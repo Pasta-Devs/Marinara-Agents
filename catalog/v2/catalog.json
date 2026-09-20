@@ -2954,7 +2954,7 @@
         "schemaVersion": 1,
         "id": "quest",
         "name": "Quest Tracker",
-        "version": "1.0.4",
+        "version": "1.0.5",
         "description": "Manages quest objectives, completion states, and rewards. Add the Agent in Chat Settings → Agents → Tracker Agents for Roleplay mode.",
         "engine": {
           "min": "2.3.0",
@@ -2969,8 +2969,8 @@
         "files": [
           {
             "path": "agents.json",
-            "sha256": "18157d0a54da2e433d82cd2f77b7b6d7ff772fcfae06962da0e24bf034ceac06",
-            "bytes": 10653
+            "sha256": "b5c230bf868817787594a875488dd3b4c75df11cb061ff713c533343e86a4347",
+            "bytes": 10980
           }
         ],
         "permissions": [
@@ -2985,9 +2985,9 @@
       "category": "tracker",
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/quest.png",
       "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/quest-1.0.4.zip",
-        "sha256": "8399f39bc548bd16087d05e2d2893ce91be495375a7da19d8c4edf30bc6c642a",
-        "bytes": 2990
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/quest-1.0.5.zip",
+        "sha256": "08301290bc1f2af35b195823f9488396722e0dabf2c29b70fafd662baff3f0da",
+        "bytes": 3131
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Engine/blob/staging/docs/agents/built-in-agents.md#quest-tracker"
     },

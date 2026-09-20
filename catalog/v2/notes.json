@@ -275,6 +275,16 @@
         }
       ]
     },
+    "quest": {
+      "versions": [
+        {
+          "version": "1.0.5",
+          "date": "2026-09-20",
+          "notes": "- Require explicit goals and progress before creating or updating quest commitments.",
+          "highlight": false
+        }
+      ]
+    },
     "slurp": {
       "versions": [
         {
