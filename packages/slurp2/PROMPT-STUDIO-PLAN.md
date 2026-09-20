@@ -8,12 +8,12 @@ internal prompt implementation.
 
 ## Slice status
 
-| Slice | Scope                                                    | Status      | Commit |
-| ----- | -------------------------------------------------------- | ----------- | ------ |
-| 1     | Prompt Studio page framing and scope context             | In progress | —      |
-| 2     | Group prompt recipes and reduce technical density        | Pending     | —      |
-| 3     | Explicit model preview flow and consistent draft saving  | Pending     | —      |
-| 4     | Remove visible Classic mode and migrate Produce defaults | Pending     | —      |
+| Slice | Scope                                                    | Status      | Commit   |
+| ----- | -------------------------------------------------------- | ----------- | -------- |
+| 1     | Prompt Studio page framing and scope context             | Complete    | 242ca65e |
+| 2     | Group prompt recipes and reduce technical density        | Complete    | —        |
+| 3     | Explicit model preview flow and consistent draft saving  | Pending     | —        |
+| 4     | Remove visible Classic mode and migrate Produce defaults | Pending     | —        |
 
 ## Slice 1 proof
 
@@ -29,3 +29,12 @@ internal prompt implementation.
 - Support global defaults first, with Creator-specific overrides as a later layer.
 - Show both the generated result and the exact compiled prompt in the eventual preview surface.
 - Do not expose Classic as a second user-facing architecture.
+
+## Slice 2 proof
+
+- Prompt recipes are grouped by writing, messages, audience, profiles, images, and world.
+- Each recipe has a plain-language purpose summary.
+- Existing block editing, ordering, and save behavior remain available.
+- Focused prompt regressions and Prettier pass.
+- Slurp2 typecheck is blocked on September 20, 2026 because the host has no free disk space for
+  the typecheck script's temporary copy.
