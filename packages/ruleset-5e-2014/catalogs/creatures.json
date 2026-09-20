@@ -137,7 +137,6 @@
         "immune": ["acid"],
         "tier": "cr_14",
         "traits": [
-          { "name": "Bite", "text": "Hit: 17 (2d10 + 6) piercing damage plus 4 (1d8) acid damage." },
           { "name": "Detect", "text": "The dragon makes a Wisdom (Perception) check." },
           {
             "name": "Multiattack",
@@ -166,7 +165,7 @@
             "name": "Bite",
             "budget": "action",
             "toHit": 11,
-            "damage": { "dice": "2d10", "flat": 6, "type": "piercing" },
+            "damage": { "dice": "2d10", "flat": 6, "type": "piercing", "plus": [{ "dice": "1d8", "type": "acid" }] },
             "reach": 10
           },
           {
@@ -248,7 +247,6 @@
         "immune": ["lightning"],
         "tier": "cr_16",
         "traits": [
-          { "name": "Bite", "text": "Hit: 18 (2d10 + 7) piercing damage plus 5 (1d10) lightning damage." },
           { "name": "Detect", "text": "The dragon makes a Wisdom (Perception) check." },
           {
             "name": "Multiattack",
@@ -276,7 +274,12 @@
             "name": "Bite",
             "budget": "action",
             "toHit": 12,
-            "damage": { "dice": "2d10", "flat": 7, "type": "piercing" },
+            "damage": {
+              "dice": "2d10",
+              "flat": 7,
+              "type": "piercing",
+              "plus": [{ "dice": "1d10", "type": "lightning" }]
+            },
             "reach": 10
           },
           {
@@ -826,7 +829,6 @@
         "conditionImmunities": ["poisoned"],
         "tier": "cr_15",
         "traits": [
-          { "name": "Bite", "text": "Hit: 17 (2d10 + 6) piercing damage plus 7 (2d6) poison damage." },
           { "name": "Detect", "text": "The dragon makes a Wisdom (Perception) check." },
           {
             "name": "Multiattack",
@@ -855,7 +857,7 @@
             "name": "Bite",
             "budget": "action",
             "toHit": 11,
-            "damage": { "dice": "2d10", "flat": 6, "type": "piercing" },
+            "damage": { "dice": "2d10", "flat": 6, "type": "piercing", "plus": [{ "dice": "2d6", "type": "poison" }] },
             "reach": 10
           },
           {
@@ -937,7 +939,6 @@
         "immune": ["fire"],
         "tier": "cr_17",
         "traits": [
-          { "name": "Bite", "text": "Hit: 19 (2d10 + 8) piercing damage plus 7 (2d6) fire damage." },
           { "name": "Detect", "text": "The dragon makes a Wisdom (Perception) check." },
           {
             "name": "Multiattack",
@@ -965,7 +966,7 @@
             "name": "Bite",
             "budget": "action",
             "toHit": 14,
-            "damage": { "dice": "2d10", "flat": 8, "type": "piercing" },
+            "damage": { "dice": "2d10", "flat": 8, "type": "piercing", "plus": [{ "dice": "2d6", "type": "fire" }] },
             "reach": 10
           },
           {
@@ -1164,7 +1165,6 @@
         "immune": ["cold"],
         "tier": "cr_13",
         "traits": [
-          { "name": "Bite", "text": "Hit: 17 (2d10 + 6) piercing damage plus 4 (1d8) cold damage." },
           { "name": "Detect", "text": "The dragon makes a Wisdom (Perception) check." },
           {
             "name": "Multiattack",
@@ -1196,7 +1196,7 @@
             "name": "Bite",
             "budget": "action",
             "toHit": 11,
-            "damage": { "dice": "2d10", "flat": 6, "type": "piercing" },
+            "damage": { "dice": "2d10", "flat": 6, "type": "piercing", "plus": [{ "dice": "1d8", "type": "cold" }] },
             "reach": 10
           },
           {
@@ -1343,7 +1343,6 @@
         "immune": ["acid"],
         "tier": "cr_21",
         "traits": [
-          { "name": "Bite", "text": "Hit: 19 (2d10 + 8) piercing damage plus 9 (2d8) acid damage." },
           { "name": "Detect", "text": "The dragon makes a Wisdom (Perception) check." },
           {
             "name": "Multiattack",
@@ -1372,7 +1371,7 @@
             "name": "Bite",
             "budget": "action",
             "toHit": 15,
-            "damage": { "dice": "2d10", "flat": 8, "type": "piercing" },
+            "damage": { "dice": "2d10", "flat": 8, "type": "piercing", "plus": [{ "dice": "2d8", "type": "acid" }] },
             "reach": 15
           },
           {
@@ -1454,7 +1453,6 @@
         "immune": ["lightning"],
         "tier": "cr_23",
         "traits": [
-          { "name": "Bite", "text": "Hit: 20 (2d10 + 9) piercing damage plus 11 (2d10) lightning damage." },
           { "name": "Detect", "text": "The dragon makes a Wisdom (Perception) check." },
           {
             "name": "Multiattack",
@@ -1482,7 +1480,12 @@
             "name": "Bite",
             "budget": "action",
             "toHit": 16,
-            "damage": { "dice": "2d10", "flat": 9, "type": "piercing" },
+            "damage": {
+              "dice": "2d10",
+              "flat": 9,
+              "type": "piercing",
+              "plus": [{ "dice": "2d10", "type": "lightning" }]
+            },
             "reach": 15
           },
           {
@@ -2045,7 +2048,6 @@
         "conditionImmunities": ["poisoned"],
         "tier": "cr_22",
         "traits": [
-          { "name": "Bite", "text": "Hit: 19 (2d10 + 8) piercing damage plus 10 (3d6) poison damage." },
           { "name": "Detect", "text": "The dragon makes a Wisdom (Perception) check." },
           {
             "name": "Multiattack",
@@ -2074,7 +2076,7 @@
             "name": "Bite",
             "budget": "action",
             "toHit": 15,
-            "damage": { "dice": "2d10", "flat": 8, "type": "piercing" },
+            "damage": { "dice": "2d10", "flat": 8, "type": "piercing", "plus": [{ "dice": "3d6", "type": "poison" }] },
             "reach": 15
           },
           {
@@ -2156,7 +2158,6 @@
         "immune": ["fire"],
         "tier": "cr_24",
         "traits": [
-          { "name": "Bite", "text": "Hit: 21 (2d10 + 10) piercing damage plus 14 (4d6) fire damage." },
           { "name": "Detect", "text": "The dragon makes a Wisdom (Perception) check." },
           {
             "name": "Multiattack",
@@ -2184,7 +2185,7 @@
             "name": "Bite",
             "budget": "action",
             "toHit": 17,
-            "damage": { "dice": "2d10", "flat": 10, "type": "piercing" },
+            "damage": { "dice": "2d10", "flat": 10, "type": "piercing", "plus": [{ "dice": "4d6", "type": "fire" }] },
             "reach": 15
           },
           {
@@ -2388,7 +2389,6 @@
         "immune": ["cold"],
         "tier": "cr_20",
         "traits": [
-          { "name": "Bite", "text": "Hit: 19 (2d10 + 8) piercing damage plus 9 (2d8) cold damage." },
           { "name": "Detect", "text": "The dragon makes a Wisdom (Perception) check." },
           {
             "name": "Multiattack",
@@ -2420,7 +2420,7 @@
             "name": "Bite",
             "budget": "action",
             "toHit": 14,
-            "damage": { "dice": "2d10", "flat": 8, "type": "piercing" },
+            "damage": { "dice": "2d10", "flat": 8, "type": "piercing", "plus": [{ "dice": "2d8", "type": "cold" }] },
             "reach": 15
           },
           {
@@ -2626,20 +2626,14 @@
         "initiativeModifier": 0,
         "abilities": { "str": 17, "dex": 11, "con": 13, "int": 1, "wis": 13, "cha": 6 },
         "tier": "cr_2",
-        "traits": [
-          {
-            "name": "Bite",
-            "text": "Hit: 10 (2d6 + 3) slashing damage plus 3 (1d6) acid damage. If the target is a Large or smaller creature, it is grappled (escape DC 13). Until this grapple ends, the ankheg can bite only the grappled creature and has advantage on attack rolls to do so."
-          },
-          { "name": "Speed", "text": "30 ft., burrow 10 ft." }
-        ],
+        "traits": [{ "name": "Speed", "text": "30 ft., burrow 10 ft." }],
         "actions": [
           {
             "id": "bite",
             "name": "Bite",
             "budget": "action",
             "toHit": 5,
-            "damage": { "dice": "2d6", "flat": 3, "type": "slashing" },
+            "damage": { "dice": "2d6", "flat": 3, "type": "slashing", "plus": [{ "dice": "1d6", "type": "acid" }] },
             "reach": 5
           },
           {
@@ -2934,7 +2928,7 @@
             "name": "Warhammer",
             "budget": "action",
             "toHit": 5,
-            "damage": { "dice": "1d8", "flat": 3, "type": "bludgeoning" },
+            "damage": { "dice": "1d8", "flat": 3, "type": "bludgeoning", "plus": [{ "dice": "1d6", "type": "fire" }] },
             "reach": 5
           }
         ]
@@ -3017,10 +3011,6 @@
         "tier": "cr_19",
         "traits": [
           {
-            "name": "Longsword",
-            "text": "Hit: 21 (3d8 + 8) slashing damage plus 13 (3d8) lightning damage. If the balor scores a critical hit, it rolls damage dice three times, instead of twice."
-          },
-          {
             "name": "Whip",
             "text": "Hit: 15 (2d6 + 8) slashing damage plus 10 (3d6) fire damage, and the target must succeed on a DC 20 Strength saving throw or be pulled up to 25 feet toward the balor."
           },
@@ -3044,6 +3034,10 @@
           {
             "name": "Fire Aura",
             "text": "At the start of each of the balor's turns, each creature within 5 feet of it takes 10 (3d6) fire damage, and flammable objects in the aura that aren't being worn or carried ignite. A creature that touches the balor or hits it with a melee attack while within 5 feet of it takes 10 (3d6) fire damage."
+          },
+          {
+            "name": "Magic Resistance",
+            "text": "The balor has advantage on saving throws against spells and other magical effects."
           }
         ],
         "actions": [
@@ -3061,7 +3055,12 @@
             "name": "Longsword",
             "budget": "action",
             "toHit": 14,
-            "damage": { "dice": "3d8", "flat": 8, "type": "slashing" },
+            "damage": {
+              "dice": "3d8",
+              "flat": 8,
+              "type": "slashing",
+              "plus": [{ "dice": "3d8", "type": "lightning" }]
+            },
             "reach": 10
           },
           {
@@ -3069,7 +3068,7 @@
             "name": "Whip",
             "budget": "action",
             "toHit": 14,
-            "damage": { "dice": "2d6", "flat": 8, "type": "slashing" },
+            "damage": { "dice": "2d6", "flat": 8, "type": "slashing", "plus": [{ "dice": "3d6", "type": "fire" }] },
             "reach": 30
           }
         ]
@@ -3284,7 +3283,6 @@
         "abilities": { "str": 16, "dex": 8, "con": 15, "int": 2, "wis": 8, "cha": 7 },
         "tier": "cr_3",
         "traits": [
-          { "name": "Bite", "text": "Hit: 10 (2d6 + 3) piercing damage plus 7 (2d6) poison damage." },
           {
             "name": "Petrifying Gaze",
             "text": "If a creature starts its turn within 30 ft. of the basilisk and the two of them can see each other, the basilisk can force the creature to make a DC 12 Constitution saving throw if the basilisk isn't incapacitated. On a failed save, the creature magically begins to turn to stone and is restrained. It must repeat the saving throw at the end of its next turn. See the SRD for the full text."
@@ -3296,7 +3294,7 @@
             "name": "Bite",
             "budget": "action",
             "toHit": 5,
-            "damage": { "dice": "2d6", "flat": 3, "type": "piercing" },
+            "damage": { "dice": "2d6", "flat": 3, "type": "piercing", "plus": [{ "dice": "2d6", "type": "poison" }] },
             "reach": 5
           }
         ]
@@ -3424,13 +3422,7 @@
         "abilities": { "str": 23, "dex": 16, "con": 18, "int": 7, "wis": 14, "cha": 12 },
         "immune": ["lightning"],
         "tier": "cr_11",
-        "traits": [
-          {
-            "name": "Constrict",
-            "text": "Hit: 17 (2d10 + 6) bludgeoning damage plus 17 (2d10 + 6) slashing damage. The target is grappled (escape DC 16) if the behir isn't already constricting a creature, and the target is restrained until this grapple ends."
-          },
-          { "name": "Speed", "text": "50 ft., climb 40 ft." }
-        ],
+        "traits": [{ "name": "Speed", "text": "50 ft., climb 40 ft." }],
         "actions": [
           {
             "id": "multiattack",
@@ -3454,7 +3446,12 @@
             "name": "Constrict",
             "budget": "action",
             "toHit": 10,
-            "damage": { "dice": "2d10", "flat": 6, "type": "bludgeoning" },
+            "damage": {
+              "dice": "2d10",
+              "flat": 6,
+              "type": "bludgeoning",
+              "plus": [{ "dice": "2d10", "flat": 6, "type": "slashing" }]
+            },
             "reach": 5
           },
           {
@@ -3573,7 +3570,6 @@
         "immune": ["acid"],
         "tier": "cr_2",
         "traits": [
-          { "name": "Bite", "text": "Hit: 7 (1d10 + 2) piercing damage plus 2 (1d4) acid damage." },
           { "name": "Speed", "text": "30 ft., fly 60 ft., swim 30 ft." },
           { "name": "Amphibious", "text": "The dragon can breathe air and water." }
         ],
@@ -3583,7 +3579,7 @@
             "name": "Bite",
             "budget": "action",
             "toHit": 4,
-            "damage": { "dice": "1d10", "flat": 2, "type": "piercing" },
+            "damage": { "dice": "1d10", "flat": 2, "type": "piercing", "plus": [{ "dice": "1d4", "type": "acid" }] },
             "reach": 5
           },
           {
@@ -3620,10 +3616,6 @@
         "tier": "cr_4",
         "traits": [
           {
-            "name": "Pseudopod",
-            "text": "Hit: 6 (1d6 + 3) bludgeoning damage plus 18 (4d8) acid damage. In addition, nonmagical armor worn by the target is partly dissolved and takes a permanent and cumulative -1 penalty to the AC it offers. The armor is destroyed if the penalty reduces its AC to 10."
-          },
-          {
             "name": "Immune to exhaustion",
             "text": "The Black Pudding is immune to exhaustion, which this sheet counts on a track rather than as a condition."
           },
@@ -3647,7 +3639,7 @@
             "name": "Pseudopod",
             "budget": "action",
             "toHit": 5,
-            "damage": { "dice": "1d6", "flat": 3, "type": "bludgeoning" },
+            "damage": { "dice": "1d6", "flat": 3, "type": "bludgeoning", "plus": [{ "dice": "4d8", "type": "acid" }] },
             "reach": 5
           }
         ]
@@ -3743,17 +3735,19 @@
         "saves": { "dex_save": 2, "con_save": 4, "wis_save": 2, "cha_save": 4 },
         "immune": ["lightning"],
         "tier": "cr_3",
-        "traits": [
-          { "name": "Bite", "text": "Hit: 8 (1d10 + 3) piercing damage plus 3 (1d6) lightning damage." },
-          { "name": "Speed", "text": "30 ft., burrow 15 ft., fly 60 ft." }
-        ],
+        "traits": [{ "name": "Speed", "text": "30 ft., burrow 15 ft., fly 60 ft." }],
         "actions": [
           {
             "id": "bite",
             "name": "Bite",
             "budget": "action",
             "toHit": 5,
-            "damage": { "dice": "1d10", "flat": 3, "type": "piercing" },
+            "damage": {
+              "dice": "1d10",
+              "flat": 3,
+              "type": "piercing",
+              "plus": [{ "dice": "1d6", "type": "lightning" }]
+            },
             "reach": 5
           },
           {
@@ -3826,10 +3820,6 @@
         "tier": "cr_9",
         "traits": [
           {
-            "name": "Sting",
-            "text": "Hit: 13 (2d8 + 4) piercing damage plus 17 (5d6) poison damage, and the target must succeed on a DC 14 Constitution saving throw or become poisoned for 1 minute. The target can repeat the saving throw at the end of each of its turns, ending the effect on itself on a success."
-          },
-          {
             "name": "Nonmagical attacks",
             "text": "cold; bludgeoning, piercing, and slashing from nonmagical attacks not made with silvered weapons A fight has no way to ask whether a weapon is magical, so this qualifier is not applied."
           },
@@ -3863,7 +3853,7 @@
             "name": "Sting",
             "budget": "action",
             "toHit": 8,
-            "damage": { "dice": "2d8", "flat": 4, "type": "piercing" },
+            "damage": { "dice": "2d8", "flat": 4, "type": "piercing", "plus": [{ "dice": "5d6", "type": "poison" }] },
             "save": { "save": "con_save", "difficulty": 14, "onSuccess": "none" },
             "applies": [
               {
@@ -5166,7 +5156,6 @@
         "conditionImmunities": ["charmed", "frightened"],
         "tier": "cr_10",
         "traits": [
-          { "name": "Mace", "text": "Hit: 7 (1d6 + 4) bludgeoning damage plus 18 (4d8) radiant damage." },
           {
             "name": "Healing Touch",
             "text": "The deva touches another creature. The target magically regains 20 (4d8 + 2) hit points and is freed from any curse, disease, poison, blindness, or deafness."
@@ -5191,6 +5180,10 @@
           {
             "name": "Innate Spellcasting",
             "text": "The deva's spellcasting ability is Charisma (spell save DC 17). The deva can innately cast the following spells, requiring only verbal components: At will: detect evil and good 1/day each: commune, raise dead"
+          },
+          {
+            "name": "Magic Resistance",
+            "text": "The deva has advantage on saving throws against spells and other magical effects."
           }
         ],
         "actions": [
@@ -5205,7 +5198,12 @@
             "name": "Mace",
             "budget": "action",
             "toHit": 8,
-            "damage": { "dice": "1d6", "flat": 4, "type": "bludgeoning" },
+            "damage": {
+              "dice": "1d6",
+              "flat": 4,
+              "type": "bludgeoning",
+              "plus": [{ "dice": "4d8", "type": "radiant" }]
+            },
             "reach": 5
           }
         ]
@@ -5553,12 +5551,10 @@
         "abilities": { "str": 16, "dex": 16, "con": 18, "int": 13, "wis": 14, "cha": 12 },
         "tier": "cr_6",
         "traits": [
-          { "name": "Bite", "text": "Hit: 2 (1d4) piercing damage plus 9 (2d8) poison damage." },
           {
             "name": "Longsword",
             "text": "Hit: 7 (1d8 + 3) slashing damage, or 8 (1d10 + 3) slashing damage if used with two hands."
           },
-          { "name": "Longbow", "text": "Hit: 7 (1d8 + 3) piercing damage plus 4 (1d8) poison damage." },
           {
             "name": "Multiattack",
             "text": "The drider makes three attacks, either with its longsword or its longbow. It can replace one of those attacks with a bite attack."
@@ -5575,7 +5571,12 @@
           {
             "name": "Spider Climb",
             "text": "The drider can climb difficult surfaces, including upside down on ceilings, without needing to make an ability check."
-          }
+          },
+          {
+            "name": "Sunlight Sensitivity",
+            "text": "While in sunlight, the drider has disadvantage on attack rolls, as well as on Wisdom (Perception) checks that rely on sight."
+          },
+          { "name": "Web Walker", "text": "The drider ignores movement restrictions caused by webbing." }
         ],
         "actions": [
           {
@@ -5595,7 +5596,7 @@
             "name": "Bite",
             "budget": "action",
             "toHit": 6,
-            "damage": { "dice": "1d4", "type": "piercing" },
+            "damage": { "dice": "1d4", "type": "piercing", "plus": [{ "dice": "2d8", "type": "poison" }] },
             "reach": 5
           },
           {
@@ -5611,7 +5612,7 @@
             "name": "Longbow",
             "budget": "action",
             "toHit": 6,
-            "damage": { "dice": "1d8", "flat": 3, "type": "piercing" },
+            "damage": { "dice": "1d8", "flat": 3, "type": "piercing", "plus": [{ "dice": "1d8", "type": "poison" }] },
             "range": { "normal": 150, "long": 600 }
           }
         ]
@@ -5984,7 +5985,6 @@
         "immune": ["fire"],
         "tier": "cr_11",
         "traits": [
-          { "name": "Scimitar", "text": "Hit: 13 (2d6 + 6) slashing damage plus 7 (2d6) fire damage." },
           { "name": "Multiattack", "text": "The efreeti makes two scimitar attacks or uses its Hurl Flame twice." },
           { "name": "Speed", "text": "40 ft., fly 60 ft." },
           {
@@ -6012,7 +6012,7 @@
             "name": "Scimitar",
             "budget": "action",
             "toHit": 10,
-            "damage": { "dice": "2d6", "flat": 6, "type": "slashing" },
+            "damage": { "dice": "2d6", "flat": 6, "type": "slashing", "plus": [{ "dice": "2d6", "type": "fire" }] },
             "reach": 5
           },
           {
@@ -6130,10 +6130,6 @@
             "text": "Hit: 8 (1d8 + 4) slashing damage, or 9 (1d10 + 4) slashing damage if used with two hands, plus 13 (3d8) poison damage."
           },
           {
-            "name": "Longbow",
-            "text": "Hit: 7 (1d8 + 3) piercing damage plus 13 (3d8) poison damage, and the target must succeed on a DC 14 Constitution saving throw or be poisoned. The poison lasts until it is removed by the lesser restoration spell or similar magic."
-          },
-          {
             "name": "Variant: Rope of Entanglement",
             "text": "Some erinyes carry a rope of entanglement (detailed in the Dungeon Master's Guide). When such an erinyes uses its Multiattack, the erinyes can use the rope in place of two of the attacks."
           },
@@ -6169,7 +6165,7 @@
             "name": "Longsword",
             "budget": "action",
             "toHit": 8,
-            "damage": { "dice": "1d8", "flat": 4, "type": "slashing" },
+            "damage": { "dice": "1d8", "flat": 4, "type": "slashing", "plus": [{ "dice": "3d8", "type": "poison" }] },
             "reach": 5
           },
           {
@@ -6177,7 +6173,7 @@
             "name": "Longbow",
             "budget": "action",
             "toHit": 7,
-            "damage": { "dice": "1d8", "flat": 3, "type": "piercing" },
+            "damage": { "dice": "1d8", "flat": 3, "type": "piercing", "plus": [{ "dice": "3d8", "type": "poison" }] },
             "save": { "save": "con_save", "difficulty": 14, "onSuccess": "none" },
             "applies": [{ "condition": "poisoned", "duration": "instant" }],
             "range": { "normal": 150, "long": 600 }
@@ -6198,10 +6194,6 @@
         "abilities": { "str": 14, "dex": 15, "con": 13, "int": 7, "wis": 12, "cha": 8 },
         "tier": "cr_2",
         "traits": [
-          {
-            "name": "Bite",
-            "text": "Hit: 6 (1d8 + 2) piercing damage plus 4 (1d8) poison damage. The target must succeed on a DC 11 Constitution saving throw or be poisoned for 1 minute. The creature can repeat the saving throw at the end of each of its turns, ending the effect on itself on a success."
-          },
           {
             "name": "Web",
             "text": "Hit: The creature is restrained by webbing. As an action, the restrained creature can make a DC 11 Strength check, escaping from the webbing on a success. The effect ends if the webbing is destroyed. The webbing has AC 10, 5 hit points, vulnerability to fire damage and immunity to bludgeoning, poison, and psychic damage."
@@ -6232,7 +6224,7 @@
             "name": "Bite",
             "budget": "action",
             "toHit": 4,
-            "damage": { "dice": "1d8", "flat": 2, "type": "piercing" },
+            "damage": { "dice": "1d8", "flat": 2, "type": "piercing", "plus": [{ "dice": "1d8", "type": "poison" }] },
             "save": { "save": "con_save", "difficulty": 11, "onSuccess": "none" },
             "applies": [
               {
@@ -6540,7 +6532,6 @@
         "abilities": { "str": 4, "dex": 18, "con": 11, "int": 2, "wis": 12, "cha": 5 },
         "tier": "cr_1_8",
         "traits": [
-          { "name": "Bite", "text": "Hit: 1 piercing damage plus 7 (3d4) poison damage." },
           { "name": "Speed", "text": "30 ft., fly 60 ft., swim 30 ft." },
           {
             "name": "Flyby",
@@ -6553,7 +6544,7 @@
             "name": "Bite",
             "budget": "action",
             "toHit": 6,
-            "damage": { "flat": 1, "type": "piercing" },
+            "damage": { "flat": 1, "type": "piercing", "plus": [{ "dice": "3d4", "type": "poison" }] },
             "reach": 5
           }
         ]
@@ -7996,10 +7987,6 @@
         "tier": "cr_1",
         "traits": [
           {
-            "name": "Bite",
-            "text": "Hit: 7 (1d10 + 2) piercing damage plus 5 (1d10) poison damage, and the target is grappled (escape DC 13). Until this grapple ends, the target is restrained, and the toad can't bite another target."
-          },
-          {
             "name": "Swallow",
             "text": "The toad makes one bite attack against a Medium or smaller target it is grappling. If the attack hits, the target is swallowed, and the grapple ends. The swallowed target is blinded and restrained, it has total cover against attacks and other effects outside the toad, and it takes 10 (3d6) acid damage at the start of each of the toad's turns. See the SRD for the full text."
           },
@@ -8016,7 +8003,7 @@
             "name": "Bite",
             "budget": "action",
             "toHit": 4,
-            "damage": { "dice": "1d10", "flat": 2, "type": "piercing" },
+            "damage": { "dice": "1d10", "flat": 2, "type": "piercing", "plus": [{ "dice": "1d10", "type": "poison" }] },
             "reach": 5
           }
         ]
@@ -8654,10 +8641,6 @@
         "tier": "cr_1_2",
         "traits": [
           {
-            "name": "Pseudopod",
-            "text": "Hit: 4 (1d6 + 1) bludgeoning damage plus 7 (2d6) acid damage, and if the target is wearing nonmagical metal armor, its armor is partly corroded and takes a permanent and cumulative -1 penalty to the AC it offers. The armor is destroyed if the penalty reduces its AC to 10."
-          },
-          {
             "name": "Immune to exhaustion",
             "text": "The Gray Ooze is immune to exhaustion, which this sheet counts on a track rather than as a condition."
           },
@@ -8681,7 +8664,7 @@
             "name": "Pseudopod",
             "budget": "action",
             "toHit": 3,
-            "damage": { "dice": "1d6", "flat": 1, "type": "bludgeoning" },
+            "damage": { "dice": "1d6", "flat": 1, "type": "bludgeoning", "plus": [{ "dice": "2d6", "type": "acid" }] },
             "reach": 5
           }
         ]
@@ -8703,7 +8686,6 @@
         "conditionImmunities": ["poisoned"],
         "tier": "cr_2",
         "traits": [
-          { "name": "Bite", "text": "Hit: 7 (1d10 + 2) piercing damage plus 3 (1d6) poison damage." },
           { "name": "Speed", "text": "30 ft., fly 60 ft., swim 30 ft." },
           { "name": "Amphibious", "text": "The dragon can breathe air and water." }
         ],
@@ -8713,7 +8695,7 @@
             "name": "Bite",
             "budget": "action",
             "toHit": 4,
-            "damage": { "dice": "1d10", "flat": 2, "type": "piercing" },
+            "damage": { "dice": "1d10", "flat": 2, "type": "piercing", "plus": [{ "dice": "1d6", "type": "poison" }] },
             "reach": 5
           },
           {
@@ -8914,7 +8896,6 @@
         "conditionImmunities": ["blinded"],
         "tier": "cr_1_4",
         "traits": [
-          { "name": "Spiked Bone Club", "text": "Hit: 5 (1d4 + 3) bludgeoning damage plus 2 (1d4) piercing damage." },
           {
             "name": "Blind Senses",
             "text": "The grimlock can't use its blindsight while deafened and unable to smell."
@@ -8934,7 +8915,12 @@
             "name": "Spiked Bone Club",
             "budget": "action",
             "toHit": 5,
-            "damage": { "dice": "1d4", "flat": 3, "type": "bludgeoning" },
+            "damage": {
+              "dice": "1d4",
+              "flat": 3,
+              "type": "bludgeoning",
+              "plus": [{ "dice": "1d4", "type": "piercing" }]
+            },
             "reach": 5
           }
         ]
@@ -9291,7 +9277,6 @@
         "immune": ["fire"],
         "tier": "cr_3",
         "traits": [
-          { "name": "Bite", "text": "Hit: 7 (1d8 + 3) piercing damage plus 7 (2d6) fire damage." },
           {
             "name": "Keen Hearing and Smell",
             "text": "The hound has advantage on Wisdom (Perception) checks that rely on hearing or smell."
@@ -9307,7 +9292,7 @@
             "name": "Bite",
             "budget": "action",
             "toHit": 5,
-            "damage": { "dice": "1d8", "flat": 3, "type": "piercing" },
+            "damage": { "dice": "1d8", "flat": 3, "type": "piercing", "plus": [{ "dice": "2d6", "type": "fire" }] },
             "reach": 5
           },
           {
@@ -9769,9 +9754,6 @@
         "conditionImmunities": ["poisoned"],
         "tier": "cr_14",
         "traits": [
-          { "name": "Bite", "text": "Hit: 12 (2d6 + 5) piercing damage plus 10 (3d6) cold damage." },
-          { "name": "Claws", "text": "Hit: 10 (2d4 + 5) slashing damage plus 10 (3d6) cold damage." },
-          { "name": "Tail", "text": "Hit: 12 (2d6 + 5) bludgeoning damage plus 10 (3d6) cold damage." },
           {
             "name": "Wall of Ice",
             "text": "The devil magically forms an opaque wall of ice on a solid surface it can see within 60 feet of it. The wall is 1 foot thick and up to 30 feet long and 10 feet high, or it's a hemispherical dome up to 20 feet in diameter. When the wall appears, each creature in its space is pushed out of it by the shortest route. See the SRD for the full text."
@@ -9802,7 +9784,7 @@
             "name": "Bite",
             "budget": "action",
             "toHit": 10,
-            "damage": { "dice": "2d6", "flat": 5, "type": "piercing" },
+            "damage": { "dice": "2d6", "flat": 5, "type": "piercing", "plus": [{ "dice": "3d6", "type": "cold" }] },
             "reach": 5
           },
           {
@@ -9810,7 +9792,7 @@
             "name": "Claws",
             "budget": "action",
             "toHit": 10,
-            "damage": { "dice": "2d4", "flat": 5, "type": "slashing" },
+            "damage": { "dice": "2d4", "flat": 5, "type": "slashing", "plus": [{ "dice": "3d6", "type": "cold" }] },
             "reach": 5
           },
           {
@@ -9818,7 +9800,7 @@
             "name": "Tail",
             "budget": "action",
             "toHit": 10,
-            "damage": { "dice": "2d6", "flat": 5, "type": "bludgeoning" },
+            "damage": { "dice": "2d6", "flat": 5, "type": "bludgeoning", "plus": [{ "dice": "3d6", "type": "cold" }] },
             "reach": 10
           },
           {
@@ -9854,7 +9836,6 @@
         "conditionImmunities": ["poisoned"],
         "tier": "cr_1_2",
         "traits": [
-          { "name": "Claws", "text": "Hit: 3 (1d4 + 1) slashing damage plus 2 (1d4) cold damage." },
           {
             "name": "Variant: Summon Mephits",
             "text": "The mephit has a 25 percent chance of summoning 1d4 mephits of its kind. A summoned mephit appears in an unoccupied space within 60 feet of its summoner, acts as an ally of its summoner, and can't summon other mephits. It remains for 1 minute, until it or its summoner dies, or until its summoner dismisses it as an action."
@@ -9879,7 +9860,7 @@
             "name": "Claws",
             "budget": "action",
             "toHit": 3,
-            "damage": { "dice": "1d4", "flat": 1, "type": "slashing" },
+            "damage": { "dice": "1d4", "flat": 1, "type": "slashing", "plus": [{ "dice": "1d4", "type": "cold" }] },
             "reach": 5
           },
           {
@@ -10819,7 +10800,6 @@
         "conditionImmunities": ["poisoned"],
         "tier": "cr_1_2",
         "traits": [
-          { "name": "Claws", "text": "Hit: 3 (1d4 + 1) slashing damage plus 2 (1d4) fire damage." },
           {
             "name": "Variant: Summon Mephits",
             "text": "The mephit has a 25 percent chance of summoning 1d4 mephits of its kind. A summoned mephit appears in an unoccupied space within 60 feet of its summoner, acts as an ally of its summoner, and can't summon other mephits. It remains for 1 minute, until it or its summoner dies, or until its summoner dismisses it as an action."
@@ -10844,7 +10824,7 @@
             "name": "Claws",
             "budget": "action",
             "toHit": 3,
-            "damage": { "dice": "1d4", "flat": 1, "type": "slashing" },
+            "damage": { "dice": "1d4", "flat": 1, "type": "slashing", "plus": [{ "dice": "1d4", "type": "fire" }] },
             "reach": 5
           },
           {
@@ -11133,8 +11113,6 @@
         "abilities": { "str": 10, "dex": 15, "con": 16, "int": 12, "wis": 13, "cha": 15 },
         "tier": "cr_6",
         "traits": [
-          { "name": "Snake Hair", "text": "Hit: 4 (1d4 + 2) piercing damage plus 14 (4d6) poison damage." },
-          { "name": "Longbow", "text": "Hit: 6 (1d8 + 2) piercing damage plus 7 (2d6) poison damage." },
           {
             "name": "Multiattack",
             "text": "The medusa makes either three melee attacks - one with its snake hair and two with its shortsword - or two ranged attacks with its longbow."
@@ -11165,7 +11143,7 @@
             "name": "Snake Hair",
             "budget": "action",
             "toHit": 5,
-            "damage": { "dice": "1d4", "flat": 2, "type": "piercing" },
+            "damage": { "dice": "1d4", "flat": 2, "type": "piercing", "plus": [{ "dice": "4d6", "type": "poison" }] },
             "reach": 5
           },
           {
@@ -11181,7 +11159,7 @@
             "name": "Longbow",
             "budget": "action",
             "toHit": 5,
-            "damage": { "dice": "1d8", "flat": 2, "type": "piercing" },
+            "damage": { "dice": "1d8", "flat": 2, "type": "piercing", "plus": [{ "dice": "2d6", "type": "poison" }] },
             "range": { "normal": 150, "long": 600 }
           }
         ]
@@ -11308,7 +11286,6 @@
         "conditionImmunities": ["prone"],
         "tier": "cr_2",
         "traits": [
-          { "name": "Bite", "text": "Hit: 7 (1d8 + 3) piercing damage plus 4 (1d8) acid damage." },
           {
             "name": "Adhesive (Object Form Only)",
             "text": "The mimic adheres to anything that touches it. A Huge or smaller creature adhered to the mimic is also grappled by it (escape DC 13). Ability checks made to escape this grapple have disadvantage."
@@ -11340,7 +11317,7 @@
             "name": "Bite",
             "budget": "action",
             "toHit": 5,
-            "damage": { "dice": "1d8", "flat": 3, "type": "piercing" },
+            "damage": { "dice": "1d8", "flat": 3, "type": "piercing", "plus": [{ "dice": "1d8", "type": "acid" }] },
             "reach": 5
           }
         ]
@@ -11530,7 +11507,12 @@
             "name": "Rotting Fist",
             "budget": "action",
             "toHit": 5,
-            "damage": { "dice": "2d6", "flat": 3, "type": "bludgeoning" },
+            "damage": {
+              "dice": "2d6",
+              "flat": 3,
+              "type": "bludgeoning",
+              "plus": [{ "dice": "3d6", "type": "necrotic" }]
+            },
             "reach": 5
           },
           {
@@ -11615,7 +11597,12 @@
             "name": "Rotting Fist",
             "budget": "action",
             "toHit": 9,
-            "damage": { "dice": "3d6", "flat": 4, "type": "bludgeoning" },
+            "damage": {
+              "dice": "3d6",
+              "flat": 4,
+              "type": "bludgeoning",
+              "plus": [{ "dice": "6d6", "type": "necrotic" }]
+            },
             "reach": 5
           },
           {
@@ -11815,7 +11802,6 @@
         "immune": ["fire"],
         "tier": "cr_3",
         "traits": [
-          { "name": "Hooves", "text": "Hit: 13 (2d8 + 4) bludgeoning damage plus 7 (2d6) fire damage." },
           {
             "name": "Ethereal Stride",
             "text": "The nightmare and up to three willing creatures within 5 feet of it magically enter the Ethereal Plane from the Material Plane, or vice versa."
@@ -11836,7 +11822,7 @@
             "name": "Hooves",
             "budget": "action",
             "toHit": 6,
-            "damage": { "dice": "2d8", "flat": 4, "type": "bludgeoning" },
+            "damage": { "dice": "2d8", "flat": 4, "type": "bludgeoning", "plus": [{ "dice": "2d6", "type": "fire" }] },
             "reach": 5
           }
         ]
@@ -11892,7 +11878,6 @@
         "conditionImmunities": ["blinded", "charmed", "deafened", "frightened", "prone"],
         "tier": "cr_2",
         "traits": [
-          { "name": "Pseudopod", "text": "Hit: 9 (2d6 + 2) bludgeoning damage plus 3 (1d6) acid damage." },
           {
             "name": "Immune to exhaustion",
             "text": "The Ochre Jelly is immune to exhaustion, which this sheet counts on a track rather than as a condition."
@@ -11913,7 +11898,7 @@
             "name": "Pseudopod",
             "budget": "action",
             "toHit": 4,
-            "damage": { "dice": "2d6", "flat": 2, "type": "bludgeoning" },
+            "damage": { "dice": "2d6", "flat": 2, "type": "bludgeoning", "plus": [{ "dice": "1d6", "type": "acid" }] },
             "reach": 5
           }
         ]
@@ -12176,10 +12161,6 @@
         "tier": "cr_5",
         "traits": [
           {
-            "name": "Tentacle",
-            "text": "Hit: 7 (1d8 + 3) bludgeoning damage plus 4 (1d8) piercing damage. If the target is Medium or smaller, it is grappled (escape DC 13) and restrained until the grapple ends. The otyugh has two tentacles, each of which can grapple one target."
-          },
-          {
             "name": "Limited Telepathy",
             "text": "The otyugh can magically transmit simple messages and images to any creature within 120 ft. of it that can understand a language. This form of telepathy doesn't allow the receiving creature to telepathically respond."
           }
@@ -12209,7 +12190,12 @@
             "name": "Tentacle",
             "budget": "action",
             "toHit": 6,
-            "damage": { "dice": "1d8", "flat": 3, "type": "bludgeoning" },
+            "damage": {
+              "dice": "1d8",
+              "flat": 3,
+              "type": "bludgeoning",
+              "plus": [{ "dice": "1d8", "type": "piercing" }]
+            },
             "reach": 10
           },
           {
@@ -12469,7 +12455,6 @@
             "name": "Bite",
             "text": "Hit: 22 (4d6 + 8) piercing damage. The target must succeed on a DC 21 Constitution saving throw or become poisoned. While poisoned in this way, the target can't regain hit points, and it takes 21 (6d6) poison damage at the start of each of its turns. The poisoned target can repeat the saving throw at the end of each of its turns, ending the effect on itself on a success."
           },
-          { "name": "Mace", "text": "Hit: 15 (2d6 + 8) bludgeoning damage plus 21 (6d6) fire damage." },
           {
             "name": "Nonmagical attacks",
             "text": "cold; bludgeoning, piercing, and slashing from nonmagical attacks not made with silvered weapons A fight has no way to ask whether a weapon is magical, so this qualifier is not applied."
@@ -12530,7 +12515,7 @@
             "name": "Mace",
             "budget": "action",
             "toHit": 14,
-            "damage": { "dice": "2d6", "flat": 8, "type": "bludgeoning" },
+            "damage": { "dice": "2d6", "flat": 8, "type": "bludgeoning", "plus": [{ "dice": "6d6", "type": "fire" }] },
             "reach": 10
           },
           {
@@ -12560,7 +12545,6 @@
         "conditionImmunities": ["charmed", "frightened"],
         "tier": "cr_16",
         "traits": [
-          { "name": "Greatsword", "text": "Hit: 21 (4d6 + 7) slashing damage plus 22 (5d8) radiant damage." },
           {
             "name": "Healing Touch",
             "text": "The planetar touches another creature. The target magically regains 30 (6d8 + 3) hit points and is freed from any curse, disease, poison, blindness, or deafness."
@@ -12582,6 +12566,10 @@
           {
             "name": "Innate Spellcasting",
             "text": "The planetar's spellcasting ability is Charisma (spell save DC 20). The planetar can innately cast the following spells, requiring no material components: At will: detect evil and good, invisibility (self only) 3/day each: blade barrier, dispel evil and good, flame strike, raise dead 1/day each: commune, control weather, insect plague"
+          },
+          {
+            "name": "Magic Resistance",
+            "text": "The planetar has advantage on saving throws against spells and other magical effects."
           }
         ],
         "actions": [
@@ -12596,7 +12584,7 @@
             "name": "Greatsword",
             "budget": "action",
             "toHit": 12,
-            "damage": { "dice": "4d6", "flat": 7, "type": "slashing" },
+            "damage": { "dice": "4d6", "flat": 7, "type": "slashing", "plus": [{ "dice": "5d8", "type": "radiant" }] },
             "reach": 5
           }
         ]
@@ -13185,17 +13173,14 @@
         "saves": { "dex_save": 2, "con_save": 5, "wis_save": 2, "cha_save": 4 },
         "immune": ["fire"],
         "tier": "cr_4",
-        "traits": [
-          { "name": "Bite", "text": "Hit: 9 (1d10 + 4) piercing damage plus 3 (1d6) fire damage." },
-          { "name": "Speed", "text": "30 ft., climb 30 ft., fly 60 ft." }
-        ],
+        "traits": [{ "name": "Speed", "text": "30 ft., climb 30 ft., fly 60 ft." }],
         "actions": [
           {
             "id": "bite",
             "name": "Bite",
             "budget": "action",
             "toHit": 6,
-            "damage": { "dice": "1d10", "flat": 4, "type": "piercing" },
+            "damage": { "dice": "1d10", "flat": 4, "type": "piercing", "plus": [{ "dice": "1d6", "type": "fire" }] },
             "reach": 5
           },
           {
@@ -13257,10 +13242,6 @@
         "immune": ["cold", "fire"],
         "tier": "cr_11",
         "traits": [
-          {
-            "name": "Bite",
-            "text": "Hit: 40 (6d10 + 7) piercing damage plus 10 (3d6) fire damage. If the target is a creature, it is grappled (escape DC 17). Until this grapple ends, the target is restrained, and the remorhaz can't bite another target."
-          },
           { "name": "Speed", "text": "30 ft., burrow 20 ft." },
           {
             "name": "Heated Body",
@@ -13273,7 +13254,7 @@
             "name": "Bite",
             "budget": "action",
             "toHit": 11,
-            "damage": { "dice": "6d10", "flat": 7, "type": "piercing" },
+            "damage": { "dice": "6d10", "flat": 7, "type": "piercing", "plus": [{ "dice": "3d6", "type": "fire" }] },
             "reach": 10
           },
           {
@@ -13682,10 +13663,6 @@
             "text": "Hit: 11 (2d6 + 4) piercing damage, or 13 (2d8 + 4) piercing damage if used with two hands to make a melee attack, plus 3 (1d6) fire damage."
           },
           {
-            "name": "Tail",
-            "text": "Hit: 11 (2d6 + 4) bludgeoning damage plus 7 (2d6) fire damage, and the target is grappled (escape DC 14). Until this grapple ends, the target is restrained, the salamander can automatically hit the target with its tail, and the salamander can't make tail attacks against other targets."
-          },
-          {
             "name": "Nonmagical attacks",
             "text": "bludgeoning, piercing, and slashing from nonmagical attacks A fight has no way to ask whether a weapon is magical, so this qualifier is not applied."
           },
@@ -13713,7 +13690,7 @@
             "name": "Spear",
             "budget": "action",
             "toHit": 7,
-            "damage": { "dice": "2d6", "flat": 4, "type": "piercing" },
+            "damage": { "dice": "2d6", "flat": 4, "type": "piercing", "plus": [{ "dice": "1d6", "type": "fire" }] },
             "reach": 5,
             "range": { "normal": 20, "long": 60 }
           },
@@ -13722,7 +13699,7 @@
             "name": "Tail",
             "budget": "action",
             "toHit": 7,
-            "damage": { "dice": "2d6", "flat": 4, "type": "bludgeoning" },
+            "damage": { "dice": "2d6", "flat": 4, "type": "bludgeoning", "plus": [{ "dice": "2d6", "type": "fire" }] },
             "reach": 10
           }
         ]
@@ -14204,7 +14181,6 @@
         "conditionImmunities": ["charmed", "frightened", "poisoned"],
         "tier": "cr_21",
         "traits": [
-          { "name": "Greatsword", "text": "Hit: 22 (4d6 + 8) slashing damage plus 27 (6d8) radiant damage." },
           {
             "name": "Slaying Longbow",
             "text": "Hit: 15 (2d8 + 6) piercing damage plus 27 (6d8) radiant damage. If the target is a creature that has 190 hit points or fewer, it must succeed on a DC 15 Constitution saving throw or die."
@@ -14222,16 +14198,17 @@
             "text": "The solar magically teleports, along with any equipment it is wearing or carrying, up to 120 ft. to an unoccupied space it can see."
           },
           {
-            "name": "Searing Burst",
-            "text": "The solar emits magical, divine energy. Each creature of its choice in a 10 -foot radius must make a DC 23 Dexterity saving throw, taking 14 (4d6) fire damage plus 14 (4d6) radiant damage on a failed save, or half as much damage on a successful one."
-          },
-          {
             "name": "Immune to exhaustion",
             "text": "The Solar is immune to exhaustion, which this sheet counts on a track rather than as a condition."
           },
           {
             "name": "Nonmagical attacks",
             "text": "radiant; bludgeoning, piercing, and slashing from nonmagical attacks A fight has no way to ask whether a weapon is magical, so this qualifier is not applied."
+          },
+          { "name": "Speed", "text": "50 ft., fly 150 ft." },
+          {
+            "name": "Angelic Weapons",
+            "text": "The solar's weapon attacks are magical. When the solar hits with any weapon, the weapon deals an extra 6d8 radiant damage (included in the attack)."
           }
         ],
         "signaturePoints": 3,
@@ -14247,7 +14224,7 @@
             "name": "Greatsword",
             "budget": "action",
             "toHit": 15,
-            "damage": { "dice": "4d6", "flat": 8, "type": "slashing" },
+            "damage": { "dice": "4d6", "flat": 8, "type": "slashing", "plus": [{ "dice": "6d8", "type": "radiant" }] },
             "reach": 5
           },
           {
@@ -14255,14 +14232,14 @@
             "name": "Slaying Longbow",
             "budget": "action",
             "toHit": 13,
-            "damage": { "dice": "2d8", "flat": 6, "type": "piercing" },
+            "damage": { "dice": "2d8", "flat": 6, "type": "piercing", "plus": [{ "dice": "6d8", "type": "radiant" }] },
             "range": { "normal": 150, "long": 600 }
           },
           {
             "id": "searing_burst",
             "name": "Searing Burst",
             "budget": "action",
-            "damage": { "dice": "4d6", "type": "fire" },
+            "damage": { "dice": "4d6", "type": "fire", "plus": [{ "dice": "4d6", "type": "radiant" }] },
             "save": { "save": "dex_save", "difficulty": 23, "onSuccess": "half" },
             "targetCount": 3,
             "area": { "shape": "burst", "size": 10, "friendlyFire": false },
@@ -14543,7 +14520,6 @@
         "conditionImmunities": ["poisoned"],
         "tier": "cr_1_4",
         "traits": [
-          { "name": "Claws", "text": "Hit: 2 (1d4) slashing damage plus 2 (1d4) fire damage." },
           {
             "name": "Variant: Summon Mephits",
             "text": "The mephit has a 25 percent chance of summoning 1d4 mephits of its kind. A summoned mephit appears in an unoccupied space within 60 feet of its summoner, acts as an ally of its summoner, and can't summon other mephits. It remains for 1 minute, until it or its summoner dies, or until its summoner dismisses it as an action."
@@ -14564,7 +14540,7 @@
             "name": "Claws",
             "budget": "action",
             "toHit": 2,
-            "damage": { "dice": "1d4", "type": "slashing" },
+            "damage": { "dice": "1d4", "type": "slashing", "plus": [{ "dice": "1d4", "type": "fire" }] },
             "reach": 5
           },
           {
@@ -16067,10 +16043,6 @@
         "tier": "cr_13",
         "traits": [
           {
-            "name": "Bite",
-            "text": "Hit: 7 (1d6 + 4) piercing damage plus 10 (3d6) necrotic damage. The target's hit point maximum is reduced by an amount equal to the necrotic damage taken, and the vampire regains hit points equal to that amount. The reduction lasts until the target finishes a long rest. The target dies if this effect reduces its hit point maximum to 0. See the SRD for the full text."
-          },
-          {
             "name": "Children of the Night",
             "text": "The vampire magically calls 2d4 swarms of bats or rats, provided that the sun isn't up. While outdoors, the vampire can call 3d6 wolves instead. The called creatures arrive in 1d4 rounds, acting as allies of the vampire and obeying its spoken commands. The beasts remain for 1 hour, until the vampire dies, or until the vampire dismisses them as a bonus action."
           },
@@ -16088,6 +16060,10 @@
           {
             "name": "Misty Escape",
             "text": "When it drops to 0 hit points outside its resting place, the vampire transforms into a cloud of mist (as in the Shapechanger trait) instead of falling unconscious, provided that it isn't in sunlight or running water. If it can't transform, it is destroyed. See the SRD for the full text."
+          },
+          {
+            "name": "Regeneration",
+            "text": "The vampire regains 20 hit points at the start of its turn if it has at least 1 hit point and isn't in sunlight or running water. If the vampire takes radiant damage or damage from holy water, this trait doesn't function at the start of the vampire's next turn."
           }
         ],
         "signaturePoints": 3,
@@ -16114,7 +16090,7 @@
             "name": "Bite",
             "budget": "action",
             "toHit": 9,
-            "damage": { "dice": "1d6", "flat": 4, "type": "piercing" },
+            "damage": { "dice": "1d6", "flat": 4, "type": "piercing", "plus": [{ "dice": "3d6", "type": "necrotic" }] },
             "reach": 5
           },
           {
@@ -16130,7 +16106,7 @@
             "name": "Bite",
             "budget": "action",
             "toHit": 9,
-            "damage": { "dice": "1d6", "flat": 4, "type": "piercing" },
+            "damage": { "dice": "1d6", "flat": 4, "type": "piercing", "plus": [{ "dice": "3d6", "type": "necrotic" }] },
             "reach": 5,
             "signature": { "cost": 2 }
           }
@@ -16157,10 +16133,6 @@
         "resist": ["bludgeoning", "necrotic", "piercing", "slashing"],
         "tier": "cr_5",
         "traits": [
-          {
-            "name": "Bite",
-            "text": "Hit: 6 (1d6 + 3) piercing damage plus 7 (2d6) necrotic damage. The target's hit point maximum is reduced by an amount equal to the necrotic damage taken, and the vampire regains hit points equal to that amount. The reduction lasts until the target finishes a long rest. The target dies if this effect reduces its hit point maximum to 0."
-          },
           { "name": "Multiattack", "text": "The vampire makes two attacks, only one of which can be a bite attack." },
           {
             "name": "Nonmagical attacks",
@@ -16194,7 +16166,7 @@
             "name": "Bite",
             "budget": "action",
             "toHit": 6,
-            "damage": { "dice": "1d6", "flat": 3, "type": "piercing" },
+            "damage": { "dice": "1d6", "flat": 3, "type": "piercing", "plus": [{ "dice": "2d6", "type": "necrotic" }] },
             "reach": 5
           },
           {
@@ -17023,17 +16995,14 @@
         "saves": { "dex_save": 2, "con_save": 4, "wis_save": 2, "cha_save": 2 },
         "immune": ["cold"],
         "tier": "cr_2",
-        "traits": [
-          { "name": "Bite", "text": "Hit: 7 (1d10 + 2) piercing damage plus 2 (1d4) cold damage." },
-          { "name": "Speed", "text": "30 ft., burrow 15 ft., fly 60 ft., swim 30 ft." }
-        ],
+        "traits": [{ "name": "Speed", "text": "30 ft., burrow 15 ft., fly 60 ft., swim 30 ft." }],
         "actions": [
           {
             "id": "bite",
             "name": "Bite",
             "budget": "action",
             "toHit": 4,
-            "damage": { "dice": "1d10", "flat": 2, "type": "piercing" },
+            "damage": { "dice": "1d10", "flat": 2, "type": "piercing", "plus": [{ "dice": "1d4", "type": "cold" }] },
             "reach": 5
           },
           {
@@ -17501,7 +17470,6 @@
         "immune": ["acid"],
         "tier": "cr_7",
         "traits": [
-          { "name": "Bite", "text": "Hit: 15 (2d10 + 4) piercing damage plus 4 (1d8) acid damage." },
           { "name": "Speed", "text": "40 ft., fly 80 ft., swim 40 ft." },
           { "name": "Amphibious", "text": "The dragon can breathe air and water." }
         ],
@@ -17520,7 +17488,7 @@
             "name": "Bite",
             "budget": "action",
             "toHit": 7,
-            "damage": { "dice": "2d10", "flat": 4, "type": "piercing" },
+            "damage": { "dice": "2d10", "flat": 4, "type": "piercing", "plus": [{ "dice": "1d8", "type": "acid" }] },
             "reach": 10
           },
           {
@@ -17558,10 +17526,7 @@
         "saves": { "dex_save": 4, "con_save": 8, "wis_save": 5, "cha_save": 7 },
         "immune": ["lightning"],
         "tier": "cr_9",
-        "traits": [
-          { "name": "Bite", "text": "Hit: 16 (2d10 + 5) piercing damage plus 5 (1d10) lightning damage." },
-          { "name": "Speed", "text": "40 ft., burrow 40 ft., fly 80 ft." }
-        ],
+        "traits": [{ "name": "Speed", "text": "40 ft., burrow 40 ft., fly 80 ft." }],
         "actions": [
           {
             "id": "multiattack",
@@ -17577,7 +17542,12 @@
             "name": "Bite",
             "budget": "action",
             "toHit": 9,
-            "damage": { "dice": "2d10", "flat": 5, "type": "piercing" },
+            "damage": {
+              "dice": "2d10",
+              "flat": 5,
+              "type": "piercing",
+              "plus": [{ "dice": "1d10", "type": "lightning" }]
+            },
             "reach": 10
           },
           {
@@ -17889,7 +17859,6 @@
         "conditionImmunities": ["poisoned"],
         "tier": "cr_8",
         "traits": [
-          { "name": "Bite", "text": "Hit: 15 (2d10 + 4) piercing damage plus 7 (2d6) poison damage." },
           { "name": "Speed", "text": "40 ft., fly 80 ft., swim 40 ft." },
           { "name": "Amphibious", "text": "The dragon can breathe air and water." }
         ],
@@ -17908,7 +17877,7 @@
             "name": "Bite",
             "budget": "action",
             "toHit": 7,
-            "damage": { "dice": "2d10", "flat": 4, "type": "piercing" },
+            "damage": { "dice": "2d10", "flat": 4, "type": "piercing", "plus": [{ "dice": "2d6", "type": "poison" }] },
             "reach": 10
           },
           {
@@ -17946,10 +17915,7 @@
         "saves": { "dex_save": 4, "con_save": 9, "wis_save": 4, "cha_save": 8 },
         "immune": ["fire"],
         "tier": "cr_10",
-        "traits": [
-          { "name": "Bite", "text": "Hit: 17 (2d10 + 6) piercing damage plus 3 (1d6) fire damage." },
-          { "name": "Speed", "text": "40 ft., climb 40 ft., fly 80 ft." }
-        ],
+        "traits": [{ "name": "Speed", "text": "40 ft., climb 40 ft., fly 80 ft." }],
         "actions": [
           {
             "id": "multiattack",
@@ -17965,7 +17931,7 @@
             "name": "Bite",
             "budget": "action",
             "toHit": 10,
-            "damage": { "dice": "2d10", "flat": 6, "type": "piercing" },
+            "damage": { "dice": "2d10", "flat": 6, "type": "piercing", "plus": [{ "dice": "1d6", "type": "fire" }] },
             "reach": 10
           },
           {
@@ -18064,7 +18030,6 @@
         "immune": ["cold"],
         "tier": "cr_6",
         "traits": [
-          { "name": "Bite", "text": "Hit: 15 (2d10 + 4) piercing damage plus 4 (1d8) cold damage." },
           { "name": "Speed", "text": "40 ft., burrow 20 ft., fly 80 ft., swim 40 ft." },
           {
             "name": "Ice Walk",
@@ -18086,7 +18051,7 @@
             "name": "Bite",
             "budget": "action",
             "toHit": 7,
-            "damage": { "dice": "2d10", "flat": 4, "type": "piercing" },
+            "damage": { "dice": "2d10", "flat": 4, "type": "piercing", "plus": [{ "dice": "1d8", "type": "cold" }] },
             "reach": 10
           },
           {

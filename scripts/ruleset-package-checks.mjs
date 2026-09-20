@@ -66,6 +66,37 @@ export const RULESET_CREATURES_MIN_CAPABILITY_API = Object.freeze({ major: 1, mi
 // reads them.
 export const RULESET_POSITIONS_MIN_CAPABILITY_API = Object.freeze({ major: 1, minor: 28 });
 
+// What one TURN of a fight can do: an attack list that buys several strikes with
+// one spend, a condition narrowed to certain saves or tied to the creature that
+// caused it, an effect outside the list an older Engine knew, and the part of a
+// standard action a flag alone does not carry. All of it lives in `ruleset.json`,
+// so an Engine that does not know the keys refuses the whole strict file.
+export const RULESET_TURN_MIN_CAPABILITY_API = Object.freeze({ major: 1, minor: 29 });
+
+// The condition effects an Engine before 1.29 knew. Written out rather than sliced
+// off the list below, because the question this asks is what an OLDER Engine would
+// refuse, which is fixed however long the current list grows.
+const OLD_CONDITION_EFFECTS = Object.freeze([
+  "own-attacks-advantage",
+  "own-attacks-disadvantage",
+  "attacks-against-advantage",
+  "attacks-against-disadvantage",
+  "attacks-against-adjacent-advantage",
+  "attacks-against-far-disadvantage",
+  "attacks-from-adjacent-critical",
+  "cannot-act",
+  "cannot-react",
+  "speed-zero",
+  "half-move-to-stand",
+  "ends-on-damage",
+]);
+
+// An attack source may name a boolean column that holds ITS OWN row to a single
+// strike however many the list buys, for a weapon that fires once a turn whatever
+// its wielder's count. It lives in `ruleset.json`, so an older Engine refuses the
+// whole file rather than ignoring the key.
+export const RULESET_STRIKE_CAP_MIN_CAPABILITY_API = Object.freeze({ major: 1, minor: 32 });
+
 // What the Engine's own schema allows a distance, in the ruleset's own unit.
 const RULESET_DISTANCE_MAX = 10000;
 const RULESET_DISTANCE_LABEL_MAX = 12;
@@ -103,6 +134,12 @@ const RULESET_COMBAT_CONDITION_EFFECTS = Object.freeze([
   "speed-zero",
   "half-move-to-stand",
   "ends-on-damage",
+  // Added by Capability API 1.29, with `saves` narrowing the two that are about saving throws.
+  "own-saves-advantage",
+  "own-saves-disadvantage",
+  "resist-all",
+  "cannot-target-source",
+  "cannot-approach-source",
 ]);
 const RULESET_COMBAT_STANDARD_ACTIONS = Object.freeze(["dash", "disengage", "dodge", "help", "hide", "ready"]);
 
@@ -625,6 +662,28 @@ export function assertRulesetCombat(manifest, document) {
     throw new Error(`${id} combat kind ${JSON.stringify(combat.kind)} is not one the Engine resolves`);
   }
 
+  // The same reading the Engine makes before it installs the package: any one of these keys and an
+  // Engine that predates them refuses the file, so the package says which Engine it needs.
+  const turnKeys = ["saves", "whileSourceInSight", "endsWhenSourceDown"];
+  const carriesTurn =
+    combat.standardEffects !== undefined ||
+    (combat.attacks ?? []).some((source) => source?.strikes !== undefined) ||
+    (combat.conditions ?? []).some(
+      (entry) =>
+        turnKeys.some((key) => entry?.[key] !== undefined) ||
+        (entry?.effects ?? []).some(
+          (effect) => RULESET_COMBAT_CONDITION_EFFECTS.includes(effect) && !OLD_CONDITION_EFFECTS.includes(effect),
+        ),
+    );
+  if (carriesTurn) {
+    const turnApi = RULESET_TURN_MIN_CAPABILITY_API;
+    if (!meetsCapabilityApi(manifest, turnApi)) {
+      throw new Error(
+        `${id} says what one turn of a fight can do and must declare capability API ${turnApi.major}.${turnApi.minor} or newer`,
+      );
+    }
+  }
+
   const names = sheetNames(document);
   const pool = names.pools.get(combat.health?.pool);
   if (!pool) throw new Error(`${id} combat health names unknown live pool ${JSON.stringify(combat.health?.pool)}`);
@@ -701,6 +760,27 @@ export function assertRulesetCombat(manifest, document) {
   const cover = blockOf("cover");
   const opportunity = blockOf("opportunity");
   const positionKeys = ["ranged", "cover", "opportunity"].filter((key) => combat[key] !== undefined);
+  // A row that caps its own strikes: the key, the column it names, and the number it caps.
+  (combat.attacks ?? []).forEach((source, index) => {
+    const cap = source?.strikesCappedBy;
+    if (cap === undefined) return;
+    const capApi = RULESET_STRIKE_CAP_MIN_CAPABILITY_API;
+    if (!meetsCapabilityApi(manifest, capApi)) {
+      throw new Error(
+        `${id} caps a weapon's strikes and must declare capability API ${capApi.major}.${capApi.minor} or newer`,
+      );
+    }
+    if (source.strikes === undefined) {
+      throw new Error(`${id} combat attacks[${index}] caps strikes on a list that buys one a spend anyway`);
+    }
+    const list = (document?.sheet?.lists ?? []).find((entry) => entry?.id === source.list);
+    const column = (list?.columns ?? []).find((entry) => entry?.id === cap?.column);
+    if (!column || column.type !== "boolean") {
+      throw new Error(
+        `${id} combat attacks[${index}].strikesCappedBy names "${cap?.column}", which is not a boolean column of "${source.list}"`,
+      );
+    }
+  });
   const attackDistances = (combat.attacks ?? []).flatMap((source, index) =>
     ["reach", "range"].filter((key) => source?.[key] !== undefined).map((key) => `attacks[${index}].${key}`),
   );
@@ -858,6 +938,13 @@ export function assertRulesetCombat(manifest, document) {
     for (const effect of entry.effects ?? []) {
       if (!RULESET_COMBAT_CONDITION_EFFECTS.includes(effect)) {
         throw new Error(`${id} combat condition "${entry.condition}" has the unknown effect ${JSON.stringify(effect)}`);
+      }
+    }
+    // Both lists of saves, exactly as the Engine reads them: the ones this condition is about, and
+    // the ones it fails outright.
+    for (const save of entry.saves ?? []) {
+      if (!names.saves.has(save)) {
+        throw new Error(`${id} combat condition "${entry.condition}" narrows unknown save ${JSON.stringify(save)}`);
       }
     }
     for (const save of entry.failsSaves ?? []) {
