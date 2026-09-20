@@ -1,5 +1,9 @@
 # Long-Term Memory changelog
 
+## 1.3.7 — 2026-09-20
+
+- Require review for character, lorebook, and chat-summary source provenance, and recompute that boundary at commit so forged or stale review flags cannot enable low-risk auto-apply.
+
 ## 1.3.6 — 2026-09-20
 
 - Preserved actionable extraction error codes and retryability, and reused one deterministic vault snapshot for Game Mode batch imports.

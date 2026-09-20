@@ -121,6 +121,10 @@ function canMarkCurrent(prepared: PreparedSource) {
   }
   return false;
 }
+
+function sourceRequiresReview(sourceNote: LtmNote) {
+  return ["character", "lorebook", "chat_summary"].includes(sourceNote.provenance?.kind ?? "");
+}
 async function rebuildAfterSourceExtraction(root?: string) {
   try {
     await rebuildLongTermMemoryIndexes({ root });
@@ -244,8 +248,7 @@ export async function prepareLongTermMemorySource(options: PrepareOptions): Prom
   return {
     ...result,
     extractionMethod: "llm",
-    reviewRequired:
-      options.sourceNote.provenance?.kind === "character" || options.sourceNote.provenance?.kind === "lorebook",
+    reviewRequired: sourceRequiresReview(options.sourceNote),
   };
 }
 
@@ -254,6 +257,7 @@ async function commitPreparedLongTermMemorySource(
   options: { root?: string; overlay?: Map<string, LtmNote>; applyLowRisk?: boolean },
 ) {
   const storage = new LongTermMemoryStorage(options.root);
+  const reviewRequired = prepared.reviewRequired || sourceRequiresReview(prepared.sourceNote);
   // ponytail: serialize finalization per vault; use narrower locks only if local commit throughput becomes a bottleneck.
   return withLtmVaultLock(storage.root, async () => {
     const draft = await finalizeLongTermMemoryExtractionDraft(
@@ -268,7 +272,7 @@ async function commitPreparedLongTermMemorySource(
         diagnostics: prepared.diagnostics,
         outcome: prepared.outcome,
         accounting: prepared.accounting,
-        reviewRequired: prepared.reviewRequired,
+        reviewRequired,
         chatId: prepared.chatId,
         afterWrite: (draft) =>
           draft.extractionOutcome?.droppedCandidates.length
@@ -290,7 +294,7 @@ async function commitPreparedLongTermMemorySource(
         : prepared.sourceNote;
     const fingerprintPersisted = markCurrent && Boolean(note.extractionFingerprint);
     const applyResult =
-      options.applyLowRisk && !prepared.reviewRequired && fingerprintPersisted && draft.mutations.length
+      options.applyLowRisk && !reviewRequired && fingerprintPersisted && draft.mutations.length
         ? await applyLongTermMemoryDraft(draft.id, {
             root: options.root,
             actor: "maintenance_api",
