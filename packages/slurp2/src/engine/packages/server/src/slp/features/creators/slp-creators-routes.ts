@@ -214,6 +214,7 @@ export async function slpCreatorsRoutes(app: FastifyInstance, deps: SlpRouteDeps
         request: parsed.data,
         connection,
         promptBlocks: slurpPromptContext(settings).blocks,
+        promptInstructions: slurpPromptContext(settings).instructions,
       });
     } catch (error) {
       logger.error(

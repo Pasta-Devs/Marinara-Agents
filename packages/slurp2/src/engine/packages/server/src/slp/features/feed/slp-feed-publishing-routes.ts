@@ -152,6 +152,7 @@ export async function slpFeedPublishingRoutes(app: FastifyInstance, deps: SlpRou
         guidance: body.data.guidance ?? "",
         connection,
         promptBlocks: slurpPromptContext(settings).blocks,
+        promptInstructions: slurpPromptContext(settings).instructions,
       });
     } catch (error) {
       logger.error(error, "[slurp] Post guidance draft failed using %s", connection.model || connection.provider);

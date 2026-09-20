@@ -663,6 +663,7 @@ export async function slpFeedPostRoutes(app: FastifyInstance, deps: SlpRouteDeps
       return await generateInvitedSlpPostDraft(app.db, account!, connection, {
         ...body.data,
         promptBlocks: prompts.blocks,
+        promptInstructions: prompts.instructions,
         promptMode: prompts.mode,
       });
     } catch (error) {

@@ -296,7 +296,11 @@ export function SlurpPromptBlockBuilder({
             .map((entry) => {
               const block = blockDefinition(prompt, entry.id);
               if (block.optional && entry.enabled === false) return "";
-              return entry.text?.trim() || block.defaultText.trim();
+              return (
+                (entry.instructionId
+                  ? instructions.find((instruction) => instruction.id === entry.instructionId)?.text
+                  : entry.text) || block.defaultText.trim()
+              );
             })
             .filter(Boolean)
             .join("\n");

@@ -20,7 +20,11 @@ import { parseGameJsonish } from "../../../services/game/jsonish.js";
 import { requireModelAnswer } from "../../base/model/slp-model-answer.js";
 import { withConnectionFallbackProvider } from "../../../services/llm/connection-fallback-provider.js";
 import type { ChatMessage } from "../../../services/llm/base-provider.js";
-import { composeSlurpPromptBlocks, type SlurpPromptBlockOverrides } from "../../base/prompting/slp-prompt-blocks.js";
+import {
+  composeSlurpPromptBlocks,
+  type SlurpPromptBlockOverrides,
+  type SlurpReusablePromptInstruction,
+} from "../../base/prompting/slp-prompt-blocks.js";
 import { createLLMProvider } from "../../../services/llm/provider-registry.js";
 import { createConnectionsStorage } from "../../../services/storage/connections.storage.js";
 import { describeSlurpPostCondition } from "../feed/slp-feed-contract.js";
@@ -86,6 +90,7 @@ export function buildCreatorReplyMessages(input: {
   /** Holidays and site events running today. See `slurp-platform-events.ts`. */
   platformEvents?: string | null;
   promptBlocks?: SlurpPromptBlockOverrides;
+  promptInstructions?: SlurpReusablePromptInstruction[];
   /** Which prompt personality to write. Defaults to the shipped mode. */
   promptMode?: SlurpPromptMode;
 }): ChatMessage[] {
@@ -141,6 +146,7 @@ export function buildCreatorReplyMessages(input: {
       { id: "output", kind: "required" as const, text: "Return JSON only. No prose outside the JSON object." },
     ],
     input.promptBlocks,
+    input.promptInstructions,
   );
   const data = {
     ...(input.platformEvents ? { platformEvents: input.platformEvents } : {}),
@@ -246,6 +252,7 @@ export async function generateCreatorReply(input: {
     contentMenu: await resolveSlurpCreatorMenu(input.db, input.creator.id).catch(() => ""),
     platformEvents: slurpPlatformEventInstruction(settings.platformEvents, new Date()),
     promptBlocks: prompts.blocks,
+    promptInstructions: prompts.instructions,
     promptMode: prompts.mode,
   });
   const debugMode = input.debugMode === true || isDebugAgentsEnabled();

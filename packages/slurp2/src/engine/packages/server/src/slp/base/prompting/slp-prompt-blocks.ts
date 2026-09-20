@@ -47,6 +47,7 @@ export type SlurpPromptModeOverrides = Partial<Record<SlurpPromptMode, SlurpProm
 export type SlurpPromptContext = {
   mode: SlurpPromptMode;
   blocks: SlurpPromptBlockOverrides;
+  instructions: SlurpReusablePromptInstruction[];
 };
 
 export type SlurpPromptBlock = {
@@ -492,9 +493,10 @@ export function normalizeSlurpPromptBlockOverrides(value: unknown): SlurpPromptM
 export function slurpPromptContext(settings: {
   promptMode?: unknown;
   promptBlocks?: SlurpPromptModeOverrides;
+  promptInstructions?: SlurpReusablePromptInstruction[];
 }): SlurpPromptContext {
   const mode = slurpPromptMode(settings.promptMode);
-  return { mode, blocks: settings.promptBlocks?.[mode] ?? {} };
+  return { mode, blocks: settings.promptBlocks?.[mode] ?? {}, instructions: settings.promptInstructions ?? [] };
 }
 
 /** Compose one prompt from current runtime blocks and a validated user layout. */
