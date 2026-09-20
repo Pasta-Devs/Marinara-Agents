@@ -11,7 +11,7 @@
         },
         "builtAgainst": {
           "engineVersion": "2.4.6",
-          "engineCommit": "e3599679043c0070b995f9be5d5aca85edacbdb5"
+          "engineCommit": "8aa5e0fc42969dbcad6d3a1511fc673cda71715b"
         },
         "id": "ruleset-5e-2014",
         "name": "5e (SRD 5.1)",
@@ -64,7 +64,7 @@
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/ruleset-5e-2014.png",
       "artifact": {
         "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/ruleset-5e-2014-0.6.0.zip",
-        "sha256": "9c5c3a5db08e56183743cebbc0d3f14d97e1b2adbceedf6594ae06736f4362e2",
+        "sha256": "221726698f7aadd13d08b87a4153c70e83b942c697cecf91137b18916ced2334",
         "bytes": 1286891
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Engine/blob/staging/docs/game/getting-started.md#choosing-rules"
