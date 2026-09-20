@@ -14,6 +14,7 @@ import {
   composeSlurpPromptBlocks,
   type SlurpPromptBlock,
   type SlurpPromptBlockOverrides,
+  type SlurpReusablePromptInstruction,
 } from "../../base/prompting/slp-prompt-blocks.js";
 import { SLURP_DEFAULT_PROMPT_MODE, type SlurpPromptMode } from "../../base/prompting/slp-prompt-modes.js";
 import { buildSlurpPostTimingContext } from "../../modules/feed/slp-post-timing.js";
@@ -98,6 +99,7 @@ export type SlurpPostPromptInput = {
   /** Matching lorebook entries for this Creator. Absent when lorebook context is off or nothing matched. */
   loreContext?: string;
   promptBlocks?: SlurpPromptBlockOverrides;
+  promptInstructions?: SlurpReusablePromptInstruction[];
   /** Which prompt personality to write. Defaults to the shipped mode. */
   promptMode?: SlurpPromptMode;
   /** From `slp-content-type.ts`: what this post is for. Produce mode only. */
@@ -225,7 +227,12 @@ export function buildSlurpPostBlocks(input: SlurpPostPromptInput): SlurpPromptBl
 export function buildNoodlerPostMessages(input: SlurpPostPromptInput): ChatMessage[] {
   const protect = (value: string) =>
     protectCreatorGeneratedIdentity(value, input.disclosureMode, input.publicIdentity) ?? "";
-  const system = composeSlurpPromptBlocks("post", buildSlurpPostBlocks(input), input.promptBlocks);
+  const system = composeSlurpPromptBlocks(
+    "post",
+    buildSlurpPostBlocks(input),
+    input.promptBlocks,
+    input.promptInstructions,
+  );
   const user = [
     "# Slurp account",
     `Display name: ${protect(input.account.displayName)}`,

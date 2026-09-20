@@ -633,6 +633,20 @@ export function normalizeSlurpSettings(raw: unknown): SlurpSettings {
     rawRecord.imageGenerationPrompt === LEGACY_SLP_CREATOR_DEFAULT_IMAGE_GENERATION_PROMPT
       ? SLP_CREATOR_DEFAULT_IMAGE_GENERATION_PROMPT
       : rawRecord.imageGenerationPrompt;
+  candidate.promptInstructions = rawRecord.promptInstructions ?? [
+    {
+      id: "creator-voice",
+      name: "Creator voice",
+      text: candidate.generationGuidance as string,
+      builtin: true,
+    },
+    {
+      id: "image-style",
+      name: "Image style",
+      text: candidate.imageGenerationPrompt as string,
+      builtin: true,
+    },
+  ];
   candidate.imagePromptInterpretation =
     rawRecord.imagePromptInterpretation === undefined ||
     rawRecord.imagePromptInterpretation === "" ||

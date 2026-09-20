@@ -340,6 +340,7 @@ export async function generateCreatorPost(
     scheduleContext,
     loreContext,
     promptBlocks: prompts.blocks,
+    promptInstructions: settings.promptInstructions,
     promptMode: prompts.mode,
     contentTypeInstruction,
     productionInstruction: production ? slurpProductionInstruction(production) : undefined,

@@ -235,12 +235,14 @@ export function SlpPromptsPanel(page: SlpBackstagePageProps) {
           <SlurpPromptBlockBuilder
             mode={settings.promptMode}
             value={settings.promptBlocks[settings.promptMode] ?? {}}
+            instructions={settings.promptInstructions}
             pending={updateSettings.isPending}
             onSave={(promptBlocks) =>
               // Merge, never replace. Writing only the active mode would drop the other mode's
               // saved layout on the first save after a switch.
               update("promptBlocks", { ...settings.promptBlocks, [settings.promptMode]: promptBlocks })
             }
+            onSaveInstructions={(promptInstructions) => update("promptInstructions", promptInstructions)}
           />
         </SettingAnchor>
       </div>

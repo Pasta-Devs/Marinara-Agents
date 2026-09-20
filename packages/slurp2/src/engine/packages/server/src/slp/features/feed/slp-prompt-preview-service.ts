@@ -83,6 +83,7 @@ export async function previewSlurpPromptBlocks(
     productionInstruction: production ? slurpProductionInstruction(production) : undefined,
     promptMode: input.mode,
     promptBlocks: settings.promptBlocks?.[input.mode] ?? {},
+    promptInstructions: settings.promptInstructions,
   });
   return { supported: true, blocks: blocks.map((block) => ({ id: block.id, text: block.text.trim() })) };
 }
