@@ -48,6 +48,7 @@ import {
 import { slpResponseFormat } from "../../base/prompting/slp-response-format.js";
 import { normalizeSlurpFanActivityRows } from "../../modules/audience/slp-fan-activity-response.js";
 import { composeSlurpPromptBlocks } from "../../base/prompting/slp-prompt-blocks.js";
+import { slurpPromptContext } from "../../base/prompting/slp-prompt-blocks.js";
 
 type GenerationConnection = NonNullable<Awaited<ReturnType<ReturnType<typeof createConnectionsStorage>["getWithKey"]>>>;
 
@@ -203,7 +204,10 @@ function describeFanRelationship(persona: {
 
 function buildFanActivityMessages(input: {
   creators: SlpCreatorFanCreatorCandidate[];
-  settings: Pick<SlurpSettings, "fanLikesPerRefresh" | "fanRepliesPerRefresh" | "audienceTone" | "promptBlocks"> &
+  settings: Pick<
+    SlurpSettings,
+    "fanLikesPerRefresh" | "fanRepliesPerRefresh" | "audienceTone" | "promptMode" | "promptBlocks"
+  > &
     Partial<Pick<SlurpSettings, "simulationTuning">>;
   imageContexts?: ReadonlyMap<string, string>;
 }): ChatMessage[] {
@@ -261,7 +265,7 @@ function buildFanActivityMessages(input: {
       },
       { id: "audience", kind: "context", text: "The supplied audience data follows." },
     ],
-    input.settings.promptBlocks,
+    slurpPromptContext(input.settings).blocks,
   );
   const creators = input.creators.map((candidate) => ({
     creatorAccountId: candidate.creator.id,
@@ -320,6 +324,7 @@ async function generateFanActivity(input: {
     | "audienceTone"
     | "imageContextMode"
     | "imageContextConnectionId"
+    | "promptMode"
     | "promptBlocks"
   >;
   creators: SlpCreatorFanCreatorCandidate[];

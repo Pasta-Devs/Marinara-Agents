@@ -30,6 +30,7 @@ import type { SlpImagePromptReviewItem, ReviewedSlpImagePrompt } from "./slp-pub
 import { characterNameFromRow } from "../../modules/creators/slp-public-support.js";
 import { selectSlpImageProviderPrompt } from "../../base/media/slp-image-prompt.js";
 import { slurpImageExtension } from "../../base/media/slp-image-format.js";
+import { slurpPromptContext } from "../../base/prompting/slp-prompt-blocks.js";
 
 const REVIEWED_IMAGE_CLAIM_LEASE_MS = 2 * 60 * 1000;
 const REVIEWED_IMAGE_CLAIM_RENEW_MS = 30 * 1000;
@@ -64,6 +65,7 @@ export async function generateCreatorPostImage(input: {
     | "imageWidth"
     | "imageHeight"
     | "characterImageInstructions"
+    | "promptMode"
     | "promptBlocks"
   >;
   characters: ReturnType<typeof createCharactersStorage>;
@@ -292,7 +294,7 @@ export async function generateCreatorPostImage(input: {
         instructions: redactIdentity(imagePromptInstructions),
         characterContext,
         styleGuidance,
-        promptBlocks: input.settings.promptBlocks,
+        promptBlocks: slurpPromptContext(input.settings).blocks,
       })
     : null;
   // The style profile is an Engine setting, not something the interpretation model owns. The

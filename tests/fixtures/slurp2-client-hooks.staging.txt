@@ -30,7 +30,7 @@ get /slurp2/noodler/viewer?personaId=${encodedPersonaId}
 get /slurp2/settings
 get /slurp2/settings/audience-characters/groups
 get /slurp2/settings/defaults
-get /slurp2/settings/prompt-blocks
+get /slurp2/settings/prompt-blocks?mode=${encodeURIComponent(mode)}
 patch /slurp2/accounts/${encodeURIComponent(accountId)}/settings
 patch /slurp2/accounts/${encodeURIComponent(accountId)}/settings
 patch /slurp2/accounts/${encodeURIComponent(accountId)}/settings

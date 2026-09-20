@@ -3,8 +3,9 @@ import { z } from "zod";
 import { SLURP_DISCOVERY_TAG_MAX_LENGTH, SLURP_DISCOVERY_TAG_SEED } from "../discovery/slp-discovery-profile.js";
 import {
   normalizeSlurpPromptBlockOverrides,
-  SlurpPromptBlockOverrides,
+  SlurpPromptModeOverrides,
 } from "../../base/prompting/slp-prompt-blocks.js";
+import { SLURP_DEFAULT_PROMPT_MODE, SLURP_PROMPT_MODES } from "../../base/prompting/slp-prompt-modes.js";
 import { SLURP_DEFAULT_ECONOMY } from "../economy/slp-wallet.js";
 import {
   slurpCreatorCollabsSchema,
@@ -278,7 +279,15 @@ export const slurpSettingsSchema = z.object({
       }),
     )
     .max(20),
-  /** User changes to the shared prompt block layouts. Defaults stay in source. */
+  /**
+   * Which prompt personality the whole package runs: the rebuilt `produce` prompts or the
+   * `classic` ones they replaced. See `slp-prompt-modes.ts`.
+   */
+  promptMode: z.enum(SLURP_PROMPT_MODES),
+  /**
+   * User changes to the shared prompt block layouts, kept per mode. Defaults stay in source.
+   * Switching modes never discards the other mode's tuning.
+   */
   promptBlocks: z.unknown().transform(normalizeSlurpPromptBlockOverrides),
   enableEnhancedTimelineWriting: z.boolean(),
   includeCharacterSchedules: z.boolean(),
@@ -513,7 +522,8 @@ export const DEFAULT_SLURP_SETTINGS: SlurpSettings = {
   postShowMoreLength: 300,
   characterImageInstructions: {},
   promptPresets: [],
-  promptBlocks: {} satisfies SlurpPromptBlockOverrides,
+  promptMode: SLURP_DEFAULT_PROMPT_MODE,
+  promptBlocks: {} satisfies SlurpPromptModeOverrides,
   professorMariCreatorSource: true,
   enableEnhancedTimelineWriting: false,
   includeCharacterSchedules: false,

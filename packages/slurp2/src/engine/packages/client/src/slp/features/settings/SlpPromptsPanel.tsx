@@ -12,6 +12,7 @@ import {
   DEFAULT_SLURP_GENERATION_GUIDANCE,
 } from "../../modules/settings/slp-backstage-format";
 import { PromptCard } from "../../modules/settings/SlpBackstageKit";
+import { SLURP_PROMPT_MODES, type SlurpPromptMode } from "./slp-settings-contract";
 
 /**
  * Prompts: every text Slurp sends to a model, in one place.
@@ -207,11 +208,39 @@ export function SlpPromptsPanel(page: SlpBackstagePageProps) {
               "Change the instructions, order, and optional context for every prompt Slurp sends to a model.",
           })}
         />
+        <Field
+          settingKey="promptMode"
+          label={t("ui.slurp.settings.prompts.modeLabel", { defaultValue: "Prompt mode" })}
+          detail={t("ui.slurp.settings.prompts.modeDetail", {
+            defaultValue:
+              "Produce writes as a creator who plans, shoots, and sells content. Classic is the older behaviour, where a moment happens and a photo records it. Each mode keeps its own block edits, so switching never discards the other one's tuning.",
+          })}
+        >
+          <select
+            value={settings.promptMode}
+            disabled={updateSettings.isPending}
+            onChange={(event) => void update("promptMode", event.target.value as SlurpPromptMode)}
+            className="min-h-10 w-full rounded-lg border border-[var(--slurp-outline)] bg-transparent px-3 text-sm"
+          >
+            {SLURP_PROMPT_MODES.map((mode) => (
+              <option key={mode} value={mode}>
+                {t(`ui.slurp.settings.prompts.mode.${mode}`, {
+                  defaultValue: mode === "produce" ? "Produce (new)" : "Classic",
+                })}
+              </option>
+            ))}
+          </select>
+        </Field>
         <SettingAnchor settingKey="promptBlocks">
           <SlurpPromptBlockBuilder
-            value={settings.promptBlocks}
+            mode={settings.promptMode}
+            value={settings.promptBlocks[settings.promptMode] ?? {}}
             pending={updateSettings.isPending}
-            onSave={(promptBlocks) => update("promptBlocks", promptBlocks)}
+            onSave={(promptBlocks) =>
+              // Merge, never replace. Writing only the active mode would drop the other mode's
+              // saved layout on the first save after a switch.
+              update("promptBlocks", { ...settings.promptBlocks, [settings.promptMode]: promptBlocks })
+            }
           />
         </SettingAnchor>
       </div>

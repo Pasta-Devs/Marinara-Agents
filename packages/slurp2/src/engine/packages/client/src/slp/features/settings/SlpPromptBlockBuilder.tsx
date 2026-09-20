@@ -2,11 +2,13 @@ import { useEffect, useState } from "react";
 import { ChevronDown, ChevronUp, GripVertical, LockKeyhole, Pencil, RotateCcw } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import type { SlurpPromptBlockOverride } from "../../base/state/slp-state-types";
-import type { SlurpPromptBlockDefinition, SlurpPromptDefinition } from "./slp-settings-contract";
+import type { SlurpPromptBlockDefinition, SlurpPromptDefinition, SlurpPromptMode } from "./slp-settings-contract";
 import { useSlurpPromptBlocks } from "./slp-settings-hooks";
 import { Modal } from "../../../components/ui/Modal";
 
 type PromptBlockBuilderProps = {
+  /** Which mode's inventory is being edited. The two modes declare different block ids. */
+  mode: SlurpPromptMode;
   value: Record<string, SlurpPromptBlockOverride[]>;
   pending: boolean;
   onSave: (value: Record<string, SlurpPromptBlockOverride[]>) => Promise<boolean>;
@@ -48,15 +50,22 @@ function blockDefinition(prompt: SlurpPromptDefinition, id: string): SlurpPrompt
   return prompt.blocks.find((block) => block.id === id)!;
 }
 
-export function SlurpPromptBlockBuilder({ value, pending, onSave }: PromptBlockBuilderProps) {
+export function SlurpPromptBlockBuilder({ mode, value, pending, onSave }: PromptBlockBuilderProps) {
   const { t } = useTranslation();
-  const definitions = useSlurpPromptBlocks();
+  const definitions = useSlurpPromptBlocks(mode);
   const [draft, setDraft] = useState(value);
   const [openPromptId, setOpenPromptId] = useState<string | null>(null);
   const [editing, setEditing] = useState<{ promptId: string; blockId: string } | null>(null);
   const [textDraft, setTextDraft] = useState("");
 
-  useEffect(() => setDraft(value), [value]);
+  // Reset when the mode changes as well as when the value does. Without the mode in the
+  // dependency list a half-finished classic layout stayed in the draft after switching to produce
+  // and was saved against produce's block ids.
+  useEffect(() => {
+    setDraft(value);
+    setOpenPromptId(null);
+    setEditing(null);
+  }, [value, mode]);
 
   const prompts = definitions.data?.prompts ?? [];
   const promptLabel = (id: string) => t(`ui.slurp.settings.prompts.prompt.${id}`, { defaultValue: promptName(id) });

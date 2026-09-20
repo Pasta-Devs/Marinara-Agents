@@ -37,6 +37,7 @@ import {
   parseRecord,
 } from "../../modules/creators/slp-public-support.js";
 import { bootstrapVisibleSlp } from "../../data/creators/slp-creator-accounts.js";
+import { slurpPromptContext } from "../../base/prompting/slp-prompt-blocks.js";
 
 type ImageConnection = NonNullable<Awaited<ReturnType<ReturnType<typeof createConnectionsStorage>["getWithKey"]>>>;
 
@@ -266,7 +267,7 @@ export async function generateSlpPostImage(input: {
         instructions: imagePromptInstructions,
         characterContext,
         styleGuidance,
-        promptBlocks: input.settings.promptBlocks,
+        promptBlocks: slurpPromptContext(input.settings).blocks,
       })
     : null;
   // The style profile is an Engine setting, not something the interpretation model owns. The

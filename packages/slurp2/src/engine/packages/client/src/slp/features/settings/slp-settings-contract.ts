@@ -91,7 +91,10 @@ export type SlurpSettings = {
   postShowMoreLength: number;
   characterImageInstructions: Record<string, boolean>;
   promptPresets: SlurpPromptPreset[];
-  promptBlocks: Record<string, SlurpPromptBlockOverride[]>;
+  /** Which prompt personality the package runs. See the server's `slp-prompt-modes.ts`. */
+  promptMode: SlurpPromptMode;
+  /** Block layouts per mode. Switching modes never discards the other mode's tuning. */
+  promptBlocks: Partial<Record<SlurpPromptMode, Record<string, SlurpPromptBlockOverride[]>>>;
   professorMariCreatorSource: boolean;
   enableEnhancedTimelineWriting: boolean;
   includeCharacterSchedules: boolean;
@@ -143,11 +146,19 @@ export type SlurpSettings = {
   onboarding: "not_started" | "in_progress" | "completed";
 };
 export type SlurpSettingsUpdate = Partial<SlurpSettings>;
+export const SLURP_PROMPT_MODES = ["classic", "produce"] as const;
+export type SlurpPromptMode = (typeof SLURP_PROMPT_MODES)[number];
 export type SlurpPromptBlockDefinition = {
   id: string;
   kind: "editable" | "required" | "context";
   optional: boolean;
   defaultText: string;
+};
+/** The prompt-blocks response. Named rather than inline: the client-hook scanner cannot read a
+ * generic argument containing a semicolon, so an inline object type hides the call from it. */
+export type SlurpPromptBlocksResponse = {
+  mode: SlurpPromptMode;
+  prompts: SlurpPromptDefinition[];
 };
 export type SlurpPromptDefinition = {
   id: string;

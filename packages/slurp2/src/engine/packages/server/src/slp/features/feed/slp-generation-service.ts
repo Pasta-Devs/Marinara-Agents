@@ -76,6 +76,7 @@ export {
   containsIdentity,
   type PublicIdentity,
 } from "../../base/identity/slp-identity-protection.js";
+import { slurpPromptContext } from "../../base/prompting/slp-prompt-blocks.js";
 
 export type GeneratedCreatorPostResult = {
   post: SlpCreatorManagedPost;
@@ -277,7 +278,7 @@ export async function generateCreatorPost(
     postMaxLength: settings.postMaxLength,
     scheduleContext,
     loreContext,
-    promptBlocks: settings.promptBlocks,
+    promptBlocks: slurpPromptContext(settings).blocks,
     generatedAt: input.generatedAt ?? new Date(),
     publicationTime: input.publicationTime,
   });

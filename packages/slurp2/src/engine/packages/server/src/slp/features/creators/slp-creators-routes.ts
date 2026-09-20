@@ -26,6 +26,7 @@ import { verifyCreatorSourceRevisionToken } from "../../base/identity/slp-source
 import type { FastifyInstance } from "fastify";
 import { slurpDiscoveryTagNameSchema } from "../../modules/requests/slp-request-schemas.js";
 import type { SlpRouteDeps } from "../viewer/slp-viewer-contract.js";
+import { slurpPromptContext } from "../../base/prompting/slp-prompt-blocks.js";
 
 const slpStageProfileUpdateRequestSchema = slpStageProfileUpdateSchema.extend({
   ...slurpDiscoveryProfileSchema.shape,
@@ -129,7 +130,7 @@ export async function slpCreatorsRoutes(app: FastifyInstance, deps: SlpRouteDeps
           personality: String(data.personality ?? ""),
         },
         scheduleSettings.simulationTuning.prompts.scheduleExtra,
-        scheduleSettings.promptBlocks,
+        slurpPromptContext(scheduleSettings).blocks,
       );
     } catch (error) {
       req.log.warn({ err: error }, "Conversation schedule generation returned invalid output");
@@ -212,7 +213,7 @@ export async function slpCreatorsRoutes(app: FastifyInstance, deps: SlpRouteDeps
       return await generateCreatorStageProfileDraft(app.db, {
         request: parsed.data,
         connection,
-        promptBlocks: settings.promptBlocks,
+        promptBlocks: slurpPromptContext(settings).blocks,
       });
     } catch (error) {
       logger.error(

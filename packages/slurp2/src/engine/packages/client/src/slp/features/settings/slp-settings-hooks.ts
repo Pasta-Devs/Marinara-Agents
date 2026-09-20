@@ -1,7 +1,12 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../../../lib/api-client.js";
 import { slpKeys } from "../../base/state/slp-query-keys.js";
-import type { SlurpPromptDefinition, SlurpSettings, SlurpSettingsUpdate } from "./slp-settings-contract.js";
+import type {
+  SlurpPromptBlocksResponse,
+  SlurpPromptMode,
+  SlurpSettings,
+  SlurpSettingsUpdate,
+} from "./slp-settings-contract.js";
 
 export function useSlurpSettings() {
   return useQuery({
@@ -17,10 +22,13 @@ export function useSlurpSettingsDefaults() {
     staleTime: Infinity,
   });
 }
-export function useSlurpPromptBlocks() {
+// Keyed by mode, because the two modes return different inventories. Sharing one cache entry
+// showed produce mode's blocks while classic was selected.
+export function useSlurpPromptBlocks(mode: SlurpPromptMode) {
   return useQuery({
-    queryKey: [...slpKeys.settings(), "prompt-blocks"] as const,
-    queryFn: () => api.get<{ prompts: SlurpPromptDefinition[] }>("/slurp2/settings/prompt-blocks"),
+    queryKey: [...slpKeys.settings(), "prompt-blocks", mode] as const,
+    queryFn: () =>
+      api.get<SlurpPromptBlocksResponse>(`/slurp2/settings/prompt-blocks?mode=${encodeURIComponent(mode)}`),
     staleTime: Infinity,
   });
 }

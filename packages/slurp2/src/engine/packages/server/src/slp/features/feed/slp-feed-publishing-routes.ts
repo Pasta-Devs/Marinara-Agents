@@ -26,6 +26,7 @@ import {
   sendCreatorMediaError,
 } from "../../base/host/slp-multipart.js";
 import type { SlpRouteDeps } from "../viewer/slp-viewer-contract.js";
+import { slurpPromptContext } from "../../base/prompting/slp-prompt-blocks.js";
 
 const slurpTargetedRefreshSchema = slpCreatorTargetedRefreshSchema.extend({
   access: z.enum(["public", "locked"]).optional(),
@@ -150,7 +151,7 @@ export async function slpFeedPublishingRoutes(app: FastifyInstance, deps: SlpRou
         currentDraft: body.data.currentDraft ?? "",
         guidance: body.data.guidance ?? "",
         connection,
-        promptBlocks: settings.promptBlocks,
+        promptBlocks: slurpPromptContext(settings).blocks,
       });
     } catch (error) {
       logger.error(error, "[slurp] Post guidance draft failed using %s", connection.model || connection.provider);

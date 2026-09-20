@@ -43,6 +43,7 @@ import { createChatsStorage } from "../../../services/storage/chats.storage.js";
 import { createCharactersStorage } from "../../../services/storage/characters.storage.js";
 import { SLURP_PLATFORM_CONTEXT } from "../../modules/prompting/slp-prompt.js";
 import { resolveCreatorCharacterCanon } from "../../data/creators/slp-source-resolve.js";
+import { slurpPromptContext } from "../../base/prompting/slp-prompt-blocks.js";
 
 type GenerationConnection = NonNullable<Awaited<ReturnType<ReturnType<typeof createConnectionsStorage>["getWithKey"]>>>;
 
@@ -232,7 +233,7 @@ export async function generateCreatorReply(input: {
     imageContext: imageContexts.get(input.post.id),
     contentMenu: await resolveSlurpCreatorMenu(input.db, input.creator.id).catch(() => ""),
     platformEvents: slurpPlatformEventInstruction(settings.platformEvents, new Date()),
-    promptBlocks: settings.promptBlocks,
+    promptBlocks: slurpPromptContext(settings).blocks,
   });
   const debugMode = input.debugMode === true || isDebugAgentsEnabled();
   const options = {

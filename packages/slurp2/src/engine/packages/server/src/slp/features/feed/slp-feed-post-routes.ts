@@ -43,6 +43,7 @@ import {
   readCreatorMultipart,
 } from "../../base/host/slp-multipart.js";
 import type { SlpRouteDeps } from "../viewer/slp-viewer-contract.js";
+import { slurpPromptContext } from "../../base/prompting/slp-prompt-blocks.js";
 
 const slurpCreatorPostCreateBaseSchema = (
   slpCreatorPostCreateWithMediaSchema instanceof z.ZodEffects
@@ -660,7 +661,7 @@ export async function slpFeedPostRoutes(app: FastifyInstance, deps: SlpRouteDeps
     try {
       return await generateInvitedSlpPostDraft(app.db, account!, connection, {
         ...body.data,
-        promptBlocks: settings.promptBlocks,
+        promptBlocks: slurpPromptContext(settings).blocks,
       });
     } catch (error) {
       if (isConnectionAdmissionFailure(error)) return reply.code(409).send({ error: getErrorMessage(error) });

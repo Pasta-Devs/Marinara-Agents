@@ -83,6 +83,7 @@ import {
   slurpModelWorkerAllows,
   type SlurpModelWorkerContext,
 } from "../../base/model/slp-model-worker.js";
+import { slurpPromptContext } from "../../base/prompting/slp-prompt-blocks.js";
 
 type GenerationConnection = NonNullable<Awaited<ReturnType<ReturnType<typeof createConnectionsStorage>["getWithKey"]>>>;
 
@@ -538,7 +539,7 @@ export async function buildSlurpMessagePrompt(input: SlurpMessagePromptInput): P
     publicIdentity,
     generationGuidance: settings.generationGuidance,
     viewerGenerationGuidance: input.generationGuidance,
-    promptBlocks: settings.promptBlocks,
+    promptBlocks: slurpPromptContext(settings).blocks,
     scheduleContext,
     characterCanon,
   });
