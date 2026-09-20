@@ -12,8 +12,8 @@ internal prompt implementation.
 | ----- | -------------------------------------------------------- | ----------- | -------- |
 | 1     | Prompt Studio page framing and scope context             | Complete    | 242ca65e |
 | 2     | Group prompt recipes and reduce technical density        | Complete    | —        |
-| 3     | Make prompt preview explicit and preserve draft context  | In progress | —        |
-| 4     | Remove visible Classic mode and migrate Produce defaults | Pending     | —        |
+| 3     | Make prompt preview explicit and preserve draft context  | Complete    | c7a1e41e |
+| 4     | Remove visible Classic mode and migrate Produce defaults | Complete    | —        |
 
 ## Slice 1 proof
 
@@ -46,3 +46,16 @@ internal prompt implementation.
 - Keep the selected Creator visible as the preview context.
 - Add the full model-generated result preview in a later sub-slice after the draft payload contract is
   defined.
+
+## Slice 4 proof
+
+- The Prompt Studio no longer renders a prompt mode selector.
+- The builder always edits the Produce inventory.
+- Classic is hidden from Backstage search while internal compatibility code remains available.
+- Existing stored Classic data is not deleted by this UI slice.
+
+## Slice 4 proof
+
+- Prompt preset, client hook, and prompt block regressions pass.
+- Prettier and `git diff --check` pass for the changed source and plan.
+- Full package typecheck remains blocked by the host disk-space failure recorded above.
