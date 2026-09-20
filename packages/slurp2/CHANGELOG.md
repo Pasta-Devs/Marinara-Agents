@@ -1,5 +1,13 @@
 # Slurp Remastered release notes
 
+## 0.1.6 — 2026-09-20
+
+- Prompt Studio now keeps voice, post, and image instructions readable in muted fields without opening an editor.
+- Recipes scan as compact capability rows, then open into a focused block-outline, pipeline, and preview workspace.
+- Collapsed blocks show their resolved prompt, while the selected block exposes its source, inputs, length, and draft action.
+- Presets and secondary controls stay available without competing with the main prompt workflow.
+- Compiled prompts can be copied directly from the preview inspector.
+
 ## 0.1.5 — 2026-09-20
 
 - Prompt Studio now starts with plain-language controls for voice, post behavior, and image direction.

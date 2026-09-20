@@ -19,7 +19,7 @@ internal prompt implementation.
 | 7     | Replace the settings wall with outcome controls           | Complete | a0bd6310 |
 | 8     | Build the focused responsive recipe workspace             | Complete | a0bd6310 |
 | 9     | Add draft/current comparison and finish validation        | Complete | 665e6361 |
-| 10    | Keep outcome prompts visible and simplify recipe scanning | Complete | —        |
+| 10    | Keep outcome prompts visible and simplify recipe scanning | Complete | 2761e122 |
 
 ## Slice 1 proof
 
