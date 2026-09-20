@@ -88,9 +88,8 @@ export function SlurpPromptBlockBuilder({
   const [editingInstructionId, setEditingInstructionId] = useState<string | null>(null);
   const [newInstructionName, setNewInstructionName] = useState("");
 
-  // Reset when the mode changes as well as when the value does. Without the mode in the
-  // dependency list a half-finished classic layout stayed in the draft after switching to produce
-  // and was saved against produce's block ids.
+  // Reset the editor view when the mode changes. Settings updates must not collapse the prompt that
+  // is open, because saving an instruction or block gives the parent a new settings object.
   useEffect(() => {
     setDraft(value);
     setSelectedPromptId(null);
@@ -100,7 +99,15 @@ export function SlurpPromptBlockBuilder({
     preview.reset();
     // `preview` is a stable mutation handle; listing it would reset the panel on every render.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [value, mode, instructions]);
+  }, [mode]);
+
+  useEffect(() => {
+    setDraft(value);
+  }, [value]);
+
+  useEffect(() => {
+    setInstructionDraft(instructions);
+  }, [instructions]);
 
   const prompts = definitions.data?.prompts ?? [];
   const promptLabel = (id: string) => t(`ui.slurp.settings.prompts.prompt.${id}`, { defaultValue: promptName(id) });
