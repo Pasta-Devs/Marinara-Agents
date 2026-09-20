@@ -18,6 +18,7 @@ async function main() {
   const { projectLtmDraftMutationGroup } = await import(`${source}/draft-projector.ts`);
   const { sourceHashForLtmSourceNote } = await import(`${source}/source-hash.ts`);
   const { normalizeStructuredSummaryEvidenceUnits } = await import(`${source}/structured-summary-normalizer.ts`);
+  const { validateLtmEvidenceUnits } = await import(`${source}/evidence-unit-validation.ts`);
   const { resolveScopedEvidenceUnitTargets, scopedVariantNoteId } = await import(`${source}/scoped-targets.ts`);
   const { ltmNoteIdSchema } =
     await import("../packages/long-term-memory/src/engine/packages/shared/src/features/agents/long-term-memory/schema.ts");
@@ -1274,6 +1275,27 @@ async function main() {
     ],
     notes: [],
   });
+  const aliasEvent = validateLtmEvidenceUnits({
+    units: [
+      unit(chat, {
+        bucket: "timeline_event",
+        subjectId: "Sera",
+        sectionKey: "event",
+        text: "Sera arrived at the observatory.",
+      }),
+    ],
+    sourceText: chat.sections.source.text,
+    sourceNote: chat,
+    existingNotes: [],
+    expectedSourceHash: sourceHashForLtmSourceNote(chat),
+    eventSubjectIdentityKeys: new Set(["sera"]),
+  });
+  assert.equal(
+    aliasEvent.diagnostics.find((diagnostic: any) => diagnostic.code === "event_subject_matches_character_alias")
+      ?.severity,
+    "error",
+    "timeline event identifiers matching character aliases must be rejected",
+  );
   const subjectIdentityRejection = resolveLtmSubjectIdentities({
     units: [
       unit(chat, {

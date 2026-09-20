@@ -34,15 +34,27 @@ export function renderSectionContributions(
   additive: boolean,
 ): LtmSection | null {
   if (!contributions.length) return null;
-  const manual = contributions.filter((contribution) => contribution.owner === "manual");
+  const deduplicated = contributions.filter((contribution, index) => {
+    const key =
+      contribution.owner === "source"
+        ? `source:${contribution.sourceNoteId}:${contribution.sourceHash}:${normalizedText(contribution.text)}`
+        : `manual:${normalizedText(contribution.text)}`;
+    return (
+      contributions.findIndex((candidate) => {
+        const candidateKey =
+          candidate.owner === "source"
+            ? `source:${candidate.sourceNoteId}:${candidate.sourceHash}:${normalizedText(candidate.text)}`
+            : `manual:${normalizedText(candidate.text)}`;
+        return candidateKey === key;
+      }) === index
+    );
+  });
+  const manual = deduplicated.filter((contribution) => contribution.owner === "manual");
   const rendered = additive
-    ? [
-        ...contributions.filter((contribution) => contribution.owner === "source"),
-        ...(manual.length ? [manual.at(-1)!] : []),
-      ]
+    ? [...deduplicated.filter((contribution) => contribution.owner === "source"), ...manual]
     : manual.length
       ? [manual.at(-1)!]
-      : [contributions.at(-1)!];
+      : [deduplicated.at(-1)!];
   const latest = [...rendered].sort((left, right) => left.updatedAt.localeCompare(right.updatedAt)).at(-1)!;
   let text = "";
   if (additive) {
@@ -63,7 +75,7 @@ export function renderSectionContributions(
   const importance = (["critical", "major", "moderate", "minor"] as const).find((value) =>
     rendered.some((item) => item.importance === value),
   );
-  const evidence = uniqueStrings(contributions.flatMap((item) => item.evidence ?? [])).slice(0, 100);
+  const evidence = uniqueStrings(deduplicated.flatMap((item) => item.evidence ?? [])).slice(0, 100);
   return {
     text,
     updatedAt: latest.updatedAt,
@@ -73,6 +85,10 @@ export function renderSectionContributions(
     ...(latest.dimensions ? { dimensions: latest.dimensions } : {}),
     ...(latest.dimensionChanges ? { dimensionChanges: latest.dimensionChanges } : {}),
     ...(evidence.length ? { evidence } : {}),
-    contributions,
+    contributions: deduplicated,
   };
+}
+
+function normalizedText(text: string) {
+  return text.trim().replace(/\s+/g, " ").toLocaleLowerCase();
 }

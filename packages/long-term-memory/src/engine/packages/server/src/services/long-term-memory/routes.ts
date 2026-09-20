@@ -35,6 +35,10 @@ import {
   ltmIdentityRepairApplyResponseSchema,
   ltmIdentityRepairPreviewRequestSchema,
   ltmIdentityRepairPreviewResponseSchema,
+  ltmNoteForkApplyRequestSchema,
+  ltmNoteForkApplyResponseSchema,
+  ltmNoteForkPreviewRequestSchema,
+  ltmNoteForkPreviewResponseSchema,
   ltmInteropPreviewRequestSchema,
   ltmInteropPreviewResponseSchema,
   ltmRepairRequestSchema,
@@ -62,6 +66,7 @@ import { getLtmExtractionConfig, updateLtmExtractionConfig } from "./extraction-
 import { isEnoent } from "./ltm-utils.js";
 import { checkLongTermMemoryIntegrity, repairLongTermMemory } from "./maintenance.js";
 import { applyLtmNoteTransfer, previewLtmNoteTransfer } from "./note-transfer.js";
+import { applyLtmNoteForkRepair, previewLtmNoteForkRepair } from "./note-fork-repair.js";
 import { getPackageLanguageModels, getPackagePersistence, getPackageResources, logger } from "./package-runtime.js";
 import { getLongTermMemoryDirectories, LTM_DIR_NAME } from "./paths.js";
 import { longTermMemoryRecallIndexPath, parseLtmRecallIndex, rebuildLongTermMemoryIndexes } from "./rebuild.js";
@@ -1322,6 +1327,19 @@ export function createLongTermMemoryRoutes(runtime: {
           });
         }
       },
+    );
+    app.post<{ Body: unknown }>("/fork-repair/preview", { bodyLimit: MAINTENANCE_BODY_LIMIT_BYTES }, async (request) =>
+      ltmNoteForkPreviewResponseSchema.parse(
+        await previewLtmNoteForkRepair(ltmNoteForkPreviewRequestSchema.parse(request.body ?? {}), { root }),
+      ),
+    );
+    app.post<{ Body: unknown }>(
+      "/fork-repair/apply",
+      { bodyLimit: IDENTITY_REPAIR_BODY_LIMIT_BYTES },
+      async (request) =>
+        ltmNoteForkApplyResponseSchema.parse(
+          await applyLtmNoteForkRepair(ltmNoteForkApplyRequestSchema.parse(request.body ?? {}), { root }),
+        ),
     );
     app.post<{ Body: unknown }>("/search", { bodyLimit: SEARCH_BODY_LIMIT_BYTES }, async (request) =>
       retrieveLongTermMemory({ ...searchBody.parse(request.body), root }),

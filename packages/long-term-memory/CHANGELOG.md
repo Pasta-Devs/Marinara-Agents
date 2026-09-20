@@ -1,5 +1,11 @@
 # Long-Term Memory changelog
 
+## 1.3.7 — 2026-09-20
+
+- Added review-only warnings for suspicious resolved-thread creates and strict event identifiers, plus backed-up preview/apply maintenance for divergent thread and world notes.
+- Repaired fork review scope, provenance, stale-preview, conflict, and rollback guardrails.
+- Corrected resolved-thread diagnostics and character-alias validation.
+
 ## 1.3.6 — 2026-09-20
 
 - Preserved actionable extraction error codes and retryability, and reused one deterministic vault snapshot for Game Mode batch imports.

@@ -1368,6 +1368,7 @@ export function compileEvidenceUnitExtraction(options: {
   mode?: LtmMode;
   sourceHash: string;
   allowedBuckets?: readonly LtmEvidenceUnit["bucket"][];
+  eventSubjectIdentityKeys?: ReadonlySet<string>;
   skipStructuredBackfill?: boolean;
 }): CompileEvidenceUnitExtractionResult {
   const normalized = normalizeStructuredSummaryEvidenceUnits({
@@ -1391,6 +1392,7 @@ export function compileEvidenceUnitExtraction(options: {
     expectedSourceHash: options.sourceHash,
     allowedBuckets:
       options.allowedBuckets ?? DEFAULT_LTM_ALLOWED_STREAMS_BY_MODE[options.mode ?? options.modes[0] ?? "roleplay"],
+    eventSubjectIdentityKeys: options.eventSubjectIdentityKeys,
   });
   const keptUnits = validated.keptUnits;
   const dedupResult = deduplicateUnits(keptUnits, options.existingNotes);
