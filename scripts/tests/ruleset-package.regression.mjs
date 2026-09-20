@@ -1756,6 +1756,19 @@ assert.throws(
     ),
   /combat attacks "attacks" reach names a column or a constant, not 5/u,
 );
+// An object carrying neither key is not a distance either: the column check lets an absent name
+// through, so without its own guard `{}` would be read as a reach and pass.
+for (const neither of [{}, { columns: "reach" }]) {
+  assert.throws(
+    () =>
+      assertRulesetCombat(
+        positionsManifest,
+        positionsWith((combat) => (combat.attacks[0].reach = neither)),
+      ),
+    /combat attacks "attacks" reach names a column or a constant/u,
+    JSON.stringify(neither),
+  );
+}
 for (const fixed of [-1, 10001]) {
   assert.throws(
     () =>

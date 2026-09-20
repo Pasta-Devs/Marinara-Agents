@@ -782,6 +782,11 @@ export function assertRulesetCombat(manifest, document) {
         }
         return fixed;
       }
+      // `column` lets an absent name through, so an object carrying neither key would otherwise be
+      // read as a distance and pass. It names one or the other, and nothing else is a distance.
+      if (value.column === undefined) {
+        throw new Error(`${id} combat attacks ${where} names a column or a constant, not ${JSON.stringify(value)}`);
+      }
       column(value.column, ["number"], where);
       return undefined;
     };
