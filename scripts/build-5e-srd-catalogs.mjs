@@ -2095,9 +2095,7 @@ function creatureAction(action, attackRow, report) {
   // The same second helping an attack may carry: "plus 7 (2d6) fire damage" on a breath weapon is
   // one more clause of the same blow, and the action's own save-for-half covers the clauses that
   // ask for none of their own. `or` alternatives are still a choice a fight cannot make.
-  const extraClauses = dropped
-    .filter((clause) => clause.joiner?.toLowerCase() === "plus")
-    .slice(0, CREATURE_MAX_PLUS);
+  const extraClauses = dropped.filter((clause) => clause.joiner?.toLowerCase() === "plus").slice(0, CREATURE_MAX_PLUS);
   const carriedClauses = new Set(extraClauses);
   const printedDistance = printedRange(RANGE.exec(text), label);
   const printedShape = printedArea(text);

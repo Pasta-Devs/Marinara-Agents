@@ -6,9 +6,9 @@ slots, hit dice, class resources, conditions, rests, a full character sheet, and
 a battle in a game on this ruleset is fought by these rules, on screen, against the SRD's own
 monsters.
 
-Requires **Marinara Engine 2.4.6+ with Capability API 1.29** (the ruleset seam, catalogs, the
-battle block, scaled catalog columns, the combat block, bestiaries, a fight with positions and what
-one TURN of that fight can do:
+Requires **Marinara Engine 2.4.6+ with Capability API 1.32** (the ruleset seam, catalogs, the
+battle block, scaled catalog columns, the combat block, bestiaries, a fight with positions, what
+one TURN of that fight can do, and a weapon that caps its own strikes:
 hash-pinned `ruleset.json` and `catalogs/<id>.json` assets the Engine reads by reserved filename,
 exactly like `gm-verbs.json`). Today that means the Engine `staging` branch; older hosts reject the manifest and
 cannot install this package. This package ships no server entrypoint, no client entrypoint, and no
@@ -428,14 +428,14 @@ A fight plays, so this is the honest list of what it still does not do:
 
 Available to Engine `staging` users only. The package is listed in `STAGING_ONLY_PACKAGE_IDS`, so
 it is published to the preview overlay under `catalog/preview/` that staging Engines read, and is
-hidden from stable `main` users. It stays there until the Capability API 1.29 ruleset, catalog,
-battle, scaled-column, combat, bestiary, positions and turn-economy seam reaches a stable Engine
-release.
+hidden from stable `main` users. It stays there until the Capability API 1.32 ruleset, catalog,
+battle, scaled-column, combat, bestiary, positions, turn-economy and strike-cap seam reaches a
+stable Engine release.
 
 ## Installing
 
 Install it from **Agents** and **Download Agents** in a Marinara Engine build that supports
-Capability API 1.29. After installing, choose it under Rules in the Game Mode setup wizard when you
+Capability API 1.32. After installing, choose it under Rules in the Game Mode setup wizard when you
 create a new game. Choose the **Tactical** combat style in the same wizard if you want the fight
 played on a board; **Classic** plays the same fight without positions.
 
