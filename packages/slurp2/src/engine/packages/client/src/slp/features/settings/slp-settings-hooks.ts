@@ -3,6 +3,7 @@ import { api } from "../../../lib/api-client.js";
 import { slpKeys } from "../../base/state/slp-query-keys.js";
 import type {
   SlurpPromptBlocksResponse,
+  SlurpPromptPreviewResponse,
   SlurpPromptMode,
   SlurpSettings,
   SlurpSettingsUpdate,
@@ -30,6 +31,18 @@ export function useSlurpPromptBlocks(mode: SlurpPromptMode) {
     queryFn: () =>
       api.get<SlurpPromptBlocksResponse>(`/slurp2/settings/prompt-blocks?mode=${encodeURIComponent(mode)}`),
     staleTime: Infinity,
+  });
+}
+/**
+ * What a prompt's blocks actually contain, for one Creator.
+ *
+ * A mutation rather than a query: it is asked for when a player opens a preview, not kept warm for
+ * every prompt in the panel.
+ */
+export function useSlurpPromptBlockPreview() {
+  return useMutation({
+    mutationFn: (input: { promptId: string; mode: SlurpPromptMode; creatorAccountId: string }) =>
+      api.post<SlurpPromptPreviewResponse>("/slurp2/settings/prompt-blocks/preview", input),
   });
 }
 export function useUpdateSlurpSettings() {

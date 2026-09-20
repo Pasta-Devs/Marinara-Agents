@@ -48,6 +48,7 @@ patch /slurp2/noodler/post-guidance
 patch /slurp2/noodler/posts/${encodeURIComponent(id)}
 patch /slurp2/noodler/posts/${encodeURIComponent(postId)}/interactions/${encodeURIComponent(interactionId)}
 patch /slurp2/settings
+post /slurp2/settings/prompt-blocks/preview
 post /slurp2/accounts/${encodeURIComponent(accountId)}/post-draft
 post /slurp2/accounts/${encodeURIComponent(sourceAccountId)}/noodler
 post /slurp2/ambient-profiles/reroll

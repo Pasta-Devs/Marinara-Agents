@@ -3,6 +3,7 @@ import { z } from "zod";
 import { SLURP_DISCOVERY_TAG_MAX_LENGTH, SLURP_DISCOVERY_TAG_SEED } from "../discovery/slp-discovery-profile.js";
 import {
   normalizeSlurpPromptBlockOverrides,
+  SlurpPromptBlockOverrides,
   SlurpPromptModeOverrides,
 } from "../../base/prompting/slp-prompt-blocks.js";
 import { SLURP_DEFAULT_PROMPT_MODE, SLURP_PROMPT_MODES } from "../../base/prompting/slp-prompt-modes.js";
@@ -379,7 +380,9 @@ export const slurpSettingsSchema = z.object({
 
 export type SlurpSettings = z.infer<typeof slurpSettingsSchema>;
 
-export type { SlurpPromptBlockOverrides };
+// Re-exported for the consumers that take one mode's layout. The stored shape is the mode-keyed
+// `SlurpPromptModeOverrides`; `slurpPromptContext` narrows one to the other.
+export type { SlurpPromptBlockOverrides, SlurpPromptModeOverrides };
 
 export type SlurpSettingsUpdateInput = Partial<SlurpSettings>;
 

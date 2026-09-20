@@ -1,9 +1,10 @@
 import { useEffect, useState } from "react";
-import { ChevronDown, ChevronUp, GripVertical, LockKeyhole, Pencil, RotateCcw } from "lucide-react";
+import { ChevronDown, ChevronUp, Eye, GripVertical, LockKeyhole, Pencil, RotateCcw } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import type { SlurpPromptBlockOverride } from "../../base/state/slp-state-types";
 import type { SlurpPromptBlockDefinition, SlurpPromptDefinition, SlurpPromptMode } from "./slp-settings-contract";
-import { useSlurpPromptBlocks } from "./slp-settings-hooks";
+import { useSlurpPromptBlockPreview, useSlurpPromptBlocks } from "./slp-settings-hooks";
+import { useCreatorAccounts } from "../creators/slp-creators-contract";
 import { Modal } from "../../../components/ui/Modal";
 
 type PromptBlockBuilderProps = {
@@ -53,6 +54,12 @@ function blockDefinition(prompt: SlurpPromptDefinition, id: string): SlurpPrompt
 export function SlurpPromptBlockBuilder({ mode, value, pending, onSave }: PromptBlockBuilderProps) {
   const { t } = useTranslation();
   const definitions = useSlurpPromptBlocks(mode);
+  const creators = useCreatorAccounts();
+  const preview = useSlurpPromptBlockPreview();
+  const [previewCreatorId, setPreviewCreatorId] = useState("");
+  const [previewing, setPreviewing] = useState<{ promptId: string; blockId: string } | null>(null);
+  const creatorOptions = creators.data ?? [];
+  const activeCreatorId = previewCreatorId || creatorOptions[0]?.id || "";
   const [draft, setDraft] = useState(value);
   const [openPromptId, setOpenPromptId] = useState<string | null>(null);
   const [editing, setEditing] = useState<{ promptId: string; blockId: string } | null>(null);
@@ -65,6 +72,10 @@ export function SlurpPromptBlockBuilder({ mode, value, pending, onSave }: Prompt
     setDraft(value);
     setOpenPromptId(null);
     setEditing(null);
+    setPreviewing(null);
+    preview.reset();
+    // `preview` is a stable mutation handle; listing it would reset the panel on every render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [value, mode]);
 
   const prompts = definitions.data?.prompts ?? [];
@@ -82,6 +93,16 @@ export function SlurpPromptBlockBuilder({ mode, value, pending, onSave }: Prompt
   const save = async () => {
     if (await onSave(draft)) setOpenPromptId(null);
   };
+  // Required blocks could be reordered but never read, so the text protecting privacy and output
+  // shape was the one text a player could not see. Rendered from the real builder for a real
+  // Creator, so what the panel shows is what the model is actually sent.
+  const showPreview = (promptId: string, blockId: string) => {
+    setPreviewing({ promptId, blockId });
+    if (activeCreatorId) preview.mutate({ promptId, mode, creatorAccountId: activeCreatorId });
+  };
+  const previewText = previewing
+    ? (preview.data?.blocks.find((block) => block.id === previewing.blockId)?.text ?? "")
+    : "";
 
   if (definitions.isLoading)
     return (
@@ -104,6 +125,22 @@ export function SlurpPromptBlockBuilder({ mode, value, pending, onSave }: Prompt
             "Reorder every part of a prompt. Required blocks protect privacy, safety, and readable model output. They move with the other blocks, but they cannot be removed or edited.",
         })}
       </p>
+      {creatorOptions.length > 0 && (
+        <label className="block text-xs font-semibold">
+          {t("ui.slurp.settings.prompts.previewCreator", { defaultValue: "Preview blocks as" })}
+          <select
+            value={activeCreatorId}
+            onChange={(event) => setPreviewCreatorId(event.target.value)}
+            className="mt-1 min-h-10 w-full rounded-lg border border-[var(--slurp-outline)] bg-transparent px-3 text-sm font-normal"
+          >
+            {creatorOptions.map((creator) => (
+              <option key={creator.id} value={creator.id}>
+                {creator.displayName}
+              </option>
+            ))}
+          </select>
+        </label>
+      )}
       {prompts.map((prompt) => {
         const layout = completeLayout(prompt, draft[prompt.id]);
         const changed = Boolean(value[prompt.id]?.length);
@@ -168,6 +205,17 @@ export function SlurpPromptBlockBuilder({ mode, value, pending, onSave }: Prompt
                             {t("ui.slurp.settings.prompts.blockUse", { defaultValue: "Use" })}
                           </label>
                         )}
+                        <button
+                          type="button"
+                          aria-label={t("ui.slurp.settings.prompts.previewBlockAria", {
+                            block: blockLabel(block.id),
+                            defaultValue: "Preview {{block}}",
+                          })}
+                          onClick={() => showPreview(prompt.id, block.id)}
+                          className="inline-flex size-10 items-center justify-center rounded-lg border border-[var(--slurp-outline)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)]"
+                        >
+                          <Eye size={15} aria-hidden="true" />
+                        </button>
                         {editable && (
                           <button
                             type="button"
@@ -242,6 +290,53 @@ export function SlurpPromptBlockBuilder({ mode, value, pending, onSave }: Prompt
           </section>
         );
       })}
+      <Modal
+        open={previewing !== null}
+        onClose={() => setPreviewing(null)}
+        title={
+          previewing
+            ? t("ui.slurp.settings.prompts.previewBlockTitle", {
+                block: blockLabel(previewing.blockId),
+                defaultValue: "Preview of {{block}}",
+              })
+            : t("ui.slurp.settings.prompts.previewBlock", { defaultValue: "Preview prompt block" })
+        }
+        width="max-w-3xl"
+      >
+        <div className="space-y-3">
+          {creatorOptions.length === 0 ? (
+            <p className="text-sm text-[var(--slurp-muted)]">
+              {t("ui.slurp.settings.prompts.previewNoCreator", {
+                defaultValue: "Set up a Creator first. A block is rendered for a real Creator, not from a sample.",
+              })}
+            </p>
+          ) : preview.isPending ? (
+            <p className="text-sm text-[var(--slurp-muted)]">
+              {t("ui.slurp.settings.prompts.previewLoading", { defaultValue: "Rendering..." })}
+            </p>
+          ) : preview.isError ? (
+            <p role="alert" className="text-sm text-[var(--destructive)]">
+              {t("ui.slurp.settings.prompts.previewError", { defaultValue: "Could not render this block." })}
+            </p>
+          ) : preview.data && !preview.data.supported ? (
+            <p className="text-sm text-[var(--slurp-muted)]">
+              {t("ui.slurp.settings.prompts.previewUnsupported", {
+                defaultValue: "This prompt cannot be previewed yet. Creator posts can.",
+              })}
+            </p>
+          ) : previewText ? (
+            <pre className="max-h-96 overflow-auto whitespace-pre-wrap rounded-lg bg-[var(--slurp-canvas)] p-3 text-xs leading-5 ring-1 ring-inset ring-[var(--slurp-outline)]">
+              {previewText}
+            </pre>
+          ) : (
+            <p className="text-sm text-[var(--slurp-muted)]">
+              {t("ui.slurp.settings.prompts.previewEmpty", {
+                defaultValue: "This block adds nothing for this Creator right now.",
+              })}
+            </p>
+          )}
+        </div>
+      </Modal>
       <Modal
         open={editing !== null}
         onClose={() => setEditing(null)}

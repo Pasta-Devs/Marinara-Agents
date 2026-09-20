@@ -4,6 +4,16 @@ import { DEFAULT_SLURP_SETTINGS, slurpSettingsSchema } from "../../modules/setti
 import { getSlurpModelBudgetLedger } from "../../base/model/slp-model-worker.js";
 import type { FastifyInstance } from "fastify";
 import type { SlpRouteDeps } from "../viewer/slp-viewer-contract.js";
+import { z } from "zod";
+import { getErrorMessage } from "../../modules/creators/slp-public-support.js";
+import { previewSlurpPromptBlocks } from "../feed/slp-feed-contract.js";
+import { SLURP_PROMPT_IDS } from "../../base/prompting/slp-prompt-blocks.js";
+
+const slurpPromptPreviewSchema = z.object({
+  promptId: z.enum(SLURP_PROMPT_IDS),
+  mode: z.enum(SLURP_PROMPT_MODES),
+  creatorAccountId: z.string().trim().min(1),
+});
 
 export async function slpSettingsRoutes(app: FastifyInstance, deps: SlpRouteDeps) {
   const { noodle } = deps;
@@ -26,6 +36,19 @@ export async function slpSettingsRoutes(app: FastifyInstance, deps: SlpRouteDeps
         })),
       })),
     };
+  });
+  // The block builder could reorder required blocks but never show them, so the text protecting
+  // privacy and output shape was the one text a player could not read. Read-only, no model call,
+  // and it runs the generator's own identity protection: a Secret Creator's details must not leak
+  // into the settings panel any more than into a post.
+  app.post("/settings/prompt-blocks/preview", async (req, reply) => {
+    const body = slurpPromptPreviewSchema.safeParse(req.body ?? {});
+    if (!body.success) return reply.code(400).send({ error: body.error.flatten() });
+    try {
+      return await previewSlurpPromptBlocks(app.db, body.data);
+    } catch (error) {
+      return reply.code(404).send({ error: getErrorMessage(error) });
+    }
   });
   // The shipped values, so Settings can show what differs and reset one section.
   app.get("/settings/defaults", async () => DEFAULT_SLURP_SETTINGS);

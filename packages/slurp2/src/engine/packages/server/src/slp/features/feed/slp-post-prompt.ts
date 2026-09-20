@@ -10,7 +10,11 @@ import {
 import { parseGameJsonish } from "../../../services/game/jsonish.js";
 import { requireModelAnswer } from "../../base/model/slp-model-answer.js";
 import type { ChatMessage } from "../../../services/llm/base-provider.js";
-import { composeSlurpPromptBlocks, type SlurpPromptBlockOverrides } from "../../base/prompting/slp-prompt-blocks.js";
+import {
+  composeSlurpPromptBlocks,
+  type SlurpPromptBlock,
+  type SlurpPromptBlockOverrides,
+} from "../../base/prompting/slp-prompt-blocks.js";
 import { SLURP_DEFAULT_PROMPT_MODE, type SlurpPromptMode } from "../../base/prompting/slp-prompt-modes.js";
 import { buildSlurpPostTimingContext } from "../../modules/feed/slp-post-timing.js";
 import { type SlurpProject } from "../../modules/projects/slp-project.js";
@@ -58,7 +62,7 @@ function formatCreatorPostHistory(posts: SlpCreatorManagedPost[], protect: (valu
     .join("\n");
 }
 
-export function buildNoodlerPostMessages(input: {
+export type SlurpPostPromptInput = {
   account: Pick<SlpAccount, "displayName" | "handle" | "bio">;
   stagePersonality: string;
   /** The Creator's private content menu. See `slurp-post-guidance.ts`. */
@@ -100,9 +104,15 @@ export function buildNoodlerPostMessages(input: {
   contentTypeInstruction?: string;
   /** From `slp-production-profile.ts`: how this Creator makes things. Produce mode only. */
   productionInstruction?: string;
-}): ChatMessage[] {
-  const protect = (value: string) =>
-    protectCreatorGeneratedIdentity(value, input.disclosureMode, input.publicIdentity) ?? "";
+};
+
+/**
+ * The post prompt's blocks, before they are ordered and joined.
+ *
+ * Split out so Settings can show what a block actually contains without keeping a second copy of
+ * the text. A preview built from a copy is a preview that silently stops matching the prompt.
+ */
+export function buildSlurpPostBlocks(input: SlurpPostPromptInput): SlurpPromptBlock[] {
   const guidance = input.generationGuidance.trim();
   const format = input.request.format ?? "caption";
   const produce = (input.promptMode ?? SLURP_DEFAULT_PROMPT_MODE) === "produce";
@@ -209,7 +219,13 @@ export function buildNoodlerPostMessages(input: {
       }\nReturn JSON only. No prose outside the JSON object.`,
     },
   ];
-  const system = composeSlurpPromptBlocks("post", systemBlocks, input.promptBlocks);
+  return systemBlocks;
+}
+
+export function buildNoodlerPostMessages(input: SlurpPostPromptInput): ChatMessage[] {
+  const protect = (value: string) =>
+    protectCreatorGeneratedIdentity(value, input.disclosureMode, input.publicIdentity) ?? "";
+  const system = composeSlurpPromptBlocks("post", buildSlurpPostBlocks(input), input.promptBlocks);
   const user = [
     "# Slurp account",
     `Display name: ${protect(input.account.displayName)}`,

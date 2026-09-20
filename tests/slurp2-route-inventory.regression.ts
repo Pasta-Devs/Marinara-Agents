@@ -77,6 +77,7 @@ const EXPECTED = [
   "GET /settings/audience-characters/groups",
   "GET /settings/defaults",
   "GET /settings/prompt-blocks",
+  "POST /settings/prompt-blocks/preview",
   "PATCH /accounts/:id/profile",
   "PATCH /accounts/:id/settings",
   "PATCH /ambient-profiles/:id",
@@ -223,9 +224,9 @@ const EXPECTED_HANDLER_COUNTS = {
   "features/notifications": 2,
   "features/onboarding": 4,
   "features/projects": 15,
-  "features/settings": 5,
+  "features/settings": 6,
 } as const;
-const EXPECTED_METHOD_COUNTS = { DELETE: 11, GET: 59, PATCH: 14, POST: 90, PUT: 5 } as const;
+const EXPECTED_METHOD_COUNTS = { DELETE: 11, GET: 59, PATCH: 14, POST: 91, PUT: 5 } as const;
 
 const root = join(import.meta.dirname, "../packages/slurp2/src/engine/packages/server/src/slp");
 const registration = /\bapp\.(get|post|put|patch|delete|addContentTypeParser)(?:<[^()]*?>)?\(\s*["'`]([^"'`]+)["'`]/gu;
@@ -280,7 +281,7 @@ const methodCounts = Object.fromEntries(
     }, new Map<string, number>()),
 );
 assert.deepEqual(methodCounts, EXPECTED_METHOD_COUNTS, "HTTP method multiset changed from staging");
-assert.equal(foundRoutes.filter((route) => !route.startsWith("ADDCONTENTTYPEPARSER ")).length, 179);
+assert.equal(foundRoutes.filter((route) => !route.startsWith("ADDCONTENTTYPEPARSER ")).length, 180);
 assert.deepEqual(handlerCounts, EXPECTED_HANDLER_COUNTS, "handler count changed in a feature");
 assert.ok(foundRoutes.includes("POST /slurp/posts/:id/media"), "the renamed POST media route must remain registered");
 assert.ok(

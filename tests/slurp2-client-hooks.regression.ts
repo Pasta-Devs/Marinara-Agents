@@ -381,7 +381,7 @@ const counts = Object.fromEntries(
 assert.deepEqual(
   counts,
   {
-    useMutation: 130,
+    useMutation: 131,
     useQuery: 186,
     useInfiniteQuery: 5,
     invalidateQueries: 124,

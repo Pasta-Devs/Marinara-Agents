@@ -78,6 +78,16 @@ export {
 } from "../../base/identity/slp-identity-protection.js";
 import { slurpPromptContext } from "../../base/prompting/slp-prompt-blocks.js";
 import { slurpCameraSourceInstruction, slurpPostCameraSource } from "../../modules/feed/slp-camera-source.js";
+import { slurpImageBrief } from "../../modules/feed/slp-image-brief.js";
+import { slurpContentTypeInstruction, slurpPostContentType } from "../../modules/feed/slp-content-type.js";
+import { slurpShootInstruction } from "../../modules/feed/slp-shoot.js";
+import { findReusableSlurpShoot, openSlurpShoot, useSlurpShoot } from "../../data/feed/slp-shoot-storage.js";
+import {
+  slurpEffortInstruction,
+  slurpPostEffort,
+  slurpProductionInstruction,
+  slurpProductionProfile,
+} from "../../modules/creators/slp-production-profile.js";
 
 export type GeneratedCreatorPostResult = {
   post: SlpCreatorManagedPost;

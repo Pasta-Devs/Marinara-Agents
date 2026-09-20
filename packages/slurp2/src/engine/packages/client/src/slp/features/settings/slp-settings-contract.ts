@@ -160,6 +160,14 @@ export type SlurpPromptBlocksResponse = {
   mode: SlurpPromptMode;
   prompts: SlurpPromptDefinition[];
 };
+export type SlurpPromptBlockPreview = {
+  id: string;
+  text: string;
+};
+export type SlurpPromptPreviewResponse = {
+  supported: boolean;
+  blocks: SlurpPromptBlockPreview[];
+};
 export type SlurpPromptDefinition = {
   id: string;
   group: "writing" | "messages" | "images" | "profiles" | "world" | "audience";

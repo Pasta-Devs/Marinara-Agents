@@ -1,0 +1,88 @@
+import type { DB } from "../../../db/connection.js";
+import type { SlpAccount } from "../../../../../shared/src/slp/slp-social.types.js";
+import { createSlurpStorage } from "../../data/slp-storage.js";
+import { buildSlurpPostBlocks } from "./slp-post-prompt.js";
+import { resolveCreatorCharacterCanon } from "../../data/creators/slp-source-resolve.js";
+import { slpCreatorPublicIdentityFor } from "./slp-public-identity.js";
+import { slurpPostVariation, slurpPostVariationInstruction } from "../../modules/feed/slp-post-variation.js";
+import { slurpCameraSourceInstruction, slurpPostCameraSource } from "../../modules/feed/slp-camera-source.js";
+import { slurpContentTypeInstruction, slurpPostContentType } from "../../modules/feed/slp-content-type.js";
+import { slurpProductionInstruction, slurpProductionProfile } from "../../modules/creators/slp-production-profile.js";
+import type { SlurpPromptMode } from "../../base/prompting/slp-prompt-modes.js";
+import type { SlurpPromptId } from "../../base/prompting/slp-prompt-blocks.js";
+
+export type SlurpPromptBlockPreview = {
+  id: string;
+  /** Empty when this block contributes nothing for the chosen Creator, which is itself worth seeing. */
+  text: string;
+};
+
+/**
+ * What a prompt's blocks actually contain, for one Creator.
+ *
+ * The block builder could reorder required blocks but never show them, so the text protecting
+ * privacy and output shape was the one text a player could not read. This renders the real blocks
+ * from the real builder rather than a second copy of the strings: a preview built from a copy is a
+ * preview that silently stops matching the prompt.
+ *
+ * Read-only, and no model is called. The Creator's own values reach this, so it runs the same
+ * identity protection the generator does — a Secret Creator's details must not leak into the
+ * settings panel any more than into a post.
+ *
+ * ponytail: `post` only. Its blocks are the ones this overhaul changed and the ones players ask
+ * about. Every other prompt still composes its blocks inline at its own call site; giving them
+ * previews means extracting each builder the way `buildSlurpPostBlocks` was extracted.
+ */
+export async function previewSlurpPromptBlocks(
+  db: DB,
+  input: { promptId: SlurpPromptId; mode: SlurpPromptMode; creatorAccountId: string },
+): Promise<{ supported: boolean; blocks: SlurpPromptBlockPreview[] }> {
+  if (input.promptId !== "post") return { supported: false, blocks: [] };
+  const slurp = createSlurpStorage(db);
+  const account = await slurp.getAccountById(input.creatorAccountId);
+  if (!account) throw new Error("That Creator no longer exists.");
+  const settings = await slurp.getSettings();
+  const disclosureMode = account.settings.privacy.identityDisclosure ?? "open";
+  const linkedPublicAccount = await slurp.resolveAccountSource(account as SlpAccount);
+  const publicIdentity = await slpCreatorPublicIdentityFor(db, linkedPublicAccount);
+  const sourceCharacterContext = await resolveCreatorCharacterCanon(db, linkedPublicAccount, disclosureMode);
+
+  // The next post this Creator would make, so the preview shows the rotation they are actually on
+  // rather than a fixed sample that never matches what they publish.
+  const sequence = await slurp.countNoodlerPostsByAccount(account.id);
+  const variation = slurpPostVariation(account.id, sequence, settings.storyRate);
+  const produce = input.mode === "produce";
+  const production = produce ? slurpProductionProfile(account.id) : null;
+  const camera = production
+    ? slurpPostCameraSource(account.id, sequence, {
+        companyCanHoldCamera: variation.companyCanHoldCamera,
+        prefers: production.prefers,
+      })
+    : null;
+  const contentType = produce
+    ? slurpPostContentType(account.id, sequence, { story: variation.story, teaser: false })
+    : null;
+
+  const blocks = buildSlurpPostBlocks({
+    account,
+    stagePersonality: account.settings.privacy.stagePersonality ?? "",
+    sourceCharacterContext,
+    disclosureMode,
+    publicIdentity,
+    recentPosts: [],
+    request: { format: variation.format },
+    allowImagePrompt: settings.enableImagePrompts,
+    imageGenerationPrompt: settings.imageGenerationPrompt,
+    generationGuidance: settings.generationGuidance,
+    postMaxLength: settings.postMaxLength,
+    variationInstruction: slurpPostVariationInstruction(
+      variation,
+      camera ? slurpCameraSourceInstruction(camera) : undefined,
+    ),
+    contentTypeInstruction: contentType ? slurpContentTypeInstruction(contentType) : undefined,
+    productionInstruction: production ? slurpProductionInstruction(production) : undefined,
+    promptMode: input.mode,
+    promptBlocks: settings.promptBlocks?.[input.mode] ?? {},
+  });
+  return { supported: true, blocks: blocks.map((block) => ({ id: block.id, text: block.text.trim() })) };
+}
