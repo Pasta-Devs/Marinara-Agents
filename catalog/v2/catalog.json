@@ -2801,7 +2801,7 @@
         "schemaVersion": 1,
         "id": "persona-stats",
         "name": "Persona Stats",
-        "version": "1.0.2",
+        "version": "1.0.3",
         "description": "Tracks the player persona's status bars — Satiety, Energy, Hygiene, and other custom stats — with realistic changes based on narrative events. Add the Agent in Chat Settings → Agents → Tracker Agents for Roleplay mode.",
         "engine": {
           "min": "2.3.0",
@@ -2816,8 +2816,8 @@
         "files": [
           {
             "path": "agents.json",
-            "sha256": "f2a140f1df942bc54180d872f7fbb878c38e7285f85ddf38f5e44046ee60b4d8",
-            "bytes": 1819
+            "sha256": "753f8660d348ed719e460c768a2dae59e91f6ea642bce09cddce10374d318f0e",
+            "bytes": 2121
           }
         ],
         "permissions": [
@@ -2832,9 +2832,9 @@
       "category": "tracker",
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/persona-stats.png",
       "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/persona-stats-1.0.2.zip",
-        "sha256": "86df5e00036c224e58e9add1e84b844f9f63161ae3abaf6fb58f7a1d6c759970",
-        "bytes": 1648
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/persona-stats-1.0.3.zip",
+        "sha256": "727aa844ea245686e9bffba97db3eae27564ac2ececae35fa400c60e196997f9",
+        "bytes": 1785
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Engine/blob/staging/docs/agents/built-in-agents.md#persona-stats"
     },

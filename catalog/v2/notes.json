@@ -275,6 +275,16 @@
         }
       ]
     },
+    "persona-stats": {
+      "versions": [
+        {
+          "version": "1.0.3",
+          "date": "2026-09-20",
+          "notes": "- Require explicit evidence for stat changes and preserve values when the narrative is uncertain.",
+          "highlight": false
+        }
+      ]
+    },
     "slurp": {
       "versions": [
         {
