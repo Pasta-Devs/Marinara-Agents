@@ -94,6 +94,12 @@
     "inventory-tracker": {
       "versions": [
         {
+          "version": "1.2.1",
+          "date": "2026-09-19",
+          "notes": "- Tightened source authority and uncertainty handling for inventory updates.",
+          "highlight": false
+        },
+        {
           "version": "1.2.0",
           "date": "2026-09-14",
           "notes": "- Track established item descriptions and storage locations on compatible Engines, preserving unchanged details and locked values.",

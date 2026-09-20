@@ -2308,7 +2308,7 @@
         "schemaVersion": 1,
         "id": "inventory-tracker",
         "name": "Inventory Tracker",
-        "version": "1.2.0",
+        "version": "1.2.1",
         "description": "Tracks currencies, equipped gear, and carried items as separate structured lists with compact quantities. Add the Agent in Chat Settings → Agents → Tracker Agents for Roleplay mode.",
         "engine": {
           "min": "2.4.3",
@@ -2323,8 +2323,8 @@
         "files": [
           {
             "path": "agents.json",
-            "sha256": "bbb14a375cfac0f3418f8c8a9cf58d8c7dd2ecf176bd091a6211257b228801d9",
-            "bytes": 2866
+            "sha256": "26f46f9516c459cac0d38e8a5284be8e79d00bae56eadf6d3cd3f017ebf3ca8f",
+            "bytes": 3186
           }
         ],
         "permissions": [
@@ -2339,9 +2339,9 @@
       "category": "tracker",
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/inventory-tracker.png",
       "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/inventory-tracker-1.2.0.zip",
-        "sha256": "f06193a933817f1342c80a80ba48b639cd71d8b0c2032cf0463648671ee0e28f",
-        "bytes": 2009
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/inventory-tracker-1.2.1.zip",
+        "sha256": "c39bb054fcce2a9cc8e72e0aabdb3caf4963f10f02d29b74f4a5805e50c462f8",
+        "bytes": 2133
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Engine/blob/staging/docs/agents/built-in-agents.md#inventory-tracker"
     },

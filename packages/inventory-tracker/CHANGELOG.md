@@ -1,5 +1,8 @@
 # Inventory Tracker
 
+## 1.2.1 — 2026-09-19
+- Tightened source authority and uncertainty handling for inventory updates.
+
 ## 1.2.0 — 2026-09-14
 - Track established item descriptions and storage locations on compatible Engines, preserving unchanged details and locked values.
 
