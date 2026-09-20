@@ -101,6 +101,7 @@ function postCreatorRequestWithImage<T>(
 export function useGenerateCreatorSlpPost() {
   const qc = useQueryClient();
   return useMutation({
+    mutationKey: ["slurp", "generate-post"],
     mutationFn: ({ image, ...input }: SlpCreatorGeneratePostRequest) =>
       postCreatorRequestWithImage<GeneratedCreatorSlpPost>(
         "/slurp2/refresh",
@@ -123,6 +124,7 @@ export function useGenerateCreatorSlpPost() {
 export function useConfirmCreatorImagePrompts() {
   const qc = useQueryClient();
   return useMutation({
+    mutationKey: ["slurp", "generate-post-images"],
     mutationFn: (input: { targetAccountId: string; prompts: ImagePromptOverride[] }) =>
       api.post<{ finalized: number }>("/slurp2/slurp/refresh/images", {
         prompts: input.prompts,
@@ -140,6 +142,7 @@ export function useConfirmCreatorImagePrompts() {
 export function useCreateCreatorPost() {
   const qc = useQueryClient();
   return useMutation({
+    mutationKey: ["slurp", "create-post"],
     mutationFn: ({ image, ...input }: SlpCreatorCreatePostRequest) =>
       postCreatorRequestWithImage<SlpCreatorManagedPost>("/slurp2/slurp/posts", input, image),
     onSuccess: (_post, input) =>
@@ -223,6 +226,7 @@ export function useReplaceCreatorPostImage() {
 export function useGenerateCreatorPostImage() {
   const qc = useQueryClient();
   return useMutation({
+    mutationKey: ["slurp", "generate-post-image"],
     mutationFn: ({ id, accountId, imagePrompt }: { id: string; accountId: string; imagePrompt?: string }) =>
       api.post<SlpCreatorManagedPost>(`/slurp2/slurp/posts/${encodeURIComponent(id)}/image/generate`, {
         accountId,

@@ -61,6 +61,7 @@ export function useUpdateCreatorScheduleSlot() {
 export function useRunCreatorAutoPostNow() {
   const qc = useQueryClient();
   return useMutation({
+    mutationKey: ["slurp", "auto-post"],
     mutationFn: (accountId: string) =>
       api.post<SlpCreatorManagedPost>(`/slurp2/slurp/accounts/${encodeURIComponent(accountId)}/auto-post/run-now`),
     onSuccess: (_post, accountId) =>

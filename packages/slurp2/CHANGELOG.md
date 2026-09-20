@@ -1,5 +1,87 @@
 # Slurp Remastered release notes
 
+## 0.1.22 — 2026-09-20
+
+- Restored Pulse quick buttons as direct Generate posts and Run audience actions.
+- Kept the Automation settings screen separate from Pulse actions.
+
+## 0.1.21 — 2026-09-20
+
+- Made Pulse automation controls navigate to Automation settings instead of running work directly.
+- Kept expanded child tasks as separate cards.
+
+## 0.1.20 — 2026-09-20
+
+- Kept grouped Pulse child content hidden until expansion.
+- Added blank stacked backsheets to the collapsed group state.
+
+## 0.1.19 — 2026-09-20
+
+- Opened Pulse beside the desktop sidebar while keeping the mobile bottom sheet.
+- Added visible child previews to grouped post stacks.
+- Added `in` timing for future scheduled posts.
+
+## 0.1.18 — 2026-09-20
+
+- Removed idle Pulse status text from the closed control.
+- Renamed the panel subtitle to Background activity.
+- Replaced group expand text with a rotating chevron.
+
+## 0.1.17 — 2026-09-20
+
+- Stopped scheduled posts from activating the Pulse icon and wave animation.
+- Changed expanded Pulse child rows to a flat notification-style stack.
+
+## 0.1.16 — 2026-09-20
+
+- Removed stale first-post queue records and commission briefs from Pulse background work.
+- Added layered notification-style backsheets to grouped Pulse cards.
+
+## 0.1.15 — 2026-09-20
+
+- Separated scheduled posts from active generation work in Pulse.
+- Added a Scheduled section with the next publish time.
+
+## 0.1.14 — 2026-09-20
+
+- Grouped related Pulse work into top-level cards instead of showing raw task rows.
+- Added expandable child task stacks, Needs attention, and grouped Recent sections.
+
+## 0.1.13 — 2026-09-20
+
+- Enriched Pulse task rows with scope, progress, elapsed time, result detail, and clearer status labels.
+- Kept the panel compact with a three-line task presentation.
+
+## 0.1.12 — 2026-09-20
+
+- Changed the closed Pulse control to a rectangular signal tile.
+- Pulse icon activity now uses scale only, without opacity animation.
+
+## 0.1.11 — 2026-09-20
+
+- Refined the Pulse capsule shape and added independent pulse-icon animation during active work.
+
+## 0.1.10 — 2026-09-20
+
+- Refined the closed Pulse control into a compact capsule.
+- Replaced the heartbeat mark with a pulse icon and radiating active-work waves.
+
+## 0.1.9 — 2026-09-20
+
+- Refined Pulse chrome with a heartbeat icon and active-work pulse state.
+- Moved Pulse quick actions above active and recent work.
+- Reduced the Pulse header copy for a tighter panel.
+
+## 0.1.8 — 2026-09-20
+
+- Fixed Pulse rendering when the shell passes the post composer callback.
+
+## 0.1.7 — 2026-09-20
+
+- Added Pulse above the persona selector on desktop and mobile.
+- Pulse shows durable server tasks and current-session work, including post generation, images, audience activity, follow-ups, commissions, and Creator improvements.
+- Added compact status rows, recent results, progress counts, and Creator avatars for background work.
+
 ## 0.1.6 — 2026-09-20
 
 - Prompt Studio now keeps voice, post, and image instructions readable in muted fields without opening an editor.

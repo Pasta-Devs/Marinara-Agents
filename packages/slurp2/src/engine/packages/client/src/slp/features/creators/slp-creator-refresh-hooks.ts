@@ -11,6 +11,7 @@ export function useRefreshCreatorConversationSchedule() {
   const { t: localizeUi } = useUiTranslation();
   // Toasts live here, not in mutate() callbacks: those are dropped if the caller unmounts first.
   return useMutation({
+    mutationKey: ["slurp", "conversation-schedule"],
     mutationFn: (accountId: string) =>
       api.post<{ state: "active"; blocks: number }>(
         `/slurp2/slurp/accounts/${encodeURIComponent(accountId)}/conversation-schedule/refresh`,
@@ -28,6 +29,7 @@ export function useRefreshCreatorConversationSchedule() {
 export function useRefreshTargetedCreatorsNow(onRemaining?: (remaining: number) => void) {
   const qc = useQueryClient();
   return useMutation({
+    mutationKey: ["slurp", "generate-posts"],
     mutationFn: (input: { accountIds: string[]; executionId?: string; access?: "public" | "locked" }) =>
       refreshSlurpCreatorBatch(
         input.accountIds,

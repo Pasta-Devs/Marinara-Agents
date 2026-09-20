@@ -59,6 +59,10 @@ export interface SlpShellProps {
   /** Omit on surfaces with no scoped equivalent. */
   onOpenWallet?: () => void;
   onOpenStudio?: () => void;
+  /** Generates posts for the active Slurp Creator set. */
+  onGeneratePosts?: () => void;
+  /** Runs the audience activity pass. */
+  onRunAudience?: () => void;
   /** Unseen activity, shown on the unified Inbox entry. */
   notificationCount?: number;
   /** The studio only exists for a persona that operates a Creator. */
