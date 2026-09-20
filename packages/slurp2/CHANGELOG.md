@@ -1,5 +1,13 @@
 # Slurp Remastered release notes
 
+## 0.1.5 — 2026-09-20
+
+- Prompt Studio now starts with plain-language controls for voice, post behavior, and image direction.
+- Prompt recipes open in a focused, responsive block workspace instead of one long settings accordion.
+- Blocks show their purpose, source, editability, order, and customization state at a glance.
+- Preview a draft result or compiled prompt without applying it, and compare a draft result with the currently applied recipe.
+- Prompt changes share one Backstage draft bar, so they can be reviewed, discarded, or applied together.
+
 ## 0.1.4 — 2026-09-20
 
 - New experimental prompt mode, "Produce", is now the default. Creators write like people who plan, shoot and sell content, not like someone narrating a moment. Switch modes under Settings, Prompts.

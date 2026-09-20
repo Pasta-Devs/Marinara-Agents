@@ -306,6 +306,12 @@
     "slurp2": {
       "versions": [
         {
+          "version": "0.1.5",
+          "date": "2026-09-20",
+          "notes": "- Prompt Studio now starts with plain-language controls for voice, post behavior, and image direction.\n- Prompt recipes open in a focused, responsive block workspace instead of one long settings accordion.\n- Blocks show their purpose, source, editability, order, and customization state at a glance.\n- Preview a draft result or compiled prompt without applying it, and compare a draft result with the currently applied recipe.\n- Prompt changes share one Backstage draft bar, so they can be reviewed, discarded, or applied together.",
+          "highlight": false
+        },
+        {
           "version": "0.1.4",
           "date": "2026-09-20",
           "notes": "- New experimental prompt mode, \"Produce\", is now the default. Creators write like people who plan, shoot and sell content, not like someone narrating a moment. Switch modes under Settings, Prompts.\n- Every picture now has a camera somebody is actually holding: a selfie, a mirror, a timer, another person, a video still, or an old photo.\n- Captions and pictures no longer describe each other, and posts now have a purpose: a teaser, a set, a throwaway, an ordinary day, a request, a thank-you, or a boundary.\n- One planned set can supply a few posts over a couple of days, so \"one more from yesterday\" matches.\n- Creators differ in how they make things, and that shows in every post.\n- Messages and replies know this is a job, so a Creator can say no or say later.\n- Prompt blocks can be previewed, locked ones included.\n- \"Classic\" keeps the old behaviour. Each mode keeps its own prompt edits.",
@@ -417,12 +423,6 @@
           "version": "0.0.9",
           "date": "2026-09-14",
           "notes": "- Added Autopurge with configurable day, week, or month retention; media-only or full-post cleanup; optional direct-message media cleanup; an immediate purge action; and restart-safe scheduling for overdue purges.",
-          "highlight": false
-        },
-        {
-          "version": "0.0.8",
-          "date": "2026-09-14",
-          "notes": "- Bug fixes for discovery filters and translations, subscription prices, image references, fan privacy, rapport details, message fees, arc editing and generation, profile validation, regression tests, and test-output handling.",
           "highlight": false
         }
       ]

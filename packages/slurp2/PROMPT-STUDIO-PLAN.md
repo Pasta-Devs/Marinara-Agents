@@ -8,17 +8,17 @@ internal prompt implementation.
 
 ## Slice status
 
-| Slice | Scope                                                    | Status      | Commit   |
-| ----- | -------------------------------------------------------- | ----------- | -------- |
-| 1     | Prompt Studio page framing and scope context             | Complete    | 242ca65e |
-| 2     | Group prompt recipes and reduce technical density        | Complete    | 0c35b8dc |
-| 3     | Make prompt preview explicit and preserve draft context  | Complete    | c7a1e41e |
-| 4     | Remove visible Classic mode and migrate Produce defaults | Complete    | 95c7a1df |
-| 5     | Add a draft-aware compiled prompt preview contract       | Complete    | b464ba1e |
-| 6     | Add explicit model-generated result preview              | Complete    | 4a122cd5 |
-| 7     | Replace the settings wall with outcome controls          | Complete    | —        |
-| 8     | Build the focused responsive recipe workspace            | Complete    | —        |
-| 9     | Add draft/current comparison and finish validation       | In progress | —        |
+| Slice | Scope                                                    | Status   | Commit   |
+| ----- | -------------------------------------------------------- | -------- | -------- |
+| 1     | Prompt Studio page framing and scope context             | Complete | 242ca65e |
+| 2     | Group prompt recipes and reduce technical density        | Complete | 0c35b8dc |
+| 3     | Make prompt preview explicit and preserve draft context  | Complete | c7a1e41e |
+| 4     | Remove visible Classic mode and migrate Produce defaults | Complete | 95c7a1df |
+| 5     | Add a draft-aware compiled prompt preview contract       | Complete | b464ba1e |
+| 6     | Add explicit model-generated result preview              | Complete | 4a122cd5 |
+| 7     | Replace the settings wall with outcome controls          | Complete | a0bd6310 |
+| 8     | Build the focused responsive recipe workspace            | Complete | a0bd6310 |
+| 9     | Add draft/current comparison and finish validation       | Complete | —        |
 
 ## Slice 1 proof
 
@@ -117,3 +117,16 @@ internal prompt implementation.
   Preview and focuses one selected block at a time.
 - Public and locked post guidance now participates in the Backstage draft, discard, and apply flow.
 - Opening recipes and blocks only changes local UI state and never starts a preview request.
+
+## Slice 9 proof
+
+- Draft preview accepts Creator, access, format, and optional direction without persisting a post.
+- A generated draft result can be compared with a separately generated currently applied result.
+- A responsive Playwright regression covers the overview, recipe workspace, selected block,
+  mobile Preview view, implicit-request guard, and horizontal overflow at 1440 px and 390 px.
+- Playwright discovers both projects. Execution is environment-blocked before page launch because
+  this host lacks `libnspr4.so`, and installing Playwright system dependencies requires unavailable
+  interactive sudo access.
+- Slurp2 typecheck, architecture, prompt-block, route, client-hook, catalog lane, locale, catalog,
+  release-note, ESLint, Prettier, and diff checks pass.
+- The rebuilt `0.1.5` package installs as active and ready on the scratch `dev-marinara` Engine.

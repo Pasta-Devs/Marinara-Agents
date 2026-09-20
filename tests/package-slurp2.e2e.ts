@@ -263,6 +263,60 @@ test.describe("standalone Slurp package", () => {
     expect(errors).toEqual([]);
   });
 
+  test("Prompt Studio keeps outcomes, recipes, blocks, and preview in a focused responsive flow", async ({
+    page,
+  }, testInfo) => {
+    const errors = collectUnexpectedErrors(page);
+    await getSlurpSettings(page);
+    expect((await page.request.patch("/api/slurp2/settings", { data: { onboarding: "completed" } })).ok()).toBe(true);
+    await page.addInitScript(() => {
+      localStorage.setItem(
+        "marinara:slurp2:package-ui",
+        JSON.stringify({
+          navigation: { mode: "creator-settings", section: "prompts" },
+          onboardingState: "completed",
+        }),
+      );
+    });
+    const previewRequests: string[] = [];
+    page.on("request", (request) => {
+      if (/\/settings\/prompt-blocks\/(?:preview|generate-preview)$/u.test(new URL(request.url()).pathname)) {
+        previewRequests.push(request.url());
+      }
+    });
+
+    await page.goto("/");
+    await openSlurp(page);
+    const slurp = page.locator('[data-component="NoodleView"]');
+    await expect(slurp.getByRole("heading", { name: "Prompt Studio", exact: true })).toBeVisible();
+    for (const outcome of ["Voice and writing", "Post behavior", "Image direction"]) {
+      await expect(slurp.getByRole("button", { name: new RegExp(`^${outcome}`, "u") })).toBeVisible();
+    }
+    await expect(slurp.getByRole("heading", { name: "Prompt recipes", exact: true })).toBeVisible();
+    await expect(slurp.getByText("Try your changes", { exact: true })).toBeVisible();
+    expect(previewRequests).toEqual([]);
+
+    await slurp.getByRole("button", { name: /^Creator posts/u }).click();
+    await expect(slurp.getByRole("heading", { name: "Creator posts", exact: true })).toBeVisible();
+    await expect(slurp.locator("ol button[aria-expanded]").first()).toBeVisible();
+    await slurp.locator("ol button[aria-expanded]").first().click();
+    await expect(slurp.getByRole("button", { name: "Apply to draft", exact: true })).toBeVisible();
+    expect(previewRequests).toEqual([]);
+
+    if (testInfo.project.name.includes("mobile")) {
+      await slurp.getByRole("button", { name: "Preview", exact: true }).click();
+      await expect(slurp.getByText("Try your changes", { exact: true })).toBeVisible();
+      await expect(slurp.getByRole("button", { name: "Run preview", exact: true })).toBeVisible();
+    } else {
+      await expect(slurp.getByRole("navigation", { name: "Prompt recipes" })).toBeVisible();
+      await expect(slurp.getByText("Try your changes", { exact: true })).toBeVisible();
+    }
+
+    await expect.poll(() => slurp.evaluate((element) => element.scrollWidth <= element.clientWidth + 1)).toBe(true);
+    await page.screenshot({ path: testInfo.outputPath("slurp2-prompt-studio-workspace.png"), fullPage: true });
+    expect(errors).toEqual([]);
+  });
+
   test("requires the current release acknowledgement and keeps older notes collapsed", async ({ page }, testInfo) => {
     const errors = collectUnexpectedErrors(page);
     await page.addInitScript(() => localStorage.removeItem("slurp2:splash-seen-version"));
