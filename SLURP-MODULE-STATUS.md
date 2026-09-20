@@ -57,6 +57,8 @@ The remaining NoodleR names are permanent for Engine contracts, persisted names,
   media files restored.
 - Post-update viewer, feed, settings, subscribe, message, and new profile/post/media/share-card
   operations passed. Legacy `/api/noodle/accounts` remained healthy.
+- The legacy Slurp package was not installed in production, so legacy Slurp runtime checks were
+  not possible. Its source and generated package remain unchanged in this branch.
 - Restart and offline-style restart passed. The Engine was disconnected from its Docker network
   during restart, reconnected, and returned healthy.
 - The temporary profile and posts were deleted after proof. Production remains on `0.1.3`.
