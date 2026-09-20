@@ -223,10 +223,11 @@ export async function generateCreatorPost(
   // their direction is the angle, and a second one would fight it.
   // One sequence for both rotations, so the project and the variation cannot drift out of step.
   const sequence = await noodle.countNoodlerPostsByAccount(account.id);
+  const prompts = slurpPromptContext(settings);
   const directed = Boolean(input.request.noodlerPostGuide?.trim());
   const variation = directed
     ? null
-    : slurpPostVariation(account.id, sequence, settings.storyImagesEnabled ? settings.storyRate : "off");
+    : slurpPostVariation(account.id, sequence, settings.storyImagesEnabled ? settings.storyRate : "off", prompts.mode);
   // A project claims this post only if the rotation gives it one. Player direction stands both
   // rotations down for the same reason: their direction is the subject, and a second one fights it.
   const project = directed
@@ -244,7 +245,6 @@ export async function generateCreatorPost(
   // Produce mode decides who is holding the camera before anything describes the picture, so the
   // framing is a consequence of a camera that exists rather than a free-floating instruction. See
   // `slp-camera-source.ts`. Classic mode keeps the old framing axis untouched.
-  const prompts = slurpPromptContext(settings);
   // How this Creator makes things, as opposed to who they are. Stable for the life of the account,
   // so it biases every post they ever make rather than this one.
   const production = prompts.mode === "produce" ? slurpProductionProfile(account.id) : null;

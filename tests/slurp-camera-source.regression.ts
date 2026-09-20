@@ -29,15 +29,19 @@ for (let sequence = 0; sequence < 50; sequence += 1) {
   assert.ok(SLURP_CAMERA_SOURCES.includes(source));
 }
 
-// Consecutive posts differ, which is what rotating rather than drawing at random buys.
+// Produce mode draws from weights. Repetition is valid, and the sequence remains deterministic.
 for (const companyCanHoldCamera of [true, false]) {
-  for (let sequence = 0; sequence < 20; sequence += 1) {
-    assert.notEqual(
-      slurpPostCameraSource("creator-a", sequence, { companyCanHoldCamera }),
-      slurpPostCameraSource("creator-a", sequence + 1, { companyCanHoldCamera }),
-      `consecutive posts repeated a camera source at ${sequence}`,
-    );
-  }
+  const sequence = Array.from({ length: 200 }, (_, index) =>
+    slurpPostCameraSource("creator-a", index, { companyCanHoldCamera }),
+  );
+  assert.ok(
+    sequence.some((source, index) => source === sequence[index - 1]),
+    "weighted draws may repeat naturally",
+  );
+  assert.deepEqual(
+    sequence,
+    Array.from({ length: 200 }, (_, index) => slurpPostCameraSource("creator-a", index, { companyCanHoldCamera })),
+  );
 }
 
 // Two Creators set up the same day must not march through the sources in lockstep.

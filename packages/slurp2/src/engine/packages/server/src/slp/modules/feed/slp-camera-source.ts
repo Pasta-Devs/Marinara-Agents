@@ -22,16 +22,15 @@
  * subject holding the phone. A second person cannot hold the camera when the Creator is alone.
  *
  * So the source is chosen first, and the scene has to pay for it: `permitted` filters the sources
- * against what the rest of the variation already decided. Selection then rotates rather than being
- * drawn at random, for the same reason the variation does — consecutive posts cannot land on the
- * same source twice, which is the failure being fixed.
+ * against what the rest of the variation already decided. Produce mode uses weighted draws so a
+ * common phone picture stays common without making the sequence periodic.
  *
  * Deliberately staged sources are here on purpose. A tripod shoot the Creator admits to reads as
  * more real than a candid shot that could not exist. The distinction that matters is not staged
  * against real, it is credible staging against unexplained access.
  */
 
-import { slurpRotationHash } from "./slp-post-variation.js";
+import { slurpWeightedPick } from "./slp-weighted.js";
 
 export const SLURP_CAMERA_SOURCES = ["selfie", "mirror", "tripod", "partner", "screenshot", "archive"] as const;
 
@@ -87,36 +86,33 @@ export function slurpPermittedCameraSources(options: { companyCanHoldCamera: boo
 }
 
 /**
- * The rotation order for one Creator, with the ones they reach for first appearing twice as often.
+ * How often each camera turns up.
  *
- * Interleaved rather than grouped, because the rotation steps through this list one place at a
- * time: listing the favourites together would hand a Creator the same camera twice in a row, which
- * is the repetition the rotation exists to prevent. Preference never overrides permission — a
- * Creator who likes being photographed still cannot be, alone.
+ * A phone in your own hand is how most pictures on earth are taken, so it dominates. The rest are
+ * occasional by nature: setting up a timer is a decision, somebody else holding the camera needs
+ * somebody else, and posting an old picture is a thing people do sometimes rather than weekly.
+ *
+ * These are weights rather than rotation slots on purpose. Six sources in a rotation meant an old
+ * photo every sixth post forever, which stops being "sometimes she posts an old one" and becomes
+ * her posting schedule.
  */
-function cameraRotation(
-  permitted: readonly SlurpCameraSource[],
-  prefers: readonly SlurpCameraSource[],
-): readonly SlurpCameraSource[] {
-  const favoured = prefers.filter((source) => permitted.includes(source));
-  if (favoured.length === 0) return permitted;
-  const rest = permitted.filter((source) => !favoured.includes(source));
-  const rotation: SlurpCameraSource[] = [];
-  for (let index = 0; index < Math.max(favoured.length, rest.length); index += 1) {
-    if (favoured[index]) rotation.push(favoured[index]!);
-    if (rest[index]) rotation.push(rest[index]!);
-  }
-  // Every favoured source appears once more, spaced by the whole list so the extra turn can never
-  // land beside its first one.
-  return [...rotation, ...favoured];
-}
+const WEIGHTS: Record<SlurpCameraSource, number> = {
+  selfie: 42,
+  mirror: 22,
+  tripod: 14,
+  screenshot: 10,
+  archive: 7,
+  partner: 5,
+};
+
+/** How much a Creator's own habits bend the odds. Enough to be their habit, not enough to be a rule. */
+const PREFERENCE_MULTIPLIER = 2.5;
 
 /**
  * The camera source for one post.
  *
- * `sequence` is how many posts this Creator has already made, and rotating on it — rather than
- * drawing at random — is what guarantees consecutive posts differ. The offset by creator id stops
- * two Creators set up on the same day from marching through the sources in lockstep.
+ * `sequence` is how many posts this Creator has already made. It seeds a deterministic weighted
+ * draw, so the same post is reproducible without forcing consecutive posts to differ.
  *
  * The rotation runs over the permitted list, so a Creator who is alone for several posts still
  * moves through the sources available to them instead of stalling on one.
@@ -126,11 +122,16 @@ export function slurpPostCameraSource(
   sequence: number,
   options: { companyCanHoldCamera: boolean; prefers?: readonly SlurpCameraSource[] },
 ): SlurpCameraSource {
-  const permitted = cameraRotation(slurpPermittedCameraSources(options), options.prefers ?? []);
-  // Math.floor(NaN) is NaN and indexes nothing, which would hand the caller an undefined source.
-  // Guarded at the boundary rather than trusting the caller's arithmetic, as the variation does.
-  const step = Number.isFinite(sequence) ? Math.max(0, Math.floor(sequence)) : 0;
-  return permitted[(slurpRotationHash(creatorAccountId) + step) % permitted.length]!;
+  const prefers = options.prefers ?? [];
+  return slurpWeightedPick(
+    "camera",
+    creatorAccountId,
+    sequence,
+    slurpPermittedCameraSources(options).map((value) => ({
+      value,
+      weight: WEIGHTS[value] * (prefers.includes(value) ? PREFERENCE_MULTIPLIER : 1),
+    })),
+  );
 }
 
 /** The source as prompt text. One block, so the caller does not assemble it in three places. */

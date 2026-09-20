@@ -18,15 +18,16 @@ for (let sequence = 0; sequence < 60; sequence += 1) {
   assert.ok(type !== "story" && type !== "teaser", "the rotation must not re-decide story or teaser");
 }
 
-// Consecutive posts must not land on the same job twice, which is what rotating buys over drawing
-// at random.
-for (let sequence = 0; sequence < 30; sequence += 1) {
-  assert.notEqual(
-    slurpPostContentType("creator-a", sequence, {}),
-    slurpPostContentType("creator-a", sequence + 1, {}),
-    `consecutive posts repeated a content type at ${sequence}`,
-  );
-}
+// Produce mode draws from weights. Consecutive posts may repeat, and the sequence is stable.
+const weightedTypes = Array.from({ length: 200 }, (_, sequence) => slurpPostContentType("creator-a", sequence, {}));
+assert.ok(
+  weightedTypes.some((type, index) => type === weightedTypes[index - 1]),
+  "weighted draws may repeat naturally",
+);
+assert.deepEqual(
+  weightedTypes,
+  Array.from({ length: 200 }, (_, sequence) => slurpPostContentType("creator-a", sequence, {})),
+);
 
 // Two Creators must not march through the jobs in lockstep.
 const a = Array.from({ length: 12 }, (_, i) => slurpPostContentType("creator-a", i, {}));

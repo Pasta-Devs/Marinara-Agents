@@ -1,5 +1,16 @@
 # Slurp Remastered release notes
 
+## 0.1.4 — 2026-09-20
+
+- New experimental prompt mode, "Produce", is now the default. Creators write like people who plan, shoot and sell content, not like someone narrating a moment. Switch modes under Settings, Prompts.
+- Every picture now has a camera somebody is actually holding: a selfie, a mirror, a timer, another person, a video still, or an old photo.
+- Captions and pictures no longer describe each other, and posts now have a purpose: a teaser, a set, a throwaway, an ordinary day, a request, a thank-you, or a boundary.
+- One planned set can supply a few posts over a couple of days, so "one more from yesterday" matches.
+- Creators differ in how they make things, and that shows in every post.
+- Messages and replies know this is a job, so a Creator can say no or say later.
+- Prompt blocks can be previewed, locked ones included.
+- "Classic" keeps the old behaviour. Each mode keeps its own prompt edits.
+
 ## 0.1.3 — 2026-09-20
 
 - Slurp HTTP routes now use Slurp naming. Existing avatars, banners, ad images, post images and backups keep working.

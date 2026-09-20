@@ -30,6 +30,26 @@
  * axis twice — which is exactly the failure being fixed.
  */
 
+import { slurpWeightedPick } from "./slp-weighted.js";
+import type { SlurpPromptMode } from "../../base/prompting/slp-prompt-modes.js";
+
+/**
+ * How often each axis value turns up, for callers that draw instead of rotating.
+ *
+ * The rotations below step one place at a time, which makes every entry equally common and
+ * perfectly periodic. That is how "in the room they spend the least time in" came to fire every
+ * sixth post forever: a Creator who is supposedly never in that room was in it on a schedule. The
+ * same arithmetic made every Creator "alone and not glad of it" every fifth post.
+ *
+ * These weights say what each entry should actually be worth. Most of the time a person is where
+ * they usually are, doing something unremarkable, by themselves and fine about it.
+ *
+ * Classic mode keeps the rotations exactly as they shipped. Produce mode uses these weights.
+ */
+const PLACE_WEIGHTS = [30, 5, 12, 9, 26, 18] as const;
+const MOMENT_WEIGHTS = [24, 20, 15, 8, 14, 12, 7] as const;
+const COMPANY_WEIGHTS = [34, 10, 20, 16, 20] as const;
+
 /** Where the post is coming from, relative to the Creator's habits. */
 const PLACES = [
   "somewhere other than where this creator usually posts from",
@@ -198,24 +218,56 @@ export function slurpPostVariation(
   creatorAccountId: string,
   sequence: number,
   storyRate: SlurpStoryRate = SLURP_DEFAULT_STORY_RATE,
+  mode: SlurpPromptMode = "classic",
 ): SlurpPostVariation {
   const offset = slurpRotationHash(creatorAccountId);
   // Math.floor(NaN) is NaN and indexes nothing, which would hand every caller an undefined variation.
   // Third time this shape has bitten in this package; guard it at the boundary rather than trust
   // the caller's arithmetic.
   const step = Number.isFinite(sequence) ? Math.max(0, Math.floor(sequence)) : 0;
-  // Co-prime strides, so place, moment, framing, and company do not resynchronise into a repeating
-  // combined pattern every few posts.
   const formatSlot = (offset + step) % FORMAT_CYCLE.length;
   const format = FORMAT_CYCLE[formatSlot]!;
+  const produce = mode === "produce";
+  const place = produce
+    ? slurpWeightedPick(
+        "place",
+        creatorAccountId,
+        step,
+        PLACES.map((value, index) => ({ value, weight: PLACE_WEIGHTS[index]! })),
+      )
+    : PLACES[(offset + step) % PLACES.length]!;
+  const moment = produce
+    ? slurpWeightedPick(
+        "moment",
+        creatorAccountId,
+        step,
+        MOMENTS.map((value, index) => ({ value, weight: MOMENT_WEIGHTS[index]! })),
+      )
+    : MOMENTS[(offset + step * 3) % MOMENTS.length]!;
+  const framing = produce
+    ? slurpWeightedPick(
+        "framing",
+        creatorAccountId,
+        step,
+        FRAMINGS.map((value) => ({ value, weight: 1 })),
+      )
+    : FRAMINGS[(offset + step * 5) % FRAMINGS.length]!;
+  const company = produce
+    ? slurpWeightedPick(
+        "company",
+        creatorAccountId,
+        step,
+        COMPANY.map((value, index) => ({ value, weight: COMPANY_WEIGHTS[index]! })),
+      )
+    : COMPANY[(offset + step * 2) % COMPANY.length]!;
   return {
     format,
     story: format === "caption" && slurpStorySlots(storyRate).has(formatSlot),
-    place: PLACES[(offset + step) % PLACES.length]!,
-    moment: MOMENTS[(offset + step * 3) % MOMENTS.length]!,
-    framing: FRAMINGS[(offset + step * 5) % FRAMINGS.length]!,
-    company: COMPANY[(offset + step * 2) % COMPANY.length]!.text,
-    companyCanHoldCamera: COMPANY[(offset + step * 2) % COMPANY.length]!.helper,
+    place,
+    moment,
+    framing,
+    company: typeof company === "string" ? company : company.text,
+    companyCanHoldCamera: typeof company === "string" ? false : company.helper,
   };
 }
 

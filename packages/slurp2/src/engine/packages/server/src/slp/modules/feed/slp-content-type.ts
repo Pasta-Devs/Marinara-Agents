@@ -20,11 +20,11 @@
  *
  * Two of these already existed elsewhere and are not reinvented here. Stories come out of the
  * format rotation in `slp-post-variation.ts`, and free teaser posts come out of `slurpTeaserPost`.
- * `slurpPostContentType` takes both as given and rotates only over what is left, so the three
- * cannot contradict each other and a Story cannot also be a boundary notice.
+ * `slurpPostContentType` takes both as given and draws only from what is left, so the three cannot
+ * contradict each other and a Story cannot also be a boundary notice.
  */
 
-import { slurpRotationHash } from "./slp-post-variation.js";
+import { slurpWeightedPick } from "./slp-weighted.js";
 
 export const SLURP_CONTENT_TYPES = [
   "teaser",
@@ -64,34 +64,37 @@ const JOBS: Record<SlurpContentType, string> = {
 };
 
 /**
- * Types the rotation may choose on its own.
+ * How often each job turns up.
  *
- * `teaser` and `story` are excluded because they are already decided elsewhere, and choosing them
+ * `teaser` and `story` are absent because they are already decided elsewhere, and choosing them
  * again here would let the two decisions disagree.
+ *
+ * Ordinary life is most of it. A feed where every entry is a sale reads exactly as false as one
+ * where every entry is a confession, and the thing a person mostly does is have a day.
+ *
+ * The bottom of this list is the reason these are weights and not rotation slots. Ten slots meant
+ * one `boundary` post every ten, which at four posts a day is a Creator announcing a limit every
+ * second afternoon. A boundary post lands because it is rare; on a schedule it is just nagging.
  */
-const ROTATED: readonly SlurpContentType[] = [
-  "life",
-  "set",
-  "callback",
-  "life",
-  "production",
-  "request",
-  "life",
-  "appreciation",
-  "set",
-  "boundary",
-];
+const WEIGHTS: Record<Exclude<SlurpContentType, "teaser" | "story">, number> = {
+  life: 38,
+  set: 16,
+  callback: 13,
+  request: 10,
+  production: 9,
+  appreciation: 8,
+  boundary: 6,
+};
 
 /**
  * The type for one post.
  *
  * `story` and `teaser` are passed in rather than chosen, because the format rotation and the
- * access rotation already decided them. Everything else rotates on the same post count the
- * variation uses, so consecutive posts cannot land on the same job twice.
+ * access rotation already decided them.
  *
- * `life` appears three times in ten on purpose. Most of what a person posts is not a product, and
- * a feed where every entry is a sale reads exactly as false as a feed where every entry is a
- * confession.
+ * Drawn rather than rotated, so the sequence has no period and consecutive posts are unrelated
+ * instead of adjacent. Two ordinary days in a row are allowed on purpose: forcing every post to
+ * differ from the last one reads as a schedule just as clearly as repeating does.
  */
 export function slurpPostContentType(
   creatorAccountId: string,
@@ -100,9 +103,12 @@ export function slurpPostContentType(
 ): SlurpContentType {
   if (decided.story) return "story";
   if (decided.teaser) return "teaser";
-  // Math.floor(NaN) is NaN and indexes nothing, which would hand the caller an undefined type.
-  const step = Number.isFinite(sequence) ? Math.max(0, Math.floor(sequence)) : 0;
-  return ROTATED[(slurpRotationHash(creatorAccountId) + step) % ROTATED.length]!;
+  return slurpWeightedPick(
+    "contentType",
+    creatorAccountId,
+    sequence,
+    Object.entries(WEIGHTS).map(([value, weight]) => ({ value: value as SlurpContentType, weight })),
+  );
 }
 
 /** The type as prompt text. One block, so the caller does not assemble it in three places. */

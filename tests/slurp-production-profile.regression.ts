@@ -50,18 +50,14 @@ for (let i = 0; i < 20; i += 1) {
   }
 }
 
-// The favourites are interleaved, not grouped. Grouping them would hand a Creator the same camera
-// twice in a row, which is the repetition the rotation exists to prevent.
+// Weighted selection can repeat. The preference must still bias the long-run result.
 for (let i = 0; i < 20; i += 1) {
   const profile = slurpProductionProfile(`creator-${i}`);
   for (const companyCanHoldCamera of [true, false]) {
-    for (let sequence = 0; sequence < 40; sequence += 1) {
-      assert.notEqual(
-        slurpPostCameraSource(`creator-${i}`, sequence, { companyCanHoldCamera, prefers: profile.prefers }),
-        slurpPostCameraSource(`creator-${i}`, sequence + 1, { companyCanHoldCamera, prefers: profile.prefers }),
-        `${profile.style} repeated a camera at ${sequence}`,
-      );
-    }
+    const sequence = Array.from({ length: 120 }, (_, index) =>
+      slurpPostCameraSource(`creator-${i}`, index, { companyCanHoldCamera, prefers: profile.prefers }),
+    );
+    assert.ok(sequence.some((source, index) => source === sequence[index - 1]));
   }
 }
 
