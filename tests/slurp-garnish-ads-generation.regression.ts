@@ -32,7 +32,7 @@ assert.match(service, /existingBrands/u, "generation must be told what already e
 assert.match(service, /Math\.min\(Math\.max\(request\.count \?\? 4, 1\), 10\)/u, "generation count must be bounded");
 
 const routes = slurp2Source("packages/slurp2/src/engine/packages/server/src/routes/slurp.routes.ts");
-assert.match(routes, /app\.post\("\/noodler\/ads\/generate"/u);
+assert.match(routes, /app\.post\("\/slurp\/ads\/generate"/u);
 assert.match(routes, /retireWeakGarnishAds/u, "the pool must shed as well as grow");
 
 // These three shipped as free identifiers with no import, so every generate call died with a

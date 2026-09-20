@@ -54,11 +54,11 @@ const slpImagePromptConfirmationSchema = z.object({
 });
 export async function slpFeedPublishingRoutes(app: FastifyInstance, deps: SlpRouteDeps) {
   const { connections, noodle, slpCreatorImages } = deps;
-  app.get("/noodler/auto-post/status", async (_req, reply) => {
+  app.get("/slurp/auto-post/status", async (_req, reply) => {
     return noodle.getNoodlerReserveStatus();
   });
 
-  app.patch("/noodler/auto-post/schedule/:slotId", async (req, reply) => {
+  app.patch("/slurp/auto-post/schedule/:slotId", async (req, reply) => {
     const body = z.object({ publishAt: z.string().datetime() }).safeParse(req.body ?? {});
     if (!body.success) return reply.code(400).send({ error: body.error.flatten() });
     const { slotId } = req.params as { slotId: string };
@@ -74,7 +74,7 @@ export async function slpFeedPublishingRoutes(app: FastifyInstance, deps: SlpRou
 
   // `builtIn` travels with the value so the client can show what applies while a field is empty
   // without keeping its own copy of the wording.
-  app.get("/noodler/post-guidance", async () => ({
+  app.get("/slurp/post-guidance", async () => ({
     ...(await getSlurpPostGuidance(app.db)),
     builtIn: SLURP_BUILT_IN_POST_GUIDANCE,
   }));
@@ -86,7 +86,7 @@ export async function slpFeedPublishingRoutes(app: FastifyInstance, deps: SlpRou
    * means the global field. An empty string clears the level being written and lets the level
    * below it apply again.
    */
-  app.patch("/noodler/post-guidance", async (req, reply) => {
+  app.patch("/slurp/post-guidance", async (req, reply) => {
     const body = z
       .object({
         creatorId: z.string().min(1).nullable().optional(),
@@ -126,7 +126,7 @@ export async function slpFeedPublishingRoutes(app: FastifyInstance, deps: SlpRou
   });
 
   /** Draft one access direction with the model. Returns the text; saving it stays the client's call. */
-  app.post("/noodler/post-guidance-draft", async (req, reply) => {
+  app.post("/slurp/post-guidance-draft", async (req, reply) => {
     const body = z
       .object({
         access: z.enum(["public", "locked"]),
@@ -159,9 +159,9 @@ export async function slpFeedPublishingRoutes(app: FastifyInstance, deps: SlpRou
     }
   });
 
-  app.get("/noodler/image-connections", async () => getCreatorImageConnections(app.db));
+  app.get("/slurp/image-connections", async () => getCreatorImageConnections(app.db));
 
-  app.patch("/noodler/image-connections", async (req, reply) => {
+  app.patch("/slurp/image-connections", async (req, reply) => {
     const body = z
       .object({
         defaultConnectionId: z.string().min(1).nullable().optional(),
@@ -203,7 +203,7 @@ export async function slpFeedPublishingRoutes(app: FastifyInstance, deps: SlpRou
   // Manual test trigger: runs one automatic-style post immediately, the same way the
   // scheduler does (locked access, no guide), without waiting for the next cadence
   // schedule or requiring auto-posting to be enabled.
-  app.post("/noodler/accounts/:id/auto-post/run-now", async (req, reply) => {
+  app.post("/slurp/accounts/:id/auto-post/run-now", async (req, reply) => {
     const { id } = req.params as { id: string };
     try {
       const result = await generateAndApplyCreatorPost(app.db, {
@@ -238,13 +238,13 @@ export async function slpFeedPublishingRoutes(app: FastifyInstance, deps: SlpRou
   // Global manual trigger: runs every automation-enabled creator (prioritizing those
   // scheduled soonest), consuming each selected creator's near-future slot the same way
   // an automatic run would. One creator's failure does not affect the others.
-  app.post("/noodler/auto-post/refresh-now", async (_req, reply) => {
+  app.post("/slurp/auto-post/refresh-now", async (_req, reply) => {
     const result = await refreshAllCreatorsNow(app.db);
     if (result.status === "disabled") return reply.code(404).send({ error: "Not Found" });
     return { outcomes: result.outcomes };
   });
 
-  app.post("/noodler/auto-post/refresh-targeted", async (req, reply) => {
+  app.post("/slurp/auto-post/refresh-targeted", async (req, reply) => {
     const parsed = slurpTargetedRefreshSchema.safeParse(req.body ?? {});
     if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
     const result = await refreshTargetedCreatorsNow(
@@ -257,7 +257,7 @@ export async function slpFeedPublishingRoutes(app: FastifyInstance, deps: SlpRou
     return { outcomes: result.outcomes };
   });
 
-  app.post("/noodler/refresh/images", async (req, reply) => {
+  app.post("/slurp/refresh/images", async (req, reply) => {
     const parsed = slpImagePromptConfirmationSchema.safeParse(req.body);
     if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
     const result = await slpCreatorImages.generateReviewedImages({

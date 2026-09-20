@@ -198,6 +198,15 @@ modules, rejected alternative, and migration consequence.
   change is compile-time only. `slurp2-vocabulary-shape` proves all 202 copied declarations are
   shape-identical to the Engine originals; it needs `MARINARA_ENGINE_ROOT` and reports a skip
   without one.
-- **Pending decision:** renaming the `/noodler/*` routes. It is runtime-safe because the client and
-  the server ship in one bundle, but it deliberately rewrites the 179-route inventory baseline, so
-  it needs its own slice.
+- **Decision:** Slurp2 operation routes use `/api/slurp2/slurp/*`, with the same methods, parameters,
+  bodies, responses and handlers. Four GET media routes remain at `/api/slurp2/noodler/*` because
+  account rows, Garnish records and post rows can persist those URLs, and backups preserve them:
+  avatar, banner, ad image and post image. New media writes use the Slurp paths and new post media
+  URLs remain the existing post-media URL so future stored rows also use the retained route.
+- **Proof:** `slurp2-route-inventory.regression.ts` maps the new inventory back to the staging
+  baseline, checks 179 routes, the HTTP-method multiset, per-feature handler counts, explicit
+  retained paths, and negative fixtures for a missing route and a changed method. The client-hooks
+  regression checks the request mapping and preserves all eleven wiring counts.
+- **Migration consequence:** none. No table, column, JSON key, locale key, platform value, backup
+  format, stored media path or response shape changed. The manifest requires an Engine restart on
+  update, so an old client bundle cannot run against the new operation routes after an update.

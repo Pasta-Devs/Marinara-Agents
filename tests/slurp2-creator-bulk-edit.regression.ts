@@ -20,7 +20,7 @@ const bulkEdit = read("client/src/components/slurp/SlurpCreatorBulkEdit.tsx");
 const en = JSON.parse(read("client/src/localization/locales/en.json")) as Record<string, string>;
 
 // Route: bounded, strict, and never an empty patch.
-const routeStart = routes.indexOf('app.post("/noodler/accounts/bulk-update"');
+const routeStart = routes.indexOf('app.post("/slurp/accounts/bulk-update"');
 assert.ok(routeStart >= 0, "bulk-update route exists");
 const route = routes.slice(routeStart, routes.indexOf("\n  });", routeStart));
 assert.match(route, /\.max\(500\)/u);
@@ -51,7 +51,7 @@ assert.match(tagsPage, /<label className="relative flex/u);
 assert.match(settings, /<SlurpCreatorBulkEdit/u);
 assert.match(settings, /<SlurpDiscoveryProfileEditor/u);
 assert.match(settings, /ids: \[selectedCreator\.id\]/u);
-assert.match(read("client/src/hooks/use-slurp.ts"), /"\/slurp2\/noodler\/accounts\/bulk-update"/u);
+assert.match(read("client/src/hooks/use-slurp.ts"), /"\/slurp2\/slurp\/accounts\/bulk-update"/u);
 
 // Every literal key the new UI uses exists in English (plural keys may only have _one/_other).
 for (const source of [tagsPage, bulkEdit, settings]) {

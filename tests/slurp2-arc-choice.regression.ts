@@ -149,7 +149,7 @@ assert.match(generation, /arcPoll \? \{ poll: arcPoll \}/);
 
 // Director choose goes through the gated director route; viewer votes are one per account.
 const routes = slurp2Source("packages/slurp2/src/engine/packages/server/src/routes/slurp.routes.ts");
-const director = routes.slice(routes.indexOf('"/noodler/accounts/:id/projects/:projectId/director"'));
+const director = routes.slice(routes.indexOf('"/slurp/accounts/:id/projects/:projectId/director"'));
 assert.ok(director.indexOf("arcDirectorMode") < director.indexOf("directProject"));
 const storage = slurp2Source("packages/slurp2/src/engine/packages/server/src/services/storage/slurp.storage.ts");
 assert.match(storage, /arcPollHours: 24,/);

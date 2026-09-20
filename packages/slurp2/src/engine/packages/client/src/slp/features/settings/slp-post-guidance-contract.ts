@@ -20,7 +20,7 @@ export type SlurpPostAccess = "public" | "locked";
 export function useSlurpPostGuidance(enabled = true) {
   return useQuery({
     queryKey: slpKeys.noodlerPostGuidance(),
-    queryFn: () => api.get<SlurpPostGuidance>("/slurp2/noodler/post-guidance"),
+    queryFn: () => api.get<SlurpPostGuidance>("/slurp2/slurp/post-guidance"),
     enabled,
     staleTime: 10_000,
   });
@@ -29,7 +29,7 @@ export function useUpdateSlurpPostGuidance() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (patch: { creatorId?: string | null; public?: string; locked?: string; menu?: string }) =>
-      api.patch<SlurpPostGuidance>("/slurp2/noodler/post-guidance", patch),
+      api.patch<SlurpPostGuidance>("/slurp2/slurp/post-guidance", patch),
     onSuccess: (value) => qc.setQueryData(slpKeys.noodlerPostGuidance(), value),
   });
 }
@@ -40,7 +40,7 @@ export function useGenerateSlurpPostGuidance() {
       creatorId?: string | null;
       currentDraft?: string;
       guidance?: string;
-    }) => api.post<{ guidance: string }>("/slurp2/noodler/post-guidance-draft", input),
+    }) => api.post<{ guidance: string }>("/slurp2/slurp/post-guidance-draft", input),
   });
 }
 

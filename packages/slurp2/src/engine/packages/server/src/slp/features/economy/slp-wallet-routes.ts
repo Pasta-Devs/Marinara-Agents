@@ -48,7 +48,7 @@ export async function slpWalletRoutes(app: FastifyInstance, deps: SlpRouteDeps) 
    * One viewer's wallet: balance, recent ledger, and paid-through dates. Reading it is what pays
    * the daily stipend and charges due renewals, so the wallet page is also the economy's clock.
    */
-  app.get("/noodler/viewer/wallet", async (req, reply) => {
+  app.get("/slurp/viewer/wallet", async (req, reply) => {
     const parsed = z.object({ personaId: z.string().trim().min(1) }).safeParse(req.query);
     if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
     const viewer = await resolveViewerPersona(parsed.data.personaId);
@@ -71,7 +71,7 @@ export async function slpWalletRoutes(app: FastifyInstance, deps: SlpRouteDeps) 
     };
   });
 
-  app.post("/noodler/viewer/wallet/daily-refill", async (req, reply) => {
+  app.post("/slurp/viewer/wallet/daily-refill", async (req, reply) => {
     const parsed = z.object({ personaId: z.string().trim().min(1) }).safeParse(req.body);
     if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
     const viewer = await resolveViewerPersona(parsed.data.personaId);
@@ -79,7 +79,7 @@ export async function slpWalletRoutes(app: FastifyInstance, deps: SlpRouteDeps) 
     return noodle.claimWalletRefill(viewer.id);
   });
 
-  app.post("/noodler/viewer/wallet/dev-set", async (req, reply) => {
+  app.post("/slurp/viewer/wallet/dev-set", async (req, reply) => {
     if (process.env.NODE_ENV !== "development" || process.env.CHEATS_ENABLED !== "true")
       return reply.code(404).send({ error: "Not found" });
     const parsed = z
@@ -91,7 +91,7 @@ export async function slpWalletRoutes(app: FastifyInstance, deps: SlpRouteDeps) 
     return noodle.setWalletCoinsForDevelopment(viewer.id, parsed.data.coins);
   });
 
-  app.post("/noodler/accounts/:id/tip", async (req, reply) => {
+  app.post("/slurp/accounts/:id/tip", async (req, reply) => {
     const parsed = z
       .object({
         personaId: z.string().trim().min(1),
@@ -167,7 +167,7 @@ export async function slpWalletRoutes(app: FastifyInstance, deps: SlpRouteDeps) 
   });
 
   /** A creator's own weekly price. `null` clears it back to the Slurp-wide default. */
-  app.put("/noodler/accounts/:id/subscription-price", async (req, reply) => {
+  app.put("/slurp/accounts/:id/subscription-price", async (req, reply) => {
     const parsed = z
       .object({ personaId: z.string().trim().min(1), price: z.number().int().min(0).max(9999).nullable() })
       .safeParse(req.body);
@@ -183,7 +183,7 @@ export async function slpWalletRoutes(app: FastifyInstance, deps: SlpRouteDeps) 
     return { price: await noodle.getCreatorSubscriptionPrice(id) };
   });
 
-  app.get("/noodler/viewer-wallets", async (_req, reply) => {
+  app.get("/slurp/viewer-wallets", async (_req, reply) => {
     const personas = await characters.listPersonas();
     return noodle.listViewerWallets(personas.map((persona) => persona.id));
   });
@@ -194,7 +194,7 @@ export async function slpWalletRoutes(app: FastifyInstance, deps: SlpRouteDeps) 
    * The circuit only closes here: without a payout, earnings are a scoreboard attached to nothing
    * and being a successful Creator does not change your life as a fan.
    */
-  app.post("/noodler/accounts/:id/payout", async (req, reply) => {
+  app.post("/slurp/accounts/:id/payout", async (req, reply) => {
     const parsed = z
       .object({ personaId: z.string().trim().min(1), amount: z.number().int().min(1).max(100_000) })
       .safeParse(req.body ?? {});
@@ -219,7 +219,7 @@ export async function slpWalletRoutes(app: FastifyInstance, deps: SlpRouteDeps) 
     };
   });
 
-  app.post("/noodler/accounts/:id/subscribe", async (req, reply) => {
+  app.post("/slurp/accounts/:id/subscribe", async (req, reply) => {
     const parsed = slpCreatorSubscriptionSchema.safeParse(req.body);
     if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
     const { id } = req.params as { id: string };
@@ -248,7 +248,7 @@ export async function slpWalletRoutes(app: FastifyInstance, deps: SlpRouteDeps) 
     return reply.code(201).send(buildViewerShell(await buildViewerContext(freshViewer ?? viewer)));
   });
 
-  app.delete("/noodler/accounts/:id/subscribe", async (req, reply) => {
+  app.delete("/slurp/accounts/:id/subscribe", async (req, reply) => {
     const parsed = slpCreatorSubscriptionSchema.safeParse(req.query);
     if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
     const viewer = await resolveViewerPersona(parsed.data.personaId);
@@ -259,7 +259,7 @@ export async function slpWalletRoutes(app: FastifyInstance, deps: SlpRouteDeps) 
     return buildViewerShell(await buildViewerContext(freshViewer ?? viewer));
   });
 
-  app.get("/noodler/accounts/:id/subscribers", async (req, reply) => {
+  app.get("/slurp/accounts/:id/subscribers", async (req, reply) => {
     const { id } = req.params as { id: string };
     const parsed = slpCreatorSubscriberPageQuerySchema.safeParse(req.query);
     if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
@@ -328,7 +328,7 @@ export async function slpWalletRoutes(app: FastifyInstance, deps: SlpRouteDeps) 
     };
   });
 
-  app.post("/noodler/posts/:id/unlock", async (req, reply) => {
+  app.post("/slurp/posts/:id/unlock", async (req, reply) => {
     const parsed = slpCreatorUnlockSchema.safeParse(req.body);
     if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
     const { id } = req.params as { id: string };

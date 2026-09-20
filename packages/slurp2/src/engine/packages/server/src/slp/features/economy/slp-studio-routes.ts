@@ -18,7 +18,7 @@ import type { SlpRouteDeps } from "../viewer/slp-viewer-contract.js";
 
 export async function slpStudioRoutes(app: FastifyInstance, deps: SlpRouteDeps) {
   const { creatorBelongsToViewer, noodle, resolveViewerPersona } = deps;
-  app.get("/noodler/studio", async (req, reply) => {
+  app.get("/slurp/studio", async (req, reply) => {
     const parsed = slpCreatorViewerPersonaSchema.safeParse(req.query);
     if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
     const viewer = await resolveViewerPersona(parsed.data.personaId);
@@ -156,11 +156,11 @@ export async function slpStudioRoutes(app: FastifyInstance, deps: SlpRouteDeps) 
   /**
    * Metrics for every Creator, for the Backstage Creators list.
    *
-   * Read-only on purpose. `/noodler/studio` rewrites its snapshot on every read, so the Creator
+   * Read-only on purpose. `/slurp/studio` rewrites its snapshot on every read, so the Creator
    * home deltas would reset whenever Settings was opened. Likes and replies are the displayed
    * counts over the newest posts, the same numbers a post card shows.
    */
-  app.get("/noodler/creator-metrics", async () => {
+  app.get("/slurp/creator-metrics", async () => {
     const accounts = (await noodle.listNoodlerAccounts()).filter((account) => !isSlurpViewerActorAccount(account));
     const ids = accounts.map((account) => account.id);
     const settings = await noodle.getSettings();

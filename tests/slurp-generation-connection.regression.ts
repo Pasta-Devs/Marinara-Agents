@@ -71,7 +71,7 @@ async function main() {
   // The stage-profile draft route drives creator and persona creation and editing. It used to skip
   // the Slurp generation setting entirely and go straight to the agent default.
   const routes = read("routes/slurp.routes.ts");
-  const draftRoute = routes.slice(routes.indexOf('app.post("/noodler/stage-profile-draft"'), 900 + routes.length);
+  const draftRoute = routes.slice(routes.indexOf('app.post("/slurp/stage-profile-draft"'), 900 + routes.length);
   assert.match(draftRoute.slice(0, 900), /parsed\.data\.connectionId \?\? settings\.generationConnectionId/);
 
   console.log("slurp generation connection regression passed");

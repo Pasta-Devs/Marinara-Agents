@@ -199,7 +199,6 @@ export function useSlurpHomeBaseState({ navigation, onNavigate, onLeave }: Slurp
       };
       if (!isEmptyCreatorPostDraft(nextDraft)) {
         return {
-          onNavigate,
           ...current,
           [profileId]: nextDraft,
         };
@@ -609,6 +608,7 @@ export function useSlurpHomeBaseState({ navigation, onNavigate, onLeave }: Slurp
 
   return {
     navigation,
+    onNavigate,
     localizeUi,
     accountsQuery,
     retryAccountsOrReload,

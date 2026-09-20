@@ -55,7 +55,7 @@ export async function slpProjectsRoutes(app: FastifyInstance, deps: SlpRouteDeps
    * A milestone is a target the player aims at. A tip goal is one they show the audience, which is
    * what gives anyone a reason to tip. Only the operating persona may set it.
    */
-  app.put("/noodler/accounts/:id/goal", async (req, reply) => {
+  app.put("/slurp/accounts/:id/goal", async (req, reply) => {
     const parsed = z
       .object({
         personaId: z.string().trim().min(1),
@@ -84,7 +84,7 @@ export async function slpProjectsRoutes(app: FastifyInstance, deps: SlpRouteDeps
    * coming next — and the opposite of a tip goal, which exists to be shown. Nothing here reaches
    * the audience except the posts it produces.
    */
-  app.get("/noodler/accounts/:id/projects", async (req, reply) => {
+  app.get("/slurp/accounts/:id/projects", async (req, reply) => {
     const parsed = z.object({ personaId: z.string().trim().min(1) }).safeParse(req.query ?? {});
     if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
     const viewer = await resolveViewerPersona(parsed.data.personaId);
@@ -100,7 +100,7 @@ export async function slpProjectsRoutes(app: FastifyInstance, deps: SlpRouteDeps
     .max(SLURP_PROJECT_MAX_CHAPTERS);
 
   /** Open a project. Refused past the active limit rather than opening one that would never post. */
-  app.post("/noodler/accounts/:id/projects", async (req, reply) => {
+  app.post("/slurp/accounts/:id/projects", async (req, reply) => {
     const parsed = z
       .object({
         personaId: z.string().trim().min(1),
@@ -162,7 +162,7 @@ export async function slpProjectsRoutes(app: FastifyInstance, deps: SlpRouteDeps
    * Posts already published into it keep the chapter they were written for. A feed that rewrote
    * its own history every time the plan changed would be worse than one with no plan.
    */
-  app.patch("/noodler/accounts/:id/projects/:projectId", async (req, reply) => {
+  app.patch("/slurp/accounts/:id/projects/:projectId", async (req, reply) => {
     const parsed = z
       .object({
         personaId: z.string().trim().min(1),
@@ -205,7 +205,7 @@ export async function slpProjectsRoutes(app: FastifyInstance, deps: SlpRouteDeps
    * One Director mode action on an arc. Refused with 403 while `arcDirectorMode` is off, so the
    * arcs run by themselves unless the player turned directing on.
    */
-  app.post("/noodler/accounts/:id/projects/:projectId/director", async (req, reply) => {
+  app.post("/slurp/accounts/:id/projects/:projectId/director", async (req, reply) => {
     const parsed = z
       .object({
         personaId: z.string().trim().min(1),
@@ -234,7 +234,7 @@ export async function slpProjectsRoutes(app: FastifyInstance, deps: SlpRouteDeps
    * Apply or reject an arc's pending profile change. Owner-only, and not a Director action: a
    * proposal always waits for the player, whether or not Director mode is on.
    */
-  app.post("/noodler/accounts/:id/projects/:projectId/profile", async (req, reply) => {
+  app.post("/slurp/accounts/:id/projects/:projectId/profile", async (req, reply) => {
     const parsed = z.object({ personaId: z.string().trim().min(1), apply: z.boolean() }).safeParse(req.body ?? {});
     if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
     const viewer = await resolveViewerPersona(parsed.data.personaId);
@@ -253,7 +253,7 @@ export async function slpProjectsRoutes(app: FastifyInstance, deps: SlpRouteDeps
    * hidden from the viewer shows nothing, and a Creator with a protected identity shows arcs to the
    * owner only, because arc text is typed by the player and is not passed through disclosure.
    */
-  app.get("/noodler/accounts/:id/arcs", async (req, reply) => {
+  app.get("/slurp/accounts/:id/arcs", async (req, reply) => {
     const parsed = z.object({ personaId: z.string().trim().min(1) }).safeParse(req.query ?? {});
     if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
     const viewer = await resolveViewerPersona(parsed.data.personaId);
@@ -317,7 +317,7 @@ export async function slpProjectsRoutes(app: FastifyInstance, deps: SlpRouteDeps
   });
 
   /** A Creator's arc overrides. Owner-only, like the projects they shape. */
-  app.get("/noodler/accounts/:id/arc-config", async (req, reply) => {
+  app.get("/slurp/accounts/:id/arc-config", async (req, reply) => {
     const parsed = z.object({ personaId: z.string().trim().min(1) }).safeParse(req.query ?? {});
     if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
     const viewer = await resolveViewerPersona(parsed.data.personaId);
@@ -328,7 +328,7 @@ export async function slpProjectsRoutes(app: FastifyInstance, deps: SlpRouteDeps
   });
 
   /** Replace a Creator's arc overrides. A field left out uses the global setting; `{}` resets all. */
-  app.put("/noodler/accounts/:id/arc-config", async (req, reply) => {
+  app.put("/slurp/accounts/:id/arc-config", async (req, reply) => {
     const parsed = z
       .object({
         personaId: z.string().trim().min(1),
@@ -351,7 +351,7 @@ export async function slpProjectsRoutes(app: FastifyInstance, deps: SlpRouteDeps
   });
 
   /** Forget a project. Its posts stay published and keep pointing at it. */
-  app.delete("/noodler/accounts/:id/projects/:projectId", async (req, reply) => {
+  app.delete("/slurp/accounts/:id/projects/:projectId", async (req, reply) => {
     const parsed = z.object({ personaId: z.string().trim().min(1) }).safeParse(req.query ?? {});
     if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
     const viewer = await resolveViewerPersona(parsed.data.personaId);
@@ -366,7 +366,7 @@ export async function slpProjectsRoutes(app: FastifyInstance, deps: SlpRouteDeps
   });
 
   /** Ask the model for an arc for this Creator. It is stored as a suggestion for the player to review. */
-  app.post("/noodler/accounts/:id/projects/generate", async (req, reply) => {
+  app.post("/slurp/accounts/:id/projects/generate", async (req, reply) => {
     const parsed = z.object({ personaId: z.string().trim().min(1) }).safeParse(req.body ?? {});
     if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
     const viewer = await resolveViewerPersona(parsed.data.personaId);
@@ -388,7 +388,7 @@ export async function slpProjectsRoutes(app: FastifyInstance, deps: SlpRouteDeps
   });
 
   /** Generate an unsaved Arc Library draft from a player brief. */
-  app.post("/noodler/accounts/:id/arc-library/generate", async (req, reply) => {
+  app.post("/slurp/accounts/:id/arc-library/generate", async (req, reply) => {
     const parsed = z
       .object({ personaId: z.string().trim().min(1), brief: z.string().trim().min(1).max(2_000) })
       .safeParse(req.body ?? {});
@@ -415,7 +415,7 @@ export async function slpProjectsRoutes(app: FastifyInstance, deps: SlpRouteDeps
   });
 
   /** Copy an arc into the arc library as a custom type. */
-  app.post("/noodler/accounts/:id/projects/:projectId/library", async (req, reply) => {
+  app.post("/slurp/accounts/:id/projects/:projectId/library", async (req, reply) => {
     const parsed = z.object({ personaId: z.string().trim().min(1) }).safeParse(req.body ?? {});
     if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
     const viewer = await resolveViewerPersona(parsed.data.personaId);
@@ -429,7 +429,7 @@ export async function slpProjectsRoutes(app: FastifyInstance, deps: SlpRouteDeps
   });
 
   /** One project's own posts, so the Studio can show the thread rather than the whole page. */
-  app.get("/noodler/accounts/:id/projects/:projectId/posts", async (req, reply) => {
+  app.get("/slurp/accounts/:id/projects/:projectId/posts", async (req, reply) => {
     const parsed = z
       .object({ personaId: z.string().trim().min(1), limit: z.coerce.number().int().min(1).max(50).default(20) })
       .safeParse(req.query ?? {});
