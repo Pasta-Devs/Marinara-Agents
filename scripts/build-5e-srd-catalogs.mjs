@@ -69,6 +69,10 @@ const DISTANCE_UNITS = { distance: { label: "ft", perCell: 5 } };
 
 // The three distance columns of the attacks list, wired through combat.attacks
 // so one weapon row says how far it swings and how far it is thrown or shot.
+// The sheet field the weapon list's strikes reads, declared by ruleset.json.
+const ATTACKS_PER_ACTION_FIELD = "attacks_per_action";
+// The weapon column a rider may require, likewise declared by ruleset.json.
+const FINESSE_OR_RANGED_COLUMN = "finesse_or_ranged";
 const ATTACK_REACH_COLUMN = "reach";
 const ATTACK_RANGE_COLUMN = "range";
 const ATTACK_LONG_RANGE_COLUMN = "long_range";
@@ -287,7 +291,7 @@ const RANGED_WEAPONS = new Set([
 // The ruleset version this converter writes. Raise it when the generated
 // content changes what an installed ruleset means; a rebuild refuses to lower
 // a version that is already higher.
-const RULESET_VERSION = 6;
+const RULESET_VERSION = 7;
 
 // The SRD's healing spells. The fixture has no healing field at all: a spell
 // carries a damage roll or nothing, so a heal arrives here looking exactly like
@@ -533,6 +537,15 @@ const COUNTERS = [
     name: "Action Surge",
     max: 1,
     recharge: "short",
+    // "On your turn, you can take one additional action on top of your regular action and a
+    // possible bonus action." Taking it costs nothing itself, which is what `free` says, and the
+    // action it hands over is capped where it lands so it cannot be saved for a later turn.
+    mechanics: {
+      kind: "utility",
+      targets: "self",
+      free: true,
+      gives: [{ budget: BUDGET_ACTION, count: 1 }],
+    },
     scaled: {
       from: { field: "level" },
       table: [
@@ -1246,6 +1259,74 @@ function stepTableFromColumn(counter, levels) {
   return table;
 }
 
+// Features that carry combat mechanics but no limited-use counter. A COUNTERS row carries its own
+// `mechanics` where the SRD states a number of uses; this is the other half, for a feature the SRD
+// puts no such number on. Every row quotes the sentence it encodes, and a feature named in both
+// tables stops the build rather than letting one silently win.
+const FEATURE_MECHANICS = [
+  {
+    feature: "srd_rogue_cunning-action",
+    name: "Cunning Action",
+    // "You can take a bonus action on each of your turns in combat. This action can be used only to
+    // take the Dash, Disengage, or Hide action." The entry is a PERMISSION: it is never taken from
+    // the menu itself, it puts those three standard actions on it for the bonus budget.
+    mechanics: {
+      kind: "utility",
+      targets: "self",
+      standard: { actions: ["dash", "disengage", "hide"], budget: BUDGET_BONUS },
+    },
+  },
+  {
+    feature: "srd_rogue_sneak-attack",
+    name: "Sneak Attack",
+    // "Once per turn, you can deal an extra 1d6 damage to one creature you hit with an attack if
+    // you have advantage on the attack roll. The attack must use a finesse or a ranged weapon." and
+    // "You don't need advantage on the attack roll if another enemy of the target is within 5 feet
+    // of it". The two are ALTERNATIVES, which is what `when` is: any one of them is enough.
+    mechanics: {
+      kind: "rider",
+      rider: {
+        on: "hit",
+        sources: [ATTACK_LIST],
+        requires: { column: FINESSE_OR_RANGED_COLUMN },
+        when: ["advantage", "ally-adjacent"],
+        oncePer: "turn",
+        amount: { dice: "1d6" },
+      },
+    },
+    // "The amount of the extra damage increases as you gain levels in this class, as shown in the
+    // Sneak Attack column of the Rogue table." Built from that column, never typed.
+    scalesFromDiceColumn: { base: { count: 1, sides: 6 }, from: { field: "level" } },
+  },
+];
+
+/** A step table built from a class-table column that prints DICE rather than a count, such as the
+ *  Rogue table's Sneak Attack column. The Engine grows a rider by the EXTRA dice its table gives,
+ *  so each step is the column's own count less the dice the mechanics already carry. */
+function diceStepTableFromColumn(feature, levels, base, name) {
+  const rows = levels.get(feature);
+  if (!rows?.length) fail(`${name} reads the class-table column of ${feature}, which the source has not`);
+  const table = [];
+  let previous;
+  for (const { level, value } of rows) {
+    const match = /^(\d{1,2})d(\d{1,2})$/u.exec(String(value));
+    if (!match) fail(`${name} reads ${JSON.stringify(value)} at level ${level}, which is not dice`);
+    const [, count, sides] = match;
+    if (Number(sides) !== base.sides) {
+      fail(`${name} reads a d${sides} at level ${level}, but its own amount is a d${base.sides}`);
+    }
+    const extra = Number(count) - base.count;
+    if (extra < 0) fail(`${name} reads ${value} at level ${level}, under the ${base.count} it already carries`);
+    if (extra !== previous) table.push([level, extra]);
+    previous = extra;
+  }
+  if (table.length === 0) fail(`${feature} states no dice`);
+  if (table[0][0] !== 1 || table[0][1] !== 0) {
+    fail(`${name} must start at level 1 with no extra dice; its table starts ${JSON.stringify(table[0])}`);
+  }
+  return table;
+}
+
 /** What each kept counter can reach at most, gathered while the rows are built. */
 const SCALED_CEILINGS = new Map();
 
@@ -1314,6 +1395,22 @@ function counterFor(pk, levels) {
   return { counter, scaled, summary };
 }
 
+/** The mechanics a feature carries when no counter does, with any dice column it scales by built
+ *  from the source. A feature both tables claim is refused: one of them would otherwise be lost. */
+function featureMechanicsFor(pk, levels) {
+  const row = FEATURE_MECHANICS.find((entry) => entry.feature === pk);
+  if (!row) return undefined;
+  if (COUNTERS.some((counter) => counter.feature === pk)) {
+    fail(`${row.name} is in FEATURE_MECHANICS and in COUNTERS; a feature carries its mechanics once`);
+  }
+  const spec = row.scalesFromDiceColumn;
+  if (!spec) return row.mechanics;
+  return {
+    ...row.mechanics,
+    scales: { from: spec.from, table: diceStepTableFromColumn(pk, levels, spec.base, row.name) },
+  };
+}
+
 function buildFeatureEntries(features, classes, featureLevels) {
   return features
     .map(({ pk, fields }) => {
@@ -1351,7 +1448,7 @@ function buildFeatureEntries(features, classes, featureLevels) {
           level: gainedAt,
         }),
         rows,
-        mechanics: counter?.counter.mechanics,
+        mechanics: counter?.counter.mechanics ?? featureMechanicsFor(pk, featureLevels),
       };
     })
     .sort(byId);
@@ -1470,6 +1567,10 @@ function buildWeaponEntries(weapons, propertiesByWeapon, report) {
               name: fields.name,
               ability: ranged ? "dex" : "str",
               proficient: true,
+              // SRD 5.1, Rogue Sneak Attack: "The attack must use a finesse or a ranged weapon."
+              // Both halves come from the source itself: its own Finesse property, and the ranged
+              // weapons listed above. One column, because it is one question about the row.
+              [FINESSE_OR_RANGED_COLUMN]: has("Finesse") || ranged,
               bonus: 0,
               damage: fields.damage_dice,
               damage_type: fields.damage_type,
@@ -2868,6 +2969,11 @@ function combatBlock(tiers) {
         damage: { dice: { column: "damage" }, ability: { column: "ability" }, type: { column: "damage_type" } },
         reach: { column: ATTACK_REACH_COLUMN },
         range: { normal: { column: ATTACK_RANGE_COLUMN }, long: { column: ATTACK_LONG_RANGE_COLUMN } },
+        // SRD 5.1, Extra Attack: "you can attack twice, instead of once, whenever you take the
+        // Attack action on your turn." The sheet has no notion of class, so the count is the
+        // player's own field rather than a class table; a character without the feature leaves it
+        // at 1 and the fight is the one it always was.
+        strikes: { field: ATTACKS_PER_ACTION_FIELD },
       },
     ],
     abilities: [
@@ -2889,14 +2995,35 @@ function combatBlock(tiers) {
       },
     ],
     standard: ["dash", "disengage", "dodge", "help", "hide", "ready"],
+    standardEffects: {
+      // SRD 5.1, Dodge: "you have advantage on Dexterity saving throws" until the start of your
+      // next turn. Being harder to hit is already carried by the action's own flag; this is the
+      // other half of the same sentence.
+      dodge: { saves: ["dex_save"] },
+    },
     conditions: [
       {
         $comment:
-          "Only the parts of each condition the closed effect list can say today. Charmed and deafened have no effect it can express, so they are left out and stay plain records on the sheet.",
+          "Only the parts of each condition the closed effect list can say today. Deafened has no effect it can express, so it is left out and stays a plain record on the sheet. Charmed joined the list when Capability API 1.29 added an effect for the one thing it does in a fight.",
         condition: "blinded",
         effects: ["own-attacks-disadvantage", "attacks-against-advantage"],
       },
-      { condition: "frightened", effects: ["own-attacks-disadvantage"] },
+      {
+        // "A charmed creature can't attack the charmer or target the charmer with harmful abilities
+        // or magical effects." The second half, the charmer's advantage on social checks, is not a
+        // fight rule and has no effect to carry it. The SRD does not say a charm ends when the
+        // charmer drops, so this does not say so either.
+        condition: "charmed",
+        effects: ["cannot-target-source"],
+      },
+      {
+        // "A frightened creature has disadvantage on ability checks and attack rolls WHILE THE
+        // SOURCE of its fear is within line of sight" and, separately and ungated, "can't willingly
+        // move closer to the source of its fear". So the sight gate names the first only.
+        condition: "frightened",
+        effects: ["own-attacks-disadvantage", "cannot-approach-source"],
+        whileSourceInSight: ["own-attacks-disadvantage"],
+      },
       { condition: "grappled", effects: ["speed-zero"] },
       { condition: "incapacitated", effects: ["cannot-act", "cannot-react"] },
       { condition: "invisible", effects: ["own-attacks-advantage", "attacks-against-disadvantage"] },
@@ -2906,8 +3033,10 @@ function combatBlock(tiers) {
         failsSaves: ["str_save", "dex_save"],
       },
       {
+        // "The creature has resistance to all damage", which `resist-all` halves on top of whatever
+        // the target's own resistances already said.
         condition: "petrified",
-        effects: ["cannot-act", "cannot-react", "speed-zero", "attacks-against-advantage"],
+        effects: ["cannot-act", "cannot-react", "speed-zero", "attacks-against-advantage", "resist-all"],
         failsSaves: ["str_save", "dex_save"],
       },
       { condition: "poisoned", effects: ["own-attacks-disadvantage"] },
@@ -2920,7 +3049,13 @@ function combatBlock(tiers) {
           "half-move-to-stand",
         ],
       },
-      { condition: "restrained", effects: ["own-attacks-disadvantage", "attacks-against-advantage", "speed-zero"] },
+      {
+        // "The creature has disadvantage on Dexterity saving throws", which is what `saves` narrows
+        // the effect to: the other saves are rolled as they always were.
+        condition: "restrained",
+        effects: ["own-attacks-disadvantage", "attacks-against-advantage", "speed-zero", "own-saves-disadvantage"],
+        saves: ["dex_save"],
+      },
       {
         condition: "stunned",
         effects: ["cannot-act", "cannot-react", "speed-zero", "attacks-against-advantage"],

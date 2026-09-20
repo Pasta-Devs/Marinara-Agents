@@ -1085,7 +1085,8 @@
             }
           }
         }
-      ]
+      ],
+      "mechanics": { "kind": "utility", "targets": "self", "free": true, "gives": [{ "budget": "action", "count": 1 }] }
     },
     {
       "id": "fighter-equipment",
@@ -2371,7 +2372,12 @@
             "text": "Starting at 2nd level, your quick thinking and agility allow you to move and act quickly. You can take a bonus action on each of your turns in combat. This action can be used only to take the Dash, Disengage, or Hide action."
           }
         }
-      ]
+      ],
+      "mechanics": {
+        "kind": "utility",
+        "targets": "self",
+        "standard": { "actions": ["dash", "disengage", "hide"], "budget": "bonus" }
+      }
     },
     {
       "id": "rogue-elusive",
@@ -2506,7 +2512,33 @@
             "text": "Beginning at 1st level, you know how to strike subtly and exploit a foe's distraction. Once per turn, you can deal an extra 1d6 damage to one creature you hit with an attack if you have advantage on the attack roll. The attack must use a finesse or a ranged weapon. You don't need advantage on the attack roll if another enemy of the target is within 5 feet of it, that enemy isn't incapacitated, and you don't have disadvantage on the attack roll. The amount of the extra damage increases as you gain levels in this class, as shown in the Sneak Attack column of the Rogue table."
           }
         }
-      ]
+      ],
+      "mechanics": {
+        "kind": "rider",
+        "rider": {
+          "on": "hit",
+          "sources": ["attacks"],
+          "requires": { "column": "finesse_or_ranged" },
+          "when": ["advantage", "ally-adjacent"],
+          "oncePer": "turn",
+          "amount": { "dice": "1d6" }
+        },
+        "scales": {
+          "from": { "field": "level" },
+          "table": [
+            [1, 0],
+            [3, 1],
+            [5, 2],
+            [7, 3],
+            [9, 4],
+            [11, 5],
+            [13, 6],
+            [15, 7],
+            [17, 8],
+            [19, 9]
+          ]
+        }
+      }
     },
     {
       "id": "rogue-stroke-of-luck",

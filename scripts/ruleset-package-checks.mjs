@@ -103,6 +103,12 @@ const RULESET_COMBAT_CONDITION_EFFECTS = Object.freeze([
   "speed-zero",
   "half-move-to-stand",
   "ends-on-damage",
+  // Added by Capability API 1.29, with `saves` narrowing the two that are about saving throws.
+  "own-saves-advantage",
+  "own-saves-disadvantage",
+  "resist-all",
+  "cannot-target-source",
+  "cannot-approach-source",
 ]);
 const RULESET_COMBAT_STANDARD_ACTIONS = Object.freeze(["dash", "disengage", "dodge", "help", "hide", "ready"]);
 

@@ -2,15 +2,15 @@
   "schemaVersion": 2,
   "capabilityApi": {
     "major": 1,
-    "minor": 28
+    "minor": 29
   },
   "builtAgainst": {
     "engineVersion": "2.4.6",
-    "engineCommit": "41a60e30a0c6d792036ff8ef884bc0084abdc243"
+    "engineCommit": "4398962ff6be03568615298d318bca8a546472fe"
   },
   "id": "ruleset-5e-2014",
   "name": "5e (SRD 5.1)",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "description": "Provides 5e SRD 5.1 rules for Game Mode ability checks, skill checks, saving throws, and the full character sheet, plus pickable SRD spells, class features and weapons so you do not type them row by row, and class resources the sheet keeps current as you level up. It also brings 5e combat itself: a battle in a new game on this ruleset is fought by these rules on screen, with attack rolls against Armor Class, advantage and disadvantage, criticals, saving throws, conditions, concentration, death saves and spell slots spent off your sheet, against a bestiary of 319 SRD monsters the Game Master can name or a new opponent built on the measured challenge scale. With the Tactical combat style the fight is played on a board measured in feet: Speed becomes squares you walk, weapons reach 5 or 10 feet, bows carry to their long range at disadvantage, half cover adds 2 to Armor Class, spells land as cones, lines and bursts, and walking out of a reach draws an attack. The Classic style plays the same fight without positions. Not yet: chosen reactions, three-quarters cover, elevation, and the window a legendary action is spent in. After installing, choose it under Rules in the Game Mode setup wizard when you create a new game.",
   "engine": {
     "min": "2.4.6",
@@ -33,8 +33,8 @@
   "files": [
     {
       "path": "ruleset.json",
-      "sha256": "53cb1ba9c95d6618fb8ee738d830d5ef14134c8d3734d3ed77df1a79b84096bd",
-      "bytes": 80348
+      "sha256": "fd07f6399dd173af6ad6848289ffe229e71e6d9df159294cccdfbd482244e91f",
+      "bytes": 83643
     },
     {
       "path": "catalogs/spells.json",
@@ -43,8 +43,8 @@
     },
     {
       "path": "catalogs/features.json",
-      "sha256": "5ae2e05546b1a4e15eec5ed8674cda89c1519a7dd4849801554a11017aabda03",
-      "bytes": 198188
+      "sha256": "62046fb128190f245a04d7871cda832d2ae9fe6c90c05042d8fc91cd0c237f48",
+      "bytes": 199101
     },
     {
       "path": "catalogs/creatures.json",
