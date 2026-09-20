@@ -762,22 +762,104 @@ function spellRange(fields, name) {
   fail(`Spell "${name}" has a range this converter cannot map: ${fields.range_text}`);
 }
 
-function spellSave(fields) {
+// What a saving throw does about the damage, read from the spell's own printed
+// sentence. Three shapes, and nothing outside them is guessed at:
+//
+//   half     "On a successful save, it takes half as much damage", in either
+//            order: the SRD's commonest wording.
+//   negates  "must succeed on a Dexterity saving throw or take 3d6", or "On a
+//            failed save, the target takes 10d6 + 40 force damage": the damage
+//            IS what failing brings, so a success avoids all of it.
+//   none     the damage is dealt before the save is even called for, so the
+//            save gates something else and the damage lands either way.
+//
+// A damaging spell whose wording fits none of them lands on nobody's judgement:
+// SPELL_SAVES_BY_HAND says which it is and quotes the sentence, and
+// assertSpellLands below stops the run for a damaging spell that is in neither
+// place. This matters because an entry with no save at all does not ask for one
+// in the middle of a turn: it simply deals its whole damage, every time.
+const SAVE_HALVES =
+  /half as much damage on a successful|takes? half (?:as much )?damage on a success|half damage on a successful|on a successful save[^.]{0,140}?\bhalf\b/iu;
+const SAVE_NEGATES = /on a failed save[^.]{0,200}?\bdamage\b|saving throw or (?:take|takes)\b/iu;
+
+// The damaging spells whose sentence neither reading above fits, decided by
+// hand from the words quoted beside each. assertSpellSaves keeps them honest.
+const SPELL_SAVES_BY_HAND = new Map([
+  // "On a failed save, echoes of the phantasmal monstrosity spawn a nightmare ... In addition, when
+  // the target wakes up, it takes 3d6 psychic damage." The damage follows the failed save, two
+  // sentences later, so a success avoids it.
+  ["srd_dream", { onSuccess: "negates", printed: "when the target wakes up, it takes 3d6 psychic damage" }],
+  // "The target takes 4d6 psychic damage and must make an intelligence saving throw." The damage is
+  // dealt before the save; the save only decides whether its mind goes with it.
+  [
+    "srd_feeblemind",
+    { onSuccess: "none", printed: "The target takes 4d6 psychic damage and must make an intelligence saving throw" },
+  ],
+  // "Any creature in physical contact with the object takes 2d8 fire damage when you cast the
+  // spell." The save that follows is about dropping the object, not about the burn.
+  ["srd_heat-metal", { onSuccess: "none", printed: "takes 2d8 fire damage when you cast the spell" }],
+]);
+
+// Spells the source gives a damage roll that is NOT what the spell does to
+// somebody it is cast at: a row of a table it rolls on, a ward that burns
+// whoever walks in, ground that cuts whoever crosses it. Shipped as `utility`,
+// which keeps them off a fight menu entirely, because an entry that deals
+// damage with nothing rolled for it simply lands.
+const SPELL_DAMAGE_NOT_ITS_OWN = new Map([
+  // "On a mishap ... each teleporting creature takes 3d10 force damage": one row of the spell's own
+  // d100 table, and it hurts the travellers rather than anybody they are aimed at.
+  [
+    "srd_teleport",
+    {
+      printed: "takes 3d10 force damage",
+      reason: "the 3d10 is the mishap row of its own d100 table and hurts the travellers, not a target",
+    },
+  ],
+  // "While the creature is charmed by you, it takes 5d10 psychic damage each time it acts in a
+  // manner directly counter to your instructions, but no more than once each day."
+  [
+    "srd_geas",
+    {
+      printed: "each time it acts in a manner directly counter to your instructions",
+      reason: "the 5d10 only comes later, when a charmed creature disobeys, and never when it is cast",
+    },
+  ],
+  // "When a chosen creature enters the spell's area for the first time on a turn or starts its turn
+  // there, the creature takes 5d10 radiant or necrotic damage."
+  [
+    "srd_forbiddance",
+    {
+      printed: "enters the spell's area for the first time on a turn",
+      reason: "the 5d10 is a ward that burns a named kind of creature walking in, not something it is aimed at",
+    },
+  ],
+  // "When a creature moves into or within the area, it takes 2d4 piercing damage for every 5 feet
+  // it travels."
+  [
+    "srd_spike-growth",
+    {
+      printed: "2d4 piercing damage for every 5 feet it travels",
+      reason: "the 2d4 is ground that cuts whoever walks over it, counted per 5 feet rather than per cast",
+    },
+  ],
+]);
+
+// The SRD prints "Make a melee spell attack" and the fixture says otherwise.
+// One entry, corrected from the printed sentence and checked both ways, so a
+// source that fixes itself stops the run rather than leaving a stale override.
+const SPELL_ATTACK_ROLL_CORRECTIONS = new Map([["srd_inflict-wounds", "Make a melee spell attack"]]);
+
+function spellSave(pk, fields) {
   const ability = ABILITY_BY_SOURCE_NAME[fields.saving_throw_ability];
   if (fields.saving_throw_ability && !ability) fail(`Unknown saving throw ability "${fields.saving_throw_ability}"`);
   if (!ability) return undefined;
-  const desc = fields.desc;
-  if (
-    /half as much damage on a successful|takes half (?:as much )?damage on a success|half damage on a successful/iu.test(
-      desc,
-    )
-  ) {
-    return { save: `${ability}_save`, onSuccess: "half" };
-  }
-  // "negates" only where the description says the save is the whole story: the
-  // creature must succeed or the effect lands. A spell that deals damage
-  // alongside the save (Heat Metal, Geas) is left out, because a success there
-  // does not undo the damage.
+  const desc = oneLine(fields.desc);
+  const byHand = SPELL_SAVES_BY_HAND.get(pk);
+  if (byHand) return { save: `${ability}_save`, onSuccess: byHand.onSuccess };
+  if (SAVE_HALVES.test(desc)) return { save: `${ability}_save`, onSuccess: "half" };
+  if (SAVE_NEGATES.test(desc)) return { save: `${ability}_save`, onSuccess: "negates" };
+  // And the spell that deals no damage at all: "must succeed on a Wisdom saving throw or be
+  // paralyzed" is the save being the whole story, which is what negates says.
   const succeeds = new RegExp(`must succeed on an? ${fields.saving_throw_ability} saving throw or\\b`, "iu");
   if (!fields.attack_roll && !fields.damage_roll && succeeds.test(desc)) {
     return { save: `${ability}_save`, onSuccess: "negates" };
@@ -837,7 +919,7 @@ function assertSpellRiders(spells) {
     // `applies` lands on anything the save did not turn aside, so a row that puts a condition on a
     // target without a save to resist it would be harsher than the SRD. Checked against the save the
     // entry will really carry, so a fixture that stopped stating one stops the build.
-    if (rider.applies && !(rider.save ?? spellSave(spell.fields))) {
+    if (rider.applies && !(rider.save ?? spellSave(pk, spell.fields))) {
       fail(`${pk} applies a condition with no saving throw to resist it`);
     }
   }
@@ -895,7 +977,11 @@ function spellMechanics(pk, fields, options, healing, rider) {
   // A spell that puts a condition on what it touches is a debuff even when it deals no damage, and
   // one that only hands out temporary points is a buff. Without that they would both read as
   // `utility`, which a fight leaves off the menu entirely.
-  const kind = rider?.kind ?? (healing ? "heal" : amount ? "attack" : rider?.applies ? "debuff" : "utility");
+  // A spell whose damage roll belongs to something other than what it does to a target is not an
+  // attack at all, whatever the source's damage field says.
+  const kind = SPELL_DAMAGE_NOT_ITS_OWN.has(pk)
+    ? "utility"
+    : (rider?.kind ?? (healing ? "heal" : amount ? "attack" : rider?.applies ? "debuff" : "utility"));
   return compact({
     // The source marks no spell as healing, so a heal is the hand-checked
     // HEALING_SPELLS table above rather than a guess at the wording. Everything
@@ -906,9 +992,9 @@ function spellMechanics(pk, fields, options, healing, rider) {
     targets: rider?.targets ?? (healing ? "ally" : undefined),
     amount: healing ? healing.amount : amount,
     damageType: rider?.damageType ?? fields.damage_types[0],
-    attackRoll: fields.attack_roll ? true : undefined,
+    attackRoll: fields.attack_roll || SPELL_ATTACK_ROLL_CORRECTIONS.has(pk) ? true : undefined,
     autoHit: rider?.autoHit,
-    save: rider?.save ?? spellSave(fields),
+    save: rider?.save ?? spellSave(pk, fields),
     applies: rider?.applies,
     temporary: rider?.temporary,
     // The source states how many creatures a spell may be pointed at, and states it only where the
@@ -961,6 +1047,35 @@ function assertSpellAreas(spells) {
     if (!spells.some((entry) => entry.pk === pk)) fail(`${pk} is written as a printed shape that is not an area`);
     if (SPELL_AREAS.has(pk)) fail(`${pk} is both a carried area and one that is not an area`);
   }
+  for (const [pk, entry] of SPELL_SAVES_BY_HAND) {
+    const spell = spells.find((candidate) => candidate.pk === pk);
+    if (!spell) fail(`${pk} has a hand-read saving throw but is not in the source`);
+    if (SPELL_RIDERS.get(pk)?.save) fail(`${pk} has a hand-read save and a rider that states one too`);
+    if (!spell.fields.saving_throw_ability) fail(`${pk} no longer states a saving throw for its reading to name`);
+    if (!spell.fields.damage_roll) fail(`${pk} no longer deals damage, so there is nothing for its save to relieve`);
+    if (!oneLine(spell.fields.desc).includes(entry.printed)) {
+      fail(`${pk} no longer prints ${JSON.stringify(entry.printed)}, so its saving throw reading is stale`);
+    }
+  }
+  for (const [pk, entry] of SPELL_DAMAGE_NOT_ITS_OWN) {
+    const spell = spells.find((candidate) => candidate.pk === pk);
+    if (!spell) fail(`${pk} is written as damage that is not its own but is not in the source`);
+    // Two readings of the same spell would be one of them quietly losing.
+    if (SPELL_RIDERS.has(pk)) fail(`${pk} is both a spell rider and damage that is not its own`);
+    if (SPELL_SAVES_BY_HAND.has(pk)) fail(`${pk} has a hand-read save and damage that is not its own`);
+    if (!spell.fields.damage_roll) fail(`${pk} no longer carries a damage roll, so it has nothing to leave out`);
+    if (!oneLine(spell.fields.desc).includes(entry.printed)) {
+      fail(`${pk} no longer prints ${JSON.stringify(entry.printed)}, so its reading is stale`);
+    }
+  }
+  for (const [pk, printed] of SPELL_ATTACK_ROLL_CORRECTIONS) {
+    const spell = spells.find((candidate) => candidate.pk === pk);
+    if (!spell) fail(`${pk} is written as a missing attack roll but is not in the source`);
+    if (spell.fields.attack_roll) fail(`${pk} now states its attack roll, so the correction is stale`);
+    if (!oneLine(spell.fields.desc).toLowerCase().includes(printed.toLowerCase())) {
+      fail(`${pk} no longer prints ${JSON.stringify(printed)}, so its attack roll correction is stale`);
+    }
+  }
   for (const [pk, entry] of SPELL_FIXTURE_SHAPES_NOT_AREAS) {
     const spell = spells.find((candidate) => candidate.pk === pk);
     if (!spell) fail(`${pk} is written as a fixture shape that is not an area but is not in the source`);
@@ -988,6 +1103,7 @@ function buildSpellEntries(spells, castingOptions, classNames, report) {
         HEALING_SPELLS.get(pk),
         SPELL_RIDERS.get(pk),
       );
+      assertSpellLands(pk, fields, mechanics);
       countSpellDistances(pk, fields, mechanics, report);
       return {
         id: entryId(pk),
@@ -1024,6 +1140,30 @@ function buildSpellEntries(spells, castingOptions, classNames, report) {
  * has to be accounted for by one of the two tables above, or the run stops:
  * nothing is approximated silently, and nothing is dropped silently either.
  */
+/**
+ * Nothing a fight can pick deals damage with nobody rolling for it.
+ *
+ * An entry with an amount and no attack roll, no saving throw and no `autoHit` simply LANDS: the
+ * resolver has nothing to check, so it takes off its whole damage every single time. For a spell
+ * that really does land, `autoHit` says so out loud. For everything else that means either a save
+ * the converter failed to read, which makes a spell far harsher than the page, or a damage roll
+ * that was never the spell's own effect at all.
+ *
+ * Neither is something to discover by playing, so it stops the run here and the three tables above
+ * are where the answer is written down, each with the sentence it came from.
+ */
+function assertSpellLands(pk, fields, mechanics) {
+  if (mechanics.kind === "utility" || mechanics.kind === "heal" || mechanics.reaction) return;
+  if (!mechanics.amount) return;
+  if (mechanics.attackRoll || mechanics.save || mechanics.autoHit) return;
+  fail(
+    `Spell "${fields.name}" (${pk}) deals ${JSON.stringify(fields.damage_roll)} with no attack roll, no saving throw ` +
+      "and no autoHit, so a fight would land all of it every time. Say which it is: a save in " +
+      "SPELL_SAVES_BY_HAND, damage that is not its own in SPELL_DAMAGE_NOT_ITS_OWN, an attack the source " +
+      "forgot in SPELL_ATTACK_ROLL_CORRECTIONS, or an autoHit in SPELL_RIDERS.",
+  );
+}
+
 function countSpellDistances(pk, fields, mechanics, report) {
   if (mechanics.kind === "utility" || mechanics.reaction) return;
   const self = mechanics.area && oneLine(fields.range_text).toLowerCase() === "self";
@@ -3265,6 +3405,19 @@ console.log(
 console.log(
   `  ${longCastDamage} damage spell(s) take longer than a turn to cast, which the economy has no budget for, so they ` +
     "spend the list's own action",
+);
+console.log(
+  `  ${SPELL_DAMAGE_NOT_ITS_OWN.size} spell(s) carry a damage roll that is not their own effect and ship as utility, ` +
+    "so a fight never offers them:",
+);
+for (const [pk, entry] of SPELL_DAMAGE_NOT_ITS_OWN) console.log(`    ${pk} - ${entry.reason}`);
+console.log(
+  `  ${SPELL_SAVES_BY_HAND.size} saving throw(s) are read by hand, because neither printed shape fits: ` +
+    `${[...SPELL_SAVES_BY_HAND].map(([pk, entry]) => `${pk} (${entry.onSuccess})`).join(", ")}`,
+);
+console.log(
+  `  ${SPELL_ATTACK_ROLL_CORRECTIONS.size} attack roll(s) corrected from the printed sentence: ` +
+    `${[...SPELL_ATTACK_ROLL_CORRECTIONS.keys()].join(", ")}`,
 );
 
 // What a fight on a BOARD can measure, counted for every catalog this package ships: how far each

@@ -639,6 +639,7 @@
         "area": { "shape": "burst", "size": 7.5 },
         "amount": { "dice": "3d6" },
         "damageType": "bludgeoning",
+        "save": { "save": "dex_save", "onSuccess": "negates" },
         "cost": [{ "pool": "slots_4", "amount": 1 }],
         "concentration": true
       }
@@ -666,6 +667,7 @@
         "range": 90,
         "amount": { "dice": "6d10" },
         "damageType": "slashing",
+        "save": { "save": "dex_save", "onSuccess": "half" },
         "cost": [{ "pool": "slots_6", "amount": 1 }],
         "concentration": true
       }
@@ -1531,6 +1533,7 @@
         "range": 300,
         "amount": { "dice": "2d8" },
         "damageType": "bludgeoning",
+        "save": { "save": "str_save", "onSuccess": "half" },
         "cost": [{ "pool": "slots_4", "amount": 1 }],
         "concentration": true
       }
@@ -2032,6 +2035,7 @@
         "range": 60,
         "amount": { "dice": "10d6+40" },
         "damageType": "force",
+        "save": { "save": "dex_save", "onSuccess": "negates" },
         "cost": [{ "pool": "slots_6", "amount": 1 }]
       }
     },
@@ -2258,6 +2262,7 @@
         "kind": "attack",
         "amount": { "dice": "3d6" },
         "damageType": "psychic",
+        "save": { "save": "wis_save", "onSuccess": "negates" },
         "cost": [{ "pool": "slots_5", "amount": 1 }]
       }
     },
@@ -2305,6 +2310,7 @@
         "area": { "shape": "burst", "size": 100 },
         "amount": { "dice": "5d6" },
         "damageType": "bludgeoning",
+        "save": { "save": "con_save", "onSuccess": "half" },
         "cost": [{ "pool": "slots_8", "amount": 1 }],
         "concentration": true
       }
@@ -2682,6 +2688,7 @@
         "range": 150,
         "amount": { "dice": "4d6" },
         "damageType": "psychic",
+        "save": { "save": "int_save", "onSuccess": "none" },
         "cost": [{ "pool": "slots_8", "amount": 1 }]
       }
     },
@@ -3119,7 +3126,7 @@
         }
       ],
       "mechanics": {
-        "kind": "attack",
+        "kind": "utility",
         "range": 0,
         "amount": { "dice": "5d10" },
         "damageType": "necrotic",
@@ -3210,6 +3217,7 @@
         "area": { "shape": "burst", "size": 60 },
         "amount": { "dice": "10d6" },
         "damageType": "cold",
+        "save": { "save": "con_save", "onSuccess": "half" },
         "cost": [{ "pool": "slots_6", "amount": 1 }],
         "perCostStep": { "dice": "1d6" }
       }
@@ -3283,7 +3291,7 @@
         }
       ],
       "mechanics": {
-        "kind": "attack",
+        "kind": "utility",
         "range": 60,
         "amount": { "dice": "5d10" },
         "damageType": "psychic",
@@ -3795,6 +3803,7 @@
         "range": 60,
         "amount": { "dice": "2d8" },
         "damageType": "fire",
+        "save": { "save": "con_save", "onSuccess": "none" },
         "cost": [{ "pool": "slots_2", "amount": 1 }],
         "perCostStep": { "dice": "1d8" },
         "concentration": true
@@ -4204,6 +4213,7 @@
         "range": 0,
         "amount": { "dice": "3d10" },
         "damageType": "necrotic",
+        "attackRoll": true,
         "cost": [{ "pool": "slots_1", "amount": 1 }],
         "perCostStep": { "dice": "1d10" }
       }
@@ -6648,7 +6658,7 @@
         }
       ],
       "mechanics": {
-        "kind": "attack",
+        "kind": "utility",
         "range": 150,
         "area": { "shape": "burst", "size": 20 },
         "amount": { "dice": "2d4" },
@@ -6680,6 +6690,7 @@
         "range": 0,
         "amount": { "dice": "3d8" },
         "damageType": "radiant",
+        "save": { "save": "wis_save", "onSuccess": "half" },
         "cost": [{ "pool": "slots_3", "amount": 1 }],
         "perCostStep": { "dice": "1d8" },
         "concentration": true
@@ -6892,6 +6903,7 @@
         "area": { "shape": "burst", "size": 60 },
         "amount": { "dice": "12d6" },
         "damageType": "radiant",
+        "save": { "save": "con_save", "onSuccess": "half" },
         "cost": [{ "pool": "slots_8", "amount": 1 }]
       }
     },
@@ -6985,7 +6997,7 @@
         }
       ],
       "mechanics": {
-        "kind": "attack",
+        "kind": "utility",
         "range": 10,
         "amount": { "dice": "3d10" },
         "damageType": "force",
@@ -7055,6 +7067,7 @@
         "area": { "shape": "burst", "size": 5 },
         "amount": { "dice": "2d8" },
         "damageType": "thunder",
+        "save": { "save": "con_save", "onSuccess": "half" },
         "cost": [{ "pool": "slots_1", "amount": 1 }],
         "perCostStep": { "dice": "1d8" }
       }

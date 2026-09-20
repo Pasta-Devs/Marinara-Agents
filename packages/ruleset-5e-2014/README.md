@@ -222,9 +222,9 @@ number alone, since a number is where your own edits live. Delete each weapon ro
 the catalog again, or type the three numbers into the row yourself. A character built from here on
 gets them with the row.
 
-**Spells land as the shape the SRD prints.** Of the 84 spells a fight can resolve, 75 carry a range
+**Spells land as the shape the SRD prints.** Of the 80 spells a fight can resolve, 71 carry a range
 in feet, 7 draw a shape from the caster and so name no distance at all, and the last 2 are Dream
-("Special") and Meteor Swarm ("1 mile"), neither of which is a number of feet. 28 carry an area: 13
+("Special") and Meteor Swarm ("1 mile"), neither of which is a number of feet. 27 carry an area: 12
 spheres, 4 cylinders, 4 cones, 2 lines and 5 cubes or squares.
 
 A range of **Touch** is written as 0, which the Engine reads as a reach of one square rather than a
@@ -240,8 +240,8 @@ burst of radius (N - 5) / 2: Thunderwave's 15-foot cube is three squares across 
 cube with an even number of squares comes out one square wider than the printed cube. It is the one
 place a shipped area is not the SRD's own outline.
 
-Seven printed shapes in a resolvable spell are deliberately not areas, because none of them is a
-patch of ground the spell catches creatures in:
+Seven printed shapes are deliberately not areas, because none of them is a patch of ground the spell
+catches creatures in:
 
 | Spell | What the number really is |
 | --- | --- |
@@ -253,11 +253,34 @@ patch of ground the spell catches creatures in:
 | Teleport | how big an object it may send, not ground it covers |
 | Wall of Ice | ten 10-foot-square panels, which is a wall |
 
+(Teleport is not on a fight's menu at all any more; see below.)
+
 Fire Storm and Teleport are the two the machine-readable source itself states a shape for, and both
 would otherwise have shipped as a single 10-foot cube: a tenth of Fire Storm's real footprint, and
 something Teleport does not have at all. The build refuses to run if a resolvable spell ever prints a
 shape that is in neither list, or if one that states a boxed shape says in its own text that there
 are several of them.
+
+**Nothing a fight offers you deals damage with nobody rolling for it.** An entry with damage and no
+attack roll, no saving throw and nothing saying it simply lands would take off its whole damage every
+single time, so the build refuses to ship one. That rule turned up two different problems in the SRD
+data, both now fixed:
+
+- **Seven spells were missing their saving throw**, because the converter only knew the SRD's
+  commonest way of writing it. Blade Barrier, Control Water, Earthquake, Freezing Sphere, Spirit
+  Guardians, Sunburst and Thunderwave all print "On a successful save, the creature takes half as
+  much damage", and all seven now ask for that save. Black Tentacles and Disintegrate print the
+  damage as what FAILING brings, so a success avoids all of it. Dream, Feeblemind and Heat Metal are
+  read by hand from their own sentences, because no general wording fits them.
+- **Four spells carry a damage roll that is not what they do to anybody**, and they are now shipped
+  as utility so a fight never offers them at all: **Teleport** (its 3d10 is the mishap row of its own
+  d100 table, and it hurts the travellers), **Geas** (5d10 only later, when a charmed creature
+  disobeys), **Forbiddance** (a ward that burns a named kind of creature walking in) and **Spike
+  Growth** (ground that cuts whoever crosses it, counted per 5 feet travelled).
+
+**Inflict Wounds** is the one place a spell's attack roll is corrected: the SRD prints "Make a melee
+spell attack" and the machine-readable source says it makes none. The build stops if the source ever
+fixes that itself.
 
 **A creature carries how far its actions reach.** The bestiary's 828 actions divide up exactly, each
 one into a single row:

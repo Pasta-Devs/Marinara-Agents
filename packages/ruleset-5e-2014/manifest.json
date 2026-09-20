@@ -38,8 +38,8 @@
     },
     {
       "path": "catalogs/spells.json",
-      "sha256": "88e4b2d33985cbc05363e149fda348d8bc8ee4e3779d1cf550af95f56fc940cb",
-      "bytes": 311492
+      "sha256": "42a62a7a2c7a09cefdf6c8afe03be6b0bda63209ffb6bfb553ef39e661c7ed25",
+      "bytes": 312265
     },
     {
       "path": "catalogs/features.json",
