@@ -1024,6 +1024,7 @@ export async function importPackageInterop(
           diagnostics: [],
           outcome: {
             state: "no_suggestions_created" as const,
+            incomplete: false,
             totalCandidates: 0,
             keptUnits: 0,
             droppedUnits: 0,
@@ -1043,7 +1044,8 @@ export async function importPackageInterop(
         })),
     cancelled = results.filter((item) => item.extractionStatus === "cancelled").length,
     failed = results.filter((item) => item.extractionStatus === "failed").length,
-    succeeded = results.filter((item) => item.extractionStatus === "succeeded").length;
+    succeeded = results.filter((item) => item.extractionStatus === "succeeded").length,
+    hasIncomplete = results.some((item) => item.extractionStatus === "incomplete");
   const counts = {
       requested: request.sourceIds.length,
       sourceNotesWritten: written.length,
@@ -1055,9 +1057,9 @@ export async function importPackageInterop(
     },
     incomplete = counts.failed + counts.cancelled + counts.missing + counts.sourceWriteFailed,
     batchStatus =
-      incomplete === 0
+      incomplete === 0 && !hasIncomplete
         ? ("success" as const)
-        : counts.succeeded
+        : counts.succeeded || hasIncomplete
           ? ("partial_success" as const)
           : counts.cancelled && !counts.failed && !counts.missing && !counts.sourceWriteFailed
             ? ("cancelled" as const)

@@ -100,6 +100,12 @@
     "long-term-memory": {
       "versions": [
         {
+          "version": "1.3.5",
+          "date": "2026-09-20",
+          "notes": "- Recover complete memory candidates from token-limited output without marking incomplete extractions current.\n- Surface recovered output as an incomplete, retryable draft and bound rejection diagnostics for review.\n- Retain candidates within the processing limit and report overflow instead of rejecting the entire response.\n- Generate memory IDs and source hashes on the server, and default omitted evidence from the trusted source note.",
+          "highlight": false
+        },
+        {
           "version": "1.3.4",
           "date": "2026-09-18",
           "notes": "- Kept a source note's extraction context unbound until its extraction succeeds, so a failed or cancelled preparation no longer rewrites the source note.\n- Rejected concurrent source-context changes again at the final commit, so a late writer cannot be overwritten after extraction validation.\n- Marked extractions whose only non-kept candidates were duplicates as current, so re-running them no longer churns.\n- Kept error-diagnostic extractions from being marked current, including direct Game Mode preparation with requested context bound to draft and persistence metadata.",

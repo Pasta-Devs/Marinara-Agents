@@ -842,10 +842,74 @@ async function main() {
   assert.equal(countedMalformedCompilation.outcome.droppedUnits, 100);
   assert.equal(countedMalformedCompilation.outcome.droppedCandidates.length, 80);
   assert.equal(countedMalformedCompilation.outcome.droppedCandidateDetailsTruncated, true);
-  assert.throws(
-    () => parseEvidenceUnitPayload({ units: Array.from({ length: 1_000 }, () => null) }, sourceHash),
-    /maximum is 999/,
+  const overflowPayload = parseEvidenceUnitPayload({ units: Array.from({ length: 1_000 }, () => null) }, sourceHash);
+  assert.equal(overflowPayload.totalCandidates, 1_000);
+  assert.equal(overflowPayload.parserRejections, 1_000);
+  assert.equal(overflowPayload.response.units.length, 0);
+  assert.equal(overflowPayload.droppedCandidates.length, 80);
+  assert.equal(overflowPayload.droppedCandidates.at(-1)?.reason, "candidate_overflow");
+
+  const overflowWithValid = parseEvidenceUnitPayload(
+    {
+      units: Array.from({ length: 1_000 }, (_, index) =>
+        unit(chat, {
+          bucket: "world_fact",
+          subjectId: `fact_${index}`,
+          sectionKey: "facts",
+          text: `Fact ${index}.`,
+        }),
+      ),
+    },
+    sourceHash,
   );
+  assert.equal(overflowWithValid.totalCandidates, 1_000);
+  assert.equal(overflowWithValid.response.units.length, 999);
+  assert.equal(overflowWithValid.parserRejections, 1);
+  assert.equal(overflowWithValid.droppedCandidates[0]?.reason, "candidate_overflow");
+
+  const providerSchema = evidenceUnitResponseFormat({ allowedBuckets: ["timeline_event"], sourceHash }).json_schema
+    .schema;
+  const schemaText = JSON.stringify(providerSchema);
+  assert.equal(/"(?:allOf|if|then|else|not|uniqueItems)"/u.test(schemaText), false);
+  for (const resolveSubjectNames of [true, false]) {
+    const schema = evidenceUnitResponseFormat({
+      allowedBuckets: ["character_fact", "relationship_state"],
+      sourceHash,
+      resolveSubjectNames,
+    }).json_schema.schema as any;
+    const item = schema.properties.units.items;
+    assert.equal(item.required.includes("id"), false);
+    assert.equal(item.required.includes("sourceHash"), false);
+    assert.equal(item.required.includes("evidence"), false);
+    assert.equal(item.required.includes("subjectNames"), resolveSubjectNames);
+    assert.equal(item.properties.dimensions.properties.trust.minimum, 0);
+    assert.equal(item.properties.dimensionChanges.properties.trust.minimum, -100);
+    assert.equal(item.properties.links.items.properties.aspect.maxLength, 50);
+  }
+  const diagnosticHeavy = compileEvidenceUnitExtraction({
+    unitResponse: {
+      summary: "Diagnostic bound",
+      units: Array.from({ length: 600 }, (_, index) =>
+        unit(chat, {
+          bucket: "timeline_event",
+          subjectId: `invalid_event_${index}`,
+          sectionKey: "event",
+          text: "Not present in source.",
+          links: [{ target: "missing_event", relation: "evidenced_by" }],
+        }),
+      ),
+    },
+    providerCandidates: 600,
+    sourceText: chat.sections.source.text,
+    sourceNote: chat,
+    existingNotes: [],
+    scope: {},
+    modes: ["roleplay"],
+    mode: "roleplay",
+    sourceHash,
+    skipStructuredBackfill: true,
+  });
+  assert.ok(diagnosticHeavy.diagnostics.length <= 500);
 
   const existingTone = {
     ...chat,

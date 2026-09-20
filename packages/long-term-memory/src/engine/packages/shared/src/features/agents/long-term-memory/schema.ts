@@ -2068,6 +2068,7 @@ export const ltmDraftMutationSchema = z.discriminatedUnion("kind", [
 
 export const ltmExtractionDropReasonSchema = z.enum([
   "invalid_format",
+  "candidate_overflow",
   "placeholder_output",
   "quote_not_found_in_source",
   "missing_source_evidence",
@@ -2120,9 +2121,10 @@ export const ltmExtractionOutcomeStateSchema = z.enum(["success", "partial_succe
 export const ltmExtractionOutcomeSchema = z
   .object({
     state: ltmExtractionOutcomeStateSchema,
-    totalCandidates: z.number().int().min(0).max(LTM_EXTRACTION_MAX_CANDIDATES),
-    keptUnits: z.number().int().min(0).max(LTM_EXTRACTION_MAX_CANDIDATES),
-    droppedUnits: z.number().int().min(0).max(LTM_EXTRACTION_MAX_CANDIDATES),
+    incomplete: z.boolean().default(false),
+    totalCandidates: z.number().int().min(0),
+    keptUnits: z.number().int().min(0),
+    droppedUnits: z.number().int().min(0),
     droppedCandidates: z
       .array(ltmExtractionDroppedCandidateSchema)
       .max(LTM_EXTRACTION_MAX_REJECTION_DETAILS)
@@ -2152,12 +2154,12 @@ export const ltmExtractionDiagnosticSchema = z
 
 export const ltmExtractionAccountingSchema = z
   .object({
-    providerCandidates: z.number().int().min(0).max(LTM_EXTRACTION_MAX_CANDIDATES),
-    normalizedAdditions: z.number().int().min(0).max(LTM_EXTRACTION_MAX_CANDIDATES),
-    parserRejections: z.number().int().min(0).max(LTM_EXTRACTION_MAX_CANDIDATES),
-    validationRejections: z.number().int().min(0).max(LTM_EXTRACTION_MAX_CANDIDATES),
-    deduplications: z.number().int().min(0).max(LTM_EXTRACTION_MAX_CANDIDATES),
-    keptUnits: z.number().int().min(0).max(LTM_EXTRACTION_MAX_CANDIDATES),
+    providerCandidates: z.number().int().min(0),
+    normalizedAdditions: z.number().int().min(0),
+    parserRejections: z.number().int().min(0),
+    validationRejections: z.number().int().min(0),
+    deduplications: z.number().int().min(0),
+    keptUnits: z.number().int().min(0),
   })
   .strict()
   .superRefine((accounting, ctx) => {
@@ -2692,6 +2694,14 @@ export const ltmImportedSourceResultSchema = z
       .strict(),
     ltmImportedSourceResultBaseSchema
       .extend({
+        extractionStatus: z.literal("incomplete"),
+        retryable: z.literal(true),
+        draft: ltmExtractionDraftSchema,
+        diagnostics: z.array(ltmExtractionDiagnosticSchema).max(500),
+      })
+      .strict(),
+    ltmImportedSourceResultBaseSchema
+      .extend({
         extractionStatus: z.literal("failed"),
         retryable: z.literal(true),
         error: z
@@ -2805,10 +2815,11 @@ export const ltmImportSourceNotesResponseSchema = z
     }
     const incomplete =
       response.counts.failed + response.counts.cancelled + response.counts.missing + response.counts.sourceWriteFailed;
+    const hasIncomplete = response.imported.some((item) => item.extractionStatus === "incomplete");
     const expectedBatchStatus =
-      incomplete === 0
+      incomplete === 0 && !hasIncomplete
         ? "success"
-        : response.counts.succeeded > 0
+        : response.counts.succeeded > 0 || response.imported.some((item) => item.extractionStatus === "incomplete")
           ? "partial_success"
           : response.counts.cancelled > 0 &&
               response.counts.failed === 0 &&
@@ -2829,6 +2840,7 @@ export const ltmEvidenceUnitExtractionResponseSchema = z
   .object({
     summary: z.string().max(2_000).default(""),
     units: z.array(ltmEvidenceUnitSchema).max(LTM_EXTRACTION_MAX_CANDIDATES).default([]),
+    incomplete: z.boolean().default(false),
   })
   .strict();
 

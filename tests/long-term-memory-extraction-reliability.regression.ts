@@ -112,18 +112,19 @@ async function main() {
         message: "malformed output must not trigger a repair call",
       },
       {
-        response: {
-          content: JSON.stringify({ units: Array.from({ length: 1_000 }, () => validUnit) }),
-          finishReason: "stop",
-        },
-        expectedCode: "ltm_model_output_unusable",
-        matchMessage: /maximum is/u,
-        message: "oversized output must not trigger a repair call",
-      },
-      {
         response: { content: '{"summary":"unfinished', finishReason: "length" },
         expectedCode: "ltm_model_output_truncated",
         message: "truncated output must not trigger a repair call",
+      },
+      {
+        response: { content: '{"summary":"unfinished', finishReason: "max_tokens" },
+        expectedCode: "ltm_model_output_truncated",
+        message: "max_tokens finish reason without recoverable units must fail explicitly",
+      },
+      {
+        response: { content: '{"summary":"unfinished', finishReason: "token_limit" },
+        expectedCode: "ltm_model_output_truncated",
+        message: "token_limit finish reason without recoverable units must fail explicitly",
       },
     ]) {
       calls.length = 0;
@@ -135,6 +136,57 @@ async function main() {
       );
       assert.equal(calls.length, 1, testCase.message);
     }
+
+    calls.length = 0;
+    response = {
+      content: JSON.stringify({ units: Array.from({ length: 1_000 }, () => validUnit) }),
+      finishReason: "stop",
+    };
+    const overflowRun = await runLongTermMemoryEvidenceUnitExtraction({ ...options, operationId: randomUUID() });
+    assert.equal(calls.length, 1, "oversized output must not trigger a repair call");
+    assert.equal(overflowRun.totalCandidates, 1_000);
+    assert.equal(overflowRun.response.units.length, 999);
+    assert.equal(overflowRun.parserRejections, 1);
+    assert.equal(overflowRun.droppedCandidates.length, 1);
+    assert.equal(overflowRun.droppedCandidates[0]?.reason, "candidate_overflow");
+
+    for (const finishReason of ["length", "max_tokens", "token_limit"]) {
+      calls.length = 0;
+      const truncatedPayloadContent =
+        '{"summary":"Text contains a fake \\\"units\\\":[{\\\"subjectId\\\":\\\"fake\\\"}] array","units":[' +
+        JSON.stringify(validUnit) +
+        ',{"bucket":"timeline_event","subjectId":"partial_event","sectionKey":"event","text":"Mara was interrup';
+      response = { content: truncatedPayloadContent, finishReason };
+      const recoveredRun = await runLongTermMemoryEvidenceUnitExtraction({ ...options, operationId: randomUUID() });
+      assert.equal(calls.length, 1);
+      assert.equal(recoveredRun.response.incomplete, true);
+      assert.equal(recoveredRun.response.units.length, 1);
+      assert.equal(recoveredRun.response.units[0]?.subjectId, "observatory_gate_sealed");
+    }
+
+    calls.length = 0;
+    const slimUnit = {
+      bucket: "timeline_event",
+      subjectId: "observatory_gate_sealed",
+      sectionKey: "event",
+      text: "Mara sealed the observatory gate.",
+      claimKind: "change",
+      importance: "major",
+      confidence: 0.95,
+      salience: 0.9,
+      status: "active",
+      links: [{ target: sourceNote.id, relation: "extracted_from" }],
+    };
+    response = {
+      content: JSON.stringify({ summary: "Slim unit.", units: [slimUnit] }),
+      finishReason: "stop",
+    };
+    const slimRun = await runLongTermMemoryEvidenceUnitExtraction({ ...options, operationId: randomUUID() });
+    assert.equal(calls.length, 1);
+    assert.equal(slimRun.response.units.length, 1);
+    assert.equal(Boolean(slimRun.response.units[0]?.id), true);
+    assert.equal(slimRun.response.units[0]?.sourceHash, sourceHash);
+    assert.deepEqual(slimRun.response.units[0]?.evidence, [`source_note:${sourceNote.id}`]);
 
     calls.length = 0;
     response = {
@@ -449,6 +501,51 @@ async function main() {
         assert.deepEqual(
           lateDrafts.filter((draft) => draft.source.sourceNoteId === lateSource.id).map((draft) => draft.id),
           [result.draft.id],
+        );
+
+        // A truncated recovery must create a partial draft but never mark the source note current.
+        const truncSource = await storage.createNote({
+          id: "source_context_trunc_commit",
+          title: "Truncated commit source",
+          type: "source",
+          status: "active",
+          modes: ["roleplay"],
+          scope: { chatId: "chat-a", chatIds: ["chat-a"] },
+          tags: ["source_summary"],
+          keywords: [],
+          links: [],
+          provenance: { kind: "chat_summary", sourceId: "chat-a", entryId: "summary-trunc-commit" },
+          sections: { source: { text: "Mara sealed the observatory gate at dusk.", updatedAt: timestamp } },
+        });
+        const truncUnit = {
+          ...validUnit,
+          evidence: [`source_note:${truncSource.id}`],
+          links: [{ target: truncSource.id, relation: "extracted_from" }],
+        };
+        options.languageModel.chatComplete = async () => ({
+          content:
+            '{"summary":"Recovered partially.","units":[' +
+            JSON.stringify(truncUnit) +
+            ',{"bucket":"timeline_event","subjectId":"partial_event',
+          finishReason: "length",
+        });
+        const truncResult = await processLongTermMemorySource({
+          sourceNote: truncSource,
+          languageModel: options.languageModel,
+          scope: { chatId: "chat-a", chatIds: ["chat-a"] },
+          modes: ["roleplay"],
+          mode: "roleplay",
+          extractionMode: "roleplay",
+          operationId: randomUUID(),
+          root: commitRoot,
+        });
+        assert.equal(truncResult.outcome.incomplete, true);
+        assert.equal(truncResult.outcome.keptUnits, 1);
+        const truncNoteAfter = await storage.getNote(truncSource.id);
+        assert.equal(
+          Boolean(truncNoteAfter?.extractionFingerprint),
+          false,
+          "truncated recovery must not persist extraction fingerprint",
         );
       } finally {
         LongTermMemoryDraftStore.prototype.createDraft = originalCreateDraft;
