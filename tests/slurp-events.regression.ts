@@ -130,8 +130,8 @@ assert.match(messages, /recordCreatorEvent\(creatorAccountId, "commission_reques
 assert.match(messages, /recordCreatorEvent\(creatorAccountId, "message"/u);
 
 const routes = read("server/src/routes/slurp.routes.ts");
-assert.match(routes, /app\.get\("\/noodler\/notifications"/u);
-assert.match(routes, /app\.post\("\/noodler\/notifications\/seen"/u);
+assert.match(routes, /app\.get\("\/slurp\/notifications"/u);
+assert.match(routes, /app\.post\("\/slurp\/notifications\/seen"/u);
 // Actor ids are resolved to names: "abc-123 subscribed" is the failure this surface exists to fix.
 assert.match(routes, /actors\.get\(event\.actorLabel\)\?\.displayName/u);
 assert.match(routes, /actorAvatarUrl:[\s\S]*?actors\.get\(event\.actorLabel\)\?\.avatarUrl/u);

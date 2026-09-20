@@ -130,10 +130,10 @@ the next restart. A consumer depends on `SlpActiveModifierProvider`, never on Wo
 - No generic `index.ts` barrels. Import the concrete file or a contract.
 - A submodule gets its own folder only when it has several cohesive files or is an expansion seam.
 
-Persisted and public names are not renamed during source work: `/api/slurp2` and `/noodler/*`
-routes, `slurp2_*` tables, `noodle*` stored identifiers and keys, stored JSON shapes, `ui.slurp.*`
-locale keys, and existing exported Slurp/Noodle symbols that form a public contract. New private
-symbols use `Slp`/`slp`.
+Persisted and public names are not renamed during source work: `/api/slurp2` and the retained
+`/noodler/*` media URLs, `slurp2_*` tables, `noodle*` stored identifiers and keys, stored JSON
+shapes, `ui.slurp.*` locale keys, and existing exported Slurp/Noodle symbols that form a public
+contract. New operation routes use `/slurp/*`. New private symbols use `Slp`/`slp`.
 
 ## Size
 

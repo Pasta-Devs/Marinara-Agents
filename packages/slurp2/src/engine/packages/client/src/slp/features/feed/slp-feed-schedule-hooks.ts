@@ -40,7 +40,7 @@ export function useUpdateCreatorAutoPosting() {
 export function useCreatorReserveStatus(enabled = true) {
   return useQuery({
     queryKey: slpKeys.noodlerReserveStatus(),
-    queryFn: () => api.get<SlurpReserveStatus>("/slurp2/noodler/auto-post/status"),
+    queryFn: () => api.get<SlurpReserveStatus>("/slurp2/slurp/auto-post/status"),
     enabled,
     // The scheduler prepares posts on its own timer, so nothing here invalidates this key when
     // the counts change. Same 30s cadence the creator list already uses.
@@ -52,7 +52,7 @@ export function useUpdateCreatorScheduleSlot() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: ({ slotId, publishAt }: { slotId: string; publishAt: string }) =>
-      api.patch<SlurpReserveStatus>(`/slurp2/noodler/auto-post/schedule/${encodeURIComponent(slotId)}`, {
+      api.patch<SlurpReserveStatus>(`/slurp2/slurp/auto-post/schedule/${encodeURIComponent(slotId)}`, {
         publishAt,
       }),
     onSuccess: (status) => qc.setQueryData(slpKeys.noodlerReserveStatus(), status),
@@ -62,7 +62,7 @@ export function useRunCreatorAutoPostNow() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (accountId: string) =>
-      api.post<SlpCreatorManagedPost>(`/slurp2/noodler/accounts/${encodeURIComponent(accountId)}/auto-post/run-now`),
+      api.post<SlpCreatorManagedPost>(`/slurp2/slurp/accounts/${encodeURIComponent(accountId)}/auto-post/run-now`),
     onSuccess: (_post, accountId) =>
       Promise.all([
         qc.invalidateQueries({ queryKey: slpKeys.noodlerPosts(accountId) }),

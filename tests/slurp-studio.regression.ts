@@ -96,7 +96,7 @@ const root = join(import.meta.dirname, "..", "packages/slurp2/src/engine/package
 const read = (path: string) => slurp2Source(join(root, path));
 
 const routes = read("server/src/routes/slurp.routes.ts");
-assert.match(routes, /app\.get\("\/noodler\/studio"/u);
+assert.match(routes, /app\.get\("\/slurp\/studio"/u);
 // Only Creators this persona operates. A character-backed Creator has no operator, so it must
 // never appear in someone's studio.
 assert.match(routes, /operated = accounts\.filter\(\(account\) => creatorBelongsToViewer\(account, viewer\)\)/u);
@@ -118,7 +118,7 @@ const studioHook = hooks.slice(hooks.indexOf("export function useSlurpStudio"));
 assert.match(studioHook.slice(0, 700), /staleTime: Infinity/u);
 assert.match(studioHook.slice(0, 700), /refetchOnWindowFocus: false/u);
 
-assert.match(routes, /app\.put\("\/noodler\/accounts\/:id\/goal"/u);
+assert.match(routes, /app\.put\("\/slurp\/accounts\/:id\/goal"/u);
 assert.match(home, /function SlurpGoalEditor/u);
 
 const shell = read("client/src/components/slurp/SlurpShell.tsx");

@@ -63,7 +63,7 @@ export async function slpMediaRoutes(app: FastifyInstance, deps: SlpRouteDeps) {
       .sendFile(basename(served), dirname(served));
   });
 
-  app.post("/noodler/accounts/:id/avatar", async (req, reply) => {
+  app.post("/slurp/accounts/:id/avatar", async (req, reply) => {
     const { id } = req.params as { id: string };
     try {
       const { media } = await readCreatorMultipart(req);
@@ -94,7 +94,7 @@ export async function slpMediaRoutes(app: FastifyInstance, deps: SlpRouteDeps) {
     }
   });
 
-  app.patch("/noodler/accounts/:id/avatar/source", async (req, reply) => {
+  app.patch("/slurp/accounts/:id/avatar/source", async (req, reply) => {
     const { id } = req.params as { id: string };
     const locked = await tryCreatorAccountOperation(id, async () => {
       const account = await noodle.getNoodlerAccountById(id);
@@ -113,7 +113,7 @@ export async function slpMediaRoutes(app: FastifyInstance, deps: SlpRouteDeps) {
     return locked.value;
   });
 
-  app.delete("/noodler/accounts/:id/avatar", async (req, reply) => {
+  app.delete("/slurp/accounts/:id/avatar", async (req, reply) => {
     const { id } = req.params as { id: string };
     const locked = await tryCreatorAccountOperation(id, async () => {
       const account = await noodle.getNoodlerAccountById(id);
@@ -128,7 +128,7 @@ export async function slpMediaRoutes(app: FastifyInstance, deps: SlpRouteDeps) {
     return locked.value;
   });
 
-  app.post("/noodler/accounts/:id/banner", async (req, reply) => {
+  app.post("/slurp/accounts/:id/banner", async (req, reply) => {
     const { id } = req.params as { id: string };
     try {
       const { media } = await readCreatorMultipart(req);
@@ -159,7 +159,7 @@ export async function slpMediaRoutes(app: FastifyInstance, deps: SlpRouteDeps) {
     }
   });
 
-  app.post("/noodler/accounts/:id/artwork/generate", async (req, reply) => {
+  app.post("/slurp/accounts/:id/artwork/generate", async (req, reply) => {
     const { id } = req.params as { id: string };
     const parsed = z
       .object({

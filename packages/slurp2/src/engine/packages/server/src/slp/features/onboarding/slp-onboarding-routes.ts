@@ -92,7 +92,7 @@ export async function slpOnboardingRoutes(app: FastifyInstance, deps: SlpRouteDe
     }
   });
 
-  app.post("/noodler/accounts/bulk", async (req, reply) => {
+  app.post("/slurp/accounts/bulk", async (req, reply) => {
     const parsed = slurpBulkCreatorAccountCreateSchema.safeParse(req.body ?? {});
     if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
     const { noodleAccountIds, disclosureMode, disclosureExceptions, autoPosting, connectionId, executionId } =
@@ -274,7 +274,7 @@ export async function slpOnboardingRoutes(app: FastifyInstance, deps: SlpRouteDe
     });
   });
 
-  app.post("/noodler/first-posts/enqueue", async (req, reply) => {
+  app.post("/slurp/first-posts/enqueue", async (req, reply) => {
     const parsed = z
       .object({
         executionId: z.string().trim().min(1).max(128),
@@ -285,7 +285,7 @@ export async function slpOnboardingRoutes(app: FastifyInstance, deps: SlpRouteDe
     return { jobs: await firstPostQueue.enqueue(parsed.data.executionId, parsed.data.accountIds) };
   });
 
-  app.get("/noodler/first-posts/status", async (req, reply) => {
+  app.get("/slurp/first-posts/status", async (req, reply) => {
     const parsed = z.object({ executionId: z.string().trim().min(1).max(128) }).safeParse(req.query);
     if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
     return firstPostQueue.status(parsed.data.executionId);

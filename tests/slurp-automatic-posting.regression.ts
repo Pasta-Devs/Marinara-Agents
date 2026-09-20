@@ -168,7 +168,7 @@ for (const postsPerDay of [4, 24, 96]) {
   assert.equal(hasSlurpCreatorPostingIntervalConflict([0], interval, postsPerDay), false);
 }
 assert.match(settingsUi, /value=\{settings\.postsPerDay\}\s*\n\s*min=\{1\}\s*\n\s*max=\{96\}/u);
-assert.match(routes, /app\.patch\("\/noodler\/auto-post\/schedule\/:slotId"/u);
+assert.match(routes, /app\.patch\("\/slurp\/auto-post\/schedule\/:slotId"/u);
 assert.match(storage, /item\.id !== current\.id && \(item\.state === "scheduled" \|\| item\.state === "prepared"\)/u);
 assert.match(storage, /hasSlurpCreatorPostingIntervalConflict\(activityTimes, publishMs, settings\.postsPerDay\)/u);
 assert.match(routes, /result === "conflict"/u);

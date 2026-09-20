@@ -113,7 +113,7 @@ export function SlpCreatorPostMenu({
               const persona = ctx.personaAccount?.entityId;
               void api
                 .download(
-                  `/slurp2/noodler/posts/${encodeURIComponent(post.id)}/share-card${persona ? `?personaId=${encodeURIComponent(persona)}` : ""}`,
+                  `/slurp2/slurp/posts/${encodeURIComponent(post.id)}/share-card${persona ? `?personaId=${encodeURIComponent(persona)}` : ""}`,
                   `slurp-${post.id}.png`,
                 )
                 .catch((error: unknown) =>

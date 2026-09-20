@@ -108,11 +108,8 @@ assert.ok(world.includes("setTiePaidThrough("), "billing state must be recorded 
 // through subscription rows, and the audience pays through the funnel because it holds no wallet.
 const routes = slurp2Source(join(root, "packages/slurp2/src/engine/packages/server/src/routes/slurp.routes.ts"));
 assert.ok(routes.includes("countSubscribersForCreators"), "subscriber counts must include the audience");
-assert.ok(
-  routes.includes('app.get("/noodler/accounts/:id/followers"'),
-  "followers must be listable, not only countable",
-);
-assert.ok(routes.includes('app.get("/noodler/audience/:memberId"'), "an audience name must open a fan card");
+assert.ok(routes.includes('app.get("/slurp/accounts/:id/followers"'), "followers must be listable, not only countable");
+assert.ok(routes.includes('app.get("/slurp/audience/:memberId"'), "an audience name must open a fan card");
 
 const storage = slurp2Source(
   join(root, "packages/slurp2/src/engine/packages/server/src/services/storage/slurp-population.storage.ts"),

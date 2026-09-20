@@ -78,9 +78,9 @@ async function main() {
     // The Slurp routes must scope pool lookups to the Slurp platform, or an id from another
     // Garnish platform is editable and deletable through them.
     const routes = slurp2Source("packages/slurp2/src/engine/packages/server/src/routes/slurp.routes.ts");
-    const patchRoute = routes.slice(routes.indexOf('app.patch("/noodler/ads/pool/:id"'));
+    const patchRoute = routes.slice(routes.indexOf('app.patch("/slurp/ads/pool/:id"'));
     assert.match(patchRoute.slice(0, 600), /ads\.pool\.listAll\(SLURP_GARNISH_PLATFORM\)/u);
-    const deleteRoute = routes.slice(routes.indexOf('app.delete("/noodler/ads/pool/:id"'));
+    const deleteRoute = routes.slice(routes.indexOf('app.delete("/slurp/ads/pool/:id"'));
     assert.match(deleteRoute.slice(0, 800), /ads\.pool\.listAll\(SLURP_GARNISH_PLATFORM\)/u);
     assert.match(deleteRoute.slice(0, 800), /await ads\.pool\.releaseGeneratedImage\(id\)/u);
 

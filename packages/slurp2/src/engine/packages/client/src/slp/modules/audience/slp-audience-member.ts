@@ -29,7 +29,7 @@ export function useSlurpAudienceMember(memberId: string | null, creatorAccountId
     queryKey: slpKeys.audienceMember(memberId ?? "none", creatorAccountId ?? "none"),
     queryFn: () =>
       api.get<SlurpAudienceMember>(
-        `/slurp2/noodler/audience/${encodeURIComponent(memberId!)}?creatorAccountId=${encodeURIComponent(creatorAccountId ?? "")}`,
+        `/slurp2/slurp/audience/${encodeURIComponent(memberId!)}?creatorAccountId=${encodeURIComponent(creatorAccountId ?? "")}`,
       ),
     enabled: Boolean(memberId),
     staleTime: 60_000,

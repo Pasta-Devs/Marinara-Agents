@@ -52,7 +52,7 @@ export function useBulkCreateCreatorStageProfiles() {
         skipped: string[];
         failed?: string[];
         reasons?: { accountId: string; reason: string }[];
-      }>("/slurp2/noodler/accounts/bulk", input),
+      }>("/slurp2/slurp/accounts/bulk", input),
     onSuccess: (result) => {
       const failed = result.failed?.length ?? 0;
       const counts = {
@@ -89,7 +89,7 @@ export function useUpdateCreatorStageProfile() {
       sourceRevisionToken?: string;
       confirmAvatarReview?: boolean;
     } & SlurpStageProfileInput) =>
-      api.put<SlurpManagedStageProfile>(`/slurp2/noodler/accounts/${encodeURIComponent(accountId)}/stage-profile`, {
+      api.put<SlurpManagedStageProfile>(`/slurp2/slurp/accounts/${encodeURIComponent(accountId)}/stage-profile`, {
         ...input,
         ...(sourceSnapshot ? { sourceSnapshot } : {}),
       }),
@@ -131,7 +131,7 @@ export function useUploadCreatorAvatar() {
     const form = new FormData();
     form.append("payload", "{}");
     form.append("file", file);
-    return api.upload<SlpCreatorStageProfile>(`/slurp2/noodler/accounts/${encodeURIComponent(accountId)}/avatar`, form);
+    return api.upload<SlpCreatorStageProfile>(`/slurp2/slurp/accounts/${encodeURIComponent(accountId)}/avatar`, form);
   });
 }
 export function useUploadCreatorBanner() {
@@ -139,13 +139,13 @@ export function useUploadCreatorBanner() {
     const form = new FormData();
     form.append("payload", "{}");
     form.append("file", file);
-    return api.upload<SlpCreatorStageProfile>(`/slurp2/noodler/accounts/${encodeURIComponent(accountId)}/banner`, form);
+    return api.upload<SlpCreatorStageProfile>(`/slurp2/slurp/accounts/${encodeURIComponent(accountId)}/banner`, form);
   });
 }
 export function useGenerateCreatorArtwork() {
   return useCreatorAvatarMutation(
     ({ accountId, kind, guidance }: { accountId: string; kind: "avatar" | "banner"; guidance?: string }) =>
-      api.post<SlpCreatorStageProfile>(`/slurp2/noodler/accounts/${encodeURIComponent(accountId)}/artwork/generate`, {
+      api.post<SlpCreatorStageProfile>(`/slurp2/slurp/accounts/${encodeURIComponent(accountId)}/artwork/generate`, {
         kind,
         guidance,
       }),
@@ -153,12 +153,12 @@ export function useGenerateCreatorArtwork() {
 }
 export function useUseCreatorSourceAvatar() {
   return useCreatorAvatarMutation(({ accountId }) =>
-    api.patch<SlpCreatorStageProfile>(`/slurp2/noodler/accounts/${encodeURIComponent(accountId)}/avatar/source`, {}),
+    api.patch<SlpCreatorStageProfile>(`/slurp2/slurp/accounts/${encodeURIComponent(accountId)}/avatar/source`, {}),
   );
 }
 export function useRemoveCreatorAvatar() {
   return useCreatorAvatarMutation(({ accountId }) =>
-    api.delete<SlpCreatorStageProfile>(`/slurp2/noodler/accounts/${encodeURIComponent(accountId)}/avatar`),
+    api.delete<SlpCreatorStageProfile>(`/slurp2/slurp/accounts/${encodeURIComponent(accountId)}/avatar`),
   );
 }
 function useCreatorSourceAction(action: "dismiss" | "adopt-identity") {
@@ -166,7 +166,7 @@ function useCreatorSourceAction(action: "dismiss" | "adopt-identity") {
   return useMutation({
     mutationFn: (accountId: string) =>
       api.post<SlpCreatorManagedStageProfile>(
-        `/slurp2/noodler/accounts/${encodeURIComponent(accountId)}/source/${action}`,
+        `/slurp2/slurp/accounts/${encodeURIComponent(accountId)}/source/${action}`,
         {},
       ),
     onSuccess: () =>
@@ -187,7 +187,7 @@ export function useDeleteCreatorStageProfile() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (accountId: string) =>
-      api.delete<SlpAccount>(`/slurp2/noodler/accounts/${encodeURIComponent(accountId)}`),
+      api.delete<SlpAccount>(`/slurp2/slurp/accounts/${encodeURIComponent(accountId)}`),
     onSuccess: (_account, accountId) => {
       qc.removeQueries({ queryKey: slpKeys.noodlerPosts(accountId) });
       return Promise.all([
@@ -214,7 +214,7 @@ export function useGenerateCreatorStageProfileDraft() {
             /** What the server repaired or still needs. Shown once, never saved. */
             notes?: string[];
           }
-        >("/slurp2/noodler/stage-profile-draft", input, {
+        >("/slurp2/slurp/stage-profile-draft", input, {
           signal: controller.signal,
         })
         .finally(() => clearTimeout(timer));

@@ -1,3 +1,6 @@
+import type { z } from "zod";
+import { slpCreatorContentFormatSchema } from "../../../../../shared/src/slp/slp-social.schema.js";
+
 /**
  * The content formats and the hard length cap, in a leaf module.
  *
@@ -7,7 +10,7 @@
  * to the shared schema maximum.
  */
 
-export type SlpCreatorContentFormat = "caption" | "announcement" | "long_form";
+export type SlpCreatorContentFormat = z.infer<typeof slpCreatorContentFormatSchema>;
 
 /** Mirrors NOODLE_POST_CONTENT_MAX_LENGTH, the shared schema's limit for any stored post. */
 export const NOODLER_CONTENT_HARD_MAX_LENGTH = 4000;
