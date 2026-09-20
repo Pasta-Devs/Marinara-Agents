@@ -13,6 +13,18 @@ const slurpPromptPreviewSchema = z.object({
   promptId: z.enum(SLURP_PROMPT_IDS),
   mode: z.enum(SLURP_PROMPT_MODES),
   creatorAccountId: z.string().trim().min(1),
+  promptBlocks: z.unknown().optional(),
+  promptInstructions: z
+    .array(
+      z.object({
+        id: z.string().trim().min(1).max(80),
+        name: z.string().trim().min(1).max(120),
+        text: z.string().trim().max(20_000),
+        builtin: z.boolean().optional(),
+      }),
+    )
+    .max(100)
+    .optional(),
 });
 
 export async function slpSettingsRoutes(app: FastifyInstance, deps: SlpRouteDeps) {

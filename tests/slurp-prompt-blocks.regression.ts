@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import {
   composeSlurpPromptBlocks,
   normalizeSlurpPromptBlockOverrides,
+  resolveSlurpPromptBlocks,
   slurpPromptContext,
   slurpPromptDescriptions,
   SLURP_PROMPT_IDS,
@@ -103,6 +104,26 @@ const output = composeSlurpPromptBlocks(
 );
 
 assert.equal(output, "required output\ncustom task\nrequired safety");
+const resolved = resolveSlurpPromptBlocks(
+  "post",
+  [
+    { id: "task", kind: "editable", text: "default task" },
+    { id: "optional", kind: "context", text: "optional context", optional: true },
+    { id: "output", kind: "required", text: "required output" },
+  ],
+  {
+    post: [{ id: "output" }, { id: "task", instructionId: "shared" }, { id: "optional", enabled: false }],
+  },
+  [{ id: "shared", name: "Shared", text: "shared task" }],
+);
+assert.deepEqual(
+  resolved.map((block) => [block.id, block.text]),
+  [
+    ["output", "required output"],
+    ["task", "shared task"],
+  ],
+  "resolved blocks must apply order, reusable instructions, and optional state",
+);
 
 const dmSource = slurp2Source(
   "packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-message-generation.service.ts",

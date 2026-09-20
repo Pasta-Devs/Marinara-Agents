@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../../../lib/api-client.js";
 import { slpKeys } from "../../base/state/slp-query-keys.js";
+import type { SlurpReusablePromptInstruction } from "../../base/state/slp-state-types.js";
 import type {
   SlurpPromptBlocksResponse,
   SlurpPromptPreviewResponse,
@@ -41,8 +42,13 @@ export function useSlurpPromptBlocks(mode: SlurpPromptMode) {
  */
 export function useSlurpPromptBlockPreview() {
   return useMutation({
-    mutationFn: (input: { promptId: string; mode: SlurpPromptMode; creatorAccountId: string }) =>
-      api.post<SlurpPromptPreviewResponse>("/slurp2/settings/prompt-blocks/preview", input),
+    mutationFn: (input: {
+      promptId: string;
+      mode: SlurpPromptMode;
+      creatorAccountId: string;
+      promptBlocks?: unknown;
+      promptInstructions?: SlurpReusablePromptInstruction[];
+    }) => api.post<SlurpPromptPreviewResponse>("/slurp2/settings/prompt-blocks/preview", input),
   });
 }
 export function useUpdateSlurpSettings() {

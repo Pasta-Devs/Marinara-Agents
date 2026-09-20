@@ -172,6 +172,7 @@ export type SlurpPromptBlockPreview = {
 export type SlurpPromptPreviewResponse = {
   supported: boolean;
   blocks: SlurpPromptBlockPreview[];
+  compiledText: string;
 };
 export type SlurpPromptDefinition = {
   id: string;

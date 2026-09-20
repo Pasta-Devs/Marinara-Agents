@@ -2,6 +2,12 @@ import type { DB } from "../../../db/connection.js";
 import type { SlpAccount } from "../../../../../shared/src/slp/slp-social.types.js";
 import { createSlurpStorage } from "../../data/slp-storage.js";
 import { buildSlurpPostBlocks } from "./slp-post-prompt.js";
+import {
+  composeSlurpPromptBlocks,
+  normalizeSlurpPromptBlockOverrides,
+  resolveSlurpPromptBlocks,
+  type SlurpReusablePromptInstruction,
+} from "../../base/prompting/slp-prompt-blocks.js";
 import { resolveCreatorCharacterCanon } from "../../data/creators/slp-source-resolve.js";
 import { slpCreatorPublicIdentityFor } from "./slp-public-identity.js";
 import { slurpPostVariation, slurpPostVariationInstruction } from "../../modules/feed/slp-post-variation.js";
@@ -15,6 +21,14 @@ export type SlurpPromptBlockPreview = {
   id: string;
   /** Empty when this block contributes nothing for the chosen Creator, which is itself worth seeing. */
   text: string;
+};
+
+export type SlurpPromptPreviewInput = {
+  promptId: SlurpPromptId;
+  mode: SlurpPromptMode;
+  creatorAccountId: string;
+  promptBlocks?: unknown;
+  promptInstructions?: SlurpReusablePromptInstruction[];
 };
 
 /**
@@ -35,9 +49,9 @@ export type SlurpPromptBlockPreview = {
  */
 export async function previewSlurpPromptBlocks(
   db: DB,
-  input: { promptId: SlurpPromptId; mode: SlurpPromptMode; creatorAccountId: string },
-): Promise<{ supported: boolean; blocks: SlurpPromptBlockPreview[] }> {
-  if (input.promptId !== "post") return { supported: false, blocks: [] };
+  input: SlurpPromptPreviewInput,
+): Promise<{ supported: boolean; blocks: SlurpPromptBlockPreview[]; compiledText: string }> {
+  if (input.promptId !== "post") return { supported: false, blocks: [], compiledText: "" };
   const slurp = createSlurpStorage(db);
   const account = await slurp.getAccountById(input.creatorAccountId);
   if (!account) throw new Error("That Creator no longer exists.");
@@ -85,5 +99,14 @@ export async function previewSlurpPromptBlocks(
     promptBlocks: settings.promptBlocks?.[input.mode] ?? {},
     promptInstructions: settings.promptInstructions,
   });
-  return { supported: true, blocks: blocks.map((block) => ({ id: block.id, text: block.text.trim() })) };
+  const promptBlocks = normalizeSlurpPromptBlockOverrides(
+    input.promptBlocks === undefined ? settings.promptBlocks : { [input.mode]: input.promptBlocks },
+  );
+  const promptInstructions = input.promptInstructions ?? settings.promptInstructions;
+  const resolvedBlocks = resolveSlurpPromptBlocks(input.promptId, blocks, promptBlocks[input.mode], promptInstructions);
+  return {
+    supported: true,
+    blocks: resolvedBlocks.map((block) => ({ id: block.id, text: block.text.trim() })),
+    compiledText: composeSlurpPromptBlocks(input.promptId, blocks, promptBlocks[input.mode], promptInstructions),
+  };
 }

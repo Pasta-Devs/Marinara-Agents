@@ -506,6 +506,19 @@ export function composeSlurpPromptBlocks(
   overrides: SlurpPromptBlockOverrides | undefined,
   instructions: readonly SlurpReusablePromptInstruction[] = [],
 ): string {
+  return resolveSlurpPromptBlocks(promptId, blocks, overrides, instructions)
+    .map((block) => block.text.trim())
+    .filter(Boolean)
+    .join("\n");
+}
+
+/** Resolve one prompt's active blocks with the stored order and editable text applied. */
+export function resolveSlurpPromptBlocks(
+  promptId: SlurpPromptId,
+  blocks: readonly SlurpPromptBlock[],
+  overrides: SlurpPromptBlockOverrides | undefined,
+  instructions: readonly SlurpReusablePromptInstruction[] = [],
+): SlurpPromptBlock[] {
   const byId = new Map(blocks.map((block) => [block.id, block]));
   const instructionById = new Map(instructions.map((instruction) => [instruction.id, instruction.text]));
   const configured = overrides?.[promptId] ?? blocks.map((block) => ({ id: block.id }));
@@ -520,13 +533,13 @@ export function composeSlurpPromptBlocks(
   ];
   return ordered
     .filter(({ block, entry }) => !block.optional || entry.enabled !== false)
-    .map(({ block, entry }) =>
-      block.kind === "editable" && entry.instructionId && instructionById.get(entry.instructionId)?.trim()
-        ? instructionById.get(entry.instructionId)!.trim()
-        : block.kind === "editable" && entry.text?.trim()
-          ? entry.text.trim()
-          : block.text.trim(),
-    )
-    .filter(Boolean)
-    .join("\n");
+    .map(({ block, entry }) => ({
+      ...block,
+      text:
+        block.kind === "editable" && entry.instructionId && instructionById.get(entry.instructionId)?.trim()
+          ? instructionById.get(entry.instructionId)!.trim()
+          : block.kind === "editable" && entry.text?.trim()
+            ? entry.text.trim()
+            : block.text.trim(),
+    }));
 }

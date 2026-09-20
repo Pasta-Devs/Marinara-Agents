@@ -142,7 +142,14 @@ export function SlurpPromptBlockBuilder({
   // Creator, so what the panel shows is what the model is actually sent.
   const showPreview = (promptId: string, blockId: string) => {
     setPreviewing({ promptId, blockId });
-    if (activeCreatorId) preview.mutate({ promptId, mode, creatorAccountId: activeCreatorId });
+    if (activeCreatorId)
+      preview.mutate({
+        promptId,
+        mode,
+        creatorAccountId: activeCreatorId,
+        promptBlocks: draft,
+        promptInstructions: instructionDraft,
+      });
   };
   const selectPrompt = (promptId: string, open: boolean) => {
     setSelectedPromptId(open ? null : promptId);
@@ -407,11 +414,12 @@ export function SlurpPromptBlockBuilder({
                                     ? preview.data?.blocks.find((previewBlock) => previewBlock.id === block.id)?.text
                                     : undefined;
                                 const blockText =
-                                  renderedText ||
-                                  (entry.instructionId
-                                    ? instructions.find((instruction) => instruction.id === entry.instructionId)?.text
-                                    : entry.text) ||
-                                  block.defaultText;
+                                  renderedText !== undefined
+                                    ? renderedText
+                                    : (entry.instructionId
+                                        ? instructions.find((instruction) => instruction.id === entry.instructionId)
+                                            ?.text
+                                        : entry.text) || block.defaultText;
                                 return (
                                   <li
                                     key={block.id}
@@ -662,12 +670,24 @@ export function SlurpPromptBlockBuilder({
               {t("ui.slurp.settings.prompts.previewLoading", { defaultValue: "Rendering..." })}
             </p>
           ) : (
-            <pre className="max-h-64 overflow-auto whitespace-pre-wrap text-xs leading-5 text-[var(--slurp-muted)]">
-              {previewText ||
-                t("ui.slurp.settings.prompts.previewEmpty", {
-                  defaultValue: "This block adds nothing for this Creator right now.",
-                })}
-            </pre>
+            <>
+              <pre className="max-h-64 overflow-auto whitespace-pre-wrap text-xs leading-5 text-[var(--slurp-muted)]">
+                {previewText ||
+                  t("ui.slurp.settings.prompts.previewEmpty", {
+                    defaultValue: "This block adds nothing for this Creator right now.",
+                  })}
+              </pre>
+              {preview.data?.compiledText && (
+                <details className="mt-3 rounded-lg border border-[var(--slurp-outline)] bg-[var(--slurp-surface-raised)]">
+                  <summary className="cursor-pointer px-3 py-2 text-xs font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)]">
+                    {t("ui.slurp.settings.prompts.compiledPrompt", { defaultValue: "Compiled prompt" })}
+                  </summary>
+                  <pre className="max-h-96 overflow-auto whitespace-pre-wrap border-t border-[var(--slurp-outline)] p-3 text-xs leading-5 text-[var(--slurp-muted)]">
+                    {preview.data.compiledText}
+                  </pre>
+                </details>
+              )}
+            </>
           )}
         </div>
       )}

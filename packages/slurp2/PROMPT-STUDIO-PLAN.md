@@ -11,9 +11,11 @@ internal prompt implementation.
 | Slice | Scope                                                    | Status      | Commit   |
 | ----- | -------------------------------------------------------- | ----------- | -------- |
 | 1     | Prompt Studio page framing and scope context             | Complete    | 242ca65e |
-| 2     | Group prompt recipes and reduce technical density        | Complete    | —        |
+| 2     | Group prompt recipes and reduce technical density        | Complete    | 0c35b8dc |
 | 3     | Make prompt preview explicit and preserve draft context  | Complete    | c7a1e41e |
-| 4     | Remove visible Classic mode and migrate Produce defaults | Complete    | —        |
+| 4     | Remove visible Classic mode and migrate Produce defaults | Complete    | 95c7a1df |
+| 5     | Add a draft-aware compiled prompt preview contract       | Complete    | —        |
+| 6     | Add explicit model-generated result preview              | Pending     | —        |
 
 ## Slice 1 proof
 
@@ -59,3 +61,20 @@ internal prompt implementation.
 - Prompt preset, client hook, and prompt block regressions pass.
 - Prettier and `git diff --check` pass for the changed source and plan.
 - Full package typecheck remains blocked by the host disk-space failure recorded above.
+
+## Slice 5 scope
+
+- Send the current Produce recipe draft and reusable instructions to the no-model preview route.
+- Return the full ordered compiled prompt with the rendered block values.
+- Keep preview explicit and preserve privacy redaction from the real prompt builder.
+
+## Slice 5 proof
+
+- Draft block order, custom text, reusable instructions, and optional state resolve through one
+  shared server function.
+- The preview route returns rendered blocks and the complete compiled prompt.
+- The client sends the current unsaved draft only after an explicit preview action.
+- `tests/slurp-prompt-blocks.regression.ts`, `tests/slurp2-prompt-presets.regression.ts`,
+  `tests/slurp2-client-hooks.regression.ts`, and `tests/slurp2-route-inventory.regression.ts` pass.
+- `node scripts/typecheck-packages.mjs slurp2` passes with `TMPDIR=/home/dev/.cache/marinara-tmp`.
+- Prettier and `git diff --check` pass for the changed files.
