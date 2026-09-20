@@ -1292,6 +1292,11 @@ const FEATURE_MECHANICS = [
         on: "hit",
         sources: [ATTACK_LIST],
         requires: { column: FINESSE_OR_RANGED_COLUMN },
+        // The SRD lets the adjacent-ally branch stand only if "you don't have disadvantage on the
+        // attack roll", and `when` is a closed advantage / ally-adjacent pair with nothing that can
+        // say that. Keeping the branch is the lesser error: dropping it would deny Sneak Attack its
+        // commonest trigger, where keeping it only over-grants when the rogue attacks at
+        // disadvantage. The gap is stated in the package README rather than left to be discovered.
         when: ["advantage", "ally-adjacent"],
         oncePer: "turn",
         amount: { dice: "1d6" },
@@ -1299,6 +1304,11 @@ const FEATURE_MECHANICS = [
     },
     // "The amount of the extra damage increases as you gain levels in this class, as shown in the
     // Sneak Attack column of the Rogue table." Built from that column, never typed.
+    //
+    // `level` is the sheet's ONE level field, so a multiclass rogue reads their total, which is
+    // generous. That is this package's standing convention for everything that follows a class
+    // table, stated in MULTICLASS_NOTE and carried onto this entry's summary: a ruleset sheet has
+    // no notion of class and so there is no rogue-level field to read instead.
     scalesFromDiceColumn: { base: { count: 1, sides: 6 }, from: { field: "level" } },
   },
 ];
@@ -3065,6 +3075,12 @@ function combatBlock(tiers) {
         // "A frightened creature has disadvantage on ability checks and attack rolls WHILE THE
         // SOURCE of its fear is within line of sight" and, separately and ungated, "can't willingly
         // move closer to the source of its fear". So the sight gate names the first only.
+        //
+        // `effects` holds BOTH and the gate names the subset to drop when the source is out of
+        // sight. It is not a list of the ungated ones: the Engine refuses a gate naming an effect
+        // the condition does not have ("This condition does not have the effect ... to gate"), so
+        // moving own-attacks-disadvantage out of `effects` makes the file fail to import. Checked
+        // against the real parser; please do not "simplify" it that way.
         condition: "frightened",
         effects: ["own-attacks-disadvantage", "cannot-approach-source"],
         whileSourceInSight: ["own-attacks-disadvantage"],
