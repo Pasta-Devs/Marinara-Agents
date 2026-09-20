@@ -1,5 +1,10 @@
 # Long-Term Memory changelog
 
+## 1.3.6 — 2026-09-20
+
+- Preserved actionable extraction error codes and retryability, and reused one deterministic vault snapshot for Game Mode batch imports.
+- Classified permanent provider quota failures as non-retryable and kept deterministic snapshot failures within their batch results.
+
 ## 1.3.5 — 2026-09-20
 
 - Recover complete memory candidates from token-limited output without marking incomplete extractions current.
