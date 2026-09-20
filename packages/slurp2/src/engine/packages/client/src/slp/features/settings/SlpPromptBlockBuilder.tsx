@@ -3,7 +3,7 @@ import { ChevronDown, ChevronUp, Eye, LockKeyhole, Pencil, Plus, RotateCcw, Save
 import { useTranslation } from "react-i18next";
 import type { SlurpPromptBlockOverride, SlurpReusablePromptInstruction } from "../../base/state/slp-state-types";
 import type { SlurpPromptBlockDefinition, SlurpPromptDefinition, SlurpPromptMode } from "./slp-settings-contract";
-import { useSlurpPromptBlockPreview, useSlurpPromptBlocks } from "./slp-settings-hooks";
+import { useSlurpPromptBlockPreview, useSlurpPromptBlocks, useSlurpPromptResultPreview } from "./slp-settings-hooks";
 import { useCreatorAccounts } from "../creators/slp-creators-contract";
 
 type PromptBlockBuilderProps = {
@@ -89,6 +89,7 @@ export function SlurpPromptBlockBuilder({
   const definitions = useSlurpPromptBlocks(mode);
   const creators = useCreatorAccounts();
   const preview = useSlurpPromptBlockPreview();
+  const resultPreview = useSlurpPromptResultPreview();
   const [previewCreatorId, setPreviewCreatorId] = useState("");
   const [previewing, setPreviewing] = useState<{ promptId: string; blockId: string } | null>(null);
   const creatorOptions = creators.data ?? [];
@@ -110,7 +111,8 @@ export function SlurpPromptBlockBuilder({
     setPreviewing(null);
     setInstructionDraft(instructions);
     preview.reset();
-    // `preview` is a stable mutation handle; listing it would reset the panel on every render.
+    resultPreview.reset();
+    // The mutation handles are stable; listing them would reset the panel on every render.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mode]);
 
@@ -121,6 +123,14 @@ export function SlurpPromptBlockBuilder({
   useEffect(() => {
     setInstructionDraft(instructions);
   }, [instructions]);
+
+  useEffect(() => {
+    setPreviewing(null);
+    preview.reset();
+    resultPreview.reset();
+    // Preview output describes one exact draft. Any edit makes that output stale.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [draft, instructionDraft]);
 
   const prompts = definitions.data?.prompts ?? [];
   const promptLabel = (id: string) => t(`ui.slurp.settings.prompts.prompt.${id}`, { defaultValue: promptName(id) });
@@ -150,6 +160,16 @@ export function SlurpPromptBlockBuilder({
         promptBlocks: draft,
         promptInstructions: instructionDraft,
       });
+  };
+  const generateResultPreview = () => {
+    if (!activeCreatorId) return;
+    resultPreview.mutate({
+      promptId: "post",
+      mode,
+      creatorAccountId: activeCreatorId,
+      promptBlocks: draft,
+      promptInstructions: instructionDraft,
+    });
   };
   const selectPrompt = (promptId: string, open: boolean) => {
     setSelectedPromptId(open ? null : promptId);
@@ -189,7 +209,12 @@ export function SlurpPromptBlockBuilder({
             {t("ui.slurp.settings.prompts.previewCreator", { defaultValue: "Preview as" })}
             <select
               value={activeCreatorId}
-              onChange={(event) => setPreviewCreatorId(event.target.value)}
+              onChange={(event) => {
+                setPreviewCreatorId(event.target.value);
+                setPreviewing(null);
+                preview.reset();
+                resultPreview.reset();
+              }}
               className="mt-1 min-h-10 w-full rounded-lg border border-[var(--slurp-outline)] bg-transparent px-3 text-sm font-normal"
             >
               {creatorOptions.map((creator) => (
@@ -383,26 +408,94 @@ export function SlurpPromptBlockBuilder({
                               </p>
                               <p className="mt-1 text-xs leading-5 text-[var(--slurp-muted)]">
                                 {t("ui.slurp.settings.prompts.recipeControlsDetail", {
-                                  defaultValue: "Preview uses the selected Creator and runs only when you ask for it.",
+                                  defaultValue:
+                                    "Inspecting the prompt is free. Generate result makes one model request with the selected Creator.",
                                 })}
                               </p>
                             </div>
-                            <button
-                              type="button"
-                              disabled={!activeCreatorId || preview.isPending}
-                              onClick={() => showPreview(prompt.id, layout[0]?.id ?? "")}
-                              className="inline-flex min-h-10 items-center gap-1.5 rounded-lg border border-[var(--slurp-outline)] px-3 text-xs font-semibold text-[var(--slurp-muted)] hover:text-[var(--slurp-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] disabled:opacity-45"
-                            >
-                              <Eye size={14} aria-hidden="true" />
-                              {preview.isPending
-                                ? t("ui.slurp.settings.prompts.previewRendering", {
-                                    defaultValue: "Rendering preview...",
-                                  })
-                                : t("ui.slurp.settings.prompts.previewRecipe", {
-                                    defaultValue: "Preview recipe",
-                                  })}
-                            </button>
+                            <div className="flex flex-wrap gap-2">
+                              <button
+                                type="button"
+                                disabled={!activeCreatorId || preview.isPending}
+                                onClick={() => showPreview(prompt.id, layout[0]?.id ?? "")}
+                                className="inline-flex min-h-10 items-center gap-1.5 rounded-lg border border-[var(--slurp-outline)] px-3 text-xs font-semibold text-[var(--slurp-muted)] hover:text-[var(--slurp-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] disabled:opacity-45"
+                              >
+                                <Eye size={14} aria-hidden="true" />
+                                {preview.isPending
+                                  ? t("ui.slurp.settings.prompts.previewRendering", {
+                                      defaultValue: "Rendering preview...",
+                                    })
+                                  : t("ui.slurp.settings.prompts.previewRecipe", {
+                                      defaultValue: "Inspect prompt",
+                                    })}
+                              </button>
+                              {prompt.id === "post" && (
+                                <button
+                                  type="button"
+                                  disabled={!activeCreatorId || resultPreview.isPending}
+                                  onClick={generateResultPreview}
+                                  className="inline-flex min-h-10 items-center gap-1.5 rounded-lg bg-[var(--noodle-accent)] px-3 text-xs font-bold text-zinc-950 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] disabled:opacity-45"
+                                >
+                                  <Plus size={14} aria-hidden="true" />
+                                  {resultPreview.isPending
+                                    ? t("ui.slurp.settings.prompts.generatingResult", {
+                                        defaultValue: "Generating...",
+                                      })
+                                    : t("ui.slurp.settings.prompts.generateResult", {
+                                        defaultValue: "Generate result",
+                                      })}
+                                </button>
+                              )}
+                            </div>
                           </div>
+                          {prompt.id === "post" && resultPreview.isError && (
+                            <p role="alert" className="text-sm text-[var(--destructive)]">
+                              {resultPreview.error instanceof Error
+                                ? resultPreview.error.message
+                                : t("ui.slurp.settings.prompts.resultError", {
+                                    defaultValue: "Could not generate a preview result.",
+                                  })}
+                            </p>
+                          )}
+                          {prompt.id === "post" && resultPreview.data && (
+                            <section
+                              aria-labelledby="slurp-prompt-result-title"
+                              className="space-y-3 rounded-lg bg-[var(--slurp-canvas)] p-4 ring-1 ring-inset ring-[var(--slurp-outline)]"
+                            >
+                              <div>
+                                <p className="text-xs font-semibold text-[var(--slurp-muted)]">
+                                  {t("ui.slurp.settings.prompts.generatedResult", {
+                                    defaultValue: "Generated result",
+                                  })}
+                                </p>
+                                <h4 id="slurp-prompt-result-title" className="mt-1 text-base font-bold">
+                                  {resultPreview.data.title ||
+                                    t("ui.slurp.settings.prompts.untitledResult", { defaultValue: "Untitled post" })}
+                                </h4>
+                              </div>
+                              <p className="whitespace-pre-wrap text-sm leading-6">{resultPreview.data.content}</p>
+                              {resultPreview.data.imagePrompt && (
+                                <div className="rounded-lg bg-[var(--slurp-surface-raised)] p-3">
+                                  <p className="text-xs font-bold">
+                                    {t("ui.slurp.settings.prompts.imagePromptResult", {
+                                      defaultValue: "Image prompt",
+                                    })}
+                                  </p>
+                                  <p className="mt-1 whitespace-pre-wrap text-xs leading-5 text-[var(--slurp-muted)]">
+                                    {resultPreview.data.imagePrompt}
+                                  </p>
+                                </div>
+                              )}
+                              <details className="rounded-lg border border-[var(--slurp-outline)]">
+                                <summary className="cursor-pointer px-3 py-2 text-xs font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)]">
+                                  {t("ui.slurp.settings.prompts.promptUsed", { defaultValue: "Prompt used" })}
+                                </summary>
+                                <pre className="max-h-96 overflow-auto whitespace-pre-wrap border-t border-[var(--slurp-outline)] p-3 text-xs leading-5 text-[var(--slurp-muted)]">
+                                  {resultPreview.data.compiledPrompt}
+                                </pre>
+                              </details>
+                            </section>
+                          )}
                           <div className="space-y-3">
                             <ol className="space-y-2">
                               {layout.map((entry, index) => {

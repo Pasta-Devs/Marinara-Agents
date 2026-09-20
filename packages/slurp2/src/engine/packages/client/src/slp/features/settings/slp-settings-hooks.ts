@@ -5,6 +5,7 @@ import type { SlurpReusablePromptInstruction } from "../../base/state/slp-state-
 import type {
   SlurpPromptBlocksResponse,
   SlurpPromptPreviewResponse,
+  SlurpPromptResultPreviewResponse,
   SlurpPromptMode,
   SlurpSettings,
   SlurpSettingsUpdate,
@@ -49,6 +50,17 @@ export function useSlurpPromptBlockPreview() {
       promptBlocks?: unknown;
       promptInstructions?: SlurpReusablePromptInstruction[];
     }) => api.post<SlurpPromptPreviewResponse>("/slurp2/settings/prompt-blocks/preview", input),
+  });
+}
+export function useSlurpPromptResultPreview() {
+  return useMutation({
+    mutationFn: (input: {
+      promptId: "post";
+      mode: SlurpPromptMode;
+      creatorAccountId: string;
+      promptBlocks?: unknown;
+      promptInstructions?: SlurpReusablePromptInstruction[];
+    }) => api.post<SlurpPromptResultPreviewResponse>("/slurp2/settings/prompt-blocks/generate-preview", input),
   });
 }
 export function useUpdateSlurpSettings() {

@@ -355,12 +355,17 @@ const callsBefore = readFileSync(join(import.meta.dirname, "fixtures/slurp2-clie
   .map((call) => call.replaceAll("\\u0020", " "))
   .filter(Boolean);
 const mapStagingCall = (call: string) => call.replace("/slurp2/noodler/", "/slurp2/slurp/");
+const addedCalls = ["post /slurp2/settings/prompt-blocks/generate-preview"];
 const calls = [
   ...combined.matchAll(/api\.(get|post|put|patch|delete|upload|raw)\s*(?:<[^;]*?>)?\s*\(\s*[`"]([^`"]*)/gu),
 ]
   .map((m) => `${m[1]} ${m[2]}`)
   .sort();
-assert.deepEqual(calls, callsBefore.map(mapStagingCall).sort(), "client request paths and HTTP methods must match");
+assert.deepEqual(
+  calls,
+  callsBefore.map(mapStagingCall).concat(addedCalls).sort(),
+  "client request paths and HTTP methods must match",
+);
 
 // 4. Mutation and invalidation behaviour: the cache-touching call counts did not drift.
 const counts = Object.fromEntries(
@@ -381,7 +386,7 @@ const counts = Object.fromEntries(
 assert.deepEqual(
   counts,
   {
-    useMutation: 131,
+    useMutation: 132,
     useQuery: 186,
     useInfiniteQuery: 5,
     invalidateQueries: 124,

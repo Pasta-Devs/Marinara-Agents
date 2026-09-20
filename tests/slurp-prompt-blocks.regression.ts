@@ -131,9 +131,17 @@ const dmSource = slurp2Source(
 const commentSource = slurp2Source(
   "packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-reply-generation.service.ts",
 );
+const generationSource = slurp2Source(
+  "packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-generation.service.ts",
+);
+const settingsRoutes = slurp2Source("packages/slurp2/src/engine/packages/server/src/routes/slurp.routes.ts");
 assert.match(dmSource, /id: "outputContract"/u);
 assert.match(dmSource, /id: "relationshipState"/u);
 assert.match(commentSource, /id: "outputContract"/u);
+assert.match(generationSource, /if \(!input\.previewOnly\) \{[\s\S]*?openSlurpShoot/u);
+assert.match(generationSource, /prepareOnly:[\s\S]*?compiledPrompt/u);
+assert.match(settingsRoutes, /\/settings\/prompt-blocks\/generate-preview/u);
+assert.match(settingsRoutes, /prepareOnly: true,[\s\S]*?previewOnly: true/u);
 
 for (const mode of SLURP_PROMPT_MODES) {
   for (const prompt of slurpPromptDescriptions(mode)) {

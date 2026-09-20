@@ -1,12 +1,19 @@
-import { slurpPromptDescriptions, slurpPromptEditableDefaults } from "../../base/prompting/slp-prompt-blocks.js";
+import {
+  normalizeSlurpPromptBlockOverrides,
+  slurpPromptDescriptions,
+  slurpPromptEditableDefaults,
+} from "../../base/prompting/slp-prompt-blocks.js";
 import { SLURP_PROMPT_MODES, slurpPromptMode } from "../../base/prompting/slp-prompt-modes.js";
 import { DEFAULT_SLURP_SETTINGS, slurpSettingsSchema } from "../../modules/settings/slp-settings.js";
 import { getSlurpModelBudgetLedger } from "../../base/model/slp-model-worker.js";
+import { resolveSlurpTextConnection } from "../../base/identity/slp-connection.js";
+import { createConnectionsStorage } from "../../../services/storage/connections.storage.js";
+import { isConnectionAdmissionFailure } from "../../../services/generation/connection-admission.js";
 import type { FastifyInstance } from "fastify";
 import type { SlpRouteDeps } from "../viewer/slp-viewer-contract.js";
 import { z } from "zod";
 import { getErrorMessage } from "../../modules/creators/slp-public-support.js";
-import { previewSlurpPromptBlocks } from "../feed/slp-feed-contract.js";
+import { generateCreatorPost, previewSlurpPromptBlocks } from "../feed/slp-feed-contract.js";
 import { SLURP_PROMPT_IDS } from "../../base/prompting/slp-prompt-blocks.js";
 
 const slurpPromptPreviewSchema = z.object({
@@ -25,6 +32,10 @@ const slurpPromptPreviewSchema = z.object({
     )
     .max(100)
     .optional(),
+});
+
+const slurpPromptResultPreviewSchema = slurpPromptPreviewSchema.extend({
+  promptId: z.literal("post"),
 });
 
 export async function slpSettingsRoutes(app: FastifyInstance, deps: SlpRouteDeps) {
@@ -60,6 +71,48 @@ export async function slpSettingsRoutes(app: FastifyInstance, deps: SlpRouteDeps
       return await previewSlurpPromptBlocks(app.db, body.data);
     } catch (error) {
       return reply.code(404).send({ error: getErrorMessage(error) });
+    }
+  });
+  app.post("/settings/prompt-blocks/generate-preview", async (req, reply) => {
+    const body = slurpPromptResultPreviewSchema.safeParse(req.body ?? {});
+    if (!body.success) return reply.code(400).send({ error: body.error.flatten() });
+    const account = await noodle.getNoodlerAccountById(body.data.creatorAccountId);
+    if (!account) return reply.code(404).send({ error: "That Creator no longer exists." });
+    const settings = await noodle.getSettings();
+    const connection = await resolveSlurpTextConnection(
+      createConnectionsStorage(app.db),
+      settings.generationConnectionId,
+    );
+    if (!connection) return reply.code(400).send({ error: "Select a Slurp generation connection first." });
+    const promptBlocks =
+      normalizeSlurpPromptBlockOverrides({
+        produce: body.data.promptBlocks ?? settings.promptBlocks.produce,
+      }).produce ?? {};
+    try {
+      const result = await generateCreatorPost(app.db, {
+        account,
+        connection,
+        prepareOnly: true,
+        previewOnly: true,
+        promptMode: "produce",
+        promptBlocks,
+        promptInstructions: body.data.promptInstructions,
+        request: {
+          mode: "noodler",
+          targetAccountId: account.id,
+          access: "public",
+          format: "caption",
+        },
+      });
+      return {
+        title: result.title,
+        content: result.content,
+        imagePrompt: result.imagePrompt,
+        compiledPrompt: result.compiledPrompt,
+      };
+    } catch (error) {
+      if (isConnectionAdmissionFailure(error)) return reply.code(409).send({ error: getErrorMessage(error) });
+      return reply.code(500).send({ error: `Prompt preview failed: ${getErrorMessage(error)}` });
     }
   });
   // The shipped values, so Settings can show what differs and reset one section.

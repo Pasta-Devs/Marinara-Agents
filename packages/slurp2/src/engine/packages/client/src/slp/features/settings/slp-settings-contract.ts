@@ -174,6 +174,12 @@ export type SlurpPromptPreviewResponse = {
   blocks: SlurpPromptBlockPreview[];
   compiledText: string;
 };
+export type SlurpPromptResultPreviewResponse = {
+  title: string | null;
+  content: string;
+  imagePrompt: string | null;
+  compiledPrompt: string;
+};
 export type SlurpPromptDefinition = {
   id: string;
   group: "writing" | "messages" | "images" | "profiles" | "world" | "audience";

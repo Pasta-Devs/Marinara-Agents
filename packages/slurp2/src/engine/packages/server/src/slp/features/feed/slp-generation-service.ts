@@ -76,7 +76,12 @@ export {
   containsIdentity,
   type PublicIdentity,
 } from "../../base/identity/slp-identity-protection.js";
-import { slurpPromptContext } from "../../base/prompting/slp-prompt-blocks.js";
+import {
+  slurpPromptContext,
+  type SlurpPromptBlockOverrides,
+  type SlurpReusablePromptInstruction,
+} from "../../base/prompting/slp-prompt-blocks.js";
+import type { SlurpPromptMode } from "../../base/prompting/slp-prompt-modes.js";
 import { slurpCameraSourceInstruction, slurpPostCameraSource } from "../../modules/feed/slp-camera-source.js";
 import { slurpImageBrief } from "../../modules/feed/slp-image-brief.js";
 import { slurpContentTypeInstruction, slurpPostContentType } from "../../modules/feed/slp-content-type.js";
@@ -103,6 +108,8 @@ export type PreparedCreatorPostResult = {
   projectId: string | null;
   projectChapter: string | null;
   metadata: Record<string, unknown>;
+  /** The exact system and user messages used for this prepared result. */
+  compiledPrompt: string;
 };
 
 type GenerationConnection = NonNullable<Awaited<ReturnType<ReturnType<typeof createConnectionsStorage>["getWithKey"]>>>;
@@ -121,6 +128,12 @@ export type SlpCreatorPostGenerationInput = {
   publicationTime?: Date;
   /** False keeps the Story rotation out: "Create posts now" asks for feed posts, not Stories. */
   allowStory?: boolean;
+  /** Preview calls use the Produce pipeline and the supplied draft without changing saved settings. */
+  promptMode?: SlurpPromptMode;
+  promptBlocks?: SlurpPromptBlockOverrides;
+  promptInstructions?: SlurpReusablePromptInstruction[];
+  /** Skip continuity writes when `prepareOnly` is used for a settings preview. */
+  previewOnly?: boolean;
 };
 
 const SLP_CREATOR_POST_MAX_TOKENS = 2048;
@@ -223,7 +236,15 @@ export async function generateCreatorPost(
   // their direction is the angle, and a second one would fight it.
   // One sequence for both rotations, so the project and the variation cannot drift out of step.
   const sequence = await noodle.countNoodlerPostsByAccount(account.id);
-  const prompts = slurpPromptContext(settings);
+  const promptMode = input.promptMode ?? settings.promptMode;
+  const prompts = slurpPromptContext({
+    ...settings,
+    promptMode,
+    promptBlocks: input.promptBlocks
+      ? { ...settings.promptBlocks, [promptMode]: input.promptBlocks }
+      : settings.promptBlocks,
+    promptInstructions: input.promptInstructions ?? settings.promptInstructions,
+  });
   const directed = Boolean(input.request.noodlerPostGuide?.trim());
   const variation = directed
     ? null
@@ -340,13 +361,14 @@ export async function generateCreatorPost(
     scheduleContext,
     loreContext,
     promptBlocks: prompts.blocks,
-    promptInstructions: settings.promptInstructions,
+    promptInstructions: prompts.instructions,
     promptMode: prompts.mode,
     contentTypeInstruction,
     productionInstruction: production ? slurpProductionInstruction(production) : undefined,
     generatedAt: input.generatedAt ?? new Date(),
     publicationTime: input.publicationTime,
   });
+  let compiledPrompt = messages.map((message) => `# ${message.role}\n${message.content}`).join("\n\n");
   const debugMode = input.request.debugMode === true || isDebugAgentsEnabled();
   logDebugOverride(
     debugMode,
@@ -399,6 +421,7 @@ export async function generateCreatorPost(
           : "The response was not one valid Slurp-post JSON object. Return exactly one object with title and content only. Do not include a poll or image prompt. Return JSON only.",
       },
     ];
+    compiledPrompt = correctionMessages.map((message) => `# ${message.role}\n${message.content}`).join("\n\n");
     logDebugOverride(
       debugMode,
       "[debug/slurp] Correction prompt prepared with %d messages; private prompt content is redacted.",
@@ -426,22 +449,24 @@ export async function generateCreatorPost(
   // callbacks can draw from; a callback that used one spends a shot. Recorded here rather than
   // after persistence because a run that fails on the image still produced the shoot; a shoot left
   // behind by a run that throws later is pruned with the rest.
-  if (contentType === "set" && camera && variation) {
-    await openSlurpShoot(db, {
-      creatorAccountId: account.id,
-      place: variation.place,
-      company: variation.company,
-      cameraSource: camera,
-      at: input.generatedAt ?? new Date(),
-    }).catch((error: unknown) => {
-      // A post must never fail over continuity bookkeeping.
-      logger.warn(error, "[slurp] Could not open a shoot session; the post stands on its own");
-      return null;
-    });
-  } else if (shoot) {
-    await useSlurpShoot(db, shoot).catch((error: unknown) => {
-      logger.warn(error, "[slurp] Could not record a shoot reuse; the shoot may be posted from again");
-    });
+  if (!input.previewOnly) {
+    if (contentType === "set" && camera && variation) {
+      await openSlurpShoot(db, {
+        creatorAccountId: account.id,
+        place: variation.place,
+        company: variation.company,
+        cameraSource: camera,
+        at: input.generatedAt ?? new Date(),
+      }).catch((error: unknown) => {
+        // A post must never fail over continuity bookkeeping.
+        logger.warn(error, "[slurp] Could not open a shoot session; the post stands on its own");
+        return null;
+      });
+    } else if (shoot) {
+      await useSlurpShoot(db, shoot).catch((error: unknown) => {
+        logger.warn(error, "[slurp] Could not record a shoot reuse; the shoot may be posted from again");
+      });
+    }
   }
   const protectedGenerated = {
     // Every format shows a title now. Weak models still drop the field, so fall back to the
@@ -526,6 +551,7 @@ export async function generateCreatorPost(
       access: input.request.access,
       projectId: project?.id ?? null,
       projectChapter,
+      compiledPrompt,
       // The scheduled path returns here, before the image-commit branch that stamps the story flag,
       // so a scheduled Story used to publish as an ordinary post. Carry the intent in the prepared
       // payload instead; publishDueNoodlerPreparedPosts drops it again if no image ever attached,

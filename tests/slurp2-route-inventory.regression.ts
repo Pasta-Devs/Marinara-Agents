@@ -77,6 +77,7 @@ const EXPECTED = [
   "GET /settings/audience-characters/groups",
   "GET /settings/defaults",
   "GET /settings/prompt-blocks",
+  "POST /settings/prompt-blocks/generate-preview",
   "POST /settings/prompt-blocks/preview",
   "PATCH /accounts/:id/profile",
   "PATCH /accounts/:id/settings",
@@ -195,6 +196,7 @@ const RETAINED_OLD_PATHS = new Set([
   "GET /noodler/ads/:id/image/:fileName",
   "GET /noodler/posts/:id/media",
 ]);
+const ADDED_ROUTES = new Set(["POST /settings/prompt-blocks/generate-preview"]);
 
 const stagingRoutes = readFileSync(join(import.meta.dirname, "fixtures/slurp2-route-inventory.staging.txt"), "utf8")
   .split("\n")
@@ -208,7 +210,7 @@ const routeToStaging = (route: string): string => {
   if (route.startsWith("ADDCONTENTTYPEPARSER ") || RETAINED_OLD_PATHS.has(route)) return route;
   return route.replace("/slurp/", "/noodler/");
 };
-const mappedStagingRoutes = stagingRoutes.map(routeFromStaging).sort();
+const mappedStagingRoutes = [...stagingRoutes.map(routeFromStaging), ...ADDED_ROUTES].sort();
 assert.deepEqual([...EXPECTED].sort(), mappedStagingRoutes, "the route mapping must match the staging fixture");
 
 const EXPECTED_HANDLER_COUNTS = {
@@ -224,9 +226,9 @@ const EXPECTED_HANDLER_COUNTS = {
   "features/notifications": 2,
   "features/onboarding": 4,
   "features/projects": 15,
-  "features/settings": 6,
+  "features/settings": 7,
 } as const;
-const EXPECTED_METHOD_COUNTS = { DELETE: 11, GET: 59, PATCH: 14, POST: 91, PUT: 5 } as const;
+const EXPECTED_METHOD_COUNTS = { DELETE: 11, GET: 59, PATCH: 14, POST: 92, PUT: 5 } as const;
 
 const root = join(import.meta.dirname, "../packages/slurp2/src/engine/packages/server/src/slp");
 const registration = /\bapp\.(get|post|put|patch|delete|addContentTypeParser)(?:<[^()]*?>)?\(\s*["'`]([^"'`]+)["'`]/gu;
@@ -281,7 +283,7 @@ const methodCounts = Object.fromEntries(
     }, new Map<string, number>()),
 );
 assert.deepEqual(methodCounts, EXPECTED_METHOD_COUNTS, "HTTP method multiset changed from staging");
-assert.equal(foundRoutes.filter((route) => !route.startsWith("ADDCONTENTTYPEPARSER ")).length, 180);
+assert.equal(foundRoutes.filter((route) => !route.startsWith("ADDCONTENTTYPEPARSER ")).length, 181);
 assert.deepEqual(handlerCounts, EXPECTED_HANDLER_COUNTS, "handler count changed in a feature");
 assert.ok(foundRoutes.includes("POST /slurp/posts/:id/media"), "the renamed POST media route must remain registered");
 assert.ok(
@@ -289,7 +291,10 @@ assert.ok(
   "changing the media upload method must fail the fixture",
 );
 assert.deepEqual(
-  foundRoutes.map(routeToStaging).sort(),
+  foundRoutes
+    .filter((route) => !ADDED_ROUTES.has(route))
+    .map(routeToStaging)
+    .sort(),
   stagingRoutes,
   "the route change must be limited to the explicit Slurp mapping",
 );

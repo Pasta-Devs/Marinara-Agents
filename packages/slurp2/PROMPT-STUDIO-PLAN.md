@@ -14,8 +14,8 @@ internal prompt implementation.
 | 2     | Group prompt recipes and reduce technical density        | Complete    | 0c35b8dc |
 | 3     | Make prompt preview explicit and preserve draft context  | Complete    | c7a1e41e |
 | 4     | Remove visible Classic mode and migrate Produce defaults | Complete    | 95c7a1df |
-| 5     | Add a draft-aware compiled prompt preview contract       | Complete    | —        |
-| 6     | Add explicit model-generated result preview              | Pending     | —        |
+| 5     | Add a draft-aware compiled prompt preview contract       | Complete    | b464ba1e |
+| 6     | Add explicit model-generated result preview              | Complete    | —        |
 
 ## Slice 1 proof
 
@@ -78,3 +78,15 @@ internal prompt implementation.
   `tests/slurp2-client-hooks.regression.ts`, and `tests/slurp2-route-inventory.regression.ts` pass.
 - `node scripts/typecheck-packages.mjs slurp2` passes with `TMPDIR=/home/dev/.cache/marinara-tmp`.
 - Prettier and `git diff --check` pass for the changed files.
+
+## Slice 6 proof
+
+- `Generate result` is a separate explicit action from no-model prompt inspection.
+- The model preview uses the selected Creator and the current unsaved Produce draft.
+- The server calls the configured text connection and returns title, content, image prompt, and the
+  exact prompt used.
+- Preview calls use `prepareOnly` and `previewOnly`; they do not persist posts or write shoot
+  continuity state.
+- Client and route inventories were updated for the intentional new endpoint.
+- Focused regressions, architecture regression, Slurp2 typecheck, Prettier, `git diff --check`, and
+  `npm run check` pass. `npm run check` reports 0 errors and existing warnings.
