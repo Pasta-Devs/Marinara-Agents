@@ -196,7 +196,7 @@ function noteText(note: LtmNote) {
     .filter(Boolean)
     .join(" ")
     .toLocaleLowerCase()
-    .replace(/[^a-z0-9\s]+/g, " ")
+    .replace(/[^\p{L}\p{N}\s]+/gu, " ")
     .replace(/\s+/g, " ")
     .trim();
 }

@@ -40,13 +40,13 @@ function text(note: LtmNote) {
 function similarity(left: string, right: string) {
   const a = new Set(
     left
-      .replace(/[^a-z0-9\s]+/g, " ")
+      .replace(/[^\p{L}\p{N}\s]+/gu, " ")
       .split(/\s+/)
       .filter((token) => token.length >= 3),
   );
   const b = new Set(
     right
-      .replace(/[^a-z0-9\s]+/g, " ")
+      .replace(/[^\p{L}\p{N}\s]+/gu, " ")
       .split(/\s+/)
       .filter((token) => token.length >= 3),
   );

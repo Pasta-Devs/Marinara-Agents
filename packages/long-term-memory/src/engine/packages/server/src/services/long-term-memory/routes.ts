@@ -412,6 +412,13 @@ function routeError(error: unknown, fallback: string) {
     (error && typeof error === "object" && "statusCode" in error && "code" in error)
   )
     return ltmErrorResponse(error, fallback);
+  if (error instanceof AggregateError) {
+    logger.error(error, "[ltm] Unexpected aggregate failure in route");
+    return {
+      statusCode: 500,
+      body: { error: fallback, code: "ltm_unexpected_failure" },
+    };
+  }
   const message = error instanceof Error ? error.message : fallback;
   return {
     statusCode: 500,
