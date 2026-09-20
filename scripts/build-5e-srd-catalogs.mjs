@@ -2851,7 +2851,6 @@ const report = {
   damageMeasurementSkippedHiddenDamage: 0,
 };
 
-
 const classes = new Map(srdOnly(await fixture("CharacterClass.json"), "class").map(({ pk, fields }) => [pk, fields]));
 const classNames = new Map([...classes].map(([pk, fields]) => [pk, fields.name]));
 
@@ -3184,9 +3183,7 @@ console.log(
   `  spells a fight resolves: ${report.spellsWithRange} carry a range in feet, ${report.spellsWithoutRange.length} do ` +
     `not (${list(report.spellsWithoutRange, 4)})`,
 );
-console.log(
-  `  spell areas: ${[...report.spellAreasByShape].map(([shape, count]) => `${count} ${shape}`).join(", ")}`,
-);
+console.log(`  spell areas: ${[...report.spellAreasByShape].map(([shape, count]) => `${count} ${shape}`).join(", ")}`);
 console.log(
   `  ${report.spellAreasNotMapped.length} printed shape(s) in a resolvable spell are not an area a fight reads:`,
 );

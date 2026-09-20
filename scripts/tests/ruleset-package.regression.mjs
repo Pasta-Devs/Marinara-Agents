@@ -1638,7 +1638,7 @@ for (const key of ["reach", "range"]) {
           delete combat.attacks[0][key === "reach" ? "range" : "reach"];
         }),
       ),
-      new RegExp(`combat "attacks\\[0\\]\\.${key}" is measured in cells`, "u"),
+    new RegExp(`combat "attacks\\[0\\]\\.${key}" is measured in cells`, "u"),
     key,
   );
 }
@@ -1650,14 +1650,22 @@ for (const [perCell, message] of [
   ["five", /combat distance perCell is a number above zero, not "five"/u],
 ]) {
   assert.throws(
-    () => assertRulesetCombat(positionsManifest, positionsWith((combat) => (combat.distance.perCell = perCell))),
+    () =>
+      assertRulesetCombat(
+        positionsManifest,
+        positionsWith((combat) => (combat.distance.perCell = perCell)),
+      ),
     message,
     String(perCell),
   );
 }
 for (const label of ["", "a much longer unit"]) {
   assert.throws(
-    () => assertRulesetCombat(positionsManifest, positionsWith((combat) => (combat.distance.label = label))),
+    () =>
+      assertRulesetCombat(
+        positionsManifest,
+        positionsWith((combat) => (combat.distance.label = label)),
+      ),
     /combat distance label .* is 1 to 12 characters/u,
     JSON.stringify(label),
   );
@@ -1666,19 +1674,30 @@ for (const label of ["", "a much longer unit"]) {
 // What a long shot and a shot beside a foe cost is a closed pair of words.
 for (const key of ["long", "adjacentFoe"]) {
   assert.throws(
-    () => assertRulesetCombat(positionsManifest, positionsWith((combat) => (combat.ranged[key] = "harder"))),
+    () =>
+      assertRulesetCombat(
+        positionsManifest,
+        positionsWith((combat) => (combat.ranged[key] = "harder")),
+      ),
     new RegExp(`combat ranged ${key} is disadvantage or normal, not "harder"`, "u"),
   );
   // Either may be left out, and then it costs nothing.
   assert.doesNotThrow(() =>
-    assertRulesetCombat(positionsManifest, positionsWith((combat) => delete combat.ranged[key])),
+    assertRulesetCombat(
+      positionsManifest,
+      positionsWith((combat) => delete combat.ranged[key]),
+    ),
   );
 }
 
 // Cover is a whole bonus a defense can hold.
 for (const bonus of [-1, 2.5, 101, "two"]) {
   assert.throws(
-    () => assertRulesetCombat(positionsManifest, positionsWith((combat) => (combat.cover.bonus = bonus))),
+    () =>
+      assertRulesetCombat(
+        positionsManifest,
+        positionsWith((combat) => (combat.cover.bonus = bonus)),
+      ),
     /combat cover bonus is a whole number from 0 to 100/u,
     String(bonus),
   );
@@ -1686,35 +1705,62 @@ for (const bonus of [-1, 2.5, 101, "two"]) {
 
 // A strike at somebody walking away is paid out of a budget the economy really declares.
 assert.throws(
-  () => assertRulesetCombat(positionsManifest, positionsWith((combat) => (combat.opportunity.budget = "reaction"))),
+  () =>
+    assertRulesetCombat(
+      positionsManifest,
+      positionsWith((combat) => (combat.opportunity.budget = "reaction")),
+    ),
   /combat opportunity budget names unknown budget "reaction"/u,
 );
 
 // A weapon's distance is a number column of its own list, or the same number on every row.
 assert.throws(
-  () => assertRulesetCombat(positionsManifest, positionsWith((combat) => (combat.attacks[0].reach = { column: "grip" }))),
+  () =>
+    assertRulesetCombat(
+      positionsManifest,
+      positionsWith((combat) => (combat.attacks[0].reach = { column: "grip" })),
+    ),
   /combat attacks "attacks" reach names unknown column "grip"/u,
 );
 assert.throws(
-  () => assertRulesetCombat(positionsManifest, positionsWith((combat) => (combat.attacks[0].reach = { column: "name" }))),
+  () =>
+    assertRulesetCombat(
+      positionsManifest,
+      positionsWith((combat) => (combat.attacks[0].reach = { column: "name" })),
+    ),
   /combat attacks "attacks" reach must name a number column, not text/u,
 );
 assert.throws(
-  () => assertRulesetCombat(positionsManifest, positionsWith((combat) => (combat.attacks[0].reach = 5))),
+  () =>
+    assertRulesetCombat(
+      positionsManifest,
+      positionsWith((combat) => (combat.attacks[0].reach = 5)),
+    ),
   /combat attacks "attacks" reach names a column or a constant, not 5/u,
 );
 for (const fixed of [-1, 10001]) {
   assert.throws(
-    () => assertRulesetCombat(positionsManifest, positionsWith((combat) => (combat.attacks[0].reach = { const: fixed }))),
+    () =>
+      assertRulesetCombat(
+        positionsManifest,
+        positionsWith((combat) => (combat.attacks[0].reach = { const: fixed })),
+      ),
     /combat attacks "attacks" reach const is a distance from 0 to 10000/u,
     String(fixed),
   );
 }
 assert.doesNotThrow(() =>
-  assertRulesetCombat(positionsManifest, positionsWith((combat) => (combat.attacks[0].reach = { const: 5 }))),
+  assertRulesetCombat(
+    positionsManifest,
+    positionsWith((combat) => (combat.attacks[0].reach = { const: 5 })),
+  ),
 );
 assert.throws(
-  () => assertRulesetCombat(positionsManifest, positionsWith((combat) => (combat.attacks[0].range = { long: { const: 60 } }))),
+  () =>
+    assertRulesetCombat(
+      positionsManifest,
+      positionsWith((combat) => (combat.attacks[0].range = { long: { const: 60 } })),
+    ),
   /combat attacks "attacks" range names the ordinary distance it is shot at/u,
 );
 assert.throws(
@@ -1735,13 +1781,29 @@ assert.doesNotThrow(() =>
 );
 
 // A creature's own distances. Both have been legal since 1.27 and need no `distance` beside them.
-assert.equal(assertRulesetCreatures(creatureManifest, bestiaryDocument((block) => (block.actions[0].reach = 10))), 1);
-assert.equal(assertRulesetCreatures(creatureManifest, bestiaryDocument((block) => (block.actions[0].range = 60))), 1);
+assert.equal(
+  assertRulesetCreatures(
+    creatureManifest,
+    bestiaryDocument((block) => (block.actions[0].reach = 10)),
+  ),
+  1,
+);
+assert.equal(
+  assertRulesetCreatures(
+    creatureManifest,
+    bestiaryDocument((block) => (block.actions[0].range = 60)),
+  ),
+  1,
+);
 for (const [what, edit, message] of [
   ["reach", (block) => (block.actions[0].reach = -5), /action "bite" has a reach of -5, not a distance from 0/u],
   ["reach", (block) => (block.actions[0].reach = 10001), /action "bite" has a reach of 10001/u],
   ["range", (block) => (block.actions[0].range = -1), /action "bite" has a range of -1, not a distance from 0/u],
-  ["range", (block) => (block.actions[0].range = "far"), /action "bite" has a range of "far", not a distance or a pair/u],
+  [
+    "range",
+    (block) => (block.actions[0].range = "far"),
+    /action "bite" has a range of "far", not a distance or a pair/u,
+  ],
   ["speed", (block) => (block.speed = -1), /has a speed of -1, not a distance from 0/u],
   ["speed", (block) => (block.speed = "quick"), /has a speed of "quick", not a distance from 0/u],
 ]) {
