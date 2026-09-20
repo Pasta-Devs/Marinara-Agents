@@ -44,6 +44,8 @@ import { createCharactersStorage } from "../../../services/storage/characters.st
 import { SLURP_PLATFORM_CONTEXT } from "../../modules/prompting/slp-prompt.js";
 import { resolveCreatorCharacterCanon } from "../../data/creators/slp-source-resolve.js";
 import { slurpPromptContext } from "../../base/prompting/slp-prompt-blocks.js";
+import { SLURP_PERFORMED_INTIMACY } from "../../modules/creators/slp-performance.js";
+import { SLURP_DEFAULT_PROMPT_MODE, type SlurpPromptMode } from "../../base/prompting/slp-prompt-modes.js";
 
 type GenerationConnection = NonNullable<Awaited<ReturnType<ReturnType<typeof createConnectionsStorage>["getWithKey"]>>>;
 
@@ -84,9 +86,12 @@ export function buildCreatorReplyMessages(input: {
   /** Holidays and site events running today. See `slurp-platform-events.ts`. */
   platformEvents?: string | null;
   promptBlocks?: SlurpPromptBlockOverrides;
+  /** Which prompt personality to write. Defaults to the shipped mode. */
+  promptMode?: SlurpPromptMode;
 }): ChatMessage[] {
   const protect = (value: string | null | undefined) =>
     protectCreatorGeneratedIdentity(value, input.disclosureMode, input.publicIdentity) ?? "";
+  const produce = (input.promptMode ?? SLURP_DEFAULT_PROMPT_MODE) === "produce";
   const system = composeSlurpPromptBlocks(
     "commentReply",
     [
@@ -110,6 +115,12 @@ export function buildCreatorReplyMessages(input: {
         id: "identity",
         kind: "required" as const,
         text: slpCreatorIdentityInstruction(input.disclosureMode, input.publicIdentity),
+      },
+      {
+        id: "performance",
+        kind: "context" as const,
+        optional: true,
+        text: produce ? SLURP_PERFORMED_INTIMACY : "",
       },
       {
         id: "style",
@@ -203,6 +214,7 @@ export async function generateCreatorReply(input: {
   const disclosureMode = input.creator.settings.privacy.identityDisclosure ?? "open";
   const publicIdentity = await resolveNoodlerPublicIdentity(input.db, input.creator);
   const settings = await createSlurpStorage(input.db).getSettings();
+  const prompts = slurpPromptContext(settings);
   const source = await createSlurpStorage(input.db).resolveAccountSource(input.creator);
   const characterCanon = await resolveCreatorCharacterCanon(input.db, source, disclosureMode);
   const scheduleContext = source
@@ -233,7 +245,8 @@ export async function generateCreatorReply(input: {
     imageContext: imageContexts.get(input.post.id),
     contentMenu: await resolveSlurpCreatorMenu(input.db, input.creator.id).catch(() => ""),
     platformEvents: slurpPlatformEventInstruction(settings.platformEvents, new Date()),
-    promptBlocks: slurpPromptContext(settings).blocks,
+    promptBlocks: prompts.blocks,
+    promptMode: prompts.mode,
   });
   const debugMode = input.debugMode === true || isDebugAgentsEnabled();
   const options = {

@@ -265,6 +265,22 @@ const CLASSIC_PROMPT_DESCRIPTIONS: SlurpPromptDescription[] = [
  * fan-side or world-side and have nothing to do with posting intent: they share classic's entry
  * outright rather than being copied, so exactly one copy of that text exists.
  */
+/** Where produce mode inserts the "you are working" block, relative to each prompt's own blocks. */
+const PERFORMANCE_AFTER: Partial<Record<SlurpPromptId, string>> = {
+  dmReply: "identity",
+  commentReply: "identity",
+  invitedPost: "safety",
+};
+
+function withPerformanceBlock(prompt: SlurpPromptDescription): SlurpPromptDescription {
+  const after = PERFORMANCE_AFTER[prompt.id];
+  if (!after) return prompt;
+  const blocks = prompt.blocks.flatMap((block) =>
+    block.id === after ? [block, { id: "performance", kind: "context" as const, optional: true }] : [block],
+  );
+  return { ...prompt, blocks };
+}
+
 const PRODUCE_PROMPT_DESCRIPTIONS: SlurpPromptDescription[] = CLASSIC_PROMPT_DESCRIPTIONS.map((prompt) =>
   prompt.id === "post"
     ? {
@@ -288,7 +304,7 @@ const PRODUCE_PROMPT_DESCRIPTIONS: SlurpPromptDescription[] = CLASSIC_PROMPT_DES
           ["character", "context"],
         ]),
       }
-    : prompt,
+    : withPerformanceBlock(prompt),
 );
 
 const PROMPT_DESCRIPTIONS: Record<SlurpPromptMode, SlurpPromptDescription[]> = {

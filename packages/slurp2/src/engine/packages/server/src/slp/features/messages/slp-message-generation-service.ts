@@ -84,6 +84,8 @@ import {
   type SlurpModelWorkerContext,
 } from "../../base/model/slp-model-worker.js";
 import { slurpPromptContext } from "../../base/prompting/slp-prompt-blocks.js";
+import { SLURP_PERFORMED_INTIMACY } from "../../modules/creators/slp-performance.js";
+import { SLURP_DEFAULT_PROMPT_MODE, type SlurpPromptMode } from "../../base/prompting/slp-prompt-modes.js";
 
 type GenerationConnection = NonNullable<Awaited<ReturnType<ReturnType<typeof createConnectionsStorage>["getWithKey"]>>>;
 
@@ -139,10 +141,13 @@ export function buildSlurpMessageChat(input: {
   /** A viewer request stays in the untrusted user-data message, never in trusted system guidance. */
   viewerGenerationGuidance?: string;
   promptBlocks?: SlurpPromptBlockOverrides;
+  /** Which prompt personality to write. Defaults to the shipped mode. */
+  promptMode?: SlurpPromptMode;
 }): ChatMessage[] {
   const protect = (value: string | null | undefined) =>
     protectCreatorGeneratedIdentity(value, input.disclosureMode, input.publicIdentity) ?? "";
   const known = input.notes && input.notes.length > 0 ? notesForPrompt(input.notes) : null;
+  const produce = (input.promptMode ?? SLURP_DEFAULT_PROMPT_MODE) === "produce";
   const system = composeSlurpPromptBlocks(
     "dmReply",
     [
@@ -173,6 +178,12 @@ export function buildSlurpMessageChat(input: {
         id: "identity",
         kind: "required" as const,
         text: slpCreatorIdentityInstruction(input.disclosureMode, input.publicIdentity),
+      },
+      {
+        id: "performance",
+        kind: "context" as const,
+        optional: true,
+        text: produce ? SLURP_PERFORMED_INTIMACY : "",
       },
       {
         id: "canon",
@@ -401,6 +412,7 @@ export async function buildSlurpMessagePrompt(input: SlurpMessagePromptInput): P
   const disclosureMode = input.creator.settings.privacy.identityDisclosure ?? "open";
   const publicIdentity = await resolveNoodlerPublicIdentity(input.db, input.creator);
   const settings = await slurp.getSettings();
+  const prompts = slurpPromptContext(settings);
   const source = await slurp.resolveAccountSource(input.creator);
   const characters = createCharactersStorage(input.db);
   const [scheduleContext, recentPostRows] = await Promise.all([
@@ -539,7 +551,8 @@ export async function buildSlurpMessagePrompt(input: SlurpMessagePromptInput): P
     publicIdentity,
     generationGuidance: settings.generationGuidance,
     viewerGenerationGuidance: input.generationGuidance,
-    promptBlocks: slurpPromptContext(settings).blocks,
+    promptBlocks: prompts.blocks,
+    promptMode: prompts.mode,
     scheduleContext,
     characterCanon,
   });

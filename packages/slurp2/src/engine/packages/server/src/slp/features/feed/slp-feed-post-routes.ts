@@ -659,9 +659,11 @@ export async function slpFeedPostRoutes(app: FastifyInstance, deps: SlpRouteDeps
     );
     if (!connection) return reply.code(400).send({ error: "Select a Slurp generation connection first." });
     try {
+      const prompts = slurpPromptContext(settings);
       return await generateInvitedSlpPostDraft(app.db, account!, connection, {
         ...body.data,
-        promptBlocks: slurpPromptContext(settings).blocks,
+        promptBlocks: prompts.blocks,
+        promptMode: prompts.mode,
       });
     } catch (error) {
       if (isConnectionAdmissionFailure(error)) return reply.code(409).send({ error: getErrorMessage(error) });
