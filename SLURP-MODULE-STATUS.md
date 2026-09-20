@@ -107,6 +107,8 @@ The remaining NoodleR names are permanent for Engine contracts, persisted names,
 - The Engine application still does not mount here. Every core asset fails with
   `net::ERR_INSUFFICIENT_RESOURCES`. The host is out of resources: `/tmp` is a full 7.8 GB
   tmpfs and swap is exhausted. This is a host limit, not a package defect.
+- The gap is closed by CI, not by this host. The `Slurp Remastered package browser` job passes on
+  this branch, so the browser suite is green and the failure was environmental throughout.
 
 ## Out Of Scope: Claude Agent SDK Native Binary
 
