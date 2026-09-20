@@ -35,6 +35,12 @@ The remaining NoodleR names are permanent for Engine contracts, persisted names,
 ## Validation
 
 - Package version: `0.1.3`.
+- Artifact: `artifacts/slurp2-0.1.3.zip`, `6783886` bytes, SHA-256
+  `85fb8d871568ba8bf6dea7e9a2d3d5df0c75b2b7d57b167faab1d4ea5a80e9d3`.
+- Engine build worktree: `/home/dev/.paseo/worktrees/1432mxa9/shy-lionfish`, branch
+  `welcome-to-the-agentshop`, commit `92f3eaa5fdd18ba6e56bb2f7548a6cfd66258670`, clean at final
+  inspection. Its `origin/staging` is `57499fcb2b2b9f2f470b7ae6155266ff42046eff`; the merge base
+  is `c324acfdda22475e743c8d026860d38ee3700452`. No reset or clean was used.
 - Route proof: 179 routes, method counts `DELETE 11`, `GET 59`, `PATCH 14`, `POST 90`, `PUT 5`,
   unchanged handler counts, independent `origin/staging` route fixture, and failing method/removal
   fixtures.
