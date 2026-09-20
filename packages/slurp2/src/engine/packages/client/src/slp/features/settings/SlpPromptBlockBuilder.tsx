@@ -287,7 +287,7 @@ export function SlurpPromptBlockBuilder({
           </div>
         </section>
       )}
-      <div className="grid gap-3 lg:grid-cols-2">
+      <div className="space-y-3">
         {prompts.map((prompt) => {
           const layout = completeLayout(prompt, draft[prompt.id]);
           const changed = Boolean(value[prompt.id]?.length);
