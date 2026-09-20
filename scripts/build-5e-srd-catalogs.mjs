@@ -2022,11 +2022,13 @@ function creatureAction(action, attackRow, report) {
     // "plus 7 (2d6) fire damage" is a second helping of the SAME blow, which Capability API 1.29
     // lets an action carry and roll on its own, so resistance and immunity apply to it separately.
     // Only the clauses joined by `plus` qualify: `or` offers an alternative a fight has no way to
-    // choose between, and a clause that lands behind the rider's own save is relieved by that save
-    // rather than by the blow, which one action still cannot say.
-    const extraClauses = riderDamage
-      ? []
-      : dropped.filter((clause) => clause.joiner?.toLowerCase() === "plus").slice(0, CREATURE_MAX_PLUS);
+    // choose between, and a clause that lands BEHIND the rider's own save is relieved by that save
+    // rather than by the blow, which one action still cannot say. One in front of the save belongs
+    // to the blow like any other, so the rider does not take it down with it. No SRD action is
+    // written that way today; the position is read rather than assumed so that one could be.
+    const extraClauses = dropped
+      .filter((clause) => clause.joiner?.toLowerCase() === "plus" && !(riderDamage && clause.at > save.index))
+      .slice(0, CREATURE_MAX_PLUS);
     const carriedClauses = new Set(extraClauses);
     const reach = REACH.exec(text);
     const range = RANGE.exec(text);

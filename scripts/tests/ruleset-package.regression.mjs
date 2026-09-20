@@ -934,6 +934,74 @@ assert.throws(
 assert.doesNotThrow(() =>
   assertRulesetCombat(rulesetManifest({ capabilityApi: { major: 2, minor: 0 } }), combatDocument(combatBlock)),
 );
+
+// What one TURN of a fight can do, each key on its own: a package carrying any of them on an older
+// Engine is refused here rather than at install, where the whole strict file goes.
+const turnMessage = /says what one turn of a fight can do and must declare capability API 1\.29 or newer/u;
+const atCombatApi = (edit) => () => assertRulesetCombat(combatManifest, combatWith(edit));
+assert.throws(
+  atCombatApi((combat) => (combat.attacks[0].strikes = { const: 2 })),
+  turnMessage,
+);
+assert.throws(
+  atCombatApi((combat) => (combat.conditions[0].saves = ["str_save"])),
+  turnMessage,
+);
+assert.throws(
+  atCombatApi((combat) => (combat.conditions[0].whileSourceInSight = true)),
+  turnMessage,
+);
+assert.throws(
+  atCombatApi((combat) => (combat.conditions[0].endsWhenSourceDown = true)),
+  turnMessage,
+);
+assert.throws(
+  atCombatApi((combat) => (combat.conditions[0].effects = ["resist-all"])),
+  turnMessage,
+);
+assert.throws(
+  atCombatApi((combat) => (combat.standardEffects = { dodge: { saves: ["str_save"] } })),
+  turnMessage,
+);
+// An effect the older list already held asks for nothing newer.
+assert.doesNotThrow(atCombatApi((combat) => (combat.conditions[0].effects = ["cannot-act"])));
+const turnManifest = rulesetManifest({ capabilityApi: { major: 1, minor: 29 } });
+assert.doesNotThrow(() =>
+  assertRulesetCombat(
+    turnManifest,
+    combatWith((combat) => (combat.conditions[0].effects = ["resist-all"])),
+  ),
+);
+
+// A weapon held to one strike by a column of its own row, and the Engine that reads the key.
+const capManifest = rulesetManifest({ capabilityApi: { major: 1, minor: 32 } });
+const capped = (edit) =>
+  combatWith((combat) => {
+    combat.attacks[0].strikes = { const: 2 };
+    combat.attacks[0].strikesCappedBy = { column: "proficient" };
+    edit?.(combat);
+  });
+assert.doesNotThrow(() => assertRulesetCombat(capManifest, capped()));
+assert.throws(
+  () => assertRulesetCombat(turnManifest, capped()),
+  /caps a weapon's strikes and must declare capability API 1\.32 or newer/u,
+);
+assert.throws(
+  () =>
+    assertRulesetCombat(
+      capManifest,
+      capped((combat) => delete combat.attacks[0].strikes),
+    ),
+  /caps strikes on a list that buys one a spend anyway/u,
+);
+assert.throws(
+  () =>
+    assertRulesetCombat(
+      capManifest,
+      capped((combat) => (combat.attacks[0].strikesCappedBy.column = "bonus")),
+    ),
+  /strikesCappedBy names "bonus", which is not a boolean column of "attacks"/u,
+);
 assert.throws(
   () =>
     assertRulesetCombat(

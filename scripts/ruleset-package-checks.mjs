@@ -66,6 +66,31 @@ export const RULESET_CREATURES_MIN_CAPABILITY_API = Object.freeze({ major: 1, mi
 // reads them.
 export const RULESET_POSITIONS_MIN_CAPABILITY_API = Object.freeze({ major: 1, minor: 28 });
 
+// What one TURN of a fight can do: an attack list that buys several strikes with
+// one spend, a condition narrowed to certain saves or tied to the creature that
+// caused it, an effect outside the list an older Engine knew, and the part of a
+// standard action a flag alone does not carry. All of it lives in `ruleset.json`,
+// so an Engine that does not know the keys refuses the whole strict file.
+export const RULESET_TURN_MIN_CAPABILITY_API = Object.freeze({ major: 1, minor: 29 });
+
+// The condition effects an Engine before 1.29 knew. Written out rather than sliced
+// off the list below, because the question this asks is what an OLDER Engine would
+// refuse, which is fixed however long the current list grows.
+const OLD_CONDITION_EFFECTS = Object.freeze([
+  "own-attacks-advantage",
+  "own-attacks-disadvantage",
+  "attacks-against-advantage",
+  "attacks-against-disadvantage",
+  "attacks-against-adjacent-advantage",
+  "attacks-against-far-disadvantage",
+  "attacks-from-adjacent-critical",
+  "cannot-act",
+  "cannot-react",
+  "speed-zero",
+  "half-move-to-stand",
+  "ends-on-damage",
+]);
+
 // An attack source may name a boolean column that holds ITS OWN row to a single
 // strike however many the list buys, for a weapon that fires once a turn whatever
 // its wielder's count. It lives in `ruleset.json`, so an older Engine refuses the
@@ -635,6 +660,28 @@ export function assertRulesetCombat(manifest, document) {
   }
   if (combat.kind !== "attack-vs-defense") {
     throw new Error(`${id} combat kind ${JSON.stringify(combat.kind)} is not one the Engine resolves`);
+  }
+
+  // The same reading the Engine makes before it installs the package: any one of these keys and an
+  // Engine that predates them refuses the file, so the package says which Engine it needs.
+  const turnKeys = ["saves", "whileSourceInSight", "endsWhenSourceDown"];
+  const carriesTurn =
+    combat.standardEffects !== undefined ||
+    (combat.attacks ?? []).some((source) => source?.strikes !== undefined) ||
+    (combat.conditions ?? []).some(
+      (entry) =>
+        turnKeys.some((key) => entry?.[key] !== undefined) ||
+        (entry?.effects ?? []).some(
+          (effect) => RULESET_COMBAT_CONDITION_EFFECTS.includes(effect) && !OLD_CONDITION_EFFECTS.includes(effect),
+        ),
+    );
+  if (carriesTurn) {
+    const turnApi = RULESET_TURN_MIN_CAPABILITY_API;
+    if (!meetsCapabilityApi(manifest, turnApi)) {
+      throw new Error(
+        `${id} says what one turn of a fight can do and must declare capability API ${turnApi.major}.${turnApi.minor} or newer`,
+      );
+    }
   }
 
   const names = sheetNames(document);
