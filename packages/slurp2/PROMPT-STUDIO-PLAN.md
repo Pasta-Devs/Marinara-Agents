@@ -15,7 +15,7 @@ internal prompt implementation.
 | 3     | Make prompt preview explicit and preserve draft context  | Complete    | c7a1e41e |
 | 4     | Remove visible Classic mode and migrate Produce defaults | Complete    | 95c7a1df |
 | 5     | Add a draft-aware compiled prompt preview contract       | Complete    | b464ba1e |
-| 6     | Add explicit model-generated result preview              | Complete    | —        |
+| 6     | Add explicit model-generated result preview              | Complete    | 4a122cd5 |
 
 ## Slice 1 proof
 
