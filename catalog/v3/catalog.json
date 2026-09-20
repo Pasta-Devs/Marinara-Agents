@@ -3528,7 +3528,7 @@
         "schemaVersion": 1,
         "id": "world-state",
         "name": "World State",
-        "version": "1.1.0",
+        "version": "1.1.1",
         "description": "Tracks date, time, weather, location, temperature, and custom world details automatically. Add the Agent in Chat Settings → Agents → Tracker Agents for Roleplay mode.",
         "engine": {
           "min": "2.3.0",
@@ -3543,8 +3543,8 @@
         "files": [
           {
             "path": "agents.json",
-            "sha256": "45e832101a2f1573e00f8b4f0619a67e798e5ff1503a4d1c3356af83f13ed0bb",
-            "bytes": 2866
+            "sha256": "17e601d2b352ab5da72fdf95e392d8cbe1abdeb22a5aa20d79d1447f1416f7dd",
+            "bytes": 3256
           }
         ],
         "permissions": [
@@ -3559,9 +3559,9 @@
       "category": "tracker",
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/world-state.png",
       "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/world-state-1.1.0.zip",
-        "sha256": "bedf93879675900da43eedf85320898788fd54920342070ba8dba6b24e339f49",
-        "bytes": 2004
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/world-state-1.1.1.zip",
+        "sha256": "12e15c4a54cd6d5c48ce9c79457bd7861957d6451d827048a2f29941288b2bed",
+        "bytes": 2165
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Engine/blob/staging/docs/agents/built-in-agents.md#world-state"
     }

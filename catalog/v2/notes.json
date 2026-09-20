@@ -436,6 +436,12 @@
     "world-state": {
       "versions": [
         {
+          "version": "1.1.1",
+          "date": "2026-09-19",
+          "notes": "- Tightened source authority and uncertainty handling for world-state updates.",
+          "highlight": false
+        },
+        {
           "version": "1.1.0",
           "date": "2026-09-14",
           "notes": "- On compatible Engines, report only changed or removed tracker values while preserving unchanged state and locked rows. Older Engines retain the full-output format.",
