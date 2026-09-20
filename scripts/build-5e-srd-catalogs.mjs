@@ -3066,10 +3066,18 @@ function combatBlock(tiers) {
       {
         // "A charmed creature can't attack the charmer or target the charmer with harmful abilities
         // or magical effects." The second half, the charmer's advantage on social checks, is not a
-        // fight rule and has no effect to carry it. The SRD does not say a charm ends when the
-        // charmer drops, so this does not say so either.
+        // fight rule and has no effect to carry it.
+        //
+        // `endsWhenSourceDown` is a FAILSAFE rather than a quotation. In 5e the thing that caused
+        // the charm says when it ends, and the sentence is always on the spell: Charm Person ends
+        // "if you or your companions do anything harmful to it", Dominate Person when the spell
+        // ends, and so on. A fight cannot read any of that, so without this a charmer who drops
+        // leaves their victim charmed for the rest of the battle with nothing able to lift it. The
+        // Engine ends it when the source goes down, which is the one moment it can see, and every
+        // way a combatant goes down runs through that one path.
         condition: "charmed",
         effects: ["cannot-target-source"],
+        endsWhenSourceDown: true,
       },
       {
         // "A frightened creature has disadvantage on ability checks and attack rolls WHILE THE

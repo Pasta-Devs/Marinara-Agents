@@ -38,8 +38,8 @@
         "files": [
           {
             "path": "ruleset.json",
-            "sha256": "e2d84b5b0ce72b7fca494c93fe4140eb61391b1053446252e7eab1e1a633c134",
-            "bytes": 83644
+            "sha256": "ae452acac563a47fb66ab272b70d38fa6defdfa2e396413922e8246fba99930a",
+            "bytes": 83672
           },
           {
             "path": "catalogs/spells.json",
@@ -64,8 +64,8 @@
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/ruleset-5e-2014.png",
       "artifact": {
         "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/ruleset-5e-2014-0.7.0.zip",
-        "sha256": "4e172a9fc6fc8ad012676fe501bf92da33bd2699d4dace6c0250f2ac25d7c61c",
-        "bytes": 1287568
+        "sha256": "110a7429d3b25520698a2121d99597f4e5ffd348843ed42fbf3ccff161d18797",
+        "bytes": 1287596
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Engine/blob/staging/docs/game/getting-started.md#choosing-rules"
     }

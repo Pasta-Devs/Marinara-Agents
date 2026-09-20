@@ -411,6 +411,13 @@ A fight plays, so this is the honest list of what it still does not do:
 - **A class feature's own difficulty** is not the spell save DC, so the Features list rolls neither
   to hit nor against a difficulty. No entry this package ships needs one; an entry that did would
   stop the build rather than borrow the caster's number.
+- **A charm lifts when the charmer goes down**, which the SRD does not say in so many words. In 5e
+  the thing that caused a charm is what says when it ends, and that sentence is always on the spell:
+  Charm Person ends "if you or your companions do anything harmful to it", Dominate Person when the
+  spell ends, and so on. A fight cannot read any of that. Without a failsafe a charmer who drops
+  would leave their victim charmed for the rest of the battle, because this package's charms run
+  600 rounds for Charm Person and Dominate Monster and 10 for the others. So the condition ends
+  when its source goes down, which is the one moment a fight can see.
 - **Loading does not cap a strike count.** SRD Loading says you fire only one piece of ammunition
   when you use an action to fire, "regardless of the number of attacks you can normally make", and
   the four weapons that have it (both hand and heavy and light crossbows, and the blowgun) carry it

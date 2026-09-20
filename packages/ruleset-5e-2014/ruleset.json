@@ -2414,7 +2414,7 @@
         "condition": "blinded",
         "effects": ["own-attacks-disadvantage", "attacks-against-advantage"]
       },
-      { "condition": "charmed", "effects": ["cannot-target-source"] },
+      { "condition": "charmed", "effects": ["cannot-target-source"], "endsWhenSourceDown": true },
       {
         "condition": "frightened",
         "effects": ["own-attacks-disadvantage", "cannot-approach-source"],

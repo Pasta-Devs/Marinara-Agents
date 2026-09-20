@@ -4,7 +4,7 @@
 - Extra Attack works. Set Attacks per Attack action on your sheet and one Attack buys that many strikes: the first spends the action, the rest are free, and you may change weapon or target and walk between them.
 - Sneak Attack is a rider your rogue simply has: hit with a finesse or ranged weapon while you have advantage, or while another enemy stands beside your target. It grows with the Rogue table, 1d6 to 10d6.
 - Action Surge hands you a second action and costs nothing. Cunning Action puts Dash, Disengage and Hide on your menu for a bonus action.
-- Dodge now also gives advantage on Dexterity saves. Charmed stops you turning on the charmer, frightened stops you walking closer, restrained hampers Dexterity saves only, and petrified halves all damage.
+- Dodge now also gives advantage on Dexterity saves. Charmed stops you turning on the charmer and lifts if the charmer goes down, frightened stops you walking closer, restrained hampers Dexterity saves only, and petrified halves all damage.
 - Weapon rows you already picked do not know whether they are finesse or ranged, so Sneak Attack will not come off them. Pick them again, or tick the new box.
 - Needs an Engine with Capability API 1.29.
 
