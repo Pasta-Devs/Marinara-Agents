@@ -318,7 +318,9 @@ async function main() {
       /quota exceeded/u,
     );
     assert.equal(calls.length, 1, "permanent quota errors do not trigger compatibility fallback");
-    const { processLongTermMemorySource } = await import(`${source}/source-processing.ts`);
+    const { processLongTermMemorySource, processLongTermMemorySourceBatch } = await import(
+      `${source}/source-processing.ts`
+    );
     const { LongTermMemoryStorage } = await import(`${source}/storage.ts`);
     const { LongTermMemoryDraftStore } = await import(`${source}/draft-store.ts`);
     const commitRoot = await mkdtemp(join(tmpdir(), "marinara-ltm-source-commit-"));
@@ -342,6 +344,198 @@ async function main() {
         evidence: [`source_note:${committedSource.id}`],
         links: [{ target: committedSource.id, relation: "extracted_from" }],
       };
+
+      const failedBatch = await processLongTermMemorySourceBatch({
+        items: [
+          {
+            sourceId: committedSource.id,
+            title: committedSource.title!,
+            note: committedSource,
+            created: false,
+            extractionMode: "roleplay",
+          },
+        ],
+        operationId: randomUUID(),
+        signal: new AbortController().signal,
+        concurrency: 1,
+        root: commitRoot,
+      });
+      assert.equal(failedBatch[0]?.extractionStatus, "failed");
+      assert.equal(failedBatch[0]?.error?.code, "ltm_model_configuration");
+      assert.equal(failedBatch[0]?.retryable, false);
+
+      const providerFailureCases = [
+        { status: 429, code: "insufficient_quota", retryable: false },
+        { code: "quota_exceeded", retryable: false },
+        { status: 429, code: "rate_limit_exceeded", retryable: true },
+      ];
+      for (const failureCase of providerFailureCases) {
+        options.languageModel.chatComplete = async () => {
+          throw Object.assign(new Error(failureCase.code), failureCase);
+        };
+        const providerFailure = await processLongTermMemorySourceBatch({
+          items: [
+            {
+              sourceId: committedSource.id,
+              title: committedSource.title!,
+              note: committedSource,
+              created: false,
+              extractionMode: "roleplay",
+            },
+          ],
+          languageModel: options.languageModel,
+          operationId: randomUUID(),
+          signal: new AbortController().signal,
+          concurrency: 1,
+          root: commitRoot,
+        });
+        assert.equal(providerFailure[0]?.error?.code, failureCase.code);
+        assert.equal(providerFailure[0]?.retryable, failureCase.retryable);
+      }
+
+      const deterministicSource = await storage.createNote({
+        id: "source_deterministic_batch",
+        title: "Deterministic batch source",
+        type: "source",
+        status: "active",
+        modes: ["game"],
+        scope: { chatId: "chat-a", chatIds: ["chat-a"] },
+        tags: ["source_summary"],
+        keywords: [],
+        links: [],
+        provenance: { kind: "chat_summary", sourceId: "chat-a", entryId: "summary-deterministic-batch" },
+        sections: { source: { text: "## world_fact\nVault: The moon vault is sealed.", updatedAt: timestamp } },
+      });
+      const filteredTarget = await storage.createNote({
+        id: "world_deterministic_target",
+        title: "Moon vault",
+        type: "world",
+        status: "active",
+        modes: ["game"],
+        scope: { chatId: "chat-a", chatIds: ["chat-a"] },
+        tags: [],
+        keywords: [],
+        links: [],
+        sections: { facts: { text: "The moon vault was opened.", updatedAt: timestamp } },
+      });
+      const excludedTarget = await storage.createNote({
+        id: "world_deterministic_excluded",
+        title: "Excluded moon vault",
+        type: "world",
+        status: "active",
+        modes: ["game"],
+        scope: { chatId: "chat-b", chatIds: ["chat-b"] },
+        tags: [],
+        keywords: [],
+        links: [],
+        sections: { facts: { text: "The moon vault is sealed.", updatedAt: timestamp } },
+      });
+      const deterministicSecondSource = await storage.createNote({
+        id: "source_deterministic_batch_second",
+        title: "Second deterministic source",
+        type: "source",
+        status: "active",
+        modes: ["game"],
+        scope: { chatId: "chat-a", chatIds: ["chat-a"] },
+        tags: ["source_summary"],
+        keywords: [],
+        links: [],
+        provenance: { kind: "chat_summary", sourceId: "chat-a", entryId: "summary-deterministic-batch-second" },
+        sections: { source: { text: "## world_fact\nVault: The moon vault is sealed.", updatedAt: timestamp } },
+      });
+      const originalListNotes = LongTermMemoryStorage.prototype.listNotes;
+      let listNotesCalls = 0;
+      LongTermMemoryStorage.prototype.listNotes = async function (...args: any[]) {
+        listNotesCalls += 1;
+        return originalListNotes.apply(this, args);
+      };
+      try {
+        const deterministicBatch = await processLongTermMemorySourceBatch({
+          items: [
+            {
+              sourceId: deterministicSource.id,
+              title: deterministicSource.title!,
+              note: deterministicSource,
+              created: false,
+              extractionMode: "game",
+              deterministicSourceText: "## world_fact\nVault: The moon vault is sealed.",
+            },
+            {
+              sourceId: "source_deterministic_batch_second",
+              title: "Second deterministic source",
+              note: deterministicSecondSource,
+              created: true,
+              extractionMode: "game",
+              deterministicSourceText: "## world_fact\nVault: The moon vault is sealed.",
+            },
+          ],
+          languageModel: options.languageModel,
+          operationId: randomUUID(),
+          signal: new AbortController().signal,
+          concurrency: 2,
+          root: commitRoot,
+          directGameMode: true,
+        });
+        assert.deepEqual(
+          deterministicBatch.map((result) => result.extractionStatus),
+          ["succeeded", "succeeded"],
+        );
+        assert.equal(
+          listNotesCalls,
+          2,
+          "deterministic batches must use one preparation snapshot plus one rebuild scan",
+        );
+        assert.equal(deterministicBatch[0]?.outcome.droppedUnits, 0);
+        assert.equal(deterministicBatch[1]?.outcome.droppedUnits, 0);
+        assert.ok(deterministicBatch[0]?.draft?.mutations.length);
+        assert.equal(filteredTarget.id, "world_deterministic_target");
+        assert.equal(JSON.stringify(deterministicBatch[0]?.draft).includes(excludedTarget.id), false);
+      } finally {
+        LongTermMemoryStorage.prototype.listNotes = originalListNotes;
+      }
+
+      const originalListNotesForFailure = LongTermMemoryStorage.prototype.listNotes;
+      let snapshotFailureArmed = false;
+      LongTermMemoryStorage.prototype.listNotes = async function () {
+        if (snapshotFailureArmed) throw new Error("snapshot unavailable");
+        return originalListNotesForFailure.call(this);
+      };
+      try {
+        options.languageModel.chatComplete = async () => {
+          snapshotFailureArmed = true;
+          return { content: validContent, finishReason: "stop" };
+        };
+        const snapshotFailureBatch = await processLongTermMemorySourceBatch({
+          items: [
+            {
+              sourceId: committedSource.id,
+              title: committedSource.title!,
+              note: committedSource,
+              created: false,
+              extractionMode: "roleplay",
+            },
+            {
+              sourceId: deterministicSource.id,
+              title: deterministicSource.title!,
+              note: deterministicSource,
+              created: false,
+              extractionMode: "game",
+              deterministicSourceText: "## world_fact\nVault: The moon vault is sealed.",
+            },
+          ],
+          languageModel: options.languageModel,
+          operationId: randomUUID(),
+          signal: new AbortController().signal,
+          concurrency: 1,
+          root: commitRoot,
+          directGameMode: true,
+        });
+        assert.equal(snapshotFailureBatch[0]?.extractionStatus, "succeeded", JSON.stringify(snapshotFailureBatch[0]));
+        assert.equal(snapshotFailureBatch[1]?.extractionStatus, "failed");
+        assert.equal(snapshotFailureBatch[1]?.error?.code, "extract_failed");
+      } finally {
+        LongTermMemoryStorage.prototype.listNotes = originalListNotesForFailure;
+      }
 
       // A failed preparation must leave the source note untouched even when a different context is requested.
       options.languageModel.chatComplete = async () => {

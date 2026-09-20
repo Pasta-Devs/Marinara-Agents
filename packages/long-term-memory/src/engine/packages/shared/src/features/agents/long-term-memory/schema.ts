@@ -2703,7 +2703,7 @@ export const ltmImportedSourceResultSchema = z
     ltmImportedSourceResultBaseSchema
       .extend({
         extractionStatus: z.literal("failed"),
-        retryable: z.literal(true),
+        retryable: z.boolean(),
         error: z
           .object({
             code: z.string().min(1).max(120),
