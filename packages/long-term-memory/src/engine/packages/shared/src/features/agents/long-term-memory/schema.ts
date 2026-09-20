@@ -2819,7 +2819,7 @@ export const ltmImportSourceNotesResponseSchema = z
     const expectedBatchStatus =
       incomplete === 0 && !hasIncomplete
         ? "success"
-        : response.counts.succeeded > 0 || response.imported.some((item) => item.extractionStatus === "incomplete")
+        : response.counts.succeeded > 0 || hasIncomplete
           ? "partial_success"
           : response.counts.cancelled > 0 &&
               response.counts.failed === 0 &&
