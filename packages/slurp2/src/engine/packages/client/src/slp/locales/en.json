@@ -2149,6 +2149,8 @@
   "ui.slurp.settings.prompts.previewBlock": "Preview prompt block",
   "ui.slurp.settings.prompts.previewCreator": "Preview blocks as",
   "ui.slurp.settings.prompts.previewLoading": "Rendering...",
+  "ui.slurp.settings.prompts.previewRendering": "Rendering preview...",
+  "ui.slurp.settings.prompts.refreshPreview": "Refresh preview",
   "ui.slurp.settings.prompts.previewError": "Could not render this block.",
   "ui.slurp.settings.prompts.previewEmpty": "This block adds nothing for this Creator right now.",
   "ui.slurp.settings.prompts.previewNoCreator": "Set up a Creator first. A block is rendered for a real Creator, not from a sample.",
