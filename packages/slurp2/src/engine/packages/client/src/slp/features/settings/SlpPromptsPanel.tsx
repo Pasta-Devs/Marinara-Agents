@@ -50,10 +50,38 @@ export function SlpPromptsPanel(page: SlpBackstagePageProps) {
   return (
     <div className="space-y-4">
       <BackstagePageHeader
-        title={t("ui.slurp.settings.backstage.sections.prompts")}
-        detail={t("ui.slurp.settings.backstage.landing.promptsDetail")}
+        title={t("ui.slurp.settings.prompts.studioTitle", { defaultValue: "Prompt Studio" })}
+        detail={t("ui.slurp.settings.prompts.studioDetail", {
+          defaultValue: "Shape how Slurp thinks, writes, and produces content for your Creators.",
+        })}
         scope="all-slurp"
       />
+      <section
+        aria-labelledby="slurp-prompt-studio-scope"
+        className="rounded-xl bg-[var(--slurp-surface-raised)] p-4 ring-1 ring-inset ring-[var(--slurp-outline)] sm:p-5"
+      >
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+          <div className="min-w-0">
+            <h2 id="slurp-prompt-studio-scope" className="text-sm font-bold">
+              {t("ui.slurp.settings.prompts.scopeTitle", { defaultValue: "Prompt scope" })}
+            </h2>
+            <p className="mt-1 max-w-2xl text-sm leading-6 text-[var(--slurp-muted)]">
+              {t("ui.slurp.settings.prompts.scopeDetail", {
+                defaultValue:
+                  "These defaults apply to every Creator. Choose a Creator in the advanced builder when you need to inspect the runtime context used by a preview.",
+              })}
+            </p>
+          </div>
+          <div className="flex shrink-0 flex-wrap gap-2 text-xs font-semibold">
+            <span className="rounded-full bg-[var(--slurp-canvas)] px-3 py-1.5 text-[var(--slurp-violet)] ring-1 ring-inset ring-[var(--slurp-violet)]/25">
+              {t("ui.slurp.settings.prompts.globalDefaults", { defaultValue: "Global defaults" })}
+            </span>
+            <span className="rounded-full bg-[var(--slurp-canvas)] px-3 py-1.5 text-[var(--slurp-muted)] ring-1 ring-inset ring-[var(--slurp-outline)]">
+              {t("ui.slurp.settings.prompts.producePipeline", { defaultValue: "Produce pipeline" })}
+            </span>
+          </div>
+        </div>
+      </section>
       <div className="space-y-5 rounded-xl bg-[var(--slurp-surface-raised)] p-4 ring-1 ring-inset ring-[var(--slurp-outline)] sm:p-5">
         <SectionTitle
           title={t("ui.slurp.settings.prompts.textTitle")}
@@ -200,7 +228,10 @@ export function SlpPromptsPanel(page: SlpBackstagePageProps) {
           </div>
         </Field>
       </div>
-      <div className="space-y-5 rounded-xl bg-[var(--slurp-surface-raised)] p-4 ring-1 ring-inset ring-[var(--slurp-outline)] sm:p-5">
+      <div
+        id="slurp-prompt-builder"
+        className="space-y-5 rounded-xl bg-[var(--slurp-surface-raised)] p-4 ring-1 ring-inset ring-[var(--slurp-outline)] sm:p-5"
+      >
         <SectionTitle
           title={t("ui.slurp.settings.prompts.blockBuildersTitle", { defaultValue: "Prompt block builders" })}
           detail={t("ui.slurp.settings.prompts.blockBuildersDetail", {
