@@ -2,7 +2,7 @@
   "$comment": "First-party 5e ruleset on SRD 5.1. Every id here is this file's own choice: the Engine never looks for 'level', 'dex' or 'slots'. A $comment key is allowed on any object and ignored.",
   "schemaVersion": 1,
   "id": "5e-2014",
-  "version": 5,
+  "version": 6,
   "name": "5e (SRD 5.1)",
   "edition": "System Reference Document 5.1, 2014 rules",
   "license": {
@@ -16,7 +16,7 @@
     "resources": true,
     "rests": true,
     "combat": true,
-    "summary": "Ability checks, skill checks, saving throws, the full character sheet, spell slots, hit dice, class resources, conditions, rests, and 5e combat itself: attack rolls against Armor Class with advantage and criticals, saves, concentration, death saves and the SRD monsters. Not yet: positions and movement, reactions, the window a legendary action is spent in, and a second damage roll on one action."
+    "summary": "Ability checks, skill checks, saving throws, the full character sheet, spell slots, hit dice, class resources, conditions, rests, and 5e combat: attack rolls against Armor Class with advantage and criticals, saves, concentration, death saves, the SRD monsters, and a fight on a board in feet with movement, reach, range, cover and areas. Not yet: chosen reactions, elevation, grapple and shove."
   },
   "resolution": {
     "kind": "dice-sum",
@@ -89,7 +89,7 @@
     ]
   },
   "sheet": {
-    "version": 1,
+    "version": 2,
     "sections": [
       {
         "id": "identity",
@@ -686,6 +686,33 @@
             "label": "Damage type",
             "type": "text",
             "maxLength": 30
+          },
+          {
+            "$comment": "How far this weapon strikes on a board, in feet. SRD 5.1 Melee Attacks: \"you can attack a target within 5 feet of you\", and the Reach property: \"This weapon adds 5 feet to your reach when you attack with it.\" A row that only shoots reads 0.",
+            "id": "reach",
+            "label": "Reach (ft)",
+            "type": "number",
+            "min": 0,
+            "max": 120,
+            "default": 5
+          },
+          {
+            "$comment": "The ordinary distance this weapon is thrown or shot, in feet. SRD 5.1 Range: \"A weapon that can be used to make a ranged attack has a range in parentheses after the ammunition or thrown property.\" 0 is a weapon that is neither thrown nor shot.",
+            "id": "range",
+            "label": "Range (ft)",
+            "type": "number",
+            "min": 0,
+            "max": 1000,
+            "default": 0
+          },
+          {
+            "$comment": "The longer distance the same shot still carries, in feet. SRD 5.1 Range: \"Your attack has disadvantage when your target is beyond normal range, and you can't attack a target beyond the long range.\"",
+            "id": "long_range",
+            "label": "Long range (ft)",
+            "type": "number",
+            "min": 0,
+            "max": 1000,
+            "default": 0
           }
         ]
       },
@@ -1203,7 +1230,10 @@
                 "proficient": true,
                 "bonus": 0,
                 "damage": "1d8",
-                "damage_type": "slashing"
+                "damage_type": "slashing",
+                "reach": 5,
+                "range": 0,
+                "long_range": 0
               }
             }
           ],
@@ -1229,7 +1259,10 @@
                 "proficient": true,
                 "bonus": 0,
                 "damage": "1",
-                "damage_type": "piercing"
+                "damage_type": "piercing",
+                "reach": 0,
+                "range": 25,
+                "long_range": 100
               }
             }
           ],
@@ -1255,7 +1288,10 @@
                 "proficient": true,
                 "bonus": 0,
                 "damage": "1d4",
-                "damage_type": "bludgeoning"
+                "damage_type": "bludgeoning",
+                "reach": 5,
+                "range": 0,
+                "long_range": 0
               }
             }
           ],
@@ -1281,7 +1317,10 @@
                 "proficient": true,
                 "bonus": 0,
                 "damage": "1d6",
-                "damage_type": "piercing"
+                "damage_type": "piercing",
+                "reach": 0,
+                "range": 30,
+                "long_range": 120
               }
             }
           ],
@@ -1307,7 +1346,10 @@
                 "proficient": true,
                 "bonus": 0,
                 "damage": "1d10",
-                "damage_type": "piercing"
+                "damage_type": "piercing",
+                "reach": 0,
+                "range": 100,
+                "long_range": 400
               }
             }
           ],
@@ -1333,7 +1375,10 @@
                 "proficient": true,
                 "bonus": 0,
                 "damage": "1d8",
-                "damage_type": "piercing"
+                "damage_type": "piercing",
+                "reach": 0,
+                "range": 80,
+                "long_range": 320
               }
             }
           ],
@@ -1359,7 +1404,10 @@
                 "proficient": true,
                 "bonus": 0,
                 "damage": "1d4",
-                "damage_type": "piercing"
+                "damage_type": "piercing",
+                "reach": 5,
+                "range": 20,
+                "long_range": 60
               }
             }
           ],
@@ -1385,7 +1433,10 @@
                 "proficient": true,
                 "bonus": 0,
                 "damage": "1d4",
-                "damage_type": "piercing"
+                "damage_type": "piercing",
+                "reach": 0,
+                "range": 20,
+                "long_range": 60
               }
             }
           ],
@@ -1411,7 +1462,10 @@
                 "proficient": true,
                 "bonus": 0,
                 "damage": "1d8",
-                "damage_type": "bludgeoning"
+                "damage_type": "bludgeoning",
+                "reach": 5,
+                "range": 0,
+                "long_range": 0
               }
             }
           ],
@@ -1437,7 +1491,10 @@
                 "proficient": true,
                 "bonus": 0,
                 "damage": "1d10",
-                "damage_type": "slashing"
+                "damage_type": "slashing",
+                "reach": 10,
+                "range": 0,
+                "long_range": 0
               }
             }
           ],
@@ -1463,7 +1520,10 @@
                 "proficient": true,
                 "bonus": 0,
                 "damage": "1d12",
-                "damage_type": "slashing"
+                "damage_type": "slashing",
+                "reach": 5,
+                "range": 0,
+                "long_range": 0
               }
             }
           ],
@@ -1489,7 +1549,10 @@
                 "proficient": true,
                 "bonus": 0,
                 "damage": "1d8",
-                "damage_type": "bludgeoning"
+                "damage_type": "bludgeoning",
+                "reach": 5,
+                "range": 0,
+                "long_range": 0
               }
             }
           ],
@@ -1515,7 +1578,10 @@
                 "proficient": true,
                 "bonus": 0,
                 "damage": "2d6",
-                "damage_type": "slashing"
+                "damage_type": "slashing",
+                "reach": 5,
+                "range": 0,
+                "long_range": 0
               }
             }
           ],
@@ -1541,7 +1607,10 @@
                 "proficient": true,
                 "bonus": 0,
                 "damage": "1d10",
-                "damage_type": "slashing"
+                "damage_type": "slashing",
+                "reach": 10,
+                "range": 0,
+                "long_range": 0
               }
             }
           ],
@@ -1567,7 +1636,10 @@
                 "proficient": true,
                 "bonus": 0,
                 "damage": "1d6",
-                "damage_type": "slashing"
+                "damage_type": "slashing",
+                "reach": 5,
+                "range": 20,
+                "long_range": 60
               }
             }
           ],
@@ -1593,7 +1665,10 @@
                 "proficient": true,
                 "bonus": 0,
                 "damage": "1d6",
-                "damage_type": "piercing"
+                "damage_type": "piercing",
+                "reach": 5,
+                "range": 30,
+                "long_range": 120
               }
             }
           ],
@@ -1619,7 +1694,10 @@
                 "proficient": true,
                 "bonus": 0,
                 "damage": "1d12",
-                "damage_type": "piercing"
+                "damage_type": "piercing",
+                "reach": 10,
+                "range": 0,
+                "long_range": 0
               }
             }
           ],
@@ -1645,7 +1723,10 @@
                 "proficient": true,
                 "bonus": 0,
                 "damage": "1d4",
-                "damage_type": "bludgeoning"
+                "damage_type": "bludgeoning",
+                "reach": 5,
+                "range": 20,
+                "long_range": 60
               }
             }
           ],
@@ -1671,7 +1752,10 @@
                 "proficient": true,
                 "bonus": 0,
                 "damage": "1d8",
-                "damage_type": "piercing"
+                "damage_type": "piercing",
+                "reach": 0,
+                "range": 150,
+                "long_range": 600
               }
             }
           ],
@@ -1697,7 +1781,10 @@
                 "proficient": true,
                 "bonus": 0,
                 "damage": "1d8",
-                "damage_type": "slashing"
+                "damage_type": "slashing",
+                "reach": 5,
+                "range": 0,
+                "long_range": 0
               }
             }
           ],
@@ -1723,7 +1810,10 @@
                 "proficient": true,
                 "bonus": 0,
                 "damage": "1d6",
-                "damage_type": "bludgeoning"
+                "damage_type": "bludgeoning",
+                "reach": 5,
+                "range": 0,
+                "long_range": 0
               }
             }
           ],
@@ -1749,7 +1839,10 @@
                 "proficient": true,
                 "bonus": 0,
                 "damage": "2d6",
-                "damage_type": "bludgeoning"
+                "damage_type": "bludgeoning",
+                "reach": 5,
+                "range": 0,
+                "long_range": 0
               }
             }
           ],
@@ -1775,7 +1868,10 @@
                 "proficient": true,
                 "bonus": 0,
                 "damage": "1d8",
-                "damage_type": "piercing"
+                "damage_type": "piercing",
+                "reach": 5,
+                "range": 0,
+                "long_range": 0
               }
             }
           ],
@@ -1801,7 +1897,10 @@
                 "proficient": true,
                 "bonus": 0,
                 "damage": "1d10",
-                "damage_type": "piercing"
+                "damage_type": "piercing",
+                "reach": 10,
+                "range": 0,
+                "long_range": 0
               }
             }
           ],
@@ -1827,7 +1926,10 @@
                 "proficient": true,
                 "bonus": 0,
                 "damage": "1d6",
-                "damage_type": "bludgeoning"
+                "damage_type": "bludgeoning",
+                "reach": 5,
+                "range": 0,
+                "long_range": 0
               }
             }
           ],
@@ -1853,7 +1955,10 @@
                 "proficient": true,
                 "bonus": 0,
                 "damage": "1d8",
-                "damage_type": "piercing"
+                "damage_type": "piercing",
+                "reach": 5,
+                "range": 0,
+                "long_range": 0
               }
             }
           ],
@@ -1879,7 +1984,10 @@
                 "proficient": true,
                 "bonus": 0,
                 "damage": "1d6",
-                "damage_type": "slashing"
+                "damage_type": "slashing",
+                "reach": 5,
+                "range": 0,
+                "long_range": 0
               }
             }
           ],
@@ -1905,7 +2013,10 @@
                 "proficient": true,
                 "bonus": 0,
                 "damage": "1d6",
-                "damage_type": "piercing"
+                "damage_type": "piercing",
+                "reach": 0,
+                "range": 80,
+                "long_range": 320
               }
             }
           ],
@@ -1931,7 +2042,10 @@
                 "proficient": true,
                 "bonus": 0,
                 "damage": "1d6",
-                "damage_type": "slashing"
+                "damage_type": "slashing",
+                "reach": 5,
+                "range": 0,
+                "long_range": 0
               }
             }
           ],
@@ -1957,7 +2071,10 @@
                 "proficient": true,
                 "bonus": 0,
                 "damage": "1d4",
-                "damage_type": "slashing"
+                "damage_type": "slashing",
+                "reach": 5,
+                "range": 0,
+                "long_range": 0
               }
             }
           ],
@@ -1983,7 +2100,10 @@
                 "proficient": true,
                 "bonus": 0,
                 "damage": "1d4",
-                "damage_type": "bludgeoning"
+                "damage_type": "bludgeoning",
+                "reach": 0,
+                "range": 30,
+                "long_range": 120
               }
             }
           ],
@@ -2009,7 +2129,10 @@
                 "proficient": true,
                 "bonus": 0,
                 "damage": "1d6",
-                "damage_type": "piercing"
+                "damage_type": "piercing",
+                "reach": 5,
+                "range": 20,
+                "long_range": 60
               }
             }
           ],
@@ -2035,7 +2158,10 @@
                 "proficient": true,
                 "bonus": 0,
                 "damage": "1d6",
-                "damage_type": "piercing"
+                "damage_type": "piercing",
+                "reach": 5,
+                "range": 20,
+                "long_range": 60
               }
             }
           ],
@@ -2061,7 +2187,10 @@
                 "proficient": true,
                 "bonus": 0,
                 "damage": "1d8",
-                "damage_type": "piercing"
+                "damage_type": "piercing",
+                "reach": 5,
+                "range": 0,
+                "long_range": 0
               }
             }
           ],
@@ -2087,7 +2216,10 @@
                 "proficient": true,
                 "bonus": 0,
                 "damage": "1d8",
-                "damage_type": "bludgeoning"
+                "damage_type": "bludgeoning",
+                "reach": 5,
+                "range": 0,
+                "long_range": 0
               }
             }
           ],
@@ -2113,7 +2245,10 @@
                 "proficient": true,
                 "bonus": 0,
                 "damage": "1d4",
-                "damage_type": "slashing"
+                "damage_type": "slashing",
+                "reach": 10,
+                "range": 0,
+                "long_range": 0
               }
             }
           ],
@@ -2163,6 +2298,24 @@
       ],
       "movement": { "field": "speed" }
     },
+    "distance": {
+      "$comment": "SRD 5.1, Playing on a Grid: \"Each square on the grid represents 5 feet.\" Every distance in this ruleset is in feet, so one cell is five of them.",
+      "label": "ft",
+      "perCell": 5
+    },
+    "ranged": {
+      "$comment": "SRD 5.1, Range: \"Your attack has disadvantage when your target is beyond normal range.\" Ranged Attacks in Close Combat: \"You have disadvantage on a ranged attack roll if you are within 5 feet of a hostile creature who can see you and who isn't incapacitated.\" The Engine reads the second rule from the shooter's own neighbours and cannot ask whether that neighbour sees them.",
+      "long": "disadvantage",
+      "adjacentFoe": "disadvantage"
+    },
+    "cover": {
+      "$comment": "SRD 5.1, Cover: \"A target with half cover has a +2 bonus to AC and Dexterity saving throws.\" Three-quarters cover and total cover are not in the Engine yet, so every piece of covering ground here is half cover, and the bonus applies to the attack roll and not to a saving throw.",
+      "bonus": 2
+    },
+    "opportunity": {
+      "$comment": "SRD 5.1, Opportunity Attacks: \"You can make an opportunity attack when a hostile creature that you can see moves out of your reach. To make the opportunity attack, you use your reaction.\" Taking it is automatic in this Engine, because nothing opens a reaction window yet.",
+      "budget": "reaction"
+    },
     "attacks": [
       {
         "list": "attacks",
@@ -2177,7 +2330,9 @@
           "dice": { "column": "damage" },
           "ability": { "column": "ability" },
           "type": { "column": "damage_type" }
-        }
+        },
+        "reach": { "column": "reach" },
+        "range": { "normal": { "column": "range" }, "long": { "column": "long_range" } }
       }
     ],
     "abilities": [

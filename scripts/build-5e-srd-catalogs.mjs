@@ -67,6 +67,12 @@ const ATTACK_LIST = "attacks";
 const CREATURE_CATALOG = "creatures";
 const DISTANCE_UNITS = { distance: { label: "ft", perCell: 5 } };
 
+// The three distance columns of the attacks list, wired through combat.attacks
+// so one weapon row says how far it swings and how far it is thrown or shot.
+const ATTACK_REACH_COLUMN = "reach";
+const ATTACK_RANGE_COLUMN = "range";
+const ATTACK_LONG_RANGE_COLUMN = "long_range";
+
 // The combat block's own ids, all declared by ruleset.json: the budgets a turn
 // holds, the save the sheet keeps concentration on and the thirteen damage
 // types. assertRulesetCombat re-checks every one of them against the sheet.
@@ -142,10 +148,88 @@ const CASTING_TIMES = Object.freeze({
   "24hours": "24 hours",
 });
 
-// The catalog's area shapes are a closed set the later combat bridge has to
-// read. A sphere, a cylinder and a cube are all "everything within a size of a
-// point" to it; anything else is left out rather than forced into the set.
-const AREA_SHAPES = Object.freeze({ sphere: "burst", cylinder: "burst", cube: "burst", cone: "cone", line: "line" });
+// The catalog's area shapes are a closed set the Engine reads on a board: a
+// burst, a cone and a line. A sphere and a cylinder are a burst with the radius
+// the SRD prints, so those carry straight over.
+//
+// A CUBE and a SQUARE are neither. The nearest honest thing is the burst that
+// covers the same patch of ground: a burst of radius r covers 2r + 1 cells
+// across, so an edge of N feet is the burst of radius (N - 5) / 2. A cube whose
+// edge is an odd number of cells comes out exact (a 15-foot cube is three cells
+// across, and so is a burst of radius 5 feet), and an even one comes out one
+// cell wider. It is the one place a shipped area is not the SRD's own outline,
+// and the README says so.
+const AREA_SHAPES = Object.freeze({
+  sphere: "burst",
+  cylinder: "burst",
+  cube: "burst",
+  square: "burst",
+  cone: "cone",
+  line: "line",
+});
+const BOXED_SHAPES = new Set(["cube", "square"]);
+const GRID_FEET = DISTANCE_UNITS.distance.perCell;
+
+/** One printed shape as the catalog carries it, or nothing when the source
+ *  states no shape at all. A boxed shape becomes the burst nearest its own
+ *  footprint; every other shape keeps the number the SRD prints. */
+function areaFrom(shapeType, size, name) {
+  if (!shapeType) return undefined;
+  const shape = AREA_SHAPES[shapeType];
+  if (!shape) fail(`Spell "${name}" has the shape "${shapeType}", which this converter has no reading for`);
+  if (!(size > 0)) return undefined;
+  if (!BOXED_SHAPES.has(shapeType)) return { shape, size };
+  // Never zero: a burst has to cover at least the cell it is centred on, and
+  // the schema refuses a size of nothing.
+  return { shape, size: Math.max(GRID_FEET / 2, (size - GRID_FEET) / 2) };
+}
+
+// The areas the SRD prints in a spell's own sentence and the Open5e fixture
+// carries no shape fields for. Each row quotes the fragment it was read from,
+// and assertSpellAreas below fails the run when the pk leaves the source, when
+// the source grows shape fields of its own (the table would then be a second
+// opinion), or when the quoted fragment is no longer in the spell's text.
+const SPELL_AREAS = new Map([
+  // "Squirming, ebony tentacles fill a 20-foot square on ground that you can see within range."
+  ["srd_black-tentacles", { shape: "square", size: 20, printed: "a 20-foot square" }],
+  // "an intense tremor rips through the ground in a 100-foot-radius circle centered on that point"
+  ["srd_earthquake", { shape: "sphere", size: 100, printed: "a 100-foot-radius circle" }],
+  // "Grasping weeds and vines sprout from the ground in a 20-foot square starting form a point within range."
+  ["srd_entangle", { shape: "square", size: 20, printed: "a 20-foot square" }],
+  // "Each creature in a 10-foot-radius, 40-foot-high cylinder centered on a point within range"
+  ["srd_flame-strike", { shape: "cylinder", size: 10, printed: "a 10-foot-radius, 40-foot-high cylinder" }],
+  // "Slick grease covers the ground in a 10-foot square centered on a point within range"
+  ["srd_grease", { shape: "square", size: 10, printed: "a 10-foot square" }],
+  // "A hail of rock-hard ice pounds to the ground in a 20-foot-radius, 40-foot-high cylinder"
+  ["srd_ice-storm", { shape: "cylinder", size: 20, printed: "a 20-foot-radius, 40-foot-high cylinder" }],
+  // "A stroke of lightning forming a line 100 feet long and 5 feet wide blasts out from you"
+  ["srd_lightning-bolt", { shape: "line", size: 100, printed: "a line 100 feet long and 5 feet wide" }],
+  // "A silvery beam of pale light shines down in a 5-foot-radius, 40-foot-high cylinder"
+  ["srd_moonbeam", { shape: "cylinder", size: 5, printed: "a 5-foot-radius, 40-foot-high cylinder" }],
+  // "The ground in a 20-foot radius centered on a point within range twists and sprouts hard spikes"
+  ["srd_spike-growth", { shape: "sphere", size: 20, printed: "a 20-foot radius" }],
+  // "A beam of brilliant light flashes out from your hand in a 5-foot-wide, 60-foot-long line."
+  ["srd_sunbeam", { shape: "line", size: 60, printed: "a 5-foot-wide, 60-foot-long line" }],
+  // "Brilliant sunlight flashes in a 60-foot radius centered on a point you choose within range."
+  ["srd_sunburst", { shape: "sphere", size: 60, printed: "a 60-foot radius" }],
+]);
+
+// Spells a fight resolves whose text prints a distance in the shape of an area
+// and where that shape is NOT the patch of ground the spell catches creatures
+// in. Written down rather than silently ignored, so the scan below can fail the
+// run on a printed shape nobody has looked at.
+const SPELL_SHAPES_NOT_AREAS = new Map([
+  ["srd_control-water", "the 20-foot wave is moving water, and the Engine has no shape that moves"],
+  ["srd_disintegrate", "the 10-foot cube is what the ray destroys of an object; the spell itself takes one target"],
+  ["srd_flame-blade", "the 10-foot radius is the light the blade sheds"],
+  ["srd_produce-flame", "the 10-foot radius is the light the flame sheds"],
+  ["srd_wall-of-ice", "ten 10-foot-square panels are a wall, and the Engine has no wall to build"],
+]);
+
+// Loose on purpose: it only has to notice that a sentence states a distance in
+// the shape of an area, so that the two tables above have to account for it.
+const PRINTED_SHAPE =
+  /(\d{1,3})[- ]foot(?:[- ](?:radius|cone|cube|square|line|sphere|cylinder|wide|long|tall|high))|\bline\s+(\d{1,3})\s+feet\s+long/iu;
 
 // The SRD 5.1 weapons table splits its rows into melee and ranged, but the
 // fixture carries no flag for it: a thrown melee weapon and a ranged weapon
@@ -167,7 +251,7 @@ const RANGED_WEAPONS = new Set([
 // The ruleset version this converter writes. Raise it when the generated
 // content changes what an installed ruleset means; a rebuild refuses to lower
 // a version that is already higher.
-const RULESET_VERSION = 5;
+const RULESET_VERSION = 6;
 
 // The SRD's healing spells. The fixture has no healing field at all: a spell
 // carries a damage roll or nothing, so a heal arrives here looking exactly like
@@ -755,8 +839,13 @@ function spellScales(fields, options) {
   return table.length > 1 ? { from: { field: "level" }, table } : undefined;
 }
 
-function spellMechanics(fields, options, healing, rider) {
-  const shape = fields.shape_type ? AREA_SHAPES[fields.shape_type] : undefined;
+function spellMechanics(pk, fields, options, healing, rider) {
+  // The fixture's own shape fields first, then the sentence the SRD prints for
+  // a spell the fixture gives none for.
+  const printed = SPELL_AREAS.get(pk);
+  const area = fields.shape_type
+    ? areaFrom(fields.shape_type, fields.shape_size, fields.name)
+    : printed && areaFrom(printed.shape, printed.size, fields.name);
   const amount =
     rider?.amount ?? (fields.damage_roll ? amountFrom(fields.damage_roll, `Spell "${fields.name}"`) : undefined);
   // A spell that puts a condition on what it touches is a debuff even when it deals no damage, and
@@ -769,7 +858,7 @@ function spellMechanics(fields, options, healing, rider) {
     // not in that table stays exactly what it was.
     kind,
     range: spellRange(fields, fields.name),
-    area: shape && fields.shape_size > 0 ? { shape, size: fields.shape_size } : undefined,
+    area,
     targets: rider?.targets ?? (healing ? "ally" : undefined),
     amount: healing ? healing.amount : amount,
     damageType: rider?.damageType ?? fields.damage_types[0],
@@ -810,12 +899,41 @@ function spellNotes(fields) {
   return notes;
 }
 
-function buildSpellEntries(spells, castingOptions, classNames) {
+/** Every hand-read area still names a spell the source has, still has no shape fields of its own,
+ *  and still prints the sentence it was read from. A fixture that grew the shape would make the row
+ *  a second opinion, and a sentence that changed would make it a stale one, so both stop the run. */
+function assertSpellAreas(spells) {
+  for (const [pk, printed] of SPELL_AREAS) {
+    const spell = spells.find((entry) => entry.pk === pk);
+    if (!spell) fail(`${pk} is written with a hand-read area but is not in the source`);
+    if (spell.fields.shape_type) {
+      fail(`${pk} now carries its own shape fields, so its hand-read area is a second opinion`);
+    }
+    if (!oneLine(spell.fields.desc).includes(printed.printed)) {
+      fail(`${pk} no longer prints ${JSON.stringify(printed.printed)}, so its hand-read area is stale`);
+    }
+  }
+  for (const pk of SPELL_SHAPES_NOT_AREAS.keys()) {
+    if (!spells.some((entry) => entry.pk === pk)) fail(`${pk} is written as a printed shape that is not an area`);
+    if (SPELL_AREAS.has(pk)) fail(`${pk} is both a carried area and one that is not an area`);
+  }
+}
+
+function buildSpellEntries(spells, castingOptions, classNames, report) {
   assertHealingSpells(spells);
   assertSpellRiders(spells);
+  assertSpellAreas(spells);
   return spells
     .map(({ pk, fields }) => {
       const classes = fields.classes.map((id) => classNames.get(id) ?? fail(`Spell "${fields.name}" names ${id}`));
+      const mechanics = spellMechanics(
+        pk,
+        fields,
+        castingOptions.get(pk) ?? new Map(),
+        HEALING_SPELLS.get(pk),
+        SPELL_RIDERS.get(pk),
+      );
+      countSpellDistances(pk, fields, mechanics, report);
       return {
         id: entryId(pk),
         label: fields.name,
@@ -836,15 +954,39 @@ function buildSpellEntries(spells, castingOptions, classNames) {
             },
           },
         ],
-        mechanics: spellMechanics(
-          fields,
-          castingOptions.get(pk) ?? new Map(),
-          HEALING_SPELLS.get(pk),
-          SPELL_RIDERS.get(pk),
-        ),
+        mechanics,
       };
     })
     .sort(byId);
+}
+
+/**
+ * What a fight can measure about one spell, counted for the build report.
+ *
+ * Only the spells a fight resolves are counted and scanned: a `utility` entry
+ * and a reaction never reach a menu, so a shape printed in one of them costs
+ * nobody anything. A resolvable spell that prints a shape and carries no area
+ * has to be accounted for by one of the two tables above, or the run stops:
+ * nothing is approximated silently, and nothing is dropped silently either.
+ */
+function countSpellDistances(pk, fields, mechanics, report) {
+  if (mechanics.kind === "utility" || mechanics.reaction) return;
+  if (mechanics.range === undefined) report.spellsWithoutRange.push(`${fields.name} (${oneLine(fields.range_text)})`);
+  else report.spellsWithRange += 1;
+  if (mechanics.area) {
+    const printed = fields.shape_type ?? SPELL_AREAS.get(pk)?.shape;
+    report.spellAreasByShape.set(printed, (report.spellAreasByShape.get(printed) ?? 0) + 1);
+    return;
+  }
+  const match = PRINTED_SHAPE.exec(oneLine(fields.desc));
+  if (!match) return;
+  const reason = SPELL_SHAPES_NOT_AREAS.get(pk);
+  if (!reason) {
+    fail(
+      `Spell "${fields.name}" prints ${JSON.stringify(match[0])} and carries no area. Add it to SPELL_AREAS, or say in SPELL_SHAPES_NOT_AREAS why that shape is not an area.`,
+    );
+  }
+  report.spellAreasNotMapped.push(`${fields.name} - ${reason}`);
 }
 
 // ── Class features ──
@@ -1029,7 +1171,51 @@ function assertWeaponCorrections(weapons, propertiesByWeapon) {
   }
 }
 
-function buildWeaponEntries(weapons, propertiesByWeapon) {
+/**
+ * How far one weapon row reaches and carries, in feet, for the three distance
+ * columns of the attacks list.
+ *
+ * SRD 5.1, Melee Attacks: "you can attack a target within 5 feet of you". The
+ * Reach property: "This weapon adds 5 feet to your reach when you attack with
+ * it." Range: "A weapon that can be used to make a ranged attack has a range in
+ * parentheses after the ammunition or thrown property. The range lists two
+ * numbers." A weapon under the SRD's own Ranged Weapons heading is shot rather
+ * than swung, so it reaches nothing and only carries; a thrown melee weapon
+ * carries BOTH, exactly as the table prints it.
+ *
+ * Nothing here is typed: the two numbers are the fixture's own, and the fixture
+ * is cross-checked against the properties it also carries, so a weapon that
+ * grew or lost a range without the matching property stops the run.
+ */
+function weaponDistances(pk, fields, properties) {
+  const ranged = RANGED_WEAPONS.has(pk);
+  const thrown = properties.includes("Thrown");
+  if (fields.range > 0 !== (ranged || thrown)) {
+    fail(
+      `${fields.name} has range ${fields.range} in the source but is ${ranged || thrown ? "" : "neither "}listed as a ranged weapon ${ranged || thrown ? "or thrown" : "nor thrown"}`,
+    );
+  }
+  if (fields.long_range > 0 && fields.long_range < fields.range) {
+    fail(`${fields.name} has a long range of ${fields.long_range} below its ordinary ${fields.range}`);
+  }
+  if (fields.range > 0 && fields.long_range <= 0) fail(`${fields.name} has a range but no long range`);
+  return {
+    [ATTACK_REACH_COLUMN]: ranged ? 0 : properties.includes("Reach") ? 10 : 5,
+    [ATTACK_RANGE_COLUMN]: fields.range,
+    [ATTACK_LONG_RANGE_COLUMN]: fields.long_range,
+  };
+}
+
+/** Which of the four kinds of distance a weapon row carries, for the build report. */
+function weaponDistanceKind(distances) {
+  const swings = distances[ATTACK_REACH_COLUMN] > 0;
+  const carries = distances[ATTACK_RANGE_COLUMN] > 0;
+  if (swings && carries) return "thrown";
+  if (carries) return "ranged";
+  return distances[ATTACK_REACH_COLUMN] > 5 ? "reach" : "melee";
+}
+
+function buildWeaponEntries(weapons, propertiesByWeapon, report) {
   assertRangedWeapons(weapons, propertiesByWeapon);
   assertWeaponCorrections(weapons, propertiesByWeapon);
   return weapons
@@ -1046,6 +1232,8 @@ function buildWeaponEntries(weapons, propertiesByWeapon) {
       const ranged = RANGED_WEAPONS.has(pk);
       const category = `${fields.is_simple ? "Simple" : "Martial"} ${ranged ? "ranged" : "melee"}`;
       const amount = amountFrom(fields.damage_dice, fields.name);
+      const distances = weaponDistances(pk, fields, properties);
+      report.weaponsByDistance[weaponDistanceKind(distances)] += 1;
       const versatile = assigned.find((entry) => entry.name === "Versatile")?.detail;
       const summary = [
         `${category} weapon.`,
@@ -1073,14 +1261,16 @@ function buildWeaponEntries(weapons, propertiesByWeapon) {
               bonus: 0,
               damage: fields.damage_dice,
               damage_type: fields.damage_type,
+              ...distances,
             },
           },
         ],
         mechanics: compact({
           kind: "attack",
-          // A ranged or thrown weapon uses its own normal range; any other
-          // melee weapon reaches 5 feet, or 10 with the Reach property.
-          range: fields.range > 0 ? fields.range : has("Reach") ? 10 : 5,
+          // The one distance an entry's own mechanics can hold, read off the
+          // same columns the row carries: how far a ranged or thrown weapon
+          // carries, and how far anything else reaches.
+          range: distances[ATTACK_RANGE_COLUMN] > 0 ? distances[ATTACK_RANGE_COLUMN] : distances[ATTACK_REACH_COLUMN],
           amount,
           damageType: fields.damage_type,
           attackRoll: true,
@@ -1172,7 +1362,51 @@ const DAMAGE_CLAUSE =
 const BARE_DAMAGE_CLAUSE = /(plus|or|and)?\s*(?:^|[\s,:])(\d{1,3})\s+([a-z]+)\s+damage/giu;
 const TO_HIT = /([+-]\d{1,3})\s+to hit/iu;
 const REACH = /reach\s+(\d{1,3})\s*(?:ft|feet)/iu;
-const RANGE = /range\s+(\d{1,4})(?:\/\d{1,4})?\s*(?:ft|feet)/iu;
+const RANGE = /range\s+(\d{1,4})(?:\/(\d{1,4}))?\s*(?:ft|feet)/iu;
+
+// "The dragon exhales fire in a 60-foot cone." A creature action in Capability API 1.28 carries a
+// reach and a range and no shape at all, so a printed area cannot become a cone, a line or a burst
+// on the board the way a catalog entry's `mechanics.area` can.
+//
+// What the format CAN carry is how far the thing stretches, and that number is the stat block's
+// own, so a printed area becomes the action's range and the conservative `targetCount` below still
+// decides how many it catches. The shape itself is lost, and every one of them is counted in the
+// build report and named in the README, because this is the one place a printed shape is flattened.
+// Loose about its punctuation on purpose: the SRD prints "60-foot cone", "10 -foot radius", "a line
+// that is 30 ft. long" and "a line of lightning that is 20 ft. long", and all four say the same
+// thing.
+const PRINTED_AREA =
+  /(\d{1,4})\s*-?\s*foot\s*-?\s*(radius|cone|line|cube|square|sphere|cylinder)|\bline\b(?:\s+of\s+\w+)?\s+(?:that is\s+)?(\d{1,4})\s*(?:ft\.?|feet)\s+long/iu;
+
+function printedArea(text) {
+  const match = PRINTED_AREA.exec(text);
+  if (!match) return undefined;
+  return { shape: (match[2] ?? "line").toLowerCase(), size: Number(match[1] ?? match[3]) };
+}
+
+// "Each creature of the dragon's choice that is within 120 feet of the dragon ... must succeed on a
+// DC 16 Wisdom saving throw." A stat block writes the distance of an aura, a presence or a thrown
+// bolt this way rather than as a range, and the FIRST one in the text is always the sentence that
+// says who has to save: the rest, where there is a rest, are a radius around the point it landed on.
+// Read only when the block prints neither a range nor a shape, so nothing here overrides either.
+const PRINTED_WITHIN = /within\s+(\d{1,4})\s*(?:ft|feet)/iu;
+
+function printedWithin(text) {
+  const match = PRINTED_WITHIN.exec(text);
+  return match ? Number(match[1]) : undefined;
+}
+
+/** A printed "range 20/60 ft." as a creature action writes its distance: a plain number when the
+ *  stat block prints one, and the pair when it prints both. Never invented: a block that prints no
+ *  range at all carries none. */
+function printedRange(match, label) {
+  if (!match) return undefined;
+  const normal = Number(match[1]);
+  if (match[2] === undefined) return normal;
+  const long = Number(match[2]);
+  if (long < normal) fail(`${label} prints a long range of ${long} below its ordinary ${normal}`);
+  return { normal, long };
+}
 const SAVE_DC = /DC\s*(\d{1,3})\s+(Strength|Dexterity|Constitution|Intelligence|Wisdom|Charisma)\s+saving throw/iu;
 const HALF_ON_SUCCESS = /half as much damage on a success/iu;
 const REPEATS_SAVE = /saving throw at the end of (?:each of its turns|its next turn)/iu;
@@ -1420,8 +1654,11 @@ function creatureAction(action, attackRow, report) {
           ? { save: `${ability}_save`, difficulty: Number(save[1]), onSuccess: "none" }
           : undefined,
       applies: conditions.length > 0 ? conditions : undefined,
+      // "Melee Weapon Attack: +4 to hit, reach 5 ft." is the reach the block prints; an attack that
+      // only ever carries prints a range and no reach at all. A thrown weapon prints both, and this
+      // carries both, exactly as the stat block does.
       reach: reach ? Number(reach[1]) : range ? undefined : 5,
-      range: range ? Number(range[1]) : undefined,
+      range: printedRange(range, label),
     });
     if (!built.damage && !built.applies) {
       report.attacksWithNothingToResolve.push(action.pk);
@@ -1462,6 +1699,15 @@ function creatureAction(action, attackRow, report) {
   const ability = ABILITY_BY_SAVE_NAME[save[2].toLowerCase()];
   const conditions = appliedConditions(text, save.index, ability);
   const onSuccess = HALF_ON_SUCCESS.test(text) ? "half" : "negates";
+  const printedDistance = printedRange(RANGE.exec(text), label);
+  const area = printedArea(text);
+  if (area) {
+    const flattened = report.creatureAreasNotCarried;
+    flattened.set(area.shape, (flattened.get(area.shape) ?? 0) + 1);
+    if (printedDistance !== undefined) report.creatureAreasWithPrintedRange += 1;
+  }
+  const within = printedDistance === undefined && area === undefined ? printedWithin(text) : undefined;
+  if (within !== undefined) report.creatureActionsFromWithin += 1;
   const built = compact({
     id,
     name: label,
@@ -1469,10 +1715,15 @@ function creatureAction(action, attackRow, report) {
     damage: primary ? damageFrom(primary) : undefined,
     save: { save: `${ability}_save`, difficulty: Number(save[1]), onSuccess },
     applies: conditions.length > 0 ? conditions : undefined,
-    // An area action reaches more than one target, and a fight has no positions to count them with,
-    // so the count is the conservative one the SRD's own shapes suggest.
+    // An area action reaches more than one target, and the creature format has no shape to count
+    // them with, so the count is the conservative one the SRD's own shapes suggest. It is what the
+    // Engine reads with a board and without one alike: `targetCount` is only ignored for an entry
+    // that carries a real `area`, and a creature action never can.
     targetCount: primary || conditions.length > 0 ? areaTargets(text) : undefined,
-    range: RANGE.exec(text) ? Number(RANGE.exec(text)[1]) : undefined,
+    // The printed aiming distance where the block states one, then how far the printed shape
+    // stretches, then the distance the sentence itself names, so a 60-foot cone and a presence felt
+    // at 120 feet are not read as things that only reach the next cell.
+    range: printedDistance ?? area?.size ?? within,
   });
   if (!built.damage && !built.applies) {
     report.savesWithNothingToResolve.push(action.pk);
@@ -2339,6 +2590,28 @@ function combatBlock(tiers) {
       ],
       movement: { field: "speed" },
     },
+    distance: {
+      $comment:
+        'SRD 5.1, Playing on a Grid: "Each square on the grid represents 5 feet." Every distance in this ruleset is in feet, so one cell is five of them.',
+      label: DISTANCE_UNITS.distance.label,
+      perCell: DISTANCE_UNITS.distance.perCell,
+    },
+    ranged: {
+      $comment:
+        'SRD 5.1, Range: "Your attack has disadvantage when your target is beyond normal range." Ranged Attacks in Close Combat: "You have disadvantage on a ranged attack roll if you are within 5 feet of a hostile creature who can see you and who isn\'t incapacitated." The Engine reads the second rule from the shooter\'s own neighbours and cannot ask whether that neighbour sees them.',
+      long: "disadvantage",
+      adjacentFoe: "disadvantage",
+    },
+    cover: {
+      $comment:
+        'SRD 5.1, Cover: "A target with half cover has a +2 bonus to AC and Dexterity saving throws." Three-quarters cover and total cover are not in the Engine yet, so every piece of covering ground here is half cover, and the bonus applies to the attack roll and not to a saving throw.',
+      bonus: 2,
+    },
+    opportunity: {
+      $comment:
+        'SRD 5.1, Opportunity Attacks: "You can make an opportunity attack when a hostile creature that you can see moves out of your reach. To make the opportunity attack, you use your reaction." Taking it is automatic in this Engine, because nothing opens a reaction window yet.',
+      budget: BUDGET_REACTION,
+    },
     attacks: [
       {
         list: ATTACK_LIST,
@@ -2346,6 +2619,8 @@ function combatBlock(tiers) {
         name: "name",
         toHit: { ability: { column: "ability" }, proficiency: { column: "proficient" }, bonus: { column: "bonus" } },
         damage: { dice: { column: "damage" }, ability: { column: "ability" }, type: { column: "damage_type" } },
+        reach: { column: ATTACK_REACH_COLUMN },
+        range: { normal: { column: ATTACK_RANGE_COLUMN }, long: { column: ATTACK_LONG_RANGE_COLUMN } },
       },
     ],
     abilities: [
@@ -2524,53 +2799,22 @@ const provenance =
   `Generated by scripts/build-5e-srd-catalogs.mjs. Do not edit by hand. Source: Open5e ${SOURCE_DOCUMENT} data, ` +
   `${SOURCE_REPOSITORY}, ${SOURCE_PATH}, commit ${sourceCommit}, licensed CC-BY-4.0 like SRD 5.1 itself.`;
 
-const classes = new Map(srdOnly(await fixture("CharacterClass.json"), "class").map(({ pk, fields }) => [pk, fields]));
-const classNames = new Map([...classes].map(([pk, fields]) => [pk, fields.name]));
-
-const castingOptions = new Map();
-for (const { fields } of await fixture("SpellCastingOption.json")) {
-  if (!castingOptions.has(fields.parent)) castingOptions.set(fields.parent, new Map());
-  castingOptions.get(fields.parent).set(fields.type, fields);
-}
-const srdSpells = srdOnly(await fixture("Spell.json"), "spell");
-const spells = buildSpellEntries(srdSpells, castingOptions, classNames);
-
-// A class table's rows are modelled as features whose description is the marker
-// "[Column data]". They are the source for a counter maximum, never a feature a
-// player picks, so they are indexed and then kept out of the catalog.
-const allFeatures = srdOnly(await fixture("ClassFeature.json"), "class feature");
-const featureLevels = new Map();
-for (const { fields } of await fixture("ClassFeatureItem.json")) {
-  if (!featureLevels.has(fields.parent)) featureLevels.set(fields.parent, []);
-  featureLevels.get(fields.parent).push({ level: fields.level, value: fields.column_value });
-}
-for (const items of featureLevels.values()) items.sort((left, right) => left.level - right.level);
-const features = buildFeatureEntries(
-  allFeatures.filter(({ fields }) => oneLine(fields.desc) !== "[Column data]"),
-  classes,
-  featureLevels,
-);
-for (const counter of COUNTERS) {
-  if (!allFeatures.some(({ pk }) => pk === counter.feature)) fail(`${counter.feature} is not an SRD class feature`);
-}
-
-const weaponProperties = new Map(
-  srdOnly(await fixture("WeaponProperty.json"), "weapon property").map(({ pk, fields }) => [pk, fields.name]),
-);
-const propertiesByWeapon = new Map();
-for (const { fields } of srdOnly(await fixture("WeaponPropertyAssignment.json"), "weapon property assignment")) {
-  const name = weaponProperties.get(fields.property) ?? fail(`Unknown weapon property ${fields.property}`);
-  if (!propertiesByWeapon.has(fields.weapon)) propertiesByWeapon.set(fields.weapon, []);
-  propertiesByWeapon.get(fields.weapon).push({ name, detail: fields.detail });
-}
-const weaponRecords = srdOnly(await fixture("Weapon.json"), "weapon");
-const weapons = buildWeaponEntries(weaponRecords, propertiesByWeapon);
-
-// ── The bestiary, and the threat scale measured from it ──
-
 /** Everything the build report counts. Deterministic: lists are pushed in source order and printed
  *  in it, so two runs over the same fixtures print the same report. */
 const report = {
+  weaponsByDistance: { melee: 0, reach: 0, ranged: 0, thrown: 0 },
+  spellsWithRange: 0,
+  spellsWithoutRange: [],
+  spellAreasByShape: new Map(),
+  spellAreasNotMapped: [],
+  creatureActionsWithReach: 0,
+  creatureActionsWithRange: 0,
+  creatureActionsWithLongRange: 0,
+  creatureActionsWithBoth: 0,
+  creatureActionsWithNoDistance: 0,
+  creatureAreasNotCarried: new Map(),
+  creatureAreasWithPrintedRange: 0,
+  creatureActionsFromWithin: 0,
   skipped: [],
   multiattacksParsed: 0,
   multiattackShapes: new Map(),
@@ -2606,6 +2850,51 @@ const report = {
   damageMeasurementSkippedCasters: 0,
   damageMeasurementSkippedHiddenDamage: 0,
 };
+
+
+const classes = new Map(srdOnly(await fixture("CharacterClass.json"), "class").map(({ pk, fields }) => [pk, fields]));
+const classNames = new Map([...classes].map(([pk, fields]) => [pk, fields.name]));
+
+const castingOptions = new Map();
+for (const { fields } of await fixture("SpellCastingOption.json")) {
+  if (!castingOptions.has(fields.parent)) castingOptions.set(fields.parent, new Map());
+  castingOptions.get(fields.parent).set(fields.type, fields);
+}
+const srdSpells = srdOnly(await fixture("Spell.json"), "spell");
+const spells = buildSpellEntries(srdSpells, castingOptions, classNames, report);
+
+// A class table's rows are modelled as features whose description is the marker
+// "[Column data]". They are the source for a counter maximum, never a feature a
+// player picks, so they are indexed and then kept out of the catalog.
+const allFeatures = srdOnly(await fixture("ClassFeature.json"), "class feature");
+const featureLevels = new Map();
+for (const { fields } of await fixture("ClassFeatureItem.json")) {
+  if (!featureLevels.has(fields.parent)) featureLevels.set(fields.parent, []);
+  featureLevels.get(fields.parent).push({ level: fields.level, value: fields.column_value });
+}
+for (const items of featureLevels.values()) items.sort((left, right) => left.level - right.level);
+const features = buildFeatureEntries(
+  allFeatures.filter(({ fields }) => oneLine(fields.desc) !== "[Column data]"),
+  classes,
+  featureLevels,
+);
+for (const counter of COUNTERS) {
+  if (!allFeatures.some(({ pk }) => pk === counter.feature)) fail(`${counter.feature} is not an SRD class feature`);
+}
+
+const weaponProperties = new Map(
+  srdOnly(await fixture("WeaponProperty.json"), "weapon property").map(({ pk, fields }) => [pk, fields.name]),
+);
+const propertiesByWeapon = new Map();
+for (const { fields } of srdOnly(await fixture("WeaponPropertyAssignment.json"), "weapon property assignment")) {
+  const name = weaponProperties.get(fields.property) ?? fail(`Unknown weapon property ${fields.property}`);
+  if (!propertiesByWeapon.has(fields.weapon)) propertiesByWeapon.set(fields.weapon, []);
+  propertiesByWeapon.get(fields.weapon).push({ name, detail: fields.detail });
+}
+const weaponRecords = srdOnly(await fixture("Weapon.json"), "weapon");
+const weapons = buildWeaponEntries(weaponRecords, propertiesByWeapon, report);
+
+// ── The bestiary, and the threat scale measured from it ──
 
 const creatureRecords = srdOnly(await fixture("Creature.json"), "creature");
 const creatureActions = new Map();
@@ -2868,6 +3157,55 @@ console.log(
 console.log(
   `  ${longCastDamage} damage spell(s) take longer than a turn to cast, which the economy has no budget for, so they ` +
     "spend the list's own action",
+);
+
+// What a fight on a BOARD can measure, counted for every catalog this package ships: how far each
+// weapon row swings and carries, how far each spell reaches and what shape it covers, and how far
+// each creature action reaches. Everything a printed distance could not be carried into is named.
+for (const creature of creatures) {
+  for (const action of creature.creature.actions) {
+    const reach = action.reach !== undefined;
+    const range = action.range !== undefined;
+    if (reach) report.creatureActionsWithReach += 1;
+    if (range) report.creatureActionsWithRange += 1;
+    if (range && typeof action.range === "object") report.creatureActionsWithLongRange += 1;
+    if (reach && range) report.creatureActionsWithBoth += 1;
+    if (!reach && !range) report.creatureActionsWithNoDistance += 1;
+  }
+}
+console.log("");
+console.log("Distances");
+const weaponKinds = report.weaponsByDistance;
+console.log(
+  `  weapons: ${weaponKinds.melee} reach 5 ft, ${weaponKinds.reach} reach 10 ft, ${weaponKinds.ranged} shoot and do ` +
+    `not reach, ${weaponKinds.thrown} reach and are thrown`,
+);
+console.log(
+  `  spells a fight resolves: ${report.spellsWithRange} carry a range in feet, ${report.spellsWithoutRange.length} do ` +
+    `not (${list(report.spellsWithoutRange, 4)})`,
+);
+console.log(
+  `  spell areas: ${[...report.spellAreasByShape].map(([shape, count]) => `${count} ${shape}`).join(", ")}`,
+);
+console.log(
+  `  ${report.spellAreasNotMapped.length} printed shape(s) in a resolvable spell are not an area a fight reads:`,
+);
+for (const entry of report.spellAreasNotMapped) console.log(`    ${entry}`);
+const creatureActionCount = creatures.reduce((total, entry) => total + entry.creature.actions.length, 0);
+console.log(
+  `  creature actions: ${creatureActionCount} in all, ${report.creatureActionsWithReach} reach, ` +
+    `${report.creatureActionsWithRange} carry (${report.creatureActionsWithLongRange} of them with a long range), ` +
+    `${report.creatureActionsWithBoth} do both, ${report.creatureActionsWithNoDistance} state no distance`,
+);
+console.log(
+  `  ${[...report.creatureAreasNotCarried.values()].reduce((total, count) => total + count, 0)} printed creature ` +
+    `area(s) lost their shape and kept only how far they stretch (` +
+    `${[...report.creatureAreasNotCarried].map(([shape, count]) => `${count} ${shape}`).join(", ")}); ` +
+    `${report.creatureAreasWithPrintedRange} of them print an aiming range as well, which is what those carry`,
+);
+console.log(
+  `  ${report.creatureActionsFromWithin} creature action(s) print neither a range nor a shape and take their distance ` +
+    'from the sentence that says who must save ("within 120 feet of the dragon")',
 );
 
 console.log("");
