@@ -6,10 +6,10 @@ slots, hit dice, class resources, conditions, rests, a full character sheet, and
 a battle in a game on this ruleset is fought by these rules, on screen, against the SRD's own
 monsters.
 
-Requires **Marinara Engine 2.4.6+ with Capability API 1.27** (the ruleset seam, catalogs, the
-battle block, scaled catalog columns, the combat block and bestiaries: hash-pinned `ruleset.json`
-and `catalogs/<id>.json` assets the Engine reads by reserved filename, exactly like
-`gm-verbs.json`). Today that means the Engine `staging` branch; older hosts reject the manifest and
+Requires **Marinara Engine 2.4.6+ with Capability API 1.28** (the ruleset seam, catalogs, the
+battle block, scaled catalog columns, the combat block, bestiaries and a fight with positions:
+hash-pinned `ruleset.json` and `catalogs/<id>.json` assets the Engine reads by reserved filename,
+exactly like `gm-verbs.json`). Today that means the Engine `staging` branch; older hosts reject the manifest and
 cannot install this package. This package ships no server entrypoint, no client entrypoint, and no
 Agent. It is pure data: nothing here runs code, and no restart is needed after install.
 
@@ -27,8 +27,8 @@ Agent. It is pure data: nothing here runs code, and no restart is needed after i
 - Short and long rest recovery rules.
 - GM guidance text for when to call for a check or save and how to read the sheet.
 - A `battle` block: what a fight may read from the sheet, and what it writes back.
-- A `combat` block: how a battle is fought by 5e's own rules, which is what a game plays on. See
-  5e combat below.
+- A `combat` block: how a battle is fought by 5e's own rules, which is what a game plays on,
+  including what one square of a battlefield is worth. See 5e combat and On a board below.
 
 Every id in `ruleset.json` (`level`, `dex`, `slots`, and so on) is this file's own naming choice.
 The Engine does not look for 5e-specific names; it reads the same closed set of resolution kinds
@@ -180,6 +180,144 @@ cap everybody else's. The numbers are still the SRD creatures' own; only which r
 changes. This is live: when a Game Master invents an opponent instead of naming one out of the
 bestiary, the fight you play is built on this table.
 
+### On a board
+
+A fight can also be **positioned**: fought on a battlefield of squares, in feet. Two things have to
+agree before any of it happens. This package declares what one square is worth, and the player sets
+the game's combat style to **Tactical**. With **Classic**, the fight is exactly the theatre of the
+mind it was before: anybody can be pointed at anybody, and nothing in this section is read at all.
+
+What the block says, with the SRD sentence each number came from:
+
+| What | This package | SRD 5.1 |
+| --- | --- | --- |
+| One square | 5 ft | Playing on a Grid: "Each square on the grid represents 5 feet." |
+| Movement | Your **Speed** field, which starts at 30 | Speed: "Your speed defines how far you can move when you move on your turn." |
+| A long shot | Disadvantage | Range: "Your attack has disadvantage when your target is beyond normal range." |
+| A shot with a foe next to you | Disadvantage | Ranged Attacks in Close Combat: "You have disadvantage on a ranged attack roll if you are within 5 feet of a hostile creature." |
+| Cover | +2 to Armor Class | Cover: "A target with half cover has a +2 bonus to AC and Dexterity saving throws." |
+| Walking out of a reach | Costs the enemy its **reaction** | Opportunity Attacks: "To make the opportunity attack, you use your reaction." |
+
+**Speed is a plain sheet field defaulting to 30**, because this sheet has no notion of a race and so
+cannot read a race's speed off one. A Wood Elf's 35 or a Dwarf's 25 is a number you type into the
+Speed box yourself, exactly like Armor Class.
+
+**Weapons carry three new distances.** The Attacks list gains a **Reach (ft)** column defaulting to
+5, and **Range (ft)** and **Long range (ft)** columns defaulting to 0, and every weapon in the
+catalog fills them from the SRD's own weapons table: 17 weapons reach 5 feet, 5 reach 10 feet (the
+Reach property adds 5), 8 are shot and reach nothing at all, and 6 both swing and are thrown. A 0 in
+a column means that row carries no such distance, which is how a sword and a thrown axe sit in the
+same list.
+
+A row that carries **both** is a thrown weapon, and it is read as each of them where each applies: a
+handaxe is a swing inside its 5 feet, with none of the penalties a shot takes, and a throw beyond
+that, at disadvantage past 20 feet and out of the question past 60. It is also something to strike
+somebody walking past you with, which a bow is not.
+
+**Pick your weapons again.** A picked row is a copy, so a weapon you added before this version has
+none of the three columns, and the Engine reads a row with no reach as reaching exactly one square:
+an old longbow will only fire at somebody standing next to you. The sheet editor's **Newer text**
+review will not fix it, because it only ever compares text-like columns and deliberately leaves a
+number alone, since a number is where your own edits live. Delete each weapon row and pick it from
+the catalog again, or type the three numbers into the row yourself. A character built from here on
+gets them with the row.
+
+**Spells land as the shape the SRD prints.** Of the 80 spells a fight can resolve, 71 carry a range
+in feet, 7 draw a shape from the caster and so name no distance at all, and the last 2 are Dream
+("Special") and Meteor Swarm ("1 mile"), neither of which is a number of feet. 27 carry an area: 12
+spheres, 4 cylinders, 4 cones, 2 lines and 5 cubes or squares.
+
+A range of **Touch** is written as 0, which the Engine reads as a reach of one square rather than a
+shot, so touching somebody standing beside an enemy costs nothing. A spell whose range is **Self**
+and which draws a shape carries no distance at all, because Self names none: the Engine sets a burst
+down on the caster's own square and lets a cone or a line be aimed anywhere within its own length,
+since there the aimed square only picks the direction. Burning Hands and Thunderwave are two of the
+seven.
+
+**A cube or a square becomes the nearest burst**, because the Engine has a burst, a cone and a line
+and nothing else. A burst of radius r covers 2r + 1 squares across, so an edge of N feet ships as a
+burst of radius (N - 5) / 2: Thunderwave's 15-foot cube is three squares across either way, and a
+cube with an even number of squares comes out one square wider than the printed cube. It is the one
+place a shipped area is not the SRD's own outline.
+
+Seven printed shapes are deliberately not areas, because none of them is a patch of ground the spell
+catches creatures in:
+
+| Spell | What the number really is |
+| --- | --- |
+| Control Water | a 20-foot wave of moving water, and the Engine has no shape that moves |
+| Disintegrate | the 10-foot cube the ray destroys of an object; the spell itself takes one target |
+| Fire Storm | up to ten 10-foot cubes arranged as you wish, and the Engine has no shape made of several |
+| Flame Blade | the 10-foot radius of light the blade sheds |
+| Produce Flame | the 10-foot radius of light the flame sheds |
+| Teleport | how big an object it may send, not ground it covers |
+| Wall of Ice | ten 10-foot-square panels, which is a wall |
+
+(Teleport is not on a fight's menu at all any more; see below.)
+
+Fire Storm and Teleport are the two the machine-readable source itself states a shape for, and both
+would otherwise have shipped as a single 10-foot cube: a tenth of Fire Storm's real footprint, and
+something Teleport does not have at all. The build refuses to run if a resolvable spell ever prints a
+shape that is in neither list, or if one that states a boxed shape says in its own text that there
+are several of them.
+
+**Nothing a fight offers you deals damage with nobody rolling for it.** An entry with damage and no
+attack roll, no saving throw and nothing saying it simply lands would take off its whole damage every
+single time, so the build refuses to ship one. That rule turned up two different problems in the SRD
+data, both now fixed:
+
+- **Seven spells were missing their saving throw**, because the converter only knew the SRD's
+  commonest way of writing it. Blade Barrier, Control Water, Earthquake, Freezing Sphere, Spirit
+  Guardians, Sunburst and Thunderwave all print "On a successful save, the creature takes half as
+  much damage", and all seven now ask for that save. Black Tentacles and Disintegrate print the
+  damage as what FAILING brings, so a success avoids all of it. Dream, Feeblemind and Heat Metal are
+  read by hand from their own sentences, because no general wording fits them.
+- **Four spells carry a damage roll that is not what they do to anybody**, and they are now shipped
+  as utility so a fight never offers them at all: **Teleport** (its 3d10 is the mishap row of its own
+  d100 table, and it hurts the travellers), **Geas** (5d10 only later, when a charmed creature
+  disobeys), **Forbiddance** (a ward that burns a named kind of creature walking in) and **Spike
+  Growth** (ground that cuts whoever crosses it, counted per 5 feet travelled).
+
+**Inflict Wounds** is the one place a spell's attack roll is corrected: the SRD prints "Make a melee
+spell attack" and the machine-readable source says it makes none. The build stops if the source ever
+fixes that itself.
+
+**A creature carries how far its actions reach.** The bestiary's 828 actions divide up exactly, each
+one into a single row:
+
+| What it carries | How many | What they are |
+| --- | --- | --- |
+| A reach only | 487 | a printed "reach 5 ft.", the ordinary swing |
+| A reach and a range | 18 | the thrown weapons: "reach 5 ft. or range 20/60 ft." |
+| A range only | 109 | bows, bolts and everything that only carries |
+| A shape only | 57 | breath weapons, sprays and clouds |
+| A shape and a range | 1 | the Djinni's whirlwind, formed on a point within 120 feet |
+| Nothing at all | 156 | 150 multiattack sequences, whose parts carry their own, and 6 things done to somebody already grappled or standing in the creature's own square |
+
+So 505 actions reach, 128 carry (56 of those with a long range beyond the ordinary one) and 58 land
+in a shape; the only overlaps are the 18 that both reach and carry and the 1 that both shapes and
+carries. 72 of them print no range of their own and take their distance from the sentence that names
+who has to save, which is how a stat block writes an aura or a presence ("each creature within 120
+feet of the dragon").
+
+**And a creature's breath lands in a real shape.** 58 actions carry the shape the SRD prints: 31
+cones, 22 lines and 5 bursts. A dragon's "60-foot cone" is a cone of twelve squares aimed from where
+the dragon stands, the Behir's "line of lightning that is 20 ft. long" is a line, and the Vrock's
+"15-foot-radius cloud of toxic spores" is a burst. Each of them also keeps the target count below,
+because that is what a fight in the Classic style reads instead.
+
+Two of them spare the creature's own side, and only because their own sentence says so: the Kraken's
+Ink Cloud ("Each creature other than the kraken") and the Solar's Searing Burst ("Each creature of
+its choice"). Every other shape catches everybody standing in it, which is what "Each creature in
+that area" means. The build stops if any other printed shape ever grows wording like that without
+somebody deciding what it means.
+
+Only the Djinni's whirlwind prints how far off its shape may be formed ("on a point the djinni can
+see within 120 feet of it"); every other shape carries no range, which is what makes it start at the
+creature. A burst with no range goes off on the creature's own square and nowhere else, so the
+Kraken's 60-foot ink cloud is centred on the kraken; a cone or a line with no range is aimed anywhere
+within its own length, because there the aimed square only picks the direction.
+
 ### Creatures
 
 `catalogs/creatures.json` is 319 of the SRD 5.1 monsters, each written in the numbers above:
@@ -226,13 +364,22 @@ of its own, or if the two stop printing the same actions.
 
 A fight plays, so this is the honest list of what it still does not do:
 
-- **No positions.** Reach, range, areas, cover, speed and movement are carried and read by nobody
-  yet, so an area action says how many targets it takes instead: two for a line, three for a cone or
-  a sphere, two for anything else that says "each creature". Those are deliberately low, chosen once,
-  and they are the one place in the bestiary where a number is not the SRD's own.
+- **A target count instead of a shape, for a fight with no positions.** Every area action also says
+  how many creatures it takes: two for a line, three for a cone or a sphere, two for anything else
+  that says "each creature". Those counts are deliberately low, chosen once, and they are the one
+  place in the bestiary where a number is not the SRD's own. With the Tactical style the shape
+  decides instead and the count is not read at all; with Classic the count is the whole of it.
+- **A line has no width.** "A line 100 feet long and 5 feet wide" is a line of single squares, which
+  is what the SRD's own line is at this width and would not be at a wider one.
+- **Half cover only, and only against an attack.** Ground the Engine's battlefield calls cover is
+  worth +2 and never the +5 of three-quarters cover, there is no total cover, no elevation and no
+  flying height, and the bonus is read when the attack roll is made and never when a saving throw
+  is: SRD half cover also adds +2 to a Dexterity save, which nothing here can say.
+- **A strike at somebody walking away is automatic**, for you as well as for the monsters, because
+  choosing whether to take one is a reaction window and there are no reactions yet.
+- **No grapple, no shove**, and nothing pushes anybody anywhere.
 - **One speed per creature.** A creature that walks, swims and flies carries the fastest of them as
-  its number and the rest as a trait, because the format has one speed and the slice that moves a
-  creature will read it.
+  its number and the rest as a trait, because the format has one speed.
 - **No reactions**, so a reaction spell such as Shield is left off the menu and a creature's printed
   reactions are traits.
 - **Legendary actions are carried, priced and resolved, but nothing opens the window they are spent
@@ -245,7 +392,7 @@ A fight plays, so this is the honest list of what it still does not do:
   attack that prints an alternative ("or 8 (1d10 + 3) if used with two hands", "or 5 (2d4) if the
   swarm has half its hit points"), which is a choice a fight has no way to make: 61 of them.
   The second helpings are a trait in this release because a creature action holds one damage roll in
-  Capability API 1.27; the Engine is scheduled to carry them, and the converter already counts them,
+  Capability API 1.28; the Engine is scheduled to carry them, and the converter already counts them,
   so they come back as numbers the release after that seam lands.
 - **Spellcasting monsters** are traits. A stat block's spell list is not something a creature action
   can hold.
@@ -266,14 +413,15 @@ A fight plays, so this is the honest list of what it still does not do:
 
 Available to Engine `staging` users only. The package is listed in `STAGING_ONLY_PACKAGE_IDS`, so
 it is published to the preview overlay under `catalog/preview/` that staging Engines read, and is
-hidden from stable `main` users. It stays there until the Capability API 1.27 ruleset, catalog,
-battle, scaled-column, combat and bestiary seam reaches a stable Engine release.
+hidden from stable `main` users. It stays there until the Capability API 1.28 ruleset, catalog,
+battle, scaled-column, combat, bestiary and positions seam reaches a stable Engine release.
 
 ## Installing
 
 Install it from **Agents** and **Download Agents** in a Marinara Engine build that supports
-Capability API 1.27. After installing, choose it under Rules in the Game Mode setup wizard when you
-create a new game.
+Capability API 1.28. After installing, choose it under Rules in the Game Mode setup wizard when you
+create a new game. Choose the **Tactical** combat style in the same wizard if you want the fight
+played on a board; **Classic** plays the same fight without positions.
 
 ## License
 

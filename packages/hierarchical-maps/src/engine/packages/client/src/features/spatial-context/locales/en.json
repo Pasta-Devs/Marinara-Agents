@@ -3,6 +3,7 @@
     "locale": "en",
     "direction": "ltr"
   },
+  "ui.worldMaps.artwork.childMapHint": "Use a square image, such as 1024 × 1024 px, to match the 100 × 100 grid. It appears behind child locations here and in the runtime map, and is never sent to image generation.",
   "ui.worldMaps.connection.aiLabel": "AI connection",
   "ui.worldMaps.connection.aiAriaLabel": "AI map connection",
   "ui.worldMaps.connection.help": "Saved for World Maps and used by the next AI draft or expansion.",

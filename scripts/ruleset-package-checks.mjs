@@ -54,6 +54,26 @@ export const RULESET_COMBAT_MIN_CAPABILITY_API = Object.freeze({ major: 1, minor
 // older Engine refuses whichever file holds it.
 export const RULESET_CREATURES_MIN_CAPABILITY_API = Object.freeze({ major: 1, minor: 27 });
 
+// Capability API 1.28 gave a fight positions: `combat.distance` says what one cell
+// of a board is worth, and `ranged`, `cover`, `opportunity` and an attack list's
+// `reach` and `range` are all measured in it. A creature action's `range` may also
+// be a `{ normal, long }` pair rather than a plain number. Those live in
+// `ruleset.json` and in a `catalogs/<id>.json` asset, so an older Engine refuses
+// whichever file holds one.
+//
+// A creature action carrying a plain `reach` or `range` is NOT gated here: those
+// keys have been legal since 1.27, and a ruleset with no `distance` simply never
+// reads them.
+export const RULESET_POSITIONS_MIN_CAPABILITY_API = Object.freeze({ major: 1, minor: 28 });
+
+// What the Engine's own schema allows a distance, in the ruleset's own unit.
+const RULESET_DISTANCE_MAX = 10000;
+const RULESET_DISTANCE_LABEL_MAX = 12;
+const RULESET_COVER_MAX = 100;
+const RULESET_RANGED_RULES = Object.freeze(["disadvantage", "normal"]);
+// The shapes the Engine draws on a board, for a catalog entry and a creature action alike.
+const RULESET_AREA_SHAPES = Object.freeze(["burst", "cone", "line"]);
+
 // How many columns of one row a ruleset may keep, and how long a step table may be.
 const RULESET_SCALED_MAX_COLUMNS = 4;
 const RULESET_STEP_TABLE_MAX = 100;
@@ -661,6 +681,69 @@ export function assertRulesetCombat(manifest, document) {
     if (!budgets.has(value)) throw new Error(`${id} combat ${where} names unknown budget ${JSON.stringify(value)}`);
   };
 
+  // ── Positions: what a board measures, and what has to be there before any of it means anything ──
+  //
+  // The Engine's own rule, restated: `distance` is what makes a fight positionable, and every other
+  // key below is a number measured in it, so declaring one without it is refused at import.
+  // Each of the four is an object or it is not there. Checked before anything reads into one, so a
+  // `null`, an array or a bare number says what is wrong with it instead of throwing a TypeError or,
+  // worse, passing every check below because reading a key off it gave `undefined`.
+  const blockOf = (key) => {
+    const value = combat[key];
+    if (value === undefined) return undefined;
+    if (!value || typeof value !== "object" || Array.isArray(value)) {
+      throw new Error(`${id} combat ${key} must be an object, not ${JSON.stringify(value)}`);
+    }
+    return value;
+  };
+  const distance = blockOf("distance");
+  const ranged = blockOf("ranged");
+  const cover = blockOf("cover");
+  const opportunity = blockOf("opportunity");
+  const positionKeys = ["ranged", "cover", "opportunity"].filter((key) => combat[key] !== undefined);
+  const attackDistances = (combat.attacks ?? []).flatMap((source, index) =>
+    ["reach", "range"].filter((key) => source?.[key] !== undefined).map((key) => `attacks[${index}].${key}`),
+  );
+  if (distance === undefined) {
+    const orphan = positionKeys[0] ?? attackDistances[0];
+    if (orphan) {
+      throw new Error(`${id} combat "${orphan}" is measured in cells, so the block declares "distance" too`);
+    }
+  } else {
+    const api = RULESET_POSITIONS_MIN_CAPABILITY_API;
+    if (!meetsCapabilityApi(manifest, api)) {
+      throw new Error(
+        `${id} gives a fight positions and must declare capability API ${api.major}.${api.minor} or newer`,
+      );
+    }
+    const { label, perCell } = distance;
+    if (typeof label !== "string" || label.length < 1 || label.length > RULESET_DISTANCE_LABEL_MAX) {
+      throw new Error(
+        `${id} combat distance label ${JSON.stringify(label)} is 1 to ${RULESET_DISTANCE_LABEL_MAX} characters`,
+      );
+    }
+    if (!Number.isFinite(perCell) || perCell <= 0) {
+      throw new Error(`${id} combat distance perCell is a number above zero, not ${JSON.stringify(perCell)}`);
+    }
+  }
+  if (ranged !== undefined) {
+    for (const key of ["long", "adjacentFoe"]) {
+      const rule = ranged[key];
+      if (rule !== undefined && !RULESET_RANGED_RULES.includes(rule)) {
+        throw new Error(
+          `${id} combat ranged ${key} is ${RULESET_RANGED_RULES.join(" or ")}, not ${JSON.stringify(rule)}`,
+        );
+      }
+    }
+  }
+  if (cover !== undefined) {
+    const bonus = cover.bonus;
+    if (!Number.isInteger(bonus) || bonus < 0 || bonus > RULESET_COVER_MAX) {
+      throw new Error(`${id} combat cover bonus is a whole number from 0 to ${RULESET_COVER_MAX}, not ${bonus}`);
+    }
+  }
+  if (opportunity !== undefined) budget(opportunity.budget, "opportunity budget");
+
   for (const source of combat.attacks ?? []) {
     const list = names.lists.get(source?.list);
     if (!list) throw new Error(`${id} combat attacks name unknown list ${JSON.stringify(source?.list)}`);
@@ -684,6 +767,50 @@ export function assertRulesetCombat(manifest, document) {
     column(source.damage?.type?.column, ["text", "enum"], "damage type");
     if (source.damage?.dice?.column === undefined) {
       throw new Error(`${id} combat attacks "${source.list}" must name the dice column its rows are rolled from`);
+    }
+    // A distance one row carries: a number column of that same list, or the same number on every
+    // row. Whichever it is, it is the Engine's own union, restated.
+    const distance = (value, where) => {
+      if (value === undefined) return undefined;
+      if (!value || typeof value !== "object" || Array.isArray(value)) {
+        throw new Error(`${id} combat attacks ${where} names a column or a constant, not ${JSON.stringify(value)}`);
+      }
+      if ("const" in value) {
+        const fixed = value.const;
+        if (!Number.isFinite(fixed) || fixed < 0 || fixed > RULESET_DISTANCE_MAX) {
+          throw new Error(`${id} combat attacks ${where} const is a distance from 0 to ${RULESET_DISTANCE_MAX}`);
+        }
+        return fixed;
+      }
+      // `column` lets an absent name through, so an object carrying neither key would otherwise be
+      // read as a distance and pass. It names one or the other, and nothing else is a distance.
+      if (value.column === undefined) {
+        throw new Error(`${id} combat attacks ${where} names a column or a constant, not ${JSON.stringify(value)}`);
+      }
+      column(value.column, ["number"], where);
+      return undefined;
+    };
+    distance(source.reach, `"${source.list}" reach`);
+    if (source.range !== undefined) {
+      // Said before anything reads into it: `null` would throw a TypeError rather than a sentence,
+      // and an array or a number would fall through to the message below, which is about a shape
+      // that at least IS a pair.
+      if (!source.range || typeof source.range !== "object" || Array.isArray(source.range)) {
+        throw new Error(
+          `${id} combat attacks "${source.list}" range is an ordinary distance and an optional longer one, not ${JSON.stringify(source.range)}`,
+        );
+      }
+      if (source.range.normal === undefined) {
+        throw new Error(`${id} combat attacks "${source.list}" range names the ordinary distance it is shot at`);
+      }
+      const normal = distance(source.range.normal, `"${source.list}" range normal`);
+      const long = distance(source.range.long, `"${source.list}" range long`);
+      // Only comparable when both are written once for every row. A pair of columns is the
+      // player's own two numbers, and the Engine reads a shorter long distance as no long
+      // distance at all rather than refusing the row.
+      if (normal !== undefined && long !== undefined && long < normal) {
+        throw new Error(`${id} combat attacks "${source.list}" range long is at least the ordinary one`);
+      }
     }
   }
 
@@ -906,6 +1033,13 @@ export function assertRulesetCreatures(manifest, document, catalogSources = new 
           throw new Error(`${where} is immune to unknown condition ${JSON.stringify(condition)}`);
         }
       }
+      // How far it walks, in the ruleset's own distance unit. Read only by a fight with a board,
+      // and legal without one, exactly as the Engine has it.
+      if (creature.speed !== undefined) {
+        if (!Number.isFinite(creature.speed) || creature.speed < 0 || creature.speed > RULESET_DISTANCE_MAX) {
+          throw new Error(`${where} has a speed of ${JSON.stringify(creature.speed)}, not a distance from 0`);
+        }
+      }
       if ((creature.traits ?? []).length > RULESET_CREATURE_MAX_TRAITS) {
         throw new Error(
           `${where} carries ${creature.traits.length} traits, over the ${RULESET_CREATURE_MAX_TRAITS} limit`,
@@ -939,6 +1073,60 @@ export function assertRulesetCreatures(manifest, document, catalogSources = new 
         if (action.save && action.saveDifficulty !== undefined) {
           throw new Error(`${at} has a save of its own, and that save's difficulty is what a save-ends uses`);
         }
+        // How far this one reaches and how far it carries, in the ruleset's own unit. Both have
+        // been legal since 1.27 and need no `distance` beside them: a ruleset without a board
+        // simply never reads them. What DOES need 1.28 is a range written as a pair, which an
+        // older Engine refuses along with the whole catalog file that holds it.
+        const reachOf = (value, what) => {
+          if (!Number.isFinite(value) || value < 0 || value > RULESET_DISTANCE_MAX) {
+            throw new Error(`${at} has a ${what} of ${JSON.stringify(value)}, not a distance from 0`);
+          }
+        };
+        if (action.reach !== undefined) reachOf(action.reach, "reach");
+        if (typeof action.range === "number") reachOf(action.range, "range");
+        else if (action.range !== undefined) {
+          if (!action.range || typeof action.range !== "object" || Array.isArray(action.range)) {
+            throw new Error(`${at} has a range of ${JSON.stringify(action.range)}, not a distance or a pair`);
+          }
+          const api = RULESET_POSITIONS_MIN_CAPABILITY_API;
+          if (!meetsCapabilityApi(manifest, api)) {
+            throw new Error(
+              `${at} writes its range as a pair and must declare capability API ${api.major}.${api.minor} or newer`,
+            );
+          }
+          reachOf(action.range.normal, "range");
+          if (action.range.long !== undefined) {
+            reachOf(action.range.long, "long range");
+            if (action.range.long < action.range.normal) {
+              throw new Error(`${at} has a long range below its ordinary one`);
+            }
+          }
+        }
+        // The shape it lands in, in the ruleset's own unit. A new key in a strict file, so an older
+        // Engine refuses the whole catalog file that holds it, exactly as it does a range pair.
+        if (action.area !== undefined) {
+          const area = action.area;
+          if (!area || typeof area !== "object" || Array.isArray(area)) {
+            throw new Error(`${at} has an area of ${JSON.stringify(area)}, not a shape`);
+          }
+          const api = RULESET_POSITIONS_MIN_CAPABILITY_API;
+          if (!meetsCapabilityApi(manifest, api)) {
+            throw new Error(
+              `${at} lands in a shape and must declare capability API ${api.major}.${api.minor} or newer`,
+            );
+          }
+          if (!RULESET_AREA_SHAPES.includes(area.shape)) {
+            throw new Error(
+              `${at} lands in the shape ${JSON.stringify(area.shape)}, which is not one the Engine draws`,
+            );
+          }
+          if (!Number.isFinite(area.size) || area.size <= 0 || area.size > RULESET_DISTANCE_MAX) {
+            throw new Error(`${at} has an area of ${JSON.stringify(area.size)}, not a size above 0`);
+          }
+          if (area.friendlyFire !== undefined && typeof area.friendlyFire !== "boolean") {
+            throw new Error(`${at} says friendlyFire is ${JSON.stringify(area.friendlyFire)}, not true or false`);
+          }
+        }
         const applies = action.applies ?? [];
         if (applies.length > RULESET_CREATURE_MAX_APPLIES) {
           throw new Error(`${at} applies ${applies.length} conditions, over the ${RULESET_CREATURE_MAX_APPLIES} limit`);
@@ -965,8 +1153,9 @@ export function assertRulesetCreatures(manifest, document, catalogSources = new 
           throw new Error(`${at} ends a condition on a save with no difficulty to roll against`);
         }
         if (!action.sequence) continue;
-        // A sequence is a container: anything else on it would be a second thing the one budget did.
-        for (const key of ["toHit", "autoHit", "damage", "save", "saveDifficulty", "applies", "targetCount"]) {
+        // A sequence is a container: anything else on it would be a second thing the one budget did,
+        // the shape it might land in included. The actions it names carry their own.
+        for (const key of ["toHit", "autoHit", "damage", "save", "saveDifficulty", "applies", "targetCount", "area"]) {
           if (action[key] !== undefined) throw new Error(`${at} is a sequence, so it carries no ${key} of its own`);
         }
         if (action.sequence.length === 0 || action.sequence.length > RULESET_CREATURE_MAX_SEQUENCE) {

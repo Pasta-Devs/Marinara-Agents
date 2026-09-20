@@ -81,6 +81,16 @@
         }
       ]
     },
+    "hierarchical-maps": {
+      "versions": [
+        {
+          "version": "1.4.3",
+          "date": "2026-09-20",
+          "notes": "- Child-location maps now use the same square canvas in the editor and runtime, keeping square artwork aligned with the 100×100 coordinate grid. The background picker includes image size guidance.",
+          "highlight": false
+        }
+      ]
+    },
     "inventory-tracker": {
       "versions": [
         {
@@ -99,6 +109,12 @@
     },
     "long-term-memory": {
       "versions": [
+        {
+          "version": "1.3.6",
+          "date": "2026-09-20",
+          "notes": "- Preserved actionable extraction error codes and retryability, and reused one deterministic vault snapshot for Game Mode batch imports.\n- Classified permanent provider quota failures as non-retryable and kept deterministic snapshot failures within their batch results.",
+          "highlight": false
+        },
         {
           "version": "1.3.5",
           "date": "2026-09-20",

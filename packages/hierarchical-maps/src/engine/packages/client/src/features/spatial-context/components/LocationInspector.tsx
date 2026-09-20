@@ -30,6 +30,7 @@ import type {
   SpatialLinkState,
 } from "@marinara-engine/shared";
 import { cn } from "../package-utils";
+import { useSpatialMapTranslation } from "../localization";
 import { getSpatialDescendantIds, resolveSpatialBreadcrumb } from "@marinara-engine/shared";
 import { canonicalizeSpatialDirectLinks, type SpatialDirectLinkDirection } from "../editor-state";
 import { GameMapBindingsPanel } from "./GameMapBindingsPanel";
@@ -335,6 +336,7 @@ export function LocationInspector({
   permanentDeleteCount = 1,
   gameBinding,
 }: LocationInspectorProps) {
+  const { t } = useSpatialMapTranslation();
   const [loreSearch, setLoreSearch] = useState("");
   const [expandedLorebookIds, setExpandedLorebookIds] = useState<Set<string>>(() => new Set());
   const [newLinkTarget, setNewLinkTarget] = useState("");
@@ -1141,8 +1143,7 @@ export function LocationInspector({
                   </p>
                 </div>
                 <p className="mt-1 text-[0.6875rem] leading-relaxed text-[var(--marinara-chat-chrome-panel-muted)]">
-                  Displayed behind the movable places on this map and in the runtime minimap. It is never sent to image
-                  generation.
+                  {t("ui.worldMaps.artwork.childMapHint")}
                 </p>
                 <div className="mt-3 overflow-hidden rounded-lg border border-[var(--marinara-chat-chrome-panel-border)] bg-[var(--background)]">
                   {mapBackgroundImage ? (
@@ -1150,7 +1151,7 @@ export function LocationInspector({
                       src={mapBackgroundImage.url}
                       alt={`${location.name} child map background`}
                       loading="lazy"
-                      className="h-32 w-full object-cover"
+                      className="aspect-square w-full object-cover"
                       style={{
                         objectPosition: `${location.mapBackgroundPosition?.x ?? 50}% ${location.mapBackgroundPosition?.y ?? 50}%`,
                       }}
