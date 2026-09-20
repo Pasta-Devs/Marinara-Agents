@@ -1,5 +1,15 @@
 # 5e (SRD 5.1)
 
+## 0.6.0 — 2026-09-19
+- A battle can be fought on a board in feet. Set the game's combat style to Tactical and your Speed becomes squares you walk between attacks. Classic plays the same fight flat.
+- Weapons know how far they reach: a longsword strikes the next square, a glaive two, and a bow carries to its long range with disadvantage.
+- Shooting with an enemy beside you is also rolled with disadvantage, and a target in trees or ruins is 2 harder to hit.
+- Spells land as the shapes the SRD prints: Fireball a burst, Burning Hands a cone, Lightning Bolt a line. Everybody in it is caught, friends too.
+- Walk out of an ogre's reach and it swings at you, spending its reaction. Disengage first and it does not.
+- Weapon rows you already picked have none of the new distances. Refresh each one from the ruleset, or an old bow only fires at somebody next to you.
+- Still to come: choosing whether to strike at a walker, three-quarters cover, elevation, grapple and shove.
+- Needs an Engine with Capability API 1.28.
+
 ## 0.5.0 — 2026-09-19
 - Battles in a new game on this ruleset are now fought with 5e rules, on screen: the d20 attack roll with advantage, a natural 20 that hits and doubles the damage dice, a natural 1 that misses, your weapons and prepared spells, the SRD conditions, concentration, death saves and spell slots spent off your sheet.
 - Adds a bestiary: 319 SRD monsters with their armour class, hit dice, saves, resistances, immunities, attacks, breath weapons, multiattacks and legendary actions, every number taken from the printed stat block.

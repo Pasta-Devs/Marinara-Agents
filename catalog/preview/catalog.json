@@ -7,7 +7,7 @@
         "schemaVersion": 2,
         "capabilityApi": {
           "major": 1,
-          "minor": 27
+          "minor": 28
         },
         "builtAgainst": {
           "engineVersion": "2.4.6",
@@ -15,8 +15,8 @@
         },
         "id": "ruleset-5e-2014",
         "name": "5e (SRD 5.1)",
-        "version": "0.5.0",
-        "description": "Provides 5e SRD 5.1 rules for Game Mode ability checks, skill checks, saving throws, and the full character sheet, plus pickable SRD spells, class features and weapons so you do not type them row by row, and class resources the sheet keeps current as you level up. It also brings 5e combat itself: a battle in a new game on this ruleset is fought by these rules on screen, with attack rolls against Armor Class, advantage and disadvantage, criticals, saving throws, conditions, concentration, death saves and spell slots spent off your sheet, against a bestiary of 319 SRD monsters the Game Master can name or a new opponent built on the measured challenge scale. Not yet: positions and movement, reactions, and the window a legendary action is spent in. After installing, choose it under Rules in the Game Mode setup wizard when you create a new game.",
+        "version": "0.6.0",
+        "description": "Provides 5e SRD 5.1 rules for Game Mode ability checks, skill checks, saving throws, and the full character sheet, plus pickable SRD spells, class features and weapons so you do not type them row by row, and class resources the sheet keeps current as you level up. It also brings 5e combat itself: a battle in a new game on this ruleset is fought by these rules on screen, with attack rolls against Armor Class, advantage and disadvantage, criticals, saving throws, conditions, concentration, death saves and spell slots spent off your sheet, against a bestiary of 319 SRD monsters the Game Master can name or a new opponent built on the measured challenge scale. With the Tactical combat style the fight is played on a board measured in feet: Speed becomes squares you walk, weapons reach 5 or 10 feet, bows carry to their long range at disadvantage, half cover adds 2 to Armor Class, spells land as cones, lines and bursts, and walking out of a reach draws an attack. The Classic style plays the same fight without positions. Not yet: chosen reactions, three-quarters cover, elevation, and the window a legendary action is spent in. After installing, choose it under Rules in the Game Mode setup wizard when you create a new game.",
         "engine": {
           "min": "2.4.6",
           "maxExclusive": "4.0.0"
@@ -38,13 +38,13 @@
         "files": [
           {
             "path": "ruleset.json",
-            "sha256": "bdc05cbd3cc4d9d34e69860f56596f677c011e958781a456a38b5d4eed3c0a1c",
-            "bytes": 73862
+            "sha256": "3bdb752a34da1235f461ede14d78ce0933f9e51599e54e7d8909b5f1b96f3e7a",
+            "bytes": 79997
           },
           {
             "path": "catalogs/spells.json",
-            "sha256": "db049e43e5ff86dccf2288db9299dca4672f1ab4621af112574c44b30e5562ea",
-            "bytes": 311199
+            "sha256": "96e58c9dd89fe0ef59e56dd5882ee1a288681b6acadabc725df1c8e1be868f80",
+            "bytes": 311774
           },
           {
             "path": "catalogs/features.json",
@@ -53,8 +53,8 @@
           },
           {
             "path": "catalogs/creatures.json",
-            "sha256": "a8f0967bb98e96150a707e1bdda01cdb31344c22241f247ee1e4485edd885cf4",
-            "bytes": 687277
+            "sha256": "52d31b94bd0959798f4d3ca182dc6a2e06ba5e627f738e236d8c32675beabeb7",
+            "bytes": 691943
           }
         ],
         "permissions": [],
@@ -63,9 +63,9 @@
       "category": "misc",
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/ruleset-5e-2014.png",
       "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/ruleset-5e-2014-0.5.0.zip",
-        "sha256": "423b77e6aeb5432e3c64251e7819c700097b8d8997182cc6c376ae0e74703eae",
-        "bytes": 1273263
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/ruleset-5e-2014-0.6.0.zip",
+        "sha256": "5674e8b99eb3ca31b634df80d4594622a09144d1a7d5b0bd99a24feeb5f93f3e",
+        "bytes": 1285019
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Engine/blob/staging/docs/game/getting-started.md#choosing-rules"
     }

@@ -6,10 +6,10 @@ slots, hit dice, class resources, conditions, rests, a full character sheet, and
 a battle in a game on this ruleset is fought by these rules, on screen, against the SRD's own
 monsters.
 
-Requires **Marinara Engine 2.4.6+ with Capability API 1.27** (the ruleset seam, catalogs, the
-battle block, scaled catalog columns, the combat block and bestiaries: hash-pinned `ruleset.json`
-and `catalogs/<id>.json` assets the Engine reads by reserved filename, exactly like
-`gm-verbs.json`). Today that means the Engine `staging` branch; older hosts reject the manifest and
+Requires **Marinara Engine 2.4.6+ with Capability API 1.28** (the ruleset seam, catalogs, the
+battle block, scaled catalog columns, the combat block, bestiaries and a fight with positions:
+hash-pinned `ruleset.json` and `catalogs/<id>.json` assets the Engine reads by reserved filename,
+exactly like `gm-verbs.json`). Today that means the Engine `staging` branch; older hosts reject the manifest and
 cannot install this package. This package ships no server entrypoint, no client entrypoint, and no
 Agent. It is pure data: nothing here runs code, and no restart is needed after install.
 
@@ -27,8 +27,8 @@ Agent. It is pure data: nothing here runs code, and no restart is needed after i
 - Short and long rest recovery rules.
 - GM guidance text for when to call for a check or save and how to read the sheet.
 - A `battle` block: what a fight may read from the sheet, and what it writes back.
-- A `combat` block: how a battle is fought by 5e's own rules, which is what a game plays on. See
-  5e combat below.
+- A `combat` block: how a battle is fought by 5e's own rules, which is what a game plays on,
+  including what one square of a battlefield is worth. See 5e combat and On a board below.
 
 Every id in `ruleset.json` (`level`, `dex`, `slots`, and so on) is this file's own naming choice.
 The Engine does not look for 5e-specific names; it reads the same closed set of resolution kinds
@@ -180,6 +180,64 @@ cap everybody else's. The numbers are still the SRD creatures' own; only which r
 changes. This is live: when a Game Master invents an opponent instead of naming one out of the
 bestiary, the fight you play is built on this table.
 
+### On a board
+
+A fight can also be **positioned**: fought on a battlefield of squares, in feet. Two things have to
+agree before any of it happens. This package declares what one square is worth, and the player sets
+the game's combat style to **Tactical**. With **Classic**, the fight is exactly the theatre of the
+mind it was before: anybody can be pointed at anybody, and nothing in this section is read at all.
+
+What the block says, with the SRD sentence each number came from:
+
+| What | This package | SRD 5.1 |
+| --- | --- | --- |
+| One square | 5 ft | Playing on a Grid: "Each square on the grid represents 5 feet." |
+| Movement | Your **Speed** field, which starts at 30 | Speed: "Your speed defines how far you can move when you move on your turn." |
+| A long shot | Disadvantage | Range: "Your attack has disadvantage when your target is beyond normal range." |
+| A shot with a foe next to you | Disadvantage | Ranged Attacks in Close Combat: "You have disadvantage on a ranged attack roll if you are within 5 feet of a hostile creature." |
+| Cover | +2 to Armor Class | Cover: "A target with half cover has a +2 bonus to AC and Dexterity saving throws." |
+| Walking out of a reach | Costs the enemy its **reaction** | Opportunity Attacks: "To make the opportunity attack, you use your reaction." |
+
+**Speed is a plain sheet field defaulting to 30**, because this sheet has no notion of a race and so
+cannot read a race's speed off one. A Wood Elf's 35 or a Dwarf's 25 is a number you type into the
+Speed box yourself, exactly like Armor Class.
+
+**Weapons carry three new distances.** The Attacks list gains a **Reach (ft)** column defaulting to
+5, and **Range (ft)** and **Long range (ft)** columns defaulting to 0, and every weapon in the
+catalog fills them from the SRD's own weapons table: 17 weapons reach 5 feet, 5 reach 10 feet (the
+Reach property adds 5), 8 are shot and reach nothing at all, and 6 both swing and are thrown. A 0 in
+a column means that row carries no such distance, which is how a sword and a thrown axe sit in the
+same list.
+
+**Refresh a row you already picked.** A picked row is a copy, so a weapon you added before this
+version has none of the three columns and the Engine reads that as reaching exactly one square. An
+old longbow will only fire at somebody standing next to you until you open the row and choose
+**Refresh from ruleset**, or fill the three numbers in by hand.
+
+**Spells land as the shape the SRD prints.** 82 of the 84 spells a fight can resolve carry a range
+in feet, and 30 carry an area: 13 spheres, 4 cylinders, 4 cones, 2 lines and 7 cubes or squares.
+Dream ("Special") and Meteor Swarm ("1 mile") carry no range, because neither is a number of feet.
+A range of **Touch** or **Self** is written as 0, which the Engine reads as the caster's own square
+and, when it is aimed at somebody else, as the next one. A Self cone or line is aimed by pointing at
+a neighbouring square, which is what gives it its direction.
+
+**A cube or a square becomes the nearest burst**, because the Engine has a burst, a cone and a line
+and nothing else. A burst of radius r covers 2r + 1 squares across, so an edge of N feet ships as a
+burst of radius (N - 5) / 2: Thunderwave's 15-foot cube is three squares across either way, and a
+cube with an even number of squares comes out one square wider than the printed cube. It is the one
+place a shipped area is not the SRD's own outline.
+
+Five printed shapes in a resolvable spell are deliberately not areas: Control Water's 20-foot wave
+(moving water), Disintegrate's 10-foot cube (what the ray does to an object), Flame Blade's and
+Produce Flame's 10-foot radius (the light they shed) and Wall of Ice's 10-foot-square panels (a
+wall). The build refuses to run if a resolvable spell ever prints a shape that is in neither list.
+
+**A creature carries how far its actions reach.** Of the bestiary's 828 actions, 505 reach (a printed
+"reach 5 ft."), 185 carry (a printed "range 30/120 ft.", 56 of them with the long range as well), 18
+do both, and 156 state no distance: 150 of those are multiattack sequences, whose parts carry their
+own, and the last 6 are things done to somebody already grappled or standing in the creature's own
+square.
+
 ### Creatures
 
 `catalogs/creatures.json` is 319 of the SRD 5.1 monsters, each written in the numbers above:
@@ -226,13 +284,26 @@ of its own, or if the two stop printing the same actions.
 
 A fight plays, so this is the honest list of what it still does not do:
 
-- **No positions.** Reach, range, areas, cover, speed and movement are carried and read by nobody
-  yet, so an area action says how many targets it takes instead: two for a line, three for a cone or
-  a sphere, two for anything else that says "each creature". Those are deliberately low, chosen once,
-  and they are the one place in the bestiary where a number is not the SRD's own.
+- **A creature's area has no shape.** Capability API 1.28 gives a creature action a reach and a
+  range and nowhere at all to put a cone, a line or a burst, so the dragon's "60-foot cone" ships as
+  an action that reaches 60 feet and names its targets. 59 printed areas are flattened that way (31
+  cones, 22 lines, 5 radii and 1 cube), and each of them still says how many creatures it takes: two
+  for a line, three for a cone or a sphere, two for anything else that says "each creature". Those
+  counts are deliberately low, chosen once, and they are the one place in the bestiary where a
+  number is not the SRD's own. They are what the fight reads with a board and without one alike.
+- **A line has no width.** "A line 100 feet long and 5 feet wide" is a line of single squares, which
+  is what the SRD's own line is at this width and would not be at a wider one.
+- **A thrown weapon is read as a shot.** A row that carries both a reach and a range is a shot at
+  every distance, so swinging a handaxe at somebody in the next square takes the disadvantage meant
+  for shooting past a foe, and a character carrying only thrown weapons has nothing to strike a
+  passer-by with. The SRD's own two numbers are what ships; the reading is the Engine's.
+- **Half cover only.** Ground the Engine's battlefield calls cover is worth +2 and never the +5 of
+  three-quarters cover, and there is no total cover, no elevation and no flying height.
+- **A strike at somebody walking away is automatic**, for you as well as for the monsters, because
+  choosing whether to take one is a reaction window and there are no reactions yet.
+- **No grapple, no shove**, and nothing pushes anybody anywhere.
 - **One speed per creature.** A creature that walks, swims and flies carries the fastest of them as
-  its number and the rest as a trait, because the format has one speed and the slice that moves a
-  creature will read it.
+  its number and the rest as a trait, because the format has one speed.
 - **No reactions**, so a reaction spell such as Shield is left off the menu and a creature's printed
   reactions are traits.
 - **Legendary actions are carried, priced and resolved, but nothing opens the window they are spent
@@ -245,7 +316,7 @@ A fight plays, so this is the honest list of what it still does not do:
   attack that prints an alternative ("or 8 (1d10 + 3) if used with two hands", "or 5 (2d4) if the
   swarm has half its hit points"), which is a choice a fight has no way to make: 61 of them.
   The second helpings are a trait in this release because a creature action holds one damage roll in
-  Capability API 1.27; the Engine is scheduled to carry them, and the converter already counts them,
+  Capability API 1.28; the Engine is scheduled to carry them, and the converter already counts them,
   so they come back as numbers the release after that seam lands.
 - **Spellcasting monsters** are traits. A stat block's spell list is not something a creature action
   can hold.
@@ -266,14 +337,15 @@ A fight plays, so this is the honest list of what it still does not do:
 
 Available to Engine `staging` users only. The package is listed in `STAGING_ONLY_PACKAGE_IDS`, so
 it is published to the preview overlay under `catalog/preview/` that staging Engines read, and is
-hidden from stable `main` users. It stays there until the Capability API 1.27 ruleset, catalog,
-battle, scaled-column, combat and bestiary seam reaches a stable Engine release.
+hidden from stable `main` users. It stays there until the Capability API 1.28 ruleset, catalog,
+battle, scaled-column, combat, bestiary and positions seam reaches a stable Engine release.
 
 ## Installing
 
 Install it from **Agents** and **Download Agents** in a Marinara Engine build that supports
-Capability API 1.27. After installing, choose it under Rules in the Game Mode setup wizard when you
-create a new game.
+Capability API 1.28. After installing, choose it under Rules in the Game Mode setup wizard when you
+create a new game. Choose the **Tactical** combat style in the same wizard if you want the fight
+played on a board; **Classic** plays the same fight without positions.
 
 ## License
 

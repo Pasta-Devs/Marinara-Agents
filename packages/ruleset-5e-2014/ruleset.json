@@ -693,7 +693,7 @@
             "label": "Reach (ft)",
             "type": "number",
             "min": 0,
-            "max": 120,
+            "max": 30,
             "default": 5
           },
           {
@@ -702,7 +702,7 @@
             "label": "Range (ft)",
             "type": "number",
             "min": 0,
-            "max": 1000,
+            "max": 1200,
             "default": 0
           },
           {
@@ -711,7 +711,7 @@
             "label": "Long range (ft)",
             "type": "number",
             "min": 0,
-            "max": 1000,
+            "max": 3000,
             "default": 0
           }
         ]
