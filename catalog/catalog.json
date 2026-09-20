@@ -473,7 +473,7 @@
         "schemaVersion": 1,
         "id": "custom-tracker",
         "name": "Custom Tracker",
-        "version": "1.1.0",
+        "version": "1.1.1",
         "description": "Tracks user-defined fields (currencies, counters, flags, or any custom data). Add any fields you want the model to keep track of during the roleplay. Add the Agent in Chat Settings → Agents → Tracker Agents for Roleplay mode.",
         "engine": {
           "min": "2.3.0",
@@ -488,8 +488,8 @@
         "files": [
           {
             "path": "agents.json",
-            "sha256": "40acf7260fb727a9ac1e61f3a1227cb0945ac3596cab0ce7bc984abae4e3261f",
-            "bytes": 2196
+            "sha256": "521b918235649833b3c94c8f2b9a6e61f2eca14d83f48a31d946c42abb51342c",
+            "bytes": 2529
           }
         ],
         "permissions": [
@@ -504,9 +504,9 @@
       "category": "tracker",
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/custom-tracker.png",
       "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/custom-tracker-1.1.0.zip",
-        "sha256": "3d54d8b50fdc57da092a9f5d7b3f14d04e5f2c63f5291e9f7d339b0488a9f178",
-        "bytes": 1791
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/custom-tracker-1.1.1.zip",
+        "sha256": "4cac746b2a7cab15f680835007a4116354b9ba444de24ea9246f127f3d3029c2",
+        "bytes": 3549
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Engine/blob/staging/docs/agents/built-in-agents.md#custom-tracker"
     },
