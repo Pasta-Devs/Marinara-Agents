@@ -12,7 +12,7 @@ internal prompt implementation.
 | ----- | -------------------------------------------------------- | ----------- | -------- |
 | 1     | Prompt Studio page framing and scope context             | Complete    | 242ca65e |
 | 2     | Group prompt recipes and reduce technical density        | Complete    | —        |
-| 3     | Explicit model preview flow and consistent draft saving  | Pending     | —        |
+| 3     | Make prompt preview explicit and preserve draft context  | In progress | —        |
 | 4     | Remove visible Classic mode and migrate Produce defaults | Pending     | —        |
 
 ## Slice 1 proof
@@ -38,3 +38,11 @@ internal prompt implementation.
 - Focused prompt regressions and Prettier pass.
 - Slurp2 typecheck is blocked on September 20, 2026 because the host has no free disk space for
   the typecheck script's temporary copy.
+
+## Slice 3 scope
+
+- Opening a recipe must not call the preview endpoint.
+- Preview runs only after an explicit `Preview recipe` action or block-level preview action.
+- Keep the selected Creator visible as the preview context.
+- Add the full model-generated result preview in a later sub-slice after the draft payload contract is
+  defined.

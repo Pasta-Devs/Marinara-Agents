@@ -144,9 +144,8 @@ export function SlurpPromptBlockBuilder({
     setPreviewing({ promptId, blockId });
     if (activeCreatorId) preview.mutate({ promptId, mode, creatorAccountId: activeCreatorId });
   };
-  const selectPrompt = (promptId: string, open: boolean, firstBlockId: string) => {
+  const selectPrompt = (promptId: string, open: boolean) => {
     setSelectedPromptId(open ? null : promptId);
-    if (!open) showPreview(promptId, firstBlockId);
   };
   const previewText = previewing
     ? (preview.data?.blocks.find((block) => block.id === previewing.blockId)?.text ?? "")
@@ -348,7 +347,7 @@ export function SlurpPromptBlockBuilder({
                       <button
                         type="button"
                         aria-expanded={selected}
-                        onClick={() => selectPrompt(prompt.id, selected, layout[0]?.id ?? "")}
+                        onClick={() => selectPrompt(prompt.id, selected)}
                         className="flex min-h-12 w-full items-start gap-3 rounded-xl px-4 py-3 text-start focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)]"
                       >
                         <span className="min-w-0 flex-1">
@@ -370,6 +369,33 @@ export function SlurpPromptBlockBuilder({
                       </button>
                       {selected && (
                         <div className="space-y-4 border-t border-[var(--slurp-outline)] p-3 sm:p-4 lg:col-span-2">
+                          <div className="flex flex-wrap items-start justify-between gap-3 rounded-lg bg-[var(--slurp-surface-raised)] p-3 ring-1 ring-inset ring-[var(--slurp-outline)]">
+                            <div className="min-w-0">
+                              <p className="text-xs font-bold">
+                                {t("ui.slurp.settings.prompts.recipeControls", { defaultValue: "Recipe controls" })}
+                              </p>
+                              <p className="mt-1 text-xs leading-5 text-[var(--slurp-muted)]">
+                                {t("ui.slurp.settings.prompts.recipeControlsDetail", {
+                                  defaultValue: "Preview uses the selected Creator and runs only when you ask for it.",
+                                })}
+                              </p>
+                            </div>
+                            <button
+                              type="button"
+                              disabled={!activeCreatorId || preview.isPending}
+                              onClick={() => showPreview(prompt.id, layout[0]?.id ?? "")}
+                              className="inline-flex min-h-10 items-center gap-1.5 rounded-lg border border-[var(--slurp-outline)] px-3 text-xs font-semibold text-[var(--slurp-muted)] hover:text-[var(--slurp-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] disabled:opacity-45"
+                            >
+                              <Eye size={14} aria-hidden="true" />
+                              {preview.isPending
+                                ? t("ui.slurp.settings.prompts.previewRendering", {
+                                    defaultValue: "Rendering preview...",
+                                  })
+                                : t("ui.slurp.settings.prompts.previewRecipe", {
+                                    defaultValue: "Preview recipe",
+                                  })}
+                            </button>
+                          </div>
                           <div className="space-y-3">
                             <ol className="space-y-2">
                               {layout.map((entry, index) => {
