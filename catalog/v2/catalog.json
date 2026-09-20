@@ -2912,7 +2912,7 @@
         "schemaVersion": 1,
         "id": "prose-guardian",
         "name": "Prose Guardian",
-        "version": "1.0.2",
+        "version": "1.0.3",
         "description": "Post-processes the latest assistant message to remove banned words, repetition, and unwanted prose habits without changing the meaning. Add the Agent in Chat Settings → Agents → Writer Agents for Roleplay mode.",
         "engine": {
           "min": "2.3.0",
@@ -2927,8 +2927,8 @@
         "files": [
           {
             "path": "agents.json",
-            "sha256": "f391ee52c56212577d752206e5cb07ceb10af802f1583111778a25d5b7cce382",
-            "bytes": 1806
+            "sha256": "dadcd4aa76394ff4a6c60d6407fb3298172c0067ab085b0edcce514c3a75c7df",
+            "bytes": 2064
           }
         ],
         "permissions": [
@@ -2943,9 +2943,9 @@
       "category": "writer",
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/prose-guardian.png",
       "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/prose-guardian-1.0.2.zip",
-        "sha256": "d39342c6b4dc44a7669c8900d1e00d10f8aa16a2155a0ee6b4053d248cc4fc2f",
-        "bytes": 1526
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/prose-guardian-1.0.3.zip",
+        "sha256": "d72102b3c23e4ac390a62ffa6d30c582140a3d4a7e174bf0d278c36e4bd171b2",
+        "bytes": 1656
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Engine/blob/staging/docs/agents/built-in-agents.md#prose-guardian"
     },
