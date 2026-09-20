@@ -418,13 +418,6 @@ A fight plays, so this is the honest list of what it still does not do:
   would leave their victim charmed for the rest of the battle, because this package's charms run
   600 rounds for Charm Person and Dominate Monster and 10 for the others. So the condition ends
   when its source goes down, which is the one moment a fight can see.
-- **Loading does not cap a strike count.** SRD Loading says you fire only one piece of ammunition
-  when you use an action to fire, "regardless of the number of attacks you can normally make", and
-  the four weapons that have it (both hand and heavy and light crossbows, and the blowgun) carry it
-  in their properties. But `strikes` is one value for the whole weapon list rather than a column on
-  the row, so a character with Extra Attack firing a crossbow is offered the same number of strikes
-  as one swinging a sword. Use a bow if you want the count to be right, or take the one extra shot
-  as a known overcount. Tracked as https://github.com/Pasta-Devs/Marinara-Engine/issues/6452.
 - **Sneak Attack's third condition.** The SRD lets the adjacent-ally alternative stand only if "you
   don't have disadvantage on the attack roll", and the rider's `when` vocabulary is a closed
   `advantage` / `ally-adjacent` pair with nothing that can say "and not disadvantage". So a rogue

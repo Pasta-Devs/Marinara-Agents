@@ -66,6 +66,12 @@ export const RULESET_CREATURES_MIN_CAPABILITY_API = Object.freeze({ major: 1, mi
 // reads them.
 export const RULESET_POSITIONS_MIN_CAPABILITY_API = Object.freeze({ major: 1, minor: 28 });
 
+// An attack source may name a boolean column that holds ITS OWN row to a single
+// strike however many the list buys, for a weapon that fires once a turn whatever
+// its wielder's count. It lives in `ruleset.json`, so an older Engine refuses the
+// whole file rather than ignoring the key.
+export const RULESET_STRIKE_CAP_MIN_CAPABILITY_API = Object.freeze({ major: 1, minor: 32 });
+
 // What the Engine's own schema allows a distance, in the ruleset's own unit.
 const RULESET_DISTANCE_MAX = 10000;
 const RULESET_DISTANCE_LABEL_MAX = 12;
@@ -707,6 +713,27 @@ export function assertRulesetCombat(manifest, document) {
   const cover = blockOf("cover");
   const opportunity = blockOf("opportunity");
   const positionKeys = ["ranged", "cover", "opportunity"].filter((key) => combat[key] !== undefined);
+  // A row that caps its own strikes: the key, the column it names, and the number it caps.
+  (combat.attacks ?? []).forEach((source, index) => {
+    const cap = source?.strikesCappedBy;
+    if (cap === undefined) return;
+    const capApi = RULESET_STRIKE_CAP_MIN_CAPABILITY_API;
+    if (!meetsCapabilityApi(manifest, capApi)) {
+      throw new Error(
+        `${id} caps a weapon's strikes and must declare capability API ${capApi.major}.${capApi.minor} or newer`,
+      );
+    }
+    if (source.strikes === undefined) {
+      throw new Error(`${id} combat attacks[${index}] caps strikes on a list that buys one a spend anyway`);
+    }
+    const list = (document?.sheet?.lists ?? []).find((entry) => entry?.id === source.list);
+    const column = (list?.columns ?? []).find((entry) => entry?.id === cap?.column);
+    if (!column || column.type !== "boolean") {
+      throw new Error(
+        `${id} combat attacks[${index}].strikesCappedBy names "${cap?.column}", which is not a boolean column of "${source.list}"`,
+      );
+    }
+  });
   const attackDistances = (combat.attacks ?? []).flatMap((source, index) =>
     ["reach", "range"].filter((key) => source?.[key] !== undefined).map((key) => `attacks[${index}].${key}`),
   );

@@ -73,6 +73,8 @@ const DISTANCE_UNITS = { distance: { label: "ft", perCell: 5 } };
 const ATTACKS_PER_ACTION_FIELD = "attacks_per_action";
 // The weapon column a rider may require, likewise declared by ruleset.json.
 const FINESSE_OR_RANGED_COLUMN = "finesse_or_ranged";
+// The weapon column that holds its own row to one strike, likewise declared by ruleset.json.
+const LOADING_COLUMN = "loading";
 const ATTACK_REACH_COLUMN = "reach";
 const ATTACK_RANGE_COLUMN = "range";
 const ATTACK_LONG_RANGE_COLUMN = "long_range";
@@ -1596,6 +1598,10 @@ function buildWeaponEntries(weapons, propertiesByWeapon, report) {
               // Both halves come from the source itself: its own Finesse property, and the ranged
               // weapons listed above. One column, because it is one question about the row.
               [FINESSE_OR_RANGED_COLUMN]: has("Finesse") || ranged,
+              // SRD 5.1, Loading: "you can fire only one piece of ammunition when you use an
+              // action ... regardless of the number of attacks you can normally make." The source
+              // carries the property; the combat block below is what acts on it.
+              [LOADING_COLUMN]: has("Loading"),
               bonus: 0,
               damage: fields.damage_dice,
               damage_type: fields.damage_type,
@@ -3029,6 +3035,9 @@ function combatBlock(tiers) {
         // player's own field rather than a class table; a character without the feature leaves it
         // at 1 and the fight is the one it always was.
         strikes: { field: ATTACKS_PER_ACTION_FIELD },
+        // Extra Attack does not give a crossbow a second shot. The count above is the list's; this
+        // column is what holds a loading weapon's own row to one.
+        strikesCappedBy: { column: LOADING_COLUMN },
       },
     ],
     abilities: [
