@@ -1794,6 +1794,20 @@ assert.throws(
     ),
   /combat attacks "attacks" range names the ordinary distance it is shot at/u,
 );
+// A range that is not a pair at all is refused by its own sentence: `null` would otherwise throw a
+// TypeError, and an array or a number would be told it is missing a normal distance, which is the
+// wrong complaint about a value that was never the right shape.
+for (const wrong of [null, 30, [30, 120], "30/120"]) {
+  assert.throws(
+    () =>
+      assertRulesetCombat(
+        positionsManifest,
+        positionsWith((combat) => (combat.attacks[0].range = wrong)),
+      ),
+    /combat attacks "attacks" range is an ordinary distance and an optional longer one/u,
+    JSON.stringify(wrong),
+  );
+}
 assert.throws(
   () =>
     assertRulesetCombat(

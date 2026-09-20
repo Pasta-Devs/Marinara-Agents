@@ -792,6 +792,14 @@ export function assertRulesetCombat(manifest, document) {
     };
     distance(source.reach, `"${source.list}" reach`);
     if (source.range !== undefined) {
+      // Said before anything reads into it: `null` would throw a TypeError rather than a sentence,
+      // and an array or a number would fall through to the message below, which is about a shape
+      // that at least IS a pair.
+      if (!source.range || typeof source.range !== "object" || Array.isArray(source.range)) {
+        throw new Error(
+          `${id} combat attacks "${source.list}" range is an ordinary distance and an optional longer one, not ${JSON.stringify(source.range)}`,
+        );
+      }
       if (source.range.normal === undefined) {
         throw new Error(`${id} combat attacks "${source.list}" range names the ordinary distance it is shot at`);
       }
