@@ -180,6 +180,16 @@ export type SlurpPromptResultPreviewResponse = {
   imagePrompt: string | null;
   compiledPrompt: string;
 };
+export type SlurpPromptResultPreviewInput = {
+  promptId: "post";
+  mode: SlurpPromptMode;
+  creatorAccountId: string;
+  promptBlocks?: unknown;
+  promptInstructions?: SlurpReusablePromptInstruction[];
+  access?: "public" | "locked";
+  format?: "caption" | "announcement" | "long_form";
+  direction?: string;
+};
 export type SlurpPromptDefinition = {
   id: string;
   group: "writing" | "messages" | "images" | "profiles" | "world" | "audience";

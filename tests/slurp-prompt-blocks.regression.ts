@@ -135,6 +135,9 @@ const generationSource = slurp2Source(
   "packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-generation.service.ts",
 );
 const settingsRoutes = slurp2Source("packages/slurp2/src/engine/packages/server/src/routes/slurp.routes.ts");
+const promptStudioSource = slurp2Source(
+  "packages/slurp2/src/engine/packages/client/src/components/slurp/SlurpPromptBlockBuilder.tsx",
+);
 assert.match(dmSource, /id: "outputContract"/u);
 assert.match(dmSource, /id: "relationshipState"/u);
 assert.match(commentSource, /id: "outputContract"/u);
@@ -142,6 +145,13 @@ assert.match(generationSource, /if \(!input\.previewOnly\) \{[\s\S]*?openSlurpSh
 assert.match(generationSource, /prepareOnly:[\s\S]*?compiledPrompt/u);
 assert.match(settingsRoutes, /\/settings\/prompt-blocks\/generate-preview/u);
 assert.match(settingsRoutes, /prepareOnly: true,[\s\S]*?previewOnly: true/u);
+assert.match(settingsRoutes, /access: body\.data\.access/u);
+assert.match(settingsRoutes, /format: body\.data\.format/u);
+assert.match(settingsRoutes, /noodlerPostGuide: body\.data\.direction \|\| undefined/u);
+assert.match(promptStudioSource, /SlpPromptPipeline/u);
+assert.match(promptStudioSource, /SlpPromptPreviewInspector/u);
+assert.match(promptStudioSource, /Compare with current/u);
+assert.match(promptStudioSource, /Apply to draft/u);
 
 for (const mode of SLURP_PROMPT_MODES) {
   for (const prompt of slurpPromptDescriptions(mode)) {

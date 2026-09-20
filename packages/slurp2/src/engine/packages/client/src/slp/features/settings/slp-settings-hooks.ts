@@ -6,6 +6,7 @@ import type {
   SlurpPromptBlocksResponse,
   SlurpPromptPreviewResponse,
   SlurpPromptResultPreviewResponse,
+  SlurpPromptResultPreviewInput,
   SlurpPromptMode,
   SlurpSettings,
   SlurpSettingsUpdate,
@@ -54,13 +55,8 @@ export function useSlurpPromptBlockPreview() {
 }
 export function useSlurpPromptResultPreview() {
   return useMutation({
-    mutationFn: (input: {
-      promptId: "post";
-      mode: SlurpPromptMode;
-      creatorAccountId: string;
-      promptBlocks?: unknown;
-      promptInstructions?: SlurpReusablePromptInstruction[];
-    }) => api.post<SlurpPromptResultPreviewResponse>("/slurp2/settings/prompt-blocks/generate-preview", input),
+    mutationFn: (input: SlurpPromptResultPreviewInput) =>
+      api.post<SlurpPromptResultPreviewResponse>("/slurp2/settings/prompt-blocks/generate-preview", input),
   });
 }
 export function useUpdateSlurpSettings() {

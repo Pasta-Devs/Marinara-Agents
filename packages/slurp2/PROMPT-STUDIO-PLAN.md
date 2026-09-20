@@ -16,6 +16,9 @@ internal prompt implementation.
 | 4     | Remove visible Classic mode and migrate Produce defaults | Complete    | 95c7a1df |
 | 5     | Add a draft-aware compiled prompt preview contract       | Complete    | b464ba1e |
 | 6     | Add explicit model-generated result preview              | Complete    | 4a122cd5 |
+| 7     | Replace the settings wall with outcome controls          | Complete    | —        |
+| 8     | Build the focused responsive recipe workspace            | Complete    | —        |
+| 9     | Add draft/current comparison and finish validation       | In progress | —        |
 
 ## Slice 1 proof
 
@@ -31,6 +34,19 @@ internal prompt implementation.
 - Support global defaults first, with Creator-specific overrides as a later layer.
 - Show both the generated result and the exact compiled prompt in the eventual preview surface.
 - Do not expose Classic as a second user-facing architecture.
+- Keep all Prompt Studio edits in the existing Backstage draft and apply flow.
+- Open one recipe at a time; only its selected block expands.
+- Use the selected Creator only as preview context in this release.
+
+## Approved redesign acceptance
+
+- The default page leads with Voice & writing, Post behavior, and Image direction outcomes.
+- Recipes read as capabilities with purpose, block count, and Default or Custom state.
+- Desktop uses recipe navigation, a focused pipeline, and a persistent preview inspector.
+- Mobile uses Build and Preview views without horizontal scrolling.
+- Preview supports Creator, access, format, and optional direction without persisting a post.
+- Draft results can be compared with the currently applied recipe.
+- Opening a recipe or block never calls a model.
 
 ## Slice 2 proof
 
@@ -90,3 +106,14 @@ internal prompt implementation.
 - Client and route inventories were updated for the intentional new endpoint.
 - Focused regressions, architecture regression, Slurp2 typecheck, Prettier, `git diff --check`, and
   `npm run check` pass. `npm run check` reports 0 errors and existing warnings.
+
+## Slices 7 and 8 proof
+
+- The overview leads with three outcome controls and keeps presets in a compact disclosure.
+- Prompt recipes are capability cards with purpose, block count, and customization state.
+- The old accordion builder is split into recipe navigation, pipeline, selected-block editor,
+  shared-guidance editor, preview inspector, and presentation-model modules.
+- Desktop keeps the pipeline and inspector visible together; mobile switches between Build and
+  Preview and focuses one selected block at a time.
+- Public and locked post guidance now participates in the Backstage draft, discard, and apply flow.
+- Opening recipes and blocks only changes local UI state and never starts a preview request.

@@ -9,6 +9,7 @@ import {
   SLURP_GUIDANCE_PRESETS,
   SLURP_IMAGE_INTERPRETATION_PRESETS,
   SLURP_IMAGE_INTERPRETATION_STYLES,
+  errorMessage,
 } from "../../modules/settings/slp-backstage-format";
 import {
   exportSlurpPromptPresets,
@@ -17,6 +18,7 @@ import {
   SLURP_PROMPT_PRESET_NAME_LIMIT,
 } from "./slp-prompt-presets";
 import type { SlurpSettings } from "./slp-settings-contract";
+import { useSlurpPostGuidance, useUpdateSlurpPostGuidance } from "./slp-post-guidance-contract";
 
 /**
  * Generation guidance, prompt presets and the image prompt. These settings are read by ads,
@@ -24,12 +26,10 @@ import type { SlurpSettings } from "./slp-settings-contract";
  */
 export function useSlpPromptsBackstageState({
   settings,
-  save,
-  restore,
+  updatePatch,
 }: {
   settings: SlurpSettings | undefined;
-  save: (patch: Partial<SlurpSettings>) => Promise<boolean>;
-  restore: (patch: Partial<SlurpSettings>, message?: string) => Promise<boolean>;
+  updatePatch: (patch: Partial<SlurpSettings>) => Promise<boolean>;
 }) {
   const { t } = useTranslation();
   const [generationGuidanceDraft, setGenerationGuidanceDraft] = useState("");
@@ -37,7 +37,10 @@ export function useSlpPromptsBackstageState({
   const [imagePromptDraft, setImagePromptDraft] = useState("");
   const [imagePromptEditorOpen, setImagePromptEditorOpen] = useState(false);
   const [selectedPresetName, setSelectedPresetName] = useState("");
+  const [postGuidanceDraft, setPostGuidanceDraft] = useState<Partial<Record<"public" | "locked", string>>>({});
   const presetImportRef = useRef<HTMLInputElement>(null);
+  const postGuidanceQuery = useSlurpPostGuidance(true);
+  const updatePostGuidance = useUpdateSlurpPostGuidance();
 
   useEffect(() => {
     if (settings) {
@@ -69,16 +72,13 @@ export function useSlpPromptsBackstageState({
       ?.trim()
       .slice(0, SLURP_PROMPT_PRESET_NAME_LIMIT);
     if (!name) return;
-    const saved = await restore(
-      {
-        promptPresets: mergeSlurpPromptPreset(settings.promptPresets, {
-          name,
-          generationGuidance: settings.generationGuidance,
-          imageGenerationPrompt: settings.imageGenerationPrompt,
-        }),
-      },
-      t("ui.slurp.settings.presets.saved"),
-    );
+    const saved = await updatePatch({
+      promptPresets: mergeSlurpPromptPreset(settings.promptPresets, {
+        name,
+        generationGuidance: settings.generationGuidance,
+        imageGenerationPrompt: settings.imageGenerationPrompt,
+      }),
+    });
     if (saved) setSelectedPresetName(name);
   };
 
@@ -97,13 +97,10 @@ export function useSlpPromptsBackstageState({
       }))
     )
       return;
-    await restore(
-      {
-        generationGuidance: selectedPreset.generationGuidance,
-        imageGenerationPrompt: selectedPreset.imageGenerationPrompt,
-      },
-      t("ui.slurp.settings.presets.applied"),
-    );
+    await updatePatch({
+      generationGuidance: selectedPreset.generationGuidance,
+      imageGenerationPrompt: selectedPreset.imageGenerationPrompt,
+    });
   };
 
   const deletePromptPreset = async () => {
@@ -114,7 +111,11 @@ export function useSlpPromptsBackstageState({
       confirmLabel: t("ui.slurp.settings.presets.delete"),
     });
     if (!confirmed) return;
-    if (await save({ promptPresets: settings.promptPresets.filter((preset) => preset.name !== selectedPreset.name) })) {
+    if (
+      await updatePatch({
+        promptPresets: settings.promptPresets.filter((preset) => preset.name !== selectedPreset.name),
+      })
+    ) {
       setSelectedPresetName("");
     }
   };
@@ -147,24 +148,29 @@ export function useSlpPromptsBackstageState({
         toast.error(t("ui.slurp.settings.presets.importInvalid"));
         return;
       }
-      await restore(
-        { promptPresets: result.presets },
-        t("ui.slurp.settings.presets.imported", { count: result.imported }),
-      );
+      await updatePatch({ promptPresets: result.presets });
     } catch {
       toast.error(t("ui.slurp.settings.presets.importInvalid"));
     }
   };
 
-  const restoreDefaultImagePrompt = () =>
-    restore(
-      { imageGenerationPrompt: DEFAULT_SLURP_IMAGE_GENERATION_PROMPT },
-      t("ui.slurp.settings.prompts.imageRestored"),
-    );
-  const saveImagePrompt = () =>
-    restore({ imageGenerationPrompt: imagePromptDraft }, t("ui.slurp.settings.prompts.imageSaved"));
-  const saveGenerationGuidance = () =>
-    restore({ generationGuidance: generationGuidanceDraft }, t("ui.slurp.settings.prompts.guidanceSaved"));
+  const restoreDefaultImagePrompt = () => updatePatch({ imageGenerationPrompt: DEFAULT_SLURP_IMAGE_GENERATION_PROMPT });
+  const saveImagePrompt = () => updatePatch({ imageGenerationPrompt: imagePromptDraft });
+  const saveGenerationGuidance = () => updatePatch({ generationGuidance: generationGuidanceDraft });
+  const stagePostGuidance = (access: "public" | "locked", value: string) =>
+    setPostGuidanceDraft((current) => ({ ...current, [access]: value }));
+  const discardPromptDraft = () => setPostGuidanceDraft({});
+  const applyPromptDraft = async () => {
+    if (Object.keys(postGuidanceDraft).length === 0) return true;
+    try {
+      await updatePostGuidance.mutateAsync({ creatorId: null, ...postGuidanceDraft });
+      setPostGuidanceDraft({});
+      return true;
+    } catch (error) {
+      toast.error(errorMessage(error));
+      return false;
+    }
+  };
 
   return {
     generationGuidanceDraft,
@@ -179,6 +185,12 @@ export function useSlpPromptsBackstageState({
     setSelectedPresetName,
     presetImportRef,
     selectedPreset,
+    postGuidanceQuery,
+    postGuidanceDraft,
+    promptDraftCount: Object.keys(postGuidanceDraft).length,
+    stagePostGuidance,
+    discardPromptDraft,
+    applyPromptDraft,
     generationGuidanceIsDefault,
     guidanceLevel,
     interpretationStyle,

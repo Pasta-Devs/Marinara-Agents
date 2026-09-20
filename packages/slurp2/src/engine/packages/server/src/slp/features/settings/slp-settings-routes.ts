@@ -36,6 +36,9 @@ const slurpPromptPreviewSchema = z.object({
 
 const slurpPromptResultPreviewSchema = slurpPromptPreviewSchema.extend({
   promptId: z.literal("post"),
+  access: z.enum(["public", "locked"]).default("public"),
+  format: z.enum(["caption", "announcement", "long_form"]).default("caption"),
+  direction: z.string().trim().max(2000).optional(),
 });
 
 export async function slpSettingsRoutes(app: FastifyInstance, deps: SlpRouteDeps) {
@@ -100,8 +103,9 @@ export async function slpSettingsRoutes(app: FastifyInstance, deps: SlpRouteDeps
         request: {
           mode: "noodler",
           targetAccountId: account.id,
-          access: "public",
-          format: "caption",
+          access: body.data.access,
+          format: body.data.format,
+          noodlerPostGuide: body.data.direction || undefined,
         },
       });
       return {

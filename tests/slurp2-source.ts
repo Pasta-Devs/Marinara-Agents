@@ -753,6 +753,11 @@ export const SLURP2_SOURCE_MODULES: Record<string, readonly string[]> = {
   ],
   "packages/client/src/components/slurp/SlurpPromptBlockBuilder.tsx": [
     "packages/client/src/slp/features/settings/SlpPromptBlockBuilder.tsx",
+    "packages/client/src/slp/features/settings/SlpPromptOutcomeCard.tsx",
+    "packages/client/src/slp/features/settings/SlpPromptPipeline.tsx",
+    "packages/client/src/slp/features/settings/SlpPromptPreviewInspector.tsx",
+    "packages/client/src/slp/features/settings/SlpReusableInstructions.tsx",
+    "packages/client/src/slp/features/settings/slp-prompt-studio-model.ts",
   ],
   // Slice 10 split the shell: domain-neutral chrome to base/, the shell and persona switcher to
   // modules/chrome/ because the shell renders a wallet balance through modules/coin.
