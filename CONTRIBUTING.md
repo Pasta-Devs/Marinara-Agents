@@ -44,6 +44,8 @@ Developer/
 
 Set `MARINARA_ENGINE_ROOT` when the Engine checkout is elsewhere.
 
+Run `node scripts/validate-vendored-engine.mjs --baseline-ref origin/staging` with `MARINARA_ENGINE_ROOT` pointing to an Engine `staging` checkout to compare Git-tracked Engine files (ignoring generated host output) and report every common vendored file as current, drifted, or orphaned. The check skips with a notice when no Engine path is supplied. CI runs it in the Noodle browser job that already checks out Engine. `scripts/vendored-engine-baseline.json` records the existing divergent copies by status and both source/host hashes; later PRs may only remove entries. New drift, changes to either side of a stale copy, and a newly missing host file fail the gate. When a copy matches Engine or is removed, remove its baseline entry too. A file absent from Engine may still be package-owned runtime code: trace its package imports before deleting it. Host-service migration is tracked in Marinara-Engine#6385.
+
 After a fresh checkout, and whenever `package.json` or `package-lock.json` changes, install this repository's pinned build dependencies:
 
 ```bash
