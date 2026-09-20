@@ -34,6 +34,7 @@ import {
   prepareLtmSubjectIdentityContext,
   subjectsEqual,
   trustedLtmIdentityNotesForSource,
+  trustedLtmCharacterAliasIdentifiers,
   type TrustedLtmSubjectCatalog,
 } from "./subject-identity.js";
 import { noteIdForLtmDraftMutation, projectLtmDraftOntoNotes } from "./draft-projector.js";
@@ -591,6 +592,9 @@ async function extractLongTermMemoryFromSourceNoteInner(
     mode: resolvedMode,
     sourceHash,
     allowedBuckets,
+    eventSubjectIdentityKeys: options.trustedSubjectCatalog
+      ? trustedLtmCharacterAliasIdentifiers(options.trustedSubjectCatalog)
+      : undefined,
     skipStructuredBackfill: true,
   });
   compiled.diagnostics.push(...identityResolution.diagnostics, ...targetResolution.diagnostics);

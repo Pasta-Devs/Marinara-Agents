@@ -17,6 +17,7 @@ import { LongTermMemoryDraftStore } from "./draft-store.js";
 import { nowIso, uniqueStrings } from "./ltm-utils.js";
 import { isLtmSourceExtractionFingerprintCurrent } from "./source-hash.js";
 import { LongTermMemoryStorage } from "./storage.js";
+import { canUpdateLtmScopedTarget } from "./scoped-targets.js";
 
 export type ProjectLtmDraftReviewOptions = {
   root?: string;
@@ -47,6 +48,7 @@ export async function projectLongTermMemoryDraftReview(
   const sourceNoteIds = drafts.map((draft) => draft.source.sourceNoteId);
   const overlayNoteIds = drafts.flatMap((draft) => draft.mutations.map(noteIdForLtmDraftMutation));
   const notes = await storage.getNotesByIds(uniqueStrings([...sourceNoteIds, ...overlayNoteIds]));
+  const openThreads = await storage.listNotes({ type: "thread", status: "active" });
   const overlay = new Map(notes);
   const sourceNotes = notes;
   const sources = new Map<string, MutableSource>();
@@ -87,7 +89,10 @@ export async function projectLongTermMemoryDraftReview(
             draftId: draft.id,
             mutation: mutations.get(item.mutationId)!,
             disposition: item.disposition,
-            diagnostics: rowDiagnostics.get(item.mutationId) ?? [],
+            diagnostics: [
+              ...(rowDiagnostics.get(item.mutationId) ?? []),
+              ...suspiciousResolvedThreadDiagnostics(item, note.after, openThreads),
+            ],
             changes: item.changes,
           }));
           if (source) {
@@ -157,6 +162,52 @@ export async function projectLongTermMemoryDraftReview(
       ),
     },
   });
+}
+
+function suspiciousResolvedThreadDiagnostics(
+  item: { mutationId: string; disposition: string },
+  note: LtmNote,
+  openThreads: LtmNote[],
+): LtmExtractionDiagnostic[] {
+  if (item.disposition !== "new" || note.type !== "thread" || note.status !== "resolved") return [];
+  const text = noteText(note);
+  if (!text) return [];
+  const match = openThreads
+    .filter((candidate) => canUpdateLtmScopedTarget(candidate.scope, note.scope))
+    .map((candidate) => ({ candidate, score: lexicalSimilarity(text, noteText(candidate)) }))
+    .filter((entry) => entry.score >= 0.72)
+    .sort((left, right) => right.score - left.score)[0];
+  if (!match) return [];
+  return [
+    {
+      severity: "warning",
+      code: "suspicious_resolved_thread_create",
+      mutationId: item.mutationId,
+      noteId: note.id,
+      message: `Resolved thread text closely matches open thread ${match.candidate.id}; review whether this should update the existing thread.`,
+      details: { existingThreadId: match.candidate.id, similarity: Number(match.score.toFixed(3)) },
+    },
+  ];
+}
+
+function noteText(note: LtmNote) {
+  return Object.values(note.sections)
+    .map((section) => section.text.trim())
+    .filter(Boolean)
+    .join(" ")
+    .toLocaleLowerCase()
+    .replace(/[^\p{L}\p{N}\s]+/gu, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function lexicalSimilarity(left: string, right: string) {
+  const leftTokens = new Set(left.split(" ").filter((token) => token.length >= 3));
+  const rightTokens = new Set(right.split(" ").filter((token) => token.length >= 3));
+  if (!leftTokens.size || !rightTokens.size) return 0;
+  let shared = 0;
+  for (const token of leftTokens) if (rightTokens.has(token)) shared += 1;
+  return shared / Math.min(leftTokens.size, rightTokens.size);
 }
 
 function draftFreshness(draft: LtmDraftReviewDraft["draft"], source: LtmNote | null): LtmDraftFreshness {

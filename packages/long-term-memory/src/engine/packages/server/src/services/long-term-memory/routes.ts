@@ -35,6 +35,10 @@ import {
   ltmIdentityRepairApplyResponseSchema,
   ltmIdentityRepairPreviewRequestSchema,
   ltmIdentityRepairPreviewResponseSchema,
+  ltmNoteForkApplyRequestSchema,
+  ltmNoteForkApplyResponseSchema,
+  ltmNoteForkPreviewRequestSchema,
+  ltmNoteForkPreviewResponseSchema,
   ltmInteropPreviewRequestSchema,
   ltmInteropPreviewResponseSchema,
   ltmRepairRequestSchema,
@@ -62,6 +66,7 @@ import { getLtmExtractionConfig, updateLtmExtractionConfig } from "./extraction-
 import { isEnoent } from "./ltm-utils.js";
 import { checkLongTermMemoryIntegrity, repairLongTermMemory } from "./maintenance.js";
 import { applyLtmNoteTransfer, previewLtmNoteTransfer } from "./note-transfer.js";
+import { applyLtmNoteForkRepair, previewLtmNoteForkRepair } from "./note-fork-repair.js";
 import { getPackageLanguageModels, getPackagePersistence, getPackageResources, logger } from "./package-runtime.js";
 import { getLongTermMemoryDirectories, LTM_DIR_NAME } from "./paths.js";
 import { longTermMemoryRecallIndexPath, parseLtmRecallIndex, rebuildLongTermMemoryIndexes } from "./rebuild.js";
@@ -407,6 +412,13 @@ function routeError(error: unknown, fallback: string) {
     (error && typeof error === "object" && "statusCode" in error && "code" in error)
   )
     return ltmErrorResponse(error, fallback);
+  if (error instanceof AggregateError) {
+    logger.error(error, "[ltm] Unexpected aggregate failure in route");
+    return {
+      statusCode: 500,
+      body: { error: fallback, code: "ltm_unexpected_failure" },
+    };
+  }
   const message = error instanceof Error ? error.message : fallback;
   return {
     statusCode: 500,
@@ -1320,6 +1332,34 @@ export function createLongTermMemoryRoutes(runtime: {
             error: error instanceof Error ? error.message : "Failed to repair long-term memory identities",
             code: error instanceof LtmIdentityRepairError ? error.code : "identity_repair_failed",
           });
+        }
+      },
+    );
+    app.post<{ Body: unknown }>(
+      "/fork-repair/preview",
+      { bodyLimit: MAINTENANCE_BODY_LIMIT_BYTES },
+      async (request, reply) => {
+        try {
+          return ltmNoteForkPreviewResponseSchema.parse(
+            await previewLtmNoteForkRepair(ltmNoteForkPreviewRequestSchema.parse(request.body ?? {}), { root }),
+          );
+        } catch (error) {
+          const result = routeError(error, "Could not preview long-term memory fork repair");
+          return reply.status(result.statusCode).send(result.body);
+        }
+      },
+    );
+    app.post<{ Body: unknown }>(
+      "/fork-repair/apply",
+      { bodyLimit: IDENTITY_REPAIR_BODY_LIMIT_BYTES },
+      async (request, reply) => {
+        try {
+          return ltmNoteForkApplyResponseSchema.parse(
+            await applyLtmNoteForkRepair(ltmNoteForkApplyRequestSchema.parse(request.body ?? {}), { root }),
+          );
+        } catch (error) {
+          const result = routeError(error, "Could not apply long-term memory fork repair");
+          return reply.status(result.statusCode).send(result.body);
         }
       },
     );
