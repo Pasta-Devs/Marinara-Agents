@@ -300,8 +300,10 @@ A fight plays, so this is the honest list of what it still does not do:
   every distance, so swinging a handaxe at somebody in the next square takes the disadvantage meant
   for shooting past a foe, and a character carrying only thrown weapons has nothing to strike a
   passer-by with. The SRD's own two numbers are what ships; the reading is the Engine's.
-- **Half cover only.** Ground the Engine's battlefield calls cover is worth +2 and never the +5 of
-  three-quarters cover, and there is no total cover, no elevation and no flying height.
+- **Half cover only, and only against an attack.** Ground the Engine's battlefield calls cover is
+  worth +2 and never the +5 of three-quarters cover, there is no total cover, no elevation and no
+  flying height, and the bonus is read when the attack roll is made and never when a saving throw
+  is: SRD half cover also adds +2 to a Dexterity save, which nothing here can say.
 - **A strike at somebody walking away is automatic**, for you as well as for the monsters, because
   choosing whether to take one is a reaction window and there are no reactions yet.
 - **No grapple, no shove**, and nothing pushes anybody anywhere.
