@@ -24,6 +24,13 @@ function returnedKeys(source: string): string[] {
 }
 
 // `useSlurpHomeState` is the base state spread over the actions, so the model is both returns.
+// Assert that composition, or dropping a spread would strip a whole half of the model while the
+// key scan below still found its keys in the module that no longer reaches the screens.
+assert.match(
+  actions.slice(actions.indexOf("export function useSlurpHomeState")).replace(/\s+/gu, " "),
+  /return \{ \.\.\.state, \.\.\.useSlurpHomeActions\(state\) \};/u,
+  "the Home model must stay the base state spread over the actions",
+);
 const stateKeys = returnedKeys(state);
 const modelKeys = new Set([...stateKeys, ...returnedKeys(actions)]);
 assert.ok(stateKeys.length > 50, "the Home state return block was not found");
