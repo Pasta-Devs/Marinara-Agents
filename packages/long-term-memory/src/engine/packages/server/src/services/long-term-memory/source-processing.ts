@@ -73,6 +73,7 @@ function cancelled(error: unknown, signal?: AbortSignal) {
   return signal?.aborted || (error instanceof Error && error.name === "AbortError");
 }
 function canMarkCurrent(prepared: PreparedSource) {
+  if (prepared.outcome.incomplete) return false;
   if (prepared.diagnostics.some((item) => item.severity === "error")) return false;
   if (prepared.outcome.state === "success") return true;
   if (prepared.outcome.state === "no_suggestions_created") return prepared.outcome.droppedUnits === 0;
@@ -305,6 +306,7 @@ function failed(
       draft: null,
       outcome: prepared?.outcome ?? {
         state: "no_suggestions_created" as const,
+        incomplete: false,
         totalCandidates: 0,
         keptUnits: 0,
         droppedUnits: 0,
@@ -421,9 +423,9 @@ export async function processLongTermMemorySourceBatch(options: {
         note: committed.note,
         created: item.created,
         sourceWriteStatus: item.created ? "created" : "refreshed",
-        extractionStatus: "succeeded",
+        extractionStatus: prepared.outcome.incomplete === true ? "incomplete" : "succeeded",
         extractionMethod: prepared.extractionMethod,
-        retryable: false,
+        retryable: prepared.outcome.incomplete === true,
         draft: committed.draft,
         diagnostics: prepared.diagnostics,
         outcome: prepared.outcome,

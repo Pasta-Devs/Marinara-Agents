@@ -77,6 +77,7 @@ async function main(routeScenario: RouteScenario) {
   const debugOverrides: any[] = [];
   let failGameRefine = false;
   let emptyModelResponse = false;
+  let truncatedModelResponse = false;
   let failGrammarOnce = false;
   let grammarErrorMessage = "";
   let fitContextMode: "normal" | "reduced" | "trimmed" = "normal";
@@ -299,62 +300,64 @@ async function main(routeScenario: RouteScenario) {
                   return {
                     content: emptyModelResponse
                       ? ""
-                      : JSON.stringify({
-                          summary: "Extracted observatory facts.",
-                          units: [
-                            {
-                              bucket: "timeline_event",
-                              subjectId: "observatory_gate_sealed",
-                              sectionKey: "event",
-                              text: "Mara sealed the observatory gate at dusk.",
-                              importance: "major",
-                              evidence: ["source_note:source_route_extract"],
-                              confidence: 0.95,
-                              salience: 0.9,
-                              status: "active",
-                              links: [],
-                              sourceHash: "replaced-by-package",
-                            },
-                            {
-                              bucket: "world_fact",
-                              subjectId: "observatory_gate",
-                              sectionKey: "facts",
-                              text: "The observatory gate is sealed at dusk.",
-                              importance: "major",
-                              evidence: ["source_note:source_route_extract"],
-                              confidence: 0.95,
-                              salience: 0.9,
-                              status: "active",
-                              links: [
-                                {
-                                  relation: "evidenced_by",
-                                  target: "timeline_observatory_gate_sealed",
-                                },
-                              ],
-                              sourceHash: "replaced-by-package",
-                            },
-                            {
-                              bucket: "character_fact",
-                              subjectId: "mara",
-                              subjectNames: ["Mara"],
-                              sectionKey: "role",
-                              text: "Mara seals the observatory gate at dusk.",
-                              importance: "major",
-                              evidence: ["source_note:source_route_extract"],
-                              confidence: 0.95,
-                              salience: 0.9,
-                              status: "active",
-                              links: [
-                                {
-                                  relation: "evidenced_by",
-                                  target: "timeline_observatory_gate_sealed",
-                                },
-                              ],
-                              sourceHash: "replaced-by-package",
-                            },
-                          ],
-                        }),
-                    finishReason: "stop",
+                      : truncatedModelResponse
+                        ? '{"summary":"Recovered route extraction","units":[{"bucket":"timeline_event","subjectId":"observatory_gate_sealed","sectionKey":"event","text":"Mara sealed the observatory gate at dusk.","importance":"major","confidence":0.95,"salience":0.9,"status":"active","links":[{"target":"source_route_extract","relation":"extracted_from"}],"evidence":["source_note:source_route_extract"]},{"bucket":"timeline_event","subjectId":"unfinished'
+                        : JSON.stringify({
+                            summary: "Extracted observatory facts.",
+                            units: [
+                              {
+                                bucket: "timeline_event",
+                                subjectId: "observatory_gate_sealed",
+                                sectionKey: "event",
+                                text: "Mara sealed the observatory gate at dusk.",
+                                importance: "major",
+                                evidence: ["source_note:source_route_extract"],
+                                confidence: 0.95,
+                                salience: 0.9,
+                                status: "active",
+                                links: [],
+                                sourceHash: "replaced-by-package",
+                              },
+                              {
+                                bucket: "world_fact",
+                                subjectId: "observatory_gate",
+                                sectionKey: "facts",
+                                text: "The observatory gate is sealed at dusk.",
+                                importance: "major",
+                                evidence: ["source_note:source_route_extract"],
+                                confidence: 0.95,
+                                salience: 0.9,
+                                status: "active",
+                                links: [
+                                  {
+                                    relation: "evidenced_by",
+                                    target: "timeline_observatory_gate_sealed",
+                                  },
+                                ],
+                                sourceHash: "replaced-by-package",
+                              },
+                              {
+                                bucket: "character_fact",
+                                subjectId: "mara",
+                                subjectNames: ["Mara"],
+                                sectionKey: "role",
+                                text: "Mara seals the observatory gate at dusk.",
+                                importance: "major",
+                                evidence: ["source_note:source_route_extract"],
+                                confidence: 0.95,
+                                salience: 0.9,
+                                status: "active",
+                                links: [
+                                  {
+                                    relation: "evidenced_by",
+                                    target: "timeline_observatory_gate_sealed",
+                                  },
+                                ],
+                                sourceHash: "replaced-by-package",
+                              },
+                            ],
+                          }),
+                    finishReason: truncatedModelResponse ? "length" : "stop",
                     usage: {
                       promptTokens: 100,
                       completionTokens: 50,
@@ -365,7 +368,7 @@ async function main(routeScenario: RouteScenario) {
                 fitContext(messages: any[], options: any) {
                   return {
                     messages,
-                    maxTokens: fitContextMode === "reduced" ? 123 : options.maxTokens,
+                    maxTokens: fitContextMode === "reduced" ? 256 : options.maxTokens,
                     estimatedTokensBefore: 100,
                     estimatedTokensAfter: 100,
                     trimmed: fitContextMode === "trimmed",
@@ -2258,7 +2261,7 @@ async function main(routeScenario: RouteScenario) {
         payload: { chatId: "chat-a" },
       });
       assert.equal(reducedBudget.statusCode, 200, reducedBudget.body);
-      assert.equal(completionOptions.at(-1)?.maxTokens, 123);
+      assert.equal(completionOptions.at(-1)?.maxTokens, 256);
       fitContextMode = "trimmed";
       const trimmedContext = await app.inject({
         method: "POST",
@@ -3130,6 +3133,28 @@ async function main(routeScenario: RouteScenario) {
         .json()
         .samples.find((sample: any) => sample.sourceId === "chat-a:summary-empty-response");
       assert.equal(emptyResponseSample.freshness, "extraction_incomplete");
+      chats[0].metadata.summaryEntries.push({
+        id: "summary-truncated-response",
+        content: "A token-limited extraction keeps its complete prefix retryable.",
+        enabled: true,
+      });
+      truncatedModelResponse = true;
+      const truncatedResponseImport = await app.inject({
+        method: "POST",
+        url: "/api/long-term-memory/import/source-notes",
+        headers,
+        payload: {
+          source: "chats",
+          sourceIds: ["chat-a:summary-truncated-response"],
+          destinationScope: { chatId: "chat-b", chatIds: ["chat-b"] },
+        },
+      });
+      truncatedModelResponse = false;
+      assert.equal(truncatedResponseImport.statusCode, 200, truncatedResponseImport.body);
+      assert.equal(truncatedResponseImport.json().imported[0].extractionStatus, "incomplete");
+      assert.equal(truncatedResponseImport.json().imported[0].retryable, true);
+      assert.equal(truncatedResponseImport.json().imported[0].draft?.status, "pending");
+      assert.equal(truncatedResponseImport.json().imported[0].appliedMutationIds.length, 0);
       chats[0].metadata.summaryEntries.push({
         id: "summary-legacy",
         content: "Legacy identity should migrate to canonical provenance.",
@@ -4464,7 +4489,7 @@ async function main(routeScenario: RouteScenario) {
       });
       assert.equal(backup.statusCode, 200, backup.body);
       assert.equal(backup.json().format, "marinara-long-term-memory");
-      const expectedRejectedCount = routeScenario === "backup" ? 1 : 10;
+      const expectedRejectedCount = routeScenario === "backup" ? 1 : 11;
       assert.equal(backup.json().rejectedSuggestions.length, expectedRejectedCount);
       const backupPreview = await app.inject({
         method: "POST",
