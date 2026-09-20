@@ -1644,6 +1644,23 @@ for (const key of ["reach", "range"]) {
   );
 }
 
+// Each of the four is an object or it is not there. A null, an array or a bare number is refused by
+// name: reading a key off one of those would either throw or, for `ranged`, quietly pass.
+for (const key of ["distance", "ranged", "cover", "opportunity"]) {
+  for (const value of [null, [], 5, "yes"]) {
+    const wanted = `combat ${key} must be an object, not ${JSON.stringify(value)}`;
+    assert.throws(
+      () =>
+        assertRulesetCombat(
+          positionsManifest,
+          positionsWith((combat) => (combat[key] = value)),
+        ),
+      (error) => error.message.includes(wanted),
+      `${key} = ${JSON.stringify(value)}`,
+    );
+  }
+}
+
 // The cell size itself.
 for (const [perCell, message] of [
   [0, /combat distance perCell is a number above zero, not 0/u],

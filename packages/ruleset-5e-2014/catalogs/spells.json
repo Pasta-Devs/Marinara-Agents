@@ -2873,7 +2873,6 @@
       "mechanics": {
         "kind": "attack",
         "range": 150,
-        "area": { "shape": "burst", "size": 2.5 },
         "amount": { "dice": "7d10" },
         "damageType": "fire",
         "save": { "save": "dex_save", "onSuccess": "half" },
@@ -6988,7 +6987,6 @@
       "mechanics": {
         "kind": "attack",
         "range": 10,
-        "area": { "shape": "burst", "size": 2.5 },
         "amount": { "dice": "3d10" },
         "damageType": "force",
         "cost": [{ "pool": "slots_7", "amount": 1 }]

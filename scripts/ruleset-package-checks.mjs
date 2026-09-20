@@ -685,11 +685,26 @@ export function assertRulesetCombat(manifest, document) {
   //
   // The Engine's own rule, restated: `distance` is what makes a fight positionable, and every other
   // key below is a number measured in it, so declaring one without it is refused at import.
+  // Each of the four is an object or it is not there. Checked before anything reads into one, so a
+  // `null`, an array or a bare number says what is wrong with it instead of throwing a TypeError or,
+  // worse, passing every check below because reading a key off it gave `undefined`.
+  const blockOf = (key) => {
+    const value = combat[key];
+    if (value === undefined) return undefined;
+    if (!value || typeof value !== "object" || Array.isArray(value)) {
+      throw new Error(`${id} combat ${key} must be an object, not ${JSON.stringify(value)}`);
+    }
+    return value;
+  };
+  const distance = blockOf("distance");
+  const ranged = blockOf("ranged");
+  const cover = blockOf("cover");
+  const opportunity = blockOf("opportunity");
   const positionKeys = ["ranged", "cover", "opportunity"].filter((key) => combat[key] !== undefined);
   const attackDistances = (combat.attacks ?? []).flatMap((source, index) =>
     ["reach", "range"].filter((key) => source?.[key] !== undefined).map((key) => `attacks[${index}].${key}`),
   );
-  if (combat.distance === undefined) {
+  if (distance === undefined) {
     const orphan = positionKeys[0] ?? attackDistances[0];
     if (orphan) {
       throw new Error(`${id} combat "${orphan}" is measured in cells, so the block declares "distance" too`);
@@ -701,7 +716,7 @@ export function assertRulesetCombat(manifest, document) {
         `${id} gives a fight positions and must declare capability API ${api.major}.${api.minor} or newer`,
       );
     }
-    const { label, perCell } = combat.distance;
+    const { label, perCell } = distance;
     if (typeof label !== "string" || label.length < 1 || label.length > RULESET_DISTANCE_LABEL_MAX) {
       throw new Error(
         `${id} combat distance label ${JSON.stringify(label)} is 1 to ${RULESET_DISTANCE_LABEL_MAX} characters`,
@@ -711,9 +726,9 @@ export function assertRulesetCombat(manifest, document) {
       throw new Error(`${id} combat distance perCell is a number above zero, not ${JSON.stringify(perCell)}`);
     }
   }
-  if (combat.ranged !== undefined) {
+  if (ranged !== undefined) {
     for (const key of ["long", "adjacentFoe"]) {
-      const rule = combat.ranged[key];
+      const rule = ranged[key];
       if (rule !== undefined && !RULESET_RANGED_RULES.includes(rule)) {
         throw new Error(
           `${id} combat ranged ${key} is ${RULESET_RANGED_RULES.join(" or ")}, not ${JSON.stringify(rule)}`,
@@ -721,13 +736,13 @@ export function assertRulesetCombat(manifest, document) {
       }
     }
   }
-  if (combat.cover !== undefined) {
-    const bonus = combat.cover.bonus;
+  if (cover !== undefined) {
+    const bonus = cover.bonus;
     if (!Number.isInteger(bonus) || bonus < 0 || bonus > RULESET_COVER_MAX) {
       throw new Error(`${id} combat cover bonus is a whole number from 0 to ${RULESET_COVER_MAX}, not ${bonus}`);
     }
   }
-  if (combat.opportunity !== undefined) budget(combat.opportunity.budget, "opportunity budget");
+  if (opportunity !== undefined) budget(opportunity.budget, "opportunity budget");
 
   for (const source of combat.attacks ?? []) {
     const list = names.lists.get(source?.list);

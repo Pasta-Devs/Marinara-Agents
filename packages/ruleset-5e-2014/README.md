@@ -222,15 +222,17 @@ number alone, since a number is where your own edits live. Delete each weapon ro
 the catalog again, or type the three numbers into the row yourself. A character built from here on
 gets them with the row.
 
-**Spells land as the shape the SRD prints.** 82 of the 84 spells a fight can resolve carry a range
-in feet, and 30 carry an area: 13 spheres, 4 cylinders, 4 cones, 2 lines and 7 cubes or squares.
-Dream ("Special") and Meteor Swarm ("1 mile") carry no range, because neither is a number of feet.
+**Spells land as the shape the SRD prints.** Of the 84 spells a fight can resolve, 75 carry a range
+in feet, 7 draw a shape from the caster and so name no distance at all, and the last 2 are Dream
+("Special") and Meteor Swarm ("1 mile"), neither of which is a number of feet. 28 carry an area: 13
+spheres, 4 cylinders, 4 cones, 2 lines and 5 cubes or squares.
+
 A range of **Touch** is written as 0, which the Engine reads as a reach of one square rather than a
 shot, so touching somebody standing beside an enemy costs nothing. A spell whose range is **Self**
 and which draws a shape carries no distance at all, because Self names none: the Engine sets a burst
 down on the caster's own square and lets a cone or a line be aimed anywhere within its own length,
-since there the aimed square only picks the direction. Seven of the spells a fight resolves work that
-way, Burning Hands and Thunderwave among them.
+since there the aimed square only picks the direction. Burning Hands and Thunderwave are two of the
+seven.
 
 **A cube or a square becomes the nearest burst**, because the Engine has a burst, a cone and a line
 and nothing else. A burst of radius r covers 2r + 1 squares across, so an edge of N feet ships as a
@@ -238,18 +240,42 @@ burst of radius (N - 5) / 2: Thunderwave's 15-foot cube is three squares across 
 cube with an even number of squares comes out one square wider than the printed cube. It is the one
 place a shipped area is not the SRD's own outline.
 
-Five printed shapes in a resolvable spell are deliberately not areas: Control Water's 20-foot wave
-(moving water), Disintegrate's 10-foot cube (what the ray does to an object), Flame Blade's and
-Produce Flame's 10-foot radius (the light they shed) and Wall of Ice's 10-foot-square panels (a
-wall). The build refuses to run if a resolvable spell ever prints a shape that is in neither list.
+Seven printed shapes in a resolvable spell are deliberately not areas, because none of them is a
+patch of ground the spell catches creatures in:
 
-**A creature carries how far its actions reach.** Of the bestiary's 828 actions, 505 reach (a printed
-"reach 5 ft."), 128 carry (a printed "range 30/120 ft.", 56 of them with the long range as well), 18
-do both, and 156 state no distance at all: 150 of those are multiattack sequences, whose parts carry
-their own, and the last 6 are things done to somebody already grappled or standing in the creature's
-own square. 72 actions print no range and take their distance from the sentence that names who has
-to save, which is how a stat block writes an aura or a presence ("each creature within 120 feet of
-the dragon").
+| Spell | What the number really is |
+| --- | --- |
+| Control Water | a 20-foot wave of moving water, and the Engine has no shape that moves |
+| Disintegrate | the 10-foot cube the ray destroys of an object; the spell itself takes one target |
+| Fire Storm | up to ten 10-foot cubes arranged as you wish, and the Engine has no shape made of several |
+| Flame Blade | the 10-foot radius of light the blade sheds |
+| Produce Flame | the 10-foot radius of light the flame sheds |
+| Teleport | how big an object it may send, not ground it covers |
+| Wall of Ice | ten 10-foot-square panels, which is a wall |
+
+Fire Storm and Teleport are the two the machine-readable source itself states a shape for, and both
+would otherwise have shipped as a single 10-foot cube: a tenth of Fire Storm's real footprint, and
+something Teleport does not have at all. The build refuses to run if a resolvable spell ever prints a
+shape that is in neither list, or if one that states a boxed shape says in its own text that there
+are several of them.
+
+**A creature carries how far its actions reach.** The bestiary's 828 actions divide up exactly, each
+one into a single row:
+
+| What it carries | How many | What they are |
+| --- | --- | --- |
+| A reach only | 487 | a printed "reach 5 ft.", the ordinary swing |
+| A reach and a range | 18 | the thrown weapons: "reach 5 ft. or range 20/60 ft." |
+| A range only | 109 | bows, bolts and everything that only carries |
+| A shape only | 57 | breath weapons, sprays and clouds |
+| A shape and a range | 1 | the Djinni's whirlwind, formed on a point within 120 feet |
+| Nothing at all | 156 | 150 multiattack sequences, whose parts carry their own, and 6 things done to somebody already grappled or standing in the creature's own square |
+
+So 505 actions reach, 128 carry (56 of those with a long range beyond the ordinary one) and 58 land
+in a shape; the only overlaps are the 18 that both reach and carry and the 1 that both shapes and
+carries. 72 of them print no range of their own and take their distance from the sentence that names
+who has to save, which is how a stat block writes an aura or a presence ("each creature within 120
+feet of the dragon").
 
 **And a creature's breath lands in a real shape.** 58 actions carry the shape the SRD prints: 31
 cones, 22 lines and 5 bursts. A dragon's "60-foot cone" is a cone of twelve squares aimed from where

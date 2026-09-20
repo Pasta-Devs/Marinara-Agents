@@ -216,6 +216,40 @@ const SPELL_AREAS = new Map([
   ["srd_sunburst", { shape: "sphere", size: 60, printed: "a 60-foot radius" }],
 ]);
 
+// Spells whose FIXTURE states shape fields that are not the patch of ground the
+// spell catches creatures in. The source models one number per spell, so a size
+// the text gives for something else entirely arrives looking exactly like an
+// area. Each row quotes the sentence the number really belongs to, and
+// assertSpellAreas fails the run when the pk leaves the source or stops stating
+// a shape of its own, so the table cannot go stale in either direction.
+const SPELL_FIXTURE_SHAPES_NOT_AREAS = new Map([
+  // "The area of the storm consists of up to ten 10-foot cubes, which you can arrange as you wish."
+  // One cube is a tenth of the storm, and the Engine has no shape made of several.
+  [
+    "srd_fire-storm",
+    {
+      printed: "up to ten 10-foot cubes",
+      reason: "the storm is up to ten 10-foot cubes arranged as you wish, and the Engine has no shape made of several",
+    },
+  ],
+  // "If you target an object, it must be able to fit entirely inside a 10-foot cube": the size of
+  // the thing you may send, not a patch of ground. The spell itself takes willing creatures.
+  [
+    "srd_teleport",
+    {
+      printed: "fit entirely inside a 10-foot cube",
+      reason: "the 10-foot cube is how big an object it may send, not an area it catches creatures in",
+    },
+  ],
+]);
+
+// A shape made of SEVERAL boxes. The fixture states one box and one size, so a
+// sentence like this would otherwise ship as a single burst a tenth of the
+// printed size. Any boxed shape whose text says this has to be accounted for in
+// the table above, or the run stops.
+const SEVERAL_BOXES =
+  /\b(?:up to\s+)?(?:two|three|four|five|six|seven|eight|nine|ten|\d{1,2})\s+\d{1,3}[- ]foot[- ](?:cubes|squares|square panels)/iu;
+
 // Spells a fight resolves whose text prints a distance in the shape of an area
 // and where that shape is NOT the patch of ground the spell catches creatures
 // in. Written down rather than silently ignored, so the scan below can fail the
@@ -845,9 +879,11 @@ function spellMechanics(pk, fields, options, healing, rider) {
   // The fixture's own shape fields first, then the sentence the SRD prints for
   // a spell the fixture gives none for.
   const printed = SPELL_AREAS.get(pk);
-  const area = fields.shape_type
-    ? areaFrom(fields.shape_type, fields.shape_size, fields.name)
-    : printed && areaFrom(printed.shape, printed.size, fields.name);
+  const area = SPELL_FIXTURE_SHAPES_NOT_AREAS.has(pk)
+    ? undefined
+    : fields.shape_type
+      ? areaFrom(fields.shape_type, fields.shape_size, fields.name)
+      : printed && areaFrom(printed.shape, printed.size, fields.name);
   // "Range: Self" names no distance to aim at, and for a spell that draws a SHAPE that is the
   // whole of it: the Engine sends a burst off on the caster's own cell and lets a cone or a line
   // be aimed anywhere within its own length, which is exactly what a spell starting at the caster
@@ -925,6 +961,17 @@ function assertSpellAreas(spells) {
     if (!spells.some((entry) => entry.pk === pk)) fail(`${pk} is written as a printed shape that is not an area`);
     if (SPELL_AREAS.has(pk)) fail(`${pk} is both a carried area and one that is not an area`);
   }
+  for (const [pk, entry] of SPELL_FIXTURE_SHAPES_NOT_AREAS) {
+    const spell = spells.find((candidate) => candidate.pk === pk);
+    if (!spell) fail(`${pk} is written as a fixture shape that is not an area but is not in the source`);
+    if (!spell.fields.shape_type) {
+      fail(`${pk} no longer states shape fields of its own, so it has nothing left to leave out`);
+    }
+    if (!oneLine(spell.fields.desc).includes(entry.printed)) {
+      fail(`${pk} no longer prints ${JSON.stringify(entry.printed)}, so its reading is stale`);
+    }
+    if (SPELL_AREAS.has(pk)) fail(`${pk} is both a hand-read area and a fixture shape that is not an area`);
+  }
 }
 
 function buildSpellEntries(spells, castingOptions, classNames, report) {
@@ -984,12 +1031,26 @@ function countSpellDistances(pk, fields, mechanics, report) {
   else if (mechanics.range === undefined) {
     report.spellsWithoutRange.push(`${fields.name} (${oneLine(fields.range_text)})`);
   } else report.spellsWithRange += 1;
+  const text = oneLine(fields.desc);
+  // A shape made of several boxes would otherwise ship as one burst a fraction of the printed size,
+  // which is worse than shipping no shape at all. It has to be written down before it can be left
+  // out, so a source that grows another one stops the run.
+  if (BOXED_SHAPES.has(fields.shape_type) && SEVERAL_BOXES.test(text) && !SPELL_FIXTURE_SHAPES_NOT_AREAS.has(pk)) {
+    fail(
+      `Spell "${fields.name}" states one ${fields.shape_type} and its text says ${JSON.stringify(SEVERAL_BOXES.exec(text)[0])}. One box is not the shape, so say in SPELL_FIXTURE_SHAPES_NOT_AREAS why it carries none.`,
+    );
+  }
   if (mechanics.area) {
     const printed = fields.shape_type ?? SPELL_AREAS.get(pk)?.shape;
     report.spellAreasByShape.set(printed, (report.spellAreasByShape.get(printed) ?? 0) + 1);
     return;
   }
-  const match = PRINTED_SHAPE.exec(oneLine(fields.desc));
+  const left = SPELL_FIXTURE_SHAPES_NOT_AREAS.get(pk);
+  if (left) {
+    report.spellAreasNotMapped.push(`${fields.name} - ${left.reason}`);
+    return;
+  }
+  const match = PRINTED_SHAPE.exec(text);
   if (!match) return;
   const reason = SPELL_SHAPES_NOT_AREAS.get(pk);
   if (!reason) {
