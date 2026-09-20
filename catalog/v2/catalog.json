@@ -280,7 +280,7 @@
         "schemaVersion": 1,
         "id": "character-tracker",
         "name": "Character Tracker",
-        "version": "1.1.0",
+        "version": "1.1.1",
         "description": "Tracks which characters are present in the scene, their mood, actions, appearance, outfit, thoughts, and per-character stats (HP, etc.). Add the Agent in Chat Settings → Agents → Tracker Agents for Roleplay mode.",
         "engine": {
           "min": "2.3.0",
@@ -295,8 +295,8 @@
         "files": [
           {
             "path": "agents.json",
-            "sha256": "504ac24e4092f1e847717103398c88f67b0598b92a726721df72ed71860481c5",
-            "bytes": 3341
+            "sha256": "59621bd336047be6f351bdc767b1437ceb4ef5bc2cb5462b7f053b8ba1ad1aa5",
+            "bytes": 3699
           }
         ],
         "permissions": [
@@ -311,9 +311,9 @@
       "category": "tracker",
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/character-tracker.png",
       "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/character-tracker-1.1.0.zip",
-        "sha256": "16f255450688654df0f7462350427a9e881b91e58c8c9d8daa0caa00da162420",
-        "bytes": 2214
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/character-tracker-1.1.1.zip",
+        "sha256": "3c7f686449333ed154f903105e089b1cffae12f595df6dda1405a6af2f71e4b9",
+        "bytes": 4712
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Engine/blob/staging/docs/agents/built-in-agents.md#character-tracker"
     },
