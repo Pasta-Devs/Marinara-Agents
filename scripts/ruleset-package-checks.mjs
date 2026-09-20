@@ -940,6 +940,13 @@ export function assertRulesetCombat(manifest, document) {
         throw new Error(`${id} combat condition "${entry.condition}" has the unknown effect ${JSON.stringify(effect)}`);
       }
     }
+    // Both lists of saves, exactly as the Engine reads them: the ones this condition is about, and
+    // the ones it fails outright.
+    for (const save of entry.saves ?? []) {
+      if (!names.saves.has(save)) {
+        throw new Error(`${id} combat condition "${entry.condition}" narrows unknown save ${JSON.stringify(save)}`);
+      }
+    }
     for (const save of entry.failsSaves ?? []) {
       if (!names.saves.has(save)) {
         throw new Error(`${id} combat condition "${entry.condition}" fails unknown save ${JSON.stringify(save)}`);

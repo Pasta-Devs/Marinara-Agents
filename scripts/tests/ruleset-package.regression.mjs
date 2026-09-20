@@ -1291,6 +1291,14 @@ assert.throws(
     ),
   /combat condition "prone" fails unknown save "luck_save"/u,
 );
+assert.throws(
+  () =>
+    assertRulesetCombat(
+      turnManifest,
+      combatWith((combat) => (combat.conditions[0].saves = ["luck_save"])),
+    ),
+  /combat condition "prone" narrows unknown save "luck_save"/u,
+);
 
 // Concentration, dying and the damage types.
 assert.throws(
