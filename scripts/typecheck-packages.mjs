@@ -68,6 +68,7 @@ for (const id of packages) {
   try {
     await cp(engineSources, overlay, { recursive: true, force: true });
     await cp(packageSources, overlay, { recursive: true, force: true });
+    await cp(join(repoRoot, "sources/host-integrations"), overlay, { recursive: true, force: true });
 
     const files = execFileSync("find", ["packages", "-name", "*.ts", "-o", "-name", "*.tsx"], {
       cwd: packageSources,

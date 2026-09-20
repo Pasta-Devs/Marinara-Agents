@@ -11,23 +11,7 @@ const server = join(root, "sources/engine/packages/server/src");
 const storage = await mkdtemp(join(tmpdir(), "calls-swarm-"));
 const requests = [];
 const mp4 = Buffer.from("000000186674797069736f6d0000020069736f6d69736f32", "hex");
-let output = `data:video/mp4;base64,${mp4.toString("base64")}`;
-globalThis.__callsSwarmFetch = async (url, options) => {
-  assert.equal(options.policy.allowLocal, true);
-  assert.equal(options.policy.allowLoopback, true);
-  assert.deepEqual(options.policy.allowedOrigins, [new URL(url).origin]);
-  assert.ok(options.maxResponseBytes > 0);
-  options.signal?.throwIfAborted();
-  const body = options.body ? JSON.parse(options.body) : null;
-  requests.push({ url: String(url), body, headers: options.headers });
-  if (String(url).endsWith("/Output/clip.mp4")) return new Response(mp4, { headers: { "Content-Type": "video/mp4" } });
-  if (String(url).endsWith("/API/GetNewSession")) return Response.json({ session_id: "fixture-session" });
-  assert.ok(String(url).endsWith("/API/GenerateText2Image"));
-  return Response.json({ images: [output] });
-};
-
-// Keep the real provider, queue, workflow resolver, and Calls disk/job lifecycle.
-// External network/logging and unrelated prompt/avatar infrastructure are fixture boundaries.
+// Provider I/O belongs to Engine. Keep the real Calls request shaping and disk/job lifecycle.
 const mocks = new Map([
   [join(server, "utils/data-dir.js"), `export const DATA_DIR = ${JSON.stringify(storage)};`],
   [join(server, "utils/id-generator.js"), 'export { randomUUID as newId } from "node:crypto";'],
@@ -41,7 +25,7 @@ const mocks = new Map([
     `
     import { resolve, relative } from "node:path";
     export function assertInsideDir(root, path) { const target = resolve(path); if (relative(root, target).startsWith("..")) throw Error("Unsafe path"); return target; }
-    export const safeFetch = (...args) => globalThis.__callsSwarmFetch(...args);
+    export function safeFetch(){ throw Error("Package must use the host video service"); }
     export function isAllowedImageBuffer(){ throw Error("Unexpected avatar decoding"); }
   `,
   ],
@@ -64,6 +48,13 @@ const hooks = registerHooks({
     }
     if (specifier.startsWith(".") && context.parentURL) {
       const path = fileURLToPath(new URL(specifier, context.parentURL));
+      if (path === join(server, "services/video/video-generation.js"))
+        return {
+          url: pathToFileURL(
+            join(root, "sources/host-integrations/packages/server/src/services/video/video-generation.ts"),
+          ).href,
+          shortCircuit: true,
+        };
       if (mocks.has(path)) return { url: pathToFileURL(path).href, shortCircuit: true };
       if (path.endsWith(".js") && !existsSync(path) && existsSync(path.replace(/\.js$/u, ".ts"))) {
         return { url: pathToFileURL(path.replace(/\.js$/u, ".ts")).href, shortCircuit: true };
@@ -77,84 +68,27 @@ const hooks = registerHooks({
   },
 });
 try {
-  const { generateVideo } = await import("../sources/engine/packages/server/src/services/video/video-generation.ts");
+  const { bindPackageIntegrations } =
+    await import("../sources/host-integrations/packages/server/src/services/package-host.ts");
+  const release = bindPackageIntegrations({
+    videos: {
+      async generate(source, baseUrl, apiKey, serviceHint, request) {
+        requests.push({ source, baseUrl, apiKey, serviceHint, request });
+        return { base64: mp4.toString("base64"), mimeType: "video/mp4", ext: "mp4" };
+      },
+      resolveDuration(_source, _hint, request) {
+        return request.durationSeconds;
+      },
+      resolveReferenceUpload() {
+        return null;
+      },
+    },
+  });
   const calls =
     await import("../sources/engine/packages/server/src/services/conversation/call-character-videos.service.ts");
   const workflow = JSON.stringify({
     node: { inputs: { text: "%prompt%", fps: "%fps%", frames: "%length%", width: "%width%", lora: "%LORA_1%" } },
   });
-  const settings = {
-    prompt: "A quiet portrait",
-    model: "local-video",
-    durationSeconds: 4,
-    aspectRatio: "16:9",
-    comfyWorkflow: workflow,
-    fps: 24,
-  };
-  assert.equal(
-    (await generateVideo("swarmui", "http://swarm:7801", "key", "comfyui", settings)).base64,
-    mp4.toString("base64"),
-  );
-  assert.equal(requests[0].headers.Cookie, "swarm_token=key");
-  assert.equal(requests[1].body.session_id, "fixture-session");
-  assert.equal(JSON.parse(requests[1].body.comfyworkflowraw).node.inputs.frames, 96);
-  assert.equal(requests[1].body.model, "local-video");
-
-  output = "/Output/clip.mp4";
-  assert.equal(
-    (await generateVideo("swarmui", "http://swarm:7801", "key", "swarmui", settings)).base64,
-    mp4.toString("base64"),
-  );
-  assert.equal(requests.at(-1).url, "http://swarm:7801/Output/clip.mp4");
-  assert.equal(requests.at(-1).headers.Cookie, "swarm_token=key");
-
-  output = "data:video/mp4;base64,aW52YWxpZA==";
-  await assert.rejects(generateVideo("swarmui", "http://swarm:7801", "", "swarmui", settings), /non-MP4/u);
-  output = "https://outside.example/clip.mp4";
-  const beforeForeignOutput = requests.length;
-  await assert.rejects(
-    generateVideo("swarmui", "http://swarm:7801", "secret", "swarmui", settings),
-    /outside its configured origin/u,
-  );
-  assert.equal(
-    requests.length,
-    beforeForeignOutput + 2,
-    "foreign output is rejected before any authenticated download",
-  );
-  output = `data:video/mp4;base64,${mp4.toString("base64")}`;
-  await generateVideo("unsupported-fixture", "http://primary", "", "unsupported-fixture", {
-    ...settings,
-    fallback: {
-      connectionId: "backup",
-      connectionName: "Backup",
-      source: "swarmui",
-      baseUrl: "http://backup:7801",
-      apiKey: "",
-      serviceHint: "comfyui",
-      model: "backup-model",
-      comfyWorkflow: workflow,
-      fps: 12,
-    },
-  });
-  assert.equal(JSON.parse(requests.at(-1).body.comfyworkflowraw).node.inputs.frames, 48);
-  assert.equal(requests.at(-1).body.model, "backup-model");
-  const beforeAbort = requests.length;
-  await assert.rejects(
-    generateVideo("swarmui", "http://swarm:7801", "", "swarmui", {
-      ...settings,
-      signal: AbortSignal.abort(new Error("cancelled")),
-    }),
-    /cancelled/u,
-  );
-  assert.equal(requests.length, beforeAbort);
-  await assert.rejects(
-    generateVideo("swarmui", "http://swarm:7801", "", "swarmui", {
-      ...settings,
-      comfyWorkflow: "{} %reference_image_name%",
-    }),
-    /backend-local filenames/u,
-  );
-
   const input = {
     characterId: "swarm-character",
     characterName: "Fixture",
@@ -187,15 +121,19 @@ try {
   }
   assert.equal(manifest.generating, false);
   assert.equal(manifest.clips.find((clip) => clip.kind === "idle")?.status, "ready");
-  const generatedWorkflow = JSON.parse(requests.at(-1).body.comfyworkflowraw);
-  assert.equal(generatedWorkflow.node.inputs.fps, 30);
-  assert.equal(generatedWorkflow.node.inputs.width, 832);
-  assert.equal(generatedWorkflow.node.inputs.lora, "portrait.safetensors");
+  const generated = requests.at(-1);
+  assert.equal(generated.source, "swarmui");
+  assert.equal(generated.baseUrl, "http://swarm:7801");
+  assert.equal(generated.serviceHint, "swarmui");
+  assert.equal(generated.request.comfyWorkflow, workflow);
+  assert.equal(generated.request.fps, 30);
+  assert.equal(generated.request.resolution, "480p");
+  assert.equal(generated.request.comfyLoras[0].model, "portrait.safetensors");
   const file = calls.getConversationCallCharacterVideoFile(input.characterId, "idle");
   assert.deepEqual(await readFile(file), mp4);
-  console.log("Calls SwarmUI provider and character-clip regressions passed.");
+  release();
+  console.log("Calls forwards SwarmUI settings to the host and persists generated character clips.");
 } finally {
   hooks.deregister();
-  delete globalThis.__callsSwarmFetch;
   await rm(storage, { recursive: true, force: true });
 }

@@ -1,5 +1,9 @@
 # Calls release notes
 
+## 1.0.18 — 2026-09-20
+
+- Generation uses the current Engine's provider and media services, so Engine fixes reach this package automatically. Requires Engine 2.4.6 with capability API 1.31.
+
 ## 1.0.17 — 2026-09-19
 
 - Keep calls responsive when Safari blocks voice playback: wait for a new touch or key press, and let stopping a call cancel pending playback.

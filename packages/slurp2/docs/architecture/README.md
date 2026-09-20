@@ -86,6 +86,10 @@ that every feature's routes receive through `SlpRouteDeps`. `features/media/` ow
 and media routes, and `features/settings/` owns the settings routes; the domain-neutral image and
 media helpers stay in `base/media/`.
 
+## Engine generation services
+
+The feature builder binds provider and media imports to `sources/host-integrations`, the shared package-owned adapters for capability API 1.31. These adapters call `api.runtime.integrations`; they contain no provider implementation. Slurp2 retains its prompts, settings and orchestration in the existing `slp` layers. Engine owns LLM transport, image/video generation, queues and provider-specific request handling. The builder rejects bundled private LLM providers, and the package manifest declares the required API before activation.
+
 ## Features
 
 Client and server share one feature vocabulary: `creators`, `feed`, `messages`, `discovery`,

@@ -1,5 +1,9 @@
 # Slurp Remastered release notes
 
+## 0.1.4 — 2026-09-20
+
+- Generation uses the current Engine's provider and media services, so Engine fixes reach this package automatically. Requires Engine 2.4.6 with capability API 1.31.
+
 ## 0.1.3 — 2026-09-20
 
 - Slurp HTTP routes now use Slurp naming. Existing avatars, banners, ad images, post images and backups keep working.

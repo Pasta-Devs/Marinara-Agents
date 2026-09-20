@@ -28,7 +28,7 @@ const catalog = JSON.parse(readFileSync("catalog/catalog.json", "utf8")) as {
 
 assert.equal(manifest.id, "slurp");
 assert.equal(manifest.name, "Slurp Legacy");
-assert.equal(manifest.engine?.min, "2.4.3");
+assert.equal(manifest.engine?.min, "2.4.6");
 assert.match(manifest.description, /Legacy Slurp version/i);
 assert.match(manifest.description, /New development is happening in Slurp Remastered/i);
 assert.deepEqual(manifest.contributions?.homeBrowserTab, {

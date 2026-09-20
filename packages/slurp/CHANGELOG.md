@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.51.1 — 2026-09-20
+
+- Generation uses the current Engine's provider and media services, so Engine fixes reach this package automatically. Requires Engine 2.4.6 with capability API 1.31.
+
 ## 1.51.0 — 2026-09-13
 
 - Completion and error notifications now appear inside the standalone package.

@@ -27,9 +27,11 @@ on:
       - "scripts/run-package-browser-tests.mjs"
       - "scripts/start-package-browser-servers.mjs"
       - "sources/engine/**"
+      - "sources/host-integrations/**"
       - "tests/package-noodle.e2e.ts"
       - "tests/package-slurp.e2e.ts"
       - "tests/package-slurp2.e2e.ts"
+      - "tests/package-host-generation.e2e.ts"
       - "tests/playwright.package.config.ts"
 
 concurrency:
@@ -195,3 +197,9 @@ jobs:
         env:
           MARINARA_ENGINE_ROOT: ${{ github.workspace }}/engine
         run: npm run test:browser:slurp2
+
+      - name: Verify installed package uses host image generation
+        env:
+          MARINARA_ENGINE_ROOT: ${{ github.workspace }}/engine
+          IMAGE_LOCAL_URLS_ENABLED: "true"
+        run: node scripts/run-package-browser-tests.mjs slurp2 tests/package-host-generation.e2e.ts

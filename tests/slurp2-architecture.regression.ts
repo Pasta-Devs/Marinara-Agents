@@ -332,3 +332,21 @@ try {
 } finally {
   rmSync(scratch, { recursive: true, force: true });
 }
+
+const manifest = JSON.parse(readFileSync(join(repoRoot, "packages/slurp2/manifest.json"), "utf8"));
+assert.equal(manifest.schemaVersion, 2, "Host integration requirements must be enforced before activation");
+assert.ok(manifest.capabilityApi.major === 1 && manifest.capabilityApi.minor >= 31);
+for (const name of [
+  "package-host.ts",
+  "image/image-generation.ts",
+  "video/video-generation.ts",
+  "llm/provider-registry.ts",
+  "llm/connection-fallback-provider.ts",
+  "llm/local-sidecar.ts",
+]) {
+  assert.equal(
+    existsSync(join(repoRoot, "sources/engine/packages/server/src/services", name)),
+    false,
+    `${name} must be host-owned`,
+  );
+}

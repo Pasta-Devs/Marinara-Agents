@@ -210,3 +210,11 @@ modules, rejected alternative, and migration consequence.
 - **Migration consequence:** none. No table, column, JSON key, locale key, platform value, backup
   format, stored media path or response shape changed. The manifest requires an Engine restart on
   update, so an old client bundle cannot run against the new operation routes after an update.
+
+## 2026-09-20 — Use host generation integrations
+
+- **Problem:** Bundled Engine provider copies missed live Engine fixes.
+- **Decision:** The shared feature builder binds the existing service imports to the live capability API 1.31 host. Package prompts, request preparation and orchestration stay in their current modules.
+- **Affected modules:** Image and language-model callers in Slurp2, shared package adapters and the feature builder. No `slp` module moves or storage changes.
+- **Rejected alternative:** Backporting each provider fix into package snapshots; it recreates the drift that caused the issue.
+- **Migration consequence:** Slurp2 requires capability API 1.31. The manifest rejects older hosts; bundled provider implementations are removed and the builder rejects their return.

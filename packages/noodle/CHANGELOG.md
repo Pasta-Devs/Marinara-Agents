@@ -1,5 +1,9 @@
 # Noodle release notes
 
+## 1.2.25 — 2026-09-20
+
+- Generation uses the current Engine's provider and media services, so Engine fixes reach this package automatically. Requires Engine 2.4.6 with capability API 1.31.
+
 ## 1.2.24 — 2026-09-15
 
 - Search icons and post menus keep Noodle's selected accent when Engine Chroma animates.

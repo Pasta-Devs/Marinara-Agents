@@ -3,7 +3,7 @@ import { existsSync, realpathSync } from "node:fs";
 import { copyFile, cp, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, dirname, join, relative, resolve, sep } from "node:path";
-import { spawnSync } from "node:child_process";
+import { spawnSync, execFileSync } from "node:child_process";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { createRequire } from "node:module";
 import { catalogArtworkUrl } from "./catalog-artwork.mjs";
@@ -53,6 +53,17 @@ function spawnEsbuild(args, options) {
 const artifactsDir = join(repoRoot, "artifacts");
 const packagesDir = join(repoRoot, "packages");
 const sourcesRoot = join(repoRoot, "sources/engine");
+// ponytail: preserve existing imports through build overlays; move callers to the public host API as their modules change.
+const hostIntegrationsRoot = join(repoRoot, "sources/host-integrations");
+const hostIntegrationPackages = new Set(["noodle", "slurp", "slurp2", "conversation-calls"]);
+const hostIntegrationPaths = [
+  "packages/server/src/services/package-host.ts",
+  "packages/server/src/services/llm/provider-registry.ts",
+  "packages/server/src/services/llm/connection-fallback-provider.ts",
+  "packages/server/src/services/llm/local-sidecar.ts",
+  "packages/server/src/services/image/image-generation.ts",
+  "packages/server/src/services/video/video-generation.ts",
+];
 const hierarchicalMapsSourceRoot = join(packagesDir, "hierarchical-maps/src/engine");
 const sourceRoot = process.env.MARINARA_ENGINE_SOURCE_ROOT
   ? resolve(process.env.MARINARA_ENGINE_SOURCE_ROOT)
@@ -179,13 +190,14 @@ const rebuiltFeatureClients = new Set(
 const sha256 = (value) => createHash("sha256").update(value).digest("hex");
 
 async function prepareFeatureBuildRoot(feature) {
-  if (feature.id === "noodle" || feature.id === "slurp" || feature.id === "slurp2") {
-    if (!existsSync(feature.packageSourceRoot)) {
+  if (hostIntegrationPackages.has(feature.id)) {
+    if (feature.packageSourceRoot && !existsSync(feature.packageSourceRoot)) {
       throw new Error(`Missing package-owned ${feature.name} source`);
     }
     const buildRoot = await mkdtemp(join(tmpdir(), `marinara-${feature.id}-source-`));
     await cp(sourceRoot, buildRoot, { recursive: true, force: true });
-    await cp(feature.packageSourceRoot, buildRoot, { recursive: true, force: true });
+    if (feature.packageSourceRoot) await cp(feature.packageSourceRoot, buildRoot, { recursive: true, force: true });
+    await cp(hostIntegrationsRoot, buildRoot, { recursive: true, force: true });
     return {
       buildRoot,
       cleanup: () => rm(buildRoot, { recursive: true, force: true }),
@@ -277,8 +289,8 @@ async function removeOwnedSourceSnapshots(excludedPaths) {
 const features = [
   {
     id: "noodle",
-    version: "1.2.24",
-    minEngineVersion: "2.4.4",
+    version: "1.2.25",
+    minEngineVersion: "2.4.6",
     maxEngineExclusive: MAX_ENGINE_EXCLUSIVE,
     name: "Noodle",
     description: "Explore the Noodle public timeline as an optional local social world.",
@@ -333,8 +345,8 @@ const features = [
   },
   {
     id: "slurp",
-    version: "1.51.0",
-    minEngineVersion: "2.4.3",
+    version: "1.51.1",
+    minEngineVersion: "2.4.6",
     maxEngineExclusive: MAX_ENGINE_EXCLUSIVE,
     name: "Slurp Legacy",
     description:
@@ -390,8 +402,8 @@ const features = [
   },
   {
     id: "slurp2",
-    version: "0.1.3",
-    minEngineVersion: "2.4.5",
+    version: "0.1.4",
+    minEngineVersion: "2.4.6",
     maxEngineExclusive: MAX_ENGINE_EXCLUSIVE,
     name: "Slurp Remastered",
     description:
@@ -547,8 +559,8 @@ const features = [
   {
     id: "conversation-calls",
     name: "Calls",
-    version: "1.0.17",
-    minEngineVersion: "2.4.1",
+    version: "1.0.18",
+    minEngineVersion: "2.4.6",
     description: "Adds live audio and video calls with Conversation characters.",
     kind: ["agent", "conversation-calls"],
     modes: ["conversation"],
@@ -631,6 +643,12 @@ if (selectedFeatures.length !== requestedFeatureIds.size && requestedFeatureIds.
   const unknownIds = [...requestedFeatureIds].filter((id) => !knownIds.has(id));
   throw new Error(`Unknown feature package${unknownIds.length === 1 ? "" : "s"}: ${unknownIds.join(", ")}`);
 }
+const hostBuiltAgainst = selectedFeatures.some((feature) => hostIntegrationPackages.has(feature.id))
+  ? {
+      engineVersion: JSON.parse(await readFile(join(engineRoot, "package.json"), "utf8")).version,
+      engineCommit: execFileSync("git", ["rev-parse", "HEAD"], { cwd: engineRoot, encoding: "utf8" }).trim(),
+    }
+  : null;
 const hierarchicalMapsBoundary = selectedFeatures.some((feature) => feature.id === "hierarchical-maps")
   ? await assertHierarchicalMapsPrivateImportBoundary()
   : null;
@@ -726,9 +744,9 @@ export async function selfCheck({ api }) {
 }\n`
         : feature.id === "conversation-calls"
           ? `import { ${feature.serverExport} as register } from ${JSON.stringify(target)};
-import * as commandRuntime from ${JSON.stringify(resolve(sourceRoot, "packages/server/src/services/generation/conversation-call-command-runtime.ts"))};
-import * as characterVideos from ${JSON.stringify(resolve(sourceRoot, "packages/server/src/services/conversation/call-character-videos.service.ts"))};
-import { createConversationCallsStorage } from ${JSON.stringify(resolve(sourceRoot, "packages/server/src/services/storage/conversation-calls.storage.ts"))};
+import * as commandRuntime from ${JSON.stringify(resolve(prepared.buildRoot, "packages/server/src/services/generation/conversation-call-command-runtime.ts"))};
+import * as characterVideos from ${JSON.stringify(resolve(prepared.buildRoot, "packages/server/src/services/conversation/call-character-videos.service.ts"))};
+import { createConversationCallsStorage } from ${JSON.stringify(resolve(prepared.buildRoot, "packages/server/src/services/storage/conversation-calls.storage.ts"))};
 let readinessStorage = null;
 export async function activate({ app, api }) {
   await app.register(register, { prefix: ${JSON.stringify(feature.prefix)} });
@@ -748,7 +766,26 @@ export async function selfCheck() {
             : `import { ${feature.engineExport} as engine } from ${JSON.stringify(target)};\nexport async function activate({ api }) { const cleanups = [api.registerTurnGameEngine(engine), api.registerConversationCommand({ commandType: ${JSON.stringify(feature.commandType)}, tags: [${JSON.stringify(feature.commandType)}] })]; return () => { for (const cleanup of cleanups.reverse()) cleanup(); }; }\n`;
     const entry = join(temporary, "entry.mjs");
     const metafile = join(temporary, "meta.json");
-    await writeFile(entry, source);
+    if (hostIntegrationPackages.has(feature.id)) {
+      const implementation = join(temporary, "implementation.mjs");
+      await writeFile(implementation, source);
+      await writeFile(
+        entry,
+        `import { activate as activateFeature } from ${JSON.stringify(implementation)};
+export { selfCheck } from ${JSON.stringify(implementation)};
+import { bindPackageIntegrations } from ${JSON.stringify(resolve(prepared.buildRoot, "packages/server/src/services/package-host.ts"))};
+export async function activate(context) {
+  const releaseHost = bindPackageIntegrations(context.api.runtime?.integrations);
+  try {
+    const cleanup = await activateFeature(context);
+    return async () => { try { await cleanup?.(); } finally { releaseHost(); } };
+  } catch (error) { releaseHost(); throw error; }
+}
+`,
+      );
+    } else {
+      await writeFile(entry, source);
+    }
     const result = spawnEsbuild(
       [
         entry,
@@ -786,8 +823,18 @@ export async function selfCheck() {
     if (result.status !== 0) {
       throw new Error(result.stderr || result.stdout || result.error?.message || `esbuild failed for ${feature.id}`);
     }
+    if (hostIntegrationPackages.has(feature.id)) {
+      const metadata = JSON.parse(await readFile(metafile, "utf8"));
+      for (const output of Object.values(metadata.outputs)) {
+        for (const [input, details] of Object.entries(output.inputs)) {
+          if (details.bytesInOutput > 0 && input.replaceAll("\\", "/").includes("/services/llm/providers/")) {
+            throw new Error(`${feature.id} still bundles a private LLM provider: ${input}`);
+          }
+        }
+      }
+    }
     if (feature.ownedSourcePaths?.length) {
-      await capturePackageSources(metafile, prepared.buildRoot, feature.ownedSourcePaths);
+      await capturePackageSources(metafile, prepared.buildRoot, [...feature.ownedSourcePaths, ...hostIntegrationPaths]);
       if (feature.id === "slurp" || feature.id === "slurp2") {
         await removeOwnedSourceSnapshots([
           "packages/client/src/localization/locales",
@@ -799,7 +846,7 @@ export async function selfCheck() {
       await captureEngineSources(
         metafile,
         prepared.buildRoot,
-        feature.id === "hierarchical-maps" ? hierarchicalMapsOwnedSourcePaths : [],
+        feature.id === "hierarchical-maps" ? hierarchicalMapsOwnedSourcePaths : hostIntegrationPaths,
       );
     }
   } finally {
@@ -1652,7 +1699,7 @@ if (!customElements.get(${JSON.stringify(tag)})) customElements.define(${JSON.st
     if (result.status !== 0)
       throw new Error(result.stderr || result.stdout || `client esbuild failed for ${feature.id}`);
     if (feature.ownedSourcePaths?.length) {
-      await capturePackageSources(metafile, prepared.buildRoot, feature.ownedSourcePaths);
+      await capturePackageSources(metafile, prepared.buildRoot, [...feature.ownedSourcePaths, ...hostIntegrationPaths]);
     } else {
       await captureEngineSources(
         metafile,
@@ -1743,7 +1790,10 @@ for (const feature of selectedFeatures) {
           ? memoryNagBoundary
           : null;
   const manifest = {
-    schemaVersion: boundary ? 2 : 1,
+    schemaVersion: boundary || hostIntegrationPackages.has(feature.id) ? 2 : 1,
+    ...(hostIntegrationPackages.has(feature.id)
+      ? { capabilityApi: { major: 1, minor: 31 }, builtAgainst: hostBuiltAgainst }
+      : {}),
     ...(boundary
       ? {
           capabilityApi: boundary.capabilityApi,

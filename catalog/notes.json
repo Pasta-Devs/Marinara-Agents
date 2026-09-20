@@ -24,6 +24,12 @@
     "conversation-calls": {
       "versions": [
         {
+          "version": "1.0.18",
+          "date": "2026-09-20",
+          "notes": "- Generation uses the current Engine's provider and media services, so Engine fixes reach this package automatically. Requires Engine 2.4.6 with capability API 1.31.",
+          "highlight": false
+        },
+        {
           "version": "1.0.17",
           "date": "2026-09-19",
           "notes": "- Keep calls responsive when Safari blocks voice playback: wait for a new touch or key press, and let stopping a call cancel pending playback.",
@@ -226,6 +232,12 @@
     "noodle": {
       "versions": [
         {
+          "version": "1.2.25",
+          "date": "2026-09-20",
+          "notes": "- Generation uses the current Engine's provider and media services, so Engine fixes reach this package automatically. Requires Engine 2.4.6 with capability API 1.31.",
+          "highlight": false
+        },
+        {
           "version": "1.2.24",
           "date": "2026-09-15",
           "notes": "- Search icons and post menus keep Noodle's selected accent when Engine Chroma animates.",
@@ -272,6 +284,12 @@
     "slurp": {
       "versions": [
         {
+          "version": "1.51.1",
+          "date": "2026-09-20",
+          "notes": "- Generation uses the current Engine's provider and media services, so Engine fixes reach this package automatically. Requires Engine 2.4.6 with capability API 1.31.",
+          "highlight": false
+        },
+        {
           "version": "1.51.0",
           "date": "2026-09-13",
           "notes": "- Completion and error notifications now appear inside the standalone package.\n- Fan reactions and creator replies can use stored image prompts or vision descriptions. Auto prefers the stored prompt, with vision as a fallback for uploaded images. Public fans never receive locked images, and descriptions follow the creator's identity protection.\n- The targeted creator refresh shows the remaining count as each generation finishes, including failed or skipped jobs.",
@@ -305,6 +323,12 @@
     },
     "slurp2": {
       "versions": [
+        {
+          "version": "0.1.4",
+          "date": "2026-09-20",
+          "notes": "- Generation uses the current Engine's provider and media services, so Engine fixes reach this package automatically. Requires Engine 2.4.6 with capability API 1.31.",
+          "highlight": false
+        },
         {
           "version": "0.1.3",
           "date": "2026-09-20",
@@ -417,12 +441,6 @@
           "version": "0.0.8",
           "date": "2026-09-14",
           "notes": "- Bug fixes for discovery filters and translations, subscription prices, image references, fan privacy, rapport details, message fees, arc editing and generation, profile validation, regression tests, and test-output handling.",
-          "highlight": false
-        },
-        {
-          "version": "0.0.7",
-          "date": "2026-09-13",
-          "notes": "- Rebuilt Discover around direct subscription actions, persistent grid and list views, and filters for subscription status, gender, weekly price, and Creator tags.\n- Added Recommended, Newest, Most liked, and Most subscribed sorting with stable results.\n- Added editable Creator gender and tags, including safe custom tags and AI-suggested curated tags during profile creation and redrafting.\n- Added Arcs with automatic suggestions, pacing, focus, allowed kinds, and delivery to posts, messages, fan comments, and notifications.\n- Moved message, photo, subscription, and tip prices from the profile information box to the action that uses each price.\n- Hid the Follow control for subscribed Creators because a subscription already includes following.\n- Made Open the default Creator identity mode and removed the Secret identity tier.\n- Fixed persona Creator creation when Slurp already has the persona's viewer identity.",
           "highlight": false
         }
       ]
