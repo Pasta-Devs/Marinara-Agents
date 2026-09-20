@@ -241,6 +241,27 @@ export async function generateCreatorPost(
           slurpPostCameraSource(account.id, sequence, { companyCanHoldCamera: variation.companyCanHoldCamera }),
         )
       : undefined;
+  // A Story is a picture with a line under it, so a run that produces no image publishes an
+  // ordinary post instead. The flag is only honoured on the path that commits an image below.
+  // A Story the player asked for outranks the rotation, which never fires on a directed post.
+  // Hoisted above the prompt build because the content type below needs it; computing it twice
+  // would let the two copies disagree about whether this post is a Story.
+  const storyVariation =
+    ((input.allowStory !== false && variation?.story === true && settings.storyImagesEnabled) ||
+      input.request.postType === "story") &&
+    imagesEnabled;
+  // Same slot the scheduler used to choose free access, so only its teasers read as one.
+  const isTeaser =
+    input.request.access === "public" && !directed && slurpTeaserPost(account.id, sequence, settings.teaserRate);
+  // What this post is for, as opposed to what it is about. Story and teaser are passed in rather
+  // than chosen again, so the three decisions cannot contradict each other.
+  const contentTypeInstruction =
+    prompts.mode === "produce" && !directed
+      ? slurpContentTypeInstruction(
+          slurpPostContentType(account.id, sequence, { story: storyVariation, teaser: isTeaser }),
+        )
+      : undefined;
+
   // In produce mode the post call writes text only. Asking one call for the caption and the
   // picture together is what made every image an illustration of its own caption, so the brief is
   // assembled from the situation instead and the caption never reaches it. A directed post has no
@@ -281,10 +302,7 @@ export async function generateCreatorPost(
       ) ?? undefined,
     accessInstruction: [
       await resolveSlurpPostGuidance(db, account.id, input.request.access),
-      // Same slot the scheduler used to choose free access, so only its teasers read as one.
-      input.request.access === "public" && !directed && slurpTeaserPost(account.id, sequence, settings.teaserRate)
-        ? SLURP_TEASER_INSTRUCTION
-        : "",
+      isTeaser ? SLURP_TEASER_INSTRUCTION : "",
     ]
       .filter(Boolean)
       .join("\n\n"),
@@ -297,6 +315,7 @@ export async function generateCreatorPost(
     loreContext,
     promptBlocks: prompts.blocks,
     promptMode: prompts.mode,
+    contentTypeInstruction,
     generatedAt: input.generatedAt ?? new Date(),
     publicationTime: input.publicationTime,
   });
@@ -386,14 +405,6 @@ export async function generateCreatorPost(
       ) ?? slpCreatorTitleFromContent(protectedContent),
     content: protectedContent,
   };
-
-  // A Story is a picture with a line under it, so a run that produces no image publishes an
-  // ordinary post instead. The flag is only honoured on the path that commits an image below.
-  // A Story the player asked for outranks the rotation, which never fires on a directed post.
-  const storyVariation =
-    ((input.allowStory !== false && variation?.story === true && settings.storyImagesEnabled) ||
-      input.request.postType === "story") &&
-    imagesEnabled;
 
   // Identity protection applies to the image prompt too, not only post text. The arc's chapter line
   // joins the prompt before protection, so a chapter naming a real place is redacted the same way.

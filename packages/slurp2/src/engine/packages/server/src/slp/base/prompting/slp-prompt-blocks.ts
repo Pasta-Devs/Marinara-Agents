@@ -265,7 +265,30 @@ const CLASSIC_PROMPT_DESCRIPTIONS: SlurpPromptDescription[] = [
  * fan-side or world-side and have nothing to do with posting intent: they share classic's entry
  * outright rather than being copied, so exactly one copy of that text exists.
  */
-const PRODUCE_PROMPT_DESCRIPTIONS: SlurpPromptDescription[] = CLASSIC_PROMPT_DESCRIPTIONS;
+const PRODUCE_PROMPT_DESCRIPTIONS: SlurpPromptDescription[] = CLASSIC_PROMPT_DESCRIPTIONS.map((prompt) =>
+  prompt.id === "post"
+    ? {
+        ...prompt,
+        // `contentType` is what this post is *for*: bait, throwaway, a planned set, a thank-you, a
+        // boundary notice. Classic mode has no such concept — every post there is "something
+        // happened, here is a picture of it" — so the block exists only in this inventory.
+        blocks: descriptions([
+          ["task", "editable"],
+          ["platform", "required"],
+          ["safety", "required"],
+          ["creativeDirection", "context", true],
+          ["identity", "required"],
+          ["format", "required"],
+          ["access", "context", true],
+          ["contentType", "context", true],
+          ["continuity", "editable"],
+          ["imageDirection", "context", true],
+          ["output", "required"],
+          ["character", "context"],
+        ]),
+      }
+    : prompt,
+);
 
 const PROMPT_DESCRIPTIONS: Record<SlurpPromptMode, SlurpPromptDescription[]> = {
   classic: CLASSIC_PROMPT_DESCRIPTIONS,

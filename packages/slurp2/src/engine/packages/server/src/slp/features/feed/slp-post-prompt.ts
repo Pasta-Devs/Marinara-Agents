@@ -96,6 +96,8 @@ export function buildNoodlerPostMessages(input: {
   promptBlocks?: SlurpPromptBlockOverrides;
   /** Which prompt personality to write. Defaults to the shipped mode. */
   promptMode?: SlurpPromptMode;
+  /** From `slp-content-type.ts`: what this post is for. Produce mode only. */
+  contentTypeInstruction?: string;
 }): ChatMessage[] {
   const protect = (value: string) =>
     protectCreatorGeneratedIdentity(value, input.disclosureMode, input.publicIdentity) ?? "";
@@ -152,6 +154,15 @@ export function buildNoodlerPostMessages(input: {
       text: input.accessInstruction?.trim()
         ? `## Who can read this post\n${input.accessInstruction.trim()}\n## End who can read this post`
         : "",
+    },
+    // What this post is for, as opposed to what it is about. Without it every post is the same
+    // kind of post: something happened, here is a picture, here is what it meant. Produce mode
+    // only; classic mode's inventory does not declare the block.
+    {
+      id: "contentType",
+      kind: "context" as const,
+      optional: true,
+      text: produce ? (input.contentTypeInstruction?.trim() ?? "") : "",
     },
     // Tone, mood balance, and the adult flirty lean are supplied by the editable
     // generation guidance (see input.generationGuidance above), not hardcoded here.
