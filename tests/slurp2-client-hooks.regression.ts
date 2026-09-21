@@ -355,7 +355,20 @@ const callsBefore = readFileSync(join(import.meta.dirname, "fixtures/slurp2-clie
   .map((call) => call.replaceAll("\\u0020", " "))
   .filter(Boolean);
 const mapStagingCall = (call: string) => call.replace("/slurp2/noodler/", "/slurp2/slurp/");
-const addedCalls = ["post /slurp2/settings/prompt-blocks/generate-preview"];
+const addedCalls = [
+  "post /slurp2/settings/prompt-blocks/generate-preview",
+  "get /slurp2/continuity/${encodeURIComponent(creatorAccountId!)}?${query}",
+  "get /slurp2/messages/threads/${encodeURIComponent(threadId!)}/requests?personaId=${encodeURIComponent(personaId!)}",
+  "get /slurp2/slurp/tasks",
+  "patch /slurp2/accounts/${encodeURIComponent(accountId)}/settings",
+  "patch /slurp2/continuity/facts/${encodeURIComponent(input.id)}",
+  "post /slurp2/continuity/${input.path}",
+  "post /slurp2/messages/threads/${encodeURIComponent(threadId!)}/requests/${encodeURIComponent(input.requestId)}/action",
+];
+// Classic runtime mode is gone, so the block catalog no longer takes a mode.
+const renamedCalls = new Map([
+  ["get /slurp2/settings/prompt-blocks?mode=${encodeURIComponent(mode)}", "get /slurp2/settings/prompt-blocks"],
+]);
 const calls = [
   ...combined.matchAll(/api\.(get|post|put|patch|delete|upload|raw)\s*(?:<[^;]*?>)?\s*\(\s*[`"]([^`"]*)/gu),
 ]
@@ -363,7 +376,11 @@ const calls = [
   .sort();
 assert.deepEqual(
   calls,
-  callsBefore.map(mapStagingCall).concat(addedCalls).sort(),
+  callsBefore
+    .map(mapStagingCall)
+    .map((call) => renamedCalls.get(call) ?? call)
+    .concat(addedCalls)
+    .sort(),
   "client request paths and HTTP methods must match",
 );
 
@@ -386,19 +403,19 @@ const counts = Object.fromEntries(
 assert.deepEqual(
   counts,
   {
-    useMutation: 132,
-    useQuery: 186,
+    useMutation: 139,
+    useQuery: 197,
     useInfiniteQuery: 5,
-    invalidateQueries: 124,
-    setQueryData: 15,
+    invalidateQueries: 127,
+    setQueryData: 16,
     cancelQueries: 5,
     removeQueries: 1,
     refetchQueries: 1,
     onMutate: 2,
-    onError: 3,
+    onError: 10,
     onSettled: 3,
   },
-  "query and mutation wiring counts must match the monolith",
+  "query and mutation wiring counts match the monolith plus the 0.2.0 planner and continuity hooks",
 );
 
 // The shared invalidators are still called directly from the mutation callbacks that owned them.
