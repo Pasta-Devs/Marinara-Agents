@@ -24,6 +24,7 @@ import { createChatsStorage } from "../../../../services/storage/chats.storage.j
 import { createGalleryStorage } from "../../../../services/storage/gallery.storage.js";
 import { pickGalleryAttachmentForAccount } from "../slp-generated-activity-service.js";
 import { slurpPlanSlot } from "../../../modules/feed/slp-planner.js";
+import { slurpCreatorStrategy } from "../../../modules/creators/slp-creator-strategy.js";
 import {
   completeSlurpOpportunity,
   findSlurpOpportunityBySlot,
@@ -160,6 +161,7 @@ export async function prepareNextCreatorReservePost(db: DB, at = new Date()): Pr
           ? { skip: false as const }
           : slurpPlanSlot(selectedAccount.id, await noodle.countNoodlerPostsByAccount(selectedAccount.id), {
               skippedLast: await slurpSkippedLastSlot(db, selectedAccount.id),
+              skipRate: slurpCreatorStrategy(selectedAccount.id, selectedAccount.settings.strategy).skipRate,
             });
     if (decision.skip) {
       await planSlurpOpportunity(db, {

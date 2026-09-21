@@ -127,6 +127,21 @@ const TEXT_ONLY_WEIGHTS: Record<SlurpContentIntent, number> = {
   business: 60,
 };
 
+/** The shipped weights with the Creator's saved ones applied. All zero means "use the shipped ones". */
+function intentOptions(saved: Partial<Record<SlurpContentIntent, number>> | undefined) {
+  const shipped = Object.entries(INTENT_WEIGHTS).map(([value, weight]) => ({
+    value: value as SlurpContentIntent,
+    weight,
+  }));
+  const options = shipped.map((option) => ({ ...option, weight: saved?.[option.value] ?? option.weight }));
+  return options.some((option) => option.weight > 0) ? options : shipped;
+}
+
+/** Weights that make one intent certain, for a purpose the player chose. */
+export function slurpOnlyIntent(intent: SlurpContentIntent): Partial<Record<SlurpContentIntent, number>> {
+  return Object.fromEntries(Object.keys(INTENT_WEIGHTS).map((key) => [key, key === intent ? 1 : 0]));
+}
+
 export type SlurpPostAxes = { intent: SlurpContentIntent; delivery: SlurpContentDelivery };
 
 /**
@@ -146,23 +161,30 @@ export type SlurpPostAxes = { intent: SlurpContentIntent; delivery: SlurpContent
 export function slurpPostAxes(
   creatorAccountId: string,
   sequence: number,
-  decided: { story?: boolean; teaser?: boolean; images: boolean },
+  decided: {
+    story?: boolean;
+    teaser?: boolean;
+    images: boolean;
+    /** This Creator's saved weights, from `slp-creator-strategy.ts`. Absent intents keep theirs. */
+    intentWeights?: Partial<Record<SlurpContentIntent, number>>;
+    /** Out of 100, from the same place. Scales every intent's lean on words. */
+    textOnlyRate?: number;
+  },
 ): SlurpPostAxes {
   const intent: SlurpContentIntent = decided.teaser
     ? "teaser"
     : decided.story
       ? "casual"
-      : slurpWeightedPick(
-          "contentType",
-          creatorAccountId,
-          sequence,
-          Object.entries(INTENT_WEIGHTS).map(([value, weight]) => ({ value: value as SlurpContentIntent, weight })),
-        );
+      : slurpWeightedPick("contentType", creatorAccountId, sequence, intentOptions(decided.intentWeights));
   if (decided.story && decided.images) return { intent, delivery: "story" };
   // Without pictures every intent goes out as text, including a set: it becomes the announcement
   // of one. The caller still has no picture to attach, so claiming otherwise would be a lie.
   if (!decided.images) return { intent, delivery: "text_only" };
-  const textOnly = TEXT_ONLY_WEIGHTS[intent];
+  // The Creator's own lean scales the shipped per-intent rates rather than replacing them: a
+  // Creator who mostly writes still never sends a set out as text, because a set has no words to
+  // be. 50 is the shipped balance, so an unset strategy changes nothing.
+  const lean = (decided.textOnlyRate ?? 50) / 50;
+  const textOnly = Math.min(90, Math.round(TEXT_ONLY_WEIGHTS[intent] * lean));
   const delivery = slurpWeightedPick("delivery", creatorAccountId, sequence, [
     { value: "text_only" as const, weight: textOnly },
     { value: "new_capture" as const, weight: 100 - textOnly },

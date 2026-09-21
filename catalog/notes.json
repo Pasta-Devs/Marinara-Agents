@@ -306,6 +306,12 @@
     "slurp2": {
       "versions": [
         {
+          "version": "0.1.26",
+          "date": "2026-09-21",
+          "notes": "- Added a Posting strategy section to each Creator's publishing settings: production style, how often a slot stays quiet, how much they lean on words, and a note on how they run their page.\n- Every strategy value starts automatic and can be reset back to automatic on its own.\n- Added a post purpose choice to the composer for guided posts. It applies to that one post only.",
+          "highlight": false
+        },
+        {
           "version": "0.1.25",
           "date": "2026-09-21",
           "notes": "- A Creator can now leave a scheduled slot empty. A quiet slot costs no post, no picture, and no retry, and it is no longer reported as a failed run.\n- Two quiet slots in a row are refused, so a page never goes silent for a whole day.\n- Every planned post is recorded before it is written, so a retry repeats the same decision instead of making a new one.",
@@ -417,12 +423,6 @@
           "version": "0.1.7",
           "date": "2026-09-20",
           "notes": "- Added Pulse above the persona selector on desktop and mobile.\n- Pulse shows durable server tasks and current-session work, including post generation, images, audience activity, follow-ups, commissions, and Creator improvements.\n- Added compact status rows, recent results, progress counts, and Creator avatars for background work.",
-          "highlight": false
-        },
-        {
-          "version": "0.1.6",
-          "date": "2026-09-20",
-          "notes": "- Prompt Studio now keeps voice, post, and image instructions readable in muted fields without opening an editor.\n- Recipes scan as compact capability rows, then open into a focused block-outline, pipeline, and preview workspace.\n- Collapsed blocks show their resolved prompt, while the selected block exposes its source, inputs, length, and draft action.\n- Presets and secondary controls stay available without competing with the main prompt workflow.\n- Compiled prompts can be copied directly from the preview inspector.",
           "highlight": false
         }
       ]

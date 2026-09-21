@@ -13,7 +13,7 @@ import { slpCreatorPublicIdentityFor } from "./slp-public-identity.js";
 import { slurpPostVariation, slurpPostVariationInstruction } from "../../modules/feed/slp-post-variation.js";
 import { slurpCameraSourceInstruction, slurpPostCameraSource } from "../../modules/feed/slp-camera-source.js";
 import { slurpContentAxesInstruction, slurpPostAxes } from "../../modules/feed/slp-content-axes.js";
-import { slurpProductionInstruction, slurpProductionProfile } from "../../modules/creators/slp-production-profile.js";
+import { slurpCreatorStrategy, slurpStrategyInstruction } from "../../modules/creators/slp-creator-strategy.js";
 import type { SlurpPromptId } from "../../base/prompting/slp-prompt-blocks.js";
 
 export type SlurpPromptBlockPreview = {
@@ -63,7 +63,8 @@ export async function previewSlurpPromptBlocks(
   // rather than a fixed sample that never matches what they publish.
   const sequence = await slurp.countNoodlerPostsByAccount(account.id);
   const variation = slurpPostVariation(account.id, sequence, settings.storyRate);
-  const production = slurpProductionProfile(account.id);
+  const strategy = slurpCreatorStrategy(account.id, account.settings.strategy);
+  const production = strategy.production;
   const camera = slurpPostCameraSource(account.id, sequence, {
     companyCanHoldCamera: variation.companyCanHoldCamera,
     prefers: production.prefers,
@@ -72,6 +73,8 @@ export async function previewSlurpPromptBlocks(
     story: variation.story,
     teaser: false,
     images: account.settings.scheduler.autoPosting?.imagesEnabled === true,
+    intentWeights: strategy.intentWeights,
+    textOnlyRate: strategy.textOnlyRate,
   });
 
   const blocks = buildSlurpPostBlocks({
@@ -88,7 +91,7 @@ export async function previewSlurpPromptBlocks(
     postMaxLength: settings.postMaxLength,
     variationInstruction: slurpPostVariationInstruction(variation, slurpCameraSourceInstruction(camera)),
     contentTypeInstruction: slurpContentAxesInstruction(axes),
-    productionInstruction: slurpProductionInstruction(production),
+    productionInstruction: slurpStrategyInstruction(strategy),
     promptBlocks: settings.promptBlocks,
     promptInstructions: settings.promptInstructions,
   });

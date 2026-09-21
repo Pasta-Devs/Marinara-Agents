@@ -271,10 +271,25 @@ export const slpAccountSocialPatchSchema = slpAccountSocialSettingsSchema.pick({
   noodleFeedSeenAt: true,
 });
 
+/**
+ * One Creator strategy edit. `null` clears a value back to the derived default; an absent key
+ * leaves it alone. Bounds match `SLURP_STRATEGY_LIMITS` on the server.
+ */
+export const slpCreatorStrategyPatchSchema = z
+  .object({
+    style: z.enum(["homemade", "polished", "documentary", "theatrical"]).nullable().optional(),
+    skipRate: z.number().int().min(0).max(40).nullable().optional(),
+    textOnlyRate: z.number().int().min(0).max(100).nullable().optional(),
+    intentWeights: z.record(z.string(), z.number().int().min(0).max(100)).nullable().optional(),
+    strategyText: z.string().max(2000).nullable().optional(),
+  })
+  .strict();
+
 export const slpAccountSettingsPatchSchema = z.discriminatedUnion("subtree", [
   z.object({ subtree: z.literal("social"), patch: slpAccountSocialPatchSchema }).strict(),
   z.object({ subtree: z.literal("scheduler"), patch: slpAccountSchedulerPatchSchema }).strict(),
   z.object({ subtree: z.literal("privacy"), patch: slpAccountPrivacyPatchSchema }).strict(),
+  z.object({ subtree: z.literal("strategy"), patch: slpCreatorStrategyPatchSchema }).strict(),
 ]);
 
 const slpAccountIdentityUpdateShape = {

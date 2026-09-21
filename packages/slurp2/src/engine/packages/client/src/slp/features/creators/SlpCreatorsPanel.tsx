@@ -17,6 +17,7 @@ import { CreatorMessagingGroup } from "../messages/slp-messages-contract";
 import { BackstagePageHeader, SettingAnchor } from "../../modules/settings/SlpSettingsKit";
 import { SlurpPostGuidanceField } from "../settings/slp-post-guidance-contract";
 import { SlurpCreatorProfileEditor } from "./SlpCreatorProfileEditor";
+import { SlurpCreatorStrategyGroup } from "./SlpCreatorStrategyGroup";
 import { useSlurpCreatorMetrics } from "./slp-creators-hooks";
 import { useSlurpPostGuidance } from "../settings/slp-post-guidance-contract";
 
@@ -237,6 +238,7 @@ export function SlpCreatorsPanel(page: SlpBackstagePageProps) {
                 {t("ui.slurp.settings.creators.postingSchedule")}
               </button>
             </SettingsGroup>
+            <SlurpCreatorStrategyGroup creator={selectedCreator} />
             {/* A creator who fishes for subscribers in public and pays it off behind the
                 paywall needs their own two directions; empty means the global ones apply. */}
             <SettingsGroup title={t("ui.slurp.settings.creators.guidanceGroup")}>

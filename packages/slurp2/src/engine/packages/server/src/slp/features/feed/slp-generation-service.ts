@@ -83,16 +83,12 @@ import {
 } from "../../base/prompting/slp-prompt-blocks.js";
 import { slurpCameraSourceInstruction, slurpPostCameraSource } from "../../modules/feed/slp-camera-source.js";
 import { slurpImageBrief } from "../../modules/feed/slp-image-brief.js";
-import { slurpContentAxesInstruction, slurpPostAxes } from "../../modules/feed/slp-content-axes.js";
+import { slurpContentAxesInstruction, slurpOnlyIntent, slurpPostAxes } from "../../modules/feed/slp-content-axes.js";
 import { completeSlurpOpportunity, planSlurpOpportunity } from "../../data/feed/slp-opportunity-storage.js";
 import { slurpShootInstruction } from "../../modules/feed/slp-shoot.js";
 import { findReusableSlurpShoot, openSlurpShoot, useSlurpShoot } from "../../data/feed/slp-shoot-storage.js";
-import {
-  slurpEffortInstruction,
-  slurpPostEffort,
-  slurpProductionInstruction,
-  slurpProductionProfile,
-} from "../../modules/creators/slp-production-profile.js";
+import { slurpEffortInstruction, slurpPostEffort } from "../../modules/creators/slp-production-profile.js";
+import { slurpCreatorStrategy, slurpStrategyInstruction } from "../../modules/creators/slp-creator-strategy.js";
 
 export type GeneratedCreatorPostResult = {
   post: SlpCreatorManagedPost;
@@ -264,7 +260,8 @@ export async function generateCreatorPost(
   // `slp-camera-source.ts`.
   // How this Creator makes things, as opposed to who they are. Stable for the life of the account,
   // so it biases every post they ever make rather than this one.
-  const production = slurpProductionProfile(account.id);
+  const strategy = slurpCreatorStrategy(account.id, account.settings.strategy);
+  const production = strategy.production;
   const cameraSource = variation
     ? slurpPostCameraSource(account.id, sequence, {
         companyCanHoldCamera: variation.companyCanHoldCamera,
@@ -285,9 +282,24 @@ export async function generateCreatorPost(
     input.request.access === "public" && !directed && slurpTeaserPost(account.id, sequence, settings.teaserRate);
   // What this post is for, as opposed to what it is about, and how it goes out. Story and teaser
   // are passed in rather than chosen again, so the decisions cannot contradict each other.
-  const axes = !directed
-    ? slurpPostAxes(account.id, sequence, { story: storyVariation, teaser: isTeaser, images: imagesEnabled })
-    : null;
+  // A purpose picked in the composer outranks the strategy for this post only, even on a directed
+  // post: the direction says what it is about, the purpose says what it is for. It never touches
+  // the saved strategy. An image the player asked for is honoured rather than redrawn as text.
+  const chosen = input.request.contentIntent;
+  const drawn =
+    !directed || chosen
+      ? slurpPostAxes(account.id, sequence, {
+          story: storyVariation,
+          teaser: chosen ? chosen === "teaser" : isTeaser,
+          images: imagesEnabled,
+          intentWeights: chosen ? slurpOnlyIntent(chosen) : strategy.intentWeights,
+          textOnlyRate: strategy.textOnlyRate,
+        })
+      : null;
+  const axes =
+    drawn && chosen && input.request.generateImage === true && imagesEnabled && drawn.delivery === "text_only"
+      ? { ...drawn, delivery: "new_capture" as const }
+      : drawn;
   // The decision is durable before the model is called, so a run that dies between the two does
   // not lose it and a retry repeats it instead of drawing again. A preview decides nothing.
   const opportunity =
@@ -380,7 +392,7 @@ export async function generateCreatorPost(
     promptBlocks: prompts.blocks,
     promptInstructions: prompts.instructions,
     contentTypeInstruction,
-    productionInstruction: slurpProductionInstruction(production),
+    productionInstruction: slurpStrategyInstruction(strategy),
     generatedAt: input.generatedAt ?? new Date(),
     publicationTime: input.publicationTime,
   });
