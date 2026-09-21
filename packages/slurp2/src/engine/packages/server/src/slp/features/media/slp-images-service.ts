@@ -9,9 +9,12 @@ import { getErrorMessage } from "../../modules/creators/slp-public-support.js";
 import { NOODLER_MEDIA_PREFIX, slpCreatorPostMediaUrl } from "../../base/media/slp-media.js";
 import { resolveImageConnectionFallback } from "../../../services/generation/media-connection-fallback.js";
 import { generateImage, stageImageToDisk, type StagedGalleryImage } from "../../../services/image/image-generation.js";
+import { generateSlurpImageWithHost, stageSlurpImageWithHost } from "../../base/host/slp-generation-integrations.js";
 import { resolveConnectionImageDefaults } from "../../../services/image/image-generation-defaults.js";
 import { compileImagePrompt, resolveImageStyleGuidanceText } from "../../../services/image/image-prompt-compiler.js";
 import { resolveImagePromptReviewSize } from "../../../services/image/image-prompt-review.js";
+import type { SlurpVisualBrief } from "../../base/media/slp-visual-brief.js";
+import { slurpVisualBriefPromptViolatesPolicy } from "../../base/media/slp-visual-brief.js";
 import { loadImageGenerationUserSettings } from "../../../services/image/image-generation-settings.js";
 import { resolveIllustratorCharacterReferences } from "../../../services/image/illustrator-references.js";
 import { createCharactersStorage } from "../../../services/storage/characters.storage.js";
@@ -55,6 +58,8 @@ export async function generateCreatorPostImage(input: {
   disclosureMode: SlpIdentityDisclosure;
   postContent: string;
   draftPrompt: string;
+  contentPolicy?: string;
+  visualBrief?: SlurpVisualBrief;
   settings: Pick<
     SlurpSettings,
     | "imageGenerationPrompt"
@@ -202,6 +207,7 @@ export async function generateCreatorPostImage(input: {
   const postPrompt = await loadPrompt(input.promptOverrides, NOODLE_IMAGE_POST, {
     authorName: input.account.displayName,
     postContent: input.postContent,
+    visualBrief: input.visualBrief,
     draftPrompt: input.draftPrompt,
     userInstructions: input.settings.imageGenerationPrompt,
     characterDescription,
@@ -273,6 +279,7 @@ export async function generateCreatorPostImage(input: {
       characterDescription ? `Appearance:\n${characterDescription}` : "",
       characterPersonality ? `Personality:\n${characterPersonality}` : "",
       characterImageInstructions ? `Character image preferences:\n${characterImageInstructions}` : "",
+      input.contentPolicy ? `Creator content policy:\n${input.contentPolicy}` : "",
     ]
       .filter(Boolean)
       .join("\n\n"),
@@ -289,6 +296,7 @@ export async function generateCreatorPostImage(input: {
     ? await rewriteSlpImagePrompt({
         db: input.db,
         prompt: rawRewriteInput,
+        postContent: input.postContent,
         interpretationInstruction: input.settings.imagePromptInterpretation,
         instructions: redactIdentity(imagePromptInstructions),
         characterContext,
@@ -310,9 +318,13 @@ export async function generateCreatorPostImage(input: {
         imageDefaults,
       })
     : null;
+  const acceptedRewrittenPrompt =
+    input.visualBrief && rewrittenPrompt && slurpVisualBriefPromptViolatesPolicy(input.visualBrief, rewrittenPrompt)
+      ? null
+      : compiledRewrittenPrompt?.prompt || rewrittenPrompt;
   const finalPromptBase = redactIdentity(
     selectSlpImageProviderPrompt({
-      rewrittenPrompt: compiledRewrittenPrompt?.prompt || rewrittenPrompt,
+      rewrittenPrompt: acceptedRewrittenPrompt,
       rawPrompt: rawProviderPrompt,
       rewriteAttempted,
       onFallback: (reason) =>
@@ -369,20 +381,42 @@ export async function generateCreatorPostImage(input: {
   const image = await generateSlpImageWithRetry(
     async (attempt) => {
       await input.beforeProviderAttempt?.(attempt);
-      return generateImage(imageSource, imageBaseUrl, input.imageConnection.apiKey || "", imageServiceHint, {
-        prompt: finalPrompt,
-        negativePrompt: finalNegativePrompt,
-        model: imageModel,
-        width: outputWidth,
-        height: outputHeight,
-        imageEndpointId: input.imageConnection.imageEndpointId || undefined,
-        comfyWorkflow: input.imageConnection.comfyuiWorkflow || undefined,
-        imageDefaults,
-        referenceImages,
-        debugMode: input.debugMode,
-        admissionMode: input.admissionMode,
-        fallback: imageFallback,
-      });
+      return (
+        generateSlurpImageWithHost({
+          source: imageSource,
+          baseUrl: imageBaseUrl,
+          apiKey: input.imageConnection.apiKey || "",
+          serviceHint: imageServiceHint,
+          request: {
+            prompt: finalPrompt,
+            negativePrompt: finalNegativePrompt,
+            model: imageModel,
+            width: outputWidth,
+            height: outputHeight,
+            imageEndpointId: input.imageConnection.imageEndpointId || undefined,
+            comfyWorkflow: input.imageConnection.comfyuiWorkflow || undefined,
+            imageDefaults,
+            referenceImages,
+            debugMode: input.debugMode,
+            admissionMode: input.admissionMode,
+            fallback: imageFallback,
+          },
+        }) ??
+        generateImage(imageSource, imageBaseUrl, input.imageConnection.apiKey || "", imageServiceHint, {
+          prompt: finalPrompt,
+          negativePrompt: finalNegativePrompt,
+          model: imageModel,
+          width: outputWidth,
+          height: outputHeight,
+          imageEndpointId: input.imageConnection.imageEndpointId || undefined,
+          comfyWorkflow: input.imageConnection.comfyuiWorkflow || undefined,
+          imageDefaults,
+          referenceImages,
+          debugMode: input.debugMode,
+          admissionMode: input.admissionMode,
+          fallback: imageFallback,
+        })
+      );
     },
     async (error, attempt, maxAttempts) => {
       await input.onProviderAttemptFailure?.(attempt);
@@ -403,12 +437,17 @@ export async function generateCreatorPostImage(input: {
   } catch (error) {
     logger.warn(error, "[slurp] Could not charge image energy for %s", input.account.id);
   }
-  const file = stageImageToDisk(
-    `${NOODLER_MEDIA_PREFIX}${input.account.id}`,
-    image.base64,
-    // The provider's declared extension is only a fallback; the bytes decide.
-    slurpImageExtension(image.base64, image.ext),
-  );
+  const file =
+    stageSlurpImageWithHost(
+      `${NOODLER_MEDIA_PREFIX}${input.account.id}`,
+      image.base64,
+      slurpImageExtension(image.base64, image.ext),
+    ) ??
+    stageImageToDisk(
+      `${NOODLER_MEDIA_PREFIX}${input.account.id}`,
+      image.base64,
+      slurpImageExtension(image.base64, image.ext),
+    );
   return {
     metadata: {
       imageGenerated: true,

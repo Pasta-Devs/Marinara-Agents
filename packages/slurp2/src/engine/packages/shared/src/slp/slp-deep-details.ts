@@ -51,6 +51,17 @@ export type SlpDeepDetailsRecord = {
   modelOutput: { title: string | null; content: string; imagePrompt: string | null };
   /** The picture brief built from the situation, or the model's own image prompt when there was none. */
   imageBrief: string | null;
+  /** The typed scene contract used to constrain image prompt interpretation, when available. */
+  visualBrief?: {
+    subject: string;
+    action: string;
+    setting: string;
+    company: string;
+    clothing: string | null;
+    camera: string;
+    mood: string | null;
+    sexualLevel: "none" | "suggestive" | "nudity" | "explicit";
+  } | null;
   askedModelForImagePrompt: boolean;
 };
 

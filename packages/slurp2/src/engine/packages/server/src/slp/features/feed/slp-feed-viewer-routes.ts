@@ -146,6 +146,7 @@ export async function slpFeedViewerRoutes(app: FastifyInstance, deps: SlpRouteDe
     });
     const projected = await projectViewerPosts(context, page.items);
     return {
+      ...buildViewerShell(context),
       items: page.items.flatMap((post) => {
         const view = projected.get(post.id);
         return view ? [{ creatorAccountId: post.authorAccountId, post: view }] : [];

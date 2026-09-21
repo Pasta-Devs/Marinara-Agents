@@ -241,3 +241,62 @@ modules, rejected alternative, and migration consequence.
 - **Migration consequence:** additive. New tables, a new optional `strategy` key in account settings,
   and `classicPromptBlocks` in Slurp settings. Old prompt-block layouts migrate in place, keeping
   their edits and gaining new blocks at their inventory position.
+
+## Host-owned generation integrations (2026-09-21)
+
+- **Problem:** The Creator posting path called Engine provider and image implementations directly.
+  That copied host integration details into the package and could bypass newer host queues, admission,
+  fallback, and media lifecycle behavior.
+- **Decision:** The Creator posting path keeps prompt construction and generation orchestration, but
+  uses the Engine's Capability API 1.31 integration facade for its LLM provider, image generation, and
+  staged image writes. A small `base/host` adapter stores the activation-scoped facade. Other Slurp2
+  generation features retain their existing host-service path until a separate migration slice covers
+  them.
+- **Affected modules:** `base/host/slp-generation-integrations.ts`, Creator post generation, Creator
+  image generation, server activation, the package manifest, and the build boundary metadata.
+- **Rejected alternative:** copying the Engine's provider and image implementations into Slurp2. That
+  would duplicate security and queue behavior and would drift on every Engine generation change.
+- **Migration consequence:** Slurp2 now requires Engine 2.4.6 and Capability API 1.31. Existing Slurp
+  data is unchanged. Package activation fails on older Engines instead of silently using an incomplete
+  Creator posting integration.
+
+## Prompt intent is the source of truth (2026-09-21)
+
+- **Problem:** Slurp has several valid prompt controls: global prompt blocks, global generation and
+  image settings, Creator stage and content settings, production strategy, current Creator state,
+  and message relationship state. They were all expressed as prose. Image interpretation could
+  therefore treat a personality or adult image instruction as permission to change the post's scene.
+- **Decision:** The post's subject, action, setting, clothing, and sexual intensity are the visual
+  intent. The post prompt blocks and Creator settings may shape that intent, but image interpretation
+  may only render it. Stable appearance and style add detail after intent. They may not add an event,
+  person, outfit, viewpoint, nudity, explicit anatomy, or sexual activity. The post caption remains a
+  related text output, not the image source. Message image requests use the same Creator content menu
+  and relationship boundaries, with thread state deciding whether adult escalation is permitted.
+- **Affected modules:** `base/prompting/slp-prompt-blocks.ts`, `base/media/slp-image-prompt-rewrite.ts`,
+  `features/feed/`, `features/media/`, `features/messages/`, and the global image settings defaults.
+- **Rejected alternative:** adding a second Creator-specific image prompt system. The existing block
+  editor, global image settings, Creator image preferences, content menu, and message relationship
+  state already provide the required controls. A second system would create conflicting sources of
+  truth.
+- **Migration consequence:** the shipped image defaults become non-escalating. Exact older shipped
+  defaults migrate to the new values; user-edited text remains unchanged. Stored posts and image
+  prompts are not rewritten.
+
+## Typed visual brief between planning and rendering (2026-09-21)
+
+- **Problem:** Post planning already knew the place, action, company, camera, effort, and delivery,
+  but the image path reduced those facts to free text before interpretation. A style or adult image
+  instruction could therefore change the scene after planning.
+- **Decision:** Automatic post planning creates a `SlurpVisualBrief` in `base/media/`. It carries the
+  authoritative subject, action, setting, company, clothing, camera, mood, and sexual level. Image
+  interpretation receives both the typed brief and the old text draft. The typed brief constrains the
+  rewrite, and the policy text is appended to the final provider prompt. Deep Details records the
+  brief when one exists. Existing stored image prompt strings remain compatible.
+- **Affected modules:** `base/media/slp-visual-brief.ts`, `modules/feed/slp-visual-brief.ts`, post
+  generation, both Creator image services, Deep Details, and the prompt preview inspector.
+- **Rejected alternative:** replacing the stored image prompt with a new JSON payload. Existing posts,
+  image review, retries, and media records already use prompt strings. The typed brief is additive and
+  remains an internal generation contract.
+- **Migration consequence:** no stored post changes. New automatic posts record typed visual intent;
+  older posts continue to use their stored image prompts. Prompt previews now label block inspection
+  separately from full post generation.

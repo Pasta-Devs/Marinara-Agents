@@ -1,7 +1,7 @@
 import type { SlpCreatorContentFormat } from "../../features/feed/slp-feed-contract";
 import type { SlurpContentDelivery, SlurpContentIntent } from "../../../../../shared/src/slp/slp-content-axes.js";
 import { AnimatePresence } from "framer-motion";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, Loader2 } from "lucide-react";
 import { DEFAULT_SLURP_SUBSCRIPTION_PRICE } from "../../modules/coin/SlpCoin";
 import { HelpTooltip } from "../../../components/ui/HelpTooltip";
 import { type SlpIdentityDisclosure } from "../../../../../shared/src/slp/slp-social.types.js";
@@ -456,10 +456,12 @@ export function LoadMoreFeedButton({
   visible,
   total,
   onLoadMore,
+  loading = false,
 }: {
   visible: number;
   total: number;
   onLoadMore: () => void;
+  loading?: boolean;
 }) {
   const { t: localizeUi } = useUiTranslation();
   return (
@@ -467,9 +469,19 @@ export function LoadMoreFeedButton({
       data-component="SlurpHome.LoadMoreFeed"
       type="button"
       onClick={onLoadMore}
+      disabled={loading}
+      aria-busy={loading}
       className="min-h-11 w-full border-b border-[var(--noodle-divider)] px-4 py-3 text-sm font-bold text-[var(--noodle-accent)] hover:bg-[var(--noodle-accent)]/10"
     >
-      {localizeUi("ui.noodle.noodlehome.loadMore", { visible, total })}
+      {loading ? (
+        <Loader2
+          size={16}
+          className="mx-auto animate-spin motion-reduce:animate-none"
+          aria-label={localizeUi("ui.slurp.feed.loading", { defaultValue: "Loading" })}
+        />
+      ) : (
+        localizeUi("ui.noodle.noodlehome.loadMore", { visible, total })
+      )}
     </button>
   );
 }

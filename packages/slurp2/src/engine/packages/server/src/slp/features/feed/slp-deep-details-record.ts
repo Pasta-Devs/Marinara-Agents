@@ -2,6 +2,7 @@ import type { SlpDeepDetailsRecord } from "../../../../../shared/src/slp/slp-dee
 import type { ChatMessage } from "../../../services/llm/base-provider.js";
 import type { SlurpCreatorStrategy } from "../../modules/creators/slp-creator-strategy.js";
 import type { SlurpPostVariation } from "../../modules/feed/slp-post-variation.js";
+import type { SlurpVisualBrief } from "../../base/media/slp-visual-brief.js";
 
 const numberOrNull = (value: unknown) => (typeof value === "number" ? value : null);
 
@@ -35,6 +36,7 @@ export function buildSlurpDeepDetailsRecord(ctx: {
   content: string;
   generated: { title?: string | null; content: string; imagePrompt?: string | null };
   draftImagePrompt: string | null | undefined;
+  visualBrief?: SlurpVisualBrief | null;
   askModelForImagePrompt: boolean;
 }): SlpDeepDetailsRecord {
   return {
@@ -93,6 +95,7 @@ export function buildSlurpDeepDetailsRecord(ctx: {
       imagePrompt: ctx.generated.imagePrompt ?? null,
     },
     imageBrief: ctx.draftImagePrompt ?? null,
+    visualBrief: ctx.visualBrief ?? null,
     askedModelForImagePrompt: ctx.askModelForImagePrompt,
   };
 }

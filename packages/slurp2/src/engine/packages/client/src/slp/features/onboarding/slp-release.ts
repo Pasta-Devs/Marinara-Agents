@@ -1,5 +1,5 @@
 // The splash screen needs the shipped version and its public notes inside the client bundle.
-export const SLURP2_VERSION = "0.2.5";
+export const SLURP2_VERSION = "0.2.9";
 
 export interface Slurp2ReleaseEntry {
   version: string;
@@ -9,6 +9,28 @@ export interface Slurp2ReleaseEntry {
 
 /** The public release history shown in the Engine splash screen. */
 export const SLURP2_RELEASES: Slurp2ReleaseEntry[] = [
+  {
+    version: "0.2.9",
+    date: "2026-09-21",
+    notes: [
+      "Deleted posts now leave a sparkling restore slot for 60 seconds before permanent cleanup.",
+      "Post image prompts now use a typed visual brief and preserve the planned scene through image interpretation.",
+    ],
+  },
+  {
+    version: "0.2.8",
+    date: "2026-09-21",
+    notes: [
+      "Feed loading has a softer status animation, older drops show a progress state, and deleted posts leave the timeline with a short gentle exit.",
+    ],
+  },
+  {
+    version: "0.2.7",
+    date: "2026-09-21",
+    notes: [
+      "The feed loads its first page first, older posts load on demand, and post edits and deletes update the visible feed without a full reload.",
+    ],
+  },
   {
     version: "0.2.5",
     date: "2026-09-21",

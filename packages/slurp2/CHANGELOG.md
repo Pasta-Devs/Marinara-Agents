@@ -1,5 +1,22 @@
 # Slurp Remastered release notes
 
+## 0.2.9 — 2026-09-21
+
+- Post image prompts now use a typed visual brief and preserve the planned scene through image interpretation.
+- Deleted posts now leave a sparkling restore slot for 60 seconds before permanent cleanup.
+
+## 0.2.8 — 2026-09-21
+
+- Feed loading has a softer status animation, older drops show a progress state, and deleted posts leave the timeline with a short gentle exit.
+
+## 0.2.7 — 2026-09-21
+
+- The feed loads its first page first, older posts load on demand, and post edits and deletes update the visible feed without a full reload.
+
+## 0.2.6 — 2026-09-21
+
+- Creator posts now use the Engine's live Capability API generation integrations for text providers, image generation, fallback handling, and staged media writes.
+
 ## 0.2.5 — 2026-09-21
 
 - Locked posts no longer tease what the reader already owns, and housekeeping posts stay public. The composer offers only the purposes that fit the post's audience.

@@ -13,6 +13,8 @@ import { generateImage, stageImageToDisk, type StagedGalleryImage } from "../../
 import { resolveConnectionImageDefaults } from "../../../services/image/image-generation-defaults.js";
 import { compileImagePrompt, resolveImageStyleGuidanceText } from "../../../services/image/image-prompt-compiler.js";
 import { resolveImagePromptReviewSize } from "../../../services/image/image-prompt-review.js";
+import type { SlurpVisualBrief } from "../../base/media/slp-visual-brief.js";
+import { slurpVisualBriefPromptViolatesPolicy } from "../../base/media/slp-visual-brief.js";
 import {
   normalizeIllustratorAppearance,
   readIllustratorAppearance,
@@ -118,6 +120,8 @@ export async function generateSlpPostImage(input: {
   referenceAccounts: SlpAccount[];
   postContent: string;
   draftPrompt: string;
+  contentPolicy?: string;
+  visualBrief?: SlurpVisualBrief;
   settings: SlurpSettings;
   characters: ReturnType<typeof createCharactersStorage>;
   characterGallery: ReturnType<typeof createCharacterGalleryStorage>;
@@ -200,6 +204,7 @@ export async function generateSlpPostImage(input: {
   const postPrompt = await loadPrompt(input.promptOverrides, NOODLE_IMAGE_POST, {
     authorName: input.account.displayName,
     postContent: input.postContent,
+    visualBrief: input.visualBrief,
     draftPrompt: input.draftPrompt,
     userInstructions: input.settings.imageGenerationPrompt,
     characterDescription,
@@ -251,6 +256,7 @@ export async function generateSlpPostImage(input: {
     characterDescription ? `Appearance:\n${characterDescription}` : "",
     characterPersonality ? `Personality:\n${characterPersonality}` : "",
     characterImageInstructions ? `Character image preferences:\n${characterImageInstructions}` : "",
+    input.contentPolicy ? `Creator content policy:\n${input.contentPolicy}` : "",
   ]
     .filter(Boolean)
     .join("\n\n");
@@ -263,6 +269,7 @@ export async function generateSlpPostImage(input: {
     ? await rewriteSlpImagePrompt({
         db: input.db,
         prompt: rawFinalPrompt,
+        postContent: input.postContent,
         interpretationInstruction: input.settings.imagePromptInterpretation,
         instructions: imagePromptInstructions,
         characterContext,
@@ -284,8 +291,12 @@ export async function generateSlpPostImage(input: {
         imageDefaults,
       })
     : null;
-  const finalPrompt = selectSlpImageProviderPrompt({
-    rewrittenPrompt: compiledRewrittenPrompt?.prompt || rewrittenPrompt,
+  const acceptedRewrittenPrompt =
+    input.visualBrief && rewrittenPrompt && slurpVisualBriefPromptViolatesPolicy(input.visualBrief, rewrittenPrompt)
+      ? null
+      : compiledRewrittenPrompt?.prompt || rewrittenPrompt;
+  const finalPromptBase = selectSlpImageProviderPrompt({
+    rewrittenPrompt: acceptedRewrittenPrompt,
     rawPrompt: rawProviderPrompt,
     rewriteAttempted,
     onFallback: (reason) => logger.warn("[slurp] Image prompt rewrite unusable (%s); sending the capped draft", reason),
@@ -295,6 +306,7 @@ export async function generateSlpPostImage(input: {
     privateContext: [characterPersonality],
     guidanceContext: [configuredImageInstructions, connectionImageInstructions],
   });
+  const finalPrompt = finalPromptBase;
   // A reviewer who cleared the negative prompt still gets the style profile's own negatives back,
   // for the same reason the positive prompt is recompiled above.
   const finalNegativePrompt = input.promptOverride

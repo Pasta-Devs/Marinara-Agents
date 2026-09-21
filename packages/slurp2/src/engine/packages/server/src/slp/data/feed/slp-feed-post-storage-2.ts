@@ -389,6 +389,46 @@ export function createFeedPostStorage2(context: SlurpStorageContext) {
       });
       return existing;
     },
+    async softDeleteNoodlerPost(id: string): Promise<SlpCreatorManagedPost | null> {
+      const existing = await this.getNoodlerPostById(id);
+      if (!existing) return null;
+      const deletedAt = new Date().toISOString();
+      await db
+        .update(slpPosts)
+        .set({
+          access: "draft",
+          updatedAt: deletedAt,
+          metadata: JSON.stringify({
+            ...existing.metadata,
+            slurpDeletedAt: deletedAt,
+            slurpDeletedAccess: existing.access,
+          }),
+        })
+        .where(eq(slpPosts.id, id));
+      return { ...existing, access: "draft", updatedAt: deletedAt };
+    },
+    async restoreNoodlerPost(id: string): Promise<SlpCreatorManagedPost | null> {
+      const existing = await this.getNoodlerPostById(id);
+      if (!existing || typeof existing.metadata.slurpDeletedAt !== "string") return null;
+      const access = existing.metadata.slurpDeletedAccess === "locked" ? "locked" : "public";
+      const metadata = { ...existing.metadata };
+      delete metadata.slurpDeletedAt;
+      delete metadata.slurpDeletedAccess;
+      await db
+        .update(slpPosts)
+        .set({ access, metadata: JSON.stringify(metadata), updatedAt: now() })
+        .where(eq(slpPosts.id, id));
+      return this.getNoodlerPostById(id);
+    },
+    async listExpiredDeletedNoodlerPostIds(at = Date.now()): Promise<string[]> {
+      const rows = await db.select().from(slpPosts).where(eq(slpPosts.access, "draft"));
+      return rows
+        .filter((row) => {
+          const deletedAt = parseRecord(row.metadata).slurpDeletedAt;
+          return typeof deletedAt === "string" && Date.parse(deletedAt) + 60_000 <= at;
+        })
+        .map((row) => row.id);
+    },
   } satisfies ThisType<Record<string, any>>;
   return storage;
 }

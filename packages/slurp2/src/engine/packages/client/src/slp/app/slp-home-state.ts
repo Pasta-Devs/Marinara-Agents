@@ -24,6 +24,7 @@ import {
   useConfirmCreatorImagePrompts,
   useCreateCreatorPost,
   useDeleteCreatorPost,
+  useRestoreCreatorPost,
   useGenerateCreatorSlpPost,
   useGenerateCreatorPostImage,
   useLoadCreatorPostImage,
@@ -277,6 +278,7 @@ export function useSlurpHomeBaseState({ navigation, onNavigate, onLeave }: Slurp
   const removeInteraction = useRemoveCreatorInteraction();
   const updatePost = useUpdateCreatorPost();
   const deletePost = useDeleteCreatorPost();
+  const restorePost = useRestoreCreatorPost();
   const updateInteraction = useUpdateCreatorInteraction();
   const deleteInteraction = useDeleteCreatorInteraction();
   const [draftNoodleAccountId, setDraftNoodleAccountId] = useState<string | null>(null);
@@ -453,6 +455,8 @@ export function useSlurpHomeBaseState({ navigation, onNavigate, onLeave }: Slurp
     submitReply,
     savePost,
     deleteNoodlePost,
+    deletingPostIds,
+    deletedPostIds,
     editingReplyId,
     setEditingReplyId,
     editingReplyContent,
@@ -474,6 +478,7 @@ export function useSlurpHomeBaseState({ navigation, onNavigate, onLeave }: Slurp
     replacePostImage,
     updatePost,
     deletePost,
+    restorePost,
   });
   const postCardController = useSlpPostCardController({
     postShowMoreLength: slurpSettingsQuery.data?.postShowMoreLength,
@@ -751,6 +756,8 @@ export function useSlurpHomeBaseState({ navigation, onNavigate, onLeave }: Slurp
     submitReply,
     savePost,
     deleteNoodlePost,
+    deletingPostIds,
+    deletedPostIds,
     editingReplyId,
     setEditingReplyId,
     editingReplyContent,

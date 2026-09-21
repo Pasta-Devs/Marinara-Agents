@@ -3,7 +3,11 @@ import type {
   SlpCreatorPostCreateInput,
   SlpCreatorPostUpdateInput,
 } from "../../../../../shared/src/slp/slp-social-generation.schema.js";
-import type { SlpCreatorManagedPost, SlpPostImageCrop } from "../../../../../shared/src/slp/slp-social.types.js";
+import type {
+  SlpCreatorManagedPost,
+  SlpPostImageCrop,
+  SlpCreatorViewerScope,
+} from "../../../../../shared/src/slp/slp-social.types.js";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { ImagePromptOverride } from "../../../components/ui/ImagePromptReviewModal.js";
 import { api } from "../../../lib/api-client.js";
@@ -184,13 +188,11 @@ export function useUpdateCreatorPost() {
   return useMutation({
     mutationFn: ({ id, accountId, ...input }: { id: string; accountId: string } & SlpCreatorPostUpdateInput) =>
       api.patch<SlpCreatorManagedPost>(`/slurp2/slurp/posts/${encodeURIComponent(id)}`, { ...input, accountId }),
-    onSuccess: (_post, input) => {
-      return Promise.all([
-        qc.invalidateQueries({
-          queryKey: slpKeys.noodlerPosts(input.accountId),
-        }),
-        qc.invalidateQueries({ queryKey: slpKeys.slpCreatorViewers() }),
-      ]);
+    onSuccess: (post, input) => {
+      qc.setQueriesData<SlurpProfilePost[]>({ queryKey: slpKeys.noodlerPosts(input.accountId) }, (current) =>
+        current?.map((item) => (item.managed?.id === post.id ? { ...item, managed: post } : item)),
+      );
+      return qc.invalidateQueries({ queryKey: slpKeys.slpCreatorViewers() });
     },
   });
 }
@@ -214,13 +216,12 @@ export function useReplaceCreatorPostImage() {
       form.append("file", file);
       return api.upload<SlpCreatorManagedPost>(`/slurp2/slurp/posts/${encodeURIComponent(id)}/media`, form);
     },
-    onSuccess: (_post, input) =>
-      Promise.all([
-        qc.invalidateQueries({
-          queryKey: slpKeys.noodlerPosts(input.accountId),
-        }),
-        qc.invalidateQueries({ queryKey: slpKeys.slpCreatorViewers() }),
-      ]),
+    onSuccess: (post, input) => {
+      qc.setQueriesData<SlurpProfilePost[]>({ queryKey: slpKeys.noodlerPosts(input.accountId) }, (current) =>
+        current?.map((item) => (item.managed?.id === post.id ? { ...item, managed: post } : item)),
+      );
+      return qc.invalidateQueries({ queryKey: slpKeys.slpCreatorViewers() });
+    },
   });
 }
 export function useGenerateCreatorPostImage() {
@@ -249,12 +250,22 @@ export function useDeleteCreatorPost() {
         `/slurp2/slurp/posts/${encodeURIComponent(id)}?accountId=${encodeURIComponent(accountId)}`,
       ),
     onSuccess: (_post, input) => {
-      return Promise.all([
-        qc.invalidateQueries({
-          queryKey: slpKeys.noodlerPosts(input.accountId),
-        }),
-        qc.invalidateQueries({ queryKey: slpKeys.slpCreatorViewers() }),
-      ]);
+      qc.setQueriesData<SlurpProfilePost[]>({ queryKey: slpKeys.noodlerPosts(input.accountId) }, (current) =>
+        current?.filter((item) => item.managed?.id !== input.id),
+      );
+      return Promise.resolve();
     },
+  });
+}
+export function useRestoreCreatorPost() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, accountId }: { id: string; accountId: string }) =>
+      api.post<SlpCreatorManagedPost>(`/slurp2/slurp/posts/${encodeURIComponent(id)}/restore`, { accountId }),
+    onSuccess: (_post, input) =>
+      Promise.all([
+        qc.invalidateQueries({ queryKey: slpKeys.noodlerPosts(input.accountId) }),
+        qc.invalidateQueries({ queryKey: slpKeys.slpCreatorViewers() }),
+      ]),
   });
 }

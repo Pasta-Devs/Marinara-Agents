@@ -9,17 +9,13 @@ import { newId } from "../../../utils/id-generator.js";
 import type { DB } from "../../../db/connection.js";
 import { describeSlurpPostCondition } from "./slp-post-condition-service.js";
 import { logger, logDebugOverride } from "../../../lib/logger.js";
-import { resolveBaseUrl } from "../../../services/generation/connection-base-url.js";
 import { clampGenerationMaxOutputTokens } from "../../../services/generation/output-token-limits.js";
 import { resolveStoredChatOptions } from "../../../services/generation/generation-parameters.js";
 import { slpSamplingOptions } from "../../base/prompting/slp-sampling-options.js";
-import { withConnectionFallbackProvider } from "../../../services/llm/connection-fallback-provider.js";
-import { withConnectionAdmissionProvider } from "../../../services/generation/connection-admission.js";
 import {
   isConnectionAdmissionFailure,
   type ConnectionAdmissionMode,
 } from "../../../services/generation/connection-admission.js";
-import { createLLMProvider } from "../../../services/llm/provider-registry.js";
 import { resolveCreatorImageConnectionId } from "../../base/media/slp-image-connections.js";
 import { resolveSlurpCreatorMenu, resolveSlurpPostGuidance } from "../../data/settings/slp-post-guidance-storage.js";
 import { createCharactersStorage } from "../../../services/storage/characters.storage.js";
@@ -85,6 +81,7 @@ import {
 } from "../../base/prompting/slp-prompt-blocks.js";
 import { slurpCameraSourceInstruction, slurpPostCameraSource } from "../../modules/feed/slp-camera-source.js";
 import { slurpImageBrief } from "../../modules/feed/slp-image-brief.js";
+import { slurpVisualBriefFromSituation } from "../../modules/feed/slp-visual-brief.js";
 import { slurpContentAxesInstruction, slurpIntentFormat } from "../../modules/feed/slp-content-axes.js";
 import { planSlurpPost, recordSlurpPostOutcome } from "./slp-post-plan-service.js";
 import { stageImageToDisk, type StagedGalleryImage } from "../../../services/image/image-generation.js";
@@ -92,6 +89,7 @@ import { slurpShootInstruction } from "../../modules/feed/slp-shoot.js";
 import { openSlurpShoot, useSlurpShoot } from "../../data/feed/slp-shoot-storage.js";
 import { slurpEffortInstruction, slurpPostEffort } from "../../modules/creators/slp-production-profile.js";
 import { slurpCreatorStrategy, slurpStrategyInstruction } from "../../modules/creators/slp-creator-strategy.js";
+import { createSlurpPostProvider } from "../../base/host/slp-generation-integrations.js";
 
 export type GeneratedCreatorPostResult = {
   post: SlpCreatorManagedPost;
@@ -162,32 +160,11 @@ export async function generateCreatorPost(
 
   const connections = createConnectionsStorage(db);
   const fallbackConnection = await connections.getFallbackForMain();
-  const fallbackProvider = withConnectionFallbackProvider({
-    primary: createLLMProvider(
-      input.connection.provider,
-      resolveBaseUrl(input.connection),
-      input.connection.apiKey,
-      input.connection.maxContext,
-      input.connection.openrouterProvider,
-      input.connection.maxTokensOverride,
-      input.connection.claudeFastMode === "true",
-      input.connection.treatAsLocalEndpoint === "true",
-      input.connection.defaultParameters,
-    ),
-    primaryConnectionId: input.connection.id,
+  const provider = createSlurpPostProvider({
+    connection: input.connection,
     fallbackConnection,
-    fallbackBaseUrl: fallbackConnection ? resolveBaseUrl(fallbackConnection) : "",
-    category: "main",
+    admissionMode: input.admissionMode ?? { kind: "foreground" },
   });
-  // The fallback wrapper takes no admission mode — passing one silently dropped it, which left
-  // every automatic post unadmitted and, worse, never ran `beforeAttempt`, so the daily budget
-  // was never claimed and the reserve poll regenerated a post on every pass. Admission goes on
-  // the outside, where the composed provider's calls actually pass through it.
-  const provider = withConnectionAdmissionProvider(
-    fallbackProvider,
-    input.connection.id,
-    input.admissionMode ?? { kind: "foreground" },
-  );
   const recentPosts = await noodle.listNoodlerPostsByAccount(account.id, 8);
   const disclosureMode = account.settings.privacy.identityDisclosure ?? "open";
   const linkedPublicAccount = await noodle.resolveAccountSource(account as SlurpAccount);
@@ -337,11 +314,12 @@ export async function generateCreatorPost(
   // written by somebody with no mood, no energy and no memory of last night. A failure here must
   // never cost a post: an unremarkable day is the same as no block at all.
   const conditionInstruction = await describeSlurpPostCondition(db, account.id, input.generatedAt ?? new Date());
+  const contentMenu = await resolveSlurpCreatorMenu(db, account.id).catch(() => "");
   const messages = buildNoodlerPostMessages({
     account,
     sourceCharacterContext,
     stagePersonality: account.settings.privacy.stagePersonality ?? "",
-    contentMenu: await resolveSlurpCreatorMenu(db, account.id).catch(() => ""),
+    contentMenu,
     disclosureMode,
     publicIdentity,
     recentPosts,
@@ -455,6 +433,17 @@ export async function generateCreatorPost(
         publicIdentity,
       )
     : null;
+  const visualBrief =
+    postImages && variation && cameraInstruction
+      ? slurpVisualBriefFromSituation({
+          variation,
+          axes,
+          cameraInstruction,
+          effortInstruction: slurpEffortInstruction(effort),
+          shoot,
+          story: storyVariation,
+        })
+      : undefined;
 
   // Shoot bookkeeping, once the post definitely has text and its picture brief. A set drop opens a
   // shoot that later callbacks can draw from, and stores its brief so their pictures keep its
@@ -528,6 +517,7 @@ export async function generateCreatorPost(
         projectChapter,
         camera,
         effort,
+        visualBrief,
         strategy,
         sentMessages,
         content,
@@ -696,6 +686,8 @@ export async function generateCreatorPost(
     disclosureMode,
     postContent: protectedGenerated.content,
     draftPrompt: draftImagePrompt,
+    contentPolicy: contentMenu,
+    visualBrief,
     settings,
     characters: createCharactersStorage(db),
     promptOverrides: createPromptOverridesStorage(db),

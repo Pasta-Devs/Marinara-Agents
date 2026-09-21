@@ -33,8 +33,8 @@ import { isDirectlyInvitedSlpCharacter } from "../../modules/feed/slp-invited-po
 import { resolveSlurpTextConnection } from "../../base/identity/slp-connection.js";
 import { generateInvitedSlpPostDraft } from "./slp-invited-post-draft-service.js";
 import { isConnectionAdmissionFailure } from "../../../services/generation/connection-admission.js";
-import { listSlurpPostMedia } from "../../data/feed/slp-post-media-storage.js";
 import { getErrorMessage } from "../../modules/creators/slp-public-support.js";
+import { listSlurpPostMedia } from "../../data/feed/slp-post-media-storage.js";
 import type { FastifyInstance } from "fastify";
 import { slurpPostTypeSchema } from "../../modules/requests/slp-request-schemas.js";
 import {
@@ -648,17 +648,29 @@ export async function slpFeedPostRoutes(app: FastifyInstance, deps: SlpRouteDeps
     const existing = await noodle.getNoodlerPostById(id);
     if (!existing) return reply.code(404).send({ error: "Slurp post not found" });
     if (existing.authorAccountId !== accountId) return reply.code(403).send({ error: "Forbidden" });
-    const attachments = await listSlurpPostMedia(app.db, id);
-    const locked = await tryCreatorAccountOperation(existing.authorAccountId, () => noodle.deleteNoodlerPost(id));
+    const locked = await tryCreatorAccountOperation(existing.authorAccountId, () => noodle.softDeleteNoodlerPost(id));
     if (!locked.acquired) {
       return reply.code(409).send({
         error: "Another operation for this Slurp account is already running.",
       });
     }
     if (!locked.value) return reply.code(404).send({ error: "Slurp post not found" });
-    unlinkCreatorMedia(readCreatorMediaPath(locked.value));
-    for (const attachment of attachments) unlinkCreatorMedia(attachment.mediaPath);
     return locked.value;
+  });
+
+  app.post("/slurp/posts/:id/restore", async (req, reply) => {
+    const body = (req.body ?? {}) as { accountId?: unknown };
+    const accountId = typeof body.accountId === "string" ? body.accountId : null;
+    if (!accountId) return reply.code(400).send({ error: "accountId is required" });
+    const { id } = req.params as { id: string };
+    const existing = await noodle.getNoodlerPostById(id);
+    if (!existing || existing.authorAccountId !== accountId)
+      return reply.code(404).send({ error: "Slurp post not found" });
+    const restored = await tryCreatorAccountOperation(accountId, () => noodle.restoreNoodlerPost(id));
+    if (!restored.acquired)
+      return reply.code(409).send({ error: "Another operation for this Slurp account is already running." });
+    if (!restored.value) return reply.code(409).send({ error: "This post can no longer be restored." });
+    return restored.value;
   });
 
   /**

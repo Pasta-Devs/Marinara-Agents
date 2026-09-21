@@ -433,14 +433,17 @@ export const LEGACY_EXPLICIT_SLURP_DEFAULT_GENERATION_GUIDANCE =
 export const LEGACY_SLP_CREATOR_DEFAULT_IMAGE_GENERATION_PROMPT =
   "Create a polished social-media image for an adult Creator post. Match the creator's identity, personality, body, clothing, and established visual details. Follow the post's mood and subject. Describe the pose, expression, setting, lighting, camera angle, composition, and visible details clearly. Flirty, suggestive, sensual, or explicit imagery is allowed when it fits the post and creator, but do not force sexual content into ordinary updates. Keep the image coherent, intentional, and suitable for a public or locked Creator feed.";
 
-export const SLP_CREATOR_DEFAULT_IMAGE_GENERATION_PROMPT =
+export const LEGACY_GRAPHIC_SLP_CREATOR_DEFAULT_IMAGE_GENERATION_PROMPT =
   "Create a polished social-media image for an adult Creator post. Match the creator's identity, personality, body, clothing, and established visual details. Follow the post's mood and subject. Describe the pose, expression, setting, lighting, camera angle, composition, and visible details clearly. Flirty, suggestive, sensual, or explicit imagery is allowed when it fits the post and creator, but do not force sexual content into ordinary updates. When the image shows nudity or sex, always use thorough, graphic descriptions. Name the body in dirty everyday words, not clinical ones: tits, nipples, ass, pussy, clit, cock, balls, cum, wet, dripping, hard, leaking. Describe how it looks, how it sits, how it catches the light. Keep the image coherent, intentional, and suitable for a public or locked Creator feed.";
+
+export const SLP_CREATOR_DEFAULT_IMAGE_GENERATION_PROMPT =
+  "Create a provider-ready image prompt for the supplied adult Creator post. Preserve the post's subject, action, setting, mood, clothing, and established appearance. Use the Creator's personality to shape expression and presentation, not to invent a new event or sexualize an ordinary moment. Add nudity, explicit anatomy, or sexual activity only when the post or an explicit trusted instruction already requires it. Keep the image coherent, believable, and suitable for the post's public or locked access level. Use only the visual details needed for this scene.";
 
 export const LEGACY_SLP_CREATOR_DEFAULT_IMAGE_PROMPT_INTERPRETATION =
   "Edit this image prompt into a provider-ready image prompt. Preserve the original subject, action, setting, composition, and visual style. Preserve any explicit style in the original prompt, character context, image instructions, or style guidance. Do not add realistic, photorealistic, photographic, camera, lens, or natural-lighting language unless the supplied context clearly requests that style. Do not convert an anime, cartoon, game, manga, comic, illustration, painterly, fantasy, or stylized character into a realistic image. When no style is specified, keep the prompt style-neutral. Do not invent an art style. Treat image instructions as guidance, not text to copy into the result. Return only the provider-ready image prompt.";
 
 export const SLP_CREATOR_DEFAULT_IMAGE_PROMPT_INTERPRETATION =
-  "Edit this image prompt into a provider-ready image prompt. Preserve the original subject, action, setting, composition, and visual style. Preserve any explicit style in the original prompt, character context, image instructions, or style guidance. Do not add realistic, photorealistic, photographic, camera, lens, or natural-lighting language unless the supplied context clearly requests that style. Do not convert an anime, cartoon, game, manga, comic, illustration, painterly, fantasy, or stylized character into a realistic image. When no style is specified, keep the prompt style-neutral. Do not invent an art style. When the prompt shows nudity or sex, keep thorough, graphic body language and dirty everyday words such as tits, nipples, ass, pussy, clit, cock, balls, cum, wet, dripping, hard, leaking. Do not replace them with clinical or euphemistic wording. Treat image instructions as guidance, not text to copy into the result. Return only the provider-ready image prompt.";
+  "Edit this image prompt into a concise provider-ready image prompt. Preserve the original subject, action, setting, clothing, composition, visual style, and sexual intensity. Preserve explicit style from the original prompt, character context, image instructions, or style guidance. Do not add a new event, person, pose, outfit, viewpoint, nudity, explicit anatomy, or sexual activity. Do not turn an ordinary update into a fashion shoot or erotic image. Do not add realistic, photographic, camera, lens, or natural-lighting language unless the supplied context requests it. Do not convert a stylized character into a realistic image. Treat image instructions as guidance, not text to copy. Return only the provider-ready image prompt.";
 
 /**
  * The LEGACY_* guidance constants above are every previously shipped default. An install that
@@ -624,23 +627,37 @@ export function normalizeSlurpSettings(raw: unknown): SlurpSettings {
   candidate.imageGenerationPrompt =
     rawRecord.imageGenerationPrompt === undefined ||
     rawRecord.imageGenerationPrompt === "" ||
-    rawRecord.imageGenerationPrompt === LEGACY_SLP_CREATOR_DEFAULT_IMAGE_GENERATION_PROMPT
+    rawRecord.imageGenerationPrompt === LEGACY_SLP_CREATOR_DEFAULT_IMAGE_GENERATION_PROMPT ||
+    rawRecord.imageGenerationPrompt === LEGACY_GRAPHIC_SLP_CREATOR_DEFAULT_IMAGE_GENERATION_PROMPT
       ? SLP_CREATOR_DEFAULT_IMAGE_GENERATION_PROMPT
       : rawRecord.imageGenerationPrompt;
-  candidate.promptInstructions = rawRecord.promptInstructions ?? [
-    {
-      id: "creator-voice",
-      name: "Creator voice",
-      text: candidate.generationGuidance as string,
-      builtin: true,
-    },
-    {
-      id: "image-style",
-      name: "Image style",
-      text: candidate.imageGenerationPrompt as string,
-      builtin: true,
-    },
-  ];
+  const storedPromptInstructions = Array.isArray(rawRecord.promptInstructions) ? rawRecord.promptInstructions : null;
+  candidate.promptInstructions = storedPromptInstructions
+    ? storedPromptInstructions.map((instruction) => {
+        if (!instruction || typeof instruction !== "object" || Array.isArray(instruction)) return instruction;
+        const record = instruction as Record<string, unknown>;
+        const isBuiltInImageInstruction =
+          record.id === "image-style" &&
+          (record.text === LEGACY_SLP_CREATOR_DEFAULT_IMAGE_GENERATION_PROMPT ||
+            record.text === LEGACY_GRAPHIC_SLP_CREATOR_DEFAULT_IMAGE_GENERATION_PROMPT);
+        return isBuiltInImageInstruction
+          ? { ...record, text: SLP_CREATOR_DEFAULT_IMAGE_GENERATION_PROMPT }
+          : instruction;
+      })
+    : [
+        {
+          id: "creator-voice",
+          name: "Creator voice",
+          text: candidate.generationGuidance as string,
+          builtin: true,
+        },
+        {
+          id: "image-style",
+          name: "Image style",
+          text: candidate.imageGenerationPrompt as string,
+          builtin: true,
+        },
+      ];
   candidate.imagePromptInterpretation =
     rawRecord.imagePromptInterpretation === undefined ||
     rawRecord.imagePromptInterpretation === "" ||

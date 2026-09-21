@@ -223,6 +223,14 @@ export function SlpPromptPreviewInspector({
         </button>
       )}
 
+      {view === "result" && (
+        <p className="text-xs leading-5 text-[var(--slurp-muted)]">
+          {t("ui.slurp.settings.prompts.fullGenerationPreviewNote", {
+            defaultValue: "This runs the post generator with the selected Creator and current settings.",
+          })}
+        </p>
+      )}
+
       <div role="status" aria-live="polite" className="sr-only">
         {pending ? t("ui.slurp.settings.prompts.previewRunning", { defaultValue: "Running preview…" }) : ""}
       </div>
@@ -275,6 +283,12 @@ export function SlpPromptPreviewInspector({
 
       {view === "prompt" && compiledPrompt && (
         <div className="space-y-2">
+          <p className="text-xs leading-5 text-[var(--slurp-muted)]">
+            {t("ui.slurp.settings.prompts.blockPreviewNote", {
+              defaultValue:
+                "This shows the compiled prompt blocks. Runtime data can add more context during generation.",
+            })}
+          </p>
           <div className="flex justify-end">
             <button
               type="button"

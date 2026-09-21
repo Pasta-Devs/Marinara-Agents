@@ -374,7 +374,7 @@ const PROMPT_EDITABLE_DEFAULTS: SlurpPromptEditableDefaults = {
   imageInterpretation: {
     task: "Rewrite the supplied draft into one provider-ready image prompt.",
     style:
-      "Keep style instructions first, character appearance next, and the scene last. Preserve supplied appearance and style details without labels or duplication.",
+      "Keep style instructions first, character appearance next, and the scene last. Preserve the original subject, action, setting, clothing, composition, style, and sexual intensity without labels or duplication. Do not add a new event, person, pose, outfit, viewpoint, nudity, explicit anatomy, or sexual activity. Do not turn an ordinary update into an erotic image.",
   },
   garnishAds: {
     task: "Invent fictional advertisements for an in-world Slurp feed.",

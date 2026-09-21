@@ -318,6 +318,30 @@
     "slurp2": {
       "versions": [
         {
+          "version": "0.2.9",
+          "date": "2026-09-21",
+          "notes": "- Post image prompts now use a typed visual brief and preserve the planned scene through image interpretation.\n- Deleted posts now leave a sparkling restore slot for 60 seconds before permanent cleanup.",
+          "highlight": false
+        },
+        {
+          "version": "0.2.8",
+          "date": "2026-09-21",
+          "notes": "- Feed loading has a softer status animation, older drops show a progress state, and deleted posts leave the timeline with a short gentle exit.",
+          "highlight": false
+        },
+        {
+          "version": "0.2.7",
+          "date": "2026-09-21",
+          "notes": "- The feed loads its first page first, older posts load on demand, and post edits and deletes update the visible feed without a full reload.",
+          "highlight": false
+        },
+        {
+          "version": "0.2.6",
+          "date": "2026-09-21",
+          "notes": "- Creator posts now use the Engine's live Capability API generation integrations for text providers, image generation, fallback handling, and staged media writes.",
+          "highlight": false
+        },
+        {
           "version": "0.2.5",
           "date": "2026-09-21",
           "notes": "- Locked posts no longer tease what the reader already owns, and housekeeping posts stay public. The composer offers only the purposes that fit the post's audience.",
@@ -411,30 +435,6 @@
           "version": "0.0.17",
           "date": "2026-09-16",
           "notes": "- Settings is now Backstage: Overview, Creators, Features, Automation, and Maintenance, with setting search and live previews.\n- Creators shows metrics and totals for every Creator. Click one to open its settings, content menu, message prices, and collab partners.\n- Features -> Events and holidays: yearly events that Creators mention in posts, replies, and messages.\n- Free teaser posts: some automatic posts go out free to win subscribers.\n- Featured, buried, and viral weeks change post reach, and viral posts bring a rush of followers.\n- Fans who spend a lot and show up constantly can become Too attached.\n- Crossovers prefer collab partners, and commissions get a quote by default.\n- Feed posts have Edit, Delete, and Show image context in the post menu again.",
-          "highlight": false
-        },
-        {
-          "version": "0.0.16",
-          "date": "2026-09-15",
-          "notes": "- Settings -> Audience is simpler: one Activity choice (Off, Quiet, Realistic, Lively, Generous), crowd size and tone up front, and fan types, AI writing and advanced numbers in folded sections. Off also stops commissions, DMs and the activity pulse.\n- A fan type's tone override now changes how those fans write their comments.\n- Settings -> Tags is rebuilt: tags show as chips in their groups, with usage counts and a filter. Click a tag to rename it, merge it into another tag, move it to another group, or delete it.\n- Settings -> Creators: select many Creators and change gender, add or remove tags, or turn auto-post and images on or off in one step. The selected Creator also has a quick gender and tag editor.\n- Fix: toggles in Settings no longer black out the screen in Firefox.",
-          "highlight": false
-        },
-        {
-          "version": "0.0.15",
-          "date": "2026-09-15",
-          "notes": "- Fixed a wide post or story pushing the left and right sidebars off the screen.\n- The follow button on a Creator profile now shows whether you follow that Creator.",
-          "highlight": false
-        },
-        {
-          "version": "0.0.14",
-          "date": "2026-09-15",
-          "notes": "- Fixed commissions drawing a new picture on every retry when the fan could not pay.\n- Fixed locked pay-per-view messages sending what their picture shows before the fan paid.\n- Pictures in messages, commissions and your recent posts now reach the AI as stored prompts or descriptions, with an optional image description model. Each picture is described once, and models that cannot read images are skipped.\n- Characters can remember their Slurp posts, messages, commissions, subscriptions and tips in Engine chats: turn on Carryover to chats in Settings and Include Slurp activity in the chat's settings.\n- Added lorebook context for Creator posts, prompt presets with import and export, a changed count and Reset section for each settings section, gallery images when no picture is generated, a Professor Mari Creator switch, and a per-character choice for chat image instructions.\n- Deleting all Slurp data now asks you to type DELETE, and the mobile bottom bar is smaller.",
-          "highlight": false
-        },
-        {
-          "version": "0.0.13",
-          "date": "2026-09-15",
-          "notes": "- Fixed Creator management (profile, goal, subscription price, projects, arcs, payout, and Story viewers) rejecting edits with \"Only the Creator's owner can...\" — Slurp is single-player, so any Creator is now always yours to manage.\n- Fixed direct-message replies crashing when two reply attempts collided, along with other duplicate-safe storage operations that crossed the package boundary.\n- Persona Creators can now like and reply to their own posts as their public Creator identity.",
           "highlight": false
         }
       ]
