@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { slurpIntentFitsAccess } from "../packages/slurp2/src/engine/packages/shared/src/slp/slp-content-axes";
 import { slurp2Source } from "./slurp2-source";
 import {
   slurpIntentFormat,
@@ -40,3 +41,16 @@ console.log("slurp intent format regression passed");
 const plan = slurp2Source("packages/slurp2/src/engine/packages/server/src/slp/features/feed/slp-post-plan-service.ts");
 assert.match(plan, /orphanCallback = requestedAxes\?\.intent === "callback" && !callbackShoot && !chosen && !stage/u);
 assert.match(plan, /orphanCallback && reusedAxesDrawn \? \{ \.\.\.reusedAxesDrawn, intent: "casual" as const \}/u);
+
+// A locked post never teases what the reader already owns, and housekeeping stays public.
+for (let sequence = 0; sequence < 300; sequence += 1) {
+  const locked = slurpPostAxes("locked-creator", sequence, { images: true, access: "locked" });
+  assert.ok(locked.intent !== "teaser" && locked.intent !== "business", `locked drew ${locked.intent}`);
+}
+assert.equal(slurpIntentFitsAccess("teaser", "locked"), false);
+assert.equal(slurpIntentFitsAccess("business", "locked"), false);
+assert.equal(slurpIntentFitsAccess("teaser", "public"), true);
+assert.equal(slurpIntentFitsAccess("set", "locked"), true);
+// The composer refuses the same combination server-side.
+const schema = slurp2Source("packages/slurp2/src/engine/packages/shared/src/slp/slp-social-generation.schema.ts");
+assert.match(schema, /!slurpIntentFitsAccess\(input\.contentIntent, input\.access\)/u);

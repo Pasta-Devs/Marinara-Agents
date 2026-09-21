@@ -111,6 +111,7 @@ export async function planSlurpPost(
           images: imagesEnabled,
           intentWeights: forced ? slurpOnlyIntent(forced) : strategy.intentWeights,
           textOnlyRate: strategy.textOnlyRate,
+          access: request.access ?? "public",
         })
       : null;
   const drawnAxes =

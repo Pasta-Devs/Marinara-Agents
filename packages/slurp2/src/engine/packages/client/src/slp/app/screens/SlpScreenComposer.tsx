@@ -4,13 +4,6 @@ import {
   SLP_CREATOR_POST_TITLE_MAX_LENGTH,
   slpPollInputSchema,
 } from "../../../../../shared/src/slp/slp-social.schema.js";
-import {
-  SLURP_CONTENT_DELIVERIES,
-  SLURP_CONTENT_INTENTS,
-  slurpContentDeliveryFits,
-  type SlurpContentDelivery,
-  type SlurpContentIntent,
-} from "../../../../../shared/src/slp/slp-content-axes.js";
 import type { SlpPollInput } from "../../../../../shared/src/slp/slp-social-generation.schema.js";
 import type {
   SlpCreatorManagedPost,
@@ -20,6 +13,8 @@ import type {
 import type { SlurpManagedStageProfile } from "../../base/state/slp-state-types";
 import type { SlpCreatorContentFormat, SlurpProfilePost } from "../../features/feed/slp-feed-contract";
 import { useSlurpSettings } from "../../features/settings/slp-settings-hooks";
+import { slurpIntentFitsAccess } from "../../../../../shared/src/slp/slp-content-axes.js";
+import { SlpComposerPurpose } from "../../modules/post/SlpComposerPurpose";
 import { SlpOpenContinuityButton } from "../../base/navigation/SlpOpenContinuityButton";
 import { SlpComposerShell, SlpComposerToolRow } from "../../modules/post/SlpPostCard";
 import { SlpAnchoredPopover } from "../../base/chrome/SlpAnchoredPopover";
@@ -471,50 +466,13 @@ export function NoodlerPostComposer({
       }
       action={
         <>
-          <label className="inline-flex h-9 items-center gap-1.5 text-xs font-bold">
-            <span className="sr-only">{localizeUi("ui.slurp.composer.purpose")}</span>
-            <select
-              value={contentIntent ?? ""}
-              disabled={composerBusy || postType === "story"}
-              title={localizeUi(`ui.slurp.composer.purposeHint.${contentIntent ?? "auto"}`)}
-              onChange={(event) => {
-                const next = (event.target.value || null) as SlurpContentIntent | null;
-                updateDraft({
-                  contentIntent: next,
-                  contentDelivery:
-                    next && contentDelivery && slurpContentDeliveryFits(next, contentDelivery) ? contentDelivery : null,
-                });
-              }}
-              className="h-9 rounded-lg border border-[var(--noodle-divider)] bg-transparent px-2 text-xs font-bold disabled:opacity-50"
-            >
-              {(["", ...SLURP_CONTENT_INTENTS] as const).map((intent) => (
-                <option key={intent || "auto"} value={intent}>
-                  {localizeUi(`ui.slurp.composer.intent.${intent || "auto"}`)}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="inline-flex h-9 items-center gap-1.5 text-xs font-bold">
-            <span className="sr-only">{localizeUi("ui.slurp.composer.delivery")}</span>
-            <select
-              value={contentDelivery ?? ""}
-              disabled={composerBusy || postType === "story" || !contentIntent}
-              title={localizeUi(`ui.slurp.composer.deliveryHint.${contentDelivery ?? "auto"}`)}
-              onChange={(event) =>
-                updateDraft({ contentDelivery: (event.target.value || null) as SlurpContentDelivery | null })
-              }
-              className="h-9 max-w-40 rounded-lg border border-[var(--noodle-divider)] bg-transparent px-2 text-xs font-bold disabled:opacity-50"
-            >
-              <option value="">{localizeUi("ui.slurp.composer.delivery.auto")}</option>
-              {SLURP_CONTENT_DELIVERIES.filter(
-                (delivery) => contentIntent && slurpContentDeliveryFits(contentIntent, delivery),
-              ).map((delivery) => (
-                <option key={delivery} value={delivery}>
-                  {localizeUi(`ui.slurp.composer.delivery.${delivery}`)}
-                </option>
-              ))}
-            </select>
-          </label>
+          <SlpComposerPurpose
+            access={access}
+            contentIntent={contentIntent}
+            contentDelivery={contentDelivery}
+            disabled={composerBusy || postType === "story"}
+            onChange={updateDraft}
+          />
           <SlpOpenContinuityButton
             creatorAccountId={profile.id}
             className="inline-flex h-9 items-center rounded-lg border border-[var(--noodle-divider)] px-3 text-xs font-bold hover:bg-[var(--accent)]"
@@ -619,7 +577,15 @@ export function NoodlerPostComposer({
                       type="button"
                       aria-pressed={access === option}
                       disabled={composerBusy}
-                      onClick={() => updateDraft({ access: option })}
+                      onClick={() =>
+                        updateDraft({
+                          access: option,
+                          // A purpose that no longer fits the new audience goes back to automatic.
+                          ...(contentIntent && !slurpIntentFitsAccess(contentIntent, option)
+                            ? { contentIntent: null, contentDelivery: null }
+                            : {}),
+                        })
+                      }
                       title={localizeUi(`ui.noodle.postaccess.${option}.hint`)}
                       className={cn(
                         "min-h-8 rounded px-2 text-xs font-bold capitalize",

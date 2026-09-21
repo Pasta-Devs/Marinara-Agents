@@ -32,7 +32,7 @@ import type {
   SlurpContentWorkflow,
 } from "../../../../../shared/src/slp/slp-content-axes.js";
 import type { SlpCreatorContentFormat } from "../../base/prompting/slp-content-format.js";
-import { slurpContentDeliveryFits } from "../../../../../shared/src/slp/slp-content-axes.js";
+import { slurpContentDeliveryFits, slurpIntentFitsAccess } from "../../../../../shared/src/slp/slp-content-axes.js";
 import { slurpWeightedPick } from "./slp-weighted.js";
 
 /**
@@ -159,12 +159,16 @@ export function slurpPostAxes(
     intentWeights?: Partial<Record<SlurpContentIntent, number>>;
     /** Out of 100, from the same place. Scales every intent's lean on words. */
     textOnlyRate?: number;
+    /** Who will be able to read this. A locked post never teases what the reader already owns. */
+    access?: "public" | "locked";
   },
 ): SlurpPostAxes {
   // A Story can be a thank-you or a request as well as a passing moment. It cannot be a set or a
   // callback: both need a shoot, and a Story is taken now.
   const options = intentOptions(decided.intentWeights).filter(
-    (option) => !decided.story || (option.value !== "set" && option.value !== "callback"),
+    (option) =>
+      (!decided.story || (option.value !== "set" && option.value !== "callback")) &&
+      slurpIntentFitsAccess(option.value, decided.access ?? "public"),
   );
   const intent: SlurpContentIntent = decided.teaser
     ? "teaser"
