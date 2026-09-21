@@ -371,6 +371,7 @@ type PreparedLtmSubjectIdentityContext = {
   index: CatalogIndex;
   legacyBindings: Map<string, LtmSubject[]>;
   batchNames: BatchSubjectNameResolution;
+  establishedKeysBySubject: Map<string, string[]>;
   sourceBackedNpcSourceText?: string;
   sourceBackedNpcSourceTitle?: string;
   scope?: LtmScope;
@@ -481,6 +482,7 @@ export function buildTrustedLtmSubjectCatalog({
   notes: LtmNote[];
   localSourceNotes?: LtmNote[];
 }): TrustedLtmSubjectCatalog {
+  notes = notes.filter((note) => !localCharacterScopeError(note.subjects, note.destinationScope ?? note.scope));
   const preferredKeyByRef = new Map<string, string>();
   for (const note of [...notes].sort(compareNoteAge)) {
     for (const subject of note.subjects ?? []) {
@@ -800,10 +802,51 @@ export function prepareLtmSubjectIdentityContext({
   sourceBackedNpcSourceText?: string;
   sourceBackedNpcSourceTitle?: string;
 }): LtmSubjectIdentityContext {
-  const effectiveCatalog =
-    mode && mode !== "roleplay"
-      ? { ...catalog, entries: catalog.entries.filter((entry) => !isLocalCharacterSubject(entry.subject)) }
-      : catalog;
+  const familyId = (mode === undefined || mode === "roleplay") && scope ? ltmScopeFamilyId(scope) : null;
+  const effectiveCatalog: TrustedLtmSubjectCatalog = {
+    ...catalog,
+    entries: catalog.entries.filter((entry) => {
+      if (mode && mode !== "roleplay" && isLocalCharacterSubject(entry.subject)) return false;
+      if (familyId && entry.familyId && entry.familyId !== familyId) return false;
+      if (familyId && isLocalCharacterSubject(entry.subject)) {
+        const subjectFamily =
+          localCharacterFamilyFromKey(entry.subject.key) ??
+          (entry.subject.ref?.kind === "local_character"
+            ? localCharacterFamilyFromKey(`local_character:${entry.subject.ref.id}`)
+            : null);
+        if (subjectFamily !== familyId) return false;
+      }
+      return true;
+    }),
+    notes: catalog.notes.filter((note) => {
+      if (mode && mode !== "roleplay" && note.subjects?.some(isLocalCharacterSubject)) return false;
+      if (familyId) {
+        const noteFamily = ltmScopeFamilyId(note.destinationScope ?? note.scope);
+        if (noteFamily && noteFamily !== familyId) return false;
+        if (
+          note.subjects?.some((subject) => {
+            if (!isLocalCharacterSubject(subject)) return false;
+            const subjectFamily =
+              localCharacterFamilyFromKey(subject.key) ??
+              (subject.ref?.kind === "local_character"
+                ? localCharacterFamilyFromKey(`local_character:${subject.ref.id}`)
+                : null);
+            return subjectFamily !== familyId;
+          })
+        )
+          return false;
+      }
+      return true;
+    }),
+    ambiguousLocalNames: catalog.ambiguousLocalNames
+      ? catalog.ambiguousLocalNames.filter((name) => !familyId || name.startsWith(`${familyId}\u0000`))
+      : [],
+    ambiguousLocalEntries: Object.fromEntries(
+      Object.entries(catalog.ambiguousLocalEntries ?? {}).filter(
+        ([key]) => !familyId || key.startsWith(`${familyId}\u0000`),
+      ),
+    ),
+  };
   const index = buildCatalogIndex(effectiveCatalog);
   const legacyBindings = inferLegacyBindings(effectiveCatalog, index);
   const batchNames = preResolveBatchSubjectNames({
@@ -814,11 +857,34 @@ export function prepareLtmSubjectIdentityContext({
     sourceText: sourceBackedNpcSourceText,
     sourceTitle: sourceBackedNpcSourceTitle,
   });
+
+  const establishedKeysBySubject = new Map<string, string[]>();
+  const contestedSubjectKeys = new Set<string>();
+  for (const unit of units) {
+    if (unit.subjectKeys?.length) {
+      const key = `${unit.bucket}\u0000${stripNotePrefix(normalizeSubjectIdentifier(unit.subjectId, ""))}`;
+      const current = establishedKeysBySubject.get(key);
+      if (current === undefined) {
+        establishedKeysBySubject.set(key, [...unit.subjectKeys]);
+      } else {
+        const sortedCurrent = [...current].sort();
+        const sortedIncoming = [...unit.subjectKeys].sort();
+        if (sortedCurrent.length !== sortedIncoming.length || sortedCurrent.some((k, i) => k !== sortedIncoming[i])) {
+          contestedSubjectKeys.add(key);
+        }
+      }
+    }
+  }
+  for (const contested of contestedSubjectKeys) {
+    establishedKeysBySubject.delete(contested);
+  }
+
   const context: PreparedLtmSubjectIdentityContext = {
     catalog: effectiveCatalog,
     index,
     legacyBindings,
     batchNames,
+    establishedKeysBySubject,
     sourceBackedNpcSourceText,
     sourceBackedNpcSourceTitle,
     scope,
@@ -827,14 +893,22 @@ export function prepareLtmSubjectIdentityContext({
   return {
     identityKeyForUnit(unit) {
       const hasSubjectNames = unit.subjectNames !== undefined && unit.subjectNames.length > 0;
-      const match = hasSubjectNames
-        ? resolveNamedUnitSubjects(unit, batchNames, index, context)
-        : resolveUnitSubjects(unit, index);
-      if (match.status !== "matched") return noteIdForEvidenceUnit(unit);
+      const established =
+        unit.subjectKeys === undefined && !hasSubjectNames
+          ? establishedKeysBySubject.get(
+              `${unit.bucket}\u0000${stripNotePrefix(normalizeSubjectIdentifier(unit.subjectId, ""))}`,
+            )
+          : undefined;
+      const effectiveUnit = established ? { ...unit, subjectKeys: established } : unit;
+      const match =
+        hasSubjectNames && !effectiveUnit.subjectKeys?.length
+          ? resolveNamedUnitSubjects(unit, batchNames, index, context)
+          : resolveUnitSubjects(effectiveUnit, index);
+      if (match.status !== "matched") return noteIdForEvidenceUnit(effectiveUnit);
       const entries = sortSubjectEntries(match.entries);
       return (
-        chooseIdentityTarget(effectiveCatalog.notes, legacyBindings, entries, unit.bucket)?.id ??
-        canonicalNoteIdForEntries(entries, unit.bucket)
+        chooseIdentityTarget(effectiveCatalog.notes, legacyBindings, entries, effectiveUnit.bucket)?.id ??
+        canonicalNoteIdForEntries(entries, effectiveUnit.bucket)
       );
     },
     resolve({ units: nextUnits, existingNotes, enforceTrustedSubjects = true }) {
@@ -893,6 +967,7 @@ function resolveLtmSubjectIdentitiesWithContext({
     index,
     legacyBindings,
     batchNames,
+    establishedKeysBySubject,
     sourceBackedNpcSourceText,
     sourceBackedNpcSourceTitle,
     scope,
@@ -916,21 +991,32 @@ function resolveLtmSubjectIdentitiesWithContext({
     }
 
     const hasSubjectNames = unit.subjectNames !== undefined && unit.subjectNames.length > 0;
-    const match = hasSubjectNames
-      ? resolveNamedUnitSubjects(unit, batchNames, index, context)
-      : resolveUnitSubjects(unit, index);
+    // Keyless, nameless backfill units adopt the trusted keys another unit in this
+    // batch already established for the same bucket + subjectId. Units with explicit
+    // names or explicit keys (even invalid ones) still resolve or fail on their own.
+    const established =
+      unit.subjectKeys === undefined && !hasSubjectNames
+        ? establishedKeysBySubject.get(
+            `${unit.bucket}\u0000${stripNotePrefix(normalizeSubjectIdentifier(unit.subjectId, ""))}`,
+          )
+        : undefined;
+    const effectiveUnit = established ? { ...unit, subjectKeys: established } : unit;
+    const match =
+      hasSubjectNames && !effectiveUnit.subjectKeys?.length
+        ? resolveNamedUnitSubjects(unit, batchNames, index, context)
+        : resolveUnitSubjects(effectiveUnit, index);
     if (match.status !== "matched") {
       const sourceBackedNpc = hasSubjectNames
         ? null
-        : sourceBackedNpcSubject(unit, scope, mode, sourceBackedNpcSourceText, sourceBackedNpcSourceTitle);
+        : sourceBackedNpcSubject(effectiveUnit, scope, mode, sourceBackedNpcSourceText, sourceBackedNpcSourceTitle);
       if (sourceBackedNpc && match.status === "untrusted") {
         addCatalogEntry(index, sourceBackedNpc);
         const subjects = [sourceBackedNpc.subject];
-        const canonicalNoteId = canonicalNoteIdForEntries([sourceBackedNpc], unit.bucket);
-        const originalNoteId = noteIdForEvidenceUnit(unit);
+        const canonicalNoteId = canonicalNoteIdForEntries([sourceBackedNpc], effectiveUnit.bucket);
+        const originalNoteId = noteIdForEvidenceUnit(effectiveUnit);
         const nextUnit: LtmEvidenceUnit = {
-          ...unit,
-          subjectId: subjectIdForTarget(canonicalNoteId, unit.bucket),
+          ...effectiveUnit,
+          subjectId: subjectIdForTarget(canonicalNoteId, effectiveUnit.bucket),
           subjectNames: [sourceBackedNpc.name],
           subjectKeys: subjects.map((subject) => subject.key),
           subjects,
@@ -940,7 +1026,7 @@ function resolveLtmSubjectIdentitiesWithContext({
           severity: "warning",
           code: "source_backed_npc_identity",
           candidateIndex,
-          mutationId: unit.id,
+          mutationId: effectiveUnit.id,
           noteId: canonicalNoteId,
           message: `Accepted ${sourceBackedNpc.name} as a scoped local character from the source.`,
           details: {
@@ -951,18 +1037,22 @@ function resolveLtmSubjectIdentitiesWithContext({
         });
         continue;
       }
-      if (!enforceTrustedSubjects && !hasSubjectNames) {
-        const fallbackSubjects = fallbackSubjectsForUnit(unit);
-        const targetNoteId = noteIdForEvidenceUnit(unit);
+      if (!enforceTrustedSubjects && !hasSubjectNames && !effectiveUnit.subjectKeys?.length) {
+        const fallbackSubjects = fallbackSubjectsForUnit(effectiveUnit);
+        const targetNoteId = noteIdForEvidenceUnit(effectiveUnit);
         resolved.push({
-          unit: { ...unit, subjectKeys: fallbackSubjects.map((subject) => subject.key), subjects: fallbackSubjects },
+          unit: {
+            ...effectiveUnit,
+            subjectKeys: fallbackSubjects.map((subject) => subject.key),
+            subjects: fallbackSubjects,
+          },
           originalNoteId: targetNoteId,
           targetNoteId,
           candidateIndex,
         });
         continue;
       }
-      const rejection = subjectRejection(unit, match, candidateIndex);
+      const rejection = subjectRejection(effectiveUnit, match, candidateIndex);
       diagnostics.push(rejection.diagnostic);
       droppedCandidates.push(rejection.dropped);
       continue;
@@ -972,36 +1062,19 @@ function resolveLtmSubjectIdentitiesWithContext({
     const subjects = entries.map((entry) => entry.subject);
     const subjectNames = entries.map((entry) => entry.name);
     const subjectKeys = subjects.map((subject) => subject.key);
-    const target = chooseIdentityTarget(catalog.notes, legacyBindings, entries, unit.bucket);
-    const canonicalNoteId = target?.id ?? canonicalNoteIdForEntries(entries, unit.bucket);
+    const target = chooseIdentityTarget(catalog.notes, legacyBindings, entries, effectiveUnit.bucket);
+    const canonicalNoteId = target?.id ?? canonicalNoteIdForEntries(entries, effectiveUnit.bucket);
     if (target) targetNotes.set(target.id, target);
-    const originalNoteId = noteIdForEvidenceUnit(unit);
-    const subjectId = subjectIdForTarget(canonicalNoteId, unit.bucket);
+    const originalNoteId = noteIdForEvidenceUnit(effectiveUnit);
+    const subjectId = subjectIdForTarget(canonicalNoteId, effectiveUnit.bucket);
     const nextUnit: LtmEvidenceUnit = {
-      ...unit,
+      ...effectiveUnit,
       subjectId,
       subjectNames,
       subjectKeys,
       subjects,
     };
     resolved.push({ unit: nextUnit, originalNoteId, targetNoteId: canonicalNoteId, candidateIndex });
-
-    if (hasSubjectNames && legacySubjectKeysDisagree(unit.subjectKeys, subjectKeys)) {
-      diagnostics.push({
-        severity: "warning",
-        code: "subject_identity_corrected",
-        candidateIndex,
-        mutationId: unit.id,
-        noteId: canonicalNoteId,
-        message: `Corrected legacy subject keys for ${canonicalNoteId} from source-visible character names.`,
-        details: {
-          originalSubjectKeys: unit.subjectKeys,
-          subjectNames,
-          subjectKeys,
-          matchBasis: match.basis,
-        },
-      });
-    }
 
     if (entries.some((entry) => batchNames.provisionalKeys.has(entry.subject.key))) {
       diagnostics.push({
@@ -1273,14 +1346,25 @@ function resolveAndCacheSubjectName(
       return match;
     }
     if (subject) {
-      const longerEntry = index.entries.find(
+      const longerEntries = index.entries.filter(
         (entry) =>
-          entry.familyId === familyId &&
-          isLongerVersionOfName(entry.name, name) &&
-          isLocalCharacterSubject(entry.subject),
+          (!entry.familyId || entry.familyId === familyId) &&
+          (isLongerVersionOfName(entry.name, name, entry.aliases) ||
+            isLongerVersionOfName(name, entry.name, entry.aliases)),
       );
-      if (longerEntry) {
+      const uniqueLongerSubjects = new Map(longerEntries.map((entry) => [entry.subject.key, entry]));
+      if (uniqueLongerSubjects.size === 1) {
+        const longerEntry = [...uniqueLongerSubjects.values()][0]!;
         const match: SubjectMatch = { status: "matched", entries: [longerEntry], basis: "batch_name_alias" };
+        batch.matches.set(name, match);
+        return match;
+      }
+      if (uniqueLongerSubjects.size > 1) {
+        const match: SubjectMatch = {
+          status: "ambiguous",
+          keys: [...uniqueLongerSubjects.keys()],
+          basis: "batch_name_alias",
+        };
         batch.matches.set(name, match);
         return match;
       }
@@ -1456,15 +1540,17 @@ function sourceContainsWholeName(source: string | undefined, name: string) {
   return false;
 }
 
-function isLongerVersionOfName(shortName: string, candidate: string) {
+function isLongerVersionOfName(shortName: string, candidate: string, aliases: readonly string[] = []) {
   if (nameTokenCount(candidate) <= nameTokenCount(shortName)) return false;
   const shortSlug = normalizeSubjectIdentifier(shortName, "");
   const candidateSlug = normalizeSubjectIdentifier(candidate, "");
   if (!shortSlug || !candidateSlug) return false;
+  const firstName = candidateSlug.split("_")[0] ?? "";
   return (
     candidateSlug.startsWith(`${shortSlug}_`) ||
     candidateSlug.endsWith(`_${shortSlug}`) ||
-    expandedAliases(candidate, []).some((alias) => normalizeSubjectIdentifier(alias, "") === shortSlug)
+    (firstName.length > shortSlug.length && firstName.startsWith(shortSlug) && shortSlug.length >= 3) ||
+    expandedAliases(candidate, [...aliases]).some((alias) => normalizeSubjectIdentifier(alias, "") === shortSlug)
   );
 }
 
@@ -1764,6 +1850,13 @@ function inferLegacyBindings(catalog: TrustedLtmSubjectCatalog, index: CatalogIn
       const match =
         note.type === "character" ? matchLegacyCharacter(index, identifier) : matchRelationship(index, identifier);
       if (match.status !== "matched") continue;
+      if (
+        localCharacterScopeError(
+          match.entries.map((entry) => entry.subject),
+          note.destinationScope ?? note.scope,
+        )
+      )
+        continue;
       bindings.set(note.id, sortSubjects(match.entries.map((entry) => entry.subject)));
       break;
     }
@@ -1952,16 +2045,6 @@ function fallbackSubjectsForUnit(unit: LtmEvidenceUnit) {
 function withoutSubjectIdentity(unit: LtmEvidenceUnit): LtmEvidenceUnit {
   const { subjectNames: _subjectNames, subjectKeys: _subjectKeys, subjects: _subjects, ...withoutIdentity } = unit;
   return withoutIdentity;
-}
-
-function legacySubjectKeysDisagree(legacyKeys: string[] | undefined, resolvedKeys: string[]) {
-  if (!legacyKeys || legacyKeys.length === 0) return false;
-  const normalizedLegacy = [...legacyKeys].sort();
-  const normalizedResolved = [...resolvedKeys].sort();
-  return (
-    normalizedLegacy.length !== normalizedResolved.length ||
-    normalizedLegacy.some((key, index) => key !== normalizedResolved[index])
-  );
 }
 
 function sortSubjects(subjects: LtmSubject[]) {
