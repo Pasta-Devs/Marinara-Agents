@@ -1,5 +1,11 @@
 # Slurp Remastered release notes
 
+## 0.1.25 — 2026-09-21
+
+- A Creator can now leave a scheduled slot empty. A quiet slot costs no post, no picture, and no retry, and it is no longer reported as a failed run.
+- Two quiet slots in a row are refused, so a page never goes silent for a whole day.
+- Every planned post is recorded before it is written, so a retry repeats the same decision instead of making a new one.
+
 ## 0.1.24 — 2026-09-21
 
 - Split what a post is for from how it goes out. A Story or a plain text post can now also be a thank-you, a teaser, or a request.

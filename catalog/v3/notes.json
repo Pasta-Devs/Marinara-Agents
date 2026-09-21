@@ -306,6 +306,12 @@
     "slurp2": {
       "versions": [
         {
+          "version": "0.1.25",
+          "date": "2026-09-21",
+          "notes": "- A Creator can now leave a scheduled slot empty. A quiet slot costs no post, no picture, and no retry, and it is no longer reported as a failed run.\n- Two quiet slots in a row are refused, so a page never goes silent for a whole day.\n- Every planned post is recorded before it is written, so a retry repeats the same decision instead of making a new one.",
+          "highlight": false
+        },
+        {
           "version": "0.1.24",
           "date": "2026-09-21",
           "notes": "- Split what a post is for from how it goes out. A Story or a plain text post can now also be a thank-you, a teaser, or a request.\n- Some posts now go out as text on purpose, even when pictures are available. Schedule and business notes lean on text; sets never do.\n- A text post by choice no longer picks up a gallery picture as a stand-in.",
@@ -417,12 +423,6 @@
           "version": "0.1.6",
           "date": "2026-09-20",
           "notes": "- Prompt Studio now keeps voice, post, and image instructions readable in muted fields without opening an editor.\n- Recipes scan as compact capability rows, then open into a focused block-outline, pipeline, and preview workspace.\n- Collapsed blocks show their resolved prompt, while the selected block exposes its source, inputs, length, and draft action.\n- Presets and secondary controls stay available without competing with the main prompt workflow.\n- Compiled prompts can be copied directly from the preview inspector.",
-          "highlight": false
-        },
-        {
-          "version": "0.1.5",
-          "date": "2026-09-20",
-          "notes": "- Prompt Studio now starts with plain-language controls for voice, post behavior, and image direction.\n- Prompt recipes open in a focused, responsive block workspace instead of one long settings accordion.\n- Blocks show their purpose, source, editability, order, and customization state at a glance.\n- Preview a draft result or compiled prompt without applying it, and compare a draft result with the currently applied recipe.\n- Prompt changes share one Backstage draft bar, so they can be reviewed, discarded, or applied together.",
           "highlight": false
         }
       ]

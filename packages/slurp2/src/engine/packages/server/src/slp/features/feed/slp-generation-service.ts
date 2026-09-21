@@ -84,6 +84,7 @@ import {
 import { slurpCameraSourceInstruction, slurpPostCameraSource } from "../../modules/feed/slp-camera-source.js";
 import { slurpImageBrief } from "../../modules/feed/slp-image-brief.js";
 import { slurpContentAxesInstruction, slurpPostAxes } from "../../modules/feed/slp-content-axes.js";
+import { completeSlurpOpportunity, planSlurpOpportunity } from "../../data/feed/slp-opportunity-storage.js";
 import { slurpShootInstruction } from "../../modules/feed/slp-shoot.js";
 import { findReusableSlurpShoot, openSlurpShoot, useSlurpShoot } from "../../data/feed/slp-shoot-storage.js";
 import {
@@ -130,6 +131,8 @@ export type SlpCreatorPostGenerationInput = {
   /** Preview calls use the supplied draft without changing saved settings. */
   promptBlocks?: SlurpPromptBlockOverrides;
   promptInstructions?: SlurpReusablePromptInstruction[];
+  /** The scheduled slot this post fills, so its plan and its slot stay one record. */
+  slotId?: string | null;
   /** Skip continuity writes when `prepareOnly` is used for a settings preview. */
   previewOnly?: boolean;
 };
@@ -285,6 +288,26 @@ export async function generateCreatorPost(
   const axes = !directed
     ? slurpPostAxes(account.id, sequence, { story: storyVariation, teaser: isTeaser, images: imagesEnabled })
     : null;
+  // The decision is durable before the model is called, so a run that dies between the two does
+  // not lose it and a retry repeats it instead of drawing again. A preview decides nothing.
+  const opportunity =
+    axes && !input.previewOnly
+      ? await planSlurpOpportunity(db, {
+          creatorAccountId: account.id,
+          slotId: input.slotId ?? null,
+          sequence,
+          workflow: axes.delivery === "text_only" ? "text_only" : "publish",
+          intent: axes.intent,
+          delivery: axes.delivery,
+          access: input.request.access ?? "",
+          at: input.generatedAt ?? new Date(),
+          dueAt: input.publicationTime ?? null,
+        }).catch((error: unknown) => {
+          // A post must never fail over planner bookkeeping.
+          logger.warn(error, "[slurp] Could not record a content plan; the post stands on its own");
+          return null;
+        })
+      : null;
   // Text-only by intent, not by failure: no brief, no image call, and no gallery stand-in.
   const textOnly = axes?.delivery === "text_only";
   const postImages = imagesEnabled && !textOnly;
@@ -574,6 +597,15 @@ export async function generateCreatorPost(
     // Advanced here, after the row lands, rather than when the project was chosen: a generation
     // that failed halfway would otherwise skip a chapter and the thread would have a hole in it.
     if (project) await noodle.advanceProject(account.id, project.id, post.id);
+    // The plan is closed here for the same reason, and links what it produced.
+    if (opportunity) {
+      await completeSlurpOpportunity(db, opportunity.id, {
+        postId: post.id,
+        at: input.generatedAt ?? new Date(),
+      }).catch((error: unknown) => {
+        logger.warn(error, "[slurp] Could not close a content plan; the post stands on its own");
+      });
+    }
     return post;
   };
 
