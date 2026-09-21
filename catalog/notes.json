@@ -110,6 +110,12 @@
     "long-term-memory": {
       "versions": [
         {
+          "version": "1.3.9",
+          "date": "2026-09-21",
+          "notes": "- Collapsed identical chat summaries shared across branch chat records into one ready-to-import Sources preview row, while preserving conflicting same-ID summaries, distinct summaries, and branch-specific import provenance.",
+          "highlight": false
+        },
+        {
           "version": "1.3.8",
           "date": "2026-09-21",
           "notes": "- Resolve character and relationship extraction candidates by trusted subject keys before matching names, while preserving rejection of invalid keys and ambiguous keyless identities.\n- Reconcile structured-summary backfill with batch-established subject keys, keep same-name local characters isolated to their own chat family, and map short participant names to their established full-name identity instead of forking duplicate character or relationship notes.",
