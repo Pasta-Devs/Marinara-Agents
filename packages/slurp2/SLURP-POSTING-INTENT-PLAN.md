@@ -1,5 +1,10 @@
 # Slurp2 posting intent plan
 
+> **Status: delivered and superseded.** The first overhaul described here shipped. The planner,
+> campaigns, picture reuse, Creator strategy, and the continuity ledger that followed are described
+> in `docs/POSTING.md`, and the full concept lives in `plan/concept.md` at the repository root.
+> This file is kept for the problem statement and the reasoning behind the first fixes.
+
 ## The problem
 
 Slurp2 generates intimate moments. It should generate **creator content about**
@@ -64,18 +69,18 @@ more credible image than "a woman in a kitchen, warm light".
 
 ## Decisions taken
 
-| Question | Decision |
-| --- | --- |
-| Scope | Full system: content types, shoot sessions, production profiles, per-creator tuning |
-| Mode switch | Settings -> Prompts, not an experiments tab |
-| Default | Produce mode ships on; classic stays switchable |
-| Inventory | Both modes declare all 18 prompt IDs; the 9 unchanged ones import one shared builder |
-| Marginal prompts | `dmReply`, `commentReply`, `invitedPost` do get produce variants |
-| Saved edits | Existing overrides migrate to the classic key untouched; produce starts at its own defaults |
-| Block previews | Live render against a chosen creator, every block including locked ones |
-| Shoot storage | A real shoot-sessions table |
-| Production style | Derived from existing character data, no new authored field |
-| Branch | New branch off `staging` |
+| Question         | Decision                                                                                    |
+| ---------------- | ------------------------------------------------------------------------------------------- |
+| Scope            | Full system: content types, shoot sessions, production profiles, per-creator tuning         |
+| Mode switch      | Settings -> Prompts, not an experiments tab                                                 |
+| Default          | Produce mode ships on; classic stays switchable                                             |
+| Inventory        | Both modes declare all 18 prompt IDs; the 9 unchanged ones import one shared builder        |
+| Marginal prompts | `dmReply`, `commentReply`, `invitedPost` do get produce variants                            |
+| Saved edits      | Existing overrides migrate to the classic key untouched; produce starts at its own defaults |
+| Block previews   | Live render against a chosen creator, every block including locked ones                     |
+| Shoot storage    | A real shoot-sessions table                                                                 |
+| Production style | Derived from existing character data, no new authored field                                 |
+| Branch           | New branch off `staging`                                                                    |
 
 ## Which prompts actually change
 
@@ -103,6 +108,7 @@ services. Nothing about the mode split fights that.
 ### New and changed files
 
 **`base/prompting/`**
+
 - `slp-prompt-modes.ts` — `SLURP_PROMPT_MODES = ["classic", "produce"]`, the
   active-mode resolver, and the per-mode inventory registry.
 - `slp-prompt-blocks.ts` — `SLURP_PROMPT_DESCRIPTIONS` and
@@ -114,6 +120,7 @@ services. Nothing about the mode split fights that.
   both inventories.
 
 **`modules/feed/`** (pure, deterministic, testable without a model)
+
 - `slp-content-type.ts` — the content-type set and its rotation, mirroring how
   `slp-post-variation.ts` already rotates rather than draws at random, so
   consecutive posts cannot repeat a type.
@@ -128,15 +135,18 @@ services. Nothing about the mode split fights that.
   instruction. `PLACES`, `MOMENTS`, and `COMPANY` survive.
 
 **`data/feed/`**
+
 - `slp-shoot-storage.ts` — CRUD for shoot sessions.
 
 **`db/schema/slurp.ts`**
+
 - `slurp_shoot_sessions`: id, creatorAccountId, location, outfit, lighting,
   cameraSetup, theme, shotsTaken, shotsUsed, createdAt. Posts reference it by
   `shootId`. Retention follows the existing autopurge rules so old shoots do
   not accumulate.
 
 **`features/feed/`**
+
 - `slp-post-prompt.ts` — split. Produce mode gets its own block builder and,
   critically, **stops asking one model call for caption and image together**.
   The caption is generated first. The image prompt is generated from content
@@ -146,23 +156,27 @@ services. Nothing about the mode split fights that.
   session when a set drop is produced.
 
 **`features/media/`**
+
 - `slp-images-service.ts` and `slp-image-prompt-rewrite.ts` — the rewrite keeps
   identity and style handling, but in produce mode the required output contract
   changes from a full scene brief to a photograph description anchored on the
   camera source. Existing identity protection is untouched.
 
 **`features/settings/`**
+
 - `slp-settings-routes.ts` — `/settings/prompt-blocks` takes a mode parameter.
   New `POST /settings/prompt-blocks/preview` renders one composed block, or a
   whole prompt, against a chosen creator.
 
 **`modules/settings/slp-settings.ts`**
+
 - `promptMode: z.enum(["classic", "produce"])`, default `"produce"`.
 - `promptBlocks` becomes `Record<mode, overrides>`. The normalizer accepts the
   old flat shape and lifts it into `{ classic: <old> }`, so an upgrading user
   loses nothing.
 
 **Client `features/settings/`**
+
 - `SlpPromptsPanel.tsx` — the mode switch, with a clear statement that each mode
   keeps its own tuning.
 - `SlpPromptBlockBuilder.tsx` — a preview control on every block, locked ones
@@ -178,17 +192,17 @@ text.
 
 ## Content types
 
-| Type | Caption job | Image job |
-| --- | --- | --- |
-| Teaser | Short, enticing, points at locked content | Cropped or alternate angle from the real set |
-| Set drop | Introduces theme; may mention the work | High effort, intentional styling |
-| Story | Minimal or absent | Phone quality, casual framing |
-| Life update | Longer, personal, non-sexual | Optional, casual, clothed |
-| Custom request | Names the request pattern | Delivers what was asked |
-| Behind the scenes | Discusses making the content | Setup, outtake, or failure visible |
-| Callback | References earlier content | Same location, outfit, or shoot |
-| Appreciation | Direct gratitude to subscribers | Warm, eye contact |
-| Boundary / business | Limits, schedule, absence | Optional, neutral |
+| Type                | Caption job                               | Image job                                    |
+| ------------------- | ----------------------------------------- | -------------------------------------------- |
+| Teaser              | Short, enticing, points at locked content | Cropped or alternate angle from the real set |
+| Set drop            | Introduces theme; may mention the work    | High effort, intentional styling             |
+| Story               | Minimal or absent                         | Phone quality, casual framing                |
+| Life update         | Longer, personal, non-sexual              | Optional, casual, clothed                    |
+| Custom request      | Names the request pattern                 | Delivers what was asked                      |
+| Behind the scenes   | Discusses making the content              | Setup, outtake, or failure visible           |
+| Callback            | References earlier content                | Same location, outfit, or shoot              |
+| Appreciation        | Direct gratitude to subscribers           | Warm, eye contact                            |
+| Boundary / business | Limits, schedule, absence                 | Optional, neutral                            |
 
 Not every event becomes a post. Produce mode allows text-only posts, reposted
 old material, and skipped days.

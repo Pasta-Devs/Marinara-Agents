@@ -306,6 +306,12 @@
     "slurp2": {
       "versions": [
         {
+          "version": "0.1.36",
+          "date": "2026-09-21",
+          "notes": "- Documented how a Creator decides what to post, from the quiet-slot check to what the model is told.\n- The splash screen again shows the current release; the build now fails when its version drifts from the package version.\n- The composer opens the Creator's continuity editor directly.",
+          "highlight": false
+        },
+        {
           "version": "0.1.35",
           "date": "2026-09-21",
           "notes": "- Continuity proposals whose source messages changed or were deleted are now refused as stale instead of being applied.\n- Event proposals are approved as events, and each proposal shows its source messages and extraction fingerprint.\n- The continuity editor filters by type, source, scope, status, confidence, and date, and records links between requests, promises, opportunities, campaigns, shoots, and posts.\n- Backstage shows a continuity review queue across every Creator, and message requests open the Creator's continuity editor directly.",
@@ -417,12 +423,6 @@
           "version": "0.1.17",
           "date": "2026-09-20",
           "notes": "- Stopped scheduled posts from activating the Pulse icon and wave animation.\n- Changed expanded Pulse child rows to a flat notification-style stack.",
-          "highlight": false
-        },
-        {
-          "version": "0.1.16",
-          "date": "2026-09-20",
-          "notes": "- Removed stale first-post queue records and commission briefs from Pulse background work.\n- Added layered notification-style backsheets to grouped Pulse cards.",
           "highlight": false
         }
       ]

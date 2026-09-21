@@ -1,5 +1,11 @@
 # Slurp Remastered release notes
 
+## 0.1.36 — 2026-09-21
+
+- Documented how a Creator decides what to post, from the quiet-slot check to what the model is told.
+- The splash screen again shows the current release; the build now fails when its version drifts from the package version.
+- The composer opens the Creator's continuity editor directly.
+
 ## 0.1.35 — 2026-09-21
 
 - Continuity proposals whose source messages changed or were deleted are now refused as stale instead of being applied.

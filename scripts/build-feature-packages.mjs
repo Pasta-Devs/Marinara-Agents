@@ -390,7 +390,7 @@ const features = [
   },
   {
     id: "slurp2",
-    version: "0.1.35",
+    version: "0.1.36",
     minEngineVersion: "2.4.5",
     maxEngineExclusive: MAX_ENGINE_EXCLUSIVE,
     name: "Slurp Remastered",
@@ -630,6 +630,17 @@ if (selectedFeatures.length !== requestedFeatureIds.size && requestedFeatureIds.
   const knownIds = new Set(features.map((feature) => feature.id));
   const unknownIds = [...requestedFeatureIds].filter((id) => !knownIds.has(id));
   throw new Error(`Unknown feature package${unknownIds.length === 1 ? "" : "s"}: ${unknownIds.join(", ")}`);
+}
+// The Slurp2 splash reads its version from the client bundle; a stale copy hides the release dialog.
+for (const feature of selectedFeatures.filter((entry) => entry.id === "slurp2")) {
+  const release = await readFile(
+    join(repoRoot, "packages/slurp2/src/engine/packages/client/src/slp/features/onboarding/slp-release.ts"),
+    "utf8",
+  );
+  const clientVersion = release.match(/SLURP2_VERSION = "([^"]+)"/u)?.[1];
+  if (clientVersion !== feature.version) {
+    throw new Error(`slurp2: SLURP2_VERSION ${clientVersion} does not match package version ${feature.version}`);
+  }
 }
 const hierarchicalMapsBoundary = selectedFeatures.some((feature) => feature.id === "hierarchical-maps")
   ? await assertHierarchicalMapsPrivateImportBoundary()

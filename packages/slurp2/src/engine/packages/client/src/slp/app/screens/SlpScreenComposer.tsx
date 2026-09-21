@@ -20,6 +20,7 @@ import type {
 import type { SlurpManagedStageProfile } from "../../base/state/slp-state-types";
 import type { SlpCreatorContentFormat, SlurpProfilePost } from "../../features/feed/slp-feed-contract";
 import { useSlurpSettings } from "../../features/settings/slp-settings-hooks";
+import { SlpOpenContinuityButton } from "../../base/navigation/SlpOpenContinuityButton";
 import { SlpComposerShell, SlpComposerToolRow } from "../../modules/post/SlpPostCard";
 import { SlpAnchoredPopover } from "../../base/chrome/SlpAnchoredPopover";
 import { SlpImageComposer } from "../../base/media/SlpImageComposer";
@@ -514,6 +515,10 @@ export function NoodlerPostComposer({
               ))}
             </select>
           </label>
+          <SlpOpenContinuityButton
+            creatorAccountId={profile.id}
+            className="inline-flex h-9 items-center rounded-lg border border-[var(--noodle-divider)] px-3 text-xs font-bold hover:bg-[var(--accent)]"
+          />
           <button
             type="button"
             onClick={() => void guidePost()}
