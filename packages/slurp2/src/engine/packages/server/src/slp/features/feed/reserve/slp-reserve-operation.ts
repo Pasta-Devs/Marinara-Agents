@@ -244,6 +244,7 @@ export async function prepareNextCreatorReservePost(db: DB, at = new Date()): Pr
       // still coming and is left alone; a gallery image is finished, so the failure marks go.
       if (
         settings.allowGalleryImageAttachments &&
+        payload.metadata.contentDelivery !== "text_only" &&
         typeof payload.metadata.noodlerMediaPath !== "string" &&
         payload.metadata.imageGenerationDeferred !== true
       ) {

@@ -99,7 +99,7 @@ export type SlurpPostPromptInput = {
   loreContext?: string;
   promptBlocks?: SlurpPromptBlockOverrides;
   promptInstructions?: SlurpReusablePromptInstruction[];
-  /** From `slp-content-type.ts`: what this post is for. */
+  /** From `slp-content-axes.ts`: what this post is for and how it goes out. */
   contentTypeInstruction?: string;
   /** From `slp-production-profile.ts`: how this Creator makes things. */
   productionInstruction?: string;
