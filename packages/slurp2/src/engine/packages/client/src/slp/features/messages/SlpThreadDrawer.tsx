@@ -12,6 +12,7 @@ export function SlpThreadDrawer({ model }: { model: SlurpThreadViewModel }) {
   const {
     closeDrawer,
     commissions,
+    targetCreatorAccountId,
     drawerMode,
     drawerRef,
     headerAccount,
@@ -92,7 +93,13 @@ export function SlpThreadDrawer({ model }: { model: SlurpThreadViewModel }) {
                 />
                 {/* What the fan asked for and what was done about it. The fan's own side of the
                     drawer never shows this. */}
-                {ownsCreator && <SlurpThreadRequestsPanel threadId={threadId} personaId={personaId} />}
+                {ownsCreator && (
+                  <SlurpThreadRequestsPanel
+                    threadId={threadId}
+                    personaId={personaId}
+                    creatorAccountId={targetCreatorAccountId}
+                  />
+                )}
               </>
             ) : drawerMode === "commissions" ? (
               <SlurpCommissionsPanel

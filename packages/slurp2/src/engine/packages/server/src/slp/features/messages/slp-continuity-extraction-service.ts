@@ -211,6 +211,8 @@ export async function drainSlurpContinuityExtraction(
               risk,
               confidence: candidate.confidence,
               sourceHash,
+              sourceMessageIds: batch.map((message) => message.id),
+              extractionFingerprint: `${threadId}:${sourceHash}`,
             },
             at,
           );

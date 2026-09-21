@@ -2,7 +2,7 @@ import type { DB } from "../../../db/connection.js";
 import { and, eq } from "../../../db/file-query.js";
 import { slurpContinuityEvents } from "../../../db/schema/slurp.js";
 import { createSlurpStorage } from "../../data/slp-storage.js";
-import { recordSlurpContinuityEvent } from "../../data/continuity/slp-continuity-storage.js";
+import { recordSlurpContinuityEvent, recordSlurpContinuityLink } from "../../data/continuity/slp-continuity-storage.js";
 import { planSlurpOpportunity } from "../../data/feed/slp-opportunity-storage.js";
 import { bumpSlurpDemandTrend } from "../../data/feed/slp-demand-storage.js";
 import { slurpContinuityIdentityOf } from "../../modules/continuity/slp-continuity-rules.js";
@@ -117,7 +117,7 @@ export async function applySlurpRequestAction(
   }
   // The count goes up under a topic the Creator typed. The request text and the fan never do.
   if (effect.aggregate && input.topic) await bumpSlurpDemandTrend(db, input.creatorAccountId, input.topic, at);
-  await recordSlurpContinuityEvent(
+  const actionEvent = await recordSlurpContinuityEvent(
     db,
     {
       ...thread,
@@ -131,5 +131,13 @@ export async function applySlurpRequestAction(
     },
     at,
   );
+  await recordSlurpContinuityLink(db, {
+    creatorAccountId: input.creatorAccountId,
+    fromType: "request",
+    fromId: input.requestId,
+    toType: promise ? "opportunity" : "outcome",
+    toId: promise?.id ?? actionEvent.id,
+    relation: input.action,
+  });
   return "applied";
 }

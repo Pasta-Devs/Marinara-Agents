@@ -1,5 +1,12 @@
 # Slurp Remastered release notes
 
+## 0.1.35 — 2026-09-21
+
+- Continuity proposals whose source messages changed or were deleted are now refused as stale instead of being applied.
+- Event proposals are approved as events, and each proposal shows its source messages and extraction fingerprint.
+- The continuity editor filters by type, source, scope, status, confidence, and date, and records links between requests, promises, opportunities, campaigns, shoots, and posts.
+- Backstage shows a continuity review queue across every Creator, and message requests open the Creator's continuity editor directly.
+
 ## 0.1.34 — 2026-09-21
 
 - Photo sets now publish up to three ordered, shoot-consistent images and remain usable when a secondary image fails.
