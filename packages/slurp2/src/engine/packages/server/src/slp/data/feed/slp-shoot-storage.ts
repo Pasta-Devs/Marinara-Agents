@@ -3,6 +3,7 @@ import { desc, eq } from "../../../db/file-query.js";
 import { slurpShootSessions } from "../../../db/schema/slurp.js";
 import { newId } from "../../../utils/id-generator.js";
 import type { SlurpCameraSource } from "../../modules/feed/slp-camera-source.js";
+import type { SlurpPostEffort } from "../../modules/creators/slp-production-profile.js";
 import {
   SLURP_SHOOT_MAX_SHOTS,
   SLURP_SHOOT_MAX_AGE_MS,
@@ -16,6 +17,13 @@ export type SlurpShootSession = {
   company: string;
   cameraSource: SlurpCameraSource;
   shotsUsed: number;
+  shotsTaken: number;
+  shotsSelected: number;
+  effort: SlurpPostEffort;
+  theme: string;
+  status: "active" | "exhausted";
+  campaignId: string | null;
+  capturedAt: string;
   /** See the schema. Empty when unknown. */
   brief: string;
   createdAt: string;
@@ -32,6 +40,13 @@ function mapShoot(row: Record<string, unknown>): SlurpShootSession {
     // A stored count that will not parse must not make a shoot immortal, so an unreadable value
     // is treated as exhausted rather than as zero.
     shotsUsed: Number.isFinite(shots) ? shots : SLURP_SHOOT_MAX_SHOTS,
+    shotsTaken: Number.parseInt(String(row.shotsTaken ?? "1"), 10) || 1,
+    shotsSelected: Number.parseInt(String(row.shotsSelected ?? "1"), 10) || 1,
+    effort: (["low", "medium", "high"].includes(String(row.effort)) ? row.effort : "medium") as SlurpPostEffort,
+    theme: String(row.theme ?? "set"),
+    status: row.status === "exhausted" ? "exhausted" : "active",
+    campaignId: typeof row.campaignId === "string" ? row.campaignId : null,
+    capturedAt: String(row.capturedAt || row.createdAt),
     brief: String(row.brief ?? ""),
     createdAt: String(row.createdAt),
   };
@@ -46,6 +61,10 @@ export async function openSlurpShoot(
     company: string;
     cameraSource: SlurpCameraSource;
     brief?: string | null;
+    effort: SlurpPostEffort;
+    theme: string;
+    campaignId?: string | null;
+    shotsTaken?: number;
     at: Date;
   },
 ): Promise<SlurpShootSession> {
@@ -56,6 +75,13 @@ export async function openSlurpShoot(
     company: input.company,
     cameraSource: input.cameraSource,
     shotsUsed: "1",
+    shotsTaken: String(input.shotsTaken ?? 1),
+    shotsSelected: "1",
+    effort: input.effort,
+    theme: input.theme.trim().slice(0, 120) || "set",
+    status: "active",
+    campaignId: input.campaignId ?? null,
+    capturedAt: input.at.toISOString(),
     // Bounded: the brief is a prompt, not a document, and it rides into every later brief.
     brief: (input.brief ?? "").trim().slice(0, 1200),
     createdAt: input.at.toISOString(),
@@ -91,10 +117,24 @@ export async function findReusableSlurpShoot(
 
 /** Record that one more post drew from this shoot. */
 export async function useSlurpShoot(db: DB, shoot: SlurpShootSession): Promise<void> {
+  const next = shoot.shotsUsed + 1;
   await db
     .update(slurpShootSessions)
-    .set({ shotsUsed: String(shoot.shotsUsed + 1) })
+    .set({ shotsUsed: String(next), status: next >= SLURP_SHOOT_MAX_SHOTS ? "exhausted" : "active" })
     .where(eq(slurpShootSessions.id, shoot.id));
+}
+
+export async function recordSlurpShootSelection(db: DB, shootId: string, selected: number): Promise<void> {
+  const rows = await db.select().from(slurpShootSessions).where(eq(slurpShootSessions.id, shootId));
+  const shoot = rows[0] ? mapShoot(rows[0] as Record<string, unknown>) : null;
+  if (!shoot) return;
+  await db
+    .update(slurpShootSessions)
+    .set({
+      shotsTaken: String(Math.max(shoot.shotsTaken, selected)),
+      shotsSelected: String(Math.max(shoot.shotsSelected, selected)),
+    })
+    .where(eq(slurpShootSessions.id, shootId));
 }
 
 /**

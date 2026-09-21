@@ -309,6 +309,8 @@ export interface SlpPost {
   content: string;
   imageUrl: string | null;
   imagePrompt: string | null;
+  /** Ordered media. Position zero mirrors imageUrl/imagePrompt for older clients. */
+  images: SlpPostMedia[];
   parentPostId: string | null;
   quotePostId: string | null;
   source: SlpPostSource;
@@ -317,6 +319,13 @@ export interface SlpPost {
   authorSnapshot: SlpAuthorSnapshot | null;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface SlpPostMedia {
+  id: string;
+  position: number;
+  imageUrl: string;
+  imagePrompt: string | null;
 }
 
 export interface SlpCreatorManagedPost extends SlpPost {
@@ -357,6 +366,8 @@ export interface SlpCreatorPostView {
   hasImage: boolean;
   imageUrl: string | null;
   imagePrompt: string | null;
+  /** Empty while locked unless the URL is an access-checked teaser. */
+  images: SlpPostMedia[];
   metadata: Record<string, unknown> | null;
   createdAt: string;
   /** Empty for locked posts — use likeCount/replyCount for the teaser footer. */

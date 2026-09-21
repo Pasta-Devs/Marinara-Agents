@@ -1,11 +1,14 @@
-// ──────────────────────────────────────────────
-// Slurp post card — the membership-style, media-forward variant of the post card
-// used by the Slurp creator feed. Shares all leaf helpers, the ctx contract,
-// and the reply/edit/poll machinery's building blocks with SlpPostCard; only the
-// layout (two-line header, filled access pill, full-width body, image-on-top) differs.
-// The public Noodle feed keeps the original SlpPostCard.
-// ──────────────────────────────────────────────
-import { AtSign, ChevronDown, Heart, Flame, TrendingUp, MessageCircle, RefreshCw } from "lucide-react";
+import {
+  AtSign,
+  ChevronDown,
+  ChevronLeft,
+  ChevronRight,
+  Heart,
+  Flame,
+  TrendingUp,
+  MessageCircle,
+  RefreshCw,
+} from "lucide-react";
 import { Fragment, useMemo, useRef, useState } from "react";
 import { slurpPostWentViral, slurpReachWeek } from "../../../../../shared/src/slp/slp-reach.js";
 import { readSlpPollFromMetadata } from "../../../../../shared/src/slp/slp-polls.js";
@@ -91,11 +94,7 @@ export function SlurpCreatorPostCard({
   const accountByHandle = ctx.accountByHandle ?? new Map<string, SlpAccount>();
   const authorAccount = accountById.get(post.authorAccountId) ?? null;
   const author = authorAccount ?? post.authorSnapshot;
-  // Card-owned defaults for absent capability groups. Hosts pass only the capabilities they
-  // support (NoodleR omits media/replyManagement/mentions/poll/profile); the card fills the
-  // rest with no-ops and empty state, and gates the corresponding UI on group presence — so
-  // no host has to hand over discarded setters, dangling refs, or fake mutations. Annotations
-  // keep the () => {} fallbacks callable with their real signatures.
+  // Hosts pass only the capability groups they support; absent groups use inert defaults.
   const fallbackDivRef = useRef<HTMLDivElement | null>(null);
   const fallbackFileRef = useRef<HTMLInputElement | null>(null);
   const openProfile: (account: SlpAccount | null) => void = ctx.openProfile ?? (() => {});
@@ -146,33 +145,28 @@ export function SlurpCreatorPostCard({
   const isEditingPost = Boolean(ctx.postManagement) && editingPostId === post.id;
   const imageCrop = readSlpPostImageCrop(post.metadata);
   const [failedImageUrl, setFailedImageUrl] = useState<string | null>(null);
+  const [activeImageIndex, setActiveImageIndex] = useState(0);
+  const activeImage = post.images[activeImageIndex] ?? post.images[0] ?? null;
   const [commentsExpanded, setCommentsExpanded] = useState(false);
   const [expandedThreadIds, setExpandedThreadIds] = useState<ReadonlySet<string>>(new Set());
   const {
     src: postImageSrc,
     observe: observePostImage,
     loading: postImageLoading,
-  } = useNearViewportSlurpMediaSrc(post.imageUrl, { width: 960 });
+  } = useNearViewportSlurpMediaSrc(activeImage?.imageUrl ?? post.imageUrl, { width: 960 });
   const displayedImageUrl = postImageSrc && postImageSrc !== failedImageUrl ? postImageSrc : null;
   const imageGenerationPending = ctx.generatingPostImageId === post.id;
   const postMenuOpen = ctx.postMenuId === post.id;
-  // The algorithm week this post was made in. Derived, like its counts, so every card agrees.
   const reachBadge = slurpPostWentViral({ accountId: post.authorAccountId, postId: post.id, createdAt: post.createdAt })
     ? "viral"
     : slurpReachWeek(post.authorAccountId, post.createdAt) === "featured"
       ? "featured"
       : null;
-  // Debug view of what the picture was made from, and what the vision model said it shows.
   const [imageContextOpen, setImageContextOpen] = useState(false);
-  // null while closed; a string while the image prompt is being rewritten for a redraw.
   const [promptDraft, setPromptDraft] = useState<string | null>(null);
   const imageDescription =
     typeof post.metadata?.imageDescription === "string" ? post.metadata.imageDescription.trim() : "";
   const hasImageContext = Boolean(post.imageUrl && (post.imagePrompt?.trim() || imageDescription));
-  // Distinct from displayedImageUrl: while postImageSrc is still resolving (the authenticated
-  // fetch hasn't returned yet) there is no evidence the image is broken, so editing must not
-  // drop it. Only a confirmed <img> render failure (postImageSrc resolved and then errored,
-  // recorded in failedImageUrl) strips the image from what gets edited/saved.
   const editablePost =
     post.imageUrl && (postImageSrc === null || postImageSrc !== failedImageUrl) ? post : { ...post, imageUrl: null };
   const postInteractions = post.interactions;
@@ -230,7 +224,6 @@ export function SlurpCreatorPostCard({
     };
   }, [postInteractions]);
   const replyThreads = slurpReplyThreads(orderedReplies, replyById);
-  // An older thread stays on screen while it holds the open reply composer or a linked comment.
   const threadIsActive = (thread: (typeof replyThreads)[number]) =>
     [thread.root, ...thread.children].some(
       (reply) => reply.id === highlightedInteractionId || reply.id === replyParentInteractionId,
@@ -445,26 +438,35 @@ export function SlurpCreatorPostCard({
         </div>
       </div>
       <div>
-        {/* The image editor renders its own preview while editing, so hide the read-only one. */}
         {isEditingPost && imageEditing ? null : displayedImageUrl || postImageLoading ? (
-          <button
+          <div
             ref={observePostImage}
-            type="button"
-            onClick={() => {
-              if (!displayedImageUrl) return;
-              if (ctx.openPost) ctx.openPost(post.id);
-              else setImageLightbox(createSlpLightboxImage(post.id, displayedImageUrl, post.imagePrompt ?? ""));
-            }}
-            disabled={!displayedImageUrl}
             className={cn(
-              "mt-4 flex max-h-[32rem] justify-center overflow-hidden bg-black/20 text-left ring-1 ring-inset ring-white/10 ring-offset-[var(--background)] transition-[opacity,transform] hover:opacity-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)] focus-visible:ring-offset-2 motion-reduce:transition-none",
+              "relative mt-4 flex max-h-[32rem] justify-center overflow-hidden bg-black/20 text-left ring-1 ring-inset ring-white/10 ring-offset-[var(--background)]",
               surface === "profile"
                 ? "w-full rounded-xl"
                 : "-mx-4 w-[calc(100%+2rem)] rounded-none sm:mx-0 sm:w-full sm:rounded-xl",
             )}
-            title={localizeUi("ui.noodle.noodlepostcard.openImage")}
-            aria-label={localizeUi("ui.noodle.noodlepostcard.openPostImage")}
           >
+            {displayedImageUrl && (
+              <button
+                type="button"
+                onClick={() => {
+                  if (ctx.openPost) ctx.openPost(post.id);
+                  else
+                    setImageLightbox(
+                      createSlpLightboxImage(
+                        `${post.id}:${activeImageIndex}`,
+                        displayedImageUrl,
+                        activeImage?.imagePrompt ?? post.imagePrompt ?? "",
+                      ),
+                    );
+                }}
+                className="absolute inset-0 z-10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--noodle-accent)]"
+                title={localizeUi("ui.noodle.noodlepostcard.openImage")}
+                aria-label={localizeUi("ui.noodle.noodlepostcard.openPostImage")}
+              />
+            )}
             {!displayedImageUrl ? (
               <span
                 className="block aspect-[4/3] w-full animate-pulse bg-[var(--muted)] motion-reduce:animate-none sm:aspect-[16/10]"
@@ -498,7 +500,33 @@ export function SlurpCreatorPostCard({
                 />
               </div>
             )}
-          </button>
+            {post.images.length > 1 && displayedImageUrl && (
+              <span className="pointer-events-none absolute inset-x-2 top-1/2 z-20 flex -translate-y-1/2 justify-between">
+                <button
+                  type="button"
+                  aria-label={localizeUi("ui.slurp.post.previousImage")}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    setActiveImageIndex((activeImageIndex - 1 + post.images.length) % post.images.length);
+                  }}
+                  className="pointer-events-auto grid size-10 place-items-center rounded-full bg-black/65 text-white"
+                >
+                  <ChevronLeft size={20} />
+                </button>
+                <button
+                  type="button"
+                  aria-label={localizeUi("ui.slurp.post.nextImage")}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    setActiveImageIndex((activeImageIndex + 1) % post.images.length);
+                  }}
+                  className="pointer-events-auto grid size-10 place-items-center rounded-full bg-black/65 text-white"
+                >
+                  <ChevronRight size={20} />
+                </button>
+              </span>
+            )}
+          </div>
         ) : post.imagePrompt ? (
           <div className="relative mt-3 rounded-xl border border-[var(--noodle-accent)]/35 bg-[var(--noodle-accent)]/10 p-3 pr-14 text-xs leading-5">
             <span className="mb-1 flex items-center gap-1.5 font-semibold text-[var(--noodle-accent)]">

@@ -75,10 +75,12 @@ for (let sequence = 0; sequence < 40; sequence += 1) {
 }
 assert.equal(slurpPostAxes("creator-a", 0, { story: true, images: false }).delivery, "text_only");
 
-// ponytail check: deliveries that need real media are contract-only until media selection exists.
-for (const axes of weighted) {
-  assert.ok(["text_only", "new_capture"].includes(axes.delivery), `${axes.delivery} must not be drawn yet`);
-}
+const multiImage = weighted.filter((axes) => axes.delivery === "multi_image_set");
+assert.ok(multiImage.length > 0, "planned sets must sometimes publish as real image sets");
+assert.ok(
+  multiImage.every((axes) => ["set", "request", "callback"].includes(axes.intent)),
+  "only shoot-compatible intents may draw a set",
+);
 
 // Compatibility rules.
 assert.ok(!slurpDeliveryFits("set", "text_only"), "a set is a shoot");

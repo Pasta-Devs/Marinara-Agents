@@ -27,11 +27,11 @@ import { createSlurpStorage } from "../../data/slp-storage.js";
 import { type SlurpAccount } from "../../modules/records/slp-storage-model.js";
 import { createPromptOverridesStorage } from "../../../services/storage/prompt-overrides.storage.js";
 import { generateCreatorPostImage } from "../media/slp-media-contract.js";
+import { persistSlurpGeneratedImageSet } from "./slp-post-media-operation.js";
 import { slpCreatorUnlockPriceMetadata } from "../../modules/economy/slp-prices.js";
 import {
   NOODLER_MEDIA_PREFIX,
   persistCreatorPostWithUploadedMedia,
-  slpCreatorPostMediaUrl,
   type SlpCreatorPostMediaUpload,
 } from "../../base/media/slp-media.js";
 import type { SlpImagePromptReviewItem } from "../media/slp-media-contract.js";
@@ -266,6 +266,7 @@ export async function generateCreatorPost(
   // so it biases every post they ever make rather than this one.
   const strategy = slurpCreatorStrategy(account.id, account.settings.strategy);
   const production = strategy.production;
+  const effort = slurpPostEffort(production, sequence);
   const cameraSource = variation
     ? slurpPostCameraSource(account.id, sequence, {
         companyCanHoldCamera: variation.companyCanHoldCamera,
@@ -286,7 +287,7 @@ export async function generateCreatorPost(
     input.request.access === "public" && !directed && slurpTeaserPost(account.id, sequence, settings.teaserRate);
   // What this post is for, as opposed to what it is about, and how it goes out. Story and teaser
   // are passed in rather than chosen again, so the decisions cannot contradict each other.
-  const { axes, shoot, reusedMedia, reusedSource, opportunity, demandTopic, continuityInstruction } =
+  const { axes, shoot, reusedMedia, reusedSource, opportunity, demandTopic, continuityInstruction, campaignId } =
     await planSlurpPost(db, {
       account,
       request: input.request,
@@ -484,7 +485,7 @@ export async function generateCreatorPost(
           variation,
           story: storyVariation,
           shoot,
-          effortInstruction: slurpEffortInstruction(slurpPostEffort(production, sequence)),
+          effortInstruction: slurpEffortInstruction(effort),
         })
       : generated.imagePrompt;
   const draftImagePrompt = postImages
@@ -509,6 +510,10 @@ export async function generateCreatorPost(
         company: variation.company,
         cameraSource: camera,
         brief: draftImagePrompt,
+        effort,
+        theme: axes.intent,
+        campaignId,
+        shotsTaken: axes.delivery === "multi_image_set" ? 3 : 1,
         at: input.generatedAt ?? new Date(),
       }).catch((error: unknown) => {
         // A post must never fail over continuity bookkeeping.
@@ -766,22 +771,18 @@ export async function generateCreatorPost(
     };
   }
 
-  // One operation owns promotion and exactly one committed post: the serving URL is derived from
-  // a pre-generated id so the image URL and media metadata persist together in a single insert.
   const postId = newId();
-  try {
-    image.stagedMedia?.promote();
-    const post = await persist({
-      id: postId,
-      imagePrompt: draftImagePrompt,
-      imageUrl: slpCreatorPostMediaUrl(postId),
-      metadata: { ...image.metadata, ...(storyVariation ? { noodlerPostType: "story" } : {}) },
-    });
-    return { post, imagePromptReview: null };
-  } catch (err) {
-    image.stagedMedia?.compensate();
-    throw err;
-  }
+  const post = await persistSlurpGeneratedImageSet({
+    db,
+    postId,
+    imagePrompt: draftImagePrompt,
+    primary: { ...image, metadata: { ...image.metadata, ...(storyVariation ? { noodlerPostType: "story" } : {}) } },
+    imageInput,
+    multi: axes?.delivery === "multi_image_set",
+    shootId,
+    persist,
+  });
+  return { post, imagePromptReview: null };
 }
 
 /**

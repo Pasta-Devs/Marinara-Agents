@@ -31,6 +31,7 @@ import type {
   SlurpContentIntent,
   SlurpContentWorkflow,
 } from "../../../../../shared/src/slp/slp-content-axes.js";
+import { slurpContentDeliveryFits } from "../../../../../shared/src/slp/slp-content-axes.js";
 import { slurpWeightedPick } from "./slp-weighted.js";
 
 /**
@@ -72,19 +73,8 @@ const DELIVERY_NOTES: Partial<Record<SlurpContentDelivery, string>> = {
  * A cropped preview exists only to sell something, so only a teaser uses it. Everything else is
  * open, because a thank-you or a schedule notice can be delivered almost any way.
  */
-const DELIVERIES: Record<SlurpContentIntent, readonly SlurpContentDelivery[]> = {
-  casual: ["text_only", "new_capture", "existing_media", "story"],
-  teaser: ["text_only", "new_capture", "existing_media", "story", "cropped_preview"],
-  set: ["new_capture", "multi_image_set"],
-  behind_the_scenes: ["text_only", "new_capture", "existing_media", "story"],
-  request: ["text_only", "new_capture", "existing_media", "story", "multi_image_set"],
-  appreciation: ["text_only", "new_capture", "existing_media", "story"],
-  callback: ["new_capture", "existing_media", "story", "multi_image_set"],
-  business: ["text_only", "new_capture", "existing_media"],
-};
-
 export function slurpDeliveryFits(intent: SlurpContentIntent, delivery: SlurpContentDelivery): boolean {
-  return DELIVERIES[intent].includes(delivery);
+  return slurpContentDeliveryFits(intent, delivery);
 }
 
 /**
@@ -154,11 +144,8 @@ export type SlurpPostAxes = { intent: SlurpContentIntent; delivery: SlurpContent
  * instead of adjacent. Two ordinary days in a row are allowed on purpose: forcing every post to
  * differ from the last one reads as a schedule just as clearly as repeating does.
  *
- * Only `text_only`, `new_capture`, and `story` are drawn here. Reuse is decided afterwards by
- * `slurpReuseDelivery`, because it depends on which real pictures exist.
- *
- * ponytail: `multi_image_set` is never drawn. A post holds one picture; several need a post media
- * list and a carousel, which is a data-model change of its own.
+ * Reuse is decided afterwards by `slurpReuseDelivery`, because it depends on which real pictures
+ * exist. Sets, callbacks, and requests may draw a multi-image delivery from one shoot.
  */
 export function slurpPostAxes(
   creatorAccountId: string,
@@ -187,9 +174,11 @@ export function slurpPostAxes(
   // be. 50 is the shipped balance, so an unset strategy changes nothing.
   const lean = (decided.textOnlyRate ?? 50) / 50;
   const textOnly = Math.min(90, Math.round(TEXT_ONLY_WEIGHTS[intent] * lean));
+  const multiImageWeight = intent === "set" ? 45 : intent === "callback" ? 25 : intent === "request" ? 20 : 0;
   const delivery = slurpWeightedPick("delivery", creatorAccountId, sequence, [
     { value: "text_only" as const, weight: textOnly },
-    { value: "new_capture" as const, weight: 100 - textOnly },
+    { value: "new_capture" as const, weight: Math.max(0, 100 - textOnly - multiImageWeight) },
+    { value: "multi_image_set" as const, weight: multiImageWeight },
   ]);
   return { intent, delivery };
 }

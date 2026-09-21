@@ -357,6 +357,7 @@ function useSlurpHomeActions(state: SlurpHomeBaseState) {
     postType,
     generateImage,
     contentIntent,
+    contentDelivery,
   }: SlpCreatorPostSubmission) => {
     if (!(await confirmProviderDisclosure())) return;
     const guide = serializeCreatorPostGuide(title, body);
@@ -366,6 +367,7 @@ function useSlurpHomeActions(state: SlurpHomeBaseState) {
       ...(guide ? { noodlerPostGuide: guide } : {}),
       ...(generateImage ? { generateImage: true } : {}),
       ...(contentIntent ? { contentIntent } : {}),
+      ...(contentDelivery ? { contentDelivery } : {}),
       access,
       image,
       poll,

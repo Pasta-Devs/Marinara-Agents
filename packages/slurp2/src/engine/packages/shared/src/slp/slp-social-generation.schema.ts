@@ -2,7 +2,7 @@
 // Slurp generation schemas. Split from slp-social.schema.ts to stay under the architecture
 // line budget; copied from the Engine Noodle schemas with values unchanged.
 // ──────────────────────────────────────────────
-import { SLURP_CONTENT_INTENTS } from "./slp-content-axes.js";
+import { SLURP_CONTENT_DELIVERIES, SLURP_CONTENT_INTENTS, slurpContentDeliveryFits } from "./slp-content-axes.js";
 import { z } from "zod";
 import {
   SLP_CREATOR_POST_CONTENT_MAX_LENGTH,
@@ -75,11 +75,28 @@ const slpCreatorGenerationRequestShape = {
   poll: slpPollInputSchema.nullable().optional(),
   /** A one-shot post purpose from the composer. Outranks the Creator's strategy for this post only. */
   contentIntent: z.enum(SLURP_CONTENT_INTENTS).optional(),
+  /** One-shot delivery. It is paired with an intent so incompatible combinations fail early. */
+  contentDelivery: z.enum(SLURP_CONTENT_DELIVERIES).optional(),
 };
 
 export const slpCreatorGenerationRequestSchema = z
   .object({ ...slpCreatorGenerationRequestShape, access: slpPostAccessSchema.default("public") })
-  .strict();
+  .strict()
+  .superRefine((input, ctx) => {
+    if (input.contentDelivery && !input.contentIntent) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["contentDelivery"], message: "Choose a post purpose too." });
+    } else if (
+      input.contentDelivery &&
+      input.contentIntent &&
+      !slurpContentDeliveryFits(input.contentIntent, input.contentDelivery)
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["contentDelivery"],
+        message: "That delivery does not fit this post purpose.",
+      });
+    }
+  });
 
 export const slpGenerationRequestSchema = z.union([
   slpPublicGenerationRequestSchema,

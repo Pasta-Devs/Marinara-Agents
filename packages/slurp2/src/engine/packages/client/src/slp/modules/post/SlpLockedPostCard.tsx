@@ -1,5 +1,7 @@
 import {
   Bell,
+  ChevronLeft,
+  ChevronRight,
   Eye,
   Heart,
   Image as ImageIcon,
@@ -69,13 +71,16 @@ export function LockedSlurpPostCard({
   const [transaction, setTransaction] = useState<"subscribe" | "unlock" | null>(null);
   const [postMenuOpen, setPostMenuOpen] = useState(false);
   const [demoUnlocked, setDemoUnlocked] = useState(false);
+  const [activeImageIndex, setActiveImageIndex] = useState(0);
   const likeCount = post.likeCount ?? 0;
   const replyCount = post.replyCount ?? 0;
   const openProfile = onOpenProfile ? () => onOpenProfile(profile.id) : undefined;
   const revealed = Boolean(demo && demoUnlocked);
   // A locked post's URL resolves to a server-blurred teaser, not the original bytes. Where no
   // teaser can be built the server sends nothing and only the frame renders.
-  const requestedMediaUrl = (revealed && demo?.unlockedImageUrl) || post.imageUrl || null;
+  const postImages = post.images ?? [];
+  const requestedMediaUrl =
+    (revealed && demo?.unlockedImageUrl) || postImages[activeImageIndex]?.imageUrl || post.imageUrl || null;
   const { src: mediaSrc, observe: observeMedia } = useNearViewportSlurpMediaSrc(requestedMediaUrl, { width: 960 });
   // No teaser could be built (the route 404s), so drop the broken <img> and keep the frame.
   const [failedMediaSrc, setFailedMediaSrc] = useState<string | null>(null);
@@ -260,6 +265,26 @@ export function LockedSlurpPostCard({
               />
             )}
             {!revealed && shownMediaSrc && <SlurpSparkleVeil className={transaction ? "opacity-100" : ""} />}
+            {postImages.length > 1 && (
+              <div className="pointer-events-none absolute inset-x-2 top-1/2 z-20 flex -translate-y-1/2 justify-between">
+                <button
+                  type="button"
+                  aria-label={localizeUi("ui.slurp.post.previousImage")}
+                  onClick={() => setActiveImageIndex((activeImageIndex - 1 + postImages.length) % postImages.length)}
+                  className="pointer-events-auto grid size-10 place-items-center rounded-full bg-black/65 text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
+                >
+                  <ChevronLeft size={20} />
+                </button>
+                <button
+                  type="button"
+                  aria-label={localizeUi("ui.slurp.post.nextImage")}
+                  onClick={() => setActiveImageIndex((activeImageIndex + 1) % postImages.length)}
+                  className="pointer-events-auto grid size-10 place-items-center rounded-full bg-black/65 text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
+                >
+                  <ChevronRight size={20} />
+                </button>
+              </div>
+            )}
             {/* The lock is a state cue; the accessible image text already describes the preview. */}
             {!revealed && (
               <span className="pointer-events-none absolute inset-x-0 top-[36%] flex justify-center" aria-hidden="true">

@@ -1,7 +1,7 @@
 // ──────────────────────────────────────────────
 // Schema: Slurp creator social media
 // ──────────────────────────────────────────────
-import { fileTable, text } from "../file-schema.js";
+import { fileTable, integer, text } from "../file-schema.js";
 
 export const slpAccounts = fileTable(
   "slurp2_accounts",
@@ -83,6 +83,22 @@ export const slpPosts = fileTable("slurp2_posts", {
   createdAt: text("created_at").notNull(),
   updatedAt: text("updated_at").notNull(),
 });
+
+/** Ordered secondary attachments. The primary remains on slurp2_posts for compatibility. */
+export const slpPostMedia = fileTable(
+  "slurp2_post_media",
+  {
+    id: text("id").primaryKey(),
+    postId: text("post_id").notNull(),
+    position: integer("position").notNull(),
+    imageUrl: text("image_url").notNull(),
+    imagePrompt: text("image_prompt"),
+    mediaPath: text("media_path").notNull(),
+    shootId: text("shoot_id"),
+    createdAt: text("created_at").notNull(),
+  },
+  { uniqueBy: [{ keys: ["postId", "position"] }] },
+);
 
 export const slpAccountSubscriptions = fileTable(
   "slurp2_account_subscriptions",
@@ -659,6 +675,13 @@ export const slurpShootSessions = fileTable("slurp2_shoot_sessions", {
   cameraSource: text("camera_source").notNull(),
   /** How many posts have drawn from this shoot, including the drop that opened it. */
   shotsUsed: text("shots_used").notNull().default("1"),
+  shotsTaken: text("shots_taken").notNull().default("1"),
+  shotsSelected: text("shots_selected").notNull().default("1"),
+  effort: text("effort").notNull().default("medium"),
+  theme: text("theme").notNull().default("set"),
+  status: text("status").notNull().default("active"),
+  campaignId: text("campaign_id"),
+  capturedAt: text("captured_at").notNull().default(""),
   /**
    * The picture brief the drop was generated from, so a later picture keeps its clothes and light.
    * Empty for shoots recorded before it existed: an unknown detail stays unknown, never invented.
