@@ -659,6 +659,11 @@ export const slurpShootSessions = fileTable("slurp2_shoot_sessions", {
   cameraSource: text("camera_source").notNull(),
   /** How many posts have drawn from this shoot, including the drop that opened it. */
   shotsUsed: text("shots_used").notNull().default("1"),
+  /**
+   * The picture brief the drop was generated from, so a later picture keeps its clothes and light.
+   * Empty for shoots recorded before it existed: an unknown detail stays unknown, never invented.
+   */
+  brief: text("brief").notNull().default(""),
   createdAt: text("created_at").notNull(),
 });
 

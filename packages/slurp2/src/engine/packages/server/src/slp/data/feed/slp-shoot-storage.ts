@@ -16,6 +16,8 @@ export type SlurpShootSession = {
   company: string;
   cameraSource: SlurpCameraSource;
   shotsUsed: number;
+  /** See the schema. Empty when unknown. */
+  brief: string;
   createdAt: string;
 };
 
@@ -30,6 +32,7 @@ function mapShoot(row: Record<string, unknown>): SlurpShootSession {
     // A stored count that will not parse must not make a shoot immortal, so an unreadable value
     // is treated as exhausted rather than as zero.
     shotsUsed: Number.isFinite(shots) ? shots : SLURP_SHOOT_MAX_SHOTS,
+    brief: String(row.brief ?? ""),
     createdAt: String(row.createdAt),
   };
 }
@@ -37,7 +40,14 @@ function mapShoot(row: Record<string, unknown>): SlurpShootSession {
 /** Open a shoot. The drop that opens it counts as its first shot. */
 export async function openSlurpShoot(
   db: DB,
-  input: { creatorAccountId: string; place: string; company: string; cameraSource: SlurpCameraSource; at: Date },
+  input: {
+    creatorAccountId: string;
+    place: string;
+    company: string;
+    cameraSource: SlurpCameraSource;
+    brief?: string | null;
+    at: Date;
+  },
 ): Promise<SlurpShootSession> {
   const row = {
     id: newId(),
@@ -46,6 +56,8 @@ export async function openSlurpShoot(
     company: input.company,
     cameraSource: input.cameraSource,
     shotsUsed: "1",
+    // Bounded: the brief is a prompt, not a document, and it rides into every later brief.
+    brief: (input.brief ?? "").trim().slice(0, 1200),
     createdAt: input.at.toISOString(),
   };
   await db.insert(slurpShootSessions).values(row);

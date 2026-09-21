@@ -80,18 +80,22 @@ const poll = slurp2Source("packages/slurp2/src/engine/packages/server/src/slp/mo
 assert.match(poll, /\| "skipped"/u);
 assert.match(poll, /if \(reserve === "skipped"\) reserve = await operations\.prepare\(\);/u);
 
-// The plan is durable before the model is called, and closed by what it produced.
+// The plan is durable before the model is called, and closed by what it produced. Planning lives in
+// its own service and runs before the generator builds the prompt.
 const generation = slurp2Source(
   "packages/slurp2/src/engine/packages/server/src/slp/features/feed/slp-generation-service.ts",
 );
-assert.match(generation, /await planSlurpOpportunity\(db, \{/u);
+const planService = slurp2Source(
+  "packages/slurp2/src/engine/packages/server/src/slp/features/feed/slp-post-plan-service.ts",
+);
+assert.match(planService, /await planSlurpOpportunity\(db, \{/u);
 assert.ok(
-  generation.indexOf("await planSlurpOpportunity") < generation.indexOf("const messages = buildNoodlerPostMessages"),
+  generation.indexOf("await planSlurpPost(db, {") < generation.indexOf("const messages = buildNoodlerPostMessages"),
   "the plan must be stored before the prompt is built",
 );
 assert.match(generation, /completeSlurpOpportunity\(db, opportunity\.id, \{\s*postId: post\.id,/u);
 // A settings preview decides nothing and must leave no plan behind.
-assert.match(generation, /axes && !input\.previewOnly/u);
+assert.match(planService, /axes && !previewOnly/u);
 
 // A plan and its slot are one record, so a retry finds the decision it already made.
 const storage = slurp2Source("packages/slurp2/src/engine/packages/server/src/slp/data/feed/slp-opportunity-storage.ts");

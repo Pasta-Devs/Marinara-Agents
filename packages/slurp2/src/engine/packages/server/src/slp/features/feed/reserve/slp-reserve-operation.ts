@@ -203,7 +203,11 @@ export async function prepareNextCreatorReservePost(db: DB, at = new Date()): Pr
         publicationTime: new Date(selectedPublishAt),
         generatedAt: at,
       });
-      let stagedMedia: { promote: () => void; compensate: () => void } | null = null;
+      // A reused picture arrives already staged. It is promoted or dropped exactly like a generated
+      // one below, and never written into the stored payload as an object.
+      const { stagedMedia: reusedMedia, ...prepared } = payload;
+      payload = prepared;
+      let stagedMedia: { promote: () => void; compensate: () => void } | null = reusedMedia ?? null;
       if (selectedAccount.settings.scheduler.autoPosting?.imagesEnabled && payload.imagePrompt) {
         const imageConnectionId = await resolveCreatorImageConnectionId(db, selectedAccount.id);
         // Fall back to the default image connection when a creator's mapped
