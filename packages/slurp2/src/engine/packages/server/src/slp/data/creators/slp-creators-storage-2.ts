@@ -1,4 +1,5 @@
 import { and, desc, eq, inArray, or } from "../../../db/file-query.js";
+import { deleteSlurpCreatorPlanningRows } from "../continuity/slp-continuity-storage.js";
 import { SlpAccount, SlpAccountKind } from "../../../../../shared/src/slp/slp-social.types.js";
 import { slurpProjectsKey } from "../../modules/projects/slp-project.js";
 import { slurpArcAutoKey, slurpArcConfigKey } from "../../modules/projects/slp-arc-library.js";
@@ -381,6 +382,7 @@ export function createCreatorsStorage2(context: SlurpStorageContext) {
             ),
           );
         await tx.delete(slpCreatorPreparedPosts).where(eq(slpCreatorPreparedPosts.creatorAccountId, existing.id));
+        await deleteSlurpCreatorPlanningRows(tx, existing.id);
         // Same Creator-keyed rows deleteNoodlerAccount cascades. Both entry points must agree, or
         // which one the caller happened to use decides what survives.
         await tx.delete(slurpCommissions).where(eq(slurpCommissions.creatorAccountId, existing.id));

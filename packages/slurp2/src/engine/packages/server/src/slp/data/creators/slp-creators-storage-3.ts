@@ -1,4 +1,5 @@
 import { and, desc, eq, inArray, or } from "../../../db/file-query.js";
+import { deleteSlurpCreatorPlanningRows } from "../continuity/slp-continuity-storage.js";
 import { slurpCreatorStrategy } from "../../modules/creators/slp-creator-strategy.js";
 import { SlpAccountSettingsPatchInput } from "../../../../../shared/src/slp/slp-social-generation.schema.js";
 import {
@@ -188,6 +189,7 @@ export function createCreatorsStorage3(context: SlurpStorageContext) {
             ),
           );
         await tx.delete(slpCreatorPreparedPosts).where(eq(slpCreatorPreparedPosts.creatorAccountId, id));
+        await deleteSlurpCreatorPlanningRows(tx, id);
         // Threads on either side of the deleted account, and their messages. Left behind, the
         // inbox would keep listing a creator that no longer exists.
         const threadRows = await tx

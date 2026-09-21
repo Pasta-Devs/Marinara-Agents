@@ -1,5 +1,11 @@
 # Slurp Remastered release notes
 
+## 0.1.29 — 2026-09-21
+
+- Added the storage for Creator continuity: facts, events, and proposed changes, each marked with who may see it and whether it literally happened.
+- A fan's private detail can never reach a post, and roleplay or game scenes never count as a Creator's real history.
+- Deleting a Creator now also removes their plans, shoots, campaigns, and continuity records.
+
 ## 0.1.28 — 2026-09-21
 
 - A set now opens a short campaign: the set, then a public teaser that shows a cropped corner of it, then a callback a day later.
