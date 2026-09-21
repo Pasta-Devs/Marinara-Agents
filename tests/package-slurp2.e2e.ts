@@ -293,8 +293,8 @@ test.describe("standalone Slurp package", () => {
       await expect(slurp.getByRole("heading", { name: outcome, exact: true })).toBeVisible();
     }
     await expect(slurp.getByText("Generation guidance", { exact: true })).toBeVisible();
-    await expect(slurp.getByText("Public post guidance", { exact: true })).toBeVisible();
-    await expect(slurp.getByText("Locked post guidance", { exact: true })).toBeVisible();
+    await expect(slurp.getByText("Public post direction", { exact: true })).toBeVisible();
+    await expect(slurp.getByText("Locked post direction", { exact: true })).toBeVisible();
     await expect(slurp.getByRole("heading", { name: "Prompt recipes", exact: true })).toBeVisible();
     await expect(slurp.getByText("Try your changes", { exact: true })).toBeVisible();
     expect(previewRequests).toEqual([]);
