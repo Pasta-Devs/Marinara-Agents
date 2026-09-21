@@ -15,6 +15,7 @@ import { isEnoent, nowIso } from "./ltm-utils.js";
 import { assertInsideDirectory, getLongTermMemoryDirectories, safeJoin } from "./paths.js";
 import { logger } from "./package-runtime.js";
 import { appendLtmActivityEvents } from "./activity-index.js";
+import { invalidateLtmVaultSnapshot } from "./vault-snapshot.js";
 
 const changeSchema = z
   .object({ path: ltmSafeRelativePathSchema, before: z.unknown().nullable(), after: z.unknown().nullable() })
@@ -87,6 +88,7 @@ async function publish(root: string, tx: LtmMutationTransaction, deduplicate = f
   await remove(root, tx);
 }
 export async function commitLtmMutation(root: string, input: { files: LtmMutationFileChange[]; events?: LtmEvent[] }) {
+  invalidateLtmVaultSnapshot(root);
   const prepared = create(root, input.files, input.events ?? []);
   await writeJsonAtomic(journalPath(root, prepared.id), prepared);
   let committed = false;
@@ -142,6 +144,7 @@ export async function recoverLtmMutations(root: string) {
     }
     await markLtmIndexesDirty(root);
   }
+  if (transactions.length) invalidateLtmVaultSnapshot(root);
   if (committed.length) await rebuildLtmNoteSummary(root);
   for (const tx of committed) await publish(root, tx, true);
 }

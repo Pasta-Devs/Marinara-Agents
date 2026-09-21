@@ -583,7 +583,11 @@ function availabilityEntries(
 function subjectSearchValues(note: LtmNote, subjectLabels: (subject: LtmSubject) => string) {
   return (note.subjects ?? []).flatMap((subject) => [subject.key, subject.ref?.id, subjectLabels(subject)]);
 }
-function searchable(note: LtmNote, notes: readonly LtmNote[], subjectLabels: (subject: LtmSubject) => string) {
+function searchable(
+  note: LtmNote,
+  notesById: ReadonlyMap<string, LtmNote>,
+  subjectLabels: (subject: LtmSubject) => string,
+) {
   return [
     note.id,
     note.title,
@@ -592,7 +596,7 @@ function searchable(note: LtmNote, notes: readonly LtmNote[], subjectLabels: (su
     ...note.tags,
     ...note.keywords,
     ...subjectSearchValues(note, subjectLabels),
-    ...note.links.flatMap((link) => [link.target, notes.find((linked) => linked.id === link.target)?.title]),
+    ...note.links.flatMap((link) => [link.target, notesById.get(link.target)?.title]),
     ...Object.values(note.sections).map((section) => section.text),
   ]
     .filter(Boolean)
@@ -612,7 +616,7 @@ function preview(
   note: LtmNote,
   search: string,
   localizeUi: LtmTranslationFunction,
-  notes: readonly LtmNote[],
+  notesById: ReadonlyMap<string, LtmNote>,
   subjectLabels: (subject: LtmSubject) => string,
 ) {
   const sections = Object.entries(note.sections).filter(([, section]) => section.text.trim());
@@ -626,16 +630,11 @@ function preview(
     );
     if (subject)
       return { label: localizeUi("ui.longTermMemory.memoryvault.subjectMatch"), text: subjectLabels(subject) };
-    const link = note.links.find((value) =>
-      notes
-        .find((linked) => linked.id === value.target)
-        ?.title?.toLocaleLowerCase()
-        .includes(query),
-    );
+    const link = note.links.find((value) => notesById.get(value.target)?.title?.toLocaleLowerCase().includes(query));
     if (link)
       return {
         label: localizeUi("ui.longTermMemory.memoryvault.linkedToMatch"),
-        text: notes.find((linked) => linked.id === link.target)?.title ?? link.target,
+        text: notesById.get(link.target)?.title ?? link.target,
       };
   }
   if (!selected)
@@ -1641,6 +1640,7 @@ export default function MemoryVault({
     queryFn: () => request<{ events: NoteEvent[] }>(`/events?noteId=${encodeURIComponent(draft!.id)}&limit=5`),
   });
   const allNotes = [...(notes.data ?? [])];
+  const notesById = useMemo(() => new Map((notes.data ?? []).map((note) => [note.id, note])), [notes.data]);
   const subjectSearchLabel = (subject: LtmSubject) => {
     if (!subject.ref) return localizeUi("ui.longTermMemory.memoryvault.unresolvedSubject");
     const targets =
@@ -1659,7 +1659,7 @@ export default function MemoryVault({
         (statusFilter === "all" || note.status === statusFilter) &&
         (sourceFilter ? note.type === "source" : note.type !== "source") &&
         (!filterModes.length || filterModes.some((mode) => note.modes.includes(mode))) &&
-        (!search.trim() || searchable(note, allNotes, subjectSearchLabel).includes(search.trim().toLocaleLowerCase())),
+        (!search.trim() || searchable(note, notesById, subjectSearchLabel).includes(search.trim().toLocaleLowerCase())),
     )
     .sort((left, right) =>
       sort === "title"
@@ -3369,7 +3369,7 @@ export default function MemoryVault({
                         <span className="ml-auto text-[var(--muted-foreground)]">{group.length}</span>
                       </summary>
                       {group.map((note) => {
-                        const notePreview = preview(note, search, localizeUi, allNotes, subjectSearchLabel);
+                        const notePreview = preview(note, search, localizeUi, notesById, subjectSearchLabel);
                         return (
                           <ClickSurface
                             key={note.id}

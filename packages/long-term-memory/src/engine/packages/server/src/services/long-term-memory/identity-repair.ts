@@ -40,6 +40,7 @@ import {
   type TrustedLtmSubjectCatalog,
 } from "./subject-identity.js";
 import { withLtmVaultLock } from "./vault-lock.js";
+import { invalidateLtmVaultSnapshot } from "./vault-snapshot.js";
 import { LtmServiceError } from "./service-error.js";
 
 type Group = {
@@ -203,6 +204,7 @@ export async function restoreLtmIdentityRepairBackup(root: string, backup: LtmId
       throw error;
     }
     await rm(failed, { recursive: true, force: true });
+    invalidateLtmVaultSnapshot(root);
   });
 }
 

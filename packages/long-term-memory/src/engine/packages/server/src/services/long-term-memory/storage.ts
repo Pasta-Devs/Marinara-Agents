@@ -52,6 +52,7 @@ import { longTermMemoryRetentionConfigPath, runLongTermMemoryRetention } from ".
 import { longTermMemoryUsagePath, readLongTermMemoryUsage } from "./usage.js";
 import { parseStoredLtmNote } from "./stored-note.js";
 import { withLtmVaultLock } from "./vault-lock.js";
+import { invalidateLtmVaultSnapshot, readLtmVaultSnapshot, type LtmVaultScan } from "./vault-snapshot.js";
 import { LtmServiceError } from "./service-error.js";
 import { quarantineLegacyCapturedTurnSources } from "./legacy-source-quarantine.js";
 import { isAdditiveLtmSection } from "./draft-projector.js";
@@ -232,28 +233,17 @@ export class LongTermMemoryStorage {
   async listNotes(filter: ListLtmNotesOptions = {}) {
     return withLtmVaultLock(this.root, async () => {
       await this.initializeLtmStore();
-      const notes: LtmNote[] = [];
-      const dirs = getLongTermMemoryDirectories(this.root);
-      const folders = filter.type ? [vaultFolderForNoteType(filter.type)] : LTM_VAULT_FOLDERS;
-      const files = (
-        await Promise.all(
-          folders.map(async (folder) =>
-            (await readdir(safeJoin(dirs.vault, folder), { withFileTypes: true }))
-              .filter((entry) => entry.isFile() && entry.name.endsWith(".json"))
-              .map((entry) => ({ folder, name: entry.name })),
-          ),
-        )
-      )
-        .flat()
-        .sort((left, right) => left.name.localeCompare(right.name) || left.folder.localeCompare(right.folder));
+      const scan = await readLtmVaultSnapshot(this.root, () => this.readAllNotesUnlocked());
+      // A typed read only owns one vault folder, so a malformed or misplaced
+      // note elsewhere must not fail it. Full reads still surface any failure.
+      const wantedFolder = filter.type ? vaultFolderForNoteType(filter.type) : undefined;
+      const failure = scan.errors.find((item) => !wantedFolder || item.folder === wantedFolder);
+      if (failure) throw failure.error;
       const offset = filter.offset ?? 0;
       let matched = 0;
-      for (const file of files) {
-        const note = parseStoredLtmNote(
-          JSON.parse(await readFile(safeJoin(dirs.vault, `${file.folder}/${file.name}`), "utf8")),
-        );
-        if (vaultFolderForNoteType(note.type) !== file.folder)
-          throw new Error(`Long-term memory note ${note.id} has type ${note.type} but is stored in ${file.folder}.`);
+      const notes: LtmNote[] = [];
+      for (const note of scan.notes) {
+        if (filter.type && note.type !== filter.type) continue;
         if (filter.status && note.status !== filter.status) continue;
         if (filter.tag && !note.tags.includes(filter.tag)) continue;
         if (
@@ -271,6 +261,36 @@ export class LongTermMemoryStorage {
       }
       return filter.limit === undefined ? notes.sort((a, b) => a.id.localeCompare(b.id)) : notes;
     });
+  }
+  /** Read and validate every vault note in canonical folder/name order. */
+  private async readAllNotesUnlocked(): Promise<LtmVaultScan> {
+    const notes: LtmNote[] = [];
+    const errors: LtmVaultScan["errors"] = [];
+    const dirs = getLongTermMemoryDirectories(this.root);
+    const files = (
+      await Promise.all(
+        LTM_VAULT_FOLDERS.map(async (folder) =>
+          (await readdir(safeJoin(dirs.vault, folder), { withFileTypes: true }))
+            .filter((entry) => entry.isFile() && entry.name.endsWith(".json"))
+            .map((entry) => ({ folder, name: entry.name })),
+        ),
+      )
+    )
+      .flat()
+      .sort((left, right) => left.name.localeCompare(right.name) || left.folder.localeCompare(right.folder));
+    for (const file of files) {
+      try {
+        const note = parseStoredLtmNote(
+          JSON.parse(await readFile(safeJoin(dirs.vault, `${file.folder}/${file.name}`), "utf8")),
+        );
+        if (vaultFolderForNoteType(note.type) !== file.folder)
+          throw new Error(`Long-term memory note ${note.id} has type ${note.type} but is stored in ${file.folder}.`);
+        notes.push(note);
+      } catch (error) {
+        errors.push({ folder: file.folder, error });
+      }
+    }
+    return { notes, errors };
   }
   async getNote(id: string) {
     const wanted = ltmNoteIdSchema.parse(id);
@@ -1348,5 +1368,6 @@ export class LongTermMemoryStorage {
   }
   async cleanup() {
     initialized.delete(resolve(this.root));
+    invalidateLtmVaultSnapshot(this.root);
   }
 }
