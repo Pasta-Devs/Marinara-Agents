@@ -731,6 +731,78 @@ export const slurpContentCampaignStages = fileTable("slurp2_content_campaign_sta
   completedAt: text("completed_at"),
 });
 
+/**
+ * Durable Creator facts: boundaries, interests, plans, promises, circumstances.
+ *
+ * Keyed on the source Character or Persona as well as the Slurp account, because the source is the
+ * identity that owns canon. Not a second character card: only things that change or persist
+ * across Slurp operations belong here. See `shared/src/slp/slp-continuity.ts` for the scopes.
+ */
+export const slurpContinuityFacts = fileTable("slurp2_continuity_facts", {
+  id: text("id").primaryKey(),
+  sourceKind: text("source_kind").notNull(),
+  sourceEntityId: text("source_entity_id").notNull(),
+  creatorAccountId: text("creator_account_id").notNull(),
+  factType: text("fact_type").notNull(),
+  subject: text("subject").notNull().default(""),
+  text: text("text").notNull(),
+  audienceScope: text("audience_scope").notNull(),
+  realityScope: text("reality_scope").notNull(),
+  threadId: text("thread_id"),
+  confidence: text("confidence").notNull().default("1"),
+  salience: text("salience").notNull().default("0.5"),
+  status: text("status").notNull(),
+  source: text("source").notNull(),
+  evidence: text("evidence").notNull().default(""),
+  sourceHash: text("source_hash").notNull().default(""),
+  contribution: text("contribution").notNull(),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+  expiresAt: text("expires_at"),
+});
+
+/** Things that happened to or around a Creator. Same identity and scopes as facts. */
+export const slurpContinuityEvents = fileTable("slurp2_continuity_events", {
+  id: text("id").primaryKey(),
+  sourceKind: text("source_kind").notNull(),
+  sourceEntityId: text("source_entity_id").notNull(),
+  creatorAccountId: text("creator_account_id").notNull(),
+  eventType: text("event_type").notNull(),
+  source: text("source").notNull(),
+  realityScope: text("reality_scope").notNull(),
+  audienceScope: text("audience_scope").notNull(),
+  threadId: text("thread_id"),
+  payload: text("payload").notNull().default("{}"),
+  status: text("status").notNull(),
+  confidence: text("confidence").notNull().default("1"),
+  evidence: text("evidence").notNull().default(""),
+  relatedIds: text("related_ids").notNull().default("[]"),
+  /** Deterministic for system events, so the same thing is never recorded twice. */
+  fingerprint: text("fingerprint").notNull(),
+  contribution: text("contribution").notNull(),
+  occurredAt: text("occurred_at").notNull(),
+  createdAt: text("created_at").notNull(),
+  expiresAt: text("expires_at"),
+});
+
+/** Extracted changes waiting to be applied or reviewed. Nothing here is read by a prompt. */
+export const slurpContinuityProposals = fileTable("slurp2_continuity_proposals", {
+  id: text("id").primaryKey(),
+  creatorAccountId: text("creator_account_id").notNull(),
+  /** `fact` or `event`. */
+  target: text("target").notNull(),
+  /** The candidate record as JSON, validated before it was stored. */
+  candidate: text("candidate").notNull(),
+  risk: text("risk").notNull(),
+  confidence: text("confidence").notNull(),
+  sourceHash: text("source_hash").notNull(),
+  status: text("status").notNull(),
+  reviewer: text("reviewer"),
+  revision: text("revision").notNull().default("1"),
+  createdAt: text("created_at").notNull(),
+  reviewedAt: text("reviewed_at"),
+});
+
 /** One cross-process lease for the free world tick. */
 export const slurpWorldClaims = fileTable("slurp2_world_claims", {
   id: text("id").primaryKey(),

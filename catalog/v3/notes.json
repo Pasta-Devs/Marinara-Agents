@@ -306,6 +306,12 @@
     "slurp2": {
       "versions": [
         {
+          "version": "0.1.29",
+          "date": "2026-09-21",
+          "notes": "- Added the storage for Creator continuity: facts, events, and proposed changes, each marked with who may see it and whether it literally happened.\n- A fan's private detail can never reach a post, and roleplay or game scenes never count as a Creator's real history.\n- Deleting a Creator now also removes their plans, shoots, campaigns, and continuity records.",
+          "highlight": false
+        },
+        {
           "version": "0.1.28",
           "date": "2026-09-21",
           "notes": "- A set now opens a short campaign: the set, then a public teaser that shows a cropped corner of it, then a callback a day later.\n- A campaign step only runs in a slot the Creator would have posted in anyway, never before the step it follows, and never over a post the player directed.\n- Campaign steps that never find a slot expire after four days instead of running late.",
@@ -417,12 +423,6 @@
           "version": "0.1.10",
           "date": "2026-09-20",
           "notes": "- Refined the closed Pulse control into a compact capsule.\n- Replaced the heartbeat mark with a pulse icon and radiating active-work waves.",
-          "highlight": false
-        },
-        {
-          "version": "0.1.9",
-          "date": "2026-09-20",
-          "notes": "- Refined Pulse chrome with a heartbeat icon and active-work pulse state.\n- Moved Pulse quick actions above active and recent work.\n- Reduced the Pulse header copy for a tighter panel.",
           "highlight": false
         }
       ]
