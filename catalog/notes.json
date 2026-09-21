@@ -306,6 +306,12 @@
     "slurp2": {
       "versions": [
         {
+          "version": "0.1.32",
+          "date": "2026-09-21",
+          "notes": "- Added a Continuity tab to each Creator: what they remember, what is waiting for your decision, what happened, and the plans behind recent posts.\n- You can remember or discard anything read from messages, edit or retract a note, and publish a private note.\n- Each note shows where it came from and the words it was taken from.",
+          "highlight": false
+        },
+        {
           "version": "0.1.31",
           "date": "2026-09-21",
           "notes": "- Requests a fan makes in a conversation can now be answered from that conversation: fulfil, tease, delay, decline, count it, or ignore.\n- Fulfil, tease, and delay owe the Creator a post, and the planner posts it before anything else it might have chosen. A kept promise is recorded in the conversation it was made in.\n- Counting a request adds to an anonymous tally under a label you type. The fan and their wording never leave the conversation.\n- Added a way to publish a private continuity note. It creates a new public note and leaves the private one untouched.",
@@ -417,12 +423,6 @@
           "version": "0.1.13",
           "date": "2026-09-20",
           "notes": "- Enriched Pulse task rows with scope, progress, elapsed time, result detail, and clearer status labels.\n- Kept the panel compact with a three-line task presentation.",
-          "highlight": false
-        },
-        {
-          "version": "0.1.12",
-          "date": "2026-09-20",
-          "notes": "- Changed the closed Pulse control to a rectangular signal tile.\n- Pulse icon activity now uses scale only, without opacity animation.",
           "highlight": false
         }
       ]

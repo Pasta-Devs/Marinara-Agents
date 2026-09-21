@@ -18,11 +18,12 @@ import { BackstagePageHeader, SettingAnchor } from "../../modules/settings/SlpSe
 import { SlurpPostGuidanceField } from "../settings/slp-post-guidance-contract";
 import { SlurpCreatorProfileEditor } from "./SlpCreatorProfileEditor";
 import { SlurpCreatorStrategyGroup } from "./SlpCreatorStrategyGroup";
+import { SlurpContinuityPanel } from "./SlpContinuityPanel";
 import { useSlurpCreatorMetrics } from "./slp-creators-hooks";
 import { useSlurpPostGuidance } from "../settings/slp-post-guidance-contract";
 
 const CREATOR_FILTERS: readonly SlpCreatorFilter[] = ["all", "active", "paused", "attention"];
-const CREATOR_TABS: readonly SlpCreatorTab[] = ["profile", "publishing", "images", "messages", "danger"];
+const CREATOR_TABS: readonly SlpCreatorTab[] = ["profile", "publishing", "images", "messages", "continuity", "danger"];
 
 function needsAttention(creator: SlpCreatorManagedStageProfile) {
   return creator.sourceStatus.state === "missing" || creator.sourceStatus.state === "changed";
@@ -442,6 +443,8 @@ export function SlpCreatorsPanel(page: SlpBackstagePageProps) {
           ) : (
             <p className={noteClass}>{t("ui.slurp.settings.creators.messagesWorldRules")}</p>
           ))}
+
+        {tab === "continuity" && <SlurpContinuityPanel creatorAccountId={selectedCreator.id} />}
 
         {tab === "danger" && (
           <div className="space-y-3 rounded-lg p-3 ring-1 ring-inset ring-[var(--slurp-danger)]/30">
