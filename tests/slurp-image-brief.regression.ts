@@ -48,7 +48,7 @@ const generation = slurp2Source(
   "packages/slurp2/src/engine/packages/server/src/slp/features/feed/slp-generation-service.ts",
 );
 assert.match(generation, /allowImagePrompt: askModelForImagePrompt/u);
-assert.match(generation, /const askModelForImagePrompt = imagesEnabled && !briefedImage/u);
+assert.match(generation, /const askModelForImagePrompt = postImages && !briefedImage/u);
 // The response schema and the correction turn must agree with the post call, or a produce-mode
 // retry would demand a field the prompt no longer asks for.
 assert.equal(generation.match(/allowImagePrompt: askModelForImagePrompt/gu)?.length, 2);

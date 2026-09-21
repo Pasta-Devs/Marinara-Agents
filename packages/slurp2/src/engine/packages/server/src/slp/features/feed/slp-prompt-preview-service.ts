@@ -12,7 +12,7 @@ import { resolveCreatorCharacterCanon } from "../../data/creators/slp-source-res
 import { slpCreatorPublicIdentityFor } from "./slp-public-identity.js";
 import { slurpPostVariation, slurpPostVariationInstruction } from "../../modules/feed/slp-post-variation.js";
 import { slurpCameraSourceInstruction, slurpPostCameraSource } from "../../modules/feed/slp-camera-source.js";
-import { slurpContentTypeInstruction, slurpPostContentType } from "../../modules/feed/slp-content-type.js";
+import { slurpContentAxesInstruction, slurpPostAxes } from "../../modules/feed/slp-content-axes.js";
 import { slurpProductionInstruction, slurpProductionProfile } from "../../modules/creators/slp-production-profile.js";
 import type { SlurpPromptId } from "../../base/prompting/slp-prompt-blocks.js";
 
@@ -68,7 +68,11 @@ export async function previewSlurpPromptBlocks(
     companyCanHoldCamera: variation.companyCanHoldCamera,
     prefers: production.prefers,
   });
-  const contentType = slurpPostContentType(account.id, sequence, { story: variation.story, teaser: false });
+  const axes = slurpPostAxes(account.id, sequence, {
+    story: variation.story,
+    teaser: false,
+    images: account.settings.scheduler.autoPosting?.imagesEnabled === true,
+  });
 
   const blocks = buildSlurpPostBlocks({
     account,
@@ -83,7 +87,7 @@ export async function previewSlurpPromptBlocks(
     generationGuidance: settings.generationGuidance,
     postMaxLength: settings.postMaxLength,
     variationInstruction: slurpPostVariationInstruction(variation, slurpCameraSourceInstruction(camera)),
-    contentTypeInstruction: slurpContentTypeInstruction(contentType),
+    contentTypeInstruction: slurpContentAxesInstruction(axes),
     productionInstruction: slurpProductionInstruction(production),
     promptBlocks: settings.promptBlocks,
     promptInstructions: settings.promptInstructions,

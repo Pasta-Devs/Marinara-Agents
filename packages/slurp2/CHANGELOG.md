@@ -1,5 +1,11 @@
 # Slurp Remastered release notes
 
+## 0.1.24 — 2026-09-21
+
+- Split what a post is for from how it goes out. A Story or a plain text post can now also be a thank-you, a teaser, or a request.
+- Some posts now go out as text on purpose, even when pictures are available. Schedule and business notes lean on text; sets never do.
+- A text post by choice no longer picks up a gallery picture as a stand-in.
+
 ## 0.1.23 — 2026-09-21
 
 - Removed the Classic generation mode. Slurp now runs one posting engine.

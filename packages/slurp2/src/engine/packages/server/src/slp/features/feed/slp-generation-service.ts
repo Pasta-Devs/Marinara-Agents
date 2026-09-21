@@ -83,7 +83,7 @@ import {
 } from "../../base/prompting/slp-prompt-blocks.js";
 import { slurpCameraSourceInstruction, slurpPostCameraSource } from "../../modules/feed/slp-camera-source.js";
 import { slurpImageBrief } from "../../modules/feed/slp-image-brief.js";
-import { slurpContentTypeInstruction, slurpPostContentType } from "../../modules/feed/slp-content-type.js";
+import { slurpContentAxesInstruction, slurpPostAxes } from "../../modules/feed/slp-content-axes.js";
 import { slurpShootInstruction } from "../../modules/feed/slp-shoot.js";
 import { findReusableSlurpShoot, openSlurpShoot, useSlurpShoot } from "../../data/feed/slp-shoot-storage.js";
 import {
@@ -271,7 +271,7 @@ export async function generateCreatorPost(
   // A Story is a picture with a line under it, so a run that produces no image publishes an
   // ordinary post instead. The flag is only honoured on the path that commits an image below.
   // A Story the player asked for outranks the rotation, which never fires on a directed post.
-  // Hoisted above the prompt build because the content type below needs it; computing it twice
+  // Hoisted above the prompt build because the axes below need it; computing it twice
   // would let the two copies disagree about whether this post is a Story.
   const storyVariation =
     ((input.allowStory !== false && variation?.story === true && settings.storyImagesEnabled) ||
@@ -280,32 +280,35 @@ export async function generateCreatorPost(
   // Same slot the scheduler used to choose free access, so only its teasers read as one.
   const isTeaser =
     input.request.access === "public" && !directed && slurpTeaserPost(account.id, sequence, settings.teaserRate);
-  // What this post is for, as opposed to what it is about. Story and teaser are passed in rather
-  // than chosen again, so the three decisions cannot contradict each other.
-  const contentType = !directed
-    ? slurpPostContentType(account.id, sequence, { story: storyVariation, teaser: isTeaser })
+  // What this post is for, as opposed to what it is about, and how it goes out. Story and teaser
+  // are passed in rather than chosen again, so the decisions cannot contradict each other.
+  const axes = !directed
+    ? slurpPostAxes(account.id, sequence, { story: storyVariation, teaser: isTeaser, images: imagesEnabled })
     : null;
+  // Text-only by intent, not by failure: no brief, no image call, and no gallery stand-in.
+  const textOnly = axes?.delivery === "text_only";
+  const postImages = imagesEnabled && !textOnly;
   // A callback continues something already shot. Drawing from a real earlier shoot is what lets a
   // caption say "one more from yesterday" and have the picture actually match, instead of putting
   // the Creator back in yesterday's room with no explanation.
   const shoot =
-    contentType === "callback" ? await findReusableSlurpShoot(db, account.id, input.generatedAt ?? new Date()) : null;
+    axes?.intent === "callback" ? await findReusableSlurpShoot(db, account.id, input.generatedAt ?? new Date()) : null;
   // A reused shoot keeps its own camera. The rotation's choice for today does not apply to a
   // picture that was taken two days ago.
   const camera = shoot?.cameraSource ?? cameraSource;
   const cameraInstruction = camera ? slurpCameraSourceInstruction(camera) : undefined;
   // The shoot rides in the content-type block rather than a block of its own: it is part of what
   // this post is for, and a second block would be dead for every post that is not a callback.
-  const contentTypeInstruction = contentType
-    ? [slurpContentTypeInstruction(contentType), shoot ? slurpShootInstruction(shoot) : ""].filter(Boolean).join("\n")
+  const contentTypeInstruction = axes
+    ? [slurpContentAxesInstruction(axes), shoot ? slurpShootInstruction(shoot) : ""].filter(Boolean).join("\n")
     : undefined;
 
   // The post call writes text only. Asking one call for the caption and the
   // picture together is what made every image an illustration of its own caption, so the brief is
   // assembled from the situation instead and the caption never reaches it. A directed post has no
   // variation and therefore no brief, so it keeps the old single-call behaviour.
-  const briefedImage = Boolean(imagesEnabled && cameraInstruction && variation);
-  const askModelForImagePrompt = imagesEnabled && !briefedImage;
+  const briefedImage = Boolean(postImages && cameraInstruction && variation);
+  const askModelForImagePrompt = postImages && !briefedImage;
   // The Creator's own state reached her direct messages and stopped there, so the feed was
   // written by somebody with no mood, no energy and no memory of last night. A failure here must
   // never cost a post: an unremarkable day is the same as no block at all.
@@ -440,7 +443,7 @@ export async function generateCreatorPost(
   // after persistence because a run that fails on the image still produced the shoot; a shoot left
   // behind by a run that throws later is pruned with the rest.
   if (!input.previewOnly) {
-    if (contentType === "set" && camera && variation) {
+    if (axes?.intent === "set" && camera && variation) {
       await openSlurpShoot(db, {
         creatorAccountId: account.id,
         place: variation.place,
@@ -487,7 +490,7 @@ export async function generateCreatorPost(
           effortInstruction: slurpEffortInstruction(slurpPostEffort(production, sequence)),
         })
       : generated.imagePrompt;
-  const draftImagePrompt = imagesEnabled
+  const draftImagePrompt = postImages
     ? protectCreatorGeneratedIdentity(
         imageDraft && arcImageLine ? `${imageDraft}\n${arcImageLine}` : imageDraft,
         disclosureMode,
@@ -519,6 +522,8 @@ export async function generateCreatorPost(
     projectChapter,
     metadata: {
       noodlerContentFormat: format,
+      // Persisted so later planning, the scheduled publisher, and the feed read the same decision.
+      ...(axes ? { contentIntent: axes.intent, contentDelivery: axes.delivery } : {}),
       // Stamped at creation like a manual post, so a generated locked post honours the configured
       // unlock price and keeps it across refreshes and edits instead of falling back to 1.
       ...(input.request.access === "locked"
@@ -588,7 +593,7 @@ export async function generateCreatorPost(
   // A post that ends without a generated picture can still show one from the source character's own
   // gallery, when the player allows it. Best effort: no gallery image is the same as none attached.
   const galleryFallback = async (): Promise<{ imageUrl?: string; metadata?: Record<string, unknown> }> => {
-    if (!settings.allowGalleryImageAttachments || linkedPublicAccount?.kind !== "character") return {};
+    if (textOnly || !settings.allowGalleryImageAttachments || linkedPublicAccount?.kind !== "character") return {};
     const attachment = await pickGalleryAttachmentForAccount({
       account: linkedPublicAccount,
       chats: createChatsStorage(db),

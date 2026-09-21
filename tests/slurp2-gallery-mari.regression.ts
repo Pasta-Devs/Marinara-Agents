@@ -15,7 +15,7 @@ const settingsView = slurp2BackstageSource();
 // Gallery images are a fallback: gated on the setting and a character source, never an error.
 assert.match(
   generation,
-  /if \(!settings\.allowGalleryImageAttachments \|\| linkedPublicAccount\?\.kind !== "character"\) return \{\};/u,
+  /if \(textOnly \|\| !settings\.allowGalleryImageAttachments \|\| linkedPublicAccount\?\.kind !== "character"\)\s*return \{\};/u,
 );
 assert.match(generation, /if \(!draftImagePrompt\) return \{ post: await persist\(await galleryFallback\(\)\)/u);
 // Every no-picture outcome tries the gallery first: no connection, review failure, generation failure.
@@ -31,7 +31,7 @@ assert.match(settingsView, /update\("allowGalleryImageAttachments", value\)/u);
 const reserve = read("server/src/services/slurp/slurp-reserve.operation.ts");
 assert.match(
   reserve,
-  /settings\.allowGalleryImageAttachments &&\s*typeof payload\.metadata\.noodlerMediaPath !== "string" &&\s*payload\.metadata\.imageGenerationDeferred !== true/u,
+  /settings\.allowGalleryImageAttachments &&\s*payload\.metadata\.contentDelivery !== "text_only" &&\s*typeof payload\.metadata\.noodlerMediaPath !== "string" &&\s*payload\.metadata\.imageGenerationDeferred !== true/u,
 );
 assert.match(reserve, /galleryAttachmentImageUrl: attachment\.imageUrl/u);
 assert.match(storage, /imageUrl: hasMedia \? slpCreatorPostMediaUrl\(postId\) : galleryImageUrl,/u);
