@@ -461,3 +461,74 @@ export async function promoteSlurpContinuityFact(
   );
   return derived ?? "not_promotable";
 }
+
+/** Everything the editor shows for one Creator: facts, recent events, and pending proposals. */
+export async function listSlurpContinuityForEditor(
+  db: DB,
+  creatorAccountId: string,
+  at = new Date(),
+): Promise<{
+  facts: SlurpContinuityFact[];
+  events: SlurpContinuityEvent[];
+  proposals: {
+    id: string;
+    target: "fact" | "event";
+    candidate: Record<string, unknown>;
+    risk: string;
+    confidence: number;
+    createdAt: string;
+  }[];
+}> {
+  const { facts, events } = await listSlurpContinuityFor(db, creatorAccountId, "creator_editor", { at, limit: 200 });
+  const rows = await db
+    .select()
+    .from(slurpContinuityProposals)
+    .where(
+      and(
+        eq(slurpContinuityProposals.creatorAccountId, creatorAccountId),
+        eq(slurpContinuityProposals.status, "pending"),
+      ),
+    );
+  return {
+    facts,
+    events,
+    proposals: rows
+      .map((row) => ({
+        id: String(row.id),
+        target: String(row.target) === "event" ? ("event" as const) : ("fact" as const),
+        candidate: parseJson<Record<string, unknown>>(row.candidate, {}),
+        risk: String(row.risk),
+        confidence: number(row.confidence, 0),
+        createdAt: String(row.createdAt),
+      }))
+      .sort((left, right) => right.createdAt.localeCompare(left.createdAt)),
+  };
+}
+
+/**
+ * Approve or reject one proposal. Approving writes the record the extractor proposed, as a manual
+ * contribution: a person decided it. Rejecting closes it so the same batch cannot re-raise it.
+ */
+export async function reviewSlurpContinuityProposal(
+  db: DB,
+  id: string,
+  decision: "approve" | "reject",
+  at = new Date(),
+): Promise<SlurpContinuityFact | "not_found" | "rejected" | "not_pending"> {
+  const [row] = await db.select().from(slurpContinuityProposals).where(eq(slurpContinuityProposals.id, id));
+  if (!row) return "not_found";
+  if (String(row.status) !== "pending") return "not_pending";
+  await db
+    .update(slurpContinuityProposals)
+    .set({ status: decision === "approve" ? "applied" : "rejected", reviewedAt: at.toISOString(), reviewer: "user" })
+    .where(eq(slurpContinuityProposals.id, id));
+  if (decision === "reject") return "rejected";
+  const candidate = parseJson<SlurpContinuityFactInput & { status?: SlurpContinuityStatus }>(
+    row.candidate,
+    null as never,
+  );
+  if (!candidate?.text) return "not_found";
+  return (
+    (await createSlurpContinuityFact(db, { ...candidate, status: "active", contribution: "manual" }, at)) ?? "not_found"
+  );
+}

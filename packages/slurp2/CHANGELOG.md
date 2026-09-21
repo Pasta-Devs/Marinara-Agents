@@ -1,5 +1,11 @@
 # Slurp Remastered release notes
 
+## 0.1.32 — 2026-09-21
+
+- Added a Continuity tab to each Creator: what they remember, what is waiting for your decision, what happened, and the plans behind recent posts.
+- You can remember or discard anything read from messages, edit or retract a note, and publish a private note.
+- Each note shows where it came from and the words it was taken from.
+
 ## 0.1.31 — 2026-09-21
 
 - Requests a fan makes in a conversation can now be answered from that conversation: fulfil, tease, delay, decline, count it, or ignore.
