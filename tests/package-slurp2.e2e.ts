@@ -301,16 +301,16 @@ test.describe("standalone Slurp package", () => {
 
     await slurp.getByRole("button", { name: /^Creator posts/u }).click();
     await expect(slurp.getByRole("heading", { level: 2, name: "Creator posts", exact: true })).toBeVisible();
-    const pipeline = slurp.locator("ol:has(button[aria-expanded])");
-    await expect(pipeline.locator("button[aria-expanded]").first()).toBeVisible();
-    await expect(pipeline.locator("> li").first().locator("p").last()).not.toBeEmpty();
-    await pipeline.locator("button[aria-expanded]").first().click();
-    await expect(slurp.getByRole("button", { name: "Apply to draft", exact: true })).toBeVisible();
-    expect(previewRequests).toEqual([]);
+    // Every block is readable and editable in place: no open or apply step.
+    const pipeline = slurp.locator("ol:has(textarea)");
+    await expect(pipeline.locator("textarea").first()).toBeVisible();
+    await expect(pipeline.locator("> li").first().locator("pre, textarea").first()).not.toBeEmpty();
+    expect(previewRequests.filter((url) => url.endsWith("/generate-preview"))).toEqual([]);
 
     if (testInfo.project.name.includes("mobile")) {
       await slurp.getByRole("button", { name: "Result", exact: true }).click();
       await expect(slurp.getByText("Try your changes", { exact: true })).toBeVisible();
+      await slurp.getByRole("button", { name: "Sample post", exact: true }).click();
       await expect(slurp.getByRole("button", { name: "Run preview", exact: true })).toBeVisible();
     } else {
       await expect(slurp.getByRole("navigation", { name: "Recipe blocks" })).toBeVisible();

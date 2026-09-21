@@ -172,10 +172,15 @@ assert.match(settingsRoutes, /noodlerPostGuide: body\.data\.direction \|\| undef
 assert.match(promptStudioSource, /SlpPromptPipeline/u);
 assert.match(promptStudioSource, /SlpPromptPreviewInspector/u);
 assert.match(promptStudioSource, /Compare with current/u);
-assert.match(promptStudioSource, /Apply to draft/u);
+// Edits land in the draft as they are typed; the draft bar is the one apply step.
+assert.doesNotMatch(promptStudioSource, /Apply to draft/u);
 assert.match(promptStudioSource, /overviewContent/u);
-assert.match(promptStudioSource, /const resolvedText =/u);
-assert.match(promptStudioSource, /!selected &&[\s\S]*?resolvedText/u);
+// Every block is readable and editable in place: no clamp, no open-then-apply step, and runtime
+// blocks show what the preview Creator actually gets, kept current without a button.
+assert.match(promptStudioSource, /const shownText = liveText \?\? sharedInstruction\?\.text \?\? text;/u);
+assert.doesNotMatch(promptStudioSource, /line-clamp-3 whitespace-pre-wrap/u);
+assert.match(promptStudioSource, /useSlurpLivePromptBlocks\(liveInput\)/u);
+assert.match(promptStudioSource, /liveCompiled=\{live\.data\?\.supported \? live\.data\.compiledText : undefined\}/u);
 assert.match(backstageKitSource, /whitespace-pre-wrap break-words[\s\S]*?\{value\}/u);
 assert.doesNotMatch(backstageKitSource, /line-clamp-3 whitespace-pre-line/u);
 

@@ -1,9 +1,9 @@
 import { ArrowLeft, ChevronRight, RotateCcw, Search, SlidersHorizontal } from "lucide-react";
-import { useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import type { SlurpPromptBlockOverride, SlurpReusablePromptInstruction } from "../../base/state/slp-state-types";
 import type { SlurpPromptDefinition } from "./slp-settings-contract";
-import { useSlurpPromptBlocks } from "./slp-settings-hooks";
+import { useSlurpLivePromptBlocks, useSlurpPromptBlocks } from "./slp-settings-hooks";
 import { useCreatorAccounts } from "../creators/slp-creators-contract";
 import { SlpPromptPipeline } from "./SlpPromptPipeline";
 import { SlpPromptPreviewInspector } from "./SlpPromptPreviewInspector";
@@ -64,6 +64,26 @@ export function SlurpPromptBlockBuilder({
         : prompts,
     [normalizedQuery, prompts],
   );
+
+  // Typing must not fire a request per keystroke; the live text catches up once the draft settles.
+  const [liveInput, setLiveInput] = useState<Parameters<typeof useSlurpLivePromptBlocks>[0]>(null);
+  useEffect(() => {
+    const next =
+      selectedPrompt && activeCreatorId
+        ? {
+            promptId: selectedPrompt.id,
+            creatorAccountId: activeCreatorId,
+            promptBlocks: value,
+            promptInstructions: instructions,
+          }
+        : null;
+    const timer = window.setTimeout(() => setLiveInput(next), 450);
+    return () => window.clearTimeout(timer);
+  }, [selectedPrompt, activeCreatorId, value, instructions]);
+  const live = useSlurpLivePromptBlocks(liveInput);
+  const liveText = live.data?.supported
+    ? Object.fromEntries(live.data.blocks.map((block) => [block.id, block.text]))
+    : undefined;
 
   const updateLayout = (prompt: SlurpPromptDefinition, layout: SlurpPromptBlockOverride[]) => {
     onChange({ ...value, [prompt.id]: layout });
@@ -192,25 +212,14 @@ export function SlurpPromptBlockBuilder({
             }}
           />
           <div className={`${mobileView === "preview" ? "hidden" : "block"} min-w-0 xl:block`}>
-            {selectedBlockId && (
-              <button
-                type="button"
-                onClick={() => setSelectedBlockId(null)}
-                className="mb-3 inline-flex min-h-10 items-center gap-2 rounded-lg px-3 text-xs font-bold text-[var(--noodle-accent)] ring-1 ring-inset ring-[var(--noodle-accent)]/35 lg:hidden"
-              >
-                <ArrowLeft size={14} className="rtl:rotate-180" aria-hidden="true" />
-                {t("ui.slurp.settings.prompts.backToBlocks", { defaultValue: "Back to blocks" })}
-              </button>
-            )}
             <SlpPromptPipeline
               prompt={selectedPrompt}
               layout={layout}
               instructions={instructions}
               selectedBlockId={selectedBlockId}
-              onSelectBlock={setSelectedBlockId}
+              liveText={liveText}
               onUpdate={(next) => updateLayout(selectedPrompt, next)}
               onMove={(index, offset) => moveBlock(selectedPrompt, index, offset)}
-              focusSelectedOnSmallScreens
             />
           </div>
           <div className={`${mobileView === "preview" ? "block" : "hidden"} min-w-0 xl:block`}>
@@ -223,6 +232,7 @@ export function SlurpPromptBlockBuilder({
               currentBlocks={savedValue}
               draftInstructions={instructions}
               currentInstructions={savedInstructions}
+              liveCompiled={live.data?.supported ? live.data.compiledText : undefined}
             />
           </div>
         </div>
@@ -346,7 +356,8 @@ function RecipeCard({
   onOpen: () => void;
 }) {
   const { t } = useTranslation();
-  const count = completePromptLayout(prompt, value).length;
+  const layout = completePromptLayout(prompt, value);
+  const count = layout.length;
   const customCount = promptCustomizationCount(prompt, value);
   return (
     <button
@@ -362,6 +373,22 @@ function RecipeCard({
           <span className="block text-sm font-bold text-balance">{promptName(prompt.id)}</span>
           <span className="mt-1 block text-xs leading-5 text-[var(--slurp-muted)] text-pretty">
             {promptPurpose(prompt.id)}
+          </span>
+          {/* The recipe at a glance: every block in order, custom ones marked, disabled ones struck. */}
+          <span className="mt-2 flex flex-wrap gap-1" aria-hidden="true">
+            {layout.map((entry) => {
+              const block = blockDefinition(prompt, entry.id);
+              const custom = entry.text !== undefined || entry.instructionId !== undefined;
+              const off = block.optional && entry.enabled === false;
+              return (
+                <span
+                  key={entry.id}
+                  className={`rounded-md px-1.5 py-0.5 text-[0.65rem] font-semibold ring-1 ring-inset ${custom ? "text-[var(--noodle-accent)] ring-[var(--noodle-accent)]/40" : "text-[var(--slurp-muted)] ring-[var(--slurp-outline)]"} ${off ? "line-through opacity-50" : ""}`}
+                >
+                  {blockName(entry.id)}
+                </span>
+              );
+            })}
           </span>
         </span>
         <span className="mt-2 flex flex-wrap items-center gap-2 text-xs font-semibold sm:mt-0 sm:justify-end">

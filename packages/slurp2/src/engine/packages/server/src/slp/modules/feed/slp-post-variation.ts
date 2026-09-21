@@ -42,8 +42,7 @@ import { slurpWeightedPick } from "./slp-weighted.js";
  *
  * These weights say what each entry should actually be worth. Most of the time a person is where
  * they usually are, doing something unremarkable, by themselves and fine about it.
- *
- * Classic mode keeps the rotations exactly as they shipped. Produce mode uses these weights.
+
  */
 const PLACE_WEIGHTS = [30, 5, 12, 9, 26, 18] as const;
 const MOMENT_WEIGHTS = [24, 20, 15, 8, 14, 12, 7] as const;
@@ -264,7 +263,7 @@ export function slurpPostVariation(
 /**
  * The variation as prompt text. One block, so the caller does not assemble it in three places.
  *
- * `cameraInstruction` is produce mode's replacement for the `Framing` line. The two are mutually
+ * `cameraInstruction` is the replacement for the `Framing` line. The two are mutually
  * exclusive on purpose: `FRAMINGS` hands out positions like "from above, looking down" with nothing
  * in the scene to justify them, which is the unexplained-cameraman problem `slp-camera-source.ts`
  * exists to fix. Emitting both would reintroduce it underneath the fix.

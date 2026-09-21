@@ -17,6 +17,7 @@ export function SlpPromptPreviewInspector({
   currentBlocks,
   draftInstructions,
   currentInstructions,
+  liveCompiled,
 }: {
   prompt: SlurpPromptDefinition;
   creatorOptions: CreatorOption[];
@@ -26,9 +27,12 @@ export function SlpPromptPreviewInspector({
   currentBlocks: Record<string, SlurpPromptBlockOverride[]>;
   draftInstructions: SlurpReusablePromptInstruction[];
   currentInstructions: SlurpReusablePromptInstruction[];
+  /** The draft compiled for the preview Creator, kept current by the studio. */
+  liveCompiled?: string;
 }) {
   const { t } = useTranslation();
-  const [view, setView] = useState<"result" | "prompt">("result");
+  // The compiled prompt is free and always current, so it is what opens first.
+  const [view, setView] = useState<"result" | "prompt">("prompt");
   const [access, setAccess] = useState<"public" | "locked">("public");
   const [format, setFormat] = useState<"caption" | "announcement" | "long_form">("caption");
   const [direction, setDirection] = useState("");
@@ -46,7 +50,7 @@ export function SlpPromptPreviewInspector({
     resultPreview.reset();
     currentPreview.reset();
     setPromptCopied(false);
-    setView(prompt.id === "post" ? "result" : "prompt");
+    setView("prompt");
     // Mutation handles are stable and including them resets on every render.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [prompt.id, activeCreatorId]);
@@ -89,7 +93,7 @@ export function SlpPromptPreviewInspector({
 
   const pending = promptPreview.isPending || resultPreview.isPending;
   const error = promptPreview.error ?? resultPreview.error;
-  const compiledPrompt = resultPreview.data?.compiledPrompt ?? promptPreview.data?.compiledText ?? "";
+  const compiledPrompt = liveCompiled ?? promptPreview.data?.compiledText ?? resultPreview.data?.compiledPrompt ?? "";
 
   return (
     <aside
@@ -191,7 +195,7 @@ export function SlpPromptPreviewInspector({
           onClick={() => setView("result")}
           className={`min-h-10 rounded-md px-3 text-xs font-bold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] disabled:opacity-40 ${view === "result" ? "bg-[var(--slurp-surface)] shadow-sm" : "text-[var(--slurp-muted)]"}`}
         >
-          {t("ui.slurp.settings.prompts.previewResultTab", { defaultValue: "Result" })}
+          {t("ui.slurp.settings.prompts.samplePostTab", { defaultValue: "Sample post" })}
         </button>
         <button
           type="button"
@@ -203,19 +207,21 @@ export function SlpPromptPreviewInspector({
         </button>
       </div>
 
-      <button
-        type="button"
-        disabled={!activeCreatorId || pending}
-        onClick={runPreview}
-        className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-lg bg-[var(--noodle-accent)] px-4 text-sm font-black text-zinc-950 transition-transform active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] disabled:opacity-45 motion-reduce:transition-none motion-reduce:active:scale-100"
-      >
-        {view === "result" ? <Play size={16} aria-hidden="true" /> : <Code2 size={16} aria-hidden="true" />}
-        {pending
-          ? t("ui.slurp.settings.prompts.previewRunning", { defaultValue: "Running preview…" })
-          : view === "result"
-            ? t("ui.slurp.settings.prompts.runPreview", { defaultValue: "Run preview" })
-            : t("ui.slurp.settings.prompts.inspectPrompt", { defaultValue: "Compile prompt" })}
-      </button>
+      {(view === "result" || liveCompiled === undefined) && (
+        <button
+          type="button"
+          disabled={!activeCreatorId || pending}
+          onClick={runPreview}
+          className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-lg bg-[var(--noodle-accent)] px-4 text-sm font-black text-zinc-950 transition-transform active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] disabled:opacity-45 motion-reduce:transition-none motion-reduce:active:scale-100"
+        >
+          {view === "result" ? <Play size={16} aria-hidden="true" /> : <Code2 size={16} aria-hidden="true" />}
+          {pending
+            ? t("ui.slurp.settings.prompts.previewRunning", { defaultValue: "Running preview…" })
+            : view === "result"
+              ? t("ui.slurp.settings.prompts.runPreview", { defaultValue: "Run preview" })
+              : t("ui.slurp.settings.prompts.inspectPrompt", { defaultValue: "Compile prompt" })}
+        </button>
+      )}
 
       <div role="status" aria-live="polite" className="sr-only">
         {pending ? t("ui.slurp.settings.prompts.previewRunning", { defaultValue: "Running preview…" }) : ""}

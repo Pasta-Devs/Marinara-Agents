@@ -89,8 +89,6 @@ export type SlurpPostPromptInput = {
    * `slurp-post-guidance.ts`. Absent only for a caller that does not know the access yet.
    */
   accessInstruction?: string;
-  /** A few long-term notes from the Creator's most active thread. Absent when there are none. */
-  fanMemory?: string[];
   /** The project this post continues, with that project's own recent posts. Absent for a loose post. */
   project?: { project: SlurpProject; posts: SlpCreatorManagedPost[] };
   generatedAt?: Date;
@@ -297,16 +295,6 @@ export function buildNoodlerPostMessages(input: SlurpPostPromptInput): ChatMessa
               .reverse()
               .map((post) => `${post.title ? `${protect(post.title)} — ` : ""}${protect(post.content)}`),
           }),
-        ]
-      : []),
-    ...(input.fanMemory?.length
-      ? [
-          "",
-          "# What you remember about the people who talk to you",
-          // The feed used to have no memory of anybody, so a Creator who had been told something
-          // in a DM for weeks still posted like a stranger.
-          "These are private things you were told in direct messages. They may inspire what you post about, but never name the person, quote them, or repeat a private detail in public.",
-          ...input.fanMemory.map((note) => `- ${protect(note)}`),
         ]
       : []),
     ...(input.request.noodlerPostGuide ? ["", "# Post direction", protect(input.request.noodlerPostGuide)] : []),
