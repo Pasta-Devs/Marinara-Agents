@@ -286,7 +286,7 @@ export async function generateCreatorPost(
     input.request.access === "public" && !directed && slurpTeaserPost(account.id, sequence, settings.teaserRate);
   // What this post is for, as opposed to what it is about, and how it goes out. Story and teaser
   // are passed in rather than chosen again, so the decisions cannot contradict each other.
-  const { axes, shoot, reusedMedia, reusedSource, opportunity } = await planSlurpPost(db, {
+  const { axes, shoot, reusedMedia, reusedSource, opportunity, demandTopic } = await planSlurpPost(db, {
     account,
     request: input.request,
     strategy,
@@ -311,7 +311,14 @@ export async function generateCreatorPost(
   // The shoot rides in the content-type block rather than a block of its own: it is part of what
   // this post is for, and a second block would be dead for every post that is not a callback.
   const contentTypeInstruction = axes
-    ? [slurpContentAxesInstruction(axes), shoot ? slurpShootInstruction(shoot) : ""].filter(Boolean).join("\n")
+    ? [
+        slurpContentAxesInstruction(axes),
+        shoot ? slurpShootInstruction(shoot) : "",
+        // A count under a label the Creator typed. Never a fan, never their words.
+        demandTopic ? `Several subscribers have asked for: ${demandTopic}. Do not name or quote anyone.` : "",
+      ]
+        .filter(Boolean)
+        .join("\n")
     : undefined;
 
   // The post call writes text only. Asking one call for the caption and the

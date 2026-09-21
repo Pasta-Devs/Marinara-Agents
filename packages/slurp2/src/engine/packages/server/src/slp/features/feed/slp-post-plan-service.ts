@@ -10,7 +10,15 @@ import type { SlpCreatorGenerationRequest } from "../../../../../shared/src/slp/
 import { slurpOnlyIntent, slurpPostAxes, slurpReuseDelivery } from "../../modules/feed/slp-content-axes.js";
 import type { SlurpCreatorStrategy } from "../../modules/creators/slp-creator-strategy.js";
 import { findReusableSlurpShoot } from "../../data/feed/slp-shoot-storage.js";
-import { completeSlurpOpportunity, planSlurpOpportunity } from "../../data/feed/slp-opportunity-storage.js";
+import {
+  claimSlurpPromise,
+  completeSlurpOpportunity,
+  findDueSlurpPromise,
+  planSlurpOpportunity,
+} from "../../data/feed/slp-opportunity-storage.js";
+import { topSlurpDemandTrend } from "../../data/feed/slp-demand-storage.js";
+import { eq } from "../../../db/file-query.js";
+import { slurpContinuityEvents } from "../../../db/schema/slurp.js";
 import { findSlurpReuse, loadSlurpReuse } from "../media/slp-media-contract.js";
 import { slurpCampaignStageIntent, slurpNextCampaignStage } from "../../modules/feed/slp-campaign.js";
 import {
@@ -63,17 +71,31 @@ export async function planSlurpPost(
   // post: the direction says what it is about, the purpose says what it is for. It never touches
   // the saved strategy. An image the player asked for is honoured rather than redrawn as text.
   const chosen = request.contentIntent;
+  // A promise the Creator made in a thread comes first among automatic reasons to post: it was
+  // made to a person. It still never outranks the player's own direction or purpose.
+  const promise =
+    !directed && !chosen && !previewOnly
+      ? await findDueSlurpPromise(db, account.id, { at, access: request.access ?? "public" }).catch(
+          (error: unknown) => {
+            logger.warn(error, "[slurp] Could not read promises; this post is planned on its own");
+            return null;
+          },
+        )
+      : null;
   // A due campaign stage takes an undirected slot the same way a chosen purpose would. It never
   // outranks the player: a directed or purpose-picked post leaves the campaign waiting.
   const stages =
-    !directed && !chosen && !previewOnly
+    !directed && !chosen && !promise && !previewOnly
       ? await listOpenSlurpCampaignStages(db, account.id, at).catch((error: unknown) => {
           logger.warn(error, "[slurp] Could not read campaigns; this post is planned on its own");
           return [];
         })
       : [];
   const stage = slurpNextCampaignStage(stages, { at, access: request.access ?? "public" });
-  const forced = chosen ?? (stage ? slurpCampaignStageIntent(stage.kind) : undefined);
+  const forced =
+    chosen ??
+    (promise?.intent === "request" || promise?.intent === "teaser" ? promise.intent : undefined) ??
+    (stage ? slurpCampaignStageIntent(stage.kind) : undefined);
   const drawn =
     !directed || forced
       ? slurpPostAxes(account.id, sequence, {
@@ -136,24 +158,37 @@ export async function planSlurpPost(
   const axes = reuseKind && !reusedMedia ? drawnAxes : reusedAxes;
   // The decision is durable before the model is called, so a run that dies between the two does
   // not lose it and a retry repeats it instead of drawing again. A preview decides nothing.
+  const workflow = axes?.delivery === "text_only" ? "text_only" : reusedMedia ? "reuse_media" : "publish";
   const opportunity =
-    axes && !previewOnly
-      ? await planSlurpOpportunity(db, {
-          creatorAccountId: account.id,
+    axes && !previewOnly && promise
+      ? // The promise row is the plan: claiming it keeps the promise and the post it produced as one
+        // record, so a kept promise can be traced back to the request it answered.
+        await claimSlurpPromise(db, promise.id, {
           slotId: slotId ?? null,
-          sequence,
-          workflow: axes.delivery === "text_only" ? "text_only" : reusedMedia ? "reuse_media" : "publish",
-          intent: axes.intent,
+          workflow,
           delivery: axes.delivery,
           access: request.access ?? "",
-          at: at,
-          dueAt: dueAt ?? null,
         }).catch((error: unknown) => {
-          // A post must never fail over planner bookkeeping.
-          logger.warn(error, "[slurp] Could not record a content plan; the post stands on its own");
+          logger.warn(error, "[slurp] Could not claim a promise; it stays open for a later slot");
           return null;
         })
-      : null;
+      : axes && !previewOnly
+        ? await planSlurpOpportunity(db, {
+            creatorAccountId: account.id,
+            slotId: slotId ?? null,
+            sequence,
+            workflow,
+            intent: axes.intent,
+            delivery: axes.delivery,
+            access: request.access ?? "",
+            at: at,
+            dueAt: dueAt ?? null,
+          }).catch((error: unknown) => {
+            // A post must never fail over planner bookkeeping.
+            logger.warn(error, "[slurp] Could not record a content plan; the post stands on its own");
+            return null;
+          })
+        : null;
   // Campaign bookkeeping, never allowed to cost the post. A stage this plan runs is claimed by it; a
   // set planned outside a campaign opens one, with itself as the first, already claimed stage.
   if (opportunity) {
@@ -166,7 +201,45 @@ export async function planSlurpPost(
       logger.warn(error, "[slurp] Could not update a campaign; the post stands on its own");
     }
   }
-  return { axes, shoot, reusedMedia, reusedSource, opportunity };
+  // Anonymous demand: when this post answers "somebody asked", the most-asked topic can say what.
+  // A promised post never gets it: its request is private to one thread.
+  const demand =
+    axes?.intent === "request" && !promise && !previewOnly
+      ? await topSlurpDemandTrend(db, account.id, at).catch(() => null)
+      : null;
+  return { axes, shoot, reusedMedia, reusedSource, opportunity, demandTopic: demand?.topic ?? null };
+}
+
+/**
+ * A promise was kept: record it in the thread it was made in, once. Called wherever a plan
+ * completes, so a promise kept by a scheduled post is recorded as surely as a direct one.
+ */
+export async function recordSlurpPromiseKept(
+  db: DB,
+  opportunity: Pick<SlurpContentOpportunity, "id" | "sourceEventId">,
+  input: { postId?: string | null; at: Date },
+): Promise<void> {
+  if (!opportunity.sourceEventId) return;
+  const [source] = await db
+    .select()
+    .from(slurpContinuityEvents)
+    .where(eq(slurpContinuityEvents.id, opportunity.sourceEventId));
+  if (!source?.threadId) return;
+  await recordSlurpContinuityEvent(db, {
+    sourceKind: String(source.sourceKind),
+    sourceEntityId: String(source.sourceEntityId),
+    creatorAccountId: String(source.creatorAccountId),
+    eventType: "promise_kept",
+    source: "slurp_post",
+    realityScope: "slurp",
+    audienceScope: "thread_private",
+    threadId: String(source.threadId),
+    payload: { requestId: opportunity.sourceEventId, ...(input.postId ? { postId: input.postId } : {}) },
+    relatedIds: [opportunity.sourceEventId, opportunity.id, ...(input.postId ? [input.postId] : [])],
+    fingerprint: `kept:${opportunity.id}`,
+    contribution: "system",
+    occurredAt: input.at,
+  });
 }
 
 /**
@@ -213,6 +286,7 @@ export async function recordSlurpPostOutcome(
     await Promise.all([
       completeSlurpOpportunity(db, opportunity.id, { postId: post.id, at }),
       completeSlurpCampaignStageFor(db, opportunity.id, { postId: post.id, at }),
+      recordSlurpPromiseKept(db, opportunity, { postId: post.id, at }),
     ]).catch((error: unknown) => {
       logger.warn(error, "[slurp] Could not close a content plan; the post stands on its own");
     });

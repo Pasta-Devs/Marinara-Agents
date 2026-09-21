@@ -1,6 +1,7 @@
 import { ArrowLeft, X } from "lucide-react";
 import { SlurpPromptDebugPanel, SlurpRapportBadge, SlurpRelationshipPanel } from "./SlpMessageInsights";
 import { SlurpMemoriesPanel } from "./SlpMemoriesPanel";
+import { SlurpThreadRequestsPanel } from "./SlpThreadRequestsPanel";
 import { SlurpCommissionsPanel } from "./commissions/SlpCommissions";
 import { Avatar } from "../../base/chrome/SlpChrome";
 import { showConfirmDialog } from "../../../lib/app-dialogs";
@@ -81,13 +82,18 @@ export function SlpThreadDrawer({ model }: { model: SlurpThreadViewModel }) {
             {drawerMode === "prompt" ? (
               <SlurpPromptDebugPanel enabled={promptDebugEnabled} query={promptDebug} />
             ) : drawerMode === "memories" ? (
-              <SlurpMemoriesPanel
-                notes={relationship?.notes ?? []}
-                scheduledFollowUps={relationship?.scheduledFollowUps}
-                threadId={threadId}
-                personaId={personaId}
-                onOpenPrompt={threadId ? () => setDrawerMode("prompt") : null}
-              />
+              <>
+                <SlurpMemoriesPanel
+                  notes={relationship?.notes ?? []}
+                  scheduledFollowUps={relationship?.scheduledFollowUps}
+                  threadId={threadId}
+                  personaId={personaId}
+                  onOpenPrompt={threadId ? () => setDrawerMode("prompt") : null}
+                />
+                {/* What the fan asked for and what was done about it. The fan's own side of the
+                    drawer never shows this. */}
+                {ownsCreator && <SlurpThreadRequestsPanel threadId={threadId} personaId={personaId} />}
+              </>
             ) : drawerMode === "commissions" ? (
               <SlurpCommissionsPanel
                 commissions={commissions}

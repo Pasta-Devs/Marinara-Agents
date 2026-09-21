@@ -692,6 +692,11 @@ export const slurpContentOpportunities = fileTable("slurp2_content_opportunities
   skipReason: text("skip_reason"),
   /** The post this plan produced, once one exists. */
   postId: text("post_id"),
+  /**
+   * The continuity event this plan answers, such as a fan request the Creator agreed to fulfil.
+   * A plan with a source event and no slot is a promise: it waits until the planner honours it.
+   */
+  sourceEventId: text("source_event_id"),
   plannedAt: text("planned_at").notNull(),
   dueAt: text("due_at"),
   completedAt: text("completed_at"),
@@ -801,6 +806,23 @@ export const slurpContinuityProposals = fileTable("slurp2_continuity_proposals",
   revision: text("revision").notNull().default("1"),
   createdAt: text("created_at").notNull(),
   reviewedAt: text("reviewed_at"),
+});
+
+/**
+ * How often subscribers have asked for the same kind of thing.
+ *
+ * A topic label and a count, deliberately nothing else: no fan identity and no private request
+ * text. That is what lets demand shape Creator-wide planning without exposing who asked.
+ */
+export const slurpDemandTrends = fileTable("slurp2_creator_demand_trends", {
+  id: text("id").primaryKey(),
+  creatorAccountId: text("creator_account_id").notNull(),
+  /** Normalised, lowercase, bounded. The key a trend is counted under. */
+  topic: text("topic").notNull(),
+  count: text("count").notNull().default("1"),
+  firstSeenAt: text("first_seen_at").notNull(),
+  lastSeenAt: text("last_seen_at").notNull(),
+  expiresAt: text("expires_at").notNull(),
 });
 
 /** One cross-process lease for the free world tick. */

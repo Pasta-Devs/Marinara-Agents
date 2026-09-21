@@ -7,6 +7,7 @@ import {
   slurpContinuityEvents,
   slurpContinuityFacts,
   slurpContinuityProposals,
+  slurpDemandTrends,
   slurpShootSessions,
 } from "../../../db/schema/slurp.js";
 import { newId } from "../../../utils/id-generator.js";
@@ -338,6 +339,7 @@ export async function deleteSlurpCreatorPlanningRows(tx: Pick<DB, "delete">, cre
   await tx.delete(slurpContentCampaigns).where(eq(slurpContentCampaigns.creatorAccountId, creatorAccountId));
   await tx.delete(slurpContentOpportunities).where(eq(slurpContentOpportunities.creatorAccountId, creatorAccountId));
   await tx.delete(slurpShootSessions).where(eq(slurpShootSessions.creatorAccountId, creatorAccountId));
+  await tx.delete(slurpDemandTrends).where(eq(slurpDemandTrends.creatorAccountId, creatorAccountId));
 }
 
 /**
@@ -413,4 +415,49 @@ export async function hasSlurpContinuityFact(
         .toLocaleLowerCase() === wanted &&
       (row.threadId ?? null) === (match.threadId ?? null),
   );
+}
+
+/** Audiences a fact may be promoted into. Promotion only ever widens toward the Creator's own. */
+export const SLURP_PROMOTION_TARGETS = ["creator_private", "creator_public", "cross_platform"] as const;
+export type SlurpPromotionTarget = (typeof SLURP_PROMOTION_TARGETS)[number];
+
+/**
+ * Promote a fact to a wider audience by writing a new, derived fact. The private source is never
+ * changed, so it keeps its own audience and can still be retracted on its own. The derived record
+ * is a manual contribution: a person chose to publish it.
+ */
+export async function promoteSlurpContinuityFact(
+  db: DB,
+  id: string,
+  audienceScope: SlurpPromotionTarget,
+  at = new Date(),
+): Promise<SlurpContinuityFact | "not_found" | "not_promotable"> {
+  const [row] = await db.select().from(slurpContinuityFacts).where(eq(slurpContinuityFacts.id, id));
+  if (!row) return "not_found";
+  const source = mapFact(row as Record<string, unknown>);
+  if (source.audienceScope === audienceScope || source.status === "retracted" || source.status === "rejected") {
+    return "not_promotable";
+  }
+  const derived = await createSlurpContinuityFact(
+    db,
+    {
+      sourceKind: source.sourceKind,
+      sourceEntityId: source.sourceEntityId,
+      creatorAccountId: source.creatorAccountId,
+      factType: source.factType,
+      subject: source.subject,
+      text: source.text,
+      audienceScope,
+      realityScope: source.realityScope,
+      threadId: null,
+      confidence: source.confidence,
+      salience: source.salience,
+      status: "active",
+      source: "user",
+      evidence: `Promoted from ${source.id}`,
+      contribution: "manual",
+    },
+    at,
+  );
+  return derived ?? "not_promotable";
 }

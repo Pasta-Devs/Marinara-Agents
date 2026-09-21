@@ -3,6 +3,7 @@ import {
   slpStageProfileDraftRequestSchema,
   slpStageProfileUpdateSchema,
 } from "../../../../../shared/src/slp/slp-social.schema.js";
+import { slpContinuityRoutes } from "./slp-continuity-routes.js";
 import {
   slurpDiscoveryProfileSchema,
   SLURP_DISCOVERY_TAG_LIMIT,
@@ -38,6 +39,7 @@ const slpStageProfileUpdateRequestSchema = slpStageProfileUpdateSchema.extend({
   confirmAvatarReview: z.boolean().optional(),
 });
 export async function slpCreatorsRoutes(app: FastifyInstance, deps: SlpRouteDeps) {
+  await slpContinuityRoutes(app);
   const { characters, connections, noodle, resolveNoodlerPublicIdentity, resolveViewerPersona } = deps;
   // One edit for many Creators, also used for a single Creator's quick edit. Capped so one request stays bounded.
   app.post("/slurp/accounts/bulk-update", async (req, reply) => {
