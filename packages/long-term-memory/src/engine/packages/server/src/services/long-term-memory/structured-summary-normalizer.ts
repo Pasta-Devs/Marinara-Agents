@@ -1205,7 +1205,7 @@ function parseStructuredCharacterLine(
     if (["id", "subject", "character", "character_id", "character_name", "name"].includes(key)) {
       subjectId = normalizeIdentifier(value, subjectId);
       const isIdentifierOnly =
-        ["id", "character_id"].includes(key) || NOTE_ID_PREFIX_PATTERN.test(value) || value.includes("_");
+        ["id", "character_id"].includes(key) || NOTE_ID_PREFIX_PATTERN.test(subjectId) || value.includes("_");
       if (!isIdentifierOnly && value.trim()) {
         subjectNames = [value.trim()];
       }

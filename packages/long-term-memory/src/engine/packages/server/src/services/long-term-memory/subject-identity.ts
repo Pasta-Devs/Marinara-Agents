@@ -482,6 +482,7 @@ export function buildTrustedLtmSubjectCatalog({
   notes: LtmNote[];
   localSourceNotes?: LtmNote[];
 }): TrustedLtmSubjectCatalog {
+  notes = notes.filter((note) => !localCharacterScopeError(note.subjects, note.destinationScope ?? note.scope));
   const preferredKeyByRef = new Map<string, string>();
   for (const note of [...notes].sort(compareNoteAge)) {
     for (const subject of note.subjects ?? []) {
@@ -807,6 +808,14 @@ export function prepareLtmSubjectIdentityContext({
     entries: catalog.entries.filter((entry) => {
       if (mode && mode !== "roleplay" && isLocalCharacterSubject(entry.subject)) return false;
       if (familyId && entry.familyId && entry.familyId !== familyId) return false;
+      if (familyId && isLocalCharacterSubject(entry.subject)) {
+        const subjectFamily =
+          localCharacterFamilyFromKey(entry.subject.key) ??
+          (entry.subject.ref?.kind === "local_character"
+            ? localCharacterFamilyFromKey(`local_character:${entry.subject.ref.id}`)
+            : null);
+        if (subjectFamily !== familyId) return false;
+      }
       return true;
     }),
     notes: catalog.notes.filter((note) => {
@@ -814,6 +823,18 @@ export function prepareLtmSubjectIdentityContext({
       if (familyId) {
         const noteFamily = ltmScopeFamilyId(note.destinationScope ?? note.scope);
         if (noteFamily && noteFamily !== familyId) return false;
+        if (
+          note.subjects?.some((subject) => {
+            if (!isLocalCharacterSubject(subject)) return false;
+            const subjectFamily =
+              localCharacterFamilyFromKey(subject.key) ??
+              (subject.ref?.kind === "local_character"
+                ? localCharacterFamilyFromKey(`local_character:${subject.ref.id}`)
+                : null);
+            return subjectFamily !== familyId;
+          })
+        )
+          return false;
       }
       return true;
     }),
@@ -1829,6 +1850,13 @@ function inferLegacyBindings(catalog: TrustedLtmSubjectCatalog, index: CatalogIn
       const match =
         note.type === "character" ? matchLegacyCharacter(index, identifier) : matchRelationship(index, identifier);
       if (match.status !== "matched") continue;
+      if (
+        localCharacterScopeError(
+          match.entries.map((entry) => entry.subject),
+          note.destinationScope ?? note.scope,
+        )
+      )
+        continue;
       bindings.set(note.id, sortSubjects(match.entries.map((entry) => entry.subject)));
       break;
     }

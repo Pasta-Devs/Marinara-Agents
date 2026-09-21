@@ -725,6 +725,73 @@ async function main() {
     [activeMara.key],
   );
 
+  for (const character of ["char-Mara", "char Mara"]) {
+    const normalized = normalizeStructuredSummaryEvidenceUnits({
+      units: [],
+      sourceText: `## Character Facts\n- character: ${character} | Mara guards the gate.`,
+      sourceNote: sourceNote as any,
+      sourceHash: "c".repeat(64),
+      existingNotes: [],
+      allowedBuckets: ["character_fact"],
+      mode: "roleplay",
+      modes: ["roleplay"],
+    });
+    assert.equal(normalized.units.length, 1);
+    assert.equal(normalized.units[0]!.subjectNames, undefined, "normalized note IDs must not become names");
+  }
+
+  const activeNote = {
+    ...sourceNote,
+    id: "char_mara",
+    title: "Mara",
+    type: "character" as const,
+    subjects: [activeMara],
+  };
+  const unscopedNote = { ...activeNote, id: "char_unscoped", scope: {} };
+  const invalidNote = { ...activeNote, id: "char_invalid", subjects: [otherMara] };
+  const filteredCatalog = buildTrustedLtmSubjectCatalog({
+    roster: [],
+    notes: [activeNote, unscopedNote, invalidNote],
+  });
+  assert.deepEqual(
+    filteredCatalog.notes.map((note) => note.id),
+    [activeNote.id],
+    "invalid local notes must leave the catalog",
+  );
+
+  const maraUnit = unit({ bucket: "character_fact", subjectId: "mara", text: "Mara guards the gate." });
+  const missingMetadataContext = prepareLtmSubjectIdentityContext({
+    units: [maraUnit],
+    catalog: {
+      entries: [
+        { ...activeMaraEntry, familyId: undefined },
+        { ...otherMaraEntry, familyId: undefined },
+      ],
+      notes: [activeNote, { ...activeNote, id: "char_foreign", scope: {}, subjects: [otherMara] }],
+    },
+    scope,
+  });
+  assert.equal(missingMetadataContext.identityKeyForUnit(maraUnit), activeNote.id);
+  const missingMetadataResult = missingMetadataContext.resolve({ units: [maraUnit], existingNotes: [] });
+  assert.equal(missingMetadataResult.droppedCandidates.length, 0);
+  assert.equal(missingMetadataResult.units[0]!.subjects?.[0]?.key, activeMara.key);
+
+  for (const legacyScope of [{}, otherScope]) {
+    const legacyContext = prepareLtmSubjectIdentityContext({
+      units: [maraUnit],
+      catalog: {
+        entries: [activeMaraEntry],
+        notes: [{ ...activeNote, id: "char_legacy", scope: legacyScope, subjects: undefined }],
+      },
+      scope,
+    });
+    assert.notEqual(
+      legacyContext.identityKeyForUnit(maraUnit),
+      "char_legacy",
+      "unscoped or foreign legacy notes must not bind local subjects",
+    );
+  }
+
   process.stdout.write(
     "Long-Term Memory local-character regression: scoped identity, review risk, safeguards, and isolation passed\n",
   );
