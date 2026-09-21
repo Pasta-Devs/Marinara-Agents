@@ -117,7 +117,7 @@ export class OpenAIProvider extends BaseLLMProvider {
     /** When true, body.tools is sent even if the model name triggers parameter suppression. */
     private readonly allowsToolCalling: boolean = false,
   ) {
-    super(baseUrl, apiKey, defaultMaxContext, defaultOpenrouterProvider, maxTokensOverride);
+    super(baseUrl.replace(/\/+$/, ""), apiKey, defaultMaxContext, defaultOpenrouterProvider, maxTokensOverride);
   }
 
   private static openAIFileContentParts(
