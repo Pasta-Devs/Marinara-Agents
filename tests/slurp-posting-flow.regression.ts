@@ -60,7 +60,12 @@ order(
 // Generation plans first and writes second. Nothing is decided after the model has spoken.
 order(
   generation,
-  ["await planSlurpPost(db, {", "buildNoodlerPostMessages({", "completeSlurpCreatorPost(", "recordSlurpPostOutcome(db, {"],
+  [
+    "await planSlurpPost(db, {",
+    "buildNoodlerPostMessages({",
+    "completeSlurpCreatorPost(",
+    "recordSlurpPostOutcome(db, {",
+  ],
   "generation",
 );
 

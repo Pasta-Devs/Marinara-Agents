@@ -259,20 +259,11 @@ export async function generateCreatorPost(
   // The project's own posts, not the page's. The page history is already supplied above and says
   // nothing about where this thread had got to.
   const projectPosts = project ? await noodle.listPostsByProject(project.id, 4) : [];
-  // Decide who is holding the camera before anything describes the picture, so the framing is a
-  // consequence of a camera that exists rather than a free-floating instruction. See
-  // `slp-camera-source.ts`.
   // How this Creator makes things, as opposed to who they are. Stable for the life of the account,
   // so it biases every post they ever make rather than this one.
   const strategy = slurpCreatorStrategy(account.id, account.settings.strategy);
   const production = strategy.production;
-  const effort = slurpPostEffort(production, sequence);
-  const cameraSource = variation
-    ? slurpPostCameraSource(account.id, sequence, {
-        companyCanHoldCamera: variation.companyCanHoldCamera,
-        prefers: production.prefers,
-      })
-    : null;
+  const effort = slurpPostEffort(production, sequence, account.id);
   // A Story is a picture with a line under it, so a run that produces no image publishes an
   // ordinary post instead. The flag is only honoured on the path that commits an image below.
   // A Story the player asked for outranks the rotation, which never fires on a directed post.
@@ -308,8 +299,16 @@ export async function generateCreatorPost(
   const textOnly = axes?.delivery === "text_only";
   // A reused picture is the picture: nothing is briefed or generated for this post.
   const postImages = imagesEnabled && !textOnly && !reusedMedia;
-  // A reused shoot keeps its own camera. The rotation's choice for today does not apply to a
-  // picture that was taken two days ago.
+  // Drawn after the plan: a planned shoot is not photographed at arm's length. A reused shoot
+  // keeps its own camera. See `slp-camera-source.ts`.
+  const cameraSource = variation
+    ? slurpPostCameraSource(account.id, sequence, {
+        companyCanHoldCamera: variation.companyCanHoldCamera,
+        prefers: production.prefers,
+        intent: axes?.intent,
+        effort,
+      })
+    : null;
   const camera = shoot?.cameraSource ?? cameraSource;
   const cameraInstruction = camera ? slurpCameraSourceInstruction(camera) : undefined;
   // The shoot rides in the content-type block rather than a block of its own: it is part of what

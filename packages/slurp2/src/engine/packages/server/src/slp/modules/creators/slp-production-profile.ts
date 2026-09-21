@@ -114,8 +114,14 @@ export function slurpProductionProfile(
  * feed where every post is the same situation. Even the theatrical one has ordinary days, and a
  * fixed effort cycle would turn those ordinary days into a schedule.
  */
-export function slurpPostEffort(profile: SlurpProductionProfile, sequence: number): SlurpPostEffort {
-  return slurpWeightedPick("effort", profile.style, sequence, profile.effortWeights);
+export function slurpPostEffort(
+  profile: SlurpProductionProfile,
+  sequence: number,
+  // Seeded on the style alone, every Creator who shoots the same way moved through the identical
+  // effort sequence. Keyed on the account too, two polished Creators have different days.
+  creatorAccountId = "",
+): SlurpPostEffort {
+  return slurpWeightedPick("effort", `${profile.style}:${creatorAccountId}`, sequence, profile.effortWeights);
 }
 
 const EFFORT_INSTRUCTIONS: Record<SlurpPostEffort, string> = {

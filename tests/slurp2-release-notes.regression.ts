@@ -18,13 +18,14 @@ const changelog = parsePackageChangelog(readFileSync(join(root, "CHANGELOG.md"),
   notes: string;
 }>;
 
-assert.equal(SLURP2_VERSION, "0.2.3");
+assert.equal(SLURP2_VERSION, "0.2.4");
 assert.equal(SLURP2_VERSION, manifest.version);
 assert.deepEqual(
   SLURP2_RELEASES.map(({ version, date, notes }) => ({ version, date, notes })),
   changelog
     .filter(
       (entry) =>
+        entry.version === "0.2.4" ||
         entry.version === "0.2.3" ||
         entry.version === "0.2.2" ||
         entry.version === "0.2.1" ||
@@ -46,40 +47,44 @@ assert.deepEqual(
 );
 assert.deepEqual(
   SLURP2_RELEASES.map((release) => release.version),
-  ["0.2.3", "0.2.2", "0.2.1", "0.2.0", "0.1.3", "0.1.2", "0.1.1", "0.1.0", "0.0.22"],
+  ["0.2.4", "0.2.3", "0.2.2", "0.2.1", "0.2.0", "0.1.3", "0.1.2", "0.1.1", "0.1.0", "0.0.22"],
 );
 assert.deepEqual(
   getSlurp2UnseenReleases(null).map((release) => release.version),
-  ["0.2.3", "0.2.2", "0.2.1", "0.2.0", "0.1.3", "0.1.2", "0.1.1", "0.1.0", "0.0.22"],
+  ["0.2.4", "0.2.3", "0.2.2", "0.2.1", "0.2.0", "0.1.3", "0.1.2", "0.1.1", "0.1.0", "0.0.22"],
 );
 assert.deepEqual(
   getSlurp2UnseenReleases("0.0.22").map((release) => release.version),
-  ["0.2.3", "0.2.2", "0.2.1", "0.2.0", "0.1.3", "0.1.2", "0.1.1", "0.1.0"],
+  ["0.2.4", "0.2.3", "0.2.2", "0.2.1", "0.2.0", "0.1.3", "0.1.2", "0.1.1", "0.1.0"],
 );
 assert.deepEqual(
   getSlurp2UnseenReleases("0.1.0").map((release) => release.version),
-  ["0.2.3", "0.2.2", "0.2.1", "0.2.0", "0.1.3", "0.1.2", "0.1.1"],
+  ["0.2.4", "0.2.3", "0.2.2", "0.2.1", "0.2.0", "0.1.3", "0.1.2", "0.1.1"],
 );
 assert.deepEqual(
   getSlurp2UnseenReleases("0.1.1").map((release) => release.version),
-  ["0.2.3", "0.2.2", "0.2.1", "0.2.0", "0.1.3", "0.1.2"],
+  ["0.2.4", "0.2.3", "0.2.2", "0.2.1", "0.2.0", "0.1.3", "0.1.2"],
 );
 assert.deepEqual(
   getSlurp2UnseenReleases("0.1.3").map((release) => release.version),
-  ["0.2.3", "0.2.2", "0.2.1", "0.2.0"],
+  ["0.2.4", "0.2.3", "0.2.2", "0.2.1", "0.2.0"],
 );
 assert.deepEqual(
   getSlurp2UnseenReleases("0.2.0").map((release) => release.version),
-  ["0.2.3", "0.2.2", "0.2.1"],
+  ["0.2.4", "0.2.3", "0.2.2", "0.2.1"],
 );
 assert.deepEqual(
   getSlurp2UnseenReleases("0.2.1").map((release) => release.version),
-  ["0.2.3", "0.2.2"],
+  ["0.2.4", "0.2.3", "0.2.2"],
 );
 assert.deepEqual(
   getSlurp2UnseenReleases("0.2.2").map((release) => release.version),
-  ["0.2.3"],
+  ["0.2.4", "0.2.3"],
 );
-assert.deepEqual(getSlurp2UnseenReleases("0.2.3"), []);
+assert.deepEqual(
+  getSlurp2UnseenReleases("0.2.3").map((release) => release.version),
+  ["0.2.4"],
+);
+assert.deepEqual(getSlurp2UnseenReleases("0.2.4"), []);
 
 console.log("slurp2 release notes mirror CHANGELOG.md");

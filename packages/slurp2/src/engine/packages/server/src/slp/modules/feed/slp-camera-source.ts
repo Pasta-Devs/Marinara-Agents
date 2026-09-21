@@ -109,6 +109,29 @@ const WEIGHTS: Record<SlurpCameraSource, number> = {
 const PREFERENCE_MULTIPLIER = 2.5;
 
 /**
+ * What the post is for bends the odds too.
+ *
+ * A phone in your own hand dominates ordinary posting, but a planned shoot taken as a selfie is
+ * the same unexplained-access problem in reverse: the caption says this took an afternoon and the
+ * picture says she held the phone. Effort says the same thing from the production side.
+ */
+const INTENT_BIAS: Record<string, Partial<Record<SlurpCameraSource, number>>> = {
+  set: { selfie: 0.4, mirror: 0.8, tripod: 2.2, partner: 2, screenshot: 0.6 },
+  teaser: { tripod: 1.4, mirror: 1.2, selfie: 0.8 },
+  callback: { tripod: 1.3, selfie: 0.9 },
+  behind_the_scenes: { tripod: 1.5, screenshot: 1.6, selfie: 0.9 },
+  business: { selfie: 1.3, tripod: 0.6, partner: 0.5 },
+  casual: { selfie: 1.2, screenshot: 1.2, tripod: 0.7 },
+  appreciation: { selfie: 1.2, tripod: 0.8 },
+};
+
+const EFFORT_BIAS: Record<string, Partial<Record<SlurpCameraSource, number>>> = {
+  low: { selfie: 1.4, screenshot: 1.4, tripod: 0.4, partner: 0.6 },
+  medium: {},
+  high: { selfie: 0.5, tripod: 2, partner: 1.6, screenshot: 0.7 },
+};
+
+/**
  * The camera source for one post.
  *
  * `sequence` is how many posts this Creator has already made. It seeds a deterministic weighted
@@ -120,16 +143,29 @@ const PREFERENCE_MULTIPLIER = 2.5;
 export function slurpPostCameraSource(
   creatorAccountId: string,
   sequence: number,
-  options: { companyCanHoldCamera: boolean; prefers?: readonly SlurpCameraSource[] },
+  options: {
+    companyCanHoldCamera: boolean;
+    prefers?: readonly SlurpCameraSource[];
+    /** What this post is for, from `slp-content-axes.ts`. */
+    intent?: string;
+    /** How much work this picture gets, from `slp-production-profile.ts`. */
+    effort?: string;
+  },
 ): SlurpCameraSource {
   const prefers = options.prefers ?? [];
+  const intentBias = (options.intent ? INTENT_BIAS[options.intent] : undefined) ?? {};
+  const effortBias = (options.effort ? EFFORT_BIAS[options.effort] : undefined) ?? {};
   return slurpWeightedPick(
     "camera",
     creatorAccountId,
     sequence,
     slurpPermittedCameraSources(options).map((value) => ({
       value,
-      weight: WEIGHTS[value] * (prefers.includes(value) ? PREFERENCE_MULTIPLIER : 1),
+      weight:
+        WEIGHTS[value] *
+        (prefers.includes(value) ? PREFERENCE_MULTIPLIER : 1) *
+        (intentBias[value] ?? 1) *
+        (effortBias[value] ?? 1),
     })),
   );
 }

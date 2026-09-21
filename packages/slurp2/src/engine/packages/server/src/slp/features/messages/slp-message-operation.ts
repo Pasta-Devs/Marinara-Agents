@@ -161,6 +161,7 @@ export async function replyToSlurpMessage(
     // replyLength will be filled in after generation
     talkativeness: talkativenessProfile.talkativeness,
     delays: replyDelays,
+    firstContact: !history.some((message) => message.role === "creator"),
   });
   const completedReplyId = await messagesStore.getCompletedReply(thread.id, input.triggerMessageId);
   if (completedReplyId) {
@@ -486,6 +487,7 @@ export async function replyToSlurpMessage(
         replyLength: actualReplyLength,
         talkativeness: talkativenessProfile.talkativeness,
         delays: replyDelays,
+        firstContact: !history.some((message) => message.role === "creator"),
       });
       return { status: "replied", message: locked.value.message, pacing: recalculatedPacing };
     }
