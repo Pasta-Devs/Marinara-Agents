@@ -194,24 +194,28 @@ export function SlpPromptsPanel(page: SlpBackstagePageProps) {
         })}
         scope="all-slurp"
         actions={
-          <PromptPresetToolbar
-            page={page}
-            selectedPresetName={selectedPresetName}
-            selectedPreset={selectedPreset}
-            pending={updateSettings.isPending}
-          />
+          <SettingAnchor settingKey="promptPresets">
+            <PromptPresetToolbar
+              page={page}
+              selectedPresetName={selectedPresetName}
+              selectedPreset={selectedPreset}
+              pending={updateSettings.isPending}
+            />
+          </SettingAnchor>
         }
       />
       <SettingAnchor settingKey="promptBlocks">
-        <SlurpPromptBlockBuilder
-          value={settings.promptBlocks}
-          savedValue={savedSettings?.promptBlocks ?? {}}
-          instructions={settings.promptInstructions}
-          savedInstructions={savedSettings?.promptInstructions ?? []}
-          onChange={(promptBlocks) => void update("promptBlocks", promptBlocks)}
-          onChangeInstructions={(promptInstructions) => void update("promptInstructions", promptInstructions)}
-          overviewContent={outcomeSections}
-        />
+        <SettingAnchor settingKey="promptInstructions">
+          <SlurpPromptBlockBuilder
+            value={settings.promptBlocks}
+            savedValue={savedSettings?.promptBlocks ?? {}}
+            instructions={settings.promptInstructions}
+            savedInstructions={savedSettings?.promptInstructions ?? []}
+            onChange={(promptBlocks) => void update("promptBlocks", promptBlocks)}
+            onChangeInstructions={(promptInstructions) => void update("promptInstructions", promptInstructions)}
+            overviewContent={outcomeSections}
+          />
+        </SettingAnchor>
       </SettingAnchor>
     </div>
   );

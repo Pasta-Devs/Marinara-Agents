@@ -2,7 +2,7 @@
   "$comment": "First-party 5e ruleset on SRD 5.1. Every id here is this file's own choice: the Engine never looks for 'level', 'dex' or 'slots'. A $comment key is allowed on any object and ignored.",
   "schemaVersion": 1,
   "id": "5e-2014",
-  "version": 6,
+  "version": 7,
   "name": "5e (SRD 5.1)",
   "edition": "System Reference Document 5.1, 2014 rules",
   "license": {
@@ -353,6 +353,16 @@
         "section": "combat"
       },
       {
+        "$comment": "How many strikes one Attack action buys. The combat block reads it as the weapon list's strikes, so a character who gains Extra Attack raises this number. SRD 5.1, Fighter Extra Attack: \"you can attack twice, instead of once, whenever you take the Attack action on your turn\", rising to three at 11th level and to four at 20th. The sheet has one Level field and no notion of class, so this is the player's number to set rather than a table the Engine could read off anything.",
+        "id": "attacks_per_action",
+        "label": "Attacks per Attack action",
+        "type": "number",
+        "min": 1,
+        "max": 4,
+        "default": 1,
+        "section": "combat"
+      },
+      {
         "id": "initiative_misc",
         "label": "Initiative bonus (other)",
         "type": "number",
@@ -667,6 +677,20 @@
             "label": "Proficient",
             "type": "boolean",
             "default": true
+          },
+          {
+            "$comment": "Whether this weapon qualifies for a rider that asks for one. SRD 5.1, Rogue Sneak Attack: \"The attack must use a finesse or a ranged weapon\", which is one question about the row rather than two, so it is one column. The build sets it from the source's own Finesse property and its ranged weapons; a hand-typed row is the player's to tick.",
+            "id": "finesse_or_ranged",
+            "label": "Finesse or ranged",
+            "type": "boolean",
+            "default": false
+          },
+          {
+            "$comment": "Set on a weapon that fires once a turn however many attacks its wielder has. The combat block names this column as strikesCappedBy. SRD 5.1, Loading: \"you can fire only one piece of ammunition when you use an action, bonus action, or reaction to fire it, regardless of the number of attacks you can normally make.\"",
+            "id": "loading",
+            "label": "Loading",
+            "type": "boolean",
+            "default": false
           },
           {
             "id": "bonus",
@@ -1229,6 +1253,8 @@
                 "name": "Battleaxe",
                 "ability": "str",
                 "proficient": true,
+                "finesse_or_ranged": false,
+                "loading": false,
                 "bonus": 0,
                 "damage": "1d8",
                 "damage_type": "slashing",
@@ -1258,6 +1284,8 @@
                 "name": "Blowgun",
                 "ability": "dex",
                 "proficient": true,
+                "finesse_or_ranged": true,
+                "loading": true,
                 "bonus": 0,
                 "damage": "1",
                 "damage_type": "piercing",
@@ -1287,6 +1315,8 @@
                 "name": "Club",
                 "ability": "str",
                 "proficient": true,
+                "finesse_or_ranged": false,
+                "loading": false,
                 "bonus": 0,
                 "damage": "1d4",
                 "damage_type": "bludgeoning",
@@ -1316,6 +1346,8 @@
                 "name": "Crossbow, hand",
                 "ability": "dex",
                 "proficient": true,
+                "finesse_or_ranged": true,
+                "loading": true,
                 "bonus": 0,
                 "damage": "1d6",
                 "damage_type": "piercing",
@@ -1345,6 +1377,8 @@
                 "name": "Crossbow, heavy",
                 "ability": "dex",
                 "proficient": true,
+                "finesse_or_ranged": true,
+                "loading": true,
                 "bonus": 0,
                 "damage": "1d10",
                 "damage_type": "piercing",
@@ -1374,6 +1408,8 @@
                 "name": "Crossbow, light",
                 "ability": "dex",
                 "proficient": true,
+                "finesse_or_ranged": true,
+                "loading": true,
                 "bonus": 0,
                 "damage": "1d8",
                 "damage_type": "piercing",
@@ -1403,6 +1439,8 @@
                 "name": "Dagger",
                 "ability": "str",
                 "proficient": true,
+                "finesse_or_ranged": true,
+                "loading": false,
                 "bonus": 0,
                 "damage": "1d4",
                 "damage_type": "piercing",
@@ -1432,6 +1470,8 @@
                 "name": "Dart",
                 "ability": "dex",
                 "proficient": true,
+                "finesse_or_ranged": true,
+                "loading": false,
                 "bonus": 0,
                 "damage": "1d4",
                 "damage_type": "piercing",
@@ -1461,6 +1501,8 @@
                 "name": "Flail",
                 "ability": "str",
                 "proficient": true,
+                "finesse_or_ranged": false,
+                "loading": false,
                 "bonus": 0,
                 "damage": "1d8",
                 "damage_type": "bludgeoning",
@@ -1490,6 +1532,8 @@
                 "name": "Glaive",
                 "ability": "str",
                 "proficient": true,
+                "finesse_or_ranged": false,
+                "loading": false,
                 "bonus": 0,
                 "damage": "1d10",
                 "damage_type": "slashing",
@@ -1519,6 +1563,8 @@
                 "name": "Greataxe",
                 "ability": "str",
                 "proficient": true,
+                "finesse_or_ranged": false,
+                "loading": false,
                 "bonus": 0,
                 "damage": "1d12",
                 "damage_type": "slashing",
@@ -1548,6 +1594,8 @@
                 "name": "Greatclub",
                 "ability": "str",
                 "proficient": true,
+                "finesse_or_ranged": false,
+                "loading": false,
                 "bonus": 0,
                 "damage": "1d8",
                 "damage_type": "bludgeoning",
@@ -1577,6 +1625,8 @@
                 "name": "Greatsword",
                 "ability": "str",
                 "proficient": true,
+                "finesse_or_ranged": false,
+                "loading": false,
                 "bonus": 0,
                 "damage": "2d6",
                 "damage_type": "slashing",
@@ -1606,6 +1656,8 @@
                 "name": "Halberd",
                 "ability": "str",
                 "proficient": true,
+                "finesse_or_ranged": false,
+                "loading": false,
                 "bonus": 0,
                 "damage": "1d10",
                 "damage_type": "slashing",
@@ -1635,6 +1687,8 @@
                 "name": "Handaxe",
                 "ability": "str",
                 "proficient": true,
+                "finesse_or_ranged": false,
+                "loading": false,
                 "bonus": 0,
                 "damage": "1d6",
                 "damage_type": "slashing",
@@ -1664,6 +1718,8 @@
                 "name": "Javelin",
                 "ability": "str",
                 "proficient": true,
+                "finesse_or_ranged": false,
+                "loading": false,
                 "bonus": 0,
                 "damage": "1d6",
                 "damage_type": "piercing",
@@ -1693,6 +1749,8 @@
                 "name": "Lance",
                 "ability": "str",
                 "proficient": true,
+                "finesse_or_ranged": false,
+                "loading": false,
                 "bonus": 0,
                 "damage": "1d12",
                 "damage_type": "piercing",
@@ -1722,6 +1780,8 @@
                 "name": "Light hammer",
                 "ability": "str",
                 "proficient": true,
+                "finesse_or_ranged": false,
+                "loading": false,
                 "bonus": 0,
                 "damage": "1d4",
                 "damage_type": "bludgeoning",
@@ -1751,6 +1811,8 @@
                 "name": "Longbow",
                 "ability": "dex",
                 "proficient": true,
+                "finesse_or_ranged": true,
+                "loading": false,
                 "bonus": 0,
                 "damage": "1d8",
                 "damage_type": "piercing",
@@ -1780,6 +1842,8 @@
                 "name": "Longsword",
                 "ability": "str",
                 "proficient": true,
+                "finesse_or_ranged": false,
+                "loading": false,
                 "bonus": 0,
                 "damage": "1d8",
                 "damage_type": "slashing",
@@ -1809,6 +1873,8 @@
                 "name": "Mace",
                 "ability": "str",
                 "proficient": true,
+                "finesse_or_ranged": false,
+                "loading": false,
                 "bonus": 0,
                 "damage": "1d6",
                 "damage_type": "bludgeoning",
@@ -1838,6 +1904,8 @@
                 "name": "Maul",
                 "ability": "str",
                 "proficient": true,
+                "finesse_or_ranged": false,
+                "loading": false,
                 "bonus": 0,
                 "damage": "2d6",
                 "damage_type": "bludgeoning",
@@ -1867,6 +1935,8 @@
                 "name": "Morningstar",
                 "ability": "str",
                 "proficient": true,
+                "finesse_or_ranged": false,
+                "loading": false,
                 "bonus": 0,
                 "damage": "1d8",
                 "damage_type": "piercing",
@@ -1896,6 +1966,8 @@
                 "name": "Pike",
                 "ability": "str",
                 "proficient": true,
+                "finesse_or_ranged": false,
+                "loading": false,
                 "bonus": 0,
                 "damage": "1d10",
                 "damage_type": "piercing",
@@ -1925,6 +1997,8 @@
                 "name": "Quarterstaff",
                 "ability": "str",
                 "proficient": true,
+                "finesse_or_ranged": false,
+                "loading": false,
                 "bonus": 0,
                 "damage": "1d6",
                 "damage_type": "bludgeoning",
@@ -1954,6 +2028,8 @@
                 "name": "Rapier",
                 "ability": "str",
                 "proficient": true,
+                "finesse_or_ranged": true,
+                "loading": false,
                 "bonus": 0,
                 "damage": "1d8",
                 "damage_type": "piercing",
@@ -1983,6 +2059,8 @@
                 "name": "Scimitar",
                 "ability": "str",
                 "proficient": true,
+                "finesse_or_ranged": true,
+                "loading": false,
                 "bonus": 0,
                 "damage": "1d6",
                 "damage_type": "slashing",
@@ -2012,6 +2090,8 @@
                 "name": "Shortbow",
                 "ability": "dex",
                 "proficient": true,
+                "finesse_or_ranged": true,
+                "loading": false,
                 "bonus": 0,
                 "damage": "1d6",
                 "damage_type": "piercing",
@@ -2041,6 +2121,8 @@
                 "name": "Shortsword",
                 "ability": "str",
                 "proficient": true,
+                "finesse_or_ranged": true,
+                "loading": false,
                 "bonus": 0,
                 "damage": "1d6",
                 "damage_type": "slashing",
@@ -2070,6 +2152,8 @@
                 "name": "Sickle",
                 "ability": "str",
                 "proficient": true,
+                "finesse_or_ranged": false,
+                "loading": false,
                 "bonus": 0,
                 "damage": "1d4",
                 "damage_type": "slashing",
@@ -2099,6 +2183,8 @@
                 "name": "Sling",
                 "ability": "dex",
                 "proficient": true,
+                "finesse_or_ranged": true,
+                "loading": false,
                 "bonus": 0,
                 "damage": "1d4",
                 "damage_type": "bludgeoning",
@@ -2128,6 +2214,8 @@
                 "name": "Spear",
                 "ability": "str",
                 "proficient": true,
+                "finesse_or_ranged": false,
+                "loading": false,
                 "bonus": 0,
                 "damage": "1d6",
                 "damage_type": "piercing",
@@ -2157,6 +2245,8 @@
                 "name": "Trident",
                 "ability": "str",
                 "proficient": true,
+                "finesse_or_ranged": false,
+                "loading": false,
                 "bonus": 0,
                 "damage": "1d6",
                 "damage_type": "piercing",
@@ -2186,6 +2276,8 @@
                 "name": "War Pick",
                 "ability": "str",
                 "proficient": true,
+                "finesse_or_ranged": false,
+                "loading": false,
                 "bonus": 0,
                 "damage": "1d8",
                 "damage_type": "piercing",
@@ -2215,6 +2307,8 @@
                 "name": "Warhammer",
                 "ability": "str",
                 "proficient": true,
+                "finesse_or_ranged": false,
+                "loading": false,
                 "bonus": 0,
                 "damage": "1d8",
                 "damage_type": "bludgeoning",
@@ -2244,6 +2338,8 @@
                 "name": "Whip",
                 "ability": "str",
                 "proficient": true,
+                "finesse_or_ranged": true,
+                "loading": false,
                 "bonus": 0,
                 "damage": "1d4",
                 "damage_type": "slashing",
@@ -2333,7 +2429,9 @@
           "type": { "column": "damage_type" }
         },
         "reach": { "column": "reach" },
-        "range": { "normal": { "column": "range" }, "long": { "column": "long_range" } }
+        "range": { "normal": { "column": "range" }, "long": { "column": "long_range" } },
+        "strikes": { "field": "attacks_per_action" },
+        "strikesCappedBy": { "column": "loading" }
       }
     ],
     "abilities": [
@@ -2353,13 +2451,19 @@
       }
     ],
     "standard": ["dash", "disengage", "dodge", "help", "hide", "ready"],
+    "standardEffects": { "dodge": { "saves": ["dex_save"] } },
     "conditions": [
       {
-        "$comment": "Only the parts of each condition the closed effect list can say today. Charmed and deafened have no effect it can express, so they are left out and stay plain records on the sheet.",
+        "$comment": "Only the parts of each condition the closed effect list can say today. Deafened has no effect it can express, so it is left out and stays a plain record on the sheet. Charmed joined the list when Capability API 1.29 added an effect for the one thing it does in a fight.",
         "condition": "blinded",
         "effects": ["own-attacks-disadvantage", "attacks-against-advantage"]
       },
-      { "condition": "frightened", "effects": ["own-attacks-disadvantage"] },
+      { "condition": "charmed", "effects": ["cannot-target-source"], "endsWhenSourceDown": true },
+      {
+        "condition": "frightened",
+        "effects": ["own-attacks-disadvantage", "cannot-approach-source"],
+        "whileSourceInSight": ["own-attacks-disadvantage"]
+      },
       { "condition": "grappled", "effects": ["speed-zero"] },
       { "condition": "incapacitated", "effects": ["cannot-act", "cannot-react"] },
       { "condition": "invisible", "effects": ["own-attacks-advantage", "attacks-against-disadvantage"] },
@@ -2370,7 +2474,7 @@
       },
       {
         "condition": "petrified",
-        "effects": ["cannot-act", "cannot-react", "speed-zero", "attacks-against-advantage"],
+        "effects": ["cannot-act", "cannot-react", "speed-zero", "attacks-against-advantage", "resist-all"],
         "failsSaves": ["str_save", "dex_save"]
       },
       { "condition": "poisoned", "effects": ["own-attacks-disadvantage"] },
@@ -2383,7 +2487,11 @@
           "half-move-to-stand"
         ]
       },
-      { "condition": "restrained", "effects": ["own-attacks-disadvantage", "attacks-against-advantage", "speed-zero"] },
+      {
+        "condition": "restrained",
+        "effects": ["own-attacks-disadvantage", "attacks-against-advantage", "speed-zero", "own-saves-disadvantage"],
+        "saves": ["dex_save"]
+      },
       {
         "condition": "stunned",
         "effects": ["cannot-act", "cannot-react", "speed-zero", "attacks-against-advantage"],
@@ -2447,7 +2555,7 @@
           "health": [2, 15],
           "defense": 12,
           "toHit": 4,
-          "damagePerRound": [1, 7],
+          "damagePerRound": [1, 9],
           "saveDifficulty": 11
         },
         {
@@ -2501,7 +2609,7 @@
           "health": [45, 120],
           "defense": 14,
           "toHit": 5,
-          "damagePerRound": [7, 33],
+          "damagePerRound": [13, 33],
           "saveDifficulty": 13
         },
         {
@@ -2510,7 +2618,7 @@
           "health": [65, 136],
           "defense": 15,
           "toHit": 7,
-          "damagePerRound": [14, 37],
+          "damagePerRound": [18, 37],
           "saveDifficulty": 15
         },
         {
@@ -2519,7 +2627,7 @@
           "health": [65, 136],
           "defense": 15,
           "toHit": 7,
-          "damagePerRound": [15, 45],
+          "damagePerRound": [20, 45],
           "saveDifficulty": 15
         },
         {
@@ -2546,7 +2654,7 @@
           "health": [133, 200],
           "defense": 18,
           "toHit": 10,
-          "damagePerRound": [30, 56],
+          "damagePerRound": [32, 56],
           "saveDifficulty": 16
         },
         {
@@ -2573,7 +2681,7 @@
           "health": [133, 248],
           "defense": 18,
           "toHit": 10,
-          "damagePerRound": [39, 66],
+          "damagePerRound": [66, 66],
           "saveDifficulty": 17
         },
         {
@@ -2582,7 +2690,7 @@
           "health": [133, 248],
           "defense": 18,
           "toHit": 11,
-          "damagePerRound": [39, 66],
+          "damagePerRound": [66, 66],
           "saveDifficulty": 17
         },
         {
@@ -2591,7 +2699,7 @@
           "health": [180, 248],
           "defense": 18,
           "toHit": 11,
-          "damagePerRound": [39, 66],
+          "damagePerRound": [66, 66],
           "saveDifficulty": 18
         },
         {
@@ -2600,7 +2708,7 @@
           "health": [180, 248],
           "defense": 19,
           "toHit": 12,
-          "damagePerRound": [42, 66],
+          "damagePerRound": [66, 66],
           "saveDifficulty": 18
         },
         {
@@ -2609,7 +2717,7 @@
           "health": [189, 248],
           "defense": 19,
           "toHit": 12,
-          "damagePerRound": [47, 93],
+          "damagePerRound": [66, 93],
           "saveDifficulty": 19
         },
         {
@@ -2618,7 +2726,7 @@
           "health": [199, 341],
           "defense": 19,
           "toHit": 14,
-          "damagePerRound": [58, 93],
+          "damagePerRound": [66, 93],
           "saveDifficulty": 21
         },
         {
@@ -2627,7 +2735,7 @@
           "health": [231, 341],
           "defense": 19,
           "toHit": 14,
-          "damagePerRound": [58, 93],
+          "damagePerRound": [66, 93],
           "saveDifficulty": 21
         },
         {
@@ -2636,7 +2744,7 @@
           "health": [262, 341],
           "defense": 19,
           "toHit": 14,
-          "damagePerRound": [58, 93],
+          "damagePerRound": [66, 93],
           "saveDifficulty": 21
         },
         {
@@ -2645,7 +2753,7 @@
           "health": [297, 341],
           "defense": 20,
           "toHit": 14,
-          "damagePerRound": [58, 93],
+          "damagePerRound": [66, 93],
           "saveDifficulty": 21
         },
         {
@@ -2654,7 +2762,7 @@
           "health": [297, 367],
           "defense": 21,
           "toHit": 15,
-          "damagePerRound": [63, 93],
+          "damagePerRound": [66, 93],
           "saveDifficulty": 21
         },
         {

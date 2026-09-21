@@ -70,6 +70,9 @@ jobs:
       - name: Measure Beholder UI parity against the reference extension
         run: npx tsx tests/beholder-parity.regression.ts
 
+      - name: Test vendored Engine drift detection
+        run: node scripts/tests/vendored-engine.regression.mjs
+
       - name: Test catalog lane routing and build provenance
         run: node scripts/test-catalog-lanes.mjs
 

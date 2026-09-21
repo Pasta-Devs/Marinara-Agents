@@ -1,5 +1,5 @@
 // The splash screen needs the shipped version and its public notes inside the client bundle.
-export const SLURP2_VERSION = "0.1.36";
+export const SLURP2_VERSION = "0.2.0";
 
 export interface Slurp2ReleaseEntry {
   version: string;
@@ -10,11 +10,15 @@ export interface Slurp2ReleaseEntry {
 /** The public release history shown in the Engine splash screen. */
 export const SLURP2_RELEASES: Slurp2ReleaseEntry[] = [
   {
-    version: "0.1.36",
+    version: "0.2.0",
     date: "2026-09-21",
     notes: [
-      "Creators plan what to post, keep promises from messages, and remember what they have said and done.",
-      "Photo sets, Stories, text-only posts, and chosen skips are now real choices.",
+      "Creators now plan posts: teasers, photo sets of up to three images, Stories, cropped previews, reused pictures, text on purpose, and quiet slots. Classic mode became a prompt preset.",
+      "Shoots keep a set consistent, and a set can open a teaser-and-callback campaign.",
+      "Each Creator has a Posting strategy; the composer picks a one-off purpose and delivery.",
+      "Fan requests can be answered from the conversation, and the planner keeps promises.",
+      "Creators remember what they said and did; fan-private details never leak. Review it in the new Continuity tab or the Backstage queue.",
+      "Prompt Studio was redesigned, and Pulse shows background work.",
     ],
   },
   {

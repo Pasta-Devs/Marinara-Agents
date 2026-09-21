@@ -25,6 +25,42 @@ const BACK = new Map(Object.entries(MAP).map(([engine, slp]) => [slp, engine]));
 // where Slurp is meant. Every other difference is a shape difference and must fail.
 const INTENDED_DELTAS: Record<string, [string, string][]> = {
   slpAccountIdentityUpdateShape: [['"Enter a Slurp handle."', '"Enter a Noodle handle."']],
+  // 0.2.0: per-Creator posting strategy is Slurp-only.
+  SlpAccountSettings: [["strategy?: SlpCreatorStrategySettings;", ""]],
+  // 0.2.0: ordered photo-set attachments; imageUrl/imagePrompt still mirror position zero.
+  SlpPost: [
+    [
+      "/** Ordered media. Position zero mirrors imageUrl/imagePrompt for older clients. */\n  images: SlpPostMedia[];",
+      "",
+    ],
+  ],
+  SlpCreatorPostView: [
+    ["/** Empty while locked unless the URL is an access-checked teaser. */\n  images: SlpPostMedia[];", ""],
+  ],
+  slpAccountSettingsPatchSchema: [
+    [',\n  z.object({ subtree: z.literal("strategy"), patch: slpCreatorStrategyPatchSchema }).strict(),', ","],
+  ],
+  slpCreatorPostCreateShape: [["  format: slpCreatorContentFormatSchema.optional(),\n", ""]],
+  slpCreatorGenerationRequestShape: [
+    ["  format: slpCreatorContentFormatSchema.optional(),\n", ""],
+    [
+      "  /** A one-shot post purpose from the composer. Outranks the Creator's strategy for this post only. */\n  contentIntent: z.enum(SLURP_CONTENT_INTENTS).optional(),\n  /** One-shot delivery. It is paired with an intent so incompatible combinations fail early. */\n  contentDelivery: z.enum(SLURP_CONTENT_DELIVERIES).optional(),\n",
+      "",
+    ],
+  ],
+  // 0.2.0: a one-shot delivery must come with a purpose it fits.
+  slpCreatorGenerationRequestSchema: [
+    [
+      '\n  .superRefine((input, ctx) => {\n    if (input.contentDelivery && !input.contentIntent) {\n      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["contentDelivery"], message: "Choose a post purpose too." });\n    } else if (\n      input.contentDelivery &&\n      input.contentIntent &&\n      !slurpContentDeliveryFits(input.contentIntent, input.contentDelivery)\n    ) {\n      ctx.addIssue({\n        code: z.ZodIssueCode.custom,\n        path: ["contentDelivery"],\n        message: "That delivery does not fit this post purpose.",\n      });\n    }\n  });',
+      ";",
+    ],
+  ],
+  SlpCreatorManagedStageProfile: [
+    [
+      "strategy: {\n    saved: SlpCreatorStrategySettings | null;\n    effective: { style: string; skipRate: number; textOnlyRate: number };\n  };",
+      "",
+    ],
+  ],
 };
 
 const PAIRS: [string, string[]][] = [

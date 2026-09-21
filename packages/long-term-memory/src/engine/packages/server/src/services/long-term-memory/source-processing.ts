@@ -59,7 +59,44 @@ type PrepareOptions = {
   chatId?: string;
   directGameMode?: boolean;
   directSourceText?: string;
+  existingNotes?: LtmNote[];
 };
+
+const RETRYABLE_FAILURE_CODES = new Set([
+  "ltm_model_output_empty",
+  "ltm_model_output_unusable",
+  "ltm_model_output_truncated",
+]);
+const PERMANENT_FAILURE_CODES = new Set([
+  "authentication_error",
+  "billing_hard_limit",
+  "insufficient_quota",
+  "quota_exceeded",
+]);
+const SAFE_ERROR_CODE = /^[a-z][a-z0-9_.-]{0,119}$/u;
+
+function failureCode(error: unknown, stage: "extract" | "finalize") {
+  const code =
+    error instanceof LtmServiceError
+      ? error.code
+      : error && typeof error === "object" && typeof (error as { code?: unknown }).code === "string"
+        ? (error as { code: string }).code
+        : "";
+  return SAFE_ERROR_CODE.test(code) ? code : `${stage}_failed`;
+}
+
+function retryableFailure(error: unknown, code: string, isCancelled: boolean) {
+  if (isCancelled || RETRYABLE_FAILURE_CODES.has(code)) return true;
+  if (PERMANENT_FAILURE_CODES.has(code)) return false;
+  const statusCode =
+    error instanceof LtmServiceError
+      ? error.statusCode
+      : error && typeof error === "object" && typeof (error as { status?: unknown }).status === "number"
+        ? (error as { status: number }).status
+        : undefined;
+  if (statusCode !== undefined) return statusCode === 408 || statusCode === 429 || statusCode >= 500;
+  return true;
+}
 
 function abortError() {
   const error = new Error("Long-term memory import was cancelled.");
@@ -155,7 +192,7 @@ export async function prepareLongTermMemorySource(options: PrepareOptions): Prom
     };
     const sourceHash = sourceHashForEvidenceUnitExtraction(sourceNote);
     const sourceText = options.directSourceText ?? sourceNote.sections.source?.text ?? "";
-    const existingNotes = (await new LongTermMemoryStorage(options.root).listNotes()).filter(
+    const existingNotes = (options.existingNotes ?? (await new LongTermMemoryStorage(options.root).listNotes())).filter(
       (note) => !isLtmSourceLikeNote(note) && canUpdateLtmScopedTarget(note.scope, requestedScope),
     );
     const response = {
@@ -302,7 +339,7 @@ function failed(
       created: item.created,
       sourceWriteStatus: item.created ? ("created" as const) : ("refreshed" as const),
       extractionMethod: method,
-      retryable: true as const,
+      retryable: retryableFailure(error, failureCode(error, stage), isCancelled),
       draft: null,
       outcome: prepared?.outcome ?? {
         state: "no_suggestions_created" as const,
@@ -334,8 +371,11 @@ function failed(
     : {
         ...base,
         extractionStatus: "failed",
-        error: { code: `${stage}_failed`, message },
-        diagnostics: [...(prepared?.diagnostics ?? []), { severity: "error", code: `${stage}_failed`, message }],
+        error: { code: failureCode(error, stage), message },
+        diagnostics: [
+          ...(prepared?.diagnostics ?? []),
+          { severity: "error", code: failureCode(error, stage), message },
+        ],
       };
 }
 
@@ -358,6 +398,7 @@ export async function processLongTermMemorySourceBatch(options: {
     | { state: "failed"; result: LtmImportedSourceResult }
     | undefined
   > = new Array(options.items.length);
+  let deterministicSnapshot: Promise<LtmNote[]> | undefined;
   let next = 0;
   await Promise.all(
     Array.from({ length: Math.min(Math.max(options.concurrency, 1), options.items.length) }, async () => {
@@ -382,6 +423,9 @@ export async function processLongTermMemorySourceBatch(options: {
               chatId: options.chatId,
               directGameMode,
               directSourceText: item.deterministicSourceText,
+              existingNotes: directGameMode
+                ? await (deterministicSnapshot ??= new LongTermMemoryStorage(options.root).listNotes())
+                : undefined,
             }),
           };
         } catch (error) {

@@ -56,6 +56,15 @@ export type TrustedLtmSubjectCatalog = {
   ambiguousLocalEntries?: Record<string, TrustedLtmSubjectCatalogEntry[]>;
 };
 
+export function trustedLtmCharacterAliasIdentifiers(catalog: TrustedLtmSubjectCatalog) {
+  return new Set(
+    catalog.entries
+      .filter((entry) => entry.subject.ref?.kind === "character")
+      .flatMap((entry) => [entry.name, ...entry.aliases].map((alias) => normalizeSubjectIdentifier(alias, "")))
+      .filter(Boolean),
+  );
+}
+
 export type LtmSubjectIdentityResolution = {
   units: LtmEvidenceUnit[];
   existingNotes: LtmNote[];

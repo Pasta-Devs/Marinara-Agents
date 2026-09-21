@@ -5,6 +5,7 @@ import {
   isLtmSourceLikeNote,
   ltmNoteIdSchema,
   ltmScopesOverlap,
+  normalizeLtmScope,
   type LtmEvidenceUnit,
   type LtmNote,
   type LtmScope,
@@ -34,6 +35,22 @@ export function canUpdateLtmScopedTarget(existingScope: LtmScope, incomingScope:
   const incomingGlobal = isGlobalLtmScope(incomingScope);
   if (existingGlobal || incomingGlobal) return existingGlobal && incomingGlobal;
   return ltmScopesOverlap(existingScope, incomingScope, { includeGlobal: false });
+}
+
+export function equivalentLtmForkAvailability(left: LtmNote, right: LtmNote) {
+  const normalize = (scope: LtmScope) => {
+    const value = normalizeLtmScope(scope);
+    return JSON.stringify({
+      chats: getLtmScopeChatIds(value).sort(),
+      groups: getLtmScopeGroupIds(value).sort(),
+      characters: [...(value.characterIds ?? [])].sort(),
+      personas: getLtmScopePersonaIds(value).sort(),
+    });
+  };
+  return (
+    normalize(left.scope) === normalize(right.scope) &&
+    JSON.stringify([...new Set(left.modes)].sort()) === JSON.stringify([...new Set(right.modes)].sort())
+  );
 }
 
 export function scopedVariantNoteId(baseId: string, scope: LtmScope, attempt = 0) {

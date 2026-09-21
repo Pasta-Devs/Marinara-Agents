@@ -27,6 +27,9 @@ on:
       - "scripts/run-package-browser-tests.mjs"
       - "scripts/start-package-browser-servers.mjs"
       - "sources/engine/**"
+      - "scripts/validate-vendored-engine.mjs"
+      - "scripts/vendored-engine-baseline.json"
+      - "scripts/tests/vendored-engine.regression.mjs"
       - "tests/package-noodle.e2e.ts"
       - "tests/package-slurp.e2e.ts"
       - "tests/package-slurp2.e2e.ts"
@@ -75,6 +78,12 @@ jobs:
 
       - name: Install package runner dependencies
         run: npm ci
+
+      - name: Check vendored Engine drift against the shrinking baseline
+        env:
+          MARINARA_ENGINE_ROOT: ${{ github.workspace }}/engine
+          BASE_REF: ${{ github.base_ref }}
+        run: node scripts/validate-vendored-engine.mjs --baseline-ref "origin/$BASE_REF"
 
       - name: Install Engine dependencies
         run: pnpm --dir engine install --frozen-lockfile

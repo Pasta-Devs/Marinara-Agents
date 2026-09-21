@@ -2442,7 +2442,7 @@
         },
         "id": "long-term-memory",
         "name": "Long-Term Memory",
-        "version": "1.3.5",
+        "version": "1.3.7",
         "description": "Extracts durable memories from chat summaries, character records, and lorebooks, then recalls relevant context from a package-owned vault. Enable it per chat from Chat Settings → Agents → Long-Term Memory. In Roleplay and Game, you can also add it from Chat Settings → Agents → Misc Agents.",
         "engine": {
           "min": "2.4.1",
@@ -2474,13 +2474,13 @@
           },
           {
             "path": "server.mjs",
-            "sha256": "fcca8d6daf6b7f1437135a2073e57e3c9c0bafd248fa34b6138e2d95930f3fe4",
-            "bytes": 408082
+            "sha256": "709c007e5efc11cb10d4f131bef0aa1e50cb6ab6cb5b7970d0c0aab77841dfd1",
+            "bytes": 417200
           },
           {
             "path": "client.js",
-            "sha256": "429b50f02bbcfc05f6167c8c9005495a606d6aa771befbec71805b62a1f1f1a2",
-            "bytes": 912716
+            "sha256": "3b69f7848ee1e2bcddf3bea68df0b2b49fc37a3140da380a76479cdeffe7c9eb",
+            "bytes": 913472
           }
         ],
         "permissions": [
@@ -2496,9 +2496,9 @@
       "category": "misc",
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/long-term-memory.png",
       "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/long-term-memory-1.3.5.zip",
-        "sha256": "ee336a149110d22c87f590068b87139067e38cddc5ca4cf6402be46ed1e4e6c0",
-        "bytes": 1323336
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/long-term-memory-1.3.7.zip",
+        "sha256": "37ae540c6d2940387a9444ef654987fe51669ca07764640bec6785768ab387ed",
+        "bytes": 1333210
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents#long-term-memory"
     },
@@ -3167,7 +3167,7 @@
         "schemaVersion": 1,
         "id": "slurp2",
         "name": "Slurp Remastered",
-        "version": "0.1.36",
+        "version": "0.2.0",
         "description": "The Slurp remaster. It installs beside Slurp Legacy and keeps its own separate data: create a local Creator profile from an Engine character or persona, publish public or locked posts, and simulate subscriptions and audience activity. Install it, restart Marinara Engine when prompted, then open Home → Slurp Remastered.",
         "localizations": {
           "de": {
@@ -3232,8 +3232,8 @@
           },
           {
             "path": "client.js",
-            "sha256": "0caade80308b2aaa6fcc3a18b203666ec312a89f980660ef35082596e6f9cc1b",
-            "bytes": 3737613
+            "sha256": "f3dbd56183bcd977d8caf075af81f2c140dcb22ae7e84bd0cf7fa600d4d2fcb6",
+            "bytes": 3738275
           },
           {
             "path": "slurp2-logo.png",
@@ -3259,9 +3259,9 @@
       "category": "misc",
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/slurp2.png",
       "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/slurp2-0.1.36.zip",
-        "sha256": "d69c73eb41de82a6f6c2a6b9da0e746b47fe1dbe492dfc87400b51738bde22f7",
-        "bytes": 6966659
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/slurp2-0.2.0.zip",
+        "sha256": "a14aa1d626afe0ded79daeb3b2ed941046124bd4f8d076ea8b6d13189cf31b5b",
+        "bytes": 6967320
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents/blob/main/packages/slurp2/README.md"
     },

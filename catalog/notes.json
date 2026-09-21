@@ -110,6 +110,18 @@
     "long-term-memory": {
       "versions": [
         {
+          "version": "1.3.7",
+          "date": "2026-09-20",
+          "notes": "- Added review-only warnings for suspicious resolved-thread creates and strict event identifiers, plus backed-up preview/apply maintenance for divergent thread and world notes.\n- Repaired fork review scope, provenance, stale-preview, conflict, and rollback guardrails.\n- Corrected resolved-thread diagnostics and character-alias validation.",
+          "highlight": false
+        },
+        {
+          "version": "1.3.6",
+          "date": "2026-09-20",
+          "notes": "- Preserved actionable extraction error codes and retryability, and reused one deterministic vault snapshot for Game Mode batch imports.\n- Classified permanent provider quota failures as non-retryable and kept deterministic snapshot failures within their batch results.",
+          "highlight": false
+        },
+        {
           "version": "1.3.5",
           "date": "2026-09-20",
           "notes": "- Recover complete memory candidates from token-limited output without marking incomplete extractions current.\n- Surface recovered output as an incomplete, retryable draft and bound rejection diagnostics for review.\n- Retain candidates within the processing limit and report overflow instead of rejecting the entire response.\n- Generate memory IDs and source hashes on the server, and default omitted evidence from the trusted source note.",
@@ -306,123 +318,123 @@
     "slurp2": {
       "versions": [
         {
-          "version": "0.1.36",
+          "version": "0.2.0",
           "date": "2026-09-21",
-          "notes": "- Documented how a Creator decides what to post, from the quiet-slot check to what the model is told.\n- The splash screen again shows the current release; the build now fails when its version drifts from the package version.\n- The composer opens the Creator's continuity editor directly.",
-          "highlight": false
+          "notes": "- Creators now plan posts: teasers, photo sets of up to three images, Stories, cropped previews, reused pictures, text on purpose, and quiet slots. Classic mode became a prompt preset.\n- Shoots keep a set consistent, and a set can open a teaser-and-callback campaign.\n- Each Creator has a Posting strategy; the composer picks a one-off purpose and delivery.\n- Fan requests can be answered from the conversation, and the planner keeps promises.\n- Creators remember what they said and did; fan-private details never leak. Review it in the new Continuity tab or the Backstage queue.\n- Prompt Studio was redesigned, and Pulse shows background work.",
+          "highlight": true
         },
         {
-          "version": "0.1.35",
-          "date": "2026-09-21",
-          "notes": "- Continuity proposals whose source messages changed or were deleted are now refused as stale instead of being applied.\n- Event proposals are approved as events, and each proposal shows its source messages and extraction fingerprint.\n- The continuity editor filters by type, source, scope, status, confidence, and date, and records links between requests, promises, opportunities, campaigns, shoots, and posts.\n- Backstage shows a continuity review queue across every Creator, and message requests open the Creator's continuity editor directly.",
-          "highlight": false
-        },
-        {
-          "version": "0.1.34",
-          "date": "2026-09-21",
-          "notes": "- Photo sets now publish up to three ordered, shoot-consistent images and remain usable when a secondary image fails.\n- Public and locked posts render accessible carousels; every attachment follows the same access, deletion, backup, and autopurge rules as the primary image.\n- The composer can choose a one-off delivery method as well as a purpose, and rejects combinations that do not make sense.\n- Shoot records now retain effort, theme, capture time, campaign, selection counts, and attachment links.",
-          "highlight": false
-        },
-        {
-          "version": "0.1.33",
-          "date": "2026-09-21",
-          "notes": "- Creators now write posts and messages knowing what they have already said: their limits, plans, and business rules, and what they have been doing.\n- A reply also knows what was said in that conversation. It never sees another fan's conversation, and a post never sees any of them.\n- Remembered notes are given as facts to stay consistent with, never as instructions, and are never quoted back.",
-          "highlight": false
-        },
-        {
-          "version": "0.1.32",
-          "date": "2026-09-21",
-          "notes": "- Added a Continuity tab to each Creator: what they remember, what is waiting for your decision, what happened, and the plans behind recent posts.\n- You can remember or discard anything read from messages, edit or retract a note, and publish a private note.\n- Each note shows where it came from and the words it was taken from.",
-          "highlight": false
-        },
-        {
-          "version": "0.1.31",
-          "date": "2026-09-21",
-          "notes": "- Requests a fan makes in a conversation can now be answered from that conversation: fulfil, tease, delay, decline, count it, or ignore.\n- Fulfil, tease, and delay owe the Creator a post, and the planner posts it before anything else it might have chosen. A kept promise is recorded in the conversation it was made in.\n- Counting a request adds to an anonymous tally under a label you type. The fan and their wording never leave the conversation.\n- Added a way to publish a private continuity note. It creates a new public note and leaves the private one untouched.",
-          "highlight": false
-        },
-        {
-          "version": "0.1.30",
-          "date": "2026-09-21",
-          "notes": "- Creators now remember what they explicitly say in messages: their limits, plans, and business rules. A fan's request is remembered only inside that fan's conversation.\n- Personal details a Creator mentions are held for review instead of being remembered automatically.\n- Every published post and every quiet slot is now recorded in the Creator's history.\n- Reading messages for this uses its own AI budget line, Continuity notes from messages, which can be limited or turned off.",
-          "highlight": false
-        },
-        {
-          "version": "0.1.29",
-          "date": "2026-09-21",
-          "notes": "- Added the storage for Creator continuity: facts, events, and proposed changes, each marked with who may see it and whether it literally happened.\n- A fan's private detail can never reach a post, and roleplay or game scenes never count as a Creator's real history.\n- Deleting a Creator now also removes their plans, shoots, campaigns, and continuity records.",
-          "highlight": false
-        },
-        {
-          "version": "0.1.28",
-          "date": "2026-09-21",
-          "notes": "- A set now opens a short campaign: the set, then a public teaser that shows a cropped corner of it, then a callback a day later.\n- A campaign step only runs in a slot the Creator would have posted in anyway, never before the step it follows, and never over a post the player directed.\n- Campaign steps that never find a slot expire after four days instead of running late.",
-          "highlight": false
-        },
-        {
-          "version": "0.1.27",
-          "date": "2026-09-21",
-          "notes": "- A callback can now show a real picture from the shoot it continues, instead of a new picture that only claims to be from it.\n- Creators now and then repost an older picture of their own. A picture from a locked post is only ever reused in another locked post.\n- A public teaser can show a cropped corner of a recent locked set. The crop is cut on the server, so the full picture never reaches the public post.\n- A new picture from an earlier shoot keeps that shoot's clothes and light.",
-          "highlight": false
-        },
-        {
-          "version": "0.1.26",
-          "date": "2026-09-21",
-          "notes": "- Added a Posting strategy section to each Creator's publishing settings: production style, how often a slot stays quiet, how much they lean on words, and a note on how they run their page.\n- Every strategy value starts automatic and can be reset back to automatic on its own.\n- Added a post purpose choice to the composer for guided posts. It applies to that one post only.",
-          "highlight": false
-        },
-        {
-          "version": "0.1.25",
-          "date": "2026-09-21",
-          "notes": "- A Creator can now leave a scheduled slot empty. A quiet slot costs no post, no picture, and no retry, and it is no longer reported as a failed run.\n- Two quiet slots in a row are refused, so a page never goes silent for a whole day.\n- Every planned post is recorded before it is written, so a retry repeats the same decision instead of making a new one.",
-          "highlight": false
-        },
-        {
-          "version": "0.1.24",
-          "date": "2026-09-21",
-          "notes": "- Split what a post is for from how it goes out. A Story or a plain text post can now also be a thank-you, a teaser, or a request.\n- Some posts now go out as text on purpose, even when pictures are available. Schedule and business notes lean on text; sets never do.\n- A text post by choice no longer picks up a gallery picture as a stand-in.",
-          "highlight": false
-        },
-        {
-          "version": "0.1.23",
-          "date": "2026-09-21",
-          "notes": "- Removed the Classic generation mode. Slurp now runs one posting engine.\n- Kept old prompt edits: they carry over to the current prompts and to a new Classic prompt preset.\n- Added Load Classic prompts to the prompt studio. It restores the old wording and turns off the newer context blocks.\n- Fixed Pulse labels that shared one translation key with different text.",
-          "highlight": false
-        },
-        {
-          "version": "0.1.22",
+          "version": "0.1.3",
           "date": "2026-09-20",
-          "notes": "- Restored Pulse quick buttons as direct Generate posts and Run audience actions.\n- Kept the Automation settings screen separate from Pulse actions.",
+          "notes": "- Slurp HTTP routes now use Slurp naming. Existing avatars, banners, ad images, post images and backups keep working.",
           "highlight": false
         },
         {
-          "version": "0.1.21",
-          "date": "2026-09-20",
-          "notes": "- Made Pulse automation controls navigate to Automation settings instead of running work directly.\n- Kept expanded child tasks as separate cards.",
+          "version": "0.1.2",
+          "date": "2026-09-19",
+          "notes": "- Fixed Creator filters, profile expansion, and settings tabs not responding after the 0.1.1 update.",
           "highlight": false
         },
         {
-          "version": "0.1.20",
-          "date": "2026-09-20",
-          "notes": "- Kept grouped Pulse child content hidden until expansion.\n- Added blank stacked backsheets to the collapsed group state.",
+          "version": "0.1.1",
+          "date": "2026-09-19",
+          "notes": "- Slurp now carries its own vocabulary instead of borrowing names from the Engine.\n- Cleaned up a leftover wording slip in the setup wizard intro.\n- Fixed SwarmUI image generation: prompt images and LoRAs are now sent when you do not use a custom workflow.\n- Nothing else changes. Your creators, posts and settings are untouched.",
           "highlight": false
         },
         {
-          "version": "0.1.19",
-          "date": "2026-09-20",
-          "notes": "- Opened Pulse beside the desktop sidebar while keeping the mobile bottom sheet.\n- Added visible child previews to grouped post stacks.\n- Added `in` timing for future scheduled posts.",
+          "version": "0.1.0",
+          "date": "2026-09-19",
+          "notes": "- Completed the backend file split and modularisation.\n- You should not feel any difference. If you do, tell me in Discord.",
+          "highlight": true
+        },
+        {
+          "version": "0.0.22",
+          "date": "2026-09-17",
+          "notes": "- Invite Engine characters to the Slurp audience from character groups or per-character controls.\n- Audience characters are now available as a first expansion step. The current setup is still limited and needs clearer guidance and simpler controls.\n- Invited characters use their own card voice and tags in comments, audience activity, and messages.\n- Invited characters can follow, subscribe, spend, hold ties, and appear in fan cards.\n- Added a New Chat picker for owned Creators and invited characters.\n- Added prompt-cost limits and deterministic character rotation.\n- Fixed feed ads, image prompt display, and the configured subscription price.\n- Added configurable image Stories and platform-style message actions.\n- Added backend groundwork for the next expansion and bug-fix updates, with clearer service boundaries for safer iteration.",
           "highlight": false
         },
         {
-          "version": "0.1.18",
-          "date": "2026-09-20",
-          "notes": "- Removed idle Pulse status text from the closed control.\n- Renamed the panel subtitle to Background activity.\n- Replaced group expand text with a rotating chevron.",
+          "version": "0.0.21",
+          "date": "2026-09-17",
+          "notes": "- Messages: the composer is shorter on one-line messages and still grows for longer text.\n- Messages: away replies use a centered Creator status block with a quiet Get reply now action.\n- Messages: sent messages now show separate delivered and seen receipts.\n- Messages: mobile headers keep the Creator name visible and move the relationship label into an icon and meter.\n- Messages: fixed the transparent mobile header menu with an opaque surface.\n- Messages: desktop uses the compact connection switcher.\n- Messages: every sent message shows one check when delivered and two when seen.\n- Messages: away Creators show a status card with a sleeping animation, not typing dots.\n- Creators stay online 5 minutes after replying and 10 after delivering a commission.\n- Messages: tier icons are back in the desktop header; tap one to see the full tier scale.\n- Messages: Back returns to the profile or activity a chat was opened from.\n- Fixed see-through menus and pickers.",
           "highlight": false
         },
         {
-          "version": "0.1.17",
-          "date": "2026-09-20",
-          "notes": "- Stopped scheduled posts from activating the Pulse icon and wave animation.\n- Changed expanded Pulse child rows to a flat notification-style stack.",
+          "version": "0.0.20",
+          "date": "2026-09-17",
+          "notes": "- Fixed Restart Setup stuck on \"How will people recognize them?\".\n- Fixed \"Needs attention\" on Creators with a Conversation Schedule. Older schedules now repeat weekly, like in Engine chats.\n- Ads: new Ad image connection setting.\n- Stories: wider viewer, backdrop, show whole image, likes, unlock price.\n- Messages: cleaner message bar that grows with your text.\n- Messages: sending scrolls to your message; a button jumps to the latest.\n- Messages: header buttons fold into one menu on phones.\n- Messages: a \"New messages\" line marks where you stopped.\n- Creators keep a separate draft for each fan thread.\n- Side menu: Creator card shows the full banner and a clean name.\n- Create posts now: no Stories, waits for busy Creators, names any that did not post.",
+          "highlight": false
+        },
+        {
+          "version": "0.0.19",
+          "date": "2026-09-17",
+          "notes": "- Fixed Force reply now doing nothing when the hourly model budget was used up.",
+          "highlight": false
+        },
+        {
+          "version": "0.0.18",
+          "date": "2026-09-16",
+          "notes": "- Messages: Force reply now answers a queued reply at once.\n- Fixed Creators sometimes never answering a message.\n- Posts are no longer cut off. New settings: Longest post, Show more after 300 characters.\n- New Backstage section Prompts, with a prompt block builder.\n- New image prompt style: Danbooru tags (experimental).\n- Image prompts put style tags first, then the Creator's appearance.\n- Edit the image prompt when you regenerate an image or retry a failed one.\n- Automation -> Manual actions: run posts, audience activity and schedules yourself.\n- Like, comment, vote and subscribe without a Creator profile.\n- Mobile Backstage: no section tabs, full-width search.\n- Fixed Prompts reset, turned-off prompt blocks, and Slurp loading after an Engine restart.\n- Creators no longer mention the time or weekday in every post.",
+          "highlight": false
+        },
+        {
+          "version": "0.0.17",
+          "date": "2026-09-16",
+          "notes": "- Settings is now Backstage: Overview, Creators, Features, Automation, and Maintenance, with setting search and live previews.\n- Creators shows metrics and totals for every Creator. Click one to open its settings, content menu, message prices, and collab partners.\n- Features -> Events and holidays: yearly events that Creators mention in posts, replies, and messages.\n- Free teaser posts: some automatic posts go out free to win subscribers.\n- Featured, buried, and viral weeks change post reach, and viral posts bring a rush of followers.\n- Fans who spend a lot and show up constantly can become Too attached.\n- Crossovers prefer collab partners, and commissions get a quote by default.\n- Feed posts have Edit, Delete, and Show image context in the post menu again.",
+          "highlight": false
+        },
+        {
+          "version": "0.0.16",
+          "date": "2026-09-15",
+          "notes": "- Settings -> Audience is simpler: one Activity choice (Off, Quiet, Realistic, Lively, Generous), crowd size and tone up front, and fan types, AI writing and advanced numbers in folded sections. Off also stops commissions, DMs and the activity pulse.\n- A fan type's tone override now changes how those fans write their comments.\n- Settings -> Tags is rebuilt: tags show as chips in their groups, with usage counts and a filter. Click a tag to rename it, merge it into another tag, move it to another group, or delete it.\n- Settings -> Creators: select many Creators and change gender, add or remove tags, or turn auto-post and images on or off in one step. The selected Creator also has a quick gender and tag editor.\n- Fix: toggles in Settings no longer black out the screen in Firefox.",
+          "highlight": false
+        },
+        {
+          "version": "0.0.15",
+          "date": "2026-09-15",
+          "notes": "- Fixed a wide post or story pushing the left and right sidebars off the screen.\n- The follow button on a Creator profile now shows whether you follow that Creator.",
+          "highlight": false
+        },
+        {
+          "version": "0.0.14",
+          "date": "2026-09-15",
+          "notes": "- Fixed commissions drawing a new picture on every retry when the fan could not pay.\n- Fixed locked pay-per-view messages sending what their picture shows before the fan paid.\n- Pictures in messages, commissions and your recent posts now reach the AI as stored prompts or descriptions, with an optional image description model. Each picture is described once, and models that cannot read images are skipped.\n- Characters can remember their Slurp posts, messages, commissions, subscriptions and tips in Engine chats: turn on Carryover to chats in Settings and Include Slurp activity in the chat's settings.\n- Added lorebook context for Creator posts, prompt presets with import and export, a changed count and Reset section for each settings section, gallery images when no picture is generated, a Professor Mari Creator switch, and a per-character choice for chat image instructions.\n- Deleting all Slurp data now asks you to type DELETE, and the mobile bottom bar is smaller.",
+          "highlight": false
+        },
+        {
+          "version": "0.0.13",
+          "date": "2026-09-15",
+          "notes": "- Fixed Creator management (profile, goal, subscription price, projects, arcs, payout, and Story viewers) rejecting edits with \"Only the Creator's owner can...\" — Slurp is single-player, so any Creator is now always yours to manage.\n- Fixed direct-message replies crashing when two reply attempts collided, along with other duplicate-safe storage operations that crossed the package boundary.\n- Persona Creators can now like and reply to their own posts as their public Creator identity.",
+          "highlight": false
+        },
+        {
+          "version": "0.0.12",
+          "date": "2026-09-15",
+          "notes": "- AI Creator drafts are repaired instead of failing: long text is shortened, gender and tag spellings are understood, broken JSON is fixed, and the form lists what still needs a choice.\n- Persona Creators now have the same drafting tools as character Creators: AI post drafts from your own text, and an AI image toggle in the composer for drafted and manual posts.\n- Fixed bulk Creator creation skipping open-mode Creators with a wrong gender and tags reason, and draft errors now show the real cause.",
+          "highlight": false
+        },
+        {
+          "version": "0.0.11",
+          "date": "2026-09-14",
+          "notes": "- Fixed AI Creator drafts that failed or could not be saved because the model left out gender or gave fewer than three tags.",
+          "highlight": false
+        },
+        {
+          "version": "0.0.10",
+          "date": "2026-09-14",
+          "notes": "- Rebuilt the audience as a deterministic simulation with editable fan types, presets, a seven-day estimate, and JSON import and export.\n- Added separate free-simulation and AI-text clocks with call limits, a shared model budget, weekly fan spending limits, and a multi-process world lease.\n- Added Creator pricing: own subscription, post, and commission prices with suggestions, commission quotes that follow the brief, haggling, and weekly dynamic prices for character Creators.\n- Long posts and long comment threads now collapse, and replies nest under the comment they answer.\n- Fixed doubled subscriber totals, lost followers after an ended subscription, tips missing from fan relationships, thin like pacing, and silent subscription lapses.\n- Fixed Slurp images failing with an X-Admin-Secret error on remote installs, and sent image connection custom parameters such as LoRA settings.",
+          "highlight": false
+        },
+        {
+          "version": "0.0.9",
+          "date": "2026-09-14",
+          "notes": "- Added Autopurge with configurable day, week, or month retention; media-only or full-post cleanup; optional direct-message media cleanup; an immediate purge action; and restart-safe scheduling for overdue purges.",
+          "highlight": false
+        },
+        {
+          "version": "0.0.8",
+          "date": "2026-09-14",
+          "notes": "- Bug fixes for discovery filters and translations, subscription prices, image references, fan privacy, rapport details, message fees, arc editing and generation, profile validation, regression tests, and test-output handling.",
           "highlight": false
         }
       ]

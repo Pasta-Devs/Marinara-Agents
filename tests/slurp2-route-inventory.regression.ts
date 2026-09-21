@@ -6,6 +6,17 @@ import { join } from "node:path";
 // parser. The route list below is the post-rename inventory. BASELINE is derived from it through
 // the explicit mapping table, so a method change or a missing route cannot pass by rebaselining.
 const EXPECTED = [
+  "GET /continuity",
+  "GET /continuity/:creatorAccountId",
+  "GET /messages/threads/:threadId/requests",
+  "GET /noodler/posts/:id/media/:position",
+  "GET /slurp/tasks",
+  "PATCH /continuity/facts/:id",
+  "POST /continuity/:creatorAccountId/facts",
+  "POST /continuity/:target/:id/retract",
+  "POST /continuity/facts/:id/promote",
+  "POST /continuity/proposals/:id/:decision",
+  "POST /messages/threads/:threadId/requests/:requestId/action",
   "ADDCONTENTTYPEPARSER application/zip",
   "DELETE /data",
   "DELETE /data/unused",
@@ -195,8 +206,22 @@ const RETAINED_OLD_PATHS = new Set([
   "GET /noodler/accounts/:id/banner/:fileName",
   "GET /noodler/ads/:id/image/:fileName",
   "GET /noodler/posts/:id/media",
+  "GET /noodler/posts/:id/media/:position",
 ]);
-const ADDED_ROUTES = new Set(["POST /settings/prompt-blocks/generate-preview"]);
+const ADDED_ROUTES = new Set([
+  "POST /settings/prompt-blocks/generate-preview",
+  "GET /continuity",
+  "GET /continuity/:creatorAccountId",
+  "GET /messages/threads/:threadId/requests",
+  "GET /noodler/posts/:id/media/:position",
+  "GET /slurp/tasks",
+  "PATCH /continuity/facts/:id",
+  "POST /continuity/:creatorAccountId/facts",
+  "POST /continuity/:target/:id/retract",
+  "POST /continuity/facts/:id/promote",
+  "POST /continuity/proposals/:id/:decision",
+  "POST /messages/threads/:threadId/requests/:requestId/action",
+]);
 
 const stagingRoutes = readFileSync(join(import.meta.dirname, "fixtures/slurp2-route-inventory.staging.txt"), "utf8")
   .split("\n")
@@ -216,19 +241,19 @@ assert.deepEqual([...EXPECTED].sort(), mappedStagingRoutes, "the route mapping m
 const EXPECTED_HANDLER_COUNTS = {
   "features/ads": 18,
   "features/audience": 12,
-  "features/creators": 19,
+  "features/creators": 26,
   "features/discovery": 4,
   "features/economy": 13,
-  "features/feed": 32,
-  "features/maintenance": 13,
+  "features/feed": 33,
+  "features/maintenance": 14,
   "features/media": 7,
-  "features/messages": 35,
+  "features/messages": 37,
   "features/notifications": 2,
   "features/onboarding": 4,
   "features/projects": 15,
   "features/settings": 7,
 } as const;
-const EXPECTED_METHOD_COUNTS = { DELETE: 11, GET: 59, PATCH: 14, POST: 92, PUT: 5 } as const;
+const EXPECTED_METHOD_COUNTS = { DELETE: 11, GET: 64, PATCH: 15, POST: 97, PUT: 5 } as const;
 
 const root = join(import.meta.dirname, "../packages/slurp2/src/engine/packages/server/src/slp");
 const registration = /\bapp\.(get|post|put|patch|delete|addContentTypeParser)(?:<[^()]*?>)?\(\s*["'`]([^"'`]+)["'`]/gu;
@@ -283,7 +308,7 @@ const methodCounts = Object.fromEntries(
     }, new Map<string, number>()),
 );
 assert.deepEqual(methodCounts, EXPECTED_METHOD_COUNTS, "HTTP method multiset changed from staging");
-assert.equal(foundRoutes.filter((route) => !route.startsWith("ADDCONTENTTYPEPARSER ")).length, 181);
+assert.equal(foundRoutes.filter((route) => !route.startsWith("ADDCONTENTTYPEPARSER ")).length, 192);
 assert.deepEqual(handlerCounts, EXPECTED_HANDLER_COUNTS, "handler count changed in a feature");
 assert.ok(foundRoutes.includes("POST /slurp/posts/:id/media"), "the renamed POST media route must remain registered");
 assert.ok(

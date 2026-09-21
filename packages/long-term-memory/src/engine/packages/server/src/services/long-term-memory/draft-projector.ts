@@ -152,12 +152,13 @@ export function projectLtmDraftOntoNotes(options: {
 }
 
 export function isAdditiveLtmSection(note: Pick<LtmNote, "type" | "tags">, key: string) {
+  if (note.tags.includes("anchor")) return false;
   if (note.type === "timeline_event") return true;
   if (note.type === "character") return !["items", "progression"].includes(key);
   if (note.type === "relationship" && key === "history") return true;
   if (note.type === "world") return true;
   if (note.type === "tone" && key === "observations") return true;
-  return note.tags.includes("anchor") || key === "anchors";
+  return key === "anchors";
 }
 
 function projectMutation(
