@@ -72,8 +72,6 @@ export interface StageProfileViewProps {
   subscriptionPending: boolean;
   /** Opens Messages in this Creator's chat. No thread is created until something is sent. */
   onOpenMessages: (creatorAccountId: string) => void;
-  accessPending: boolean;
-  onAccessChange: (access: SlurpManagedStageProfile["access"]) => void;
   /** Increments each time the profile rail asks the composer to open. */
   composerOpenSignal: number;
 }
@@ -100,7 +98,6 @@ export function useStageProfileViewModel(props: StageProfileViewProps) {
   } = props;
   const { t: localizeUi, i18n } = useUiTranslation();
   const bannerSrc = useSlurpMediaSrc(profile.bannerUrl, { width: 1280 });
-  const [accessSettingsOpen, setAccessSettingsOpen] = useState(false);
   const [automationOpen, setAutomationOpen] = useState(false);
   // Open on a Creator this persona operates, where posting is the reason for the visit. On a
   // world-run Creator the tools are still reachable, but they are not what you came to read.
@@ -162,7 +159,6 @@ export function useStageProfileViewModel(props: StageProfileViewProps) {
   const profileBioBody = profile.bio.trim();
   const accent = profileAccent(profile.id);
   const personaBackedCreator = viewerAccounts.some((account) => account.id === profile.sourceAccountId);
-  const accessViewerAccounts = viewerAccounts.filter((account) => account.id !== profile.sourceAccountId);
   // Every Slurp Creator profile is operator-managed, so post controls and artwork editing stay
   // available regardless of which viewer persona is looking at the profile.
   const managedCreator = true;
@@ -237,8 +233,6 @@ export function useStageProfileViewModel(props: StageProfileViewProps) {
     localizeUi,
     i18n,
     bannerSrc,
-    accessSettingsOpen,
-    setAccessSettingsOpen,
     automationOpen,
     setAutomationOpen,
     creatorToolsOpen,
@@ -284,7 +278,6 @@ export function useStageProfileViewModel(props: StageProfileViewProps) {
     profileBioBody,
     accent,
     personaBackedCreator,
-    accessViewerAccounts,
     managedCreator,
     goalForViewer,
     arcsQuery,

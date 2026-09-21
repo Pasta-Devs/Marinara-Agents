@@ -9,9 +9,6 @@ import type { StageProfileViewModel } from "./slp-profile-view-model";
 export function SlpProfileModals({ model }: { model: StageProfileViewModel }) {
   const {
     accent,
-    accessPending,
-    accessSettingsOpen,
-    accessViewerAccounts,
     artworkGuidance,
     artworkKind,
     automationOpen,
@@ -19,13 +16,11 @@ export function SlpProfileModals({ model }: { model: StageProfileViewModel }) {
     generateProfileArtwork,
     globalSettings,
     localizeUi,
-    onAccessChange,
     onEdit,
     onRunNow,
     personaBackedCreator,
     profile,
     runNowPending,
-    setAccessSettingsOpen,
     setArtworkGuidance,
     setArtworkKind,
     setAutomationOpen,
@@ -111,53 +106,6 @@ export function SlpProfileModals({ model }: { model: StageProfileViewModel }) {
               {localizeUi("ui.slurp.artwork.generate")}
             </button>
           </div>
-        </div>
-      </Modal>
-      <Modal
-        open={accessSettingsOpen}
-        onClose={() => setAccessSettingsOpen(false)}
-        title={localizeUi("ui.noodle.stageprofileview.viewerAccess")}
-        width="max-w-md"
-        panelStyle={getSlpAccentStyle(accent)}
-      >
-        <div className="space-y-4">
-          <div className="flex items-start justify-between gap-4">
-            <p className="text-xs leading-5 text-[var(--muted-foreground)]">
-              {localizeUi("ui.noodle.stageprofileview.theseRulesApplyOnlyToThisStageProfile")}
-            </p>
-            {accessPending && <Loader2 size={16} className="shrink-0 animate-spin text-[var(--noodle-accent)]" />}
-          </div>
-          {accessViewerAccounts.length > 0 && (
-            <fieldset>
-              <legend className="text-xs font-bold">
-                {localizeUi("ui.noodle.stageprofileview.hiddenFromPersonas")}
-              </legend>
-              <div className="mt-2 divide-y divide-[var(--noodle-divider)] rounded-lg border border-[var(--noodle-divider)]">
-                {accessViewerAccounts.map((account) => {
-                  const checked = profile.access.hiddenFromAccountIds.includes(account.id);
-                  return (
-                    <label key={account.id} className="flex min-h-11 items-center justify-between gap-3 px-3 py-2">
-                      <span className="truncate text-xs font-semibold">{account.displayName}</span>
-                      <input
-                        type="checkbox"
-                        checked={checked}
-                        disabled={accessPending}
-                        onChange={(event) =>
-                          onAccessChange({
-                            ...profile.access,
-                            hiddenFromAccountIds: event.target.checked
-                              ? [...profile.access.hiddenFromAccountIds, account.id]
-                              : profile.access.hiddenFromAccountIds.filter((id) => id !== account.id),
-                          })
-                        }
-                        className="h-5 w-5 accent-[var(--noodle-accent)]"
-                      />
-                    </label>
-                  );
-                })}
-              </div>
-            </fieldset>
-          )}
         </div>
       </Modal>
       <Modal

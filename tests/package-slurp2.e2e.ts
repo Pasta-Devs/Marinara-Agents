@@ -658,10 +658,8 @@ test.describe("standalone Slurp package", () => {
       const profileControls = slurp.getByRole("button", { name: "Profile controls", exact: true });
       if ((await profileControls.getAttribute("aria-expanded")) !== "true") await profileControls.click();
       await expect(page.getByRole("button", { name: /^Automation/u })).toHaveCount(0);
-      await page.getByRole("button", { name: "Access", exact: true }).click();
-      const accessDialog = page.getByRole("dialog", { name: "Viewer access" });
-      await expect(accessDialog).toBeVisible();
-      await expect(accessDialog.getByText(personaName, { exact: true })).toHaveCount(0);
+      // Viewer access was removed: every persona sees every Creator.
+      await expect(page.getByRole("button", { name: "Access", exact: true })).toHaveCount(0);
 
       expect(errors).toEqual([]);
     } finally {

@@ -244,7 +244,6 @@ export function StageProfileView({
     composerOpenSignal,
     localizeUi,
     bannerSrc,
-    setAccessSettingsOpen,
     setAutomationOpen,
     creatorToolsOpen,
     setCreatorToolsOpen,
@@ -543,15 +542,8 @@ export function StageProfileView({
                   {/* Edit lives on the profile header with Follow and Subscribe. It used to be
                     duplicated here too, which gave the same action two homes and made this panel
                     look like the place to go. */}
-                  <div className="flex flex-wrap gap-2 px-3 py-2 @min-[760px]:px-4">
-                    <button
-                      type="button"
-                      onClick={() => setAccessSettingsOpen(true)}
-                      className="min-h-11 rounded-lg border border-[var(--noodle-divider)] px-3 text-xs font-bold hover:bg-[var(--accent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)]"
-                    >
-                      {localizeUi("ui.noodle.stageprofileview.access")}
-                    </button>
-                    {!personaBackedCreator && (
+                  {!personaBackedCreator && (
+                    <div className="flex flex-wrap gap-2 px-3 py-2 @min-[760px]:px-4">
                       <button
                         type="button"
                         onClick={() => setAutomationOpen(true)}
@@ -561,8 +553,8 @@ export function StageProfileView({
                           ? localizeUi("ui.noodle.stageprofileview.automationOn")
                           : localizeUi("ui.noodle.stageprofileview.automation")}
                       </button>
-                    )}
-                  </div>
+                    </div>
+                  )}
                   <NoodlerPostComposer
                     key={profile.id}
                     profile={profile}

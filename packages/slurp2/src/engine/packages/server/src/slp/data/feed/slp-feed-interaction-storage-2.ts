@@ -2,7 +2,7 @@ import { and, eq, gt } from "../../../db/file-query.js";
 import { DEFAULT_SLP_CREATOR_REPLIES_PER_24_HOURS } from "../../../../../shared/src/slp/slp-social.schema.js";
 import { SlpAccount, SlpCreatorManagedPost, SlpInteraction } from "../../../../../shared/src/slp/slp-social.types.js";
 import { spend } from "../../modules/economy/slp-wallet.js";
-import { canViewCreatorPost, isCreatorHiddenFromViewer } from "../../base/identity/slp-access.js";
+import { canViewCreatorPost } from "../../base/identity/slp-access.js";
 import {
   slpAccounts,
   slpAccountSubscriptions,
@@ -223,7 +223,6 @@ export function createFeedInteractionStorage2(context: SlurpStorageContext) {
           parentActorRows[0]?.sourceKind === "persona"
             ? (parentActorRows[0].sourceEntityId ?? parentRow.actorAccountId)
             : parentRow.actorAccountId;
-        if (isCreatorHiddenFromViewer(creator, viewerPersonaId)) return null;
         const post = mapManagedPost(postRow);
         const [subscriptions, unlocks] = await Promise.all([
           tx

@@ -31,11 +31,7 @@ import {
   useReplaceCreatorPostImage,
   useUpdateCreatorPost,
 } from "../features/feed/slp-feed-post-hooks";
-import {
-  useRunCreatorAutoPostNow,
-  useUpdateCreatorAccess,
-  useUpdateCreatorAutoPosting,
-} from "../features/feed/slp-feed-schedule-hooks";
+import { useRunCreatorAutoPostNow, useUpdateCreatorAutoPosting } from "../features/feed/slp-feed-schedule-hooks";
 import {
   useCreateCreatorInteraction,
   useDeleteCreatorInteraction,
@@ -283,7 +279,6 @@ export function useSlurpHomeBaseState({ navigation, onNavigate, onLeave }: Slurp
   const deletePost = useDeleteCreatorPost();
   const updateInteraction = useUpdateCreatorInteraction();
   const deleteInteraction = useDeleteCreatorInteraction();
-  const updateAccess = useUpdateCreatorAccess();
   const [draftNoodleAccountId, setDraftNoodleAccountId] = useState<string | null>(null);
   const [sourceSearch, setSourceSearch] = useState("");
   const [sourceKind, setSourceKind] = useState<"all" | "character" | "persona">("all");
@@ -686,7 +681,6 @@ export function useSlurpHomeBaseState({ navigation, onNavigate, onLeave }: Slurp
     deletePost,
     updateInteraction,
     deleteInteraction,
-    updateAccess,
     draftNoodleAccountId,
     setDraftNoodleAccountId,
     sourceSearch,

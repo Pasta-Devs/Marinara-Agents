@@ -32,7 +32,7 @@ import {
   SlurpEarningsEntryKind,
 } from "../../modules/economy/slp-earnings.js";
 import { logger } from "../../../lib/logger.js";
-import { canViewCreatorPost, isCreatorHiddenFromViewer } from "../../base/identity/slp-access.js";
+import { canViewCreatorPost } from "../../base/identity/slp-access.js";
 import {
   slpAccounts,
   slpAccountSubscriptions,
@@ -469,7 +469,7 @@ export function createSlurpStorageContext(db: DB) {
       const currentActor = actorRows[0] ? mapAccount(actorRows[0]) : actor;
       if (authorPlatform === "noodler") {
         const currentAuthor = mapAccount(authorRows[0]);
-        if (currentActor.kind !== "persona" || isCreatorHiddenFromViewer(currentAuthor, viewerPersonaId)) {
+        if (currentActor.kind !== "persona") {
           return null;
         }
         const currentPostView = mapPost(currentPost);

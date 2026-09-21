@@ -9,7 +9,7 @@ import {
   slpInteractionUpdateSchema,
 } from "../../../../../shared/src/slp/slp-social.schema.js";
 import { z } from "zod";
-import { isCreatorHiddenFromViewer, canViewCreatorPost } from "../../base/identity/slp-access.js";
+import { canViewCreatorPost } from "../../base/identity/slp-access.js";
 import {
   readCreatorMediaPath,
   resolveCreatorMediaAbsolutePath,
@@ -99,7 +99,7 @@ export async function slpFeedPostRoutes(app: FastifyInstance, deps: SlpRouteDeps
     const viewer = await resolveViewerPersona(personaId);
     const post = viewer ? await noodle.getNoodlerPostById(postId) : null;
     const creator = post ? await noodle.getNoodlerAccountById(post.authorAccountId) : null;
-    if (!viewer || !post || !creator || isCreatorHiddenFromViewer(creator, viewer.id)) return null;
+    if (!viewer || !post || !creator) return null;
     if (creatorBelongsToViewer(creator, viewer)) return { viewer, post, creator, locked: false };
     const [subscriptions, unlocks] = await Promise.all([
       noodle.listSubscriptionsForViewer(viewer.id),
