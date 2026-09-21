@@ -1,8 +1,10 @@
-import { ImageIcon, MoreHorizontal, Pencil, RefreshCw, Share2, Trash2 } from "lucide-react";
+import { ImageIcon, MoreHorizontal, Pencil, RefreshCw, ScanSearch, Share2, Trash2 } from "lucide-react";
+import { useState } from "react";
 import { useTranslation as useUiTranslation } from "react-i18next";
 import { toast } from "sonner";
 import type { SlpPostCardCtx, SlpPostCardModel } from "./SlpPostTypes";
 import { api } from "../../../lib/api-client";
+import { SlpDeepDetailsModal } from "./SlpDeepDetailsModal";
 
 /** The post's own action menu: edit, regenerate its image, delete, show its context, share it. */
 export function SlpCreatorPostMenu({
@@ -31,9 +33,13 @@ export function SlpCreatorPostMenu({
   setPromptDraft: React.Dispatch<React.SetStateAction<string | null>>;
 }) {
   const { t: localizeUi } = useUiTranslation();
+  const [deepDetailsOpen, setDeepDetailsOpen] = useState(false);
 
   return (
     <div className="relative shrink-0">
+      {ctx.postManagement && (
+        <SlpDeepDetailsModal postId={post.id} open={deepDetailsOpen} onClose={() => setDeepDetailsOpen(false)} />
+      )}
       <button
         type="button"
         onClick={() => ctx.setPostMenuId((current) => (current === post.id ? null : post.id))}
@@ -90,6 +96,19 @@ export function SlpCreatorPostMenu({
                 {localizeUi("lorebook.editor.batch.delete")}
               </button>
             </>
+          )}
+          {ctx.postManagement && (
+            <button
+              type="button"
+              onClick={() => {
+                ctx.setPostMenuId(null);
+                setDeepDetailsOpen(true);
+              }}
+              className="flex min-h-10 w-full items-center gap-2 px-3 text-start transition-colors hover:bg-[var(--accent)]"
+            >
+              <ScanSearch size={14} />
+              {localizeUi("ui.slurp.deepDetails.title", { defaultValue: "Deep details" })}
+            </button>
           )}
           {hasImageContext && (
             <button

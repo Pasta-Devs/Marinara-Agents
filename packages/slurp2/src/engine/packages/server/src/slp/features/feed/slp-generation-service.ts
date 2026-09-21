@@ -1,3 +1,5 @@
+import { saveSlurpPostDeepDetails } from "../../data/feed/slp-post-deep-details-storage.js";
+import { buildSlurpDeepDetailsRecord } from "./slp-deep-details-record.js";
 import { type APIProvider } from "@marinara-engine/shared";
 import { createSlpPoll } from "../../../../../shared/src/slp/slp-polls.js";
 import { SLP_CREATOR_POST_TITLE_MAX_LENGTH } from "../../../../../shared/src/slp/slp-social.schema.js";
@@ -17,7 +19,6 @@ import {
   isConnectionAdmissionFailure,
   type ConnectionAdmissionMode,
 } from "../../../services/generation/connection-admission.js";
-import type { ChatMessage } from "../../../services/llm/base-provider.js";
 import { createLLMProvider } from "../../../services/llm/provider-registry.js";
 import { resolveCreatorImageConnectionId } from "../../base/media/slp-image-connections.js";
 import { resolveSlurpCreatorMenu, resolveSlurpPostGuidance } from "../../data/settings/slp-post-guidance-storage.js";
@@ -65,7 +66,7 @@ import {
   FormattedCreatorGenerationRequest,
   buildNoodlerPostMessages,
   slpCreatorTitleFromContent,
-  parseCreatorPost,
+  completeSlurpCreatorPost,
 } from "./slp-post-prompt.js";
 export type { SlpCreatorContentFormat } from "../../base/prompting/slp-content-format.js";
 
@@ -258,20 +259,11 @@ export async function generateCreatorPost(
   // The project's own posts, not the page's. The page history is already supplied above and says
   // nothing about where this thread had got to.
   const projectPosts = project ? await noodle.listPostsByProject(project.id, 4) : [];
-  // Decide who is holding the camera before anything describes the picture, so the framing is a
-  // consequence of a camera that exists rather than a free-floating instruction. See
-  // `slp-camera-source.ts`.
   // How this Creator makes things, as opposed to who they are. Stable for the life of the account,
   // so it biases every post they ever make rather than this one.
   const strategy = slurpCreatorStrategy(account.id, account.settings.strategy);
   const production = strategy.production;
-  const effort = slurpPostEffort(production, sequence);
-  const cameraSource = variation
-    ? slurpPostCameraSource(account.id, sequence, {
-        companyCanHoldCamera: variation.companyCanHoldCamera,
-        prefers: production.prefers,
-      })
-    : null;
+  const effort = slurpPostEffort(production, sequence, account.id);
   // A Story is a picture with a line under it, so a run that produces no image publishes an
   // ordinary post instead. The flag is only honoured on the path that commits an image below.
   // A Story the player asked for outranks the rotation, which never fires on a directed post.
@@ -307,8 +299,16 @@ export async function generateCreatorPost(
   const textOnly = axes?.delivery === "text_only";
   // A reused picture is the picture: nothing is briefed or generated for this post.
   const postImages = imagesEnabled && !textOnly && !reusedMedia;
-  // A reused shoot keeps its own camera. The rotation's choice for today does not apply to a
-  // picture that was taken two days ago.
+  // Drawn after the plan: a planned shoot is not photographed at arm's length. A reused shoot
+  // keeps its own camera. See `slp-camera-source.ts`.
+  const cameraSource = variation
+    ? slurpPostCameraSource(account.id, sequence, {
+        companyCanHoldCamera: variation.companyCanHoldCamera,
+        prefers: production.prefers,
+        intent: axes?.intent,
+        effort,
+      })
+    : null;
   const camera = shoot?.cameraSource ?? cameraSource;
   const cameraInstruction = camera ? slurpCameraSourceInstruction(camera) : undefined;
   // The shoot rides in the content-type block rather than a block of its own: it is part of what
@@ -403,46 +403,13 @@ export async function generateCreatorPost(
     }),
   } as const;
 
-  let response = await provider.chatComplete(messages, completionOptions);
-  let content = response.content ?? "";
-  logDebugOverride(
-    debugMode,
-    "[debug/slurp] Model response attempt 1 received (%d characters); content is redacted.",
-    content.length,
+  const { generated, content, sentMessages, attempts } = await completeSlurpCreatorPost(
+    provider,
+    messages,
+    completionOptions,
+    { askModelForImagePrompt, debugMode },
   );
-  let generated;
-  try {
-    generated = parseCreatorPost(content);
-  } catch {
-    // Automatic posts used to get one attempt where a foreground post got two, so a scheduled post
-    // failed outright on malformed output that a manual post recovered from — and the slot was lost
-    // with the first call already paid for. The correction turn reuses the admission this run was
-    // already granted and only fires on the failure path, so both paths now recover the same way.
-    const correctionMessages: ChatMessage[] = [
-      ...messages,
-      { role: "assistant", content },
-      {
-        role: "user",
-        content: askModelForImagePrompt
-          ? "The response was not one valid Slurp-post JSON object. Return exactly one object with title, content, and imagePrompt. title and imagePrompt must both be non-empty. Do not include a poll. Return JSON only."
-          : "The response was not one valid Slurp-post JSON object. Return exactly one object with title and content only. Do not include a poll or image prompt. Return JSON only.",
-      },
-    ];
-    compiledPrompt = correctionMessages.map((message) => `# ${message.role}\n${message.content}`).join("\n\n");
-    logDebugOverride(
-      debugMode,
-      "[debug/slurp] Correction prompt prepared with %d messages; private prompt content is redacted.",
-      correctionMessages.length,
-    );
-    response = await provider.chatComplete(correctionMessages, completionOptions);
-    content = response.content ?? "";
-    logDebugOverride(
-      debugMode,
-      "[debug/slurp] Model response attempt 2 received (%d characters); content is redacted.",
-      content.length,
-    );
-    generated = parseCreatorPost(content);
-  }
+  compiledPrompt = sentMessages.map((message) => `# ${message.role}\n${message.content}`).join("\n\n");
 
   const protectedContent = protectBoundedCreatorGeneratedText(
     generated.content,
@@ -535,6 +502,45 @@ export async function generateCreatorPost(
       })
     : null;
 
+  // Deep details, best effort. ponytail: an unpublished scheduled post leaves its record until the
+  // Creator is deleted; sweep records with no post if they add up.
+  let deepDetailsId: string | null = input.previewOnly ? null : newId();
+  if (deepDetailsId) {
+    await saveSlurpPostDeepDetails(db, {
+      id: deepDetailsId,
+      creatorAccountId: account.id,
+      record: buildSlurpDeepDetailsRecord({
+        input,
+        sequence,
+        completionOptions,
+        attempts,
+        opportunity,
+        axes,
+        isTeaser,
+        storyVariation,
+        format,
+        variation,
+        campaignId,
+        shootId,
+        reusedSource: reusedMedia ? reusedSource : null,
+        demandTopic,
+        project,
+        projectChapter,
+        camera,
+        effort,
+        strategy,
+        sentMessages,
+        content,
+        generated,
+        draftImagePrompt,
+        askModelForImagePrompt,
+      }),
+    }).catch((error: unknown) => {
+      logger.warn(error, "[slurp] Could not record deep details for a post");
+      deepDetailsId = null;
+    });
+  }
+
   const baseInput = {
     authorAccountId: account.id,
     title: protectedGenerated.title,
@@ -547,6 +553,7 @@ export async function generateCreatorPost(
     projectChapter,
     metadata: {
       noodlerContentFormat: format,
+      ...(deepDetailsId ? { deepDetailsId } : {}),
       // Persisted so later planning, the scheduled publisher, and the feed read the same decision.
       ...(axes ? { contentIntent: axes.intent, contentDelivery: axes.delivery } : {}),
       ...(shootId ? { shootId } : {}),

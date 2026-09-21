@@ -9,6 +9,7 @@ import {
   slurpContinuityLinks,
   slurpContinuityProposals,
   slurpMessages,
+  slpPostDeepDetails,
   slurpDemandTrends,
   slurpShootSessions,
 } from "../../../db/schema/slurp.js";
@@ -335,6 +336,7 @@ export async function pruneSlurpContinuity(db: DB, creatorAccountId: string, at 
  * facts, events, or proposals behind to travel in every backup.
  */
 export async function deleteSlurpCreatorPlanningRows(tx: Pick<DB, "delete">, creatorAccountId: string): Promise<void> {
+  await tx.delete(slpPostDeepDetails).where(eq(slpPostDeepDetails.creatorAccountId, creatorAccountId));
   await tx.delete(slurpContinuityLinks).where(eq(slurpContinuityLinks.creatorAccountId, creatorAccountId));
   await tx.delete(slurpContinuityFacts).where(eq(slurpContinuityFacts.creatorAccountId, creatorAccountId));
   await tx.delete(slurpContinuityEvents).where(eq(slurpContinuityEvents.creatorAccountId, creatorAccountId));

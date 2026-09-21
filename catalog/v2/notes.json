@@ -318,6 +318,18 @@
     "slurp2": {
       "versions": [
         {
+          "version": "0.2.4",
+          "date": "2026-09-21",
+          "notes": "- Who holds the camera now follows what the post is for: a planned shoot is rarely a selfie, an ordinary day usually is.\n- Two Creators who shoot the same way no longer have identical effort on the same day.\n- Conversations start between strangers instead of as friends.\n- Creators answer a new message within the hour instead of after two, so the inbox no longer needs Reply now.",
+          "highlight": false
+        },
+        {
+          "version": "0.2.3",
+          "date": "2026-09-21",
+          "notes": "- Every post's menu has Deep details: the plan, the draws, the full prompt, the model's raw answer, the picture brief, and every tag behind that post.",
+          "highlight": false
+        },
+        {
           "version": "0.2.2",
           "date": "2026-09-21",
           "notes": "- Removed viewer access. Every persona now sees every Creator; the per-Creator hide list is no longer used.",
@@ -423,18 +435,6 @@
           "version": "0.0.12",
           "date": "2026-09-15",
           "notes": "- AI Creator drafts are repaired instead of failing: long text is shortened, gender and tag spellings are understood, broken JSON is fixed, and the form lists what still needs a choice.\n- Persona Creators now have the same drafting tools as character Creators: AI post drafts from your own text, and an AI image toggle in the composer for drafted and manual posts.\n- Fixed bulk Creator creation skipping open-mode Creators with a wrong gender and tags reason, and draft errors now show the real cause.",
-          "highlight": false
-        },
-        {
-          "version": "0.0.11",
-          "date": "2026-09-14",
-          "notes": "- Fixed AI Creator drafts that failed or could not be saved because the model left out gender or gave fewer than three tags.",
-          "highlight": false
-        },
-        {
-          "version": "0.0.10",
-          "date": "2026-09-14",
-          "notes": "- Rebuilt the audience as a deterministic simulation with editable fan types, presets, a seven-day estimate, and JSON import and export.\n- Added separate free-simulation and AI-text clocks with call limits, a shared model budget, weekly fan spending limits, and a multi-process world lease.\n- Added Creator pricing: own subscription, post, and commission prices with suggestions, commission quotes that follow the brief, haggling, and weekly dynamic prices for character Creators.\n- Long posts and long comment threads now collapse, and replies nest under the comment they answer.\n- Fixed doubled subscriber totals, lost followers after an ended subscription, tips missing from fan relationships, thin like pacing, and silent subscription lapses.\n- Fixed Slurp images failing with an X-Admin-Secret error on remote installs, and sent image connection custom parameters such as LoRA settings.",
           "highlight": false
         }
       ]

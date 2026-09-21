@@ -3599,5 +3599,9 @@
   "ui.slurp.continuity.review": "Review",
   "ui.slurp.messages.requests.openContinuity": "Open continuity",
   "ui.slurp.settings.prompts.samplePostTab": "Sample post",
-  "ui.slurp.settings.prompts.liveForCreator": "As the preview Creator gets it"
+  "ui.slurp.settings.prompts.liveForCreator": "As the preview Creator gets it",
+  "ui.slurp.deepDetails.title": "Deep details",
+  "ui.slurp.deepDetails.loadError": "Could not load this post's details.",
+  "ui.slurp.deepDetails.copyAll": "Copy all as JSON",
+  "ui.slurp.deepDetails.notRecorded": "This post was written before Slurp recorded deep details, or by hand. Its stored plan, tags, and numbers are below."
 }
