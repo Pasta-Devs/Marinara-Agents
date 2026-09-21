@@ -220,6 +220,7 @@ export async function replyToSlurpMessage(
         mood: thread.mood,
         moodUpdatedAt: thread.moodUpdatedAt,
         notes: thread.notes,
+        threadId: thread.id,
         threadState: thread.threadState,
         creatorState,
         dayVibe: await describeSlurpDayVibe(db, thread.creatorAccountId),

@@ -1,4 +1,6 @@
 import type { DB } from "../../../db/connection.js";
+import { listSlurpContinuityFor } from "../../data/continuity/slp-continuity-storage.js";
+import { slurpContinuityInstruction } from "../../modules/continuity/slp-continuity-prompt.js";
 import type { SlpAccount } from "../../../../../shared/src/slp/slp-social.types.js";
 import { createSlurpStorage } from "../../data/slp-storage.js";
 import { buildSlurpPostBlocks } from "./slp-post-prompt.js";
@@ -91,6 +93,12 @@ export async function previewSlurpPromptBlocks(
     postMaxLength: settings.postMaxLength,
     variationInstruction: slurpPostVariationInstruction(variation, slurpCameraSourceInstruction(camera)),
     contentTypeInstruction: slurpContentAxesInstruction(axes),
+    continuityInstruction: slurpContinuityInstruction(
+      await listSlurpContinuityFor(db, account.id, "public_post", { at: new Date(), limit: 20 }).catch(() => ({
+        facts: [],
+        events: [],
+      })),
+    ),
     productionInstruction: slurpStrategyInstruction(strategy),
     promptBlocks: settings.promptBlocks,
     promptInstructions: settings.promptInstructions,

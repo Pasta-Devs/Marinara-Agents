@@ -286,20 +286,21 @@ export async function generateCreatorPost(
     input.request.access === "public" && !directed && slurpTeaserPost(account.id, sequence, settings.teaserRate);
   // What this post is for, as opposed to what it is about, and how it goes out. Story and teaser
   // are passed in rather than chosen again, so the decisions cannot contradict each other.
-  const { axes, shoot, reusedMedia, reusedSource, opportunity, demandTopic } = await planSlurpPost(db, {
-    account,
-    request: input.request,
-    strategy,
-    sequence,
-    directed,
-    storyVariation,
-    isTeaser,
-    imagesEnabled,
-    previewOnly: input.previewOnly,
-    slotId: input.slotId,
-    at: input.generatedAt ?? new Date(),
-    dueAt: input.publicationTime ?? null,
-  });
+  const { axes, shoot, reusedMedia, reusedSource, opportunity, demandTopic, continuityInstruction } =
+    await planSlurpPost(db, {
+      account,
+      request: input.request,
+      strategy,
+      sequence,
+      directed,
+      storyVariation,
+      isTeaser,
+      imagesEnabled,
+      previewOnly: input.previewOnly,
+      slotId: input.slotId,
+      at: input.generatedAt ?? new Date(),
+      dueAt: input.publicationTime ?? null,
+    });
   // Text-only by intent, not by failure: no brief, no image call, and no gallery stand-in.
   const textOnly = axes?.delivery === "text_only";
   // A reused picture is the picture: nothing is briefed or generated for this post.
@@ -375,6 +376,7 @@ export async function generateCreatorPost(
     promptBlocks: prompts.blocks,
     promptInstructions: prompts.instructions,
     contentTypeInstruction,
+    continuityInstruction,
     productionInstruction: slurpStrategyInstruction(strategy),
     generatedAt: input.generatedAt ?? new Date(),
     publicationTime: input.publicationTime,

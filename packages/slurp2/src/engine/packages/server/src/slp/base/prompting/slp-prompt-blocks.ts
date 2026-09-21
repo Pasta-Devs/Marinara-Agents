@@ -280,6 +280,7 @@ const PRODUCE_PROMPT_DESCRIPTIONS: SlurpPromptDescription[] = BASE_PROMPT_DESCRI
           ["safety", "required"],
           ["creativeDirection", "context", true],
           ["identity", "required"],
+          ["memory", "context", true],
           ["format", "required"],
           ["access", "context", true],
           ["contentType", "context", true],
@@ -473,7 +474,7 @@ export function slurpLegacyClassicPromptBlocks(value: unknown): SlurpPromptBlock
 
 /** Blocks the posting-intent overhaul added. The Classic preset turns them off. */
 const PRODUCE_ONLY_BLOCKS: Partial<Record<SlurpPromptId, readonly string[]>> = {
-  post: ["contentType", "production"],
+  post: ["contentType", "production", "memory"],
   dmReply: ["performance"],
   commentReply: ["performance"],
   invitedPost: ["performance"],

@@ -99,6 +99,8 @@ export type SlurpPostPromptInput = {
   loreContext?: string;
   promptBlocks?: SlurpPromptBlockOverrides;
   promptInstructions?: SlurpReusablePromptInstruction[];
+  /** From `slp-continuity-prompt.ts`: approved notes this Creator may use in a post. */
+  continuityInstruction?: string;
   /** From `slp-content-axes.ts`: what this post is for and how it goes out. */
   contentTypeInstruction?: string;
   /** From `slp-production-profile.ts`: how this Creator makes things. */
@@ -164,6 +166,14 @@ export function buildSlurpPostBlocks(input: SlurpPostPromptInput): SlurpPromptBl
       text: input.accessInstruction?.trim()
         ? `## Who can read this post\n${input.accessInstruction.trim()}\n## End who can read this post`
         : "",
+    },
+    // Notes written down earlier, as facts to stay consistent with. Never instructions: a line a
+    // model wrote into memory must not be able to tell a later model what to do.
+    {
+      id: "memory",
+      kind: "context" as const,
+      optional: true,
+      text: input.continuityInstruction?.trim() ?? "",
     },
     // What this post is for, as opposed to what it is about. Without it every post is the same
     // kind of post: something happened, here is a picture, here is what it meant.

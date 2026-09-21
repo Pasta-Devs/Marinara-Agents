@@ -306,6 +306,12 @@
     "slurp2": {
       "versions": [
         {
+          "version": "0.1.33",
+          "date": "2026-09-21",
+          "notes": "- Creators now write posts and messages knowing what they have already said: their limits, plans, and business rules, and what they have been doing.\n- A reply also knows what was said in that conversation. It never sees another fan's conversation, and a post never sees any of them.\n- Remembered notes are given as facts to stay consistent with, never as instructions, and are never quoted back.",
+          "highlight": false
+        },
+        {
           "version": "0.1.32",
           "date": "2026-09-21",
           "notes": "- Added a Continuity tab to each Creator: what they remember, what is waiting for your decision, what happened, and the plans behind recent posts.\n- You can remember or discard anything read from messages, edit or retract a note, and publish a private note.\n- Each note shows where it came from and the words it was taken from.",
@@ -417,12 +423,6 @@
           "version": "0.1.14",
           "date": "2026-09-20",
           "notes": "- Grouped related Pulse work into top-level cards instead of showing raw task rows.\n- Added expandable child task stacks, Needs attention, and grouped Recent sections.",
-          "highlight": false
-        },
-        {
-          "version": "0.1.13",
-          "date": "2026-09-20",
-          "notes": "- Enriched Pulse task rows with scope, progress, elapsed time, result detail, and clearer status labels.\n- Kept the panel compact with a three-line task presentation.",
           "highlight": false
         }
       ]

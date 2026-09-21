@@ -6,6 +6,8 @@
  * prompt is told — the history, the rapport, and whether the creator is even awake — so the
  * machinery around it is reused rather than rebuilt.
  */
+import { listSlurpContinuityFor } from "../../data/continuity/slp-continuity-storage.js";
+import { slurpContinuityInstruction } from "../../modules/continuity/slp-continuity-prompt.js";
 import { type APIProvider } from "@marinara-engine/shared";
 import { type SlpAccount } from "../../../../../shared/src/slp/slp-social.types.js";
 import { isDebugAgentsEnabled } from "../../../config/runtime-config.js";
@@ -126,6 +128,8 @@ export function buildSlurpMessageChat(input: {
   stance: SlurpStance;
   /** Facts kept from earlier in this conversation, beyond the history window. */
   notes?: SlurpThreadNote[];
+  /** From `slp-continuity-prompt.ts`: approved notes, including this thread's own. */
+  continuityInstruction?: string;
   threadState?: SlurpThreadState;
   creatorState?: SlurpCreatorState;
   characterCanon?: string;
@@ -216,10 +220,14 @@ export function buildSlurpMessageChat(input: {
         id: "memory",
         kind: "context" as const,
         optional: true,
-        text:
+        text: [
           input.notes && input.notes.length > 0
             ? "You already know some things about this fan from earlier conversations. Working memory is recent and may change. Long-term memory is stable. Use them when they fit, and never recite them back as a list."
             : "",
+          input.continuityInstruction?.trim() ?? "",
+        ]
+          .filter(Boolean)
+          .join("\n"),
       },
       {
         id: "creatorState",
@@ -380,6 +388,8 @@ export type SlurpMessagePromptInput = {
   mood?: number;
   moodUpdatedAt?: string | null;
   /** What the creator already knows about this fan, beyond the last sixteen turns. */
+  /** The thread this reply belongs to, so its own private notes can reach only this reply. */
+  threadId?: string | null;
   notes?: SlurpThreadNote[];
   threadState?: SlurpThreadState;
   creatorState?: SlurpCreatorState;
@@ -539,8 +549,20 @@ export async function buildSlurpMessagePrompt(input: SlurpMessagePromptInput): P
       return new Map([...postImages, ...threadImages]);
     })
     .catch(() => new Map<string, string>());
+  // Approved notes: the Creator's own, plus anything private to this thread. Another fan's thread
+  // is unreachable from here — `slurpContinuityReadable` decides that, not this call site.
+  const continuityInstruction = input.threadId
+    ? await listSlurpContinuityFor(input.db, input.creator.id, "fan_thread", {
+        at: new Date(),
+        threadId: input.threadId,
+        limit: 20,
+      })
+        .then((ledger) => slurpContinuityInstruction({ ...ledger, threadId: input.threadId }))
+        .catch(() => "")
+    : "";
   const messages = buildSlurpMessageChat({
     ...input,
+    continuityInstruction,
     contentMenu: await resolveSlurpCreatorMenu(input.db, input.creator.id).catch(() => ""),
     platformEvents: slurpPlatformEventInstruction(settings.platformEvents, new Date()),
     imageContexts,
