@@ -697,6 +697,40 @@ export const slurpContentOpportunities = fileTable("slurp2_content_opportunities
   completedAt: text("completed_at"),
 });
 
+/**
+ * A short planned sequence around one set: the set, a public teaser for it, and a later callback.
+ *
+ * A creator page converts in sequences, not single posts. Without this every set was a one-off and
+ * nothing ever pointed at it again, so a paid drop had no teaser and no follow-up.
+ */
+export const slurpContentCampaigns = fileTable("slurp2_content_campaigns", {
+  id: text("id").primaryKey(),
+  creatorAccountId: text("creator_account_id").notNull(),
+  /** `open` while any stage can still run; `closed` once every stage is done, skipped, or expired. */
+  status: text("status").notNull(),
+  createdAt: text("created_at").notNull(),
+  expiresAt: text("expires_at").notNull(),
+});
+
+/** One step of a campaign. A stage runs only in a slot the planner hands it, never on its own. */
+export const slurpContentCampaignStages = fileTable("slurp2_content_campaign_stages", {
+  id: text("id").primaryKey(),
+  campaignId: text("campaign_id").notNull(),
+  creatorAccountId: text("creator_account_id").notNull(),
+  /** `set`, `teaser`, or `callback`. Also the stage's intent. */
+  kind: text("kind").notNull(),
+  position: text("position").notNull(),
+  /** The access this stage needs. A teaser only runs in a public slot. */
+  access: text("access").notNull().default(""),
+  /** `planned`, `claimed`, `completed`, `skipped`, or `cancelled`. */
+  status: text("status").notNull(),
+  opportunityId: text("opportunity_id"),
+  postId: text("post_id"),
+  /** Not before this time. A callback the same afternoon as its set is not a callback. */
+  dueAt: text("due_at").notNull(),
+  completedAt: text("completed_at"),
+});
+
 /** One cross-process lease for the free world tick. */
 export const slurpWorldClaims = fileTable("slurp2_world_claims", {
   id: text("id").primaryKey(),

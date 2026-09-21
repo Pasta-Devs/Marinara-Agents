@@ -1,5 +1,11 @@
 # Slurp Remastered release notes
 
+## 0.1.28 — 2026-09-21
+
+- A set now opens a short campaign: the set, then a public teaser that shows a cropped corner of it, then a callback a day later.
+- A campaign step only runs in a slot the Creator would have posted in anyway, never before the step it follows, and never over a post the player directed.
+- Campaign steps that never find a slot expire after four days instead of running late.
+
 ## 0.1.27 — 2026-09-21
 
 - A callback can now show a real picture from the shoot it continues, instead of a new picture that only claims to be from it.

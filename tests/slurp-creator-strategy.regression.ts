@@ -121,8 +121,8 @@ const oneShot = slurp2Source(
   "packages/slurp2/src/engine/packages/server/src/slp/features/feed/slp-post-plan-service.ts",
 );
 assert.match(oneShot, /const chosen = request\.contentIntent;/u);
-assert.match(oneShot, /teaser: chosen \? chosen === "teaser" : isTeaser,/u);
-assert.match(oneShot, /intentWeights: chosen \? slurpOnlyIntent\(chosen\) : strategy\.intentWeights,/u);
+assert.match(oneShot, /teaser: forced \? forced === "teaser" : isTeaser,/u);
+assert.match(oneShot, /intentWeights: forced \? slurpOnlyIntent\(forced\) : strategy\.intentWeights,/u);
 assert.doesNotMatch(oneShot, /subtree: "strategy"/u, "a one-shot choice must not write the saved strategy");
 assert.match(
   slurp2Source("packages/slurp2/src/engine/packages/client/src/slp/app/slp-home-actions.ts"),
