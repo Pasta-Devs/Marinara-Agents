@@ -147,7 +147,7 @@ assert.match(service, /if \(!sharp\) return null;/u);
 assert.match(service, /\.extract\(slurpPreviewCrop\(meta\.width, meta\.height\)\)/u);
 assert.match(service, /if \(!isAllowedImageBuffer\(original\)\) return null;/u);
 const plan = slurp2Source("packages/slurp2/src/engine/packages/server/src/slp/features/feed/slp-post-plan-service.ts");
-assert.match(plan, /const axes = reuseKind && !reusedMedia \? drawnAxes : reusedAxes;/u);
+assert.match(plan, /const axes = reuseKind && !reusedMedia \? requestedAxes : reusedAxes;/u);
 assert.match(plan, /reusedMedia \? "reuse_media" : "publish"/u);
 const generation = slurp2Source(
   "packages/slurp2/src/engine/packages/server/src/slp/features/feed/slp-generation-service.ts",

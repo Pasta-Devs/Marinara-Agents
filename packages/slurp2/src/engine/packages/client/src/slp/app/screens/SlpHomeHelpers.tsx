@@ -1,5 +1,5 @@
 import type { SlpCreatorContentFormat } from "../../features/feed/slp-feed-contract";
-import type { SlurpContentIntent } from "../../../../../shared/src/slp/slp-content-axes.js";
+import type { SlurpContentDelivery, SlurpContentIntent } from "../../../../../shared/src/slp/slp-content-axes.js";
 import { AnimatePresence } from "framer-motion";
 import { ArrowLeft } from "lucide-react";
 import { DEFAULT_SLURP_SUBSCRIPTION_PRICE } from "../../modules/coin/SlpCoin";
@@ -38,6 +38,7 @@ export interface SlpCreatorPostSubmission {
   generateImage: boolean;
   /** One-shot purpose for a guided post. Null lets the Creator's strategy decide. */
   contentIntent: SlurpContentIntent | null;
+  contentDelivery: SlurpContentDelivery | null;
 }
 
 export interface SlpCreatorPostDraft {
@@ -52,6 +53,7 @@ export interface SlpCreatorPostDraft {
   unlockPrice: number | null;
   generateImage: boolean;
   contentIntent: SlurpContentIntent | null;
+  contentDelivery: SlurpContentDelivery | null;
 }
 
 export interface PendingCreatorImage {
@@ -80,6 +82,7 @@ export const EMPTY_SLP_CREATOR_POST_DRAFT: SlpCreatorPostDraft = {
   unlockPrice: null,
   generateImage: false,
   contentIntent: null,
+  contentDelivery: null,
 };
 
 export const EMPTY_STAGE_PROFILE: SlurpStageProfileInput = {

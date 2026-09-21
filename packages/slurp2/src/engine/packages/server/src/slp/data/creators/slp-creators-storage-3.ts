@@ -15,6 +15,7 @@ import {
   slpActivityDigests,
   slpInteractions,
   slpPosts,
+  slpPostMedia,
   slpPostUnlocks,
   slpCreatorCreatorReplyClaims,
   slpCreatorPreparedPosts,
@@ -189,6 +190,7 @@ export function createCreatorsStorage3(context: SlurpStorageContext) {
             ),
           );
         await tx.delete(slpCreatorPreparedPosts).where(eq(slpCreatorPreparedPosts.creatorAccountId, id));
+        if (postIds.length > 0) await tx.delete(slpPostMedia).where(inArray(slpPostMedia.postId, postIds));
         await deleteSlurpCreatorPlanningRows(tx, id);
         // Threads on either side of the deleted account, and their messages. Left behind, the
         // inbox would keep listing a creator that no longer exists.

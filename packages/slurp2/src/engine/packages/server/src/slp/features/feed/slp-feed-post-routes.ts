@@ -33,6 +33,7 @@ import { isDirectlyInvitedSlpCharacter } from "../../modules/feed/slp-invited-po
 import { resolveSlurpTextConnection } from "../../base/identity/slp-connection.js";
 import { generateInvitedSlpPostDraft } from "./slp-invited-post-draft-service.js";
 import { isConnectionAdmissionFailure } from "../../../services/generation/connection-admission.js";
+import { listSlurpPostMedia } from "../../data/feed/slp-post-media-storage.js";
 import { getErrorMessage } from "../../modules/creators/slp-public-support.js";
 import type { FastifyInstance } from "fastify";
 import { slurpPostTypeSchema } from "../../modules/requests/slp-request-schemas.js";
@@ -173,6 +174,31 @@ export async function slpFeedPostRoutes(app: FastifyInstance, deps: SlpRouteDeps
         .header("Content-Disposition", `inline; filename="slurp-${id}${extname(basename(served)).toLowerCase()}"`)
         .sendFile(basename(served), dirname(served))
     );
+  });
+
+  app.get("/noodler/posts/:id/media/:position", async (req, reply) => {
+    const { id, position: rawPosition } = req.params as { id: string; position: string };
+    const position = Number.parseInt(rawPosition, 10);
+    if (!Number.isInteger(position) || position < 1) return reply.code(404).send({ error: "Not Found" });
+    const personaId = (req.query as { personaId?: string }).personaId;
+    const readable = personaId ? await resolveReadableCreatorPost(personaId, id) : null;
+    const post = personaId ? readable?.post : await noodle.getNoodlerPostById(id);
+    if (!post) return reply.code(404).send({ error: "Not Found" });
+    const media = (await listSlurpPostMedia(app.db, id)).find((item) => item.position === position);
+    const absolute = media ? resolveCreatorMediaAbsolutePath(media.mediaPath) : null;
+    if (!absolute || !existsSync(absolute)) return reply.code(404).send({ error: "Not Found" });
+    if (readable?.locked) {
+      const teaser = await readCreatorLockedTeaser(absolute);
+      if (!teaser) return reply.code(404).send({ error: "Not Found" });
+      return reply.header("Cache-Control", "private, max-age=300").type("image/jpeg").send(teaser);
+    }
+    const width = z.coerce
+      .number()
+      .int()
+      .optional()
+      .safeParse((req.query as { width?: string }).width);
+    const served = await resolveCreatorMediaVariant(absolute, width.success ? width.data : undefined);
+    return reply.header("Cache-Control", "private, max-age=300").sendFile(basename(served), dirname(served));
   });
 
   /**
@@ -622,6 +648,7 @@ export async function slpFeedPostRoutes(app: FastifyInstance, deps: SlpRouteDeps
     const existing = await noodle.getNoodlerPostById(id);
     if (!existing) return reply.code(404).send({ error: "Slurp post not found" });
     if (existing.authorAccountId !== accountId) return reply.code(403).send({ error: "Forbidden" });
+    const attachments = await listSlurpPostMedia(app.db, id);
     const locked = await tryCreatorAccountOperation(existing.authorAccountId, () => noodle.deleteNoodlerPost(id));
     if (!locked.acquired) {
       return reply.code(409).send({
@@ -630,6 +657,7 @@ export async function slpFeedPostRoutes(app: FastifyInstance, deps: SlpRouteDeps
     }
     if (!locked.value) return reply.code(404).send({ error: "Slurp post not found" });
     unlinkCreatorMedia(readCreatorMediaPath(locked.value));
+    for (const attachment of attachments) unlinkCreatorMedia(attachment.mediaPath);
     return locked.value;
   });
 

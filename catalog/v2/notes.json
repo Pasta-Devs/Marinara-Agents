@@ -306,6 +306,12 @@
     "slurp2": {
       "versions": [
         {
+          "version": "0.1.34",
+          "date": "2026-09-21",
+          "notes": "- Photo sets now publish up to three ordered, shoot-consistent images and remain usable when a secondary image fails.\n- Public and locked posts render accessible carousels; every attachment follows the same access, deletion, backup, and autopurge rules as the primary image.\n- The composer can choose a one-off delivery method as well as a purpose, and rejects combinations that do not make sense.\n- Shoot records now retain effort, theme, capture time, campaign, selection counts, and attachment links.",
+          "highlight": false
+        },
+        {
           "version": "0.1.33",
           "date": "2026-09-21",
           "notes": "- Creators now write posts and messages knowing what they have already said: their limits, plans, and business rules, and what they have been doing.\n- A reply also knows what was said in that conversation. It never sees another fan's conversation, and a post never sees any of them.\n- Remembered notes are given as facts to stay consistent with, never as instructions, and are never quoted back.",
@@ -417,12 +423,6 @@
           "version": "0.1.15",
           "date": "2026-09-20",
           "notes": "- Separated scheduled posts from active generation work in Pulse.\n- Added a Scheduled section with the next publish time.",
-          "highlight": false
-        },
-        {
-          "version": "0.1.14",
-          "date": "2026-09-20",
-          "notes": "- Grouped related Pulse work into top-level cards instead of showing raw task rows.\n- Added expandable child task stacks, Needs attention, and grouped Recent sections.",
           "highlight": false
         }
       ]

@@ -10,6 +10,7 @@ import {
   slpActivityDigests,
   slpInteractions,
   slpPosts,
+  slpPostMedia,
   slpPostUnlocks,
   slpRefreshRuns,
   slpCreatorCreatorReplyClaims,
@@ -120,6 +121,7 @@ export function createCreatorsStorage2(context: SlurpStorageContext) {
           await tx.delete(table);
         }
         if (postIds.length) {
+          await tx.delete(slpPostMedia).where(inArray(slpPostMedia.postId, postIds));
           await tx.delete(slpInteractions).where(inArray(slpInteractions.postId, postIds));
           await tx.delete(slpPostUnlocks).where(inArray(slpPostUnlocks.postId, postIds));
           await tx.delete(slpPosts).where(inArray(slpPosts.id, postIds));
@@ -391,6 +393,7 @@ export function createCreatorsStorage2(context: SlurpStorageContext) {
         await tx.delete(slurpEvents).where(eq(slurpEvents.creatorAccountId, existing.id));
         await tx.delete(slpCreatorFirstPostJobs).where(eq(slpCreatorFirstPostJobs.creatorAccountId, existing.id));
         await tx.delete(slurpImprovementProposals).where(eq(slurpImprovementProposals.accountId, existing.id));
+        await tx.delete(slpPostMedia).where(inArray(slpPostMedia.postId, postIds));
         await tx.delete(slpPosts).where(inArray(slpPosts.id, postIds));
         await tx.delete(slpAccounts).where(eq(slpAccounts.id, existing.id));
         await tx._fileStore.flush();

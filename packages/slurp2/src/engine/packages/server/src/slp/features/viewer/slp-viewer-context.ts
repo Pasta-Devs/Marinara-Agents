@@ -196,6 +196,21 @@ export function createSlpViewerContext(
         const visibleInteractions = allInteractions.filter(
           (interaction) => !locked || !interaction.actorAccountId.startsWith(NOODLER_FAN_IDENTITY_PREFIX),
         );
+        const images = post.images.flatMap((image) => {
+          if (locked && !image.imageUrl.startsWith(NOODLER_MEDIA_URL_PREFIX)) return [];
+          return [
+            {
+              ...image,
+              imageUrl: slpCreatorPostMediaUrlForPersona(
+                image.imageUrl,
+                context.viewer.entityId,
+                locked ? "locked" : "original",
+                post.updatedAt,
+              ),
+              imagePrompt: locked ? null : image.imagePrompt,
+            },
+          ];
+        });
         return [
           post.id,
           {
@@ -205,7 +220,7 @@ export function createSlpViewerContext(
             locked,
             title: post.title,
             content: locked ? null : post.content,
-            hasImage: post.imageUrl !== null,
+            hasImage: post.images.length > 0,
             imageUrl:
               locked && !post.imageUrl?.startsWith(NOODLER_MEDIA_URL_PREFIX)
                 ? null
@@ -216,6 +231,7 @@ export function createSlpViewerContext(
                     post.updatedAt,
                   ),
             imagePrompt: locked ? null : post.imagePrompt,
+            images,
             metadata: locked ? null : post.metadata,
             // A locked post withholds its metadata, so the price travels as its own field. It is
             // The post's own price, which the unlock route charges when the wallet is enabled.

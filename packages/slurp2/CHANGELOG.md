@@ -1,5 +1,12 @@
 # Slurp Remastered release notes
 
+## 0.1.34 — 2026-09-21
+
+- Photo sets now publish up to three ordered, shoot-consistent images and remain usable when a secondary image fails.
+- Public and locked posts render accessible carousels; every attachment follows the same access, deletion, backup, and autopurge rules as the primary image.
+- The composer can choose a one-off delivery method as well as a purpose, and rejects combinations that do not make sense.
+- Shoot records now retain effort, theme, capture time, campaign, selection counts, and attachment links.
+
 ## 0.1.33 — 2026-09-21
 
 - Creators now write posts and messages knowing what they have already said: their limits, plans, and business rules, and what they have been doing.

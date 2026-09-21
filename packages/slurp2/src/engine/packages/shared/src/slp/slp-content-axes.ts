@@ -56,6 +56,21 @@ export function isSlurpContentDelivery(value: unknown): value is SlurpContentDel
   return typeof value === "string" && (SLURP_CONTENT_DELIVERIES as readonly string[]).includes(value);
 }
 
+const COMPATIBLE_DELIVERIES: Record<SlurpContentIntent, readonly SlurpContentDelivery[]> = {
+  casual: ["text_only", "new_capture", "existing_media", "story"],
+  teaser: ["text_only", "new_capture", "existing_media", "story", "cropped_preview"],
+  set: ["new_capture", "multi_image_set"],
+  behind_the_scenes: ["text_only", "new_capture", "existing_media", "story"],
+  request: ["text_only", "new_capture", "existing_media", "story", "multi_image_set"],
+  appreciation: ["text_only", "new_capture", "existing_media", "story"],
+  callback: ["new_capture", "existing_media", "story", "multi_image_set"],
+  business: ["text_only", "new_capture", "existing_media"],
+};
+
+export function slurpContentDeliveryFits(intent: SlurpContentIntent, delivery: SlurpContentDelivery): boolean {
+  return COMPATIBLE_DELIVERIES[intent].includes(delivery);
+}
+
 export function isSlurpContentWorkflow(value: unknown): value is SlurpContentWorkflow {
   return typeof value === "string" && (SLURP_CONTENT_WORKFLOWS as readonly string[]).includes(value);
 }

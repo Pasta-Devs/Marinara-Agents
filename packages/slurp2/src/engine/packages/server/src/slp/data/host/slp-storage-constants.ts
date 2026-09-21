@@ -6,6 +6,7 @@ import {
   slpActivityDigests,
   slpInteractions,
   slpPosts,
+  slpPostMedia,
   slpPostUnlocks,
   slpRefreshRuns,
   slpCreatorCreatorReplyClaims,
@@ -65,6 +66,7 @@ export const slurpViewerSettingsKey = (personaId: string) => `slurp2.viewer.${pe
 export const SLURP_BACKUP_TABLES = {
   accounts: slpAccounts,
   posts: slpPosts,
+  postMedia: slpPostMedia,
   subscriptions: slpAccountSubscriptions,
   unlocks: slpPostUnlocks,
   interactions: slpInteractions,

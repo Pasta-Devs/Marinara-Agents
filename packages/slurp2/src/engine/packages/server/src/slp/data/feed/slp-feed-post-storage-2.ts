@@ -10,6 +10,7 @@ import {
   slpActivityDigests,
   slpInteractions,
   slpPosts,
+  slpPostMedia,
   slpPostUnlocks,
   slpCreatorCreatorReplyClaims,
 } from "../../../db/schema/slurp.js";
@@ -287,6 +288,7 @@ export function createFeedPostStorage2(context: SlurpStorageContext) {
       await db.transaction(async (tx) => {
         await tx.delete(slpPostUnlocks).where(eq(slpPostUnlocks.postId, id));
         await tx.delete(slpInteractions).where(eq(slpInteractions.postId, id));
+        await tx.delete(slpPostMedia).where(eq(slpPostMedia.postId, id));
         await tx.delete(slpActivityDigests).where(eq(slpActivityDigests.sourcePostId, id));
         await tx.delete(slpPosts).where(eq(slpPosts.id, id));
       });

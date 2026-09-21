@@ -41,7 +41,9 @@ export async function planSlurpPost(
   db: DB,
   ctx: {
     account: Pick<SlpAccount, "id">;
-    request: Pick<SlpCreatorGenerationRequest, "contentIntent" | "access"> & { generateImage?: boolean };
+    request: Pick<SlpCreatorGenerationRequest, "contentIntent" | "contentDelivery" | "access"> & {
+      generateImage?: boolean;
+    };
     strategy: SlurpCreatorStrategy;
     sequence: number;
     directed: boolean;
@@ -111,15 +113,20 @@ export async function planSlurpPost(
     drawn && chosen && request.generateImage === true && imagesEnabled && drawn.delivery === "text_only"
       ? { ...drawn, delivery: "new_capture" as const }
       : drawn;
+  const requestedAxes =
+    drawnAxes && request.contentDelivery ? { ...drawnAxes, delivery: request.contentDelivery } : drawnAxes;
   // A callback continues something already shot. Drawing from a real earlier shoot is what lets a
   // caption say "one more from yesterday" and have the picture actually match, instead of putting
   // the Creator back in yesterday's room with no explanation.
-  const shoot = drawnAxes?.intent === "callback" ? await findReusableSlurpShoot(db, account.id, at) : null;
+  const shoot = requestedAxes?.intent === "callback" ? await findReusableSlurpShoot(db, account.id, at) : null;
   // Whether a real earlier picture goes up instead of a new one. Decided from pictures that exist,
   // so the plan never promises a reuse that cannot happen; if the chosen file turns out to be
   // unreadable the post falls back to a new picture. A preview reads no files.
   const reuse =
-    drawnAxes?.delivery === "new_capture" && imagesEnabled && !previewOnly
+    requestedAxes &&
+    ["new_capture", "existing_media", "cropped_preview"].includes(requestedAxes.delivery) &&
+    imagesEnabled &&
+    !previewOnly
       ? await findSlurpReuse(db, {
           creatorAccountId: account.id,
           access: request.access ?? "public",
@@ -136,16 +143,16 @@ export async function planSlurpPost(
       : null;
   const reusedAxes =
     // A campaign teaser shows its set whenever a preview can be cut; that is what the stage is for.
-    drawnAxes && reuse && stage?.kind === "teaser" && reuse.preview && drawnAxes.delivery === "new_capture"
-      ? { ...drawnAxes, delivery: "cropped_preview" as const }
-      : drawnAxes && reuse
+    requestedAxes && reuse && stage?.kind === "teaser" && reuse.preview && requestedAxes.delivery === "new_capture"
+      ? { ...requestedAxes, delivery: "cropped_preview" as const }
+      : requestedAxes && reuse && requestedAxes.delivery === "new_capture"
         ? slurpReuseDelivery(
-            drawnAxes,
+            requestedAxes,
             { shoot: Boolean(reuse.shoot), archive: Boolean(reuse.archive), preview: Boolean(reuse.preview) },
             account.id,
             sequence,
           )
-        : drawnAxes;
+        : requestedAxes;
   const reuseKind =
     reusedAxes?.delivery === "cropped_preview"
       ? ("preview" as const)
@@ -156,7 +163,13 @@ export async function planSlurpPost(
         : null;
   const reusedSource = reuseKind ? (reuse?.[reuseKind] ?? null) : null;
   const reusedMedia = reuseKind && reusedSource ? await loadSlurpReuse(reusedSource, reuseKind) : null;
-  const axes = reuseKind && !reusedMedia ? drawnAxes : reusedAxes;
+  if (request.contentDelivery === "existing_media" && !reuse?.archive && !reuse?.shoot) {
+    throw new Error("No reusable image is available for this Creator.");
+  }
+  if (request.contentDelivery === "cropped_preview" && !reuse?.preview) {
+    throw new Error("No set image is available to crop as a preview.");
+  }
+  const axes = reuseKind && !reusedMedia ? requestedAxes : reusedAxes;
   // The decision is durable before the model is called, so a run that dies between the two does
   // not lose it and a retry repeats it instead of drawing again. A preview decides nothing.
   const workflow = axes?.delivery === "text_only" ? "text_only" : reusedMedia ? "reuse_media" : "publish";
@@ -192,11 +205,17 @@ export async function planSlurpPost(
         : null;
   // Campaign bookkeeping, never allowed to cost the post. A stage this plan runs is claimed by it; a
   // set planned outside a campaign opens one, with itself as the first, already claimed stage.
+  let campaignId = stage?.campaignId ?? null;
   if (opportunity) {
     try {
       if (stage) await moveSlurpCampaignStage(db, stage, "claimed", { at, opportunityId: opportunity.id });
       else if (axes?.intent === "set") {
-        await openSlurpCampaign(db, { creatorAccountId: account.id, opportunityId: opportunity.id, at, dueAt });
+        campaignId = await openSlurpCampaign(db, {
+          creatorAccountId: account.id,
+          opportunityId: opportunity.id,
+          at,
+          dueAt,
+        });
       }
     } catch (error) {
       logger.warn(error, "[slurp] Could not update a campaign; the post stands on its own");
@@ -230,6 +249,7 @@ export async function planSlurpPost(
     opportunity,
     demandTopic: demand?.topic ?? null,
     continuityInstruction,
+    campaignId,
   };
 }
 
