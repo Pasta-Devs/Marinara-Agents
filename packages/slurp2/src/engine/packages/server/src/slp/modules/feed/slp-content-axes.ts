@@ -154,9 +154,11 @@ export type SlurpPostAxes = { intent: SlurpContentIntent; delivery: SlurpContent
  * instead of adjacent. Two ordinary days in a row are allowed on purpose: forcing every post to
  * differ from the last one reads as a schedule just as clearly as repeating does.
  *
- * ponytail: only `text_only`, `new_capture`, and `story` are drawn. `existing_media`,
- * `multi_image_set`, and `cropped_preview` need real media selection; the planner draws them once
- * that exists.
+ * Only `text_only`, `new_capture`, and `story` are drawn here. Reuse is decided afterwards by
+ * `slurpReuseDelivery`, because it depends on which real pictures exist.
+ *
+ * ponytail: `multi_image_set` is never drawn. A post holds one picture; several need a post media
+ * list and a carousel, which is a data-model change of its own.
  */
 export function slurpPostAxes(
   creatorAccountId: string,
@@ -251,4 +253,38 @@ const PUBLISHING: ReadonlySet<SlurpContentWorkflow> = new Set([
 
 export function slurpWorkflowPublishes(state: SlurpContentWorkflow): boolean {
   return PUBLISHING.has(state);
+}
+
+/**
+ * Whether this post reuses a real earlier picture instead of taking a new one.
+ *
+ * Run after `slurpPostAxes`, with what actually exists. A callback mostly shows the shoot it names;
+ * a public teaser often shows a cropped corner of a recent locked set; anything else now and then
+ * reposts an older picture. Text-only, Story, and set posts are left alone: a set is new work, and
+ * a Story is taken now.
+ */
+export function slurpReuseDelivery(
+  axes: SlurpPostAxes,
+  available: { shoot: boolean; archive: boolean; preview: boolean },
+  creatorAccountId: string,
+  sequence: number,
+): SlurpPostAxes {
+  if (axes.delivery !== "new_capture") return axes;
+  const draw = (reuse: number) =>
+    slurpWeightedPick("reuseDelivery", creatorAccountId, sequence, [
+      { value: true, weight: reuse },
+      { value: false, weight: 100 - reuse },
+    ]);
+  if (axes.intent === "callback" && available.shoot && draw(60)) return { ...axes, delivery: "existing_media" };
+  if (axes.intent === "teaser" && available.preview && draw(50)) return { ...axes, delivery: "cropped_preview" };
+  if (
+    axes.intent !== "set" &&
+    axes.intent !== "callback" &&
+    available.archive &&
+    slurpDeliveryFits(axes.intent, "existing_media") &&
+    draw(12)
+  ) {
+    return { ...axes, delivery: "existing_media" };
+  }
+  return axes;
 }

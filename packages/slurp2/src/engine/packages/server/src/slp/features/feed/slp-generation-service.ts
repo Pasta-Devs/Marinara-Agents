@@ -29,6 +29,7 @@ import { createPromptOverridesStorage } from "../../../services/storage/prompt-o
 import { generateCreatorPostImage } from "../media/slp-media-contract.js";
 import { slpCreatorUnlockPriceMetadata } from "../../modules/economy/slp-prices.js";
 import {
+  NOODLER_MEDIA_PREFIX,
   persistCreatorPostWithUploadedMedia,
   slpCreatorPostMediaUrl,
   type SlpCreatorPostMediaUpload,
@@ -83,10 +84,12 @@ import {
 } from "../../base/prompting/slp-prompt-blocks.js";
 import { slurpCameraSourceInstruction, slurpPostCameraSource } from "../../modules/feed/slp-camera-source.js";
 import { slurpImageBrief } from "../../modules/feed/slp-image-brief.js";
-import { slurpContentAxesInstruction, slurpOnlyIntent, slurpPostAxes } from "../../modules/feed/slp-content-axes.js";
-import { completeSlurpOpportunity, planSlurpOpportunity } from "../../data/feed/slp-opportunity-storage.js";
+import { slurpContentAxesInstruction } from "../../modules/feed/slp-content-axes.js";
+import { planSlurpPost } from "./slp-post-plan-service.js";
+import { stageImageToDisk, type StagedGalleryImage } from "../../../services/image/image-generation.js";
+import { completeSlurpOpportunity } from "../../data/feed/slp-opportunity-storage.js";
 import { slurpShootInstruction } from "../../modules/feed/slp-shoot.js";
-import { findReusableSlurpShoot, openSlurpShoot, useSlurpShoot } from "../../data/feed/slp-shoot-storage.js";
+import { openSlurpShoot, useSlurpShoot } from "../../data/feed/slp-shoot-storage.js";
 import { slurpEffortInstruction, slurpPostEffort } from "../../modules/creators/slp-production-profile.js";
 import { slurpCreatorStrategy, slurpStrategyInstruction } from "../../modules/creators/slp-creator-strategy.js";
 
@@ -106,6 +109,8 @@ export type PreparedCreatorPostResult = {
   metadata: Record<string, unknown>;
   /** The exact system and user messages used for this prepared result. */
   compiledPrompt: string;
+  /** A reused picture staged for the payload. The caller promotes it once the row is durable. */
+  stagedMedia?: StagedGalleryImage | null;
 };
 
 type GenerationConnection = NonNullable<Awaited<ReturnType<ReturnType<typeof createConnectionsStorage>["getWithKey"]>>>;
@@ -282,52 +287,24 @@ export async function generateCreatorPost(
     input.request.access === "public" && !directed && slurpTeaserPost(account.id, sequence, settings.teaserRate);
   // What this post is for, as opposed to what it is about, and how it goes out. Story and teaser
   // are passed in rather than chosen again, so the decisions cannot contradict each other.
-  // A purpose picked in the composer outranks the strategy for this post only, even on a directed
-  // post: the direction says what it is about, the purpose says what it is for. It never touches
-  // the saved strategy. An image the player asked for is honoured rather than redrawn as text.
-  const chosen = input.request.contentIntent;
-  const drawn =
-    !directed || chosen
-      ? slurpPostAxes(account.id, sequence, {
-          story: storyVariation,
-          teaser: chosen ? chosen === "teaser" : isTeaser,
-          images: imagesEnabled,
-          intentWeights: chosen ? slurpOnlyIntent(chosen) : strategy.intentWeights,
-          textOnlyRate: strategy.textOnlyRate,
-        })
-      : null;
-  const axes =
-    drawn && chosen && input.request.generateImage === true && imagesEnabled && drawn.delivery === "text_only"
-      ? { ...drawn, delivery: "new_capture" as const }
-      : drawn;
-  // The decision is durable before the model is called, so a run that dies between the two does
-  // not lose it and a retry repeats it instead of drawing again. A preview decides nothing.
-  const opportunity =
-    axes && !input.previewOnly
-      ? await planSlurpOpportunity(db, {
-          creatorAccountId: account.id,
-          slotId: input.slotId ?? null,
-          sequence,
-          workflow: axes.delivery === "text_only" ? "text_only" : "publish",
-          intent: axes.intent,
-          delivery: axes.delivery,
-          access: input.request.access ?? "",
-          at: input.generatedAt ?? new Date(),
-          dueAt: input.publicationTime ?? null,
-        }).catch((error: unknown) => {
-          // A post must never fail over planner bookkeeping.
-          logger.warn(error, "[slurp] Could not record a content plan; the post stands on its own");
-          return null;
-        })
-      : null;
+  const { axes, shoot, reusedMedia, reusedSource, opportunity } = await planSlurpPost(db, {
+    account,
+    request: input.request,
+    strategy,
+    sequence,
+    directed,
+    storyVariation,
+    isTeaser,
+    imagesEnabled,
+    previewOnly: input.previewOnly,
+    slotId: input.slotId,
+    at: input.generatedAt ?? new Date(),
+    dueAt: input.publicationTime ?? null,
+  });
   // Text-only by intent, not by failure: no brief, no image call, and no gallery stand-in.
   const textOnly = axes?.delivery === "text_only";
-  const postImages = imagesEnabled && !textOnly;
-  // A callback continues something already shot. Drawing from a real earlier shoot is what lets a
-  // caption say "one more from yesterday" and have the picture actually match, instead of putting
-  // the Creator back in yesterday's room with no explanation.
-  const shoot =
-    axes?.intent === "callback" ? await findReusableSlurpShoot(db, account.id, input.generatedAt ?? new Date()) : null;
+  // A reused picture is the picture: nothing is briefed or generated for this post.
+  const postImages = imagesEnabled && !textOnly && !reusedMedia;
   // A reused shoot keeps its own camera. The rotation's choice for today does not apply to a
   // picture that was taken two days ago.
   const camera = shoot?.cameraSource ?? cameraSource;
@@ -473,29 +450,6 @@ export async function generateCreatorPost(
   );
   if (!protectedContent) throw new Error("Slurp generation returned no usable post content.");
 
-  // Shoot bookkeeping, once the post definitely has text. A set drop opens a shoot that later
-  // callbacks can draw from; a callback that used one spends a shot. Recorded here rather than
-  // after persistence because a run that fails on the image still produced the shoot; a shoot left
-  // behind by a run that throws later is pruned with the rest.
-  if (!input.previewOnly) {
-    if (axes?.intent === "set" && camera && variation) {
-      await openSlurpShoot(db, {
-        creatorAccountId: account.id,
-        place: variation.place,
-        company: variation.company,
-        cameraSource: camera,
-        at: input.generatedAt ?? new Date(),
-      }).catch((error: unknown) => {
-        // A post must never fail over continuity bookkeeping.
-        logger.warn(error, "[slurp] Could not open a shoot session; the post stands on its own");
-        return null;
-      });
-    } else if (shoot) {
-      await useSlurpShoot(db, shoot).catch((error: unknown) => {
-        logger.warn(error, "[slurp] Could not record a shoot reuse; the shoot may be posted from again");
-      });
-    }
-  }
   const protectedGenerated = {
     // Every format shows a title now. Weak models still drop the field, so fall back to the
     // opening of the post rather than failing a whole generation over a headline.
@@ -533,6 +487,36 @@ export async function generateCreatorPost(
       )
     : null;
 
+  // Shoot bookkeeping, once the post definitely has text and its picture brief. A set drop opens a
+  // shoot that later callbacks can draw from, and stores its brief so their pictures keep its
+  // clothes and light; a callback that used one spends a shot. Recorded here rather than after
+  // persistence because a run that fails on the image still produced the shoot; a shoot left
+  // behind by a run that throws later is pruned with the rest.
+  let openedShootId: string | null = null;
+  if (!input.previewOnly) {
+    if (axes?.intent === "set" && camera && variation) {
+      const opened = await openSlurpShoot(db, {
+        creatorAccountId: account.id,
+        place: variation.place,
+        company: variation.company,
+        cameraSource: camera,
+        brief: draftImagePrompt,
+        at: input.generatedAt ?? new Date(),
+      }).catch((error: unknown) => {
+        // A post must never fail over continuity bookkeeping.
+        logger.warn(error, "[slurp] Could not open a shoot session; the post stands on its own");
+        return null;
+      });
+      openedShootId = opened?.id ?? null;
+    } else if (shoot) {
+      await useSlurpShoot(db, shoot).catch((error: unknown) => {
+        logger.warn(error, "[slurp] Could not record a shoot reuse; the shoot may be posted from again");
+      });
+    }
+  }
+  // Stamped on the post so a later callback can find the pictures this shoot actually produced.
+  const shootId = openedShootId ?? shoot?.id ?? null;
+
   const projectChapter = project ? slurpProjectChapter(project) : null;
   // An open arc choice is posted as a real poll, attached here rather than parsed from the text.
   const arcChoice = project && !project.pollPostId ? (project.choices[project.chapter] ?? null) : null;
@@ -559,6 +543,9 @@ export async function generateCreatorPost(
       noodlerContentFormat: format,
       // Persisted so later planning, the scheduled publisher, and the feed read the same decision.
       ...(axes ? { contentIntent: axes.intent, contentDelivery: axes.delivery } : {}),
+      ...(shootId ? { shootId } : {}),
+      // Where a reused picture came from. The bytes are a copy, so this is provenance, not a link.
+      ...(reusedMedia && reusedSource ? { reusedFromPostId: reusedSource.id } : {}),
       // Stamped at creation like a manual post, so a generated locked post honours the configured
       // unlock price and keeps it across refreshes and edits instead of falling back to 1.
       ...(input.request.access === "locked"
@@ -574,7 +561,17 @@ export async function generateCreatorPost(
   };
 
   if (input.prepareOnly) {
+    // A scheduled post publishes later, so a reused picture is staged now and rides in the payload
+    // like a generated one. The reserve promotes it once the row is durable, or drops it.
+    const stagedReuse = reusedMedia
+      ? stageImageToDisk(
+          `${NOODLER_MEDIA_PREFIX}${account.id}`,
+          reusedMedia.buffer.toString("base64"),
+          reusedMedia.extension,
+        )
+      : null;
     return {
+      stagedMedia: stagedReuse,
       title: protectedGenerated.title,
       content: protectedGenerated.content,
       imagePrompt: draftImagePrompt,
@@ -586,7 +583,11 @@ export async function generateCreatorPost(
       // so a scheduled Story used to publish as an ordinary post. Carry the intent in the prepared
       // payload instead; publishDueNoodlerPreparedPosts drops it again if no image ever attached,
       // which keeps the "a Story is a picture with a line under it" rule intact.
-      metadata: { ...baseInput.metadata, ...(storyVariation ? { noodlerPostType: "story" } : {}) },
+      metadata: {
+        ...baseInput.metadata,
+        ...(stagedReuse ? { noodlerMediaPath: stagedReuse.filePath } : {}),
+        ...(storyVariation ? { noodlerPostType: "story" } : {}),
+      },
     };
   }
 
@@ -621,9 +622,10 @@ export async function generateCreatorPost(
     return post;
   };
 
-  if (input.media) {
+  const media = input.media ?? reusedMedia;
+  if (media) {
     const postId = newId();
-    const post = await persistCreatorPostWithUploadedMedia(account.id, postId, input.media, (persistedMedia) =>
+    const post = await persistCreatorPostWithUploadedMedia(account.id, postId, media, (persistedMedia) =>
       persist({
         id: postId,
         imageUrl: persistedMedia.imageUrl,

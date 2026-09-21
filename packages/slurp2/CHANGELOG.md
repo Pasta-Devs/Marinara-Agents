@@ -1,5 +1,12 @@
 # Slurp Remastered release notes
 
+## 0.1.27 — 2026-09-21
+
+- A callback can now show a real picture from the shoot it continues, instead of a new picture that only claims to be from it.
+- Creators now and then repost an older picture of their own. A picture from a locked post is only ever reused in another locked post.
+- A public teaser can show a cropped corner of a recent locked set. The crop is cut on the server, so the full picture never reaches the public post.
+- A new picture from an earlier shoot keeps that shoot's clothes and light.
+
 ## 0.1.26 — 2026-09-21
 
 - Added a Posting strategy section to each Creator's publishing settings: production style, how often a slot stays quiet, how much they lean on words, and a note on how they run their page.
