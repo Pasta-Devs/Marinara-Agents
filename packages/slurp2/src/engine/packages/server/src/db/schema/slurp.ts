@@ -662,6 +662,36 @@ export const slurpShootSessions = fileTable("slurp2_shoot_sessions", {
   createdAt: text("created_at").notNull(),
 });
 
+/**
+ * One planned post, decided before anything is written.
+ *
+ * The feed used to be the only record that a Creator had considered posting. Nothing said why a
+ * post exists, and nothing at all was left behind when the answer was "not today" — a quiet
+ * afternoon was indistinguishable from a failed run. The planner writes its decision here first,
+ * so a retry repeats the decision instead of making a new one, and a chosen skip is a fact rather
+ * than an absence.
+ */
+export const slurpContentOpportunities = fileTable("slurp2_content_opportunities", {
+  id: text("id").primaryKey(),
+  creatorAccountId: text("creator_account_id").notNull(),
+  /** The scheduled slot this plan belongs to, when the scheduler asked for it. */
+  slotId: text("slot_id"),
+  /** How many posts the Creator had made when the plan was drawn. The draws seed off it. */
+  sequence: text("sequence").notNull(),
+  /** From `slp-content-axes.ts`. Empty for a skip: nothing is being delivered. */
+  intent: text("intent").notNull().default(""),
+  delivery: text("delivery").notNull().default(""),
+  workflow: text("workflow").notNull(),
+  access: text("access").notNull().default(""),
+  /** Why the Creator did not post. Set only when the workflow is `skip`. */
+  skipReason: text("skip_reason"),
+  /** The post this plan produced, once one exists. */
+  postId: text("post_id"),
+  plannedAt: text("planned_at").notNull(),
+  dueAt: text("due_at"),
+  completedAt: text("completed_at"),
+});
+
 /** One cross-process lease for the free world tick. */
 export const slurpWorldClaims = fileTable("slurp2_world_claims", {
   id: text("id").primaryKey(),

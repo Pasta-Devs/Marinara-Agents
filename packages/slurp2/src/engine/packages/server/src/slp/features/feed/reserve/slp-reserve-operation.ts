@@ -23,6 +23,13 @@ import { createCharacterGalleryStorage } from "../../../../services/storage/char
 import { createChatsStorage } from "../../../../services/storage/chats.storage.js";
 import { createGalleryStorage } from "../../../../services/storage/gallery.storage.js";
 import { pickGalleryAttachmentForAccount } from "../slp-generated-activity-service.js";
+import { slurpPlanSlot } from "../../../modules/feed/slp-planner.js";
+import {
+  completeSlurpOpportunity,
+  findSlurpOpportunityBySlot,
+  planSlurpOpportunity,
+  slurpSkippedLastSlot,
+} from "../../../data/feed/slp-opportunity-storage.js";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -143,11 +150,36 @@ export async function prepareNextCreatorReservePost(db: DB, at = new Date()): Pr
   const locked = await tryCreatorAccountOperation(selectedAccount.id, async () => {
     const connection = await resolveSlurpTextConnection(createConnectionsStorage(db), settings.generationConnectionId);
     if (!connection) return "ineligible" as const;
+    // Whether this Creator posts at all, decided before any model is called. A quiet slot costs
+    // nothing: no text, no image, no attempt claim, and no failure mark. See `slp-planner.ts`.
+    const planned = await findSlurpOpportunityBySlot(db, selectedSlotId);
+    const decision =
+      planned?.workflow === "skip"
+        ? { skip: true as const, reason: planned.skipReason ?? ("quiet_day" as const) }
+        : planned
+          ? { skip: false as const }
+          : slurpPlanSlot(selectedAccount.id, await noodle.countNoodlerPostsByAccount(selectedAccount.id), {
+              skippedLast: await slurpSkippedLastSlot(db, selectedAccount.id),
+            });
+    if (decision.skip) {
+      await planSlurpOpportunity(db, {
+        creatorAccountId: selectedAccount.id,
+        slotId: selectedSlotId,
+        sequence: await noodle.countNoodlerPostsByAccount(selectedAccount.id),
+        workflow: "skip",
+        skipReason: decision.reason,
+        at,
+        dueAt: new Date(selectedPublishAt),
+      });
+      await noodle.skipNoodlerScheduledPost(selectedSlotId, selectedPublishAt, at);
+      return "skipped" as const;
+    }
     try {
       let payload = await generateCreatorPost(db, {
         account: selectedAccount,
         connection,
         prepareOnly: true,
+        slotId: selectedSlotId,
         admissionMode: {
           kind: "background",
           beforeAttempt: async () => {
@@ -285,6 +317,9 @@ export async function prepareNextCreatorReservePost(db: DB, at = new Date()): Pr
           stagedMedia?.compensate();
           return "missed" as const;
         }
+        // The plan is executed once the slot holds it. Publishing it later is mechanical.
+        const opportunity = await findSlurpOpportunityBySlot(db, selectedSlotId);
+        if (opportunity) await completeSlurpOpportunity(db, opportunity.id, { at: completedAt });
       } catch (persistError) {
         // The row never landed, so the staged image belongs to nothing: drop it before rethrowing.
         stagedMedia?.compensate();
