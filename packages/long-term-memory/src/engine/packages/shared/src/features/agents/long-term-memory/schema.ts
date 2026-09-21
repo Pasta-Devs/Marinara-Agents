@@ -1688,6 +1688,46 @@ export const ltmRepairResponseSchema = z
   })
   .strict();
 
+const ltmNoteForkRequestBaseSchema = z
+  .object({
+    noteIds: z.array(ltmNoteIdSchema).min(2).max(100),
+  })
+  .strict();
+
+export const ltmNoteForkPreviewRequestSchema = ltmNoteForkRequestBaseSchema.refine(
+  (request) => new Set(request.noteIds).size === request.noteIds.length,
+  "Fork note IDs must be unique.",
+);
+
+export const ltmNoteForkCandidateSchema = z
+  .object({
+    noteIds: z.array(ltmNoteIdSchema).min(2).max(100),
+    canonicalNoteId: ltmNoteIdSchema,
+    noteType: z.enum(["thread", "world"]),
+    similarity: z.number().min(0).max(1),
+    blockingReasons: z.array(z.string().min(1).max(500)).max(20),
+    contentHash: z.string().regex(/^[a-f0-9]{64}$/),
+  })
+  .strict();
+
+export const ltmNoteForkPreviewResponseSchema = z
+  .object({
+    candidates: z.array(ltmNoteForkCandidateSchema).max(100),
+  })
+  .strict();
+
+export const ltmNoteForkApplyRequestSchema = ltmNoteForkRequestBaseSchema
+  .extend({ canonicalNoteId: ltmNoteIdSchema, contentHash: z.string().regex(/^[a-f0-9]{64}$/) })
+  .refine((request) => new Set(request.noteIds).size === request.noteIds.length, "Fork note IDs must be unique.");
+
+export const ltmNoteForkApplyResponseSchema = z
+  .object({
+    canonicalNoteId: ltmNoteIdSchema,
+    archivedNoteIds: z.array(ltmNoteIdSchema).max(99),
+    backupId: z.string().uuid(),
+  })
+  .strict();
+
 export const ltmIdentityMatchBasisSchema = z.enum([
   "bound_subjects",
   "exact_name",
@@ -2933,6 +2973,11 @@ export type LtmRepairAction = z.infer<typeof ltmRepairActionSchema>;
 export type LtmRepairRequest = z.infer<typeof ltmRepairRequestSchema>;
 export type LtmRepairActionResult = z.infer<typeof ltmRepairActionResultSchema>;
 export type LtmRepairResponse = z.infer<typeof ltmRepairResponseSchema>;
+export type LtmNoteForkPreviewRequest = z.infer<typeof ltmNoteForkPreviewRequestSchema>;
+export type LtmNoteForkCandidate = z.infer<typeof ltmNoteForkCandidateSchema>;
+export type LtmNoteForkPreviewResponse = z.infer<typeof ltmNoteForkPreviewResponseSchema>;
+export type LtmNoteForkApplyRequest = z.infer<typeof ltmNoteForkApplyRequestSchema>;
+export type LtmNoteForkApplyResponse = z.infer<typeof ltmNoteForkApplyResponseSchema>;
 export type LtmIdentityMatchBasis = z.infer<typeof ltmIdentityMatchBasisSchema>;
 export type LtmIdentityRepairNoteMatch = z.infer<typeof ltmIdentityRepairNoteMatchSchema>;
 export type LtmIdentityRepairAdditiveContent = z.infer<typeof ltmIdentityRepairAdditiveContentSchema>;

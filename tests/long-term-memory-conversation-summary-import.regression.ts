@@ -67,6 +67,23 @@ const conflictingSourceChat = {
     ],
   },
 };
+const sharedBranchChat = {
+  ...roleplayChat,
+  id: "chat-shared-branch",
+  groupId: "group-shared-branches",
+  metadata: {
+    branchName: "Shared branch",
+    summaryEntries: [{ id: "shared-summary", content: "The shared branch summary." }],
+  },
+};
+const sharedBranchSiblingChat = {
+  ...sharedBranchChat,
+  id: "chat-shared-branch-sibling",
+  metadata: {
+    branchName: "Shared branch sibling",
+    summaryEntries: [{ id: "shared-summary", content: "The shared branch summary." }],
+  },
+};
 
 async function main() {
   const [
@@ -93,7 +110,15 @@ async function main() {
   await runWithSafeCleanup(
     "Long-Term Memory Conversation summary import",
     async () => {
-      const chats = [conversationChat, roleplayChat, gameChat, duplicateSourceChat, conflictingSourceChat];
+      const chats = [
+        conversationChat,
+        roleplayChat,
+        gameChat,
+        duplicateSourceChat,
+        conflictingSourceChat,
+        sharedBranchChat,
+        sharedBranchSiblingChat,
+      ];
       releaseRuntime = configurePackageRuntime({
         dataDir,
         logger: { debug() {}, info() {}, warn() {}, error() {} },
@@ -533,6 +558,55 @@ async function main() {
       assert.equal(importedAgain.counts.sourceNotesWritten, 3);
       assert.ok(importedAgain.imported.every((item) => !item.created));
       assert.equal((await storage.listNotes({ type: "source" })).length, 7);
+
+      const sharedBranchPreview = await previewPackageInterop(
+        {
+          source: "chats",
+          sourceScope: { groupId: "group-shared-branches", groupIds: ["group-shared-branches"] },
+          limit: 100,
+        },
+        join(dataDir, "long-term-memory"),
+      );
+      assert.deepEqual(
+        sharedBranchPreview.samples.map((candidate) => candidate.sourceId),
+        [`${sharedBranchChat.id}:shared-summary`],
+        "identical branch summaries must collapse to one ready-to-import preview row",
+      );
+      assert.deepEqual(sharedBranchPreview.totals, { matches: 1, ready: 1, imported: 0 });
+
+      const sharedBranchDestinationScope = {
+        groupId: "group-shared-branches",
+        groupIds: ["group-shared-branches"],
+      };
+      const importedSibling = await importPackageInterop(
+        {
+          source: "chats",
+          sourceIds: [`${sharedBranchSiblingChat.id}:shared-summary`],
+          destinationScope: sharedBranchDestinationScope,
+          extract: false,
+          limit: 100,
+        },
+        join(dataDir, "long-term-memory"),
+        new AbortController().signal,
+      );
+      assert.equal(importedSibling.imported.length, 1);
+      assert.ok(importedSibling.imported.every((item) => item.created));
+
+      const sharedBranchPreviewAfterImport = await previewPackageInterop(
+        {
+          source: "chats",
+          sourceScope: sharedBranchDestinationScope,
+          limit: 100,
+        },
+        join(dataDir, "long-term-memory"),
+      );
+      assert.deepEqual(
+        sharedBranchPreviewAfterImport.samples.map((candidate) => candidate.sourceId),
+        [`${sharedBranchSiblingChat.id}:shared-summary`],
+        "the collapsed row must switch to the imported sibling instead of re-offering the summary",
+      );
+      assert.equal(sharedBranchPreviewAfterImport.samples[0].status, "imported");
+      assert.deepEqual(sharedBranchPreviewAfterImport.totals, { matches: 1, ready: 0, imported: 1 });
 
       const duplicateImport = ltmImportSourceNotesResponseSchema.parse(
         await importPackageInterop(

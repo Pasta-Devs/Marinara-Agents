@@ -1,5 +1,20 @@
 # Long-Term Memory changelog
 
+## 1.3.9 — 2026-09-21
+
+- Collapsed identical chat summaries shared across branch chat records into one ready-to-import Sources preview row, while preserving conflicting same-ID summaries, distinct summaries, and branch-specific import provenance.
+
+## 1.3.8 — 2026-09-21
+
+- Resolve character and relationship extraction candidates by trusted subject keys before matching names, while preserving rejection of invalid keys and ambiguous keyless identities.
+- Reconcile structured-summary backfill with batch-established subject keys, keep same-name local characters isolated to their own chat family, and map short participant names to their established full-name identity instead of forking duplicate character or relationship notes.
+
+## 1.3.7 — 2026-09-20
+
+- Added review-only warnings for suspicious resolved-thread creates and strict event identifiers, plus backed-up preview/apply maintenance for divergent thread and world notes.
+- Repaired fork review scope, provenance, stale-preview, conflict, and rollback guardrails.
+- Corrected resolved-thread diagnostics and character-alias validation.
+
 ## 1.3.6 — 2026-09-20
 
 - Preserved actionable extraction error codes and retryability, and reused one deterministic vault snapshot for Game Mode batch imports.

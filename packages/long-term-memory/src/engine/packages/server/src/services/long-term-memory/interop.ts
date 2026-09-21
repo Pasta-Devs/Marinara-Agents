@@ -326,6 +326,24 @@ function candidateVisibleInScope(candidate: Candidate, scope: LtmScope | undefin
   return matchesScope(candidate, scope);
 }
 
+function resolvePreviewCandidates(rows: Candidate[], matchExisting: (row: Candidate) => LtmNote | undefined) {
+  const resolved = new Map<string, Candidate>();
+  for (const row of rows) {
+    // ponytail: branch chat records share summary entry identity but keep
+    // distinct chat ids; keep the first identical chat-summary candidate so
+    // shared branch summaries do not repeat in the Sources preview, preferring
+    // an already-imported sibling so the row reflects imported state instead of
+    // offering a duplicate import.
+    const key =
+      row.provenance.kind === "chat_summary"
+        ? `chat_summary\0${row.provenance.entryId ?? ""}\0${row.sourceText}`
+        : row.sourceId;
+    const previous = resolved.get(key);
+    if (!previous || (!matchExisting(previous) && matchExisting(row))) resolved.set(key, row);
+  }
+  return [...resolved.values()];
+}
+
 function resolveImportCandidates(rows: Candidate[]) {
   const resolved = new Map<string, Candidate>();
   const conflicts = new Map<string, Candidate>();
@@ -663,10 +681,13 @@ export async function previewPackageInterop(
   root: string,
 ): Promise<LtmInteropPreviewResponse> {
   const sourceScope = requestedSourceScope(request);
-  const rows = (await candidates({ ...request, sourceScope, includeOutOfScope: sourceScope !== undefined })).filter(
-    (row) => candidateVisibleInScope(row, sourceScope),
-  );
   const matchExisting = await existingMatcher(new LongTermMemoryStorage(root));
+  const rows = resolvePreviewCandidates(
+    (await candidates({ ...request, sourceScope, includeOutOfScope: sourceScope !== undefined })).filter((row) =>
+      candidateVisibleInScope(row, sourceScope),
+    ),
+    matchExisting,
+  );
   const page = previewPage(rows, request, request.source, (row) => row.previewOrder ?? row.sourceId);
   // ponytail: host resource APIs list complete source records; only this page gets
   // rendered previews and freshness hashes. Host-side cursors can replace the scan later.

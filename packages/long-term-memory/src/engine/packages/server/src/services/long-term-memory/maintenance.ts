@@ -29,6 +29,7 @@ import { longTermMemoryRecallIndexPath, parseLtmRecallIndex, rebuildLongTermMemo
 import { LongTermMemoryStorage } from "./storage.js";
 import { parseStoredLtmNote } from "./stored-note.js";
 import { withLtmVaultLock } from "./vault-lock.js";
+import { equivalentLtmForkAvailability } from "./scoped-targets.js";
 
 type VaultFile = {
   folder: (typeof LTM_VAULT_FOLDERS)[number];
@@ -254,6 +255,7 @@ async function checkLongTermMemoryIntegrityUnlocked(root: string): Promise<LtmIn
   }
 
   const notes = [...notesById.values()].sort((a, b) => a.id.localeCompare(b.id));
+  issues.push(...noteForkIssues(notes));
   const eventCount = await checkEventLog(root, issues);
   const health = await checkRecallIndex(root, notes, issues);
   const boundedIssues = issues.slice(0, 10_000);
@@ -301,6 +303,47 @@ function importedSourceTitleFromNote(note: LtmNote) {
   if (note.tags.includes("imported_character")) return `Character \u2014 ${name}`;
   if (note.tags.includes("imported_lorebook")) return `Lorebook \u2014 ${name}`;
   return name || "Imported source";
+}
+
+function noteText(note: LtmNote) {
+  return Object.values(note.sections)
+    .map((section) => section.text.trim())
+    .filter(Boolean)
+    .join(" ")
+    .toLocaleLowerCase()
+    .replace(/[^\p{L}\p{N}\s]+/gu, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function forkSimilarity(left: string, right: string) {
+  const leftTokens = new Set(left.split(" ").filter((token) => token.length >= 3));
+  const rightTokens = new Set(right.split(" ").filter((token) => token.length >= 3));
+  if (!leftTokens.size || !rightTokens.size) return 0;
+  let shared = 0;
+  for (const token of leftTokens) if (rightTokens.has(token)) shared += 1;
+  return shared / Math.min(leftTokens.size, rightTokens.size);
+}
+
+function noteForkIssues(notes: LtmNote[]): LtmIntegrityIssue[] {
+  const issues: LtmIntegrityIssue[] = [];
+  for (let index = 0; index < notes.length; index += 1) {
+    const left = notes[index]!;
+    if (left.status === "archived" || (left.type !== "thread" && left.type !== "world")) continue;
+    const leftText = noteText(left);
+    for (const right of notes.slice(index + 1)) {
+      if (right.status === "archived" || right.type !== left.type || left.id === right.id) continue;
+      if (!equivalentLtmForkAvailability(left, right)) continue;
+      if (forkSimilarity(leftText, noteText(right)) < 0.72) continue;
+      issues.push({
+        severity: "warning",
+        code: "note_fork_review_required",
+        noteId: left.id,
+        message: `Note ${left.id} closely matches ${right.id}; review with the out-of-band note repair workflow before merging.`,
+      });
+    }
+  }
+  return issues;
 }
 
 async function quarantineMalformedNotes(root: string) {
