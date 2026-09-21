@@ -204,12 +204,11 @@ export function SlpPromptsPanel(page: SlpBackstagePageProps) {
       />
       <SettingAnchor settingKey="promptBlocks">
         <SlurpPromptBlockBuilder
-          mode="produce"
-          value={settings.promptBlocks.produce ?? {}}
-          savedValue={savedSettings?.promptBlocks.produce ?? {}}
+          value={settings.promptBlocks}
+          savedValue={savedSettings?.promptBlocks ?? {}}
           instructions={settings.promptInstructions}
           savedInstructions={savedSettings?.promptInstructions ?? []}
-          onChange={(promptBlocks) => void update("promptBlocks", { ...settings.promptBlocks, produce: promptBlocks })}
+          onChange={(promptBlocks) => void update("promptBlocks", promptBlocks)}
           onChangeInstructions={(promptInstructions) => void update("promptInstructions", promptInstructions)}
           overviewContent={outcomeSections}
         />

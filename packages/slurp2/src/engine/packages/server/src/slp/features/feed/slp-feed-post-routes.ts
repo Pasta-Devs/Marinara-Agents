@@ -664,7 +664,6 @@ export async function slpFeedPostRoutes(app: FastifyInstance, deps: SlpRouteDeps
         ...body.data,
         promptBlocks: prompts.blocks,
         promptInstructions: prompts.instructions,
-        promptMode: prompts.mode,
       });
     } catch (error) {
       if (isConnectionAdmissionFailure(error)) return reply.code(409).send({ error: getErrorMessage(error) });

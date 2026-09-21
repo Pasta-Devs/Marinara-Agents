@@ -13,27 +13,15 @@ import {
 } from "../packages/slurp2/src/engine/packages/server/src/slp/modules/feed/slp-post-variation.js";
 import { slurp2Source } from "./slurp2-source";
 
-// Classic mode keeps the shipped rotation. Produce mode uses weighted draws instead.
-for (const creator of ["creator-a", "creator-b", "creator-c"]) {
-  for (let index = 0; index < 400; index += 1) {
-    const current = slurpPostVariation(creator, index, undefined, "classic");
-    const next = slurpPostVariation(creator, index + 1, undefined, "classic");
-    assert.notEqual(current.place, next.place, `${creator} repeated a place at ${index}`);
-    assert.notEqual(current.framing, next.framing, `${creator} repeated a framing at ${index}`);
-    assert.notEqual(current.moment, next.moment, `${creator} repeated a moment at ${index}`);
-  }
-}
-
-const produceVariations = Array.from({ length: 300 }, (_, sequence) =>
-  slurpPostVariation("creator-a", sequence, undefined, "produce"),
-);
+// Situations are seeded weighted draws, not a rotation: repeats are allowed and results are stable.
+const variations = Array.from({ length: 300 }, (_, sequence) => slurpPostVariation("creator-a", sequence));
 assert.ok(
-  produceVariations.some((variation, index) => variation.place === produceVariations[index - 1]?.place),
-  "produce places may repeat naturally",
+  variations.some((variation, index) => variation.place === variations[index - 1]?.place),
+  "places may repeat naturally",
 );
 assert.deepEqual(
-  produceVariations,
-  Array.from({ length: 300 }, (_, sequence) => slurpPostVariation("creator-a", sequence, undefined, "produce")),
+  variations,
+  Array.from({ length: 300 }, (_, sequence) => slurpPostVariation("creator-a", sequence)),
 );
 
 // Deterministic, so the same post always carries the same angle rather than shifting on re-read.
@@ -43,7 +31,7 @@ assert.notDeepEqual(slurpPostVariation("creator-a", 0), slurpPostVariation("crea
 
 // Nonsense sequence numbers must still produce a usable variation.
 for (const sequence of [-5, 0.5, Number.NaN]) {
-  const variation = slurpPostVariation("creator-a", sequence, undefined, "classic");
+  const variation = slurpPostVariation("creator-a", sequence);
   assert.ok(
     variation.place && variation.framing && variation.moment && variation.company,
     `no variation for ${sequence}`,
@@ -91,7 +79,7 @@ assert.match(generation, /post\.imagePrompt \? .*showed:.* : line/u);
 assert.match(generation, /Do not repeat a recent post's setting, activity, framing, or wardrobe/u);
 assert.match(
   generation,
-  /slurpPostVariation\(account\.id, sequence, settings\.storyImagesEnabled \? settings\.storyRate : "off", prompts\.mode\)/u,
+  /slurpPostVariation\(account\.id, sequence, settings\.storyImagesEnabled \? settings\.storyRate : "off"\)/u,
 );
 
 // The automatic path pinned the format and passed a constant guide. Between them they defeated

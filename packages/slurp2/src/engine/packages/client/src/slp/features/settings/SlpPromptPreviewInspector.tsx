@@ -65,7 +65,6 @@ export function SlpPromptPreviewInspector({
     instructions: SlurpReusablePromptInstruction[],
   ): SlurpPromptResultPreviewInput => ({
     promptId: "post",
-    mode: "produce",
     creatorAccountId: activeCreatorId,
     promptBlocks: blocks,
     promptInstructions: instructions,
@@ -82,7 +81,6 @@ export function SlpPromptPreviewInspector({
     }
     promptPreview.mutate({
       promptId: prompt.id,
-      mode: "produce",
       creatorAccountId: activeCreatorId,
       promptBlocks: draftBlocks,
       promptInstructions: draftInstructions,

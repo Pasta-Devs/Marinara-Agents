@@ -79,12 +79,10 @@ for (const style of SLURP_PRODUCTION_STYLES) {
 }
 for (const effort of SLURP_POST_EFFORTS) assert.ok(slurpEffortInstruction(effort).startsWith("Effort:"));
 
-// The block exists in produce mode only.
-const blocks = (mode: "classic" | "produce") =>
-  slurpPromptDescriptions(mode)
-    .find((prompt) => prompt.id === "post")!
-    .blocks.map((block) => block.id);
-assert.ok(blocks("produce").includes("production"));
-assert.ok(!blocks("classic").includes("production"));
+// Optional, so the Classic prompt preset can switch it off.
+const productionBlock = slurpPromptDescriptions()
+  .find((prompt) => prompt.id === "post")!
+  .blocks.find((block) => block.id === "production");
+assert.equal(productionBlock?.optional, true);
 
 console.log("slurp production profile regression checks passed");

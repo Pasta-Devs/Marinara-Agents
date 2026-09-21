@@ -306,6 +306,12 @@
     "slurp2": {
       "versions": [
         {
+          "version": "0.1.23",
+          "date": "2026-09-21",
+          "notes": "- Removed the Classic generation mode. Slurp now runs one posting engine.\n- Kept old prompt edits: they carry over to the current prompts and to a new Classic prompt preset.\n- Added Load Classic prompts to the prompt studio. It restores the old wording and turns off the newer context blocks.\n- Fixed Pulse labels that shared one translation key with different text.",
+          "highlight": false
+        },
+        {
           "version": "0.1.22",
           "date": "2026-09-20",
           "notes": "- Restored Pulse quick buttons as direct Generate posts and Run audience actions.\n- Kept the Automation settings screen separate from Pulse actions.",
@@ -417,12 +423,6 @@
           "version": "0.1.4",
           "date": "2026-09-20",
           "notes": "- New experimental prompt mode, \"Produce\", is now the default. Creators write like people who plan, shoot and sell content, not like someone narrating a moment. Switch modes under Settings, Prompts.\n- Every picture now has a camera somebody is actually holding: a selfie, a mirror, a timer, another person, a video still, or an old photo.\n- Captions and pictures no longer describe each other, and posts now have a purpose: a teaser, a set, a throwaway, an ordinary day, a request, a thank-you, or a boundary.\n- One planned set can supply a few posts over a couple of days, so \"one more from yesterday\" matches.\n- Creators differ in how they make things, and that shows in every post.\n- Messages and replies know this is a job, so a Creator can say no or say later.\n- Prompt blocks can be previewed, locked ones included.\n- \"Classic\" keeps the old behaviour. Each mode keeps its own prompt edits.",
-          "highlight": false
-        },
-        {
-          "version": "0.1.3",
-          "date": "2026-09-20",
-          "notes": "- Slurp HTTP routes now use Slurp naming. Existing avatars, banners, ad images, post images and backups keep working.",
           "highlight": false
         }
       ]

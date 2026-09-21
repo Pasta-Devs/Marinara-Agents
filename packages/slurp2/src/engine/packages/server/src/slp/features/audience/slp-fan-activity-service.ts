@@ -204,10 +204,7 @@ function describeFanRelationship(persona: {
 
 function buildFanActivityMessages(input: {
   creators: SlpCreatorFanCreatorCandidate[];
-  settings: Pick<
-    SlurpSettings,
-    "fanLikesPerRefresh" | "fanRepliesPerRefresh" | "audienceTone" | "promptMode" | "promptBlocks"
-  > &
+  settings: Pick<SlurpSettings, "fanLikesPerRefresh" | "fanRepliesPerRefresh" | "audienceTone" | "promptBlocks"> &
     Partial<Pick<SlurpSettings, "simulationTuning">>;
   imageContexts?: ReadonlyMap<string, string>;
 }): ChatMessage[] {
@@ -324,7 +321,6 @@ async function generateFanActivity(input: {
     | "audienceTone"
     | "imageContextMode"
     | "imageContextConnectionId"
-    | "promptMode"
     | "promptBlocks"
   >;
   creators: SlpCreatorFanCreatorCandidate[];

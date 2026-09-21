@@ -2,7 +2,7 @@ import { ArrowLeft, ChevronRight, RotateCcw, Search, SlidersHorizontal } from "l
 import { useMemo, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import type { SlurpPromptBlockOverride, SlurpReusablePromptInstruction } from "../../base/state/slp-state-types";
-import type { SlurpPromptDefinition, SlurpPromptMode } from "./slp-settings-contract";
+import type { SlurpPromptDefinition } from "./slp-settings-contract";
 import { useSlurpPromptBlocks } from "./slp-settings-hooks";
 import { useCreatorAccounts } from "../creators/slp-creators-contract";
 import { SlpPromptPipeline } from "./SlpPromptPipeline";
@@ -21,7 +21,6 @@ import {
 } from "./slp-prompt-studio-model";
 
 type PromptBlockBuilderProps = {
-  mode: SlurpPromptMode;
   value: Record<string, SlurpPromptBlockOverride[]>;
   savedValue: Record<string, SlurpPromptBlockOverride[]>;
   onChange: (value: Record<string, SlurpPromptBlockOverride[]>) => void;
@@ -32,7 +31,6 @@ type PromptBlockBuilderProps = {
 };
 
 export function SlurpPromptBlockBuilder({
-  mode,
   value,
   savedValue,
   onChange,
@@ -42,7 +40,7 @@ export function SlurpPromptBlockBuilder({
   overviewContent,
 }: PromptBlockBuilderProps) {
   const { t } = useTranslation();
-  const definitions = useSlurpPromptBlocks(mode);
+  const definitions = useSlurpPromptBlocks();
   const creators = useCreatorAccounts();
   const [selectedPromptId, setSelectedPromptId] = useState<string | null>(null);
   const [selectedBlockId, setSelectedBlockId] = useState<string | null>(null);
@@ -270,6 +268,16 @@ export function SlurpPromptBlockBuilder({
                 className="min-h-11 w-full rounded-lg border border-[var(--slurp-outline)] bg-[var(--slurp-canvas)] pe-3 ps-10 text-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] sm:text-sm"
               />
             </label>
+            {/* Draft only: the player still saves or discards it like any other edit. */}
+            <button
+              type="button"
+              disabled={!definitions.data?.classicPreset}
+              onClick={() => definitions.data && onChange(definitions.data.classicPreset)}
+              className="inline-flex min-h-11 items-center gap-2 rounded-lg px-3 text-sm font-semibold ring-1 ring-inset ring-[var(--slurp-outline)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] disabled:opacity-40"
+            >
+              <RotateCcw size={15} aria-hidden="true" />
+              {t("ui.slurp.settings.prompts.loadClassicPreset", { defaultValue: "Load Classic prompts" })}
+            </button>
           </div>
           {SLP_PROMPT_GROUP_ORDER.map((group) => {
             const groupPrompts = visiblePrompts.filter((prompt) => prompt.group === group);

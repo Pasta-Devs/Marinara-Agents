@@ -16,7 +16,6 @@ import {
   type SlurpPromptBlockOverrides,
   type SlurpReusablePromptInstruction,
 } from "../../base/prompting/slp-prompt-blocks.js";
-import { SLURP_DEFAULT_PROMPT_MODE, type SlurpPromptMode } from "../../base/prompting/slp-prompt-modes.js";
 import { buildSlurpPostTimingContext } from "../../modules/feed/slp-post-timing.js";
 import { type SlurpProject } from "../../modules/projects/slp-project.js";
 import { slurpProjectChapter, slurpProjectInstruction } from "../../modules/projects/slp-arc-progress.js";
@@ -100,11 +99,9 @@ export type SlurpPostPromptInput = {
   loreContext?: string;
   promptBlocks?: SlurpPromptBlockOverrides;
   promptInstructions?: SlurpReusablePromptInstruction[];
-  /** Which prompt personality to write. Defaults to the shipped mode. */
-  promptMode?: SlurpPromptMode;
-  /** From `slp-content-type.ts`: what this post is for. Produce mode only. */
+  /** From `slp-content-type.ts`: what this post is for. */
   contentTypeInstruction?: string;
-  /** From `slp-production-profile.ts`: how this Creator makes things. Produce mode only. */
+  /** From `slp-production-profile.ts`: how this Creator makes things. */
   productionInstruction?: string;
 };
 
@@ -117,7 +114,6 @@ export type SlurpPostPromptInput = {
 export function buildSlurpPostBlocks(input: SlurpPostPromptInput): SlurpPromptBlock[] {
   const guidance = input.generationGuidance.trim();
   const format = input.request.format ?? "caption";
-  const produce = (input.promptMode ?? SLURP_DEFAULT_PROMPT_MODE) === "produce";
   const systemBlocks = [
     {
       id: "task",
@@ -170,13 +166,12 @@ export function buildSlurpPostBlocks(input: SlurpPostPromptInput): SlurpPromptBl
         : "",
     },
     // What this post is for, as opposed to what it is about. Without it every post is the same
-    // kind of post: something happened, here is a picture, here is what it meant. Produce mode
-    // only; classic mode's inventory does not declare the block.
+    // kind of post: something happened, here is a picture, here is what it meant.
     {
       id: "contentType",
       kind: "context" as const,
       optional: true,
-      text: produce ? (input.contentTypeInstruction?.trim() ?? "") : "",
+      text: input.contentTypeInstruction?.trim() ?? "",
     },
     // Unrelated Creators all arrived at the same soft light and the same flattering angle, because
     // the variation gave them different situations and the same production grammar. This is the
@@ -185,7 +180,7 @@ export function buildSlurpPostBlocks(input: SlurpPostPromptInput): SlurpPromptBl
       id: "production",
       kind: "context" as const,
       optional: true,
-      text: produce ? (input.productionInstruction?.trim() ?? "") : "",
+      text: input.productionInstruction?.trim() ?? "",
     },
     // Tone, mood balance, and the adult flirty lean are supplied by the editable
     // generation guidance (see input.generationGuidance above), not hardcoded here.
@@ -211,12 +206,10 @@ export function buildSlurpPostBlocks(input: SlurpPostPromptInput): SlurpPromptBl
       kind: "required" as const,
       text: `${
         input.allowImagePrompt
-          ? produce
-            ? // The old contract asked for "subject, pose, setting, lighting, framing", which is a
-              // scene brief. A brief with no gaps in it produces a photograph with no accident in
-              // it, and the result reads as a shoot rather than as something a person posted.
-              "Return one JSON object with title, content, and imagePrompt. imagePrompt is required and describes the photograph this person actually took with the camera named above — what it caught, not what the moment was. It may be badly framed, poorly lit, partly blocked, or dull. Do not improve it, do not add a camera position nobody present could reach, and do not add exposed skin, undress, or sexual emphasis the post did not already call for. Never return null or an empty imagePrompt, and never put the post text or field names in it. Do not create a poll."
-            : "Return one JSON object with title, content, and imagePrompt. imagePrompt is required and must be a concrete visual description of one photo or image the creator would post now (subject, pose, setting, lighting, framing). Never return null or an empty imagePrompt, and never put the post text or field names in it. Do not create a poll."
+          ? // The old contract asked for "subject, pose, setting, lighting, framing", which is a
+            // scene brief. A brief with no gaps in it produces a photograph with no accident in
+            // it, and the result reads as a shoot rather than as something a person posted.
+            "Return one JSON object with title, content, and imagePrompt. imagePrompt is required and describes the photograph this person actually took with the camera named above — what it caught, not what the moment was. It may be badly framed, poorly lit, partly blocked, or dull. Do not improve it, do not add a camera position nobody present could reach, and do not add exposed skin, undress, or sexual emphasis the post did not already call for. Never return null or an empty imagePrompt, and never put the post text or field names in it. Do not create a poll."
           : "Return one JSON object with title and content only. Do not create a poll or image prompt."
       }\nReturn JSON only. No prose outside the JSON object.`,
     },

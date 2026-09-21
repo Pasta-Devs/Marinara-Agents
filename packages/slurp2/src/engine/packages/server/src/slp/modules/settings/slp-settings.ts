@@ -3,11 +3,10 @@ import { z } from "zod";
 import { SLURP_DISCOVERY_TAG_MAX_LENGTH, SLURP_DISCOVERY_TAG_SEED } from "../discovery/slp-discovery-profile.js";
 import {
   normalizeSlurpPromptBlockOverrides,
+  slurpLegacyClassicPromptBlocks,
   SlurpPromptBlockOverrides,
-  SlurpPromptModeOverrides,
   SlurpReusablePromptInstruction,
 } from "../../base/prompting/slp-prompt-blocks.js";
-import { SLURP_DEFAULT_PROMPT_MODE, SLURP_PROMPT_MODES } from "../../base/prompting/slp-prompt-modes.js";
 import { SLURP_DEFAULT_ECONOMY } from "../economy/slp-wallet.js";
 import {
   slurpCreatorCollabsSchema,
@@ -281,16 +280,13 @@ export const slurpSettingsSchema = z.object({
       }),
     )
     .max(20),
-  /**
-   * Which prompt personality the whole package runs: the rebuilt `produce` prompts or the
-   * `classic` ones they replaced. See `slp-prompt-modes.ts`.
-   */
-  promptMode: z.enum(SLURP_PROMPT_MODES),
-  /**
-   * User changes to the shared prompt block layouts, kept per mode. Defaults stay in source.
-   * Switching modes never discards the other mode's tuning.
-   */
+  /** User changes to the prompt block layouts. Defaults stay in source. */
   promptBlocks: z.unknown().transform(normalizeSlurpPromptBlockOverrides),
+  /**
+   * The player's prompt edits from before the Classic runtime was removed, kept so the Classic
+   * prompt preset can restore them. Written once by migration; never by generation.
+   */
+  classicPromptBlocks: z.unknown().transform(normalizeSlurpPromptBlockOverrides),
   promptInstructions: z
     .array(
       z.object({
@@ -391,9 +387,7 @@ export const slurpSettingsSchema = z.object({
 
 export type SlurpSettings = z.infer<typeof slurpSettingsSchema>;
 
-// Re-exported for the consumers that take one mode's layout. The stored shape is the mode-keyed
-// `SlurpPromptModeOverrides`; `slurpPromptContext` narrows one to the other.
-export type { SlurpPromptBlockOverrides, SlurpPromptModeOverrides, SlurpReusablePromptInstruction };
+export type { SlurpPromptBlockOverrides, SlurpReusablePromptInstruction };
 
 export type SlurpSettingsUpdateInput = Partial<SlurpSettings>;
 
@@ -537,8 +531,8 @@ export const DEFAULT_SLURP_SETTINGS: SlurpSettings = {
   postShowMoreLength: 300,
   characterImageInstructions: {},
   promptPresets: [],
-  promptMode: SLURP_DEFAULT_PROMPT_MODE,
-  promptBlocks: {} satisfies SlurpPromptModeOverrides,
+  promptBlocks: {} satisfies SlurpPromptBlockOverrides,
+  classicPromptBlocks: {} satisfies SlurpPromptBlockOverrides,
   professorMariCreatorSource: true,
   enableEnhancedTimelineWriting: false,
   includeCharacterSchedules: false,
@@ -653,6 +647,9 @@ export function normalizeSlurpSettings(raw: unknown): SlurpSettings {
     rawRecord.imagePromptInterpretation === LEGACY_SLP_CREATOR_DEFAULT_IMAGE_PROMPT_INTERPRETATION
       ? SLP_CREATOR_DEFAULT_IMAGE_PROMPT_INTERPRETATION
       : rawRecord.imagePromptInterpretation;
+  // Present once migrated, even when empty. Until then the stored layouts are the Classic edits.
+  candidate.classicPromptBlocks =
+    rawRecord.classicPromptBlocks ?? slurpLegacyClassicPromptBlocks(rawRecord.promptBlocks);
   candidate.nightQuiet = rawRecord.nightQuiet ?? DEFAULT_SLURP_SETTINGS.nightQuiet;
   // Repaired rather than replaced: a player who edited one type must not lose the other seven
   // because a single field went out of range. An all-disabled list re-enables built-in Regular,

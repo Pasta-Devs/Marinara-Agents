@@ -1,5 +1,12 @@
 # Slurp Remastered release notes
 
+## 0.1.23 — 2026-09-21
+
+- Removed the Classic generation mode. Slurp now runs one posting engine.
+- Kept old prompt edits: they carry over to the current prompts and to a new Classic prompt preset.
+- Added Load Classic prompts to the prompt studio. It restores the old wording and turns off the newer context blocks.
+- Fixed Pulse labels that shared one translation key with different text.
+
 ## 0.1.22 — 2026-09-20
 
 - Restored Pulse quick buttons as direct Generate posts and Run audience actions.

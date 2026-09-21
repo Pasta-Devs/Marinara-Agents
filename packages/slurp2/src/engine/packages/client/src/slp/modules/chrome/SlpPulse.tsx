@@ -661,7 +661,7 @@ function readAccountId(variables: unknown): string | null {
 function pulseTaskLabel(key: string, t: (key: string, options?: Record<string, unknown>) => string) {
   const labels: Record<string, [string, string]> = {
     "generate-post": ["ui.slurp.pulse.generatePost", "Generating post"],
-    "generate-posts": ["ui.slurp.pulse.generatePosts", "Generating posts"],
+    "generate-posts": ["ui.slurp.pulse.generatingPosts", "Generating posts"],
     "generate-post-image": ["ui.slurp.pulse.generateImage", "Generating image"],
     "generate-post-images": ["ui.slurp.pulse.generateImages", "Preparing post images"],
     "create-post": ["ui.slurp.pulse.createPostTask", "Publishing post"],
@@ -669,11 +669,11 @@ function pulseTaskLabel(key: string, t: (key: string, options?: Record<string, u
     "audience-activity": ["ui.slurp.pulse.audienceTask", "Running audience activity"],
     "conversation-schedule": ["ui.slurp.pulse.scheduleTask", "Refreshing conversation schedule"],
     "first-post": ["ui.slurp.pulse.firstPost", "Creating first post"],
-    "creator-improvement": ["ui.slurp.pulse.creatorImprovement", "Improving Creator profiles"],
+    "creator-improvement": ["ui.slurp.pulse.improvingCreators", "Improving Creator profiles"],
     "conversation-follow-up": ["ui.slurp.pulse.followUp", "Preparing conversation follow-up"],
-    commission: ["ui.slurp.pulse.commission", "Preparing commission"],
+    commission: ["ui.slurp.pulse.preparingCommission", "Preparing commission"],
   };
-  const [keyName, defaultValue] = labels[key] ?? ["ui.slurp.pulse.task", "Slurp task"];
+  const [keyName, defaultValue] = labels[key] ?? ["ui.slurp.pulse.slurpTask", "Slurp task"];
   return t(keyName, { defaultValue });
 }
 

@@ -31,7 +31,6 @@
  */
 
 import { slurpWeightedPick } from "./slp-weighted.js";
-import type { SlurpPromptMode } from "../../base/prompting/slp-prompt-modes.js";
 
 /**
  * How often each axis value turns up, for callers that draw instead of rotating.
@@ -208,17 +207,17 @@ export type SlurpPostVariation = {
 /**
  * The variation for one post.
  *
- * `sequence` is how many posts this Creator has already made. Rotating on it — rather than drawing
- * at random — is what guarantees consecutive posts differ, which random selection does not.
+ * `sequence` is how many posts this Creator has already made. The format still rotates on it, so
+ * the story and teaser slots stay predictable. Place, moment, framing, and company are seeded
+ * weighted draws: common situations recur, rare ones stay rare, and repeats are allowed.
  *
  * The offset by creator id stops two Creators set up on the same day from marching through the
- * cycle in lockstep.
+ * format cycle in lockstep.
  */
 export function slurpPostVariation(
   creatorAccountId: string,
   sequence: number,
   storyRate: SlurpStoryRate = SLURP_DEFAULT_STORY_RATE,
-  mode: SlurpPromptMode = "classic",
 ): SlurpPostVariation {
   const offset = slurpRotationHash(creatorAccountId);
   // Math.floor(NaN) is NaN and indexes nothing, which would hand every caller an undefined variation.
@@ -227,39 +226,30 @@ export function slurpPostVariation(
   const step = Number.isFinite(sequence) ? Math.max(0, Math.floor(sequence)) : 0;
   const formatSlot = (offset + step) % FORMAT_CYCLE.length;
   const format = FORMAT_CYCLE[formatSlot]!;
-  const produce = mode === "produce";
-  const place = produce
-    ? slurpWeightedPick(
-        "place",
-        creatorAccountId,
-        step,
-        PLACES.map((value, index) => ({ value, weight: PLACE_WEIGHTS[index]! })),
-      )
-    : PLACES[(offset + step) % PLACES.length]!;
-  const moment = produce
-    ? slurpWeightedPick(
-        "moment",
-        creatorAccountId,
-        step,
-        MOMENTS.map((value, index) => ({ value, weight: MOMENT_WEIGHTS[index]! })),
-      )
-    : MOMENTS[(offset + step * 3) % MOMENTS.length]!;
-  const framing = produce
-    ? slurpWeightedPick(
-        "framing",
-        creatorAccountId,
-        step,
-        FRAMINGS.map((value) => ({ value, weight: 1 })),
-      )
-    : FRAMINGS[(offset + step * 5) % FRAMINGS.length]!;
-  const company = produce
-    ? slurpWeightedPick(
-        "company",
-        creatorAccountId,
-        step,
-        COMPANY.map((value, index) => ({ value, weight: COMPANY_WEIGHTS[index]! })),
-      )
-    : COMPANY[(offset + step * 2) % COMPANY.length]!;
+  const place = slurpWeightedPick(
+    "place",
+    creatorAccountId,
+    step,
+    PLACES.map((value, index) => ({ value, weight: PLACE_WEIGHTS[index]! })),
+  );
+  const moment = slurpWeightedPick(
+    "moment",
+    creatorAccountId,
+    step,
+    MOMENTS.map((value, index) => ({ value, weight: MOMENT_WEIGHTS[index]! })),
+  );
+  const framing = slurpWeightedPick(
+    "framing",
+    creatorAccountId,
+    step,
+    FRAMINGS.map((value) => ({ value, weight: 1 })),
+  );
+  const company = slurpWeightedPick(
+    "company",
+    creatorAccountId,
+    step,
+    COMPANY.map((value, index) => ({ value, weight: COMPANY_WEIGHTS[index]! })),
+  );
   return {
     format,
     story: format === "caption" && slurpStorySlots(storyRate).has(formatSlot),

@@ -108,7 +108,7 @@ export const SLP_BACKSTAGE_SETTING_PLACEMENT: Record<keyof SlurpSettings, SlpBac
   characterImageInstructions: place("creators", "creators", "creator", "character image instructions"),
   creatorCollabs: place("creators", "creators", "creator", "collabs", "collab partners", "crossover"),
   promptPresets: prompts("prompt presets", "writing presets"),
-  promptMode: internal(prompts("prompt mode", "produce mode", "classic mode")),
+  classicPromptBlocks: internal(prompts("classic prompt preset", "classic prompts")),
   promptBlocks: prompts("prompt block builder", "prompt order", "prompt blocks"),
   professorMariCreatorSource: automation("general", "Professor Mari creator", "new creators"),
   enableEnhancedTimelineWriting: internal(automation("general", "enhanced timeline writing")),
