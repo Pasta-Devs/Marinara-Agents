@@ -8,7 +8,8 @@ const timestamp = "2026-09-04T00:00:00.000Z";
 function unit(input: {
   bucket: "character_fact" | "relationship_state";
   subjectId: string;
-  subjectNames: string[];
+  subjectNames?: string[];
+  subjectKeys?: string[];
   text: string;
   sectionKey?: string;
 }) {
@@ -335,6 +336,7 @@ async function main() {
         provenance: "group_roster:character:char_group_alex",
         sourceScope: "group",
       },
+      { kind: "character", id: "rowan", name: "Rowan" },
     ],
     notes: [],
   });
@@ -357,6 +359,65 @@ async function main() {
   assert.ok(diagnosticDetails.competingRecords?.length >= 2);
   assert.equal(diagnosticDetails.collisionSource, "group_catalog");
   assert.ok(diagnosticDetails.competingRecords.some((r: any) => r.provenance?.includes("group_roster")));
+
+  // Explicit catalog keys disambiguate names in both resolution and backfill identity lookup.
+  const alexKey = "character:char_direct_alex";
+  const rowanKey = "character:rowan";
+  for (const bucket of ["character_fact", "relationship_state"] as const) {
+    const subjectKeys = bucket === "character_fact" ? [alexKey] : [rowanKey, alexKey];
+    const subjectNames = bucket === "character_fact" ? ["Alex"] : ["Alex", "Rowan"];
+    const candidate = unit({
+      bucket,
+      subjectId: "provider_subject",
+      subjectNames,
+      subjectKeys,
+      text: "Alex trusts Rowan.",
+    });
+    const keyedContext = prepareLtmSubjectIdentityContext({
+      units: [candidate],
+      catalog: duplicateDisplayNameCatalog,
+      scope,
+      sourceBackedNpcSourceText: "Alex trusts Rowan.",
+    });
+    const keyOnlyTarget = keyedContext.identityKeyForUnit({ ...candidate, subjectNames: undefined });
+    for (const names of [subjectNames, ["Unknown name"], [], undefined]) {
+      const input = { ...candidate, subjectNames: names };
+      const result = keyedContext.resolve({ units: [input], existingNotes: [] });
+      assert.equal(result.units.length, 1, "trusted keys must take precedence over name matching");
+      assert.deepEqual(result.units[0]!.subjectKeys, [...subjectKeys].sort());
+      assert.deepEqual(
+        result.units[0]!.subjects?.map((subject) => subject.key),
+        [...subjectKeys].sort(),
+      );
+      assert.deepEqual(result.units[0]!.subjectNames, subjectNames);
+      assert.equal(keyedContext.identityKeyForUnit(input), keyOnlyTarget);
+      assert.equal(`${bucket === "character_fact" ? "char" : "rel"}_${result.units[0]!.subjectId}`, keyOnlyTarget);
+      assert.equal(result.droppedCandidates.length, 0);
+    }
+    for (const keys of [undefined, []]) {
+      const result = keyedContext.resolve({ units: [{ ...candidate, subjectKeys: keys }], existingNotes: [] });
+      assert.equal(result.units.length, 0);
+      assert.equal(result.droppedCandidates[0]!.reason, "ambiguous_subject");
+    }
+    const invalidKeys =
+      bucket === "character_fact"
+        ? [["character:unknown"], [alexKey, rowanKey]]
+        : [[alexKey, "character:unknown"], [alexKey], [alexKey, alexKey], [alexKey, rowanKey, "character:unknown"]];
+    for (const keys of invalidKeys) {
+      for (const names of [subjectNames, undefined]) {
+        for (const enforceTrustedSubjects of [true, false]) {
+          const result = keyedContext.resolve({
+            units: [{ ...candidate, subjectNames: names, subjectKeys: keys }],
+            existingNotes: [],
+            enforceTrustedSubjects,
+          });
+          assert.equal(result.units.length, 0, "invalid explicit keys must not fall back to names or legacy subjects");
+          assert.equal(result.droppedCandidates.length, 1);
+          assert.equal(result.diagnostics[0]!.details?.matchBasis, "trusted_key");
+        }
+      }
+    }
+  }
 
   const aliasCollisionResolution = prepareLtmSubjectIdentityContext({
     units: [unit({ bucket: "character_fact", subjectId: "sam", subjectNames: ["Sam"], text: "Sam waits." })],
@@ -501,6 +562,235 @@ async function main() {
   });
   assert.equal(coveredBackfillResult.units.length, 1);
   assert.equal(coveredBackfillResult.addedUnits, 0);
+
+  // --- I04: cross-family isolation and batch-established keys for structured backfill ---
+  // Synthetic equivalents of the reported failure: identical display names across groups must
+  // not collide in the active scope, and keyless backfilled units adopt keys another unit in
+  // the same batch already established instead of guessing names or forking a second target.
+  const activeFamily = ltmScopeFamilyId(scope)!;
+  const otherScope = { chatId: "chat-z", chatIds: ["chat-z"] };
+  const foreignFamily = ltmScopeFamilyId(otherScope)!;
+  const activeMara = localCharacterSubjectForName(scope, "Mara")!;
+  const otherMara = localCharacterSubjectForName(otherScope, "Mara")!;
+  assert.notEqual(activeMara.key, otherMara.key);
+
+  const activeMaraEntry = {
+    subject: activeMara,
+    name: "Mara",
+    aliases: [],
+    canonicalSlug: "mara",
+    familyId: activeFamily,
+  };
+  const otherMaraEntry = {
+    subject: otherMara,
+    name: "Mara",
+    aliases: [],
+    canonicalSlug: "mara",
+    familyId: foreignFamily,
+  };
+  const ashleighEntry = {
+    subject: {
+      key: "character:char_ashleigh_kestrel",
+      ref: { kind: "character" as const, id: "char_ashleigh_kestrel" },
+    },
+    name: "Ashleigh Kestrel",
+    aliases: [],
+    canonicalSlug: "ashleigh_kestrel",
+    provenance: "roster:character:char_ashleigh_kestrel",
+  };
+
+  // 1. A same-name local character in another family must not create ambiguity in this scope,
+  //    whether the unit arrives keyless with a bare subjectId or named.
+  const crossFamilyCatalog = { entries: [activeMaraEntry, otherMaraEntry, ashleighEntry], notes: [] };
+  const crossFamilyContext = prepareLtmSubjectIdentityContext({
+    units: [
+      unit({ bucket: "character_fact", subjectId: "mara", text: "Mara guards the gate." }),
+      unit({ bucket: "character_fact", subjectId: "mara", subjectNames: ["Mara"], text: "Mara keeps watch." }),
+    ],
+    catalog: crossFamilyCatalog,
+    scope,
+    sourceBackedNpcSourceText: "Mara guards the gate. Mara keeps watch.",
+    sourceBackedNpcSourceTitle: "Mara",
+  });
+  const crossFamilyResolution = crossFamilyContext.resolve({
+    units: [
+      unit({ bucket: "character_fact", subjectId: "mara", text: "Mara guards the gate." }),
+      unit({ bucket: "character_fact", subjectId: "mara", subjectNames: ["Mara"], text: "Mara keeps watch." }),
+    ],
+    existingNotes: [],
+  });
+  assert.equal(crossFamilyResolution.droppedCandidates.length, 0, "foreign-family names must not collide");
+  assert.deepEqual(
+    crossFamilyResolution.units.map((resolvedUnit) => resolvedUnit.subjects?.[0]?.key),
+    [activeMara.key, activeMara.key],
+  );
+
+  // 2. A short form of a longer roster name resolves to that roster identity instead of
+  //    inventing a provisional local character. The short name arrives after batch
+  //    pre-resolution (structured backfill), so it resolves on demand.
+  const shortFormContext = prepareLtmSubjectIdentityContext({
+    units: [],
+    catalog: { entries: [ashleighEntry], notes: [] },
+    scope,
+    sourceBackedNpcSourceText: "Ash holds the line.",
+    sourceBackedNpcSourceTitle: "Ash",
+  });
+  const shortFormResolution = shortFormContext.resolve({
+    units: [unit({ bucket: "character_fact", subjectId: "ash", subjectNames: ["Ash"], text: "Ash holds the line." })],
+    existingNotes: [],
+  });
+  assert.equal(shortFormResolution.droppedCandidates.length, 0);
+  assert.equal(
+    shortFormResolution.units[0]!.subjects?.[0]?.key,
+    "character:char_ashleigh_kestrel",
+    "short names must reuse the established longer identity rather than fork a new one",
+  );
+
+  // 2b. A backfilled relationship naming short forms of the same participants must resolve to
+  //     the same canonical relationship target as the keyed batch unit, not a parallel note.
+  const rowanSubject = localCharacterSubjectForName(scope, "Rowan")!;
+  const pairModelUnit = unit({
+    bucket: "relationship_state",
+    subjectId: "ash_kestrel_rowan",
+    subjectKeys: ["character:char_ashleigh_kestrel", rowanSubject.key],
+    text: "Ash and Rowan watch the gate.",
+  });
+  const pairBackfillUnit = unit({
+    bucket: "relationship_state",
+    subjectId: "ash_rowan",
+    subjectNames: ["Ash", "Rowan"],
+    text: "Ash and Rowan watch the gate.",
+  });
+  const shortPairContext = prepareLtmSubjectIdentityContext({
+    units: [pairModelUnit],
+    catalog: {
+      entries: [
+        ashleighEntry,
+        {
+          subject: rowanSubject,
+          name: "Rowan",
+          aliases: [],
+          canonicalSlug: "rowan",
+          familyId: activeFamily,
+        },
+      ],
+      notes: [],
+    },
+    scope,
+    sourceBackedNpcSourceText: "Ash and Rowan watch the gate.",
+    sourceBackedNpcSourceTitle: "Watch",
+  });
+  const shortPairResolution = shortPairContext.resolve({ units: [pairModelUnit, pairBackfillUnit], existingNotes: [] });
+  assert.equal(shortPairResolution.droppedCandidates.length, 0);
+  assert.equal(shortPairResolution.units.length, 2);
+  assert.equal(
+    shortPairResolution.units[0]!.subjectId,
+    shortPairResolution.units[1]!.subjectId,
+    "short and full participant names must not fork parallel relationship targets",
+  );
+
+  // 3. A keyless, nameless backfilled unit adopts the keys already established for the same
+  //    subject in the batch, so identity keys and resolved targets stay identical.
+  const modelMara = unit({
+    bucket: "character_fact",
+    subjectId: "mara_ellison",
+    subjectKeys: [activeMara.key],
+    text: "Mara Ellison arrives.",
+  });
+  const backfilledMara = unit({
+    bucket: "character_fact",
+    subjectId: "mara_ellison",
+    text: "Mara Ellison departs.",
+  });
+  const establishedContext = prepareLtmSubjectIdentityContext({
+    units: [modelMara],
+    catalog: { entries: [activeMaraEntry], notes: [] },
+    scope,
+  });
+  const modelIdentity = establishedContext.identityKeyForUnit(modelMara);
+  assert.equal(
+    establishedContext.identityKeyForUnit(backfilledMara),
+    modelIdentity,
+    "backfill coverage must match the identity of the unit that established the keys",
+  );
+  const establishedResolution = establishedContext.resolve({
+    units: [modelMara, backfilledMara],
+    existingNotes: [],
+  });
+  assert.equal(establishedResolution.droppedCandidates.length, 0);
+  assert.equal(establishedResolution.units.length, 2);
+  assert.equal(establishedResolution.units[0]!.subjectId, establishedResolution.units[1]!.subjectId);
+  assert.deepEqual(
+    establishedResolution.units[1]!.subjects?.map((subject) => subject.key),
+    [activeMara.key],
+  );
+
+  for (const character of ["char-Mara", "char Mara"]) {
+    const normalized = normalizeStructuredSummaryEvidenceUnits({
+      units: [],
+      sourceText: `## Character Facts\n- character: ${character} | Mara guards the gate.`,
+      sourceNote: sourceNote as any,
+      sourceHash: "c".repeat(64),
+      existingNotes: [],
+      allowedBuckets: ["character_fact"],
+      mode: "roleplay",
+      modes: ["roleplay"],
+    });
+    assert.equal(normalized.units.length, 1);
+    assert.equal(normalized.units[0]!.subjectNames, undefined, "normalized note IDs must not become names");
+  }
+
+  const activeNote = {
+    ...sourceNote,
+    id: "char_mara",
+    title: "Mara",
+    type: "character" as const,
+    subjects: [activeMara],
+  };
+  const unscopedNote = { ...activeNote, id: "char_unscoped", scope: {} };
+  const invalidNote = { ...activeNote, id: "char_invalid", subjects: [otherMara] };
+  const filteredCatalog = buildTrustedLtmSubjectCatalog({
+    roster: [],
+    notes: [activeNote, unscopedNote, invalidNote],
+  });
+  assert.deepEqual(
+    filteredCatalog.notes.map((note) => note.id),
+    [activeNote.id],
+    "invalid local notes must leave the catalog",
+  );
+
+  const maraUnit = unit({ bucket: "character_fact", subjectId: "mara", text: "Mara guards the gate." });
+  const missingMetadataContext = prepareLtmSubjectIdentityContext({
+    units: [maraUnit],
+    catalog: {
+      entries: [
+        { ...activeMaraEntry, familyId: undefined },
+        { ...otherMaraEntry, familyId: undefined },
+      ],
+      notes: [activeNote, { ...activeNote, id: "char_foreign", scope: {}, subjects: [otherMara] }],
+    },
+    scope,
+  });
+  assert.equal(missingMetadataContext.identityKeyForUnit(maraUnit), activeNote.id);
+  const missingMetadataResult = missingMetadataContext.resolve({ units: [maraUnit], existingNotes: [] });
+  assert.equal(missingMetadataResult.droppedCandidates.length, 0);
+  assert.equal(missingMetadataResult.units[0]!.subjects?.[0]?.key, activeMara.key);
+
+  for (const legacyScope of [{}, otherScope]) {
+    const legacyContext = prepareLtmSubjectIdentityContext({
+      units: [maraUnit],
+      catalog: {
+        entries: [activeMaraEntry],
+        notes: [{ ...activeNote, id: "char_legacy", scope: legacyScope, subjects: undefined }],
+      },
+      scope,
+    });
+    assert.notEqual(
+      legacyContext.identityKeyForUnit(maraUnit),
+      "char_legacy",
+      "unscoped or foreign legacy notes must not bind local subjects",
+    );
+  }
 
   process.stdout.write(
     "Long-Term Memory local-character regression: scoped identity, review risk, safeguards, and isolation passed\n",
