@@ -355,6 +355,7 @@ const callsBefore = readFileSync(join(import.meta.dirname, "fixtures/slurp2-clie
   .filter(Boolean);
 const mapStagingCall = (call: string) => call.replace("/slurp2/noodler/", "/slurp2/slurp/");
 const addedCalls = [
+  "get /slurp2/slurp/posts/${encodeURIComponent(postId)}/deep-details",
   "post /slurp2/settings/prompt-blocks/generate-preview",
   // The studio keeps every block live for the preview Creator (useSlurpLivePromptBlocks).
   "post /slurp2/settings/prompt-blocks/preview",
@@ -413,7 +414,7 @@ assert.deepEqual(
   counts,
   {
     useMutation: 138,
-    useQuery: 197,
+    useQuery: 199,
     useInfiniteQuery: 5,
     invalidateQueries: 125,
     setQueryData: 16,
@@ -421,7 +422,7 @@ assert.deepEqual(
     removeQueries: 1,
     refetchQueries: 1,
     onMutate: 2,
-    onError: 10,
+    onError: 11,
     onSettled: 3,
   },
   "query and mutation wiring counts match the monolith plus the 0.2.0 planner and continuity hooks",

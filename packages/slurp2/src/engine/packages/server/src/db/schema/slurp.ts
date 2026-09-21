@@ -100,6 +100,14 @@ export const slpPostMedia = fileTable(
   { uniqueBy: [{ keys: ["postId", "position"] }] },
 );
 
+/** What went into each generated post: the full prompt, the plan, the draws. See `slp-deep-details.ts`. */
+export const slpPostDeepDetails = fileTable("slurp2_post_deep_details", {
+  id: text("id").primaryKey(),
+  creatorAccountId: text("creator_account_id").notNull(),
+  record: text("record").notNull(),
+  createdAt: text("created_at").notNull(),
+});
+
 export const slpAccountSubscriptions = fileTable(
   "slurp2_account_subscriptions",
   {

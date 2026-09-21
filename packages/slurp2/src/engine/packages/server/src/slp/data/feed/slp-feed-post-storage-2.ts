@@ -1,3 +1,4 @@
+import { deleteSlurpPostDeepDetails } from "./slp-post-deep-details-storage.js";
 import { and, eq, inArray, isNotNull, isNull, lt, or } from "../../../db/file-query.js";
 import {
   SlpCreatePostInput,
@@ -381,6 +382,9 @@ export function createFeedPostStorage2(context: SlurpStorageContext) {
         await tx.delete(slpCreatorCreatorReplyClaims).where(eq(slpCreatorCreatorReplyClaims.postId, id));
         await tx.delete(slpInteractions).where(eq(slpInteractions.postId, id));
         await tx.delete(slpPosts).where(eq(slpPosts.id, id));
+        if (typeof existing.metadata.deepDetailsId === "string") {
+          await deleteSlurpPostDeepDetails(tx, existing.metadata.deepDetailsId);
+        }
         await tx._fileStore.flush();
       });
       return existing;

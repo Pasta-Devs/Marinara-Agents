@@ -8,6 +8,7 @@ import {
   type SlpIdentityDisclosure,
 } from "../../../../../shared/src/slp/slp-social.types.js";
 import { parseGameJsonish } from "../../../services/game/jsonish.js";
+import { logDebugOverride } from "../../../lib/logger.js";
 import { requireModelAnswer } from "../../base/model/slp-model-answer.js";
 import type { ChatMessage } from "../../../services/llm/base-provider.js";
 import {
@@ -328,4 +329,60 @@ export function parseCreatorPost(content: string) {
   // in an array ([{"title":...}]) regardless of the prompt instructing "one JSON object".
   // Unwrap the common single-item array response while preserving validation for other shapes.
   return slpGeneratedCreatorPostSchema.parse(Array.isArray(parsed) && parsed.length === 1 ? parsed[0] : parsed);
+}
+
+/**
+ * One post from the model, with the single correction turn that malformed JSON earns. Returns the
+ * messages actually sent, so the caller records the prompt that produced the answer.
+ */
+export async function completeSlurpCreatorPost(
+  provider: { chatComplete: (messages: ChatMessage[], options: never) => Promise<{ content?: string | null }> },
+  messages: ChatMessage[],
+  completionOptions: object,
+  { askModelForImagePrompt, debugMode }: { askModelForImagePrompt: boolean; debugMode: boolean },
+) {
+  let sentMessages: ChatMessage[] = messages;
+  let attempts = 1;
+  let response = await provider.chatComplete(messages, completionOptions as never);
+  let content = response.content ?? "";
+  logDebugOverride(
+    debugMode,
+    "[debug/slurp] Model response attempt 1 received (%d characters); content is redacted.",
+    content.length,
+  );
+  let generated: ReturnType<typeof parseCreatorPost>;
+  try {
+    generated = parseCreatorPost(content);
+  } catch {
+    // Automatic posts used to get one attempt where a foreground post got two, so a scheduled post
+    // failed outright on malformed output that a manual post recovered from — and the slot was lost
+    // with the first call already paid for. The correction turn reuses the admission this run was
+    // already granted and only fires on the failure path, so both paths now recover the same way.
+    const correctionMessages: ChatMessage[] = [
+      ...messages,
+      { role: "assistant", content },
+      {
+        role: "user",
+        content: askModelForImagePrompt
+          ? "The response was not one valid Slurp-post JSON object. Return exactly one object with title, content, and imagePrompt. title and imagePrompt must both be non-empty. Do not include a poll. Return JSON only."
+          : "The response was not one valid Slurp-post JSON object. Return exactly one object with title and content only. Do not include a poll or image prompt. Return JSON only.",
+      },
+    ];
+    logDebugOverride(
+      debugMode,
+      "[debug/slurp] Correction prompt prepared with %d messages; private prompt content is redacted.",
+      correctionMessages.length,
+    );
+    sentMessages = correctionMessages;
+    attempts = 2;
+    response = await provider.chatComplete(correctionMessages, completionOptions as never);
+    content = response.content ?? "";
+    logDebugOverride(
+      debugMode,
+      "[debug/slurp] Model response attempt 2 received (%d characters); content is redacted.",
+      content.length,
+    );
+    generated = parseCreatorPost(content);
+  }
+  return { generated, content, sentMessages, attempts };
 }

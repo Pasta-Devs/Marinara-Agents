@@ -1,5 +1,9 @@
 # Slurp Remastered release notes
 
+## 0.2.3 — 2026-09-21
+
+- Every post's menu has Deep details: the plan, the draws, the full prompt, the model's raw answer, the picture brief, and every tag behind that post.
+
 ## 0.2.2 — 2026-09-21
 
 - Removed viewer access. Every persona now sees every Creator; the per-Creator hide list is no longer used.

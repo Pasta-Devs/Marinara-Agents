@@ -435,6 +435,11 @@ export const SLURP2_SOURCE_MODULES: Record<string, readonly string[]> = {
     "packages/server/src/slp/features/feed/slp-public-identity.ts",
     "packages/server/src/slp/features/feed/slp-post-prompt.ts",
   ],
+  // The model call and its correction turn moved into slp-post-prompt.ts (completeSlurpCreatorPost).
+  "packages/server/src/slp/features/feed/slp-generation-service.ts": [
+    "packages/server/src/slp/features/feed/slp-generation-service.ts",
+    "packages/server/src/slp/features/feed/slp-post-prompt.ts",
+  ],
   "packages/server/src/services/slurp/slurp-post.operation.ts": [
     "packages/server/src/slp/features/feed/slp-post-operation.ts",
   ],
