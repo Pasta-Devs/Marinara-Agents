@@ -148,6 +148,7 @@ export function toSlpPostCardModel(view: SlpCreatorPostView, profile: SlpCreator
     content: view.content ?? "",
     imageUrl: view.imageUrl,
     imagePrompt: view.imagePrompt,
+    images: view.images,
     metadata: view.metadata ?? {},
     authorSnapshot: {
       id: profile.id,
@@ -171,6 +172,7 @@ export function toManagedPostCardModel(post: SlpCreatorManagedPost, profile: Slp
     content: post.content,
     imageUrl: post.imageUrl,
     imagePrompt: post.imagePrompt,
+    images: post.images,
     metadata: post.metadata,
     authorSnapshot: {
       id: profile.id,

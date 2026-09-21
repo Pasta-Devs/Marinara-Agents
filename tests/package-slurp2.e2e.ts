@@ -300,10 +300,11 @@ test.describe("standalone Slurp package", () => {
     expect(previewRequests).toEqual([]);
 
     await slurp.getByRole("button", { name: /^Creator posts/u }).click();
-    await expect(slurp.getByRole("heading", { name: "Creator posts", exact: true })).toBeVisible();
-    await expect(slurp.locator("ol button[aria-expanded]").first()).toBeVisible();
-    await expect(slurp.locator("ol > li").first().locator("p").last()).not.toBeEmpty();
-    await slurp.locator("ol button[aria-expanded]").first().click();
+    await expect(slurp.getByRole("heading", { level: 2, name: "Creator posts", exact: true })).toBeVisible();
+    const pipeline = slurp.locator("ol:has(button[aria-expanded])");
+    await expect(pipeline.locator("button[aria-expanded]").first()).toBeVisible();
+    await expect(pipeline.locator("> li").first().locator("p").last()).not.toBeEmpty();
+    await pipeline.locator("button[aria-expanded]").first().click();
     await expect(slurp.getByRole("button", { name: "Apply to draft", exact: true })).toBeVisible();
     expect(previewRequests).toEqual([]);
 

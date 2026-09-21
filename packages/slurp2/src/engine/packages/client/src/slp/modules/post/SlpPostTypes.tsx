@@ -58,7 +58,7 @@ export interface SlpPostCardMentionsCap {
 type SlpPostCardAuthor = Pick<SlpAuthorSnapshot, "id" | "handle" | "displayName" | "avatarUrl" | "avatarCrop">;
 export type SlpPostCardModel = Pick<
   SlpPost,
-  "id" | "authorAccountId" | "content" | "imageUrl" | "imagePrompt" | "metadata" | "createdAt" | "access"
+  "id" | "authorAccountId" | "content" | "imageUrl" | "imagePrompt" | "images" | "metadata" | "createdAt" | "access"
 > & {
   title: string | null;
   authorSnapshot: SlpPostCardAuthor | null;
