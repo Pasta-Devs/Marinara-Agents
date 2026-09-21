@@ -9,6 +9,7 @@ import { createSlurpStorage } from "../../../data/slp-storage.js";
 import { slpCreatorReservePolicyFingerprint } from "../../../modules/records/slp-storage-model.js";
 import { hasSlurpCreatorPostingIntervalConflict } from "../../../modules/feed/slp-posting-interval.js";
 import { generateCreatorPost, resolveSlurpAutomaticPostAccess } from "../slp-generation-service.js";
+import { recordSlurpPromiseKept } from "../slp-post-plan-service.js";
 import { generateCreatorPostImage } from "../../media/slp-media-contract.js";
 import { tryCreatorAccountOperation } from "../../../base/locking/slp-account-operation-lock.js";
 import { createCharactersStorage } from "../../../../services/storage/characters.storage.js";
@@ -350,6 +351,7 @@ export async function prepareNextCreatorReservePost(db: DB, at = new Date()): Pr
           // The set's post id is not known until it publishes, so a scheduled set's teaser falls
           // back to the newest locked picture, which by then is normally that set.
           await completeSlurpCampaignStageFor(db, opportunity.id, { at: completedAt });
+          await recordSlurpPromiseKept(db, opportunity, { at: completedAt });
         }
       } catch (persistError) {
         // The row never landed, so the staged image belongs to nothing: drop it before rethrowing.

@@ -1,5 +1,12 @@
 # Slurp Remastered release notes
 
+## 0.1.31 — 2026-09-21
+
+- Requests a fan makes in a conversation can now be answered from that conversation: fulfil, tease, delay, decline, count it, or ignore.
+- Fulfil, tease, and delay owe the Creator a post, and the planner posts it before anything else it might have chosen. A kept promise is recorded in the conversation it was made in.
+- Counting a request adds to an anonymous tally under a label you type. The fan and their wording never leave the conversation.
+- Added a way to publish a private continuity note. It creates a new public note and leaves the private one untouched.
+
 ## 0.1.30 — 2026-09-21
 
 - Creators now remember what they explicitly say in messages: their limits, plans, and business rules. A fan's request is remembered only inside that fan's conversation.

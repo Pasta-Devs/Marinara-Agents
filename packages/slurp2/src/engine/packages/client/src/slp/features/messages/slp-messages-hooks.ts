@@ -104,6 +104,39 @@ export function useSlurpMessagePrompt(threadId: string | null, personaId: string
     staleTime: 0,
   });
 }
+export type SlurpThreadRequest = {
+  id: string;
+  text: string;
+  occurredAt: string;
+  action: "fulfill" | "tease" | "decline" | "delay" | "ignore" | "aggregate" | null;
+};
+
+/** Requests a fan made in this thread. Creator side only; a fan never sees how theirs was filed. */
+export function useSlurpThreadRequests(threadId: string | null, personaId: string | null, enabled: boolean) {
+  return useQuery({
+    queryKey: [...messageKeys.thread(threadId ?? "none", personaId), "requests"],
+    queryFn: () =>
+      api.get<{ requests: SlurpThreadRequest[] }>(
+        `/slurp2/messages/threads/${encodeURIComponent(threadId!)}/requests?personaId=${encodeURIComponent(personaId!)}`,
+      ),
+    enabled: enabled && Boolean(threadId && personaId),
+  });
+}
+
+/** Answer one request. The answer is recorded once, so the same content is never promised twice. */
+export function useSlurpRequestAction(threadId: string | null, personaId: string | null) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { requestId: string; action: NonNullable<SlurpThreadRequest["action"]>; topic?: string }) =>
+      api.post<{ requests: SlurpThreadRequest[] }>(
+        `/slurp2/messages/threads/${encodeURIComponent(threadId!)}/requests/${encodeURIComponent(input.requestId)}/action`,
+        { personaId, action: input.action, ...(input.topic ? { topic: input.topic } : {}) },
+      ),
+    onSuccess: (data) =>
+      queryClient.setQueryData([...messageKeys.thread(threadId ?? "none", personaId), "requests"], data),
+  });
+}
+
 /**
  * The conversation with one creator, started or not. Used when the player opens a chat from a
  * profile, where there may be no thread yet and creating one on sight would charge a fee.
