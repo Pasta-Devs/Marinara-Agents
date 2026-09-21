@@ -1,5 +1,4 @@
 import { type APIProvider } from "@marinara-engine/shared";
-import { completeSlurpCampaignStageFor } from "../../data/feed/slp-campaign-storage.js";
 import { createSlpPoll } from "../../../../../shared/src/slp/slp-polls.js";
 import { SLP_CREATOR_POST_TITLE_MAX_LENGTH } from "../../../../../shared/src/slp/slp-social.schema.js";
 import { type SlpAccount, type SlpCreatorManagedPost } from "../../../../../shared/src/slp/slp-social.types.js";
@@ -86,9 +85,8 @@ import {
 import { slurpCameraSourceInstruction, slurpPostCameraSource } from "../../modules/feed/slp-camera-source.js";
 import { slurpImageBrief } from "../../modules/feed/slp-image-brief.js";
 import { slurpContentAxesInstruction } from "../../modules/feed/slp-content-axes.js";
-import { planSlurpPost } from "./slp-post-plan-service.js";
+import { planSlurpPost, recordSlurpPostOutcome } from "./slp-post-plan-service.js";
 import { stageImageToDisk, type StagedGalleryImage } from "../../../services/image/image-generation.js";
-import { completeSlurpOpportunity } from "../../data/feed/slp-opportunity-storage.js";
 import { slurpShootInstruction } from "../../modules/feed/slp-shoot.js";
 import { openSlurpShoot, useSlurpShoot } from "../../data/feed/slp-shoot-storage.js";
 import { slurpEffortInstruction, slurpPostEffort } from "../../modules/creators/slp-production-profile.js";
@@ -611,15 +609,15 @@ export async function generateCreatorPost(
     // Advanced here, after the row lands, rather than when the project was chosen: a generation
     // that failed halfway would otherwise skip a chapter and the thread would have a hole in it.
     if (project) await noodle.advanceProject(account.id, project.id, post.id);
-    // The plan is closed here for the same reason, and links what it produced.
-    if (opportunity) {
-      await Promise.all([
-        completeSlurpOpportunity(db, opportunity.id, { postId: post.id, at: input.generatedAt ?? new Date() }),
-        completeSlurpCampaignStageFor(db, opportunity.id, { postId: post.id, at: input.generatedAt ?? new Date() }),
-      ]).catch((error: unknown) => {
-        logger.warn(error, "[slurp] Could not close a content plan; the post stands on its own");
-      });
-    }
+    await recordSlurpPostOutcome(db, {
+      account,
+      post,
+      axes,
+      shootId,
+      opportunity,
+      at: input.generatedAt ?? new Date(),
+      previewOnly: input.previewOnly,
+    });
     return post;
   };
 

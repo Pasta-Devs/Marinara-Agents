@@ -120,3 +120,20 @@ export function slurpContinuityPrunable<T extends { id: string; status: SlurpCon
 /** Bounds for any text written to the ledger, manual or extracted. */
 export const SLURP_CONTINUITY_TEXT_MAX = 500;
 export const SLURP_CONTINUITY_EVIDENCE_MAX = 1000;
+
+/**
+ * The ledger identity for a Slurp account: the source Character or Persona that owns canon, and
+ * the account that posts. Null for an account with no source, which has no canon to keep.
+ */
+export function slurpContinuityIdentityOf(account: {
+  id: string;
+  kind?: string | null;
+  entityId?: string | null;
+  sourceKind?: string | null;
+  sourceEntityId?: string | null;
+}): { sourceKind: string; sourceEntityId: string; creatorAccountId: string } | null {
+  const sourceKind = account.sourceKind ?? account.kind ?? null;
+  const sourceEntityId = account.sourceEntityId ?? account.entityId ?? null;
+  if (!sourceKind || !sourceEntityId) return null;
+  return { sourceKind, sourceEntityId, creatorAccountId: account.id };
+}

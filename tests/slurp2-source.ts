@@ -612,6 +612,9 @@ export const SLURP2_SOURCE_MODULES: Record<string, readonly string[]> = {
   "packages/server/src/services/slurp/slurp-pending-text.service.ts": [
     "packages/server/src/slp/features/world/slp-pending-text-service.ts",
   ],
+  "packages/server/src/services/slurp/slurp-continuity-extraction.service.ts": [
+    "packages/server/src/slp/features/messages/slp-continuity-extraction-service.ts",
+  ],
   "packages/server/src/services/slurp/slurp-reaction-bank.ts": [
     "packages/server/src/slp/modules/world/slp-reaction-bank.ts",
   ],
