@@ -318,6 +318,12 @@
     "slurp2": {
       "versions": [
         {
+          "version": "0.2.5",
+          "date": "2026-09-21",
+          "notes": "- Locked posts no longer tease what the reader already owns, and housekeeping posts stay public. The composer offers only the purposes that fit the post's audience.",
+          "highlight": false
+        },
+        {
           "version": "0.2.4",
           "date": "2026-09-21",
           "notes": "- Who holds the camera now follows what the post is for: a planned shoot is rarely a selfie, an ordinary day usually is.\n- Two Creators who shoot the same way no longer have identical effort on the same day.\n- Conversations start between strangers instead of as friends.\n- Creators answer a new message within the hour instead of after two, so the inbox no longer needs Reply now.",
@@ -429,12 +435,6 @@
           "version": "0.0.13",
           "date": "2026-09-15",
           "notes": "- Fixed Creator management (profile, goal, subscription price, projects, arcs, payout, and Story viewers) rejecting edits with \"Only the Creator's owner can...\" — Slurp is single-player, so any Creator is now always yours to manage.\n- Fixed direct-message replies crashing when two reply attempts collided, along with other duplicate-safe storage operations that crossed the package boundary.\n- Persona Creators can now like and reply to their own posts as their public Creator identity.",
-          "highlight": false
-        },
-        {
-          "version": "0.0.12",
-          "date": "2026-09-15",
-          "notes": "- AI Creator drafts are repaired instead of failing: long text is shortened, gender and tag spellings are understood, broken JSON is fixed, and the form lists what still needs a choice.\n- Persona Creators now have the same drafting tools as character Creators: AI post drafts from your own text, and an AI image toggle in the composer for drafted and manual posts.\n- Fixed bulk Creator creation skipping open-mode Creators with a wrong gender and tags reason, and draft errors now show the real cause.",
           "highlight": false
         }
       ]

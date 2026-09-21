@@ -2,7 +2,12 @@
 // Slurp generation schemas. Split from slp-social.schema.ts to stay under the architecture
 // line budget; copied from the Engine Noodle schemas with values unchanged.
 // ──────────────────────────────────────────────
-import { SLURP_CONTENT_DELIVERIES, SLURP_CONTENT_INTENTS, slurpContentDeliveryFits } from "./slp-content-axes.js";
+import {
+  SLURP_CONTENT_DELIVERIES,
+  SLURP_CONTENT_INTENTS,
+  slurpContentDeliveryFits,
+  slurpIntentFitsAccess,
+} from "./slp-content-axes.js";
 import { z } from "zod";
 import {
   SLP_CREATOR_POST_CONTENT_MAX_LENGTH,
@@ -83,6 +88,13 @@ export const slpCreatorGenerationRequestSchema = z
   .object({ ...slpCreatorGenerationRequestShape, access: slpPostAccessSchema.default("public") })
   .strict()
   .superRefine((input, ctx) => {
+    if (input.contentIntent && !slurpIntentFitsAccess(input.contentIntent, input.access)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["contentIntent"],
+        message: "That purpose does not fit a locked post.",
+      });
+    }
     if (input.contentDelivery && !input.contentIntent) {
       ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["contentDelivery"], message: "Choose a post purpose too." });
     } else if (

@@ -1,5 +1,9 @@
 # Slurp Remastered release notes
 
+## 0.2.5 — 2026-09-21
+
+- Locked posts no longer tease what the reader already owns, and housekeeping posts stay public. The composer offers only the purposes that fit the post's audience.
+
 ## 0.2.4 — 2026-09-21
 
 - Who holds the camera now follows what the post is for: a planned shoot is rarely a selfie, an ordinary day usually is.

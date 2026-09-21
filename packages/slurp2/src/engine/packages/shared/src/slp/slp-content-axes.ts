@@ -71,6 +71,26 @@ export function slurpContentDeliveryFits(intent: SlurpContentIntent, delivery: S
   return COMPATIBLE_DELIVERIES[intent].includes(delivery);
 }
 
+/**
+ * Which intents make sense behind a paywall.
+ *
+ * A teaser exists to sell the thing the reader has not bought; behind the paywall it sells them
+ * what they are already holding. Housekeeping belongs where everyone can read it, for the same
+ * reason a shop puts its opening hours on the door and not in the stockroom.
+ */
+const LOCKED_INTENTS: readonly SlurpContentIntent[] = [
+  "casual",
+  "set",
+  "behind_the_scenes",
+  "request",
+  "appreciation",
+  "callback",
+];
+
+export function slurpIntentFitsAccess(intent: SlurpContentIntent, access: "public" | "locked"): boolean {
+  return access === "public" || LOCKED_INTENTS.includes(intent);
+}
+
 export function isSlurpContentWorkflow(value: unknown): value is SlurpContentWorkflow {
   return typeof value === "string" && (SLURP_CONTENT_WORKFLOWS as readonly string[]).includes(value);
 }
