@@ -827,9 +827,10 @@ export function prepareLtmSubjectIdentityContext({
   return {
     identityKeyForUnit(unit) {
       const hasSubjectNames = unit.subjectNames !== undefined && unit.subjectNames.length > 0;
-      const match = hasSubjectNames
-        ? resolveNamedUnitSubjects(unit, batchNames, index, context)
-        : resolveUnitSubjects(unit, index);
+      const match =
+        hasSubjectNames && !unit.subjectKeys?.length
+          ? resolveNamedUnitSubjects(unit, batchNames, index, context)
+          : resolveUnitSubjects(unit, index);
       if (match.status !== "matched") return noteIdForEvidenceUnit(unit);
       const entries = sortSubjectEntries(match.entries);
       return (
@@ -916,9 +917,10 @@ function resolveLtmSubjectIdentitiesWithContext({
     }
 
     const hasSubjectNames = unit.subjectNames !== undefined && unit.subjectNames.length > 0;
-    const match = hasSubjectNames
-      ? resolveNamedUnitSubjects(unit, batchNames, index, context)
-      : resolveUnitSubjects(unit, index);
+    const match =
+      hasSubjectNames && !unit.subjectKeys?.length
+        ? resolveNamedUnitSubjects(unit, batchNames, index, context)
+        : resolveUnitSubjects(unit, index);
     if (match.status !== "matched") {
       const sourceBackedNpc = hasSubjectNames
         ? null
@@ -951,7 +953,7 @@ function resolveLtmSubjectIdentitiesWithContext({
         });
         continue;
       }
-      if (!enforceTrustedSubjects && !hasSubjectNames) {
+      if (!enforceTrustedSubjects && !hasSubjectNames && !unit.subjectKeys?.length) {
         const fallbackSubjects = fallbackSubjectsForUnit(unit);
         const targetNoteId = noteIdForEvidenceUnit(unit);
         resolved.push({
@@ -985,23 +987,6 @@ function resolveLtmSubjectIdentitiesWithContext({
       subjects,
     };
     resolved.push({ unit: nextUnit, originalNoteId, targetNoteId: canonicalNoteId, candidateIndex });
-
-    if (hasSubjectNames && legacySubjectKeysDisagree(unit.subjectKeys, subjectKeys)) {
-      diagnostics.push({
-        severity: "warning",
-        code: "subject_identity_corrected",
-        candidateIndex,
-        mutationId: unit.id,
-        noteId: canonicalNoteId,
-        message: `Corrected legacy subject keys for ${canonicalNoteId} from source-visible character names.`,
-        details: {
-          originalSubjectKeys: unit.subjectKeys,
-          subjectNames,
-          subjectKeys,
-          matchBasis: match.basis,
-        },
-      });
-    }
 
     if (entries.some((entry) => batchNames.provisionalKeys.has(entry.subject.key))) {
       diagnostics.push({
@@ -1952,16 +1937,6 @@ function fallbackSubjectsForUnit(unit: LtmEvidenceUnit) {
 function withoutSubjectIdentity(unit: LtmEvidenceUnit): LtmEvidenceUnit {
   const { subjectNames: _subjectNames, subjectKeys: _subjectKeys, subjects: _subjects, ...withoutIdentity } = unit;
   return withoutIdentity;
-}
-
-function legacySubjectKeysDisagree(legacyKeys: string[] | undefined, resolvedKeys: string[]) {
-  if (!legacyKeys || legacyKeys.length === 0) return false;
-  const normalizedLegacy = [...legacyKeys].sort();
-  const normalizedResolved = [...resolvedKeys].sort();
-  return (
-    normalizedLegacy.length !== normalizedResolved.length ||
-    normalizedLegacy.some((key, index) => key !== normalizedResolved[index])
-  );
 }
 
 function sortSubjects(subjects: LtmSubject[]) {

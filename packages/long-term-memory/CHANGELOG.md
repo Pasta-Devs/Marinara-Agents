@@ -1,5 +1,9 @@
 # Long-Term Memory changelog
 
+## 1.3.8 — 2026-09-21
+
+- Resolve character and relationship extraction candidates by trusted subject keys before matching names, while preserving rejection of invalid keys and ambiguous keyless identities.
+
 ## 1.3.7 — 2026-09-20
 
 - Added review-only warnings for suspicious resolved-thread creates and strict event identifiers, plus backed-up preview/apply maintenance for divergent thread and world notes.

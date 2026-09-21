@@ -8,7 +8,8 @@ const timestamp = "2026-09-04T00:00:00.000Z";
 function unit(input: {
   bucket: "character_fact" | "relationship_state";
   subjectId: string;
-  subjectNames: string[];
+  subjectNames?: string[];
+  subjectKeys?: string[];
   text: string;
   sectionKey?: string;
 }) {
@@ -335,6 +336,7 @@ async function main() {
         provenance: "group_roster:character:char_group_alex",
         sourceScope: "group",
       },
+      { kind: "character", id: "rowan", name: "Rowan" },
     ],
     notes: [],
   });
@@ -357,6 +359,65 @@ async function main() {
   assert.ok(diagnosticDetails.competingRecords?.length >= 2);
   assert.equal(diagnosticDetails.collisionSource, "group_catalog");
   assert.ok(diagnosticDetails.competingRecords.some((r: any) => r.provenance?.includes("group_roster")));
+
+  // Explicit catalog keys disambiguate names in both resolution and backfill identity lookup.
+  const alexKey = "character:char_direct_alex";
+  const rowanKey = "character:rowan";
+  for (const bucket of ["character_fact", "relationship_state"] as const) {
+    const subjectKeys = bucket === "character_fact" ? [alexKey] : [rowanKey, alexKey];
+    const subjectNames = bucket === "character_fact" ? ["Alex"] : ["Alex", "Rowan"];
+    const candidate = unit({
+      bucket,
+      subjectId: "provider_subject",
+      subjectNames,
+      subjectKeys,
+      text: "Alex trusts Rowan.",
+    });
+    const keyedContext = prepareLtmSubjectIdentityContext({
+      units: [candidate],
+      catalog: duplicateDisplayNameCatalog,
+      scope,
+      sourceBackedNpcSourceText: "Alex trusts Rowan.",
+    });
+    const keyOnlyTarget = keyedContext.identityKeyForUnit({ ...candidate, subjectNames: undefined });
+    for (const names of [subjectNames, ["Unknown name"], [], undefined]) {
+      const input = { ...candidate, subjectNames: names };
+      const result = keyedContext.resolve({ units: [input], existingNotes: [] });
+      assert.equal(result.units.length, 1, "trusted keys must take precedence over name matching");
+      assert.deepEqual(result.units[0]!.subjectKeys, [...subjectKeys].sort());
+      assert.deepEqual(
+        result.units[0]!.subjects?.map((subject) => subject.key),
+        [...subjectKeys].sort(),
+      );
+      assert.deepEqual(result.units[0]!.subjectNames, subjectNames);
+      assert.equal(keyedContext.identityKeyForUnit(input), keyOnlyTarget);
+      assert.equal(`${bucket === "character_fact" ? "char" : "rel"}_${result.units[0]!.subjectId}`, keyOnlyTarget);
+      assert.equal(result.droppedCandidates.length, 0);
+    }
+    for (const keys of [undefined, []]) {
+      const result = keyedContext.resolve({ units: [{ ...candidate, subjectKeys: keys }], existingNotes: [] });
+      assert.equal(result.units.length, 0);
+      assert.equal(result.droppedCandidates[0]!.reason, "ambiguous_subject");
+    }
+    const invalidKeys =
+      bucket === "character_fact"
+        ? [["character:unknown"], [alexKey, rowanKey]]
+        : [[alexKey, "character:unknown"], [alexKey], [alexKey, alexKey], [alexKey, rowanKey, "character:unknown"]];
+    for (const keys of invalidKeys) {
+      for (const names of [subjectNames, undefined]) {
+        for (const enforceTrustedSubjects of [true, false]) {
+          const result = keyedContext.resolve({
+            units: [{ ...candidate, subjectNames: names, subjectKeys: keys }],
+            existingNotes: [],
+            enforceTrustedSubjects,
+          });
+          assert.equal(result.units.length, 0, "invalid explicit keys must not fall back to names or legacy subjects");
+          assert.equal(result.droppedCandidates.length, 1);
+          assert.equal(result.diagnostics[0]!.details?.matchBasis, "trusted_key");
+        }
+      }
+    }
+  }
 
   const aliasCollisionResolution = prepareLtmSubjectIdentityContext({
     units: [unit({ bucket: "character_fact", subjectId: "sam", subjectNames: ["Sam"], text: "Sam waits." })],
