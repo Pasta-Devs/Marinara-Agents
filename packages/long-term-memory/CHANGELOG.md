@@ -1,5 +1,9 @@
 # Long-Term Memory changelog
 
+## 1.3.9 — 2026-09-21
+
+- Collapsed identical chat summaries shared across branch chat records into one ready-to-import Sources preview row, while preserving conflicting same-ID summaries, distinct summaries, and branch-specific import provenance.
+
 ## 1.3.8 — 2026-09-21
 
 - Resolve character and relationship extraction candidates by trusted subject keys before matching names, while preserving rejection of invalid keys and ambiguous keyless identities.
