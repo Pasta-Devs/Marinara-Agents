@@ -3118,7 +3118,7 @@ async function main(routeScenario: RouteScenario) {
       emptyModelResponse = false;
       assert.equal(emptyResponseImport.statusCode, 200, emptyResponseImport.body);
       assert.equal(emptyResponseImport.json().imported[0].extractionStatus, "failed");
-      assert.equal(emptyResponseImport.json().imported[0].error.code, "extract_failed");
+      assert.equal(emptyResponseImport.json().imported[0].error.code, "ltm_model_output_empty");
       assert.match(emptyResponseImport.json().imported[0].error.message, /empty_output/u);
       assert.equal(emptyResponseImport.json().imported[0].retryable, true);
       assert.equal(emptyResponseImport.json().imported[0].draft, null);
