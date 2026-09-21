@@ -7,6 +7,12 @@ import type { SlurpCreatorStrategy } from "../../modules/creators/slp-creator-st
 import { findReusableSlurpShoot } from "../../data/feed/slp-shoot-storage.js";
 import { planSlurpOpportunity } from "../../data/feed/slp-opportunity-storage.js";
 import { findSlurpReuse, loadSlurpReuse } from "../media/slp-media-contract.js";
+import { slurpCampaignStageIntent, slurpNextCampaignStage } from "../../modules/feed/slp-campaign.js";
+import {
+  listOpenSlurpCampaignStages,
+  moveSlurpCampaignStage,
+  openSlurpCampaign,
+} from "../../data/feed/slp-campaign-storage.js";
 
 /**
  * Everything decided about a post before a word of it is written.
@@ -51,13 +57,24 @@ export async function planSlurpPost(
   // post: the direction says what it is about, the purpose says what it is for. It never touches
   // the saved strategy. An image the player asked for is honoured rather than redrawn as text.
   const chosen = request.contentIntent;
+  // A due campaign stage takes an undirected slot the same way a chosen purpose would. It never
+  // outranks the player: a directed or purpose-picked post leaves the campaign waiting.
+  const stages =
+    !directed && !chosen && !previewOnly
+      ? await listOpenSlurpCampaignStages(db, account.id, at).catch((error: unknown) => {
+          logger.warn(error, "[slurp] Could not read campaigns; this post is planned on its own");
+          return [];
+        })
+      : [];
+  const stage = slurpNextCampaignStage(stages, { at, access: request.access ?? "public" });
+  const forced = chosen ?? (stage ? slurpCampaignStageIntent(stage.kind) : undefined);
   const drawn =
-    !directed || chosen
+    !directed || forced
       ? slurpPostAxes(account.id, sequence, {
           story: storyVariation,
-          teaser: chosen ? chosen === "teaser" : isTeaser,
+          teaser: forced ? forced === "teaser" : isTeaser,
           images: imagesEnabled,
-          intentWeights: chosen ? slurpOnlyIntent(chosen) : strategy.intentWeights,
+          intentWeights: forced ? slurpOnlyIntent(forced) : strategy.intentWeights,
           textOnlyRate: strategy.textOnlyRate,
         })
       : null;
@@ -80,20 +97,26 @@ export async function planSlurpPost(
           at: at,
           sequence,
           shootId: shoot?.id ?? null,
+          previewPostId: stage
+            ? (stages.find((other) => other.campaignId === stage.campaignId && other.kind === "set")?.postId ?? null)
+            : null,
         }).catch((error: unknown) => {
           logger.warn(error, "[slurp] Could not look for a picture to reuse; a new one is drawn instead");
           return null;
         })
       : null;
   const reusedAxes =
-    drawnAxes && reuse
-      ? slurpReuseDelivery(
-          drawnAxes,
-          { shoot: Boolean(reuse.shoot), archive: Boolean(reuse.archive), preview: Boolean(reuse.preview) },
-          account.id,
-          sequence,
-        )
-      : drawnAxes;
+    // A campaign teaser shows its set whenever a preview can be cut; that is what the stage is for.
+    drawnAxes && reuse && stage?.kind === "teaser" && reuse.preview && drawnAxes.delivery === "new_capture"
+      ? { ...drawnAxes, delivery: "cropped_preview" as const }
+      : drawnAxes && reuse
+        ? slurpReuseDelivery(
+            drawnAxes,
+            { shoot: Boolean(reuse.shoot), archive: Boolean(reuse.archive), preview: Boolean(reuse.preview) },
+            account.id,
+            sequence,
+          )
+        : drawnAxes;
   const reuseKind =
     reusedAxes?.delivery === "cropped_preview"
       ? ("preview" as const)
@@ -125,5 +148,17 @@ export async function planSlurpPost(
           return null;
         })
       : null;
+  // Campaign bookkeeping, never allowed to cost the post. A stage this plan runs is claimed by it; a
+  // set planned outside a campaign opens one, with itself as the first, already claimed stage.
+  if (opportunity) {
+    try {
+      if (stage) await moveSlurpCampaignStage(db, stage, "claimed", { at, opportunityId: opportunity.id });
+      else if (axes?.intent === "set") {
+        await openSlurpCampaign(db, { creatorAccountId: account.id, opportunityId: opportunity.id, at, dueAt });
+      }
+    } catch (error) {
+      logger.warn(error, "[slurp] Could not update a campaign; the post stands on its own");
+    }
+  }
   return { axes, shoot, reusedMedia, reusedSource, opportunity };
 }

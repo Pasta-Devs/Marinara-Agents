@@ -1,4 +1,5 @@
 import type { DB } from "../../../../db/connection.js";
+import { completeSlurpCampaignStageFor } from "../../../data/feed/slp-campaign-storage.js";
 import { createConnectionsStorage } from "../../../../services/storage/connections.storage.js";
 import { resolveSlurpTextConnection } from "../../../base/identity/slp-connection.js";
 import { resolveCreatorImageConnectionId } from "../../../base/media/slp-image-connections.js";
@@ -325,7 +326,12 @@ export async function prepareNextCreatorReservePost(db: DB, at = new Date()): Pr
         }
         // The plan is executed once the slot holds it. Publishing it later is mechanical.
         const opportunity = await findSlurpOpportunityBySlot(db, selectedSlotId);
-        if (opportunity) await completeSlurpOpportunity(db, opportunity.id, { at: completedAt });
+        if (opportunity) {
+          await completeSlurpOpportunity(db, opportunity.id, { at: completedAt });
+          // The set's post id is not known until it publishes, so a scheduled set's teaser falls
+          // back to the newest locked picture, which by then is normally that set.
+          await completeSlurpCampaignStageFor(db, opportunity.id, { at: completedAt });
+        }
       } catch (persistError) {
         // The row never landed, so the staged image belongs to nothing: drop it before rethrowing.
         stagedMedia?.compensate();

@@ -32,15 +32,27 @@ export type SlurpReuseAvailability = Record<SlurpReuseKind, SlurpReusablePost | 
  */
 export async function findSlurpReuse(
   db: DB,
-  input: { creatorAccountId: string; access: string; at: Date; sequence: number; shootId?: string | null },
+  input: {
+    creatorAccountId: string;
+    access: string;
+    at: Date;
+    sequence: number;
+    shootId?: string | null;
+    /** A campaign teaser previews its own set when that picture qualifies. */
+    previewPostId?: string | null;
+  },
 ): Promise<SlurpReuseAvailability> {
   const posts = await createSlurpStorage(db).listNoodlerPostsByAccount(input.creatorAccountId, REUSE_LOOKBACK_POSTS);
-  const pick = (kind: SlurpReuseKind) =>
-    slurpPickReuse(
-      slurpReuseCandidates(posts, { kind, access: input.access, at: input.at, shootId: input.shootId }),
-      input.creatorAccountId,
-      input.sequence,
-    );
+  const pick = (kind: SlurpReuseKind) => {
+    const candidates = slurpReuseCandidates(posts, {
+      kind,
+      access: input.access,
+      at: input.at,
+      shootId: input.shootId,
+    });
+    const preferred = kind === "preview" ? candidates.find((post) => post.id === input.previewPostId) : undefined;
+    return preferred ?? slurpPickReuse(candidates, input.creatorAccountId, input.sequence);
+  };
   return {
     shoot: input.shootId ? pick("shoot") : null,
     archive: pick("archive"),

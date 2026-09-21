@@ -1,4 +1,5 @@
 import { type APIProvider } from "@marinara-engine/shared";
+import { completeSlurpCampaignStageFor } from "../../data/feed/slp-campaign-storage.js";
 import { createSlpPoll } from "../../../../../shared/src/slp/slp-polls.js";
 import { SLP_CREATOR_POST_TITLE_MAX_LENGTH } from "../../../../../shared/src/slp/slp-social.schema.js";
 import { type SlpAccount, type SlpCreatorManagedPost } from "../../../../../shared/src/slp/slp-social.types.js";
@@ -612,10 +613,10 @@ export async function generateCreatorPost(
     if (project) await noodle.advanceProject(account.id, project.id, post.id);
     // The plan is closed here for the same reason, and links what it produced.
     if (opportunity) {
-      await completeSlurpOpportunity(db, opportunity.id, {
-        postId: post.id,
-        at: input.generatedAt ?? new Date(),
-      }).catch((error: unknown) => {
+      await Promise.all([
+        completeSlurpOpportunity(db, opportunity.id, { postId: post.id, at: input.generatedAt ?? new Date() }),
+        completeSlurpCampaignStageFor(db, opportunity.id, { postId: post.id, at: input.generatedAt ?? new Date() }),
+      ]).catch((error: unknown) => {
         logger.warn(error, "[slurp] Could not close a content plan; the post stands on its own");
       });
     }
