@@ -26,7 +26,6 @@ import {
   slurpAudienceCharacterFanTypeId,
   slurpAudienceCharacterTraits,
 } from "../../../../../shared/src/slp/slp-audience-characters.js";
-import { isCreatorHiddenFromViewer } from "../../base/identity/slp-access.js";
 import { runCreatorFanActivity, getCreatorFanActivityStatus } from "./slp-fan-activity-operation.js";
 import { isConnectionAdmissionFailure } from "../../../services/generation/connection-admission.js";
 import { getErrorMessage } from "../../modules/creators/slp-public-support.js";
@@ -337,12 +336,7 @@ export async function slpAudienceRoutes(app: FastifyInstance, deps: SlpRouteDeps
     const { id } = req.params as { id: string };
     const viewer = await resolveViewerPersona(body.personaId);
     const creator = await noodle.getNoodlerAccountById(id);
-    if (
-      !viewer ||
-      !creator ||
-      creatorBelongsToViewer(creator, viewer) ||
-      isCreatorHiddenFromViewer(creator, viewer.id)
-    ) {
+    if (!viewer || !creator || creatorBelongsToViewer(creator, viewer)) {
       return reply.code(404).send({ error: "Slurp stage profile not found" });
     }
     const updated = await noodle.updateViewerFollow(viewer.id, creator.id, body.followed);

@@ -14,7 +14,6 @@ import {
 } from "../../data/messages/slp-messages-storage-context.js";
 import { reactToSlurpPayment } from "./slp-payment-reaction.js";
 import { slurpPayoutAllowance } from "../../modules/economy/slp-earnings.js";
-import { isCreatorHiddenFromViewer } from "../../base/identity/slp-access.js";
 import { createSlurpPopulationStorage } from "../../data/audience/slp-audience-storage-funnel.js";
 import { SLURP_NAMED_CAST_LIMIT } from "../../../../../shared/src/slp/slp-population.js";
 import { slpCreatorUnlockPriceFromMetadata } from "../../modules/economy/slp-prices.js";
@@ -227,12 +226,7 @@ export async function slpWalletRoutes(app: FastifyInstance, deps: SlpRouteDeps) 
       resolveViewerPersona(parsed.data.personaId),
       noodle.getNoodlerAccountById(id),
     ]);
-    if (
-      !viewer ||
-      !creator ||
-      creatorBelongsToViewer(creator, viewer) ||
-      isCreatorHiddenFromViewer(creator, viewer.id)
-    ) {
+    if (!viewer || !creator || creatorBelongsToViewer(creator, viewer)) {
       return reply.code(404).send({ error: "Slurp stage profile not found" });
     }
     const subscription = await noodle.subscribe(viewer.id, creator.id);
@@ -337,14 +331,7 @@ export async function slpWalletRoutes(app: FastifyInstance, deps: SlpRouteDeps) 
       noodle.getNoodlerPostById(id),
     ]);
     const creator = post ? await noodle.getNoodlerAccountById(post.authorAccountId) : null;
-    if (
-      !viewer ||
-      !post ||
-      !creator ||
-      post.access !== "locked" ||
-      creatorBelongsToViewer(creator, viewer) ||
-      isCreatorHiddenFromViewer(creator, viewer.id)
-    ) {
+    if (!viewer || !post || !creator || post.access !== "locked" || creatorBelongsToViewer(creator, viewer)) {
       return reply.code(404).send({ error: "Slurp post not found" });
     }
     const unlock = await noodle.unlockPost(viewer.id, post.id);

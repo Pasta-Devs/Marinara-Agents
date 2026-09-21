@@ -273,7 +273,6 @@ const EXPORTED_BEFORE = [
   "useUnlockCreatorPost",
   "useUnlockSlurpMessage",
   "useUpdateAmbientProfile",
-  "useUpdateCreatorAccess",
   "useUpdateCreatorAutoPosting",
   "useUpdateCreatorFanActivity",
   "useUpdateCreatorInteraction",
@@ -367,6 +366,7 @@ const addedCalls = [
   "post /slurp2/continuity/${input.path}",
   "post /slurp2/messages/threads/${encodeURIComponent(threadId!)}/requests/${encodeURIComponent(input.requestId)}/action",
 ];
+const removedCalls = ["patch /slurp2/accounts/${encodeURIComponent(accountId)}/settings"];
 // Classic runtime mode is gone, so the block catalog no longer takes a mode.
 const renamedCalls = new Map([
   ["get /slurp2/settings/prompt-blocks?mode=${encodeURIComponent(mode)}", "get /slurp2/settings/prompt-blocks"],
@@ -380,6 +380,13 @@ assert.deepEqual(
   calls,
   callsBefore
     .map(mapStagingCall)
+    .filter((call) => {
+      // Viewer access was removed; its one settings patch went with it.
+      const index = removedCalls.indexOf(call);
+      if (index < 0) return true;
+      removedCalls.splice(index, 1);
+      return false;
+    })
     .map((call) => renamedCalls.get(call) ?? call)
     .concat(addedCalls)
     .sort(),
@@ -405,10 +412,10 @@ const counts = Object.fromEntries(
 assert.deepEqual(
   counts,
   {
-    useMutation: 139,
-    useQuery: 198,
+    useMutation: 138,
+    useQuery: 197,
     useInfiniteQuery: 5,
-    invalidateQueries: 127,
+    invalidateQueries: 125,
     setQueryData: 16,
     cancelQueries: 5,
     removeQueries: 1,

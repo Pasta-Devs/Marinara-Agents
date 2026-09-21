@@ -6,7 +6,7 @@ import type {
 } from "../../../../../shared/src/slp/slp-social.types.js";
 import { projectCreatorAudienceProfile } from "../../modules/creators/slp-disclosure.js";
 import { isSlurpViewerActorAccount } from "../../modules/settings/slp-settings.js";
-import { isCreatorHiddenFromViewer, canViewCreatorPost } from "../../base/identity/slp-access.js";
+import { canViewCreatorPost } from "../../base/identity/slp-access.js";
 import { slurpGoalProgress } from "../../modules/projects/slp-goal.js";
 import { SLP_CREATOR_SUBSCRIPTION_COST, slpCreatorUnlockPriceFromMetadata } from "../../modules/economy/slp-prices.js";
 import { slurpPlatformScaleMultiplier } from "../../modules/audience/slp-scale.js";
@@ -64,11 +64,7 @@ export function createSlpViewerContext(
     const followedIds = new Set([...(viewer.settings.social.followingAccountIds ?? []), ...subscribedIds]);
     const unlockedIds = new Set(unlocks.map((item) => item.postId));
     const profileById = new Map(profiles.map((profile) => [profile.id, projectCreatorAudienceProfile(profile)]));
-    const visibleAccounts = accounts.filter(
-      (account) =>
-        !isSlurpViewerActorAccount(account) &&
-        (creatorBelongsToViewer(account, viewer) || !isCreatorHiddenFromViewer(account, viewer.id)),
-    );
+    const visibleAccounts = accounts.filter((account) => !isSlurpViewerActorAccount(account));
     // A tip goal exists to give a fan a reason to tip, and it was only ever visible to the Creator
     // who set it. It belongs on the profile the fan is looking at.
     const goalByAccountId = new Map(

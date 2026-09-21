@@ -1,5 +1,9 @@
 # Slurp Remastered release notes
 
+## 0.2.2 — 2026-09-21
+
+- Removed viewer access. Every persona now sees every Creator; the per-Creator hide list is no longer used.
+
 ## 0.2.1 — 2026-09-21
 
 - Posts no longer read private notes from direct messages.
