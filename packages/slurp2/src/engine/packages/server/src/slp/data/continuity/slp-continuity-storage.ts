@@ -1,12 +1,14 @@
 import type { DB } from "../../../db/connection.js";
-import { and, desc, eq } from "../../../db/file-query.js";
+import { and, desc, eq, inArray } from "../../../db/file-query.js";
 import {
   slurpContentCampaigns,
   slurpContentCampaignStages,
   slurpContentOpportunities,
   slurpContinuityEvents,
   slurpContinuityFacts,
+  slurpContinuityLinks,
   slurpContinuityProposals,
+  slurpMessages,
   slurpDemandTrends,
   slurpShootSessions,
 } from "../../../db/schema/slurp.js";
@@ -32,6 +34,7 @@ import {
   slurpContinuityPrunable,
   slurpContinuityReadable,
 } from "../../modules/continuity/slp-continuity-rules.js";
+import { slurpExtractionSourceHash } from "../../modules/continuity/slp-continuity-extraction.js";
 
 function parseJson<T>(value: unknown, fallback: T): T {
   try {
@@ -332,6 +335,7 @@ export async function pruneSlurpContinuity(db: DB, creatorAccountId: string, at 
  * facts, events, or proposals behind to travel in every backup.
  */
 export async function deleteSlurpCreatorPlanningRows(tx: Pick<DB, "delete">, creatorAccountId: string): Promise<void> {
+  await tx.delete(slurpContinuityLinks).where(eq(slurpContinuityLinks.creatorAccountId, creatorAccountId));
   await tx.delete(slurpContinuityFacts).where(eq(slurpContinuityFacts.creatorAccountId, creatorAccountId));
   await tx.delete(slurpContinuityEvents).where(eq(slurpContinuityEvents.creatorAccountId, creatorAccountId));
   await tx.delete(slurpContinuityProposals).where(eq(slurpContinuityProposals.creatorAccountId, creatorAccountId));
@@ -356,6 +360,8 @@ export async function proposeSlurpContinuityChange(
     risk: SlurpProposalRisk;
     confidence: number;
     sourceHash: string;
+    sourceMessageIds?: string[];
+    extractionFingerprint?: string;
   },
   at = new Date(),
 ): Promise<string> {
@@ -387,6 +393,8 @@ export async function proposeSlurpContinuityChange(
     risk: input.risk,
     confidence: String(input.confidence),
     sourceHash: input.sourceHash,
+    sourceMessageIds: JSON.stringify(input.sourceMessageIds ?? []),
+    extractionFingerprint: input.extractionFingerprint ?? input.sourceHash,
     status: "pending",
     reviewer: null,
     revision: "1",
@@ -420,6 +428,56 @@ export async function hasSlurpContinuityFact(
 /** Audiences a fact may be promoted into. Promotion only ever widens toward the Creator's own. */
 export const SLURP_PROMOTION_TARGETS = ["creator_private", "creator_public", "cross_platform"] as const;
 export type SlurpPromotionTarget = (typeof SLURP_PROMOTION_TARGETS)[number];
+
+export type SlurpContinuityLink = {
+  id: string;
+  creatorAccountId: string;
+  fromType: string;
+  fromId: string;
+  toType: string;
+  toId: string;
+  relation: string;
+  createdAt: string;
+};
+
+export async function recordSlurpContinuityLink(
+  db: DB,
+  input: Omit<SlurpContinuityLink, "id" | "createdAt">,
+  at = new Date(),
+): Promise<void> {
+  const existing = await db
+    .select()
+    .from(slurpContinuityLinks)
+    .where(
+      and(
+        eq(slurpContinuityLinks.fromType, input.fromType),
+        eq(slurpContinuityLinks.fromId, input.fromId),
+        eq(slurpContinuityLinks.toType, input.toType),
+        eq(slurpContinuityLinks.toId, input.toId),
+        eq(slurpContinuityLinks.relation, input.relation),
+      ),
+    );
+  if (existing[0]) return;
+  await db.insert(slurpContinuityLinks).values({ id: newId(), ...input, createdAt: at.toISOString() });
+}
+
+export async function listSlurpContinuityLinks(db: DB, creatorAccountId: string): Promise<SlurpContinuityLink[]> {
+  const rows = await db
+    .select()
+    .from(slurpContinuityLinks)
+    .where(eq(slurpContinuityLinks.creatorAccountId, creatorAccountId))
+    .orderBy(desc(slurpContinuityLinks.createdAt));
+  return rows.map((row) => ({
+    id: String(row.id),
+    creatorAccountId: String(row.creatorAccountId),
+    fromType: String(row.fromType),
+    fromId: String(row.fromId),
+    toType: String(row.toType),
+    toId: String(row.toId),
+    relation: String(row.relation),
+    createdAt: String(row.createdAt),
+  }));
+}
 
 /**
  * Promote a fact to a wider audience by writing a new, derived fact. The private source is never
@@ -476,6 +534,9 @@ export async function listSlurpContinuityForEditor(
     candidate: Record<string, unknown>;
     risk: string;
     confidence: number;
+    sourceHash: string;
+    sourceMessageIds: string[];
+    extractionFingerprint: string;
     createdAt: string;
   }[];
 }> {
@@ -499,6 +560,9 @@ export async function listSlurpContinuityForEditor(
         candidate: parseJson<Record<string, unknown>>(row.candidate, {}),
         risk: String(row.risk),
         confidence: number(row.confidence, 0),
+        sourceHash: String(row.sourceHash),
+        sourceMessageIds: parseJson<string[]>(row.sourceMessageIds, []),
+        extractionFingerprint: String(row.extractionFingerprint ?? row.sourceHash),
         createdAt: String(row.createdAt),
       }))
       .sort((left, right) => right.createdAt.localeCompare(left.createdAt)),
@@ -514,19 +578,49 @@ export async function reviewSlurpContinuityProposal(
   id: string,
   decision: "approve" | "reject",
   at = new Date(),
-): Promise<SlurpContinuityFact | "not_found" | "rejected" | "not_pending"> {
+): Promise<SlurpContinuityFact | SlurpContinuityEvent | "not_found" | "rejected" | "not_pending" | "stale"> {
   const [row] = await db.select().from(slurpContinuityProposals).where(eq(slurpContinuityProposals.id, id));
   if (!row) return "not_found";
   if (String(row.status) !== "pending") return "not_pending";
+  const messageIds = parseJson<string[]>(row.sourceMessageIds, []);
+  if (messageIds.length > 0) {
+    const messageRows = await db.select().from(slurpMessages).where(inArray(slurpMessages.id, messageIds));
+    const byId = new Map(messageRows.map((message) => [String(message.id), message]));
+    const current = messageIds.flatMap((messageId) => {
+      const message = byId.get(messageId);
+      return message
+        ? [
+            {
+              id: messageId,
+              role: message.role === "creator" ? ("creator" as const) : ("fan" as const),
+              content: String(message.content),
+            },
+          ]
+        : [];
+    });
+    if (current.length !== messageIds.length || slurpExtractionSourceHash(current) !== String(row.sourceHash)) {
+      await db
+        .update(slurpContinuityProposals)
+        .set({ status: "stale", reviewedAt: at.toISOString(), reviewer: "system" })
+        .where(eq(slurpContinuityProposals.id, id));
+      return "stale";
+    }
+  }
   await db
     .update(slurpContinuityProposals)
     .set({ status: decision === "approve" ? "applied" : "rejected", reviewedAt: at.toISOString(), reviewer: "user" })
     .where(eq(slurpContinuityProposals.id, id));
   if (decision === "reject") return "rejected";
-  const candidate = parseJson<SlurpContinuityFactInput & { status?: SlurpContinuityStatus }>(
-    row.candidate,
-    null as never,
-  );
+  if (String(row.target) === "event") {
+    const event = parseJson<SlurpContinuityEventInput & { occurredAt: string }>(row.candidate, null as never);
+    if (!event?.fingerprint || !event.occurredAt) return "not_found";
+    return recordSlurpContinuityEvent(
+      db,
+      { ...event, status: "active", contribution: "manual", occurredAt: new Date(event.occurredAt) },
+      at,
+    );
+  }
+  const candidate = parseJson<SlurpContinuityFactInput>(row.candidate, null as never);
   if (!candidate?.text) return "not_found";
   return (
     (await createSlurpContinuityFact(db, { ...candidate, status: "active", contribution: "manual" }, at)) ?? "not_found"

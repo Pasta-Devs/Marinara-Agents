@@ -824,12 +824,30 @@ export const slurpContinuityProposals = fileTable("slurp2_continuity_proposals",
   risk: text("risk").notNull(),
   confidence: text("confidence").notNull(),
   sourceHash: text("source_hash").notNull(),
+  sourceMessageIds: text("source_message_ids").notNull().default("[]"),
+  extractionFingerprint: text("extraction_fingerprint").notNull().default(""),
   status: text("status").notNull(),
   reviewer: text("reviewer"),
   revision: text("revision").notNull().default("1"),
   createdAt: text("created_at").notNull(),
   reviewedAt: text("reviewed_at"),
 });
+
+/** Explicit graph edges between planning, messages, shoots, campaigns, posts, and outcomes. */
+export const slurpContinuityLinks = fileTable(
+  "slurp2_continuity_links",
+  {
+    id: text("id").primaryKey(),
+    creatorAccountId: text("creator_account_id").notNull(),
+    fromType: text("from_type").notNull(),
+    fromId: text("from_id").notNull(),
+    toType: text("to_type").notNull(),
+    toId: text("to_id").notNull(),
+    relation: text("relation").notNull(),
+    createdAt: text("created_at").notNull(),
+  },
+  { uniqueBy: [{ keys: ["fromType", "fromId", "toType", "toId", "relation"] }] },
+);
 
 /**
  * How often subscribers have asked for the same kind of thing.

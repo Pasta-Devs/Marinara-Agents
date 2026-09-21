@@ -40,6 +40,19 @@ export type SlurpContinuityProposalView = {
   risk: string;
   confidence: number;
   createdAt: string;
+  sourceHash: string;
+  sourceMessageIds: string[];
+  extractionFingerprint: string;
+};
+
+export type SlurpContinuityLinkView = {
+  id: string;
+  fromType: string;
+  fromId: string;
+  toType: string;
+  toId: string;
+  relation: string;
+  createdAt: string;
 };
 
 export type SlurpContinuityOpportunityView = {
@@ -60,16 +73,45 @@ export type SlurpContinuityView = {
   events: SlurpContinuityEventView[];
   proposals: SlurpContinuityProposalView[];
   opportunities: SlurpContinuityOpportunityView[];
+  links: SlurpContinuityLinkView[];
 };
+
+export type SlurpContinuityFilters = Partial<{
+  type: string;
+  source: string;
+  scope: string;
+  status: string;
+  minConfidence: string;
+  from: string;
+  to: string;
+}>;
 
 const continuityKey = (creatorAccountId: string) => [...slpKeys.noodlerRoot(), "continuity", creatorAccountId] as const;
 
 /** Everything the editor shows for one Creator, including records no prompt may read. */
-export function useSlurpContinuity(creatorAccountId: string | null) {
+export function useSlurpContinuity(creatorAccountId: string | null, filters: SlurpContinuityFilters = {}) {
+  const query = new URLSearchParams(
+    Object.entries(filters).filter((entry): entry is [string, string] => Boolean(entry[1])),
+  );
   return useQuery({
-    queryKey: continuityKey(creatorAccountId ?? "none"),
-    queryFn: () => api.get<SlurpContinuityView>(`/slurp2/continuity/${encodeURIComponent(creatorAccountId!)}`),
+    queryKey: [...continuityKey(creatorAccountId ?? "none"), filters],
+    queryFn: () => api.get<SlurpContinuityView>(`/slurp2/continuity/${encodeURIComponent(creatorAccountId!)}?${query}`),
     enabled: Boolean(creatorAccountId),
+  });
+}
+
+export function useSlurpContinuityOverview() {
+  return useQuery({
+    queryKey: [...slpKeys.noodlerRoot(), "continuity", "all"],
+    queryFn: () =>
+      api.get<
+        {
+          creator: { id: string; displayName: string; handle: string };
+          facts: SlurpContinuityFactView[];
+          events: SlurpContinuityEventView[];
+          proposals: SlurpContinuityProposalView[];
+        }[]
+      >("/slurp2/continuity"),
   });
 }
 

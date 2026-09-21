@@ -69,3 +69,16 @@ assert.match(panel, /const PROMOTION_TARGETS = \["creator_private", "creator_pub
 assert.equal((panel.match(/fact\.status === "retracted"/gu) ?? []).length, 3);
 
 console.log("slurp continuity editor regression checks passed");
+
+// A proposal whose source messages changed or vanished is refused as stale, never applied.
+assert.match(storage, /slurpExtractionSourceHash\(current\) !== String\(row\.sourceHash\)/u);
+assert.match(storage, /set\(\{ status: "stale", reviewedAt: at\.toISOString\(\), reviewer: "system" \}\)/u);
+// Links are deleted with their Creator.
+assert.match(storage, /tx\.delete\(slurpContinuityLinks\)/u);
+// Message requests open the Creator's continuity editor directly.
+const requestsPanel = slurp2Source(
+  "packages/slurp2/src/engine/packages/client/src/slp/features/messages/SlpThreadRequestsPanel.tsx",
+);
+assert.match(requestsPanel, /continuityCreatorId: creatorAccountId/u);
+assert.match(creators, /openContinuity\(continuityCreatorId\)/u);
+assert.match(creators, /<SlpContinuityOverview onOpen=\{openContinuity\} \/>/u);

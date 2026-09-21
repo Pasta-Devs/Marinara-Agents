@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
+import { useSlurpUIStore } from "../../base/state/slp-package-store";
 import { errorMessage } from "../../modules/settings/slp-backstage-format";
 import { useSlurpRequestAction, useSlurpThreadRequests, type SlurpThreadRequest } from "./slp-messages-hooks";
 
@@ -16,10 +17,13 @@ const ACTIONS = ["fulfill", "tease", "delay", "decline", "aggregate", "ignore"] 
 export function SlurpThreadRequestsPanel({
   threadId,
   personaId,
+  creatorAccountId,
 }: {
   threadId: string | null;
   personaId: string | null;
+  creatorAccountId?: string | null;
 }) {
+  const setNavigation = useSlurpUIStore((state) => state.setNavigation);
   const { t } = useTranslation();
   const requests = useSlurpThreadRequests(threadId, personaId, true);
   const apply = useSlurpRequestAction(threadId, personaId);
@@ -47,6 +51,23 @@ export function SlurpThreadRequestsPanel({
       <h3 className="text-xs font-bold uppercase tracking-[0.14em] text-[var(--slurp-muted)]">
         {t("ui.slurp.messages.requests.title", { defaultValue: "Requests" })}
       </h3>
+      {creatorAccountId && (
+        <button
+          type="button"
+          className="text-xs font-semibold text-[var(--slurp-accent)] underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)]"
+          onClick={() =>
+            setNavigation({
+              mode: "creator-settings",
+              tab: "creator",
+              section: "creators",
+              target: "creators",
+              continuityCreatorId: creatorAccountId,
+            })
+          }
+        >
+          {t("ui.slurp.messages.requests.openContinuity", { defaultValue: "Open continuity" })}
+        </button>
+      )}
       {rows.map((request) => (
         <article key={request.id} className="space-y-2 rounded-lg bg-[var(--slurp-surface-raised)] p-3">
           <p className="text-sm leading-6 text-pretty">{request.text}</p>

@@ -4,6 +4,7 @@ import {
   createSlurpContinuityFact,
   editSlurpContinuityFact,
   listSlurpContinuityForEditor,
+  listSlurpContinuityLinks,
   moveSlurpContinuityStatus,
   promoteSlurpContinuityFact,
   reviewSlurpContinuityProposal,
@@ -12,18 +13,81 @@ import {
 import { listSlurpOpportunities } from "../../data/feed/slp-opportunity-storage.js";
 import { createSlurpStorage } from "../../data/slp-storage.js";
 import { slurpContinuityIdentityOf, SLURP_CONTINUITY_TEXT_MAX } from "../../modules/continuity/slp-continuity-rules.js";
-import { SLURP_AUDIENCE_SCOPES, SLURP_CONTINUITY_FACT_TYPES } from "../../../../../shared/src/slp/slp-continuity.js";
+import {
+  SLURP_AUDIENCE_SCOPES,
+  SLURP_CONTINUITY_FACT_TYPES,
+  SLURP_CONTINUITY_SOURCES,
+  SLURP_CONTINUITY_STATUSES,
+} from "../../../../../shared/src/slp/slp-continuity.js";
+
+const editorFilterSchema = z.object({
+  type: z.string().optional(),
+  source: z.enum(SLURP_CONTINUITY_SOURCES).optional(),
+  scope: z.enum(SLURP_AUDIENCE_SCOPES).optional(),
+  status: z.enum(SLURP_CONTINUITY_STATUSES).optional(),
+  minConfidence: z.coerce.number().min(0).max(1).optional(),
+  from: z.string().datetime().optional(),
+  to: z.string().datetime().optional(),
+});
+
+function filterLedger<T extends { source: string; audienceScope: string; status: string; confidence: number }>(
+  rows: T[],
+  filters: z.infer<typeof editorFilterSchema>,
+  typeOf: (row: T) => string,
+  dateOf: (row: T) => string,
+) {
+  return rows.filter(
+    (row) =>
+      (!filters.type || typeOf(row) === filters.type) &&
+      (!filters.source || row.source === filters.source) &&
+      (!filters.scope || row.audienceScope === filters.scope) &&
+      (!filters.status || row.status === filters.status) &&
+      (filters.minConfidence === undefined || row.confidence >= filters.minConfidence) &&
+      (!filters.from || dateOf(row) >= filters.from) &&
+      (!filters.to || dateOf(row) <= filters.to),
+  );
+}
 
 /** Creator continuity, as the player manages it. Every change here is explicit and auditable. */
 export async function slpContinuityRoutes(app: FastifyInstance) {
   /** Everything for one Creator: facts, events, pending proposals, and the plans behind them. */
-  app.get("/continuity/:creatorAccountId", async (req) => {
+  app.get("/continuity/:creatorAccountId", async (req, reply) => {
     const { creatorAccountId } = req.params as { creatorAccountId: string };
-    const [ledger, opportunities] = await Promise.all([
+    const filters = editorFilterSchema.safeParse(req.query ?? {});
+    if (!filters.success) return reply.code(400).send({ error: filters.error.flatten() });
+    const [ledger, opportunities, links] = await Promise.all([
       listSlurpContinuityForEditor(app.db, creatorAccountId),
       listSlurpOpportunities(app.db, creatorAccountId, 25),
+      listSlurpContinuityLinks(app.db, creatorAccountId),
     ]);
-    return { ...ledger, opportunities };
+    return {
+      ...ledger,
+      facts: filterLedger(
+        ledger.facts,
+        filters.data,
+        (row) => row.factType,
+        (row) => row.updatedAt,
+      ),
+      events: filterLedger(
+        ledger.events,
+        filters.data,
+        (row) => row.eventType,
+        (row) => row.occurredAt,
+      ),
+      opportunities,
+      links,
+    };
+  });
+
+  /** Cross-Creator Backstage view. Payloads stay scoped; this is the owner-only management route. */
+  app.get("/continuity", async () => {
+    const accounts = await createSlurpStorage(app.db).listNoodlerAccounts();
+    return Promise.all(
+      accounts.map(async (account) => ({
+        creator: { id: account.id, displayName: account.displayName, handle: account.handle },
+        ...(await listSlurpContinuityForEditor(app.db, account.id)),
+      })),
+    );
   });
 
   app.post("/continuity/:creatorAccountId/facts", async (req, reply) => {
@@ -84,6 +148,8 @@ export async function slpContinuityRoutes(app: FastifyInstance) {
     const result = await reviewSlurpContinuityProposal(app.db, id, decision);
     if (result === "not_found") return reply.code(404).send({ error: "Proposal not found" });
     if (result === "not_pending") return reply.code(409).send({ error: "This proposal was already reviewed." });
+    if (result === "stale")
+      return reply.code(409).send({ error: "The source messages changed. Extract this thread again." });
     return result === "rejected" ? { rejected: true } : result;
   });
 

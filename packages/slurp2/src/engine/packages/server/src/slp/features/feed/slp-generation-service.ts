@@ -629,6 +629,7 @@ export async function generateCreatorPost(
       axes,
       shootId,
       opportunity,
+      campaignId,
       at: input.generatedAt ?? new Date(),
       previewOnly: input.previewOnly,
     });

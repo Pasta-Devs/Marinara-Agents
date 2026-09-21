@@ -1,5 +1,9 @@
 import type { DB } from "../../../db/connection.js";
-import { listSlurpContinuityFor, recordSlurpContinuityEvent } from "../../data/continuity/slp-continuity-storage.js";
+import {
+  listSlurpContinuityFor,
+  recordSlurpContinuityEvent,
+  recordSlurpContinuityLink,
+} from "../../data/continuity/slp-continuity-storage.js";
 import { slurpContinuityInstruction } from "../../modules/continuity/slp-continuity-prompt.js";
 import { slurpContinuityIdentityOf } from "../../modules/continuity/slp-continuity-rules.js";
 import type { SlpCreatorManagedPost } from "../../../../../shared/src/slp/slp-social.types.js";
@@ -298,6 +302,7 @@ export async function recordSlurpPostOutcome(
     axes: SlurpPostAxes | null;
     shootId: string | null;
     opportunity: SlurpContentOpportunity | null;
+    campaignId?: string | null;
     at: Date;
     previewOnly?: boolean;
   },
@@ -333,5 +338,33 @@ export async function recordSlurpPostOutcome(
     ]).catch((error: unknown) => {
       logger.warn(error, "[slurp] Could not close a content plan; the post stands on its own");
     });
+    await recordSlurpContinuityLink(db, {
+      creatorAccountId: input.account.id,
+      fromType: opportunity.sourceEventId ? "promise" : "opportunity",
+      fromId: opportunity.sourceEventId ?? opportunity.id,
+      toType: "post",
+      toId: post.id,
+      relation: "fulfilled_by",
+    }).catch(() => undefined);
+  }
+  if (shootId) {
+    await recordSlurpContinuityLink(db, {
+      creatorAccountId: input.account.id,
+      fromType: "shoot",
+      fromId: shootId,
+      toType: "post",
+      toId: post.id,
+      relation: "produced",
+    }).catch(() => undefined);
+  }
+  if (input.campaignId) {
+    await recordSlurpContinuityLink(db, {
+      creatorAccountId: input.account.id,
+      fromType: "campaign",
+      fromId: input.campaignId,
+      toType: "post",
+      toId: post.id,
+      relation: "published",
+    }).catch(() => undefined);
   }
 }

@@ -1,4 +1,4 @@
-import { Fragment } from "react";
+import { Fragment, useEffect } from "react";
 import { CalendarClock, CheckCircle2, ListChecks, Loader2, Search, Sparkles, Trash2, UsersRound } from "lucide-react";
 import type { SlpCreatorManagedStageProfile } from "../../../../../shared/src/slp/slp-social.types.js";
 import { Field, SettingsGroup, Toggle } from "../../modules/settings/SlpSettingsControls";
@@ -19,6 +19,7 @@ import { SlurpPostGuidanceField } from "../settings/slp-post-guidance-contract";
 import { SlurpCreatorProfileEditor } from "./SlpCreatorProfileEditor";
 import { SlurpCreatorStrategyGroup } from "./SlpCreatorStrategyGroup";
 import { SlurpContinuityPanel } from "./SlpContinuityPanel";
+import { SlpContinuityOverview } from "./SlpContinuityOverview";
 import { useSlurpCreatorMetrics } from "./slp-creators-hooks";
 import { useSlurpPostGuidance } from "../settings/slp-post-guidance-contract";
 
@@ -95,6 +96,18 @@ export function SlpCreatorsPanel(page: SlpBackstagePageProps) {
           ? creators.filter((creator) => !creator.autoPosting.enabled).length
           : creators.filter(needsAttention).length;
   const openImprove = () => onNavigate({ ...navigation, section: "creators", target: "improve" });
+  const openContinuity = (creatorAccountId: string) => {
+    setSelectedCreatorId(creatorAccountId);
+    setExpandedId(creatorAccountId);
+    setTab("continuity");
+  };
+  const continuityCreatorId = navigation.continuityCreatorId;
+  useEffect(() => {
+    if (!continuityCreatorId) return;
+    openContinuity(continuityCreatorId);
+    onNavigate({ ...navigation, continuityCreatorId: undefined });
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- one-shot deep link
+  }, [continuityCreatorId]);
 
   const detailPanel = selectedCreator ? (
     <section
@@ -527,6 +540,8 @@ export function SlpCreatorsPanel(page: SlpBackstagePageProps) {
           )}
         </div>
       ) : null}
+
+      {!bulkCreatorIds && <SlpContinuityOverview onOpen={openContinuity} />}
 
       {accountsQuery.isLoading ? (
         <div className="flex justify-center py-10 text-[var(--slurp-muted)]" role="status">

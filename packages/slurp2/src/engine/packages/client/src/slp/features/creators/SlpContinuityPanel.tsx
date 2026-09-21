@@ -10,7 +10,15 @@ import {
   useSlurpContinuityAction,
   useSlurpContinuityEdit,
   type SlurpContinuityFactView,
+  type SlurpContinuityFilters,
 } from "./slp-continuity-hooks";
+import {
+  SLURP_AUDIENCE_SCOPES,
+  SLURP_CONTINUITY_EVENT_TYPES,
+  SLURP_CONTINUITY_FACT_TYPES,
+  SLURP_CONTINUITY_SOURCES,
+  SLURP_CONTINUITY_STATUSES,
+} from "../../../../../shared/src/slp/slp-continuity.js";
 
 const PROMOTION_TARGETS = ["creator_private", "creator_public", "cross_platform"] as const;
 
@@ -24,10 +32,11 @@ const PROMOTION_TARGETS = ["creator_private", "creator_public", "cross_platform"
  */
 export function SlurpContinuityPanel({ creatorAccountId }: { creatorAccountId: string }) {
   const { t, i18n } = useTranslation();
-  const query = useSlurpContinuity(creatorAccountId);
   const act = useSlurpContinuityAction(creatorAccountId);
   const edit = useSlurpContinuityEdit(creatorAccountId);
   const [filter, setFilter] = useState("");
+  const [filters, setFilters] = useState<SlurpContinuityFilters>({});
+  const query = useSlurpContinuity(creatorAccountId, filters);
   const [draft, setDraft] = useState<{ id: string; text: string } | null>(null);
   const busy = act.isPending || edit.isPending;
   const onError = (error: unknown) => toast.error(errorMessage(error));
@@ -176,6 +185,58 @@ export function SlurpContinuityPanel({ creatorAccountId }: { creatorAccountId: s
       </SettingsGroup>
 
       <SettingsGroup title={t("ui.slurp.continuity.factsGroup", { defaultValue: "What they remember" })}>
+        <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+          {[
+            ["type", "Type", [...SLURP_CONTINUITY_FACT_TYPES, ...SLURP_CONTINUITY_EVENT_TYPES]],
+            ["source", "Source", SLURP_CONTINUITY_SOURCES],
+            ["scope", "Scope", SLURP_AUDIENCE_SCOPES],
+            ["status", "Status", SLURP_CONTINUITY_STATUSES],
+          ].map(([key, label, values]) => (
+            <label key={String(key)} className="space-y-1 text-xs font-semibold">
+              <span>{t(`ui.slurp.continuity.filter.${key}`, { defaultValue: String(label) })}</span>
+              <select
+                className={selectClass}
+                value={filters[key as keyof SlurpContinuityFilters] ?? ""}
+                onChange={(event) => setFilters((current) => ({ ...current, [String(key)]: event.target.value }))}
+              >
+                <option value="">{t("ui.slurp.continuity.filter.any", { defaultValue: "Any" })}</option>
+                {(values as readonly string[]).map((value) => (
+                  <option key={value} value={value}>
+                    {value.replaceAll("_", " ")}
+                  </option>
+                ))}
+              </select>
+            </label>
+          ))}
+          <label className="space-y-1 text-xs font-semibold">
+            <span>{t("ui.slurp.continuity.filter.confidence", { defaultValue: "Minimum confidence" })}</span>
+            <input
+              className={selectClass}
+              type="number"
+              min="0"
+              max="1"
+              step="0.05"
+              value={filters.minConfidence ?? ""}
+              onChange={(event) => setFilters((current) => ({ ...current, minConfidence: event.target.value }))}
+            />
+          </label>
+          {(["from", "to"] as const).map((key) => (
+            <label key={key} className="space-y-1 text-xs font-semibold">
+              <span>{t(`ui.slurp.continuity.filter.${key}`, { defaultValue: key === "from" ? "From" : "To" })}</span>
+              <input
+                className={selectClass}
+                type="datetime-local"
+                value={filters[key]?.slice(0, 16) ?? ""}
+                onChange={(event) =>
+                  setFilters((current) => ({
+                    ...current,
+                    [key]: event.target.value ? new Date(event.target.value).toISOString() : "",
+                  }))
+                }
+              />
+            </label>
+          ))}
+        </div>
         <input
           value={filter}
           onChange={(event) => setFilter(event.target.value)}
