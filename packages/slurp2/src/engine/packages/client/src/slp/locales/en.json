@@ -3597,5 +3597,7 @@
   "ui.slurp.continuity.filter.confidence": "Minimum confidence",
   "ui.slurp.continuity.pendingCount": "{{count}} pending",
   "ui.slurp.continuity.review": "Review",
-  "ui.slurp.messages.requests.openContinuity": "Open continuity"
+  "ui.slurp.messages.requests.openContinuity": "Open continuity",
+  "ui.slurp.settings.prompts.samplePostTab": "Sample post",
+  "ui.slurp.settings.prompts.liveForCreator": "As the preview Creator gets it"
 }

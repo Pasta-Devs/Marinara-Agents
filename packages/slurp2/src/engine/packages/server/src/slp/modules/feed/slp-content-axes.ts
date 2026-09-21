@@ -31,6 +31,7 @@ import type {
   SlurpContentIntent,
   SlurpContentWorkflow,
 } from "../../../../../shared/src/slp/slp-content-axes.js";
+import type { SlpCreatorContentFormat } from "../../base/prompting/slp-content-format.js";
 import { slurpContentDeliveryFits } from "../../../../../shared/src/slp/slp-content-axes.js";
 import { slurpWeightedPick } from "./slp-weighted.js";
 
@@ -160,11 +161,19 @@ export function slurpPostAxes(
     textOnlyRate?: number;
   },
 ): SlurpPostAxes {
+  // A Story can be a thank-you or a request as well as a passing moment. It cannot be a set or a
+  // callback: both need a shoot, and a Story is taken now.
+  const options = intentOptions(decided.intentWeights).filter(
+    (option) => !decided.story || (option.value !== "set" && option.value !== "callback"),
+  );
   const intent: SlurpContentIntent = decided.teaser
     ? "teaser"
-    : decided.story
-      ? "casual"
-      : slurpWeightedPick("contentType", creatorAccountId, sequence, intentOptions(decided.intentWeights));
+    : slurpWeightedPick(
+        "contentType",
+        creatorAccountId,
+        sequence,
+        options.some((option) => option.weight > 0) ? options : [{ value: "casual" as const, weight: 1 }],
+      );
   if (decided.story && decided.images) return { intent, delivery: "story" };
   // Without pictures every intent goes out as text, including a set: it becomes the announcement
   // of one. The caller still has no picture to attach, so claiming otherwise would be a lie.
@@ -192,10 +201,39 @@ export function slurpContentAxesInstruction(axes: SlurpPostAxes): string {
     // The single most visible artificial signal in the shipped feed: every post ended by inviting
     // the reader in. A creator does that sometimes, not every time.
     "Only address the reader directly if this particular post calls for it. Do not end with an invitation out of habit.",
-    "This is the post's job, not its subject. Let your own life supply what it is actually about.",
+    "This is the post's job, not its subject.",
   ]
     .filter(Boolean)
     .join("\n");
+}
+
+/**
+ * Which lengths fit each intent. The first entry is the fallback.
+ *
+ * The format rotation in `slp-post-variation.ts` knows nothing about intent, so it used to hand a
+ * teaser ("say less than you want to") a 2,000-character long_form, and a dull ordinary day an
+ * essay. The rotation still varies length; the intent only rules out the lengths that contradict
+ * its job.
+ */
+const FORMATS: Record<SlurpContentIntent, readonly SlpCreatorContentFormat[]> = {
+  casual: ["caption"],
+  teaser: ["caption"],
+  callback: ["caption"],
+  appreciation: ["caption", "announcement"],
+  request: ["caption", "announcement"],
+  set: ["caption", "announcement"],
+  behind_the_scenes: ["caption", "announcement", "long_form"],
+  business: ["announcement", "caption"],
+};
+
+/** The rotated format if it fits this intent, otherwise the intent's own default. */
+export function slurpIntentFormat(
+  intent: SlurpContentIntent | undefined,
+  rotated: SlpCreatorContentFormat,
+): SlpCreatorContentFormat {
+  if (!intent) return rotated;
+  const allowed = FORMATS[intent];
+  return allowed.includes(rotated) ? rotated : allowed[0]!;
 }
 
 /**

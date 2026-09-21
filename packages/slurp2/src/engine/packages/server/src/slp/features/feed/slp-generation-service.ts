@@ -84,7 +84,7 @@ import {
 } from "../../base/prompting/slp-prompt-blocks.js";
 import { slurpCameraSourceInstruction, slurpPostCameraSource } from "../../modules/feed/slp-camera-source.js";
 import { slurpImageBrief } from "../../modules/feed/slp-image-brief.js";
-import { slurpContentAxesInstruction } from "../../modules/feed/slp-content-axes.js";
+import { slurpContentAxesInstruction, slurpIntentFormat } from "../../modules/feed/slp-content-axes.js";
 import { planSlurpPost, recordSlurpPostOutcome } from "./slp-post-plan-service.js";
 import { stageImageToDisk, type StagedGalleryImage } from "../../../services/image/image-generation.js";
 import { slurpShootInstruction } from "../../modules/feed/slp-shoot.js";
@@ -258,7 +258,6 @@ export async function generateCreatorPost(
   // The project's own posts, not the page's. The page history is already supplied above and says
   // nothing about where this thread had got to.
   const projectPosts = project ? await noodle.listPostsByProject(project.id, 4) : [];
-  const format = input.request.format ?? variation?.format ?? "caption";
   // Decide who is holding the camera before anything describes the picture, so the framing is a
   // consequence of a camera that exists rather than a free-floating instruction. See
   // `slp-camera-source.ts`.
@@ -302,6 +301,8 @@ export async function generateCreatorPost(
       at: input.generatedAt ?? new Date(),
       dueAt: input.publicationTime ?? null,
     });
+  // The rotation varies length; the intent rules out lengths that contradict its job.
+  const format = input.request.format ?? (variation ? slurpIntentFormat(axes?.intent, variation.format) : "caption");
   // Text-only by intent, not by failure: no brief, no image call, and no gallery stand-in.
   const textOnly = axes?.delivery === "text_only";
   // A reused picture is the picture: nothing is briefed or generated for this post.
@@ -315,6 +316,9 @@ export async function generateCreatorPost(
   const contentTypeInstruction = axes
     ? [
         slurpContentAxesInstruction(axes),
+        // The picture is briefed with this effort; the caption has to know it too, or a quick
+        // phone snap gets a caption about a set that took all afternoon.
+        postImages && variation ? slurpEffortInstruction(effort) : "",
         shoot ? slurpShootInstruction(shoot) : "",
         // A count under a label the Creator typed. Never a fan, never their words.
         demandTopic ? `Several subscribers have asked for: ${demandTopic}. Do not name or quote anyone.` : "",
@@ -333,19 +337,8 @@ export async function generateCreatorPost(
   // written by somebody with no mood, no energy and no memory of last night. A failure here must
   // never cost a post: an unremarkable day is the same as no block at all.
   const conditionInstruction = await describeSlurpPostCondition(db, account.id, input.generatedAt ?? new Date());
-  // The busiest thread's newest long-term notes. Best effort: a post must never fail over memory.
-  const fanMemory = await createSlurpMessagesStorage(db)
-    .listThreadsForCreators([account.id])
-    .then((threads) =>
-      (threads[0]?.notes ?? [])
-        .filter((note) => note.tier === "longterm")
-        .slice(-3)
-        .map((note) => note.text),
-    )
-    .catch(() => [] as string[]);
   const messages = buildNoodlerPostMessages({
     account,
-    fanMemory,
     sourceCharacterContext,
     stagePersonality: account.settings.privacy.stagePersonality ?? "",
     contentMenu: await resolveSlurpCreatorMenu(db, account.id).catch(() => ""),

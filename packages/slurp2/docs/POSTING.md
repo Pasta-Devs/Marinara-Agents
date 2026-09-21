@@ -18,7 +18,8 @@ In order of precedence:
 1. the player's own direction or the composer's one-shot purpose;
 2. a **promise** made in a message thread (fulfil, tease, or delay) — it was made to a person;
 3. a due **campaign stage** — the teaser or callback around a set the Creator already shot;
-4. a weighted draw over the Creator's intent weights.
+4. a weighted draw over the Creator's intent weights. A Story draws from every intent except
+   `set` and `callback`. A drawn callback with no earlier shoot becomes a `casual` post.
 
 Intents: `casual`, `teaser`, `set`, `behind_the_scenes`, `request`, `appreciation`, `callback`,
 `business`.
@@ -26,11 +27,16 @@ Intents: `casual`, `teaser`, `set`, `behind_the_scenes`, `request`, `appreciatio
 ## 3. How does it go out?
 
 Delivery is separate from intent, so a Story or a plain text post can also be a thank-you or a
-teaser: `text_only`, `new_capture`, `existing_media`, `story`, `multi_image_set` (not yet drawn),
-`cropped_preview`.
+teaser: `text_only`, `new_capture`, `existing_media`, `story`, `multi_image_set`, `cropped_preview`.
 
 Text-only is a real choice, scaled by the Creator's own lean on words. A set is never text-only. With
 no pictures available, every post is text-only and says so honestly.
+
+## 3b. How long is it?
+
+The format rotation varies length, but the intent rules out lengths that contradict its job
+(`slurpIntentFormat`): teasers, callbacks, and ordinary days are always captions; only
+behind-the-scenes posts may run long.
 
 ## 4. Is there a real picture already?
 
@@ -58,7 +64,7 @@ The post prompt receives the Creator's identity and voice, the selected intent a
 production style and the Creator's own note about how they run their page, the camera and shoot
 context, access, schedule, recent posts, and the **approved continuity** notes for this surface.
 
-It never receives another fan's private records, unresolved proposals, or roleplay and game records.
+It never receives a fan's direct-message notes or another fan's private records, unresolved proposals, or roleplay and game records.
 Stored memory is framed as reference data: facts to stay consistent with, never instructions.
 
 ## 8. Afterwards

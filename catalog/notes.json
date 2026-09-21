@@ -318,6 +318,12 @@
     "slurp2": {
       "versions": [
         {
+          "version": "0.2.1",
+          "date": "2026-09-21",
+          "notes": "- Posts no longer read private notes from direct messages.\n- Teasers, callbacks, and ordinary days stay short; only behind-the-scenes posts run long.\n- Stories can now be thank-yous and requests too, and a callback with nothing to continue becomes an ordinary post.\n- Prompt Studio shows every block in full and lets you edit it in place, with live text for the preview Creator and the compiled prompt kept current.",
+          "highlight": false
+        },
+        {
           "version": "0.2.0",
           "date": "2026-09-21",
           "notes": "- Creators now plan posts: teasers, photo sets of up to three images, Stories, cropped previews, reused pictures, text on purpose, and quiet slots. Classic mode became a prompt preset.\n- Shoots keep a set consistent, and a set can open a teaser-and-callback campaign.\n- Each Creator has a Posting strategy; the composer picks a one-off purpose and delivery.\n- Fan requests can be answered from the conversation, and the planner keeps promises.\n- Creators remember what they said and did; fan-private details never leak. Review it in the new Continuity tab or the Backstage queue.\n- Prompt Studio was redesigned, and Pulse shows background work.",
@@ -429,12 +435,6 @@
           "version": "0.0.9",
           "date": "2026-09-14",
           "notes": "- Added Autopurge with configurable day, week, or month retention; media-only or full-post cleanup; optional direct-message media cleanup; an immediate purge action; and restart-safe scheduling for overdue purges.",
-          "highlight": false
-        },
-        {
-          "version": "0.0.8",
-          "date": "2026-09-14",
-          "notes": "- Bug fixes for discovery filters and translations, subscription prices, image references, fan privacy, rapport details, message fees, arc editing and generation, profile validation, regression tests, and test-output handling.",
           "highlight": false
         }
       ]

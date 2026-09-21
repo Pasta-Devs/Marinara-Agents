@@ -32,10 +32,10 @@ assert.match(
   "the guided post must send its post type",
 );
 
-// 6.3 — posts may draw on long-term notes without leaking them.
+// 6.3 — a fan's direct-message notes never reach a public post. Posts read only approved
+// continuity, whose scopes keep fan-private records out (see slp-continuity-prompt.ts).
 const generation = read(server + "services/slurp/slurp-generation.service.ts");
-assert.match(generation, /fanMemory/u);
-assert.match(generation, /never name the person, quote them, or repeat a private detail in public/u);
+assert.doesNotMatch(generation, /fanMemory|tier === "longterm"/u);
 
 // 6.4 — the per-Creator proactive switch defaults on, round-trips, and stops follow-ups.
 assert.equal(SLURP_DEFAULT_CREATOR_MESSAGING.proactiveMessages, true);

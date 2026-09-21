@@ -357,6 +357,8 @@ const callsBefore = readFileSync(join(import.meta.dirname, "fixtures/slurp2-clie
 const mapStagingCall = (call: string) => call.replace("/slurp2/noodler/", "/slurp2/slurp/");
 const addedCalls = [
   "post /slurp2/settings/prompt-blocks/generate-preview",
+  // The studio keeps every block live for the preview Creator (useSlurpLivePromptBlocks).
+  "post /slurp2/settings/prompt-blocks/preview",
   "get /slurp2/continuity/${encodeURIComponent(creatorAccountId!)}?${query}",
   "get /slurp2/messages/threads/${encodeURIComponent(threadId!)}/requests?personaId=${encodeURIComponent(personaId!)}",
   "get /slurp2/slurp/tasks",
@@ -404,7 +406,7 @@ assert.deepEqual(
   counts,
   {
     useMutation: 139,
-    useQuery: 197,
+    useQuery: 198,
     useInfiniteQuery: 5,
     invalidateQueries: 127,
     setQueryData: 16,

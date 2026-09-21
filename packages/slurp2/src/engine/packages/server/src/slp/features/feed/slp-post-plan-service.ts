@@ -122,7 +122,11 @@ export async function planSlurpPost(
   // A callback continues something already shot. Drawing from a real earlier shoot is what lets a
   // caption say "one more from yesterday" and have the picture actually match, instead of putting
   // the Creator back in yesterday's room with no explanation.
-  const shoot = requestedAxes?.intent === "callback" ? await findReusableSlurpShoot(db, account.id, at) : null;
+  const callbackShoot = requestedAxes?.intent === "callback" ? await findReusableSlurpShoot(db, account.id, at) : null;
+  // A callback with nothing to call back to made the model invent an earlier post. Unless the
+  // player chose it, the post becomes an ordinary one instead.
+  const orphanCallback = requestedAxes?.intent === "callback" && !callbackShoot && !chosen && !stage;
+  const shoot = callbackShoot;
   // Whether a real earlier picture goes up instead of a new one. Decided from pictures that exist,
   // so the plan never promises a reuse that cannot happen; if the chosen file turns out to be
   // unreadable the post falls back to a new picture. A preview reads no files.
@@ -145,7 +149,7 @@ export async function planSlurpPost(
           return null;
         })
       : null;
-  const reusedAxes =
+  const reusedAxesDrawn =
     // A campaign teaser shows its set whenever a preview can be cut; that is what the stage is for.
     requestedAxes && reuse && stage?.kind === "teaser" && reuse.preview && requestedAxes.delivery === "new_capture"
       ? { ...requestedAxes, delivery: "cropped_preview" as const }
@@ -157,6 +161,8 @@ export async function planSlurpPost(
             sequence,
           )
         : requestedAxes;
+  const reusedAxes =
+    orphanCallback && reusedAxesDrawn ? { ...reusedAxesDrawn, intent: "casual" as const } : reusedAxesDrawn;
   const reuseKind =
     reusedAxes?.delivery === "cropped_preview"
       ? ("preview" as const)
