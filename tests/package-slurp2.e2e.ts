@@ -309,11 +309,11 @@ test.describe("standalone Slurp package", () => {
     expect(previewRequests).toEqual([]);
 
     if (testInfo.project.name.includes("mobile")) {
-      await slurp.getByRole("button", { name: "Preview", exact: true }).click();
+      await slurp.getByRole("button", { name: "Result", exact: true }).click();
       await expect(slurp.getByText("Try your changes", { exact: true })).toBeVisible();
       await expect(slurp.getByRole("button", { name: "Run preview", exact: true })).toBeVisible();
     } else {
-      await expect(slurp.getByRole("navigation", { name: "Prompt recipes" })).toBeVisible();
+      await expect(slurp.getByRole("navigation", { name: "Recipe blocks" })).toBeVisible();
       await expect(slurp.getByText("Try your changes", { exact: true })).toBeVisible();
     }
 
@@ -620,7 +620,7 @@ test.describe("standalone Slurp package", () => {
       await slurp.getByRole("button", { name: "Prompts", exact: true }).click();
       await slurp.getByRole("button", { name: "Edit prompt", exact: true }).first().click();
       const promptDialog = page.getByRole("dialog", { name: "Edit generation guidance" });
-      const savePrompt = promptDialog.getByRole("button", { name: "Save prompt" });
+      const savePrompt = promptDialog.getByRole("button", { name: "Apply to draft" });
       await expect(savePrompt).toBeVisible();
       await expect
         .poll(() =>
