@@ -9,6 +9,7 @@ export const SLURP_MODEL_JOB_KINDS = [
   "arc",
   "schedule",
   "fan_type_voice",
+  "continuity",
 ] as const;
 export type SlurpModelJobKind = (typeof SLURP_MODEL_JOB_KINDS)[number];
 export type SlurpModelWorkerContext = "present" | "background";
@@ -38,6 +39,8 @@ export const slurpModelBudgetSchema = z
         arc: jobPolicy(6, 2),
         schedule: jobPolicy(6, 2),
         fan_type_voice: jobPolicy(7, 10),
+        // Reads new message batches for Creator statements. Lowest priority: nothing waits on it.
+        continuity: jobPolicy(8, 12),
       })
       .default({}),
   })

@@ -3479,5 +3479,6 @@
   "ui.slurp.composer.purposeHint.request": "Answers a request without naming anyone.",
   "ui.slurp.composer.purposeHint.appreciation": "Thanks subscribers. Not a sale.",
   "ui.slurp.composer.purposeHint.callback": "Continues an earlier shoot. Needs a picture.",
-  "ui.slurp.composer.purposeHint.business": "Schedule, price, limit, or absence. Usually text only."
+  "ui.slurp.composer.purposeHint.business": "Schedule, price, limit, or absence. Usually text only.",
+  "ui.slurp.settings.aiBudget.job.continuity": "Continuity notes from messages"
 }

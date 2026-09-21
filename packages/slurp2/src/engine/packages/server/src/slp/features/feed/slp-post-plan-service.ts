@@ -1,14 +1,20 @@
 import type { DB } from "../../../db/connection.js";
+import { recordSlurpContinuityEvent } from "../../data/continuity/slp-continuity-storage.js";
+import { slurpContinuityIdentityOf } from "../../modules/continuity/slp-continuity-rules.js";
+import type { SlpCreatorManagedPost } from "../../../../../shared/src/slp/slp-social.types.js";
+import type { SlurpPostAxes } from "../../modules/feed/slp-content-axes.js";
+import type { SlurpContentOpportunity } from "../../data/feed/slp-opportunity-storage.js";
 import { logger } from "../../../lib/logger.js";
 import type { SlpAccount } from "../../../../../shared/src/slp/slp-social.types.js";
 import type { SlpCreatorGenerationRequest } from "../../../../../shared/src/slp/slp-social-generation.schema.js";
 import { slurpOnlyIntent, slurpPostAxes, slurpReuseDelivery } from "../../modules/feed/slp-content-axes.js";
 import type { SlurpCreatorStrategy } from "../../modules/creators/slp-creator-strategy.js";
 import { findReusableSlurpShoot } from "../../data/feed/slp-shoot-storage.js";
-import { planSlurpOpportunity } from "../../data/feed/slp-opportunity-storage.js";
+import { completeSlurpOpportunity, planSlurpOpportunity } from "../../data/feed/slp-opportunity-storage.js";
 import { findSlurpReuse, loadSlurpReuse } from "../media/slp-media-contract.js";
 import { slurpCampaignStageIntent, slurpNextCampaignStage } from "../../modules/feed/slp-campaign.js";
 import {
+  completeSlurpCampaignStageFor,
   listOpenSlurpCampaignStages,
   moveSlurpCampaignStage,
   openSlurpCampaign,
@@ -161,4 +167,54 @@ export async function planSlurpPost(
     }
   }
   return { axes, shoot, reusedMedia, reusedSource, opportunity };
+}
+
+/**
+ * Everything that follows a post landing: its plan closes with the post it produced, its campaign
+ * stage advances, and the ledger records that it was published. Each step is best effort, because
+ * a post that already exists must never be lost over bookkeeping about it.
+ */
+export async function recordSlurpPostOutcome(
+  db: DB,
+  input: {
+    account: Parameters<typeof slurpContinuityIdentityOf>[0];
+    post: Pick<SlpCreatorManagedPost, "id" | "access">;
+    axes: SlurpPostAxes | null;
+    shootId: string | null;
+    opportunity: SlurpContentOpportunity | null;
+    at: Date;
+    previewOnly?: boolean;
+  },
+): Promise<void> {
+  const { post, axes, shootId, opportunity, at } = input;
+  const identity = slurpContinuityIdentityOf(input.account);
+  if (identity && !input.previewOnly) {
+    // A published post is history. Recorded once per post id.
+    await recordSlurpContinuityEvent(db, {
+      ...identity,
+      eventType: "post_published",
+      source: "slurp_post",
+      realityScope: "slurp",
+      audienceScope: "creator_public",
+      payload: {
+        access: post.access,
+        ...(axes ? { intent: axes.intent, delivery: axes.delivery } : {}),
+        ...(shootId ? { shootId } : {}),
+      },
+      relatedIds: [post.id, ...(shootId ? [shootId] : [])],
+      fingerprint: `post:${post.id}`,
+      contribution: "system",
+      occurredAt: at,
+    }).catch((error: unknown) => {
+      logger.warn(error, "[slurp] Could not record a published post in continuity");
+    });
+  }
+  if (opportunity) {
+    await Promise.all([
+      completeSlurpOpportunity(db, opportunity.id, { postId: post.id, at }),
+      completeSlurpCampaignStageFor(db, opportunity.id, { postId: post.id, at }),
+    ]).catch((error: unknown) => {
+      logger.warn(error, "[slurp] Could not close a content plan; the post stands on its own");
+    });
+  }
 }

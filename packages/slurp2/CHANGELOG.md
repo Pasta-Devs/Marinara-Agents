@@ -1,5 +1,12 @@
 # Slurp Remastered release notes
 
+## 0.1.30 — 2026-09-21
+
+- Creators now remember what they explicitly say in messages: their limits, plans, and business rules. A fan's request is remembered only inside that fan's conversation.
+- Personal details a Creator mentions are held for review instead of being remembered automatically.
+- Every published post and every quiet slot is now recorded in the Creator's history.
+- Reading messages for this uses its own AI budget line, Continuity notes from messages, which can be limited or turned off.
+
 ## 0.1.29 — 2026-09-21
 
 - Added the storage for Creator continuity: facts, events, and proposed changes, each marked with who may see it and whether it literally happened.

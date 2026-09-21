@@ -18,6 +18,7 @@ import type {
   SlurpContinuityFact,
   SlurpContinuityFactType,
   SlurpContinuityIdentity,
+  SlurpProposalRisk,
   SlurpContinuitySource,
   SlurpContinuityStatus,
   SlurpContinuitySurface,
@@ -337,4 +338,79 @@ export async function deleteSlurpCreatorPlanningRows(tx: Pick<DB, "delete">, cre
   await tx.delete(slurpContentCampaigns).where(eq(slurpContentCampaigns.creatorAccountId, creatorAccountId));
   await tx.delete(slurpContentOpportunities).where(eq(slurpContentOpportunities.creatorAccountId, creatorAccountId));
   await tx.delete(slurpShootSessions).where(eq(slurpShootSessions.creatorAccountId, creatorAccountId));
+}
+
+/**
+ * Park an extracted change for review. Nothing reads a proposal; it becomes a record only when
+ * someone applies it. A newer proposal from the same source replaces an older pending one, so a
+ * re-read thread never piles up duplicates.
+ */
+export async function proposeSlurpContinuityChange(
+  db: DB,
+  input: {
+    creatorAccountId: string;
+    target: "fact" | "event";
+    candidate: SlurpContinuityFactInput | SlurpContinuityEventInput;
+    risk: SlurpProposalRisk;
+    confidence: number;
+    sourceHash: string;
+  },
+  at = new Date(),
+): Promise<string> {
+  const pending = await db
+    .select()
+    .from(slurpContinuityProposals)
+    .where(
+      and(
+        eq(slurpContinuityProposals.creatorAccountId, input.creatorAccountId),
+        eq(slurpContinuityProposals.sourceHash, input.sourceHash),
+      ),
+    );
+  const text = "text" in input.candidate ? input.candidate.text : "";
+  for (const row of pending) {
+    const previous = parseJson<{ text?: string }>(row.candidate, {});
+    if (row.status === "pending" && previous.text === text) {
+      await db
+        .update(slurpContinuityProposals)
+        .set({ status: "superseded" })
+        .where(eq(slurpContinuityProposals.id, String(row.id)));
+    }
+  }
+  const id = newId();
+  await db.insert(slurpContinuityProposals).values({
+    id,
+    creatorAccountId: input.creatorAccountId,
+    target: input.target,
+    candidate: JSON.stringify(input.candidate),
+    risk: input.risk,
+    confidence: String(input.confidence),
+    sourceHash: input.sourceHash,
+    status: "pending",
+    reviewer: null,
+    revision: "1",
+    createdAt: at.toISOString(),
+    reviewedAt: null,
+  });
+  return id;
+}
+
+/** Whether an equivalent fact already exists, so a re-read batch does not record it twice. */
+export async function hasSlurpContinuityFact(
+  db: DB,
+  creatorAccountId: string,
+  match: { factType: SlurpContinuityFactType; text: string; threadId?: string | null },
+): Promise<boolean> {
+  const rows = await db
+    .select()
+    .from(slurpContinuityFacts)
+    .where(eq(slurpContinuityFacts.creatorAccountId, creatorAccountId));
+  const wanted = match.text.trim().toLocaleLowerCase();
+  return rows.some(
+    (row) =>
+      row.factType === match.factType &&
+      String(row.text ?? "")
+        .trim()
+        .toLocaleLowerCase() === wanted &&
+      (row.threadId ?? null) === (match.threadId ?? null),
+  );
 }

@@ -90,7 +90,7 @@ assert.match(plan, /moveSlurpCampaignStage\(db, stage, "claimed", \{ at, opportu
 assert.match(plan, /axes\?\.intent === "set"[\s\S]*?openSlurpCampaign\(db, \{/u);
 // Every path that completes a plan also advances its stage.
 for (const file of [
-  "packages/slurp2/src/engine/packages/server/src/slp/features/feed/slp-generation-service.ts",
+  "packages/slurp2/src/engine/packages/server/src/slp/features/feed/slp-post-plan-service.ts",
   "packages/slurp2/src/engine/packages/server/src/slp/features/feed/reserve/slp-reserve-operation.ts",
 ]) {
   assert.match(slurp2Source(file), /completeSlurpCampaignStageFor\(db, opportunity\.id,/u, file);

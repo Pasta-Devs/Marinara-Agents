@@ -50,7 +50,7 @@ assert.match(reserve, /const decision =\s*planned\?\.workflow === "skip"/u);
 assert.match(reserve, /workflow: "skip",[\s\S]*?skipReason: decision\.reason,/u);
 assert.match(
   reserve,
-  /await noodle\.skipNoodlerScheduledPost\(selectedSlotId, selectedPublishAt, at\);\s*return "skipped" as const;/u,
+  /await noodle\.skipNoodlerScheduledPost\(selectedSlotId, selectedPublishAt, at\);[\s\S]*?return "skipped" as const;/u,
 );
 // The skip branch must come before the generation call, or a quiet slot would still cost a post.
 assert.ok(
@@ -93,7 +93,8 @@ assert.ok(
   generation.indexOf("await planSlurpPost(db, {") < generation.indexOf("const messages = buildNoodlerPostMessages"),
   "the plan must be stored before the prompt is built",
 );
-assert.match(generation, /completeSlurpOpportunity\(db, opportunity\.id, \{\s*postId: post\.id,/u);
+assert.match(generation, /await recordSlurpPostOutcome\(db, \{/u);
+assert.match(planService, /completeSlurpOpportunity\(db, opportunity\.id, \{ postId: post\.id, at \}\)/u);
 // A settings preview decides nothing and must leave no plan behind.
 assert.match(planService, /axes && !previewOnly/u);
 

@@ -4,6 +4,7 @@ import { drainSlurpAudienceReplies } from "../features/audience/slp-audience-con
 import { drainSlurpPendingText } from "../features/world/slp-world-contract.js";
 import { topUpSlurpReactionBank } from "../features/world/slp-world-contract.js";
 import { advanceSlurpWorld } from "../features/world/slp-world-contract.js";
+import { drainSlurpContinuityExtraction } from "../features/messages/slp-messages-contract.js";
 
 /** World work that runs when the player opens the notification stream. Each step fails soft. */
 export async function slpCatchUpWorldOnOpen(app: FastifyInstance) {
@@ -29,5 +30,10 @@ export async function slpCatchUpWorldOnOpen(app: FastifyInstance) {
   // they are about to read.
   await drainSlurpAudienceReplies(app.db).catch((error: unknown) =>
     logger.warn(error, "[slurp-audience-reply] Drain on open failed"),
+  );
+  // Last and lowest priority: reading new messages for Creator statements. Nothing on screen waits
+  // on it, and it spends from the same budget as everything above.
+  await drainSlurpContinuityExtraction(app.db).catch((error: unknown) =>
+    logger.warn(error, "[slurp-continuity] Drain on open failed"),
   );
 }

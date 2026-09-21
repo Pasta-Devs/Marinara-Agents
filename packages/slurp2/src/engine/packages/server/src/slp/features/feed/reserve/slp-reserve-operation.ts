@@ -1,4 +1,6 @@
 import type { DB } from "../../../../db/connection.js";
+import { recordSlurpContinuityEvent } from "../../../data/continuity/slp-continuity-storage.js";
+import { slurpContinuityIdentityOf } from "../../../modules/continuity/slp-continuity-rules.js";
 import { completeSlurpCampaignStageFor } from "../../../data/feed/slp-campaign-storage.js";
 import { createConnectionsStorage } from "../../../../services/storage/connections.storage.js";
 import { resolveSlurpTextConnection } from "../../../base/identity/slp-connection.js";
@@ -175,6 +177,23 @@ export async function prepareNextCreatorReservePost(db: DB, at = new Date()): Pr
         dueAt: new Date(selectedPublishAt),
       });
       await noodle.skipNoodlerScheduledPost(selectedSlotId, selectedPublishAt, at);
+      // A quiet slot is part of the Creator's history too: later planning can see a quiet day.
+      // Private, because nobody announces the post they did not make.
+      const identity = slurpContinuityIdentityOf(selectedAccount);
+      if (identity) {
+        await recordSlurpContinuityEvent(db, {
+          ...identity,
+          eventType: "chosen_skip",
+          source: "slurp_post",
+          realityScope: "slurp",
+          audienceScope: "creator_private",
+          payload: { reason: decision.reason },
+          relatedIds: [selectedSlotId],
+          fingerprint: `skip:${selectedSlotId}`,
+          contribution: "system",
+          occurredAt: new Date(selectedPublishAt),
+        }).catch((error: unknown) => logger.warn(error, "[slurp] Could not record a chosen skip in continuity"));
+      }
       return "skipped" as const;
     }
     try {
