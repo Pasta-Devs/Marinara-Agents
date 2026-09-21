@@ -16,6 +16,13 @@ It covers:
 - the sliced commit order;
 - regression, migration, and live validation.
 
+## Delivery Status
+
+Slices 1–12 are delivered as PRs #996–#1012 into `producing-content` (slice 12 split
+into 12a media, 12b continuity, and 12 final). All success criteria below are
+implemented; live dev-Engine proof and the `0.2.0` promotion to `staging` remain,
+and the promotion waits for the maintainer's manual test.
+
 ## Branch Workflow
 
 All twelve slices land on the long-lived integration branch `producing-content`.
@@ -1030,7 +1037,8 @@ contracts before a second writer exists.
 ## Sliced Commit Order
 
 Each slice must build, add focused regression proof, and preserve the dirty-worktree
-rule. The slices form one PR.
+rule. Each slice is its own PR into `producing-content`; a separate
+release-preparation PR folds them into `0.2.0`.
 
 1. **Remove Classic runtime mode and add preset migration.**
    - Prompt mode becomes Produce-only at runtime.
@@ -1101,7 +1109,8 @@ rule. The slices form one PR.
     - Run migration and backup proof.
     - Run automatic, manual, message, campaign, shoot, media, and continuity flows.
     - Rebuild Slurp2 and catalog outputs.
-    - Update changelog and package version once for the PR.
+    - Keep the in-client release registry in step with the package version.
+    - The release-preparation PR sets `0.2.0` once and folds the integration changelog.
 
 ## Validation Plan
 

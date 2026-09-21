@@ -158,7 +158,7 @@ modules, rejected alternative, and migration consequence.
   member query moved.
 - **Migration consequence:** no `components/slurp/` path remains, so no source test may read one
   except through `slurp2Source`. New Slurp2 code must live in the `slp` roots or one of the three
-   permanent exceptions.
+  permanent exceptions.
 
 ## 2026-09-19 — Slice 12: Slurp2 owns its social vocabulary
 
@@ -210,3 +210,34 @@ modules, rejected alternative, and migration consequence.
 - **Migration consequence:** none. No table, column, JSON key, locale key, platform value, backup
   format, stored media path or response shape changed. The manifest requires an Engine restart on
   update, so an old client bundle cannot run against the new operation routes after an update.
+
+## Planner and continuity ledger (2026-09-21)
+
+- **Decision:** the planner decides before the model is called, and stores the decision first.
+  `slurp2_content_opportunities` records intent, delivery, workflow, access, the promise it answers,
+  and the post it produced. A chosen skip is a stored decision, not an absence. The model writes the
+  Creator's voice and nothing else: it never decides access, charges, campaign stages, or skips.
+- **Decision:** intent, delivery, and workflow are three axes, not one list. The shipped list mixed
+  them, so a Story could never also be a thank-you and text-only was only ever a failure.
+- **Decision:** continuity lives in one Slurp-owned ledger (`slurp2_continuity_facts`,
+  `slurp2_continuity_events`, `slurp2_continuity_proposals`) keyed on the source Character or
+  Persona as well as the Slurp account. There is no canon-map table: the accounts table already
+  enforces one Creator per `(sourceKind, sourceEntityId)`.
+- **Decision:** one read rule, `slurpContinuityReadable`, decides privacy for every surface. A
+  thread-private record never reaches a post or another thread; `canon_only` reaches only the editor;
+  conversation, roleplay, and game records are stored but never read by a Slurp prompt, so a scene is
+  not history. Prompts read only confirmed or active, unexpired records.
+- **Decision:** extraction proposes and the rules dispose. The model may cite only message ids from a
+  server-built allowlist and must quote evidence present in that message. The Creator's own explicit
+  limits, plans, and business rules apply automatically; personal disclosures wait as proposals.
+- **Decision:** promotion writes a new derived record rather than mutating the private source, so the
+  source keeps its audience and can still be retracted.
+- **Affected modules:** `modules/feed/` (planner, axes, campaign, media reuse, demand),
+  `modules/continuity/`, `modules/creators/slp-creator-strategy.ts`, `data/feed/`,
+  `data/continuity/`, `features/feed/slp-post-plan-service.ts`, `features/messages/`, and the
+  Creator Continuity tab.
+- **Rejected alternative:** keeping the Classic runtime mode. Every planner decision would have
+  needed a second, older code path. The old prompt wording survives as a selectable preset instead.
+- **Migration consequence:** additive. New tables, a new optional `strategy` key in account settings,
+  and `classicPromptBlocks` in Slurp settings. Old prompt-block layouts migrate in place, keeping
+  their edits and gaining new blocks at their inventory position.

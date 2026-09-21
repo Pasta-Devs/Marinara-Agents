@@ -293,26 +293,27 @@ test.describe("standalone Slurp package", () => {
       await expect(slurp.getByRole("heading", { name: outcome, exact: true })).toBeVisible();
     }
     await expect(slurp.getByText("Generation guidance", { exact: true })).toBeVisible();
-    await expect(slurp.getByText("Public post guidance", { exact: true })).toBeVisible();
-    await expect(slurp.getByText("Locked post guidance", { exact: true })).toBeVisible();
+    await expect(slurp.getByText("Public post direction", { exact: true })).toBeVisible();
+    await expect(slurp.getByText("Locked post direction", { exact: true })).toBeVisible();
     await expect(slurp.getByRole("heading", { name: "Prompt recipes", exact: true })).toBeVisible();
     await expect(slurp.getByText("Try your changes", { exact: true })).toBeVisible();
     expect(previewRequests).toEqual([]);
 
     await slurp.getByRole("button", { name: /^Creator posts/u }).click();
-    await expect(slurp.getByRole("heading", { name: "Creator posts", exact: true })).toBeVisible();
-    await expect(slurp.locator("ol button[aria-expanded]").first()).toBeVisible();
-    await expect(slurp.locator("ol > li").first().locator("p").last()).not.toBeEmpty();
-    await slurp.locator("ol button[aria-expanded]").first().click();
+    await expect(slurp.getByRole("heading", { level: 2, name: "Creator posts", exact: true })).toBeVisible();
+    const pipeline = slurp.locator("ol:has(button[aria-expanded])");
+    await expect(pipeline.locator("button[aria-expanded]").first()).toBeVisible();
+    await expect(pipeline.locator("> li").first().locator("p").last()).not.toBeEmpty();
+    await pipeline.locator("button[aria-expanded]").first().click();
     await expect(slurp.getByRole("button", { name: "Apply to draft", exact: true })).toBeVisible();
     expect(previewRequests).toEqual([]);
 
     if (testInfo.project.name.includes("mobile")) {
-      await slurp.getByRole("button", { name: "Preview", exact: true }).click();
+      await slurp.getByRole("button", { name: "Result", exact: true }).click();
       await expect(slurp.getByText("Try your changes", { exact: true })).toBeVisible();
       await expect(slurp.getByRole("button", { name: "Run preview", exact: true })).toBeVisible();
     } else {
-      await expect(slurp.getByRole("navigation", { name: "Prompt recipes" })).toBeVisible();
+      await expect(slurp.getByRole("navigation", { name: "Recipe blocks" })).toBeVisible();
       await expect(slurp.getByText("Try your changes", { exact: true })).toBeVisible();
     }
 
@@ -619,7 +620,7 @@ test.describe("standalone Slurp package", () => {
       await slurp.getByRole("button", { name: "Prompts", exact: true }).click();
       await slurp.getByRole("button", { name: "Edit prompt", exact: true }).first().click();
       const promptDialog = page.getByRole("dialog", { name: "Edit generation guidance" });
-      const savePrompt = promptDialog.getByRole("button", { name: "Save prompt" });
+      const savePrompt = promptDialog.getByRole("button", { name: "Apply to draft" });
       await expect(savePrompt).toBeVisible();
       await expect
         .poll(() =>

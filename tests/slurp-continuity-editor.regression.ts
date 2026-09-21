@@ -79,6 +79,6 @@ assert.match(storage, /tx\.delete\(slurpContinuityLinks\)/u);
 const requestsPanel = slurp2Source(
   "packages/slurp2/src/engine/packages/client/src/slp/features/messages/SlpThreadRequestsPanel.tsx",
 );
-assert.match(requestsPanel, /continuityCreatorId: creatorAccountId/u);
+assert.match(requestsPanel, /<SlpOpenContinuityButton/u);
 assert.match(creators, /openContinuity\(continuityCreatorId\)/u);
 assert.match(creators, /<SlpContinuityOverview onOpen=\{openContinuity\} \/>/u);
