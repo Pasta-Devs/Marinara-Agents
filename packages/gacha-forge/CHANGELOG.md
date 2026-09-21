@@ -1,3 +1,10 @@
+## 1.8.5 — 2026-09-21
+- The opening story is optional. Forge this world asks if you are sure, then whether to write it now or later; later, the world opens as soon as its cast is ready, with Summon unlocked, and Modes > Story writes it when you ask. If it fails while the world is being created, Skip the story for now keeps the world.
+- World creation keeps what you write and brings it back on any device, and has presets: save, load, rename, replace or delete a whole setup, from the wizard or from a world you already created.
+- Models that think a lot before answering (GLM, DeepSeek) no longer lose the first try of nearly every call to the output limit.
+- Fixed: a card, lorebook, connection or persona you create or change in Marinara shows up in the game as soon as you come back to it.
+- Fixed: a character made from a card or a Cast lorebook entry reads the World lorebook entries that name them.
+
 ## 1.8.2 — 2026-09-17
 - Buffs and debuffs name their stat: a buff can raise ATK, DEF, SPD or crit chance, a debuff can drop DEF, ATK or SPD. Characters you already have fight exactly as before.
 - Newly minted characters and enemies stop piling up on ATK up, DEF down and shields: each new one is asked for what the cast still lacks.
