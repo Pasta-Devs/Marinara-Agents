@@ -1,4 +1,5 @@
 import type { SlpCreatorContentFormat } from "../../features/feed/slp-feed-contract";
+import type { SlurpContentIntent } from "../../../../../shared/src/slp/slp-content-axes.js";
 import { AnimatePresence } from "framer-motion";
 import { ArrowLeft } from "lucide-react";
 import { DEFAULT_SLURP_SUBSCRIPTION_PRICE } from "../../modules/coin/SlpCoin";
@@ -35,6 +36,8 @@ export interface SlpCreatorPostSubmission {
   unlockPrice: number | null;
   /** Ask the AI for an image: written by the model on a guided post, from the text on a manual one. */
   generateImage: boolean;
+  /** One-shot purpose for a guided post. Null lets the Creator's strategy decide. */
+  contentIntent: SlurpContentIntent | null;
 }
 
 export interface SlpCreatorPostDraft {
@@ -48,6 +51,7 @@ export interface SlpCreatorPostDraft {
   /** Price for this locked post. Null uses the Creator's price. */
   unlockPrice: number | null;
   generateImage: boolean;
+  contentIntent: SlurpContentIntent | null;
 }
 
 export interface PendingCreatorImage {
@@ -75,6 +79,7 @@ export const EMPTY_SLP_CREATOR_POST_DRAFT: SlpCreatorPostDraft = {
   linkedPostId: null,
   unlockPrice: null,
   generateImage: false,
+  contentIntent: null,
 };
 
 export const EMPTY_STAGE_PROFILE: SlurpStageProfileInput = {

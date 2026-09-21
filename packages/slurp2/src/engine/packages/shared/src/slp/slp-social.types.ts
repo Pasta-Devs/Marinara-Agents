@@ -119,8 +119,33 @@ export interface SlpAccountPrivacySettings {
   access: SlpAccountAccessSettings;
 }
 
+/**
+ * How this Creator uses Slurp, as opposed to who they are.
+ *
+ * Derived automatically for every Creator and stable until the user edits it. It must never carry
+ * voice, identity, appearance, or personality: those belong to the source Character card, and a
+ * strategy that quietly rewrote them would make the same person read as two different people.
+ *
+ * Every value is optional. An absent value means "use the derived default", so a Creator the user
+ * has never touched keeps following the automatic profile as the defaults improve.
+ */
+export interface SlpCreatorStrategySettings {
+  /** Overrides the derived production style: homemade, polished, documentary, or theatrical. */
+  style?: string;
+  /** How often a scheduled slot goes unused, 0-40. */
+  skipRate?: number;
+  /** How much this Creator leans on words instead of pictures, 0-100. */
+  textOnlyRate?: number;
+  /** Relative weight per content intent. Absent intents keep their shipped weight. */
+  intentWeights?: Record<string, number>;
+  /** Free text about how this person runs their page. Supplementary to the values above. */
+  strategyText?: string;
+}
+
 export interface SlpAccountSettings {
   profile: SlpAccountProfileSettings;
+  /** See `SlpCreatorStrategySettings`. Absent until something derives or saves one. */
+  strategy?: SlpCreatorStrategySettings;
   social: SlpAccountSocialSettings;
   scheduler: SlpAccountSchedulerSettings;
   privacy: SlpAccountPrivacySettings;
@@ -251,6 +276,11 @@ export interface SlpCreatorManagedStageProfile extends SlpCreatorStageProfile {
   autoPosting: SlpAutoPostingSettings;
   sourceStatus: SlpCreatorSourceStatus;
   fanActivity: SlpCreatorFanActivitySettings | null;
+  /** What the user saved, and what the planner actually uses once derived defaults fill the gaps. */
+  strategy: {
+    saved: SlpCreatorStrategySettings | null;
+    effective: { style: string; skipRate: number; textOnlyRate: number };
+  };
 }
 
 export interface SlpCreatorProfileSource {

@@ -23,7 +23,7 @@
 
 import { slurpWeightedPick } from "./slp-weighted.js";
 
-/** Out of 100. ponytail: one rate for everyone until Creator strategy profiles land. */
+/** Out of 100. The default when a caller has no Creator strategy; see `slp-creator-strategy.ts`. */
 const SKIP_RATE = 12;
 
 export const SLURP_SKIP_REASONS = ["quiet_day", "nothing_worth_posting", "busy_elsewhere", "resting"] as const;
@@ -34,12 +34,13 @@ export type SlurpSlotDecision = { skip: false } | { skip: true; reason: SlurpSki
 export function slurpPlanSlot(
   creatorAccountId: string,
   sequence: number,
-  context: { skippedLast?: boolean } = {},
+  context: { skippedLast?: boolean; skipRate?: number } = {},
 ): SlurpSlotDecision {
   if (context.skippedLast) return { skip: false };
+  const rate = Math.min(100, Math.max(0, context.skipRate ?? SKIP_RATE));
   const skip = slurpWeightedPick("slot", creatorAccountId, sequence, [
-    { value: true, weight: SKIP_RATE },
-    { value: false, weight: 100 - SKIP_RATE },
+    { value: true, weight: rate },
+    { value: false, weight: 100 - rate },
   ]);
   if (!skip) return { skip: false };
   return {

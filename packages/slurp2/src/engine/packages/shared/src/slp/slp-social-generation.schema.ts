@@ -2,6 +2,7 @@
 // Slurp generation schemas. Split from slp-social.schema.ts to stay under the architecture
 // line budget; copied from the Engine Noodle schemas with values unchanged.
 // ──────────────────────────────────────────────
+import { SLURP_CONTENT_INTENTS } from "./slp-content-axes.js";
 import { z } from "zod";
 import {
   SLP_CREATOR_POST_CONTENT_MAX_LENGTH,
@@ -72,6 +73,8 @@ const slpCreatorGenerationRequestShape = {
   uploadedImageUrl: z.string().trim().url().max(2000).optional(),
   imageCrop: slpPostImageCropSchema.optional(),
   poll: slpPollInputSchema.nullable().optional(),
+  /** A one-shot post purpose from the composer. Outranks the Creator's strategy for this post only. */
+  contentIntent: z.enum(SLURP_CONTENT_INTENTS).optional(),
 };
 
 export const slpCreatorGenerationRequestSchema = z

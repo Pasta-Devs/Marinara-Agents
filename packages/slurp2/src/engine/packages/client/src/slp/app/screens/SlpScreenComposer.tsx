@@ -4,6 +4,7 @@ import {
   SLP_CREATOR_POST_TITLE_MAX_LENGTH,
   slpPollInputSchema,
 } from "../../../../../shared/src/slp/slp-social.schema.js";
+import { SLURP_CONTENT_INTENTS, type SlurpContentIntent } from "../../../../../shared/src/slp/slp-content-axes.js";
 import type { SlpPollInput } from "../../../../../shared/src/slp/slp-social-generation.schema.js";
 import type {
   SlpCreatorManagedPost,
@@ -105,7 +106,7 @@ export function NoodlerPostComposer({
   const mediaToolRef = useRef<HTMLDivElement | null>(null);
   const accessToolRef = useRef<HTMLDivElement | null>(null);
   const composerBusyRef = useRef(false);
-  const { title, body, access, image, poll, postType, linkedPostId, unlockPrice, generateImage } = draft;
+  const { title, body, access, image, poll, postType, linkedPostId, unlockPrice, generateImage, contentIntent } = draft;
   const linkablePosts = availablePosts
     .map((entry) => ("managed" in entry ? entry.managed : entry.viewerPost))
     .filter((post): post is SlpCreatorManagedPost | SlpCreatorPostView => Boolean(post) && !isSlurpStory(post));
@@ -249,6 +250,7 @@ export function NoodlerPostComposer({
     linkedPostId: linkedPostId ?? null,
     unlockPrice: access === "locked" ? (unlockPrice ?? null) : null,
     generateImage: generateImage && !image,
+    contentIntent,
   });
 
   const publish = async () => {
@@ -457,6 +459,26 @@ export function NoodlerPostComposer({
       }
       action={
         <>
+          {/* Only the Guide button reads this: a post the player writes by hand has its purpose
+              already. The hint says what the choice will do before anything is generated. */}
+          <label className="inline-flex h-9 items-center gap-1.5 text-xs font-bold">
+            <span className="sr-only">{localizeUi("ui.slurp.composer.purpose")}</span>
+            <select
+              value={contentIntent ?? ""}
+              disabled={composerBusy || postType === "story"}
+              title={localizeUi(`ui.slurp.composer.purposeHint.${contentIntent ?? "auto"}`)}
+              onChange={(event) =>
+                updateDraft({ contentIntent: (event.target.value || null) as SlurpContentIntent | null })
+              }
+              className="h-9 rounded-lg border border-[var(--noodle-divider)] bg-transparent px-2 text-xs font-bold disabled:opacity-50"
+            >
+              {(["", ...SLURP_CONTENT_INTENTS] as const).map((intent) => (
+                <option key={intent || "auto"} value={intent}>
+                  {localizeUi(`ui.slurp.composer.intent.${intent || "auto"}`)}
+                </option>
+              ))}
+            </select>
+          </label>
           <button
             type="button"
             onClick={() => void guidePost()}

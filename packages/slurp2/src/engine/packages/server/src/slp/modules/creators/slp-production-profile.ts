@@ -92,9 +92,18 @@ const PROFILES: Record<SlurpProductionStyle, Omit<SlurpProductionProfile, "style
   },
 };
 
-/** This Creator's production style. Stable for the life of the account. */
-export function slurpProductionProfile(creatorAccountId: string): SlurpProductionProfile {
-  const style = SLURP_PRODUCTION_STYLES[slurpRotationHash(creatorAccountId) % SLURP_PRODUCTION_STYLES.length]!;
+/**
+ * This Creator's production style. Stable for the life of the account unless the user names one.
+ *
+ * `override` is what the Creator strategy saved. Everything else about the profile still follows
+ * from the style, so naming a style changes cameras, effort, and transparency together.
+ */
+export function slurpProductionProfile(
+  creatorAccountId: string,
+  override?: SlurpProductionStyle,
+): SlurpProductionProfile {
+  const style =
+    override ?? SLURP_PRODUCTION_STYLES[slurpRotationHash(creatorAccountId) % SLURP_PRODUCTION_STYLES.length]!;
   return { style, ...PROFILES[style] };
 }
 

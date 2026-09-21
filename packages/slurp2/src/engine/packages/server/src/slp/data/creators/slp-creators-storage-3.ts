@@ -1,4 +1,5 @@
 import { and, desc, eq, inArray, or } from "../../../db/file-query.js";
+import { slurpCreatorStrategy } from "../../modules/creators/slp-creator-strategy.js";
 import { SlpAccountSettingsPatchInput } from "../../../../../shared/src/slp/slp-social-generation.schema.js";
 import {
   SlpAccount,
@@ -249,6 +250,17 @@ export function createCreatorsStorage3(context: SlurpStorageContext) {
                 ? (account.settings.scheduler.autoPosting ?? defaultAutoPostingSettings())
                 : { ...(account.settings.scheduler.autoPosting ?? defaultAutoPostingSettings()), enabled: false },
             fanActivity: account.settings.scheduler.fanActivity ?? null,
+            strategy: (() => {
+              const effective = slurpCreatorStrategy(account.id, account.settings.strategy);
+              return {
+                saved: account.settings.strategy ?? null,
+                effective: {
+                  style: effective.production.style,
+                  skipRate: effective.skipRate,
+                  textOnlyRate: effective.textOnlyRate,
+                },
+              };
+            })(),
             // Reported so a stale schedule is visible. Engine schedules expire weekly, and until
             // now one that lapsed simply stopped applying with no signal anywhere.
             scheduleStatus: publicAccount

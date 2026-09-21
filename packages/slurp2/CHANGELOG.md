@@ -1,5 +1,11 @@
 # Slurp Remastered release notes
 
+## 0.1.26 — 2026-09-21
+
+- Added a Posting strategy section to each Creator's publishing settings: production style, how often a slot stays quiet, how much they lean on words, and a note on how they run their page.
+- Every strategy value starts automatic and can be reset back to automatic on its own.
+- Added a post purpose choice to the composer for guided posts. It applies to that one post only.
+
 ## 0.1.25 — 2026-09-21
 
 - A Creator can now leave a scheduled slot empty. A quiet slot costs no post, no picture, and no retry, and it is no longer reported as a failed run.

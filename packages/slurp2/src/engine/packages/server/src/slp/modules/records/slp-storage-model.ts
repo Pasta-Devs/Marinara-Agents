@@ -1,4 +1,5 @@
 import { normalizeAvatarCrop, AvatarCrop } from "@marinara-engine/shared";
+import { normalizeSlurpCreatorStrategy } from "../creators/slp-creator-strategy.js";
 import {
   SlpCreateInteractionInput,
   SlpCreatorCreateInteractionInput,
@@ -394,8 +395,10 @@ export function normalizeSlpAccountSettings(value: unknown): SlurpSlpAccountSett
       hiddenFromAccountIds: parseStringArray(rawAccess.hiddenFromAccountIds),
     },
   };
+  const strategy = normalizeSlurpCreatorStrategy(raw.strategy);
   return {
     profile,
+    ...(strategy && { strategy }),
     social,
     scheduler: normalizeScheduler(raw.scheduler),
     privacy,
