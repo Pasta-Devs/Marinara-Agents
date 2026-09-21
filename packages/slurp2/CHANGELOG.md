@@ -1,5 +1,11 @@
 # Slurp Remastered release notes
 
+## 0.1.33 — 2026-09-21
+
+- Creators now write posts and messages knowing what they have already said: their limits, plans, and business rules, and what they have been doing.
+- A reply also knows what was said in that conversation. It never sees another fan's conversation, and a post never sees any of them.
+- Remembered notes are given as facts to stay consistent with, never as instructions, and are never quoted back.
+
 ## 0.1.32 — 2026-09-21
 
 - Added a Continuity tab to each Creator: what they remember, what is waiting for your decision, what happened, and the plans behind recent posts.

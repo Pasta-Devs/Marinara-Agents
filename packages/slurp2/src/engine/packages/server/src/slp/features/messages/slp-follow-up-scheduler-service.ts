@@ -140,6 +140,7 @@ export function startSlurpFollowUpScheduler(app: FastifyInstance, registerStop?:
               mood: thread.mood,
               moodUpdatedAt: thread.moodUpdatedAt,
               notes: thread.notes,
+              threadId: threadRow.id,
               threadState: thread.threadState,
               creatorState: await slurp.getCreatorState(threadRow.creatorAccountId),
               dayVibe: await describeSlurpDayVibe(app.db, threadRow.creatorAccountId),

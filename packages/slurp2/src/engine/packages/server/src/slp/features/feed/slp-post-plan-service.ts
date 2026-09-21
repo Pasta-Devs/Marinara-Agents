@@ -1,5 +1,6 @@
 import type { DB } from "../../../db/connection.js";
-import { recordSlurpContinuityEvent } from "../../data/continuity/slp-continuity-storage.js";
+import { listSlurpContinuityFor, recordSlurpContinuityEvent } from "../../data/continuity/slp-continuity-storage.js";
+import { slurpContinuityInstruction } from "../../modules/continuity/slp-continuity-prompt.js";
 import { slurpContinuityIdentityOf } from "../../modules/continuity/slp-continuity-rules.js";
 import type { SlpCreatorManagedPost } from "../../../../../shared/src/slp/slp-social.types.js";
 import type { SlurpPostAxes } from "../../modules/feed/slp-content-axes.js";
@@ -207,7 +208,29 @@ export async function planSlurpPost(
     axes?.intent === "request" && !promise && !previewOnly
       ? await topSlurpDemandTrend(db, account.id, at).catch(() => null)
       : null;
-  return { axes, shoot, reusedMedia, reusedSource, opportunity, demandTopic: demand?.topic ?? null };
+  // What this Creator may use about themselves in this post: their own public and private notes,
+  // and what they have been doing. A fan's thread never reaches a post; `slurpContinuityReadable`
+  // decides that, not this call site.
+  const continuityInstruction = await listSlurpContinuityFor(
+    db,
+    account.id,
+    request.access === "locked" ? "locked_post" : "public_post",
+    { at, limit: 20 },
+  )
+    .then((ledger) => slurpContinuityInstruction(ledger))
+    .catch((error: unknown) => {
+      logger.warn(error, "[slurp] Could not read continuity for a post; it is written without it");
+      return "";
+    });
+  return {
+    axes,
+    shoot,
+    reusedMedia,
+    reusedSource,
+    opportunity,
+    demandTopic: demand?.topic ?? null,
+    continuityInstruction,
+  };
 }
 
 /**
