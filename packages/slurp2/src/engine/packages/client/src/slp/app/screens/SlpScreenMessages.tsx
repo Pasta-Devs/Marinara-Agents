@@ -504,7 +504,9 @@ function SlurpNotificationsView({
 
   const render = (groups: SlurpEventGroup[]) =>
     groups.map((group) => {
-      const key = group.type === "single" ? group.event.id : `${group.kind}-${group.ids.length}`;
+      // One group per kind (`groupSlurpEvents`). The count in the key closed an open group each
+      // time the poll added an event to it.
+      const key = group.type === "single" ? group.event.id : `group-${group.kind}`;
       const at = group.type === "single" ? group.event.createdAt : group.latestAt;
       if (group.type === "group") {
         const isOpen = expanded.has(key);

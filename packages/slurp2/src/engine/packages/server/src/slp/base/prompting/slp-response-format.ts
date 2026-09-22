@@ -108,7 +108,7 @@ const profilesSchema = {
   additionalProperties: false,
 } as const;
 
-function slpCreatorPostSchema(allowImagePrompt: boolean, contentMaxLength: number) {
+function slpCreatorPostSchema(allowImagePrompt: boolean, allowScenePlan: boolean, contentMaxLength: number) {
   return {
     type: "object",
     properties: {
@@ -122,8 +122,28 @@ function slpCreatorPostSchema(allowImagePrompt: boolean, contentMaxLength: numbe
       ...(allowImagePrompt
         ? { imagePrompt: { type: "string", minLength: 1, maxLength: SLP_REPLY_HARD_MAX_LENGTH } }
         : {}),
+      ...(allowScenePlan
+        ? {
+            scene: {
+              type: "object",
+              properties: {
+                wardrobeId: { anyOf: [{ type: "string", maxLength: 80 }, { type: "null" }] },
+                setting: { type: "string", maxLength: 500 },
+                action: { type: "string", maxLength: 500 },
+                expression: { type: "string", maxLength: 300 },
+                visualDirection: { type: "string", maxLength: 500 },
+              },
+              required: ["wardrobeId", "setting", "action", "expression", "visualDirection"],
+              additionalProperties: false,
+            },
+          }
+        : {}),
     },
-    required: allowImagePrompt ? ["title", "content", "imagePrompt"] : ["title", "content"],
+    required: allowScenePlan
+      ? ["title", "content", "scene"]
+      : allowImagePrompt
+        ? ["title", "content", "imagePrompt"]
+        : ["title", "content"],
     additionalProperties: false,
   } as const;
 }
@@ -229,7 +249,7 @@ export function slpResponseFormat(
     | "noodler_reply"
     | "noodler_dm"
     | "noodler_fan_activity",
-  options: { allowImagePrompt?: boolean; contentMaxLength?: number } = {},
+  options: { allowImagePrompt?: boolean; allowScenePlan?: boolean; contentMaxLength?: number } = {},
 ): { type: string; [key: string]: unknown } {
   if (!isOpenAIGpt56Model(model)) return { type: "json_object" };
   const schema =
@@ -257,6 +277,7 @@ export function slpResponseFormat(
                   }
                 : slpCreatorPostSchema(
                     options.allowImagePrompt === true,
+                    options.allowScenePlan === true,
                     options.contentMaxLength ?? SLP_POST_HARD_MAX_LENGTH,
                   );
   return {

@@ -31,6 +31,7 @@ export function SlpThreadComposer({ model }: { model: SlurpThreadViewModel }) {
     personaId,
     requestHint,
     requestReply,
+    requestFanReply,
     scrollToLatest,
     sendTip,
     setCommissionPrefill,
@@ -182,6 +183,42 @@ export function SlpThreadComposer({ model }: { model: SlurpThreadViewModel }) {
                   personaId={personaId}
                   mode="choose"
                 />
+              )}
+
+              {/* The Creator's side of the same tool: ask the fan to write back. */}
+              {toolTab === "request" && ownsCreator && thread && personaId && targetCreatorAccountId && (
+                <div className="flex flex-col gap-2 rounded-xl bg-[var(--slurp-surface)] p-3 ring-1 ring-inset ring-[var(--noodle-divider)]">
+                  <p className="text-xs leading-5 text-[var(--muted-foreground)]">
+                    {localizeUi("ui.slurp.messages.requestFanReplyDetail", {
+                      defaultValue: "Ask the fan to write back. They answer in their own voice.",
+                    })}
+                  </p>
+                  <button
+                    type="button"
+                    disabled={busy || requestFanReply.isPending}
+                    onClick={() => {
+                      setError(null);
+                      requestFanReply
+                        .mutateAsync({
+                          creatorAccountId: targetCreatorAccountId,
+                          personaId,
+                          threadId: thread.id,
+                        })
+                        .then(() => {
+                          setToolsOpen(false);
+                          setToolTab(null);
+                        })
+                        .catch((cause: unknown) =>
+                          setError(cause instanceof Error ? cause.message : "Could not ask for a reply."),
+                        );
+                    }}
+                    className="min-h-11 rounded-xl bg-[var(--noodle-accent)] px-4 text-xs font-bold text-zinc-950 disabled:opacity-50"
+                  >
+                    {requestFanReply.isPending
+                      ? localizeUi("ui.slurp.messages.requesting", { defaultValue: "Requesting…" })
+                      : localizeUi("ui.slurp.messages.requestFanReply", { defaultValue: "Request a reply" })}
+                  </button>
+                </div>
               )}
 
               {toolTab === "request" && !ownsCreator && thread && personaId && (
@@ -483,7 +520,8 @@ export function SlpThreadComposer({ model }: { model: SlurpThreadViewModel }) {
               onChange={(event) => setDraft(event.target.value)}
               onKeyDown={(event) => {
                 // Enter sends, Shift+Enter breaks the line: the convention every chat box uses.
-                if (event.key === "Enter" && !event.shiftKey) {
+                // An IME uses Enter to confirm a word; that press must not send the half-written message.
+                if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) {
                   event.preventDefault();
                   void submit();
                 }

@@ -64,6 +64,26 @@ export interface SlpAccountProfileSettings {
   noodlerSourceSnapshot?: SlpCreatorSourceSnapshot;
 }
 
+/**
+ * What this Creator looks like and where her life happens, stored on the Creator herself.
+ *
+ * These used to be borrowed from the linked source character, which meant three things had to be
+ * true before a picture knew who it was of: the Creator had to be linked, the card had to have an
+ * Appearance field, and the "include descriptions" setting had to be on. When any of them was
+ * false the image model was handed a scene with no person in it and invented one, so the same
+ * Creator looked like somebody different in every post.
+ *
+ * A Creator is a page somebody runs, not a view onto a character card. Her look is hers.
+ */
+export interface SlpCreatorStageFacts {
+  /** Body, face, hair, marks — the facts that must not change between posts. */
+  appearance?: string;
+  /** What she actually wears, so the wardrobe is hers rather than whatever the model reaches for. */
+  wardrobe?: string;
+  /** The places she posts from, so "somewhere she usually is" has an answer. */
+  locations?: string;
+}
+
 export interface SlpAccountSocialSettings {
   followingAccountIds?: string[];
   followingAccountTimestamps?: Record<string, string>;
@@ -119,11 +139,38 @@ export interface SlpAccountPrivacySettings {
   access: SlpAccountAccessSettings;
 }
 
+/**
+ * How this Creator uses Slurp, as opposed to who they are.
+ *
+ * Derived automatically for every Creator and stable until the user edits it. It must never carry
+ * voice, identity, appearance, or personality: those belong to the source Character card, and a
+ * strategy that quietly rewrote them would make the same person read as two different people.
+ *
+ * Every value is optional. An absent value means "use the derived default", so a Creator the user
+ * has never touched keeps following the automatic profile as the defaults improve.
+ */
+export interface SlpCreatorStrategySettings {
+  /** Overrides the derived production style: homemade, polished, documentary, or theatrical. */
+  style?: string;
+  /** How often a scheduled slot goes unused, 0-40. */
+  skipRate?: number;
+  /** How much this Creator leans on words instead of pictures, 0-100. */
+  textOnlyRate?: number;
+  /** Relative weight per content intent. Absent intents keep their shipped weight. */
+  intentWeights?: Record<string, number>;
+  /** Free text about how this person runs their page. Supplementary to the values above. */
+  strategyText?: string;
+}
+
 export interface SlpAccountSettings {
   profile: SlpAccountProfileSettings;
+  /** See `SlpCreatorStrategySettings`. Absent until something derives or saves one. */
+  strategy?: SlpCreatorStrategySettings;
   social: SlpAccountSocialSettings;
   scheduler: SlpAccountSchedulerSettings;
   privacy: SlpAccountPrivacySettings;
+  /** See `SlpCreatorStageFacts`. Absent on a Creator nobody has filled in yet. */
+  stage?: SlpCreatorStageFacts;
   wallet: SlpWalletSettings;
 }
 
@@ -241,6 +288,10 @@ export interface SlpCreatorStageProfile {
   avatarCrop: AvatarCrop | null;
   disclosureMode: SlpIdentityDisclosure | null;
   stagePersonality: string;
+  /** See `SlpCreatorStageFacts`. Flattened onto the profile because the editor edits them here. */
+  appearance: string;
+  wardrobe: string;
+  locations: string;
   publicIdentity: { displayName: string; handle: string } | null;
   createdAt: string;
   updatedAt: string;
@@ -251,6 +302,11 @@ export interface SlpCreatorManagedStageProfile extends SlpCreatorStageProfile {
   autoPosting: SlpAutoPostingSettings;
   sourceStatus: SlpCreatorSourceStatus;
   fanActivity: SlpCreatorFanActivitySettings | null;
+  /** What the user saved, and what the planner actually uses once derived defaults fill the gaps. */
+  strategy: {
+    saved: SlpCreatorStrategySettings | null;
+    effective: { style: string; skipRate: number; textOnlyRate: number };
+  };
 }
 
 export interface SlpCreatorProfileSource {
@@ -279,6 +335,8 @@ export interface SlpPost {
   content: string;
   imageUrl: string | null;
   imagePrompt: string | null;
+  /** Ordered media. Position zero mirrors imageUrl/imagePrompt for older clients. */
+  images: SlpPostMedia[];
   parentPostId: string | null;
   quotePostId: string | null;
   source: SlpPostSource;
@@ -287,6 +345,13 @@ export interface SlpPost {
   authorSnapshot: SlpAuthorSnapshot | null;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface SlpPostMedia {
+  id: string;
+  position: number;
+  imageUrl: string;
+  imagePrompt: string | null;
 }
 
 export interface SlpCreatorManagedPost extends SlpPost {
@@ -327,6 +392,8 @@ export interface SlpCreatorPostView {
   hasImage: boolean;
   imageUrl: string | null;
   imagePrompt: string | null;
+  /** Empty while locked unless the URL is an access-checked teaser. */
+  images: SlpPostMedia[];
   metadata: Record<string, unknown> | null;
   createdAt: string;
   /** Empty for locked posts — use likeCount/replyCount for the teaser footer. */

@@ -18,6 +18,7 @@ import { slpResponseFormat } from "../../base/prompting/slp-response-format.js";
 import { slpCreatorSourceText } from "../../base/prompting/slp-prompt-safety.js";
 import { NOODLER_UNTRUSTED_CONTENT_INSTRUCTION } from "./slp-public-identity.js";
 import { composeSlurpPromptBlocks, type SlurpPromptBlockOverrides } from "../../base/prompting/slp-prompt-blocks.js";
+import { SLURP_PERFORMED_INTIMACY } from "../../modules/creators/slp-performance.js";
 
 export type InvitedSlpPostDraftRequest = {
   guidance?: string;
@@ -82,6 +83,12 @@ export async function generateInvitedSlpPostDraft(
               "Return one JSON object with title, content, and imagePrompt set to null.",
               "Return JSON only. Do not create interactions or other accounts.",
             ].join("\n"),
+          },
+          {
+            id: "performance",
+            kind: "context",
+            optional: true,
+            text: SLURP_PERFORMED_INTIMACY,
           },
           {
             id: "style",

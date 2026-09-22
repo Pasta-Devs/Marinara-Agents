@@ -295,8 +295,16 @@ export const SLURP_CREATOR_STATE_DEFAULT: Omit<SlurpCreatorState, "updatedAt"> =
   modifiers: [],
 };
 
+/**
+ * Where a conversation starts: strangers.
+ *
+ * `friendly` was the shipped default, so the first message a Creator ever received from somebody
+ * they had never spoken to was already answered as a friend. `open` is the posture of somebody
+ * willing to talk to a stranger, which is what a creator page actually is. Warmth is earned from
+ * here by rapport, familiarity, and what the fan does.
+ */
 export const SLURP_THREAD_STATE_DEFAULT: Omit<SlurpThreadState, "updatedAt"> = {
-  posture: "friendly",
+  posture: "open",
   familiarity: 0,
   sexualComfort: 0,
   emotionalTrust: 0,

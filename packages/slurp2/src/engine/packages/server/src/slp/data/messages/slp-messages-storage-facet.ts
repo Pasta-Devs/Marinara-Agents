@@ -25,6 +25,7 @@ export function createSlurpMessagesStorageFacet(db: DB, createCore: SlurpMessage
     listMessages: () => [],
     listThreadsForCreators: () => [],
     listThreadsForViewer: () => [],
+    countUnread: () => ({ unread: 0, inboundUnread: 0 }),
     listCommissionsForThread: () => [],
     listOpenCommissionsForCreator: () => [],
     listAutomatedBriefCommissions: () => [],

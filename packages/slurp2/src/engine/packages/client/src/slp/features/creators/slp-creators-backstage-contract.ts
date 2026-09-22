@@ -14,7 +14,7 @@ import { useRefreshCreatorConversationSchedule, useRefreshTargetedCreatorsNow } 
 import { useBulkUpdateSlurpCreators, useCreatorAccounts } from "./slp-creators-hooks";
 
 export type SlpCreatorFilter = "all" | "active" | "paused" | "attention";
-export type SlpCreatorTab = "profile" | "publishing" | "images" | "messages" | "danger";
+export type SlpCreatorTab = "profile" | "publishing" | "images" | "messages" | "continuity" | "danger";
 
 /**
  * Creator accounts, the creator-table view state and the creator mutations Backstage drives. The

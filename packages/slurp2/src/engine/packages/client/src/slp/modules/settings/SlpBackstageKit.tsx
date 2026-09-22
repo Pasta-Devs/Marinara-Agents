@@ -354,7 +354,7 @@ export function PromptCard({
 }) {
   const { t } = useTranslation();
   return (
-    <div className="space-y-3 rounded-lg border border-[var(--border)] p-4">
+    <div className="space-y-3">
       <div className="flex items-start gap-3">
         <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[var(--noodle-accent)]/10 text-[var(--noodle-accent)]">
           <FileText size={16} />
@@ -366,29 +366,29 @@ export function PromptCard({
               {isDefault ? t("ui.slurp.settings.prompts.default") : t("ui.slurp.settings.prompts.custom")}
             </span>
           </div>
-          <p className="mt-2 line-clamp-3 whitespace-pre-line text-xs leading-5 text-[var(--muted-foreground)]">
-            {value}
-          </p>
         </div>
+        <button
+          type="button"
+          onClick={onEdit}
+          disabled={disabled}
+          className="inline-flex min-h-10 shrink-0 items-center gap-2 rounded-lg border border-[var(--border)] px-3 text-xs font-semibold hover:bg-[var(--accent)] disabled:opacity-45"
+        >
+          <Pencil size={14} className="text-[var(--noodle-accent)]" />
+          {t("ui.slurp.settings.prompts.edit")}
+        </button>
+      </div>
+      <div className="rounded-lg bg-[var(--slurp-canvas)] p-3 ring-1 ring-inset ring-[var(--slurp-outline)] sm:p-4">
+        <p className="whitespace-pre-wrap break-words text-sm leading-6 text-[var(--slurp-muted)]">{value}</p>
       </div>
       <div className="flex flex-wrap justify-end gap-2">
         <button
           type="button"
           onClick={onRestore}
           disabled={disabled || isDefault}
-          className="inline-flex min-h-10 items-center gap-1.5 rounded-lg border border-[var(--noodle-accent)]/35 px-3 text-xs font-semibold text-[var(--noodle-accent)] hover:bg-[var(--noodle-accent)]/10 disabled:opacity-45"
+          className="inline-flex min-h-10 items-center gap-1.5 rounded-lg px-3 text-xs font-semibold text-[var(--noodle-accent)] hover:bg-[var(--noodle-accent)]/10 disabled:opacity-45"
         >
           <RotateCcw size={13} />
           {restoreLabel ?? t("ui.slurp.settings.prompts.restoreDefault")}
-        </button>
-        <button
-          type="button"
-          onClick={onEdit}
-          disabled={disabled}
-          className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-[var(--border)] px-3 text-xs font-semibold hover:bg-[var(--accent)] disabled:opacity-45"
-        >
-          <Pencil size={14} className="text-[var(--noodle-accent)]" />
-          {t("ui.slurp.settings.prompts.edit")}
         </button>
       </div>
     </div>
@@ -404,6 +404,7 @@ export function PromptEditor({
   onRestore,
   pending,
   restoreLabel,
+  saveLabel,
 }: {
   open: boolean;
   title: string;
@@ -414,6 +415,7 @@ export function PromptEditor({
   onRestore: () => void;
   pending: boolean;
   restoreLabel?: string;
+  saveLabel?: string;
 }) {
   const { t } = useTranslation();
   return (
@@ -454,7 +456,7 @@ export function PromptEditor({
               className="inline-flex min-h-10 flex-1 items-center justify-center gap-1.5 rounded-lg bg-[var(--noodle-accent)] px-4 text-xs font-bold text-zinc-950 [&_svg]:!text-zinc-950 disabled:opacity-45"
             >
               {pending ? <Loader2 size={13} className="animate-spin" /> : <Save size={13} />}
-              {t("ui.slurp.settings.prompts.save")}
+              {saveLabel ?? t("ui.slurp.settings.prompts.save")}
             </button>
           </div>
         </div>

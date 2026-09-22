@@ -30,6 +30,24 @@
  * axis twice — which is exactly the failure being fixed.
  */
 
+import { slurpWeightedPick } from "./slp-weighted.js";
+
+/**
+ * How often each axis value turns up, for callers that draw instead of rotating.
+ *
+ * The rotations below step one place at a time, which makes every entry equally common and
+ * perfectly periodic. That is how "in the room they spend the least time in" came to fire every
+ * sixth post forever: a Creator who is supposedly never in that room was in it on a schedule. The
+ * same arithmetic made every Creator "alone and not glad of it" every fifth post.
+ *
+ * These weights say what each entry should actually be worth. Most of the time a person is where
+ * they usually are, doing something unremarkable, by themselves and fine about it.
+
+ */
+const PLACE_WEIGHTS = [30, 5, 12, 9, 26, 18] as const;
+const MOMENT_WEIGHTS = [24, 20, 15, 8, 14, 12, 7] as const;
+const COMPANY_WEIGHTS = [34, 10, 20, 16, 20] as const;
+
 /** Where the post is coming from, relative to the Creator's habits. */
 const PLACES = [
   "somewhere other than where this creator usually posts from",
@@ -46,32 +64,29 @@ const PLACES = [
 /** What they are doing. Deliberately about state rather than subject matter. */
 const MOMENTS = [
   "in the middle of something rather than posed for a photo",
-  "just finished with something and still coming down from it",
-  "about to leave and stopping for one second",
-  "awake when they should not be",
+  "just finished something, before putting the room back together",
+  "about to go out and stopping for one quick picture",
+  "between two ordinary parts of their day",
   "getting ready rather than ready",
-  "taking a break they did not plan",
-  "having just been interrupted",
+  "taking a short break before carrying on",
+  "pausing because their phone was already in their hand",
 ] as const;
 
-/** How the picture is taken. This is the one that fixes "the same pose". */
-const FRAMINGS = [
-  "close crop, most of them out of frame",
-  "wide, with the room doing most of the talking",
-  "caught at an angle, not squared up to the camera",
-  "in a mirror or reflection",
-  "from above, looking down",
-  "from low, looking up",
-  "an object or a detail in the foreground, them behind it",
-] as const;
-
-/** Who else is in the world right now. Presence, never a named person. */
+/**
+ * Who else is in the world right now. Presence, never a named person.
+ *
+ * `helper` marks the one case where somebody willing is close enough to be handed the phone. It is
+ * not the same question as "is anybody there": a room full of strangers who have no idea is not a
+ * photographer, and a voice on a finished call is not in the room at all. `slp-camera-source.ts`
+ * reads this to decide whether a second person may hold the camera, so that a Creator who is alone
+ * cannot be photographed from across the room.
+ */
 const COMPANY = [
-  "alone and glad of it",
-  "alone and not glad of it",
-  "somebody else is nearby but out of frame",
-  "surrounded by people who have no idea",
-  "just got off a call",
+  { text: "alone with the room to themselves", helper: false },
+  { text: "alone between other parts of the day", helper: false },
+  { text: "a trusted person is nearby but out of frame", helper: true },
+  { text: "in a public place among strangers", helper: false },
+  { text: "talking to somebody off-camera", helper: false },
 ] as const;
 
 /**
@@ -171,51 +186,77 @@ export type SlurpPostVariation = {
   story: boolean;
   place: string;
   moment: string;
-  framing: string;
   company: string;
+  /** Whether somebody willing is close enough to be handed the phone. See `COMPANY`. */
+  companyCanHoldCamera: boolean;
 };
 
 /**
  * The variation for one post.
  *
- * `sequence` is how many posts this Creator has already made. Rotating on it — rather than drawing
- * at random — is what guarantees consecutive posts differ, which random selection does not.
+ * `sequence` is how many posts this Creator has already made. The format still rotates on it, so
+ * the story and teaser slots stay predictable. Place, moment, and company are seeded weighted
+ * draws: common situations recur, rare ones stay rare, and repeats are allowed.
  *
  * The offset by creator id stops two Creators set up on the same day from marching through the
- * cycle in lockstep.
+ * format cycle in lockstep.
  */
 export function slurpPostVariation(
   creatorAccountId: string,
   sequence: number,
   storyRate: SlurpStoryRate = SLURP_DEFAULT_STORY_RATE,
 ): SlurpPostVariation {
-  const offset = hash(creatorAccountId);
+  const offset = slurpRotationHash(creatorAccountId);
   // Math.floor(NaN) is NaN and indexes nothing, which would hand every caller an undefined variation.
   // Third time this shape has bitten in this package; guard it at the boundary rather than trust
   // the caller's arithmetic.
   const step = Number.isFinite(sequence) ? Math.max(0, Math.floor(sequence)) : 0;
-  // Co-prime strides, so place, moment, framing, and company do not resynchronise into a repeating
-  // combined pattern every few posts.
   const formatSlot = (offset + step) % FORMAT_CYCLE.length;
   const format = FORMAT_CYCLE[formatSlot]!;
+  const place = slurpWeightedPick(
+    "place",
+    creatorAccountId,
+    step,
+    PLACES.map((value, index) => ({ value, weight: PLACE_WEIGHTS[index]! })),
+  );
+  const moment = slurpWeightedPick(
+    "moment",
+    creatorAccountId,
+    step,
+    MOMENTS.map((value, index) => ({ value, weight: MOMENT_WEIGHTS[index]! })),
+  );
+  const company = slurpWeightedPick(
+    "company",
+    creatorAccountId,
+    step,
+    COMPANY.map((value, index) => ({ value, weight: COMPANY_WEIGHTS[index]! })),
+  );
   return {
     format,
     story: format === "caption" && slurpStorySlots(storyRate).has(formatSlot),
-    place: PLACES[(offset + step) % PLACES.length]!,
-    moment: MOMENTS[(offset + step * 3) % MOMENTS.length]!,
-    framing: FRAMINGS[(offset + step * 5) % FRAMINGS.length]!,
-    company: COMPANY[(offset + step * 2) % COMPANY.length]!,
+    place,
+    moment,
+    company: typeof company === "string" ? company : company.text,
+    companyCanHoldCamera: typeof company === "string" ? false : company.helper,
   };
 }
 
-/** The variation as prompt text. One block, so the caller does not assemble it in three places. */
-export function slurpPostVariationInstruction(variation: SlurpPostVariation): string {
+/**
+ * The variation as prompt text. One block, so the caller does not assemble it in three places.
+ *
+ * `cameraInstruction` is required. It replaced a free-floating `FRAMINGS` axis that handed out
+ * positions like "from above, looking down" with nothing in the scene to justify them — the
+ * unexplained-cameraman problem `slp-camera-source.ts` exists to fix. The axis stayed behind as a
+ * drawn-then-discarded field for a while, which cost a weighted draw per post and showed a reader
+ * of the deep-details panel a framing the picture never used.
+ */
+export function slurpPostVariationInstruction(variation: SlurpPostVariation, cameraInstruction: string): string {
   return [
     "# This post's angle",
     "Keep the person exactly as the character card describes them — face, body, style, voice. Change the situation, not the person.",
     `Place: ${variation.place}.`,
     `Moment: ${variation.moment}.`,
-    `Framing for the image: ${variation.framing}.`,
+    cameraInstruction,
     `Company: ${variation.company}.`,
     ...(variation.story
       ? [
@@ -227,7 +268,11 @@ export function slurpPostVariationInstruction(variation: SlurpPostVariation): st
   ].join("\n");
 }
 
-function hash(value: string): number {
+/**
+ * Shared by `slp-camera-source.ts`, which rotates on the same creator id and post count. Exported
+ * rather than copied so the two rotations cannot drift apart.
+ */
+export function slurpRotationHash(value: string): number {
   let out = 0x811c9dc5;
   for (let index = 0; index < value.length; index += 1) {
     out ^= value.charCodeAt(index);
@@ -257,7 +302,7 @@ export function slurpPostProject<T extends { id: string }>(
 ): T | null {
   if (projects.length === 0) return null;
   const step = Number.isFinite(sequence) ? Math.max(0, Math.floor(sequence)) : 0;
-  const offset = hash(creatorAccountId);
+  const offset = slurpRotationHash(creatorAccountId);
   const slots = slurpProjectSlots(rate);
   if (!slots.has((offset + step) % FORMAT_CYCLE.length)) return null;
   // Which project slot this is overall, not which post. Indexing projects by `step` looks
@@ -294,7 +339,7 @@ export function slurpTeaserPost(
   rate: SlurpTeaserRate = SLURP_DEFAULT_TEASER_RATE,
 ): boolean {
   const step = Number.isFinite(sequence) ? Math.max(0, Math.floor(sequence)) : 0;
-  return (TEASER_SLOTS[rate] ?? []).includes((hash(creatorAccountId) + step) % 10);
+  return (TEASER_SLOTS[rate] ?? []).includes((slurpRotationHash(creatorAccountId) + step) % 10);
 }
 
 export const SLURP_TEASER_INSTRUCTION =

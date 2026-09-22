@@ -5,22 +5,6 @@ import { api } from "../../../lib/api-client.js";
 import { slpKeys } from "../../base/state/slp-query-keys.js";
 import type { SlurpReserveStatus } from "./slp-feed-contract.js";
 
-export function useUpdateCreatorAccess() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: ({ accountId, ...access }: { accountId: string; hiddenFromAccountIds: string[] }) =>
-      api.patch<SlpAccount>(`/slurp2/accounts/${encodeURIComponent(accountId)}/settings`, {
-        subtree: "privacy",
-        patch: { access },
-      } satisfies SlpAccountSettingsPatchInput),
-    onSuccess: () => {
-      return Promise.all([
-        qc.invalidateQueries({ queryKey: slpKeys.noodlerAccounts() }),
-        qc.invalidateQueries({ queryKey: slpKeys.slpCreatorViewers() }),
-      ]);
-    },
-  });
-}
 export function useUpdateCreatorAutoPosting() {
   const qc = useQueryClient();
   return useMutation({
@@ -61,6 +45,7 @@ export function useUpdateCreatorScheduleSlot() {
 export function useRunCreatorAutoPostNow() {
   const qc = useQueryClient();
   return useMutation({
+    mutationKey: ["slurp", "auto-post"],
     mutationFn: (accountId: string) =>
       api.post<SlpCreatorManagedPost>(`/slurp2/slurp/accounts/${encodeURIComponent(accountId)}/auto-post/run-now`),
     onSuccess: (_post, accountId) =>

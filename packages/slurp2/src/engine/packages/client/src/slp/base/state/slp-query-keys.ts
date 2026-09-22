@@ -21,6 +21,9 @@ export const slpKeys = {
   noodlerImageConnections: () => [...slpKeys.noodlerRoot(), "image-connections"] as const,
   noodlerPostGuidance: () => [...slpKeys.noodlerRoot(), "post-guidance"] as const,
   noodlerFanStatus: () => [...slpKeys.noodlerRoot(), "fan-status"] as const,
+  notificationsRoot: () => [...slpKeys.noodlerRoot(), "notifications"] as const,
+  notifications: (personaId: string) => [...slpKeys.notificationsRoot(), "stream", personaId] as const,
+  notificationUnseenCount: (personaId: string) => [...slpKeys.notificationsRoot(), "unseen-count", personaId] as const,
   // contextTags belongs in the key: it is part of the request, so leaving it
   // out meant switching tab or crossing into evening never refetched.
   ads: (personaId: string, creatorId?: string | null, contextTags: string[] = []) =>

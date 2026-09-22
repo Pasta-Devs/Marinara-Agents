@@ -1,15 +1,17 @@
-import { Fragment } from "react";
+import { Fragment, useState } from "react";
 import { useTranslation as useUiTranslation } from "react-i18next";
-import { Heart, MessageCircle, Pencil, Trash2 } from "lucide-react";
+import { Heart, MessageCircle } from "lucide-react";
 import { canManageSlpReply } from "../../../../../shared/src/slp/slp-interactions.js";
 import { type SlpAccount, type SlpInteraction } from "../../../../../shared/src/slp/slp-social.types.js";
-import { type SlpPostCardModel } from "./SlpPostCard";
+import type { SlpPostCardModel } from "./SlpPostTypes";
 import type { ChatImage } from "../../../hooks/use-gallery";
 import { cn } from "../../../lib/utils";
 import { Avatar, SlurpMediaImg } from "../../base/chrome/SlpChrome";
 import { formatTime } from "../../base/ui/slp-date-time";
-import { createSlpLightboxImage, slpCommentActionClass, textareaClass } from "./SlpPostCard";
+import { createSlpLightboxImage, slpCommentActionClass, textareaClass } from "./SlpPostHelpers";
 import { SlpTextContent } from "./SlpMarkdownRenderer";
+import { SlpInteractionMenu } from "./SlpInteractionMenu";
+import { SlpReportModal } from "./SlpReportModal";
 
 export interface SlpReplyRowProps {
   reply: SlpInteraction;
@@ -90,6 +92,10 @@ export function SlpReplyRow({
           personaAccountId: personaAccount.id,
         }),
       );
+  const copyReply = () => {
+    void navigator.clipboard?.writeText(reply.content ?? "");
+  };
+  const [reportOpen, setReportOpen] = useState(false);
   return (
     <Fragment key={reply.id}>
       <div
@@ -254,33 +260,30 @@ export function SlpReplyRow({
             >
               <MessageCircle size={14} />
             </button>
-            {canManageReply && editingReplyId !== reply.id && (
-              <>
-                <button
-                  type="button"
-                  onClick={() => startEditingReply(reply)}
-                  disabled={updateInteraction.isPending || deleteInteraction.isPending}
-                  className={cn(slpCommentActionClass, "w-7")}
-                  title={localizeUi("ui.noodle.noodlepostcard.editComment")}
-                  aria-label={localizeUi("ui.noodle.noodlepostcard.editComment")}
-                >
-                  <Pencil size={14} />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => deleteNoodleReply(post, reply)}
-                  disabled={updateInteraction.isPending || deleteInteraction.isPending}
-                  className={cn(slpCommentActionClass, "w-7")}
-                  title={localizeUi("ui.noodle.noodlepostcard.deleteComment")}
-                  aria-label={localizeUi("ui.noodle.noodlepostcard.deleteComment")}
-                >
-                  <Trash2 size={14} />
-                </button>
-              </>
+            {editingReplyId !== reply.id && (
+              <SlpInteractionMenu
+                liked={likedReplyByPersona}
+                canManage={canManageReply}
+                disabled={updateInteraction.isPending || deleteInteraction.isPending}
+                onReply={() => openReplyComposer(post.id, reply.id)}
+                onLike={() => reactToReply(post, reply, likedReplyByPersona)}
+                onCopy={copyReply}
+                onReport={personaAccount ? () => setReportOpen(true) : undefined}
+                onEdit={() => startEditingReply(reply)}
+                onDelete={() => deleteNoodleReply(post, reply)}
+              />
             )}
           </div>
         </div>
       </div>
+      <SlpReportModal
+        open={reportOpen}
+        onClose={() => setReportOpen(false)}
+        personaId={personaAccount?.entityId ?? ""}
+        postId={post.id}
+        targetType="reply"
+        targetId={reply.id}
+      />
       {replyPostId === post.id && replyParentInteractionId === reply.id && renderReplyComposer(true)}
     </Fragment>
   );

@@ -17,8 +17,9 @@ import {
 import type { SlpCreatorStageProfile, SlpIdentityDisclosure } from "../../../../../shared/src/slp/slp-social.types.js";
 import type { SlurpStageProfileInput } from "../../base/state/slp-state-types";
 import { getSlpAccentStyle, SLP_PINK, ProfileInitial } from "../../base/chrome/SlpChrome";
+import { SlurpStageFactsFields } from "./SlpStageFactsFields";
 import { isSlurpDiscoveryProfileIncomplete, SlurpDiscoveryProfileEditor } from "../discovery/slp-discovery-contract";
-import { fieldClass, textareaClass } from "../../modules/post/SlpPostCard";
+import { fieldClass, textareaClass } from "../../modules/post/SlpPostHelpers";
 import { cn } from "../../../lib/utils";
 
 /**
@@ -571,6 +572,7 @@ export function StageProfileForm({
               />
             </label>
           </div>
+          <SlurpStageFactsFields draft={draft} disabled={isGenerating || isPending} onChange={onChange} />
           <SlurpDiscoveryProfileEditor
             gender={draft.gender}
             tags={draft.tags}

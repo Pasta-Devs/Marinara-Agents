@@ -191,9 +191,7 @@ export function createProjectsStorage2(context: SlurpStorageContext) {
       creator: NonNullable<Awaited<ReturnType<typeof this.getNoodlerAccountById>>>,
       at: Date,
     ): Promise<string | null> {
-      const open = (account: typeof creator) =>
-        (account.settings.privacy.identityDisclosure ?? "open") === "open" &&
-        account.settings.privacy.access.hiddenFromAccountIds.length === 0;
+      const open = (account: typeof creator) => (account.settings.privacy.identityDisclosure ?? "open") === "open";
       if (!open(creator)) return null;
       const sameOwner = (account: typeof creator) =>
         (account.sourceKind === "persona") === (creator.sourceKind === "persona") &&

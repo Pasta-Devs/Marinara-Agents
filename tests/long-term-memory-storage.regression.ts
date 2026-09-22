@@ -74,6 +74,7 @@ async function main() {
   const { getLongTermMemoryDirectories, getLongTermMemoryRoot, ltmRejectedSuggestionsPath, notePathForId } =
     await import(`${source}/paths.ts`);
   const { LongTermMemoryStorage } = await import(`${source}/storage.ts`);
+  const { invalidateLtmVaultSnapshot, readLtmVaultSnapshot } = await import(`${source}/vault-snapshot.ts`);
   const { LongTermMemoryDraftStore } = await import(`${source}/draft-store.ts`);
   const { applyLongTermMemoryDraft, preflightLongTermMemoryDraft } = await import(`${source}/reconciliation.ts`);
   const { compileEvidenceUnitExtraction, sourceMetadataForEvidenceUnitDraft } = await import(
@@ -2285,6 +2286,162 @@ async function main() {
         true,
         "permanently deleted targets must retain an explicit blocking reason",
       );
+
+      const snapshotRoot = join(dataDir, "vault-snapshot");
+      const snapshotStorage = new LongTermMemoryStorage(snapshotRoot);
+      await snapshotStorage.createNote({ ...noteInput, id: "world_snapshot_b", title: "Snapshot B" });
+      await snapshotStorage.createNote({ ...noteInput, id: "world_snapshot_a", title: "Snapshot A" });
+      const firstRead = await snapshotStorage.listNotes();
+      assert.deepEqual(
+        firstRead.map((note) => note.id),
+        ["world_snapshot_a", "world_snapshot_b"],
+        "vault reads must keep id ordering",
+      );
+      const secondRead = await new LongTermMemoryStorage(snapshotRoot).listNotes();
+      assert.deepEqual(
+        secondRead.map((note) => note.id),
+        firstRead.map((note) => note.id),
+        "opening the vault again must reuse one parsed snapshot",
+      );
+      firstRead[0]!.sections.facts!.text = "Caller mutation must not alter the cached scan.";
+      assert.equal(
+        (await snapshotStorage.listNotes())[0]!.sections.facts!.text,
+        noteInput.sections.facts.text,
+        "listNotes must isolate cached notes from caller mutations",
+      );
+      const paged = await new LongTermMemoryStorage(snapshotRoot).listNotes({ offset: 1, limit: 1 });
+      assert.deepEqual(
+        paged.map((note) => note.id),
+        ["world_snapshot_b"],
+        "offset and limit must keep matching the full vault snapshot",
+      );
+      assert.equal(paged[0]?.id, firstRead[1]?.id);
+      assert.equal(
+        (await snapshotStorage.listNotes({ type: "source" })).length,
+        0,
+        "type filters must keep narrowing the shared snapshot",
+      );
+      assert.equal((await snapshotStorage.listNotes())[0]?.id, firstRead[0]?.id);
+      await snapshotStorage.updateNote("world_snapshot_b", { title: "Snapshot B updated" });
+      const afterUpdate = await new LongTermMemoryStorage(snapshotRoot).listNotes();
+      assert.equal(afterUpdate.find((note) => note.id === "world_snapshot_b")?.title, "Snapshot B updated");
+      await snapshotStorage.cleanup();
+      await new LongTermMemoryStorage(snapshotRoot).cleanup();
+
+      const countRoot = join(dataDir, "vault-snapshot-count");
+      let snapshotLoads = 0;
+      const loadSnapshot = () => {
+        snapshotLoads++;
+        return Promise.resolve({ notes: [], errors: [] });
+      };
+      await readLtmVaultSnapshot(countRoot, loadSnapshot);
+      await readLtmVaultSnapshot(countRoot, loadSnapshot);
+      assert.equal(snapshotLoads, 1, "concurrent snapshot consumers must share one scan");
+      invalidateLtmVaultSnapshot(countRoot);
+      await readLtmVaultSnapshot(countRoot, loadSnapshot);
+      assert.equal(snapshotLoads, 2, "snapshot invalidation must permit a fresh scan");
+
+      const isolationRoot = join(dataDir, "vault-error-isolation");
+      const isolationStorage = new LongTermMemoryStorage(isolationRoot);
+      await isolationStorage.createNote({ ...noteInput, id: "world_isolation_ok", title: "Healthy world" });
+      const isolationDirs = getLongTermMemoryDirectories(isolationRoot);
+      await writeFile(
+        join(isolationDirs.vault, "sources", "source_isolation_ok.json"),
+        `${JSON.stringify({
+          id: "source_isolation_ok",
+          title: "Healthy source",
+          type: "source",
+          status: "active",
+          modes: ["roleplay"],
+          scope: {},
+          tags: [],
+          keywords: [],
+          links: [],
+          provenance: { kind: "chat_summary", sourceId: "chat-a", entryId: "summary-isolation" },
+          sections: { source: { text: "Healthy source.", updatedAt: timestamp } },
+          createdAt: timestamp,
+          updatedAt: timestamp,
+          version: 1,
+        })}\n`,
+      );
+      await writeFile(join(isolationDirs.vault, "world", "world_isolation_malformed.json"), "{not-json\n");
+      assert.deepEqual(
+        (await isolationStorage.listNotes({ type: "source" })).map((note) => note.id),
+        ["source_isolation_ok"],
+        "a typed read must not fail on malformed notes in unrelated vault folders",
+      );
+      await assert.rejects(isolationStorage.listNotes(), /JSON/u, "a full read must still surface malformed notes");
+      await rm(join(isolationDirs.vault, "world", "world_isolation_malformed.json"));
+      assert.deepEqual(
+        (await isolationStorage.listNotes()).map((note) => note.id),
+        ["source_isolation_ok", "world_isolation_ok"],
+        "a tolerated vault failure must not be memoized past its cause",
+      );
+      await rename(join(isolationDirs.vault, "world"), join(isolationDirs.vault, "world-missing"));
+      invalidateLtmVaultSnapshot(isolationRoot);
+      assert.deepEqual(
+        (await isolationStorage.listNotes({ type: "source" })).map((note) => note.id),
+        ["source_isolation_ok"],
+        "typed reads must tolerate unrelated folder enumeration failures",
+      );
+      await assert.rejects(
+        isolationStorage.listNotes(),
+        /ENOENT/u,
+        "full reads must report folder enumeration failures",
+      );
+      await rename(join(isolationDirs.vault, "world-missing"), join(isolationDirs.vault, "world"));
+      await isolationStorage.cleanup();
+
+      const misplacedRoot = join(dataDir, "vault-misplaced-isolation");
+      const misplacedStorage = new LongTermMemoryStorage(misplacedRoot);
+      await misplacedStorage.createNote({ ...noteInput, id: "world_misplaced", title: "Misplaced world" });
+      await rename(
+        notePathForId("world_misplaced", "world", misplacedRoot),
+        join(getLongTermMemoryDirectories(misplacedRoot).vault, "threads", "world_misplaced.json"),
+      );
+      assert.equal(
+        (await misplacedStorage.listNotes({ type: "world" })).length,
+        0,
+        "a typed read must not fail on misplaced notes in other vault folders",
+      );
+      await assert.rejects(
+        misplacedStorage.listNotes({ type: "thread" }),
+        /is stored in threads/u,
+        "a typed read must still fail on a misplaced note in its own folder",
+      );
+      await assert.rejects(
+        misplacedStorage.listNotes(),
+        /is stored in threads/u,
+        "a full read must still fail on misplaced notes",
+      );
+      await misplacedStorage.cleanup();
+
+      const raceRoot = join(dataDir, "vault-snapshot-race");
+      {
+        let rejectStale!: (error: Error) => void;
+        const staleLoad = new Promise<never>((_, reject) => {
+          rejectStale = reject;
+        });
+        const stalePending = readLtmVaultSnapshot(raceRoot, () => staleLoad);
+        invalidateLtmVaultSnapshot(raceRoot);
+        let resolveFresh!: (scan: any) => void;
+        const freshLoad = new Promise<any>((resolve) => {
+          resolveFresh = resolve;
+        });
+        const freshPending = readLtmVaultSnapshot(raceRoot, () => freshLoad);
+        assert.notEqual(freshPending, stalePending, "invalidation must start a new scan");
+        rejectStale(new Error("stale vault scan failed"));
+        await assert.rejects(stalePending, /stale vault scan failed/u);
+        let reloads = 0;
+        const joined = readLtmVaultSnapshot(raceRoot, () => {
+          reloads += 1;
+          return Promise.resolve({ notes: [], errors: [] });
+        });
+        assert.equal(joined, freshPending, "a stale rejection must not evict the newer snapshot entry");
+        assert.equal(reloads, 0, "the newer pending scan must stay shared");
+        resolveFresh({ notes: [], errors: [] });
+        assert.deepEqual(await joined, { notes: [], errors: [] });
+      }
 
       const activityRoot = join(dataDir, "activity-index");
       const activityDirectories = getLongTermMemoryDirectories(activityRoot);

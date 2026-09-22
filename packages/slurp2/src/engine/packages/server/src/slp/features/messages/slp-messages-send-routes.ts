@@ -33,7 +33,58 @@ const tipSchema = z.object({
   requestId: z.string().trim().min(8).max(100).optional(),
 });
 export async function slpMessagesSendRoutes(app: FastifyInstance, messaging: SlpMessagesContext) {
-  const { freshView, messages, ownsCreator, requireViewer, slurp } = messaging;
+  const { freshView, maskForViewer, messages, ownsCreator, requireViewer, slurp } = messaging;
+
+  app.post("/messages/share-post", async (req, reply) => {
+    const parsed = z
+      .object({
+        personaId: z.string().trim().min(1),
+        creatorAccountId: z.string().trim().min(1),
+        postId: z.string().trim().min(1),
+      })
+      .strict()
+      .safeParse(req.body ?? {});
+    if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
+    const viewer = await requireViewer(parsed.data.personaId);
+    if (!viewer) return reply.code(404).send({ error: "Slurp persona not found" });
+    const creator = await slurp.getNoodlerAccountById(parsed.data.creatorAccountId);
+    const post = await slurp.getNoodlerPostById(parsed.data.postId);
+    // Any post may go into any chat: the reader picks the chat, and sharing a Creator's post back
+    // to that same Creator was the one target the picker never means.
+    if (!creator || !post) return reply.code(404).send({ error: "Post not found" });
+    // A locked post travels as a teaser. The bubble hides the body of a locked preview, but the
+    // body used to ride along in the metadata anyway, so a share was a way to read it.
+    const locked = post.access !== "public";
+    // The shared post now travels outside its author's own chat, so the card has to say whose
+    // post it is. A missing author is not worth refusing the share over.
+    const author =
+      post.authorAccountId === creator.id ? creator : await slurp.getNoodlerAccountById(post.authorAccountId);
+    const opened = await messages.openThread(viewer.id, creator.id, "viewer");
+    if (opened.status === "closed") return reply.code(403).send({ error: "This Creator is not accepting messages." });
+    if (opened.status === "insufficient_funds")
+      return reply.code(402).send({ error: "Not enough coins.", required: opened.required });
+    if (opened.status !== "ok") return reply.code(404).send({ error: "Could not open conversation" });
+    const message = await messages.appendMessage(opened.thread.id, {
+      senderAccountId: viewer.id,
+      role: "viewer",
+      kind: "post_preview",
+      content: locked ? post.title || "" : post.title || post.content.slice(0, 180),
+      imageUrl: locked ? null : post.imageUrl,
+      metadata: {
+        postId: post.id,
+        title: post.title,
+        content: locked ? "" : post.content,
+        access: post.access,
+        previewLocked: locked,
+        authorName: author?.displayName ?? null,
+        authorHandle: author?.handle ?? null,
+        authorAvatarUrl: author?.avatarUrl ?? null,
+        shareReason: "player",
+      },
+    });
+    if (!message) return reply.code(409).send({ error: "Could not share the post." });
+    return { message, thread: await freshView(opened.thread.id) };
+  });
   /**
    * Send, then answer if the creator is reachable.
    *
@@ -85,7 +136,7 @@ export async function slpMessagesSendRoutes(app: FastifyInstance, messaging: Slp
     return {
       thread: (await freshView(sent.thread.id)) ?? sent.thread,
       message: sent.message,
-      reply: outcome.status === "replied" ? outcome.message : null,
+      reply: outcome.status === "replied" ? maskForViewer(outcome.message) : null,
       replyStatus: outcome.status,
       // The client shows the typing indicator for this long before revealing the reply, so the
       // pacing the model was given and the pacing the player sees are the same number.
@@ -202,7 +253,7 @@ export async function slpMessagesSendRoutes(app: FastifyInstance, messaging: Slp
       status: "accepted",
       kind: "guidance",
       replyStatus: outcome.status,
-      reply: outcome.message,
+      reply: maskForViewer(outcome.message),
       typingMs: outcome.pacing.typingMs,
     };
   });
@@ -229,7 +280,7 @@ export async function slpMessagesSendRoutes(app: FastifyInstance, messaging: Slp
       : await replyToSlurpMessage(app.db, { threadId: thread.id, triggerMessageId, force: true });
     return {
       thread: (await freshView(thread.id)) ?? thread,
-      reply: outcome.status === "replied" ? outcome.message : null,
+      reply: outcome.status === "replied" ? maskForViewer(outcome.message) : null,
       replyStatus: outcome.status,
       typingMs: "pacing" in outcome ? outcome.pacing.typingMs : 0,
     };
@@ -255,7 +306,7 @@ export async function slpMessagesSendRoutes(app: FastifyInstance, messaging: Slp
         "The fan is asking for a reply. Treat this as a gentle request, not a demand. Answer only if the conversation rules and your availability allow it.",
     });
     return {
-      reply: outcome.status === "replied" ? outcome.message : null,
+      reply: outcome.status === "replied" ? maskForViewer(outcome.message) : null,
       replyStatus: outcome.status,
       typingMs: "pacing" in outcome ? outcome.pacing.typingMs : 0,
     };
@@ -288,8 +339,9 @@ export async function slpMessagesSendRoutes(app: FastifyInstance, messaging: Slp
     return {
       thread: (await freshView(sent.thread.id)) ?? sent.thread,
       message: sent.message,
-      reply: outcome.status === "replied" ? outcome.message : null,
+      reply: outcome.status === "replied" ? maskForViewer(outcome.message) : null,
       replyStatus: outcome.status,
+      typingMs: "pacing" in outcome ? outcome.pacing.typingMs : 0,
       wallet: await slurp.getWallet(viewer.id),
     };
   });
@@ -301,9 +353,11 @@ export async function slpMessagesSendRoutes(app: FastifyInstance, messaging: Slp
     if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
     const viewer = await requireViewer(parsed.data.personaId);
     if (!viewer) return reply.code(404).send({ error: "Slurp persona not found" });
+    // A retry or double-click on an unlocked message is a success, but not a second payment to react to.
+    const alreadyUnlocked = Boolean((await messages.getMessageById(parsed.data.messageId))?.unlockedAt);
     const message = await messages.unlockMessage(viewer.id, parsed.data.messageId);
     if (!message) return reply.code(402).send({ error: "PPV message cannot be unlocked." });
-    const unlockedThread = await messages.getThreadById(message.threadId);
+    const unlockedThread = alreadyUnlocked ? null : await messages.getThreadById(message.threadId);
     if (unlockedThread)
       await reactToSlurpPayment(app.db, {
         viewerAccountId: viewer.id,

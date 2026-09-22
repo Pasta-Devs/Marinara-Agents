@@ -6,7 +6,7 @@ import type {
 } from "../../../../../shared/src/slp/slp-social.types.js";
 import { projectCreatorAudienceProfile } from "../../modules/creators/slp-disclosure.js";
 import { isSlurpViewerActorAccount } from "../../modules/settings/slp-settings.js";
-import { isCreatorHiddenFromViewer, canViewCreatorPost } from "../../base/identity/slp-access.js";
+import { canViewCreatorPost } from "../../base/identity/slp-access.js";
 import { slurpGoalProgress } from "../../modules/projects/slp-goal.js";
 import { SLP_CREATOR_SUBSCRIPTION_COST, slpCreatorUnlockPriceFromMetadata } from "../../modules/economy/slp-prices.js";
 import { slurpPlatformScaleMultiplier } from "../../modules/audience/slp-scale.js";
@@ -64,11 +64,7 @@ export function createSlpViewerContext(
     const followedIds = new Set([...(viewer.settings.social.followingAccountIds ?? []), ...subscribedIds]);
     const unlockedIds = new Set(unlocks.map((item) => item.postId));
     const profileById = new Map(profiles.map((profile) => [profile.id, projectCreatorAudienceProfile(profile)]));
-    const visibleAccounts = accounts.filter(
-      (account) =>
-        !isSlurpViewerActorAccount(account) &&
-        (creatorBelongsToViewer(account, viewer) || !isCreatorHiddenFromViewer(account, viewer.id)),
-    );
+    const visibleAccounts = accounts.filter((account) => !isSlurpViewerActorAccount(account));
     // A tip goal exists to give a fan a reason to tip, and it was only ever visible to the Creator
     // who set it. It belongs on the profile the fan is looking at.
     const goalByAccountId = new Map(
@@ -196,6 +192,21 @@ export function createSlpViewerContext(
         const visibleInteractions = allInteractions.filter(
           (interaction) => !locked || !interaction.actorAccountId.startsWith(NOODLER_FAN_IDENTITY_PREFIX),
         );
+        const images = post.images.flatMap((image) => {
+          if (locked && !image.imageUrl.startsWith(NOODLER_MEDIA_URL_PREFIX)) return [];
+          return [
+            {
+              ...image,
+              imageUrl: slpCreatorPostMediaUrlForPersona(
+                image.imageUrl,
+                context.viewer.entityId,
+                locked ? "locked" : "original",
+                post.updatedAt,
+              ),
+              imagePrompt: locked ? null : image.imagePrompt,
+            },
+          ];
+        });
         return [
           post.id,
           {
@@ -205,7 +216,7 @@ export function createSlpViewerContext(
             locked,
             title: post.title,
             content: locked ? null : post.content,
-            hasImage: post.imageUrl !== null,
+            hasImage: post.images.length > 0,
             imageUrl:
               locked && !post.imageUrl?.startsWith(NOODLER_MEDIA_URL_PREFIX)
                 ? null
@@ -216,6 +227,7 @@ export function createSlpViewerContext(
                     post.updatedAt,
                   ),
             imagePrompt: locked ? null : post.imagePrompt,
+            images,
             metadata: locked ? null : post.metadata,
             // A locked post withholds its metadata, so the price travels as its own field. It is
             // The post's own price, which the unlock route charges when the wallet is enabled.

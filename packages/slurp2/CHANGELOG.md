@@ -1,5 +1,164 @@
 # Slurp Remastered release notes
 
+## 0.2.25 — 2026-09-22
+
+- Every generated picture keeps the Creator's appearance, planned action, expression, and mood even when image-prompt interpretation is unavailable.
+- Creator personality and stage voice now shape visual presentation without being copied as private prompt text.
+
+## 0.2.24 — 2026-09-22
+
+- Payments: recovery no longer refunds a tip or unlock that is still going through, a refund is never marked paid again, and cancelling a commission with the wallet off no longer creates coins. A persona can no longer tip its own Creator.
+- Promised follow-ups arrive with default settings, stop after a second failure, and read "1.5 hours" and "2 days" correctly.
+- Locked content is hidden in every reply. A second unlock no longer triggers a second reaction. "Let them answer" works for a Creator you play.
+- Desktop chats no longer leak drafts, pending messages, tools or older pages into the next conversation. Editing a failed message sends the new text.
+- Enter no longer sends during input-method composition, in-chat search scrolls to its match, and a pending commission cancellation can be retried.
+
+## 0.2.23 — 2026-09-22
+
+- Restore after deleting a post now works. The feed reloaded on a timer and dropped the deleted post, taking the Restore row with it mid-countdown.
+- Share asks which chat to send a post to, with a search and a New chat button, instead of sending it to the Creator who wrote it. The chat card names the author; a locked post travels as a teaser.
+- "Download post card" includes the post image again when started from the opened post.
+- Reporting offers a real social network's range of reasons plus Slurp's own, and the menu item has its icon.
+- "Request a reply" now works on both sides of a chat: playing a Creator, ask the fan to write back.
+- Avatar references and source appearance are used by default, so a Creator looks like herself. Both stay switches in Backstage.
+
+## 0.2.22 — 2026-09-22
+
+- Everyday Slurp loading now requests feed data only on feed surfaces and defers profile-source and model-connection data until profile work starts.
+- Shell notification and message badges use lightweight count routes instead of loading full notification and inbox payloads.
+- Feed seen, follow, subscription, and unlock actions update visible cached state immediately and reconcile in the background.
+
+## 0.2.21 — 2026-09-22
+
+- Wardrobe import can scan whole selected lorebooks or only individually selected enabled entries, while retaining the same evidence-backed review before anything is saved.
+- Prompt Studio shows the exact final positive prompt sent to the image provider after appearance, selected clothing, camera, visual policy, style, and interpretation are applied.
+- Successful immediate and scheduled automatic images record that exact provider prompt only in the Creator-private Deep Details record, never public post metadata.
+- Scheduled posts now pass the same typed visual brief into image interpretation as immediate posts.
+
+## 0.2.20 — 2026-09-22
+
+- Creators now own up to 64 complete wardrobe looks with model summaries, exact image descriptions, tags, public/locked suitability, provenance, and timestamps.
+- AI imports from the linked character, selected lorebooks, pasted text, or the legacy wardrobe note stay in an editable evidence-backed review until confirmed.
+- Automatic image posts return a scene plan with wardrobe ID, setting, action, expression, and visual direction. Slurp validates the choice, falls back to the least-recent compatible look, and then expands its exact clothing.
+- Prompt Studio and Deep Details show the scene, fallback, typed visual brief, and assembled image brief. Expert overrides can rewrite or disable every prompt block.
+- Random variations no longer invent loneliness, interruption, sleeplessness, or a low-income mood. Real events and character traits still affect tone.
+
+## 0.2.19 — 2026-09-22
+
+- A Creator has her own appearance, usual wardrobe, and regular places, edited on her profile.
+- The appearance is sent with every picture. It used to be borrowed from the linked character card, which needed the Creator to be linked, the card to have an Appearance field, and "include descriptions" to be on. With any of those missing the image model got a scene with nobody in it and invented somebody new each post.
+- An appearance left blank is seeded from the linked card when the Creator is created.
+- Wardrobe and places reach both the caption and the picture, so clothes are hers and "somewhere other than where she usually posts" has something to be other than.
+
+## 0.2.18 — 2026-09-22
+
+- How far a Creator's pictures go is now a setting, globally and per Creator. Locked posts deliver that level, public posts sit one step below, and housekeeping posts stay non-sexual. Every locked post used to be briefed as non-sexual.
+- The image prompt no longer asks for a bad picture. "Badly framed, poorly lit, dull" meant candid rather than staged, but an image model reads it as an instruction and returns exactly that.
+- No point-of-view framing, and nobody in the picture the scene did not pay for.
+- Camera mix rebalanced: arm's-length self-shots drop from about two thirds of posts to about 45%.
+- Posts with no picture drop from about one in six to about one in twenty-five.
+- The image provider no longer receives personality traits or an "Appearance:" label in the prompt.
+- Removed the framing axis, drawn on every post and discarded before the prompt.
+
+## 0.2.17 — 2026-09-22
+
+- The opened post viewer now shows every picture of a multi-image post, with arrows, a counter, and mini previews. It used to show the first one only.
+- Feed cards mark multi-image posts with position dots beside the existing arrows.
+- Prompt Studio: every block can be switched off, not only the ones marked optional.
+- Prompt Studio: required blocks can be rewritten. The override starts from the text the preview Creator actually gets, and says plainly that a fixed text replaces what Slurp would have composed per Creator. Context blocks stay read-only because their text is the runtime data itself.
+- The prompt preview no longer discards a finished result when the settings query refetches in the background, and a run it cannot perform now says why instead of doing nothing.
+- Prompt Studio on a phone: the preview panel is reachable without scrolling past every recipe, recipe rows no longer wrap four lines of block chips, and the preset picker fits the width.
+
+## 0.2.16 — 2026-09-21
+
+- Restoring a deleted post no longer waits on a full feed refetch, so the card comes back at once instead of sitting on its countdown.
+- The server now keeps a deleted post for twice the undo window it offers, so a Restore near the end of the countdown no longer fails.
+- The share card is drawn in the browser instead of on the server. The server render needed fonts installed on the host, which most installs do not have, so cards came out as the bare post image with no name, title, or caption.
+- Share post no longer does nothing when no viewer persona is active: it falls back to downloading the share card.
+- The post viewer's side card no longer draws the picture the viewer already shows.
+
+## 0.2.15 — 2026-09-21
+
+- Exposed restore pending state through the Home screen model so restore feedback renders immediately.
+
+## 0.2.14 — 2026-09-21
+
+- Restored posts now return to the visible feed as soon as the restore response succeeds.
+
+## 0.2.13 — 2026-09-21
+
+- Restore now gives immediate progress feedback.
+- The restore countdown pauses while the server restores the post.
+
+## 0.2.12 — 2026-09-21
+
+- Fixed the deleted-post panel crash caused by missing restore state.
+- Wired post sharing to the active viewer persona.
+- Restored the report action on feed posts.
+
+## 0.2.11 — 2026-09-21
+
+- Deleted posts can be restored again, with pending and failure feedback.
+- Restore now pulls the deleted post's sparkles into the restore action.
+
+## 0.2.10 — 2026-09-21
+
+- Normal, locked, profile, media, Story, and reply surfaces now use consistent three-dot action menus.
+- Posts now support direct sharing to Slurp messages and durable post or reply reports with snapshots.
+- Slurp now uses one canonical post card renderer.
+
+## 0.2.9 — 2026-09-21
+
+- Post image prompts now use a typed visual brief and preserve the planned scene through image interpretation.
+- Deleted posts now leave a sparkling restore slot for 60 seconds before permanent cleanup.
+
+## 0.2.8 — 2026-09-21
+
+- Feed loading has a softer status animation, older drops show a progress state, and deleted posts leave the timeline with a short gentle exit.
+
+## 0.2.7 — 2026-09-21
+
+- The feed loads its first page first, older posts load on demand, and post edits and deletes update the visible feed without a full reload.
+
+## 0.2.6 — 2026-09-21
+
+- Creator posts now use the Engine's live Capability API generation integrations for text providers, image generation, fallback handling, and staged media writes.
+
+## 0.2.5 — 2026-09-21
+
+- Locked posts no longer tease what the reader already owns, and housekeeping posts stay public. The composer offers only the purposes that fit the post's audience.
+
+## 0.2.4 — 2026-09-21
+
+- Who holds the camera now follows what the post is for: a planned shoot is rarely a selfie, an ordinary day usually is.
+- Two Creators who shoot the same way no longer have identical effort on the same day.
+- Conversations start between strangers instead of as friends.
+- Creators answer a new message within the hour instead of after two, so the inbox no longer needs Reply now.
+
+## 0.2.3 — 2026-09-21
+
+- Every post's menu has Deep details: the plan, the draws, the full prompt, the model's raw answer, the picture brief, and every tag behind that post.
+
+## 0.2.2 — 2026-09-21
+
+- Removed viewer access. Every persona now sees every Creator; the per-Creator hide list is no longer used.
+
+## 0.2.1 — 2026-09-21
+
+- Posts no longer read private notes from direct messages.
+- Teasers, callbacks, and ordinary days stay short; only behind-the-scenes posts run long.
+- Stories can now be thank-yous and requests too, and a callback with nothing to continue becomes an ordinary post.
+- Prompt Studio shows every block in full and lets you edit it in place, with live text for the preview Creator and the compiled prompt kept current.
+
+## 0.2.0 — 2026-09-21
+
+- Creators now plan posts: teasers, photo sets of up to three images, Stories, cropped previews, reused pictures, text on purpose, and quiet slots. Classic mode became a prompt preset.
+- Shoots keep a set consistent, and a set can open a teaser-and-callback campaign.
+- Each Creator has a Posting strategy; the composer picks a one-off purpose and delivery.
+- Fan requests can be answered from the conversation, and the planner keeps promises.
+- Creators remember what they said and did; fan-private details never leak. Review it in the new Continuity tab or the Backstage queue.
+- Prompt Studio was redesigned, and Pulse shows background work.
+
 ## 0.1.3 — 2026-09-20
 
 - Slurp HTTP routes now use Slurp naming. Existing avatars, banners, ad images, post images and backups keep working.

@@ -263,6 +263,65 @@ test.describe("standalone Slurp package", () => {
     expect(errors).toEqual([]);
   });
 
+  test("Prompt Studio keeps outcomes, recipes, blocks, and preview in a focused responsive flow", async ({
+    page,
+  }, testInfo) => {
+    const errors = collectUnexpectedErrors(page);
+    await getSlurpSettings(page);
+    expect((await page.request.patch("/api/slurp2/settings", { data: { onboarding: "completed" } })).ok()).toBe(true);
+    await page.addInitScript(() => {
+      localStorage.setItem(
+        "marinara:slurp2:package-ui",
+        JSON.stringify({
+          navigation: { mode: "creator-settings", section: "prompts" },
+          onboardingState: "completed",
+        }),
+      );
+    });
+    const previewRequests: string[] = [];
+    page.on("request", (request) => {
+      if (/\/settings\/prompt-blocks\/(?:preview|generate-preview)$/u.test(new URL(request.url()).pathname)) {
+        previewRequests.push(request.url());
+      }
+    });
+
+    await page.goto("/");
+    await openSlurp(page);
+    const slurp = page.locator('[data-component="NoodleView"]');
+    await expect(slurp.getByRole("heading", { name: "Prompt Studio", exact: true })).toBeVisible();
+    for (const outcome of ["Voice and writing", "Post behavior", "Image direction"]) {
+      await expect(slurp.getByRole("heading", { name: outcome, exact: true })).toBeVisible();
+    }
+    await expect(slurp.getByText("Generation guidance", { exact: true })).toBeVisible();
+    await expect(slurp.getByText("Public post direction", { exact: true })).toBeVisible();
+    await expect(slurp.getByText("Locked post direction", { exact: true })).toBeVisible();
+    await expect(slurp.getByRole("heading", { name: "Prompt recipes", exact: true })).toBeVisible();
+    await expect(slurp.getByText("Try your changes", { exact: true })).toBeVisible();
+    expect(previewRequests).toEqual([]);
+
+    await slurp.getByRole("button", { name: /^Creator posts/u }).click();
+    await expect(slurp.getByRole("heading", { level: 2, name: "Creator posts", exact: true })).toBeVisible();
+    // Every block is readable and editable in place: no open or apply step.
+    const pipeline = slurp.locator("ol:has(textarea)");
+    await expect(pipeline.locator("textarea").first()).toBeVisible();
+    await expect(pipeline.locator("> li").first().locator("pre, textarea").first()).not.toBeEmpty();
+    expect(previewRequests.filter((url) => url.endsWith("/generate-preview"))).toEqual([]);
+
+    if (testInfo.project.name.includes("mobile")) {
+      await slurp.getByRole("button", { name: "Result", exact: true }).click();
+      await expect(slurp.getByText("Try your changes", { exact: true })).toBeVisible();
+      await slurp.getByRole("button", { name: "Sample post", exact: true }).click();
+      await expect(slurp.getByRole("button", { name: "Run preview", exact: true })).toBeVisible();
+    } else {
+      await expect(slurp.getByRole("navigation", { name: "Recipe blocks" })).toBeVisible();
+      await expect(slurp.getByText("Try your changes", { exact: true })).toBeVisible();
+    }
+
+    await expect.poll(() => slurp.evaluate((element) => element.scrollWidth <= element.clientWidth + 1)).toBe(true);
+    await page.screenshot({ path: testInfo.outputPath("slurp2-prompt-studio-workspace.png"), fullPage: true });
+    expect(errors).toEqual([]);
+  });
+
   test("requires the current release acknowledgement and keeps older notes collapsed", async ({ page }, testInfo) => {
     const errors = collectUnexpectedErrors(page);
     await page.addInitScript(() => localStorage.removeItem("slurp2:splash-seen-version"));
@@ -561,7 +620,7 @@ test.describe("standalone Slurp package", () => {
       await slurp.getByRole("button", { name: "Prompts", exact: true }).click();
       await slurp.getByRole("button", { name: "Edit prompt", exact: true }).first().click();
       const promptDialog = page.getByRole("dialog", { name: "Edit generation guidance" });
-      const savePrompt = promptDialog.getByRole("button", { name: "Save prompt" });
+      const savePrompt = promptDialog.getByRole("button", { name: "Apply to draft" });
       await expect(savePrompt).toBeVisible();
       await expect
         .poll(() =>
@@ -599,10 +658,8 @@ test.describe("standalone Slurp package", () => {
       const profileControls = slurp.getByRole("button", { name: "Profile controls", exact: true });
       if ((await profileControls.getAttribute("aria-expanded")) !== "true") await profileControls.click();
       await expect(page.getByRole("button", { name: /^Automation/u })).toHaveCount(0);
-      await page.getByRole("button", { name: "Access", exact: true }).click();
-      const accessDialog = page.getByRole("dialog", { name: "Viewer access" });
-      await expect(accessDialog).toBeVisible();
-      await expect(accessDialog.getByText(personaName, { exact: true })).toHaveCount(0);
+      // Viewer access was removed: every persona sees every Creator.
+      await expect(page.getByRole("button", { name: "Access", exact: true })).toHaveCount(0);
 
       expect(errors).toEqual([]);
     } finally {

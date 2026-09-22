@@ -1,3 +1,6 @@
+import { saveSlurpPostDeepDetails } from "../../data/feed/slp-post-deep-details-storage.js";
+import { buildSlurpDeepDetailsRecord } from "./slp-deep-details-record.js";
+import { prepareSlurpCreatorPost, recordSlurpProviderPrompt } from "./slp-prepared-post.js";
 import { type APIProvider } from "@marinara-engine/shared";
 import { createSlpPoll } from "../../../../../shared/src/slp/slp-polls.js";
 import { SLP_CREATOR_POST_TITLE_MAX_LENGTH } from "../../../../../shared/src/slp/slp-social.schema.js";
@@ -7,33 +10,29 @@ import { newId } from "../../../utils/id-generator.js";
 import type { DB } from "../../../db/connection.js";
 import { describeSlurpPostCondition } from "./slp-post-condition-service.js";
 import { logger, logDebugOverride } from "../../../lib/logger.js";
-import { resolveBaseUrl } from "../../../services/generation/connection-base-url.js";
 import { clampGenerationMaxOutputTokens } from "../../../services/generation/output-token-limits.js";
 import { resolveStoredChatOptions } from "../../../services/generation/generation-parameters.js";
 import { slpSamplingOptions } from "../../base/prompting/slp-sampling-options.js";
-import { withConnectionFallbackProvider } from "../../../services/llm/connection-fallback-provider.js";
-import { withConnectionAdmissionProvider } from "../../../services/generation/connection-admission.js";
 import {
   isConnectionAdmissionFailure,
   type ConnectionAdmissionMode,
 } from "../../../services/generation/connection-admission.js";
-import type { ChatMessage } from "../../../services/llm/base-provider.js";
-import { createLLMProvider } from "../../../services/llm/provider-registry.js";
 import { resolveCreatorImageConnectionId } from "../../base/media/slp-image-connections.js";
-import { resolveSlurpCreatorMenu, resolveSlurpPostGuidance } from "../../data/settings/slp-post-guidance-storage.js";
+import {
+  resolveSlurpCreatorMenu,
+  resolveSlurpExplicitLevel,
+  resolveSlurpPostGuidance,
+} from "../../data/settings/slp-post-guidance-storage.js";
+import { SLURP_BUILT_IN_EXPLICIT_LEVEL, slurpPostSexualLevel } from "../../modules/feed/slp-post-guidance.js";
 import { createCharactersStorage } from "../../../services/storage/characters.storage.js";
 import { createConnectionsStorage } from "../../../services/storage/connections.storage.js";
 import { createSlurpStorage } from "../../data/slp-storage.js";
 import { type SlurpAccount } from "../../modules/records/slp-storage-model.js";
 import { createPromptOverridesStorage } from "../../../services/storage/prompt-overrides.storage.js";
 import { generateCreatorPostImage } from "../media/slp-media-contract.js";
+import { persistSlurpGeneratedImageSet } from "./slp-post-media-operation.js";
 import { slpCreatorUnlockPriceMetadata } from "../../modules/economy/slp-prices.js";
-import {
-  persistCreatorPostWithUploadedMedia,
-  slpCreatorPostMediaUrl,
-  type SlpCreatorPostMediaUpload,
-} from "../../base/media/slp-media.js";
-import type { SlpImagePromptReviewItem } from "../media/slp-media-contract.js";
+import { persistCreatorPostWithUploadedMedia, type SlpCreatorPostMediaUpload } from "../../base/media/slp-media.js";
 import { getErrorMessage } from "../../modules/creators/slp-public-support.js";
 import { slpResponseFormat } from "../../base/prompting/slp-response-format.js";
 import {
@@ -54,8 +53,6 @@ import { processLorebooks } from "../../../services/lorebook/index.js";
 import { createCharacterGalleryStorage } from "../../../services/storage/character-gallery.storage.js";
 import { createGalleryStorage } from "../../../services/storage/gallery.storage.js";
 import { pickGalleryAttachmentForAccount } from "./slp-generated-activity-service.js";
-// The disclosure privacy core lives in a leaf module so tests can execute it instead of grepping
-// this file, which cannot be imported without a database and an LLM provider.
 import { protectCreatorGeneratedIdentity, type PublicIdentity } from "../../base/identity/slp-identity-protection.js";
 import { resolveCreatorCharacterCanon } from "../../data/creators/slp-source-resolve.js";
 import { slurpPlatformEventInstruction } from "../../../../../shared/src/slp/slp-platform-events.js";
@@ -64,7 +61,7 @@ import {
   FormattedCreatorGenerationRequest,
   buildNoodlerPostMessages,
   slpCreatorTitleFromContent,
-  parseCreatorPost,
+  completeSlurpCreatorPost,
 } from "./slp-post-prompt.js";
 export type { SlpCreatorContentFormat } from "../../base/prompting/slp-content-format.js";
 
@@ -76,22 +73,24 @@ export {
   containsIdentity,
   type PublicIdentity,
 } from "../../base/identity/slp-identity-protection.js";
-
-export type GeneratedCreatorPostResult = {
-  post: SlpCreatorManagedPost;
-  imagePromptReview: SlpImagePromptReviewItem | null;
-};
-
-export type PreparedCreatorPostResult = {
-  title: string | null;
-  content: string;
-  imagePrompt: string | null;
-  access: "public" | "locked";
-  /** The project this post continues, carried through to publication. Null for a loose post. */
-  projectId: string | null;
-  projectChapter: string | null;
-  metadata: Record<string, unknown>;
-};
+import {
+  slurpPromptContext,
+  type SlurpPromptBlockOverrides,
+  type SlurpReusablePromptInstruction,
+} from "../../base/prompting/slp-prompt-blocks.js";
+import { slurpCameraSourceInstruction, slurpPostCameraSource } from "../../modules/feed/slp-camera-source.js";
+import { slurpPostPictureBriefs } from "./slp-post-picture-briefs.js";
+import { slurpVisualBriefFromSituation } from "../../modules/feed/slp-visual-brief.js";
+import { slurpContentAxesInstruction, slurpIntentFormat } from "../../modules/feed/slp-content-axes.js";
+import { planSlurpPost, recordSlurpPostOutcome } from "./slp-post-plan-service.js";
+import { slurpShootInstruction } from "../../modules/feed/slp-shoot.js";
+import { openSlurpShoot, useSlurpShoot } from "../../data/feed/slp-shoot-storage.js";
+import { slurpEffortInstruction, slurpPostEffort } from "../../modules/creators/slp-production-profile.js";
+import { slurpCreatorStrategy, slurpStrategyInstruction } from "../../modules/creators/slp-creator-strategy.js";
+import { createSlurpPostProvider } from "../../base/host/slp-generation-integrations.js";
+import { resolveSlurpWardrobeSelection, slurpWardrobePrompt } from "../../modules/feed/slp-wardrobe-selection.js";
+import type { GeneratedCreatorPostResult, PreparedCreatorPostResult } from "./slp-generation-contract.js";
+export type { GeneratedCreatorPostResult, PreparedCreatorPostResult } from "./slp-generation-contract.js";
 
 type GenerationConnection = NonNullable<Awaited<ReturnType<ReturnType<typeof createConnectionsStorage>["getWithKey"]>>>;
 
@@ -109,6 +108,13 @@ export type SlpCreatorPostGenerationInput = {
   publicationTime?: Date;
   /** False keeps the Story rotation out: "Create posts now" asks for feed posts, not Stories. */
   allowStory?: boolean;
+  /** Preview calls use the supplied draft without changing saved settings. */
+  promptBlocks?: SlurpPromptBlockOverrides;
+  promptInstructions?: SlurpReusablePromptInstruction[];
+  /** The scheduled slot this post fills, so its plan and its slot stay one record. */
+  slotId?: string | null;
+  /** Skip continuity writes when `prepareOnly` is used for a settings preview. */
+  previewOnly?: boolean;
 };
 
 const SLP_CREATOR_POST_MAX_TOKENS = 2048;
@@ -135,32 +141,11 @@ export async function generateCreatorPost(
 
   const connections = createConnectionsStorage(db);
   const fallbackConnection = await connections.getFallbackForMain();
-  const fallbackProvider = withConnectionFallbackProvider({
-    primary: createLLMProvider(
-      input.connection.provider,
-      resolveBaseUrl(input.connection),
-      input.connection.apiKey,
-      input.connection.maxContext,
-      input.connection.openrouterProvider,
-      input.connection.maxTokensOverride,
-      input.connection.claudeFastMode === "true",
-      input.connection.treatAsLocalEndpoint === "true",
-      input.connection.defaultParameters,
-    ),
-    primaryConnectionId: input.connection.id,
+  const provider = createSlurpPostProvider({
+    connection: input.connection,
     fallbackConnection,
-    fallbackBaseUrl: fallbackConnection ? resolveBaseUrl(fallbackConnection) : "",
-    category: "main",
+    admissionMode: input.admissionMode ?? { kind: "foreground" },
   });
-  // The fallback wrapper takes no admission mode — passing one silently dropped it, which left
-  // every automatic post unadmitted and, worse, never ran `beforeAttempt`, so the daily budget
-  // was never claimed and the reserve poll regenerated a post on every pass. Admission goes on
-  // the outside, where the composed provider's calls actually pass through it.
-  const provider = withConnectionAdmissionProvider(
-    fallbackProvider,
-    input.connection.id,
-    input.admissionMode ?? { kind: "foreground" },
-  );
   const recentPosts = await noodle.listNoodlerPostsByAccount(account.id, 8);
   const disclosureMode = account.settings.privacy.identityDisclosure ?? "open";
   const linkedPublicAccount = await noodle.resolveAccountSource(account as SlurpAccount);
@@ -211,6 +196,14 @@ export async function generateCreatorPost(
   // their direction is the angle, and a second one would fight it.
   // One sequence for both rotations, so the project and the variation cannot drift out of step.
   const sequence = await noodle.countNoodlerPostsByAccount(account.id);
+  const wardrobeLooks = await noodle.listWardrobeLooks(account.id).catch(() => []);
+  const recentWardrobeIds = recentPosts
+    .map((post) => (typeof post.metadata.wardrobeLookId === "string" ? post.metadata.wardrobeLookId : null))
+    .filter((id): id is string => Boolean(id));
+  const prompts = slurpPromptContext({
+    promptBlocks: input.promptBlocks ?? settings.promptBlocks,
+    promptInstructions: input.promptInstructions ?? settings.promptInstructions,
+  });
   const directed = Boolean(input.request.noodlerPostGuide?.trim());
   const variation = directed
     ? null
@@ -228,33 +221,101 @@ export async function generateCreatorPost(
   // The project's own posts, not the page's. The page history is already supplied above and says
   // nothing about where this thread had got to.
   const projectPosts = project ? await noodle.listPostsByProject(project.id, 4) : [];
-  const format = input.request.format ?? variation?.format ?? "caption";
+  // How this Creator makes things, as opposed to who they are. Stable for the life of the account,
+  // so it biases every post they ever make rather than this one.
+  const strategy = slurpCreatorStrategy(account.id, account.settings.strategy);
+  const production = strategy.production;
+  const effort = slurpPostEffort(production, sequence, account.id);
+  // A Story is a picture with a line under it, so a run that produces no image publishes an
+  // ordinary post instead. The flag is only honoured on the path that commits an image below.
+  // A Story the player asked for outranks the rotation, which never fires on a directed post.
+  // Hoisted above the prompt build because the axes below need it; computing it twice
+  // would let the two copies disagree about whether this post is a Story.
+  const storyVariation =
+    ((input.allowStory !== false && variation?.story === true && settings.storyImagesEnabled) ||
+      input.request.postType === "story") &&
+    imagesEnabled;
+  // Same slot the scheduler used to choose free access, so only its teasers read as one.
+  const isTeaser =
+    input.request.access === "public" && !directed && slurpTeaserPost(account.id, sequence, settings.teaserRate);
+  // What this post is for, as opposed to what it is about, and how it goes out. Story and teaser
+  // are passed in rather than chosen again, so the decisions cannot contradict each other.
+  const { axes, shoot, reusedMedia, reusedSource, opportunity, demandTopic, continuityInstruction, campaignId } =
+    await planSlurpPost(db, {
+      account,
+      request: input.request,
+      strategy,
+      sequence,
+      directed,
+      storyVariation,
+      isTeaser,
+      imagesEnabled,
+      previewOnly: input.previewOnly,
+      slotId: input.slotId,
+      at: input.generatedAt ?? new Date(),
+      dueAt: input.publicationTime ?? null,
+    });
+  // The rotation varies length; the intent rules out lengths that contradict its job.
+  const format = input.request.format ?? (variation ? slurpIntentFormat(axes?.intent, variation.format) : "caption");
+  // Text-only by intent, not by failure: no brief, no image call, and no gallery stand-in.
+  const textOnly = axes?.delivery === "text_only";
+  // A reused picture is the picture: nothing is briefed or generated for this post.
+  const postImages = imagesEnabled && !textOnly && !reusedMedia;
+  // Drawn after the plan: a planned shoot is not photographed at arm's length. A reused shoot
+  // keeps its own camera. See `slp-camera-source.ts`.
+  const cameraSource = variation
+    ? slurpPostCameraSource(account.id, sequence, {
+        companyCanHoldCamera: variation.companyCanHoldCamera,
+        prefers: production.prefers,
+        intent: axes?.intent,
+        effort,
+      })
+    : null;
+  const camera = shoot?.cameraSource ?? cameraSource;
+  const cameraInstruction = camera ? slurpCameraSourceInstruction(camera) : undefined;
+  // The shoot rides in the content-type block rather than a block of its own: it is part of what
+  // this post is for, and a second block would be dead for every post that is not a callback.
+  const contentTypeInstruction = axes
+    ? [
+        slurpContentAxesInstruction(axes),
+        // The picture is briefed with this effort; the caption has to know it too, or a quick
+        // phone snap gets a caption about a set that took all afternoon.
+        postImages && variation ? slurpEffortInstruction(effort) : "",
+        shoot ? slurpShootInstruction(shoot) : "",
+        // A count under a label the Creator typed. Never a fan, never their words.
+        demandTopic ? `Several subscribers have asked for: ${demandTopic}. Do not name or quote anyone.` : "",
+      ]
+        .filter(Boolean)
+        .join("\n")
+    : undefined;
+
+  // The post call writes text only. Asking one call for the caption and the
+  // picture together is what made every image an illustration of its own caption, so the brief is
+  // assembled from the situation instead and the caption never reaches it. A directed post has no
+  // variation and therefore no brief, so it keeps the old single-call behaviour.
+  const briefedImage = Boolean(postImages && cameraInstruction && variation);
+  const askModelForImagePrompt = postImages && !briefedImage;
+  const askModelForScene = briefedImage;
   // The Creator's own state reached her direct messages and stopped there, so the feed was
   // written by somebody with no mood, no energy and no memory of last night. A failure here must
   // never cost a post: an unremarkable day is the same as no block at all.
   const conditionInstruction = await describeSlurpPostCondition(db, account.id, input.generatedAt ?? new Date());
-  // The busiest thread's newest long-term notes. Best effort: a post must never fail over memory.
-  const fanMemory = await createSlurpMessagesStorage(db)
-    .listThreadsForCreators([account.id])
-    .then((threads) =>
-      (threads[0]?.notes ?? [])
-        .filter((note) => note.tier === "longterm")
-        .slice(-3)
-        .map((note) => note.text),
-    )
-    .catch(() => [] as string[]);
+  const contentMenu = await resolveSlurpCreatorMenu(db, account.id).catch(() => "");
+  // How far this Creator's pictures go. A read failure must not cost a post, and the shipped level
+  // is what an install with nothing configured would have used anyway.
+  const explicitLevel = await resolveSlurpExplicitLevel(db, account.id).catch(() => SLURP_BUILT_IN_EXPLICIT_LEVEL);
   const messages = buildNoodlerPostMessages({
     account,
-    fanMemory,
     sourceCharacterContext,
     stagePersonality: account.settings.privacy.stagePersonality ?? "",
-    contentMenu: await resolveSlurpCreatorMenu(db, account.id).catch(() => ""),
+    stageFacts: account.settings.stage,
+    contentMenu,
     disclosureMode,
     publicIdentity,
     recentPosts,
     // A variation carries its own format, so an automatic post stops always being a caption.
     request: { ...input.request, format },
-    variationInstruction: variation ? slurpPostVariationInstruction(variation) : undefined,
+    variationInstruction: variation ? slurpPostVariationInstruction(variation, cameraInstruction) : undefined,
     conditionInstruction: conditionInstruction ?? undefined,
     eventInstruction:
       slurpPlatformEventInstruction(
@@ -263,24 +324,30 @@ export async function generateCreatorPost(
       ) ?? undefined,
     accessInstruction: [
       await resolveSlurpPostGuidance(db, account.id, input.request.access),
-      // Same slot the scheduler used to choose free access, so only its teasers read as one.
-      input.request.access === "public" && !directed && slurpTeaserPost(account.id, sequence, settings.teaserRate)
-        ? SLURP_TEASER_INSTRUCTION
-        : "",
+      isTeaser ? SLURP_TEASER_INSTRUCTION : "",
     ]
       .filter(Boolean)
       .join("\n\n"),
     project: project ? { project, posts: projectPosts } : undefined,
-    allowImagePrompt: imagesEnabled,
+    allowImagePrompt: askModelForImagePrompt,
+    allowScenePlan: askModelForScene,
+    wardrobePrompt: askModelForScene
+      ? slurpWardrobePrompt(wardrobeLooks, input.request.access, recentWardrobeIds)
+      : null,
     imageGenerationPrompt: settings.imageGenerationPrompt,
     generationGuidance: settings.generationGuidance,
     postMaxLength: settings.postMaxLength,
     scheduleContext,
     loreContext,
-    promptBlocks: settings.promptBlocks,
+    promptBlocks: prompts.blocks,
+    promptInstructions: prompts.instructions,
+    contentTypeInstruction,
+    continuityInstruction,
+    productionInstruction: slurpStrategyInstruction(strategy),
     generatedAt: input.generatedAt ?? new Date(),
     publicationTime: input.publicationTime,
   });
+  let compiledPrompt = messages.map((message) => `# ${message.role}\n${message.content}`).join("\n\n");
   const debugMode = input.request.debugMode === true || isDebugAgentsEnabled();
   logDebugOverride(
     debugMode,
@@ -303,50 +370,19 @@ export async function generateCreatorPost(
     stream: false,
     debugMode,
     responseFormat: slpResponseFormat(input.connection.model, "noodler_post", {
-      allowImagePrompt: imagesEnabled,
+      allowImagePrompt: askModelForImagePrompt,
+      allowScenePlan: askModelForScene,
       contentMaxLength: settings.postMaxLength,
     }),
   } as const;
 
-  let response = await provider.chatComplete(messages, completionOptions);
-  let content = response.content ?? "";
-  logDebugOverride(
-    debugMode,
-    "[debug/slurp] Model response attempt 1 received (%d characters); content is redacted.",
-    content.length,
+  const { generated, content, sentMessages, attempts } = await completeSlurpCreatorPost(
+    provider,
+    messages,
+    completionOptions,
+    { askModelForImagePrompt, askModelForScene, debugMode },
   );
-  let generated;
-  try {
-    generated = parseCreatorPost(content);
-  } catch {
-    // Automatic posts used to get one attempt where a foreground post got two, so a scheduled post
-    // failed outright on malformed output that a manual post recovered from — and the slot was lost
-    // with the first call already paid for. The correction turn reuses the admission this run was
-    // already granted and only fires on the failure path, so both paths now recover the same way.
-    const correctionMessages: ChatMessage[] = [
-      ...messages,
-      { role: "assistant", content },
-      {
-        role: "user",
-        content: imagesEnabled
-          ? "The response was not one valid Slurp-post JSON object. Return exactly one object with title, content, and imagePrompt. title and imagePrompt must both be non-empty. Do not include a poll. Return JSON only."
-          : "The response was not one valid Slurp-post JSON object. Return exactly one object with title and content only. Do not include a poll or image prompt. Return JSON only.",
-      },
-    ];
-    logDebugOverride(
-      debugMode,
-      "[debug/slurp] Correction prompt prepared with %d messages; private prompt content is redacted.",
-      correctionMessages.length,
-    );
-    response = await provider.chatComplete(correctionMessages, completionOptions);
-    content = response.content ?? "";
-    logDebugOverride(
-      debugMode,
-      "[debug/slurp] Model response attempt 2 received (%d characters); content is redacted.",
-      content.length,
-    );
-    generated = parseCreatorPost(content);
-  }
+  compiledPrompt = sentMessages.map((message) => `# ${message.role}\n${message.content}`).join("\n\n");
 
   const protectedContent = protectBoundedCreatorGeneratedText(
     generated.content,
@@ -355,6 +391,7 @@ export async function generateCreatorPost(
     settings.postMaxLength,
   );
   if (!protectedContent) throw new Error("Slurp generation returned no usable post content.");
+
   const protectedGenerated = {
     // Every format shows a title now. Weak models still drop the field, so fall back to the
     // opening of the post rather than failing a whole generation over a headline.
@@ -368,24 +405,67 @@ export async function generateCreatorPost(
     content: protectedContent,
   };
 
-  // A Story is a picture with a line under it, so a run that produces no image publishes an
-  // ordinary post instead. The flag is only honoured on the path that commits an image below.
-  // A Story the player asked for outranks the rotation, which never fires on a directed post.
-  const storyVariation =
-    ((input.allowStory !== false && variation?.story === true && settings.storyImagesEnabled) ||
-      input.request.postType === "story") &&
-    imagesEnabled;
+  const wardrobeSelection = resolveSlurpWardrobeSelection({
+    looks: askModelForScene ? wardrobeLooks : [],
+    access: input.request.access,
+    scene: askModelForScene ? generated.scene : null,
+    recentIds: recentWardrobeIds,
+  });
 
-  // Identity protection applies to the image prompt too, not only post text. The arc's chapter line
-  // joins the prompt before protection, so a chapter naming a real place is redacted the same way.
-  const arcImageLine = slurpArcImageLine(project);
-  const draftImagePrompt = imagesEnabled
-    ? protectCreatorGeneratedIdentity(
-        generated.imagePrompt && arcImageLine ? `${generated.imagePrompt}\n${arcImageLine}` : generated.imagePrompt,
-        disclosureMode,
-        publicIdentity,
-      )
-    : null;
+  // What the picture is, and what it may show. Assembled in one place so the two briefs cannot
+  // disagree about the level, the shoot, or the effort.
+  const { draftImagePrompt, visualBrief } = slurpPostPictureBriefs({
+    project,
+    variation,
+    cameraInstruction,
+    effort,
+    shoot,
+    axes,
+    story: storyVariation,
+    postImages,
+    access: input.request.access,
+    explicitLevel,
+    modelImagePrompt: generated.imagePrompt,
+    stageFacts: account.settings.stage,
+    scene: generated.scene,
+    selectedWardrobe: wardrobeSelection.look,
+    disclosureMode,
+    publicIdentity,
+  });
+
+  // Shoot bookkeeping, once the post definitely has text and its picture brief. A set drop opens a
+  // shoot that later callbacks can draw from, and stores its brief so their pictures keep its
+  // clothes and light; a callback that used one spends a shot. Recorded here rather than after
+  // persistence because a run that fails on the image still produced the shoot; a shoot left
+  // behind by a run that throws later is pruned with the rest.
+  let openedShootId: string | null = null;
+  if (!input.previewOnly) {
+    if (axes?.intent === "set" && camera && variation) {
+      const opened = await openSlurpShoot(db, {
+        creatorAccountId: account.id,
+        place: variation.place,
+        company: variation.company,
+        cameraSource: camera,
+        brief: draftImagePrompt,
+        effort,
+        theme: axes.intent,
+        campaignId,
+        shotsTaken: axes.delivery === "multi_image_set" ? 3 : 1,
+        at: input.generatedAt ?? new Date(),
+      }).catch((error: unknown) => {
+        // A post must never fail over continuity bookkeeping.
+        logger.warn(error, "[slurp] Could not open a shoot session; the post stands on its own");
+        return null;
+      });
+      openedShootId = opened?.id ?? null;
+    } else if (shoot) {
+      await useSlurpShoot(db, shoot).catch((error: unknown) => {
+        logger.warn(error, "[slurp] Could not record a shoot reuse; the shoot may be posted from again");
+      });
+    }
+  }
+  // Stamped on the post so a later callback can find the pictures this shoot actually produced.
+  const shootId = openedShootId ?? shoot?.id ?? null;
 
   const projectChapter = project ? slurpProjectChapter(project) : null;
   // An open arc choice is posted as a real poll, attached here rather than parsed from the text.
@@ -399,6 +479,47 @@ export async function generateCreatorPost(
       })
     : null;
 
+  // Deep details, best effort. ponytail: an unpublished scheduled post leaves its record until the
+  // Creator is deleted; sweep records with no post if they add up.
+  let deepDetailsId: string | null = input.previewOnly ? null : newId();
+  if (deepDetailsId) {
+    await saveSlurpPostDeepDetails(db, {
+      id: deepDetailsId,
+      creatorAccountId: account.id,
+      record: buildSlurpDeepDetailsRecord({
+        input,
+        sequence,
+        completionOptions,
+        attempts,
+        opportunity,
+        axes,
+        isTeaser,
+        storyVariation,
+        format,
+        variation,
+        campaignId,
+        shootId,
+        reusedSource: reusedMedia ? reusedSource : null,
+        demandTopic,
+        project,
+        projectChapter,
+        camera,
+        effort,
+        visualBrief,
+        strategy,
+        sentMessages,
+        content,
+        generated,
+        draftImagePrompt,
+        askModelForImagePrompt,
+        wardrobeSelection,
+      }),
+    }).catch((error: unknown) => {
+      logger.warn(error, "[slurp] Could not record deep details for a post");
+      deepDetailsId = null;
+    });
+  }
+
   const baseInput = {
     authorAccountId: account.id,
     title: protectedGenerated.title,
@@ -411,6 +532,19 @@ export async function generateCreatorPost(
     projectChapter,
     metadata: {
       noodlerContentFormat: format,
+      ...(deepDetailsId ? { deepDetailsId } : {}),
+      // Persisted so later planning, the scheduled publisher, and the feed read the same decision.
+      ...(axes ? { contentIntent: axes.intent, contentDelivery: axes.delivery } : {}),
+      ...(shootId ? { shootId } : {}),
+      ...(wardrobeSelection.look ? { wardrobeLookId: wardrobeSelection.look.id } : {}),
+      ...(wardrobeSelection.fallback
+        ? {
+            wardrobeSelectionFallback: true,
+            ...(wardrobeSelection.requestedId ? { wardrobeRequestedId: wardrobeSelection.requestedId } : {}),
+          }
+        : {}),
+      // Where a reused picture came from. The bytes are a copy, so this is provenance, not a link.
+      ...(reusedMedia && reusedSource ? { reusedFromPostId: reusedSource.id } : {}),
       // Stamped at creation like a manual post, so a generated locked post honours the configured
       // unlock price and keeps it across refreshes and edits instead of falling back to 1.
       ...(input.request.access === "locked"
@@ -425,20 +559,65 @@ export async function generateCreatorPost(
     },
   };
 
-  if (input.prepareOnly) {
+  const resolveImageInput = async (draftPrompt: string) => {
+    const slpCreatorImageConnectionId = await resolveCreatorImageConnectionId(db, account.id);
+    const imageConnection =
+      (slpCreatorImageConnectionId ? await connections.getWithKey(slpCreatorImageConnectionId) : null) ??
+      (await connections.getDefaultForImageGeneration());
+    if (!imageConnection) return null;
     return {
+      account,
+      linkedPublicAccount,
+      disclosureMode,
+      postContent: protectedGenerated.content,
+      draftPrompt,
+      contentPolicy: contentMenu,
+      visualBrief,
+      settings,
+      characters: createCharactersStorage(db),
+      promptOverrides: createPromptOverridesStorage(db),
+      imageConnection,
+      db,
+      debugMode,
+      admissionMode: input.admissionMode,
+      ...(storyVariation ? { width: settings.storyImageWidth, height: settings.storyImageHeight } : {}),
+    };
+  };
+
+  if (input.prepareOnly) {
+    let providerPrompt: string | null = null;
+    if (input.previewOnly && draftImagePrompt) {
+      const previewInput = await resolveImageInput(draftImagePrompt);
+      if (previewInput) {
+        providerPrompt = (
+          await generateCreatorPostImage({
+            ...previewInput,
+            previewOnly: true,
+          })
+        ).providerPrompt;
+      }
+    }
+    return prepareSlurpCreatorPost({
+      creatorAccountId: account.id,
+      reusedMedia,
       title: protectedGenerated.title,
       content: protectedGenerated.content,
       imagePrompt: draftImagePrompt,
       access: input.request.access,
       projectId: project?.id ?? null,
       projectChapter,
-      // The scheduled path returns here, before the image-commit branch that stamps the story flag,
-      // so a scheduled Story used to publish as an ordinary post. Carry the intent in the prepared
-      // payload instead; publishDueNoodlerPreparedPosts drops it again if no image ever attached,
-      // which keeps the "a Story is a picture with a line under it" rule intact.
-      metadata: { ...baseInput.metadata, ...(storyVariation ? { noodlerPostType: "story" } : {}) },
-    };
+      compiledPrompt,
+      scene: generated.scene ?? null,
+      wardrobeSelection: {
+        selectedId: wardrobeSelection.look?.id ?? null,
+        requestedId: wardrobeSelection.requestedId,
+        fallback: wardrobeSelection.fallback,
+      },
+      visualBrief: visualBrief ?? null,
+      providerPrompt,
+      metadata: baseInput.metadata,
+      story: storyVariation,
+    });
   }
 
   const persist = async (
@@ -460,12 +639,23 @@ export async function generateCreatorPost(
     // Advanced here, after the row lands, rather than when the project was chosen: a generation
     // that failed halfway would otherwise skip a chapter and the thread would have a hole in it.
     if (project) await noodle.advanceProject(account.id, project.id, post.id);
+    await recordSlurpPostOutcome(db, {
+      account,
+      post,
+      axes,
+      shootId,
+      opportunity,
+      campaignId,
+      at: input.generatedAt ?? new Date(),
+      previewOnly: input.previewOnly,
+    });
     return post;
   };
 
-  if (input.media) {
+  const media = input.media ?? reusedMedia;
+  if (media) {
     const postId = newId();
-    const post = await persistCreatorPostWithUploadedMedia(account.id, postId, input.media, (persistedMedia) =>
+    const post = await persistCreatorPostWithUploadedMedia(account.id, postId, media, (persistedMedia) =>
       persist({
         id: postId,
         imageUrl: persistedMedia.imageUrl,
@@ -479,7 +669,7 @@ export async function generateCreatorPost(
   // A post that ends without a generated picture can still show one from the source character's own
   // gallery, when the player allows it. Best effort: no gallery image is the same as none attached.
   const galleryFallback = async (): Promise<{ imageUrl?: string; metadata?: Record<string, unknown> }> => {
-    if (!settings.allowGalleryImageAttachments || linkedPublicAccount?.kind !== "character") return {};
+    if (textOnly || !settings.allowGalleryImageAttachments || linkedPublicAccount?.kind !== "character") return {};
     const attachment = await pickGalleryAttachmentForAccount({
       account: linkedPublicAccount,
       chats: createChatsStorage(db),
@@ -494,13 +684,8 @@ export async function generateCreatorPost(
 
   if (!draftImagePrompt) return { post: await persist(await galleryFallback()), imagePromptReview: null };
 
-  const slpCreatorImageConnectionId = await resolveCreatorImageConnectionId(db, account.id);
-  // Fall back to the default image connection when a creator's mapped override
-  // was deleted (getWithKey returns null), rather than skipping image generation.
-  const imageConnection =
-    (slpCreatorImageConnectionId ? await connections.getWithKey(slpCreatorImageConnectionId) : null) ??
-    (await connections.getDefaultForImageGeneration());
-  if (!imageConnection) {
+  const imageInput = await resolveImageInput(draftImagePrompt);
+  if (!imageInput) {
     // A gallery image is a finished picture, so the post is not marked for the retry pass.
     const fallback = await galleryFallback();
     if (fallback.imageUrl) return { post: await persist(fallback), imagePromptReview: null };
@@ -516,24 +701,6 @@ export async function generateCreatorPost(
     return { post, imagePromptReview: null };
   }
 
-  const imageInput = {
-    account,
-    linkedPublicAccount,
-    disclosureMode,
-    postContent: protectedGenerated.content,
-    draftPrompt: draftImagePrompt,
-    settings,
-    characters: createCharactersStorage(db),
-    promptOverrides: createPromptOverridesStorage(db),
-    imageConnection,
-    db,
-    debugMode,
-    admissionMode: input.admissionMode,
-    // A Story is shown in a tall frame and cropped to portrait in the composer, so generate it at
-    // 4:5 rather than at the feed post size the player configured.
-    ...(storyVariation ? { width: settings.storyImageWidth, height: settings.storyImageHeight } : {}),
-  };
-
   // Manual Guide review path: persist a pending prompt and hand back a preview for the
   // reviewed-image confirmation route to claim and finalize later.
   if (input.request.reviewImagePromptsBeforeSend === true) {
@@ -543,6 +710,7 @@ export async function generateCreatorPost(
         ...imageInput,
         previewOnly: true,
       });
+      await recordSlurpProviderPrompt(db, deepDetailsId, preview.providerPrompt);
     } catch (err) {
       if (isConnectionAdmissionFailure(err)) throw err;
       logger.warn(err, "[slurp] Failed to prepare image prompt review for %s", account.displayName);
@@ -578,6 +746,7 @@ export async function generateCreatorPost(
       ...imageInput,
       previewOnly: false,
     });
+    await recordSlurpProviderPrompt(db, deepDetailsId, image.providerPrompt);
   } catch (err) {
     // Same rule as the text leg: a busy connection is a deferral, so let it propagate to the
     // scheduler instead of persisting a post permanently marked as image-failed.
@@ -598,22 +767,18 @@ export async function generateCreatorPost(
     };
   }
 
-  // One operation owns promotion and exactly one committed post: the serving URL is derived from
-  // a pre-generated id so the image URL and media metadata persist together in a single insert.
   const postId = newId();
-  try {
-    image.stagedMedia?.promote();
-    const post = await persist({
-      id: postId,
-      imagePrompt: draftImagePrompt,
-      imageUrl: slpCreatorPostMediaUrl(postId),
-      metadata: { ...image.metadata, ...(storyVariation ? { noodlerPostType: "story" } : {}) },
-    });
-    return { post, imagePromptReview: null };
-  } catch (err) {
-    image.stagedMedia?.compensate();
-    throw err;
-  }
+  const post = await persistSlurpGeneratedImageSet({
+    db,
+    postId,
+    imagePrompt: draftImagePrompt,
+    primary: { ...image, metadata: { ...image.metadata, ...(storyVariation ? { noodlerPostType: "story" } : {}) } },
+    imageInput,
+    multi: axes?.delivery === "multi_image_set",
+    shootId,
+    persist,
+  });
+  return { post, imagePromptReview: null };
 }
 
 /**

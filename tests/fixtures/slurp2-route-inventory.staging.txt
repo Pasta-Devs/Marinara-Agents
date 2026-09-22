@@ -69,6 +69,7 @@ GET /settings/audience-characters
 GET /settings/audience-characters/groups
 GET /settings/defaults
 GET /settings/prompt-blocks
+POST /settings/prompt-blocks/preview
 PATCH /accounts/:id/profile
 PATCH /accounts/:id/settings
 PATCH /ambient-profiles/:id

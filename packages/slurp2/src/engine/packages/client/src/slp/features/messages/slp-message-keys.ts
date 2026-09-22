@@ -24,6 +24,7 @@ export const messageKeys = {
   /** Every messaging query hangs off this, so one prefix invalidates the whole surface. */
   root: () => [...slpKeys.noodlerRoot(), "messages"],
   threads: (personaId: string | null) => [...slpKeys.noodlerRoot(), "messages", "threads", personaId ?? "none"],
+  unreadCount: (personaId: string | null) => [...messageKeys.root(), "unread-count", personaId ?? "none"],
   thread: (threadId: string, personaId: string | null) => [
     ...slpKeys.noodlerRoot(),
     "messages",
@@ -45,6 +46,6 @@ export const invalidateSlurpMessages = (qc: ReturnType<typeof useQueryClient>) =
       messageKeys.root(),
       [...slpKeys.noodlerRoot(), "wallet"],
       [...slpKeys.noodlerRoot(), "viewer-wallets"],
-      [...slpKeys.noodlerRoot(), "notifications"],
+      slpKeys.notificationsRoot(),
     ].map((queryKey) => qc.invalidateQueries({ queryKey })),
   );

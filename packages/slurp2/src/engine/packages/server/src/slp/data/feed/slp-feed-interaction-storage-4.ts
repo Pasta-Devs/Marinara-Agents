@@ -1,7 +1,7 @@
 import { and, eq, isNull, like } from "../../../db/file-query.js";
 import { SlpInteraction } from "../../../../../shared/src/slp/slp-social.types.js";
 import { isSlurpFileUniqueConstraintError } from "../../base/host/slp-file-errors.js";
-import { canViewCreatorPost, isCreatorHiddenFromViewer } from "../../base/identity/slp-access.js";
+import { canViewCreatorPost } from "../../base/identity/slp-access.js";
 import {
   slpAccounts,
   slpAccountSubscriptions,
@@ -187,7 +187,6 @@ export function createFeedInteractionStorage4(context: SlurpStorageContext) {
         )[0];
         if (!authorRow) return null;
         const author = mapAccount(authorRow);
-        if (isCreatorHiddenFromViewer(author, input.viewerPersonaId)) return null;
         const ownsAuthor = author.sourceKind === "persona" && author.sourceEntityId === input.viewerPersonaId;
         const subscriptions = await tx
           .select()

@@ -4,12 +4,15 @@ import { useTranslation as useUiTranslation } from "react-i18next";
 import type { SlpCreatorPostView } from "../../../../../shared/src/slp/slp-social.types.js";
 import { useRecordSlurpStoryView, useSlurpStoryViews } from "../../features/messages/slp-messages-hooks";
 import { cn } from "../../../lib/utils";
-import type { SlpPostCardCtx } from "../../modules/post/SlpPostCard";
+import type { SlpPostCardCtx } from "../../modules/post/SlpPostTypes";
 import { SlurpCoinAmount } from "../../modules/coin/SlpCoin";
 import { SlpStoryTile } from "../../modules/story/SlpStoryTile";
 import { useSlurpMediaSrc } from "../../base/media/slp-media-src";
 import { ProfileInitial } from "../../base/chrome/SlpChrome";
 import { SlurpSparkleVeil } from "../../base/chrome/SlpSparkleVeil";
+import { SlpPostSurfaceMenu } from "../../modules/post/SlpPostMenu";
+import { api } from "../../../lib/api-client";
+import { downloadSlpShareCard, toSlpShareCardInput } from "../../modules/post/slp-share-card";
 import { toSlpPostCardModel, linkedPostIdForStory, type SlurpViewerCreator, SlurpMediaDialog } from "./SlpHomeHelpers";
 
 // ---------------------------------------------------------------------------
@@ -291,6 +294,29 @@ export function SlurpMomentViewer({
           >
             <X size={20} strokeWidth={2.5} aria-hidden="true" />
           </button>
+          <div className="absolute right-16 top-6 z-20" onClick={(event) => event.stopPropagation()}>
+            <SlpPostSurfaceMenu
+              onDownload={
+                mediaSrc
+                  ? () =>
+                      void api.download(
+                        `/slurp2/noodler/posts/${encodeURIComponent(moment.post.id)}/media`,
+                        `slurp-${moment.post.id}-image`,
+                      )
+                  : undefined
+              }
+              onShare={
+                mediaSrc
+                  ? () =>
+                      void downloadSlpShareCard(
+                        toSlpShareCardInput(toSlpPostCardModel(moment.post, moment.creator.profile)),
+                        `slurp-${moment.post.id}.png`,
+                      )
+                  : undefined
+              }
+              onOpenCreator={onOpenProfile ? openProfile : undefined}
+            />
+          </div>
           {onPrevious && (
             <button
               type="button"

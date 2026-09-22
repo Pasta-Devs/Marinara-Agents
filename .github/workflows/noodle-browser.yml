@@ -83,7 +83,12 @@ jobs:
         env:
           MARINARA_ENGINE_ROOT: ${{ github.workspace }}/engine
           BASE_REF: ${{ github.base_ref }}
-        run: node scripts/validate-vendored-engine.mjs --baseline-ref "origin/$BASE_REF"
+        run: |
+          if git diff --quiet "origin/$BASE_REF...HEAD" -- packages/noodle sources/engine scripts/vendored-engine-baseline.json scripts/validate-vendored-engine.mjs; then
+            echo "Vendored Engine check skipped: no Noodle or snapshot changes."
+          else
+            node scripts/validate-vendored-engine.mjs --baseline-ref "origin/$BASE_REF"
+          fi
 
       - name: Install Engine dependencies
         run: pnpm --dir engine install --frozen-lockfile

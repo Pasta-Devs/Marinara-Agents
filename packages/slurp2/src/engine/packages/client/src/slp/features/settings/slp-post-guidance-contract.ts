@@ -9,12 +9,22 @@ import { slpKeys } from "../../base/state/slp-query-keys.js";
  * falls back to the built-in text on the server. Nothing here is resolved on the client, so the
  * fields show what was actually written rather than the value in force.
  */
-export type SlurpPostGuidanceEntry = { public: string; locked: string; menu: string };
+/** How far a Creator's pictures go. Empty means inherit the level above. */
+export const SLURP_EXPLICIT_LEVELS = ["none", "suggestive", "nudity", "explicit"] as const;
+export type SlurpExplicitLevel = (typeof SLURP_EXPLICIT_LEVELS)[number];
+export type SlurpPostGuidanceEntry = {
+  public: string;
+  locked: string;
+  menu: string;
+  level: SlurpExplicitLevel | "";
+};
 export type SlurpPostGuidance = {
   defaults: SlurpPostGuidanceEntry;
   creators: Record<string, SlurpPostGuidanceEntry>;
   /** The shipped wording, sent by the server so the client never keeps a second copy of it. */
   builtIn: SlurpPostGuidanceEntry;
+  /** The shipped level, for the same reason. */
+  builtInLevel: SlurpExplicitLevel;
 };
 export type SlurpPostAccess = "public" | "locked";
 export function useSlurpPostGuidance(enabled = true) {
@@ -28,8 +38,13 @@ export function useSlurpPostGuidance(enabled = true) {
 export function useUpdateSlurpPostGuidance() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (patch: { creatorId?: string | null; public?: string; locked?: string; menu?: string }) =>
-      api.patch<SlurpPostGuidance>("/slurp2/slurp/post-guidance", patch),
+    mutationFn: (patch: {
+      creatorId?: string | null;
+      public?: string;
+      locked?: string;
+      menu?: string;
+      level?: SlurpExplicitLevel | "";
+    }) => api.patch<SlurpPostGuidance>("/slurp2/slurp/post-guidance", patch),
     onSuccess: (value) => qc.setQueryData(slpKeys.noodlerPostGuidance(), value),
   });
 }
