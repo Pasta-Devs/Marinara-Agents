@@ -2,7 +2,10 @@ import type {
   LtmEvidenceUnit,
   LtmExtractionDiagnostic,
   LtmNote,
+  LtmScope,
+  LtmSubject,
 } from "../../../../shared/src/features/agents/long-term-memory/schema.js";
+import { normalizeLtmScope } from "../../../../shared/src/features/agents/long-term-memory/scope.js";
 import { jaccardSimilarity, tokenize } from "../../../../shared/src/features/agents/long-term-memory/utils.js";
 import { noteIdForEvidenceUnit } from "./evidence-unit-validation.js";
 
@@ -11,23 +14,42 @@ type ExistingSectionCandidate = {
   sectionKey: string;
   text: string;
   tokens: string[];
+  scope: LtmScope;
 };
 
 const MAX_COMPARISON_TOKENS = 500;
 
-export function deduplicateUnits(units: LtmEvidenceUnit[], existingNotes: LtmNote[]) {
+export function deduplicateUnits(units: LtmEvidenceUnit[], existingNotes: LtmNote[], scope: LtmScope = {}) {
   const lexicalThreshold = 0.85;
   const diagnostics: LtmExtractionDiagnostic[] = [];
   const deduplicated: LtmEvidenceUnit[] = [];
   const seenInBatch = new Map<string, ExistingSectionCandidate[]>();
+  const seenBySubjects = new Map<string, ExistingSectionCandidate[]>();
   const existingCandidates = existingSectionCandidates(existingNotes);
+  const existingById = new Map(existingNotes.map((note) => [note.id, note]));
 
   for (const [candidateIndex, unit] of units.entries()) {
     const noteId = noteIdForEvidenceUnit(unit);
     const unitText = normalizeText(unit.text);
     const unitTokens = tokenize(unit.text);
     const key = `${noteId}\u0000${unit.sectionKey}`;
-    const candidates = [...(seenInBatch.get(key) ?? []), ...(existingCandidates.get(key) ?? [])];
+    const subjectKey = subjectKeyFor(unit.subjects);
+    const subjectSectionKey = subjectKey ? `${subjectKey}\u0000${unit.sectionKey}` : null;
+    // Subject candidates bridge a legacy target id, but only within the target's own scope. Notes that merely
+    // overlap the extraction scope are separate targets, so their identical text must not suppress this write.
+    const targetScope = existingById.get(noteId)?.scope ?? scope;
+    const targetScopeKey = scopeIdentityKey(targetScope);
+    const subjectCandidates = subjectSectionKey
+      ? [
+          ...(seenBySubjects.get(subjectSectionKey) ?? []),
+          ...(existingCandidates.bySubjects.get(subjectSectionKey) ?? []),
+        ].filter((candidate) => scopeIdentityKey(candidate.scope) === targetScopeKey)
+      : [];
+    const candidates = [
+      ...(seenInBatch.get(key) ?? []),
+      ...(existingCandidates.byNote.get(key) ?? []),
+      ...subjectCandidates,
+    ];
     const duplicate = candidates.find((candidate) => {
       if (normalizeText(candidate.text) === unitText) return true;
       if (!candidate.tokens.length || !unitTokens.size) return false;
@@ -48,31 +70,62 @@ export function deduplicateUnits(units: LtmEvidenceUnit[], existingNotes: LtmNot
 
     deduplicated.push(unit);
     const bucket = seenInBatch.get(key) ?? [];
-    bucket.push({
+    const candidate = {
       noteId,
       sectionKey: unit.sectionKey,
       text: unit.text,
       tokens: allTokens(unit.text),
-    });
+      scope: targetScope,
+    };
+    bucket.push(candidate);
     seenInBatch.set(key, bucket);
+    if (subjectSectionKey) {
+      const subjectBucket = seenBySubjects.get(subjectSectionKey) ?? [];
+      subjectBucket.push(candidate);
+      seenBySubjects.set(subjectSectionKey, subjectBucket);
+    }
   }
 
   return { deduplicated, diagnostics };
 }
 
-function existingSectionCandidates(notes: LtmNote[]): Map<string, ExistingSectionCandidate[]> {
-  const candidates = new Map<string, ExistingSectionCandidate[]>();
+function existingSectionCandidates(notes: LtmNote[]) {
+  const byNote = new Map<string, ExistingSectionCandidate[]>();
+  const bySubjects = new Map<string, ExistingSectionCandidate[]>();
   for (const note of notes) {
     for (const [sectionKey, section] of Object.entries(note.sections)) {
       const text = section.text.trim();
       if (!text) continue;
       const key = `${note.id}\u0000${sectionKey}`;
-      const bucket = candidates.get(key) ?? [];
-      bucket.push({ noteId: note.id, sectionKey, text, tokens: allTokens(text) });
-      candidates.set(key, bucket);
+      const candidate = { noteId: note.id, sectionKey, text, tokens: allTokens(text), scope: note.scope };
+      const noteBucket = byNote.get(key) ?? [];
+      noteBucket.push(candidate);
+      byNote.set(key, noteBucket);
+      const subjectKey = subjectKeyFor(note.subjects);
+      if (subjectKey) {
+        const subjectBucket = bySubjects.get(`${subjectKey}\u0000${sectionKey}`) ?? [];
+        subjectBucket.push(candidate);
+        bySubjects.set(`${subjectKey}\u0000${sectionKey}`, subjectBucket);
+      }
     }
   }
-  return candidates;
+  return { byNote, bySubjects };
+}
+
+function subjectKeyFor(subjects: readonly LtmSubject[] | undefined) {
+  if (!subjects?.length) return null;
+  return subjects.map((subject) => subject.key).join("\u0000");
+}
+
+function scopeIdentityKey(scope: LtmScope | undefined) {
+  if (!scope) return null;
+  const normalized = normalizeLtmScope(scope);
+  return JSON.stringify([
+    [...(normalized.chatIds ?? [])].sort(),
+    [...(normalized.groupIds ?? [])].sort(),
+    [...(normalized.characterIds ?? [])].sort(),
+    [...(normalized.personaIds ?? [])].sort(),
+  ]);
 }
 
 function normalizeText(text: string) {
