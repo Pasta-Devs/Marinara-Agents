@@ -558,7 +558,13 @@ export function buildTrustedLtmSubjectCatalog({
     const familyId = ltmScopeFamilyId(note.destinationScope ?? note.scope);
     if (!familyId) continue;
     const sources = [note.title, ...Object.values(note.sections).map((section) => section.text)];
-    for (const name of sourceBackedNpcNames(sources).values()) {
+    // Variants of one name (short form, first name, full name) collapse to a single canonical
+    // source identity instead of each forking its own local character and target.
+    for (const { name, aliases } of canonicalSourceBackedNames([...sourceBackedNpcNames(sources).values()])) {
+      // A name already covered by a trusted roster, note, or earlier source identity must not
+      // create a competing duplicate. Resolution canonicalizes it to that identity, or fails
+      // closed with the competing records when more than one trusted identity matches.
+      if (mutableHasRelatedIdentity(mutable, name, familyId)) continue;
       const subject = localCharacterSubjectForName(note.destinationScope ?? note.scope, name);
       if (!subject) continue;
       const key = subject.key;
@@ -566,7 +572,7 @@ export function buildTrustedLtmSubjectCatalog({
       mutable.set(key, {
         subject,
         name,
-        aliases: new Set(expandedAliases(name, [])),
+        aliases: new Set(expandedAliases(name, aliases)),
         canonicalSlug: normalizeSubjectIdentifier(name, "subject"),
         familyId,
         provenance: `source_note:${note.id}`,
@@ -1528,6 +1534,51 @@ function sourceBackedNpcSubject(
       ...(familyId ? { familyId } : {}),
     },
   };
+}
+
+type MutableCatalogIdentity = {
+  name: string;
+  aliases: Set<string>;
+  familyId?: string;
+};
+
+// Collapse source-visible variants of one name into a single canonical identity. Names that
+// relate to more than one group are genuinely ambiguous and stay out of the catalog so
+// resolution fails closed instead of picking one.
+function canonicalSourceBackedNames(names: string[]) {
+  const groups: Array<{ name: string; aliases: string[] }> = [];
+  for (const name of [...names].sort(
+    (left, right) => nameTokenCount(right) - nameTokenCount(left) || left.localeCompare(right),
+  )) {
+    const related = groups.filter((group) => isVariantName(group.name, name));
+    if (related.length > 1) continue;
+    if (related.length === 1) {
+      related[0]!.aliases.push(name);
+      continue;
+    }
+    groups.push({ name, aliases: [] });
+  }
+  return groups;
+}
+
+function mutableHasRelatedIdentity(mutable: Map<string, MutableCatalogIdentity>, name: string, familyId: string) {
+  const slug = normalizeSubjectIdentifier(name, "");
+  if (!slug) return false;
+  return [...mutable.values()].some((entry) => {
+    if (entry.familyId && entry.familyId !== familyId) return false;
+    if (normalizeSubjectIdentifier(entry.name, "") === slug) return true;
+    if ([...entry.aliases].some((alias) => normalizeSubjectIdentifier(alias, "") === slug)) return true;
+    return isVariantName(entry.name, name);
+  });
+}
+
+// Same identity when slugs match or the conservative shorter/longer name heuristic relates them.
+function isVariantName(left: string, right: string) {
+  const leftSlug = normalizeSubjectIdentifier(left, "");
+  const rightSlug = normalizeSubjectIdentifier(right, "");
+  if (!leftSlug || !rightSlug) return false;
+  if (leftSlug === rightSlug) return true;
+  return isLongerVersionOfName(left, right) || isLongerVersionOfName(right, left);
 }
 
 function sourceBackedNpcNames(sources: Array<string | undefined>) {

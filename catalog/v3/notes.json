@@ -110,6 +110,12 @@
     "long-term-memory": {
       "versions": [
         {
+          "version": "1.3.13",
+          "date": "2026-09-22",
+          "notes": "- Stop imported source notes from forking short, first-name, and full-name variants of one character into separate local memories, and keep a roster character's full name from being dropped as ambiguous when its variants appear in the source.\n- Keep genuinely ambiguous names failing closed against the trusted identities that compete for them.",
+          "highlight": false
+        },
+        {
           "version": "1.3.11",
           "date": "2026-09-22",
           "notes": "- Canonicalize character name variants during extraction so short names, first-name-only forms, and minor spelling variations resolve to one trusted identity instead of forking duplicate memories, while shared or ambiguous names keep failing closed with the competing identities listed.",
@@ -221,12 +227,6 @@
           "version": "1.2.21",
           "date": "2026-09-05",
           "notes": "- Reduced redundant vault scans across Review Queue, Memory Vault, and Sources loading.\n- Preserved local-character scope targets while reusing the existing note snapshot.",
-          "highlight": false
-        },
-        {
-          "version": "1.2.20",
-          "date": "2026-09-04",
-          "notes": "- Added conversation-family-scoped Roleplay local-character memories and reviewable first-use mutations.\n- Kept Game Mode dynamic NPC metadata out of Long-Term Memory subjects and targets.",
           "highlight": false
         }
       ]

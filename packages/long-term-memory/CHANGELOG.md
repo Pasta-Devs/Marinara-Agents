@@ -1,5 +1,10 @@
 # Long-Term Memory changelog
 
+## 1.3.13 — 2026-09-22
+
+- Stop imported source notes from forking short, first-name, and full-name variants of one character into separate local memories, and keep a roster character's full name from being dropped as ambiguous when its variants appear in the source.
+- Keep genuinely ambiguous names failing closed against the trusted identities that compete for them.
+
 ## 1.3.11 — 2026-09-22
 
 - Canonicalize character name variants during extraction so short names, first-name-only forms, and minor spelling variations resolve to one trusted identity instead of forking duplicate memories, while shared or ambiguous names keep failing closed with the competing identities listed.
