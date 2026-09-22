@@ -19,7 +19,7 @@ type ExistingSectionCandidate = {
 
 const MAX_COMPARISON_TOKENS = 500;
 
-export function deduplicateUnits(units: LtmEvidenceUnit[], existingNotes: LtmNote[], scope?: LtmScope) {
+export function deduplicateUnits(units: LtmEvidenceUnit[], existingNotes: LtmNote[], scope: LtmScope = {}) {
   const lexicalThreshold = 0.85;
   const diagnostics: LtmExtractionDiagnostic[] = [];
   const deduplicated: LtmEvidenceUnit[] = [];
@@ -43,7 +43,7 @@ export function deduplicateUnits(units: LtmEvidenceUnit[], existingNotes: LtmNot
       ? [
           ...(seenBySubjects.get(subjectSectionKey) ?? []),
           ...(existingCandidates.bySubjects.get(subjectSectionKey) ?? []),
-        ].filter((candidate) => targetScopeKey === null || scopeIdentityKey(candidate.scope) === targetScopeKey)
+        ].filter((candidate) => scopeIdentityKey(candidate.scope) === targetScopeKey)
       : [];
     const candidates = [
       ...(seenInBatch.get(key) ?? []),
@@ -75,7 +75,7 @@ export function deduplicateUnits(units: LtmEvidenceUnit[], existingNotes: LtmNot
       sectionKey: unit.sectionKey,
       text: unit.text,
       tokens: allTokens(unit.text),
-      scope: targetScope ?? {},
+      scope: targetScope,
     };
     bucket.push(candidate);
     seenInBatch.set(key, bucket);

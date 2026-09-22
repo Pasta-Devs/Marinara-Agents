@@ -1401,6 +1401,12 @@ async function main() {
     overlappingScope,
   );
   assert.equal(sameScopeDedup.deduplicated.length, 0, "same-scope subject duplicates must still deduplicate");
+  const omittedScopeDedup = deduplicateUnits([scopedUnit], [otherScopeDuplicate]);
+  assert.equal(
+    omittedScopeDedup.deduplicated.length,
+    1,
+    "an omitted scope must not fall back to matching a subject-equivalent note in another scope",
+  );
   const directTargetNote = {
     ...canonicalIdentityNote,
     id: "char_seraphina_duvall",
