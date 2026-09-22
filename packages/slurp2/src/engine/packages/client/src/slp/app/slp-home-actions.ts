@@ -6,7 +6,8 @@ import type { ImagePromptOverride } from "../../components/ui/ImagePromptReviewM
 import { confirmSlurpAvatarReview } from "../features/creators/SlpStageProfileForm";
 import { ApiError } from "../../lib/api-client";
 import { toast } from "sonner";
-import { useSlurpHomeBaseState, type SlurpHomeBaseState, type SlurpHomeProps } from "./slp-home-state";
+import { useSlurpHomeBaseState, type SlurpHomeBaseState } from "./slp-home-state";
+import type { SlurpHomeProps } from "./slp-home.types";
 
 /**
  * What the Creator Hub does: open and close the profile editor, generate and save a stage

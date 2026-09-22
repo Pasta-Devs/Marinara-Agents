@@ -328,6 +328,9 @@ const NOODLE_KEYS_BEFORE = `export const slpKeys = {
   noodlerImageConnections: () => [...slpKeys.noodlerRoot(), "image-connections"] as const,
   noodlerPostGuidance: () => [...slpKeys.noodlerRoot(), "post-guidance"] as const,
   noodlerFanStatus: () => [...slpKeys.noodlerRoot(), "fan-status"] as const,
+  notificationsRoot: () => [...slpKeys.noodlerRoot(), "notifications"] as const,
+  notifications: (personaId: string) => [...slpKeys.notificationsRoot(), "stream", personaId] as const,
+  notificationUnseenCount: (personaId: string) => [...slpKeys.notificationsRoot(), "unseen-count", personaId] as const,
   // contextTags belongs in the key: it is part of the request, so leaving it
   // out meant switching tab or crossing into evening never refetched.
   ads: (personaId: string, creatorId?: string | null, contextTags: string[] = []) =>
@@ -355,6 +358,8 @@ const callsBefore = readFileSync(join(import.meta.dirname, "fixtures/slurp2-clie
   .filter(Boolean);
 const mapStagingCall = (call: string) => call.replace("/slurp2/noodler/", "/slurp2/slurp/");
 const addedCalls = [
+  "get /slurp2/messages/unread-count?personaId=${encodeURIComponent(personaId!)}",
+  "get /slurp2/slurp/notifications/unseen-count?personaId=${encodeURIComponent(personaId!)}",
   "get /slurp2/slurp/posts/${encodeURIComponent(postId)}/deep-details",
   "post /slurp2/settings/prompt-blocks/generate-preview",
   // The studio keeps every block live for the preview Creator (useSlurpLivePromptBlocks).
@@ -362,6 +367,9 @@ const addedCalls = [
   "get /slurp2/continuity/${encodeURIComponent(creatorAccountId!)}?${query}",
   "get /slurp2/messages/threads/${encodeURIComponent(threadId!)}/requests?personaId=${encodeURIComponent(personaId!)}",
   "get /slurp2/slurp/tasks",
+  "get /slurp2/slurp/viewer/feed?personaId=${encodeURIComponent(personaId)}&tab=all&limit=20${cursorQuery(current.nextCursor)}",
+  "get /slurp2/slurp/viewer/feed?personaId=${encodedPersonaId}&tab=all&limit=20",
+  "post /slurp2/slurp/posts/${encodeURIComponent(id)}/restore",
   "patch /slurp2/accounts/${encodeURIComponent(accountId)}/settings",
   "patch /slurp2/continuity/facts/${encodeURIComponent(input.id)}",
   "post /slurp2/continuity/${input.path}",
@@ -372,7 +380,10 @@ const addedCalls = [
   "post /slurp2/slurp/accounts/${encodeURIComponent(creatorId)}/wardrobe/import",
   "post /slurp2/slurp/wardrobe/lorebook-entries",
 ];
-const removedCalls = ["patch /slurp2/accounts/${encodeURIComponent(accountId)}/settings"];
+const removedCalls = [
+  "patch /slurp2/accounts/${encodeURIComponent(accountId)}/settings",
+  "get /slurp2/slurp/viewer?personaId=${encodedPersonaId}",
+];
 // Classic runtime mode is gone, so the block catalog no longer takes a mode.
 const renamedCalls = new Map([
   ["get /slurp2/settings/prompt-blocks?mode=${encodeURIComponent(mode)}", "get /slurp2/settings/prompt-blocks"],
@@ -418,16 +429,16 @@ const counts = Object.fromEntries(
 assert.deepEqual(
   counts,
   {
-    useMutation: 138,
-    useQuery: 199,
+    useMutation: 148,
+    useQuery: 210,
     useInfiniteQuery: 5,
     invalidateQueries: 125,
-    setQueryData: 16,
-    cancelQueries: 5,
+    setQueryData: 20,
+    cancelQueries: 6,
     removeQueries: 1,
-    refetchQueries: 1,
+    refetchQueries: 0,
     onMutate: 2,
-    onError: 11,
+    onError: 15,
     onSettled: 3,
   },
   "query and mutation wiring counts match the monolith plus the 0.2.0 planner and continuity hooks",

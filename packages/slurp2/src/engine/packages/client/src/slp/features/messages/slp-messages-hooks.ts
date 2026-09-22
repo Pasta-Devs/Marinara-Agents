@@ -1,4 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useEffect } from "react";
 import { api } from "../../../lib/api-client.js";
 import { slpKeys } from "../../base/state/slp-query-keys.js";
 import { invalidateSlurpMessages, messageKeys } from "./slp-message-keys.js";
@@ -12,6 +13,8 @@ import type {
   SlurpThread,
   SlurpThreadRelationship,
 } from "./slp-messages-contract.js";
+
+type SlurpUnreadCountResponse = { unread: number; inboundUnread: number };
 
 export function useSlurpThreads(personaId: string | null) {
   return useQuery({
@@ -30,6 +33,17 @@ export function useSlurpThreads(personaId: string | null) {
     // A creator who is offline answers minutes or hours later, through the scheduler. Without a
     // poll that reply only appeared once some other mutation happened to invalidate the cache,
     // so the whole off-hours pacing model was invisible while the app was open.
+    refetchInterval: personaId ? 30_000 : false,
+    refetchIntervalInBackground: false,
+  });
+}
+export function useSlurpUnreadCount(personaId: string | null) {
+  return useQuery({
+    queryKey: messageKeys.unreadCount(personaId),
+    queryFn: () =>
+      api.get<SlurpUnreadCountResponse>(`/slurp2/messages/unread-count?personaId=${encodeURIComponent(personaId!)}`),
+    enabled: Boolean(personaId),
+    staleTime: 15_000,
     refetchInterval: personaId ? 30_000 : false,
     refetchIntervalInBackground: false,
   });
@@ -54,7 +68,8 @@ export function useOpenSlurpCreatorThread() {
   });
 }
 export function useSlurpThread(threadId: string | null, personaId: string | null) {
-  return useQuery({
+  const queryClient = useQueryClient();
+  const query = useQuery({
     queryKey: messageKeys.thread(threadId ?? "none", personaId),
     queryFn: () =>
       api.get<{
@@ -81,6 +96,11 @@ export function useSlurpThread(threadId: string | null, personaId: string | null
     refetchInterval: threadId && personaId ? 30_000 : false,
     refetchIntervalInBackground: false,
   });
+  useEffect(() => {
+    if (!personaId || !query.data?.thread) return;
+    void queryClient.invalidateQueries({ queryKey: messageKeys.unreadCount(personaId) });
+  }, [personaId, query.data?.thread?.id, queryClient]);
+  return query;
 }
 export function useSlurpOlderMessages() {
   return useMutation({

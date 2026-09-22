@@ -26,6 +26,21 @@ const withSuggestedQuotes = <T extends { brief: string }>(commissions: T[], pric
 export async function slpMessagesThreadRoutes(app: FastifyInstance, messaging: SlpMessagesContext) {
   const { creatorPresence, freshView, messages, ownsCreator, population, requireViewer, slurp, visibleMessages } =
     messaging;
+  app.get("/messages/unread-count", async (req, reply) => {
+    const parsed = personaQuerySchema.safeParse(req.query);
+    if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
+    const viewer = await requireViewer(parsed.data.personaId);
+    if (!viewer) return reply.code(404).send({ error: "Slurp persona not found" });
+    const accounts = await slurp.listNoodlerAccounts();
+    const operatedCreatorAccountIds = accounts
+      .filter((account) => account.sourceKind === "persona" && account.sourceEntityId === viewer.id)
+      .map((account) => account.id);
+    return messages.countUnread(
+      viewer.id,
+      operatedCreatorAccountIds,
+      accounts.map((account) => account.id),
+    );
+  });
   app.get("/messages/threads", async (req, reply) => {
     const parsed = personaQuerySchema.safeParse(req.query);
     if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });

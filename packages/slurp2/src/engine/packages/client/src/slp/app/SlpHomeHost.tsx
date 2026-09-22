@@ -12,19 +12,13 @@ import { SlpShell } from "../modules/chrome/SlpShell";
 import { SlpBackstageShell } from "../app/backstage/SlpBackstageShell";
 import { SlpBackstageSidebar } from "../features/backstage/SlpBackstageSidebar";
 import { Modal } from "../../components/ui/Modal";
-import type { SlurpNavigationState } from "../base/navigation/slp-navigation.types";
 import { useSlurpHomeState } from "./slp-home-actions";
+import type { SlurpHomeProps } from "./slp-home.types";
 import { renderSlurpHomeCreatorFlow } from "./screens/SlpHomeCreatorFlow";
 import { renderSlurpHomeDestinations } from "./screens/SlpHomeDestinations";
 import { SlpHomeFeedRail } from "./screens/SlpHomeFeedRail";
 import { useRefreshCreatorFanActivityNow } from "../features/audience/slp-fan-activity-hooks";
 import { useRefreshTargetedCreatorsNow } from "../features/creators/slp-creator-refresh-hooks";
-
-interface SlurpHomeProps {
-  navigation: SlurpNavigationState;
-  onNavigate: (destination: SlurpNavigationState) => void;
-  onLeave?: () => void;
-}
 
 export function SlurpHome({ navigation, onNavigate, onLeave }: SlurpHomeProps) {
   const model = useSlurpHomeState({ navigation, onNavigate, onLeave });
@@ -74,8 +68,8 @@ export function SlurpHome({ navigation, onNavigate, onLeave }: SlurpHomeProps) {
     onboardingPresentedRef,
     viewerQuery,
     noodlerUnseenCount,
-    notificationsQuery,
-    inboxThreadsQuery,
+    notificationUnseenCountQuery,
+    unreadCountQuery,
     frozenFeedSeenAt,
     markFeedShown,
     toggleFollow,
@@ -179,9 +173,9 @@ export function SlurpHome({ navigation, onNavigate, onLeave }: SlurpHomeProps) {
       refreshAudienceNow.mutate();
     },
     notificationCount:
-      (notificationsQuery.data?.unseenCount ?? 0) +
-      (inboxThreadsQuery.data?.unread ?? 0) +
-      (inboxThreadsQuery.data?.inboundUnread ?? 0),
+      (notificationUnseenCountQuery.data?.unseenCount ?? 0) +
+      (unreadCountQuery.data?.unread ?? 0) +
+      (unreadCountQuery.data?.inboundUnread ?? 0),
     // The studio is only meaningful for a persona that operates a Creator.
     hasOperatedCreator: Boolean(myCreatorProfile),
     walletBalanceLabel: `${viewerWalletsQuery.data?.[viewerPersonaId ?? ""]?.coins ?? SLURP_PLACEHOLDER_BALANCE}`,

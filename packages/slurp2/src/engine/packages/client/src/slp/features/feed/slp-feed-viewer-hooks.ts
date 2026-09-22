@@ -143,11 +143,12 @@ export function useMarkCreatorFeedSeen() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (personaId: string) => api.post<SlpAccount>("/slurp2/slurp/viewer/mark-seen", { personaId }),
-    onSuccess: (_viewer, personaId) =>
-      Promise.all([
-        qc.invalidateQueries({ queryKey: slpKeys.viewer(personaId) }),
-        qc.invalidateQueries({ queryKey: slpKeys.noodlerUnseenCount(personaId) }),
-      ]),
+    onSuccess: (viewer, personaId) => {
+      qc.setQueryData<SlpCreatorViewerScope | undefined>(slpKeys.viewer(personaId), (current) =>
+        current ? { ...current, viewer: { ...current.viewer, ...viewer } } : current,
+      );
+      qc.setQueryData(slpKeys.noodlerUnseenCount(personaId), { count: 0 });
+    },
   });
 }
 export function useToggleCreatorSubscription() {
@@ -176,15 +177,11 @@ export function useToggleCreatorSubscription() {
       qc.setQueryData<SlpCreatorViewerScope | undefined>(slpKeys.viewer(input.personaId), (current) =>
         mergeSlurpViewerShell(current, scope),
       );
-      return Promise.all([
-        qc.refetchQueries({ queryKey: slpKeys.viewer(input.personaId), type: "active" }),
-        qc.invalidateQueries({ queryKey: slpKeys.noodlerPosts(input.creatorAccountId) }),
-        qc.invalidateQueries({
-          queryKey: slpKeys.noodlerSubscribers(input.creatorAccountId),
-        }),
-        qc.invalidateQueries({ queryKey: [...slpKeys.noodlerRoot(), "wallet", input.personaId] }),
-        qc.invalidateQueries({ queryKey: [...slpKeys.noodlerRoot(), "viewer-wallets"] }),
-      ]);
+      void qc.invalidateQueries({ queryKey: slpKeys.viewer(input.personaId) });
+      void qc.invalidateQueries({ queryKey: slpKeys.noodlerPosts(input.creatorAccountId) });
+      void qc.invalidateQueries({ queryKey: slpKeys.noodlerSubscribers(input.creatorAccountId) });
+      void qc.invalidateQueries({ queryKey: [...slpKeys.noodlerRoot(), "wallet", input.personaId] });
+      void qc.invalidateQueries({ queryKey: [...slpKeys.noodlerRoot(), "viewer-wallets"] });
     },
   });
 }
@@ -209,7 +206,7 @@ export function useToggleCreatorFollow() {
       qc.setQueryData<SlpCreatorViewerScope | undefined>(slpKeys.viewer(input.personaId), (current) =>
         mergeSlurpViewerShell(current, scope),
       );
-      await qc.invalidateQueries({ queryKey: slpKeys.viewer(input.personaId) });
+      void qc.invalidateQueries({ queryKey: slpKeys.viewer(input.personaId) });
     },
   });
 }
@@ -224,11 +221,9 @@ export function useUnlockCreatorPost() {
       qc.setQueryData<SlpCreatorViewerScope | undefined>(slpKeys.viewer(input.personaId), (current) =>
         mergeSlurpViewerShell(current, scope),
       );
-      await Promise.all([
-        qc.invalidateQueries({ queryKey: slpKeys.viewer(input.personaId) }),
-        qc.invalidateQueries({ queryKey: [...slpKeys.noodlerRoot(), "wallet", input.personaId] }),
-        qc.invalidateQueries({ queryKey: [...slpKeys.noodlerRoot(), "viewer-wallets"] }),
-      ]);
+      void qc.invalidateQueries({ queryKey: slpKeys.viewer(input.personaId) });
+      void qc.invalidateQueries({ queryKey: [...slpKeys.noodlerRoot(), "wallet", input.personaId] });
+      void qc.invalidateQueries({ queryKey: [...slpKeys.noodlerRoot(), "viewer-wallets"] });
     },
   });
 }

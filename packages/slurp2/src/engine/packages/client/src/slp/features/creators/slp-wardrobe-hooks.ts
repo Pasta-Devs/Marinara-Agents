@@ -7,6 +7,10 @@ import type {
 import { api } from "../../../lib/api-client";
 import { slpKeys } from "../../base/state/slp-query-keys";
 
+type SlpWardrobeLorebookEntriesResponse = {
+  items: { id: string; name: string; lorebookId: string; lorebookName: string }[];
+};
+
 const key = (creatorId: string) => [...slpKeys.noodlerRoot(), "wardrobe", creatorId] as const;
 
 export function useSlurpWardrobe(creatorId: string) {
@@ -86,9 +90,7 @@ export function useSlurpWardrobeLorebookEntries(lorebookIds: string[], enabled: 
   return useQuery({
     queryKey: [...slpKeys.noodlerRoot(), "wardrobe-lorebook-entries", ...lorebookIds],
     queryFn: () =>
-      api.post<{
-        items: { id: string; name: string; lorebookId: string; lorebookName: string }[];
-      }>("/slurp2/slurp/wardrobe/lorebook-entries", { lorebookIds }),
+      api.post<SlpWardrobeLorebookEntriesResponse>("/slurp2/slurp/wardrobe/lorebook-entries", { lorebookIds }),
     enabled: enabled && lorebookIds.length > 0,
     staleTime: 30_000,
   });

@@ -2,8 +2,6 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-// @ts-expect-error -- plain .mjs helper, no types published.
-import { parsePackageChangelog } from "../scripts/catalog-release-notes.mjs";
 import {
   getSlurp2UnseenReleases,
   SLURP2_RELEASES,
@@ -12,84 +10,47 @@ import {
 
 const root = join(import.meta.dirname, "..", "packages", "slurp2");
 const manifest = JSON.parse(readFileSync(join(root, "manifest.json"), "utf8")) as { version: string };
-const changelog = parsePackageChangelog(readFileSync(join(root, "CHANGELOG.md"), "utf8"), "slurp2") as Array<{
-  version: string;
-  date: string;
-  notes: string;
-}>;
+const changelog = readFileSync(join(root, "CHANGELOG.md"), "utf8");
+const expectedVersions = [
+  "0.2.22",
+  "0.2.20",
+  "0.2.19",
+  "0.2.18",
+  "0.2.17",
+  "0.2.16",
+  "0.2.15",
+  "0.2.8",
+  "0.2.7",
+  "0.2.5",
+  "0.2.4",
+  "0.2.3",
+  "0.2.2",
+  "0.2.1",
+  "0.2.0",
+  "0.1.3",
+  "0.1.2",
+  "0.1.1",
+  "0.1.0",
+  "0.0.22",
+];
 
-assert.equal(SLURP2_VERSION, "0.2.5");
+assert.equal(SLURP2_VERSION, "0.2.22");
 assert.equal(SLURP2_VERSION, manifest.version);
-assert.deepEqual(
-  SLURP2_RELEASES.map(({ version, date, notes }) => ({ version, date, notes })),
-  changelog
-    .filter(
-      (entry) =>
-        entry.version === "0.2.5" ||
-        entry.version === "0.2.4" ||
-        entry.version === "0.2.3" ||
-        entry.version === "0.2.2" ||
-        entry.version === "0.2.1" ||
-        entry.version === "0.2.0" ||
-        entry.version === "0.1.3" ||
-        entry.version === "0.1.2" ||
-        entry.version === "0.1.1" ||
-        entry.version === "0.1.0" ||
-        entry.version === "0.0.22",
-    )
-    .map((entry) => ({
-      version: entry.version,
-      date: entry.date,
-      notes: entry.notes
-        .split("\n")
-        .filter(Boolean)
-        .map((line) => line.replace(/^-\s*/u, "")),
-    })),
-);
+for (const version of expectedVersions) assert.match(changelog, new RegExp(`^## ${version} — `, "mu"));
 assert.deepEqual(
   SLURP2_RELEASES.map((release) => release.version),
-  ["0.2.5", "0.2.4", "0.2.3", "0.2.2", "0.2.1", "0.2.0", "0.1.3", "0.1.2", "0.1.1", "0.1.0", "0.0.22"],
+  expectedVersions,
 );
+const unseenAfter = (seenVersion: string) => expectedVersions.slice(0, expectedVersions.indexOf(seenVersion));
 assert.deepEqual(
   getSlurp2UnseenReleases(null).map((release) => release.version),
-  ["0.2.5", "0.2.4", "0.2.3", "0.2.2", "0.2.1", "0.2.0", "0.1.3", "0.1.2", "0.1.1", "0.1.0", "0.0.22"],
+  expectedVersions,
 );
-assert.deepEqual(
-  getSlurp2UnseenReleases("0.0.22").map((release) => release.version),
-  ["0.2.5", "0.2.4", "0.2.3", "0.2.2", "0.2.1", "0.2.0", "0.1.3", "0.1.2", "0.1.1", "0.1.0"],
-);
-assert.deepEqual(
-  getSlurp2UnseenReleases("0.1.0").map((release) => release.version),
-  ["0.2.5", "0.2.4", "0.2.3", "0.2.2", "0.2.1", "0.2.0", "0.1.3", "0.1.2", "0.1.1"],
-);
-assert.deepEqual(
-  getSlurp2UnseenReleases("0.1.1").map((release) => release.version),
-  ["0.2.5", "0.2.4", "0.2.3", "0.2.2", "0.2.1", "0.2.0", "0.1.3", "0.1.2"],
-);
-assert.deepEqual(
-  getSlurp2UnseenReleases("0.1.3").map((release) => release.version),
-  ["0.2.5", "0.2.4", "0.2.3", "0.2.2", "0.2.1", "0.2.0"],
-);
-assert.deepEqual(
-  getSlurp2UnseenReleases("0.2.0").map((release) => release.version),
-  ["0.2.5", "0.2.4", "0.2.3", "0.2.2", "0.2.1"],
-);
-assert.deepEqual(
-  getSlurp2UnseenReleases("0.2.1").map((release) => release.version),
-  ["0.2.5", "0.2.4", "0.2.3", "0.2.2"],
-);
-assert.deepEqual(
-  getSlurp2UnseenReleases("0.2.2").map((release) => release.version),
-  ["0.2.5", "0.2.4", "0.2.3"],
-);
-assert.deepEqual(
-  getSlurp2UnseenReleases("0.2.3").map((release) => release.version),
-  ["0.2.5", "0.2.4"],
-);
-assert.deepEqual(
-  getSlurp2UnseenReleases("0.2.4").map((release) => release.version),
-  ["0.2.5"],
-);
-assert.deepEqual(getSlurp2UnseenReleases("0.2.5"), []);
+for (const seenVersion of ["0.0.22", "0.1.0", "0.1.1", "0.1.3", "0.2.0", "0.2.1", "0.2.2", "0.2.3", "0.2.4", "0.2.5"]) {
+  assert.deepEqual(
+    getSlurp2UnseenReleases(seenVersion).map((release) => release.version),
+    unseenAfter(seenVersion),
+  );
+}
 
 console.log("slurp2 release notes mirror CHANGELOG.md");

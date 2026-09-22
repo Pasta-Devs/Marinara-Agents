@@ -6,7 +6,7 @@
 // lines. It composes that storage for accounts, subscriptions, and the wallet instead of
 // reimplementing them, so a DM tip and a profile tip move coins through exactly one code path.
 import { tolerateMissingTables } from "../../base/host/slp-host-tables.js";
-import { and, asc, desc, eq, gt, inArray, isNotNull, isNull, lt, lte, or } from "../../../db/file-query.js";
+import { and, asc, desc, eq, gt, inArray, isNotNull, isNull, lt, lte, ne, or } from "../../../db/file-query.js";
 import { newId } from "../../../utils/id-generator.js";
 import type { DB } from "../../../db/connection.js";
 import { logger } from "../../../lib/logger.js";
@@ -69,6 +69,7 @@ import type {
 } from "./slp-messages-storage-types.js";
 import { createSlurpReplyMethods } from "./slp-reply-storage-methods.js";
 import type { SlurpMessagesContext } from "./slp-messages-storage-context.js";
+import { countSlurpUnreadThreads } from "../../modules/messages/slp-unread-count.js";
 
 export function createMessagesStorageBase(context: SlurpMessagesContext) {
   const {
@@ -354,6 +355,35 @@ export function createMessagesStorageBase(context: SlurpMessagesContext) {
         });
       }
       return views;
+    },
+    /** Badge counts avoid the joins and follow-up hydration the full inbox needs. */
+    async countUnread(
+      viewerAccountId: string,
+      operatedCreatorAccountIds: readonly string[],
+      availableCreatorAccountIds: readonly string[],
+    ) {
+      const creatorScope = operatedCreatorAccountIds.length
+        ? or(
+            eq(slurpThreads.viewerAccountId, viewerAccountId),
+            inArray(slurpThreads.creatorAccountId, [...operatedCreatorAccountIds]),
+          )
+        : eq(slurpThreads.viewerAccountId, viewerAccountId);
+      const rows = await db
+        .select({
+          viewerAccountId: slurpThreads.viewerAccountId,
+          creatorAccountId: slurpThreads.creatorAccountId,
+          state: slurpThreads.state,
+          viewerUnread: slurpThreads.viewerUnread,
+          creatorUnread: slurpThreads.creatorUnread,
+        })
+        .from(slurpThreads)
+        .where(and(creatorScope, ne(slurpThreads.state, "declined")));
+      const existingCreatorIds = new Set(availableCreatorAccountIds);
+      return countSlurpUnreadThreads(
+        rows.map((row) => ({ ...row, creatorExists: existingCreatorIds.has(String(row.creatorAccountId)) })),
+        viewerAccountId,
+        operatedCreatorAccountIds,
+      );
     },
     /**
      * Rebuild the rapport for one pair from the audience tie and the thread itself.

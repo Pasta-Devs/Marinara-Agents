@@ -1,5 +1,11 @@
 # Slurp Remastered release notes
 
+## 0.2.22 — 2026-09-22
+
+- Everyday Slurp loading now requests feed data only on feed surfaces and defers profile-source and model-connection data until profile work starts.
+- Shell notification and message badges use lightweight count routes instead of loading full notification and inbox payloads.
+- Feed seen, follow, subscription, and unlock actions update visible cached state immediately and reconcile in the background.
+
 ## 0.2.21 — 2026-09-22
 
 - Wardrobe import can scan whole selected lorebooks or only individually selected enabled entries, while retaining the same evidence-backed review before anything is saved.

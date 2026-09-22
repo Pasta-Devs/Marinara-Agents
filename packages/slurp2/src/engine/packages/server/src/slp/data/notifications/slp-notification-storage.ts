@@ -125,11 +125,10 @@ export function createSlurpEventsStorage(db: DB) {
     },
 
     async countUnseen(recipientPersonaId: string): Promise<number> {
-      const rows = await db
-        .select()
-        .from(slurpEvents)
-        .where(and(eq(slurpEvents.recipientPersonaId, recipientPersonaId), isNull(slurpEvents.seenAt)));
-      return rows.length;
+      return db.count(
+        slurpEvents,
+        and(eq(slurpEvents.recipientPersonaId, recipientPersonaId), isNull(slurpEvents.seenAt)),
+      );
     },
 
     async markSeen(recipientPersonaId: string): Promise<void> {

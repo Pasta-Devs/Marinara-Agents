@@ -46,11 +46,11 @@ import {
   useUnlockCreatorPost,
   useUpdateCreatorInteraction,
 } from "../features/feed/slp-feed-viewer-hooks";
-import { useSlurpThreads } from "../features/messages/slp-messages-hooks";
-import { useSlurpNotifications } from "../features/notifications/slp-notification-hooks";
+import { useSlurpUnreadCount } from "../features/messages/slp-messages-hooks";
+import { useSlurpNotificationUnseenCount } from "../features/notifications/slp-notification-hooks";
 import { useSlurpSettings, useUpdateSlurpSettings } from "../features/settings/slp-settings-hooks";
 import { useActivePersona, usePersonas } from "../../hooks/use-creator-personas";
-import { useConnections } from "../../hooks/use-connections";
+import { useSlurpConnections } from "../base/state/slp-host-connections";
 import { showConfirmDialog } from "../../lib/app-dialogs";
 import { useSlurpUIStore } from "../base/state/slp-package-store";
 import { api } from "../../lib/api-client";
@@ -70,18 +70,16 @@ import { confirmLeaveSlurpBackstage } from "../features/backstage/SlpBackstageCo
 import { SLP_PERSONA_SWITCHER_PAGE_SIZE } from "../base/chrome/SlpChrome";
 import { toast } from "sonner";
 import { slurp2SplashPending } from "../features/onboarding/SlpSplash";
-export interface SlurpHomeProps {
-  navigation: SlurpNavigationState;
-  onNavigate: (destination: SlurpNavigationState) => void;
-  onLeave?: () => void;
-}
+import type { SlurpHomeProps } from "./slp-home.types";
 export function useSlurpHomeBaseState({ navigation, onNavigate, onLeave }: SlurpHomeProps) {
   const { t: localizeUi } = useUiTranslation();
+  const creatorView = navigation.mode === "creator" ? navigation.view : null;
+  const viewerSurfaceActive = creatorView !== null && ["hub", "search", "profile"].includes(creatorView);
   const accountsQuery = useCreatorAccounts();
   const retryAccountsOrReload = async () => {
     if ((await accountsQuery.refetch()).isError) window.location.reload();
   };
-  const connectionCountsQuery = useCreatorConnectionCounts();
+  const connectionCountsQuery = useCreatorConnectionCounts(viewerSurfaceActive);
   const viewerWalletsQuery = useCreatorViewerWallets();
   const slurpSettingsQuery = useSlurpSettings();
   const updateSlurpSettings = useUpdateSlurpSettings();
@@ -253,10 +251,10 @@ export function useSlurpHomeBaseState({ navigation, onNavigate, onLeave }: Slurp
   const [gateCelebrating, setGateCelebrating] = useState(false);
   const gatePresentedRef = useRef(false);
   const onboardingPresentedRef = useRef(false);
-  const viewerQuery = useCreatorViewer(viewerPersonaId);
+  const viewerQuery = useCreatorViewer(viewerPersonaId, viewerSurfaceActive);
   const noodlerUnseenCount = useCreatorUnseenCount(viewerPersonaId);
-  const notificationsQuery = useSlurpNotifications(viewerPersonaId);
-  const inboxThreadsQuery = useSlurpThreads(viewerPersonaId);
+  const notificationUnseenCountQuery = useSlurpNotificationUnseenCount(viewerPersonaId);
+  const unreadCountQuery = useSlurpUnreadCount(viewerPersonaId);
   const markFeedSeenMutation = useMarkCreatorFeedSeen();
   const [frozenFeedSeenAt, setFrozenFeedSeenAt] = useState<Record<string, string | null>>({});
   const feedShownForAccountRef = useRef<string | null>(null);
@@ -284,12 +282,6 @@ export function useSlurpHomeBaseState({ navigation, onNavigate, onLeave }: Slurp
   const [draftNoodleAccountId, setDraftNoodleAccountId] = useState<string | null>(null);
   const [sourceSearch, setSourceSearch] = useState("");
   const [sourceKind, setSourceKind] = useState<"all" | "character" | "persona">("all");
-  const eligibleAccountsQuery = useCreatorEligibleAccounts(
-    sourceSearch,
-    sourceKind,
-    navigation.mode === "creator",
-    draftNoodleAccountId,
-  );
   const createProfile = useCreateCreatorStageProfile();
   const updateProfile = useUpdateCreatorStageProfile();
   const updateProfileLocation = useUpdateCreatorProfileLocation();
@@ -302,8 +294,6 @@ export function useSlurpHomeBaseState({ navigation, onNavigate, onLeave }: Slurp
   const setupAutoPosting = useUpdateCreatorAutoPosting();
   const createPost = useCreateCreatorPost();
   const generateProfileDraft = useGenerateCreatorStageProfileDraft();
-  const connectionsQuery = useConnections();
-  const connections = (connectionsQuery.data ?? []) as Array<{ id: string; name: string; model?: string }>;
   const [profileDraft, setProfileDraft] = useState<SlurpStageProfileInput | null>(null);
   const [profileDraftDirty, setProfileDraftDirty] = useState(false);
   const [imagePromptReview, setImagePromptReview] = useState<{
@@ -317,6 +307,19 @@ export function useSlurpHomeBaseState({ navigation, onNavigate, onLeave }: Slurp
   const [draftConnectionId, setDraftConnectionId] = useState("");
   const [previousDraft, setPreviousDraft] = useState<SlurpStageProfileInput | null>(null);
   const [editingProfileId, setEditingProfileId] = useState<string | null>(null);
+  const profileWorkspaceActive =
+    creatorView !== null &&
+    (["profiles", "create-profile"].includes(creatorView) || creationStep !== null || editingProfileId !== null);
+  const eligibleAccountsQuery = useCreatorEligibleAccounts(
+    sourceSearch,
+    sourceKind,
+    profileWorkspaceActive,
+    draftNoodleAccountId,
+  );
+  const connectionsQuery = useSlurpConnections(
+    creatorView === "create-profile" || creationStep === "draft" || editingProfileId !== null,
+  );
+  const connections = (connectionsQuery.data ?? []) as Array<{ id: string; name: string; model?: string }>;
   const [composerOpenSignal, setComposerOpenSignal] = useState(0);
   const profileReturnToSettingsRef = useRef<SlurpNavigationState | null>(null);
   const [acceptSourceChangesForProfileId, setAcceptSourceChangesForProfileId] = useState<string | null>(null);
@@ -677,8 +680,8 @@ export function useSlurpHomeBaseState({ navigation, onNavigate, onLeave }: Slurp
     onboardingPresentedRef,
     viewerQuery,
     noodlerUnseenCount,
-    notificationsQuery,
-    inboxThreadsQuery,
+    notificationUnseenCountQuery,
+    unreadCountQuery,
     markFeedSeenMutation,
     frozenFeedSeenAt,
     setFrozenFeedSeenAt,
