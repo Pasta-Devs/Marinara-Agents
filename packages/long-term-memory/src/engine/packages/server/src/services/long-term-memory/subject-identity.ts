@@ -904,7 +904,31 @@ export function prepareLtmSubjectIdentityContext({
         hasSubjectNames && !effectiveUnit.subjectKeys?.length
           ? resolveNamedUnitSubjects(unit, batchNames, index, context)
           : resolveUnitSubjects(effectiveUnit, index);
-      if (match.status !== "matched") return noteIdForEvidenceUnit(effectiveUnit);
+      if (match.status !== "matched") {
+        // Mirror the resolution path so this pre-resolution key predicts the same target
+        // for keyless source-backed units instead of deriving a short-form identity.
+        if (match.status === "untrusted" && !hasSubjectNames) {
+          const sourceBackedNpc = sourceBackedNpcSubject(
+            effectiveUnit,
+            index,
+            scope,
+            mode,
+            sourceBackedNpcSourceText,
+            sourceBackedNpcSourceTitle,
+          );
+          if (sourceBackedNpc?.entry) {
+            return (
+              chooseIdentityTarget(
+                effectiveCatalog.notes,
+                legacyBindings,
+                [sourceBackedNpc.entry],
+                effectiveUnit.bucket,
+              )?.id ?? canonicalNoteIdForEntries([sourceBackedNpc.entry], effectiveUnit.bucket)
+            );
+          }
+        }
+        return noteIdForEvidenceUnit(effectiveUnit);
+      }
       const entries = sortSubjectEntries(match.entries);
       return (
         chooseIdentityTarget(effectiveCatalog.notes, legacyBindings, entries, effectiveUnit.bucket)?.id ??
@@ -1474,7 +1498,7 @@ function resolveNamedUnitSubjects(
 }
 
 function sourceBackedNpcSubject(
-  unit: LtmEvidenceUnit,
+  unit: LtmSubjectIdentityCandidate,
   index: CatalogIndex | undefined,
   scope: LtmScope | undefined,
   mode: LtmMode | undefined,

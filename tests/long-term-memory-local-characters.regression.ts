@@ -842,6 +842,18 @@ async function main() {
     "character:char_ashleigh_kestrel",
     "keyless short-form subject IDs must reuse the trusted longer identity",
   );
+  const keylessShortFormKeyContext = prepareLtmSubjectIdentityContext({
+    units: [keylessShortFormUnit],
+    catalog: { entries: [ashleighEntry], notes: [] },
+    scope,
+    sourceBackedNpcSourceText: "Ash holds the line.",
+    sourceBackedNpcSourceTitle: "Watch",
+  });
+  assert.equal(
+    keylessShortFormKeyContext.identityKeyForUnit(keylessShortFormUnit),
+    "char_ashleigh_kestrel",
+    "identityKeyForUnit must predict the trusted target for keyless short forms",
+  );
 
   // 4e. A keyless short-form unit must adopt the vault's existing note target for the
   //     resolved identity (even a non-canonical legacy one) instead of forking a
@@ -880,6 +892,18 @@ async function main() {
     keylessLegacyResolution.existingNotes.map((note) => note.id),
     ["char_ashleigh_legacy"],
     "the existing legacy note must be the sole target, with no forked canonical note",
+  );
+  const keylessLegacyKeyContext = prepareLtmSubjectIdentityContext({
+    units: [keylessLegacyUnit],
+    catalog: { entries: [ashleighEntry], notes: [ashleighLegacyNote] },
+    scope,
+    sourceBackedNpcSourceText: "Ash holds the line.",
+    sourceBackedNpcSourceTitle: "Watch",
+  });
+  assert.equal(
+    keylessLegacyKeyContext.identityKeyForUnit(keylessLegacyUnit),
+    "char_ashleigh_legacy",
+    "identityKeyForUnit must predict the existing legacy target for keyless source-backed units",
   );
 
   for (const character of ["char-Mara", "char Mara"]) {
