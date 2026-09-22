@@ -983,6 +983,66 @@ async function main() {
   assert.equal(new Set(unrosteredResolution.units.map((resolvedUnit) => resolvedUnit.subjectId)).size, 1);
   assert.ok(unrosteredResolution.units[0]!.subjects?.[0]?.key.startsWith("local_character:"));
 
+  // 4h. Source variants split across separate notes in one family must resolve to the same
+  //     canonical local identity and target regardless of note order.
+  const variantNoteA = {
+    ...sourceNote,
+    id: "variant-note-a",
+    title: "variant-note-a",
+    sections: { source: { text: "Ash holds the line.", updatedAt: timestamp } },
+  };
+  const variantNoteB = {
+    ...sourceNote,
+    id: "variant-note-b",
+    title: "variant-note-b",
+    sections: { source: { text: "Ashleigh Kestrel departs.", updatedAt: timestamp } },
+  };
+  const orderIdentities: Array<{ name: string; key: string }> = [];
+  for (const orderedNotes of [
+    [variantNoteA, variantNoteB],
+    [variantNoteB, variantNoteA],
+  ]) {
+    const orderedCatalog = buildTrustedLtmSubjectCatalog({
+      roster: [],
+      notes: orderedNotes,
+      localSourceNotes: orderedNotes,
+    });
+    const localEntries = orderedCatalog.entries.filter((entry) => isLocalCharacterSubject(entry.subject));
+    assert.equal(localEntries.length, 1, "split source variants must collapse to one local identity");
+    orderIdentities.push({ name: localEntries[0]!.name, key: localEntries[0]!.subject.key });
+  }
+  assert.deepEqual(orderIdentities[0], orderIdentities[1], "canonical source identity must not depend on note order");
+
+  // 4i. A roster alias that is itself a variant of the source name must block a competing local
+  //     identity, not only an exact-slug alias match.
+  const aliasSourceNote = {
+    ...sourceNote,
+    id: "alias-source",
+    title: "alias-source",
+    sections: { source: { text: "Ashleigh swings.", updatedAt: timestamp } },
+  };
+  const aliasCatalog = buildTrustedLtmSubjectCatalog({
+    roster: [{ kind: "character", id: "char_ash_kestrel", name: "Ash Kestrel", aliases: ["Ashleigh Kestrel"] }],
+    notes: [aliasSourceNote],
+    localSourceNotes: [aliasSourceNote],
+  });
+  assert.equal(
+    aliasCatalog.entries.filter((entry) => isLocalCharacterSubject(entry.subject)).length,
+    0,
+    "a roster alias variant must not fork a competing local identity",
+  );
+  const aliasUnits = [
+    unit({ bucket: "character_fact", subjectId: "ashleigh", subjectNames: ["Ashleigh"], text: "Ashleigh swings." }),
+  ];
+  const aliasResolution = prepareLtmSubjectIdentityContext({
+    units: aliasUnits,
+    catalog: aliasCatalog,
+    scope,
+    sourceBackedNpcSourceText: aliasSourceNote.sections.source.text,
+    sourceBackedNpcSourceTitle: aliasSourceNote.title,
+  }).resolve({ units: aliasUnits, existingNotes: [] });
+  assert.equal(aliasResolution.droppedCandidates.length, 0);
+
   for (const character of ["char-Mara", "char Mara"]) {
     const normalized = normalizeStructuredSummaryEvidenceUnits({
       units: [],

@@ -552,20 +552,34 @@ export function buildTrustedLtmSubjectCatalog({
     }
   }
 
+  const sourceNamesByFamily = new Map<string, { scope: LtmScope; names: Map<string, string>; noteIds: string[] }>();
   for (const note of localSourceNotes.filter(
     (candidate) => candidate.status !== "archived" && candidate.modes.includes("roleplay"),
   )) {
-    const familyId = ltmScopeFamilyId(note.destinationScope ?? note.scope);
+    const scope = note.destinationScope ?? note.scope;
+    const familyId = ltmScopeFamilyId(scope);
     if (!familyId) continue;
+    const bucket = sourceNamesByFamily.get(familyId) ?? { scope, names: new Map<string, string>(), noteIds: [] };
     const sources = [note.title, ...Object.values(note.sections).map((section) => section.text)];
-    // Variants of one name (short form, first name, full name) collapse to a single canonical
-    // source identity instead of each forking its own local character and target.
-    for (const { name, aliases } of canonicalSourceBackedNames([...sourceBackedNpcNames(sources).values()])) {
+    for (const [slug, name] of sourceBackedNpcNames(sources)) {
+      if (!bucket.names.has(slug)) bucket.names.set(slug, name);
+    }
+    bucket.noteIds.push(note.id);
+    sourceNamesByFamily.set(familyId, bucket);
+  }
+
+  // Canonicalize each family's source names as a whole so the retained identity and memory
+  // target do not depend on which note was visited first. Variants of one name (short form,
+  // first name, full name) collapse to a single canonical source identity instead of each
+  // forking its own local character and target.
+  for (const familyId of [...sourceNamesByFamily.keys()].sort()) {
+    const { scope, names, noteIds } = sourceNamesByFamily.get(familyId)!;
+    for (const { name, aliases } of canonicalSourceBackedNames([...names.values()])) {
       // A name already covered by a trusted roster, note, or earlier source identity must not
       // create a competing duplicate. Resolution canonicalizes it to that identity, or fails
       // closed with the competing records when more than one trusted identity matches.
       if (mutableHasRelatedIdentity(mutable, name, familyId)) continue;
-      const subject = localCharacterSubjectForName(note.destinationScope ?? note.scope, name);
+      const subject = localCharacterSubjectForName(scope, name);
       if (!subject) continue;
       const key = subject.key;
       if (mutable.has(key)) continue;
@@ -575,7 +589,7 @@ export function buildTrustedLtmSubjectCatalog({
         aliases: new Set(expandedAliases(name, aliases)),
         canonicalSlug: normalizeSubjectIdentifier(name, "subject"),
         familyId,
-        provenance: `source_note:${note.id}`,
+        provenance: `source_note:${[...noteIds].sort()[0]}`,
         sourceScope: "local_source",
       });
     }
@@ -1566,8 +1580,7 @@ function mutableHasRelatedIdentity(mutable: Map<string, MutableCatalogIdentity>,
   if (!slug) return false;
   return [...mutable.values()].some((entry) => {
     if (entry.familyId && entry.familyId !== familyId) return false;
-    if (normalizeSubjectIdentifier(entry.name, "") === slug) return true;
-    if ([...entry.aliases].some((alias) => normalizeSubjectIdentifier(alias, "") === slug)) return true;
+    if ([...entry.aliases].some((alias) => isVariantName(alias, name))) return true;
     return isVariantName(entry.name, name);
   });
 }
