@@ -16,6 +16,7 @@ import { nowIso } from "./ltm-utils.js";
 import { getLongTermMemoryRoot } from "./paths.js";
 import { LongTermMemoryStorage } from "./storage.js";
 import { withLtmVaultLock } from "./vault-lock.js";
+import { invalidateLtmVaultSnapshot } from "./vault-snapshot.js";
 import { createHash } from "node:crypto";
 import {
   getLtmScopeChatIds,
@@ -308,6 +309,7 @@ export async function applyLtmNoteForkRepair(
           );
         }
       }
+      invalidateLtmVaultSnapshot(root);
       if (recoveryErrors.length)
         throw new AggregateError(
           [error, ...recoveryErrors],

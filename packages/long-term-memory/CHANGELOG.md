@@ -1,5 +1,10 @@
 # Long-Term Memory changelog
 
+## 1.3.10 — 2026-09-21
+
+- Read and parse each vault note once per fresh storage state, shared by scope targets, note lists, paged reads, and helper callers instead of rescanning the whole vault for every request.
+- Drop the shared snapshot on mutations, backups, restores, and repairs so updated memories stay immediately visible.
+
 ## 1.3.9 — 2026-09-21
 
 - Collapsed identical chat summaries shared across branch chat records into one ready-to-import Sources preview row, while preserving conflicting same-ID summaries, distinct summaries, and branch-specific import provenance.
