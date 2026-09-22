@@ -25,6 +25,15 @@ export async function getSlurpPostDeepDetails(db: DB, id: string): Promise<SlpDe
   }
 }
 
+export async function setSlurpPostDeepDetailsProviderPrompt(db: DB, id: string, providerPrompt: string): Promise<void> {
+  const record = await getSlurpPostDeepDetails(db, id);
+  if (!record) return;
+  await db
+    .update(slpPostDeepDetails)
+    .set({ record: JSON.stringify({ ...record, providerPrompt }) })
+    .where(eq(slpPostDeepDetails.id, id));
+}
+
 export async function deleteSlurpPostDeepDetails(tx: Pick<DB, "delete">, id: string): Promise<void> {
   await tx.delete(slpPostDeepDetails).where(eq(slpPostDeepDetails.id, id));
 }

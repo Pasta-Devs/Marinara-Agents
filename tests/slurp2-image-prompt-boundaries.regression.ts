@@ -16,6 +16,7 @@ assert.match(rewrite, /postContent\?: string/u);
 assert.match(rewrite, /<post_context>/u);
 assert.match(rewrite, /Do not increase the sexual intensity/u);
 assert.match(imageService, /postContent: input\.postContent/u);
+assert.match(imageService, /providerPrompt: finalPrompt/u, "the private result carries the exact provider prompt");
 assert.match(publicImageService, /postContent: input\.postContent/u);
 assert.match(messageService, /Keep the image inside the Creator content menu and relationship boundaries/u);
 assert.match(settings, /LEGACY_GRAPHIC_SLP_CREATOR_DEFAULT_IMAGE_GENERATION_PROMPT/u);
@@ -31,5 +32,6 @@ assert.doesNotMatch(briefBuilder, /intent === "teaser" \? "suggestive"/u);
 assert.match(brief, /slurpVisualBriefPromptViolatesPolicy/u);
 assert.match(preview, /Runtime data can add more context during generation/u);
 assert.match(preview, /runs the post generator with the selected Creator/u);
+assert.match(preview, /Final image-provider prompt/u);
 
 console.log("slurp2 image prompt boundaries regression passed");

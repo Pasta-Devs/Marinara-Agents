@@ -440,6 +440,7 @@ export const SLURP2_SOURCE_MODULES: Record<string, readonly string[]> = {
     "packages/server/src/slp/features/feed/slp-public-identity.ts",
     "packages/server/src/slp/features/feed/slp-post-prompt.ts",
     "packages/server/src/slp/features/feed/slp-post-picture-briefs.ts",
+    "packages/server/src/slp/features/feed/slp-prepared-post.ts",
   ],
   // The model call and its correction turn moved into slp-post-prompt.ts (completeSlurpCreatorPost),
   // and the two picture briefs into slp-post-picture-briefs.ts.
@@ -447,6 +448,7 @@ export const SLURP2_SOURCE_MODULES: Record<string, readonly string[]> = {
     "packages/server/src/slp/features/feed/slp-generation-service.ts",
     "packages/server/src/slp/features/feed/slp-post-prompt.ts",
     "packages/server/src/slp/features/feed/slp-post-picture-briefs.ts",
+    "packages/server/src/slp/features/feed/slp-prepared-post.ts",
   ],
   "packages/server/src/services/slurp/slurp-post.operation.ts": [
     "packages/server/src/slp/features/feed/slp-post-operation.ts",

@@ -97,6 +97,8 @@ export async function generateCreatorPostImage(input: {
   metadata: Record<string, unknown>;
   preview: Omit<SlpImagePromptReviewItem, "id"> | null;
   stagedMedia: StagedGalleryImage | null;
+  /** Exact positive prompt sent to the image provider. Kept out of public post metadata. */
+  providerPrompt: string;
 }> {
   const imageSettings = await loadImageGenerationUserSettings(input.db);
   const redactIdentity = (value: string) => {
@@ -398,6 +400,7 @@ export async function generateCreatorPostImage(input: {
         height: previewSize.height,
       },
       stagedMedia: null,
+      providerPrompt: finalPrompt,
     };
   }
 
@@ -481,6 +484,7 @@ export async function generateCreatorPostImage(input: {
     },
     preview: null,
     stagedMedia: file,
+    providerPrompt: finalPrompt,
   };
 }
 

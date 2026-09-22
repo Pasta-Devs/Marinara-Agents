@@ -22,5 +22,6 @@ export type PreparedCreatorPostResult = {
   wardrobeSelection: { selectedId: string | null; requestedId: string | null; fallback: boolean };
   visualBrief: SlurpVisualBrief | null;
   imageBrief: string | null;
+  providerPrompt: string | null;
   stagedMedia?: StagedGalleryImage | null;
 };

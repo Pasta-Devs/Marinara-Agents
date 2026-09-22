@@ -1,5 +1,5 @@
 // The splash screen needs the shipped version and its public notes inside the client bundle.
-export const SLURP2_VERSION = "0.2.20";
+export const SLURP2_VERSION = "0.2.21";
 
 export interface Slurp2ReleaseEntry {
   version: string;
@@ -9,6 +9,14 @@ export interface Slurp2ReleaseEntry {
 
 /** The public release history shown in the Engine splash screen. */
 export const SLURP2_RELEASES: Slurp2ReleaseEntry[] = [
+  {
+    version: "0.2.21",
+    date: "2026-09-22",
+    notes: [
+      "Wardrobe import can scan whole lorebooks or only the entries you select.",
+      "Prompt Studio and private Deep Details now show the exact final prompt sent to the image provider, after Slurp applies its enforced visual rules and rewrite.",
+    ],
+  },
   {
     version: "0.2.20",
     date: "2026-09-22",

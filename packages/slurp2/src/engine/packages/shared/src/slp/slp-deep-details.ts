@@ -74,6 +74,8 @@ export type SlpDeepDetailsRecord = {
     mood: string | null;
     sexualLevel: "none" | "suggestive" | "nudity" | "explicit";
   } | null;
+  /** Exact positive prompt sent to the image provider, stored only in this Creator-private record. */
+  providerPrompt?: string | null;
   askedModelForImagePrompt: boolean;
 };
 

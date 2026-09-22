@@ -404,6 +404,24 @@ function PreviewResultCard({ label, data }: { label: string; data: SlurpPromptRe
           </div>
         </details>
       )}
+      {data.providerPrompt && (
+        <details
+          open
+          className="mt-3 rounded-md bg-[var(--slurp-surface-raised)] ring-1 ring-inset ring-[var(--slurp-outline)]"
+        >
+          <summary className="min-h-10 cursor-pointer px-3 py-2 text-xs font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)]">
+            {t("ui.slurp.settings.prompts.providerPrompt", { defaultValue: "Final image-provider prompt" })}
+          </summary>
+          <div className="space-y-2 border-t border-[var(--slurp-outline)] p-3">
+            <p className="text-xs leading-5 text-[var(--slurp-muted)]">
+              {t("ui.slurp.settings.prompts.providerPromptDetail", {
+                defaultValue: "After Slurp applied appearance, clothing, camera, policy, style, and prompt rewriting.",
+              })}
+            </p>
+            <pre className="whitespace-pre-wrap break-words text-xs leading-5">{data.providerPrompt}</pre>
+          </div>
+        </details>
+      )}
     </article>
   );
 }

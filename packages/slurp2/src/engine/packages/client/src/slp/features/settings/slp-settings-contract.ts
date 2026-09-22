@@ -196,6 +196,7 @@ export type SlurpPromptResultPreviewResponse = {
     sexualLevel: "none" | "suggestive" | "nudity" | "explicit";
   } | null;
   imageBrief: string | null;
+  providerPrompt: string | null;
 };
 export type SlurpPromptResultPreviewInput = {
   promptId: "post";

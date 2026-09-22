@@ -198,6 +198,7 @@ export function SlpDeepDetailsModal({ postId, open, onClose }: { postId: string;
               rows={[
                 ["Image brief", details?.imageBrief ?? null],
                 ["Typed visual brief", details?.visualBrief ? JSON.stringify(details.visualBrief, null, 2) : null],
+                ["Final provider prompt", details?.providerPrompt ?? null],
                 ["Stored image prompt", data.post.imagePrompt],
                 ["Provider", str(data.post.metadata.imageProvider)],
                 ["Image model", str(data.post.metadata.imageModel)],

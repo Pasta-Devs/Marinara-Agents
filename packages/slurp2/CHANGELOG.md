@@ -1,5 +1,12 @@
 # Slurp Remastered release notes
 
+## 0.2.21 — 2026-09-22
+
+- Wardrobe import can scan whole selected lorebooks or only individually selected enabled entries, while retaining the same evidence-backed review before anything is saved.
+- Prompt Studio shows the exact final positive prompt sent to the image provider after appearance, selected clothing, camera, visual policy, style, and interpretation are applied.
+- Successful immediate and scheduled automatic images record that exact provider prompt only in the Creator-private Deep Details record, never public post metadata.
+- Scheduled posts now pass the same typed visual brief into image interpretation as immediate posts.
+
 ## 0.2.20 — 2026-09-22
 
 - Creators now own up to 64 complete wardrobe looks with model summaries, exact image descriptions, tags, public/locked suitability, provenance, and timestamps.

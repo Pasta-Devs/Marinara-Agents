@@ -113,6 +113,7 @@ export async function slpSettingsRoutes(app: FastifyInstance, deps: SlpRouteDeps
         wardrobeSelection: result.wardrobeSelection,
         visualBrief: result.visualBrief,
         imageBrief: result.imageBrief,
+        providerPrompt: result.providerPrompt,
       };
     } catch (error) {
       if (isConnectionAdmissionFailure(error)) return reply.code(409).send({ error: getErrorMessage(error) });

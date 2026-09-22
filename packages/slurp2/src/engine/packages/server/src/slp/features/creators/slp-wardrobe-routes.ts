@@ -15,7 +15,13 @@ import { previewSlpWardrobeImport } from "./slp-wardrobe-import-service.js";
 
 const importSourceSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("character") }).strict(),
-  z.object({ kind: z.literal("lorebook"), lorebookIds: z.array(z.string().min(1)).min(1).max(10) }).strict(),
+  z
+    .object({
+      kind: z.literal("lorebook"),
+      lorebookIds: z.array(z.string().min(1)).min(1).max(10),
+      entryIds: z.array(z.string().min(1)).min(1).max(100).optional(),
+    })
+    .strict(),
   z.object({ kind: z.literal("text"), text: z.string().trim().min(1).max(24_000) }).strict(),
   z.object({ kind: z.literal("legacy"), text: z.string().trim().min(1).max(2_000) }).strict(),
 ]);
@@ -72,7 +78,8 @@ async function wardrobeImportSource(
     const entries = await lorebooks.listEntries(id);
     for (const entry of entries) {
       if (entry.enabled === false) continue;
-      const row = entry as { name?: unknown; content?: unknown };
+      const row = entry as { id?: unknown; name?: unknown; content?: unknown };
+      if (source.entryIds && !source.entryIds.includes(text(row.id))) continue;
       const content = text(row.content).trim();
       if (content) parts.push(`## ${text(row.name) || "Untitled"}\n${content}`);
     }
@@ -130,6 +137,34 @@ export async function slpWardrobeRoutes(app: FastifyInstance, deps: SlpRouteDeps
       }))
       .filter((book) => book.id),
   }));
+
+  app.post("/slurp/wardrobe/lorebook-entries", async (req, reply) => {
+    const parsed = z
+      .object({ lorebookIds: z.array(z.string().min(1)).min(1).max(10) })
+      .strict()
+      .safeParse(req.body);
+    if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
+    const lorebooks = createLorebooksStorage(app.db);
+    const items: { id: string; name: string; lorebookId: string; lorebookName: string }[] = [];
+    for (const lorebookId of parsed.data.lorebookIds) {
+      const book = await lorebooks.getById(lorebookId);
+      if (!book) continue;
+      const lorebookName = text((book as { name?: unknown }).name) || lorebookId;
+      for (const entry of await lorebooks.listEntries(lorebookId)) {
+        if (entry.enabled === false) continue;
+        const row = entry as { id?: unknown; name?: unknown; content?: unknown };
+        const id = text(row.id);
+        if (!id || !text(row.content).trim()) continue;
+        items.push({
+          id,
+          name: text(row.name) || "Untitled",
+          lorebookId,
+          lorebookName,
+        });
+      }
+    }
+    return { items };
+  });
 
   app.post("/slurp/accounts/:id/wardrobe/import-preview", async (req, reply) => {
     const { id } = req.params as { id: string };

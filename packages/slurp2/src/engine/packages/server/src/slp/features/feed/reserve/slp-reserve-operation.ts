@@ -9,6 +9,7 @@ import { createSlurpStorage } from "../../../data/slp-storage.js";
 import { slpCreatorReservePolicyFingerprint } from "../../../modules/records/slp-storage-model.js";
 import { hasSlurpCreatorPostingIntervalConflict } from "../../../modules/feed/slp-posting-interval.js";
 import { generateCreatorPost, resolveSlurpAutomaticPostAccess } from "../slp-generation-service.js";
+import { recordSlurpProviderPrompt } from "../slp-prepared-post.js";
 import { recordSlurpPromiseKept } from "../slp-post-plan-service.js";
 import { generateCreatorPostImage } from "../../media/slp-media-contract.js";
 import { tryCreatorAccountOperation } from "../../../base/locking/slp-account-operation-lock.js";
@@ -246,6 +247,7 @@ export async function prepareNextCreatorReservePost(db: DB, at = new Date()): Pr
               disclosureMode: selectedAccount.settings.privacy.identityDisclosure ?? "open",
               postContent: payload.content,
               draftPrompt: payload.imagePrompt,
+              visualBrief: payload.visualBrief ?? undefined,
               settings,
               characters: createCharactersStorage(db),
               promptOverrides: createPromptOverridesStorage(db),
@@ -264,6 +266,11 @@ export async function prepareNextCreatorReservePost(db: DB, at = new Date()): Pr
             // promoted first is owned by nothing if the row never lands, and staged files are
             // swept on restart.
             stagedMedia = image.stagedMedia ?? null;
+            const deepDetailsId =
+              typeof payload.metadata.deepDetailsId === "string" ? payload.metadata.deepDetailsId : null;
+            if (deepDetailsId) {
+              await recordSlurpProviderPrompt(db, deepDetailsId, image.providerPrompt);
+            }
             payload = {
               ...payload,
               metadata: { ...payload.metadata, ...image.metadata },

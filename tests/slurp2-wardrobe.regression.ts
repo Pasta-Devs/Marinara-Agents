@@ -120,6 +120,14 @@ const routes = slurp2Source(
   "packages/slurp2/src/engine/packages/server/src/slp/features/creators/slp-wardrobe-routes.ts",
 );
 assert.match(routes, /import-preview/u);
+assert.match(routes, /entryIds/u, "a lorebook import can be narrowed to selected entries");
+assert.match(routes, /wardrobe\/lorebook-entries/u, "the picker can list enabled entries without reading their text");
 assert.match(routes, /tryCreatorAccountOperation/u, "wardrobe writes share the Creator operation lock");
+
+const manager = slurp2Source(
+  "packages/slurp2/src/engine/packages/client/src/slp/features/creators/SlpWardrobeManager.tsx",
+);
+assert.match(manager, /Only selected entries/u);
+assert.match(manager, /entryIds: lorebookEntryIds/u);
 
 console.log("slurp2 wardrobe regression checks passed");

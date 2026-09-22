@@ -1,5 +1,6 @@
 import { saveSlurpPostDeepDetails } from "../../data/feed/slp-post-deep-details-storage.js";
 import { buildSlurpDeepDetailsRecord } from "./slp-deep-details-record.js";
+import { prepareSlurpCreatorPost, recordSlurpProviderPrompt } from "./slp-prepared-post.js";
 import { type APIProvider } from "@marinara-engine/shared";
 import { createSlpPoll } from "../../../../../shared/src/slp/slp-polls.js";
 import { SLP_CREATOR_POST_TITLE_MAX_LENGTH } from "../../../../../shared/src/slp/slp-social.schema.js";
@@ -31,11 +32,7 @@ import { createPromptOverridesStorage } from "../../../services/storage/prompt-o
 import { generateCreatorPostImage } from "../media/slp-media-contract.js";
 import { persistSlurpGeneratedImageSet } from "./slp-post-media-operation.js";
 import { slpCreatorUnlockPriceMetadata } from "../../modules/economy/slp-prices.js";
-import {
-  NOODLER_MEDIA_PREFIX,
-  persistCreatorPostWithUploadedMedia,
-  type SlpCreatorPostMediaUpload,
-} from "../../base/media/slp-media.js";
+import { persistCreatorPostWithUploadedMedia, type SlpCreatorPostMediaUpload } from "../../base/media/slp-media.js";
 import { getErrorMessage } from "../../modules/creators/slp-public-support.js";
 import { slpResponseFormat } from "../../base/prompting/slp-response-format.js";
 import {
@@ -86,7 +83,6 @@ import { slurpPostPictureBriefs } from "./slp-post-picture-briefs.js";
 import { slurpVisualBriefFromSituation } from "../../modules/feed/slp-visual-brief.js";
 import { slurpContentAxesInstruction, slurpIntentFormat } from "../../modules/feed/slp-content-axes.js";
 import { planSlurpPost, recordSlurpPostOutcome } from "./slp-post-plan-service.js";
-import { stageImageToDisk } from "../../../services/image/image-generation.js";
 import { slurpShootInstruction } from "../../modules/feed/slp-shoot.js";
 import { openSlurpShoot, useSlurpShoot } from "../../data/feed/slp-shoot-storage.js";
 import { slurpEffortInstruction, slurpPostEffort } from "../../modules/creators/slp-production-profile.js";
@@ -563,18 +559,47 @@ export async function generateCreatorPost(
     },
   };
 
-  if (input.prepareOnly) {
-    // A scheduled post publishes later, so a reused picture is staged now and rides in the payload
-    // like a generated one. The reserve promotes it once the row is durable, or drops it.
-    const stagedReuse = reusedMedia
-      ? stageImageToDisk(
-          `${NOODLER_MEDIA_PREFIX}${account.id}`,
-          reusedMedia.buffer.toString("base64"),
-          reusedMedia.extension,
-        )
-      : null;
+  const resolveImageInput = async (draftPrompt: string) => {
+    const slpCreatorImageConnectionId = await resolveCreatorImageConnectionId(db, account.id);
+    const imageConnection =
+      (slpCreatorImageConnectionId ? await connections.getWithKey(slpCreatorImageConnectionId) : null) ??
+      (await connections.getDefaultForImageGeneration());
+    if (!imageConnection) return null;
     return {
-      stagedMedia: stagedReuse,
+      account,
+      linkedPublicAccount,
+      disclosureMode,
+      postContent: protectedGenerated.content,
+      draftPrompt,
+      contentPolicy: contentMenu,
+      visualBrief,
+      settings,
+      characters: createCharactersStorage(db),
+      promptOverrides: createPromptOverridesStorage(db),
+      imageConnection,
+      db,
+      debugMode,
+      admissionMode: input.admissionMode,
+      ...(storyVariation ? { width: settings.storyImageWidth, height: settings.storyImageHeight } : {}),
+    };
+  };
+
+  if (input.prepareOnly) {
+    let providerPrompt: string | null = null;
+    if (input.previewOnly && draftImagePrompt) {
+      const previewInput = await resolveImageInput(draftImagePrompt);
+      if (previewInput) {
+        providerPrompt = (
+          await generateCreatorPostImage({
+            ...previewInput,
+            previewOnly: true,
+          })
+        ).providerPrompt;
+      }
+    }
+    return prepareSlurpCreatorPost({
+      creatorAccountId: account.id,
+      reusedMedia,
       title: protectedGenerated.title,
       content: protectedGenerated.content,
       imagePrompt: draftImagePrompt,
@@ -589,17 +614,10 @@ export async function generateCreatorPost(
         fallback: wardrobeSelection.fallback,
       },
       visualBrief: visualBrief ?? null,
-      imageBrief: draftImagePrompt,
-      // The scheduled path returns here, before the image-commit branch that stamps the story flag,
-      // so a scheduled Story used to publish as an ordinary post. Carry the intent in the prepared
-      // payload instead; publishDueNoodlerPreparedPosts drops it again if no image ever attached,
-      // which keeps the "a Story is a picture with a line under it" rule intact.
-      metadata: {
-        ...baseInput.metadata,
-        ...(stagedReuse ? { noodlerMediaPath: stagedReuse.filePath } : {}),
-        ...(storyVariation ? { noodlerPostType: "story" } : {}),
-      },
-    };
+      providerPrompt,
+      metadata: baseInput.metadata,
+      story: storyVariation,
+    });
   }
 
   const persist = async (
@@ -666,13 +684,8 @@ export async function generateCreatorPost(
 
   if (!draftImagePrompt) return { post: await persist(await galleryFallback()), imagePromptReview: null };
 
-  const slpCreatorImageConnectionId = await resolveCreatorImageConnectionId(db, account.id);
-  // Fall back to the default image connection when a creator's mapped override
-  // was deleted (getWithKey returns null), rather than skipping image generation.
-  const imageConnection =
-    (slpCreatorImageConnectionId ? await connections.getWithKey(slpCreatorImageConnectionId) : null) ??
-    (await connections.getDefaultForImageGeneration());
-  if (!imageConnection) {
+  const imageInput = await resolveImageInput(draftImagePrompt);
+  if (!imageInput) {
     // A gallery image is a finished picture, so the post is not marked for the retry pass.
     const fallback = await galleryFallback();
     if (fallback.imageUrl) return { post: await persist(fallback), imagePromptReview: null };
@@ -688,26 +701,6 @@ export async function generateCreatorPost(
     return { post, imagePromptReview: null };
   }
 
-  const imageInput = {
-    account,
-    linkedPublicAccount,
-    disclosureMode,
-    postContent: protectedGenerated.content,
-    draftPrompt: draftImagePrompt,
-    contentPolicy: contentMenu,
-    visualBrief,
-    settings,
-    characters: createCharactersStorage(db),
-    promptOverrides: createPromptOverridesStorage(db),
-    imageConnection,
-    db,
-    debugMode,
-    admissionMode: input.admissionMode,
-    // A Story is shown in a tall frame and cropped to portrait in the composer, so generate it at
-    // 4:5 rather than at the feed post size the player configured.
-    ...(storyVariation ? { width: settings.storyImageWidth, height: settings.storyImageHeight } : {}),
-  };
-
   // Manual Guide review path: persist a pending prompt and hand back a preview for the
   // reviewed-image confirmation route to claim and finalize later.
   if (input.request.reviewImagePromptsBeforeSend === true) {
@@ -717,6 +710,7 @@ export async function generateCreatorPost(
         ...imageInput,
         previewOnly: true,
       });
+      await recordSlurpProviderPrompt(db, deepDetailsId, preview.providerPrompt);
     } catch (err) {
       if (isConnectionAdmissionFailure(err)) throw err;
       logger.warn(err, "[slurp] Failed to prepare image prompt review for %s", account.displayName);
@@ -752,6 +746,7 @@ export async function generateCreatorPost(
       ...imageInput,
       previewOnly: false,
     });
+    await recordSlurpProviderPrompt(db, deepDetailsId, image.providerPrompt);
   } catch (err) {
     // Same rule as the text leg: a busy connection is a deferral, so let it propagate to the
     // scheduler instead of persisting a post permanently marked as image-failed.

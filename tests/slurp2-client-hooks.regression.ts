@@ -370,6 +370,7 @@ const addedCalls = [
   "patch /slurp2/slurp/accounts/${encodeURIComponent(creatorId)}/wardrobe/${encodeURIComponent(id)}",
   "delete /slurp2/slurp/accounts/${encodeURIComponent(creatorId)}/wardrobe/${encodeURIComponent(id)}",
   "post /slurp2/slurp/accounts/${encodeURIComponent(creatorId)}/wardrobe/import",
+  "post /slurp2/slurp/wardrobe/lorebook-entries",
 ];
 const removedCalls = ["patch /slurp2/accounts/${encodeURIComponent(accountId)}/settings"];
 // Classic runtime mode is gone, so the block catalog no longer takes a mode.

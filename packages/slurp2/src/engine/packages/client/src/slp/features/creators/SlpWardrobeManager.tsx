@@ -9,6 +9,7 @@ import { fieldClass, textareaClass } from "../../modules/post/SlpPostHelpers";
 import {
   usePreviewSlurpWardrobeImport,
   useSlurpWardrobe,
+  useSlurpWardrobeLorebookEntries,
   useSlurpWardrobeLorebooks,
   useSlurpWardrobeMutations,
 } from "./slp-wardrobe-hooks";
@@ -135,6 +136,9 @@ export function SlpWardrobeManager({ creatorId, legacyWardrobe }: { creatorId: s
   const [importKind, setImportKind] = useState<ImportKind>(legacyWardrobe.trim() ? "legacy" : "character");
   const [importText, setImportText] = useState(legacyWardrobe);
   const [lorebookIds, setLorebookIds] = useState<string[]>([]);
+  const [lorebookScope, setLorebookScope] = useState<"books" | "entries">("books");
+  const [lorebookEntryIds, setLorebookEntryIds] = useState<string[]>([]);
+  const lorebookEntries = useSlurpWardrobeLorebookEntries(lorebookIds, importKind === "lorebook");
   const [review, setReview] = useState<ReviewLook[]>([]);
   const [reviewSource, setReviewSource] = useState<{ kind: ImportKind; label: string } | null>(null);
   const looks = wardrobe.data?.looks ?? [];
@@ -160,7 +164,11 @@ export function SlpWardrobeManager({ creatorId, legacyWardrobe }: { creatorId: s
   const runPreview = () => {
     const source =
       importKind === "lorebook"
-        ? { kind: "lorebook" as const, lorebookIds }
+        ? {
+            kind: "lorebook" as const,
+            lorebookIds,
+            ...(lorebookScope === "entries" ? { entryIds: lorebookEntryIds } : {}),
+          }
         : importKind === "text"
           ? { kind: "text" as const, text: importText }
           : importKind === "legacy"
@@ -358,24 +366,76 @@ export function SlpWardrobeManager({ creatorId, legacyWardrobe }: { creatorId: s
               </select>
             </label>
             {importKind === "lorebook" ? (
-              <label className="space-y-1">
-                <span className="text-xs font-semibold">
-                  {t("ui.slurp.wardrobe.chooseLorebooks", { defaultValue: "Choose lorebooks" })}
-                </span>
-                <select
-                  multiple
-                  size={Math.min(5, Math.max(2, lorebooks.data?.items.length ?? 2))}
-                  className={`${fieldClass} min-h-24`}
-                  value={lorebookIds}
-                  onChange={(event) => setLorebookIds([...event.target.selectedOptions].map((option) => option.value))}
-                >
-                  {(lorebooks.data?.items ?? []).map((book) => (
-                    <option key={book.id} value={book.id}>
-                      {book.name}
-                    </option>
-                  ))}
-                </select>
-              </label>
+              <div className="space-y-3">
+                <label className="space-y-1">
+                  <span className="text-xs font-semibold">
+                    {t("ui.slurp.wardrobe.chooseLorebooks", { defaultValue: "Choose lorebooks" })}
+                  </span>
+                  <select
+                    multiple
+                    size={Math.min(5, Math.max(2, lorebooks.data?.items.length ?? 2))}
+                    className={`${fieldClass} min-h-24`}
+                    value={lorebookIds}
+                    onChange={(event) => {
+                      setLorebookIds([...event.target.selectedOptions].map((option) => option.value));
+                      setLorebookEntryIds([]);
+                    }}
+                  >
+                    {(lorebooks.data?.items ?? []).map((book) => (
+                      <option key={book.id} value={book.id}>
+                        {book.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                {lorebookIds.length > 0 && (
+                  <fieldset className="space-y-2">
+                    <legend className="text-xs font-semibold">
+                      {t("ui.slurp.wardrobe.lorebookScope", { defaultValue: "What to scan" })}
+                    </legend>
+                    <label className="flex min-h-10 items-center gap-2 text-xs">
+                      <input
+                        type="radio"
+                        name={`wardrobe-lorebook-scope-${creatorId}`}
+                        checked={lorebookScope === "books"}
+                        onChange={() => setLorebookScope("books")}
+                      />
+                      {t("ui.slurp.wardrobe.wholeLorebooks", { defaultValue: "Every enabled entry in these books" })}
+                    </label>
+                    <label className="flex min-h-10 items-center gap-2 text-xs">
+                      <input
+                        type="radio"
+                        name={`wardrobe-lorebook-scope-${creatorId}`}
+                        checked={lorebookScope === "entries"}
+                        onChange={() => setLorebookScope("entries")}
+                      />
+                      {t("ui.slurp.wardrobe.selectedEntries", { defaultValue: "Only selected entries" })}
+                    </label>
+                  </fieldset>
+                )}
+                {lorebookScope === "entries" && lorebookIds.length > 0 && (
+                  <label className="space-y-1">
+                    <span className="text-xs font-semibold">
+                      {t("ui.slurp.wardrobe.chooseEntries", { defaultValue: "Choose entries" })}
+                    </span>
+                    <select
+                      multiple
+                      size={Math.min(7, Math.max(3, lorebookEntries.data?.items.length ?? 3))}
+                      className={`${fieldClass} min-h-32`}
+                      value={lorebookEntryIds}
+                      onChange={(event) =>
+                        setLorebookEntryIds([...event.target.selectedOptions].map((option) => option.value))
+                      }
+                    >
+                      {(lorebookEntries.data?.items ?? []).map((entry) => (
+                        <option key={`${entry.lorebookId}:${entry.id}`} value={entry.id}>
+                          {entry.lorebookName} — {entry.name}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                )}
+              </div>
             ) : importKind === "text" || importKind === "legacy" ? (
               <label className="space-y-1">
                 <span className="text-xs font-semibold">
@@ -403,6 +463,7 @@ export function SlpWardrobeManager({ creatorId, legacyWardrobe }: { creatorId: s
             disabled={
               previewImport.isPending ||
               (importKind === "lorebook" && lorebookIds.length === 0) ||
+              (importKind === "lorebook" && lorebookScope === "entries" && lorebookEntryIds.length === 0) ||
               ((importKind === "text" || importKind === "legacy") && !importText.trim())
             }
             onClick={runPreview}
