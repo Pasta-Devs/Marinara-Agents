@@ -455,7 +455,14 @@ export function createSlurpMessagesContext(db: DB, createCore: SlurpMessagesCore
     await db
       .update(slurpPaymentCompensations)
       .set({ status: "settled", updatedAt: now() })
-      .where(eq(slurpPaymentCompensations.id, compensationId));
+      // A compensated intent stays compensated. Settling it again after recovery refunded the fan
+      // counted the payment as both refunded and paid.
+      .where(
+        and(
+          eq(slurpPaymentCompensations.id, compensationId),
+          inArray(slurpPaymentCompensations.status, ["created", "charging", "charged", "settled"]),
+        ),
+      );
   }
 
   async function applySlurpTipEffects(slurp: ReturnType<SlurpMessagesCoreFactory>, paymentId: string): Promise<void> {

@@ -405,6 +405,11 @@ export type SlurpMessagePromptInput = {
   workerContext?: SlurpModelWorkerContext;
   /** A player pressed Force reply now: no budget setting, cap or mode may swallow that press. */
   skipBudgetCap?: boolean;
+  /**
+   * The availability the reply operation already paced this reply by. Recomputing it here from the
+   * schedule alone ignored an open conversation window, so an instant reply was told "you are not free".
+   */
+  availability?: Awaited<ReturnType<typeof resolveSlurpCreatorAvailability>>;
 };
 
 /**
@@ -434,16 +439,18 @@ export async function buildSlurpMessagePrompt(input: SlurpMessagePromptInput): P
       .then((byAccount) => byAccount.get(input.creator.id) ?? [])
       .catch(() => []),
   ]);
-  const availability = source
-    ? await resolveSlurpCreatorAvailability(
-        characters,
-        source,
-        undefined,
-        new Date(),
-        recentPostRows[0]?.createdAt ?? null,
-        settings,
-      )
-    : { online: true, activity: null, minutesUntilOnline: 0 };
+  const availability =
+    input.availability ??
+    (source
+      ? await resolveSlurpCreatorAvailability(
+          characters,
+          source,
+          undefined,
+          new Date(),
+          recentPostRows[0]?.createdAt ?? null,
+          settings,
+        )
+      : { online: true, activity: null, minutesUntilOnline: 0 });
   const characterCanon = await resolveCreatorCharacterCanon(input.db, source, disclosureMode);
   // The fan's direction, and what the creator has posted lately. Both were already stored and
   // neither reached the one prompt where a fan is most likely to mention them.

@@ -225,9 +225,19 @@ export function createMessagesStorageFollowUps(context: SlurpMessagesContext) {
     },
     async failScheduledFollowUp(threadId: string, followUpId: string): Promise<void> {
       const timestamp = now();
+      // ponytail: one retry, then give up. A follow-up that failed twice went back to pending with
+      // the same due time forever and slowed every other follow-up; count attempts if one is not enough.
+      const failedBefore = Boolean(
+        (await db.select().from(slurpFollowUps).where(eq(slurpFollowUps.id, followUpId)))[0]?.failedAt,
+      );
       await db
         .update(slurpFollowUps)
-        .set({ status: "pending", claimedAt: null, failedAt: timestamp, updatedAt: timestamp })
+        .set({
+          status: failedBefore ? "failed" : "pending",
+          claimedAt: null,
+          failedAt: timestamp,
+          updatedAt: timestamp,
+        })
         .where(
           and(
             eq(slurpFollowUps.id, followUpId),

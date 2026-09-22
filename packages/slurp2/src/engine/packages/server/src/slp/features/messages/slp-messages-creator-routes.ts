@@ -145,6 +145,9 @@ export async function slpMessagesCreatorRoutes(app: FastifyInstance, messaging: 
       threadId: thread.id,
       triggerMessageId: latest.id,
       force: true,
+      // `ownsCreator` only passes for a hand-operated Creator, which the operation otherwise never
+      // answers for, so without this every draft came back ineligible.
+      operatorDraft: true,
     });
     if (outcome.status !== "replied") {
       return reply.code(502).send({ error: "Could not draft a reply.", status: outcome.status });

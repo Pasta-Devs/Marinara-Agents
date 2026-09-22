@@ -1,5 +1,5 @@
 // The splash screen needs the shipped version and its public notes inside the client bundle.
-export const SLURP2_VERSION = "0.2.23";
+export const SLURP2_VERSION = "0.2.24";
 
 export interface Slurp2ReleaseEntry {
   version: string;
@@ -9,6 +9,17 @@ export interface Slurp2ReleaseEntry {
 
 /** The public release history shown in the Engine splash screen. */
 export const SLURP2_RELEASES: Slurp2ReleaseEntry[] = [
+  {
+    version: "0.2.24",
+    date: "2026-09-22",
+    notes: [
+      "Payments are safer: a tip or unlock that is still going through is no longer refunded by mistake, and cancelling a commission never creates coins.",
+      "Promised follow-ups arrive again with default settings.",
+      "Switching chats on desktop no longer carries a draft, a pending message or an open tool into the next conversation.",
+      "Enter no longer sends a half-written word while you type with an input method, and in-chat search scrolls to its match.",
+      'Locked content stays hidden in fresh replies, and "Let them answer" works for a Creator you play.',
+    ],
+  },
   {
     version: "0.2.23",
     date: "2026-09-22",

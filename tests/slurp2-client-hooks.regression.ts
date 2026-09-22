@@ -432,14 +432,14 @@ assert.deepEqual(
     useMutation: 149,
     useQuery: 211,
     useInfiniteQuery: 5,
-    invalidateQueries: 125,
+    invalidateQueries: 122,
     setQueryData: 20,
     cancelQueries: 6,
     removeQueries: 1,
     refetchQueries: 0,
     onMutate: 2,
     onError: 15,
-    onSettled: 3,
+    onSettled: 9,
   },
   "query and mutation wiring counts match the monolith plus the 0.2.0 planner and continuity hooks",
 );
@@ -452,7 +452,7 @@ const invalidatorCalls = {
 };
 assert.deepEqual(
   invalidatorCalls,
-  { invalidateSlurpMessages: 22, invalidateSlurpProjects: 5, mergeSlurpViewerShell: 3 },
+  { invalidateSlurpMessages: 26, invalidateSlurpProjects: 5, mergeSlurpViewerShell: 3 },
   "shared invalidation helpers must stay wired to the same call sites",
 );
 

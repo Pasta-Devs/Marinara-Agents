@@ -98,7 +98,9 @@ export function useSlurpThread(threadId: string | null, personaId: string | null
   });
   useEffect(() => {
     if (!personaId || !query.data?.thread) return;
+    // Opening marks the thread read on the server; the inbox row badge comes from `threads`.
     void queryClient.invalidateQueries({ queryKey: messageKeys.unreadCount(personaId) });
+    void queryClient.invalidateQueries({ queryKey: messageKeys.threads(personaId) });
   }, [personaId, query.data?.thread?.id, queryClient]);
   return query;
 }

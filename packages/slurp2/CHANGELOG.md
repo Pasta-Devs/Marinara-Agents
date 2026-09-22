@@ -1,5 +1,13 @@
 # Slurp Remastered release notes
 
+## 0.2.24 — 2026-09-22
+
+- Payments: recovery no longer refunds a tip or unlock that is still going through, a refund is never marked paid again, and cancelling a commission with the wallet off no longer creates coins. A persona can no longer tip its own Creator.
+- Promised follow-ups arrive with default settings, stop after a second failure, and read "1.5 hours" and "2 days" correctly.
+- Locked content is hidden in every reply. A second unlock no longer triggers a second reaction. "Let them answer" works for a Creator you play.
+- Desktop chats no longer leak drafts, pending messages, tools or older pages into the next conversation. Editing a failed message sends the new text.
+- Enter no longer sends during input-method composition, in-chat search scrolls to its match, and a pending commission cancellation can be retried.
+
 ## 0.2.23 — 2026-09-22
 
 - Restore after deleting a post now works. The feed reloaded on a timer and dropped the deleted post, taking the Restore row with it mid-countdown.

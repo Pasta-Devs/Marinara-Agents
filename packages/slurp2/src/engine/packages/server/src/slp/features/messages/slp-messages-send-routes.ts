@@ -33,7 +33,7 @@ const tipSchema = z.object({
   requestId: z.string().trim().min(8).max(100).optional(),
 });
 export async function slpMessagesSendRoutes(app: FastifyInstance, messaging: SlpMessagesContext) {
-  const { freshView, messages, ownsCreator, requireViewer, slurp } = messaging;
+  const { freshView, maskForViewer, messages, ownsCreator, requireViewer, slurp } = messaging;
 
   app.post("/messages/share-post", async (req, reply) => {
     const parsed = z
@@ -136,7 +136,7 @@ export async function slpMessagesSendRoutes(app: FastifyInstance, messaging: Slp
     return {
       thread: (await freshView(sent.thread.id)) ?? sent.thread,
       message: sent.message,
-      reply: outcome.status === "replied" ? outcome.message : null,
+      reply: outcome.status === "replied" ? maskForViewer(outcome.message) : null,
       replyStatus: outcome.status,
       // The client shows the typing indicator for this long before revealing the reply, so the
       // pacing the model was given and the pacing the player sees are the same number.
@@ -253,7 +253,7 @@ export async function slpMessagesSendRoutes(app: FastifyInstance, messaging: Slp
       status: "accepted",
       kind: "guidance",
       replyStatus: outcome.status,
-      reply: outcome.message,
+      reply: maskForViewer(outcome.message),
       typingMs: outcome.pacing.typingMs,
     };
   });
@@ -280,7 +280,7 @@ export async function slpMessagesSendRoutes(app: FastifyInstance, messaging: Slp
       : await replyToSlurpMessage(app.db, { threadId: thread.id, triggerMessageId, force: true });
     return {
       thread: (await freshView(thread.id)) ?? thread,
-      reply: outcome.status === "replied" ? outcome.message : null,
+      reply: outcome.status === "replied" ? maskForViewer(outcome.message) : null,
       replyStatus: outcome.status,
       typingMs: "pacing" in outcome ? outcome.pacing.typingMs : 0,
     };
@@ -306,7 +306,7 @@ export async function slpMessagesSendRoutes(app: FastifyInstance, messaging: Slp
         "The fan is asking for a reply. Treat this as a gentle request, not a demand. Answer only if the conversation rules and your availability allow it.",
     });
     return {
-      reply: outcome.status === "replied" ? outcome.message : null,
+      reply: outcome.status === "replied" ? maskForViewer(outcome.message) : null,
       replyStatus: outcome.status,
       typingMs: "pacing" in outcome ? outcome.pacing.typingMs : 0,
     };
@@ -339,8 +339,9 @@ export async function slpMessagesSendRoutes(app: FastifyInstance, messaging: Slp
     return {
       thread: (await freshView(sent.thread.id)) ?? sent.thread,
       message: sent.message,
-      reply: outcome.status === "replied" ? outcome.message : null,
+      reply: outcome.status === "replied" ? maskForViewer(outcome.message) : null,
       replyStatus: outcome.status,
+      typingMs: "pacing" in outcome ? outcome.pacing.typingMs : 0,
       wallet: await slurp.getWallet(viewer.id),
     };
   });
@@ -352,9 +353,11 @@ export async function slpMessagesSendRoutes(app: FastifyInstance, messaging: Slp
     if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
     const viewer = await requireViewer(parsed.data.personaId);
     if (!viewer) return reply.code(404).send({ error: "Slurp persona not found" });
+    // A retry or double-click on an unlocked message is a success, but not a second payment to react to.
+    const alreadyUnlocked = Boolean((await messages.getMessageById(parsed.data.messageId))?.unlockedAt);
     const message = await messages.unlockMessage(viewer.id, parsed.data.messageId);
     if (!message) return reply.code(402).send({ error: "PPV message cannot be unlocked." });
-    const unlockedThread = await messages.getThreadById(message.threadId);
+    const unlockedThread = alreadyUnlocked ? null : await messages.getThreadById(message.threadId);
     if (unlockedThread)
       await reactToSlurpPayment(app.db, {
         viewerAccountId: viewer.id,

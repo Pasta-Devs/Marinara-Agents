@@ -482,6 +482,11 @@ export function createMessagesStorageCommissions(context: SlurpMessagesContext) 
             error,
             `commission:${id}:accept`,
           );
+          // Compensated: close it, or the recovery poll replays it as a fan cancellation.
+          await db
+            .update(slurpCommissions)
+            .set({ state: "declined", updatedAt: now() })
+            .where(eq(slurpCommissions.id, id));
         }
         throw error;
       }
@@ -581,25 +586,31 @@ export function createMessagesStorageCommissions(context: SlurpMessagesContext) 
           const pending = await context.storage.getCommission(id);
           if (pending?.state !== "cancellation_pending" || pending.cancellationId !== cancellationId) return pending;
         }
-        await completeSlurpPaymentIntent(slurp, `commission:${id}:accept`);
-        await compensateSlurpPayment(
-          slurp,
-          {
-            viewerAccountId: commission.viewerAccountId,
-            creatorAccountId: commission.creatorAccountId,
-            price: commission.price,
-            note: "cancelled commission",
-            creditOperationId: `commission:${id}:accept:credit`,
-          },
-          new Error("Commission cancellation requires payment compensation"),
-          cancellationId,
-        );
+        // With the wallet off, accept charged nothing, so a refund here would mint coins.
+        const { walletEnabled } = await slurp.getSettings();
+        if (walletEnabled) {
+          await completeSlurpPaymentIntent(slurp, `commission:${id}:accept`);
+          await compensateSlurpPayment(
+            slurp,
+            {
+              viewerAccountId: commission.viewerAccountId,
+              creatorAccountId: commission.creatorAccountId,
+              price: commission.price,
+              note: "cancelled commission",
+              creditOperationId: `commission:${id}:accept:credit`,
+            },
+            new Error("Commission cancellation requires payment compensation"),
+            cancellationId,
+          );
+        }
         await context.storage.appendMessage(commission.threadId, {
           id: `commission:${id}:cancellation-message`,
           senderAccountId: commission.viewerAccountId,
           role: "viewer",
           kind: "system",
-          content: "The fan cancelled this commission. The payment was refunded.",
+          content: walletEnabled
+            ? "The fan cancelled this commission. The payment was refunded."
+            : "The fan cancelled this commission.",
           metadata: { commissionId: id },
         });
         await db

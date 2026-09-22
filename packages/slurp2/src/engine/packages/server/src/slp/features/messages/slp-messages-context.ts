@@ -1,5 +1,6 @@
 import { createSlurpPopulationStorage } from "../../data/audience/slp-audience-storage-funnel.js";
 import type { SlurpMessagesStorage } from "../../data/messages/slp-messages-storage.js";
+import type { SlurpMessage } from "../../data/messages/slp-messages-storage-types.js";
 import { resolveSlurpCreatorAvailability } from "../../modules/creators/slp-creator-schedule-context.js";
 import { createCharactersStorage } from "../../../services/storage/characters.storage.js";
 import type { FastifyInstance } from "fastify";
@@ -56,30 +57,32 @@ export function createSlpMessagesContext(
   const requireViewer = async (personaId: string) => slurp.getViewer(personaId);
 
   /**
-   * The messages of a thread as this side is allowed to see them.
+   * A message as the fan is allowed to see it.
    *
    * A pay-per-view message the fan has not unlocked must not travel over the wire at all;
-   * hiding it in the client would still hand the text to anyone reading the response. The
-   * Creator side always sees what they wrote.
+   * hiding it in the client would still hand the text to anyone reading the response. Every
+   * fan-facing response that carries a message, including a fresh reply, goes through here.
    */
-  const visibleMessages = async (threadId: string, side: "viewer" | "creator") =>
-    (await messages.listMessages(threadId)).map((message) =>
-      side === "viewer" && message.kind === "ppv" && !message.unlockedAt
+  const maskForViewer = <T extends SlurpMessage | null>(message: T): T =>
+    message?.kind === "ppv" && !message.unlockedAt
+      ? {
+          ...message,
+          content: "",
+          imageUrl: null,
+          metadata: { ...message.metadata, imagePrompt: undefined, imageDescription: undefined },
+        }
+      : message?.kind === "post_preview" && message.metadata.previewLocked === true
         ? {
             ...message,
             content: "",
             imageUrl: null,
-            metadata: { ...message.metadata, imagePrompt: undefined, imageDescription: undefined },
+            metadata: { ...message.metadata, content: "", imageUrl: null },
           }
-        : side === "viewer" && message.kind === "post_preview" && message.metadata.previewLocked === true
-          ? {
-              ...message,
-              content: "",
-              imageUrl: null,
-              metadata: { ...message.metadata, content: "", imageUrl: null },
-            }
-          : message,
-    );
+        : message;
+
+  /** The messages of a thread as this side is allowed to see them. The Creator side sees what they wrote. */
+  const visibleMessages = async (threadId: string, side: "viewer" | "creator") =>
+    (await messages.listMessages(threadId)).map((message) => (side === "viewer" ? maskForViewer(message) : message));
 
   /**
    * Re-read a thread and enrich it, so every response carries the same joined shape.
@@ -104,7 +107,17 @@ export function createSlpMessagesContext(
     return Boolean(creator && creator.sourceKind === "persona" && creator.sourceEntityId === personaId);
   };
 
-  return { slurp, messages, population, creatorPresence, requireViewer, visibleMessages, freshView, ownsCreator };
+  return {
+    slurp,
+    messages,
+    population,
+    creatorPresence,
+    requireViewer,
+    maskForViewer,
+    visibleMessages,
+    freshView,
+    ownsCreator,
+  };
 }
 
 export type SlpMessagesContext = ReturnType<typeof createSlpMessagesContext>;

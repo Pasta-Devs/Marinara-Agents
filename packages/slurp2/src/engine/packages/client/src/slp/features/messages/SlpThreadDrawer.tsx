@@ -28,6 +28,8 @@ export function SlpThreadDrawer({ model }: { model: SlurpThreadViewModel }) {
     setCommissionPrefill,
     setDrawerMode,
     setError,
+    setLoadedOlderMessages,
+    setOlderCursor,
     setToolTab,
     setToolsOpen,
     thread,
@@ -160,6 +162,13 @@ export function SlpThreadDrawer({ model }: { model: SlurpThreadViewModel }) {
                             })
                               .then((confirmed) => {
                                 if (confirmed) return resetThread.mutateAsync({ threadId, personaId });
+                              })
+                              .then((cleared) => {
+                                // Older pages live outside the query cache, so the refetch alone
+                                // left the deleted messages on screen.
+                                if (!cleared) return;
+                                setLoadedOlderMessages([]);
+                                setOlderCursor(undefined);
                               })
                               .catch((cause: unknown) =>
                                 setError(

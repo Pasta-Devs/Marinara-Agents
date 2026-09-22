@@ -162,6 +162,9 @@ export function createMessagesStorageBase(context: SlurpMessagesContext) {
           ),
         );
       for (let row of rows) {
+        // A fresh `charged` row is a payment still between debit and its message write. Compensating
+        // it refunded the fan while the tip or unlock went on to land anyway.
+        if (row.status === "charged" && Date.parse(String(row.updatedAt)) > Date.now() - 5 * 60 * 1000) continue;
         if (row.status === "settled") {
           await applySlurpTipEffects(slurp, String(row.id)).catch((error) =>
             logger.warn(error, "[slurp] Durable tip-effect recovery failed for %s", row.id),
@@ -225,7 +228,10 @@ export function createMessagesStorageBase(context: SlurpMessagesContext) {
             senderAccountId: commission.viewerAccountId,
             role: "viewer",
             kind: "system",
-            content: "The fan cancelled this commission. The payment was refunded.",
+            // `:accept` marks a payment that failed during accept, not a fan who changed their mind.
+            content: commission.cancellationId.endsWith(":accept")
+              ? "The payment for this commission failed and was refunded."
+              : "The fan cancelled this commission. The payment was refunded.",
             metadata: { commissionId: commission.id },
           });
           await db
@@ -463,9 +469,12 @@ export function createMessagesStorageBase(context: SlurpMessagesContext) {
       | { status: "insufficient_funds"; required: number }
       | { status: "not_found" }
     > {
-      if (viewerAccountId === creatorAccountId) return { status: "not_found" };
       const creator = await slurp.getNoodlerAccountById(creatorAccountId);
       if (!creator) return { status: "not_found" };
+      // The viewer id is a persona id, so comparing it with the account id never matched. Checking the
+      // account's source persona is what keeps a persona from messaging or tipping its own Creator.
+      if (creator.sourceKind === "persona" && creator.sourceEntityId === viewerAccountId)
+        return { status: "not_found" };
       const existing = await context.storage.getThread(viewerAccountId, creatorAccountId);
       // A creator writing first always gets through: it is their own inbox, and a welcome message
       // that the creator's own policy blocked would be an absurdity.

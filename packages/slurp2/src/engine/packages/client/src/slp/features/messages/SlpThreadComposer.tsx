@@ -520,7 +520,8 @@ export function SlpThreadComposer({ model }: { model: SlurpThreadViewModel }) {
               onChange={(event) => setDraft(event.target.value)}
               onKeyDown={(event) => {
                 // Enter sends, Shift+Enter breaks the line: the convention every chat box uses.
-                if (event.key === "Enter" && !event.shiftKey) {
+                // An IME uses Enter to confirm a word; that press must not send the half-written message.
+                if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) {
                   event.preventDefault();
                   void submit();
                 }

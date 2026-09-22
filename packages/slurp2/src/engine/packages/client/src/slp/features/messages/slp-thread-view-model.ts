@@ -101,7 +101,7 @@ export function useSlurpThreadViewState(props: SlurpThreadViewProps) {
   const [standaloneTip, setStandaloneTip] = useState<SlurpMessage | null>(null);
   const [composerTipAmount, setComposerTipAmount] = useState(0);
   const [composerTipNote, setComposerTipNote] = useState("");
-  const [sendRequestId, setSendRequestId] = useState<string | null>(null);
+  const [sendRequest, setSendRequest] = useState<{ id: string; content: string } | null>(null);
   // The fan's own words, held on screen until the server's copy of them arrives.
   const [pending, setPending] = useState<{ content: string; id: string | null; startedAt: number } | null>(null);
   // Why no answer came. The send route has always reported this and nothing ever read it, so a
@@ -353,32 +353,6 @@ export function useSlurpThreadViewState(props: SlurpThreadViewProps) {
     if (visibleCreatorReply || (thread && !thread.needsReply && hiddenReplyIds.size === 0)) setReplyStatus(null);
   }, [hiddenReplyIds, messages, thread]);
 
-  // A different conversation must not inherit the last one's unsent echo.
-  useEffect(() => {
-    setPending(null);
-    setTyping(false);
-    setReplyStatus(null);
-    setDrawerMode(null);
-    setMessageSearchOpen(false);
-    setMessageSearch("");
-    setMessageSearchIndex(0);
-    setCommissionRibbonOpen(false);
-    setPreparingImage(false);
-    setError(null);
-    setComposerTipAmount(0);
-    setComposerTipNote("");
-    setCommissionPrefill("");
-    setCustomTipAmount("");
-    setCustomTipNote("");
-    setStandaloneTip(null);
-    setRequestHint("follow-up");
-    setVisibleCount(SLURP_MESSAGE_PAGE);
-    setAwayFromBottom(false);
-    setHeaderMenuOpen(false);
-    setTierOpen(false);
-    landedAtBottomRef.current = false;
-  }, [threadId, creatorAccountId]);
-
   useEffect(() => {
     setMessageSearchIndex(0);
   }, [messageSearch]);
@@ -402,11 +376,16 @@ export function useSlurpThreadViewState(props: SlurpThreadViewProps) {
     const match = messageSearchMatches[messageSearchIndex];
     if (match) {
       const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-      document
-        .getElementById(`slurp-message-${match}`)
-        ?.scrollIntoView({ block: "center", behavior: reduceMotion ? "auto" : "smooth" });
+      // The id sits on a `display: contents` wrapper, which has no box to scroll to. Its last child
+      // is the message itself; the date and unread separators come before it.
+      const wrapper = document.getElementById(`slurp-message-${match}`);
+      (wrapper?.lastElementChild ?? wrapper)?.scrollIntoView({
+        block: "center",
+        behavior: reduceMotion ? "auto" : "smooth",
+      });
     }
-  }, [messageSearchIndex, messageSearchMatches]);
+    // `visibleCount`: a match in an older page only exists after the effect above mounts it.
+  }, [messageSearchIndex, messageSearchMatches, visibleCount]);
 
   useEffect(() => {
     const dialog = drawerRef.current;
@@ -472,7 +451,19 @@ export function useSlurpThreadViewState(props: SlurpThreadViewProps) {
     }
     const activeThreadId = thread?.id ?? threadId;
     if (!activeThreadId || !personaId || !nextOlderCursor || olderMessages.isPending) return;
-    const page = await olderMessages.mutateAsync({ threadId: activeThreadId, personaId, cursor: nextOlderCursor });
+    let page;
+    try {
+      page = await olderMessages.mutateAsync({ threadId: activeThreadId, personaId, cursor: nextOlderCursor });
+    } catch (cause) {
+      // A stale anchor would jump the view on the next unrelated page change.
+      growAnchorRef.current = null;
+      setError(
+        cause instanceof Error
+          ? cause.message
+          : localizeUi("ui.slurp.messages.olderFailed", { defaultValue: "Could not load older messages." }),
+      );
+      return;
+    }
     setLoadedOlderMessages((current) => [...page.messages, ...current]);
     setOlderCursor(page.nextCursor);
     setVisibleCount((current) => current + SLURP_MESSAGE_PAGE);
@@ -569,8 +560,8 @@ export function useSlurpThreadViewState(props: SlurpThreadViewProps) {
     setComposerTipAmount,
     composerTipNote,
     setComposerTipNote,
-    sendRequestId,
-    setSendRequestId,
+    sendRequest,
+    setSendRequest,
     pending,
     setPending,
     replyStatus,

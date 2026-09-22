@@ -24,8 +24,17 @@ const messagePageSchema = personaQuerySchema.extend({
 const withSuggestedQuotes = <T extends { brief: string }>(commissions: T[], pricing: SlurpCommissionPricing) =>
   commissions.map((commission) => ({ ...commission, suggestedPrice: slurpCommissionQuote(commission.brief, pricing) }));
 export async function slpMessagesThreadRoutes(app: FastifyInstance, messaging: SlpMessagesContext) {
-  const { creatorPresence, freshView, messages, ownsCreator, population, requireViewer, slurp, visibleMessages } =
-    messaging;
+  const {
+    creatorPresence,
+    freshView,
+    maskForViewer,
+    messages,
+    ownsCreator,
+    population,
+    requireViewer,
+    slurp,
+    visibleMessages,
+  } = messaging;
   app.get("/messages/unread-count", async (req, reply) => {
     const parsed = personaQuerySchema.safeParse(req.query);
     if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
@@ -129,23 +138,7 @@ export async function slpMessagesThreadRoutes(app: FastifyInstance, messaging: S
     );
     return {
       thread: await freshView(thread.id, side),
-      messages: page.messages.map((message) =>
-        side === "viewer" && message.kind === "ppv" && !message.unlockedAt
-          ? {
-              ...message,
-              content: "",
-              imageUrl: null,
-              metadata: { ...message.metadata, imagePrompt: undefined, imageDescription: undefined },
-            }
-          : side === "viewer" && message.kind === "post_preview" && message.metadata.previewLocked === true
-            ? {
-                ...message,
-                content: "",
-                imageUrl: null,
-                metadata: { ...message.metadata, content: "", imageUrl: null },
-              }
-            : message,
-      ),
+      messages: side === "viewer" ? page.messages.map(maskForViewer) : page.messages,
       nextCursor: page.nextCursor,
       creator,
       counterpart,
@@ -313,23 +306,7 @@ export async function slpMessagesThreadRoutes(app: FastifyInstance, messaging: S
     const audienceTone = thread ? readSlurpAudienceTone((await slurp.getSettings()).audienceTone) : null;
     return {
       thread: thread ? await freshView(thread.id) : null,
-      messages: page.messages.map((message) =>
-        message.kind === "ppv" && !message.unlockedAt
-          ? {
-              ...message,
-              content: "",
-              imageUrl: null,
-              metadata: { ...message.metadata, imagePrompt: undefined, imageDescription: undefined },
-            }
-          : message.kind === "post_preview" && message.metadata.previewLocked === true
-            ? {
-                ...message,
-                content: "",
-                imageUrl: null,
-                metadata: { ...message.metadata, content: "", imageUrl: null },
-              }
-            : message,
-      ),
+      messages: page.messages.map(maskForViewer),
       nextCursor: page.nextCursor,
       commissions: thread ? await messages.listCommissionsForThread(thread.id) : [],
       creator,
