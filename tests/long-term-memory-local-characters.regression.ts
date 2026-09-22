@@ -725,6 +725,163 @@ async function main() {
     [activeMara.key],
   );
 
+  // 4. Batch-extracted name variants must canonicalize to one trusted identity
+  //    instead of forking provisional local characters from the surface form.
+  const batchVariantUnits = [
+    unit({ bucket: "character_fact", subjectId: "ash", subjectNames: ["Ash"], text: "Ash holds the line." }),
+    unit({
+      bucket: "character_fact",
+      subjectId: "ashleigh",
+      subjectNames: ["Ashleigh"],
+      text: "Ashleigh arrives later.",
+    }),
+    unit({
+      bucket: "character_fact",
+      subjectId: "ashleigh_kestrel",
+      subjectNames: ["Ashleigh Kestrel"],
+      text: "Ashleigh Kestrel departs.",
+    }),
+  ];
+  const batchVariantResolution = prepareLtmSubjectIdentityContext({
+    units: batchVariantUnits,
+    catalog: { entries: [ashleighEntry], notes: [] },
+    scope,
+    sourceBackedNpcSourceText: "Ash holds the line. Ashleigh arrives later. Ashleigh Kestrel departs.",
+    sourceBackedNpcSourceTitle: "Watch",
+  }).resolve({ units: batchVariantUnits, existingNotes: [] });
+  assert.equal(batchVariantResolution.droppedCandidates.length, 0);
+  assert.deepEqual(
+    batchVariantResolution.units.map((resolvedUnit) => resolvedUnit.subjects?.[0]?.key),
+    ["character:char_ashleigh_kestrel", "character:char_ashleigh_kestrel", "character:char_ashleigh_kestrel"],
+    "short, first-name, and full-name variants must share one trusted identity",
+  );
+
+  // 4b. A minor spelling variation of the trusted full name resolves to that
+  //     identity instead of forking a provisional local character.
+  const spellingVariantUnit = unit({
+    bucket: "character_fact",
+    subjectId: "ashleigh_kestral",
+    subjectNames: ["Ashleigh Kestral"],
+    text: "Ashleigh Kestral holds the line.",
+  });
+  const spellingVariantResolution = prepareLtmSubjectIdentityContext({
+    units: [spellingVariantUnit],
+    catalog: { entries: [ashleighEntry], notes: [] },
+    scope,
+    sourceBackedNpcSourceText: "Ashleigh Kestral holds the line.",
+    sourceBackedNpcSourceTitle: "Watch",
+  }).resolve({ units: [spellingVariantUnit], existingNotes: [] });
+  assert.equal(spellingVariantResolution.droppedCandidates.length, 0);
+  assert.equal(spellingVariantResolution.units[0]!.subjects?.[0]?.key, "character:char_ashleigh_kestrel");
+
+  // 4c. A first name shared by two trusted characters fails closed with
+  //     actionable competing identities instead of picking one.
+  const sharedFirstNameCatalog = {
+    entries: [
+      {
+        subject: {
+          key: "character:char_ashley_cooper",
+          ref: { kind: "character" as const, id: "char_ashley_cooper" },
+        },
+        name: "Ashley Cooper",
+        aliases: [],
+        canonicalSlug: "ashley_cooper",
+        provenance: "roster:character:char_ashley_cooper",
+      },
+      {
+        subject: {
+          key: "character:char_ashley_dalton",
+          ref: { kind: "character" as const, id: "char_ashley_dalton" },
+        },
+        name: "Ashley Dalton",
+        aliases: [],
+        canonicalSlug: "ashley_dalton",
+        provenance: "roster:character:char_ashley_dalton",
+      },
+    ],
+    notes: [],
+  };
+  const sharedFirstNameUnit = unit({
+    bucket: "character_fact",
+    subjectId: "ashley",
+    subjectNames: ["Ashley"],
+    text: "Ashley waits.",
+  });
+  const sharedFirstNameResolution = prepareLtmSubjectIdentityContext({
+    units: [sharedFirstNameUnit],
+    catalog: sharedFirstNameCatalog,
+    scope,
+    sourceBackedNpcSourceText: "Ashley waits.",
+    sourceBackedNpcSourceTitle: "Watch",
+  }).resolve({ units: [sharedFirstNameUnit], existingNotes: [] });
+  assert.equal(sharedFirstNameResolution.units.length, 0);
+  assert.equal(sharedFirstNameResolution.droppedCandidates[0]!.reason, "ambiguous_subject");
+  assert.equal(sharedFirstNameResolution.diagnostics[0]!.code, "ambiguous_subject_identity");
+  const sharedFirstNameDetails = sharedFirstNameResolution.diagnostics[0]!.details as any;
+  assert.equal(sharedFirstNameDetails.competingSubjectKeys?.length, 2);
+  assert.ok(sharedFirstNameDetails.competingRecords?.length >= 2);
+
+  // 4d. A keyless, nameless unit whose subjectId matches a short form of a
+  //     trusted name adopts that trusted identity instead of forking a
+  //     provisional local character from the source-backed surface name.
+  const keylessShortFormUnit = unit({
+    bucket: "character_fact",
+    subjectId: "ash",
+    text: "Ash holds the line.",
+  });
+  const keylessShortFormResolution = prepareLtmSubjectIdentityContext({
+    units: [keylessShortFormUnit],
+    catalog: { entries: [ashleighEntry], notes: [] },
+    scope,
+    sourceBackedNpcSourceText: "Ash holds the line.",
+    sourceBackedNpcSourceTitle: "Watch",
+  }).resolve({ units: [keylessShortFormUnit], existingNotes: [] });
+  assert.equal(keylessShortFormResolution.droppedCandidates.length, 0);
+  assert.equal(
+    keylessShortFormResolution.units[0]!.subjects?.[0]?.key,
+    "character:char_ashleigh_kestrel",
+    "keyless short-form subject IDs must reuse the trusted longer identity",
+  );
+
+  // 4e. A keyless short-form unit must adopt the vault's existing note target for the
+  //     resolved identity (even a non-canonical legacy one) instead of forking a
+  //     parallel canonical note.
+  const ashleighLegacyNote = {
+    ...sourceNote,
+    id: "char_ashleigh_legacy",
+    title: "Ashleigh",
+    type: "character" as const,
+    subjects: [ashleighEntry.subject],
+  };
+  const keylessLegacyUnit = unit({
+    bucket: "character_fact",
+    subjectId: "ash",
+    text: "Ash holds the line.",
+  });
+  const keylessLegacyResolution = prepareLtmSubjectIdentityContext({
+    units: [keylessLegacyUnit],
+    catalog: { entries: [ashleighEntry], notes: [ashleighLegacyNote] },
+    scope,
+    sourceBackedNpcSourceText: "Ash holds the line.",
+    sourceBackedNpcSourceTitle: "Watch",
+  }).resolve({ units: [keylessLegacyUnit], existingNotes: [] });
+  assert.equal(keylessLegacyResolution.droppedCandidates.length, 0);
+  assert.equal(
+    keylessLegacyResolution.units[0]!.subjects?.[0]?.key,
+    "character:char_ashleigh_kestrel",
+    "keyless short-form units must still resolve to the trusted identity",
+  );
+  assert.equal(
+    keylessLegacyResolution.units[0]!.subjectId,
+    "ashleigh_legacy",
+    "keyless source-backed units must target the existing legacy note, not a parallel canonical one",
+  );
+  assert.deepEqual(
+    keylessLegacyResolution.existingNotes.map((note) => note.id),
+    ["char_ashleigh_legacy"],
+    "the existing legacy note must be the sole target, with no forked canonical note",
+  );
+
   for (const character of ["char-Mara", "char Mara"]) {
     const normalized = normalizeStructuredSummaryEvidenceUnits({
       units: [],

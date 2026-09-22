@@ -1,5 +1,9 @@
 # Long-Term Memory changelog
 
+## 1.3.11 — 2026-09-22
+
+- Canonicalize character name variants during extraction so short names, first-name-only forms, and minor spelling variations resolve to one trusted identity instead of forking duplicate memories, while shared or ambiguous names keep failing closed with the competing identities listed.
+
 ## 1.3.10 — 2026-09-21
 
 - Read and parse each vault note once per fresh storage state, shared by scope targets, note lists, paged reads, and helper callers instead of rescanning the whole vault for every request.
