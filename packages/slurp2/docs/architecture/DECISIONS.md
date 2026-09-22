@@ -158,7 +158,7 @@ modules, rejected alternative, and migration consequence.
   member query moved.
 - **Migration consequence:** no `components/slurp/` path remains, so no source test may read one
   except through `slurp2Source`. New Slurp2 code must live in the `slp` roots or one of the three
-   permanent exceptions.
+  permanent exceptions.
 
 ## 2026-09-19 — Slice 12: Slurp2 owns its social vocabulary
 
@@ -210,3 +210,93 @@ modules, rejected alternative, and migration consequence.
 - **Migration consequence:** none. No table, column, JSON key, locale key, platform value, backup
   format, stored media path or response shape changed. The manifest requires an Engine restart on
   update, so an old client bundle cannot run against the new operation routes after an update.
+
+## Planner and continuity ledger (2026-09-21)
+
+- **Decision:** the planner decides before the model is called, and stores the decision first.
+  `slurp2_content_opportunities` records intent, delivery, workflow, access, the promise it answers,
+  and the post it produced. A chosen skip is a stored decision, not an absence. The model writes the
+  Creator's voice and nothing else: it never decides access, charges, campaign stages, or skips.
+- **Decision:** intent, delivery, and workflow are three axes, not one list. The shipped list mixed
+  them, so a Story could never also be a thank-you and text-only was only ever a failure.
+- **Decision:** continuity lives in one Slurp-owned ledger (`slurp2_continuity_facts`,
+  `slurp2_continuity_events`, `slurp2_continuity_proposals`) keyed on the source Character or
+  Persona as well as the Slurp account. There is no canon-map table: the accounts table already
+  enforces one Creator per `(sourceKind, sourceEntityId)`.
+- **Decision:** one read rule, `slurpContinuityReadable`, decides privacy for every surface. A
+  thread-private record never reaches a post or another thread; `canon_only` reaches only the editor;
+  conversation, roleplay, and game records are stored but never read by a Slurp prompt, so a scene is
+  not history. Prompts read only confirmed or active, unexpired records.
+- **Decision:** extraction proposes and the rules dispose. The model may cite only message ids from a
+  server-built allowlist and must quote evidence present in that message. The Creator's own explicit
+  limits, plans, and business rules apply automatically; personal disclosures wait as proposals.
+- **Decision:** promotion writes a new derived record rather than mutating the private source, so the
+  source keeps its audience and can still be retracted.
+- **Affected modules:** `modules/feed/` (planner, axes, campaign, media reuse, demand),
+  `modules/continuity/`, `modules/creators/slp-creator-strategy.ts`, `data/feed/`,
+  `data/continuity/`, `features/feed/slp-post-plan-service.ts`, `features/messages/`, and the
+  Creator Continuity tab.
+- **Rejected alternative:** keeping the Classic runtime mode. Every planner decision would have
+  needed a second, older code path. The old prompt wording survives as a selectable preset instead.
+- **Migration consequence:** additive. New tables, a new optional `strategy` key in account settings,
+  and `classicPromptBlocks` in Slurp settings. Old prompt-block layouts migrate in place, keeping
+  their edits and gaining new blocks at their inventory position.
+
+## Host-owned generation integrations (2026-09-21)
+
+- **Problem:** The Creator posting path called Engine provider and image implementations directly.
+  That copied host integration details into the package and could bypass newer host queues, admission,
+  fallback, and media lifecycle behavior.
+- **Decision:** The Creator posting path keeps prompt construction and generation orchestration, but
+  uses the Engine's Capability API 1.31 integration facade for its LLM provider, image generation, and
+  staged image writes. A small `base/host` adapter stores the activation-scoped facade. Other Slurp2
+  generation features retain their existing host-service path until a separate migration slice covers
+  them.
+- **Affected modules:** `base/host/slp-generation-integrations.ts`, Creator post generation, Creator
+  image generation, server activation, the package manifest, and the build boundary metadata.
+- **Rejected alternative:** copying the Engine's provider and image implementations into Slurp2. That
+  would duplicate security and queue behavior and would drift on every Engine generation change.
+- **Migration consequence:** Slurp2 now requires Engine 2.4.6 and Capability API 1.31. Existing Slurp
+  data is unchanged. Package activation fails on older Engines instead of silently using an incomplete
+  Creator posting integration.
+
+## Prompt intent is the source of truth (2026-09-21)
+
+- **Problem:** Slurp has several valid prompt controls: global prompt blocks, global generation and
+  image settings, Creator stage and content settings, production strategy, current Creator state,
+  and message relationship state. They were all expressed as prose. Image interpretation could
+  therefore treat a personality or adult image instruction as permission to change the post's scene.
+- **Decision:** The post's subject, action, setting, clothing, and sexual intensity are the visual
+  intent. The post prompt blocks and Creator settings may shape that intent, but image interpretation
+  may only render it. Stable appearance and style add detail after intent. They may not add an event,
+  person, outfit, viewpoint, nudity, explicit anatomy, or sexual activity. The post caption remains a
+  related text output, not the image source. Message image requests use the same Creator content menu
+  and relationship boundaries, with thread state deciding whether adult escalation is permitted.
+- **Affected modules:** `base/prompting/slp-prompt-blocks.ts`, `base/media/slp-image-prompt-rewrite.ts`,
+  `features/feed/`, `features/media/`, `features/messages/`, and the global image settings defaults.
+- **Rejected alternative:** adding a second Creator-specific image prompt system. The existing block
+  editor, global image settings, Creator image preferences, content menu, and message relationship
+  state already provide the required controls. A second system would create conflicting sources of
+  truth.
+- **Migration consequence:** the shipped image defaults become non-escalating. Exact older shipped
+  defaults migrate to the new values; user-edited text remains unchanged. Stored posts and image
+  prompts are not rewritten.
+
+## Typed visual brief between planning and rendering (2026-09-21)
+
+- **Problem:** Post planning already knew the place, action, company, camera, effort, and delivery,
+  but the image path reduced those facts to free text before interpretation. A style or adult image
+  instruction could therefore change the scene after planning.
+- **Decision:** Automatic post planning creates a `SlurpVisualBrief` in `base/media/`. It carries the
+  authoritative subject, action, setting, company, clothing, camera, mood, and sexual level. Image
+  interpretation receives both the typed brief and the old text draft. The typed brief constrains the
+  rewrite, and the policy text is appended to the final provider prompt. Deep Details records the
+  brief when one exists. Existing stored image prompt strings remain compatible.
+- **Affected modules:** `base/media/slp-visual-brief.ts`, `modules/feed/slp-visual-brief.ts`, post
+  generation, both Creator image services, Deep Details, and the prompt preview inspector.
+- **Rejected alternative:** replacing the stored image prompt with a new JSON payload. Existing posts,
+  image review, retries, and media records already use prompt strings. The typed brief is additive and
+  remains an internal generation contract.
+- **Migration consequence:** no stored post changes. New automatic posts record typed visual intent;
+  older posts continue to use their stored image prompts. Prompt previews now label block inspection
+  separately from full post generation.

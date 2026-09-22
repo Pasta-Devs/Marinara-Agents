@@ -177,3 +177,9 @@ getEarnings
 creditEarnings
 listPostUnlocksForViewer
 bootstrap
+skipNoodlerScheduledPost
+listWardrobeLooks
+createWardrobeLooks
+updateWardrobeLook
+deleteWardrobeLook
+clearWardrobe

@@ -1,3 +1,4 @@
+import type { SlpAccountSettingsPatchInput } from "../../../../../shared/src/slp/slp-social-generation.schema.js";
 import type { SlpAccount } from "../../../../../shared/src/slp/slp-social.types.js";
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../../../lib/api-client.js";
@@ -68,5 +69,30 @@ export function useCreatorEligibleAccounts(
     getNextPageParam: (page) => (page.hasMore ? page.offset + page.items.length : undefined),
     enabled,
     staleTime: 10_000,
+  });
+}
+
+/**
+ * Save part of a Creator's strategy. `null` returns a value to its derived default; absent keys are
+ * left alone, so one control never resets another.
+ */
+export function useUpdateCreatorStrategy() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      accountId,
+      ...strategy
+    }: {
+      accountId: string;
+      style?: "homemade" | "polished" | "documentary" | "theatrical" | null;
+      skipRate?: number | null;
+      textOnlyRate?: number | null;
+      strategyText?: string | null;
+    }) =>
+      api.patch<SlpAccount>(`/slurp2/accounts/${encodeURIComponent(accountId)}/settings`, {
+        subtree: "strategy",
+        patch: strategy,
+      } satisfies SlpAccountSettingsPatchInput),
+    onSuccess: () => qc.invalidateQueries({ queryKey: slpKeys.noodlerAccounts() }),
   });
 }

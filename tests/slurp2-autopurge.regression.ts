@@ -64,7 +64,7 @@ assert.match(
   /if \(unlinkCreatorMedia\(path\)\) removedMediaPaths\.add\(path\)[\s\S]*Retain a failed path's database reference/u,
   "failed filesystem cleanup must remain referenced for a later retry",
 );
-assert.match(operation, /removedPostMedia: new Set\(postMedia\.filter\([\s\S]*removedMessageMedia: new Set/u);
+assert.match(operation, /removedPostMedia: new Set\([\s\S]*attachments\.map[\s\S]*removedMessageMedia: new Set/u);
 assert.match(operation, /trySlurpDataDeletion/u, "manual and scheduled purges must use the destructive-work lock");
 assert.match(scheduler, /if \(Date\.parse\(settings\.autopurgeNextRunAt\) > Date\.now\(\)\) return;/u);
 assert.match(scheduler, /void pollNow\(\);/u, "the scheduler must check for overdue work during startup");

@@ -36,6 +36,7 @@ import { noodlerConcealedSourceText, slpCreatorSourceText } from "../../base/pro
 import { createCreatorSourceRevisionToken } from "../../base/identity/slp-source-revision.js";
 import type { SlurpStageProfileInput } from "../../modules/discovery/slp-discovery-profile.js";
 import { composeSlurpPromptBlocks, type SlurpPromptBlockOverrides } from "../../base/prompting/slp-prompt-blocks.js";
+import { slurpPromptContext } from "../../base/prompting/slp-prompt-blocks.js";
 
 /** Used only when a source card carries no usable prose, so the model still gets a starting point. */
 const CONCEALED_SOURCE_FALLBACK_BRIEF = "General temperament and creative interests from the source profile.";
@@ -228,7 +229,7 @@ export async function generateCreatorStageProfileDraft(
     publicAccount,
     source,
     allowedTags,
-    promptBlocks: (await noodle.getSettings()).promptBlocks,
+    promptBlocks: slurpPromptContext(await noodle.getSettings()).blocks,
   });
   const debugMode = isDebugAgentsEnabled();
   logDebugOverride(

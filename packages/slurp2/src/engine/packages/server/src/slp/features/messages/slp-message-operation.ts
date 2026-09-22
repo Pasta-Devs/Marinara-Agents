@@ -61,6 +61,8 @@ export async function replyToSlurpMessage(
     force?: boolean;
     /** The scheduler, answering unattended. A person waiting at the screen is not this. */
     background?: boolean;
+    /** The owner asked their hand-operated Creator to answer this once, through draft-reply. */
+    operatorDraft?: boolean;
     debugMode?: boolean;
     generationGuidance?: string;
   },
@@ -76,7 +78,7 @@ export async function replyToSlurpMessage(
   ]);
   // A persona-backed Creator is operated by hand: it never auto-posts and it never answers a DM
   // on its own either. The operator writes the answer through the draft-reply route.
-  if (!creator || !viewer || (creator.kind === "persona" && creator.sourceKind === "persona")) {
+  if (!creator || !viewer || (creator.kind === "persona" && creator.sourceKind === "persona" && !input.operatorDraft)) {
     // No automatic reply can ever come, so the thread must stop taking one of the scheduler's
     // oldest-first slots. Left set, these starved every newer thread the player was waiting on.
     if (input.background) await messagesStore.clearReplyObligation(thread.id);
@@ -161,6 +163,7 @@ export async function replyToSlurpMessage(
     // replyLength will be filled in after generation
     talkativeness: talkativenessProfile.talkativeness,
     delays: replyDelays,
+    firstContact: !history.some((message) => message.role === "creator"),
   });
   const completedReplyId = await messagesStore.getCompletedReply(thread.id, input.triggerMessageId);
   if (completedReplyId) {
@@ -220,12 +223,14 @@ export async function replyToSlurpMessage(
         mood: thread.mood,
         moodUpdatedAt: thread.moodUpdatedAt,
         notes: thread.notes,
+        threadId: thread.id,
         threadState: thread.threadState,
         creatorState,
         dayVibe: await describeSlurpDayVibe(db, thread.creatorAccountId),
         coolingOff: false,
         strikes: activeSlurpStrikes(thread.strikes, thread.lastStrikeAt),
         connection,
+        availability,
         debugMode: input.debugMode,
         generationGuidance: input.generationGuidance,
         // The scheduler only calls with `force` after `messagesAwayRepliesEnabled` admitted this
@@ -424,7 +429,8 @@ export async function replyToSlurpMessage(
             const { detectPromiseFromText, createScheduledFollowUps } =
               await import("../../modules/messages/slp-follow-up.js");
             const detected = detectPromiseFromText(reply.content);
-            if (detected) {
+            // One pending follow-up per kind is enough; every matching reply used to add another.
+            if (detected && !thread.scheduledFollowUps.some((followUp) => followUp.type === detected.type)) {
               const followUps = createScheduledFollowUps(
                 {
                   type: detected.type,
@@ -485,6 +491,7 @@ export async function replyToSlurpMessage(
         replyLength: actualReplyLength,
         talkativeness: talkativenessProfile.talkativeness,
         delays: replyDelays,
+        firstContact: !history.some((message) => message.role === "creator"),
       });
       return { status: "replied", message: locked.value.message, pacing: recalculatedPacing };
     }

@@ -17,6 +17,7 @@ import { generateSlpImageWithRetry } from "../../base/media/slp-image-retry.js";
 import { rewriteSlpImagePrompt } from "../../base/media/slp-image-prompt-rewrite.js";
 import { selectSlpImageProviderPrompt } from "../../base/media/slp-image-prompt.js";
 import { garnishAdImageUrl, garnishAdMediaNamespace, unlinkGarnishAdImage } from "./slp-garnish-image.js";
+import { slurpPromptContext } from "../../base/prompting/slp-prompt-blocks.js";
 
 /** Ads read as feed content, so the artwork is product photography rather than a poster. */
 function adImagePrompt(ad: GarnishAd): string {
@@ -80,7 +81,7 @@ export async function generateGarnishAdImage(
           prompt: rawPrompt,
           interpretationInstruction: settings.imagePromptInterpretation,
           instructions: imagePromptInstructions,
-          promptBlocks: settings.promptBlocks,
+          promptBlocks: slurpPromptContext(settings).blocks,
         })
       : null,
     rawPrompt,

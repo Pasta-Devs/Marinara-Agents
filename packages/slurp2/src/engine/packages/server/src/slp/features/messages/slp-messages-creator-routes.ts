@@ -2,6 +2,7 @@ import { z } from "zod";
 import { SLURP_DEFAULT_RAPPORT_WEIGHTS } from "../../modules/messages/slp-rapport.js";
 import { SLURP_DM_POLICIES } from "../../modules/messages/slp-messaging.js";
 import { replyToSlurpMessage } from "./slp-message-operation.js";
+import { replyAsSlurpFan } from "./slp-fan-reply-service.js";
 import { slurpDynamicPriceTarget } from "../../modules/economy/slp-creator-pricing.js";
 import { isDebugAgentsEnabled } from "../../../config/runtime-config.js";
 import { resolveSlurpTextConnection } from "../../base/identity/slp-connection.js";
@@ -83,6 +84,43 @@ export async function slpMessagesCreatorRoutes(app: FastifyInstance, messaging: 
   });
 
   /**
+   * Ask the fan for a reply, playing the Creator.
+   *
+   * The viewer side has had "Request a reply" since the pacing rework; the Creator side had no
+   * mirror, because a persona-operated Creator is written by hand and nothing ever wrote the
+   * fan's words on demand. Same shape as the viewer's request: it asks, it does not compel.
+   */
+  app.post("/messages/creators/:creatorAccountId/request-fan-reply", async (req, reply) => {
+    const parsed = z
+      .object({
+        personaId: z.string().trim().min(1),
+        threadId: z.string().trim().min(1),
+        guidance: z.string().trim().max(2000).optional(),
+      })
+      .safeParse(req.body ?? {});
+    if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
+    const { creatorAccountId } = req.params as { creatorAccountId: string };
+    if (!(await ownsCreator(parsed.data.personaId, creatorAccountId))) {
+      return reply.code(403).send({ error: "Only the Creator's owner can ask for this." });
+    }
+    const outcome = await replyAsSlurpFan(app.db, {
+      threadId: parsed.data.threadId,
+      creatorAccountId,
+      guidance: parsed.data.guidance,
+    });
+    if (outcome.status === "nothing_to_answer")
+      return reply.code(400).send({ error: "Write to them before asking for a reply." });
+    if (outcome.status === "no_connection")
+      return reply.code(400).send({ error: "Select a Slurp generation connection first." });
+    if (outcome.status === "ineligible") return reply.code(404).send({ error: "Conversation not found" });
+    return {
+      reply: outcome.status === "replied" ? outcome.message : null,
+      replyStatus: outcome.status,
+      thread: await freshView(parsed.data.threadId, "creator"),
+    };
+  });
+
+  /**
    * Have the Creator draft their own reply, for the player to send or rewrite.
    *
    * The generator is the fallback here rather than the default: the maintainer wants to write as
@@ -107,6 +145,9 @@ export async function slpMessagesCreatorRoutes(app: FastifyInstance, messaging: 
       threadId: thread.id,
       triggerMessageId: latest.id,
       force: true,
+      // `ownsCreator` only passes for a hand-operated Creator, which the operation otherwise never
+      // answers for, so without this every draft came back ineligible.
+      operatorDraft: true,
     });
     if (outcome.status !== "replied") {
       return reply.code(502).send({ error: "Could not draft a reply.", status: outcome.status });

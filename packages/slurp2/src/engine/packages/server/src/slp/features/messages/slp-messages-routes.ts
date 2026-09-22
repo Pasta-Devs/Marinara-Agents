@@ -5,6 +5,7 @@ import { slpMessagesCreatorRoutes } from "./slp-messages-creator-routes.js";
 import { slpMessagesMediaRoutes } from "./slp-messages-media-routes.js";
 import { slpMessagesSendRoutes } from "./slp-messages-send-routes.js";
 import { slpMessagesThreadRoutes } from "./slp-messages-thread-routes.js";
+import { slpMessagesRequestRoutes } from "./slp-messages-request-routes.js";
 
 /** Mounts every direct-message route against one shared messages context. */
 export async function slpMessagesRoutes(
@@ -18,4 +19,5 @@ export async function slpMessagesRoutes(
   await slpMessagesCreatorRoutes(app, messaging);
   await slpCommissionsRoutes(app, messaging);
   await slpMessagesMediaRoutes(app, messaging);
+  await slpMessagesRequestRoutes(app, messaging);
 }

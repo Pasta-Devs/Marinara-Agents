@@ -5,6 +5,7 @@ import {
   slpActivityDigests,
   slpInteractions,
   slpPosts,
+  slpPostMedia,
   slpPostUnlocks,
   slpCreatorCreatorReplyClaims,
   slpCreatorPreparedPosts,
@@ -101,6 +102,11 @@ async function planSlurpAutopurge(db: DB, settings: SlurpSettings) {
     mediaPathOf: ownedMediaPath,
   });
   const { oldPosts, postMedia, messageMedia, mediaPaths } = selection;
+  const oldPostIds = oldPosts.map((post) => post.id);
+  const attachments = oldPostIds.length
+    ? await db.select().from(slpPostMedia).where(inArray(slpPostMedia.postId, oldPostIds))
+    : [];
+  const attachmentPaths = attachments.map((item) => item.mediaPath);
   return {
     cutoff,
     ...selection,
@@ -108,13 +114,15 @@ async function planSlurpAutopurge(db: DB, settings: SlurpSettings) {
       cutoff,
       affectedPosts: oldPosts.length,
       postsToDelete: selection.postsToDelete.length,
-      postMediaFiles: new Set(postMedia).size,
+      postMediaFiles: new Set([...postMedia, ...attachmentPaths]).size,
       messageMediaFiles: new Set(messageMedia).size,
-      estimatedReclaimableBytes: mediaPaths.reduce(
+      estimatedReclaimableBytes: [...mediaPaths, ...attachmentPaths].reduce(
         (total, mediaPath) => total + estimateCreatorMediaRemovalBytes(mediaPath),
         0,
       ),
     } satisfies SlurpAutopurgePreview,
+    attachments,
+    mediaPaths: [...mediaPaths, ...attachmentPaths],
   };
 }
 
@@ -124,7 +132,7 @@ export async function previewSlurpAutopurge(db: DB, settings: SlurpSettings): Pr
 
 async function purgeUnlocked(db: DB, settings: SlurpSettings): Promise<Omit<SlurpAutopurgeResult, "nextRunAt">> {
   const plan = await planSlurpAutopurge(db, settings);
-  const { cutoff, oldPosts, oldMessages, postMedia, messageMedia } = plan;
+  const { cutoff, oldPosts, oldMessages, postMedia, messageMedia, attachments } = plan;
   const removedMediaPaths = new Set<string>();
   for (const path of plan.mediaPaths) {
     if (unlinkCreatorMedia(path)) removedMediaPaths.add(path);
@@ -134,11 +142,21 @@ async function purgeUnlocked(db: DB, settings: SlurpSettings): Promise<Omit<Slur
     return !path || removedMediaPaths.has(path);
   };
   // Retain a failed path's database reference so the next purge selects and retries it.
-  const postsToDelete = plan.postsToDelete.filter((post) => mediaRemovalSucceeded(post.metadata));
+  const attachmentsByPost = new Map<string, typeof attachments>();
+  for (const attachment of attachments) {
+    const items = attachmentsByPost.get(attachment.postId) ?? [];
+    items.push(attachment);
+    attachmentsByPost.set(attachment.postId, items);
+  }
+  const allAttachmentMediaRemoved = (postId: string) =>
+    (attachmentsByPost.get(postId) ?? []).every((item) => removedMediaPaths.has(item.mediaPath));
+  const postsToDelete = plan.postsToDelete.filter(
+    (post) => mediaRemovalSucceeded(post.metadata) && allAttachmentMediaRemoved(post.id),
+  );
   const postsToStrip = settings.autopurgeKeepPosts
     ? oldPosts.filter((post) => {
         const path = ownedMediaPath(post.metadata);
-        return path ? removedMediaPaths.has(path) : false;
+        return (path ? removedMediaPaths.has(path) : true) && allAttachmentMediaRemoved(post.id);
       })
     : [];
   const messagesToStrip = oldMessages.filter((message) => {
@@ -154,13 +172,14 @@ async function purgeUnlocked(db: DB, settings: SlurpSettings): Promise<Omit<Slur
 
   await db.transaction(async (tx) => {
     for (const post of postsToStrip) {
+      await tx.delete(slpPostMedia).where(eq(slpPostMedia.postId, post.id));
       await tx
         .update(slpPosts)
         .set({
           imageUrl: null,
           imageClaimToken: null,
           imageClaimLeaseUntil: null,
-          metadata: JSON.stringify(withoutMediaMetadata(post.metadata)),
+          metadata: JSON.stringify({ ...withoutMediaMetadata(post.metadata), postMedia: [] }),
           updatedAt: now(),
         })
         .where(eq(slpPosts.id, post.id));
@@ -181,6 +200,7 @@ async function purgeUnlocked(db: DB, settings: SlurpSettings): Promise<Omit<Slur
         .where(eq(slurpCommissions.deliveryMessageId, message.id));
     }
     if (deletedPostIds.length > 0) {
+      await tx.delete(slpPostMedia).where(inArray(slpPostMedia.postId, deletedPostIds));
       await tx.update(slpPosts).set({ parentPostId: null }).where(inArray(slpPosts.parentPostId, deletedPostIds));
       await tx.update(slpPosts).set({ quotePostId: null }).where(inArray(slpPosts.quotePostId, deletedPostIds));
       await tx
@@ -204,7 +224,9 @@ async function purgeUnlocked(db: DB, settings: SlurpSettings): Promise<Omit<Slur
   return {
     cutoff,
     deletedPosts: postsToDelete.length,
-    removedPostMedia: new Set(postMedia.filter((path) => removedMediaPaths.has(path))).size,
+    removedPostMedia: new Set(
+      [...postMedia, ...attachments.map((item) => item.mediaPath)].filter((path) => removedMediaPaths.has(path)),
+    ).size,
     removedMessageMedia: new Set(messageMedia.filter((path) => removedMediaPaths.has(path))).size,
   };
 }

@@ -193,12 +193,15 @@ export const SLURP_DEFAULT_REPLY_DELAYS: SlurpReplyDelays = {
   messagesHighRapportDelayMaxMinutes: 20,
   messagesMediumRapportDelayMinMinutes: 30,
   messagesMediumRapportDelayMaxMinutes: 60,
-  messagesUnknownReturnDelayMinutes: 120,
-  messagesMaxReplyDelayMinutes: 180,
-  messagesRecentPostAwayMinMinutes: 30,
-  messagesRecentPostAwayMaxMinutes: 90,
-  messagesStalePostAwayMinMinutes: 120,
-  messagesStalePostAwayMaxMinutes: 240,
+  // A Creator nobody has bought anything from still answers her messages the same day. The shipped
+  // waits (two hours before a first answer, four before a stale one) read as a dead inbox, and the
+  // only way to get a reply was the Reply now button.
+  messagesUnknownReturnDelayMinutes: 45,
+  messagesMaxReplyDelayMinutes: 90,
+  messagesRecentPostAwayMinMinutes: 15,
+  messagesRecentPostAwayMaxMinutes: 45,
+  messagesStalePostAwayMinMinutes: 45,
+  messagesStalePostAwayMaxMinutes: 120,
 };
 
 /** A point inside a player-set range. A range entered backwards still reads as a range. */
@@ -230,6 +233,13 @@ export function slurpReplyPacing(input: {
   talkativeness?: number;
   /** Player-set timing. Defaults keep the shipped pacing. */
   delays?: SlurpReplyDelays;
+  /**
+   * The Creator has never answered in this thread.
+   *
+   * A stranger scores no rapport, is not subscribed, and therefore always landed on the slowest
+   * path — which is the one case a creator page actually answers: a new person in the inbox.
+   */
+  firstContact?: boolean;
 }): SlurpReplyPacing {
   const delays = input.delays ?? SLURP_DEFAULT_REPLY_DELAYS;
   const maxDelayMs = delays.messagesMaxReplyDelayMinutes * MINUTE;
@@ -242,7 +252,9 @@ export function slurpReplyPacing(input: {
   const moodDrag = mood > 60 ? 0.5 : mood < -20 ? 1.8 : 1.0;
 
   // Calculate reach: rapport + subscription bonus + mood bonus
-  const reach = Math.min(1, Math.max(0, input.rapport.score / 100 + (input.subscribed ? 0.2 : 0) + mood / 400));
+  const earned = input.rapport.score / 100 + (input.subscribed ? 0.2 : 0) + mood / 400;
+  // A first message is worth answering even from somebody who has given nothing yet.
+  const reach = Math.min(1, Math.max(0, input.firstContact ? Math.max(earned, 0.45) : earned));
 
   // ONLINE PATH: Creator is actively available
   if (input.online) {

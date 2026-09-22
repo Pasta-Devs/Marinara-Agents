@@ -3,12 +3,14 @@ import { api } from "../../../../lib/api-client.js";
 import { invalidateSlurpMessages } from "../slp-message-keys.js";
 import type { SlurpCommission } from "../slp-messages-contract.js";
 
+// Settled, not success: a 409 or a timeout after the server already moved the commission must
+// still refresh it, or the stale "Accept and pay" stays on screen.
 export function useCreateSlurpCommission() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (input: { personaId: string; creatorAccountId: string; brief: string }) =>
       api.post<{ commission: SlurpCommission }>("/slurp2/messages/commissions", input),
-    onSuccess: () => invalidateSlurpMessages(queryClient),
+    onSettled: () => invalidateSlurpMessages(queryClient),
   });
 }
 export function useQuoteSlurpCommission() {
@@ -19,7 +21,7 @@ export function useQuoteSlurpCommission() {
         `/slurp2/messages/commissions/${encodeURIComponent(input.commissionId)}/quote`,
         input,
       ),
-    onSuccess: () => invalidateSlurpMessages(queryClient),
+    onSettled: () => invalidateSlurpMessages(queryClient),
   });
 }
 /** Offer the Creator a lower price than its quote. */
@@ -31,7 +33,7 @@ export function useCounterSlurpCommission() {
         `/slurp2/messages/commissions/${encodeURIComponent(input.commissionId)}/counter`,
         input,
       ),
-    onSuccess: () => invalidateSlurpMessages(queryClient),
+    onSettled: () => invalidateSlurpMessages(queryClient),
   });
 }
 export function useAcceptSlurpCommission() {
@@ -42,7 +44,7 @@ export function useAcceptSlurpCommission() {
         `/slurp2/messages/commissions/${encodeURIComponent(input.commissionId)}/accept`,
         input,
       ),
-    onSuccess: () => invalidateSlurpMessages(queryClient),
+    onSettled: () => invalidateSlurpMessages(queryClient),
   });
 }
 /** Either side ends an unpaid commission: the Creator declines, the fan withdraws. */
@@ -54,7 +56,7 @@ export function useDeclineSlurpCommission() {
         `/slurp2/messages/commissions/${encodeURIComponent(input.commissionId)}/decline`,
         input,
       ),
-    onSuccess: () => invalidateSlurpMessages(queryClient),
+    onSettled: () => invalidateSlurpMessages(queryClient),
   });
 }
 export function useDeliverSlurpCommission() {
@@ -65,6 +67,6 @@ export function useDeliverSlurpCommission() {
         `/slurp2/messages/commissions/${encodeURIComponent(input.commissionId)}/deliver`,
         input,
       ),
-    onSuccess: () => invalidateSlurpMessages(queryClient),
+    onSettled: () => invalidateSlurpMessages(queryClient),
   });
 }

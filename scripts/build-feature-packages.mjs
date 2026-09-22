@@ -390,8 +390,8 @@ const features = [
   },
   {
     id: "slurp2",
-    version: "0.1.3",
-    minEngineVersion: "2.4.5",
+    version: "0.2.25",
+    minEngineVersion: "2.4.6",
     maxEngineExclusive: MAX_ENGINE_EXCLUSIVE,
     name: "Slurp Remastered",
     description:
@@ -434,6 +434,11 @@ const features = [
     clientImport: "packages/client/src/slp/slp-client-entry.tsx",
     packageSourceRoot: slurp2SourceRoot,
     ownedSourcePaths: slurp2OwnedSourcePaths,
+    capabilityApi: { major: 1, minor: 31 },
+    builtAgainst: {
+      engineVersion: "2.4.6",
+      engineCommit: "c3ec876434ba25f5288a549afc292f1ca9b0e5c5",
+    },
     libraryHidden: true,
     // `slurpcoin.svg` is deliberately not shipped: the Engine keeps SVG out of its servable
     // package-asset content types, so the route 404s it whatever the manifest declares. The coin
@@ -630,6 +635,17 @@ if (selectedFeatures.length !== requestedFeatureIds.size && requestedFeatureIds.
   const knownIds = new Set(features.map((feature) => feature.id));
   const unknownIds = [...requestedFeatureIds].filter((id) => !knownIds.has(id));
   throw new Error(`Unknown feature package${unknownIds.length === 1 ? "" : "s"}: ${unknownIds.join(", ")}`);
+}
+// The Slurp2 splash reads its version from the client bundle; a stale copy hides the release dialog.
+for (const feature of selectedFeatures.filter((entry) => entry.id === "slurp2")) {
+  const release = await readFile(
+    join(repoRoot, "packages/slurp2/src/engine/packages/client/src/slp/features/onboarding/slp-release.ts"),
+    "utf8",
+  );
+  const clientVersion = release.match(/SLURP2_VERSION = "([^"]+)"/u)?.[1];
+  if (clientVersion !== feature.version) {
+    throw new Error(`slurp2: SLURP2_VERSION ${clientVersion} does not match package version ${feature.version}`);
+  }
 }
 const hierarchicalMapsBoundary = selectedFeatures.some((feature) => feature.id === "hierarchical-maps")
   ? await assertHierarchicalMapsPrivateImportBoundary()
@@ -1743,13 +1759,14 @@ for (const feature of selectedFeatures) {
           ? memoryNagBoundary
           : null;
   const manifest = {
-    schemaVersion: boundary ? 2 : 1,
+    schemaVersion: boundary || feature.capabilityApi ? 2 : 1,
     ...(boundary
       ? {
           capabilityApi: boundary.capabilityApi,
           builtAgainst: boundary.builtAgainst,
         }
       : {}),
+    ...(feature.capabilityApi ? { capabilityApi: feature.capabilityApi, builtAgainst: feature.builtAgainst } : {}),
     id: feature.id,
     name: feature.name,
     version,

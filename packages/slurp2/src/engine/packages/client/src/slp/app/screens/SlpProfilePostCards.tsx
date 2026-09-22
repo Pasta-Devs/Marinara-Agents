@@ -4,7 +4,7 @@ import { SlurpAccessTransition, EmptyState } from "./SlpHomeHelpers";
 import { Avatar } from "../../base/chrome/SlpChrome";
 import { SlurpFanCard } from "../../modules/audience/SlpFanCard";
 import { LockedSlurpPostCard } from "../../modules/post/SlpLockedPostCard";
-import { SlurpCreatorPostCard } from "../../modules/post/SlpCreatorPostCard";
+import { SlpPostCard } from "../../modules/post/SlpPostCard";
 import type { StageProfileViewModel } from "./slp-profile-view-model";
 
 /** The profile's post list: the tab the viewer picked, rendered from the screen's model. */
@@ -240,14 +240,14 @@ export function SlpProfilePostCards({ model }: { model: StageProfileViewModel })
                       {localizeUi("ui.noodle.stageprofileview.hide")}
                     </button>
                   </div>
-                  <SlurpCreatorPostCard
+                  <SlpPostCard
                     surface="profile"
                     post={item.model}
                     ctx={{ ...postCardCtx, personaAccount: null, postManagement: managedCreator }}
                   />
                 </div>
               ) : (
-                <SlurpCreatorPostCard
+                <SlpPostCard
                   surface="profile"
                   post={item.model}
                   ctx={{

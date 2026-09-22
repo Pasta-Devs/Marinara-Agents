@@ -8,11 +8,20 @@
  *
  * Standalone and pure so the rules can be tested without an Engine checkout.
  */
+import type { SlpCreatorStageFacts } from "../../../../../shared/src/slp/slp-social.types.js";
 import { normalizeSlurpDiscoveryTags, SLURP_DISCOVERY_MIN_TAGS } from "../discovery/slp-discovery-profile.js";
 import { normalizeCreatorStageProfileDraft } from "./slp-stage-profile-normalize.js";
 
 /** The same limits the shared stage-profile schema and the create form enforce. */
 export const SLURP_STAGE_PROFILE_LIMITS = { displayName: 120, handle: 40, bio: 500, stagePersonality: 1000 } as const;
+
+/**
+ * How long one stage fact may be.
+ *
+ * Generous, because an appearance that has to stay identical across hundreds of pictures needs
+ * room for the details that actually identify a person, not just hair and build.
+ */
+export const SLURP_STAGE_FACT_MAX_LENGTH = 2000;
 
 export type SlurpRepairedStageProfileDraft = {
   displayName: string;
@@ -116,4 +125,27 @@ export function repairSlurpStageProfileDraft(
     notes.push(`Add at least ${SLURP_DISCOVERY_MIN_TAGS} tags before saving.`);
 
   return { draft: { displayName, handle, bio, stagePersonality, gender, tags }, notes };
+}
+
+/**
+ * The stage facts out of a stage-profile input, or undefined when it carries none.
+ *
+ * `sourceAppearance` seeds an empty appearance on create only. A Creator drafted from a character
+ * card already has a face written down; requiring the user to copy it across by hand is the reason
+ * the field stayed empty, and an empty appearance is what let the image model invent a new person
+ * for every post.
+ */
+export function slurpStageFacts(
+  input: { appearance?: string; wardrobe?: string; locations?: string },
+  sourceAppearance?: string,
+): SlpCreatorStageFacts | undefined {
+  const fact = (value: string | undefined) => value?.trim().slice(0, SLURP_STAGE_FACT_MAX_LENGTH) || undefined;
+  const facts: SlpCreatorStageFacts = {
+    ...((fact(input.appearance) ?? fact(sourceAppearance)) !== undefined && {
+      appearance: (fact(input.appearance) ?? fact(sourceAppearance))!,
+    }),
+    ...(fact(input.wardrobe) !== undefined && { wardrobe: fact(input.wardrobe)! }),
+    ...(fact(input.locations) !== undefined && { locations: fact(input.locations)! }),
+  };
+  return Object.keys(facts).length > 0 ? facts : undefined;
 }

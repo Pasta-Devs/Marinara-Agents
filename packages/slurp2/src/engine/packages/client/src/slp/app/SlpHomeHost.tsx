@@ -9,23 +9,22 @@ import { SlurpAgeGate, SlurpConfetti } from "../features/onboarding/SlpAgeGate";
 import { SlurpSplash } from "../features/onboarding/SlpSplash";
 import { getSlpAccentStyle, SLP_PERSONA_SWITCHER_PAGE_SIZE, SLP_PINK } from "../base/chrome/SlpChrome";
 import { SlpShell } from "../modules/chrome/SlpShell";
+import { SlpSharePostModal } from "../features/messages/SlpSharePostModal";
 import { SlpBackstageShell } from "../app/backstage/SlpBackstageShell";
 import { SlpBackstageSidebar } from "../features/backstage/SlpBackstageSidebar";
 import { Modal } from "../../components/ui/Modal";
-import type { SlurpNavigationState } from "../base/navigation/slp-navigation.types";
 import { useSlurpHomeState } from "./slp-home-actions";
+import type { SlurpHomeProps } from "./slp-home.types";
 import { renderSlurpHomeCreatorFlow } from "./screens/SlpHomeCreatorFlow";
 import { renderSlurpHomeDestinations } from "./screens/SlpHomeDestinations";
 import { SlpHomeFeedRail } from "./screens/SlpHomeFeedRail";
-
-interface SlurpHomeProps {
-  navigation: SlurpNavigationState;
-  onNavigate: (destination: SlurpNavigationState) => void;
-  onLeave?: () => void;
-}
+import { useRefreshCreatorFanActivityNow } from "../features/audience/slp-fan-activity-hooks";
+import { useRefreshTargetedCreatorsNow } from "../features/creators/slp-creator-refresh-hooks";
 
 export function SlurpHome({ navigation, onNavigate, onLeave }: SlurpHomeProps) {
   const model = useSlurpHomeState({ navigation, onNavigate, onLeave });
+  const refreshAudienceNow = useRefreshCreatorFanActivityNow();
+  const refreshPostsNow = useRefreshTargetedCreatorsNow();
   const {
     localizeUi,
     accountsQuery,
@@ -70,8 +69,8 @@ export function SlurpHome({ navigation, onNavigate, onLeave }: SlurpHomeProps) {
     onboardingPresentedRef,
     viewerQuery,
     noodlerUnseenCount,
-    notificationsQuery,
-    inboxThreadsQuery,
+    notificationUnseenCountQuery,
+    unreadCountQuery,
     frozenFeedSeenAt,
     markFeedShown,
     toggleFollow,
@@ -99,6 +98,10 @@ export function SlurpHome({ navigation, onNavigate, onLeave }: SlurpHomeProps) {
     openPostComposer,
     openStoryComposer,
   } = model;
+  const personaSourceIds = new Set(personas.map((persona) => persona.id));
+  const automationCreatorIds = (accountsQuery.data ?? [])
+    .filter((creator) => !creator.sourceAccountId || !personaSourceIds.has(creator.sourceAccountId))
+    .map((creator) => creator.id);
 
   const shellProps = {
     appMode: "slurp" as const,
@@ -162,10 +165,18 @@ export function SlurpHome({ navigation, onNavigate, onLeave }: SlurpHomeProps) {
     onOpenMessages: goToMessages,
     onOpenWallet: goToWallet,
     onOpenStudio: goToStudio,
+    onGeneratePosts: () => {
+      if (automationCreatorIds.length > 0) {
+        refreshPostsNow.mutate({ accountIds: automationCreatorIds, access: "locked" });
+      }
+    },
+    onRunAudience: () => {
+      refreshAudienceNow.mutate();
+    },
     notificationCount:
-      (notificationsQuery.data?.unseenCount ?? 0) +
-      (inboxThreadsQuery.data?.unread ?? 0) +
-      (inboxThreadsQuery.data?.inboundUnread ?? 0),
+      (notificationUnseenCountQuery.data?.unseenCount ?? 0) +
+      (unreadCountQuery.data?.unread ?? 0) +
+      (unreadCountQuery.data?.inboundUnread ?? 0),
     // The studio is only meaningful for a persona that operates a Creator.
     hasOperatedCreator: Boolean(myCreatorProfile),
     walletBalanceLabel: `${viewerWalletsQuery.data?.[viewerPersonaId ?? ""]?.coins ?? SLURP_PLACEHOLDER_BALANCE}`,
@@ -326,6 +337,12 @@ export function SlurpHome({ navigation, onNavigate, onLeave }: SlurpHomeProps) {
         onFeedShown={markFeedShown}
         onOpenWallet={goToWallet}
         walletCoins={activeWalletCoins}
+        onLoadMore={model.viewerQuery.loadMore}
+        hasMore={Boolean(model.viewerQuery.data?.nextCursor)}
+        deletingPostIds={model.deletingPostIds}
+        deletedPostIds={model.deletedPostIds}
+        restoringPostIds={model.restoringPostIds}
+        onRestorePost={model.restoreNoodlePost}
         isLoading={viewerQuery.isLoading}
         isError={viewerQuery.isError}
         onRetry={() => void viewerQuery.refetch()}
@@ -398,6 +415,12 @@ export function SlurpHome({ navigation, onNavigate, onLeave }: SlurpHomeProps) {
           isPending={false}
         />
       </Modal>
+      <SlpSharePostModal
+        post={model.sharingPost}
+        personaId={viewerPersonaId}
+        open={Boolean(model.sharingPost)}
+        onClose={() => model.setSharingPost(null)}
+      />
       <SlurpSplash open={splashOpen} onDismiss={() => setSplashOpen(false)} />
       {gateCelebrating && <SlurpConfetti fixed />}
       {reviewModal}

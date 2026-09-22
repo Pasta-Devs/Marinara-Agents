@@ -3,6 +3,7 @@ import {
   slpStageProfileDraftRequestSchema,
   slpStageProfileUpdateSchema,
 } from "../../../../../shared/src/slp/slp-social.schema.js";
+import { slpContinuityRoutes } from "./slp-continuity-routes.js";
 import {
   slurpDiscoveryProfileSchema,
   SLURP_DISCOVERY_TAG_LIMIT,
@@ -26,6 +27,8 @@ import { verifyCreatorSourceRevisionToken } from "../../base/identity/slp-source
 import type { FastifyInstance } from "fastify";
 import { slurpDiscoveryTagNameSchema } from "../../modules/requests/slp-request-schemas.js";
 import type { SlpRouteDeps } from "../viewer/slp-viewer-contract.js";
+import { slurpPromptContext } from "../../base/prompting/slp-prompt-blocks.js";
+import { slpWardrobeRoutes } from "./slp-wardrobe-routes.js";
 
 const slpStageProfileUpdateRequestSchema = slpStageProfileUpdateSchema.extend({
   ...slurpDiscoveryProfileSchema.shape,
@@ -37,6 +40,8 @@ const slpStageProfileUpdateRequestSchema = slpStageProfileUpdateSchema.extend({
   confirmAvatarReview: z.boolean().optional(),
 });
 export async function slpCreatorsRoutes(app: FastifyInstance, deps: SlpRouteDeps) {
+  await slpContinuityRoutes(app);
+  await slpWardrobeRoutes(app, deps);
   const { characters, connections, noodle, resolveNoodlerPublicIdentity, resolveViewerPersona } = deps;
   // One edit for many Creators, also used for a single Creator's quick edit. Capped so one request stays bounded.
   app.post("/slurp/accounts/bulk-update", async (req, reply) => {
@@ -129,7 +134,7 @@ export async function slpCreatorsRoutes(app: FastifyInstance, deps: SlpRouteDeps
           personality: String(data.personality ?? ""),
         },
         scheduleSettings.simulationTuning.prompts.scheduleExtra,
-        scheduleSettings.promptBlocks,
+        slurpPromptContext(scheduleSettings).blocks,
       );
     } catch (error) {
       req.log.warn({ err: error }, "Conversation schedule generation returned invalid output");
@@ -212,7 +217,8 @@ export async function slpCreatorsRoutes(app: FastifyInstance, deps: SlpRouteDeps
       return await generateCreatorStageProfileDraft(app.db, {
         request: parsed.data,
         connection,
-        promptBlocks: settings.promptBlocks,
+        promptBlocks: slurpPromptContext(settings).blocks,
+        promptInstructions: slurpPromptContext(settings).instructions,
       });
     } catch (error) {
       logger.error(

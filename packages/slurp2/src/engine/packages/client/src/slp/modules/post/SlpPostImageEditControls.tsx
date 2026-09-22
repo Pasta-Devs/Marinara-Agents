@@ -4,7 +4,8 @@ import type { SlpPostImageCrop } from "../../../../../shared/src/slp/slp-social.
 import { readSlpPostImageCrop } from "../../../../../shared/src/slp/slp-post-images.js";
 import { useTranslation as useUiTranslation } from "react-i18next";
 import { PostImageCropEditor, PostImageFrame } from "../../base/media/SlpPostImageCropEditor";
-import { labelClass, type SlpPostCardModel, type SlpPostImageUpdate } from "./SlpPostCard";
+import { labelClass } from "./SlpPostHelpers";
+import type { SlpPostCardModel, SlpPostImageUpdate } from "./SlpPostTypes";
 
 type SlpPostImageCropSource =
   | {

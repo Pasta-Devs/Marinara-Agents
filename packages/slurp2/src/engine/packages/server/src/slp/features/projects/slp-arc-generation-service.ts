@@ -28,6 +28,7 @@ import { modelAnswerForCorrection, requireModelAnswer } from "../../base/model/s
 import { slpSamplingOptions } from "../../base/prompting/slp-sampling-options.js";
 import { claimSlurpModelBudget, slurpModelWorkerAllows } from "../../base/model/slp-model-worker.js";
 import { composeSlurpPromptBlocks, type SlurpPromptBlockOverrides } from "../../base/prompting/slp-prompt-blocks.js";
+import { slurpPromptContext } from "../../base/prompting/slp-prompt-blocks.js";
 
 export class SlurpArcGenerationFailure extends Error {
   constructor(
@@ -191,7 +192,7 @@ export async function generateSlurpArc(
       libraryNames: settings.arcLibrary.filter((type) => !type.hidden).map((type) => type.name),
       pastArcTitles: (await slurp.listProjects(creator.id)).map((project) => project.title),
       partners,
-      promptBlocks: settings.promptBlocks,
+      promptBlocks: slurpPromptContext(settings).blocks,
     });
     const fallbackConnection = await connections.getFallbackForMain();
     const fallbackProvider = withConnectionFallbackProvider({

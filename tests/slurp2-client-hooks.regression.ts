@@ -273,7 +273,6 @@ const EXPORTED_BEFORE = [
   "useUnlockCreatorPost",
   "useUnlockSlurpMessage",
   "useUpdateAmbientProfile",
-  "useUpdateCreatorAccess",
   "useUpdateCreatorAutoPosting",
   "useUpdateCreatorFanActivity",
   "useUpdateCreatorInteraction",
@@ -329,6 +328,9 @@ const NOODLE_KEYS_BEFORE = `export const slpKeys = {
   noodlerImageConnections: () => [...slpKeys.noodlerRoot(), "image-connections"] as const,
   noodlerPostGuidance: () => [...slpKeys.noodlerRoot(), "post-guidance"] as const,
   noodlerFanStatus: () => [...slpKeys.noodlerRoot(), "fan-status"] as const,
+  notificationsRoot: () => [...slpKeys.noodlerRoot(), "notifications"] as const,
+  notifications: (personaId: string) => [...slpKeys.notificationsRoot(), "stream", personaId] as const,
+  notificationUnseenCount: (personaId: string) => [...slpKeys.notificationsRoot(), "unseen-count", personaId] as const,
   // contextTags belongs in the key: it is part of the request, so leaving it
   // out meant switching tab or crossing into evening never refetched.
   ads: (personaId: string, creatorId?: string | null, contextTags: string[] = []) =>
@@ -355,12 +357,58 @@ const callsBefore = readFileSync(join(import.meta.dirname, "fixtures/slurp2-clie
   .map((call) => call.replaceAll("\\u0020", " "))
   .filter(Boolean);
 const mapStagingCall = (call: string) => call.replace("/slurp2/noodler/", "/slurp2/slurp/");
+const addedCalls = [
+  "get /slurp2/messages/unread-count?personaId=${encodeURIComponent(personaId!)}",
+  "get /slurp2/slurp/notifications/unseen-count?personaId=${encodeURIComponent(personaId!)}",
+  "get /slurp2/slurp/posts/${encodeURIComponent(postId)}/deep-details",
+  "post /slurp2/settings/prompt-blocks/generate-preview",
+  // The studio keeps every block live for the preview Creator (useSlurpLivePromptBlocks).
+  "post /slurp2/settings/prompt-blocks/preview",
+  "get /slurp2/continuity/${encodeURIComponent(creatorAccountId!)}?${query}",
+  "get /slurp2/messages/threads/${encodeURIComponent(threadId!)}/requests?personaId=${encodeURIComponent(personaId!)}",
+  "get /slurp2/slurp/tasks",
+  "get /slurp2/slurp/viewer/feed?personaId=${encodeURIComponent(personaId)}&tab=all&limit=20${cursorQuery(current.nextCursor)}",
+  "get /slurp2/slurp/viewer/feed?personaId=${encodedPersonaId}&tab=all&limit=20",
+  "post /slurp2/slurp/posts/${encodeURIComponent(id)}/restore",
+  "patch /slurp2/accounts/${encodeURIComponent(accountId)}/settings",
+  "patch /slurp2/continuity/facts/${encodeURIComponent(input.id)}",
+  "post /slurp2/continuity/${input.path}",
+  "post /slurp2/messages/threads/${encodeURIComponent(threadId!)}/requests/${encodeURIComponent(input.requestId)}/action",
+  "post /slurp2/slurp/accounts/${encodeURIComponent(creatorId)}/wardrobe",
+  "patch /slurp2/slurp/accounts/${encodeURIComponent(creatorId)}/wardrobe/${encodeURIComponent(id)}",
+  "delete /slurp2/slurp/accounts/${encodeURIComponent(creatorId)}/wardrobe/${encodeURIComponent(id)}",
+  "post /slurp2/slurp/accounts/${encodeURIComponent(creatorId)}/wardrobe/import",
+  "post /slurp2/slurp/wardrobe/lorebook-entries",
+];
+const removedCalls = [
+  "patch /slurp2/accounts/${encodeURIComponent(accountId)}/settings",
+  "get /slurp2/slurp/viewer?personaId=${encodedPersonaId}",
+];
+// Classic runtime mode is gone, so the block catalog no longer takes a mode.
+const renamedCalls = new Map([
+  ["get /slurp2/settings/prompt-blocks?mode=${encodeURIComponent(mode)}", "get /slurp2/settings/prompt-blocks"],
+]);
 const calls = [
   ...combined.matchAll(/api\.(get|post|put|patch|delete|upload|raw)\s*(?:<[^;]*?>)?\s*\(\s*[`"]([^`"]*)/gu),
 ]
   .map((m) => `${m[1]} ${m[2]}`)
   .sort();
-assert.deepEqual(calls, callsBefore.map(mapStagingCall).sort(), "client request paths and HTTP methods must match");
+assert.deepEqual(
+  calls,
+  callsBefore
+    .map(mapStagingCall)
+    .filter((call) => {
+      // Viewer access was removed; its one settings patch went with it.
+      const index = removedCalls.indexOf(call);
+      if (index < 0) return true;
+      removedCalls.splice(index, 1);
+      return false;
+    })
+    .map((call) => renamedCalls.get(call) ?? call)
+    .concat(addedCalls)
+    .sort(),
+  "client request paths and HTTP methods must match",
+);
 
 // 4. Mutation and invalidation behaviour: the cache-touching call counts did not drift.
 const counts = Object.fromEntries(
@@ -381,19 +429,19 @@ const counts = Object.fromEntries(
 assert.deepEqual(
   counts,
   {
-    useMutation: 130,
-    useQuery: 186,
+    useMutation: 149,
+    useQuery: 211,
     useInfiniteQuery: 5,
-    invalidateQueries: 124,
-    setQueryData: 15,
-    cancelQueries: 5,
+    invalidateQueries: 122,
+    setQueryData: 20,
+    cancelQueries: 6,
     removeQueries: 1,
-    refetchQueries: 1,
+    refetchQueries: 0,
     onMutate: 2,
-    onError: 3,
-    onSettled: 3,
+    onError: 15,
+    onSettled: 9,
   },
-  "query and mutation wiring counts must match the monolith",
+  "query and mutation wiring counts match the monolith plus the 0.2.0 planner and continuity hooks",
 );
 
 // The shared invalidators are still called directly from the mutation callbacks that owned them.
@@ -404,7 +452,7 @@ const invalidatorCalls = {
 };
 assert.deepEqual(
   invalidatorCalls,
-  { invalidateSlurpMessages: 21, invalidateSlurpProjects: 5, mergeSlurpViewerShell: 3 },
+  { invalidateSlurpMessages: 26, invalidateSlurpProjects: 5, mergeSlurpViewerShell: 3 },
   "shared invalidation helpers must stay wired to the same call sites",
 );
 

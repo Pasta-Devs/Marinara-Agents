@@ -2,9 +2,15 @@ import { slpCreatorGenerationRequestSchema } from "../../../../../shared/src/slp
 import { slpCreatorTargetedRefreshSchema } from "../../../../../shared/src/slp/slp-social.schema.js";
 import { z } from "zod";
 import { getSlurpPostGuidance, updateSlurpPostGuidance } from "../../data/settings/slp-post-guidance-storage.js";
-import { SLURP_BUILT_IN_POST_GUIDANCE, SLURP_POST_GUIDANCE_MAX_LENGTH } from "../../modules/feed/slp-post-guidance.js";
+import {
+  SLURP_BUILT_IN_EXPLICIT_LEVEL,
+  SLURP_BUILT_IN_POST_GUIDANCE,
+  SLURP_POST_GUIDANCE_MAX_LENGTH,
+} from "../../modules/feed/slp-post-guidance.js";
+import { SLURP_VISUAL_SEXUAL_LEVELS } from "../../base/media/slp-visual-brief.js";
 import { resolveSlurpTextConnection } from "../../base/identity/slp-connection.js";
 import { generateSlurpPostGuidanceDraft } from "./slp-post-guidance-draft-service.js";
+import type { SlurpPostGuidanceEntry } from "../../modules/feed/slp-post-guidance.js";
 import { logger } from "../../../lib/logger.js";
 import { getErrorMessage } from "../../modules/creators/slp-public-support.js";
 import { getCreatorImageConnections, updateCreatorImageConnections } from "../../base/media/slp-image-connections.js";
@@ -26,6 +32,7 @@ import {
   sendCreatorMediaError,
 } from "../../base/host/slp-multipart.js";
 import type { SlpRouteDeps } from "../viewer/slp-viewer-contract.js";
+import { slurpPromptContext } from "../../base/prompting/slp-prompt-blocks.js";
 
 const slurpTargetedRefreshSchema = slpCreatorTargetedRefreshSchema.extend({
   access: z.enum(["public", "locked"]).optional(),
@@ -77,6 +84,7 @@ export async function slpFeedPublishingRoutes(app: FastifyInstance, deps: SlpRou
   app.get("/slurp/post-guidance", async () => ({
     ...(await getSlurpPostGuidance(app.db)),
     builtIn: SLURP_BUILT_IN_POST_GUIDANCE,
+    builtInLevel: SLURP_BUILT_IN_EXPLICIT_LEVEL,
   }));
 
   /**
@@ -94,12 +102,19 @@ export async function slpFeedPublishingRoutes(app: FastifyInstance, deps: SlpRou
         locked: z.string().max(SLURP_POST_GUIDANCE_MAX_LENGTH).optional(),
         /** A Creator's private content menu. Only valid with `creatorId`: it has no global level. */
         menu: z.string().max(SLURP_POST_GUIDANCE_MAX_LENGTH).optional(),
+        /** How far this Creator's pictures go. An empty string clears the override. */
+        level: z.enum(["", ...SLURP_VISUAL_SEXUAL_LEVELS]).optional(),
       })
       .safeParse(req.body ?? {});
     if (!body.success) return reply.code(400).send({ error: body.error.flatten() });
     const { creatorId } = body.data;
-    if (body.data.public === undefined && body.data.locked === undefined && body.data.menu === undefined) {
-      return reply.code(400).send({ error: "Send public, locked, or menu." });
+    if (
+      body.data.public === undefined &&
+      body.data.locked === undefined &&
+      body.data.menu === undefined &&
+      body.data.level === undefined
+    ) {
+      return reply.code(400).send({ error: "Send public, locked, menu, or level." });
     }
     if (body.data.menu !== undefined && !creatorId) {
       return reply.code(400).send({ error: "A content menu belongs to one Creator; send creatorId." });
@@ -108,21 +123,22 @@ export async function slpFeedPublishingRoutes(app: FastifyInstance, deps: SlpRou
       return reply.code(404).send({ error: "Slurp stage profile not found" });
     }
     const next = await updateSlurpPostGuidance(app.db, (current) => {
-      const patch = (entry: { public: string; locked: string; menu: string }) => ({
+      const patch = (entry: SlurpPostGuidanceEntry): SlurpPostGuidanceEntry => ({
         public: body.data.public ?? entry.public,
         locked: body.data.locked ?? entry.locked,
         menu: body.data.menu ?? entry.menu,
+        level: body.data.level ?? entry.level,
       });
       if (!creatorId) return { ...current, defaults: patch(current.defaults) };
       return {
         ...current,
         creators: {
           ...current.creators,
-          [creatorId]: patch(current.creators[creatorId] ?? { public: "", locked: "", menu: "" }),
+          [creatorId]: patch(current.creators[creatorId] ?? { public: "", locked: "", menu: "", level: "" }),
         },
       };
     });
-    return { ...next, builtIn: SLURP_BUILT_IN_POST_GUIDANCE };
+    return { ...next, builtIn: SLURP_BUILT_IN_POST_GUIDANCE, builtInLevel: SLURP_BUILT_IN_EXPLICIT_LEVEL };
   });
 
   /** Draft one access direction with the model. Returns the text; saving it stays the client's call. */
@@ -150,7 +166,8 @@ export async function slpFeedPublishingRoutes(app: FastifyInstance, deps: SlpRou
         currentDraft: body.data.currentDraft ?? "",
         guidance: body.data.guidance ?? "",
         connection,
-        promptBlocks: settings.promptBlocks,
+        promptBlocks: slurpPromptContext(settings).blocks,
+        promptInstructions: slurpPromptContext(settings).instructions,
       });
     } catch (error) {
       logger.error(error, "[slurp] Post guidance draft failed using %s", connection.model || connection.provider);

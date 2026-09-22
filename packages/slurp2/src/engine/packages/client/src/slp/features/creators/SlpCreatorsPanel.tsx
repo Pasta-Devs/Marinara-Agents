@@ -1,4 +1,4 @@
-import { Fragment } from "react";
+import { Fragment, useEffect } from "react";
 import { CalendarClock, CheckCircle2, ListChecks, Loader2, Search, Sparkles, Trash2, UsersRound } from "lucide-react";
 import type { SlpCreatorManagedStageProfile } from "../../../../../shared/src/slp/slp-social.types.js";
 import { Field, SettingsGroup, Toggle } from "../../modules/settings/SlpSettingsControls";
@@ -17,11 +17,14 @@ import { CreatorMessagingGroup } from "../messages/slp-messages-contract";
 import { BackstagePageHeader, SettingAnchor } from "../../modules/settings/SlpSettingsKit";
 import { SlurpPostGuidanceField } from "../settings/slp-post-guidance-contract";
 import { SlurpCreatorProfileEditor } from "./SlpCreatorProfileEditor";
+import { SlurpCreatorStrategyGroup } from "./SlpCreatorStrategyGroup";
+import { SlurpContinuityPanel } from "./SlpContinuityPanel";
+import { SlpContinuityOverview } from "./SlpContinuityOverview";
 import { useSlurpCreatorMetrics } from "./slp-creators-hooks";
 import { useSlurpPostGuidance } from "../settings/slp-post-guidance-contract";
 
 const CREATOR_FILTERS: readonly SlpCreatorFilter[] = ["all", "active", "paused", "attention"];
-const CREATOR_TABS: readonly SlpCreatorTab[] = ["profile", "publishing", "images", "messages", "danger"];
+const CREATOR_TABS: readonly SlpCreatorTab[] = ["profile", "publishing", "images", "messages", "continuity", "danger"];
 
 function needsAttention(creator: SlpCreatorManagedStageProfile) {
   return creator.sourceStatus.state === "missing" || creator.sourceStatus.state === "changed";
@@ -93,6 +96,18 @@ export function SlpCreatorsPanel(page: SlpBackstagePageProps) {
           ? creators.filter((creator) => !creator.autoPosting.enabled).length
           : creators.filter(needsAttention).length;
   const openImprove = () => onNavigate({ ...navigation, section: "creators", target: "improve" });
+  const openContinuity = (creatorAccountId: string) => {
+    setSelectedCreatorId(creatorAccountId);
+    setExpandedId(creatorAccountId);
+    setTab("continuity");
+  };
+  const continuityCreatorId = navigation.continuityCreatorId;
+  useEffect(() => {
+    if (!continuityCreatorId) return;
+    openContinuity(continuityCreatorId);
+    onNavigate({ ...navigation, continuityCreatorId: undefined });
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- one-shot deep link
+  }, [continuityCreatorId]);
 
   const detailPanel = selectedCreator ? (
     <section
@@ -237,6 +252,7 @@ export function SlpCreatorsPanel(page: SlpBackstagePageProps) {
                 {t("ui.slurp.settings.creators.postingSchedule")}
               </button>
             </SettingsGroup>
+            <SlurpCreatorStrategyGroup creator={selectedCreator} />
             {/* A creator who fishes for subscribers in public and pays it off behind the
                 paywall needs their own two directions; empty means the global ones apply. */}
             <SettingsGroup title={t("ui.slurp.settings.creators.guidanceGroup")}>
@@ -441,6 +457,8 @@ export function SlpCreatorsPanel(page: SlpBackstagePageProps) {
             <p className={noteClass}>{t("ui.slurp.settings.creators.messagesWorldRules")}</p>
           ))}
 
+        {tab === "continuity" && <SlurpContinuityPanel creatorAccountId={selectedCreator.id} />}
+
         {tab === "danger" && (
           <div className="space-y-3 rounded-lg p-3 ring-1 ring-inset ring-[var(--slurp-danger)]/30">
             <p className="text-xs font-semibold text-[var(--slurp-danger)]">
@@ -522,6 +540,8 @@ export function SlpCreatorsPanel(page: SlpBackstagePageProps) {
           )}
         </div>
       ) : null}
+
+      {!bulkCreatorIds && <SlpContinuityOverview onOpen={openContinuity} />}
 
       {accountsQuery.isLoading ? (
         <div className="flex justify-center py-10 text-[var(--slurp-muted)]" role="status">

@@ -2,7 +2,6 @@ import { slpCreatorViewerPersonaSchema } from "../../../../../shared/src/slp/slp
 import { z } from "zod";
 import { slpCreatorUnseenCreatorAccountIds } from "../../modules/feed/slp-viewer-unseen.js";
 import { isSlurpViewerActorAccount } from "../../modules/settings/slp-settings.js";
-import { isCreatorHiddenFromViewer } from "../../base/identity/slp-access.js";
 import type { FastifyInstance } from "fastify";
 import {
   SLP_CREATOR_FEED_PAGE_SIZE,
@@ -48,11 +47,7 @@ export async function slpFeedViewerRoutes(app: FastifyInstance, deps: SlpRouteDe
     if (!viewer) return reply.code(404).send({ error: "Slurp persona not found" });
     const accounts = await noodle.listNoodlerAccounts();
     const unseenCreatorAccountIds = slpCreatorUnseenCreatorAccountIds(accounts, viewer.id);
-    const visibleAccounts = accounts.filter(
-      (account) =>
-        !isSlurpViewerActorAccount(account) &&
-        (creatorBelongsToViewer(account, viewer) || !isCreatorHiddenFromViewer(account, viewer.id)),
-    );
+    const visibleAccounts = accounts.filter((account) => !isSlurpViewerActorAccount(account));
     const visibleAccountIds = visibleAccounts.map((account) => account.id);
     const generationKey = [
       app.db._fileStore.getTableWriteGeneration("slurp2_posts"),
@@ -151,6 +146,7 @@ export async function slpFeedViewerRoutes(app: FastifyInstance, deps: SlpRouteDe
     });
     const projected = await projectViewerPosts(context, page.items);
     return {
+      ...buildViewerShell(context),
       items: page.items.flatMap((post) => {
         const view = projected.get(post.id);
         return view ? [{ creatorAccountId: post.authorAccountId, post: view }] : [];
