@@ -1,5 +1,9 @@
 # Long-Term Memory changelog
 
+## 1.3.12 — 2026-09-22
+
+- Compare extraction candidates against the canonical scoped target notes even when ranked retrieval did not return them, so equivalent memories under abbreviated or full-name subject variants deduplicate instead of forking repeated notes, while distinct subjects, scopes, sections, and genuinely additive facts remain separate.
+
 ## 1.3.11 — 2026-09-22
 
 - Canonicalize character name variants during extraction so short names, first-name-only forms, and minor spelling variations resolve to one trusted identity instead of forking duplicate memories, while shared or ambiguous names keep failing closed with the competing identities listed.

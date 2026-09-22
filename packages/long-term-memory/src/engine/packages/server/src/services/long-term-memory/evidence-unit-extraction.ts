@@ -1395,7 +1395,7 @@ export function compileEvidenceUnitExtraction(options: {
     eventSubjectIdentityKeys: options.eventSubjectIdentityKeys,
   });
   const keptUnits = validated.keptUnits;
-  const dedupResult = deduplicateUnits(keptUnits, options.existingNotes);
+  const dedupResult = deduplicateUnits(keptUnits, options.existingNotes, options.scope);
   const closed = closeSourceEventGraph(dedupResult.deduplicated, options.sourceNote, options.existingNotes);
   const parserDroppedCandidates = options.parserDroppedCandidates ?? [];
   const parserRejectionCount = options.parserRejectionCount ?? parserDroppedCandidates.length;

@@ -82,6 +82,7 @@ async function main() {
     units: ReturnType<typeof unit>[],
     skipStructuredBackfill = true,
     existingNotes: any[] = [],
+    scope: Record<string, unknown> = {},
   ) =>
     compileEvidenceUnitExtraction({
       unitResponse: { summary: "Extraction graph regression", units },
@@ -89,7 +90,7 @@ async function main() {
       sourceText: note.sections.source.text,
       sourceNote: note,
       existingNotes,
-      scope: {},
+      scope: scope as any,
       modes: ["roleplay"],
       mode: "roleplay",
       sourceHash: sourceHashForLtmSourceNote(note),
@@ -101,6 +102,7 @@ async function main() {
     { kind: "chat_summary", sourceId: "chat-a", entryId: "summary-a" },
     "Mara learned the observatory script and is guarded. Alice and Rowan trusted each other less after the argument.",
   );
+  const scopedChat = { ...chat, scope: { chatId: "chat-a", chatIds: ["chat-a"] } };
 
   const linklessCharacter = compile(chat, [
     unit(chat, {
@@ -1312,6 +1314,143 @@ async function main() {
     identityCatalog.entries.find((entry: any) => entry.name === "Seraphina Duvall")!.subject,
   ]);
   identityCatalog.notes.push(canonicalIdentityNote);
+  const canonicalSubject = canonicalIdentityNote.subjects[0];
+  const legacyIdentityNote = {
+    ...identityNote("char_seraphina_legacy", "Legacy Seraphina", [canonicalSubject]),
+    sections: { facts: { text: "Seraphina Duvall is trusted.", updatedAt: timestamp } },
+  };
+  const canonicalizedUnit = {
+    ...unit(chat, {
+      bucket: "character_fact",
+      subjectId: "seraphina_duvall",
+      sectionKey: "facts",
+      text: "Seraphina Duvall is trusted.",
+      subjectNames: ["Seraphina Duvall"],
+    }),
+    subjects: [canonicalSubject],
+  };
+  const subjectIdentityDedup = deduplicateUnits([canonicalizedUnit], [legacyIdentityNote]);
+  assert.equal(
+    subjectIdentityDedup.deduplicated.length,
+    0,
+    "canonical subject identity must deduplicate an equivalent legacy target id",
+  );
+  const distinctSubjectDedup = deduplicateUnits(
+    [
+      {
+        ...canonicalizedUnit,
+        subjectId: "rowan_hale",
+        subjects: [subject("character:rowan", { kind: "character", id: "rowan" })],
+      },
+    ],
+    [legacyIdentityNote],
+  );
+  assert.equal(distinctSubjectDedup.deduplicated.length, 1, "distinct canonical subjects must remain separate");
+  const scopeA = { chatId: "chat-a", chatIds: ["chat-a"] };
+  const scopeB = { chatId: "chat-b", chatIds: ["chat-b"] };
+  const overlappingScope = { chatIds: ["chat-a", "chat-b"] };
+  const targetScopeNote = {
+    ...legacyIdentityNote,
+    id: "char_seraphina_scope_a",
+    scope: scopeA,
+    sections: { facts: { text: "Seraphina Duvall is cautious.", updatedAt: timestamp } },
+  };
+  const otherScopeDuplicate = {
+    ...legacyIdentityNote,
+    id: "char_seraphina_scope_b",
+    scope: scopeB,
+    sections: { facts: { text: "Seraphina Duvall is trusted.", updatedAt: timestamp } },
+  };
+  const scopedUnit = {
+    ...unit(scopedChat, {
+      bucket: "character_fact",
+      subjectId: "seraphina_scope_a",
+      sectionKey: "facts",
+      text: "Seraphina Duvall is trusted.",
+      claimKind: "static",
+      subjectNames: ["Seraphina Duvall"],
+    }),
+    subjects: [canonicalSubject],
+  };
+  const crossScopeDedup = deduplicateUnits([scopedUnit], [targetScopeNote, otherScopeDuplicate], overlappingScope);
+  assert.equal(
+    crossScopeDedup.deduplicated.length,
+    1,
+    "an identical memory in a merely overlapping scope must not suppress the target-scope write",
+  );
+  const crossScopeCompilation = compile(scopedChat, [scopedUnit], true, [targetScopeNote, otherScopeDuplicate], scopeA);
+  assert.equal(
+    crossScopeCompilation.accounting.keptUnits,
+    1,
+    "an overlapping-scope duplicate must not be dropped before the target-scope write",
+  );
+  assert.equal(
+    crossScopeCompilation.outcome.droppedCandidates.filter(
+      (candidate: any) => candidate.noteId === "char_seraphina_scope_a",
+    ).length,
+    0,
+    "the target-scope note must not be dropped as out of scope",
+  );
+  assert.equal(
+    crossScopeDedup.diagnostics.some((diagnostic) => diagnostic.code === "deduplicated_evidence_unit"),
+    false,
+  );
+  const sameScopeDedup = deduplicateUnits(
+    [scopedUnit],
+    [targetScopeNote, { ...otherScopeDuplicate, scope: scopeA }],
+    overlappingScope,
+  );
+  assert.equal(sameScopeDedup.deduplicated.length, 0, "same-scope subject duplicates must still deduplicate");
+  const omittedScopeDedup = deduplicateUnits([scopedUnit], [otherScopeDuplicate]);
+  assert.equal(
+    omittedScopeDedup.deduplicated.length,
+    1,
+    "an omitted scope must not fall back to matching a subject-equivalent note in another scope",
+  );
+  const directTargetNote = {
+    ...canonicalIdentityNote,
+    id: "char_seraphina_duvall",
+  };
+  const directTargetCatalog = buildTrustedLtmSubjectCatalog({
+    roster: [{ kind: "character", id: "seraphina", name: "Seraphina Duvall" }],
+    notes: [],
+  });
+  const directTargetIdentity = resolveLtmSubjectIdentities({
+    units: [
+      unit(chat, {
+        bucket: "character_fact",
+        subjectId: "seraphina_duvall",
+        sectionKey: "facts",
+        text: "Seraphina Duvall is trusted.",
+        subjectNames: ["Seraphina Duvall"],
+      }),
+    ],
+    catalog: directTargetCatalog,
+    existingNotes: [],
+    scope: {},
+    mode: "roleplay",
+  });
+  const directTargetResolution = await resolveScopedEvidenceUnitTargets({
+    units: directTargetIdentity.units,
+    existingNotes: directTargetIdentity.existingNotes,
+    storage: {
+      getNotesByIds: async () => new Map([[directTargetNote.id, directTargetNote]]),
+    },
+    scope: {},
+  });
+  assert.deepEqual(
+    directTargetResolution.existingNotes.map((note: any) => note.id),
+    ["char_seraphina_duvall"],
+    "direct target lookup must join a retrieval-missed canonical note to deduplication",
+  );
+  const directTargetCompilation = compile(
+    chat,
+    directTargetResolution.units,
+    true,
+    directTargetResolution.existingNotes,
+  );
+  assert.equal(directTargetCompilation.accounting.deduplications, 1);
+  assert.equal(directTargetCompilation.compiledResponse.mutations.length, 0);
   assert.deepEqual(
     trustedLtmIdentityNotesForSource({
       sourceText: "Serafina Duvall entered the observatory.",
