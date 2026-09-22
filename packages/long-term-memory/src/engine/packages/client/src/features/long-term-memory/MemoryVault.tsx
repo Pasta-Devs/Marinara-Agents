@@ -2885,9 +2885,7 @@ export default function MemoryVault({
   };
   const openLinkedNote = async (noteId: string) => {
     try {
-      const note =
-        allNotes.find((candidate) => candidate.id === noteId) ??
-        (await request<LtmNote>(`/notes/${encodeURIComponent(noteId)}`));
+      const note = notesById.get(noteId) ?? (await request<LtmNote>(`/notes/${encodeURIComponent(noteId)}`));
       await openNote(note);
     } catch (cause) {
       setError(
@@ -4140,7 +4138,7 @@ export default function MemoryVault({
                                         key={`${link.target}-${link.relation}-${index}`}
                                         label={localizeUi("ui.longTermMemory.longtermmemorydetail.value1Value2", {
                                           value1: relationLabel(link.relation),
-                                          value2: memoryLabel(allNotes.find((note) => note.id === link.target)),
+                                          value2: memoryLabel(notesById.get(link.target)),
                                         })}
                                         onRemove={() =>
                                           update(
@@ -4156,7 +4154,7 @@ export default function MemoryVault({
                                           className="underline underline-offset-2"
                                           onClick={() => void openLinkedNote(link.target)}
                                         >
-                                          {memoryLabel(allNotes.find((note) => note.id === link.target))}
+                                          {memoryLabel(notesById.get(link.target))}
                                         </button>
                                       </Pill>
                                     ))}
@@ -4169,7 +4167,7 @@ export default function MemoryVault({
                                         className="text-xs text-[var(--muted-foreground)]"
                                       >
                                         {localizeUi("ui.longTermMemory.memoryvault.relationExtractedFrom")}:{" "}
-                                        {memoryLabel(allNotes.find((note) => note.id === link.target))}
+                                        {memoryLabel(notesById.get(link.target))}
                                       </p>
                                     ))}
                                   <p className="text-xs text-[var(--muted-foreground)]">

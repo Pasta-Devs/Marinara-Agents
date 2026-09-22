@@ -2298,31 +2298,48 @@ async function main() {
         "vault reads must keep id ordering",
       );
       const secondRead = await new LongTermMemoryStorage(snapshotRoot).listNotes();
-      assert.equal(
-        secondRead[0],
-        firstRead[0],
-        "opening the vault again must reuse one parsed snapshot instead of rescanning the vault",
+      assert.deepEqual(
+        secondRead.map((note) => note.id),
+        firstRead.map((note) => note.id),
+        "opening the vault again must reuse one parsed snapshot",
       );
-      assert.equal(secondRead[1], firstRead[1]);
+      firstRead[0]!.sections.facts!.text = "Caller mutation must not alter the cached scan.";
+      assert.equal(
+        (await snapshotStorage.listNotes())[0]!.sections.facts!.text,
+        noteInput.sections.facts.text,
+        "listNotes must isolate cached notes from caller mutations",
+      );
       const paged = await new LongTermMemoryStorage(snapshotRoot).listNotes({ offset: 1, limit: 1 });
       assert.deepEqual(
         paged.map((note) => note.id),
         ["world_snapshot_b"],
         "offset and limit must keep matching the full vault snapshot",
       );
-      assert.equal(paged[0], firstRead[1]);
+      assert.equal(paged[0]?.id, firstRead[1]?.id);
       assert.equal(
         (await snapshotStorage.listNotes({ type: "source" })).length,
         0,
         "type filters must keep narrowing the shared snapshot",
       );
-      assert.equal((await snapshotStorage.listNotes())[0], firstRead[0]);
+      assert.equal((await snapshotStorage.listNotes())[0]?.id, firstRead[0]?.id);
       await snapshotStorage.updateNote("world_snapshot_b", { title: "Snapshot B updated" });
       const afterUpdate = await new LongTermMemoryStorage(snapshotRoot).listNotes();
-      assert.notEqual(afterUpdate[1], firstRead[1], "mutations must drop the parsed vault snapshot");
       assert.equal(afterUpdate.find((note) => note.id === "world_snapshot_b")?.title, "Snapshot B updated");
       await snapshotStorage.cleanup();
       await new LongTermMemoryStorage(snapshotRoot).cleanup();
+
+      const countRoot = join(dataDir, "vault-snapshot-count");
+      let snapshotLoads = 0;
+      const loadSnapshot = () => {
+        snapshotLoads++;
+        return Promise.resolve({ notes: [], errors: [] });
+      };
+      await readLtmVaultSnapshot(countRoot, loadSnapshot);
+      await readLtmVaultSnapshot(countRoot, loadSnapshot);
+      assert.equal(snapshotLoads, 1, "concurrent snapshot consumers must share one scan");
+      invalidateLtmVaultSnapshot(countRoot);
+      await readLtmVaultSnapshot(countRoot, loadSnapshot);
+      assert.equal(snapshotLoads, 2, "snapshot invalidation must permit a fresh scan");
 
       const isolationRoot = join(dataDir, "vault-error-isolation");
       const isolationStorage = new LongTermMemoryStorage(isolationRoot);
@@ -2360,6 +2377,19 @@ async function main() {
         ["source_isolation_ok", "world_isolation_ok"],
         "a tolerated vault failure must not be memoized past its cause",
       );
+      await rename(join(isolationDirs.vault, "world"), join(isolationDirs.vault, "world-missing"));
+      invalidateLtmVaultSnapshot(isolationRoot);
+      assert.deepEqual(
+        (await isolationStorage.listNotes({ type: "source" })).map((note) => note.id),
+        ["source_isolation_ok"],
+        "typed reads must tolerate unrelated folder enumeration failures",
+      );
+      await assert.rejects(
+        isolationStorage.listNotes(),
+        /ENOENT/u,
+        "full reads must report folder enumeration failures",
+      );
+      await rename(join(isolationDirs.vault, "world-missing"), join(isolationDirs.vault, "world"));
       await isolationStorage.cleanup();
 
       const misplacedRoot = join(dataDir, "vault-misplaced-isolation");

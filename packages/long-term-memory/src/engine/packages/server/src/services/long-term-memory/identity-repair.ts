@@ -196,6 +196,7 @@ export async function restoreLtmIdentityRepairBackup(root: string, backup: LtmId
     await rm(staging, { recursive: true, force: true });
     await rm(failed, { recursive: true, force: true });
     await cp(backup.snapshotRoot, staging, { recursive: true, errorOnExist: true, force: false });
+    invalidateLtmVaultSnapshot(root);
     await rename(root, failed);
     try {
       await rename(staging, root);

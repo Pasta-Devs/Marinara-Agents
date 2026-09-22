@@ -133,6 +133,7 @@ export async function recoverLtmMutations(root: string) {
       logger.warn(error, `[ltm] Quarantined invalid mutation journal ${entry.name}`);
     }
   }
+  if (transactions.length) invalidateLtmVaultSnapshot(root);
   const committed: LtmMutationTransaction[] = [];
   for (const tx of transactions.sort((a, b) => a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id))) {
     if (tx.status === "committed") {
@@ -144,7 +145,6 @@ export async function recoverLtmMutations(root: string) {
     }
     await markLtmIndexesDirty(root);
   }
-  if (transactions.length) invalidateLtmVaultSnapshot(root);
   if (committed.length) await rebuildLtmNoteSummary(root);
   for (const tx of committed) await publish(root, tx, true);
 }

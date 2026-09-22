@@ -256,7 +256,7 @@ export class LongTermMemoryStorage {
         )
           continue;
         if (matched++ < offset) continue;
-        notes.push(note);
+        notes.push(structuredClone(note));
         if (filter.limit !== undefined && notes.length >= filter.limit) break;
       }
       return filter.limit === undefined ? notes.sort((a, b) => a.id.localeCompare(b.id)) : notes;
@@ -269,11 +269,16 @@ export class LongTermMemoryStorage {
     const dirs = getLongTermMemoryDirectories(this.root);
     const files = (
       await Promise.all(
-        LTM_VAULT_FOLDERS.map(async (folder) =>
-          (await readdir(safeJoin(dirs.vault, folder), { withFileTypes: true }))
-            .filter((entry) => entry.isFile() && entry.name.endsWith(".json"))
-            .map((entry) => ({ folder, name: entry.name })),
-        ),
+        LTM_VAULT_FOLDERS.map(async (folder) => {
+          try {
+            return (await readdir(safeJoin(dirs.vault, folder), { withFileTypes: true }))
+              .filter((entry) => entry.isFile() && entry.name.endsWith(".json"))
+              .map((entry) => ({ folder, name: entry.name }));
+          } catch (error) {
+            errors.push({ folder, error });
+            return [];
+          }
+        }),
       )
     )
       .flat()
