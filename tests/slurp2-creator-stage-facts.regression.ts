@@ -51,15 +51,28 @@ assert.doesNotMatch(
 );
 
 // The Creator's own appearance is applied whatever the description toggle says: that toggle
-// governs pulling the source character's description in, not whether the picture knows who it is of.
+// governs extra source context, not whether the picture knows who it is of.
 for (const path of [
   "packages/slurp2/src/engine/packages/server/src/slp/features/media/slp-images-service.ts",
   "packages/slurp2/src/engine/packages/server/src/slp/features/media/slp-public-images-service.ts",
 ]) {
   const source = slurp2Source(path);
   assert.match(source, /let characterDescription = stageAppearance;/u, `${path} must start from her own appearance`);
-  assert.match(source, /!stageAppearance &&\s*\n?\s*!?input\.(?:suppressCharacterContext|settings)/u, path);
+  assert.doesNotMatch(
+    source,
+    /sourceAppearance &&\s*\n?\s*input\.settings\.imageGenerationIncludeDescriptions/u,
+    `${path} must not gate linked appearance on the description setting`,
+  );
 }
+
+const publicImages = slurp2Source(
+  "packages/slurp2/src/engine/packages/server/src/slp/features/media/slp-public-images-service.ts",
+);
+assert.match(
+  publicImages,
+  /if \(!stageAppearance\) characterDescription = characterAppearanceFromRow\(character\);/u,
+  "public image prompts must keep a linked character's appearance when the stage field is empty",
+);
 
 // Both the caption and the picture get the facts.
 const prompt = slurp2Source("packages/slurp2/src/engine/packages/server/src/slp/features/feed/slp-post-prompt.ts");

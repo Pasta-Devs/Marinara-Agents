@@ -58,6 +58,8 @@ export function stripAppearanceLabel(value: string): string {
 export function selectSlpImageProviderPrompt(input: {
   rewrittenPrompt: string | null | undefined;
   rawPrompt: string;
+  /** Visual facts that must survive a capped fallback when the rewrite is unavailable. */
+  fallbackPrefix?: string;
   /** Never belongs in a visual prompt at any length, so it is matched whole. */
   privateContext?: ReadonlyArray<string | null | undefined>;
   /** Authored to steer the image, so only a copied block counts as a leak. */
@@ -69,7 +71,7 @@ export function selectSlpImageProviderPrompt(input: {
 }): string {
   const fallback = (reason: string) => {
     input.onFallback?.(reason);
-    return capFallbackImagePrompt(input.rawPrompt);
+    return capFallbackImagePrompt([input.fallbackPrefix?.trim(), input.rawPrompt].filter(Boolean).join("\n\n"));
   };
   const rewrittenPrompt = input.rewrittenPrompt?.trim();
   if (!rewrittenPrompt) {

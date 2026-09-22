@@ -17,11 +17,11 @@ export function slurpVisualBriefText(brief: SlurpVisualBrief): string {
   return [
     `Subject: ${brief.subject}.`,
     `Action: ${brief.action}.`,
+    brief.mood ? `Mood and production effort: ${brief.mood}.` : "",
     `Setting: ${brief.setting}.`,
     `Company: ${brief.company}.`,
     brief.clothing ? `Clothing: ${brief.clothing}.` : "",
     `Camera: ${brief.camera}`,
-    brief.mood ? `Mood and production effort: ${brief.mood}.` : "",
     `Sexual level: ${brief.sexualLevel}.`,
   ]
     .filter(Boolean)

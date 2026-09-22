@@ -1,5 +1,10 @@
 # Slurp Remastered release notes
 
+## 0.2.25 — 2026-09-22
+
+- Every generated picture keeps the Creator's appearance, planned action, expression, and mood even when image-prompt interpretation is unavailable.
+- Creator personality and stage voice now shape visual presentation without being copied as private prompt text.
+
 ## 0.2.24 — 2026-09-22
 
 - Payments: recovery no longer refunds a tip or unlock that is still going through, a refund is never marked paid again, and cancelling a commission with the wallet off no longer creates coins. A persona can no longer tip its own Creator.

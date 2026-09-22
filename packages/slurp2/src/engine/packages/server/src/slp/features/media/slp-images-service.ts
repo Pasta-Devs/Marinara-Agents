@@ -14,7 +14,7 @@ import { resolveConnectionImageDefaults } from "../../../services/image/image-ge
 import { compileImagePrompt, resolveImageStyleGuidanceText } from "../../../services/image/image-prompt-compiler.js";
 import { resolveImagePromptReviewSize } from "../../../services/image/image-prompt-review.js";
 import type { SlurpVisualBrief } from "../../base/media/slp-visual-brief.js";
-import { slurpVisualBriefPromptViolatesPolicy } from "../../base/media/slp-visual-brief.js";
+import { slurpVisualBriefPromptViolatesPolicy, slurpVisualBriefText } from "../../base/media/slp-visual-brief.js";
 import { loadImageGenerationUserSettings } from "../../../services/image/image-generation-settings.js";
 import { resolveIllustratorCharacterReferences } from "../../../services/image/illustrator-references.js";
 import { createCharactersStorage } from "../../../services/storage/characters.storage.js";
@@ -157,12 +157,7 @@ export async function generateCreatorPostImage(input: {
   // Every mode shows the same body — it is the page. Reducing a concealed creator to a handful of
   // approved tokens made them shapeless without hiding anything linkable, since a build and a hair
   // colour identify nobody.
-  if (
-    !stageAppearance &&
-    !input.suppressCharacterContext &&
-    sourceAppearance &&
-    input.settings.imageGenerationIncludeDescriptions
-  ) {
+  if (!stageAppearance && !input.suppressCharacterContext && sourceAppearance) {
     characterDescription = sourceAppearance;
   }
   if (referenceSubject) {
@@ -351,6 +346,12 @@ export async function generateCreatorPostImage(input: {
     selectSlpImageProviderPrompt({
       rewrittenPrompt: acceptedRewrittenPrompt,
       rawPrompt: rawProviderPrompt,
+      fallbackPrefix: [
+        characterDescription ? `Appearance: ${stripAppearanceLabel(characterDescription)}` : "",
+        input.visualBrief ? slurpVisualBriefText(input.visualBrief) : "",
+      ]
+        .filter(Boolean)
+        .join("\n"),
       rewriteAttempted,
       onFallback: (reason) =>
         logger.warn("[slurp] Image prompt rewrite unusable (%s); sending the capped draft", reason),

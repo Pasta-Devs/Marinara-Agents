@@ -14,7 +14,7 @@ import { resolveConnectionImageDefaults } from "../../../services/image/image-ge
 import { compileImagePrompt, resolveImageStyleGuidanceText } from "../../../services/image/image-prompt-compiler.js";
 import { resolveImagePromptReviewSize } from "../../../services/image/image-prompt-review.js";
 import type { SlurpVisualBrief } from "../../base/media/slp-visual-brief.js";
-import { slurpVisualBriefPromptViolatesPolicy } from "../../base/media/slp-visual-brief.js";
+import { slurpVisualBriefPromptViolatesPolicy, slurpVisualBriefText } from "../../base/media/slp-visual-brief.js";
 import {
   normalizeIllustratorAppearance,
   readIllustratorAppearance,
@@ -163,6 +163,7 @@ export async function generateSlpPostImage(input: {
         character,
         input.settings.characterImageInstructions[character.id],
       );
+      if (!stageAppearance) characterDescription = characterAppearanceFromRow(character);
       characterPersonality = imageContext.personality;
       characterImageInstructions = imageContext.imageInstructions;
 
@@ -196,11 +197,7 @@ export async function generateSlpPostImage(input: {
           promptText: [input.account.displayName, input.postContent, input.draftPrompt].join("\n"),
           maxReferences: 6,
         });
-        if (
-          !stageAppearance &&
-          input.settings.imageGenerationIncludeDescriptions &&
-          referenceResolution.appearanceBlock
-        ) {
+        if (!stageAppearance && referenceResolution.appearanceBlock) {
           characterDescription = referenceResolution.appearanceBlock;
         }
         if (input.settings.imageGenerationUseAvatarReferences) {
@@ -316,6 +313,12 @@ export async function generateSlpPostImage(input: {
   const finalPromptBase = selectSlpImageProviderPrompt({
     rewrittenPrompt: acceptedRewrittenPrompt,
     rawPrompt: rawProviderPrompt,
+    fallbackPrefix: [
+      characterDescription ? `Appearance: ${stripAppearanceLabel(characterDescription)}` : "",
+      input.visualBrief ? slurpVisualBriefText(input.visualBrief) : "",
+    ]
+      .filter(Boolean)
+      .join("\n"),
     rewriteAttempted,
     onFallback: (reason) => logger.warn("[slurp] Image prompt rewrite unusable (%s); sending the capped draft", reason),
     // Art style and the character's image habits are meant to reach the provider, so a rewrite
