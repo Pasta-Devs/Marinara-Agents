@@ -524,6 +524,8 @@ export function useSlurpHomeBaseState({ navigation, onNavigate, onLeave }: Slurp
   });
   const generatePostImage = useGenerateCreatorPostImage();
   const [generatingPostImageId, setGeneratingPostImageId] = useState<string | null>(null);
+  /** The post whose share picker is open, or null. */
+  const [sharingPost, setSharingPost] = useState<SlpPostCardModel | null>(null);
   const handleGeneratePostImage = (
     post: Pick<SlpCreatorManagedPost, "id" | "authorAccountId">,
     imagePrompt?: string,
@@ -543,18 +545,9 @@ export function useSlurpHomeBaseState({ navigation, onNavigate, onLeave }: Slurp
     generatingPostImageId,
     // Undefined without a persona rather than a no-op handler: the menu then falls back to its
     // own share-card download instead of the item doing nothing at all when it is clicked.
-    sharePost: viewerPersonaId
-      ? (post: SlpPostCardModel) => {
-          void api
-            .post("/slurp2/messages/share-post", {
-              personaId: viewerPersonaId,
-              creatorAccountId: post.authorAccountId,
-              postId: post.id,
-            })
-            .then(() => toast.success(localizeUi("ui.slurp.post.shared", { defaultValue: "Post shared." })))
-            .catch((error: unknown) => toast.error(errorMessage(error, localizeUi("ui.slurp.post.shareFailed"))));
-        }
-      : undefined,
+    // Sharing used to post straight to the creator who wrote the post — the one chat the reader
+    // never means — so it opens the chat picker instead.
+    sharePost: viewerPersonaId ? (post: SlpPostCardModel) => setSharingPost(post) : undefined,
   };
   const selectedProfile =
     navigation.mode === "creator" && navigation.view === "profile"
@@ -784,6 +777,8 @@ export function useSlurpHomeBaseState({ navigation, onNavigate, onLeave }: Slurp
     setGeneratingPostImageId,
     handleGeneratePostImage,
     postCardCtx,
+    sharingPost,
+    setSharingPost,
     selectedProfile,
     postsQuery,
     selectedViewerCreator,

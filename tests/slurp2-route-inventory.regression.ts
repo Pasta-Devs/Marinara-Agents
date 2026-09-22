@@ -18,6 +18,7 @@ const EXPECTED = [
   "POST /continuity/facts/:id/promote",
   "POST /continuity/proposals/:id/:decision",
   "POST /messages/threads/:threadId/requests/:requestId/action",
+  "POST /messages/creators/:creatorAccountId/request-fan-reply",
   "POST /messages/share-post",
   "POST /slurp/posts/:id/report",
   "POST /slurp/posts/:id/restore",
@@ -237,6 +238,7 @@ const ADDED_ROUTES = new Set([
   "POST /continuity/facts/:id/promote",
   "POST /continuity/proposals/:id/:decision",
   "POST /messages/threads/:threadId/requests/:requestId/action",
+  "POST /messages/creators/:creatorAccountId/request-fan-reply",
   "POST /messages/share-post",
   "POST /slurp/wardrobe/lorebook-entries",
   "POST /slurp/posts/:id/report",
@@ -282,13 +284,13 @@ const EXPECTED_HANDLER_COUNTS = {
   "features/feed": 35,
   "features/maintenance": 14,
   "features/media": 7,
-  "features/messages": 39,
+  "features/messages": 40,
   "features/notifications": 3,
   "features/onboarding": 4,
   "features/projects": 15,
   "features/settings": 7,
 } as const;
-const EXPECTED_METHOD_COUNTS = { DELETE: 12, GET: 68, PATCH: 16, POST: 104, PUT: 5 } as const;
+const EXPECTED_METHOD_COUNTS = { DELETE: 12, GET: 68, PATCH: 16, POST: 105, PUT: 5 } as const;
 
 const root = join(import.meta.dirname, "../packages/slurp2/src/engine/packages/server/src/slp");
 const registration = /\bapp\.(get|post|put|patch|delete|addContentTypeParser)(?:<[^()]*?>)?\(\s*["'`]([^"'`]+)["'`]/gu;
@@ -343,7 +345,7 @@ const methodCounts = Object.fromEntries(
     }, new Map<string, number>()),
 );
 assert.deepEqual(methodCounts, EXPECTED_METHOD_COUNTS, "HTTP method multiset changed from staging");
-assert.equal(foundRoutes.filter((route) => !route.startsWith("ADDCONTENTTYPEPARSER ")).length, 205);
+assert.equal(foundRoutes.filter((route) => !route.startsWith("ADDCONTENTTYPEPARSER ")).length, 206);
 assert.deepEqual(handlerCounts, EXPECTED_HANDLER_COUNTS, "handler count changed in a feature");
 assert.ok(foundRoutes.includes("POST /slurp/posts/:id/media"), "the renamed POST media route must remain registered");
 assert.ok(

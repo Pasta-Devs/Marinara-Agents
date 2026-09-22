@@ -1,7 +1,30 @@
 import { useState } from "react";
 import { useTranslation as useUiTranslation } from "react-i18next";
 import { Modal } from "../../../components/ui/Modal";
-import { useReportSlpContent } from "./slp-post-action-hooks";
+import { SLP_REPORT_REASONS, useReportSlpContent, type SlpReportReason } from "./slp-post-action-hooks";
+
+/**
+ * The wording each reason carries. The list is the one a real social network offers, plus the
+ * three that only exist here: a Creator passing themselves off as a real person, paid content
+ * reposted for free, and a Creator who reads as underage.
+ */
+const REASON_LABELS: Record<SlpReportReason, string> = {
+  spam: "Spam or misleading",
+  scam: "Scam or fraud",
+  misinformation: "False information",
+  harassment: "Harassment or bullying",
+  hate: "Hate speech or symbols",
+  violence: "Violence or dangerous behaviour",
+  self_harm: "Suicide or self-harm",
+  adult: "Adult content in the wrong place",
+  underage: "Creator looks underage",
+  privacy: "Privacy or personal details",
+  intellectual_property: "Intellectual property",
+  impersonation: "Pretending to be a real person",
+  leaked_paid: "Leaked paid content",
+  illegal: "Illegal content",
+  other: "Something else",
+};
 
 export function SlpReportModal({
   open,
@@ -20,7 +43,7 @@ export function SlpReportModal({
 }) {
   const { t: localizeUi } = useUiTranslation();
   const report = useReportSlpContent();
-  const [reason, setReason] = useState<"spam" | "illegal" | "privacy" | "harassment" | "adult" | "other">("spam");
+  const [reason, setReason] = useState<SlpReportReason>("spam");
   const [details, setDetails] = useState("");
   const canSubmit = reason !== "other" || details.trim().length > 0;
   const submit = () => {
@@ -46,22 +69,11 @@ export function SlpReportModal({
               onChange={(event) => setReason(event.target.value as typeof reason)}
               className="h-10 w-full rounded-lg border border-[var(--noodle-divider)] bg-[var(--background)] px-3"
             >
-              <option value="spam">
-                {localizeUi("ui.slurp.post.reportSpam", { defaultValue: "Spam or broken content" })}
-              </option>
-              <option value="illegal">
-                {localizeUi("ui.slurp.post.reportIllegal", { defaultValue: "Illegal content" })}
-              </option>
-              <option value="privacy">
-                {localizeUi("ui.slurp.post.reportPrivacy", { defaultValue: "Privacy issue" })}
-              </option>
-              <option value="harassment">
-                {localizeUi("ui.slurp.post.reportHarassment", { defaultValue: "Harassment or abuse" })}
-              </option>
-              <option value="adult">
-                {localizeUi("ui.slurp.post.reportAdult", { defaultValue: "Adult content issue" })}
-              </option>
-              <option value="other">{localizeUi("ui.slurp.post.reportOther", { defaultValue: "Other" })}</option>
+              {SLP_REPORT_REASONS.map((value) => (
+                <option key={value} value={value}>
+                  {localizeUi(`ui.slurp.post.reportReasons.${value}`, { defaultValue: REASON_LABELS[value] })}
+                </option>
+              ))}
             </select>
           </label>
           <label className="block space-y-1 text-sm font-semibold">

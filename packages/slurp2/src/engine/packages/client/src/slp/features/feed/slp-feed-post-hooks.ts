@@ -236,7 +236,7 @@ export function useGenerateCreatorPostImage() {
         debugMode: useSlurpUIStore.getState().debugMode,
       }),
     onSuccess: (restored, input) => {
-      qc.setQueriesData<SlpCreatorViewerScope | undefined>(slpKeys.slpCreatorViewers(), (current) =>
+      qc.setQueriesData<SlpCreatorViewerScope | undefined>({ queryKey: slpKeys.slpCreatorViewers() }, (current) =>
         current
           ? {
               ...current,

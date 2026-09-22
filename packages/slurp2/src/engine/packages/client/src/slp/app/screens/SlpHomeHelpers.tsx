@@ -641,10 +641,10 @@ export function SlurpPostDialog({
           <div className="h-full w-full animate-pulse bg-[var(--slurp-surface-raised)] motion-reduce:animate-none" />
         )
       }
-      // The dialog owns the picture, so the card must not draw it or offer its prompt again.
-      // `images` has to go too: the card prefers that array over `imageUrl`, so blanking only
-      // `imageUrl` left every gallery post showing its picture twice.
-      side={<SlpPostCard post={{ ...post, imageUrl: null, images: [] }} ctx={ctx} surface="profile" />}
+      // The dialog owns the picture, so the card must not draw it. The card is told to skip the
+      // picture rather than handed a post with its image fields blanked: everything else that
+      // reads those fields — "Download post card" in the card's own menu — needs them intact.
+      side={<SlpPostCard post={post} ctx={ctx} surface="profile" hideImage />}
     />
   );
 }

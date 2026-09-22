@@ -49,8 +49,16 @@ export async function slpMessagesSendRoutes(app: FastifyInstance, messaging: Slp
     if (!viewer) return reply.code(404).send({ error: "Slurp persona not found" });
     const creator = await slurp.getNoodlerAccountById(parsed.data.creatorAccountId);
     const post = await slurp.getNoodlerPostById(parsed.data.postId);
-    if (!creator || !post || post.authorAccountId !== creator.id)
-      return reply.code(404).send({ error: "Post not found" });
+    // Any post may go into any chat: the reader picks the chat, and sharing a Creator's post back
+    // to that same Creator was the one target the picker never means.
+    if (!creator || !post) return reply.code(404).send({ error: "Post not found" });
+    // A locked post travels as a teaser. The bubble hides the body of a locked preview, but the
+    // body used to ride along in the metadata anyway, so a share was a way to read it.
+    const locked = post.access !== "public";
+    // The shared post now travels outside its author's own chat, so the card has to say whose
+    // post it is. A missing author is not worth refusing the share over.
+    const author =
+      post.authorAccountId === creator.id ? creator : await slurp.getNoodlerAccountById(post.authorAccountId);
     const opened = await messages.openThread(viewer.id, creator.id, "viewer");
     if (opened.status === "closed") return reply.code(403).send({ error: "This Creator is not accepting messages." });
     if (opened.status === "insufficient_funds")
@@ -60,14 +68,17 @@ export async function slpMessagesSendRoutes(app: FastifyInstance, messaging: Slp
       senderAccountId: viewer.id,
       role: "viewer",
       kind: "post_preview",
-      content: post.title || post.content.slice(0, 180),
-      imageUrl: post.imageUrl,
+      content: locked ? post.title || "" : post.title || post.content.slice(0, 180),
+      imageUrl: locked ? null : post.imageUrl,
       metadata: {
         postId: post.id,
         title: post.title,
-        content: post.content,
+        content: locked ? "" : post.content,
         access: post.access,
-        previewLocked: post.access === "locked",
+        previewLocked: locked,
+        authorName: author?.displayName ?? null,
+        authorHandle: author?.handle ?? null,
+        authorAvatarUrl: author?.avatarUrl ?? null,
         shareReason: "player",
       },
     });

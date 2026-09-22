@@ -9,6 +9,7 @@ import { SlurpAgeGate, SlurpConfetti } from "../features/onboarding/SlpAgeGate";
 import { SlurpSplash } from "../features/onboarding/SlpSplash";
 import { getSlpAccentStyle, SLP_PERSONA_SWITCHER_PAGE_SIZE, SLP_PINK } from "../base/chrome/SlpChrome";
 import { SlpShell } from "../modules/chrome/SlpShell";
+import { SlpSharePostModal } from "../features/messages/SlpSharePostModal";
 import { SlpBackstageShell } from "../app/backstage/SlpBackstageShell";
 import { SlpBackstageSidebar } from "../features/backstage/SlpBackstageSidebar";
 import { Modal } from "../../components/ui/Modal";
@@ -414,6 +415,12 @@ export function SlurpHome({ navigation, onNavigate, onLeave }: SlurpHomeProps) {
           isPending={false}
         />
       </Modal>
+      <SlpSharePostModal
+        post={model.sharingPost}
+        personaId={viewerPersonaId}
+        open={Boolean(model.sharingPost)}
+        onClose={() => model.setSharingPost(null)}
+      />
       <SlurpSplash open={splashOpen} onDismiss={() => setSplashOpen(false)} />
       {gateCelebrating && <SlurpConfetti fixed />}
       {reviewModal}

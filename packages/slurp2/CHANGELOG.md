@@ -1,5 +1,14 @@
 # Slurp Remastered release notes
 
+## 0.2.23 — 2026-09-22
+
+- Restore after deleting a post now works. The feed reloaded on a timer and dropped the deleted post, taking the Restore row with it mid-countdown.
+- Share asks which chat to send a post to, with a search and a New chat button, instead of sending it to the Creator who wrote it. The chat card names the author; a locked post travels as a teaser.
+- "Download post card" includes the post image again when started from the opened post.
+- Reporting offers a real social network's range of reasons plus Slurp's own, and the menu item has its icon.
+- "Request a reply" now works on both sides of a chat: playing a Creator, ask the fan to write back.
+- Avatar references and source appearance are used by default, so a Creator looks like herself. Both stay switches in Backstage.
+
 ## 0.2.22 — 2026-09-22
 
 - Everyday Slurp loading now requests feed data only on feed surfaces and defers profile-source and model-connection data until profile work starts.

@@ -36,10 +36,19 @@ export function SlpPostCard({
   post,
   ctx,
   surface = "feed",
+  hideImage = false,
 }: {
   post: SlpPostCardModel;
   ctx: SlpPostCardCtx;
   surface?: "feed" | "profile";
+  /**
+   * Draw the card without its picture, for a surface that already shows the picture itself.
+   *
+   * The caller used to blank `imageUrl` and `images` on the model instead. That hid the picture
+   * and everything else that reads those fields with it: "Download post card" from this card's
+   * menu built a card with no image in it.
+   */
+  hideImage?: boolean;
 }) {
   const { t: localizeUi, i18n } = useUiTranslation();
   const {
@@ -141,7 +150,7 @@ export function SlpPostCard({
     observe: observePostImage,
     loading: postImageLoading,
   } = useNearViewportSlurpMediaSrc(activeImage?.imageUrl ?? post.imageUrl, { width: 960 });
-  const displayedImageUrl = postImageSrc && postImageSrc !== failedImageUrl ? postImageSrc : null;
+  const displayedImageUrl = !hideImage && postImageSrc && postImageSrc !== failedImageUrl ? postImageSrc : null;
   const imageGenerationPending = ctx.generatingPostImageId === post.id;
   const postMenuOpen = ctx.postMenuId === post.id;
   const reachBadge = slurpPostWentViral({ accountId: post.authorAccountId, postId: post.id, createdAt: post.createdAt })
@@ -426,7 +435,7 @@ export function SlpPostCard({
         </div>
       </div>
       <div>
-        {isEditingPost && imageEditing ? null : displayedImageUrl || postImageLoading ? (
+        {(isEditingPost && imageEditing) || hideImage ? null : displayedImageUrl || postImageLoading ? (
           <div
             ref={observePostImage}
             className={cn(

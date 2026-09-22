@@ -8,6 +8,26 @@ export function useShareSlpPost() {
   });
 }
 
+/** The reasons the report route accepts. Ordered as the modal lists them. */
+export const SLP_REPORT_REASONS = [
+  "spam",
+  "scam",
+  "misinformation",
+  "harassment",
+  "hate",
+  "violence",
+  "self_harm",
+  "adult",
+  "underage",
+  "privacy",
+  "intellectual_property",
+  "impersonation",
+  "leaked_paid",
+  "illegal",
+  "other",
+] as const;
+export type SlpReportReason = (typeof SLP_REPORT_REASONS)[number];
+
 export function useReportSlpContent() {
   return useMutation({
     mutationFn: (input: {
@@ -15,7 +35,7 @@ export function useReportSlpContent() {
       postId: string;
       targetType: "post" | "reply";
       targetId: string;
-      reason: "spam" | "illegal" | "privacy" | "harassment" | "adult" | "other";
+      reason: SlpReportReason;
       details: string;
     }) =>
       api.post<{ reported: boolean; duplicate: boolean }>(

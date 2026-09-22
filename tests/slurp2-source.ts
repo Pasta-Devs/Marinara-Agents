@@ -524,6 +524,8 @@ export const SLURP2_SOURCE_MODULES: Record<string, readonly string[]> = {
   ],
   "packages/server/src/services/slurp/slurp-message-generation.service.ts": [
     "packages/server/src/slp/features/messages/slp-message-generation-service.ts",
+    // The fan's side of the same module: it writes the audience member's next message.
+    "packages/server/src/slp/features/messages/slp-fan-reply-service.ts",
   ],
   "packages/server/src/services/slurp/slurp-message-scheduler.service.ts": [
     "packages/server/src/slp/features/messages/slp-message-scheduler-service.ts",

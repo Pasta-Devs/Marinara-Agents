@@ -10,7 +10,7 @@
   },
   "id": "slurp2",
   "name": "Slurp Remastered",
-  "version": "0.2.22",
+  "version": "0.2.23",
   "description": "The Slurp remaster. It installs beside Slurp Legacy and keeps its own separate data: create a local Creator profile from an Engine character or persona, publish public or locked posts, and simulate subscriptions and audience activity. Install it, restart Marinara Engine when prompted, then open Home → Slurp Remastered.",
   "localizations": {
     "de": {
@@ -70,13 +70,13 @@
     },
     {
       "path": "server.mjs",
-      "sha256": "4768fb299fc478913f191d5ce474ee2d8fcb1e81342169bad79e019c6ce2a122",
-      "bytes": 3106858
+      "sha256": "63c415eceb76eb10aaf21d5a780630277e3081ef2d6f626d96fd7faf4f012c39",
+      "bytes": 2904168
     },
     {
       "path": "client.js",
-      "sha256": "dadc3e3973b548df309d74eb07ea4bef8f178d0a75f3c23650f2c09393eca748",
-      "bytes": 3805333
+      "sha256": "5a344e46d962b87b85c8b9734bc18e389d292ad5996456cdf802bedc5dbf4e7c",
+      "bytes": 3785536
     },
     {
       "path": "slurp2-logo.png",

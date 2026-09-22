@@ -1,5 +1,6 @@
 import {
   Download,
+  Flag,
   ImageIcon,
   MoreHorizontal,
   Pencil,
@@ -183,6 +184,7 @@ export function SlpPostMenu({
               }}
               className="flex min-h-10 w-full items-center gap-2 px-3 text-start transition-colors hover:bg-[var(--accent)]"
             >
+              <Flag size={14} />
               {localizeUi("ui.slurp.post.report", { defaultValue: "Report post" })}
             </button>
           ) : null}

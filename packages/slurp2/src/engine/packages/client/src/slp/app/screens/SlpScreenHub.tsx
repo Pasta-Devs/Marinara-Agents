@@ -40,6 +40,7 @@ import {
   LoadMoreFeedButton,
 } from "./SlpHomeHelpers";
 import { SlpDeletedPostSlot } from "./SlpDeletedPostSlot";
+import type { SlpDeletedPostEntry } from "../slp-home-post-actions";
 import { deriveSlurpHubView } from "./slp-hub-view";
 import { useSlurpHubDiscoveryFilters } from "./slp-hub-discovery-filters";
 import { SlurpInlineSuggestedCreators } from "./SlpScreenSuggestedCreators";
@@ -111,7 +112,7 @@ export function ViewerHub({
   onLoadMore: () => Promise<boolean>;
   hasMore: boolean;
   deletingPostIds: Set<string>;
-  deletedPostIds: Map<string, number>;
+  deletedPostIds: Map<string, SlpDeletedPostEntry>;
   restoringPostIds?: Set<string>;
   onRestorePost: (post: ReturnType<typeof toSlpPostCardModel>) => void;
   isLoading: boolean;
@@ -555,6 +556,23 @@ export function ViewerHub({
             />
           ) : (
             <div className="space-y-4 bg-[var(--slurp-canvas)] px-3 pb-6 sm:px-4">
+              {/* A post inside its undo window that the feed no longer carries. The feed refetches
+                  on a timer and the server stops returning a deleted post, which used to take the
+                  row — and the Restore button on it — off screen mid-countdown, so the undo read
+                  as "nothing happened, and then the post vanished".
+                  ponytail: these sit at the top rather than in the post's old place. Splice them
+                  back by createdAt if the jump bothers anyone. */}
+              {[...deletedPostIds.entries()]
+                .filter(([postId]) => !feed.some((item) => item.post.id === postId))
+                .map(([postId, entry]) => (
+                  <SlpDeletedPostSlot
+                    key={postId}
+                    deleting={deletingPostIds.has(postId)}
+                    restoring={restoringPostIds.has(postId)}
+                    expiresAt={entry.expiresAt}
+                    onRestore={() => onRestorePost(entry.card)}
+                  />
+                ))}
               <AnimatePresence initial={false} mode="popLayout">
                 {visibleFeed.map((item, index) => (
                   <motion.div
@@ -575,7 +593,7 @@ export function ViewerHub({
                         <SlpDeletedPostSlot
                           deleting={deletingPostIds.has(item.post.id)}
                           restoring={restoringPostIds.has(item.post.id)}
-                          expiresAt={deletedPostIds.get(item.post.id)}
+                          expiresAt={deletedPostIds.get(item.post.id)?.expiresAt}
                           onRestore={() => onRestorePost(toSlpPostCardModel(item.post, item.creator.profile))}
                         />
                       ) : (

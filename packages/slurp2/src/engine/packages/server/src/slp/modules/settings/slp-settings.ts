@@ -514,8 +514,13 @@ export const DEFAULT_SLURP_SETTINGS: SlurpSettings = {
   imageGenerationPrompt: SLP_CREATOR_DEFAULT_IMAGE_GENERATION_PROMPT,
   imagePromptInterpretation: SLP_CREATOR_DEFAULT_IMAGE_PROMPT_INTERPRETATION,
   enableImageInterpretation: true,
-  imageGenerationUseAvatarReferences: false,
-  imageGenerationIncludeDescriptions: false,
+  // On by default. Off, no avatar ever reached the image model and the linked card's Appearance
+  // was never read, so a Creator's likeness rested entirely on the Appearance text written on the
+  // Creator — blank for anyone drafted from a card without one, and a blank appearance is what let
+  // the image model invent a different person for every post. A provider that cannot take a
+  // reference image simply ignores the references.
+  imageGenerationUseAvatarReferences: true,
+  imageGenerationIncludeDescriptions: true,
   autoPostingImagesEnabled: false,
   allowRandomUsers: false,
   dismissedAmbientProfileIds: [],

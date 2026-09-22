@@ -29,6 +29,9 @@ import type { SlpCreatorViewerScope } from "../../../../shared/src/slp/slp-socia
  * holds; they arrive as dependencies instead of being called again here, because calling a
  * mutation hook twice would give the host and this hook two separate mutation states.
  */
+/** A post inside its undo window: when the window closes, and the card the slot is drawn from. */
+export type SlpDeletedPostEntry = { expiresAt: number; card: SlpPostCardModel };
+
 export function useSlurpHomePostActions({
   localizeUi,
   viewerPersonaId,
@@ -60,24 +63,29 @@ export function useSlurpHomePostActions({
 }) {
   const queryClient = useQueryClient();
   const [deletingPostIds, setDeletingPostIds] = useState<Set<string>>(() => new Set());
-  const [deletedPostIds, setDeletedPostIds] = useState<Map<string, number>>(() => new Map());
+  // The card is kept beside the deadline, not just the id: the feed refetches on a timer and the
+  // server stops returning a deleted post, so the row that carries Restore has to be redrawable
+  // from here once the feed has forgotten it.
+  const [deletedPostIds, setDeletedPostIds] = useState<Map<string, SlpDeletedPostEntry>>(() => new Map());
   const [restoringPostIds, setRestoringPostIds] = useState<Set<string>>(() => new Set());
   useEffect(() => {
     const timers = [...deletedPostIds.entries()]
       .filter(([postId]) => !restoringPostIds.has(postId))
-      .map(([postId, expiresAt]) =>
+      .map(([postId, entry]) =>
         window.setTimeout(
           () => {
-            queryClient.setQueriesData<SlpCreatorViewerScope | undefined>(slpKeys.slpCreatorViewers(), (current) =>
-              current
-                ? {
-                    ...current,
-                    creators: current.creators.map((creator) => ({
-                      ...creator,
-                      posts: creator.posts.filter((post) => post.id !== postId),
-                    })),
-                  }
-                : current,
+            queryClient.setQueriesData<SlpCreatorViewerScope | undefined>(
+              { queryKey: slpKeys.slpCreatorViewers() },
+              (current) =>
+                current
+                  ? {
+                      ...current,
+                      creators: current.creators.map((creator) => ({
+                        ...creator,
+                        posts: creator.posts.filter((post) => post.id !== postId),
+                      })),
+                    }
+                  : current,
             );
             setDeletedPostIds((current) => {
               const next = new Map(current);
@@ -85,7 +93,7 @@ export function useSlurpHomePostActions({
               return next;
             });
           },
-          Math.max(0, expiresAt - Date.now()),
+          Math.max(0, entry.expiresAt - Date.now()),
         ),
       );
     return () => timers.forEach((timer) => window.clearTimeout(timer));
@@ -231,7 +239,7 @@ export function useSlurpHomePostActions({
             next.delete(post.id);
             return next;
           });
-          setDeletedPostIds((current) => new Map(current).set(post.id, Date.now() + 60_000));
+          setDeletedPostIds((current) => new Map(current).set(post.id, { expiresAt: Date.now() + 60_000, card: post }));
         },
       },
     );

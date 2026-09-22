@@ -9,6 +9,7 @@ import {
   useDraftSlurpCreatorReply,
   useForceSlurpReply,
   useRequestSlurpReply,
+  useRequestSlurpFanReply,
   useResetSlurpThread,
   useResolveSlurpMessageRequest,
   useSendSlurpCreatorReply,
@@ -72,6 +73,7 @@ export function useSlurpThreadViewState(props: SlurpThreadViewProps) {
   const cheat = useSlurpCheatDirective();
   const forceReply = useForceSlurpReply();
   const requestReply = useRequestSlurpReply();
+  const requestFanReply = useRequestSlurpFanReply();
   const tip = useTipInSlurpThread();
   const resolveRequest = useResolveSlurpMessageRequest();
   const resetThread = useResetSlurpThread();
@@ -230,6 +232,15 @@ export function useSlurpThreadViewState(props: SlurpThreadViewProps) {
     () =>
       (ownsCreator
         ? ([
+            {
+              id: "request",
+              icon: MessageCircle,
+              label: localizeUi("ui.slurp.messages.requestFanReply", { defaultValue: "Request a reply" }),
+              detail: localizeUi("ui.slurp.messages.requestFanReplyDetail", {
+                defaultValue: "Ask the fan to write back",
+              }),
+              group: "conversation" as const,
+            },
             {
               id: "generated-photo",
               icon: Palette,
@@ -517,6 +528,7 @@ export function useSlurpThreadViewState(props: SlurpThreadViewProps) {
     cheat,
     forceReply,
     requestReply,
+    requestFanReply,
     tip,
     resolveRequest,
     resetThread,

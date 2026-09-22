@@ -99,7 +99,27 @@ export async function slpFeedPostRoutes(app: FastifyInstance, deps: SlpRouteDeps
         personaId: z.string().trim().min(1),
         targetType: z.enum(["post", "reply"]),
         targetId: z.string().trim().min(1),
-        reason: z.enum(["spam", "illegal", "privacy", "harassment", "adult", "other"]),
+        // The first six are the shipped values and stay, so stored reports keep their meaning.
+        // The rest are the categories a real social network offers, plus the three that only
+        // make sense here: a Creator passing themselves off as a real person, paid content
+        // reposted for free, and a Creator who reads as underage.
+        reason: z.enum([
+          "spam",
+          "illegal",
+          "privacy",
+          "harassment",
+          "adult",
+          "other",
+          "hate",
+          "violence",
+          "self_harm",
+          "misinformation",
+          "scam",
+          "intellectual_property",
+          "impersonation",
+          "leaked_paid",
+          "underage",
+        ]),
         details: z.string().trim().max(2000).default(""),
       })
       .strict()

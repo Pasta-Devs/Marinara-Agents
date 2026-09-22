@@ -67,6 +67,22 @@ export function useRequestSlurpReply() {
     onSuccess: () => invalidateSlurpMessages(queryClient),
   });
 }
+/**
+ * The Creator's side of "Request a reply": ask the fan to write back.
+ *
+ * Same tool, other direction. Only the Creator's owner may call it, which the route checks.
+ */
+export function useRequestSlurpFanReply() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { creatorAccountId: string; personaId: string; threadId: string; guidance?: string }) =>
+      api.post<{ reply: SlurpMessage | null; replyStatus: string }>(
+        `/slurp2/messages/creators/${encodeURIComponent(input.creatorAccountId)}/request-fan-reply`,
+        input,
+      ),
+    onSuccess: () => invalidateSlurpMessages(queryClient),
+  });
+}
 export function useTipInSlurpThread() {
   const queryClient = useQueryClient();
   return useMutation({

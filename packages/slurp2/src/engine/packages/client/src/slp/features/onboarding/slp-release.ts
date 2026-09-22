@@ -1,5 +1,5 @@
 // The splash screen needs the shipped version and its public notes inside the client bundle.
-export const SLURP2_VERSION = "0.2.22";
+export const SLURP2_VERSION = "0.2.23";
 
 export interface Slurp2ReleaseEntry {
   version: string;
@@ -9,6 +9,17 @@ export interface Slurp2ReleaseEntry {
 
 /** The public release history shown in the Engine splash screen. */
 export const SLURP2_RELEASES: Slurp2ReleaseEntry[] = [
+  {
+    version: "0.2.23",
+    date: "2026-09-22",
+    notes: [
+      "Restore now works after you delete a post: the row waits for you instead of disappearing while the countdown runs.",
+      "Share asks which chat to send a post to, with a search and a New chat button, and the chat card says who wrote the post.",
+      "Reporting a post offers the reasons a real social network offers, plus Slurp's own three.",
+      "Playing a Creator, you can ask a fan to write back, the same way a fan can ask you.",
+      "Creators look like themselves in pictures: avatar references and source appearance are used by default. Both remain switches in Backstage → Images.",
+    ],
+  },
   {
     version: "0.2.22",
     date: "2026-09-22",

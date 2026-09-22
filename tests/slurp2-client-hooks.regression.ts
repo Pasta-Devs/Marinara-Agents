@@ -429,8 +429,8 @@ const counts = Object.fromEntries(
 assert.deepEqual(
   counts,
   {
-    useMutation: 148,
-    useQuery: 210,
+    useMutation: 149,
+    useQuery: 211,
     useInfiniteQuery: 5,
     invalidateQueries: 125,
     setQueryData: 20,
@@ -452,7 +452,7 @@ const invalidatorCalls = {
 };
 assert.deepEqual(
   invalidatorCalls,
-  { invalidateSlurpMessages: 21, invalidateSlurpProjects: 5, mergeSlurpViewerShell: 3 },
+  { invalidateSlurpMessages: 22, invalidateSlurpProjects: 5, mergeSlurpViewerShell: 3 },
   "shared invalidation helpers must stay wired to the same call sites",
 );
 
