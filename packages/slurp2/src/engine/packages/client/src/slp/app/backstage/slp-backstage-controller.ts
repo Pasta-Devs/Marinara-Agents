@@ -45,7 +45,7 @@ export function useSlpBackstageController(
   const messages = useSlpMessagesBackstageState();
   const economy = useSlpEconomyBackstageState();
   const maintenance = useSlpMaintenanceBackstageState({ section, target, settings, save });
-  const prompts = useSlpPromptsBackstageState({ settings, save, restore });
+  const prompts = useSlpPromptsBackstageState({ settings, updatePatch: draft.updatePatch });
 
   return {
     ...host,

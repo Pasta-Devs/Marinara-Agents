@@ -1,5 +1,5 @@
 import type { SlpAccount } from "../../../../../shared/src/slp/slp-social.types.js";
-import type { SlpPostCardModel } from "./SlpPostCard";
+import type { SlpPostCardModel } from "./SlpPostTypes";
 import { cn } from "../../../lib/utils";
 import { useTranslation as useUiTranslation } from "react-i18next";
 import {
@@ -12,7 +12,7 @@ import {
   SlpToolButton,
   SlurpToolPopover,
   createSlpLightboxImage,
-} from "./SlpPostCard";
+} from "./SlpPostHelpers";
 import { SlpAnchoredPopover } from "../../base/chrome/SlpAnchoredPopover";
 import { ConversationMediaPickerPanel } from "../../../components/chat/ConversationMediaPickerPanel";
 import { ImageIcon, Smile, X } from "lucide-react";

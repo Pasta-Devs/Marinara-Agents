@@ -904,7 +904,31 @@ export function prepareLtmSubjectIdentityContext({
         hasSubjectNames && !effectiveUnit.subjectKeys?.length
           ? resolveNamedUnitSubjects(unit, batchNames, index, context)
           : resolveUnitSubjects(effectiveUnit, index);
-      if (match.status !== "matched") return noteIdForEvidenceUnit(effectiveUnit);
+      if (match.status !== "matched") {
+        // Mirror the resolution path so this pre-resolution key predicts the same target
+        // for keyless source-backed units instead of deriving a short-form identity.
+        if (match.status === "untrusted" && !hasSubjectNames) {
+          const sourceBackedNpc = sourceBackedNpcSubject(
+            effectiveUnit,
+            index,
+            scope,
+            mode,
+            sourceBackedNpcSourceText,
+            sourceBackedNpcSourceTitle,
+          );
+          if (sourceBackedNpc && "entry" in sourceBackedNpc) {
+            return (
+              chooseIdentityTarget(
+                effectiveCatalog.notes,
+                legacyBindings,
+                [sourceBackedNpc.entry],
+                effectiveUnit.bucket,
+              )?.id ?? canonicalNoteIdForEntries([sourceBackedNpc.entry], effectiveUnit.bucket)
+            );
+          }
+        }
+        return noteIdForEvidenceUnit(effectiveUnit);
+      }
       const entries = sortSubjectEntries(match.entries);
       return (
         chooseIdentityTarget(effectiveCatalog.notes, legacyBindings, entries, effectiveUnit.bucket)?.id ??
@@ -1008,16 +1032,38 @@ function resolveLtmSubjectIdentitiesWithContext({
     if (match.status !== "matched") {
       const sourceBackedNpc = hasSubjectNames
         ? null
-        : sourceBackedNpcSubject(effectiveUnit, scope, mode, sourceBackedNpcSourceText, sourceBackedNpcSourceTitle);
-      if (sourceBackedNpc && match.status === "untrusted") {
-        addCatalogEntry(index, sourceBackedNpc);
-        const subjects = [sourceBackedNpc.subject];
-        const canonicalNoteId = canonicalNoteIdForEntries([sourceBackedNpc], effectiveUnit.bucket);
+        : sourceBackedNpcSubject(
+            effectiveUnit,
+            index,
+            scope,
+            mode,
+            sourceBackedNpcSourceText,
+            sourceBackedNpcSourceTitle,
+          );
+      if (sourceBackedNpc && "ambiguous" in sourceBackedNpc) {
+        const rejection = subjectRejection(effectiveUnit, sourceBackedNpc.ambiguous, candidateIndex);
+        diagnostics.push(rejection.diagnostic);
+        droppedCandidates.push(rejection.dropped);
+        continue;
+      }
+      if (sourceBackedNpc && "entry" in sourceBackedNpc && match.status === "untrusted") {
+        addCatalogEntry(index, sourceBackedNpc.entry);
+        const subjects = [sourceBackedNpc.entry.subject];
+        // Reuse an existing trusted/legacy note target for this identity, exactly like the
+        // matched path below, so a keyless source-backed unit cannot fork a parallel note.
+        const target = chooseIdentityTarget(
+          catalog.notes,
+          legacyBindings,
+          [sourceBackedNpc.entry],
+          effectiveUnit.bucket,
+        );
+        const canonicalNoteId = target?.id ?? canonicalNoteIdForEntries([sourceBackedNpc.entry], effectiveUnit.bucket);
+        if (target) targetNotes.set(target.id, target);
         const originalNoteId = noteIdForEvidenceUnit(effectiveUnit);
         const nextUnit: LtmEvidenceUnit = {
           ...effectiveUnit,
           subjectId: subjectIdForTarget(canonicalNoteId, effectiveUnit.bucket),
-          subjectNames: [sourceBackedNpc.name],
+          subjectNames: [sourceBackedNpc.entry.name],
           subjectKeys: subjects.map((subject) => subject.key),
           subjects,
         };
@@ -1028,7 +1074,7 @@ function resolveLtmSubjectIdentitiesWithContext({
           candidateIndex,
           mutationId: effectiveUnit.id,
           noteId: canonicalNoteId,
-          message: `Accepted ${sourceBackedNpc.name} as a scoped local character from the source.`,
+          message: `Accepted ${sourceBackedNpc.entry.name} as a scoped local character from the source.`,
           details: {
             subjectNames: nextUnit.subjectNames,
             subjectKeys: nextUnit.subjectKeys,
@@ -1206,8 +1252,21 @@ function preResolveBatchSubjectNames({
     );
   }
 
+  // Names related to a trusted catalog entry must canonicalize to that entry
+  // instead of forking a provisional local-character identity from the surface
+  // form. Ambiguous relations fail closed with the competing identities.
+  const trustedRelationMatches = new Map<string, SubjectMatch>();
+  for (const name of admissibleUnknownNames) {
+    const relation = matchTrustedNameRelation(index, name, familyId);
+    if (!relation) continue;
+    matches.set(name, relation);
+    trustedRelationMatches.set(name, relation);
+  }
+
   const canonicalNames = uniqueStrings(
-    admissibleUnknownNames.filter((name) => (longerNames.get(name)?.length ?? 0) === 0),
+    admissibleUnknownNames.filter(
+      (name) => !trustedRelationMatches.has(name) && (longerNames.get(name)?.length ?? 0) === 0,
+    ),
   ).sort((left, right) => nameTokenCount(right) - nameTokenCount(left) || left.localeCompare(right));
   const canonicalNamesBySlug = new Map<string, string[]>();
   for (const name of canonicalNames) {
@@ -1239,6 +1298,7 @@ function preResolveBatchSubjectNames({
   }
 
   for (const name of admissibleUnknownNames) {
+    if (trustedRelationMatches.has(name)) continue;
     const longer = longerNames.get(name) ?? [];
     if (longer.length > 1) {
       matches.set(name, {
@@ -1346,27 +1406,10 @@ function resolveAndCacheSubjectName(
       return match;
     }
     if (subject) {
-      const longerEntries = index.entries.filter(
-        (entry) =>
-          (!entry.familyId || entry.familyId === familyId) &&
-          (isLongerVersionOfName(entry.name, name, entry.aliases) ||
-            isLongerVersionOfName(name, entry.name, entry.aliases)),
-      );
-      const uniqueLongerSubjects = new Map(longerEntries.map((entry) => [entry.subject.key, entry]));
-      if (uniqueLongerSubjects.size === 1) {
-        const longerEntry = [...uniqueLongerSubjects.values()][0]!;
-        const match: SubjectMatch = { status: "matched", entries: [longerEntry], basis: "batch_name_alias" };
-        batch.matches.set(name, match);
-        return match;
-      }
-      if (uniqueLongerSubjects.size > 1) {
-        const match: SubjectMatch = {
-          status: "ambiguous",
-          keys: [...uniqueLongerSubjects.keys()],
-          basis: "batch_name_alias",
-        };
-        batch.matches.set(name, match);
-        return match;
+      const relation = matchTrustedNameRelation(index, name, familyId);
+      if (relation) {
+        batch.matches.set(name, relation);
+        return relation;
       }
       const entry: TrustedLtmSubjectCatalogEntry = {
         subject,
@@ -1455,25 +1498,35 @@ function resolveNamedUnitSubjects(
 }
 
 function sourceBackedNpcSubject(
-  unit: LtmEvidenceUnit,
+  unit: LtmSubjectIdentityCandidate,
+  index: CatalogIndex | undefined,
   scope: LtmScope | undefined,
   mode: LtmMode | undefined,
   sourceText: string | undefined,
   sourceTitle: string | undefined,
-): TrustedLtmSubjectCatalogEntry | null {
+): { entry: TrustedLtmSubjectCatalogEntry } | { ambiguous: Extract<SubjectMatch, { status: "ambiguous" }> } | null {
   if (mode !== undefined && mode !== "roleplay") return null;
   if (unit.bucket !== "character_fact" || (unit.subjectKeys?.length ?? 0) > 0) return null;
   const slug = stripNotePrefix(normalizeSubjectIdentifier(unit.subjectId, ""));
   const sourceNames = sourceBackedNpcNames([sourceText, sourceTitle]);
   const name = sourceNames.get(slug);
-  const subject = name && scope ? localCharacterSubjectForName(scope, name) : null;
+  if (!name || !scope) return null;
+  const subject = localCharacterSubjectForName(scope, name);
   if (!subject) return null;
+  const familyId = ltmScopeFamilyId(scope);
+  if (index) {
+    const relation = matchTrustedNameRelation(index, name, familyId);
+    if (relation?.status === "matched") return { entry: relation.entries[0]! };
+    if (relation?.status === "ambiguous") return { ambiguous: relation };
+  }
   return {
-    subject,
-    name,
-    aliases: expandedAliases(name, []).filter((alias) => normalizeSubjectIdentifier(alias, "") !== slug),
-    canonicalSlug: slug,
-    ...(ltmScopeFamilyId(scope!) ? { familyId: ltmScopeFamilyId(scope!)! } : {}),
+    entry: {
+      subject,
+      name,
+      aliases: expandedAliases(name, []).filter((alias) => normalizeSubjectIdentifier(alias, "") !== slug),
+      canonicalSlug: slug,
+      ...(familyId ? { familyId } : {}),
+    },
   };
 }
 
@@ -1552,6 +1605,34 @@ function isLongerVersionOfName(shortName: string, candidate: string, aliases: re
     (firstName.length > shortSlug.length && firstName.startsWith(shortSlug) && shortSlug.length >= 3) ||
     expandedAliases(candidate, [...aliases]).some((alias) => normalizeSubjectIdentifier(alias, "") === shortSlug)
   );
+}
+
+// Canonicalize a surface name against trusted catalog entries related by the
+// conservative shorter/longer name heuristic before any provisional local
+// character is created. Returns matched/ambiguous, or null when no trusted
+// relation exists (the caller may then create a provisional identity).
+function matchTrustedNameRelation(index: CatalogIndex, name: string, familyId: string | null): SubjectMatch | null {
+  if (!familyId) return null;
+  const related = index.entries.filter(
+    (entry) =>
+      (!entry.familyId || entry.familyId === familyId) &&
+      (isLongerVersionOfName(entry.name, name, entry.aliases) ||
+        isLongerVersionOfName(name, entry.name, entry.aliases)),
+  );
+  const uniqueSubjects = new Map(related.map((entry) => [entry.subject.key, entry]));
+  if (uniqueSubjects.size === 0) return null;
+  if (uniqueSubjects.size === 1) {
+    return { status: "matched", entries: [[...uniqueSubjects.values()][0]!], basis: "batch_name_alias" };
+  }
+  const competing = [...uniqueSubjects.values()];
+  const { collisionSource, competingRecords } = diagnoseCollision(competing);
+  return {
+    status: "ambiguous",
+    keys: competing.map(subjectEntryKey),
+    basis: "batch_name_alias",
+    competingRecords,
+    collisionSource,
+  };
 }
 
 function nameTokenCount(name: string) {

@@ -96,7 +96,6 @@ export function renderSlurpHomeCreatorFlow({
     toggleFollow,
     toggleSubscription,
     unlockPost,
-    updateAccess,
     updateNoodlerPostDraft,
     updateProfile,
     uploadAvatar,
@@ -455,17 +454,6 @@ export function renderSlurpHomeCreatorFlow({
             followPending={toggleFollow.isPending}
             onToggleSubscription={toggleCreatorSubscription}
             subscriptionPending={toggleSubscription.isPending}
-            accessPending={updateAccess.isPending}
-            onAccessChange={(access) =>
-              updateAccess.mutate(
-                { accountId: selectedProfile.id, ...access },
-                {
-                  onSuccess: () => toast.success(localizeUi("ui.noodle.noodlerhome.accessSettingsUpdated")),
-                  onError: (error) =>
-                    toast.error(errorMessage(error, localizeUi("ui.noodle.noodlerhome.couldNotUpdateAccessSettings"))),
-                },
-              )
-            }
           />
         </div>
         {reviewModal}

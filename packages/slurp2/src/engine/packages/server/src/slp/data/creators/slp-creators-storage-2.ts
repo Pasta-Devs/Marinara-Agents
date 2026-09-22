@@ -1,4 +1,5 @@
 import { and, desc, eq, inArray, or } from "../../../db/file-query.js";
+import { deleteSlurpCreatorPlanningRows } from "../continuity/slp-continuity-storage.js";
 import { SlpAccount, SlpAccountKind } from "../../../../../shared/src/slp/slp-social.types.js";
 import { slurpProjectsKey } from "../../modules/projects/slp-project.js";
 import { slurpArcAutoKey, slurpArcConfigKey } from "../../modules/projects/slp-arc-library.js";
@@ -9,6 +10,7 @@ import {
   slpActivityDigests,
   slpInteractions,
   slpPosts,
+  slpPostMedia,
   slpPostUnlocks,
   slpRefreshRuns,
   slpCreatorCreatorReplyClaims,
@@ -119,6 +121,7 @@ export function createCreatorsStorage2(context: SlurpStorageContext) {
           await tx.delete(table);
         }
         if (postIds.length) {
+          await tx.delete(slpPostMedia).where(inArray(slpPostMedia.postId, postIds));
           await tx.delete(slpInteractions).where(inArray(slpInteractions.postId, postIds));
           await tx.delete(slpPostUnlocks).where(inArray(slpPostUnlocks.postId, postIds));
           await tx.delete(slpPosts).where(inArray(slpPosts.id, postIds));
@@ -381,6 +384,7 @@ export function createCreatorsStorage2(context: SlurpStorageContext) {
             ),
           );
         await tx.delete(slpCreatorPreparedPosts).where(eq(slpCreatorPreparedPosts.creatorAccountId, existing.id));
+        await deleteSlurpCreatorPlanningRows(tx, existing.id);
         // Same Creator-keyed rows deleteNoodlerAccount cascades. Both entry points must agree, or
         // which one the caller happened to use decides what survives.
         await tx.delete(slurpCommissions).where(eq(slurpCommissions.creatorAccountId, existing.id));
@@ -389,6 +393,7 @@ export function createCreatorsStorage2(context: SlurpStorageContext) {
         await tx.delete(slurpEvents).where(eq(slurpEvents.creatorAccountId, existing.id));
         await tx.delete(slpCreatorFirstPostJobs).where(eq(slpCreatorFirstPostJobs.creatorAccountId, existing.id));
         await tx.delete(slurpImprovementProposals).where(eq(slurpImprovementProposals.accountId, existing.id));
+        await tx.delete(slpPostMedia).where(inArray(slpPostMedia.postId, postIds));
         await tx.delete(slpPosts).where(inArray(slpPosts.id, postIds));
         await tx.delete(slpAccounts).where(eq(slpAccounts.id, existing.id));
         await tx._fileStore.flush();

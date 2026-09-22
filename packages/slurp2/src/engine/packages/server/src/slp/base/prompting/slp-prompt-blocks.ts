@@ -26,9 +26,18 @@ export type SlurpPromptBlockOverride = {
   id: string;
   enabled?: boolean;
   text?: string;
+  instructionId?: string;
 };
+export type SlurpReusablePromptInstruction = { id: string; name: string; text: string; builtin?: boolean };
 
+/** The stored layout for every prompt. */
 export type SlurpPromptBlockOverrides = Partial<Record<SlurpPromptId, SlurpPromptBlockOverride[]>>;
+
+/** The stored layouts and reusable instructions, resolved together. */
+export type SlurpPromptContext = {
+  blocks: SlurpPromptBlockOverrides;
+  instructions: SlurpReusablePromptInstruction[];
+};
 
 export type SlurpPromptBlock = {
   id: string;
@@ -52,8 +61,11 @@ export type SlurpPromptDescription = {
 const descriptions = (blocks: Array<[string, SlurpPromptBlockKind, boolean?]>): SlurpPromptBlockDescription[] =>
   blocks.map(([id, kind, optional = false]) => ({ id, kind, optional }));
 
-/** Public prompt inventory used by the settings UI and by regression checks. */
-export const SLURP_PROMPT_DESCRIPTIONS: SlurpPromptDescription[] = [
+/**
+ * The prompt inventory before the posting-intent overhaul. The Classic prompt preset is this
+ * inventory: the live inventory below adds only optional context blocks to it.
+ */
+const BASE_PROMPT_DESCRIPTIONS: SlurpPromptDescription[] = [
   {
     id: "post",
     group: "writing",
@@ -240,9 +252,59 @@ export const SLURP_PROMPT_DESCRIPTIONS: SlurpPromptDescription[] = [
   },
 ];
 
-const DESCRIPTION_BY_ID = new Map(SLURP_PROMPT_DESCRIPTIONS.map((prompt) => [prompt.id, prompt]));
+/** Where the live inventory inserts the "you are working" block, relative to each prompt's own blocks. */
+const PERFORMANCE_AFTER: Partial<Record<SlurpPromptId, string>> = {
+  dmReply: "identity",
+  commentReply: "identity",
+  invitedPost: "safety",
+};
 
-export const SLURP_PROMPT_EDITABLE_DEFAULTS: Partial<Record<SlurpPromptId, Record<string, string>>> = {
+function withPerformanceBlock(prompt: SlurpPromptDescription): SlurpPromptDescription {
+  const after = PERFORMANCE_AFTER[prompt.id];
+  if (!after) return prompt;
+  const blocks = prompt.blocks.flatMap((block) =>
+    block.id === after ? [block, { id: "performance", kind: "context" as const, optional: true }] : [block],
+  );
+  return { ...prompt, blocks };
+}
+
+const PRODUCE_PROMPT_DESCRIPTIONS: SlurpPromptDescription[] = BASE_PROMPT_DESCRIPTIONS.map((prompt) =>
+  prompt.id === "post"
+    ? {
+        ...prompt,
+        // `contentType` is what this post is *for*: bait, throwaway, a planned set, a thank-you, a
+        // boundary notice. The Classic preset turns it off.
+        blocks: descriptions([
+          ["task", "editable"],
+          ["platform", "required"],
+          ["safety", "required"],
+          ["creativeDirection", "context", true],
+          ["identity", "required"],
+          ["memory", "context", true],
+          ["format", "required"],
+          ["access", "context", true],
+          ["contentType", "context", true],
+          ["production", "context", true],
+          ["wardrobe", "context", true],
+          ["continuity", "editable"],
+          ["imageDirection", "context", true],
+          ["output", "required"],
+          ["character", "context"],
+        ]),
+      }
+    : withPerformanceBlock(prompt),
+);
+
+/** Public prompt inventory used by the settings UI and by regression checks. */
+export function slurpPromptDescriptions(): SlurpPromptDescription[] {
+  return PRODUCE_PROMPT_DESCRIPTIONS;
+}
+
+const DESCRIPTION_BY_ID = new Map(PRODUCE_PROMPT_DESCRIPTIONS.map((prompt) => [prompt.id, prompt]));
+
+type SlurpPromptEditableDefaults = Partial<Record<SlurpPromptId, Record<string, string>>>;
+
+const PROMPT_EDITABLE_DEFAULTS: SlurpPromptEditableDefaults = {
   post: {
     task: "You write exactly one post for one Slurp creator page in Marinara Engine.",
     continuity:
@@ -313,19 +375,23 @@ export const SLURP_PROMPT_EDITABLE_DEFAULTS: Partial<Record<SlurpPromptId, Recor
   imageInterpretation: {
     task: "Rewrite the supplied draft into one provider-ready image prompt.",
     style:
-      "Keep style instructions first, character appearance next, and the scene last. Preserve supplied appearance and style details without labels or duplication.",
+      "Keep style instructions first, character appearance next, and the scene last. Preserve the original subject, action, setting, clothing, composition, style, and sexual intensity without labels or duplication. Do not add a new event, person, pose, outfit, viewpoint, nudity, explicit anatomy, or sexual activity. Do not turn an ordinary update into an erotic image.",
   },
   garnishAds: {
     task: "Invent fictional advertisements for an in-world Slurp feed.",
   },
 };
 
-export function slurpPromptEditableDefault(promptId: SlurpPromptId, blockId: string, fallback: string): string {
-  return SLURP_PROMPT_EDITABLE_DEFAULTS[promptId]?.[blockId] ?? fallback;
+export function slurpPromptEditableDefaults(): SlurpPromptEditableDefaults {
+  return PROMPT_EDITABLE_DEFAULTS;
 }
 
-/** Remove stale ids and changes that target required or runtime-only blocks. */
-export function normalizeSlurpPromptBlockOverrides(value: unknown): SlurpPromptBlockOverrides {
+export function slurpPromptEditableDefault(promptId: SlurpPromptId, blockId: string, fallback: string): string {
+  return PROMPT_EDITABLE_DEFAULTS[promptId]?.[blockId] ?? fallback;
+}
+
+/** Remove stale ids while preserving every expert override the studio exposes. */
+function normalizeLayouts(value: unknown): SlurpPromptBlockOverrides {
   if (!value || typeof value !== "object" || Array.isArray(value)) return {};
   const source = value as Record<string, unknown>;
   const normalized: SlurpPromptBlockOverrides = {};
@@ -344,18 +410,103 @@ export function normalizeSlurpPromptBlockOverrides(value: unknown): SlurpPromptB
       seen.add(id);
       next.push({
         id,
-        ...(block.optional && typeof record.enabled === "boolean" ? { enabled: record.enabled } : {}),
-        ...(block.kind === "editable" && typeof record.text === "string"
-          ? { text: record.text.trim().slice(0, 20_000) }
+        // Every block can be switched off, not just the ones the inventory marks optional: the
+        // studio is the place to take a prompt apart, and a required block that cannot be removed
+        // is a rule the player cannot see the effect of.
+        ...(typeof record.enabled === "boolean" ? { enabled: record.enabled } : {}),
+        // Expert overrides may deliberately freeze runtime context. The studio labels that tradeoff
+        // before copying the selected Creator's live block into the stored layout.
+        ...(typeof record.text === "string" ? { text: record.text.trim().slice(0, 20_000) } : {}),
+        ...(typeof record.instructionId === "string"
+          ? { instructionId: record.instructionId.trim().slice(0, 80) }
           : {}),
       });
     }
-    for (const block of description.blocks) if (!seen.has(block.id)) next.push({ id: block.id });
-    if (next.some((row, index) => row.id !== description.blocks[index]?.id || row.enabled !== undefined || row.text)) {
+    // A layout saved before a block existed gets it where the inventory puts it, not at the end.
+    description.blocks.forEach((block, index) => {
+      if (seen.has(block.id)) return;
+      const before = description.blocks[index - 1]?.id;
+      next.splice(next.findIndex((row) => row.id === before) + 1, 0, { id: block.id });
+    });
+    if (
+      next.some(
+        (row, index) =>
+          row.id !== description.blocks[index]?.id || row.enabled !== undefined || row.text || row.instructionId,
+      )
+    ) {
       normalized[promptId] = next;
     }
   }
   return normalized;
+}
+
+/**
+ * The two stored shapes before this one.
+ *
+ * Up to 0.1.3 the layouts were keyed by prompt id directly. Integration builds then keyed them by
+ * a `classic` or `produce` runtime mode. Neither mode name is a prompt id, so the keys tell the
+ * shapes apart.
+ */
+function modeKeyedLayouts(value: unknown): { classic?: unknown; produce?: unknown } | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const source = value as Record<string, unknown>;
+  return "classic" in source || "produce" in source ? source : null;
+}
+
+/**
+ * Validate the stored layouts.
+ *
+ * A mode-keyed record keeps its produce layouts. Classic layouts fill in only when produce has
+ * none, because the Classic inventory is a subset of this one and every Classic edit still lands
+ * on the block it was written for.
+ */
+export function normalizeSlurpPromptBlockOverrides(value: unknown): SlurpPromptBlockOverrides {
+  const keyed = modeKeyedLayouts(value);
+  if (!keyed) return normalizeLayouts(value);
+  const produce = normalizeLayouts(keyed.produce);
+  return Object.keys(produce).length > 0 ? produce : normalizeLayouts(keyed.classic);
+}
+
+/**
+ * The player's Classic-era edits, recovered from a stored layout that predates the Classic preset.
+ * Flat 0.1.3 layouts were written against the Classic inventory, so all of them count.
+ */
+export function slurpLegacyClassicPromptBlocks(value: unknown): SlurpPromptBlockOverrides {
+  const keyed = modeKeyedLayouts(value);
+  return normalizeLayouts(keyed ? keyed.classic : value);
+}
+
+/** Blocks the posting-intent overhaul added. The Classic preset turns them off. */
+const PRODUCE_ONLY_BLOCKS: Partial<Record<SlurpPromptId, readonly string[]>> = {
+  post: ["contentType", "production", "memory"],
+  dmReply: ["performance"],
+  commentReply: ["performance"],
+  invitedPost: ["performance"],
+};
+
+/**
+ * The Classic prompt preset: the player's Classic-era edits with the overhaul's context blocks off.
+ *
+ * Prompt text only. Selecting it restores the old wording; it does not bring back the old
+ * rotation, camera, or image algorithm.
+ */
+export function slurpClassicPromptPreset(classic: SlurpPromptBlockOverrides): SlurpPromptBlockOverrides {
+  const preset: SlurpPromptBlockOverrides = { ...classic };
+  for (const [promptId, off] of Object.entries(PRODUCE_ONLY_BLOCKS) as Array<[SlurpPromptId, readonly string[]]>) {
+    const rows =
+      normalizeLayouts({ [promptId]: classic[promptId] ?? [] })[promptId] ??
+      DESCRIPTION_BY_ID.get(promptId)!.blocks.map((block) => ({ id: block.id }));
+    preset[promptId] = rows.map((row) => (off.includes(row.id) ? { ...row, enabled: false } : row));
+  }
+  return preset;
+}
+
+/** The stored layouts and instructions. One place resolves both. */
+export function slurpPromptContext(settings: {
+  promptBlocks?: SlurpPromptBlockOverrides;
+  promptInstructions?: SlurpReusablePromptInstruction[];
+}): SlurpPromptContext {
+  return { blocks: settings.promptBlocks ?? {}, instructions: settings.promptInstructions ?? [] };
 }
 
 /** Compose one prompt from current runtime blocks and a validated user layout. */
@@ -363,8 +514,23 @@ export function composeSlurpPromptBlocks(
   promptId: SlurpPromptId,
   blocks: readonly SlurpPromptBlock[],
   overrides: SlurpPromptBlockOverrides | undefined,
+  instructions: readonly SlurpReusablePromptInstruction[] = [],
 ): string {
+  return resolveSlurpPromptBlocks(promptId, blocks, overrides, instructions)
+    .map((block) => block.text.trim())
+    .filter(Boolean)
+    .join("\n");
+}
+
+/** Resolve one prompt's active blocks with the stored order and editable text applied. */
+export function resolveSlurpPromptBlocks(
+  promptId: SlurpPromptId,
+  blocks: readonly SlurpPromptBlock[],
+  overrides: SlurpPromptBlockOverrides | undefined,
+  instructions: readonly SlurpReusablePromptInstruction[] = [],
+): SlurpPromptBlock[] {
   const byId = new Map(blocks.map((block) => [block.id, block]));
+  const instructionById = new Map(instructions.map((instruction) => [instruction.id, instruction.text]));
   const configured = overrides?.[promptId] ?? blocks.map((block) => ({ id: block.id }));
   const ordered = [
     ...configured.flatMap((entry) => {
@@ -376,10 +542,14 @@ export function composeSlurpPromptBlocks(
     ...byId.values().map((block) => ({ block, entry: { id: block.id } })),
   ];
   return ordered
-    .filter(({ block, entry }) => !block.optional || entry.enabled !== false)
-    .map(({ block, entry }) =>
-      block.kind === "editable" && entry.text?.trim() ? entry.text.trim() : block.text.trim(),
-    )
-    .filter(Boolean)
-    .join("\n");
+    .filter(({ entry }) => entry.enabled !== false)
+    .map(({ block, entry }) => ({
+      ...block,
+      text:
+        entry.instructionId && instructionById.get(entry.instructionId)?.trim()
+          ? instructionById.get(entry.instructionId)!.trim()
+          : entry.text?.trim()
+            ? entry.text.trim()
+            : block.text.trim(),
+    }));
 }

@@ -1,5 +1,4 @@
 import type { SlpAccount } from "../../../../../shared/src/slp/slp-social.types.js";
-import { isCreatorHiddenFromViewer } from "../../base/identity/slp-access.js";
 
 export function normalizeCreatorSeenAt(seenAt: string | null | undefined): string | null {
   if (!seenAt) return null;
@@ -13,10 +12,6 @@ export function normalizeCreatorSeenAt(seenAt: string | null | undefined): strin
  */
 export function slpCreatorUnseenCreatorAccountIds(accounts: SlpAccount[], viewerAccountId: string): string[] {
   return accounts
-    .filter(
-      (account) =>
-        !(account.kind === "persona" && account.entityId === viewerAccountId) &&
-        !isCreatorHiddenFromViewer(account, viewerAccountId),
-    )
+    .filter((account) => !(account.kind === "persona" && account.entityId === viewerAccountId))
     .map((account) => account.id);
 }

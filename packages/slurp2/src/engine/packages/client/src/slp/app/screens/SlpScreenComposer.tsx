@@ -13,7 +13,11 @@ import type {
 import type { SlurpManagedStageProfile } from "../../base/state/slp-state-types";
 import type { SlpCreatorContentFormat, SlurpProfilePost } from "../../features/feed/slp-feed-contract";
 import { useSlurpSettings } from "../../features/settings/slp-settings-hooks";
-import { SlpComposerShell, SlpComposerToolRow } from "../../modules/post/SlpPostCard";
+import { slurpIntentFitsAccess } from "../../../../../shared/src/slp/slp-content-axes.js";
+import { SlpComposerPurpose } from "../../modules/post/SlpComposerPurpose";
+import { SlpOpenContinuityButton } from "../../base/navigation/SlpOpenContinuityButton";
+import { SlpComposerShell } from "../../modules/post/SlpPostComposerShell";
+import { SlpComposerToolRow } from "../../modules/post/SlpPostComposerTools";
 import { SlpAnchoredPopover } from "../../base/chrome/SlpAnchoredPopover";
 import { SlpImageComposer } from "../../base/media/SlpImageComposer";
 import { SlpPollComposer } from "../../modules/poll/SlpPollComposer";
@@ -39,15 +43,7 @@ import {
 } from "./SlpHomeHelpers";
 export type { PendingCreatorImage } from "./SlpHomeHelpers";
 
-// ---------------------------------------------------------------------------
-// Local types
-// ---------------------------------------------------------------------------
-
 export type SlpCreatorComposerTool = "image" | "poll" | "media" | "access";
-
-// ---------------------------------------------------------------------------
-// Component
-// ---------------------------------------------------------------------------
 
 export function NoodlerPostComposer({
   profile,
@@ -105,7 +101,19 @@ export function NoodlerPostComposer({
   const mediaToolRef = useRef<HTMLDivElement | null>(null);
   const accessToolRef = useRef<HTMLDivElement | null>(null);
   const composerBusyRef = useRef(false);
-  const { title, body, access, image, poll, postType, linkedPostId, unlockPrice, generateImage } = draft;
+  const {
+    title,
+    body,
+    access,
+    image,
+    poll,
+    postType,
+    linkedPostId,
+    unlockPrice,
+    generateImage,
+    contentIntent,
+    contentDelivery,
+  } = draft;
   const linkablePosts = availablePosts
     .map((entry) => ("managed" in entry ? entry.managed : entry.viewerPost))
     .filter((post): post is SlpCreatorManagedPost | SlpCreatorPostView => Boolean(post) && !isSlurpStory(post));
@@ -249,6 +257,8 @@ export function NoodlerPostComposer({
     linkedPostId: linkedPostId ?? null,
     unlockPrice: access === "locked" ? (unlockPrice ?? null) : null,
     generateImage: generateImage && !image,
+    contentIntent,
+    contentDelivery,
   });
 
   const publish = async () => {
@@ -457,6 +467,17 @@ export function NoodlerPostComposer({
       }
       action={
         <>
+          <SlpComposerPurpose
+            access={access}
+            contentIntent={contentIntent}
+            contentDelivery={contentDelivery}
+            disabled={composerBusy || postType === "story"}
+            onChange={updateDraft}
+          />
+          <SlpOpenContinuityButton
+            creatorAccountId={profile.id}
+            className="inline-flex h-9 items-center rounded-lg border border-[var(--noodle-divider)] px-3 text-xs font-bold hover:bg-[var(--accent)]"
+          />
           <button
             type="button"
             onClick={() => void guidePost()}
@@ -557,7 +578,15 @@ export function NoodlerPostComposer({
                       type="button"
                       aria-pressed={access === option}
                       disabled={composerBusy}
-                      onClick={() => updateDraft({ access: option })}
+                      onClick={() =>
+                        updateDraft({
+                          access: option,
+                          // A purpose that no longer fits the new audience goes back to automatic.
+                          ...(contentIntent && !slurpIntentFitsAccess(contentIntent, option)
+                            ? { contentIntent: null, contentDelivery: null }
+                            : {}),
+                        })
+                      }
                       title={localizeUi(`ui.noodle.postaccess.${option}.hint`)}
                       className={cn(
                         "min-h-8 rounded px-2 text-xs font-bold capitalize",

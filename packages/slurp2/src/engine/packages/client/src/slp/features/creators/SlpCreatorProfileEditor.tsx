@@ -15,6 +15,7 @@ import {
 import { showConfirmDialog } from "../../../lib/app-dialogs";
 import { confirmSlurpAvatarReview, StageProfileForm } from "./SlpStageProfileForm";
 import { errorMessage } from "../../modules/settings/slp-backstage-format";
+import { SlpWardrobeManager } from "./SlpWardrobeManager";
 
 /**
  * The Creator's own profile fields, inside Backstage.
@@ -41,6 +42,9 @@ export function SlurpCreatorProfileEditor({
     handle: creator.handle,
     bio: creator.bio,
     stagePersonality: creator.stagePersonality,
+    appearance: creator.appearance,
+    wardrobe: creator.wardrobe,
+    locations: creator.locations,
     disclosureMode: creator.disclosureMode ?? "hinted",
     gender: creator.gender,
     tags: creator.tags,
@@ -68,46 +72,52 @@ export function SlurpCreatorProfileEditor({
   };
 
   return (
-    <StageProfileForm
-      draft={draft}
-      source={null}
-      disclosureMode={draft.disclosureMode}
-      onDisclosureChange={(value: SlpIdentityDisclosure) =>
-        setDraft((current) => ({ ...current, disclosureMode: value }))
-      }
-      guidance=""
-      onGuidanceChange={() => {}}
-      connections={[]}
-      connectionId=""
-      onConnectionChange={() => {}}
-      onGenerate={onRedraft}
-      onOpenRedraft={onRedraft}
-      isGenerating={false}
-      previousDraft={null}
-      onUndoDraft={() => {}}
-      onChange={(patch) => setDraft((current) => ({ ...current, ...patch }))}
-      sourceAccountId={creator.sourceAccountId}
-      accentId={creator.id}
-      isEditing
-      isPending={updateProfile.isPending}
-      avatar={creator}
-      sourceAvatarUrl={null}
-      avatarPending={uploadAvatar.isPending || useSourceAvatar.isPending || removeAvatar.isPending}
-      onUploadAvatar={(file) => uploadAvatar.mutate({ accountId: creator.id, file }, { onError: avatarFailed })}
-      onUseSourceAvatar={() => useSourceAvatar.mutate({ accountId: creator.id }, { onError: avatarFailed })}
-      onRemoveAvatar={() => removeAvatar.mutate({ accountId: creator.id }, { onError: avatarFailed })}
-      onCancel={() =>
-        setDraft({
-          displayName: creator.displayName,
-          handle: creator.handle,
-          bio: creator.bio,
-          stagePersonality: creator.stagePersonality,
-          disclosureMode: creator.disclosureMode ?? "hinted",
-          gender: creator.gender,
-          tags: creator.tags,
-        })
-      }
-      onSave={() => void save()}
-    />
+    <div className="space-y-4">
+      <StageProfileForm
+        draft={draft}
+        source={null}
+        disclosureMode={draft.disclosureMode}
+        onDisclosureChange={(value: SlpIdentityDisclosure) =>
+          setDraft((current) => ({ ...current, disclosureMode: value }))
+        }
+        guidance=""
+        onGuidanceChange={() => {}}
+        connections={[]}
+        connectionId=""
+        onConnectionChange={() => {}}
+        onGenerate={onRedraft}
+        onOpenRedraft={onRedraft}
+        isGenerating={false}
+        previousDraft={null}
+        onUndoDraft={() => {}}
+        onChange={(patch) => setDraft((current) => ({ ...current, ...patch }))}
+        sourceAccountId={creator.sourceAccountId}
+        accentId={creator.id}
+        isEditing
+        isPending={updateProfile.isPending}
+        avatar={creator}
+        sourceAvatarUrl={null}
+        avatarPending={uploadAvatar.isPending || useSourceAvatar.isPending || removeAvatar.isPending}
+        onUploadAvatar={(file) => uploadAvatar.mutate({ accountId: creator.id, file }, { onError: avatarFailed })}
+        onUseSourceAvatar={() => useSourceAvatar.mutate({ accountId: creator.id }, { onError: avatarFailed })}
+        onRemoveAvatar={() => removeAvatar.mutate({ accountId: creator.id }, { onError: avatarFailed })}
+        onCancel={() =>
+          setDraft({
+            displayName: creator.displayName,
+            handle: creator.handle,
+            bio: creator.bio,
+            stagePersonality: creator.stagePersonality,
+            appearance: creator.appearance,
+            wardrobe: creator.wardrobe,
+            locations: creator.locations,
+            disclosureMode: creator.disclosureMode ?? "hinted",
+            gender: creator.gender,
+            tags: creator.tags,
+          })
+        }
+        onSave={() => void save()}
+      />
+      <SlpWardrobeManager creatorId={creator.id} legacyWardrobe={draft.wardrobe ?? ""} />
+    </div>
   );
 }

@@ -1,8 +1,22 @@
 import { z } from "zod";
 import { previewSlurpAutopurge, runSlurpAutopurge } from "./slp-autopurge.js";
-import { slpAccounts, slpPosts, slpInteractions, slurpMessages } from "../../../db/schema/slurp.js";
+import {
+  slpAccounts,
+  slpPosts,
+  slpInteractions,
+  slurpMessages,
+  slpRefreshRuns,
+  slpCreatorPreparedPosts,
+  slpCreatorFirstPostJobs,
+  slurpImprovementJobs,
+  slurpFollowUps,
+} from "../../../db/schema/slurp.js";
 import { now } from "../../../utils/id-generator.js";
-import { getSlurpOperationStatus, trySlurpDataDeletion } from "../../base/locking/slp-operation-lock.js";
+import {
+  getSlurpOperationStatus,
+  isSlpOperationActive,
+  trySlurpDataDeletion,
+} from "../../base/locking/slp-operation-lock.js";
 import { summarizeCreatorMedia, removeCreatorAccountMedia, removeAllCreatorMedia } from "../../base/media/slp-media.js";
 import { tryCreatorAccountOperation } from "../../base/locking/slp-account-operation-lock.js";
 import {
@@ -12,6 +26,7 @@ import {
 } from "../../base/media/slp-image-connections.js";
 import { getSlurpPostGuidance, updateSlurpPostGuidance } from "../../data/settings/slp-post-guidance-storage.js";
 import { isAmbientSlpAccount, dismissAmbientSlpAccount } from "../../data/audience/slp-ambient-profiles.js";
+import { getCreatorFanActivityStatus } from "../audience/slp-audience-contract.js";
 import type { FastifyInstance } from "fastify";
 import type { SlpRouteDeps } from "../viewer/slp-viewer-contract.js";
 
@@ -48,6 +63,161 @@ export async function slpMaintenanceRoutes(app: FastifyInstance, deps: SlpRouteD
       },
       media: summarizeCreatorMedia(),
       unused,
+    };
+  });
+
+  app.get("/slurp/tasks", async () => {
+    const [refreshRuns, preparedPosts, firstPostJobs, improvementJobs, followUps, accounts, audience] =
+      await Promise.all([
+        app.db.select().from(slpRefreshRuns),
+        app.db.select().from(slpCreatorPreparedPosts),
+        app.db.select().from(slpCreatorFirstPostJobs),
+        app.db.select().from(slurpImprovementJobs),
+        app.db.select().from(slurpFollowUps),
+        app.db.select().from(slpAccounts),
+        getCreatorFanActivityStatus(app.db),
+      ]);
+    const cutoff = Date.now() - 24 * 60 * 60 * 1000;
+    const recent = (value: string) => Date.parse(value) >= cutoff;
+    const terminal = new Set([
+      "completed",
+      "complete",
+      "failed",
+      "error",
+      "abandoned",
+      "published",
+      "discarded",
+      "sent",
+      "cancelled",
+    ]);
+    const parseIds = (value: string) => {
+      try {
+        const parsed: unknown = JSON.parse(value || "[]");
+        return Array.isArray(parsed) && parsed.every((item) => typeof item === "string") ? parsed : [];
+      } catch {
+        return [];
+      }
+    };
+    const task = (input: {
+      id: string;
+      kind: string;
+      status: string;
+      createdAt?: string;
+      updatedAt?: string;
+      publishAt?: string;
+      accountId?: string | null;
+      accountIds?: string[];
+      detail?: string | null;
+      progress?: { completed: number; total: number } | null;
+    }) => ({ ...input, accountIds: input.accountIds ?? (input.accountId ? [input.accountId] : []) });
+    const tasks = [
+      ...(isSlpOperationActive("noodler-fan-activity")
+        ? [
+            task({
+              id: "audience:active",
+              kind: "audience-activity",
+              status: "running",
+              updatedAt: now(),
+              detail: `${audience.usedRuns}/${audience.runLimit} runs used today`,
+            }),
+          ]
+        : []),
+      ...refreshRuns
+        .filter((row) => !terminal.has(row.status) || recent(row.updatedAt))
+        .map((row) =>
+          task({
+            id: `refresh:${row.id}`,
+            kind: "generate-posts",
+            status: row.status,
+            createdAt: row.createdAt,
+            updatedAt: row.updatedAt,
+            accountIds: parseIds(row.activeAccountIds),
+            detail: row.error,
+          }),
+        ),
+      ...preparedPosts
+        .filter((row) => Date.parse(row.publishAt) > Date.now() || !terminal.has(row.state) || recent(row.updatedAt))
+        .map((row) =>
+          task({
+            id: `prepared:${row.id}`,
+            kind: Date.parse(row.publishAt) > Date.now() ? "scheduled-post" : "generate-post",
+            status: Date.parse(row.publishAt) > Date.now() ? "scheduled" : row.state,
+            createdAt: row.generatedAt,
+            updatedAt: row.updatedAt,
+            publishAt: row.publishAt,
+            accountId: row.creatorAccountId,
+            detail: Date.parse(row.publishAt) > Date.now() ? "Waiting for scheduled publish" : null,
+          }),
+        ),
+      ...firstPostJobs
+        .filter(
+          (row) => ["queued", "running"].includes(row.status) && (row.status === "running" || recent(row.updatedAt)),
+        )
+        .map((row) =>
+          task({
+            id: `first-post:${row.id}`,
+            kind: "first-post",
+            status: row.status,
+            createdAt: row.createdAt,
+            updatedAt: row.updatedAt,
+            accountId: row.creatorAccountId,
+            detail: row.error,
+          }),
+        ),
+      ...improvementJobs
+        .filter((row) => !terminal.has(row.status) || recent(row.updatedAt))
+        .map((row) =>
+          task({
+            id: `improvement:${row.id}`,
+            kind: "creator-improvement",
+            status: row.status,
+            createdAt: row.createdAt,
+            updatedAt: row.updatedAt,
+            accountIds: parseIds(row.accountIds),
+            progress: { completed: Number(row.completed), total: Number(row.total) },
+            detail: row.error,
+          }),
+        ),
+      ...followUps
+        .filter((row) => !terminal.has(row.status) || recent(row.updatedAt))
+        .map((row) =>
+          task({
+            id: `follow-up:${row.id}`,
+            kind: "conversation-follow-up",
+            status: row.status,
+            createdAt: row.createdAt,
+            updatedAt: row.updatedAt,
+            accountId: row.creatorAccountId,
+            detail: row.reason,
+          }),
+        ),
+      ...(audience.lastRun && !isSlpOperationActive("noodler-fan-activity")
+        ? [
+            task({
+              id: "audience:last-run",
+              kind: "audience-activity",
+              status: audience.lastRun.status,
+              updatedAt: audience.lastRun.finishedAt ?? undefined,
+              detail: `${audience.usedRuns}/${audience.runLimit} runs used today`,
+            }),
+          ]
+        : []),
+    ]
+      .sort(
+        (left, right) =>
+          Date.parse(right.updatedAt ?? right.createdAt ?? "") - Date.parse(left.updatedAt ?? left.createdAt ?? ""),
+      )
+      .slice(0, 80);
+    return {
+      tasks,
+      accounts: accounts.map((account) => ({
+        id: account.id,
+        entityId: account.entityId,
+        displayName: account.displayName,
+        handle: account.handle,
+        avatarUrl: account.avatarUrl,
+        avatarCrop: null,
+      })),
     };
   });
   app.post("/autopurge/run", async (_req, reply) => {

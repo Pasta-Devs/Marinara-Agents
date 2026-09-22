@@ -109,6 +109,7 @@ assert.match(storage, /arcDirectorMode: false,/, "Director mode is off by defaul
 const arcs = routes.slice(routes.indexOf('"/slurp/accounts/:id/arcs"'), routes.indexOf("A Creator's arc overrides"));
 assert.match(arcs, /status !== "suggested"/);
 assert.doesNotMatch(arcs, /direction,|twist,/);
-assert.match(arcs, /isCreatorHiddenFromViewer/);
+// Viewer access is gone; a protected identity still hides the timeline.
+assert.match(arcs, /identityDisclosure \?\? "open"\) !== "open"/);
 
 console.log("slurp2 arc director regression passed");

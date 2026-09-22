@@ -1,6 +1,5 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "../../../lib/api-client.js";
-import { slpKeys } from "../../base/state/slp-query-keys.js";
 import type { SlurpWallet } from "../economy/slp-economy-contract.js";
 import { invalidateSlurpMessages } from "./slp-message-keys.js";
 import type { SlurpMessage, SlurpSendResponse, SlurpThread } from "./slp-messages-contract.js";
@@ -62,6 +61,22 @@ export function useRequestSlurpReply() {
     mutationFn: (input: { threadId: string; personaId: string; guidance?: string }) =>
       api.post<{ reply: SlurpMessage | null; replyStatus: string; typingMs?: number }>(
         `/slurp2/messages/threads/${encodeURIComponent(input.threadId)}/request-reply`,
+        input,
+      ),
+    onSuccess: () => invalidateSlurpMessages(queryClient),
+  });
+}
+/**
+ * The Creator's side of "Request a reply": ask the fan to write back.
+ *
+ * Same tool, other direction. Only the Creator's owner may call it, which the route checks.
+ */
+export function useRequestSlurpFanReply() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { creatorAccountId: string; personaId: string; threadId: string; guidance?: string }) =>
+      api.post<{ reply: SlurpMessage | null; replyStatus: string }>(
+        `/slurp2/messages/creators/${encodeURIComponent(input.creatorAccountId)}/request-fan-reply`,
         input,
       ),
     onSuccess: () => invalidateSlurpMessages(queryClient),
@@ -214,7 +229,7 @@ export function useResolveSlurpMessageRequest() {
         `/slurp2/messages/threads/${encodeURIComponent(input.threadId)}/request`,
         input,
       ),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: slpKeys.noodlerRoot() }),
+    onSuccess: () => invalidateSlurpMessages(queryClient),
   });
 }
 /** Empty one conversation. Every message goes; what the fan paid for does not. */
@@ -223,7 +238,7 @@ export function useResetSlurpThread() {
   return useMutation({
     mutationFn: (input: { threadId: string; personaId: string }) =>
       api.post<{ thread: SlurpThread }>(`/slurp2/messages/threads/${encodeURIComponent(input.threadId)}/reset`, input),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: slpKeys.noodlerRoot() }),
+    onSuccess: () => invalidateSlurpMessages(queryClient),
   });
 }
 /**
@@ -244,7 +259,7 @@ export function useSetSlurpThreadNotes() {
         `/slurp2/messages/threads/${encodeURIComponent(input.threadId)}/notes`,
         { personaId: input.personaId, notes: input.notes },
       ),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: slpKeys.noodlerRoot() }),
+    onSuccess: () => invalidateSlurpMessages(queryClient),
   });
 }
 export function useCancelSlurpFollowUp() {
@@ -258,6 +273,6 @@ export function useCancelSlurpFollowUp() {
           personaId: input.personaId,
         },
       ),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: slpKeys.noodlerRoot() }),
+    onSuccess: () => invalidateSlurpMessages(queryClient),
   });
 }

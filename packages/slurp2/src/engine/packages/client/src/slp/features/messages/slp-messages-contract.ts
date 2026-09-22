@@ -77,7 +77,7 @@ export type SlurpCommission = {
   threadId: string;
   viewerAccountId: string;
   creatorAccountId: string;
-  state: "brief" | "quoted" | "accepted" | "declined" | "delivered";
+  state: "brief" | "quoted" | "accepted" | "cancellation_pending" | "declined" | "delivered";
   brief: string;
   price: number;
   deliveryMessageId: string | null;

@@ -25,6 +25,7 @@ import {
 } from "../../base/model/slp-model-worker.js";
 import { SLURP_SHIPPED_REACTIONS, SLURP_SHIPPED_TYPE_REACTIONS } from "../../modules/world/slp-world-copy.js";
 import { composeSlurpPromptBlocks } from "../../base/prompting/slp-prompt-blocks.js";
+import { slurpPromptContext } from "../../base/prompting/slp-prompt-blocks.js";
 
 /**
  * Growing the free comment bank.
@@ -154,7 +155,7 @@ export async function topUpSlurpReactionBank(
                   .join(", ")}}`,
               },
             ],
-            settings.promptBlocks,
+            slurpPromptContext(settings).blocks,
           ),
         },
         { role: "user", content: "Write the lines." },

@@ -3,7 +3,9 @@ import { z } from "zod";
 import { SLURP_DISCOVERY_TAG_MAX_LENGTH, SLURP_DISCOVERY_TAG_SEED } from "../discovery/slp-discovery-profile.js";
 import {
   normalizeSlurpPromptBlockOverrides,
+  slurpLegacyClassicPromptBlocks,
   SlurpPromptBlockOverrides,
+  SlurpReusablePromptInstruction,
 } from "../../base/prompting/slp-prompt-blocks.js";
 import { SLURP_DEFAULT_ECONOMY } from "../economy/slp-wallet.js";
 import {
@@ -278,8 +280,23 @@ export const slurpSettingsSchema = z.object({
       }),
     )
     .max(20),
-  /** User changes to the shared prompt block layouts. Defaults stay in source. */
+  /** User changes to the prompt block layouts. Defaults stay in source. */
   promptBlocks: z.unknown().transform(normalizeSlurpPromptBlockOverrides),
+  /**
+   * The player's prompt edits from before the Classic runtime was removed, kept so the Classic
+   * prompt preset can restore them. Written once by migration; never by generation.
+   */
+  classicPromptBlocks: z.unknown().transform(normalizeSlurpPromptBlockOverrides),
+  promptInstructions: z
+    .array(
+      z.object({
+        id: z.string().trim().min(1).max(80),
+        name: z.string().trim().min(1).max(120),
+        text: z.string().trim().max(20_000),
+        builtin: z.boolean().optional(),
+      }),
+    )
+    .max(100),
   enableEnhancedTimelineWriting: z.boolean(),
   includeCharacterSchedules: z.boolean(),
   enableLorebookContext: z.boolean(),
@@ -370,7 +387,7 @@ export const slurpSettingsSchema = z.object({
 
 export type SlurpSettings = z.infer<typeof slurpSettingsSchema>;
 
-export type { SlurpPromptBlockOverrides };
+export type { SlurpPromptBlockOverrides, SlurpReusablePromptInstruction };
 
 export type SlurpSettingsUpdateInput = Partial<SlurpSettings>;
 
@@ -416,14 +433,17 @@ export const LEGACY_EXPLICIT_SLURP_DEFAULT_GENERATION_GUIDANCE =
 export const LEGACY_SLP_CREATOR_DEFAULT_IMAGE_GENERATION_PROMPT =
   "Create a polished social-media image for an adult Creator post. Match the creator's identity, personality, body, clothing, and established visual details. Follow the post's mood and subject. Describe the pose, expression, setting, lighting, camera angle, composition, and visible details clearly. Flirty, suggestive, sensual, or explicit imagery is allowed when it fits the post and creator, but do not force sexual content into ordinary updates. Keep the image coherent, intentional, and suitable for a public or locked Creator feed.";
 
-export const SLP_CREATOR_DEFAULT_IMAGE_GENERATION_PROMPT =
+export const LEGACY_GRAPHIC_SLP_CREATOR_DEFAULT_IMAGE_GENERATION_PROMPT =
   "Create a polished social-media image for an adult Creator post. Match the creator's identity, personality, body, clothing, and established visual details. Follow the post's mood and subject. Describe the pose, expression, setting, lighting, camera angle, composition, and visible details clearly. Flirty, suggestive, sensual, or explicit imagery is allowed when it fits the post and creator, but do not force sexual content into ordinary updates. When the image shows nudity or sex, always use thorough, graphic descriptions. Name the body in dirty everyday words, not clinical ones: tits, nipples, ass, pussy, clit, cock, balls, cum, wet, dripping, hard, leaking. Describe how it looks, how it sits, how it catches the light. Keep the image coherent, intentional, and suitable for a public or locked Creator feed.";
+
+export const SLP_CREATOR_DEFAULT_IMAGE_GENERATION_PROMPT =
+  "Create a provider-ready image prompt for the supplied adult Creator post. Preserve the post's subject, action, setting, mood, clothing, and established appearance. Use the Creator's personality to shape expression and presentation, not to invent a new event or sexualize an ordinary moment. Add nudity, explicit anatomy, or sexual activity only when the post or an explicit trusted instruction already requires it. Keep the image coherent, believable, and suitable for the post's public or locked access level. Use only the visual details needed for this scene.";
 
 export const LEGACY_SLP_CREATOR_DEFAULT_IMAGE_PROMPT_INTERPRETATION =
   "Edit this image prompt into a provider-ready image prompt. Preserve the original subject, action, setting, composition, and visual style. Preserve any explicit style in the original prompt, character context, image instructions, or style guidance. Do not add realistic, photorealistic, photographic, camera, lens, or natural-lighting language unless the supplied context clearly requests that style. Do not convert an anime, cartoon, game, manga, comic, illustration, painterly, fantasy, or stylized character into a realistic image. When no style is specified, keep the prompt style-neutral. Do not invent an art style. Treat image instructions as guidance, not text to copy into the result. Return only the provider-ready image prompt.";
 
 export const SLP_CREATOR_DEFAULT_IMAGE_PROMPT_INTERPRETATION =
-  "Edit this image prompt into a provider-ready image prompt. Preserve the original subject, action, setting, composition, and visual style. Preserve any explicit style in the original prompt, character context, image instructions, or style guidance. Do not add realistic, photorealistic, photographic, camera, lens, or natural-lighting language unless the supplied context clearly requests that style. Do not convert an anime, cartoon, game, manga, comic, illustration, painterly, fantasy, or stylized character into a realistic image. When no style is specified, keep the prompt style-neutral. Do not invent an art style. When the prompt shows nudity or sex, keep thorough, graphic body language and dirty everyday words such as tits, nipples, ass, pussy, clit, cock, balls, cum, wet, dripping, hard, leaking. Do not replace them with clinical or euphemistic wording. Treat image instructions as guidance, not text to copy into the result. Return only the provider-ready image prompt.";
+  "Edit this image prompt into a concise provider-ready image prompt. Preserve the original subject, action, setting, clothing, composition, visual style, and sexual intensity. Preserve explicit style from the original prompt, character context, image instructions, or style guidance. Do not add a new event, person, pose, outfit, viewpoint, nudity, explicit anatomy, or sexual activity. Do not turn an ordinary update into a fashion shoot or erotic image. Do not add realistic, photographic, camera, lens, or natural-lighting language unless the supplied context requests it. Do not convert a stylized character into a realistic image. Treat image instructions as guidance, not text to copy. Return only the provider-ready image prompt.";
 
 /**
  * The LEGACY_* guidance constants above are every previously shipped default. An install that
@@ -483,6 +503,7 @@ export const DEFAULT_SLURP_SETTINGS: SlurpSettings = {
   storyImageHeight: 1280,
   refreshesPerDay: 0,
   generationGuidance: SLP_CREATOR_DEFAULT_GENERATION_GUIDANCE,
+  promptInstructions: [],
   audienceTone: SLURP_DEFAULT_AUDIENCE_TONE,
   worldActivity: SLURP_DEFAULT_WORLD_ACTIVITY,
   platformScale: SLURP_DEFAULT_PLATFORM_SCALE,
@@ -493,8 +514,13 @@ export const DEFAULT_SLURP_SETTINGS: SlurpSettings = {
   imageGenerationPrompt: SLP_CREATOR_DEFAULT_IMAGE_GENERATION_PROMPT,
   imagePromptInterpretation: SLP_CREATOR_DEFAULT_IMAGE_PROMPT_INTERPRETATION,
   enableImageInterpretation: true,
-  imageGenerationUseAvatarReferences: false,
-  imageGenerationIncludeDescriptions: false,
+  // On by default. Off, no avatar ever reached the image model and the linked card's Appearance
+  // was never read, so a Creator's likeness rested entirely on the Appearance text written on the
+  // Creator — blank for anyone drafted from a card without one, and a blank appearance is what let
+  // the image model invent a different person for every post. A provider that cannot take a
+  // reference image simply ignores the references.
+  imageGenerationUseAvatarReferences: true,
+  imageGenerationIncludeDescriptions: true,
   autoPostingImagesEnabled: false,
   allowRandomUsers: false,
   dismissedAmbientProfileIds: [],
@@ -514,6 +540,7 @@ export const DEFAULT_SLURP_SETTINGS: SlurpSettings = {
   characterImageInstructions: {},
   promptPresets: [],
   promptBlocks: {} satisfies SlurpPromptBlockOverrides,
+  classicPromptBlocks: {} satisfies SlurpPromptBlockOverrides,
   professorMariCreatorSource: true,
   enableEnhancedTimelineWriting: false,
   includeCharacterSchedules: false,
@@ -605,15 +632,46 @@ export function normalizeSlurpSettings(raw: unknown): SlurpSettings {
   candidate.imageGenerationPrompt =
     rawRecord.imageGenerationPrompt === undefined ||
     rawRecord.imageGenerationPrompt === "" ||
-    rawRecord.imageGenerationPrompt === LEGACY_SLP_CREATOR_DEFAULT_IMAGE_GENERATION_PROMPT
+    rawRecord.imageGenerationPrompt === LEGACY_SLP_CREATOR_DEFAULT_IMAGE_GENERATION_PROMPT ||
+    rawRecord.imageGenerationPrompt === LEGACY_GRAPHIC_SLP_CREATOR_DEFAULT_IMAGE_GENERATION_PROMPT
       ? SLP_CREATOR_DEFAULT_IMAGE_GENERATION_PROMPT
       : rawRecord.imageGenerationPrompt;
+  const storedPromptInstructions = Array.isArray(rawRecord.promptInstructions) ? rawRecord.promptInstructions : null;
+  candidate.promptInstructions = storedPromptInstructions
+    ? storedPromptInstructions.map((instruction) => {
+        if (!instruction || typeof instruction !== "object" || Array.isArray(instruction)) return instruction;
+        const record = instruction as Record<string, unknown>;
+        const isBuiltInImageInstruction =
+          record.id === "image-style" &&
+          (record.text === LEGACY_SLP_CREATOR_DEFAULT_IMAGE_GENERATION_PROMPT ||
+            record.text === LEGACY_GRAPHIC_SLP_CREATOR_DEFAULT_IMAGE_GENERATION_PROMPT);
+        return isBuiltInImageInstruction
+          ? { ...record, text: SLP_CREATOR_DEFAULT_IMAGE_GENERATION_PROMPT }
+          : instruction;
+      })
+    : [
+        {
+          id: "creator-voice",
+          name: "Creator voice",
+          text: candidate.generationGuidance as string,
+          builtin: true,
+        },
+        {
+          id: "image-style",
+          name: "Image style",
+          text: candidate.imageGenerationPrompt as string,
+          builtin: true,
+        },
+      ];
   candidate.imagePromptInterpretation =
     rawRecord.imagePromptInterpretation === undefined ||
     rawRecord.imagePromptInterpretation === "" ||
     rawRecord.imagePromptInterpretation === LEGACY_SLP_CREATOR_DEFAULT_IMAGE_PROMPT_INTERPRETATION
       ? SLP_CREATOR_DEFAULT_IMAGE_PROMPT_INTERPRETATION
       : rawRecord.imagePromptInterpretation;
+  // Present once migrated, even when empty. Until then the stored layouts are the Classic edits.
+  candidate.classicPromptBlocks =
+    rawRecord.classicPromptBlocks ?? slurpLegacyClassicPromptBlocks(rawRecord.promptBlocks);
   candidate.nightQuiet = rawRecord.nightQuiet ?? DEFAULT_SLURP_SETTINGS.nightQuiet;
   // Repaired rather than replaced: a player who edited one type must not lose the other seven
   // because a single field went out of range. An all-disabled list re-enables built-in Regular,

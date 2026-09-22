@@ -3,7 +3,11 @@ import type { SlurpModelBudget } from "../../../../../shared/src/slp/slp-model-b
 import type { SlurpPlatformEvent } from "../../../../../shared/src/slp/slp-platform-events.js";
 import type { SlurpSimulationTuning } from "../../../../../shared/src/slp/slp-tuning.js";
 import type { SlurpPromptPreset } from "./slp-prompt-presets.js";
-import type { SlurpContentRating, SlurpPromptBlockOverride } from "../../base/state/slp-state-types.js";
+import type {
+  SlurpContentRating,
+  SlurpPromptBlockOverride,
+  SlurpReusablePromptInstruction,
+} from "../../base/state/slp-state-types.js";
 import type { SlurpArcType } from "../projects/slp-projects-contract.js";
 
 export type SlurpSettings = {
@@ -92,6 +96,9 @@ export type SlurpSettings = {
   characterImageInstructions: Record<string, boolean>;
   promptPresets: SlurpPromptPreset[];
   promptBlocks: Record<string, SlurpPromptBlockOverride[]>;
+  /** Prompt edits from before Classic generation was removed. Source of the Classic prompt preset. */
+  classicPromptBlocks: Record<string, SlurpPromptBlockOverride[]>;
+  promptInstructions: SlurpReusablePromptInstruction[];
   professorMariCreatorSource: boolean;
   enableEnhancedTimelineWriting: boolean;
   includeCharacterSchedules: boolean;
@@ -148,6 +155,57 @@ export type SlurpPromptBlockDefinition = {
   kind: "editable" | "required" | "context";
   optional: boolean;
   defaultText: string;
+};
+/** The prompt-blocks response. Named rather than inline: the client-hook scanner cannot read a
+ * generic argument containing a semicolon, so an inline object type hides the call from it. */
+export type SlurpPromptBlocksResponse = {
+  /** A layout the builder can load into its draft. Prompt text only. */
+  classicPreset: Record<string, SlurpPromptBlockOverride[]>;
+  prompts: SlurpPromptDefinition[];
+};
+export type SlurpPromptBlockPreview = {
+  id: string;
+  text: string;
+};
+export type SlurpPromptPreviewResponse = {
+  supported: boolean;
+  blocks: SlurpPromptBlockPreview[];
+  compiledText: string;
+};
+export type SlurpPromptResultPreviewResponse = {
+  title: string | null;
+  content: string;
+  imagePrompt: string | null;
+  compiledPrompt: string;
+  scene: {
+    wardrobeId?: string | null;
+    setting: string;
+    action: string;
+    expression: string;
+    visualDirection: string;
+  } | null;
+  wardrobeSelection: { selectedId: string | null; requestedId: string | null; fallback: boolean };
+  visualBrief: {
+    subject: string;
+    action: string;
+    setting: string;
+    company: string;
+    clothing: string | null;
+    camera: string;
+    mood: string | null;
+    sexualLevel: "none" | "suggestive" | "nudity" | "explicit";
+  } | null;
+  imageBrief: string | null;
+  providerPrompt: string | null;
+};
+export type SlurpPromptResultPreviewInput = {
+  promptId: "post";
+  creatorAccountId: string;
+  promptBlocks?: unknown;
+  promptInstructions?: SlurpReusablePromptInstruction[];
+  access?: "public" | "locked";
+  format?: "caption" | "announcement" | "long_form";
+  direction?: string;
 };
 export type SlurpPromptDefinition = {
   id: string;

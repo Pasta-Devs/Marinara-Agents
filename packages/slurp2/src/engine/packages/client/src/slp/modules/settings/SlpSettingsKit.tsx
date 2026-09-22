@@ -16,10 +16,12 @@ export function BackstagePageHeader({
   title,
   detail,
   scope,
+  actions,
 }: {
   title: string;
   detail: string;
   scope?: SlpSettingScope;
+  actions?: ReactNode;
 }) {
   return (
     <header className="flex flex-wrap items-start justify-between gap-3">
@@ -27,7 +29,10 @@ export function BackstagePageHeader({
         <h1 className="text-2xl font-black tracking-tight text-balance">{title}</h1>
         <p className="mt-1 max-w-2xl text-sm leading-6 text-[var(--slurp-muted)] text-pretty">{detail}</p>
       </div>
-      {scope && <SlpSettingScopeBadge scope={scope} />}
+      <div className="flex flex-wrap items-start gap-2">
+        {scope && <SlpSettingScopeBadge scope={scope} />}
+        {actions}
+      </div>
     </header>
   );
 }

@@ -6,6 +6,8 @@
  * prompt is told — the history, the rapport, and whether the creator is even awake — so the
  * machinery around it is reused rather than rebuilt.
  */
+import { listSlurpContinuityFor } from "../../data/continuity/slp-continuity-storage.js";
+import { slurpContinuityInstruction } from "../../modules/continuity/slp-continuity-prompt.js";
 import { type APIProvider } from "@marinara-engine/shared";
 import { type SlpAccount } from "../../../../../shared/src/slp/slp-social.types.js";
 import { isDebugAgentsEnabled } from "../../../config/runtime-config.js";
@@ -21,7 +23,11 @@ import { parseGameJsonish } from "../../../services/game/jsonish.js";
 import { requireModelAnswer } from "../../base/model/slp-model-answer.js";
 import { withConnectionFallbackProvider } from "../../../services/llm/connection-fallback-provider.js";
 import type { ChatMessage } from "../../../services/llm/base-provider.js";
-import { composeSlurpPromptBlocks, type SlurpPromptBlockOverrides } from "../../base/prompting/slp-prompt-blocks.js";
+import {
+  composeSlurpPromptBlocks,
+  type SlurpPromptBlockOverrides,
+  type SlurpReusablePromptInstruction,
+} from "../../base/prompting/slp-prompt-blocks.js";
 import { createLLMProvider } from "../../../services/llm/provider-registry.js";
 import { createConnectionsStorage } from "../../../services/storage/connections.storage.js";
 import { createSlurpStorage } from "../../data/slp-storage.js";
@@ -83,6 +89,8 @@ import {
   slurpModelWorkerAllows,
   type SlurpModelWorkerContext,
 } from "../../base/model/slp-model-worker.js";
+import { slurpPromptContext } from "../../base/prompting/slp-prompt-blocks.js";
+import { SLURP_PERFORMED_INTIMACY } from "../../modules/creators/slp-performance.js";
 
 type GenerationConnection = NonNullable<Awaited<ReturnType<ReturnType<typeof createConnectionsStorage>["getWithKey"]>>>;
 
@@ -120,6 +128,8 @@ export function buildSlurpMessageChat(input: {
   stance: SlurpStance;
   /** Facts kept from earlier in this conversation, beyond the history window. */
   notes?: SlurpThreadNote[];
+  /** From `slp-continuity-prompt.ts`: approved notes, including this thread's own. */
+  continuityInstruction?: string;
   threadState?: SlurpThreadState;
   creatorState?: SlurpCreatorState;
   characterCanon?: string;
@@ -138,6 +148,7 @@ export function buildSlurpMessageChat(input: {
   /** A viewer request stays in the untrusted user-data message, never in trusted system guidance. */
   viewerGenerationGuidance?: string;
   promptBlocks?: SlurpPromptBlockOverrides;
+  promptInstructions?: SlurpReusablePromptInstruction[];
 }): ChatMessage[] {
   const protect = (value: string | null | undefined) =>
     protectCreatorGeneratedIdentity(value, input.disclosureMode, input.publicIdentity) ?? "";
@@ -174,6 +185,12 @@ export function buildSlurpMessageChat(input: {
         text: slpCreatorIdentityInstruction(input.disclosureMode, input.publicIdentity),
       },
       {
+        id: "performance",
+        kind: "context" as const,
+        optional: true,
+        text: SLURP_PERFORMED_INTIMACY,
+      },
+      {
         id: "canon",
         kind: "context" as const,
         optional: true,
@@ -203,10 +220,14 @@ export function buildSlurpMessageChat(input: {
         id: "memory",
         kind: "context" as const,
         optional: true,
-        text:
+        text: [
           input.notes && input.notes.length > 0
             ? "You already know some things about this fan from earlier conversations. Working memory is recent and may change. Long-term memory is stable. Use them when they fit, and never recite them back as a list."
             : "",
+          input.continuityInstruction?.trim() ?? "",
+        ]
+          .filter(Boolean)
+          .join("\n"),
       },
       {
         id: "creatorState",
@@ -242,7 +263,7 @@ export function buildSlurpMessageChat(input: {
           `Review the fan's newest message against memory on every reply. "remember" is an array of at most ${SLURP_NOTES_PER_REPLY} memory operations. Each item is {"op":"add"|"replace"|"forget"|"keep","id":string|null,"text":string|null}. Use add with text for each new personal fact worth recalling. Use replace with the fact's id and new text when a fact changed. Use forget with the fact's id when it is no longer true. Use keep with a working id when repeated conversation shows that the fact is stable and belongs in long-term memory. Use an empty array only when the newest message adds, changes, or confirms no personal fact. Never record your own words, and never record anything about payment.`,
           '"stateSignals" is an array of up to three exact signals that describe what the fan did in this message. Allowed values: fan_shared_personal_fact, fan_remembered_creator_detail, fan_gave_respectful_compliment, fan_gave_welcome_adult_attention, fan_ignored_creator_question, fan_pushed_after_refusal, fan_requested_free_content, fan_paid_for_content, fan_completed_commission, fan_returned_after_silence, fan_mentioned_another_creator, fan_apologized, fan_broke_a_promise. Use only signals that are true. Do not invent a signal to justify the reply.',
           '"sharePost" is an optional zero-based index into yourRecentPosts. Use it only when sharing one of your recent posts fits the conversation. A non-subscriber may receive a friendly locked preview sometimes. Otherwise use null.',
-          '"image" is either null or an object with a concrete visual "prompt" and optional short "caption". Use it only when a picture would feel natural, such as showing something, rewarding a warm fan, or making a pointed hostile gesture. Never use it for every reply.',
+          '"image" is either null or an object with a concrete visual "prompt" and optional short "caption". Use it only when a picture would feel natural, such as showing something, rewarding a warm fan, or making a pointed hostile gesture. Never use it for every reply. Keep the image inside the Creator content menu and relationship boundaries. Do not add nudity, explicit anatomy, or sexual activity unless the conversation and trusted Creator settings already call for it. Do not sexualize an ordinary update.',
           '"followUp" is either null or an object {"type":"reminder"|"promise_delivery"|"task_update"|"check_in"|"recurring","timing":"30 minutes"|"2 hours"|"tonight"|"every 4 hours","count":1-5,"reason":"brief description","context":"optional details"}. Use it when you promise to follow up later, send updates, deliver something, remind them about something, or check in proactively. Examples: fan asks for reminder → {"type":"reminder","timing":"30 minutes","count":1,"reason":"medication reminder"}; you promise to send daily updates → {"type":"recurring","timing":"every 4 hours","count":3,"reason":"day updates"}; fan tips and you promise exclusive content → {"type":"promise_delivery","timing":"tonight","count":1,"reason":"exclusive photo for tip"}. Most messages use null.',
           "When the conversation is warm or close and the fan has shared something personal, ask one natural follow-up question sometimes. Do not ask a question in every reply, and do not use a question to avoid answering.",
         ].join("\n"),
@@ -250,6 +271,7 @@ export function buildSlurpMessageChat(input: {
       { id: "output", kind: "required" as const, text: "Return JSON only. No prose outside the JSON object." },
     ],
     input.promptBlocks,
+    input.promptInstructions,
   );
 
   const data = {
@@ -366,6 +388,8 @@ export type SlurpMessagePromptInput = {
   mood?: number;
   moodUpdatedAt?: string | null;
   /** What the creator already knows about this fan, beyond the last sixteen turns. */
+  /** The thread this reply belongs to, so its own private notes can reach only this reply. */
+  threadId?: string | null;
   notes?: SlurpThreadNote[];
   threadState?: SlurpThreadState;
   creatorState?: SlurpCreatorState;
@@ -381,6 +405,11 @@ export type SlurpMessagePromptInput = {
   workerContext?: SlurpModelWorkerContext;
   /** A player pressed Force reply now: no budget setting, cap or mode may swallow that press. */
   skipBudgetCap?: boolean;
+  /**
+   * The availability the reply operation already paced this reply by. Recomputing it here from the
+   * schedule alone ignored an open conversation window, so an instant reply was told "you are not free".
+   */
+  availability?: Awaited<ReturnType<typeof resolveSlurpCreatorAvailability>>;
 };
 
 /**
@@ -400,6 +429,7 @@ export async function buildSlurpMessagePrompt(input: SlurpMessagePromptInput): P
   const disclosureMode = input.creator.settings.privacy.identityDisclosure ?? "open";
   const publicIdentity = await resolveNoodlerPublicIdentity(input.db, input.creator);
   const settings = await slurp.getSettings();
+  const prompts = slurpPromptContext(settings);
   const source = await slurp.resolveAccountSource(input.creator);
   const characters = createCharactersStorage(input.db);
   const [scheduleContext, recentPostRows] = await Promise.all([
@@ -409,16 +439,18 @@ export async function buildSlurpMessagePrompt(input: SlurpMessagePromptInput): P
       .then((byAccount) => byAccount.get(input.creator.id) ?? [])
       .catch(() => []),
   ]);
-  const availability = source
-    ? await resolveSlurpCreatorAvailability(
-        characters,
-        source,
-        undefined,
-        new Date(),
-        recentPostRows[0]?.createdAt ?? null,
-        settings,
-      )
-    : { online: true, activity: null, minutesUntilOnline: 0 };
+  const availability =
+    input.availability ??
+    (source
+      ? await resolveSlurpCreatorAvailability(
+          characters,
+          source,
+          undefined,
+          new Date(),
+          recentPostRows[0]?.createdAt ?? null,
+          settings,
+        )
+      : { online: true, activity: null, minutesUntilOnline: 0 });
   const characterCanon = await resolveCreatorCharacterCanon(input.db, source, disclosureMode);
   // The fan's direction, and what the creator has posted lately. Both were already stored and
   // neither reached the one prompt where a fan is most likely to mention them.
@@ -524,8 +556,20 @@ export async function buildSlurpMessagePrompt(input: SlurpMessagePromptInput): P
       return new Map([...postImages, ...threadImages]);
     })
     .catch(() => new Map<string, string>());
+  // Approved notes: the Creator's own, plus anything private to this thread. Another fan's thread
+  // is unreachable from here — `slurpContinuityReadable` decides that, not this call site.
+  const continuityInstruction = input.threadId
+    ? await listSlurpContinuityFor(input.db, input.creator.id, "fan_thread", {
+        at: new Date(),
+        threadId: input.threadId,
+        limit: 20,
+      })
+        .then((ledger) => slurpContinuityInstruction({ ...ledger, threadId: input.threadId }))
+        .catch(() => "")
+    : "";
   const messages = buildSlurpMessageChat({
     ...input,
+    continuityInstruction,
     contentMenu: await resolveSlurpCreatorMenu(input.db, input.creator.id).catch(() => ""),
     platformEvents: slurpPlatformEventInstruction(settings.platformEvents, new Date()),
     imageContexts,
@@ -538,7 +582,8 @@ export async function buildSlurpMessagePrompt(input: SlurpMessagePromptInput): P
     publicIdentity,
     generationGuidance: settings.generationGuidance,
     viewerGenerationGuidance: input.generationGuidance,
-    promptBlocks: settings.promptBlocks,
+    promptBlocks: prompts.blocks,
+    promptInstructions: prompts.instructions,
     scheduleContext,
     characterCanon,
   });

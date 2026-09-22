@@ -5,6 +5,10 @@ import { isCommissionRequest } from "./commissions/SlpCommissions";
 import { showConfirmDialog } from "../../../lib/app-dialogs";
 import { useSlurpThreadViewState, type SlurpThreadViewProps, type SlurpThreadViewState } from "./slp-thread-view-model";
 
+/** `crypto.randomUUID` exists only in a secure context; a plain-HTTP LAN Engine does not have one. */
+const newRequestId = () =>
+  typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`;
+
 /**
  * What a conversation does: hold the typing indicator, send a message, send a tip, scroll home.
  *
@@ -31,7 +35,7 @@ function useSlurpThreadActions(state: SlurpThreadViewState) {
     ownsCreator,
     personaId,
     send,
-    sendRequestId,
+    sendRequest,
     setActiveTipAmount,
     setCommissionPrefill,
     setComposerTipAmount,
@@ -44,7 +48,7 @@ function useSlurpThreadActions(state: SlurpThreadViewState) {
     setHiddenReplyIds,
     setPending,
     setReplyStatus,
-    setSendRequestId,
+    setSendRequest,
     setStandaloneTip,
     setTierOpen,
     setToolTab,
@@ -205,12 +209,6 @@ function useSlurpThreadActions(state: SlurpThreadViewState) {
     // An away Creator is not typing. Showing dots first and then the away block read as a reply
     // that was started and abandoned.
     if (!ownsCreator && availability?.online !== false) setTyping(true);
-    const requestId =
-      sendRequestId ??
-      (typeof crypto !== "undefined" && "randomUUID" in crypto
-        ? crypto.randomUUID()
-        : `${Date.now()}-${Math.random()}`);
-    setSendRequestId(requestId);
     try {
       // On a Creator-side thread the player is the Creator, so the message goes the other way.
       // Sending through the viewer route here opened a second conversation from the persona to
@@ -225,6 +223,10 @@ function useSlurpThreadActions(state: SlurpThreadViewState) {
         setPending({ content, id: written.message.id, startedAt: optimisticStartedAt });
         return;
       }
+      // A retry of the same text reuses its id so a send that landed before a timeout is not doubled.
+      // Edited text is a new message; reusing the id made the server return the old one instead.
+      const requestId = sendRequest?.content === content ? sendRequest.id : newRequestId();
+      setSendRequest({ id: requestId, content });
       const result = await send.mutateAsync({
         personaId,
         creatorAccountId: targetCreatorAccountId,
@@ -232,7 +234,7 @@ function useSlurpThreadActions(state: SlurpThreadViewState) {
         requestId,
         tip: composerTipAmount > 0 ? { amount: composerTipAmount, note: composerTipNote.trim() } : null,
       });
-      setSendRequestId(null);
+      setSendRequest(null);
       setPending({ content, id: result.message.id, startedAt: optimisticStartedAt });
       setReplyStatus(result.replyStatus ?? null);
       if (result.tipError) setError(result.tipError);
@@ -255,6 +257,11 @@ function useSlurpThreadActions(state: SlurpThreadViewState) {
 
   const sendTip = async (amount: number, note = "", restore?: { amount: string; note: string }) => {
     if (!personaId || !targetCreatorAccountId || busy) return;
+    const restoreCustomTip = () => {
+      if (!restore) return;
+      setCustomTipAmount(restore.amount);
+      setCustomTipNote(restore.note);
+    };
     setError(null);
     setActiveTipAmount(amount);
     try {
@@ -268,21 +275,21 @@ function useSlurpThreadActions(state: SlurpThreadViewState) {
         }),
         confirmLabel: localizeUi("ui.slurp.messages.sendTipConfirm", { defaultValue: "Send tip" }),
       });
-      if (!confirmed) return;
+      if (!confirmed) {
+        restoreCustomTip();
+        return;
+      }
       const result = await tip.mutateAsync({
         personaId,
         creatorAccountId: targetCreatorAccountId,
         amount,
         note,
-        requestId: crypto.randomUUID(),
+        requestId: newRequestId(),
       });
       setStandaloneTip(result.message);
       if (result.reply) holdTyping(result.typingMs ?? 0, result.reply.id);
     } catch (cause) {
-      if (restore) {
-        setCustomTipAmount(restore.amount);
-        setCustomTipNote(restore.note);
-      }
+      restoreCustomTip();
       setError(
         cause instanceof Error
           ? cause.message

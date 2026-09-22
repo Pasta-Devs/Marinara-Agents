@@ -163,8 +163,11 @@ export function createMessagesStorageConversation(context: SlurpMessagesContext)
             if (followUp?.status !== "claimed") return;
           }
           await tx.insert(slurpMessages).values(message);
+          // A quote, a delivery or a system note is not an answer. Letting one clear the obligation
+          // meant a fan who wrote just before an automatic delivery never got a reply.
+          const notAnAnswer = kind === "system" || kind.startsWith("commission");
           const newerViewer =
-            input.role === "creator" && input.preserveReplyObligation
+            input.role === "creator" && (input.preserveReplyObligation || notAnAnswer)
               ? current.needsReply === "true"
               : input.role === "creator" && input.replyObligationCreatedAt
                 ? (
@@ -299,22 +302,19 @@ export function createMessagesStorageConversation(context: SlurpMessagesContext)
           .where(and(eq(slurpMessages.threadId, threadId), eq(slurpMessages.role, "viewer")))
           .orderBy(desc(slurpMessages.createdAt), desc(slurpMessages.id))
           .limit(1);
+        // A newer fan message voids this reply; the next one answers both messages together.
         if (latestRows[0]?.id !== claim.triggerMessageId) return;
-        const newerViewerMessage = false;
         await tx.insert(slurpMessages).values(first);
         if (rows.length > 0) await tx.insert(slurpReplyBubbles).values(rows);
         // Answering is reading. Nothing cleared this before, so `listThreadsAwaitingReply` kept
         // handing the same answered message back to the queued-reply scheduler and the creator
-        // re-answered it once a minute, forever, until the fan spoke again. A message that landed
-        // while this reply was being written is a fresh obligation and stays unread.
-        if (!newerViewerMessage) {
-          for (const row of await tx
-            .select()
-            .from(slurpMessages)
-            .where(and(eq(slurpMessages.threadId, threadId), eq(slurpMessages.role, "viewer")))) {
-            if (row.readAt) continue;
-            await tx.update(slurpMessages).set({ readAt: timestamp }).where(eq(slurpMessages.id, row.id));
-          }
+        // re-answered it once a minute, forever, until the fan spoke again.
+        for (const row of await tx
+          .select()
+          .from(slurpMessages)
+          .where(and(eq(slurpMessages.threadId, threadId), eq(slurpMessages.role, "viewer")))) {
+          if (row.readAt) continue;
+          await tx.update(slurpMessages).set({ readAt: timestamp }).where(eq(slurpMessages.id, row.id));
         }
         await tx
           .update(slurpMessageClaims)
@@ -327,9 +327,9 @@ export function createMessagesStorageConversation(context: SlurpMessagesContext)
             lastMessageAt: timestamp,
             lastMessagePreview: slurpMessagePreview("text", first.content, 0),
             viewerUnread: String(Number(current.viewerUnread) + 1),
-            creatorUnread: newerViewerMessage ? current.creatorUnread : "0",
-            needsReply: newerViewerMessage ? "true" : "false",
-            replyNotBeforeAt: newerViewerMessage ? current.replyNotBeforeAt : null,
+            creatorUnread: "0",
+            needsReply: "false",
+            replyNotBeforeAt: null,
             rapport: JSON.stringify(rapport),
             updatedAt: timestamp,
           })

@@ -39,10 +39,27 @@ export function capFallbackImagePrompt(value: string): string {
   return (wordEnd >= floor ? head.slice(0, wordEnd) : head).trim();
 }
 
+/**
+ * Drop a leading field label from an appearance block.
+ *
+ * The resolver formats it as `<name>'s Appearance: ...`, and that string is concatenated straight
+ * into the prompt the image provider receives. The rewrite is told in as many words never to copy
+ * a label like `Appearance:` into an image prompt; the fallback path was sending one every time.
+ */
+export function stripAppearanceLabel(value: string): string {
+  return value
+    .split("\n")
+    .map((line) => line.replace(/^\s*(?:[^\n:]{1,60}'s\s+)?(?:character\s+)?appearance(?:\s+notes)?\s*:\s*/iu, ""))
+    .join("\n")
+    .trim();
+}
+
 /** Select only the visual prompt that can be sent to an image provider. */
 export function selectSlpImageProviderPrompt(input: {
   rewrittenPrompt: string | null | undefined;
   rawPrompt: string;
+  /** Visual facts that must survive a capped fallback when the rewrite is unavailable. */
+  fallbackPrefix?: string;
   /** Never belongs in a visual prompt at any length, so it is matched whole. */
   privateContext?: ReadonlyArray<string | null | undefined>;
   /** Authored to steer the image, so only a copied block counts as a leak. */
@@ -54,7 +71,7 @@ export function selectSlpImageProviderPrompt(input: {
 }): string {
   const fallback = (reason: string) => {
     input.onFallback?.(reason);
-    return capFallbackImagePrompt(input.rawPrompt);
+    return capFallbackImagePrompt([input.fallbackPrefix?.trim(), input.rawPrompt].filter(Boolean).join("\n\n"));
   };
   const rewrittenPrompt = input.rewrittenPrompt?.trim();
   if (!rewrittenPrompt) {

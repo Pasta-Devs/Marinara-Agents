@@ -2,7 +2,14 @@
 // Slurp generation schemas. Split from slp-social.schema.ts to stay under the architecture
 // line budget; copied from the Engine Noodle schemas with values unchanged.
 // ──────────────────────────────────────────────
+import {
+  SLURP_CONTENT_DELIVERIES,
+  SLURP_CONTENT_INTENTS,
+  slurpContentDeliveryFits,
+  slurpIntentFitsAccess,
+} from "./slp-content-axes.js";
 import { z } from "zod";
+import { slpWardrobeSceneSchema } from "./slp-wardrobe.js";
 import {
   SLP_CREATOR_POST_CONTENT_MAX_LENGTH,
   SLP_CREATOR_POST_GUIDE_MAX_LENGTH,
@@ -72,11 +79,37 @@ const slpCreatorGenerationRequestShape = {
   uploadedImageUrl: z.string().trim().url().max(2000).optional(),
   imageCrop: slpPostImageCropSchema.optional(),
   poll: slpPollInputSchema.nullable().optional(),
+  /** A one-shot post purpose from the composer. Outranks the Creator's strategy for this post only. */
+  contentIntent: z.enum(SLURP_CONTENT_INTENTS).optional(),
+  /** One-shot delivery. It is paired with an intent so incompatible combinations fail early. */
+  contentDelivery: z.enum(SLURP_CONTENT_DELIVERIES).optional(),
 };
 
 export const slpCreatorGenerationRequestSchema = z
   .object({ ...slpCreatorGenerationRequestShape, access: slpPostAccessSchema.default("public") })
-  .strict();
+  .strict()
+  .superRefine((input, ctx) => {
+    if (input.contentIntent && !slurpIntentFitsAccess(input.contentIntent, input.access)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["contentIntent"],
+        message: "That purpose does not fit a locked post.",
+      });
+    }
+    if (input.contentDelivery && !input.contentIntent) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["contentDelivery"], message: "Choose a post purpose too." });
+    } else if (
+      input.contentDelivery &&
+      input.contentIntent &&
+      !slurpContentDeliveryFits(input.contentIntent, input.contentDelivery)
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["contentDelivery"],
+        message: "That delivery does not fit this post purpose.",
+      });
+    }
+  });
 
 export const slpGenerationRequestSchema = z.union([
   slpPublicGenerationRequestSchema,
@@ -102,10 +135,16 @@ export const slpGeneratedCreatorPostSchema = z
     title: slpCreatorPostTitleSchema,
     content: z.string().trim().min(1).max(SLP_CREATOR_POST_CONTENT_MAX_LENGTH),
     imagePrompt: z.string().max(2000).nullable().optional(),
+    scene: slpWardrobeSceneSchema.nullable().optional(),
     poll: slpPollInputSchema.nullable().optional(),
   })
   .strict()
-  .transform(({ title, content, imagePrompt }) => ({ title, content, imagePrompt: imagePrompt ?? null }));
+  .transform(({ title, content, imagePrompt, scene }) => ({
+    title,
+    content,
+    imagePrompt: imagePrompt ?? null,
+    scene: scene ?? null,
+  }));
 
 export const slpGeneratedCreatorReplySchema = z
   .object({ content: z.string().trim().min(1).max(SLP_CREATOR_REPLY_CONTENT_MAX_LENGTH) })

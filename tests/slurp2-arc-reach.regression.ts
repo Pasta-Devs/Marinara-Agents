@@ -95,12 +95,15 @@ assert.match(
   /slurpArcChapterMood\(after, \(await this\.getSettings\(\)\)\.arcAffectsMood\)/,
 );
 
-// Image prompt carries the chapter line, joined before identity protection.
+// Image prompt carries the chapter line, joined before identity protection. The draft is
+// `generated.imagePrompt` in classic mode and the situation-assembled brief in produce mode, so
+// the guard names the joined variable rather than either source: what matters is that the arc line
+// is inside the protected value, not which mode wrote the draft.
 assert.equal(slurpArcImageLine(arc), "The picture shows this moment of an ongoing story: packing (cozy tone).");
 assert.equal(slurpArcImageLine(null), null);
 assert.match(
   source("services/slurp/slurp-generation.service.ts"),
-  /protectCreatorGeneratedIdentity\(\s*generated\.imagePrompt && arcImageLine/,
+  /protectCreatorGeneratedIdentity\(\s*imageDraft && arcImageLine/,
 );
 
 // Profile proposal lifecycle: propose on chapter start, apply stores previous, revert proposal at end.
