@@ -12,6 +12,7 @@ import {
 } from "../../modules/settings/slp-backstage-format";
 import type { SlpBackstagePageProps } from "../backstage/slp-backstage-contract";
 import { SlurpPostGuidanceField } from "./SlpPostGuidanceField";
+import { SLURP_EXPLICIT_LEVELS } from "./slp-post-guidance-contract";
 import { SlurpPromptBlockBuilder } from "./SlpPromptBlockBuilder";
 import { SlpPromptOutcomeSection } from "./SlpPromptOutcomeCard";
 
@@ -106,6 +107,13 @@ export function SlpPromptsPanel(page: SlpBackstagePageProps) {
           })}
           customized={postGuidanceCustom}
         >
+          <SlurpExplicitLevelField
+            t={t}
+            value={(postGuidanceDraft.level ?? postGuidanceQuery.data?.defaults.level ?? "") as string}
+            builtIn={postGuidanceQuery.data?.builtInLevel ?? "suggestive"}
+            disabled={postGuidanceQuery.isLoading || postGuidanceQuery.isError}
+            onStage={(value) => stagePostGuidance("level", value)}
+          />
           {(["public", "locked"] as const).map((access) => (
             <SlurpPostGuidanceField
               key={access}
@@ -221,6 +229,63 @@ export function SlpPromptsPanel(page: SlpBackstagePageProps) {
   );
 }
 
+/**
+ * How far this install's pictures go.
+ *
+ * Typed rather than another free-text field: the visual brief carries `sexualLevel` as a value,
+ * and prose in the content menu cannot set it. Without this the brief was pinned to "none" for
+ * every post that was not a teaser — including every locked post, which is the one somebody paid
+ * for.
+ *
+ * This is the global level. A Creator overrides it on their own Backstage page, exactly like the
+ * two guidance texts above.
+ */
+function SlurpExplicitLevelField({
+  t,
+  value,
+  builtIn,
+  disabled,
+  onStage,
+}: {
+  t: SlpBackstagePageProps["t"];
+  value: string;
+  builtIn: string;
+  disabled: boolean;
+  onStage: (value: string) => void;
+}) {
+  const levels = ["", ...SLURP_EXPLICIT_LEVELS] as const;
+  return (
+    <Field
+      settingKey="postGuidance"
+      label={t("ui.slurp.settings.prompts.explicitLevel", { defaultValue: "How far pictures go" })}
+      detail={t("ui.slurp.settings.prompts.explicitLevelDetail", {
+        defaultValue:
+          "Locked posts go this far. Public posts stay one step below, so the free feed advertises the paid one. Housekeeping posts are never sexual.",
+      })}
+    >
+      <div className="flex flex-wrap gap-2">
+        {levels.map((level) => (
+          <button
+            key={level || "inherit"}
+            type="button"
+            disabled={disabled}
+            aria-pressed={value === level}
+            onClick={() => onStage(level)}
+            className={`min-h-11 rounded-full px-4 text-sm font-semibold ring-1 ring-inset focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] disabled:opacity-50 ${value === level ? "bg-[var(--slurp-nav-active)] text-[var(--slurp-text)] ring-[var(--noodle-accent)]/45" : "bg-[var(--slurp-canvas)] text-[var(--slurp-muted)] ring-[var(--slurp-outline)] hover:text-[var(--slurp-text)]"}`}
+          >
+            {level
+              ? t(`ui.slurp.settings.prompts.explicitLevel.${level}`)
+              : t("ui.slurp.settings.prompts.explicitLevelShipped", {
+                  level: t(`ui.slurp.settings.prompts.explicitLevel.${builtIn}`),
+                  defaultValue: "Shipped ({{level}})",
+                })}
+          </button>
+        ))}
+      </div>
+    </Field>
+  );
+}
+
 function PromptOptions({ label, children }: { label: string; children: ReactNode }) {
   return (
     <details className="group rounded-lg bg-[var(--slurp-canvas)] ring-1 ring-inset ring-[var(--slurp-outline)]">
@@ -270,8 +335,8 @@ function PromptPresetToolbar({
     { label: t("ui.slurp.settings.presets.import"), action: () => presetImportRef.current?.click(), disabled: false },
   ];
   return (
-    <div className="flex items-end gap-2">
-      <label className="block min-w-40 text-[0.68rem] font-bold uppercase tracking-[0.08em] text-[var(--slurp-muted)]">
+    <div className="flex w-full items-end gap-2 sm:w-auto">
+      <label className="block min-w-0 flex-1 text-[0.68rem] sm:min-w-40 sm:flex-none font-bold uppercase tracking-[0.08em] text-[var(--slurp-muted)]">
         {t("ui.slurp.settings.prompts.preset", { defaultValue: "Preset" })}
         <select
           value={selectedPreset ? selectedPresetName : ""}

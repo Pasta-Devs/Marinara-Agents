@@ -12,6 +12,7 @@ import {
   Pencil,
   RefreshCw,
   Share2,
+  Download,
 } from "lucide-react";
 import { useState } from "react";
 import type { SlpCreatorPostView, SlpCreatorStageProfile } from "../../../../../shared/src/slp/slp-social.types.js";
@@ -23,6 +24,7 @@ import { formatTime } from "../../base/ui/slp-date-time";
 import { useTranslation as useUiTranslation } from "react-i18next";
 import { SlurpCelebrationRing, SlurpSparkleVeil } from "../../base/chrome/SlpSparkleVeil";
 import { SlurpCoin, SlurpCoinBurst } from "../coin/SlpCoin";
+import { api } from "../../../lib/api-client";
 
 const SLURP_FEED_MEDIA_RATIO_CLASS = "aspect-[4/3] sm:aspect-[16/10]";
 
@@ -181,14 +183,28 @@ export function LockedSlurpPostCard({
                   {localizeUi("ui.noodle.lockednoodlerpostcard.managePost")}
                 </button>
               )}
+              {shownMediaSrc && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPostMenuOpen(false);
+                    void api
+                      .download(`/slurp2/noodler/posts/${encodeURIComponent(post.id)}/media`, `slurp-${post.id}-teaser`)
+                      .catch(() => undefined);
+                  }}
+                  className="flex min-h-10 w-full items-center gap-2 px-3 text-start hover:bg-[var(--accent)]"
+                >
+                  <Download size={14} />
+                  {localizeUi("ui.slurp.post.downloadImage", { defaultValue: "Download image" })}
+                </button>
+              )}
               <button
                 type="button"
-                disabled
                 className="flex min-h-10 w-full items-center gap-2 px-3 text-start text-[var(--muted-foreground)] opacity-60"
-                title={localizeUi("ui.slurp.post.unlockToShare", { defaultValue: "Unlock this post to share it." })}
+                onClick={() => setPostMenuOpen(false)}
               >
                 <Share2 size={14} />
-                {localizeUi("ui.slurp.post.share", { defaultValue: "Share as image" })}
+                {localizeUi("ui.slurp.post.share", { defaultValue: "Share post" })}
               </button>
             </div>
           )}

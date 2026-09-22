@@ -342,6 +342,12 @@ export function SlurpHome({ navigation, onNavigate, onLeave }: SlurpHomeProps) {
         onFeedShown={markFeedShown}
         onOpenWallet={goToWallet}
         walletCoins={activeWalletCoins}
+        onLoadMore={model.viewerQuery.loadMore}
+        hasMore={Boolean(model.viewerQuery.data?.nextCursor)}
+        deletingPostIds={model.deletingPostIds}
+        deletedPostIds={model.deletedPostIds}
+        restoringPostIds={model.restoringPostIds}
+        onRestorePost={model.restoreNoodlePost}
         isLoading={viewerQuery.isLoading}
         isError={viewerQuery.isError}
         onRetry={() => void viewerQuery.refetch()}

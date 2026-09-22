@@ -9,6 +9,7 @@ import {
   slurpIntentFitsAccess,
 } from "./slp-content-axes.js";
 import { z } from "zod";
+import { slpWardrobeSceneSchema } from "./slp-wardrobe.js";
 import {
   SLP_CREATOR_POST_CONTENT_MAX_LENGTH,
   SLP_CREATOR_POST_GUIDE_MAX_LENGTH,
@@ -134,10 +135,16 @@ export const slpGeneratedCreatorPostSchema = z
     title: slpCreatorPostTitleSchema,
     content: z.string().trim().min(1).max(SLP_CREATOR_POST_CONTENT_MAX_LENGTH),
     imagePrompt: z.string().max(2000).nullable().optional(),
+    scene: slpWardrobeSceneSchema.nullable().optional(),
     poll: slpPollInputSchema.nullable().optional(),
   })
   .strict()
-  .transform(({ title, content, imagePrompt }) => ({ title, content, imagePrompt: imagePrompt ?? null }));
+  .transform(({ title, content, imagePrompt, scene }) => ({
+    title,
+    content,
+    imagePrompt: imagePrompt ?? null,
+    scene: scene ?? null,
+  }));
 
 export const slpGeneratedCreatorReplySchema = z
   .object({ content: z.string().trim().min(1).max(SLP_CREATOR_REPLY_CONTENT_MAX_LENGTH) })

@@ -51,6 +51,7 @@ assert.equal(record.angle?.place, variation.place);
 assert.equal(record.messages.length, 2);
 assert.equal(record.rawResponse, '{"title":"t","content":"c"}');
 assert.equal(record.imageBrief, "brief");
+assert.equal(record.providerPrompt, undefined, "the provider prompt is added only after image prompt rewriting");
 
 // The post carries only an id; the record is served by a managed route and deleted with its post.
 const generation = slurp2Source(
@@ -58,6 +59,15 @@ const generation = slurp2Source(
 );
 assert.match(generation, /\.\.\.\(deepDetailsId \? \{ deepDetailsId \} : \{\}\)/u);
 assert.match(generation, /input\.previewOnly \? null : newId\(\)/u);
+assert.match(
+  generation,
+  /recordSlurpProviderPrompt/u,
+  "successful generation records the exact provider prompt privately",
+);
+const detailsStorage = slurp2Source(
+  "packages/slurp2/src/engine/packages/server/src/slp/data/feed/slp-post-deep-details-storage.ts",
+);
+assert.match(detailsStorage, /providerPrompt/u);
 const postStorage = slurp2Source(
   "packages/slurp2/src/engine/packages/server/src/slp/data/feed/slp-feed-post-storage-2.ts",
 );

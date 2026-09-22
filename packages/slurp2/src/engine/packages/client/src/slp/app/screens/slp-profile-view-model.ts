@@ -15,7 +15,7 @@ import { useCreatorViewer } from "../../features/feed/slp-feed-viewer-hooks";
 import { useSlurpCompose } from "../../features/messages/slp-messages-hooks";
 import { useSlurpArcs } from "../../features/projects/slp-projects-hooks";
 import { useSlurpSettings } from "../../features/settings/slp-settings-hooks";
-import { type SlpPostCardCtx } from "../../modules/post/SlpPostCard";
+import { type SlpPostCardCtx } from "../../modules/post/SlpPostTypes";
 import { useSlurpMediaSrc } from "../../base/media/slp-media-src";
 import { slurpCreatorStatus } from "../../modules/creator/slp-creator-status";
 import { useTranslation as useUiTranslation } from "react-i18next";
@@ -172,6 +172,9 @@ export function useStageProfileViewModel(props: StageProfileViewProps) {
     handle: profile.handle,
     bio: profile.bio,
     stagePersonality: profile.stagePersonality,
+    appearance: profile.appearance,
+    wardrobe: profile.wardrobe,
+    locations: profile.locations,
     disclosureMode: profile.disclosureMode ?? "hinted",
     gender: profile.gender,
     tags: profile.tags,

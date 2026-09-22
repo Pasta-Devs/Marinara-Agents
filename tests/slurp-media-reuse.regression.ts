@@ -157,7 +157,7 @@ assert.match(generation, /persistCreatorPostWithUploadedMedia\(account\.id, post
 assert.match(generation, /const postImages = imagesEnabled && !textOnly && !reusedMedia;/u);
 assert.match(generation, /\.\.\.\(shootId \? \{ shootId \} : \{\}\),/u);
 assert.match(generation, /brief: draftImagePrompt,/u);
-assert.match(generation, /noodlerMediaPath: stagedReuse\.filePath/u);
+assert.match(generation, /noodlerMediaPath: stagedMedia\.filePath/u);
 const reserve = slurp2Source(
   "packages/slurp2/src/engine/packages/server/src/slp/features/feed/reserve/slp-reserve-operation.ts",
 );

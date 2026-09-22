@@ -84,21 +84,29 @@ export function slurpDeliveryFits(intent: SlurpContentIntent, delivery: SlurpCon
  * `teaser` is absent because it is already decided elsewhere, and choosing it again here would let
  * the two decisions disagree.
  *
- * Ordinary life is most of it. A feed where every entry is a sale reads exactly as false as one
- * where every entry is a confession, and the thing a person mostly does is have a day.
+ * Ordinary life used to be most of it, at casual 38. That is the right shape for a diary and the
+ * wrong one for a page somebody subscribes to: adding casual, behind-the-scenes, appreciation and
+ * business together put 61% of the feed on intents whose job is explicitly not to deliver
+ * anything. The work a reader is paying for — a shoot, what it continues, and what somebody asked
+ * for — now carries the page, and the ordinary day is what stops it reading as a firehose rather
+ * than the other way round.
+ *
+ * A feed where every entry is a sale still reads as false, so casual keeps the largest single
+ * share after `set`, and the housekeeping intents are kept rather than cut: they land precisely
+ * because they are rare.
  *
  * The bottom of this list is the reason these are weights and not rotation slots. Ten slots meant
  * one boundary post every ten, which at four posts a day is a Creator announcing a limit every
  * second afternoon. A business post lands because it is rare; on a schedule it is just nagging.
  */
 const INTENT_WEIGHTS: Record<Exclude<SlurpContentIntent, "teaser">, number> = {
-  casual: 38,
-  set: 16,
-  callback: 13,
-  request: 10,
-  behind_the_scenes: 9,
-  appreciation: 8,
-  business: 6,
+  casual: 23,
+  set: 28,
+  callback: 15,
+  request: 16,
+  behind_the_scenes: 8,
+  appreciation: 6,
+  business: 4,
 };
 
 /**
@@ -106,16 +114,20 @@ const INTENT_WEIGHTS: Record<Exclude<SlurpContentIntent, "teaser">, number> = {
  *
  * Text-only was only ever what happened when image generation was off or failed. A person also
  * posts words on purpose: a schedule note does not need a selfie, and neither does "thank you".
+ *
+ * These were high enough to matter: weighted by intent they put about one post in six on a page of
+ * pictures with no picture. A words-only post should be a change of pace, so the rates now sit
+ * around one in twenty-five overall, and only housekeeping keeps a real share of them.
  */
 const TEXT_ONLY_WEIGHTS: Record<SlurpContentIntent, number> = {
-  casual: 25,
-  teaser: 10,
+  casual: 8,
+  teaser: 0,
   set: 0,
-  behind_the_scenes: 15,
-  request: 10,
-  appreciation: 30,
+  behind_the_scenes: 5,
+  request: 3,
+  appreciation: 10,
   callback: 0,
-  business: 60,
+  business: 25,
 };
 
 /** The shipped weights with the Creator's saved ones applied. All zero means "use the shipped ones". */

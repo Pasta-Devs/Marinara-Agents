@@ -32,12 +32,13 @@ function mergeSlurpViewerShell(
   };
 }
 export function useCreatorViewer(personaId: string | null, enabled = true) {
-  return useQuery({
+  const qc = useQueryClient();
+  const query = useQuery({
     queryKey: slpKeys.viewer(personaId ?? "none"),
     queryFn: async ({ signal }) => {
       const encodedPersonaId = encodeURIComponent(personaId!);
       type ViewerPost = SlurpViewerScope["creators"][number]["posts"][number] & { story?: boolean };
-      type FeedPage = {
+      type FeedResponse = SlurpViewerScope & {
         items: Array<{
           creatorAccountId: string;
           post: ViewerPost;
@@ -45,37 +46,19 @@ export function useCreatorViewer(personaId: string | null, enabled = true) {
         total: number;
         nextCursor: SlurpPageCursor | null;
       };
-      const feedItems: FeedPage["items"] = [];
-      let cursor: SlurpPageCursor | null = null;
-      do {
-        const page: FeedPage = await api.get<{
-          items: Array<{
-            creatorAccountId: string;
-            post: SlurpViewerScope["creators"][number]["posts"][number];
-          }>;
-          total: number;
-          nextCursor: SlurpPageCursor | null;
-        }>(`/slurp2/slurp/viewer/feed?personaId=${encodedPersonaId}&tab=all&limit=20${cursorQuery(cursor)}`, {
-          signal,
-        });
-        feedItems.push(...page.items);
-        cursor = page.nextCursor;
-      } while (cursor);
-      // Read the shell after the feed. A newly-created Creator account and its first post can
-      // otherwise be observed from different file-store snapshots when these requests start
-      // together, leaving the client with a post whose Creator is absent from the shell.
-      const scope = await api.get<SlurpViewerScope>(`/slurp2/slurp/viewer?personaId=${encodedPersonaId}`, {
-        signal,
-      });
+      const page = await api.get<FeedResponse>(
+        `/slurp2/slurp/viewer/feed?personaId=${encodedPersonaId}&tab=all&limit=20`,
+        { signal },
+      );
       const postsByCreator = new Map<string, SlurpViewerScope["creators"][number]["posts"]>();
-      for (const item of feedItems) {
+      for (const item of page.items) {
         const posts = postsByCreator.get(item.creatorAccountId) ?? [];
         posts.push(item.post);
         postsByCreator.set(item.creatorAccountId, posts);
       }
       return {
-        ...scope,
-        creators: scope.creators.map((creator) => ({
+        ...page,
+        creators: page.creators.map((creator) => ({
           ...creator,
           posts: postsByCreator.get(creator.profile.id) ?? [],
         })),
@@ -87,6 +70,38 @@ export function useCreatorViewer(personaId: string | null, enabled = true) {
     refetchInterval: enabled && personaId ? 30_000 : false,
     refetchIntervalInBackground: false,
   });
+  const loadMore = async () => {
+    const current = qc.getQueryData<SlurpViewerScope & { nextCursor?: SlurpPageCursor | null }>(
+      slpKeys.viewer(personaId ?? "none"),
+    );
+    if (!personaId || !current?.nextCursor) return false;
+    type FeedResponse = SlurpViewerScope & {
+      items: Array<{ creatorAccountId: string; post: SlurpViewerScope["creators"][number]["posts"][number] }>;
+      nextCursor: SlurpPageCursor | null;
+    };
+    const page = await api.get<FeedResponse>(
+      `/slurp2/slurp/viewer/feed?personaId=${encodeURIComponent(personaId)}&tab=all&limit=20${cursorQuery(current.nextCursor)}`,
+    );
+    qc.setQueryData(slpKeys.viewer(personaId), (value: typeof current | undefined) => {
+      if (!value) return value;
+      return {
+        ...value,
+        nextCursor: page.nextCursor,
+        creators: value.creators.map((creator) => ({
+          ...creator,
+          posts: [
+            ...creator.posts,
+            ...page.items
+              .filter((item) => item.creatorAccountId === creator.profile.id)
+              .map((item) => item.post)
+              .filter((post) => !creator.posts.some((existing) => existing.id === post.id)),
+          ],
+        })),
+      };
+    });
+    return true;
+  };
+  return { ...query, loadMore };
 }
 /**
  * Unseen-post count for the public Noodle entry point. Reads the bootstrap query both Noodle

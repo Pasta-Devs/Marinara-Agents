@@ -153,6 +153,22 @@ export const slpInteractions = fileTable(
   },
 );
 
+export const slpReports = fileTable(
+  "slurp2_reports",
+  {
+    id: text("id").primaryKey(),
+    reporterAccountId: text("reporter_account_id").notNull(),
+    creatorAccountId: text("creator_account_id").notNull(),
+    targetType: text("target_type").notNull(),
+    targetId: text("target_id").notNull(),
+    reason: text("reason").notNull(),
+    details: text("details").notNull().default(""),
+    snapshot: text("snapshot").notNull().default("{}"),
+    createdAt: text("created_at").notNull(),
+  },
+  { uniqueBy: [{ keys: ["reporterAccountId", "targetType", "targetId"] }] },
+);
+
 export const slpCreatorCreatorReplyClaims = fileTable(
   "slurp2_creator_reply_claims",
   {

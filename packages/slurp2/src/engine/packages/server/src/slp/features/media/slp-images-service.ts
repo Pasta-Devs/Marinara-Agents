@@ -9,9 +9,12 @@ import { getErrorMessage } from "../../modules/creators/slp-public-support.js";
 import { NOODLER_MEDIA_PREFIX, slpCreatorPostMediaUrl } from "../../base/media/slp-media.js";
 import { resolveImageConnectionFallback } from "../../../services/generation/media-connection-fallback.js";
 import { generateImage, stageImageToDisk, type StagedGalleryImage } from "../../../services/image/image-generation.js";
+import { generateSlurpImageWithHost, stageSlurpImageWithHost } from "../../base/host/slp-generation-integrations.js";
 import { resolveConnectionImageDefaults } from "../../../services/image/image-generation-defaults.js";
 import { compileImagePrompt, resolveImageStyleGuidanceText } from "../../../services/image/image-prompt-compiler.js";
 import { resolveImagePromptReviewSize } from "../../../services/image/image-prompt-review.js";
+import type { SlurpVisualBrief } from "../../base/media/slp-visual-brief.js";
+import { slurpVisualBriefPromptViolatesPolicy } from "../../base/media/slp-visual-brief.js";
 import { loadImageGenerationUserSettings } from "../../../services/image/image-generation-settings.js";
 import { resolveIllustratorCharacterReferences } from "../../../services/image/illustrator-references.js";
 import { createCharactersStorage } from "../../../services/storage/characters.storage.js";
@@ -28,7 +31,7 @@ import {
 import { characterAppearanceFromRow, characterSlpImageContextFromRow } from "./slp-public-images-service.js";
 import type { SlpImagePromptReviewItem, ReviewedSlpImagePrompt } from "./slp-public-images-service.js";
 import { characterNameFromRow } from "../../modules/creators/slp-public-support.js";
-import { selectSlpImageProviderPrompt } from "../../base/media/slp-image-prompt.js";
+import { selectSlpImageProviderPrompt, stripAppearanceLabel } from "../../base/media/slp-image-prompt.js";
 import { slurpImageExtension } from "../../base/media/slp-image-format.js";
 import { slurpPromptContext } from "../../base/prompting/slp-prompt-blocks.js";
 
@@ -55,6 +58,8 @@ export async function generateCreatorPostImage(input: {
   disclosureMode: SlpIdentityDisclosure;
   postContent: string;
   draftPrompt: string;
+  contentPolicy?: string;
+  visualBrief?: SlurpVisualBrief;
   settings: Pick<
     SlurpSettings,
     | "imageGenerationPrompt"
@@ -92,6 +97,8 @@ export async function generateCreatorPostImage(input: {
   metadata: Record<string, unknown>;
   preview: Omit<SlpImagePromptReviewItem, "id"> | null;
   stagedMedia: StagedGalleryImage | null;
+  /** Exact positive prompt sent to the image provider. Kept out of public post metadata. */
+  providerPrompt: string;
 }> {
   const imageSettings = await loadImageGenerationUserSettings(input.db);
   const redactIdentity = (value: string) => {
@@ -116,7 +123,15 @@ export async function generateCreatorPostImage(input: {
     input.imageConnection.id,
   );
 
-  let characterDescription = "";
+  // The Creator's own appearance, written on the Creator rather than borrowed from a card.
+  //
+  // It is applied unconditionally, unlike the block below it. `imageGenerationIncludeDescriptions`
+  // decides whether to pull the *source character's* description into the picture; it was never
+  // meant to decide whether the picture knows who the Creator is. With it off, a Creator with no
+  // linked source, or a source card with an empty Appearance field, the image model received a
+  // scene containing nobody and invented somebody — a different somebody every post.
+  const stageAppearance = input.account.settings.stage?.appearance?.trim() ?? "";
+  let characterDescription = stageAppearance;
   let characterImageInstructions = "";
   let characterPersonality = "";
   let referenceImages: string[] | undefined;
@@ -142,7 +157,12 @@ export async function generateCreatorPostImage(input: {
   // Every mode shows the same body — it is the page. Reducing a concealed creator to a handful of
   // approved tokens made them shapeless without hiding anything linkable, since a build and a hair
   // colour identify nobody.
-  if (!input.suppressCharacterContext && sourceAppearance && input.settings.imageGenerationIncludeDescriptions) {
+  if (
+    !stageAppearance &&
+    !input.suppressCharacterContext &&
+    sourceAppearance &&
+    input.settings.imageGenerationIncludeDescriptions
+  ) {
     characterDescription = sourceAppearance;
   }
   if (referenceSubject) {
@@ -189,7 +209,11 @@ export async function generateCreatorPostImage(input: {
           promptText: [input.account.displayName, input.postContent, input.draftPrompt].join("\n"),
           maxReferences: 6,
         });
-        if (input.settings.imageGenerationIncludeDescriptions && referenceResolution.appearanceBlock) {
+        if (
+          !stageAppearance &&
+          input.settings.imageGenerationIncludeDescriptions &&
+          referenceResolution.appearanceBlock
+        ) {
           characterDescription = referenceResolution.appearanceBlock;
         }
         if (input.settings.imageGenerationUseAvatarReferences && referenceResolution.referenceImages.length > 0) {
@@ -202,11 +226,18 @@ export async function generateCreatorPostImage(input: {
   const postPrompt = await loadPrompt(input.promptOverrides, NOODLE_IMAGE_POST, {
     authorName: input.account.displayName,
     postContent: input.postContent,
+    visualBrief: input.visualBrief,
     draftPrompt: input.draftPrompt,
     userInstructions: input.settings.imageGenerationPrompt,
-    characterDescription,
+    characterDescription: stripAppearanceLabel(characterDescription),
     characterImageInstructions,
-    characterPersonality,
+    // Empty on purpose. The default template concatenates this straight into the prompt the image
+    // provider receives, and "arrogant, impatient with staged sentimentality" is not a visual
+    // fact — it is noise a diffusion model still tries to draw. The rewrite already treats
+    // personality as private context that must never appear in a visual prompt; the template that
+    // produces the fallback prompt should not be the one place that disagrees. A custom template
+    // that genuinely wants it can still read the character card.
+    characterPersonality: "",
   });
   const compiledPrompt = compileImagePrompt({
     kind: "illustration",
@@ -273,6 +304,7 @@ export async function generateCreatorPostImage(input: {
       characterDescription ? `Appearance:\n${characterDescription}` : "",
       characterPersonality ? `Personality:\n${characterPersonality}` : "",
       characterImageInstructions ? `Character image preferences:\n${characterImageInstructions}` : "",
+      input.contentPolicy ? `Creator content policy:\n${input.contentPolicy}` : "",
     ]
       .filter(Boolean)
       .join("\n\n"),
@@ -289,6 +321,7 @@ export async function generateCreatorPostImage(input: {
     ? await rewriteSlpImagePrompt({
         db: input.db,
         prompt: rawRewriteInput,
+        postContent: input.postContent,
         interpretationInstruction: input.settings.imagePromptInterpretation,
         instructions: redactIdentity(imagePromptInstructions),
         characterContext,
@@ -310,9 +343,13 @@ export async function generateCreatorPostImage(input: {
         imageDefaults,
       })
     : null;
+  const acceptedRewrittenPrompt =
+    input.visualBrief && rewrittenPrompt && slurpVisualBriefPromptViolatesPolicy(input.visualBrief, rewrittenPrompt)
+      ? null
+      : compiledRewrittenPrompt?.prompt || rewrittenPrompt;
   const finalPromptBase = redactIdentity(
     selectSlpImageProviderPrompt({
-      rewrittenPrompt: compiledRewrittenPrompt?.prompt || rewrittenPrompt,
+      rewrittenPrompt: acceptedRewrittenPrompt,
       rawPrompt: rawProviderPrompt,
       rewriteAttempted,
       onFallback: (reason) =>
@@ -363,26 +400,49 @@ export async function generateCreatorPostImage(input: {
         height: previewSize.height,
       },
       stagedMedia: null,
+      providerPrompt: finalPrompt,
     };
   }
 
   const image = await generateSlpImageWithRetry(
     async (attempt) => {
       await input.beforeProviderAttempt?.(attempt);
-      return generateImage(imageSource, imageBaseUrl, input.imageConnection.apiKey || "", imageServiceHint, {
-        prompt: finalPrompt,
-        negativePrompt: finalNegativePrompt,
-        model: imageModel,
-        width: outputWidth,
-        height: outputHeight,
-        imageEndpointId: input.imageConnection.imageEndpointId || undefined,
-        comfyWorkflow: input.imageConnection.comfyuiWorkflow || undefined,
-        imageDefaults,
-        referenceImages,
-        debugMode: input.debugMode,
-        admissionMode: input.admissionMode,
-        fallback: imageFallback,
-      });
+      return (
+        generateSlurpImageWithHost({
+          source: imageSource,
+          baseUrl: imageBaseUrl,
+          apiKey: input.imageConnection.apiKey || "",
+          serviceHint: imageServiceHint,
+          request: {
+            prompt: finalPrompt,
+            negativePrompt: finalNegativePrompt,
+            model: imageModel,
+            width: outputWidth,
+            height: outputHeight,
+            imageEndpointId: input.imageConnection.imageEndpointId || undefined,
+            comfyWorkflow: input.imageConnection.comfyuiWorkflow || undefined,
+            imageDefaults,
+            referenceImages,
+            debugMode: input.debugMode,
+            admissionMode: input.admissionMode,
+            fallback: imageFallback,
+          },
+        }) ??
+        generateImage(imageSource, imageBaseUrl, input.imageConnection.apiKey || "", imageServiceHint, {
+          prompt: finalPrompt,
+          negativePrompt: finalNegativePrompt,
+          model: imageModel,
+          width: outputWidth,
+          height: outputHeight,
+          imageEndpointId: input.imageConnection.imageEndpointId || undefined,
+          comfyWorkflow: input.imageConnection.comfyuiWorkflow || undefined,
+          imageDefaults,
+          referenceImages,
+          debugMode: input.debugMode,
+          admissionMode: input.admissionMode,
+          fallback: imageFallback,
+        })
+      );
     },
     async (error, attempt, maxAttempts) => {
       await input.onProviderAttemptFailure?.(attempt);
@@ -403,12 +463,17 @@ export async function generateCreatorPostImage(input: {
   } catch (error) {
     logger.warn(error, "[slurp] Could not charge image energy for %s", input.account.id);
   }
-  const file = stageImageToDisk(
-    `${NOODLER_MEDIA_PREFIX}${input.account.id}`,
-    image.base64,
-    // The provider's declared extension is only a fallback; the bytes decide.
-    slurpImageExtension(image.base64, image.ext),
-  );
+  const file =
+    stageSlurpImageWithHost(
+      `${NOODLER_MEDIA_PREFIX}${input.account.id}`,
+      image.base64,
+      slurpImageExtension(image.base64, image.ext),
+    ) ??
+    stageImageToDisk(
+      `${NOODLER_MEDIA_PREFIX}${input.account.id}`,
+      image.base64,
+      slurpImageExtension(image.base64, image.ext),
+    );
   return {
     metadata: {
       imageGenerated: true,
@@ -419,6 +484,7 @@ export async function generateCreatorPostImage(input: {
     },
     preview: null,
     stagedMedia: file,
+    providerPrompt: finalPrompt,
   };
 }
 

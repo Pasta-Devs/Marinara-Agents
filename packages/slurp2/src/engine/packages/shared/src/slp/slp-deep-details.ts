@@ -48,9 +48,34 @@ export type SlpDeepDetailsRecord = {
   };
   messages: { role: string; content: string }[];
   rawResponse: string;
-  modelOutput: { title: string | null; content: string; imagePrompt: string | null };
+  modelOutput: {
+    title: string | null;
+    content: string;
+    imagePrompt: string | null;
+    scene?: {
+      wardrobeId?: string | null;
+      setting: string;
+      action: string;
+      expression: string;
+      visualDirection: string;
+    } | null;
+  };
+  wardrobeSelection?: { selectedId: string | null; requestedId: string | null; fallback: boolean };
   /** The picture brief built from the situation, or the model's own image prompt when there was none. */
   imageBrief: string | null;
+  /** The typed scene contract used to constrain image prompt interpretation, when available. */
+  visualBrief?: {
+    subject: string;
+    action: string;
+    setting: string;
+    company: string;
+    clothing: string | null;
+    camera: string;
+    mood: string | null;
+    sexualLevel: "none" | "suggestive" | "nudity" | "explicit";
+  } | null;
+  /** Exact positive prompt sent to the image provider, stored only in this Creator-private record. */
+  providerPrompt?: string | null;
   askedModelForImagePrompt: boolean;
 };
 

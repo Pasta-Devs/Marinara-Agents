@@ -314,10 +314,11 @@ export function createFeedPostStorage1(context: SlurpStorageContext) {
       if (accountIds.length === 0) return 0;
       return db.count(slpPosts, and(inArray(slpPosts.authorAccountId, accountIds), gt(slpPosts.createdAt, since)));
     },
-    async getNoodlerPostById(id: string): Promise<SlpCreatorManagedPost | null> {
+    async getNoodlerPostById(id: string, includeDeleted = false): Promise<SlpCreatorManagedPost | null> {
       const rows = await db.select().from(slpPosts).where(eq(slpPosts.id, id));
       const row = rows[0];
       if (!row || !(await this.getNoodlerAccountById(row.authorAccountId))) return null;
+      if (!includeDeleted && parseRecord(row.metadata).slurpDeletedAt) return null;
       return mapManagedPost(row);
     },
     async getNoodlerPostByWizardExecution(

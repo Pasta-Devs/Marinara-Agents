@@ -24,6 +24,26 @@
  * call with the production profile as input.
  */
 import type { SlurpPostVariation } from "./slp-post-variation.js";
+import type { SlurpExplicitLevel } from "./slp-post-guidance.js";
+import type { SlpWardrobeScene } from "../../../../../shared/src/slp/slp-wardrobe.js";
+
+/**
+ * What the picture may show, as one line the image model can act on.
+ *
+ * A single blanket "do not add exposed skin, undress, lingerie, or sexual emphasis" used to sit
+ * here on every post. On a page whose premise is that people pay for exactly that, it was the
+ * wrong default, and it was also the only thing said about the subject — so the posts that were
+ * allowed to be sexual had no ceiling either.
+ */
+const LEVEL_LINES: Record<SlurpExplicitLevel, string> = {
+  none: "This picture is not sexual. Do not add exposed skin, undress, lingerie, or sexual emphasis the situation above did not already call for.",
+  suggestive:
+    "This picture may be flirty and knowingly posed for the people who follow this page: clothed or partly undressed, suggestive rather than explicit. No nudity, no genitals, no sexual act.",
+  nudity:
+    "This picture may show them nude or partly nude, the way this page's paid posts do. Nudity on its own, not a sexual act, and never a second person's body.",
+  explicit:
+    "This picture may be explicit, the way this page's paid posts are. It is still one photograph this person took of themselves, so whatever it shows is their own body and nobody else's.",
+};
 
 export function slurpImageBrief(input: {
   /** From `slp-camera-source.ts`: who is holding the camera, and what that forbids. */
@@ -38,26 +58,55 @@ export function slurpImageBrief(input: {
   shoot?: { place: string; company: string; brief?: string } | null;
   /** From `slp-production-profile.ts`: how much work went into this picture. */
   effortInstruction?: string;
+  /** What this post may show, already resolved from the Creator's dial and the post's access. */
+  sexualLevel: SlurpExplicitLevel;
+  /** This Creator's own look and life. See `SlpCreatorStageFacts`. */
+  stageFacts?: { wardrobe?: string; locations?: string };
+  scene?: SlpWardrobeScene | null;
+  selectedWardrobe?: { name: string; description: string } | null;
 }): string {
-  const place = input.shoot?.place ?? input.variation.place;
+  const place = input.shoot?.place ?? input.scene?.setting?.trim() ?? input.variation.place;
   const company = input.shoot?.company ?? input.variation.company;
   return [
     input.shoot
       ? "One photograph this person took at an earlier shoot and is posting now."
       : "One photograph this person took and posted.",
     input.cameraInstruction,
+    // Her own places, so "somewhere other than where she usually posts from" has something to be
+    // other than. Without this the model picks a generic room and the axis has nothing to move.
+    ...(input.stageFacts?.locations?.trim()
+      ? [`The places she is usually in: ${input.stageFacts.locations.trim()}`]
+      : []),
     `Where: ${place}.`,
-    ...(input.shoot ? [] : [`What they are in the middle of: ${input.variation.moment}.`]),
+    ...(input.shoot
+      ? []
+      : [`What they are in the middle of: ${input.scene?.action?.trim() || input.variation.moment}.`]),
     `Who is around: ${company}.`,
     // The drop's own brief, so the clothes and light match the picture subscribers already saw.
     input.shoot?.brief ? `Same shoot, same clothes and light as this earlier picture: ${input.shoot.brief}` : "",
+    // Clothes she owns rather than whatever the image model reaches for. Skipped on a continuing
+    // shoot, where the clothes are already fixed by the drop's own brief above.
+    ...(!input.shoot?.brief && input.selectedWardrobe
+      ? [`Chosen look — ${input.selectedWardrobe.name}: ${input.selectedWardrobe.description}`]
+      : !input.shoot?.brief && input.stageFacts?.wardrobe?.trim()
+        ? [
+            `What she wears: ${input.stageFacts.wardrobe.trim()}. Dress her from this unless the situation says otherwise.`,
+          ]
+        : []),
+    ...(input.scene?.expression?.trim() ? [`Expression and body language: ${input.scene.expression.trim()}.`] : []),
+    ...(input.scene?.visualDirection?.trim()
+      ? [
+          `Creative visual direction: ${input.scene.visualDirection.trim()}. Keep it compatible with the camera and company above.`,
+        ]
+      : []),
     input.effortInstruction ?? "",
     input.story
       ? "This is a Story, so the picture has to carry the post on its own, but it is still a phone picture and not a production."
       : "",
-    // Without this the rewrite reliably adds undress and a flattering light that the situation
-    // never called for, which is what made unrelated Creators share one viewer gaze.
-    "Do not add exposed skin, undress, lingerie, or sexual emphasis that the situation above did not already call for.",
+    // Stated on every post, at whatever the level is. Left unsaid, the rewrite reliably adds
+    // undress and a flattering light the situation never called for, which is what made unrelated
+    // Creators share one viewer gaze.
+    LEVEL_LINES[input.sexualLevel],
   ]
     .filter(Boolean)
     .join("\n");

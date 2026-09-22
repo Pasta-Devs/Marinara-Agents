@@ -10,6 +10,8 @@ import { createAppSettingsStorage } from "../../../services/storage/app-settings
 import {
   sanitizeSlurpPostGuidance,
   selectSlurpCreatorMenu,
+  selectSlurpExplicitLevel,
+  type SlurpExplicitLevel,
   selectSlurpPostGuidance,
   type SlurpPostAccess,
   type SlurpPostGuidance,
@@ -54,6 +56,10 @@ export async function updateSlurpPostGuidance(
   });
   updateQueue = run.catch(() => undefined);
   return run;
+}
+
+export async function resolveSlurpExplicitLevel(db: DB, creatorId: string): Promise<SlurpExplicitLevel> {
+  return selectSlurpExplicitLevel(await getSlurpPostGuidance(db), creatorId);
 }
 
 export async function resolveSlurpPostGuidance(db: DB, creatorId: string, access: SlurpPostAccess): Promise<string> {

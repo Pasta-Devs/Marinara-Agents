@@ -1,5 +1,5 @@
 // The splash screen needs the shipped version and its public notes inside the client bundle.
-export const SLURP2_VERSION = "0.2.5";
+export const SLURP2_VERSION = "0.2.21";
 
 export interface Slurp2ReleaseEntry {
   version: string;
@@ -9,6 +9,78 @@ export interface Slurp2ReleaseEntry {
 
 /** The public release history shown in the Engine splash screen. */
 export const SLURP2_RELEASES: Slurp2ReleaseEntry[] = [
+  {
+    version: "0.2.21",
+    date: "2026-09-22",
+    notes: [
+      "Wardrobe import can scan whole lorebooks or only the entries you select.",
+      "Prompt Studio and private Deep Details now show the exact final prompt sent to the image provider, after Slurp applies its enforced visual rules and rewrite.",
+    ],
+  },
+  {
+    version: "0.2.20",
+    date: "2026-09-22",
+    notes: [
+      "Creators can keep a wardrobe of complete looks, review AI imports from their character, lorebooks, pasted text, or old wardrobe note, and let automatic posts choose without repeating the same outfit.",
+      "Automatic picture posts now connect the caption to a small scene plan while Slurp still enforces identity, clothing, camera reach, company, quality, and public or locked limits.",
+      "Random post variation no longer invents loneliness, low spirits, or a bad-money day. Real events and the source character can still make a serious post serious.",
+    ],
+  },
+  {
+    version: "0.2.19",
+    date: "2026-09-22",
+    notes: [
+      "A Creator now has her own appearance, wardrobe, and regular places, on her profile. The appearance goes with every picture, so she stops looking like somebody different in each post.",
+    ],
+  },
+  {
+    version: "0.2.18",
+    date: "2026-09-22",
+    notes: [
+      "How far a Creator's pictures go is now a setting. Locked posts deliver it, public posts stay one step below, and housekeeping posts stay clean.",
+      "Pictures stop coming out muddy and badly lit: the prompt asked the image model for a plain photograph and it was reading that as a bad one.",
+      "Creators post fewer arm's-length selfies and far fewer posts with no picture at all.",
+    ],
+  },
+  {
+    version: "0.2.17",
+    date: "2026-09-22",
+    notes: [
+      "A post with several pictures now opens with arrows and mini previews, and the feed card shows how many there are.",
+      "Prompt Studio: every prompt block can be switched off, and required blocks can be rewritten in your own words.",
+    ],
+  },
+  {
+    version: "0.2.16",
+    date: "2026-09-21",
+    notes: [
+      "Restoring a deleted post now brings it back at once, and a Restore near the end of the countdown no longer fails.",
+      "Share cards are drawn in the browser, so they carry the creator name, title, and caption again instead of the bare picture.",
+      "Opening a post no longer shows its picture twice.",
+    ],
+  },
+  {
+    version: "0.2.15",
+    date: "2026-09-21",
+    notes: [
+      "Deleted posts now leave a sparkling restore slot for 60 seconds before permanent cleanup.",
+      "Post image prompts now use a typed visual brief and preserve the planned scene through image interpretation.",
+    ],
+  },
+  {
+    version: "0.2.8",
+    date: "2026-09-21",
+    notes: [
+      "Feed loading has a softer status animation, older drops show a progress state, and deleted posts leave the timeline with a short gentle exit.",
+    ],
+  },
+  {
+    version: "0.2.7",
+    date: "2026-09-21",
+    notes: [
+      "The feed loads its first page first, older posts load on demand, and post edits and deletes update the visible feed without a full reload.",
+    ],
+  },
   {
     version: "0.2.5",
     date: "2026-09-21",

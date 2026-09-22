@@ -9,6 +9,7 @@ const brief = slurpImageBrief({
   cameraInstruction: slurpCameraSourceInstruction("tripod"),
   variation,
   story: false,
+  sexualLevel: "none",
 });
 
 // The brief comes from the situation that was decided before any text existed.
@@ -16,16 +17,37 @@ assert.ok(brief.includes(variation.place), "the brief must carry where they are"
 assert.ok(brief.includes(variation.moment), "the brief must carry what they are in the middle of");
 assert.ok(brief.includes(variation.company), "the brief must carry who is around");
 assert.match(brief, /Camera: propped up or on a timer/u);
-// Without this the rewrite reliably adds undress the situation never called for.
+// Without a line about the subject the rewrite reliably adds undress the situation never called
+// for. At "none" that line is still the refusal; at the levels above it, it is a ceiling.
 assert.match(brief, /Do not add exposed skin/u);
+assert.match(
+  slurpImageBrief({
+    cameraInstruction: slurpCameraSourceInstruction("tripod"),
+    variation,
+    story: false,
+    sexualLevel: "explicit",
+  }),
+  /may be explicit/u,
+  "a paid post must be allowed to deliver what it sells",
+);
 
 // A Story still has to be a phone picture, not a production.
 assert.match(
-  slurpImageBrief({ cameraInstruction: slurpCameraSourceInstruction("selfie"), variation, story: true }),
+  slurpImageBrief({
+    cameraInstruction: slurpCameraSourceInstruction("selfie"),
+    variation,
+    story: true,
+    sexualLevel: "none",
+  }),
   /Story/u,
 );
 assert.doesNotMatch(
-  slurpImageBrief({ cameraInstruction: slurpCameraSourceInstruction("selfie"), variation, story: false }),
+  slurpImageBrief({
+    cameraInstruction: slurpCameraSourceInstruction("selfie"),
+    variation,
+    story: false,
+    sexualLevel: "none",
+  }),
   /Story/u,
 );
 
@@ -52,6 +74,6 @@ assert.match(generation, /const askModelForImagePrompt = postImages && !briefedI
 // The response schema and the correction turn must agree with the post call, or a produce-mode
 // retry would demand a field the prompt no longer asks for.
 assert.equal(generation.match(/allowImagePrompt: askModelForImagePrompt/gu)?.length, 2);
-assert.match(generation, /content: askModelForImagePrompt/u);
+assert.match(generation, /allowScenePlan: askModelForScene/u);
 
 console.log("slurp image brief regression checks passed");

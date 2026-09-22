@@ -3,6 +3,7 @@ import { SlurpMomentsShelf, SlurpMomentViewer } from "./SlpScreenMoments";
 import { SubscriptionSections } from "./SlpScreenSubscriptions";
 import { LayoutGrid, List, Loader2, RefreshCw, Search, UserRound } from "lucide-react";
 import { Fragment, useEffect, useMemo, useState } from "react";
+import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { toast } from "sonner";
 import type { Persona } from "@marinara-engine/shared";
 import type { SlurpManagedStageProfile } from "../../base/state/slp-state-types";
@@ -15,10 +16,10 @@ import {
 import { useCreatorViewer } from "../../features/feed/slp-feed-viewer-hooks";
 import { useTranslation as useUiTranslation } from "react-i18next";
 import { cn } from "../../../lib/utils";
-import { SlpPostCardCtx } from "../../modules/post/SlpPostCard";
+import { SlpPostCardCtx } from "../../modules/post/SlpPostTypes";
 import { SlurpCoinAmount } from "../../modules/coin/SlpCoin";
 import { LockedSlurpPostCard } from "../../modules/post/SlpLockedPostCard";
-import { SlurpCreatorPostCard } from "../../modules/post/SlpCreatorPostCard";
+import { SlpPostCard } from "../../modules/post/SlpPostCard";
 import { SlurpMediaWall } from "./SlpScreenProfile";
 import {
   SLURP_TOGGLE_ACTIVE_CLASS,
@@ -38,6 +39,7 @@ import {
   SlurpPostDialog,
   LoadMoreFeedButton,
 } from "./SlpHomeHelpers";
+import { SlpDeletedPostSlot } from "./SlpDeletedPostSlot";
 import { deriveSlurpHubView } from "./slp-hub-view";
 import { useSlurpHubDiscoveryFilters } from "./slp-hub-discovery-filters";
 import { SlurpInlineSuggestedCreators } from "./SlpScreenSuggestedCreators";
@@ -85,6 +87,12 @@ export function ViewerHub({
   onFeedShown,
   onOpenWallet,
   walletCoins,
+  onLoadMore,
+  hasMore,
+  deletingPostIds,
+  deletedPostIds,
+  restoringPostIds = new Set<string>(),
+  onRestorePost,
 }: {
   personas: Persona[];
   personasLoading: boolean;
@@ -100,6 +108,12 @@ export function ViewerHub({
   onFeedShown: () => void;
   onOpenWallet: () => void;
   walletCoins: number;
+  onLoadMore: () => Promise<boolean>;
+  hasMore: boolean;
+  deletingPostIds: Set<string>;
+  deletedPostIds: Map<string, number>;
+  restoringPostIds?: Set<string>;
+  onRestorePost: (post: ReturnType<typeof toSlpPostCardModel>) => void;
   isLoading: boolean;
   isError: boolean;
   onRetry: () => void;
@@ -127,9 +141,11 @@ export function ViewerHub({
   storyLifetimeHours: number;
 }) {
   const { t: localizeUi } = useUiTranslation();
+  const reduceMotion = useReducedMotion();
   const [scroller, setScroller] = useState<HTMLDivElement | null>(null);
   const setStickyHeader = useHideOnScroll(scroller);
   const [discoverCollapsed, setDiscoverCollapsed] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [visibleFeedCount, setVisibleFeedCount] = useState(SLP_CREATOR_FEED_WINDOW_SIZE);
   const [activeMomentId, setActiveMomentId] = useState<string | null>(null);
   const [feedLayout, setFeedLayout] = useState<"list" | "wall">("list");
@@ -262,7 +278,7 @@ export function ViewerHub({
           onOpenProfile={postCardCtx.openAuthorProfile}
         />
       ) : (
-        <SlurpCreatorPostCard
+        <SlpPostCard
           post={toSlpPostCardModel(post, creator.profile)}
           ctx={{
             ...feedCardCtx,
@@ -452,7 +468,16 @@ export function ViewerHub({
         </div>
       )}
       {isLoading ? (
-        <SlurpFeedSkeleton />
+        <div className="relative">
+          <div className="flex items-center gap-2 px-4 pt-4 text-xs font-semibold text-[var(--noodle-accent)] sm:px-5">
+            <span className="relative flex h-5 w-5 items-center justify-center" aria-hidden="true">
+              <span className="absolute h-5 w-5 rounded-full border border-[var(--noodle-accent)]/25 motion-safe:animate-ping motion-reduce:animate-none" />
+              <span className="h-2 w-2 rounded-full bg-[var(--noodle-accent)]" />
+            </span>
+            <span>{localizeUi("ui.slurp.feed.loading", { defaultValue: "Loading latest drops" })}</span>
+          </div>
+          <SlurpFeedSkeleton />
+        </div>
       ) : isError ? (
         <EmptyState
           title={localizeUi("ui.noodle.viewerhub.noodlerCouldNotBeLoadedForThisPersona")}
@@ -530,72 +555,108 @@ export function ViewerHub({
             />
           ) : (
             <div className="space-y-4 bg-[var(--slurp-canvas)] px-3 pb-6 sm:px-4">
-              {visibleFeed.map((item, index) => (
-                <Fragment key={item.post.id}>
-                  {index === dividerIndex && <NewSinceLastVisitDivider />}
-                  {renderFeedPost(item)}
-                  {(() => {
-                    // One place decides whether this row gets an ad. The slot
-                    // maths used to be copy-pasted six times inside the JSX.
-                    //
-                    // Following carries ads too. The query already asks for a "following" context
-                    // tag, so suppressing them here meant the default tab — the one nobody has to
-                    // switch to — never showed a single ad. Search stays clean: results are the
-                    // answer to a question, not a place to sell.
-                    const ad = inlineAdForIndex(index);
-                    if (!inlineAdsEnabled || searchTerm || !ad) return null;
-                    return (
-                      <SlurpInlineAd
-                        promotion={ad}
-                        labels={{
-                          sponsored: localizeUi("ui.slurp.ads.sponsored"),
-                          hide: localizeUi("ui.slurp.ads.hide"),
-                          hideBrand: localizeUi("ui.slurp.ads.hideBrand"),
-                          actionFallback: localizeUi("ui.slurp.ads.view"),
-                        }}
-                        onAction={() => {
-                          // The rating system has no positive signal without this.
-                          recordSlurpAdAction.mutate({ personaId: scope!.viewer.entityId, promotionId: ad.id });
-                          toast.info(localizeUi("ui.slurp.ads.opened", { brand: ad.brand }));
-                        }}
-                        // A silently failed hide leaves the ad on screen, so say so rather than
-                        // letting the reader think it worked.
-                        onHide={() =>
-                          hideSlurpAd.mutate(
-                            { personaId: scope!.viewer.entityId, promotionId: ad.id },
-                            {
-                              onError: (error) =>
-                                toast.error(errorMessage(error, localizeUi("ui.slurp.ads.hideFailed"))),
-                            },
-                          )
-                        }
-                        onHideBrand={() =>
-                          hideSlurpAdBrand.mutate(
-                            { personaId: scope!.viewer.entityId, brand: ad.brand },
-                            {
-                              onError: (error) =>
-                                toast.error(errorMessage(error, localizeUi("ui.slurp.ads.hideFailed"))),
-                            },
-                          )
-                        }
-                      />
-                    );
-                  })()}
-                  {tab === "all" && !searchTerm && index === Math.min(2, visibleFeed.length - 1) && (
-                    <SlurpInlineSuggestedCreators
-                      creators={suggestedCreators}
-                      onOpenProfile={postCardCtx.openAuthorProfile}
-                    />
-                  )}
-                </Fragment>
-              ))}
-              {visibleFeed.length < feed.length && (
+              <AnimatePresence initial={false} mode="popLayout">
+                {visibleFeed.map((item, index) => (
+                  <motion.div
+                    key={item.post.id}
+                    layout
+                    initial={false}
+                    animate={
+                      deletingPostIds.has(item.post.id)
+                        ? { opacity: 1, height: "auto", y: 0 }
+                        : { opacity: 1, height: "auto", y: 0 }
+                    }
+                    transition={reduceMotion ? { duration: 0 } : { duration: 0.28, ease: "easeOut" }}
+                    className="overflow-hidden"
+                  >
+                    <Fragment>
+                      {index === dividerIndex && <NewSinceLastVisitDivider />}
+                      {deletingPostIds.has(item.post.id) || deletedPostIds.has(item.post.id) ? (
+                        <SlpDeletedPostSlot
+                          deleting={deletingPostIds.has(item.post.id)}
+                          restoring={restoringPostIds.has(item.post.id)}
+                          expiresAt={deletedPostIds.get(item.post.id)}
+                          onRestore={() => onRestorePost(toSlpPostCardModel(item.post, item.creator.profile))}
+                        />
+                      ) : (
+                        renderFeedPost(item)
+                      )}
+                      {(() => {
+                        // One place decides whether this row gets an ad. The slot
+                        // maths used to be copy-pasted six times inside the JSX.
+                        //
+                        // Following carries ads too. The query already asks for a "following" context
+                        // tag, so suppressing them here meant the default tab — the one nobody has to
+                        // switch to — never showed a single ad. Search stays clean: results are the
+                        // answer to a question, not a place to sell.
+                        const ad = inlineAdForIndex(index);
+                        if (!inlineAdsEnabled || searchTerm || !ad) return null;
+                        return (
+                          <SlurpInlineAd
+                            promotion={ad}
+                            labels={{
+                              sponsored: localizeUi("ui.slurp.ads.sponsored"),
+                              hide: localizeUi("ui.slurp.ads.hide"),
+                              hideBrand: localizeUi("ui.slurp.ads.hideBrand"),
+                              actionFallback: localizeUi("ui.slurp.ads.view"),
+                            }}
+                            onAction={() => {
+                              // The rating system has no positive signal without this.
+                              recordSlurpAdAction.mutate({ personaId: scope!.viewer.entityId, promotionId: ad.id });
+                              toast.info(localizeUi("ui.slurp.ads.opened", { brand: ad.brand }));
+                            }}
+                            // A silently failed hide leaves the ad on screen, so say so rather than
+                            // letting the reader think it worked.
+                            onHide={() =>
+                              hideSlurpAd.mutate(
+                                { personaId: scope!.viewer.entityId, promotionId: ad.id },
+                                {
+                                  onError: (error) =>
+                                    toast.error(errorMessage(error, localizeUi("ui.slurp.ads.hideFailed"))),
+                                },
+                              )
+                            }
+                            onHideBrand={() =>
+                              hideSlurpAdBrand.mutate(
+                                { personaId: scope!.viewer.entityId, brand: ad.brand },
+                                {
+                                  onError: (error) =>
+                                    toast.error(errorMessage(error, localizeUi("ui.slurp.ads.hideFailed"))),
+                                },
+                              )
+                            }
+                          />
+                        );
+                      })()}
+                      {tab === "all" && !searchTerm && index === Math.min(2, visibleFeed.length - 1) && (
+                        <SlurpInlineSuggestedCreators
+                          creators={suggestedCreators}
+                          onOpenProfile={postCardCtx.openAuthorProfile}
+                        />
+                      )}
+                    </Fragment>
+                  </motion.div>
+                ))}
+              </AnimatePresence>
+              {(visibleFeed.length < feed.length || hasMore) && (
                 <LoadMoreFeedButton
                   visible={visibleFeed.length}
-                  total={feed.length}
-                  onLoadMore={() =>
-                    setVisibleFeedCount((count) => Math.min(feed.length, count + SLP_CREATOR_FEED_WINDOW_SIZE))
-                  }
+                  total={hasMore ? Math.max(feed.length + 1, visibleFeed.length + 1) : feed.length}
+                  onLoadMore={async () => {
+                    if (visibleFeed.length < feed.length) {
+                      setVisibleFeedCount((count) => Math.min(feed.length, count + SLP_CREATOR_FEED_WINDOW_SIZE));
+                      return;
+                    }
+                    setLoadingMore(true);
+                    try {
+                      if (await onLoadMore()) {
+                        setVisibleFeedCount((count) => count + SLP_CREATOR_FEED_WINDOW_SIZE);
+                      }
+                    } finally {
+                      setLoadingMore(false);
+                    }
+                  }}
+                  loading={loadingMore}
                 />
               )}
             </div>
@@ -617,11 +678,12 @@ export function ViewerHub({
           onAction={authorProfile ? onOpenAuthorProfile : undefined}
         />
       )}
-      {openPostItem?.post.imageUrl && (
+      {/* A gallery post can carry its pictures in `images` with no single `imageUrl`. */}
+      {(openPostItem?.post.imageUrl || openPostItem?.post.images[0]) && (
         <SlurpPostDialog
           post={{
             ...toSlpPostCardModel(openPostItem.post, openPostItem.creator.profile),
-            imageUrl: openPostItem.post.imageUrl,
+            imageUrl: openPostItem.post.imageUrl ?? openPostItem.post.images[0]!.imageUrl,
           }}
           ctx={postCardCtx}
           onClose={() => setOpenPostId(null)}

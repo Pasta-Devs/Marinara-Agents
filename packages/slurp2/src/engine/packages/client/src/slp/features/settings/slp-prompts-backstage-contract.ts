@@ -37,7 +37,11 @@ export function useSlpPromptsBackstageState({
   const [imagePromptDraft, setImagePromptDraft] = useState("");
   const [imagePromptEditorOpen, setImagePromptEditorOpen] = useState(false);
   const [selectedPresetName, setSelectedPresetName] = useState("");
-  const [postGuidanceDraft, setPostGuidanceDraft] = useState<Partial<Record<"public" | "locked", string>>>({});
+  // `level` rides in the same staged draft as the two guidance texts, so the Backstage draft bar
+  // saves or discards all three together instead of the dial saving behind the player's back.
+  const [postGuidanceDraft, setPostGuidanceDraft] = useState<Partial<Record<"public" | "locked" | "level", string>>>(
+    {},
+  );
   const presetImportRef = useRef<HTMLInputElement>(null);
   const postGuidanceQuery = useSlurpPostGuidance(true);
   const updatePostGuidance = useUpdateSlurpPostGuidance();
@@ -157,13 +161,16 @@ export function useSlpPromptsBackstageState({
   const restoreDefaultImagePrompt = () => updatePatch({ imageGenerationPrompt: DEFAULT_SLURP_IMAGE_GENERATION_PROMPT });
   const saveImagePrompt = () => updatePatch({ imageGenerationPrompt: imagePromptDraft });
   const saveGenerationGuidance = () => updatePatch({ generationGuidance: generationGuidanceDraft });
-  const stagePostGuidance = (access: "public" | "locked", value: string) =>
+  const stagePostGuidance = (access: "public" | "locked" | "level", value: string) =>
     setPostGuidanceDraft((current) => ({ ...current, [access]: value }));
   const discardPromptDraft = () => setPostGuidanceDraft({});
   const applyPromptDraft = async () => {
     if (Object.keys(postGuidanceDraft).length === 0) return true;
     try {
-      await updatePostGuidance.mutateAsync({ creatorId: null, ...postGuidanceDraft });
+      await updatePostGuidance.mutateAsync({
+        creatorId: null,
+        ...postGuidanceDraft,
+      } as Parameters<typeof updatePostGuidance.mutateAsync>[0]);
       setPostGuidanceDraft({});
       return true;
     } catch (error) {

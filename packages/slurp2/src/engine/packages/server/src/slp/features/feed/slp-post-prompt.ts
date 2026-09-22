@@ -5,6 +5,7 @@ import {
 import {
   type SlpAccount,
   type SlpCreatorManagedPost,
+  type SlpCreatorStageFacts,
   type SlpIdentityDisclosure,
 } from "../../../../../shared/src/slp/slp-social.types.js";
 import { parseGameJsonish } from "../../../services/game/jsonish.js";
@@ -69,11 +70,16 @@ export type SlurpPostPromptInput = {
   /** The Creator's private content menu. See `slurp-post-guidance.ts`. */
   contentMenu?: string;
   sourceCharacterContext: string;
+  /** This Creator's own look and life. See `SlpCreatorStageFacts`. */
+  stageFacts?: SlpCreatorStageFacts;
   disclosureMode: SlpIdentityDisclosure;
   publicIdentity: PublicIdentity | null;
   recentPosts: SlpCreatorManagedPost[];
   request: Pick<FormattedCreatorGenerationRequest, "noodlerPostGuide" | "format">;
   allowImagePrompt: boolean;
+  /** Automatic image posts return a creative scene plan; Slurp renders the provider prompt. */
+  allowScenePlan?: boolean;
+  wardrobePrompt?: string | null;
   imageGenerationPrompt: string;
   generationGuidance: string;
   /** The player's ceiling. Formats only set a target; nothing shorter than this is cut. */
@@ -211,15 +217,23 @@ export function buildSlurpPostBlocks(input: SlurpPostPromptInput): SlurpPromptBl
           : "",
     },
     {
+      id: "wardrobe",
+      kind: "context" as const,
+      optional: true,
+      text: input.allowScenePlan ? (input.wardrobePrompt?.trim() ?? "") : "",
+    },
+    {
       id: "output",
       kind: "required" as const,
       text: `${
-        input.allowImagePrompt
-          ? // The old contract asked for "subject, pose, setting, lighting, framing", which is a
-            // scene brief. A brief with no gaps in it produces a photograph with no accident in
-            // it, and the result reads as a shoot rather than as something a person posted.
-            "Return one JSON object with title, content, and imagePrompt. imagePrompt is required and describes the photograph this person actually took with the camera named above — what it caught, not what the moment was. It may be badly framed, poorly lit, partly blocked, or dull. Do not improve it, do not add a camera position nobody present could reach, and do not add exposed skin, undress, or sexual emphasis the post did not already call for. Never return null or an empty imagePrompt, and never put the post text or field names in it. Do not create a poll."
-          : "Return one JSON object with title and content only. Do not create a poll or image prompt."
+        input.allowScenePlan
+          ? "Return one JSON object with title, content, and scene. scene must contain wardrobeId, setting, action, expression, and visualDirection. Choose wardrobeId from the supplied Creator wardrobe when one is available; otherwise use null. The scene describes the specific attractive, believable photograph that belongs with this caption. setting and action must make the variation concrete without changing the character, company, camera source, or access level. visualDirection is one short memorable composition, atmosphere, or prop detail—not provider tags, identity, or policy. Do not return imagePrompt or a poll."
+          : input.allowImagePrompt
+            ? // The old contract asked for "subject, pose, setting, lighting, framing", which is a
+              // scene brief. A brief with no gaps in it produces a photograph with no accident in
+              // it, and the result reads as a shoot rather than as something a person posted.
+              "Return one JSON object with title, content, and imagePrompt. imagePrompt is required and describes the photograph this person actually took with the camera named above — what it caught, not what the moment was. It is a phone picture rather than an advertisement, so it may be plain and unposed, but it must still be a sharp, clearly visible picture. Do not stage it as a studio shoot, and do not add a camera position nobody present could reach. Never return null or an empty imagePrompt, and never put the post text or field names in it. Do not create a poll."
+            : "Return one JSON object with title and content only. Do not create a poll or image prompt."
       }\nReturn JSON only. No prose outside the JSON object.`,
     },
   ];
@@ -241,6 +255,13 @@ export function buildNoodlerPostMessages(input: SlurpPostPromptInput): ChatMessa
     `Handle: @${protect(input.account.handle)}`,
     `Bio: ${protect(input.account.bio) || "No bio provided."}`,
     `Stage voice: ${protect(input.stagePersonality) || "No additional stage voice provided."}`,
+    // Stage facts, not a character card. These are what this page is actually made of: the same
+    // body in every picture, clothes that are hers, and places she is repeatedly in. Without them
+    // the model reinvents an average person each post, which is what made every Creator read the
+    // same way.
+    ...(input.stageFacts?.appearance?.trim() ? [`Appearance: ${protect(input.stageFacts.appearance)}`] : []),
+    ...(input.stageFacts?.wardrobe?.trim() ? [`Usual wardrobe: ${protect(input.stageFacts.wardrobe)}`] : []),
+    ...(input.stageFacts?.locations?.trim() ? [`Where her life happens: ${protect(input.stageFacts.locations)}`] : []),
     ...(input.contentMenu?.trim()
       ? [
           `Content menu (private; what this Creator offers and will not do, never quoted): ${protect(input.contentMenu)}`,
@@ -339,7 +360,11 @@ export async function completeSlurpCreatorPost(
   provider: { chatComplete: (messages: ChatMessage[], options: never) => Promise<{ content?: string | null }> },
   messages: ChatMessage[],
   completionOptions: object,
-  { askModelForImagePrompt, debugMode }: { askModelForImagePrompt: boolean; debugMode: boolean },
+  {
+    askModelForImagePrompt,
+    askModelForScene,
+    debugMode,
+  }: { askModelForImagePrompt: boolean; askModelForScene?: boolean; debugMode: boolean },
 ) {
   let sentMessages: ChatMessage[] = messages;
   let attempts = 1;
@@ -363,9 +388,11 @@ export async function completeSlurpCreatorPost(
       { role: "assistant", content },
       {
         role: "user",
-        content: askModelForImagePrompt
-          ? "The response was not one valid Slurp-post JSON object. Return exactly one object with title, content, and imagePrompt. title and imagePrompt must both be non-empty. Do not include a poll. Return JSON only."
-          : "The response was not one valid Slurp-post JSON object. Return exactly one object with title and content only. Do not include a poll or image prompt. Return JSON only.",
+        content: askModelForScene
+          ? "The response was not one valid Slurp-post JSON object. Return exactly one object with title, content, and scene. scene must contain wardrobeId, setting, action, expression, and visualDirection. Do not include imagePrompt or a poll. Return JSON only."
+          : askModelForImagePrompt
+            ? "The response was not one valid Slurp-post JSON object. Return exactly one object with title, content, and imagePrompt. title and imagePrompt must both be non-empty. Do not include a poll. Return JSON only."
+            : "The response was not one valid Slurp-post JSON object. Return exactly one object with title and content only. Do not include a poll or image prompt. Return JSON only.",
       },
     ];
     logDebugOverride(
