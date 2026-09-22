@@ -916,7 +916,7 @@ export function prepareLtmSubjectIdentityContext({
             sourceBackedNpcSourceText,
             sourceBackedNpcSourceTitle,
           );
-          if (sourceBackedNpc?.entry) {
+          if (sourceBackedNpc && "entry" in sourceBackedNpc) {
             return (
               chooseIdentityTarget(
                 effectiveCatalog.notes,
@@ -1040,13 +1040,13 @@ function resolveLtmSubjectIdentitiesWithContext({
             sourceBackedNpcSourceText,
             sourceBackedNpcSourceTitle,
           );
-      if (sourceBackedNpc?.ambiguous) {
+      if (sourceBackedNpc && "ambiguous" in sourceBackedNpc) {
         const rejection = subjectRejection(effectiveUnit, sourceBackedNpc.ambiguous, candidateIndex);
         diagnostics.push(rejection.diagnostic);
         droppedCandidates.push(rejection.dropped);
         continue;
       }
-      if (sourceBackedNpc?.entry && match.status === "untrusted") {
+      if (sourceBackedNpc && "entry" in sourceBackedNpc && match.status === "untrusted") {
         addCatalogEntry(index, sourceBackedNpc.entry);
         const subjects = [sourceBackedNpc.entry.subject];
         // Reuse an existing trusted/legacy note target for this identity, exactly like the
@@ -1504,7 +1504,7 @@ function sourceBackedNpcSubject(
   mode: LtmMode | undefined,
   sourceText: string | undefined,
   sourceTitle: string | undefined,
-): { entry: TrustedLtmSubjectCatalogEntry } | { ambiguous: SubjectMatch } | null {
+): { entry: TrustedLtmSubjectCatalogEntry } | { ambiguous: Extract<SubjectMatch, { status: "ambiguous" }> } | null {
   if (mode !== undefined && mode !== "roleplay") return null;
   if (unit.bucket !== "character_fact" || (unit.subjectKeys?.length ?? 0) > 0) return null;
   const slug = stripNotePrefix(normalizeSubjectIdentifier(unit.subjectId, ""));
