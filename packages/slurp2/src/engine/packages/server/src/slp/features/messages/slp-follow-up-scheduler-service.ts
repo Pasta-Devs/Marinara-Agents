@@ -140,6 +140,7 @@ export function startSlurpFollowUpScheduler(app: FastifyInstance, registerStop?:
               mood: thread.mood,
               moodUpdatedAt: thread.moodUpdatedAt,
               notes: thread.notes,
+              threadId: threadRow.id,
               threadState: thread.threadState,
               creatorState: await slurp.getCreatorState(threadRow.creatorAccountId),
               dayVibe: await describeSlurpDayVibe(app.db, threadRow.creatorAccountId),
@@ -147,7 +148,10 @@ export function startSlurpFollowUpScheduler(app: FastifyInstance, registerStop?:
               strikes: activeSlurpStrikes(thread.strikes, thread.lastStrikeAt),
               connection,
               generationGuidance: formatFollowUpContext(followUp),
-              workerContext: "background",
+              // A follow-up is a promise the Creator already made in a reply, like an away reply that
+              // `slp-message-operation` also sends as "present". As "background" it needed the global
+              // background mode, so with default settings every follow-up postponed itself forever.
+              workerContext: "present",
             });
 
             // Store the follow-up message

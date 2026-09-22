@@ -5,6 +5,7 @@ import { createPromptOverridesStorage } from "../../../../services/storage/promp
 import { createSlurpStorage } from "../../../data/slp-storage.js";
 import { generateCreatorPostImage } from "../../media/slp-media-contract.js";
 import { resolveCreatorImageConnectionId } from "../../../base/media/slp-image-connections.js";
+import { resolveSlurpCreatorMenu } from "../../../data/settings/slp-post-guidance-storage.js";
 
 /**
  * Draw the piece a fan commissioned.
@@ -35,6 +36,7 @@ export async function generateSlurpCommissionImage(
   // ponytail: single-site fix; a shared resolveDisclosureMode() helper would stop it drifting again.
   const disclosureMode = account.settings.privacy.identityDisclosure ?? "open";
   const settings = await noodle.getSettings();
+  const contentPolicy = await resolveSlurpCreatorMenu(db, account.id).catch(() => "");
   const brief = input.brief.trim().slice(0, 2000);
   const image = await generateCreatorPostImage({
     account,
@@ -46,6 +48,7 @@ export async function generateSlurpCommissionImage(
       `The fan asked for this: ${brief}`,
       "Draw what they asked for. Keep the creator exactly as their card describes them.",
     ].join("\n"),
+    contentPolicy,
     settings,
     characters: createCharactersStorage(db),
     promptOverrides: createPromptOverridesStorage(db),

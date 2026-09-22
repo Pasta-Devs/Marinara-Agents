@@ -7,7 +7,6 @@
  */
 import type { DB } from "../../../db/connection.js";
 import { createSlurpStorage } from "../../data/slp-storage.js";
-import { describeSlurpDayVibe } from "../world/slp-world-contract.js";
 import { slurpGoalProgress } from "../../modules/projects/slp-goal.js";
 import { resolveSlurpPostStance, slurpPostStanceInstruction } from "../../modules/feed/slp-post-stance.js";
 
@@ -26,10 +25,12 @@ export async function describeSlurpPostCondition(
   try {
     const slurp = createSlurpStorage(db);
     const state = await slurp.getCreatorState(creatorAccountId);
-    const dayVibe = await describeSlurpDayVibe(db, creatorAccountId, at);
     const goal = await slurp.getGoal(creatorAccountId);
     const progress = goal ? slurpGoalProgress(goal, (await slurp.getEarnings(creatorAccountId)).lifetime) : null;
-    return slurpPostStanceInstruction(resolveSlurpPostStance({ state, dayVibe, goal: progress, at }));
+    // A partial day's earnings compared with a full-day average made early posts systematically
+    // disappointed, then cached that verdict all day. Feed mood comes from grounded state/events;
+    // the income day-vibe remains available to private conversations and explicit business work.
+    return slurpPostStanceInstruction(resolveSlurpPostStance({ state, dayVibe: null, goal: progress, at }));
   } catch {
     return null;
   }

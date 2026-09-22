@@ -8,7 +8,7 @@ import { Fragment } from "react";
 import type { SlpCreatorPostView, SlpCreatorStageProfile } from "../../../../../shared/src/slp/slp-social.types.js";
 import type { SlurpPromotion } from "../../features/ads/slp-ads-contract";
 import { toast } from "sonner";
-import { type SlpPostCardModel } from "../../modules/post/SlpPostCard";
+import { type SlpPostCardModel } from "../../modules/post/SlpPostTypes";
 import { SlurpArcTimelineCard } from "../../features/projects/SlpArcTimelineCard";
 import { useNearViewportSlurpMediaSrc } from "../../base/media/slp-media-src";
 import { SlurpProfileSurface } from "../../features/creators/SlpProfileSurface";
@@ -22,6 +22,9 @@ import {
   profileAccent,
 } from "../../features/creators/SlpStageProfileForm";
 import { cn } from "../../../lib/utils";
+import { api } from "../../../lib/api-client";
+import { SlpPostSurfaceMenu } from "../../modules/post/SlpPostMenu";
+import { downloadSlpShareCard, toSlpShareCardInput } from "../../modules/post/slp-share-card";
 import {
   errorMessage,
   isSlurpStory,
@@ -81,33 +84,53 @@ export function SlurpProfileFeaturedImage({
 export function SlurpProfileMediaTile({
   post,
   onOpenImage,
+  onOpenCreator,
 }: {
   post: SlurpProfileImagePost;
   onOpenImage: (url: string, id: string) => void;
+  onOpenCreator?: () => void;
 }) {
   const { t: localizeUi } = useUiTranslation();
   const { src: source, observe } = useNearViewportSlurpMediaSrc(post.imageUrl, { width: 480 });
   return (
-    <button
-      ref={observe}
-      type="button"
-      onClick={() => source && onOpenImage(source, post.id)}
-      disabled={!source}
-      className="relative aspect-square overflow-hidden bg-[var(--background)] text-left focus-visible:z-10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--noodle-accent)] disabled:cursor-wait"
-      aria-label={post.title || localizeUi("ui.slurp.post.openImage")}
-    >
-      {source ? (
-        <img
-          src={source}
-          alt={post.title || ""}
-          loading="lazy"
-          decoding="async"
-          className="h-full w-full object-cover transition-transform duration-300 hover:scale-[1.03] motion-reduce:transition-none motion-reduce:hover:scale-100"
+    <div ref={observe} className="relative aspect-square overflow-hidden bg-[var(--background)]">
+      <button
+        type="button"
+        onClick={() => source && onOpenImage(source, post.id)}
+        disabled={!source}
+        className="h-full w-full text-left focus-visible:z-10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--noodle-accent)] disabled:cursor-wait"
+        aria-label={post.title || localizeUi("ui.slurp.post.openImage")}
+      >
+        {source ? (
+          <img
+            src={source}
+            alt={post.title || ""}
+            loading="lazy"
+            decoding="async"
+            className="h-full w-full object-cover transition-transform duration-300 hover:scale-[1.03] motion-reduce:transition-none motion-reduce:hover:scale-100"
+          />
+        ) : (
+          <div className="h-full w-full bg-[var(--muted)]" />
+        )}
+      </button>
+      <div className="absolute end-2 top-2 z-10" onClick={(event) => event.stopPropagation()}>
+        <SlpPostSurfaceMenu
+          onDownload={
+            source
+              ? () =>
+                  void api.download(
+                    `/slurp2/noodler/posts/${encodeURIComponent(post.id)}/media`,
+                    `slurp-${post.id}-image`,
+                  )
+              : undefined
+          }
+          onShare={
+            source ? () => void downloadSlpShareCard(toSlpShareCardInput(post), `slurp-${post.id}.png`) : undefined
+          }
+          onOpenCreator={onOpenCreator}
         />
-      ) : (
-        <div className="h-full w-full bg-[var(--muted)]" />
-      )}
-    </button>
+      </div>
+    </div>
   );
 }
 
@@ -244,7 +267,6 @@ export function StageProfileView({
     composerOpenSignal,
     localizeUi,
     bannerSrc,
-    setAccessSettingsOpen,
     setAutomationOpen,
     creatorToolsOpen,
     setCreatorToolsOpen,
@@ -543,15 +565,8 @@ export function StageProfileView({
                   {/* Edit lives on the profile header with Follow and Subscribe. It used to be
                     duplicated here too, which gave the same action two homes and made this panel
                     look like the place to go. */}
-                  <div className="flex flex-wrap gap-2 px-3 py-2 @min-[760px]:px-4">
-                    <button
-                      type="button"
-                      onClick={() => setAccessSettingsOpen(true)}
-                      className="min-h-11 rounded-lg border border-[var(--noodle-divider)] px-3 text-xs font-bold hover:bg-[var(--accent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)]"
-                    >
-                      {localizeUi("ui.noodle.stageprofileview.access")}
-                    </button>
-                    {!personaBackedCreator && (
+                  {!personaBackedCreator && (
+                    <div className="flex flex-wrap gap-2 px-3 py-2 @min-[760px]:px-4">
                       <button
                         type="button"
                         onClick={() => setAutomationOpen(true)}
@@ -561,8 +576,8 @@ export function StageProfileView({
                           ? localizeUi("ui.noodle.stageprofileview.automationOn")
                           : localizeUi("ui.noodle.stageprofileview.automation")}
                       </button>
-                    )}
-                  </div>
+                    </div>
+                  )}
                   <NoodlerPostComposer
                     key={profile.id}
                     profile={profile}

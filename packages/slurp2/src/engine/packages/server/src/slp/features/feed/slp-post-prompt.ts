@@ -5,12 +5,19 @@ import {
 import {
   type SlpAccount,
   type SlpCreatorManagedPost,
+  type SlpCreatorStageFacts,
   type SlpIdentityDisclosure,
 } from "../../../../../shared/src/slp/slp-social.types.js";
 import { parseGameJsonish } from "../../../services/game/jsonish.js";
+import { logDebugOverride } from "../../../lib/logger.js";
 import { requireModelAnswer } from "../../base/model/slp-model-answer.js";
 import type { ChatMessage } from "../../../services/llm/base-provider.js";
-import { composeSlurpPromptBlocks, type SlurpPromptBlockOverrides } from "../../base/prompting/slp-prompt-blocks.js";
+import {
+  composeSlurpPromptBlocks,
+  type SlurpPromptBlock,
+  type SlurpPromptBlockOverrides,
+  type SlurpReusablePromptInstruction,
+} from "../../base/prompting/slp-prompt-blocks.js";
 import { buildSlurpPostTimingContext } from "../../modules/feed/slp-post-timing.js";
 import { type SlurpProject } from "../../modules/projects/slp-project.js";
 import { slurpProjectChapter, slurpProjectInstruction } from "../../modules/projects/slp-arc-progress.js";
@@ -57,17 +64,22 @@ function formatCreatorPostHistory(posts: SlpCreatorManagedPost[], protect: (valu
     .join("\n");
 }
 
-export function buildNoodlerPostMessages(input: {
+export type SlurpPostPromptInput = {
   account: Pick<SlpAccount, "displayName" | "handle" | "bio">;
   stagePersonality: string;
   /** The Creator's private content menu. See `slurp-post-guidance.ts`. */
   contentMenu?: string;
   sourceCharacterContext: string;
+  /** This Creator's own look and life. See `SlpCreatorStageFacts`. */
+  stageFacts?: SlpCreatorStageFacts;
   disclosureMode: SlpIdentityDisclosure;
   publicIdentity: PublicIdentity | null;
   recentPosts: SlpCreatorManagedPost[];
   request: Pick<FormattedCreatorGenerationRequest, "noodlerPostGuide" | "format">;
   allowImagePrompt: boolean;
+  /** Automatic image posts return a creative scene plan; Slurp renders the provider prompt. */
+  allowScenePlan?: boolean;
+  wardrobePrompt?: string | null;
   imageGenerationPrompt: string;
   generationGuidance: string;
   /** The player's ceiling. Formats only set a target; nothing shorter than this is cut. */
@@ -84,8 +96,6 @@ export function buildNoodlerPostMessages(input: {
    * `slurp-post-guidance.ts`. Absent only for a caller that does not know the access yet.
    */
   accessInstruction?: string;
-  /** A few long-term notes from the Creator's most active thread. Absent when there are none. */
-  fanMemory?: string[];
   /** The project this post continues, with that project's own recent posts. Absent for a loose post. */
   project?: { project: SlurpProject; posts: SlpCreatorManagedPost[] };
   generatedAt?: Date;
@@ -93,9 +103,22 @@ export function buildNoodlerPostMessages(input: {
   /** Matching lorebook entries for this Creator. Absent when lorebook context is off or nothing matched. */
   loreContext?: string;
   promptBlocks?: SlurpPromptBlockOverrides;
-}): ChatMessage[] {
-  const protect = (value: string) =>
-    protectCreatorGeneratedIdentity(value, input.disclosureMode, input.publicIdentity) ?? "";
+  promptInstructions?: SlurpReusablePromptInstruction[];
+  /** From `slp-continuity-prompt.ts`: approved notes this Creator may use in a post. */
+  continuityInstruction?: string;
+  /** From `slp-content-axes.ts`: what this post is for and how it goes out. */
+  contentTypeInstruction?: string;
+  /** From `slp-production-profile.ts`: how this Creator makes things. */
+  productionInstruction?: string;
+};
+
+/**
+ * The post prompt's blocks, before they are ordered and joined.
+ *
+ * Split out so Settings can show what a block actually contains without keeping a second copy of
+ * the text. A preview built from a copy is a preview that silently stops matching the prompt.
+ */
+export function buildSlurpPostBlocks(input: SlurpPostPromptInput): SlurpPromptBlock[] {
   const guidance = input.generationGuidance.trim();
   const format = input.request.format ?? "caption";
   const systemBlocks = [
@@ -149,6 +172,31 @@ export function buildNoodlerPostMessages(input: {
         ? `## Who can read this post\n${input.accessInstruction.trim()}\n## End who can read this post`
         : "",
     },
+    // Notes written down earlier, as facts to stay consistent with. Never instructions: a line a
+    // model wrote into memory must not be able to tell a later model what to do.
+    {
+      id: "memory",
+      kind: "context" as const,
+      optional: true,
+      text: input.continuityInstruction?.trim() ?? "",
+    },
+    // What this post is for, as opposed to what it is about. Without it every post is the same
+    // kind of post: something happened, here is a picture, here is what it meant.
+    {
+      id: "contentType",
+      kind: "context" as const,
+      optional: true,
+      text: input.contentTypeInstruction?.trim() ?? "",
+    },
+    // Unrelated Creators all arrived at the same soft light and the same flattering angle, because
+    // the variation gave them different situations and the same production grammar. This is the
+    // block that makes one of them shoot on a phone in a messy kitchen and another run a backdrop.
+    {
+      id: "production",
+      kind: "context" as const,
+      optional: true,
+      text: input.productionInstruction?.trim() ?? "",
+    },
     // Tone, mood balance, and the adult flirty lean are supplied by the editable
     // generation guidance (see input.generationGuidance above), not hardcoded here.
     // "Do not reuse their exact wording" was the only anti-repetition rule, and eight different
@@ -169,18 +217,51 @@ export function buildNoodlerPostMessages(input: {
           : "",
     },
     {
+      id: "wardrobe",
+      kind: "context" as const,
+      optional: true,
+      text: input.allowScenePlan ? (input.wardrobePrompt?.trim() ?? "") : "",
+    },
+    {
       id: "output",
       kind: "required" as const,
-      text: `${input.allowImagePrompt ? "Return one JSON object with title, content, and imagePrompt. imagePrompt is required and must be a concrete visual description of one photo or image the creator would post now (subject, pose, setting, lighting, framing). Never return null or an empty imagePrompt, and never put the post text or field names in it. Do not create a poll." : "Return one JSON object with title and content only. Do not create a poll or image prompt."}\nReturn JSON only. No prose outside the JSON object.`,
+      text: `${
+        input.allowScenePlan
+          ? "Return one JSON object with title, content, and scene. scene must contain wardrobeId, setting, action, expression, and visualDirection. Choose wardrobeId from the supplied Creator wardrobe when one is available; otherwise use null. The scene describes the specific attractive, believable photograph that belongs with this caption. setting and action must make the variation concrete without changing the character, company, camera source, or access level. visualDirection is one short memorable composition, atmosphere, or prop detail—not provider tags, identity, or policy. Do not return imagePrompt or a poll."
+          : input.allowImagePrompt
+            ? // The old contract asked for "subject, pose, setting, lighting, framing", which is a
+              // scene brief. A brief with no gaps in it produces a photograph with no accident in
+              // it, and the result reads as a shoot rather than as something a person posted.
+              "Return one JSON object with title, content, and imagePrompt. imagePrompt is required and describes the photograph this person actually took with the camera named above — what it caught, not what the moment was. It is a phone picture rather than an advertisement, so it may be plain and unposed, but it must still be a sharp, clearly visible picture. Do not stage it as a studio shoot, and do not add a camera position nobody present could reach. Never return null or an empty imagePrompt, and never put the post text or field names in it. Do not create a poll."
+            : "Return one JSON object with title and content only. Do not create a poll or image prompt."
+      }\nReturn JSON only. No prose outside the JSON object.`,
     },
   ];
-  const system = composeSlurpPromptBlocks("post", systemBlocks, input.promptBlocks);
+  return systemBlocks;
+}
+
+export function buildNoodlerPostMessages(input: SlurpPostPromptInput): ChatMessage[] {
+  const protect = (value: string) =>
+    protectCreatorGeneratedIdentity(value, input.disclosureMode, input.publicIdentity) ?? "";
+  const system = composeSlurpPromptBlocks(
+    "post",
+    buildSlurpPostBlocks(input),
+    input.promptBlocks,
+    input.promptInstructions,
+  );
   const user = [
     "# Slurp account",
     `Display name: ${protect(input.account.displayName)}`,
     `Handle: @${protect(input.account.handle)}`,
     `Bio: ${protect(input.account.bio) || "No bio provided."}`,
     `Stage voice: ${protect(input.stagePersonality) || "No additional stage voice provided."}`,
+    // Stage facts, not a character card. These are what this page is actually made of: the same
+    // body in every picture, clothes that are hers, and places she is repeatedly in. Without them
+    // the model reinvents an average person each post, which is what made every Creator read the
+    // same way.
+    ...(input.stageFacts?.appearance?.trim() ? [`Appearance: ${protect(input.stageFacts.appearance)}`] : []),
+    ...(input.stageFacts?.wardrobe?.trim() ? [`Usual wardrobe: ${protect(input.stageFacts.wardrobe)}`] : []),
+    ...(input.stageFacts?.locations?.trim() ? [`Where her life happens: ${protect(input.stageFacts.locations)}`] : []),
     ...(input.contentMenu?.trim()
       ? [
           `Content menu (private; what this Creator offers and will not do, never quoted): ${protect(input.contentMenu)}`,
@@ -238,16 +319,6 @@ export function buildNoodlerPostMessages(input: {
           }),
         ]
       : []),
-    ...(input.fanMemory?.length
-      ? [
-          "",
-          "# What you remember about the people who talk to you",
-          // The feed used to have no memory of anybody, so a Creator who had been told something
-          // in a DM for weeks still posted like a stranger.
-          "These are private things you were told in direct messages. They may inspire what you post about, but never name the person, quote them, or repeat a private detail in public.",
-          ...input.fanMemory.map((note) => `- ${protect(note)}`),
-        ]
-      : []),
     ...(input.request.noodlerPostGuide ? ["", "# Post direction", protect(input.request.noodlerPostGuide)] : []),
   ].join("\n");
   return [
@@ -279,4 +350,66 @@ export function parseCreatorPost(content: string) {
   // in an array ([{"title":...}]) regardless of the prompt instructing "one JSON object".
   // Unwrap the common single-item array response while preserving validation for other shapes.
   return slpGeneratedCreatorPostSchema.parse(Array.isArray(parsed) && parsed.length === 1 ? parsed[0] : parsed);
+}
+
+/**
+ * One post from the model, with the single correction turn that malformed JSON earns. Returns the
+ * messages actually sent, so the caller records the prompt that produced the answer.
+ */
+export async function completeSlurpCreatorPost(
+  provider: { chatComplete: (messages: ChatMessage[], options: never) => Promise<{ content?: string | null }> },
+  messages: ChatMessage[],
+  completionOptions: object,
+  {
+    askModelForImagePrompt,
+    askModelForScene,
+    debugMode,
+  }: { askModelForImagePrompt: boolean; askModelForScene?: boolean; debugMode: boolean },
+) {
+  let sentMessages: ChatMessage[] = messages;
+  let attempts = 1;
+  let response = await provider.chatComplete(messages, completionOptions as never);
+  let content = response.content ?? "";
+  logDebugOverride(
+    debugMode,
+    "[debug/slurp] Model response attempt 1 received (%d characters); content is redacted.",
+    content.length,
+  );
+  let generated: ReturnType<typeof parseCreatorPost>;
+  try {
+    generated = parseCreatorPost(content);
+  } catch {
+    // Automatic posts used to get one attempt where a foreground post got two, so a scheduled post
+    // failed outright on malformed output that a manual post recovered from — and the slot was lost
+    // with the first call already paid for. The correction turn reuses the admission this run was
+    // already granted and only fires on the failure path, so both paths now recover the same way.
+    const correctionMessages: ChatMessage[] = [
+      ...messages,
+      { role: "assistant", content },
+      {
+        role: "user",
+        content: askModelForScene
+          ? "The response was not one valid Slurp-post JSON object. Return exactly one object with title, content, and scene. scene must contain wardrobeId, setting, action, expression, and visualDirection. Do not include imagePrompt or a poll. Return JSON only."
+          : askModelForImagePrompt
+            ? "The response was not one valid Slurp-post JSON object. Return exactly one object with title, content, and imagePrompt. title and imagePrompt must both be non-empty. Do not include a poll. Return JSON only."
+            : "The response was not one valid Slurp-post JSON object. Return exactly one object with title and content only. Do not include a poll or image prompt. Return JSON only.",
+      },
+    ];
+    logDebugOverride(
+      debugMode,
+      "[debug/slurp] Correction prompt prepared with %d messages; private prompt content is redacted.",
+      correctionMessages.length,
+    );
+    sentMessages = correctionMessages;
+    attempts = 2;
+    response = await provider.chatComplete(correctionMessages, completionOptions as never);
+    content = response.content ?? "";
+    logDebugOverride(
+      debugMode,
+      "[debug/slurp] Model response attempt 2 received (%d characters); content is redacted.",
+      content.length,
+    );
+    generated = parseCreatorPost(content);
+  }
+  return { generated, content, sentMessages, attempts };
 }

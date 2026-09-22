@@ -37,6 +37,10 @@ export function slpCreatorPostMediaUrl(postId: string): string {
   return `/api/slurp2/noodler/posts/${encodeURIComponent(postId)}/media`;
 }
 
+export function slpCreatorPostAttachmentUrl(postId: string, position: number): string {
+  return `/api/slurp2/noodler/posts/${encodeURIComponent(postId)}/media/${position}`;
+}
+
 export const NOODLER_MEDIA_URL_PREFIX = "/api/slurp2/noodler/posts/";
 
 /** Access-checked serving URL for a generated direct-message image. */

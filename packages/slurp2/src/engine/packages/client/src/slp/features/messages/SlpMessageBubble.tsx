@@ -115,6 +115,18 @@ export function MessageBubble({
             <p className="text-xs font-bold text-[var(--noodle-accent)]">
               {localizeUi("ui.slurp.messages.postPreview", { defaultValue: "Shared post" })}
             </p>
+            {/* A post can now be shared into any chat, so the card names its author. */}
+            {typeof preview.authorName === "string" && preview.authorName && (
+              <p className="mt-1 flex items-center gap-2 text-xs text-[var(--muted-foreground)]">
+                {typeof preview.authorAvatarUrl === "string" && preview.authorAvatarUrl && (
+                  <img src={preview.authorAvatarUrl} alt="" className="h-5 w-5 rounded-full object-cover" />
+                )}
+                <span className="truncate font-semibold text-[var(--foreground)]">{preview.authorName}</span>
+                {typeof preview.authorHandle === "string" && preview.authorHandle && (
+                  <span className="truncate">@{preview.authorHandle}</span>
+                )}
+              </p>
+            )}
             <p className="mt-1 text-sm font-semibold">{previewTitle}</p>
             {!locked && previewContent && (
               <p className="mt-1 whitespace-pre-wrap text-sm leading-relaxed">{previewContent}</p>

@@ -1,3 +1,4 @@
+import { slpDeepDetailsRoutes } from "./features/feed/slp-deep-details-routes.js";
 import type { FastifyInstance, FastifyPluginAsync, InjectOptions } from "fastify";
 import { createSlpRouteHost } from "./features/viewer/slp-route-host.js";
 import { createSlpViewerContext } from "./features/viewer/slp-viewer-context.js";
@@ -35,6 +36,8 @@ import * as slurpSchema from "../db/schema/slurp.js";
 import { createSlurpFirstPostQueue } from "./features/onboarding/slp-first-post-queue-service.js";
 import { startSlurpAutopurgeScheduler } from "./features/maintenance/slp-autopurge-scheduler-service.js";
 import { buildSlurpChatContext, type SlurpChatContextRequest } from "./features/creators/slp-chat-context.js";
+import type { CapabilityIntegrationHost } from "@marinara-engine/shared";
+import { setSlurpGenerationIntegrations } from "./base/host/slp-generation-integrations.js";
 
 const lifecycle = createSlurpActivationLifecycle();
 
@@ -66,6 +69,7 @@ export async function mountSlpRoutes(app: FastifyInstance) {
   await slpFeedViewerRoutes(app, deps);
   await slpAdsRoutes(app, deps);
   await slpFeedPostRoutes(app, deps);
+  await slpDeepDetailsRoutes(app, deps);
   await slpOnboardingRoutes(app, deps);
   await slpFeedPublishingRoutes(app, deps);
   await slpMessagesRoutes(app, noodle, messages);
@@ -86,9 +90,18 @@ export async function activate({
       options: { prefix: string },
     ): Promise<() => void | Promise<void>>;
     runInternalRoute?: (options: InjectOptions | string) => ReturnType<FastifyInstance["inject"]>;
+    runtime?: { integrations?: CapabilityIntegrationHost };
   };
 }) {
   return lifecycle.activate(async (addTeardown) => {
+    const integrations = api.runtime?.integrations;
+    if (!integrations) {
+      throw new Error(
+        "[slurp2] This Marinara Engine does not provide Capability API 1.31 generation integrations. Update the Engine to 2.4.6 or newer.",
+      );
+    }
+    setSlurpGenerationIntegrations(integrations);
+    addTeardown(() => setSlurpGenerationIntegrations(undefined));
     // Every `slurp2_*` table lives in this bundle alone. The host image knows only the legacy
     // `slurp_*` names, and `registerTables` never namespaces by package: on a name clash the
     // existing definition wins with a warning. Owning a distinct prefix is what keeps this

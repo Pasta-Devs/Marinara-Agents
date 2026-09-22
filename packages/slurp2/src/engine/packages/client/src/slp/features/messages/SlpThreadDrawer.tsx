@@ -1,6 +1,7 @@
 import { ArrowLeft, X } from "lucide-react";
 import { SlurpPromptDebugPanel, SlurpRapportBadge, SlurpRelationshipPanel } from "./SlpMessageInsights";
 import { SlurpMemoriesPanel } from "./SlpMemoriesPanel";
+import { SlurpThreadRequestsPanel } from "./SlpThreadRequestsPanel";
 import { SlurpCommissionsPanel } from "./commissions/SlpCommissions";
 import { Avatar } from "../../base/chrome/SlpChrome";
 import { showConfirmDialog } from "../../../lib/app-dialogs";
@@ -11,6 +12,7 @@ export function SlpThreadDrawer({ model }: { model: SlurpThreadViewModel }) {
   const {
     closeDrawer,
     commissions,
+    targetCreatorAccountId,
     drawerMode,
     drawerRef,
     headerAccount,
@@ -26,6 +28,8 @@ export function SlpThreadDrawer({ model }: { model: SlurpThreadViewModel }) {
     setCommissionPrefill,
     setDrawerMode,
     setError,
+    setLoadedOlderMessages,
+    setOlderCursor,
     setToolTab,
     setToolsOpen,
     thread,
@@ -81,13 +85,24 @@ export function SlpThreadDrawer({ model }: { model: SlurpThreadViewModel }) {
             {drawerMode === "prompt" ? (
               <SlurpPromptDebugPanel enabled={promptDebugEnabled} query={promptDebug} />
             ) : drawerMode === "memories" ? (
-              <SlurpMemoriesPanel
-                notes={relationship?.notes ?? []}
-                scheduledFollowUps={relationship?.scheduledFollowUps}
-                threadId={threadId}
-                personaId={personaId}
-                onOpenPrompt={threadId ? () => setDrawerMode("prompt") : null}
-              />
+              <>
+                <SlurpMemoriesPanel
+                  notes={relationship?.notes ?? []}
+                  scheduledFollowUps={relationship?.scheduledFollowUps}
+                  threadId={threadId}
+                  personaId={personaId}
+                  onOpenPrompt={threadId ? () => setDrawerMode("prompt") : null}
+                />
+                {/* What the fan asked for and what was done about it. The fan's own side of the
+                    drawer never shows this. */}
+                {ownsCreator && (
+                  <SlurpThreadRequestsPanel
+                    threadId={threadId}
+                    personaId={personaId}
+                    creatorAccountId={targetCreatorAccountId}
+                  />
+                )}
+              </>
             ) : drawerMode === "commissions" ? (
               <SlurpCommissionsPanel
                 commissions={commissions}
@@ -147,6 +162,13 @@ export function SlpThreadDrawer({ model }: { model: SlurpThreadViewModel }) {
                             })
                               .then((confirmed) => {
                                 if (confirmed) return resetThread.mutateAsync({ threadId, personaId });
+                              })
+                              .then((cleared) => {
+                                // Older pages live outside the query cache, so the refetch alone
+                                // left the deleted messages on screen.
+                                if (!cleared) return;
+                                setLoadedOlderMessages([]);
+                                setOlderCursor(undefined);
                               })
                               .catch((cause: unknown) =>
                                 setError(

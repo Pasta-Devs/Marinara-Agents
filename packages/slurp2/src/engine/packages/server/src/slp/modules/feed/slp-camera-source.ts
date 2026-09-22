@@ -1,0 +1,207 @@
+/**
+ * Who is holding the camera.
+ *
+ * Pure and deterministic, like the other Slurp rule modules.
+ *
+ * ## The problem
+ *
+ * A Creator posts alone, and the picture is taken from the floor looking up, or from above her
+ * head, or from across the room. Nobody in the scene could have reached those positions. The feed
+ * is not broken because it is staged — a creator-platform post is normally staged — it is broken
+ * because it claims to be candid while using production conditions the scene never paid for.
+ *
+ * `slp-post-variation.ts` caused a good part of this directly. Its `FRAMINGS` axis handed out
+ * "from above, looking down" and "from low, looking up" as free-floating instructions, with no
+ * tripod, timer, mirror, or second person anywhere to justify them. The image model did as it was
+ * told, and every Creator ended up with an invisible cameraman.
+ *
+ * ## The approach
+ *
+ * Framing stops being an independent axis and becomes a *consequence* of who is holding the
+ * camera. A selfie cannot be taken from further away than an arm. A tripod shot cannot show the
+ * subject holding the phone. A second person cannot hold the camera when the Creator is alone.
+ *
+ * So the source is chosen first, and the scene has to pay for it: `permitted` filters the sources
+ * against what the rest of the variation already decided. Produce mode uses weighted draws so a
+ * common phone picture stays common without making the sequence periodic.
+ *
+ * Deliberately staged sources are here on purpose. A tripod shoot the Creator admits to reads as
+ * more real than a candid shot that could not exist. The distinction that matters is not staged
+ * against real, it is credible staging against unexplained access.
+ */
+
+import { slurpWeightedPick } from "./slp-weighted.js";
+
+export const SLURP_CAMERA_SOURCES = ["selfie", "mirror", "tripod", "partner", "screenshot", "archive"] as const;
+
+export type SlurpCameraSource = (typeof SLURP_CAMERA_SOURCES)[number];
+
+type CameraSourceRule = {
+  /** What the photograph is, written as the photograph rather than as the scene. */
+  instruction: string;
+  /** Whether this source needs somebody willing who can be handed the phone. */
+  needsHelper?: boolean;
+};
+
+const RULES: Record<SlurpCameraSource, CameraSourceRule> = {
+  selfie: {
+    instruction:
+      "Camera: their own phone, held in their own hand. The camera can be no further away than their arm reaches, and the holding arm is visible or clearly implied. No angle they could not reach while holding it.",
+  },
+  mirror: {
+    instruction:
+      "Camera: their own phone, photographed in a mirror. The phone is visible in the reflection and partly covers them. The framing is whatever the mirror allows, not whatever flatters them.",
+  },
+  tripod: {
+    instruction:
+      "Camera: propped up or on a timer, and they walked into frame. They are not holding a phone. The camera does not move, so the framing is fixed and a little too wide, and they had to place it somewhere a real surface exists.",
+  },
+  partner: {
+    instruction:
+      "Camera: held by the other person who is there. It can move and it can be further away, because somebody is carrying it.",
+    needsHelper: true,
+  },
+  screenshot: {
+    instruction:
+      "Camera: a still pulled out of a video, not a photo. It is softer and noisier than a photo, the pose is caught between two others, and the expression is unresolved.",
+  },
+  archive: {
+    instruction:
+      "Camera: none today. This is an older picture out of their own camera roll, so it does not match today's place, light, or clothes, and they know that.",
+  },
+};
+
+/**
+ * The rule every source shares.
+ *
+ * Stated as a prohibition rather than a preference, because the image model reliably reintroduces
+ * the unexplained angle when this is phrased softly.
+ */
+export const SLURP_CAMERA_SOURCE_RULE = [
+  "Describe the photograph, not the scene.",
+  "Never use a camera position nobody present could have reached: no floor-level, overhead, or across-the-room shot unless the camera source above put a camera there.",
+  // A point-of-view framing is the same unexplained-access problem wearing a different hat: it
+  // says the camera is somebody's eyes, so the image model supplies that somebody — an arm, a
+  // hand, a torso, or worse, reaching in from the near edge of the frame. The Creator is alone in
+  // most posts, and nothing in the scene ever paid for a second body. State it as a prohibition
+  // for the same reason as the line above: phrased as a preference, the framing comes straight
+  // back.
+  "The camera is a camera, never a person's eyes: no first-person or point-of-view framing, and no hands, arms, limbs, or any other part of a second body entering the frame.",
+  "Show only the people the company names. If the Creator is alone, the Creator is the only person, the only body, and the only anatomy in the picture.",
+  // Was "may be badly framed, poorly lit, partly blocked, or dull. Do not improve it." The intent
+  // was right — a candid phone picture, not an advertisement — but an image model reads "poorly
+  // lit" and "dull" as instructions and returns exactly that: a muddy, badly composed picture
+  // nobody wants to look at. Ask for the candour and rule out the mud separately.
+  "Keep it a photograph rather than an advertisement: available light, a real room, an unposed frame, no retouching and no studio setup. Plain and imperfect is right; blurry, muddy, underexposed, or hard to make out is not.",
+].join(" ");
+
+/** The sources this variation can actually pay for. */
+export function slurpPermittedCameraSources(options: { companyCanHoldCamera: boolean }): readonly SlurpCameraSource[] {
+  return SLURP_CAMERA_SOURCES.filter((source) => !RULES[source].needsHelper || options.companyCanHoldCamera);
+}
+
+/**
+ * How often each camera turns up.
+ *
+ * These are weights rather than rotation slots on purpose. Six sources in a rotation meant an old
+ * photo every sixth post forever, which stops being "sometimes she posts an old one" and becomes
+ * her posting schedule.
+ *
+ * The first cut of this table reasoned from photographs in general: a phone in your own hand is
+ * how most pictures on earth are taken, so selfie took 42 and mirror took 22. But a mirror shot is
+ * also a phone in her own hand, so together they were two posts in three, and the feed read as one
+ * person taking the same picture forever. Photographs in general is the wrong reference class —
+ * this is a page somebody runs, and a page that is only arm's-length phone pictures is a page
+ * nobody is working on.
+ *
+ * So the weights now reason from the work instead. Hand-held self-shots stay the largest share at
+ * a little under half, because they are still the cheap everyday post. A propped-up phone is what
+ * an actual planned picture looks like and is now close behind. A still out of a video is common
+ * on a page that posts video at all, and was badly underweighted at 10. Somebody else holding the
+ * camera is rare because it needs somebody else, not because it is unusual when they are there —
+ * the permitted-sources filter already removes it when she is alone, so its weight should reflect
+ * how often it happens *given* company.
+ */
+const WEIGHTS: Record<SlurpCameraSource, number> = {
+  selfie: 28,
+  mirror: 17,
+  tripod: 22,
+  screenshot: 15,
+  archive: 9,
+  partner: 9,
+};
+
+/**
+ * How much a Creator's own habits bend the odds. Enough to be their habit, not enough to be a rule.
+ *
+ * Lowered with the weights below. At 2.5 against the old selfie weight, a Creator who prefers
+ * selfies drew one about three posts in four, which is the monoculture again for that Creator.
+ */
+const PREFERENCE_MULTIPLIER = 2;
+
+/**
+ * What the post is for bends the odds too.
+ *
+ * A phone in your own hand dominates ordinary posting, but a planned shoot taken as a selfie is
+ * the same unexplained-access problem in reverse: the caption says this took an afternoon and the
+ * picture says she held the phone. Effort says the same thing from the production side.
+ */
+const INTENT_BIAS: Record<string, Partial<Record<SlurpCameraSource, number>>> = {
+  set: { selfie: 0.4, mirror: 0.8, tripod: 2.2, partner: 2, screenshot: 0.6 },
+  teaser: { tripod: 1.4, mirror: 1.2, selfie: 0.8 },
+  callback: { tripod: 1.3, selfie: 0.9 },
+  behind_the_scenes: { tripod: 1.5, screenshot: 1.6, selfie: 0.9 },
+  business: { selfie: 1.3, tripod: 0.6, partner: 0.5 },
+  casual: { selfie: 1.2, screenshot: 1.2, tripod: 0.7 },
+  appreciation: { selfie: 1.2, tripod: 0.8 },
+};
+
+const EFFORT_BIAS: Record<string, Partial<Record<SlurpCameraSource, number>>> = {
+  low: { selfie: 1.25, screenshot: 1.5, tripod: 0.4, partner: 0.6 },
+  medium: {},
+  high: { selfie: 0.5, tripod: 2, partner: 1.6, screenshot: 0.7 },
+};
+
+/**
+ * The camera source for one post.
+ *
+ * `sequence` is how many posts this Creator has already made. It seeds a deterministic weighted
+ * draw, so the same post is reproducible without forcing consecutive posts to differ.
+ *
+ * The rotation runs over the permitted list, so a Creator who is alone for several posts still
+ * moves through the sources available to them instead of stalling on one.
+ */
+export function slurpPostCameraSource(
+  creatorAccountId: string,
+  sequence: number,
+  options: {
+    companyCanHoldCamera: boolean;
+    prefers?: readonly SlurpCameraSource[];
+    /** What this post is for, from `slp-content-axes.ts`. */
+    intent?: string;
+    /** How much work this picture gets, from `slp-production-profile.ts`. */
+    effort?: string;
+  },
+): SlurpCameraSource {
+  const prefers = options.prefers ?? [];
+  const intentBias = (options.intent ? INTENT_BIAS[options.intent] : undefined) ?? {};
+  const effortBias = (options.effort ? EFFORT_BIAS[options.effort] : undefined) ?? {};
+  return slurpWeightedPick(
+    "camera",
+    creatorAccountId,
+    sequence,
+    slurpPermittedCameraSources(options).map((value) => ({
+      value,
+      weight:
+        WEIGHTS[value] *
+        (prefers.includes(value) ? PREFERENCE_MULTIPLIER : 1) *
+        (intentBias[value] ?? 1) *
+        (effortBias[value] ?? 1),
+    })),
+  );
+}
+
+/** The source as prompt text. One block, so the caller does not assemble it in three places. */
+export function slurpCameraSourceInstruction(source: SlurpCameraSource): string {
+  return `${RULES[source].instruction}\n${SLURP_CAMERA_SOURCE_RULE}`;
+}

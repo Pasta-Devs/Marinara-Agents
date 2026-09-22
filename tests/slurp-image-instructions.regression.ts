@@ -8,6 +8,7 @@ import {
   MAX_FALLBACK_IMAGE_PROMPT_LENGTH,
   selectSlpImageProviderPrompt,
 } from "../packages/slurp2/src/engine/packages/server/src/slp/base/media/slp-image-prompt";
+import { slurpVisualBriefText } from "../packages/slurp2/src/engine/packages/server/src/slp/base/media/slp-visual-brief";
 import { slurp2Source } from "./slurp2-source";
 
 const root = join(import.meta.dirname, "..");
@@ -35,6 +36,37 @@ const root = join(import.meta.dirname, "..");
   assert.equal(reasons.length, 2);
   assert.equal(selectSlpImageProviderPrompt({ rewrittenPrompt: null, rawPrompt: longDraft, onFallback }), longDraft);
   assert.equal(reasons.length, 2);
+
+  const identityAndScene = "Appearance: copper hair, green eyes. Expression: an amused, guarded half-smile.";
+  const fallbackWithIdentity = selectSlpImageProviderPrompt({
+    rewrittenPrompt: null,
+    rawPrompt: longDraft,
+    fallbackPrefix: identityAndScene,
+    rewriteAttempted: true,
+  });
+  assert.ok(fallbackWithIdentity.startsWith(identityAndScene), "a failed rewrite must retain identity and expression");
+
+  const visualBrief = slurpVisualBriefText({
+    subject: "the Creator",
+    action: "holding a phone",
+    setting: "a lived-in apartment",
+    company: "alone",
+    clothing: "a pastel sweater",
+    camera: `Camera rules: ${"long camera boilerplate ".repeat(100)}`,
+    mood: "chaotic, playful, and visibly amused",
+    sexualLevel: "none",
+  });
+  const fallbackWithPersonality = selectSlpImageProviderPrompt({
+    rewrittenPrompt: null,
+    rawPrompt: longDraft,
+    fallbackPrefix: `Appearance: petite, blonde, blue-brown eyes.\n${visualBrief}`,
+    rewriteAttempted: true,
+  });
+  assert.match(fallbackWithPersonality, /Mood and production effort: chaotic, playful, and visibly amused/u);
+  assert.ok(
+    fallbackWithPersonality.indexOf("Mood and production effort:") < fallbackWithPersonality.indexOf("Camera rules:"),
+    "personality-bearing mood must precede camera boilerplate in a capped fallback",
+  );
 }
 
 // The cap cuts on a boundary: a mid-word cut mangles the last, most specific visual detail.
@@ -210,6 +242,7 @@ for (const source of [images, publicImages]) {
     "art style and image preferences must reach the provider; personality is checked at any length",
   );
   assert.match(source, /selectSlpImageProviderPrompt/u);
+  assert.match(source, /fallbackPrefix: \[\s*characterDescription/u, "fallbacks must lead with Creator appearance");
   // Both fallback paths — interpretation disabled, and a rejected rewrite — must still carry style.
   assert.match(source, /compiledDraft|compiledPrompt/u);
   // A reviewed prompt is recompiled so the style profile survives the review path.
@@ -225,8 +258,8 @@ for (const source of [images, publicImages]) {
   );
   assert.match(
     source,
-    /rewrittenPrompt: compiledRewrittenPrompt\?\.prompt \|\| rewrittenPrompt/u,
-    "the provider must receive the recompiled rewrite, not the raw model output",
+    /rewrittenPrompt: acceptedRewrittenPrompt/u,
+    "the provider must receive the policy-checked recompiled rewrite, not the raw model output",
   );
   // The recompile must use the same style inputs as the first compile, or it silently applies the
   // global default instead of the connection's selected profile.

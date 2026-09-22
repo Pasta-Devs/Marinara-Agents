@@ -6,11 +6,28 @@ import { join } from "node:path";
 // parser. The route list below is the post-rename inventory. BASELINE is derived from it through
 // the explicit mapping table, so a method change or a missing route cannot pass by rebaselining.
 const EXPECTED = [
+  "GET /slurp/posts/:id/deep-details",
+  "GET /continuity",
+  "GET /continuity/:creatorAccountId",
+  "GET /messages/threads/:threadId/requests",
+  "GET /noodler/posts/:id/media/:position",
+  "GET /slurp/tasks",
+  "PATCH /continuity/facts/:id",
+  "POST /continuity/:creatorAccountId/facts",
+  "POST /continuity/:target/:id/retract",
+  "POST /continuity/facts/:id/promote",
+  "POST /continuity/proposals/:id/:decision",
+  "POST /messages/threads/:threadId/requests/:requestId/action",
+  "POST /messages/creators/:creatorAccountId/request-fan-reply",
+  "POST /messages/share-post",
+  "POST /slurp/posts/:id/report",
+  "POST /slurp/posts/:id/restore",
   "ADDCONTENTTYPEPARSER application/zip",
   "DELETE /data",
   "DELETE /data/unused",
   "DELETE /slurp/accounts/:id",
   "DELETE /slurp/accounts/:id/avatar",
+  "DELETE /slurp/accounts/:id/wardrobe/:lookId",
   "DELETE /slurp/accounts/:id/projects/:projectId",
   "DELETE /slurp/accounts/:id/subscribe",
   "DELETE /slurp/ads/pool/:id",
@@ -30,6 +47,7 @@ const EXPECTED = [
   "GET /messages/:messageId/media",
   "GET /messages/compose",
   "GET /messages/compose-targets",
+  "GET /messages/unread-count",
   "GET /messages/creators/:creatorAccountId/follow-up-analytics",
   "GET /messages/creators/:creatorAccountId/rapport",
   "GET /messages/creators/:creatorAccountId/settings",
@@ -48,6 +66,7 @@ const EXPECTED = [
   "GET /slurp/accounts/:id/projects",
   "GET /slurp/accounts/:id/projects/:projectId/posts",
   "GET /slurp/accounts/:id/subscribers",
+  "GET /slurp/accounts/:id/wardrobe",
   "GET /noodler/ads/:id/image/:fileName",
   "GET /slurp/ads/export",
   "GET /slurp/ads/lorebooks",
@@ -60,9 +79,9 @@ const EXPECTED = [
   "GET /slurp/first-posts/status",
   "GET /slurp/image-connections",
   "GET /slurp/notifications",
+  "GET /slurp/notifications/unseen-count",
   "GET /slurp/post-guidance",
   "GET /noodler/posts/:id/media",
-  "GET /slurp/posts/:id/share-card",
   "GET /slurp/stories/:id/views",
   "GET /slurp/studio",
   "GET /slurp/viewer",
@@ -72,17 +91,21 @@ const EXPECTED = [
   "GET /slurp/viewer/feed",
   "GET /slurp/viewer/unseen-count",
   "GET /slurp/viewer/wallet",
+  "GET /slurp/wardrobe/lorebooks",
   "GET /settings",
   "GET /settings/audience-characters",
   "GET /settings/audience-characters/groups",
   "GET /settings/defaults",
   "GET /settings/prompt-blocks",
+  "POST /settings/prompt-blocks/generate-preview",
+  "POST /settings/prompt-blocks/preview",
   "PATCH /accounts/:id/profile",
   "PATCH /accounts/:id/settings",
   "PATCH /ambient-profiles/:id",
   "PATCH /messages/creators/:creatorAccountId/settings",
   "PATCH /slurp/accounts/:id/avatar/source",
   "PATCH /slurp/accounts/:id/follow",
+  "PATCH /slurp/accounts/:id/wardrobe/:lookId",
   "PATCH /slurp/accounts/:id/projects/:projectId",
   "PATCH /slurp/ads/pool/:id",
   "PATCH /slurp/auto-post/schedule/:slotId",
@@ -93,6 +116,10 @@ const EXPECTED = [
   "PATCH /settings",
   "POST /accounts/:id/noodler",
   "POST /accounts/:id/post-draft",
+  "POST /slurp/accounts/:id/wardrobe",
+  "POST /slurp/accounts/:id/wardrobe/import",
+  "POST /slurp/accounts/:id/wardrobe/import-preview",
+  "POST /slurp/wardrobe/lorebook-entries",
   "POST /ambient-profiles/reroll",
   "POST /arc-library/:id/reset",
   "POST /autopurge/preview",
@@ -193,7 +220,42 @@ const RETAINED_OLD_PATHS = new Set([
   "GET /noodler/accounts/:id/banner/:fileName",
   "GET /noodler/ads/:id/image/:fileName",
   "GET /noodler/posts/:id/media",
+  "GET /noodler/posts/:id/media/:position",
 ]);
+const ADDED_ROUTES = new Set([
+  "GET /messages/unread-count",
+  "GET /slurp/notifications/unseen-count",
+  "GET /slurp/posts/:id/deep-details",
+  "POST /settings/prompt-blocks/generate-preview",
+  "GET /continuity",
+  "GET /continuity/:creatorAccountId",
+  "GET /messages/threads/:threadId/requests",
+  "GET /noodler/posts/:id/media/:position",
+  "GET /slurp/tasks",
+  "PATCH /continuity/facts/:id",
+  "POST /continuity/:creatorAccountId/facts",
+  "POST /continuity/:target/:id/retract",
+  "POST /continuity/facts/:id/promote",
+  "POST /continuity/proposals/:id/:decision",
+  "POST /messages/threads/:threadId/requests/:requestId/action",
+  "POST /messages/creators/:creatorAccountId/request-fan-reply",
+  "POST /messages/share-post",
+  "POST /slurp/wardrobe/lorebook-entries",
+  "POST /slurp/posts/:id/report",
+  "POST /slurp/posts/:id/restore",
+  "DELETE /slurp/accounts/:id/wardrobe/:lookId",
+  "GET /slurp/accounts/:id/wardrobe",
+  "GET /slurp/wardrobe/lorebooks",
+  "PATCH /slurp/accounts/:id/wardrobe/:lookId",
+  "POST /slurp/accounts/:id/wardrobe",
+  "POST /slurp/accounts/:id/wardrobe/import",
+  "POST /slurp/accounts/:id/wardrobe/import-preview",
+]);
+
+// Routes staging had that Slurp2 no longer serves. The share card is now drawn on a canvas in
+// the browser: the server render needed fonts installed on the host, which Engine hosts often
+// lack, so the card came out as the bare post image with no name, title, or caption.
+const REMOVED_ROUTES = new Set(["GET /noodler/posts/:id/share-card"]);
 
 const stagingRoutes = readFileSync(join(import.meta.dirname, "fixtures/slurp2-route-inventory.staging.txt"), "utf8")
   .split("\n")
@@ -207,25 +269,28 @@ const routeToStaging = (route: string): string => {
   if (route.startsWith("ADDCONTENTTYPEPARSER ") || RETAINED_OLD_PATHS.has(route)) return route;
   return route.replace("/slurp/", "/noodler/");
 };
-const mappedStagingRoutes = stagingRoutes.map(routeFromStaging).sort();
+const mappedStagingRoutes = [
+  ...stagingRoutes.filter((route) => !REMOVED_ROUTES.has(route)).map(routeFromStaging),
+  ...ADDED_ROUTES,
+].sort();
 assert.deepEqual([...EXPECTED].sort(), mappedStagingRoutes, "the route mapping must match the staging fixture");
 
 const EXPECTED_HANDLER_COUNTS = {
   "features/ads": 18,
   "features/audience": 12,
-  "features/creators": 19,
+  "features/creators": 34,
   "features/discovery": 4,
   "features/economy": 13,
-  "features/feed": 32,
-  "features/maintenance": 13,
+  "features/feed": 35,
+  "features/maintenance": 14,
   "features/media": 7,
-  "features/messages": 35,
-  "features/notifications": 2,
+  "features/messages": 40,
+  "features/notifications": 3,
   "features/onboarding": 4,
   "features/projects": 15,
-  "features/settings": 5,
+  "features/settings": 7,
 } as const;
-const EXPECTED_METHOD_COUNTS = { DELETE: 11, GET: 59, PATCH: 14, POST: 90, PUT: 5 } as const;
+const EXPECTED_METHOD_COUNTS = { DELETE: 12, GET: 68, PATCH: 16, POST: 105, PUT: 5 } as const;
 
 const root = join(import.meta.dirname, "../packages/slurp2/src/engine/packages/server/src/slp");
 const registration = /\bapp\.(get|post|put|patch|delete|addContentTypeParser)(?:<[^()]*?>)?\(\s*["'`]([^"'`]+)["'`]/gu;
@@ -280,7 +345,7 @@ const methodCounts = Object.fromEntries(
     }, new Map<string, number>()),
 );
 assert.deepEqual(methodCounts, EXPECTED_METHOD_COUNTS, "HTTP method multiset changed from staging");
-assert.equal(foundRoutes.filter((route) => !route.startsWith("ADDCONTENTTYPEPARSER ")).length, 179);
+assert.equal(foundRoutes.filter((route) => !route.startsWith("ADDCONTENTTYPEPARSER ")).length, 206);
 assert.deepEqual(handlerCounts, EXPECTED_HANDLER_COUNTS, "handler count changed in a feature");
 assert.ok(foundRoutes.includes("POST /slurp/posts/:id/media"), "the renamed POST media route must remain registered");
 assert.ok(
@@ -288,8 +353,11 @@ assert.ok(
   "changing the media upload method must fail the fixture",
 );
 assert.deepEqual(
-  foundRoutes.map(routeToStaging).sort(),
-  stagingRoutes,
+  foundRoutes
+    .filter((route) => !ADDED_ROUTES.has(route))
+    .map(routeToStaging)
+    .sort(),
+  stagingRoutes.filter((route) => !REMOVED_ROUTES.has(route)),
   "the route change must be limited to the explicit Slurp mapping",
 );
 assert.deepEqual(

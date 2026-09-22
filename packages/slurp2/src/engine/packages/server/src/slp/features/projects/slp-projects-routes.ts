@@ -25,7 +25,6 @@ import {
 } from "../../modules/projects/slp-arc-library.js";
 import { slurpCrossoverForViewer } from "../../modules/projects/slp-arc-crossover.js";
 import { isSlurpViewerActorAccount } from "../../modules/settings/slp-settings.js";
-import { isCreatorHiddenFromViewer } from "../../base/identity/slp-access.js";
 import { generateSlurpArc, SlurpArcGenerationFailure } from "./slp-arc-generation-service.js";
 import { isConnectionAdmissionFailure } from "../../../services/generation/connection-admission.js";
 import type { FastifyInstance } from "fastify";
@@ -261,12 +260,7 @@ export async function slpProjectsRoutes(app: FastifyInstance, deps: SlpRouteDeps
     const creator = await noodle.getNoodlerAccountById((req.params as { id: string }).id);
     if (!creator || isSlurpViewerActorAccount(creator)) return { arcs: [] };
     const owner = creatorBelongsToViewer(creator, viewer);
-    if (
-      !owner &&
-      (isCreatorHiddenFromViewer(creator, viewer.id) ||
-        (creator.settings.privacy.identityDisclosure ?? "open") !== "open")
-    )
-      return { arcs: [] };
+    if (!owner && (creator.settings.privacy.identityDisclosure ?? "open") !== "open") return { arcs: [] };
     const projects = await noodle.listProjects(creator.id);
     // Crossover participants go through the same rules one by one: a participant hidden from this
     // viewer, or with a protected identity, is left out, and so are the posts they published.
@@ -279,9 +273,7 @@ export async function slpProjectsRoutes(app: FastifyInstance, deps: SlpRouteDeps
       const account = participants.get(id);
       return Boolean(
         account &&
-        (creatorBelongsToViewer(account, viewer) ||
-          (!isCreatorHiddenFromViewer(account, viewer.id) &&
-            (account.settings.privacy.identityDisclosure ?? "open") === "open")),
+        (creatorBelongsToViewer(account, viewer) || (account.settings.privacy.identityDisclosure ?? "open") === "open"),
       );
     };
     return {

@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Loader2, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 import { useGenerateSlurpPostGuidance, useUpdateSlurpPostGuidance } from "./slp-post-guidance-contract";
@@ -29,6 +30,8 @@ export function SlurpPostGuidanceField({
   clearLabel,
   savedMessage,
   disabled = false,
+  draftValue,
+  onStage,
 }: {
   /** `menu` is a Creator's private content menu: same card, no model draft. */
   access: SlurpPostAccess | "menu";
@@ -42,8 +45,13 @@ export function SlurpPostGuidanceField({
   clearLabel: string;
   savedMessage: string;
   disabled?: boolean;
+  /** When supplied, edits join the Backstage draft instead of saving this separate document now. */
+  draftValue?: string;
+  onStage?: (value: string) => void;
 }) {
-  const saved = (creatorId ? guidance?.creators[creatorId] : guidance?.defaults)?.[access] ?? "";
+  const { t } = useTranslation();
+  const persisted = (creatorId ? guidance?.creators[creatorId] : guidance?.defaults)?.[access] ?? "";
+  const saved = draftValue ?? persisted;
   const [draft, setDraft] = useState("");
   const [open, setOpen] = useState(false);
   const update = useUpdateSlurpPostGuidance();
@@ -57,6 +65,10 @@ export function SlurpPostGuidanceField({
 
   const save = async (next: string): Promise<boolean> => {
     if (next === saved) return true;
+    if (onStage) {
+      onStage(next);
+      return true;
+    }
     try {
       await update.mutateAsync({ creatorId, [access]: next });
       toast.success(savedMessage);
@@ -129,6 +141,7 @@ export function SlurpPostGuidanceField({
         }}
         restoreLabel={clearLabel}
         pending={disabled || update.isPending || generate.isPending}
+        saveLabel={t("ui.slurp.settings.prompts.applyDraft", { defaultValue: "Apply to draft" })}
       />
     </div>
   );

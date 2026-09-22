@@ -19,6 +19,7 @@ import {
 } from "../../../services/garnish-ads/garnish-ads.export.js";
 import type { FastifyInstance } from "fastify";
 import type { SlpRouteDeps } from "../viewer/slp-viewer-contract.js";
+import { slurpPromptContext } from "../../base/prompting/slp-prompt-blocks.js";
 
 export async function slpAdsRoutes(app: FastifyInstance, deps: SlpRouteDeps) {
   const { ads, characters, noodle, resolveViewerPersona } = deps;
@@ -261,7 +262,7 @@ export async function slpAdsRoutes(app: FastifyInstance, deps: SlpRouteDeps) {
         era: settings.inlineAdsEra,
         contentCeiling: settings.inlineAdsContentCeiling,
         worldContext: [lorebook?.text, settings.inlineAdsWorldContext].filter((part) => part?.trim()).join("\n\n"),
-        promptBlocks: settings.promptBlocks,
+        promptBlocks: slurpPromptContext(settings).blocks,
       });
       let images = 0;
       if (settings.inlineAdsImagesEnabled) {

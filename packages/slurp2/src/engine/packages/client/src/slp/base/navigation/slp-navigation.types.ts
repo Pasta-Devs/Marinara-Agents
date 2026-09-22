@@ -41,6 +41,8 @@ export type SlurpNavigationState =
       target?: SlurpBackstageTarget;
       /** A search result to scroll to and focus once the target renders. Never persisted. */
       settingKey?: string;
+      /** Opens this Creator's continuity editor once the Creators page renders. Never persisted. */
+      continuityCreatorId?: string;
       returnTo?: SlurpNavigationState;
     };
 

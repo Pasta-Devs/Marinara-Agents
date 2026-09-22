@@ -6,7 +6,8 @@ import type { ImagePromptOverride } from "../../components/ui/ImagePromptReviewM
 import { confirmSlurpAvatarReview } from "../features/creators/SlpStageProfileForm";
 import { ApiError } from "../../lib/api-client";
 import { toast } from "sonner";
-import { useSlurpHomeBaseState, type SlurpHomeBaseState, type SlurpHomeProps } from "./slp-home-state";
+import { useSlurpHomeBaseState, type SlurpHomeBaseState } from "./slp-home-state";
+import type { SlurpHomeProps } from "./slp-home.types";
 
 /**
  * What the Creator Hub does: open and close the profile editor, generate and save a stage
@@ -123,6 +124,9 @@ function useSlurpHomeActions(state: SlurpHomeBaseState) {
       handle: profile.handle,
       bio: profile.bio,
       stagePersonality: profile.stagePersonality,
+      appearance: profile.appearance,
+      wardrobe: profile.wardrobe,
+      locations: profile.locations,
       disclosureMode: profile.disclosureMode ?? "hinted",
       gender: profile.gender,
       tags: profile.tags,
@@ -198,6 +202,9 @@ function useSlurpHomeActions(state: SlurpHomeBaseState) {
         handle: profile.handle,
         bio: profile.bio,
         stagePersonality: profile.stagePersonality,
+        appearance: profile.appearance,
+        wardrobe: profile.wardrobe,
+        locations: profile.locations,
         disclosureMode: profile.disclosureMode ?? "hinted",
         gender: profile.gender,
         tags: profile.tags,
@@ -356,6 +363,8 @@ function useSlurpHomeActions(state: SlurpHomeBaseState) {
     format,
     postType,
     generateImage,
+    contentIntent,
+    contentDelivery,
   }: SlpCreatorPostSubmission) => {
     if (!(await confirmProviderDisclosure())) return;
     const guide = serializeCreatorPostGuide(title, body);
@@ -364,6 +373,8 @@ function useSlurpHomeActions(state: SlurpHomeBaseState) {
       targetAccountId: profileId,
       ...(guide ? { noodlerPostGuide: guide } : {}),
       ...(generateImage ? { generateImage: true } : {}),
+      ...(contentIntent ? { contentIntent } : {}),
+      ...(contentDelivery ? { contentDelivery } : {}),
       access,
       image,
       poll,

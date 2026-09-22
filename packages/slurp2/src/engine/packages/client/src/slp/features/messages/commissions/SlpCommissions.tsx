@@ -116,7 +116,10 @@ export function CommissionRow({
   const deliver = useDeliverSlurpCommission();
   const decline = useDeclineSlurpCommission();
   const [price, setPrice] = useState(commission.price > 0 ? commission.price : (commission.suggestedPrice ?? 25));
-  const [offer, setOffer] = useState(Math.max(1, Math.round(commission.price * 0.8)));
+  // Derived until the fan edits it: a row mounted as a brief has price 0, and a fixed initial
+  // state kept offering 1 coin after the quote arrived.
+  const [offerInput, setOffer] = useState<number | null>(null);
+  const offer = offerInput ?? Math.max(1, Math.round(commission.price * 0.8));
   const pendingOffer = commission.counterPrice ?? null;
   const canOffer = pendingOffer === null && (commission.haggleRounds ?? 0) < 3;
   const canEnd =
@@ -124,7 +127,9 @@ export function CommissionRow({
     commission.state === "quoted" ||
     (!ownsCreator &&
       commission.state === "accepted" &&
-      (!commission.deliverAt || commission.deliverAt <= new Date().toISOString()));
+      (!commission.deliverAt || commission.deliverAt <= new Date().toISOString())) ||
+    // A cancellation whose refund failed part-way; the server lets the fan retry it.
+    (!ownsCreator && commission.state === "cancellation_pending");
   const [generateImage, setGenerateImage] = useState(false);
   const [delivery, setDelivery] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -132,7 +137,10 @@ export function CommissionRow({
   const busy = quote.isPending || counter.isPending || accept.isPending || deliver.isPending || decline.isPending;
   const wallet = useSlurpWallet(personaId);
   const steps = ["brief", "quoted", "accepted", "delivered"] as const;
-  const currentStep = commission.state === "declined" ? -1 : steps.indexOf(commission.state);
+  const currentStep =
+    commission.state === "declined"
+      ? -1
+      : steps.indexOf(commission.state === "cancellation_pending" ? "accepted" : commission.state);
   const deliveryImage = useSlurpMediaSrc(
     deliveryMessage?.imageUrl
       ? `${deliveryMessage.imageUrl}${deliveryMessage.imageUrl.includes("?") ? "&" : "?"}personaId=${encodeURIComponent(personaId)}`
@@ -233,7 +241,11 @@ export function CommissionRow({
                     : "Paid. The Creator is working on your request."
                   : commission.state === "delivered"
                     ? "The finished commission is in this chat."
-                    : "This commission is closed.",
+                    : commission.state === "cancellation_pending"
+                      ? ownsCreator
+                        ? "The fan cancelled. The refund is still being processed."
+                        : "Your refund is not finished yet. Cancel again to retry it."
+                      : "This commission is closed.",
         })}
       </p>
 

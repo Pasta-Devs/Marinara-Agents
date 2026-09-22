@@ -135,17 +135,41 @@ export function snapshotForAccount(account: SlpAccount): SlpAuthorSnapshot {
 }
 
 export function mapPost(row: PostRow): SlpPost {
+  const metadata = parseRecord(row.metadata);
+  const secondary = Array.isArray(metadata.postMedia)
+    ? metadata.postMedia.flatMap((item) => {
+        if (!item || typeof item !== "object" || Array.isArray(item)) return [];
+        const media = item as Record<string, unknown>;
+        return typeof media.id === "string" && typeof media.position === "number" && typeof media.imageUrl === "string"
+          ? [
+              {
+                id: media.id,
+                position: media.position,
+                imageUrl: media.imageUrl,
+                imagePrompt: typeof media.imagePrompt === "string" ? media.imagePrompt : null,
+              },
+            ]
+          : [];
+      })
+    : [];
+  const images = row.imageUrl
+    ? [
+        { id: `${row.id}:primary`, position: 0, imageUrl: row.imageUrl, imagePrompt: row.imagePrompt ?? null },
+        ...secondary,
+      ]
+    : secondary;
   return {
     id: row.id,
     authorAccountId: row.authorAccountId,
     content: row.content ?? "",
     imageUrl: row.imageUrl ?? null,
     imagePrompt: row.imagePrompt ?? null,
+    images: images.sort((left, right) => left.position - right.position),
     parentPostId: row.parentPostId ?? null,
     quotePostId: row.quotePostId ?? null,
     source: row.source === "generated" ? "generated" : "manual",
     access: row.access === "public" ? "public" : "locked",
-    metadata: parseRecord(row.metadata),
+    metadata,
     authorSnapshot: parseAuthorSnapshot(row.authorSnapshot),
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,

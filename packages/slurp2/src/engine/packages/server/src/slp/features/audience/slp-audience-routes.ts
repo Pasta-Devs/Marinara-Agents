@@ -26,13 +26,13 @@ import {
   slurpAudienceCharacterFanTypeId,
   slurpAudienceCharacterTraits,
 } from "../../../../../shared/src/slp/slp-audience-characters.js";
-import { isCreatorHiddenFromViewer } from "../../base/identity/slp-access.js";
 import { runCreatorFanActivity, getCreatorFanActivityStatus } from "./slp-fan-activity-operation.js";
 import { isConnectionAdmissionFailure } from "../../../services/generation/connection-admission.js";
 import { getErrorMessage } from "../../modules/creators/slp-public-support.js";
 import { logger } from "../../../lib/logger.js";
 import type { FastifyInstance } from "fastify";
 import type { SlpRouteDeps } from "../viewer/slp-viewer-contract.js";
+import { slurpPromptContext } from "../../base/prompting/slp-prompt-blocks.js";
 
 /** The `identity` lock is shared by refresh, reroll, and profile edits, so the 409 stays operation-neutral. */
 const SLP_IDENTITY_LOCK_BUSY = "Another Slurp identity operation is already running. Wait for it to finish.";
@@ -191,7 +191,7 @@ export async function slpAudienceRoutes(app: FastifyInstance, deps: SlpRouteDeps
           accounts,
           connection,
           debugMode: parsed.data.debugMode ?? false,
-          promptBlocks: settings.promptBlocks,
+          promptBlocks: slurpPromptContext(settings).blocks,
         }),
       };
     });
@@ -336,12 +336,7 @@ export async function slpAudienceRoutes(app: FastifyInstance, deps: SlpRouteDeps
     const { id } = req.params as { id: string };
     const viewer = await resolveViewerPersona(body.personaId);
     const creator = await noodle.getNoodlerAccountById(id);
-    if (
-      !viewer ||
-      !creator ||
-      creatorBelongsToViewer(creator, viewer) ||
-      isCreatorHiddenFromViewer(creator, viewer.id)
-    ) {
+    if (!viewer || !creator || creatorBelongsToViewer(creator, viewer)) {
       return reply.code(404).send({ error: "Slurp stage profile not found" });
     }
     const updated = await noodle.updateViewerFollow(viewer.id, creator.id, body.followed);

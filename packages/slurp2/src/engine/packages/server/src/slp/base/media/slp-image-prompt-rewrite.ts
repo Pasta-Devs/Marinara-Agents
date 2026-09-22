@@ -6,6 +6,8 @@ import { createConnectionsStorage } from "../../../services/storage/connections.
 import { createPromptOverridesStorage } from "../../../services/storage/prompt-overrides.storage.js";
 import { loadPrompt, NOODLE_IMAGE_INTERPRET } from "../../../services/prompt-overrides/index.js";
 import { composeSlurpPromptBlocks, type SlurpPromptBlockOverrides } from "../prompting/slp-prompt-blocks.js";
+import type { SlurpVisualBrief } from "./slp-visual-brief.js";
+import { slurpVisualBriefPolicyText, slurpVisualBriefText } from "./slp-visual-brief.js";
 
 const MAX_REWRITTEN_PROMPT_LENGTH = 12_000;
 const MAX_INSTRUCTIONS_LENGTH = 5_000;
@@ -34,6 +36,8 @@ function parseRecord(value: unknown): Record<string, unknown> {
 export async function rewriteSlpImagePrompt(input: {
   db: DB;
   prompt: string;
+  postContent?: string;
+  visualBrief?: SlurpVisualBrief;
   interpretationInstruction?: string;
   instructions?: string;
   characterContext?: string;
@@ -45,6 +49,11 @@ export async function rewriteSlpImagePrompt(input: {
   if ((!instructions && !input.characterContext?.trim() && !input.styleGuidance?.trim()) || !prompt) return null;
   const characterContext =
     input.characterContext?.trim().slice(0, 8_000) || "No additional character context was provided.";
+  const postContext = input.postContent?.trim().slice(0, 4_000) || "No post caption was provided.";
+  const visualBrief = input.visualBrief
+    ? slurpVisualBriefText(input.visualBrief)
+    : "No typed visual brief was provided.";
+  const visualPolicy = input.visualBrief ? slurpVisualBriefPolicyText(input.visualBrief) : "";
   const styleGuidance = input.styleGuidance?.trim().slice(0, 5_000) || "";
 
   try {
@@ -88,6 +97,9 @@ export async function rewriteSlpImagePrompt(input: {
                     ? "Apply the supplied art-style guidance when the original prompt does not specify a style. Preserve an explicitly requested style in the original prompt or user instructions."
                     : "",
                   "Treat the user's instructions as guidance, not text to copy into the image prompt.",
+                  "The post context describes the same moment. Preserve its action and setting when they are present in the draft. A caption can be a hook, so do not copy its wording or force every caption detail into the image.",
+                  "Do not increase the sexual intensity. Keep an ordinary or non-sexual post ordinary and non-sexual. Add nudity, explicit anatomy, or sexual activity only when the original prompt or an explicit trusted instruction already requires it.",
+                  visualPolicy,
                   'Return valid JSON only: {"prompt":"provider-ready image prompt"}.',
                 ]
                   .filter(Boolean)
@@ -104,6 +116,12 @@ export async function rewriteSlpImagePrompt(input: {
             "<original_image_prompt>",
             prompt,
             "</original_image_prompt>",
+            "<post_context>",
+            postContext,
+            "</post_context>",
+            "<visual_brief>",
+            visualBrief,
+            "</visual_brief>",
             "<character_context>",
             characterContext,
             "</character_context>",

@@ -255,6 +255,24 @@ export function createReserveStorage1(context: SlurpStorageContext) {
         return true;
       });
     },
+    /**
+     * Retire a scheduled slot the Creator chose not to post in.
+     *
+     * Discarded rather than filled: there is no payload, no image, and no failure. The slot is
+     * spent, so the reserve does not try again for the same time and nothing downstream reads it
+     * as a run that went wrong.
+     */
+    async skipNoodlerScheduledPost(id: string, expectedPublishAt: string, at: Date): Promise<boolean> {
+      return db.transaction(async (tx) => {
+        const current = (await tx.select().from(slpCreatorPreparedPosts).where(eq(slpCreatorPreparedPosts.id, id)))[0];
+        if (!current || current.state !== "scheduled" || current.publishAt !== expectedPublishAt) return false;
+        await tx
+          .update(slpCreatorPreparedPosts)
+          .set({ state: "discarded", updatedAt: at.toISOString() })
+          .where(eq(slpCreatorPreparedPosts.id, id));
+        return true;
+      });
+    },
     async rescheduleNoodlerPost(
       id: string,
       publishAt: string,

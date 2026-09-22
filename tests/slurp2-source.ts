@@ -141,11 +141,14 @@ export const SLURP2_SOURCE_MODULES: Record<string, readonly string[]> = {
     "packages/client/src/slp/modules/post/SlpPostComposerShell.tsx",
   ],
   "packages/client/src/components/slurp/SlurpCreatorPostCard.tsx": [
-    "packages/client/src/slp/modules/post/SlpCreatorPostCard.tsx",
-    "packages/client/src/slp/modules/post/SlpCreatorPostMenu.tsx",
+    "packages/client/src/slp/modules/post/SlpPostCard.tsx",
+    "packages/client/src/slp/modules/post/SlpPostMenu.tsx",
     "packages/client/src/slp/modules/post/SlpReplyRow.tsx",
     "packages/client/src/slp/modules/post/SlpReplyComposer.tsx",
     "packages/client/src/slp/modules/post/SlpLockedPostCard.tsx",
+  ],
+  "packages/client/src/slp/modules/post/SlpCreatorPostMenu.tsx": [
+    "packages/client/src/slp/modules/post/SlpPostMenu.tsx",
   ],
   "packages/client/src/components/slurp/SlurpOnboardingPanel.tsx": [
     "packages/client/src/slp/features/onboarding/SlpOnboardingPanel.tsx",
@@ -154,6 +157,7 @@ export const SLURP2_SOURCE_MODULES: Record<string, readonly string[]> = {
   ],
   "packages/client/src/components/slurp/SlurpStageProfileForm.tsx": [
     "packages/client/src/slp/features/creators/SlpStageProfileForm.tsx",
+    "packages/client/src/slp/features/creators/SlpStageFactsFields.tsx",
   ],
   "packages/client/src/components/slurp/SlurpCreatorProfileEditor.tsx": [
     "packages/client/src/slp/features/creators/SlpCreatorProfileEditor.tsx",
@@ -254,6 +258,7 @@ export const SLURP2_SOURCE_MODULES: Record<string, readonly string[]> = {
     "packages/server/src/slp/data/creators/slp-creators-storage-2.ts",
     "packages/server/src/slp/data/creators/slp-creators-storage-3.ts",
     "packages/server/src/slp/data/creators/slp-creators-storage-4.ts",
+    "packages/server/src/slp/data/creators/slp-wardrobe-storage.ts",
     "packages/server/src/slp/data/feed/reserve/slp-reserve-storage-1.ts",
     "packages/server/src/slp/data/feed/reserve/slp-reserve-storage-2.ts",
     "packages/server/src/slp/data/audience/slp-audience-storage.ts",
@@ -434,6 +439,16 @@ export const SLURP2_SOURCE_MODULES: Record<string, readonly string[]> = {
     "packages/server/src/slp/features/feed/slp-generation-service.ts",
     "packages/server/src/slp/features/feed/slp-public-identity.ts",
     "packages/server/src/slp/features/feed/slp-post-prompt.ts",
+    "packages/server/src/slp/features/feed/slp-post-picture-briefs.ts",
+    "packages/server/src/slp/features/feed/slp-prepared-post.ts",
+  ],
+  // The model call and its correction turn moved into slp-post-prompt.ts (completeSlurpCreatorPost),
+  // and the two picture briefs into slp-post-picture-briefs.ts.
+  "packages/server/src/slp/features/feed/slp-generation-service.ts": [
+    "packages/server/src/slp/features/feed/slp-generation-service.ts",
+    "packages/server/src/slp/features/feed/slp-post-prompt.ts",
+    "packages/server/src/slp/features/feed/slp-post-picture-briefs.ts",
+    "packages/server/src/slp/features/feed/slp-prepared-post.ts",
   ],
   "packages/server/src/services/slurp/slurp-post.operation.ts": [
     "packages/server/src/slp/features/feed/slp-post-operation.ts",
@@ -478,7 +493,8 @@ export const SLURP2_SOURCE_MODULES: Record<string, readonly string[]> = {
   "packages/server/src/services/slurp/slurp-generated-refresh.ts": [
     "packages/server/src/slp/features/feed/slp-generated-refresh.ts",
   ],
-  "packages/server/src/services/slurp/slurp-share-card.ts": ["packages/server/src/slp/features/feed/slp-share-card.ts"],
+  // The share card moved from a sharp/SVG render on the server to a canvas render in the browser.
+  "packages/server/src/services/slurp/slurp-share-card.ts": ["packages/client/src/slp/modules/post/slp-share-card.ts"],
   "packages/server/src/services/slurp/slurp-posting-interval.ts": [
     "packages/server/src/slp/modules/feed/slp-posting-interval.ts",
   ],
@@ -508,6 +524,8 @@ export const SLURP2_SOURCE_MODULES: Record<string, readonly string[]> = {
   ],
   "packages/server/src/services/slurp/slurp-message-generation.service.ts": [
     "packages/server/src/slp/features/messages/slp-message-generation-service.ts",
+    // The fan's side of the same module: it writes the audience member's next message.
+    "packages/server/src/slp/features/messages/slp-fan-reply-service.ts",
   ],
   "packages/server/src/services/slurp/slurp-message-scheduler.service.ts": [
     "packages/server/src/slp/features/messages/slp-message-scheduler-service.ts",
@@ -611,6 +629,9 @@ export const SLURP2_SOURCE_MODULES: Record<string, readonly string[]> = {
   ],
   "packages/server/src/services/slurp/slurp-pending-text.service.ts": [
     "packages/server/src/slp/features/world/slp-pending-text-service.ts",
+  ],
+  "packages/server/src/services/slurp/slurp-continuity-extraction.service.ts": [
+    "packages/server/src/slp/features/messages/slp-continuity-extraction-service.ts",
   ],
   "packages/server/src/services/slurp/slurp-reaction-bank.ts": [
     "packages/server/src/slp/modules/world/slp-reaction-bank.ts",
@@ -753,6 +774,11 @@ export const SLURP2_SOURCE_MODULES: Record<string, readonly string[]> = {
   ],
   "packages/client/src/components/slurp/SlurpPromptBlockBuilder.tsx": [
     "packages/client/src/slp/features/settings/SlpPromptBlockBuilder.tsx",
+    "packages/client/src/slp/features/settings/SlpPromptOutcomeCard.tsx",
+    "packages/client/src/slp/features/settings/SlpPromptPipeline.tsx",
+    "packages/client/src/slp/features/settings/SlpPromptPreviewInspector.tsx",
+    "packages/client/src/slp/features/settings/SlpReusableInstructions.tsx",
+    "packages/client/src/slp/features/settings/slp-prompt-studio-model.ts",
   ],
   // Slice 10 split the shell: domain-neutral chrome to base/, the shell and persona switcher to
   // modules/chrome/ because the shell renders a wallet balance through modules/coin.

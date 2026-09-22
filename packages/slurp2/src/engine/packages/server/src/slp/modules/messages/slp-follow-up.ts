@@ -1,3 +1,5 @@
+import { randomUUID } from "node:crypto";
+
 /**
  * Creator-initiated follow-up messages with promise tracking.
  *
@@ -51,12 +53,13 @@ export type FollowUpIntent = {
 export function parseTimingToMinutes(timing: string): number | null {
   const lower = timing.toLowerCase().trim();
 
-  // Direct numbers: "30 minutes", "2 hours"
-  const directMatch = lower.match(/(\d+)\s*(minute|hour|min|hr)s?/);
+  // Direct numbers: "30 minutes", "1.5 hours", "2 days". The decimal and the day and week units
+  // were missing, so "1.5 hours" read as 5 hours and "2 days" fell through to the one-hour default.
+  const directMatch = lower.match(/(\d+(?:\.\d+)?)\s*(minute|min|hour|hr|day|week)s?\b/);
   if (directMatch) {
-    const amount = parseInt(directMatch[1], 10);
-    const unit = directMatch[2];
-    return unit.startsWith("h") ? amount * 60 : amount;
+    const amount = Number(directMatch[1]);
+    const perUnit = { minute: 1, min: 1, hour: 60, hr: 60, day: 1440, week: 10080 }[directMatch[2]] ?? 1;
+    return Math.round(amount * perUnit);
   }
 
   // Named times
@@ -85,7 +88,7 @@ export function detectPromiseFromText(text: string): {
 
   // Promise delivery patterns
   const promisePatterns = [
-    /i['']ll (?:send|give|show) (?:you )?(.+?) (?:later|tonight|tomorrow|soon)/i,
+    /i['’]ll (?:send|give|show) (?:you )?(.+?) (?:later|tonight|tomorrow|soon)/i,
     /(?:will|gonna) (?:send|give|show) (?:you )?(.+?) (?:later|tonight|tomorrow|soon)/i,
     /(?:promised|promise) (?:to )?(?:send|give|show) (?:you )?(.+)/i,
   ];
@@ -107,8 +110,9 @@ export function detectPromiseFromText(text: string): {
 
   // Task update patterns
   const taskPatterns = [
-    /(?:working on|finishing|completing) (?:your |the )?(.+)/i,
-    /(?:i['']ll|will) (?:let you know|update you|keep you posted) (?:about|on|when)/i,
+    // Only work for the fan. Without "your", "finishing my coffee" scheduled a task update.
+    /(?:working on|finishing|completing) your (.+)/i,
+    /(?:i['’]ll|will) (?:let you know|update you|keep you posted) (?:about|on|when)/i,
   ];
 
   for (const pattern of taskPatterns) {
@@ -125,7 +129,7 @@ export function detectPromiseFromText(text: string): {
 
   // Reminder patterns
   const reminderPatterns = [
-    /(?:i['']ll|will) remind (?:you|u) (?:about|to) (.+?) in (\d+) (\w+)/i,
+    /(?:i['’]ll|will) remind (?:you|u) (?:about|to) (.+?) in (\d+) (\w+)/i,
     /remind(?:er)? (?:about|for) (.+)/i,
   ];
 
@@ -173,7 +177,7 @@ export function createScheduledFollowUps(
     for (let i = 0; i < intent.count; i++) {
       const delayMinutes = intervalMinutes * (i + 1);
       followUps.push({
-        id: `followup-${Date.now()}-${i}`,
+        id: `followup-${randomUUID()}`,
         scheduledAt: new Date(currentTime.getTime() + delayMinutes * 60_000).toISOString(),
         type: intent.type,
         reason: intent.reason,
@@ -188,7 +192,7 @@ export function createScheduledFollowUps(
     // Single follow-up
     const delayMinutes = parseTimingToMinutes(intent.timing) ?? 60;
     followUps.push({
-      id: `followup-${Date.now()}`,
+      id: `followup-${randomUUID()}`,
       scheduledAt: new Date(currentTime.getTime() + delayMinutes * 60_000).toISOString(),
       type: intent.type,
       reason: intent.reason,

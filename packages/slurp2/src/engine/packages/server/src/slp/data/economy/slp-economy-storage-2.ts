@@ -17,7 +17,6 @@ import {
 } from "../../modules/economy/slp-wallet.js";
 import { reverse as reverseEarnings, slurpEarningsKey } from "../../modules/economy/slp-earnings.js";
 import { logger } from "../../../lib/logger.js";
-import { isCreatorHiddenFromViewer } from "../../base/identity/slp-access.js";
 import { slpAccounts, slpPosts, slpPostUnlocks } from "../../../db/schema/slurp.js";
 import { newId, now } from "../../../utils/id-generator.js";
 import { slurpViewerSettingsKey } from "../host/slp-storage-constants.js";
@@ -85,11 +84,7 @@ export function createEconomyStorage2(context: SlurpStorageContext) {
             .from(slpAccounts)
             .where(and(eq(slpAccounts.id, postRow.authorAccountId), eq(slpAccounts.platform, "slurp")));
           const author = authorRows[0] ? mapAccount(authorRows[0]) : null;
-          if (
-            !author ||
-            (author.sourceKind === "persona" && author.sourceEntityId === viewerAccountId) ||
-            isCreatorHiddenFromViewer(author, viewerAccountId)
-          ) {
+          if (!author || (author.sourceKind === "persona" && author.sourceEntityId === viewerAccountId)) {
             return null;
           }
           const existing = await tx
