@@ -408,7 +408,7 @@ export function createFeedPostStorage2(context: SlurpStorageContext) {
       return { ...existing, access: "draft", updatedAt: deletedAt };
     },
     async restoreNoodlerPost(id: string): Promise<SlpCreatorManagedPost | null> {
-      const existing = await this.getNoodlerPostById(id);
+      const existing = await this.getNoodlerPostById(id, true);
       if (!existing || typeof existing.metadata.slurpDeletedAt !== "string") return null;
       const access = existing.metadata.slurpDeletedAccess === "locked" ? "locked" : "public";
       const metadata = { ...existing.metadata };
@@ -425,7 +425,10 @@ export function createFeedPostStorage2(context: SlurpStorageContext) {
       return rows
         .filter((row) => {
           const deletedAt = parseRecord(row.metadata).slurpDeletedAt;
-          return typeof deletedAt === "string" && Date.parse(deletedAt) + 60_000 <= at;
+          // The client offers Restore for 60s from when its delete call returned, and the sweeper
+          // only runs once a minute, so purging at exactly 60s raced the user's own undo window
+          // and turned a valid Restore into a 409. Purge at double the offered window instead.
+          return typeof deletedAt === "string" && Date.parse(deletedAt) + 120_000 <= at;
         })
         .map((row) => row.id);
     },

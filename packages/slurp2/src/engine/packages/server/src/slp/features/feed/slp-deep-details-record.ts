@@ -3,6 +3,8 @@ import type { ChatMessage } from "../../../services/llm/base-provider.js";
 import type { SlurpCreatorStrategy } from "../../modules/creators/slp-creator-strategy.js";
 import type { SlurpPostVariation } from "../../modules/feed/slp-post-variation.js";
 import type { SlurpVisualBrief } from "../../base/media/slp-visual-brief.js";
+import type { SlurpWardrobeSelection } from "../../modules/feed/slp-wardrobe-selection.js";
+import type { SlpWardrobeScene } from "../../../../../shared/src/slp/slp-wardrobe.js";
 
 const numberOrNull = (value: unknown) => (typeof value === "number" ? value : null);
 
@@ -34,10 +36,11 @@ export function buildSlurpDeepDetailsRecord(ctx: {
   strategy: SlurpCreatorStrategy;
   sentMessages: ChatMessage[];
   content: string;
-  generated: { title?: string | null; content: string; imagePrompt?: string | null };
+  generated: { title?: string | null; content: string; imagePrompt?: string | null; scene?: SlpWardrobeScene | null };
   draftImagePrompt: string | null | undefined;
   visualBrief?: SlurpVisualBrief | null;
   askModelForImagePrompt: boolean;
+  wardrobeSelection?: SlurpWardrobeSelection;
 }): SlpDeepDetailsRecord {
   return {
     version: 1,
@@ -73,7 +76,6 @@ export function buildSlurpDeepDetailsRecord(ctx: {
           place: ctx.variation.place,
           moment: ctx.variation.moment,
           company: ctx.variation.company,
-          framing: ctx.variation.framing,
         }
       : null,
     camera: ctx.camera ?? null,
@@ -93,6 +95,12 @@ export function buildSlurpDeepDetailsRecord(ctx: {
       title: ctx.generated.title ?? null,
       content: ctx.generated.content,
       imagePrompt: ctx.generated.imagePrompt ?? null,
+      scene: ctx.generated.scene ?? null,
+    },
+    wardrobeSelection: {
+      selectedId: ctx.wardrobeSelection?.look?.id ?? null,
+      requestedId: ctx.wardrobeSelection?.requestedId ?? null,
+      fallback: ctx.wardrobeSelection?.fallback ?? false,
     },
     imageBrief: ctx.draftImagePrompt ?? null,
     visualBrief: ctx.visualBrief ?? null,

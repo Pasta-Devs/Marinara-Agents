@@ -63,17 +63,39 @@ for (const source of SLURP_CAMERA_SOURCES) {
   assert.ok(slurpCameraSourceInstruction(source).includes(SLURP_CAMERA_SOURCE_RULE));
 }
 
-// Produce mode replaces the free-floating framing axis rather than adding to it. Emitting both
-// would reintroduce the unexplained cameraman underneath the fix.
+// The camera replaced the free-floating framing axis rather than being added alongside it. The
+// axis is gone entirely now: emitting both reintroduced the unexplained cameraman underneath the
+// fix, and keeping it drawn-but-discarded cost a draw per post and lied in the deep-details panel.
 const variation = slurpPostVariation("creator-a", 3);
-const classic = slurpPostVariationInstruction(variation);
 const produce = slurpPostVariationInstruction(variation, slurpCameraSourceInstruction("selfie"));
-assert.match(classic, /Framing for the image:/u);
 assert.doesNotMatch(produce, /Framing for the image:/u);
 assert.match(produce, /Camera: their own phone/u);
-// The rest of the angle survives, so produce mode loses no situational variety.
+assert.ok(!("framing" in variation), "the discarded framing axis must not come back");
+// The rest of the angle survives, so no situational variety was lost with it.
 for (const line of [`Place: ${variation.place}.`, `Moment: ${variation.moment}.`, `Company: ${variation.company}.`]) {
-  assert.ok(classic.includes(line) && produce.includes(line), `both modes must keep "${line}"`);
+  assert.ok(produce.includes(line), `the variation must keep "${line}"`);
+}
+
+// A point-of-view framing is an unexplained camera position that also puts a second body in the
+// frame. Every source has to carry the prohibition, or the image model supplies the body.
+for (const source of SLURP_CAMERA_SOURCES) {
+  const instruction = slurpCameraSourceInstruction(source);
+  assert.match(instruction, /no first-person or point-of-view framing/iu, `${source} must forbid POV framing`);
+  assert.match(instruction, /Show only the people the company names/u, `${source} must bound who is in frame`);
+}
+
+// The feed used to be two posts in three of the same arm's-length phone picture. Hand-held
+// self-shots stay the largest share without being the whole page.
+const draws = Array.from({ length: 4000 }, (_, index) =>
+  slurpPostCameraSource(`creator-${index % 40}`, Math.floor(index / 40), { companyCanHoldCamera: true }),
+);
+const share = (source: string) => draws.filter((value) => value === source).length / draws.length;
+const handHeld = share("selfie") + share("mirror");
+assert.ok(handHeld > 0.3, `hand-held self-shots must stay the common case, got ${handHeld.toFixed(2)}`);
+assert.ok(handHeld < 0.55, `hand-held self-shots must not dominate the feed, got ${handHeld.toFixed(2)}`);
+// Every other source has to be a real part of the mix rather than a rounding error.
+for (const source of ["tripod", "screenshot", "archive", "partner"] as const) {
+  assert.ok(share(source) > 0.05, `${source} must be visible in the mix, got ${share(source).toFixed(3)}`);
 }
 
 console.log("slurp camera source regression checks passed");

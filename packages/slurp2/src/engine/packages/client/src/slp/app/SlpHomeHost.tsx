@@ -346,6 +346,7 @@ export function SlurpHome({ navigation, onNavigate, onLeave }: SlurpHomeProps) {
         hasMore={Boolean(model.viewerQuery.data?.nextCursor)}
         deletingPostIds={model.deletingPostIds}
         deletedPostIds={model.deletedPostIds}
+        restoringPostIds={model.restoringPostIds}
         onRestorePost={model.restoreNoodlePost}
         isLoading={viewerQuery.isLoading}
         isError={viewerQuery.isError}

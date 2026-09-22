@@ -16,10 +16,10 @@ import {
 import { useCreatorViewer } from "../../features/feed/slp-feed-viewer-hooks";
 import { useTranslation as useUiTranslation } from "react-i18next";
 import { cn } from "../../../lib/utils";
-import { SlpPostCardCtx } from "../../modules/post/SlpPostCard";
+import { SlpPostCardCtx } from "../../modules/post/SlpPostTypes";
 import { SlurpCoinAmount } from "../../modules/coin/SlpCoin";
 import { LockedSlurpPostCard } from "../../modules/post/SlpLockedPostCard";
-import { SlurpCreatorPostCard } from "../../modules/post/SlpCreatorPostCard";
+import { SlpPostCard } from "../../modules/post/SlpPostCard";
 import { SlurpMediaWall } from "./SlpScreenProfile";
 import {
   SLURP_TOGGLE_ACTIVE_CLASS,
@@ -39,11 +39,11 @@ import {
   SlurpPostDialog,
   LoadMoreFeedButton,
 } from "./SlpHomeHelpers";
+import { SlpDeletedPostSlot } from "./SlpDeletedPostSlot";
 import { deriveSlurpHubView } from "./slp-hub-view";
 import { useSlurpHubDiscoveryFilters } from "./slp-hub-discovery-filters";
 import { SlurpInlineSuggestedCreators } from "./SlpScreenSuggestedCreators";
 import { SlpHubDiscover } from "./SlpHubDiscover";
-import { SlurpSparkleVeil } from "../../base/chrome/SlpSparkleVeil";
 
 // ---------------------------------------------------------------------------
 // Local types
@@ -91,6 +91,7 @@ export function ViewerHub({
   hasMore,
   deletingPostIds,
   deletedPostIds,
+  restoringPostIds = new Set<string>(),
   onRestorePost,
 }: {
   personas: Persona[];
@@ -111,6 +112,7 @@ export function ViewerHub({
   hasMore: boolean;
   deletingPostIds: Set<string>;
   deletedPostIds: Map<string, number>;
+  restoringPostIds?: Set<string>;
   onRestorePost: (post: ReturnType<typeof toSlpPostCardModel>) => void;
   isLoading: boolean;
   isError: boolean;
@@ -144,7 +146,6 @@ export function ViewerHub({
   const setStickyHeader = useHideOnScroll(scroller);
   const [discoverCollapsed, setDiscoverCollapsed] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
-  const [, setDeletedClock] = useState(0);
   const [visibleFeedCount, setVisibleFeedCount] = useState(SLP_CREATOR_FEED_WINDOW_SIZE);
   const [activeMomentId, setActiveMomentId] = useState<string | null>(null);
   const [feedLayout, setFeedLayout] = useState<"list" | "wall">("list");
@@ -158,11 +159,6 @@ export function ViewerHub({
   useEffect(() => {
     window.localStorage.setItem("slurp2.discover.layout", discoverLayout);
   }, [discoverLayout]);
-  useEffect(() => {
-    if (deletedPostIds.size === 0) return;
-    const timer = window.setInterval(() => setDeletedClock((value) => value + 1), 1_000);
-    return () => window.clearInterval(timer);
-  }, [deletedPostIds.size]);
   const inlineAdsQuery = useSlurpInlineAds(scope?.viewer.entityId ?? null, null, [
     tab === "all" ? "discover" : "following",
     new Date().getHours() >= 18 ? "night" : "day",
@@ -282,7 +278,7 @@ export function ViewerHub({
           onOpenProfile={postCardCtx.openAuthorProfile}
         />
       ) : (
-        <SlurpCreatorPostCard
+        <SlpPostCard
           post={toSlpPostCardModel(post, creator.profile)}
           ctx={{
             ...feedCardCtx,
@@ -567,7 +563,7 @@ export function ViewerHub({
                     initial={false}
                     animate={
                       deletingPostIds.has(item.post.id)
-                        ? { opacity: 0, height: 0, y: -8 }
+                        ? { opacity: 1, height: "auto", y: 0 }
                         : { opacity: 1, height: "auto", y: 0 }
                     }
                     transition={reduceMotion ? { duration: 0 } : { duration: 0.28, ease: "easeOut" }}
@@ -575,31 +571,13 @@ export function ViewerHub({
                   >
                     <Fragment>
                       {index === dividerIndex && <NewSinceLastVisitDivider />}
-                      {deletedPostIds.has(item.post.id) ? (
-                        <div className="relative overflow-hidden rounded-xl bg-[var(--slurp-surface)] px-4 py-5 text-center ring-1 ring-inset ring-[var(--noodle-accent)]/25">
-                          <SlurpSparkleVeil className="rounded-xl opacity-45" />
-                          <div className="relative z-10">
-                            <p className="text-sm font-bold text-[var(--foreground)]">
-                              {localizeUi("ui.slurp.feed.postDeleted", { defaultValue: "Post deleted" })}
-                            </p>
-                            <p className="mt-1 text-xs text-[var(--muted-foreground)]">
-                              {localizeUi("ui.slurp.feed.postDeletedCountdown", {
-                                defaultValue: "This post will disappear permanently in {{seconds}}s.",
-                                seconds: Math.max(
-                                  0,
-                                  Math.ceil(((deletedPostIds.get(item.post.id) ?? Date.now()) - Date.now()) / 1000),
-                                ),
-                              })}
-                            </p>
-                            <button
-                              type="button"
-                              className="mt-3 min-h-10 rounded-lg px-4 text-xs font-bold text-[var(--noodle-accent)] ring-1 ring-inset ring-[var(--noodle-accent)]/35 transition-[background-color,transform] hover:bg-[var(--noodle-accent)]/10 active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] motion-reduce:transition-none motion-reduce:active:scale-100"
-                              onClick={() => onRestorePost(toSlpPostCardModel(item.post, item.creator.profile))}
-                            >
-                              {localizeUi("ui.slurp.feed.restorePost", { defaultValue: "Restore" })}
-                            </button>
-                          </div>
-                        </div>
+                      {deletingPostIds.has(item.post.id) || deletedPostIds.has(item.post.id) ? (
+                        <SlpDeletedPostSlot
+                          deleting={deletingPostIds.has(item.post.id)}
+                          restoring={restoringPostIds.has(item.post.id)}
+                          expiresAt={deletedPostIds.get(item.post.id)}
+                          onRestore={() => onRestorePost(toSlpPostCardModel(item.post, item.creator.profile))}
+                        />
                       ) : (
                         renderFeedPost(item)
                       )}
@@ -700,11 +678,12 @@ export function ViewerHub({
           onAction={authorProfile ? onOpenAuthorProfile : undefined}
         />
       )}
-      {openPostItem?.post.imageUrl && (
+      {/* A gallery post can carry its pictures in `images` with no single `imageUrl`. */}
+      {(openPostItem?.post.imageUrl || openPostItem?.post.images[0]) && (
         <SlurpPostDialog
           post={{
             ...toSlpPostCardModel(openPostItem.post, openPostItem.creator.profile),
-            imageUrl: openPostItem.post.imageUrl,
+            imageUrl: openPostItem.post.imageUrl ?? openPostItem.post.images[0]!.imageUrl,
           }}
           ctx={postCardCtx}
           onClose={() => setOpenPostId(null)}

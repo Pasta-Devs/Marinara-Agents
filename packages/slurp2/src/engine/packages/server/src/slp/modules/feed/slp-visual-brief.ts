@@ -1,6 +1,8 @@
 import type { SlurpPostAxes } from "./slp-content-axes.js";
 import type { SlurpPostVariation } from "./slp-post-variation.js";
 import type { SlurpVisualBrief } from "../../base/media/slp-visual-brief.js";
+import { slurpPostSexualLevel, type SlurpExplicitLevel, type SlurpPostAccess } from "./slp-post-guidance.js";
+import type { SlpWardrobeScene } from "../../../../../shared/src/slp/slp-wardrobe.js";
 
 /**
  * The typed visual contract between post planning and image prompt writing.
@@ -15,23 +17,34 @@ export function slurpVisualBriefFromSituation(input: {
   effortInstruction?: string;
   shoot?: { place: string; company: string; brief?: string } | null;
   story?: boolean;
+  /** Who can read the post. A locked post is the one somebody paid for. */
+  access: SlurpPostAccess;
+  /** This Creator's ceiling, from the post guidance blob. */
+  explicitLevel: SlurpExplicitLevel;
+  scene?: SlpWardrobeScene | null;
+  clothing?: string | null;
 }): SlurpVisualBrief {
-  const place = input.shoot?.place ?? input.variation.place;
+  const place = input.shoot?.place ?? input.scene?.setting?.trim() ?? input.variation.place;
   const company = input.shoot?.company ?? input.variation.company;
   const action = input.shoot?.brief
     ? "continuing the same shoot with the same clothing and light"
-    : input.variation.moment;
+    : input.scene?.action?.trim() || input.variation.moment;
   const intent = input.axes?.intent;
   return {
     subject: "the Creator",
     action,
     setting: place,
     company,
-    clothing: input.shoot?.brief ? null : "the Creator's established clothing for this moment",
+    clothing: input.shoot?.brief
+      ? null
+      : input.clothing?.trim() || "the Creator's established clothing for this moment",
     camera: input.cameraInstruction,
-    mood: input.effortInstruction ?? null,
-    // Adult page guidance can shape writing tone, but it cannot turn an ordinary visual situation
-    // into explicit content. Explicit visual content must come from the planned scene itself.
-    sexualLevel: intent === "teaser" ? "suggestive" : "none",
+    mood:
+      [input.scene?.expression, input.scene?.visualDirection, input.effortInstruction].filter(Boolean).join("; ") ||
+      null,
+    // This used to be decided by the intent alone: teasers were suggestive and everything else was
+    // "none". That put the whole feed at "none" apart from the teasers, every locked post
+    // included. The level is now the Creator's own, stepped down for anything unpaid.
+    sexualLevel: slurpPostSexualLevel({ level: input.explicitLevel, access: input.access, intent }),
   };
 }

@@ -1,4 +1,4 @@
-import { ChevronDown, ChevronUp, GripVertical, LockKeyhole, RotateCcw } from "lucide-react";
+import { ChevronDown, ChevronUp, GripVertical, LockKeyhole, PencilLine, RotateCcw } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import type { SlurpPromptBlockOverride, SlurpReusablePromptInstruction } from "../../base/state/slp-state-types";
 import type { SlurpPromptDefinition } from "./slp-settings-contract";
@@ -74,8 +74,13 @@ function SlpPromptPipelineBlock({
 }) {
   const { t } = useTranslation();
   const block = blockDefinition(prompt, entry.id);
-  const enabled = !block.optional || entry.enabled !== false;
-  const editable = block.kind === "editable";
+  const enabled = entry.enabled !== false;
+  // Every assembled block has an expert override. Runtime-composed blocks start from the selected
+  // Creator's live preview, because they have no honest static default to put in an editor.
+  const overridable = true;
+  const runtimeComposed = block.kind === "required" || block.kind === "context";
+  const overriding = entry.text !== undefined || entry.instructionId !== undefined;
+  const editable = overridable && (!runtimeComposed || overriding);
   const customized = entry.text !== undefined || entry.instructionId !== undefined || entry.enabled === false;
   const sharedInstruction = instructions.find((instruction) => instruction.id === entry.instructionId);
   const text = entry.text ?? block.defaultText;
@@ -118,17 +123,15 @@ function SlpPromptPipelineBlock({
             {blockPurpose(block)}
           </p>
         </div>
-        {block.optional && (
-          <label className="flex min-h-10 shrink-0 items-center gap-2 text-xs font-semibold">
-            <input
-              type="checkbox"
-              checked={enabled}
-              onChange={(event) => onUpdate({ ...entry, enabled: event.target.checked })}
-              className="size-4 accent-[var(--noodle-accent)]"
-            />
-            {t("ui.slurp.settings.prompts.blockUse", { defaultValue: "Use" })}
-          </label>
-        )}
+        <label className="flex min-h-10 shrink-0 items-center gap-2 text-xs font-semibold">
+          <input
+            type="checkbox"
+            checked={enabled}
+            onChange={(event) => onUpdate({ ...entry, enabled: event.target.checked })}
+            className="size-4 accent-[var(--noodle-accent)]"
+          />
+          {t("ui.slurp.settings.prompts.blockUse", { defaultValue: "Use" })}
+        </label>
       </div>
 
       <div className="space-y-2 px-3 pb-3 sm:px-4 sm:pb-4">
@@ -183,21 +186,42 @@ function SlpPromptPipelineBlock({
             </p>
           </>
         ) : (
-          <div className="rounded-lg bg-[var(--slurp-canvas)] ring-1 ring-inset ring-[var(--slurp-outline)]">
-            {liveText !== undefined && enabled && (
-              <p className="border-b border-[var(--slurp-outline)] px-3 py-1.5 text-[0.7rem] font-semibold text-[var(--noodle-accent)]">
-                {t("ui.slurp.settings.prompts.liveForCreator", { defaultValue: "As the preview Creator gets it" })}
-              </p>
+          <>
+            <div className="rounded-lg bg-[var(--slurp-canvas)] ring-1 ring-inset ring-[var(--slurp-outline)]">
+              {liveText !== undefined && enabled && (
+                <p className="border-b border-[var(--slurp-outline)] px-3 py-1.5 text-[0.7rem] font-semibold text-[var(--noodle-accent)]">
+                  {t("ui.slurp.settings.prompts.liveForCreator", { defaultValue: "As the preview Creator gets it" })}
+                </p>
+              )}
+              <pre className="max-h-72 overflow-auto whitespace-pre-wrap break-words px-3 py-2.5 font-sans text-xs leading-5 text-[var(--slurp-muted)]">
+                {enabled
+                  ? shownText ||
+                    t("ui.slurp.settings.prompts.previewEmpty", {
+                      defaultValue: "This block adds nothing until runtime context is available.",
+                    })
+                  : t("ui.slurp.settings.prompts.blockDisabled", { defaultValue: "Disabled" })}
+              </pre>
+            </div>
+            {overridable && enabled && (
+              <>
+                <button
+                  type="button"
+                  disabled={!shownText}
+                  onClick={() => onUpdate({ ...entry, text: shownText })}
+                  className="inline-flex min-h-10 items-center gap-2 rounded-lg px-3 text-xs font-bold text-[var(--noodle-accent)] ring-1 ring-inset ring-[var(--noodle-accent)]/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] disabled:opacity-40"
+                >
+                  <PencilLine size={14} aria-hidden="true" />
+                  {t("ui.slurp.settings.prompts.overrideBlock", { defaultValue: "Write my own" })}
+                </button>
+                <p className="text-[0.7rem] leading-5 text-[var(--slurp-muted)]">
+                  {t("ui.slurp.settings.prompts.overrideBlockNote", {
+                    defaultValue:
+                      "Slurp builds this block for each Creator. Your own text replaces it for every Creator, so details it would have filled in are lost.",
+                  })}
+                </p>
+              </>
             )}
-            <pre className="max-h-72 overflow-auto whitespace-pre-wrap break-words px-3 py-2.5 font-sans text-xs leading-5 text-[var(--slurp-muted)]">
-              {enabled
-                ? shownText ||
-                  t("ui.slurp.settings.prompts.previewEmpty", {
-                    defaultValue: "This block adds nothing until runtime context is available.",
-                  })
-                : t("ui.slurp.settings.prompts.blockDisabled", { defaultValue: "Disabled" })}
-            </pre>
-          </div>
+          </>
         )}
       </div>
 
@@ -206,7 +230,7 @@ function SlpPromptPipelineBlock({
         <span className="me-auto text-[0.7rem] font-medium">
           {t("ui.slurp.settings.prompts.blockOrder", { defaultValue: "Order" })}
         </span>
-        {customized && editable && (
+        {customized && overridable && (
           <button
             type="button"
             aria-label={t("ui.slurp.settings.prompts.resetBlockAria", {

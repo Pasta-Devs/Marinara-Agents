@@ -33,6 +33,10 @@ export function slurpVisualBriefPolicyText(brief: SlurpVisualBrief): string {
   return [
     `The visual brief is authoritative: preserve its subject, action, setting, company, clothing, camera, and sexual level (${brief.sexualLevel}).`,
     "Style and appearance may add detail, but they may not add a new event, person, outfit, viewpoint, nudity, explicit anatomy, or sexual activity.",
+    // The camera block already forbids this, but the rewrite is free to rephrase the camera block
+    // and regularly drops the clause while keeping the sentence. The company is a scene fact the
+    // rewrite is told to preserve, so the same rule stated against the company survives.
+    `Only the people named in Company are in the picture (${brief.company}). No first-person or point-of-view framing, and no hands, limbs, or anatomy belonging to anyone the company does not name.`,
     brief.sexualLevel === "none"
       ? "This scene is non-sexual. Do not add suggestive, nude, or explicit emphasis."
       : `Do not raise the sexual level above ${brief.sexualLevel}.`,

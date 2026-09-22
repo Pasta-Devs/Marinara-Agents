@@ -173,6 +173,8 @@ export interface SlpPostCardCtx {
   /** Generate a missing post image from its saved prompt. */
   generatePostImage?: (post: Pick<SlpPostCardModel, "id" | "authorAccountId">, imagePrompt?: string) => void;
   generatingPostImageId?: string | null;
+  sharePost?: (post: SlpPostCardModel) => void;
+  reportPost?: (post: SlpPostCardModel) => void;
   /** Reply image/upload capability. Absent → the card hides all reply-image affordances. */
   media?: SlpPostCardMediaCap;
   /**

@@ -285,6 +285,7 @@ const PRODUCE_PROMPT_DESCRIPTIONS: SlurpPromptDescription[] = BASE_PROMPT_DESCRI
           ["access", "context", true],
           ["contentType", "context", true],
           ["production", "context", true],
+          ["wardrobe", "context", true],
           ["continuity", "editable"],
           ["imageDirection", "context", true],
           ["output", "required"],
@@ -389,7 +390,7 @@ export function slurpPromptEditableDefault(promptId: SlurpPromptId, blockId: str
   return PROMPT_EDITABLE_DEFAULTS[promptId]?.[blockId] ?? fallback;
 }
 
-/** Remove stale ids and changes that target required or runtime-only blocks. */
+/** Remove stale ids while preserving every expert override the studio exposes. */
 function normalizeLayouts(value: unknown): SlurpPromptBlockOverrides {
   if (!value || typeof value !== "object" || Array.isArray(value)) return {};
   const source = value as Record<string, unknown>;
@@ -409,11 +410,14 @@ function normalizeLayouts(value: unknown): SlurpPromptBlockOverrides {
       seen.add(id);
       next.push({
         id,
-        ...(block.optional && typeof record.enabled === "boolean" ? { enabled: record.enabled } : {}),
-        ...(block.kind === "editable" && typeof record.text === "string"
-          ? { text: record.text.trim().slice(0, 20_000) }
-          : {}),
-        ...(block.kind === "editable" && typeof record.instructionId === "string"
+        // Every block can be switched off, not just the ones the inventory marks optional: the
+        // studio is the place to take a prompt apart, and a required block that cannot be removed
+        // is a rule the player cannot see the effect of.
+        ...(typeof record.enabled === "boolean" ? { enabled: record.enabled } : {}),
+        // Expert overrides may deliberately freeze runtime context. The studio labels that tradeoff
+        // before copying the selected Creator's live block into the stored layout.
+        ...(typeof record.text === "string" ? { text: record.text.trim().slice(0, 20_000) } : {}),
+        ...(typeof record.instructionId === "string"
           ? { instructionId: record.instructionId.trim().slice(0, 80) }
           : {}),
       });
@@ -538,13 +542,13 @@ export function resolveSlurpPromptBlocks(
     ...byId.values().map((block) => ({ block, entry: { id: block.id } })),
   ];
   return ordered
-    .filter(({ block, entry }) => !block.optional || entry.enabled !== false)
+    .filter(({ entry }) => entry.enabled !== false)
     .map(({ block, entry }) => ({
       ...block,
       text:
-        block.kind === "editable" && entry.instructionId && instructionById.get(entry.instructionId)?.trim()
+        entry.instructionId && instructionById.get(entry.instructionId)?.trim()
           ? instructionById.get(entry.instructionId)!.trim()
-          : block.kind === "editable" && entry.text?.trim()
+          : entry.text?.trim()
             ? entry.text.trim()
             : block.text.trim(),
     }));

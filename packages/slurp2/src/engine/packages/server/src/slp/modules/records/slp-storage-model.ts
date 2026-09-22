@@ -1,5 +1,6 @@
 import { normalizeAvatarCrop, AvatarCrop } from "@marinara-engine/shared";
 import { normalizeSlurpCreatorStrategy } from "../creators/slp-creator-strategy.js";
+import { SLURP_STAGE_FACT_MAX_LENGTH } from "../creators/slp-stage-profile-repair.js";
 import {
   SlpCreateInteractionInput,
   SlpCreatorCreateInteractionInput,
@@ -339,6 +340,7 @@ export function normalizeSlpAccountSettings(value: unknown): SlurpSlpAccountSett
   const rawSocial = parseRecord(raw.social);
   const rawPrivacy = parseRecord(raw.privacy);
   const rawWallet = parseRecord(raw.wallet);
+  const rawStage = parseRecord(raw.stage);
   const rawAvatarCrop = nestedOrLegacy(rawProfile, raw, "avatarCrop");
   const rawBannerUrl = nestedOrLegacy(rawProfile, raw, "bannerUrl");
   const rawLocation = nestedOrLegacy(rawProfile, raw, "location");
@@ -396,14 +398,26 @@ export function normalizeSlpAccountSettings(value: unknown): SlurpSlpAccountSett
     },
   };
   const strategy = normalizeSlurpCreatorStrategy(raw.strategy);
+  const stage = {
+    ...(stageFact(rawStage.appearance) !== undefined && { appearance: stageFact(rawStage.appearance)! }),
+    ...(stageFact(rawStage.wardrobe) !== undefined && { wardrobe: stageFact(rawStage.wardrobe)! }),
+    ...(stageFact(rawStage.locations) !== undefined && { locations: stageFact(rawStage.locations)! }),
+  };
   return {
     profile,
     ...(strategy && { strategy }),
     social,
     scheduler: normalizeScheduler(raw.scheduler),
+    ...(Object.keys(stage).length > 0 && { stage }),
     privacy,
     wallet: { coins: normalizePersistedInteger(rawWallet.coins) ?? SLURP_DEFAULT_ECONOMY.startingCoins },
   };
+}
+
+/** Trim and cap one stage fact. Empty means the Creator has not been given one. */
+function stageFact(value: unknown): string | undefined {
+  const text = typeof value === "string" ? value.trim().slice(0, SLURP_STAGE_FACT_MAX_LENGTH) : "";
+  return text || undefined;
 }
 
 export function parseRefreshAttempts(value: unknown): SlpRefreshAttempt[] {

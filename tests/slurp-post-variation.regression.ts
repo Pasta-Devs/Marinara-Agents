@@ -32,10 +32,7 @@ assert.notDeepEqual(slurpPostVariation("creator-a", 0), slurpPostVariation("crea
 // Nonsense sequence numbers must still produce a usable variation.
 for (const sequence of [-5, 0.5, Number.NaN]) {
   const variation = slurpPostVariation("creator-a", sequence);
-  assert.ok(
-    variation.place && variation.framing && variation.moment && variation.company,
-    `no variation for ${sequence}`,
-  );
+  assert.ok(variation.place && variation.moment && variation.company, `no variation for ${sequence}`);
   assert.ok(SLURP_POST_FORMATS.includes(variation.format));
 }
 

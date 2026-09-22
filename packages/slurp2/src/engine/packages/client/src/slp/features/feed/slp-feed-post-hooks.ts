@@ -235,11 +235,38 @@ export function useGenerateCreatorPostImage() {
         replace: true,
         debugMode: useSlurpUIStore.getState().debugMode,
       }),
-    onSuccess: (_post, input) =>
-      Promise.all([
+    onSuccess: (restored, input) => {
+      qc.setQueriesData<SlpCreatorViewerScope | undefined>(slpKeys.slpCreatorViewers(), (current) =>
+        current
+          ? {
+              ...current,
+              creators: current.creators.map((creator) => ({
+                ...creator,
+                posts: creator.posts.map((post) =>
+                  post.id === restored.id
+                    ? {
+                        ...post,
+                        access: restored.access,
+                        locked: false,
+                        title: restored.title,
+                        content: restored.content,
+                        hasImage: Boolean(restored.imageUrl || restored.images.length > 0),
+                        imageUrl: restored.imageUrl,
+                        imagePrompt: restored.imagePrompt,
+                        images: restored.images,
+                        metadata: restored.metadata,
+                      }
+                    : post,
+                ),
+              })),
+            }
+          : current,
+      );
+      return Promise.all([
         qc.invalidateQueries({ queryKey: slpKeys.noodlerPosts(input.accountId) }),
         qc.invalidateQueries({ queryKey: slpKeys.slpCreatorViewers() }),
-      ]),
+      ]);
+    },
   });
 }
 export function useDeleteCreatorPost() {
@@ -262,10 +289,13 @@ export function useRestoreCreatorPost() {
   return useMutation({
     mutationFn: ({ id, accountId }: { id: string; accountId: string }) =>
       api.post<SlpCreatorManagedPost>(`/slurp2/slurp/posts/${encodeURIComponent(id)}/restore`, { accountId }),
-    onSuccess: (_post, input) =>
-      Promise.all([
-        qc.invalidateQueries({ queryKey: slpKeys.noodlerPosts(input.accountId) }),
-        qc.invalidateQueries({ queryKey: slpKeys.slpCreatorViewers() }),
-      ]),
+    // Not awaited: React Query holds the caller's own onSuccess until this resolves, and refetching
+    // the whole viewer scope left the card sitting in "Restoring…" with its countdown still running
+    // for as long as the refetch took. The post is already in the cache, so let the UI come back
+    // immediately and let the refetch reconcile behind it.
+    onSuccess: (_post, input) => {
+      void qc.invalidateQueries({ queryKey: slpKeys.noodlerPosts(input.accountId) });
+      void qc.invalidateQueries({ queryKey: slpKeys.slpCreatorViewers() });
+    },
   });
 }

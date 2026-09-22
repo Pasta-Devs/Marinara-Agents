@@ -325,11 +325,19 @@ export const slpAmbientProfileRerollSchema = z
   })
   .strict();
 
+/**
+ * `appearance`, `wardrobe` and `locations` default to "" rather than being required: a Creator
+ * saved before these existed, and every generated draft that does not fill them in, must still
+ * validate. See `SlpCreatorStageFacts`.
+ */
 const slpStageProfileShape = {
   displayName: z.string().trim().min(1, "Enter a stage name.").max(120),
   handle: z.string().trim().min(1, "Enter a stage handle.").max(40),
   bio: z.string().trim().max(500),
   stagePersonality: z.string().trim().max(1000),
+  appearance: z.string().trim().max(2000).default(""),
+  wardrobe: z.string().trim().max(2000).default(""),
+  locations: z.string().trim().max(2000).default(""),
   disclosureMode: slpIdentityDisclosureSchema,
 };
 

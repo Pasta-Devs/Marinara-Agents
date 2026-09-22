@@ -12,7 +12,31 @@
  * built-in copy: a Creator must be able to fall back to the global value, and the global value
  * must be able to fall back to the built-in one.
  */
+import { SLURP_VISUAL_SEXUAL_LEVELS, type SlurpVisualSexualLevel } from "../../base/media/slp-visual-brief.js";
+
 export const SLURP_POST_GUIDANCE_MAX_LENGTH = 4000;
+
+/**
+ * How far a Creator's pictures go, as a typed value rather than a sentence.
+ *
+ * It has to be typed because the visual brief is typed: a free-text menu can tell the writer what
+ * a Creator offers, but it cannot set `sexualLevel`, so the brief was stuck on a hardcoded
+ * `intent === "teaser" ? "suggestive" : "none"`. That made four posts in five carry an explicit
+ * "this scene is non-sexual" instruction, including every locked post — on a platform whose whole
+ * premise is that the locked post is the one worth paying for.
+ *
+ * An empty string means "use the level one level up", exactly like the guidance text beside it.
+ */
+export type SlurpExplicitLevel = SlurpVisualSexualLevel;
+
+/**
+ * The shipped level when nobody has chosen one.
+ *
+ * `suggestive` rather than something stronger: a fresh install should not surprise anyone, and the
+ * dial is one field away in Backstage. Raising the global level there lifts every Creator that has
+ * no override of its own.
+ */
+export const SLURP_BUILT_IN_EXPLICIT_LEVEL: SlurpExplicitLevel = "suggestive";
 
 export type SlurpPostAccess = "public" | "locked";
 /**
@@ -20,7 +44,13 @@ export type SlurpPostAccess = "public" | "locked";
  * rides along in this blob because it is the same kind of per-Creator direction, but it has no
  * global level; only a Creator's own entry is ever read.
  */
-export type SlurpPostGuidanceEntry = { public: string; locked: string; menu: string };
+export type SlurpPostGuidanceEntry = {
+  public: string;
+  locked: string;
+  menu: string;
+  /** How far this Creator's pictures go. Empty means inherit. */
+  level: SlurpExplicitLevel | "";
+};
 export type SlurpPostGuidance = {
   /** Applies to every Creator that has no override of its own. */
   defaults: SlurpPostGuidanceEntry;
@@ -31,7 +61,7 @@ export type SlurpPostGuidance = {
  * Used when neither the Creator nor the global field says anything, so access is differentiated
  * on a fresh install without anybody opening Settings.
  */
-export const SLURP_BUILT_IN_POST_GUIDANCE: SlurpPostGuidanceEntry = {
+export const SLURP_BUILT_IN_POST_GUIDANCE: Omit<SlurpPostGuidanceEntry, "level"> = {
   public:
     "This post is public and may be a reader's first impression. Make it complete and worthwhile on its own: share a specific moment, thought, update, or image that expresses who you are and gives people something real to react to. When paid material is relevant, create honest curiosity by saving only the genuinely premium continuation for it; do not withhold the meaning of this post or turn every public post into a repetitive subscription pitch.",
   menu: "",
@@ -39,21 +69,32 @@ export const SLURP_BUILT_IN_POST_GUIDANCE: SlurpPostGuidanceEntry = {
     "This post is the premium continuation for someone who already subscribed or paid to unlock it. Deliver the promised extra value immediately through greater intimacy, candor, access, detail, or exclusivity that fits who you are and what led here; do not give them another sales pitch or another layer of artificial withholding. Premium does not have to mean sexual, but it must feel more personal or substantial than a public post and end as a satisfying payoff rather than a preview.",
 };
 
-const emptyEntry = (): SlurpPostGuidanceEntry => ({ public: "", locked: "", menu: "" });
+const emptyEntry = (): SlurpPostGuidanceEntry => ({ public: "", locked: "", menu: "", level: "" });
 const defaults = (): SlurpPostGuidance => ({ defaults: emptyEntry(), creators: {} });
 
 function readText(value: unknown): string {
   return typeof value === "string" ? value.slice(0, SLURP_POST_GUIDANCE_MAX_LENGTH) : "";
 }
 
+function readLevel(value: unknown): SlurpExplicitLevel | "" {
+  return typeof value === "string" && (SLURP_VISUAL_SEXUAL_LEVELS as readonly string[]).includes(value)
+    ? (value as SlurpExplicitLevel)
+    : "";
+}
+
 function readEntry(value: unknown): SlurpPostGuidanceEntry {
   const record = value && typeof value === "object" ? (value as Record<string, unknown>) : {};
-  return { public: readText(record.public), locked: readText(record.locked), menu: readText(record.menu) };
+  return {
+    public: readText(record.public),
+    locked: readText(record.locked),
+    menu: readText(record.menu),
+    level: readLevel(record.level),
+  };
 }
 
 /** An override that says nothing is not an override; storing it would only hide the global value. */
 function hasText(entry: SlurpPostGuidanceEntry): boolean {
-  return Boolean(entry.public.trim() || entry.locked.trim() || entry.menu.trim());
+  return Boolean(entry.public.trim() || entry.locked.trim() || entry.menu.trim() || entry.level);
 }
 
 export function sanitizeSlurpPostGuidance(value: unknown): SlurpPostGuidance {
@@ -78,6 +119,34 @@ export function selectSlurpPostGuidance(
     guidance.defaults[access].trim() ||
     SLURP_BUILT_IN_POST_GUIDANCE[access]
   );
+}
+
+/** Creator override, then the global field, then the shipped level. */
+export function selectSlurpExplicitLevel(guidance: SlurpPostGuidance, creatorId: string): SlurpExplicitLevel {
+  return guidance.creators[creatorId]?.level || guidance.defaults.level || SLURP_BUILT_IN_EXPLICIT_LEVEL;
+}
+
+/** Intents whose job is housekeeping. A schedule notice is not a nude whatever the dial says. */
+const NON_SEXUAL_INTENTS = new Set(["business", "appreciation"]);
+
+/**
+ * How far one post goes, from the Creator's ceiling.
+ *
+ * A locked post delivers the ceiling: it is the thing somebody paid for, and a paid post that
+ * withholds what the free feed already showed is the complaint this whole module exists to answer.
+ * Everything public sits one step under it, so the free feed advertises the paid one instead of
+ * replacing it. A teaser is public, so it lands on the same step — which is the correct reading of
+ * "show enough that somebody wants the rest".
+ */
+export function slurpPostSexualLevel(input: {
+  level: SlurpExplicitLevel;
+  access: SlurpPostAccess;
+  intent?: string;
+}): SlurpExplicitLevel {
+  if (input.intent && NON_SEXUAL_INTENTS.has(input.intent)) return "none";
+  if (input.access === "locked") return input.level;
+  const index = SLURP_VISUAL_SEXUAL_LEVELS.indexOf(input.level);
+  return SLURP_VISUAL_SEXUAL_LEVELS[Math.max(0, index - 1)] ?? "none";
 }
 
 /** The Creator's own content menu. Empty when they have none; there is no global fallback. */

@@ -183,6 +183,10 @@ export function SlpDeepDetailsModal({ postId, open, onClose }: { postId: string;
                   ["Title", details.modelOutput.title],
                   ["Content", details.modelOutput.content],
                   ["Image prompt", details.modelOutput.imagePrompt],
+                  ["Scene plan", details.modelOutput.scene ? JSON.stringify(details.modelOutput.scene, null, 2) : null],
+                  ["Requested wardrobe", details.wardrobeSelection?.requestedId ?? null],
+                  ["Selected wardrobe", details.wardrobeSelection?.selectedId ?? null],
+                  ["Wardrobe fallback", details.wardrobeSelection?.fallback ? "yes" : null],
                 ]}
               />
               <Block label="Raw response" text={details.rawResponse} />
@@ -193,6 +197,7 @@ export function SlpDeepDetailsModal({ postId, open, onClose }: { postId: string;
             <Rows
               rows={[
                 ["Image brief", details?.imageBrief ?? null],
+                ["Typed visual brief", details?.visualBrief ? JSON.stringify(details.visualBrief, null, 2) : null],
                 ["Stored image prompt", data.post.imagePrompt],
                 ["Provider", str(data.post.metadata.imageProvider)],
                 ["Image model", str(data.post.metadata.imageModel)],

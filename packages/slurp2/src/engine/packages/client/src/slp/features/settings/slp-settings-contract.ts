@@ -177,6 +177,25 @@ export type SlurpPromptResultPreviewResponse = {
   content: string;
   imagePrompt: string | null;
   compiledPrompt: string;
+  scene: {
+    wardrobeId?: string | null;
+    setting: string;
+    action: string;
+    expression: string;
+    visualDirection: string;
+  } | null;
+  wardrobeSelection: { selectedId: string | null; requestedId: string | null; fallback: boolean };
+  visualBrief: {
+    subject: string;
+    action: string;
+    setting: string;
+    company: string;
+    clothing: string | null;
+    camera: string;
+    mood: string | null;
+    sexualLevel: "none" | "suggestive" | "nudity" | "explicit";
+  } | null;
+  imageBrief: string | null;
 };
 export type SlurpPromptResultPreviewInput = {
   promptId: "post";

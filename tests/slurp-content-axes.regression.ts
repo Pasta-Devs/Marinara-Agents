@@ -137,7 +137,9 @@ const generation = slurp2Source(
   "packages/slurp2/src/engine/packages/server/src/slp/features/feed/slp-generation-service.ts",
 );
 assert.match(generation, /const postImages = imagesEnabled && !textOnly && !reusedMedia;/u);
-assert.match(generation, /const draftImagePrompt = postImages\n/u);
+// The briefs moved into slp-post-picture-briefs.ts, so the gate is a property rather than a const.
+// The rule is the same one: no images means no prompt to render from.
+assert.match(generation, /draftImagePrompt: input\.postImages\n/u);
 assert.match(generation, /if \(textOnly \|\| !settings\.allowGalleryImageAttachments/u);
 assert.match(generation, /contentIntent: axes\.intent, contentDelivery: axes\.delivery/u);
 assert.match(

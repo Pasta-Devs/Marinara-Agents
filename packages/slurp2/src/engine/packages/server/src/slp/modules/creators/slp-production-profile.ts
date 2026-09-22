@@ -125,7 +125,7 @@ export function slurpPostEffort(
 }
 
 const EFFORT_INSTRUCTIONS: Record<SlurpPostEffort, string> = {
-  low: "Effort: none. Whatever the phone caught. Bad crop, wrong light, something in the way, not worth retaking.",
+  low: "Effort: none. Whatever the phone caught on the first take: an offhand crop, ordinary room light, nothing arranged or tidied. Still sharp and clearly visible — careless, not broken.",
   medium: "Effort: a bit. They looked at it, they took a second one, and they stopped there.",
   high: "Effort: real. They set this up, fixed the light, and chose this frame out of several. It still has to be a picture a person could take where they are.",
 };

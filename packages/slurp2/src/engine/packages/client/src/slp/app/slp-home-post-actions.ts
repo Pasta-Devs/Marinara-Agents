@@ -5,7 +5,7 @@ import type { SlpPollInput } from "../../../../shared/src/slp/slp-social-generat
 import type { SlpAccount, SlpInteraction } from "../../../../shared/src/slp/slp-social.types.js";
 import { showConfirmDialog } from "../../lib/app-dialogs";
 import { errorMessage } from "./screens/SlpHomeHelpers";
-import type { SlpPostCardModel, SlpPostImageUpdate } from "../modules/post/SlpPostCard";
+import type { SlpPostCardModel, SlpPostImageUpdate } from "../modules/post/SlpPostTypes";
 import type {
   useCreateCreatorInteraction,
   useDeleteCreatorInteraction,
@@ -61,32 +61,35 @@ export function useSlurpHomePostActions({
   const queryClient = useQueryClient();
   const [deletingPostIds, setDeletingPostIds] = useState<Set<string>>(() => new Set());
   const [deletedPostIds, setDeletedPostIds] = useState<Map<string, number>>(() => new Map());
+  const [restoringPostIds, setRestoringPostIds] = useState<Set<string>>(() => new Set());
   useEffect(() => {
-    const timers = [...deletedPostIds.entries()].map(([postId, expiresAt]) =>
-      window.setTimeout(
-        () => {
-          queryClient.setQueriesData<SlpCreatorViewerScope | undefined>(slpKeys.slpCreatorViewers(), (current) =>
-            current
-              ? {
-                  ...current,
-                  creators: current.creators.map((creator) => ({
-                    ...creator,
-                    posts: creator.posts.filter((post) => post.id !== postId),
-                  })),
-                }
-              : current,
-          );
-          setDeletedPostIds((current) => {
-            const next = new Map(current);
-            next.delete(postId);
-            return next;
-          });
-        },
-        Math.max(0, expiresAt - Date.now()),
-      ),
-    );
+    const timers = [...deletedPostIds.entries()]
+      .filter(([postId]) => !restoringPostIds.has(postId))
+      .map(([postId, expiresAt]) =>
+        window.setTimeout(
+          () => {
+            queryClient.setQueriesData<SlpCreatorViewerScope | undefined>(slpKeys.slpCreatorViewers(), (current) =>
+              current
+                ? {
+                    ...current,
+                    creators: current.creators.map((creator) => ({
+                      ...creator,
+                      posts: creator.posts.filter((post) => post.id !== postId),
+                    })),
+                  }
+                : current,
+            );
+            setDeletedPostIds((current) => {
+              const next = new Map(current);
+              next.delete(postId);
+              return next;
+            });
+          },
+          Math.max(0, expiresAt - Date.now()),
+        ),
+      );
     return () => timers.forEach((timer) => window.clearTimeout(timer));
-  }, [deletedPostIds, queryClient]);
+  }, [deletedPostIds, restoringPostIds, queryClient]);
   const reactToPost = (post: SlpPostCardModel, type: "like", active = false) => {
     if (!viewerPersonaId) return;
     const onError = (error: unknown) =>
@@ -234,15 +237,36 @@ export function useSlurpHomePostActions({
     );
   };
   const restoreNoodlePost = (post: SlpPostCardModel) => {
+    if (restoringPostIds.has(post.id)) return;
+    setRestoringPostIds((current) => new Set(current).add(post.id));
     restorePost.mutate(
       { id: post.id, accountId: post.authorAccountId },
       {
-        onSuccess: () =>
+        onError: (error) => {
+          setRestoringPostIds((current) => {
+            const next = new Set(current);
+            next.delete(post.id);
+            return next;
+          });
+          toast.error(
+            errorMessage(
+              error,
+              localizeUi("ui.slurp.feed.restoreFailed", { defaultValue: "Could not restore this post." }),
+            ),
+          );
+        },
+        onSuccess: () => {
+          setRestoringPostIds((current) => {
+            const next = new Set(current);
+            next.delete(post.id);
+            return next;
+          });
           setDeletedPostIds((current) => {
             const next = new Map(current);
             next.delete(post.id);
             return next;
-          }),
+          });
+        },
       },
     );
   };
@@ -301,6 +325,7 @@ export function useSlurpHomePostActions({
     deletingPostIds,
     restoreNoodlePost,
     deletedPostIds,
+    restoringPostIds,
     editingReplyId,
     editingReplyContent,
     setEditingReplyContent,

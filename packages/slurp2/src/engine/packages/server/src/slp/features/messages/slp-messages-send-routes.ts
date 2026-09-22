@@ -34,6 +34,46 @@ const tipSchema = z.object({
 });
 export async function slpMessagesSendRoutes(app: FastifyInstance, messaging: SlpMessagesContext) {
   const { freshView, messages, ownsCreator, requireViewer, slurp } = messaging;
+
+  app.post("/messages/share-post", async (req, reply) => {
+    const parsed = z
+      .object({
+        personaId: z.string().trim().min(1),
+        creatorAccountId: z.string().trim().min(1),
+        postId: z.string().trim().min(1),
+      })
+      .strict()
+      .safeParse(req.body ?? {});
+    if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
+    const viewer = await requireViewer(parsed.data.personaId);
+    if (!viewer) return reply.code(404).send({ error: "Slurp persona not found" });
+    const creator = await slurp.getNoodlerAccountById(parsed.data.creatorAccountId);
+    const post = await slurp.getNoodlerPostById(parsed.data.postId);
+    if (!creator || !post || post.authorAccountId !== creator.id)
+      return reply.code(404).send({ error: "Post not found" });
+    const opened = await messages.openThread(viewer.id, creator.id, "viewer");
+    if (opened.status === "closed") return reply.code(403).send({ error: "This Creator is not accepting messages." });
+    if (opened.status === "insufficient_funds")
+      return reply.code(402).send({ error: "Not enough coins.", required: opened.required });
+    if (opened.status !== "ok") return reply.code(404).send({ error: "Could not open conversation" });
+    const message = await messages.appendMessage(opened.thread.id, {
+      senderAccountId: viewer.id,
+      role: "viewer",
+      kind: "post_preview",
+      content: post.title || post.content.slice(0, 180),
+      imageUrl: post.imageUrl,
+      metadata: {
+        postId: post.id,
+        title: post.title,
+        content: post.content,
+        access: post.access,
+        previewLocked: post.access === "locked",
+        shareReason: "player",
+      },
+    });
+    if (!message) return reply.code(409).send({ error: "Could not share the post." });
+    return { message, thread: await freshView(opened.thread.id) };
+  });
   /**
    * Send, then answer if the creator is reachable.
    *

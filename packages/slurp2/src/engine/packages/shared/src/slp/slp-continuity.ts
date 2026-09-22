@@ -80,6 +80,7 @@ export const SLURP_CONTINUITY_EVENT_TYPES = [
   "disclosure",
   "boundary_stated",
   "demand_trend",
+  "report_received",
 ] as const;
 export type SlurpContinuityEventType = (typeof SLURP_CONTINUITY_EVENT_TYPES)[number];
 

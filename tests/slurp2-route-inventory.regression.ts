@@ -18,11 +18,15 @@ const EXPECTED = [
   "POST /continuity/facts/:id/promote",
   "POST /continuity/proposals/:id/:decision",
   "POST /messages/threads/:threadId/requests/:requestId/action",
+  "POST /messages/share-post",
+  "POST /slurp/posts/:id/report",
+  "POST /slurp/posts/:id/restore",
   "ADDCONTENTTYPEPARSER application/zip",
   "DELETE /data",
   "DELETE /data/unused",
   "DELETE /slurp/accounts/:id",
   "DELETE /slurp/accounts/:id/avatar",
+  "DELETE /slurp/accounts/:id/wardrobe/:lookId",
   "DELETE /slurp/accounts/:id/projects/:projectId",
   "DELETE /slurp/accounts/:id/subscribe",
   "DELETE /slurp/ads/pool/:id",
@@ -60,6 +64,7 @@ const EXPECTED = [
   "GET /slurp/accounts/:id/projects",
   "GET /slurp/accounts/:id/projects/:projectId/posts",
   "GET /slurp/accounts/:id/subscribers",
+  "GET /slurp/accounts/:id/wardrobe",
   "GET /noodler/ads/:id/image/:fileName",
   "GET /slurp/ads/export",
   "GET /slurp/ads/lorebooks",
@@ -74,7 +79,6 @@ const EXPECTED = [
   "GET /slurp/notifications",
   "GET /slurp/post-guidance",
   "GET /noodler/posts/:id/media",
-  "GET /slurp/posts/:id/share-card",
   "GET /slurp/stories/:id/views",
   "GET /slurp/studio",
   "GET /slurp/viewer",
@@ -84,6 +88,7 @@ const EXPECTED = [
   "GET /slurp/viewer/feed",
   "GET /slurp/viewer/unseen-count",
   "GET /slurp/viewer/wallet",
+  "GET /slurp/wardrobe/lorebooks",
   "GET /settings",
   "GET /settings/audience-characters",
   "GET /settings/audience-characters/groups",
@@ -97,6 +102,7 @@ const EXPECTED = [
   "PATCH /messages/creators/:creatorAccountId/settings",
   "PATCH /slurp/accounts/:id/avatar/source",
   "PATCH /slurp/accounts/:id/follow",
+  "PATCH /slurp/accounts/:id/wardrobe/:lookId",
   "PATCH /slurp/accounts/:id/projects/:projectId",
   "PATCH /slurp/ads/pool/:id",
   "PATCH /slurp/auto-post/schedule/:slotId",
@@ -107,6 +113,9 @@ const EXPECTED = [
   "PATCH /settings",
   "POST /accounts/:id/noodler",
   "POST /accounts/:id/post-draft",
+  "POST /slurp/accounts/:id/wardrobe",
+  "POST /slurp/accounts/:id/wardrobe/import",
+  "POST /slurp/accounts/:id/wardrobe/import-preview",
   "POST /ambient-profiles/reroll",
   "POST /arc-library/:id/reset",
   "POST /autopurge/preview",
@@ -223,7 +232,22 @@ const ADDED_ROUTES = new Set([
   "POST /continuity/facts/:id/promote",
   "POST /continuity/proposals/:id/:decision",
   "POST /messages/threads/:threadId/requests/:requestId/action",
+  "POST /messages/share-post",
+  "POST /slurp/posts/:id/report",
+  "POST /slurp/posts/:id/restore",
+  "DELETE /slurp/accounts/:id/wardrobe/:lookId",
+  "GET /slurp/accounts/:id/wardrobe",
+  "GET /slurp/wardrobe/lorebooks",
+  "PATCH /slurp/accounts/:id/wardrobe/:lookId",
+  "POST /slurp/accounts/:id/wardrobe",
+  "POST /slurp/accounts/:id/wardrobe/import",
+  "POST /slurp/accounts/:id/wardrobe/import-preview",
 ]);
+
+// Routes staging had that Slurp2 no longer serves. The share card is now drawn on a canvas in
+// the browser: the server render needed fonts installed on the host, which Engine hosts often
+// lack, so the card came out as the bare post image with no name, title, or caption.
+const REMOVED_ROUTES = new Set(["GET /noodler/posts/:id/share-card"]);
 
 const stagingRoutes = readFileSync(join(import.meta.dirname, "fixtures/slurp2-route-inventory.staging.txt"), "utf8")
   .split("\n")
@@ -237,25 +261,28 @@ const routeToStaging = (route: string): string => {
   if (route.startsWith("ADDCONTENTTYPEPARSER ") || RETAINED_OLD_PATHS.has(route)) return route;
   return route.replace("/slurp/", "/noodler/");
 };
-const mappedStagingRoutes = [...stagingRoutes.map(routeFromStaging), ...ADDED_ROUTES].sort();
+const mappedStagingRoutes = [
+  ...stagingRoutes.filter((route) => !REMOVED_ROUTES.has(route)).map(routeFromStaging),
+  ...ADDED_ROUTES,
+].sort();
 assert.deepEqual([...EXPECTED].sort(), mappedStagingRoutes, "the route mapping must match the staging fixture");
 
 const EXPECTED_HANDLER_COUNTS = {
   "features/ads": 18,
   "features/audience": 12,
-  "features/creators": 26,
+  "features/creators": 33,
   "features/discovery": 4,
   "features/economy": 13,
-  "features/feed": 34,
+  "features/feed": 35,
   "features/maintenance": 14,
   "features/media": 7,
-  "features/messages": 37,
+  "features/messages": 38,
   "features/notifications": 2,
   "features/onboarding": 4,
   "features/projects": 15,
   "features/settings": 7,
 } as const;
-const EXPECTED_METHOD_COUNTS = { DELETE: 11, GET: 65, PATCH: 15, POST: 97, PUT: 5 } as const;
+const EXPECTED_METHOD_COUNTS = { DELETE: 12, GET: 66, PATCH: 16, POST: 103, PUT: 5 } as const;
 
 const root = join(import.meta.dirname, "../packages/slurp2/src/engine/packages/server/src/slp");
 const registration = /\bapp\.(get|post|put|patch|delete|addContentTypeParser)(?:<[^()]*?>)?\(\s*["'`]([^"'`]+)["'`]/gu;
@@ -310,7 +337,7 @@ const methodCounts = Object.fromEntries(
     }, new Map<string, number>()),
 );
 assert.deepEqual(methodCounts, EXPECTED_METHOD_COUNTS, "HTTP method multiset changed from staging");
-assert.equal(foundRoutes.filter((route) => !route.startsWith("ADDCONTENTTYPEPARSER ")).length, 193);
+assert.equal(foundRoutes.filter((route) => !route.startsWith("ADDCONTENTTYPEPARSER ")).length, 202);
 assert.deepEqual(handlerCounts, EXPECTED_HANDLER_COUNTS, "handler count changed in a feature");
 assert.ok(foundRoutes.includes("POST /slurp/posts/:id/media"), "the renamed POST media route must remain registered");
 assert.ok(
@@ -322,7 +349,7 @@ assert.deepEqual(
     .filter((route) => !ADDED_ROUTES.has(route))
     .map(routeToStaging)
     .sort(),
-  stagingRoutes,
+  stagingRoutes.filter((route) => !REMOVED_ROUTES.has(route)),
   "the route change must be limited to the explicit Slurp mapping",
 );
 assert.deepEqual(

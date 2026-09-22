@@ -17,7 +17,12 @@ import {
   type ConnectionAdmissionMode,
 } from "../../../services/generation/connection-admission.js";
 import { resolveCreatorImageConnectionId } from "../../base/media/slp-image-connections.js";
-import { resolveSlurpCreatorMenu, resolveSlurpPostGuidance } from "../../data/settings/slp-post-guidance-storage.js";
+import {
+  resolveSlurpCreatorMenu,
+  resolveSlurpExplicitLevel,
+  resolveSlurpPostGuidance,
+} from "../../data/settings/slp-post-guidance-storage.js";
+import { SLURP_BUILT_IN_EXPLICIT_LEVEL, slurpPostSexualLevel } from "../../modules/feed/slp-post-guidance.js";
 import { createCharactersStorage } from "../../../services/storage/characters.storage.js";
 import { createConnectionsStorage } from "../../../services/storage/connections.storage.js";
 import { createSlurpStorage } from "../../data/slp-storage.js";
@@ -31,7 +36,6 @@ import {
   persistCreatorPostWithUploadedMedia,
   type SlpCreatorPostMediaUpload,
 } from "../../base/media/slp-media.js";
-import type { SlpImagePromptReviewItem } from "../media/slp-media-contract.js";
 import { getErrorMessage } from "../../modules/creators/slp-public-support.js";
 import { slpResponseFormat } from "../../base/prompting/slp-response-format.js";
 import {
@@ -52,8 +56,6 @@ import { processLorebooks } from "../../../services/lorebook/index.js";
 import { createCharacterGalleryStorage } from "../../../services/storage/character-gallery.storage.js";
 import { createGalleryStorage } from "../../../services/storage/gallery.storage.js";
 import { pickGalleryAttachmentForAccount } from "./slp-generated-activity-service.js";
-// The disclosure privacy core lives in a leaf module so tests can execute it instead of grepping
-// this file, which cannot be imported without a database and an LLM provider.
 import { protectCreatorGeneratedIdentity, type PublicIdentity } from "../../base/identity/slp-identity-protection.js";
 import { resolveCreatorCharacterCanon } from "../../data/creators/slp-source-resolve.js";
 import { slurpPlatformEventInstruction } from "../../../../../shared/src/slp/slp-platform-events.js";
@@ -80,36 +82,19 @@ import {
   type SlurpReusablePromptInstruction,
 } from "../../base/prompting/slp-prompt-blocks.js";
 import { slurpCameraSourceInstruction, slurpPostCameraSource } from "../../modules/feed/slp-camera-source.js";
-import { slurpImageBrief } from "../../modules/feed/slp-image-brief.js";
+import { slurpPostPictureBriefs } from "./slp-post-picture-briefs.js";
 import { slurpVisualBriefFromSituation } from "../../modules/feed/slp-visual-brief.js";
 import { slurpContentAxesInstruction, slurpIntentFormat } from "../../modules/feed/slp-content-axes.js";
 import { planSlurpPost, recordSlurpPostOutcome } from "./slp-post-plan-service.js";
-import { stageImageToDisk, type StagedGalleryImage } from "../../../services/image/image-generation.js";
+import { stageImageToDisk } from "../../../services/image/image-generation.js";
 import { slurpShootInstruction } from "../../modules/feed/slp-shoot.js";
 import { openSlurpShoot, useSlurpShoot } from "../../data/feed/slp-shoot-storage.js";
 import { slurpEffortInstruction, slurpPostEffort } from "../../modules/creators/slp-production-profile.js";
 import { slurpCreatorStrategy, slurpStrategyInstruction } from "../../modules/creators/slp-creator-strategy.js";
 import { createSlurpPostProvider } from "../../base/host/slp-generation-integrations.js";
-
-export type GeneratedCreatorPostResult = {
-  post: SlpCreatorManagedPost;
-  imagePromptReview: SlpImagePromptReviewItem | null;
-};
-
-export type PreparedCreatorPostResult = {
-  title: string | null;
-  content: string;
-  imagePrompt: string | null;
-  access: "public" | "locked";
-  /** The project this post continues, carried through to publication. Null for a loose post. */
-  projectId: string | null;
-  projectChapter: string | null;
-  metadata: Record<string, unknown>;
-  /** The exact system and user messages used for this prepared result. */
-  compiledPrompt: string;
-  /** A reused picture staged for the payload. The caller promotes it once the row is durable. */
-  stagedMedia?: StagedGalleryImage | null;
-};
+import { resolveSlurpWardrobeSelection, slurpWardrobePrompt } from "../../modules/feed/slp-wardrobe-selection.js";
+import type { GeneratedCreatorPostResult, PreparedCreatorPostResult } from "./slp-generation-contract.js";
+export type { GeneratedCreatorPostResult, PreparedCreatorPostResult } from "./slp-generation-contract.js";
 
 type GenerationConnection = NonNullable<Awaited<ReturnType<ReturnType<typeof createConnectionsStorage>["getWithKey"]>>>;
 
@@ -215,6 +200,10 @@ export async function generateCreatorPost(
   // their direction is the angle, and a second one would fight it.
   // One sequence for both rotations, so the project and the variation cannot drift out of step.
   const sequence = await noodle.countNoodlerPostsByAccount(account.id);
+  const wardrobeLooks = await noodle.listWardrobeLooks(account.id).catch(() => []);
+  const recentWardrobeIds = recentPosts
+    .map((post) => (typeof post.metadata.wardrobeLookId === "string" ? post.metadata.wardrobeLookId : null))
+    .filter((id): id is string => Boolean(id));
   const prompts = slurpPromptContext({
     promptBlocks: input.promptBlocks ?? settings.promptBlocks,
     promptInstructions: input.promptInstructions ?? settings.promptInstructions,
@@ -310,15 +299,20 @@ export async function generateCreatorPost(
   // variation and therefore no brief, so it keeps the old single-call behaviour.
   const briefedImage = Boolean(postImages && cameraInstruction && variation);
   const askModelForImagePrompt = postImages && !briefedImage;
+  const askModelForScene = briefedImage;
   // The Creator's own state reached her direct messages and stopped there, so the feed was
   // written by somebody with no mood, no energy and no memory of last night. A failure here must
   // never cost a post: an unremarkable day is the same as no block at all.
   const conditionInstruction = await describeSlurpPostCondition(db, account.id, input.generatedAt ?? new Date());
   const contentMenu = await resolveSlurpCreatorMenu(db, account.id).catch(() => "");
+  // How far this Creator's pictures go. A read failure must not cost a post, and the shipped level
+  // is what an install with nothing configured would have used anyway.
+  const explicitLevel = await resolveSlurpExplicitLevel(db, account.id).catch(() => SLURP_BUILT_IN_EXPLICIT_LEVEL);
   const messages = buildNoodlerPostMessages({
     account,
     sourceCharacterContext,
     stagePersonality: account.settings.privacy.stagePersonality ?? "",
+    stageFacts: account.settings.stage,
     contentMenu,
     disclosureMode,
     publicIdentity,
@@ -340,6 +334,10 @@ export async function generateCreatorPost(
       .join("\n\n"),
     project: project ? { project, posts: projectPosts } : undefined,
     allowImagePrompt: askModelForImagePrompt,
+    allowScenePlan: askModelForScene,
+    wardrobePrompt: askModelForScene
+      ? slurpWardrobePrompt(wardrobeLooks, input.request.access, recentWardrobeIds)
+      : null,
     imageGenerationPrompt: settings.imageGenerationPrompt,
     generationGuidance: settings.generationGuidance,
     postMaxLength: settings.postMaxLength,
@@ -377,6 +375,7 @@ export async function generateCreatorPost(
     debugMode,
     responseFormat: slpResponseFormat(input.connection.model, "noodler_post", {
       allowImagePrompt: askModelForImagePrompt,
+      allowScenePlan: askModelForScene,
       contentMaxLength: settings.postMaxLength,
     }),
   } as const;
@@ -385,7 +384,7 @@ export async function generateCreatorPost(
     provider,
     messages,
     completionOptions,
-    { askModelForImagePrompt, debugMode },
+    { askModelForImagePrompt, askModelForScene, debugMode },
   );
   compiledPrompt = sentMessages.map((message) => `# ${message.role}\n${message.content}`).join("\n\n");
 
@@ -410,40 +409,33 @@ export async function generateCreatorPost(
     content: protectedContent,
   };
 
-  // Identity protection applies to the image prompt too, not only post text. The arc's chapter line
-  // joins the prompt before protection, so a chapter naming a real place is redacted the same way.
-  const arcImageLine = slurpArcImageLine(project);
-  // Produce mode briefs the picture from the situation, never from the caption the model just
-  // wrote. Identity protection still applies: the brief carries the Creator's own place and
-  // company, so a Secret Creator's details must be redacted here exactly as they are in the text.
-  const imageDraft =
-    cameraInstruction && variation
-      ? slurpImageBrief({
-          cameraInstruction,
-          variation,
-          story: storyVariation,
-          shoot,
-          effortInstruction: slurpEffortInstruction(effort),
-        })
-      : generated.imagePrompt;
-  const draftImagePrompt = postImages
-    ? protectCreatorGeneratedIdentity(
-        imageDraft && arcImageLine ? `${imageDraft}\n${arcImageLine}` : imageDraft,
-        disclosureMode,
-        publicIdentity,
-      )
-    : null;
-  const visualBrief =
-    postImages && variation && cameraInstruction
-      ? slurpVisualBriefFromSituation({
-          variation,
-          axes,
-          cameraInstruction,
-          effortInstruction: slurpEffortInstruction(effort),
-          shoot,
-          story: storyVariation,
-        })
-      : undefined;
+  const wardrobeSelection = resolveSlurpWardrobeSelection({
+    looks: askModelForScene ? wardrobeLooks : [],
+    access: input.request.access,
+    scene: askModelForScene ? generated.scene : null,
+    recentIds: recentWardrobeIds,
+  });
+
+  // What the picture is, and what it may show. Assembled in one place so the two briefs cannot
+  // disagree about the level, the shoot, or the effort.
+  const { draftImagePrompt, visualBrief } = slurpPostPictureBriefs({
+    project,
+    variation,
+    cameraInstruction,
+    effort,
+    shoot,
+    axes,
+    story: storyVariation,
+    postImages,
+    access: input.request.access,
+    explicitLevel,
+    modelImagePrompt: generated.imagePrompt,
+    stageFacts: account.settings.stage,
+    scene: generated.scene,
+    selectedWardrobe: wardrobeSelection.look,
+    disclosureMode,
+    publicIdentity,
+  });
 
   // Shoot bookkeeping, once the post definitely has text and its picture brief. A set drop opens a
   // shoot that later callbacks can draw from, and stores its brief so their pictures keep its
@@ -524,6 +516,7 @@ export async function generateCreatorPost(
         generated,
         draftImagePrompt,
         askModelForImagePrompt,
+        wardrobeSelection,
       }),
     }).catch((error: unknown) => {
       logger.warn(error, "[slurp] Could not record deep details for a post");
@@ -547,6 +540,13 @@ export async function generateCreatorPost(
       // Persisted so later planning, the scheduled publisher, and the feed read the same decision.
       ...(axes ? { contentIntent: axes.intent, contentDelivery: axes.delivery } : {}),
       ...(shootId ? { shootId } : {}),
+      ...(wardrobeSelection.look ? { wardrobeLookId: wardrobeSelection.look.id } : {}),
+      ...(wardrobeSelection.fallback
+        ? {
+            wardrobeSelectionFallback: true,
+            ...(wardrobeSelection.requestedId ? { wardrobeRequestedId: wardrobeSelection.requestedId } : {}),
+          }
+        : {}),
       // Where a reused picture came from. The bytes are a copy, so this is provenance, not a link.
       ...(reusedMedia && reusedSource ? { reusedFromPostId: reusedSource.id } : {}),
       // Stamped at creation like a manual post, so a generated locked post honours the configured
@@ -582,6 +582,14 @@ export async function generateCreatorPost(
       projectId: project?.id ?? null,
       projectChapter,
       compiledPrompt,
+      scene: generated.scene ?? null,
+      wardrobeSelection: {
+        selectedId: wardrobeSelection.look?.id ?? null,
+        requestedId: wardrobeSelection.requestedId,
+        fallback: wardrobeSelection.fallback,
+      },
+      visualBrief: visualBrief ?? null,
+      imageBrief: draftImagePrompt,
       // The scheduled path returns here, before the image-commit branch that stamps the story flag,
       // so a scheduled Story used to publish as an ordinary post. Carry the intent in the prepared
       // payload instead; publishDueNoodlerPreparedPosts drops it again if no image ever attached,

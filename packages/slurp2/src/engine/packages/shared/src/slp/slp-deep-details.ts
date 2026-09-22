@@ -48,7 +48,19 @@ export type SlpDeepDetailsRecord = {
   };
   messages: { role: string; content: string }[];
   rawResponse: string;
-  modelOutput: { title: string | null; content: string; imagePrompt: string | null };
+  modelOutput: {
+    title: string | null;
+    content: string;
+    imagePrompt: string | null;
+    scene?: {
+      wardrobeId?: string | null;
+      setting: string;
+      action: string;
+      expression: string;
+      visualDirection: string;
+    } | null;
+  };
+  wardrobeSelection?: { selectedId: string | null; requestedId: string | null; fallback: boolean };
   /** The picture brief built from the situation, or the model's own image prompt when there was none. */
   imageBrief: string | null;
   /** The typed scene contract used to constrain image prompt interpretation, when available. */

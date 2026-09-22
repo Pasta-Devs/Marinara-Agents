@@ -1,7 +1,7 @@
 import type { SlpCreatorContentFormat } from "../../features/feed/slp-feed-contract";
 import type { SlurpContentDelivery, SlurpContentIntent } from "../../../../../shared/src/slp/slp-content-axes.js";
 import { AnimatePresence } from "framer-motion";
-import { ArrowLeft, Loader2 } from "lucide-react";
+import { ArrowLeft, ChevronLeft, ChevronRight, Loader2 } from "lucide-react";
 import { DEFAULT_SLURP_SUBSCRIPTION_PRICE } from "../../modules/coin/SlpCoin";
 import { HelpTooltip } from "../../../components/ui/HelpTooltip";
 import { type SlpIdentityDisclosure } from "../../../../../shared/src/slp/slp-social.types.js";
@@ -17,7 +17,7 @@ import type {
 } from "../../../../../shared/src/slp/slp-social.types.js";
 import type { SlpCreatorPostDraftImage } from "../../features/feed/slp-feed-contract";
 import type { SlurpStageProfileInput } from "../../base/state/slp-state-types";
-import type { SlpPostCardModel } from "../../modules/post/SlpPostCard";
+import type { SlpPostCardModel } from "../../modules/post/SlpPostTypes";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -90,6 +90,9 @@ export const EMPTY_STAGE_PROFILE: SlurpStageProfileInput = {
   handle: "",
   bio: "",
   stagePersonality: "",
+  appearance: "",
+  wardrobe: "",
+  locations: "",
   disclosureMode: "open",
   gender: null,
   tags: [],
@@ -229,8 +232,8 @@ import { getSlpAccentStyle, SLP_PINK, ProfileInitial } from "../../base/chrome/S
 import { useTranslation as useUiTranslation } from "react-i18next";
 import { useSlurpMediaSrc } from "../../base/media/slp-media-src";
 import { Modal } from "../../../components/ui/Modal";
-import type { SlpPostCardCtx } from "../../modules/post/SlpPostCard";
-import { SlurpCreatorPostCard } from "../../modules/post/SlpCreatorPostCard";
+import type { SlpPostCardCtx } from "../../modules/post/SlpPostTypes";
+import { SlpPostCard } from "../../modules/post/SlpPostCard";
 
 /** Keeps a feed slot mounted while its locked and revealed card shapes trade places. */
 export function SlurpAccessTransition({
@@ -560,8 +563,14 @@ export function SlurpPostDialog({
   onClose: () => void;
 }) {
   const { t: localizeUi } = useUiTranslation();
-  const source = useSlurpMediaSrc(post.imageUrl, { width: 1600 });
+  // A post can carry a gallery. The dialog used to show `imageUrl` alone, so every image after
+  // the first was unreachable once the post was opened.
+  const gallery = post.images.length > 0 ? post.images.map((image) => image.imageUrl) : [post.imageUrl];
+  const [index, setIndex] = useState(0);
+  const active = gallery[Math.min(index, gallery.length - 1)] ?? post.imageUrl;
+  const source = useSlurpMediaSrc(active, { width: 1600 });
   const authorName = post.authorSnapshot?.displayName ?? "";
+  const step = (offset: 1 | -1) => setIndex((current) => (current + offset + gallery.length) % gallery.length);
   return (
     <SlurpMediaDialog
       title={localizeUi("ui.slurp.post.dialogTitle", { name: authorName })}
@@ -581,13 +590,90 @@ export function SlurpPostDialog({
               decoding="async"
               className="relative z-10 max-h-full max-w-full object-contain outline outline-1 -outline-offset-1 outline-white/10"
             />
+            {gallery.length > 1 && (
+              <>
+                <span className="pointer-events-none absolute inset-x-2 top-1/2 z-20 flex -translate-y-1/2 justify-between">
+                  <button
+                    type="button"
+                    aria-label={localizeUi("ui.slurp.post.previousImage")}
+                    onClick={() => step(-1)}
+                    className="pointer-events-auto grid size-11 place-items-center rounded-full bg-black/65 text-white ring-1 ring-white/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
+                  >
+                    <ChevronLeft size={22} className="rtl:rotate-180" aria-hidden="true" />
+                  </button>
+                  <button
+                    type="button"
+                    aria-label={localizeUi("ui.slurp.post.nextImage")}
+                    onClick={() => step(1)}
+                    className="pointer-events-auto grid size-11 place-items-center rounded-full bg-black/65 text-white ring-1 ring-white/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
+                  >
+                    <ChevronRight size={22} className="rtl:rotate-180" aria-hidden="true" />
+                  </button>
+                </span>
+                <div className="absolute inset-x-0 bottom-0 z-20 flex flex-col items-center gap-2 bg-gradient-to-t from-black/80 to-transparent px-3 pb-3 pt-10">
+                  <p className="text-xs font-bold tabular-nums text-white/80" aria-live="polite">
+                    {localizeUi("ui.slurp.post.imageCounter", {
+                      index: index + 1,
+                      total: gallery.length,
+                      defaultValue: "{{index}} of {{total}}",
+                    })}
+                  </p>
+                  <ol className="flex max-w-full gap-2 overflow-x-auto pb-1">
+                    {gallery.map((imageUrl, position) => (
+                      <li key={`${imageUrl}-${position}`}>
+                        <SlurpPostDialogThumb
+                          imageUrl={imageUrl}
+                          selected={position === index}
+                          label={localizeUi("ui.slurp.post.showImage", {
+                            index: position + 1,
+                            defaultValue: "Show image {{index}}",
+                          })}
+                          onSelect={() => setIndex(position)}
+                        />
+                      </li>
+                    ))}
+                  </ol>
+                </div>
+              </>
+            )}
           </>
         ) : (
           <div className="h-full w-full animate-pulse bg-[var(--slurp-surface-raised)] motion-reduce:animate-none" />
         )
       }
       // The dialog owns the picture, so the card must not draw it or offer its prompt again.
-      side={<SlurpCreatorPostCard post={{ ...post, imageUrl: null }} ctx={ctx} surface="profile" />}
+      // `images` has to go too: the card prefers that array over `imageUrl`, so blanking only
+      // `imageUrl` left every gallery post showing its picture twice.
+      side={<SlpPostCard post={{ ...post, imageUrl: null, images: [] }} ctx={ctx} surface="profile" />}
     />
+  );
+}
+
+/** One mini preview in the dialog's gallery strip. Own component so each can resolve its own src. */
+function SlurpPostDialogThumb({
+  imageUrl,
+  selected,
+  label,
+  onSelect,
+}: {
+  imageUrl: string;
+  selected: boolean;
+  label: string;
+  onSelect: () => void;
+}) {
+  const source = useSlurpMediaSrc(imageUrl, { width: 160 });
+  return (
+    <button
+      type="button"
+      aria-label={label}
+      aria-current={selected ? "true" : undefined}
+      onClick={onSelect}
+      className={cn(
+        "size-14 overflow-hidden rounded-lg bg-black/40 ring-1 transition-opacity focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white",
+        selected ? "ring-2 ring-white" : "opacity-60 ring-white/25 hover:opacity-100",
+      )}
+    >
+      {source && <img src={source} alt="" decoding="async" className="h-full w-full object-cover" />}
+    </button>
   );
 }

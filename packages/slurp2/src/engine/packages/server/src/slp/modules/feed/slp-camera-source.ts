@@ -77,8 +77,23 @@ const RULES: Record<SlurpCameraSource, CameraSourceRule> = {
  * Stated as a prohibition rather than a preference, because the image model reliably reintroduces
  * the unexplained angle when this is phrased softly.
  */
-export const SLURP_CAMERA_SOURCE_RULE =
-  "Describe the photograph, not the scene. Never use a camera position nobody present could have reached: no floor-level, overhead, or across-the-room shot unless the camera source above put a camera there. The picture may be badly framed, poorly lit, partly blocked, or dull. Do not improve it.";
+export const SLURP_CAMERA_SOURCE_RULE = [
+  "Describe the photograph, not the scene.",
+  "Never use a camera position nobody present could have reached: no floor-level, overhead, or across-the-room shot unless the camera source above put a camera there.",
+  // A point-of-view framing is the same unexplained-access problem wearing a different hat: it
+  // says the camera is somebody's eyes, so the image model supplies that somebody — an arm, a
+  // hand, a torso, or worse, reaching in from the near edge of the frame. The Creator is alone in
+  // most posts, and nothing in the scene ever paid for a second body. State it as a prohibition
+  // for the same reason as the line above: phrased as a preference, the framing comes straight
+  // back.
+  "The camera is a camera, never a person's eyes: no first-person or point-of-view framing, and no hands, arms, limbs, or any other part of a second body entering the frame.",
+  "Show only the people the company names. If the Creator is alone, the Creator is the only person, the only body, and the only anatomy in the picture.",
+  // Was "may be badly framed, poorly lit, partly blocked, or dull. Do not improve it." The intent
+  // was right — a candid phone picture, not an advertisement — but an image model reads "poorly
+  // lit" and "dull" as instructions and returns exactly that: a muddy, badly composed picture
+  // nobody wants to look at. Ask for the candour and rule out the mud separately.
+  "Keep it a photograph rather than an advertisement: available light, a real room, an unposed frame, no retouching and no studio setup. Plain and imperfect is right; blurry, muddy, underexposed, or hard to make out is not.",
+].join(" ");
 
 /** The sources this variation can actually pay for. */
 export function slurpPermittedCameraSources(options: { companyCanHoldCamera: boolean }): readonly SlurpCameraSource[] {
@@ -88,25 +103,41 @@ export function slurpPermittedCameraSources(options: { companyCanHoldCamera: boo
 /**
  * How often each camera turns up.
  *
- * A phone in your own hand is how most pictures on earth are taken, so it dominates. The rest are
- * occasional by nature: setting up a timer is a decision, somebody else holding the camera needs
- * somebody else, and posting an old picture is a thing people do sometimes rather than weekly.
- *
  * These are weights rather than rotation slots on purpose. Six sources in a rotation meant an old
  * photo every sixth post forever, which stops being "sometimes she posts an old one" and becomes
  * her posting schedule.
+ *
+ * The first cut of this table reasoned from photographs in general: a phone in your own hand is
+ * how most pictures on earth are taken, so selfie took 42 and mirror took 22. But a mirror shot is
+ * also a phone in her own hand, so together they were two posts in three, and the feed read as one
+ * person taking the same picture forever. Photographs in general is the wrong reference class —
+ * this is a page somebody runs, and a page that is only arm's-length phone pictures is a page
+ * nobody is working on.
+ *
+ * So the weights now reason from the work instead. Hand-held self-shots stay the largest share at
+ * a little under half, because they are still the cheap everyday post. A propped-up phone is what
+ * an actual planned picture looks like and is now close behind. A still out of a video is common
+ * on a page that posts video at all, and was badly underweighted at 10. Somebody else holding the
+ * camera is rare because it needs somebody else, not because it is unusual when they are there —
+ * the permitted-sources filter already removes it when she is alone, so its weight should reflect
+ * how often it happens *given* company.
  */
 const WEIGHTS: Record<SlurpCameraSource, number> = {
-  selfie: 42,
-  mirror: 22,
-  tripod: 14,
-  screenshot: 10,
-  archive: 7,
-  partner: 5,
+  selfie: 28,
+  mirror: 17,
+  tripod: 22,
+  screenshot: 15,
+  archive: 9,
+  partner: 9,
 };
 
-/** How much a Creator's own habits bend the odds. Enough to be their habit, not enough to be a rule. */
-const PREFERENCE_MULTIPLIER = 2.5;
+/**
+ * How much a Creator's own habits bend the odds. Enough to be their habit, not enough to be a rule.
+ *
+ * Lowered with the weights below. At 2.5 against the old selfie weight, a Creator who prefers
+ * selfies drew one about three posts in four, which is the monoculture again for that Creator.
+ */
+const PREFERENCE_MULTIPLIER = 2;
 
 /**
  * What the post is for bends the odds too.
@@ -126,7 +157,7 @@ const INTENT_BIAS: Record<string, Partial<Record<SlurpCameraSource, number>>> = 
 };
 
 const EFFORT_BIAS: Record<string, Partial<Record<SlurpCameraSource, number>>> = {
-  low: { selfie: 1.4, screenshot: 1.4, tripod: 0.4, partner: 0.6 },
+  low: { selfie: 1.25, screenshot: 1.5, tripod: 0.4, partner: 0.6 },
   medium: {},
   high: { selfie: 0.5, tripod: 2, partner: 1.6, screenshot: 0.7 },
 };

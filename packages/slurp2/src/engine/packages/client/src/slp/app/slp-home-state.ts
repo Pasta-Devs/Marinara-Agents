@@ -53,6 +53,8 @@ import { useActivePersona, usePersonas } from "../../hooks/use-creator-personas"
 import { useConnections } from "../../hooks/use-connections";
 import { showConfirmDialog } from "../../lib/app-dialogs";
 import { useSlurpUIStore } from "../base/state/slp-package-store";
+import { api } from "../../lib/api-client";
+import type { SlpPostCardModel } from "../modules/post/SlpPostTypes";
 import {
   type SlpCreatorPostDraft,
   EMPTY_SLP_CREATOR_POST_DRAFT,
@@ -60,7 +62,7 @@ import {
   errorMessage,
   SLURP_PLACEHOLDER_BALANCE,
 } from "./screens/SlpHomeHelpers";
-import { useSlpPostCardController } from "../modules/post/SlpPostCard";
+import { useSlpPostCardController } from "../modules/post/SlpPostHooks";
 import type { ImagePromptReviewItem } from "../../components/ui/ImagePromptReviewModal";
 import type { SlurpNavigationState } from "../base/navigation/slp-navigation.types";
 import { useTranslation as useUiTranslation } from "react-i18next";
@@ -68,13 +70,11 @@ import { confirmLeaveSlurpBackstage } from "../features/backstage/SlpBackstageCo
 import { SLP_PERSONA_SWITCHER_PAGE_SIZE } from "../base/chrome/SlpChrome";
 import { toast } from "sonner";
 import { slurp2SplashPending } from "../features/onboarding/SlpSplash";
-
 export interface SlurpHomeProps {
   navigation: SlurpNavigationState;
   onNavigate: (destination: SlurpNavigationState) => void;
   onLeave?: () => void;
 }
-
 export function useSlurpHomeBaseState({ navigation, onNavigate, onLeave }: SlurpHomeProps) {
   const { t: localizeUi } = useUiTranslation();
   const accountsQuery = useCreatorAccounts();
@@ -457,6 +457,7 @@ export function useSlurpHomeBaseState({ navigation, onNavigate, onLeave }: Slurp
     deleteNoodlePost,
     deletingPostIds,
     deletedPostIds,
+    restoringPostIds,
     editingReplyId,
     setEditingReplyId,
     editingReplyContent,
@@ -537,6 +538,20 @@ export function useSlurpHomeBaseState({ navigation, onNavigate, onLeave }: Slurp
     ...postCardController.ctx,
     generatePostImage: handleGeneratePostImage,
     generatingPostImageId,
+    // Undefined without a persona rather than a no-op handler: the menu then falls back to its
+    // own share-card download instead of the item doing nothing at all when it is clicked.
+    sharePost: viewerPersonaId
+      ? (post: SlpPostCardModel) => {
+          void api
+            .post("/slurp2/messages/share-post", {
+              personaId: viewerPersonaId,
+              creatorAccountId: post.authorAccountId,
+              postId: post.id,
+            })
+            .then(() => toast.success(localizeUi("ui.slurp.post.shared", { defaultValue: "Post shared." })))
+            .catch((error: unknown) => toast.error(errorMessage(error, localizeUi("ui.slurp.post.shareFailed"))));
+        }
+      : undefined,
   };
   const selectedProfile =
     navigation.mode === "creator" && navigation.view === "profile"
@@ -548,7 +563,6 @@ export function useSlurpHomeBaseState({ navigation, onNavigate, onLeave }: Slurp
   const eligibleNoodleAccounts = eligibleAccountsQuery.data?.pages.flatMap((page) => page.items) ?? [];
   const selectedSource = eligibleNoodleAccounts.find((account) => account.id === draftNoodleAccountId) ?? null;
   const sourcePickerLoading = eligibleAccountsQuery.isLoading || eligibleAccountsQuery.isFetching;
-
   const handleSourceSearch = (value: string) => {
     invalidateProfileDraftGeneration();
     setSourceSearch(value);
@@ -559,7 +573,6 @@ export function useSlurpHomeBaseState({ navigation, onNavigate, onLeave }: Slurp
     setSourceKind(value);
     setDraftNoodleAccountId(null);
   };
-
   useEffect(() => {
     if (
       slurpSettingsQuery.isSuccess &&
@@ -579,12 +592,10 @@ export function useSlurpHomeBaseState({ navigation, onNavigate, onLeave }: Slurp
     slurpSettingsQuery.data?.onboarding,
     slurpSettingsQuery.isSuccess,
   ]);
-
   useEffect(() => {
     if (navigation.mode !== "creator" || navigation.view !== "hub") return;
     onboardingPresentedRef.current = false;
   }, [navigation.mode, navigation.view, onboardingState]);
-
   const enterFromGate = async () => {
     setGateOpen(false);
     setOnboardingState("completed");
@@ -595,17 +606,14 @@ export function useSlurpHomeBaseState({ navigation, onNavigate, onLeave }: Slurp
     }
     onNavigate({ mode: "creator", view: "hub" });
   };
-
   useEffect(() => {
     if (!gateCelebrating) return;
     const timer = window.setTimeout(() => setGateCelebrating(false), 1_400);
     return () => window.clearTimeout(timer);
   }, [gateCelebrating]);
-
   const closeOnboarding = () => {
     setOnboardingMode(null);
   };
-
   return {
     navigation,
     onNavigate,
@@ -758,6 +766,7 @@ export function useSlurpHomeBaseState({ navigation, onNavigate, onLeave }: Slurp
     deleteNoodlePost,
     deletingPostIds,
     deletedPostIds,
+    restoringPostIds,
     editingReplyId,
     setEditingReplyId,
     editingReplyContent,
@@ -784,5 +793,4 @@ export function useSlurpHomeBaseState({ navigation, onNavigate, onLeave }: Slurp
     closeOnboarding,
   };
 }
-
 export type SlurpHomeBaseState = ReturnType<typeof useSlurpHomeBaseState>;

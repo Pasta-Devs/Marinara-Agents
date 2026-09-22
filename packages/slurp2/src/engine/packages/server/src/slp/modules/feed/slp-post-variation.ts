@@ -64,23 +64,12 @@ const PLACES = [
 /** What they are doing. Deliberately about state rather than subject matter. */
 const MOMENTS = [
   "in the middle of something rather than posed for a photo",
-  "just finished with something and still coming down from it",
-  "about to leave and stopping for one second",
-  "awake when they should not be",
+  "just finished something, before putting the room back together",
+  "about to go out and stopping for one quick picture",
+  "between two ordinary parts of their day",
   "getting ready rather than ready",
-  "taking a break they did not plan",
-  "having just been interrupted",
-] as const;
-
-/** How the picture is taken. This is the one that fixes "the same pose". */
-const FRAMINGS = [
-  "close crop, most of them out of frame",
-  "wide, with the room doing most of the talking",
-  "caught at an angle, not squared up to the camera",
-  "in a mirror or reflection",
-  "from above, looking down",
-  "from low, looking up",
-  "an object or a detail in the foreground, them behind it",
+  "taking a short break before carrying on",
+  "pausing because their phone was already in their hand",
 ] as const;
 
 /**
@@ -93,11 +82,11 @@ const FRAMINGS = [
  * cannot be photographed from across the room.
  */
 const COMPANY = [
-  { text: "alone and glad of it", helper: false },
-  { text: "alone and not glad of it", helper: false },
-  { text: "somebody else is nearby but out of frame", helper: true },
-  { text: "surrounded by people who have no idea", helper: false },
-  { text: "just got off a call", helper: false },
+  { text: "alone with the room to themselves", helper: false },
+  { text: "alone between other parts of the day", helper: false },
+  { text: "a trusted person is nearby but out of frame", helper: true },
+  { text: "in a public place among strangers", helper: false },
+  { text: "talking to somebody off-camera", helper: false },
 ] as const;
 
 /**
@@ -197,7 +186,6 @@ export type SlurpPostVariation = {
   story: boolean;
   place: string;
   moment: string;
-  framing: string;
   company: string;
   /** Whether somebody willing is close enough to be handed the phone. See `COMPANY`. */
   companyCanHoldCamera: boolean;
@@ -207,8 +195,8 @@ export type SlurpPostVariation = {
  * The variation for one post.
  *
  * `sequence` is how many posts this Creator has already made. The format still rotates on it, so
- * the story and teaser slots stay predictable. Place, moment, framing, and company are seeded
- * weighted draws: common situations recur, rare ones stay rare, and repeats are allowed.
+ * the story and teaser slots stay predictable. Place, moment, and company are seeded weighted
+ * draws: common situations recur, rare ones stay rare, and repeats are allowed.
  *
  * The offset by creator id stops two Creators set up on the same day from marching through the
  * format cycle in lockstep.
@@ -237,12 +225,6 @@ export function slurpPostVariation(
     step,
     MOMENTS.map((value, index) => ({ value, weight: MOMENT_WEIGHTS[index]! })),
   );
-  const framing = slurpWeightedPick(
-    "framing",
-    creatorAccountId,
-    step,
-    FRAMINGS.map((value) => ({ value, weight: 1 })),
-  );
   const company = slurpWeightedPick(
     "company",
     creatorAccountId,
@@ -254,7 +236,6 @@ export function slurpPostVariation(
     story: format === "caption" && slurpStorySlots(storyRate).has(formatSlot),
     place,
     moment,
-    framing,
     company: typeof company === "string" ? company : company.text,
     companyCanHoldCamera: typeof company === "string" ? false : company.helper,
   };
@@ -263,18 +244,19 @@ export function slurpPostVariation(
 /**
  * The variation as prompt text. One block, so the caller does not assemble it in three places.
  *
- * `cameraInstruction` is the replacement for the `Framing` line. The two are mutually
- * exclusive on purpose: `FRAMINGS` hands out positions like "from above, looking down" with nothing
- * in the scene to justify them, which is the unexplained-cameraman problem `slp-camera-source.ts`
- * exists to fix. Emitting both would reintroduce it underneath the fix.
+ * `cameraInstruction` is required. It replaced a free-floating `FRAMINGS` axis that handed out
+ * positions like "from above, looking down" with nothing in the scene to justify them — the
+ * unexplained-cameraman problem `slp-camera-source.ts` exists to fix. The axis stayed behind as a
+ * drawn-then-discarded field for a while, which cost a weighted draw per post and showed a reader
+ * of the deep-details panel a framing the picture never used.
  */
-export function slurpPostVariationInstruction(variation: SlurpPostVariation, cameraInstruction?: string): string {
+export function slurpPostVariationInstruction(variation: SlurpPostVariation, cameraInstruction: string): string {
   return [
     "# This post's angle",
     "Keep the person exactly as the character card describes them — face, body, style, voice. Change the situation, not the person.",
     `Place: ${variation.place}.`,
     `Moment: ${variation.moment}.`,
-    ...(cameraInstruction ? [cameraInstruction] : [`Framing for the image: ${variation.framing}.`]),
+    cameraInstruction,
     `Company: ${variation.company}.`,
     ...(variation.story
       ? [

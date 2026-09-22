@@ -24,7 +24,10 @@ assert.match(settings, /record\.text === LEGACY_GRAPHIC_SLP_CREATOR_DEFAULT_IMAG
 assert.match(settings, /Do not turn an ordinary update into a fashion shoot or erotic image/u);
 assert.match(brief, /sexualLevel: SlurpVisualSexualLevel/u);
 assert.match(brief, /visual brief is authoritative/u);
-assert.match(briefBuilder, /sexualLevel: intent === "teaser"/u);
+// Was `sexualLevel: intent === "teaser" ? "suggestive" : "none"`, which briefed every locked post
+// as non-sexual. The level is the Creator's own now, stepped down for anything unpaid.
+assert.match(briefBuilder, /sexualLevel: slurpPostSexualLevel\(/u);
+assert.doesNotMatch(briefBuilder, /intent === "teaser" \? "suggestive"/u);
 assert.match(brief, /slurpVisualBriefPromptViolatesPolicy/u);
 assert.match(preview, /Runtime data can add more context during generation/u);
 assert.match(preview, /runs the post generator with the selected Creator/u);

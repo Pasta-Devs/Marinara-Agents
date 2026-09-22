@@ -1,5 +1,77 @@
 # Slurp Remastered release notes
 
+## 0.2.20 — 2026-09-22
+
+- Creators now own up to 64 complete wardrobe looks with model summaries, exact image descriptions, tags, public/locked suitability, provenance, and timestamps.
+- AI imports from the linked character, selected lorebooks, pasted text, or the legacy wardrobe note stay in an editable evidence-backed review until confirmed.
+- Automatic image posts return a scene plan with wardrobe ID, setting, action, expression, and visual direction. Slurp validates the choice, falls back to the least-recent compatible look, and then expands its exact clothing.
+- Prompt Studio and Deep Details show the scene, fallback, typed visual brief, and assembled image brief. Expert overrides can rewrite or disable every prompt block.
+- Random variations no longer invent loneliness, interruption, sleeplessness, or a low-income mood. Real events and character traits still affect tone.
+
+## 0.2.19 — 2026-09-22
+
+- A Creator has her own appearance, usual wardrobe, and regular places, edited on her profile.
+- The appearance is sent with every picture. It used to be borrowed from the linked character card, which needed the Creator to be linked, the card to have an Appearance field, and "include descriptions" to be on. With any of those missing the image model got a scene with nobody in it and invented somebody new each post.
+- An appearance left blank is seeded from the linked card when the Creator is created.
+- Wardrobe and places reach both the caption and the picture, so clothes are hers and "somewhere other than where she usually posts" has something to be other than.
+
+## 0.2.18 — 2026-09-22
+
+- How far a Creator's pictures go is now a setting, globally and per Creator. Locked posts deliver that level, public posts sit one step below, and housekeeping posts stay non-sexual. Every locked post used to be briefed as non-sexual.
+- The image prompt no longer asks for a bad picture. "Badly framed, poorly lit, dull" meant candid rather than staged, but an image model reads it as an instruction and returns exactly that.
+- No point-of-view framing, and nobody in the picture the scene did not pay for.
+- Camera mix rebalanced: arm's-length self-shots drop from about two thirds of posts to about 45%.
+- Posts with no picture drop from about one in six to about one in twenty-five.
+- The image provider no longer receives personality traits or an "Appearance:" label in the prompt.
+- Removed the framing axis, drawn on every post and discarded before the prompt.
+
+## 0.2.17 — 2026-09-22
+
+- The opened post viewer now shows every picture of a multi-image post, with arrows, a counter, and mini previews. It used to show the first one only.
+- Feed cards mark multi-image posts with position dots beside the existing arrows.
+- Prompt Studio: every block can be switched off, not only the ones marked optional.
+- Prompt Studio: required blocks can be rewritten. The override starts from the text the preview Creator actually gets, and says plainly that a fixed text replaces what Slurp would have composed per Creator. Context blocks stay read-only because their text is the runtime data itself.
+- The prompt preview no longer discards a finished result when the settings query refetches in the background, and a run it cannot perform now says why instead of doing nothing.
+- Prompt Studio on a phone: the preview panel is reachable without scrolling past every recipe, recipe rows no longer wrap four lines of block chips, and the preset picker fits the width.
+
+## 0.2.16 — 2026-09-21
+
+- Restoring a deleted post no longer waits on a full feed refetch, so the card comes back at once instead of sitting on its countdown.
+- The server now keeps a deleted post for twice the undo window it offers, so a Restore near the end of the countdown no longer fails.
+- The share card is drawn in the browser instead of on the server. The server render needed fonts installed on the host, which most installs do not have, so cards came out as the bare post image with no name, title, or caption.
+- Share post no longer does nothing when no viewer persona is active: it falls back to downloading the share card.
+- The post viewer's side card no longer draws the picture the viewer already shows.
+
+## 0.2.15 — 2026-09-21
+
+- Exposed restore pending state through the Home screen model so restore feedback renders immediately.
+
+## 0.2.14 — 2026-09-21
+
+- Restored posts now return to the visible feed as soon as the restore response succeeds.
+
+## 0.2.13 — 2026-09-21
+
+- Restore now gives immediate progress feedback.
+- The restore countdown pauses while the server restores the post.
+
+## 0.2.12 — 2026-09-21
+
+- Fixed the deleted-post panel crash caused by missing restore state.
+- Wired post sharing to the active viewer persona.
+- Restored the report action on feed posts.
+
+## 0.2.11 — 2026-09-21
+
+- Deleted posts can be restored again, with pending and failure feedback.
+- Restore now pulls the deleted post's sparkles into the restore action.
+
+## 0.2.10 — 2026-09-21
+
+- Normal, locked, profile, media, Story, and reply surfaces now use consistent three-dot action menus.
+- Posts now support direct sharing to Slurp messages and durable post or reply reports with snapshots.
+- Slurp now uses one canonical post card renderer.
+
 ## 0.2.9 — 2026-09-21
 
 - Post image prompts now use a typed visual brief and preserve the planned scene through image interpretation.

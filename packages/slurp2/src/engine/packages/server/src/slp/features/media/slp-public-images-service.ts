@@ -28,7 +28,7 @@ import { createPromptOverridesStorage } from "../../../services/storage/prompt-o
 import { loadPrompt, NOODLE_IMAGE_POST } from "../../../services/prompt-overrides/index.js";
 import { generateSlpImageWithRetry } from "../../base/media/slp-image-retry.js";
 import { rewriteSlpImagePrompt } from "../../base/media/slp-image-prompt-rewrite.js";
-import { selectSlpImageProviderPrompt } from "../../base/media/slp-image-prompt.js";
+import { selectSlpImageProviderPrompt, stripAppearanceLabel } from "../../base/media/slp-image-prompt.js";
 import { resolveCreatorImageConnectionId } from "../../base/media/slp-image-connections.js";
 import type { ConnectionAdmissionMode } from "../../../services/generation/connection-admission.js";
 import {
@@ -143,7 +143,15 @@ export async function generateSlpPostImage(input: {
     createConnectionsStorage(input.db),
     input.imageConnection.id,
   );
-  let characterDescription = "";
+  // The Creator's own appearance, written on the Creator rather than borrowed from a card.
+  //
+  // It is applied unconditionally, unlike the block below it. `imageGenerationIncludeDescriptions`
+  // decides whether to pull the *source character's* description into the picture; it was never
+  // meant to decide whether the picture knows who the Creator is. With it off, a Creator with no
+  // linked source, or a source card with an empty Appearance field, the image model received a
+  // scene containing nobody and invented somebody — a different somebody every post.
+  const stageAppearance = input.account.settings.stage?.appearance?.trim() ?? "";
+  let characterDescription = stageAppearance;
   let characterImageInstructions = "";
   let characterPersonality = "";
   let referenceImages: string[] | undefined;
@@ -188,7 +196,11 @@ export async function generateSlpPostImage(input: {
           promptText: [input.account.displayName, input.postContent, input.draftPrompt].join("\n"),
           maxReferences: 6,
         });
-        if (input.settings.imageGenerationIncludeDescriptions && referenceResolution.appearanceBlock) {
+        if (
+          !stageAppearance &&
+          input.settings.imageGenerationIncludeDescriptions &&
+          referenceResolution.appearanceBlock
+        ) {
           characterDescription = referenceResolution.appearanceBlock;
         }
         if (input.settings.imageGenerationUseAvatarReferences) {
@@ -207,9 +219,15 @@ export async function generateSlpPostImage(input: {
     visualBrief: input.visualBrief,
     draftPrompt: input.draftPrompt,
     userInstructions: input.settings.imageGenerationPrompt,
-    characterDescription,
+    characterDescription: stripAppearanceLabel(characterDescription),
     characterImageInstructions,
-    characterPersonality,
+    // Empty on purpose. The default template concatenates this straight into the prompt the image
+    // provider receives, and "arrogant, impatient with staged sentimentality" is not a visual
+    // fact — it is noise a diffusion model still tries to draw. The rewrite already treats
+    // personality as private context that must never appear in a visual prompt; the template that
+    // produces the fallback prompt should not be the one place that disagrees. A custom template
+    // that genuinely wants it can still read the character card.
+    characterPersonality: "",
   });
   const compiledPrompt = compileImagePrompt({
     kind: "illustration",

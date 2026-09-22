@@ -8,6 +8,7 @@ import {
   SlpCreatorSourceSnapshot,
 } from "../../../../../shared/src/slp/slp-social.types.js";
 import { SlurpStageProfileInput } from "../../modules/discovery/slp-discovery-profile.js";
+import { slurpStageFacts } from "../../modules/creators/slp-stage-profile-repair.js";
 import { resolveSlurpCreatorScheduleStatus } from "../../modules/creators/slp-creator-schedule-context.js";
 import {
   slpAccounts,
@@ -224,6 +225,7 @@ export function createCreatorsStorage3(context: SlurpStorageContext) {
         await tx.delete(slpAccounts).where(and(eq(slpAccounts.id, id), eq(slpAccounts.platform, "slurp")));
         await tx._fileStore.flush();
       });
+      await this.clearWardrobe(id);
       return existing;
     },
     async listNoodlerStageProfiles(): Promise<SlurpManagedStageProfile[]> {
@@ -248,6 +250,9 @@ export function createCreatorsStorage3(context: SlurpStorageContext) {
             tags: account.settings.profile.tags,
             disclosureMode,
             stagePersonality: account.settings.privacy.stagePersonality ?? "",
+            appearance: account.settings.stage?.appearance ?? "",
+            wardrobe: account.settings.stage?.wardrobe ?? "",
+            locations: account.settings.stage?.locations ?? "",
             access: account.settings.privacy.access,
             autoPosting:
               currentSource && !(account.kind === "persona" && account.sourceKind === "persona")
@@ -318,6 +323,12 @@ export function createCreatorsStorage3(context: SlurpStorageContext) {
           tags: stageProfile.tags,
         },
         scheduler: { autoPosting: defaultAutoPostingSettings() },
+        // Seeded from the source card when the draft left it blank. A Creator made from a
+        // character already has a face; making the user retype it is how this stayed empty, and an
+        // empty appearance is why the same Creator looked like a different person every post.
+        ...(slurpStageFacts(stageProfile, sourceSnapshot?.appearance) && {
+          stage: slurpStageFacts(stageProfile, sourceSnapshot?.appearance)!,
+        }),
         privacy: {
           identityDisclosure: stageProfile.disclosureMode,
           stagePersonality: stageProfile.stagePersonality,
@@ -386,6 +397,8 @@ export function createCreatorsStorage3(context: SlurpStorageContext) {
                 gender: stageProfile.gender,
                 tags: stageProfile.tags,
               },
+              // An edit that clears a field clears it. The seed only ever applies on create.
+              stage: slurpStageFacts(stageProfile) ?? {},
               privacy: {
                 ...settings.privacy,
                 identityDisclosure: stageProfile.disclosureMode,

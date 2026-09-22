@@ -93,7 +93,8 @@ assert.deepEqual(slurpPromptContext({}).blocks, {});
 const normalized = normalizeSlurpPromptBlockOverrides({
   post: [
     { id: "continuity", text: "custom voice" },
-    { id: "output", text: "must not replace this" },
+    { id: "output", text: "a required block is the player's to rewrite" },
+    { id: "character", text: "must not replace runtime data" },
     { id: "unknown", text: "discard" },
     { id: "continuity", text: "duplicate" },
   ],
@@ -106,7 +107,13 @@ assert.equal(
   false,
 );
 assert.equal(normalized.post?.filter((block) => block.id === "continuity").length, 1);
-assert.equal(normalized.post?.find((block) => block.id === "output")?.text, undefined);
+// Expert overrides can deliberately replace required instructions or freeze a runtime-context
+// block. Prompt Studio warns about the latter and reset restores live assembly.
+assert.equal(
+  normalized.post?.find((block) => block.id === "output")?.text,
+  "a required block is the player's to rewrite",
+);
+assert.equal(normalized.post?.find((block) => block.id === "character")?.text, "must not replace runtime data");
 
 const output = composeSlurpPromptBlocks(
   "post",
@@ -178,6 +185,7 @@ assert.match(promptStudioSource, /overviewContent/u);
 // Every block is readable and editable in place: no clamp, no open-then-apply step, and runtime
 // blocks show what the preview Creator actually gets, kept current without a button.
 assert.match(promptStudioSource, /const shownText = liveText \?\? sharedInstruction\?\.text \?\? text;/u);
+assert.match(promptStudioSource, /const overridable = true/u);
 assert.doesNotMatch(promptStudioSource, /line-clamp-3 whitespace-pre-wrap/u);
 assert.match(promptStudioSource, /useSlurpLivePromptBlocks\(liveInput\)/u);
 assert.match(promptStudioSource, /liveCompiled=\{live\.data\?\.supported \? live\.data\.compiledText : undefined\}/u);

@@ -331,16 +331,21 @@ export function SlurpPromptBlockBuilder({
           )}
           <SlpReusableInstructions value={instructions} onChange={onChangeInstructions} />
         </div>
-        <SlpPromptPreviewInspector
-          prompt={previewPrompt}
-          creatorOptions={creatorOptions}
-          activeCreatorId={activeCreatorId}
-          onCreatorChange={setPreviewCreatorId}
-          draftBlocks={value}
-          currentBlocks={savedValue}
-          draftInstructions={instructions}
-          currentInstructions={savedInstructions}
-        />
+        {/* Below the two-column breakpoint this panel would otherwise sit under every recipe
+            group and the shared instructions, which on a phone is a very long way to scroll for
+            the one control that shows what a change does. */}
+        <div className="order-first min-w-0 xl:order-none">
+          <SlpPromptPreviewInspector
+            prompt={previewPrompt}
+            creatorOptions={creatorOptions}
+            activeCreatorId={activeCreatorId}
+            onCreatorChange={setPreviewCreatorId}
+            draftBlocks={value}
+            currentBlocks={savedValue}
+            draftInstructions={instructions}
+            currentInstructions={savedInstructions}
+          />
+        </div>
       </div>
     </section>
   );
@@ -375,7 +380,8 @@ function RecipeCard({
             {promptPurpose(prompt.id)}
           </span>
           {/* The recipe at a glance: every block in order, custom ones marked, disabled ones struck. */}
-          <span className="mt-2 flex flex-wrap gap-1" aria-hidden="true">
+          {/* Eleven block chips wrap to four lines on a phone and bury the row's own name. */}
+          <span className="mt-2 hidden flex-wrap gap-1 sm:flex" aria-hidden="true">
             {layout.map((entry) => {
               const block = blockDefinition(prompt, entry.id);
               const custom = entry.text !== undefined || entry.instructionId !== undefined;

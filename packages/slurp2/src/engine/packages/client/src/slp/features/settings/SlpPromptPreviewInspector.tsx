@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { SlurpPromptBlockOverride, SlurpReusablePromptInstruction } from "../../base/state/slp-state-types";
 import type { SlurpPromptDefinition, SlurpPromptResultPreviewInput } from "./slp-settings-contract";
+import type { SlurpPromptResultPreviewResponse } from "./slp-settings-contract";
 import { useSlurpPromptBlockPreview, useSlurpPromptResultPreview } from "./slp-settings-hooks";
 import { promptName } from "./slp-prompt-studio-model";
 
@@ -55,6 +56,11 @@ export function SlpPromptPreviewInspector({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [prompt.id, activeCreatorId]);
 
+  // Keyed on the draft's VALUE, not on the objects holding it. `draftBlocks` and
+  // `draftInstructions` are rebuilt whenever the settings query refetches, so depending on their
+  // identity threw away a finished preview every time that happened in the background — including
+  // while a slow generation was still running.
+  const draftKey = JSON.stringify([draftBlocks, draftInstructions, access, format, direction]);
   useEffect(() => {
     promptPreview.reset();
     resultPreview.reset();
@@ -62,7 +68,7 @@ export function SlpPromptPreviewInspector({
     setPromptCopied(false);
     // An edited draft makes every previous result stale.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [draftBlocks, draftInstructions, access, format, direction]);
+  }, [draftKey]);
 
   const resultInput = (
     blocks: Record<string, SlurpPromptBlockOverride[]>,
@@ -77,9 +83,23 @@ export function SlpPromptPreviewInspector({
     direction: direction.trim() || undefined,
   });
 
+  // Never a silent no-op: a preview control that answers a click with nothing reads as broken.
+  const [runBlocked, setRunBlocked] = useState<string | null>(null);
   const runPreview = () => {
-    if (!activeCreatorId) return;
-    if (view === "result" && isPost) {
+    setRunBlocked(null);
+    if (!activeCreatorId) {
+      setRunBlocked(t("ui.slurp.settings.prompts.previewNoCreator"));
+      return;
+    }
+    if (view === "result") {
+      if (!isPost) {
+        setRunBlocked(
+          t("ui.slurp.settings.prompts.sampleOnlyForPosts", {
+            defaultValue: "A sample post can only be generated from the Creator posts recipe.",
+          }),
+        );
+        return;
+      }
       resultPreview.mutate(resultInput(draftBlocks, draftInstructions));
       return;
     }
@@ -210,7 +230,9 @@ export function SlpPromptPreviewInspector({
       {(view === "result" || liveCompiled === undefined) && (
         <button
           type="button"
-          disabled={!activeCreatorId || pending}
+          // Only the run itself disables this. A missing Creator explains itself below the button
+          // instead of leaving a dimmed control that looks broken.
+          disabled={pending}
           onClick={runPreview}
           className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-lg bg-[var(--noodle-accent)] px-4 text-sm font-black text-zinc-950 transition-transform active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] disabled:opacity-45 motion-reduce:transition-none motion-reduce:active:scale-100"
         >
@@ -234,6 +256,11 @@ export function SlpPromptPreviewInspector({
       <div role="status" aria-live="polite" className="sr-only">
         {pending ? t("ui.slurp.settings.prompts.previewRunning", { defaultValue: "Running preview…" }) : ""}
       </div>
+      {runBlocked && (
+        <p role="alert" className="text-sm leading-6 text-[var(--destructive)]">
+          {runBlocked}
+        </p>
+      )}
       {error && (
         <p role="alert" className="text-sm leading-6 text-[var(--destructive)]">
           {error instanceof Error
@@ -315,13 +342,7 @@ export function SlpPromptPreviewInspector({
   );
 }
 
-function PreviewResultCard({
-  label,
-  data,
-}: {
-  label: string;
-  data: { title: string | null; content: string; imagePrompt: string | null };
-}) {
+function PreviewResultCard({ label, data }: { label: string; data: SlurpPromptResultPreviewResponse }) {
   const { t } = useTranslation();
   return (
     <article className="rounded-lg bg-[var(--slurp-canvas)] p-3 ring-1 ring-inset ring-[var(--slurp-outline)]">
@@ -338,6 +359,49 @@ function PreviewResultCard({
           <p className="border-t border-[var(--slurp-outline)] p-3 text-xs leading-5 text-[var(--slurp-muted)]">
             {data.imagePrompt}
           </p>
+        </details>
+      )}
+      {data.scene && (
+        <details
+          open
+          className="mt-3 rounded-md bg-[var(--slurp-surface-raised)] ring-1 ring-inset ring-[var(--slurp-outline)]"
+        >
+          <summary className="min-h-10 cursor-pointer px-3 py-2 text-xs font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)]">
+            {t("ui.slurp.settings.prompts.previewScene", { defaultValue: "LLM scene plan" })}
+          </summary>
+          <dl className="grid gap-2 border-t border-[var(--slurp-outline)] p-3 text-xs leading-5 sm:grid-cols-[7rem_1fr]">
+            <dt className="font-bold">Wardrobe ID</dt>
+            <dd className="break-words">{data.scene.wardrobeId || "—"}</dd>
+            <dt className="font-bold">Setting</dt>
+            <dd>{data.scene.setting}</dd>
+            <dt className="font-bold">Action</dt>
+            <dd>{data.scene.action}</dd>
+            <dt className="font-bold">Expression</dt>
+            <dd>{data.scene.expression}</dd>
+            <dt className="font-bold">Direction</dt>
+            <dd>{data.scene.visualDirection}</dd>
+          </dl>
+        </details>
+      )}
+      {(data.imageBrief || data.visualBrief) && (
+        <details className="mt-3 rounded-md bg-[var(--slurp-surface-raised)] ring-1 ring-inset ring-[var(--slurp-outline)]">
+          <summary className="min-h-10 cursor-pointer px-3 py-2 text-xs font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)]">
+            {t("ui.slurp.settings.prompts.previewEnforced", { defaultValue: "What Slurp enforced" })}
+          </summary>
+          <div className="space-y-3 border-t border-[var(--slurp-outline)] p-3 text-xs leading-5">
+            <p>
+              <strong>Selected look:</strong> {data.wardrobeSelection.selectedId || "legacy fallback"}
+              {data.wardrobeSelection.fallback
+                ? ` (fallback from ${data.wardrobeSelection.requestedId || "no choice"})`
+                : ""}
+            </p>
+            {data.visualBrief && (
+              <pre className="whitespace-pre-wrap break-words">{JSON.stringify(data.visualBrief, null, 2)}</pre>
+            )}
+            {data.imageBrief && (
+              <p className="whitespace-pre-wrap break-words text-[var(--slurp-muted)]">{data.imageBrief}</p>
+            )}
+          </div>
         </details>
       )}
     </article>
