@@ -108,6 +108,7 @@ export function LockedSlurpPostCard({
   // No teaser could be built (the route 404s), so drop the broken <img> and keep the frame.
   const [failedMediaSrc, setFailedMediaSrc] = useState<string | null>(null);
   const shownMediaSrc = mediaSrc && mediaSrc !== failedMediaSrc ? mediaSrc : null;
+  const hasMediaPreview = Boolean(requestedMediaUrl || post.hasImage || (onGenerateImage && post.imagePrompt));
   const runTransaction = async (kind: "subscribe" | "unlock" | "gamble" | "unlock-offer" | "subscription-offer") => {
     if (transaction) return;
     setTransaction(kind);
@@ -144,6 +145,29 @@ export function LockedSlurpPostCard({
       setTransaction(null);
     }
   };
+  const unlockPrompt = !revealed && !controllerOnly && (
+    <div className={hasMediaPreview ? "flex flex-col items-center gap-2" : "mt-4 flex flex-wrap items-center gap-3"}>
+      <button
+        type="button"
+        disabled={unlockPending || subscriptionPending}
+        onClick={() => setUnlockSheetOpen(true)}
+        className="inline-flex min-h-11 items-center justify-center gap-2 rounded-full bg-[var(--noodle-accent)] px-5 text-sm font-black text-zinc-950 shadow-[0_10px_26px_-14px_var(--noodle-accent)] transition-[opacity,transform] hover:opacity-90 active:scale-[0.97] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] disabled:opacity-50 [&_svg]:!text-zinc-950"
+      >
+        <Eye size={16} strokeWidth={2.4} aria-hidden="true" />
+        {localizeUi("ui.noodle.lockednoodlerpostcard.unlock")}
+        <SlpCreatorFictionalPrice amount={slpCreatorUnlockPriceOf(post)} />
+      </button>
+      <span
+        className={
+          hasMediaPreview
+            ? "text-[0.68rem] font-semibold text-white/72 drop-shadow-sm"
+            : "text-xs font-medium text-[var(--muted-foreground)]"
+        }
+      >
+        {localizeUi("ui.slurp.locked.includedForSubscribers", { defaultValue: "Included for subscribers" })}
+      </span>
+    </div>
+  );
   return (
     <article
       data-noodle-post-id={post.id}
@@ -255,7 +279,7 @@ export function LockedSlurpPostCard({
       {/* Full-width body */}
       <div>
         {/* Media frame with Locked badge — only when the post has an image */}
-        {(mediaSrc || post.hasImage || (onGenerateImage && post.imagePrompt)) && (
+        {hasMediaPreview && (
           <div
             ref={observeMedia}
             data-slurp-locked-preview
@@ -350,6 +374,9 @@ export function LockedSlurpPostCard({
                 </span>
               </span>
             )}
+            {unlockPrompt && (
+              <div className="absolute inset-x-4 top-[calc(36%+4.75rem)] z-10 flex justify-center">{unlockPrompt}</div>
+            )}
           </div>
         )}
 
@@ -371,23 +398,7 @@ export function LockedSlurpPostCard({
           )
         )}
 
-        {!revealed && !controllerOnly && (
-          <div className="mt-4 flex flex-wrap items-center gap-3">
-            <button
-              type="button"
-              disabled={unlockPending || subscriptionPending}
-              onClick={() => setUnlockSheetOpen(true)}
-              className="inline-flex min-h-11 items-center justify-center gap-2 rounded-full bg-[var(--noodle-accent)] px-5 text-sm font-black text-zinc-950 shadow-[0_10px_26px_-14px_var(--noodle-accent)] transition-[opacity,transform] hover:opacity-90 active:scale-[0.97] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] disabled:opacity-50 [&_svg]:!text-zinc-950"
-            >
-              <Eye size={16} strokeWidth={2.4} aria-hidden="true" />
-              {localizeUi("ui.noodle.lockednoodlerpostcard.unlock")}
-              <SlpCreatorFictionalPrice amount={slpCreatorUnlockPriceOf(post)} />
-            </button>
-            <span className="text-xs font-medium text-[var(--muted-foreground)]">
-              {localizeUi("ui.slurp.locked.includedForSubscribers", { defaultValue: "Included for subscribers" })}
-            </span>
-          </div>
-        )}
+        {!hasMediaPreview && unlockPrompt}
 
         {/* CTA */}
         {controllerOnly ? (
@@ -462,19 +473,13 @@ export function LockedSlurpPostCard({
               </span>
             )}
           </div>
-          <div className="mb-3 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-[var(--noodle-divider)] bg-[var(--slurp-surface-raised)]/70 px-3 py-2 text-xs text-[var(--muted-foreground)]">
-            <span>{localizeUi("ui.slurp.unlocksheet.postOnly", { defaultValue: "Choose access to this post" })}</span>
-            <span className="font-bold text-[var(--noodle-accent)]">
-              {localizeUi("ui.slurp.unlocksheet.noRealPayment", { defaultValue: "No real payment" })}
-            </span>
-          </div>
           <div className="grid gap-3">
             <button
               type="button"
               data-noodler-unlock-action="post"
               disabled={unlockPending || transaction !== null}
               onClick={() => void runTransaction("unlock")}
-              className="relative flex min-h-[4.75rem] w-full items-center gap-3 overflow-visible rounded-xl bg-[var(--slurp-surface-raised)] px-4 py-3 text-left shadow-[var(--slurp-shadow-raised)] ring-1 ring-inset ring-white/[0.07] transition-[background-color,transform,box-shadow] hover:bg-[color-mix(in_srgb,var(--noodle-accent)_7%,var(--slurp-surface-raised))] hover:shadow-[var(--slurp-shadow-floating)] active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] disabled:opacity-50 motion-reduce:transition-none motion-reduce:active:scale-100"
+              className="relative flex min-h-[4.75rem] w-full items-center gap-3 overflow-visible rounded-xl border border-[var(--noodle-accent)]/45 bg-[var(--slurp-surface-raised)] px-4 py-3 text-left shadow-[var(--slurp-shadow-raised)] transition-[background-color,transform,box-shadow] hover:bg-[color-mix(in_srgb,var(--noodle-accent)_7%,var(--slurp-surface-raised))] hover:shadow-[var(--slurp-shadow-floating)] active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] disabled:opacity-50 motion-reduce:transition-none motion-reduce:active:scale-100"
             >
               <SlurpCoinBurst active={transaction === "unlock"} />
               {transaction === "unlock" ? (
@@ -599,11 +604,6 @@ export function LockedSlurpPostCard({
               />
             )}
           </div>
-          <p className="mt-4 border-t border-[var(--noodle-divider)] pt-3 text-center text-[0.68rem] text-[var(--muted-foreground)]">
-            {localizeUi("ui.slurp.unlocksheet.reassurance", {
-              defaultValue: "Fictional SlurpCoins · Cancel anytime",
-            })}
-          </p>
         </div>
       </Modal>
     </article>

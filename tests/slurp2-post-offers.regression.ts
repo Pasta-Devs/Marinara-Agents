@@ -34,10 +34,9 @@ assert.match(
   /ui\.noodle\.lockednoodlerpostcard\.unlock/u,
   "the post unlock action must not depend on an image",
 );
-assert.ok(
-  lockedCard.indexOf("ui.slurp.locked.teaser") < lockedCard.indexOf("ui.noodle.lockednoodlerpostcard.unlock"),
-  "a text-only locked post must show its unlock control after its teaser",
-);
+assert.match(lockedCard, /hasMediaPreview && \([\s\S]*?\{unlockPrompt\}[\s\S]*?!hasMediaPreview && unlockPrompt/u);
+assert.doesNotMatch(lockedCard, /ui\.slurp\.unlocksheet\.(?:postOnly|noRealPayment|reassurance)/u);
+assert.match(lockedCard, /data-noodler-unlock-action="post"[\s\S]*?border border-\[var\(--noodle-accent\)\]\/45/u);
 
 const postCard = slurp2Source("packages/slurp2/src/engine/packages/client/src/slp/modules/post/SlpPostCard.tsx");
 assert.match(postCard, /postMenuOpen && "relative z-40"/u);
