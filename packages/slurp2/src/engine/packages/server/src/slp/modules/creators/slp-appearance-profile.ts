@@ -100,9 +100,27 @@ export function parseSlpAppearanceCandidate(content: string, sourceText: string,
       (!quote && !avatarAvailable)
     )
       return null;
+    const hasVisualEvidence =
+      /\b(?:hair|eyes?|skin|face|scar|tattoo|freckles?|build|height|tall|short|body|adult|horns?|wings?|fur|ears?|nose|cheeks?|beard|glasses)\b/iu.test(
+        quote,
+      );
+    const stopWords = new Set(["with", "from", "that", "this", "have", "their", "person", "woman", "man"]);
+    const sharedVisualWord = quote
+      .toLocaleLowerCase()
+      .match(/\p{L}{2,}/gu)
+      ?.some(
+        (word) =>
+          (!/^[a-z]+$/u.test(word) || word.length >= 4) &&
+          !stopWords.has(word) &&
+          text.toLocaleLowerCase().includes(word),
+      );
+    if (!avatarAvailable && !sharedVisualWord) return null;
     return {
       text,
-      confidence: row.confidence === "high" && quote.length >= 24 ? ("high" as const) : ("medium" as const),
+      confidence:
+        row.confidence === "high" && quote.length >= 24 && hasVisualEvidence && sharedVisualWord
+          ? ("high" as const)
+          : ("medium" as const),
       source: quote ? ("description" as const) : ("avatar" as const),
     };
   } catch {

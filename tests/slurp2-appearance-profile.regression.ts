@@ -127,6 +127,18 @@ test("description extraction requires a supporting quote and never invents from 
   const supported = JSON.stringify({ appearance: "Silver hair and green eyes.", evidence: card, confidence: "high" });
   assert.equal(parseSlpAppearanceCandidate(supported, card, false)?.confidence, "high");
   assert.equal(parseSlpAppearanceCandidate(supported, "Different card", false), null);
+  assert.equal(
+    parseSlpAppearanceCandidate(
+      JSON.stringify({
+        appearance: "Blue eyes.",
+        evidence: "She enjoys long walks along the shoreline.",
+        confidence: "high",
+      }),
+      "She enjoys long walks along the shoreline.",
+      false,
+    ),
+    null,
+  );
   assert.equal(parseSlpAppearanceCandidate('{"appearance":"Blue eyes","evidence":""}', "", false), null);
   assert.equal(parseSlpAppearanceCandidate('{"appearance":"Blue eyes","evidence":""}', "", true)?.source, "avatar");
 });
