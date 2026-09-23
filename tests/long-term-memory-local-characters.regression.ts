@@ -31,9 +31,8 @@ function unit(input: {
 async function main() {
   const { compileLtmEvidenceUnits } = await import(`${source}/evidence-unit-compiler.ts`);
   const { normalizeStructuredSummaryEvidenceUnits } = await import(`${source}/structured-summary-normalizer.ts`);
-  const { localCharacterScopeError, localCharacterSubjectForName, ltmScopeFamilyId } = await import(
-    `${source}/chat-scope.ts`
-  );
+  const { isLocalCharacterSubject, localCharacterScopeError, localCharacterSubjectForName, ltmScopeFamilyId } =
+    await import(`${source}/chat-scope.ts`);
   const { buildTrustedLtmSubjectCatalog, prepareLtmSubjectIdentityContext, trustedLtmIdentityNotesForSource } =
     await import(`${source}/subject-identity.ts`);
 
@@ -905,6 +904,166 @@ async function main() {
     "char_ashleigh_legacy",
     "identityKeyForUnit must predict the existing legacy target for keyless source-backed units",
   );
+
+  // 4f. Production catalog shape: an imported roleplay source note must not fork variants of a
+  //     roster character or collide with its identity. This uses only the `notes` and
+  //     `localSourceNotes` inputs that loadTrustedLtmSubjectCatalog supplies in production.
+  const importedSourceText = "Ash holds the line. Ashleigh arrives later. Ashleigh Kestrel departs.";
+  const importedSourceNote = {
+    ...sourceNote,
+    id: "imported-source",
+    title: "Watch",
+    sections: { source: { text: importedSourceText, updatedAt: timestamp } },
+  };
+  const variantNames = ["Ash", "Ashleigh", "Ashleigh Kestrel"];
+  const variantUnits = variantNames.map((name) =>
+    unit({
+      bucket: "character_fact",
+      subjectId: name.toLowerCase().replaceAll(" ", "_"),
+      subjectNames: [name],
+      text: `${name} knows navigation.`,
+    }),
+  );
+  const productionCatalog = buildTrustedLtmSubjectCatalog({
+    roster: [{ kind: "character", id: "char_ashleigh_kestrel", name: "Ashleigh Kestrel" }],
+    notes: [importedSourceNote],
+    localSourceNotes: [importedSourceNote],
+  });
+  const productionLocalNames = productionCatalog.entries
+    .filter((entry) => isLocalCharacterSubject(entry.subject))
+    .map((entry) => entry.name);
+  for (const name of variantNames) {
+    assert.equal(
+      productionLocalNames.includes(name),
+      false,
+      "source variants of a roster character must not create competing local identities",
+    );
+  }
+  const productionResolution = prepareLtmSubjectIdentityContext({
+    units: variantUnits,
+    catalog: productionCatalog,
+    scope,
+    sourceBackedNpcSourceText: importedSourceText,
+    sourceBackedNpcSourceTitle: importedSourceNote.title,
+  }).resolve({ units: variantUnits, existingNotes: [] });
+  assert.equal(productionResolution.droppedCandidates.length, 0);
+  assert.deepEqual(
+    productionResolution.units.map((resolvedUnit) => resolvedUnit.subjects?.[0]?.key),
+    ["character:char_ashleigh_kestrel", "character:char_ashleigh_kestrel", "character:char_ashleigh_kestrel"],
+    "short, first-name, and full-name variants must reuse the roster identity",
+  );
+  assert.equal(new Set(productionResolution.units.map((resolvedUnit) => resolvedUnit.subjectId)).size, 1);
+
+  // 4g. Without a roster match, source-visible variants still collapse to one canonical local
+  //     identity and one memory target instead of one target per surface form.
+  const unrosteredCatalog = buildTrustedLtmSubjectCatalog({
+    roster: [],
+    notes: [importedSourceNote],
+    localSourceNotes: [importedSourceNote],
+  });
+  const unrosteredNames = unrosteredCatalog.entries
+    .filter((entry) => isLocalCharacterSubject(entry.subject))
+    .map((entry) => entry.name);
+  assert.equal(unrosteredNames.includes("Ash"), false, "short forms must not fork a local identity");
+  assert.equal(unrosteredNames.includes("Ashleigh"), false, "first names must not fork a local identity");
+  assert.equal(unrosteredNames.includes("Ashleigh Kestrel"), true, "the full form stays the canonical identity");
+  const unrosteredResolution = prepareLtmSubjectIdentityContext({
+    units: variantUnits,
+    catalog: unrosteredCatalog,
+    scope,
+    sourceBackedNpcSourceText: importedSourceText,
+    sourceBackedNpcSourceTitle: importedSourceNote.title,
+  }).resolve({ units: variantUnits, existingNotes: [] });
+  assert.equal(unrosteredResolution.droppedCandidates.length, 0);
+  assert.equal(
+    new Set(unrosteredResolution.units.map((resolvedUnit) => resolvedUnit.subjects?.[0]?.key)).size,
+    1,
+    "source-visible variants must share one local identity",
+  );
+  assert.equal(new Set(unrosteredResolution.units.map((resolvedUnit) => resolvedUnit.subjectId)).size, 1);
+  assert.ok(unrosteredResolution.units[0]!.subjects?.[0]?.key.startsWith("local_character:"));
+
+  // 4h. Source variants split across separate notes in one family must resolve to the same
+  //     canonical local identity and target regardless of note order.
+  const variantNoteA = {
+    ...sourceNote,
+    id: "variant-note-a",
+    title: "variant-note-a",
+    sections: { source: { text: "Ash holds the line.", updatedAt: timestamp } },
+  };
+  const variantNoteB = {
+    ...sourceNote,
+    id: "variant-note-b",
+    title: "variant-note-b",
+    sections: { source: { text: "Ashleigh Kestrel departs.", updatedAt: timestamp } },
+  };
+  const orderIdentities: Array<{ name: string; key: string }> = [];
+  for (const orderedNotes of [
+    [variantNoteA, variantNoteB],
+    [variantNoteB, variantNoteA],
+  ]) {
+    const orderedCatalog = buildTrustedLtmSubjectCatalog({
+      roster: [],
+      notes: orderedNotes,
+      localSourceNotes: orderedNotes,
+    });
+    const localEntries = orderedCatalog.entries.filter((entry) => isLocalCharacterSubject(entry.subject));
+    assert.equal(localEntries.length, 1, "split source variants must collapse to one local identity");
+    orderIdentities.push({ name: localEntries[0]!.name, key: localEntries[0]!.subject.key });
+  }
+  assert.deepEqual(orderIdentities[0], orderIdentities[1], "canonical source identity must not depend on note order");
+
+  // 4i. A roster alias that is itself a variant of the source name must block a competing local
+  //     identity, not only an exact-slug alias match.
+  const aliasSourceNote = {
+    ...sourceNote,
+    id: "alias-source",
+    title: "alias-source",
+    sections: { source: { text: "Ashleigh swings.", updatedAt: timestamp } },
+  };
+  const aliasCatalog = buildTrustedLtmSubjectCatalog({
+    roster: [{ kind: "character", id: "char_ash_kestrel", name: "Ash Kestrel", aliases: ["Ashleigh Kestrel"] }],
+    notes: [aliasSourceNote],
+    localSourceNotes: [aliasSourceNote],
+  });
+  assert.equal(
+    aliasCatalog.entries.filter((entry) => isLocalCharacterSubject(entry.subject)).length,
+    0,
+    "a roster alias variant must not fork a competing local identity",
+  );
+  const aliasUnits = [
+    unit({ bucket: "character_fact", subjectId: "ashleigh", subjectNames: ["Ashleigh"], text: "Ashleigh swings." }),
+  ];
+  const aliasResolution = prepareLtmSubjectIdentityContext({
+    units: aliasUnits,
+    catalog: aliasCatalog,
+    scope,
+    sourceBackedNpcSourceText: aliasSourceNote.sections.source.text,
+    sourceBackedNpcSourceTitle: aliasSourceNote.title,
+  }).resolve({ units: aliasUnits, existingNotes: [] });
+  assert.equal(aliasResolution.droppedCandidates.length, 0);
+  assert.equal(
+    aliasResolution.units[0]!.subjects?.[0]?.key,
+    "character:char_ash_kestrel",
+    "an alias variant must resolve to the trusted roster identity instead of a provisional local target",
+  );
+  const ambiguousAliasCatalog = buildTrustedLtmSubjectCatalog({
+    roster: [
+      { kind: "character", id: "char_ash_kestrel", name: "Ash Kestrel", aliases: ["Ashleigh Kestrel"] },
+      { kind: "character", id: "char_ashford_kestrel", name: "Ashford Kestrel", aliases: ["Ashleigh Kestrel"] },
+    ],
+    notes: [aliasSourceNote],
+    localSourceNotes: [aliasSourceNote],
+  });
+  const ambiguousAliasResolution = prepareLtmSubjectIdentityContext({
+    units: aliasUnits,
+    catalog: ambiguousAliasCatalog,
+    scope,
+    sourceBackedNpcSourceText: aliasSourceNote.sections.source.text,
+    sourceBackedNpcSourceTitle: aliasSourceNote.title,
+  }).resolve({ units: aliasUnits, existingNotes: [] });
+  assert.equal(ambiguousAliasResolution.droppedCandidates.length, 1);
+  assert.equal(ambiguousAliasResolution.droppedCandidates[0]!.reason, "ambiguous_subject");
 
   for (const character of ["char-Mara", "char Mara"]) {
     const normalized = normalizeStructuredSummaryEvidenceUnits({

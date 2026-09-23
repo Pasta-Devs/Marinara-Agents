@@ -1,5 +1,10 @@
 # Long-Term Memory changelog
 
+## 1.3.13 — 2026-09-22
+
+- Stop imported source notes from forking short, first-name, and full-name variants of one character into separate local memories, and keep a roster character's full name from being dropped as ambiguous when its variants appear in the source.
+- Keep genuinely ambiguous names failing closed against the trusted identities that compete for them.
+
 ## 1.3.12 — 2026-09-22
 
 - Compare extraction candidates against the canonical scoped target notes even when ranked retrieval did not return them, so equivalent memories under abbreviated or full-name subject variants deduplicate instead of forking repeated notes, while distinct subjects, scopes, sections, and genuinely additive facts remain separate.
