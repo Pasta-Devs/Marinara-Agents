@@ -58,6 +58,7 @@ export type SlpDeepDetailsRecord = {
       action: string;
       expression: string;
       visualDirection: string;
+      outfit?: string;
     } | null;
   };
   wardrobeSelection?: { selectedId: string | null; requestedId: string | null; fallback: boolean };

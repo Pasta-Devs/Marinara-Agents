@@ -18,7 +18,7 @@ export function SlurpBackstageApplyBar({
   const { t } = useTranslation();
   if (count === 0) return null;
   return (
-    <div className="sticky bottom-[calc(4.5rem+env(safe-area-inset-bottom))] z-30 mt-5 flex flex-wrap items-center gap-3 rounded-xl bg-[color-mix(in_srgb,var(--slurp-text)_94%,transparent)] p-3 text-[var(--slurp-canvas)] shadow-[var(--slurp-shadow-floating)] backdrop-blur-xl sm:bottom-3">
+    <div className="sticky bottom-[calc(4.5rem+env(safe-area-inset-bottom))] z-30 mt-5 flex flex-wrap items-center gap-3 rounded-2xl bg-[var(--slurp-surface-raised)] p-3 text-[var(--slurp-text)] shadow-[var(--slurp-shadow-floating)] ring-1 ring-inset ring-[var(--slurp-outline)] backdrop-blur-xl sm:bottom-3">
       <div className="me-auto min-w-0">
         <h2 className="text-sm font-bold">
           {t("ui.slurp.settings.backstage.apply.title", { defaultValue: "Review and apply" })}
@@ -34,7 +34,7 @@ export function SlurpBackstageApplyBar({
         type="button"
         disabled={pending}
         onClick={onDiscard}
-        className="inline-flex min-h-11 items-center gap-2 rounded-lg px-3 text-sm font-semibold hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white disabled:opacity-50"
+        className="inline-flex min-h-11 items-center gap-2 rounded-xl px-3 text-sm font-semibold text-[var(--slurp-muted)] hover:bg-[var(--slurp-canvas)] hover:text-[var(--slurp-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)] disabled:opacity-50"
       >
         <X size={16} aria-hidden="true" /> {t("ui.slurp.settings.backstage.apply.discard", { defaultValue: "Discard" })}
       </button>
@@ -42,7 +42,7 @@ export function SlurpBackstageApplyBar({
         type="button"
         disabled={pending}
         onClick={onApply}
-        className="inline-flex min-h-11 items-center gap-2 rounded-lg bg-[var(--noodle-accent)] px-4 text-sm font-black text-zinc-950 [&_svg]:!text-zinc-950 shadow-sm hover:brightness-105 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white disabled:opacity-50"
+        className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-[var(--noodle-accent)] px-4 text-sm font-black text-zinc-950 [&_svg]:!text-zinc-950 shadow-sm hover:brightness-105 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)] disabled:opacity-50"
       >
         <Check size={16} aria-hidden="true" />{" "}
         {t("ui.slurp.settings.backstage.apply.apply", { defaultValue: "Apply changes" })}

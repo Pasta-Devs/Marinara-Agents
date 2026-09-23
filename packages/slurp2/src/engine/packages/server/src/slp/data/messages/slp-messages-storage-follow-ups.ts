@@ -112,7 +112,7 @@ export function createMessagesStorageFollowUps(context: SlurpMessagesContext) {
         recurringPattern?: string;
       }>,
     ): Promise<void> {
-      const thread = await db.select().from(slurpThreads).where(eq(slurpThreads.id, threadId)).get();
+      const [thread] = await db.select().from(slurpThreads).where(eq(slurpThreads.id, threadId)).limit(1);
       if (!thread) return;
       const timestamp = now();
       for (const followUp of followUps) {

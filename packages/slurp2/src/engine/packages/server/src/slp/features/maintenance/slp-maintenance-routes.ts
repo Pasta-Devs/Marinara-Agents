@@ -235,8 +235,10 @@ export async function slpMaintenanceRoutes(app: FastifyInstance, deps: SlpRouteD
       const removedConnectionId = imageConnections.creatorConnectionIds[id];
       await updateCreatorImageConnections(app.db, (current) => {
         const creatorConnectionIds = { ...current.creatorConnectionIds };
+        const creatorStyleProfileIds = { ...current.creatorStyleProfileIds };
         delete creatorConnectionIds[id];
-        return { ...current, creatorConnectionIds };
+        delete creatorStyleProfileIds[id];
+        return { ...current, creatorConnectionIds, creatorStyleProfileIds };
       });
       // Same treatment for the post-guidance override, or a deleted Creator's direction would sit
       // in the blob forever and travel in every backup.

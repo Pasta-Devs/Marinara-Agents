@@ -197,7 +197,7 @@ export async function generateGarnishAds(
     maxTokens: clampGenerationMaxOutputTokens({
       provider: connection.provider as APIProvider,
       model: connection.model,
-      maxTokens: 1536,
+      maxTokens: 2048,
       maxTokensOverride: connection.maxTokensOverride,
     }),
     stream: false,

@@ -82,6 +82,7 @@ export async function generateGarnishAdImage(
           interpretationInstruction: settings.imagePromptInterpretation,
           instructions: imagePromptInstructions,
           promptBlocks: slurpPromptContext(settings).blocks,
+          connectionId: settings.generationConnectionId,
         })
       : null,
     rawPrompt,

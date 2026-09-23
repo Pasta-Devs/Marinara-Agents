@@ -67,7 +67,9 @@ export function useCreatorViewer(personaId: string | null, enabled = true) {
     enabled: enabled && Boolean(personaId),
     staleTime: 30_000,
     gcTime: 10 * 60_000,
-    refetchInterval: enabled && personaId ? 30_000 : false,
+    // The unseen-count poll already announces new posts; the full page only needs a slow refresh.
+    // ponytail: fixed 2-minute poll; refetch on a count change if that feels stale.
+    refetchInterval: enabled && personaId ? 120_000 : false,
     refetchIntervalInBackground: false,
   });
   const loadMore = async () => {
@@ -118,7 +120,9 @@ export function useCreatorUnseenCount(personaId: string | null, enabled = true) 
       api.get<{ count: number }>(`/slurp2/slurp/viewer/unseen-count?personaId=${encodeURIComponent(personaId!)}`),
     enabled: enabled && Boolean(personaId),
     staleTime: 10_000,
-    refetchInterval: enabled && personaId ? 30_000 : false,
+    // The unseen-count poll already announces new posts; the full page only needs a slow refresh.
+    // ponytail: fixed 2-minute poll; refetch on a count change if that feels stale.
+    refetchInterval: enabled && personaId ? 120_000 : false,
     refetchIntervalInBackground: false,
   });
   const count = Math.max(0, Math.floor(data?.count ?? 0));
@@ -220,6 +224,26 @@ export function useUnlockCreatorPost() {
       await qc.cancelQueries({ queryKey: slpKeys.viewer(input.personaId) });
       qc.setQueryData<SlpCreatorViewerScope | undefined>(slpKeys.viewer(input.personaId), (current) =>
         mergeSlurpViewerShell(current, scope),
+      );
+      void qc.invalidateQueries({ queryKey: slpKeys.viewer(input.personaId) });
+      void qc.invalidateQueries({ queryKey: [...slpKeys.noodlerRoot(), "wallet", input.personaId] });
+      void qc.invalidateQueries({ queryKey: [...slpKeys.noodlerRoot(), "viewer-wallets"] });
+    },
+  });
+}
+export function useGambleUnlockCreatorPost() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ postId, personaId }: { postId: string; personaId: string }) =>
+      api.post<{
+        scope: SlpCreatorViewerScope;
+        outcome: "free" | "triple-price" | "already-unlocked";
+        amount: number;
+      }>(`/slurp2/slurp/posts/${encodeURIComponent(postId)}/gamble-unlock`, { personaId }),
+    onSuccess: async (result, input) => {
+      await qc.cancelQueries({ queryKey: slpKeys.viewer(input.personaId) });
+      qc.setQueryData<SlpCreatorViewerScope | undefined>(slpKeys.viewer(input.personaId), (current) =>
+        mergeSlurpViewerShell(current, result.scope),
       );
       void qc.invalidateQueries({ queryKey: slpKeys.viewer(input.personaId) });
       void qc.invalidateQueries({ queryKey: [...slpKeys.noodlerRoot(), "wallet", input.personaId] });

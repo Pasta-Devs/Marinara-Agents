@@ -1,5 +1,5 @@
 // The splash screen needs the shipped version and its public notes inside the client bundle.
-export const SLURP2_VERSION = "0.2.25";
+export const SLURP2_VERSION = "0.2.28";
 
 export interface Slurp2ReleaseEntry {
   version: string;
@@ -10,11 +10,29 @@ export interface Slurp2ReleaseEntry {
 /** The public release history shown in the Engine splash screen. */
 export const SLURP2_RELEASES: Slurp2ReleaseEntry[] = [
   {
-    version: "0.2.25",
-    date: "2026-09-22",
+    version: "0.2.28",
+    date: "2026-09-23",
     notes: [
-      "Every generated picture keeps the Creator's appearance, planned action, expression, and mood even when image-prompt interpretation is unavailable.",
-      "Creator personality and stage voice now shape visual presentation without being copied as private prompt text.",
+      "Creator settings have a status overview and a section picker that works on phones.",
+      "Profile edits use one save bar, and settings use one scroll area.",
+    ],
+  },
+  {
+    version: "0.2.27",
+    date: "2026-09-23",
+    notes: [
+      "Creator settings keep profile drafts when you change sections and confirm before discarding them.",
+      "Creator settings are grouped by task, and the roster shows attention reasons and bulk-change previews.",
+    ],
+  },
+  {
+    version: "0.2.26",
+    date: "2026-09-23",
+    notes: [
+      "Image prompts preserve each Creator's appearance and follow the selected image guidance.",
+      "Choose an image style for each Creator, or let them use the global style.",
+      "Settings sections now use the shorter names Content and World.",
+      "Posts, messages, audience activity, story events, and image generation use clearer state and feedback handling.",
     ],
   },
   {

@@ -43,6 +43,8 @@ export type SlurpNavigationState =
       settingKey?: string;
       /** Opens this Creator's continuity editor once the Creators page renders. Never persisted. */
       continuityCreatorId?: string;
+      /** Opens the generation selector when Pulse routes into Backstage. Never persisted. */
+      openRefresh?: boolean;
       returnTo?: SlurpNavigationState;
     };
 

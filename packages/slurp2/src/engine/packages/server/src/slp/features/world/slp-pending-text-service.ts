@@ -153,7 +153,7 @@ function buildMessages(input: {
         `pending${input.kind[0].toUpperCase()}${input.kind.slice(1)}` as "pendingCommission",
         [
           { id: "task", kind: "editable", text: instruction },
-          { id: "safety", kind: "required", text: shared.join("\n") },
+          { id: "safety", kind: "required", text: shared.slice(0, -1).join("\n") },
           { id: "output", kind: "required", text: shared.at(-1) ?? "Return JSON only." },
           { id: "source", kind: "context", text: "The supplied Slurp data follows." },
         ],
@@ -334,7 +334,8 @@ export async function drainSlurpPendingText(
           maxTokens: clampGenerationMaxOutputTokens({
             provider: connection.provider as APIProvider,
             model: connection.model,
-            maxTokens: 320,
+            // Reasoning headroom: 320 was spent on thinking and the answer came back empty.
+            maxTokens: 2048,
             maxTokensOverride: connection.maxTokensOverride,
           }),
           stream: false,

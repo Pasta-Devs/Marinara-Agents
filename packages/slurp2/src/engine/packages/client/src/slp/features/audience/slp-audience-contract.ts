@@ -52,3 +52,6 @@ export type SlpAmbientProfileRerollResult = {
   accounts: SlpAccount[];
   outcomes: Array<{ accountId: string; status: string; reason?: string }>;
 };
+
+// The Creator settings modal sets one Creator's fan activity and archetype weights.
+export { useUpdateCreatorFanActivity } from "./slp-fan-activity-hooks.js";

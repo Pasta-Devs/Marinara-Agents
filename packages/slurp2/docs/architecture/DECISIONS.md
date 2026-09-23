@@ -265,7 +265,7 @@ modules, rejected alternative, and migration consequence.
 - **Problem:** Slurp has several valid prompt controls: global prompt blocks, global generation and
   image settings, Creator stage and content settings, production strategy, current Creator state,
   and message relationship state. They were all expressed as prose. Image interpretation could
-  therefore treat a personality or adult image instruction as permission to change the post's scene.
+  therefore treat a personality or image instruction as permission to change the post's scene.
 - **Decision:** The post's subject, action, setting, clothing, and sexual intensity are the visual
   intent. The post prompt blocks and Creator settings may shape that intent, but image interpretation
   may only render it. Stable appearance and style add detail after intent. They may not add an event,
@@ -300,3 +300,25 @@ modules, rejected alternative, and migration consequence.
 - **Migration consequence:** no stored post changes. New automatic posts record typed visual intent;
   older posts continue to use their stored image prompts. Prompt previews now label block inspection
   separately from full post generation.
+
+## Subject-aware story influences and occurrence ledger (2026-09-22)
+
+- **Problem:** annual platform events could modify one global price calculation, while arcs carried
+  separate chapter effects. Neither contract could explain a result for one Creator, and triggered
+  events had no durable identity across ticks or restarts.
+- **Decision:** portable arc and event blueprints use a closed influence-target vocabulary. Consumers
+  ask a subject-aware resolver for one target, time, and Creator; the resolver orders sources,
+  multiplies before adding, and leaves final clamping and rounding to the consumer. Narrative
+  guidance, facts, and arc opportunities stay typed non-numeric contracts rather than entering the
+  numeric resolver.
+- **Decision:** every event activation first writes an immutable occurrence snapshot containing its
+  activation key, trigger evidence, participants, interval, status, and complete blueprint. Effects
+  and outcomes read that snapshot, never the mutable library row. Stable activation keys make clock
+  catch-up and repeated ticks idempotent.
+- **Affected modules:** shared story schemas, World event reconciliation and storage, arc blueprints,
+  story-pack import/export, and numeric simulation consumers.
+- **Rejected alternative:** a general event bus with arbitrary field paths. It would make ordering,
+  bounds, replay, import validation, and user-facing explanations depend on executable behavior.
+- **Migration consequence:** legacy calendar rows normalize into annual blueprints. Existing running
+  arcs remain copied snapshots. Occurrences, facts, opportunities, and checkpoints use package-owned
+  settings records and therefore travel with the existing backup/restore namespace.

@@ -13,6 +13,7 @@ import type { SlpMediaBackstageState } from "../media/slp-media-backstage-contra
 import type { SlpMessagesBackstageState } from "../messages/slp-messages-backstage-contract";
 import type { SlpPromptsBackstageState } from "../settings/slp-prompts-backstage-contract";
 import type { SlpSettingsDraftState } from "../settings/slp-settings-backstage-contract";
+import type { SlpProjectsBackstageState } from "../projects/slp-projects-backstage-contract";
 import type { SlurpSettings } from "../settings/slp-settings-contract";
 import {
   SLP_BACKSTAGE_DEFAULT_TARGET,
@@ -25,8 +26,6 @@ export type SlpBackstageShellProps = {
   onNavigate: (navigation: SlurpNavigationState) => void;
   onAddCreators: () => void;
   personaSourceIds: ReadonlySet<string>;
-  onEditCreator: (creator: SlpCreatorManagedStageProfile) => void;
-  onRedraftCreator: (creator: SlpCreatorManagedStageProfile) => void;
   onRestartOnboarding: () => void;
   viewerPersonaId: string | null;
 };
@@ -93,7 +92,8 @@ export type SlpBackstagePageProps = SlpBackstageHostState &
   SlpMaintenanceBackstageState &
   SlpMediaBackstageState &
   SlpMessagesBackstageState &
-  SlpPromptsBackstageState & {
+  SlpPromptsBackstageState &
+  SlpProjectsBackstageState & {
     settings: SlurpSettings;
     audiencePreset: ReturnType<typeof slurpAudiencePresetFor>;
     openRefresh: () => void;

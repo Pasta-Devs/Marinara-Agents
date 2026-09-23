@@ -54,7 +54,11 @@ export async function slpMessagesSendRoutes(app: FastifyInstance, messaging: Slp
     if (!creator || !post) return reply.code(404).send({ error: "Post not found" });
     // A locked post travels as a teaser. The bubble hides the body of a locked preview, but the
     // body used to ride along in the metadata anyway, so a share was a way to read it.
-    const locked = post.access !== "public";
+    // A post the fan already unlocked is theirs to show: it is no longer a paid teaser to them.
+    const owned =
+      post.access !== "public" &&
+      (await slurp.listPostUnlocksForViewer(viewer.id)).some((unlock) => unlock.postId === post.id);
+    const locked = post.access !== "public" && !owned;
     // The shared post now travels outside its author's own chat, so the card has to say whose
     // post it is. A missing author is not worth refusing the share over.
     const author =
@@ -346,6 +350,8 @@ export async function slpMessagesSendRoutes(app: FastifyInstance, messaging: Slp
     };
   });
 
+  // ponytail: in-process guard; a multi-process Engine would need a claim row instead.
+  const ppvReacting = new Set<string>();
   app.post("/messages/ppv/unlock", async (req, reply) => {
     const parsed = z
       .object({ personaId: z.string().trim().min(1), messageId: z.string().trim().min(1) })
@@ -357,9 +363,16 @@ export async function slpMessagesSendRoutes(app: FastifyInstance, messaging: Slp
     const alreadyUnlocked = Boolean((await messages.getMessageById(parsed.data.messageId))?.unlockedAt);
     const message = await messages.unlockMessage(viewer.id, parsed.data.messageId);
     if (!message) return reply.code(402).send({ error: "PPV message cannot be unlocked." });
-    const unlockedThread = alreadyUnlocked ? null : await messages.getThreadById(message.threadId);
+    // Two concurrent clicks both read "not unlocked yet"; only the first may react.
+    const firstUnlock = !alreadyUnlocked && !ppvReacting.has(message.id);
+    if (firstUnlock) {
+      ppvReacting.add(message.id);
+      setTimeout(() => ppvReacting.delete(message.id), 60_000).unref?.();
+    }
+    const unlockedThread = firstUnlock ? await messages.getThreadById(message.threadId) : null;
     if (unlockedThread)
-      await reactToSlurpPayment(app.db, {
+      // Fire and forget: the reply is a chat message, and the unlock must not wait on the model.
+      void reactToSlurpPayment(app.db, {
         viewerAccountId: viewer.id,
         creatorAccountId: unlockedThread.creatorAccountId,
         kind: "ppv",

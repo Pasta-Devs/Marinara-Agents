@@ -91,11 +91,21 @@ export function MessageBubble({
       </div>
     );
   }
+  // A payment marker is bookkeeping, not something the player typed: a small centred note.
+  if (message.metadata?.paymentReaction) {
+    return (
+      <p className="self-center rounded-full bg-[var(--slurp-surface)] px-3 py-1 text-xs text-[var(--muted-foreground)] ring-1 ring-inset ring-[var(--noodle-divider)]">
+        {message.content.replace(/^\[|\]$/gu, "")}
+      </p>
+    );
+  }
   if (message.kind === "post_preview") {
     const preview = message.metadata;
     const previewTitle = typeof preview.title === "string" ? preview.title : message.content;
     const previewContent = typeof preview.content === "string" ? preview.content : "";
-    const locked = preview.access === "locked" || preview.previewLocked === true;
+    // `previewLocked` is decided per viewer on the server; a post the fan already bought is shown
+    // open. Older cards without it fall back to the post's access.
+    const locked = typeof preview.previewLocked === "boolean" ? preview.previewLocked : preview.access === "locked";
     return (
       <div
         className={cn(

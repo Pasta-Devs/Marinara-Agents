@@ -84,6 +84,21 @@ export interface SlpCreatorStageFacts {
   locations?: string;
 }
 
+export type SlpAppearanceProfileMode = "ask" | "high_confidence" | "always";
+
+export type SlpAppearanceProfileStatus = "accepted" | "needs_review";
+
+export interface SlpAppearanceProfile {
+  text: string;
+  source: "source_appearance" | "description" | "avatar" | "mixed";
+  sourceEntityId: string;
+  sourceRevisionToken: string;
+  confidence: "high" | "medium" | "low";
+  status: SlpAppearanceProfileStatus;
+  generatedAt: string;
+  acceptedAt: string | null;
+}
+
 export interface SlpAccountSocialSettings {
   followingAccountIds?: string[];
   followingAccountTimestamps?: Record<string, string>;
@@ -171,6 +186,8 @@ export interface SlpAccountSettings {
   privacy: SlpAccountPrivacySettings;
   /** See `SlpCreatorStageFacts`. Absent on a Creator nobody has filled in yet. */
   stage?: SlpCreatorStageFacts;
+  /** Cached, provider-neutral appearance text derived from source evidence. */
+  appearanceProfile?: SlpAppearanceProfile;
   wallet: SlpWalletSettings;
 }
 
@@ -297,10 +314,27 @@ export interface SlpCreatorStageProfile {
   updatedAt: string;
 }
 
+/** Optional context for a single Creator avatar or banner generation request. */
+export type SlpCreatorArtworkPromptOptions = {
+  creatorDetails: boolean;
+  appearance: boolean;
+  sourceReferences: boolean;
+  composition: boolean;
+};
+
 export interface SlpCreatorManagedStageProfile extends SlpCreatorStageProfile {
+  /** The Engine character or persona this Creator was made from. Empty when the source is gone. */
+  sourceAccountId: string | null;
   access: SlpAccountAccessSettings;
   autoPosting: SlpAutoPostingSettings;
   sourceStatus: SlpCreatorSourceStatus;
+  appearanceState: {
+    source: "override" | "linked" | "derived" | "missing";
+    text: string;
+    needsReview: boolean;
+    linkedAppearance: string;
+    profile: SlpAppearanceProfile | null;
+  };
   fanActivity: SlpCreatorFanActivitySettings | null;
   /** What the user saved, and what the planner actually uses once derived defaults fill the gaps. */
   strategy: {

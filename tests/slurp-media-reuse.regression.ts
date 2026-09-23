@@ -122,19 +122,21 @@ assert.ok(casual > 0 && casual < 100, `archive reposts should be occasional, got
 
 // A callback's new picture keeps the drop's clothes and light when the brief is known.
 const brief = slurpImageBrief({
-  cameraInstruction: "Camera: tripod.",
+  cameraPhoto: "photo on a self-timer",
   variation: slurpPostVariation("creator-a", 1),
+  sexualLevel: "none",
   shoot: { place: "the kitchen", company: "alone", brief: "red dress, window light" },
 });
-assert.match(brief, /same clothes and light as this earlier picture: red dress, window light/u);
-assert.doesNotMatch(
+assert.match(brief, /red dress, window light/u);
+assert.match(
   slurpImageBrief({
-    cameraInstruction: "Camera: tripod.",
+    cameraPhoto: "photo on a self-timer",
     variation: slurpPostVariation("creator-a", 1),
+    sexualLevel: "none",
     shoot: { place: "the kitchen", company: "alone" },
   }),
-  /same clothes/u,
-  "an unknown brief stays unknown",
+  /the kitchen/u,
+  "an unknown brief falls back to the shoot's place",
 );
 
 // Wiring. Reused bytes are copied into the new post, never shared; a preview is cut on the server;
@@ -156,7 +158,7 @@ assert.match(generation, /const media = input\.media \?\? reusedMedia;/u);
 assert.match(generation, /persistCreatorPostWithUploadedMedia\(account\.id, postId, media,/u);
 assert.match(generation, /const postImages = imagesEnabled && !textOnly && !reusedMedia;/u);
 assert.match(generation, /\.\.\.\(shootId \? \{ shootId \} : \{\}\),/u);
-assert.match(generation, /brief: draftImagePrompt,/u);
+assert.match(generation, /brief: slurpShootContinuity\(/u);
 assert.match(generation, /noodlerMediaPath: stagedMedia\.filePath/u);
 const reserve = slurp2Source(
   "packages/slurp2/src/engine/packages/server/src/slp/features/feed/reserve/slp-reserve-operation.ts",

@@ -176,3 +176,6 @@ export type SlurpComposeTarget = {
 // The Creators Backstage panel renders a Creator's message policy inline, so this group is part of
 // the Messages contract rather than an internal component.
 export { CreatorMessagingGroup } from "./SlpCreatorMessagingGroup.js";
+
+// The Creator settings modal edits one Creator's message policy.
+export { useSetSlurpCreatorMessaging } from "./slp-messages-hooks.js";

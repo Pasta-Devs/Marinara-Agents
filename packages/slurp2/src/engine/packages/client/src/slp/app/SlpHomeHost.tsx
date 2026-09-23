@@ -10,6 +10,7 @@ import { SlurpSplash } from "../features/onboarding/SlpSplash";
 import { getSlpAccentStyle, SLP_PERSONA_SWITCHER_PAGE_SIZE, SLP_PINK } from "../base/chrome/SlpChrome";
 import { SlpShell } from "../modules/chrome/SlpShell";
 import { SlpSharePostModal } from "../features/messages/SlpSharePostModal";
+import { SlpCreatorSettingsModal } from "../features/creators/settings/SlpCreatorSettingsModal";
 import { SlpBackstageShell } from "../app/backstage/SlpBackstageShell";
 import { SlpBackstageSidebar } from "../features/backstage/SlpBackstageSidebar";
 import { Modal } from "../../components/ui/Modal";
@@ -19,12 +20,10 @@ import { renderSlurpHomeCreatorFlow } from "./screens/SlpHomeCreatorFlow";
 import { renderSlurpHomeDestinations } from "./screens/SlpHomeDestinations";
 import { SlpHomeFeedRail } from "./screens/SlpHomeFeedRail";
 import { useRefreshCreatorFanActivityNow } from "../features/audience/slp-fan-activity-hooks";
-import { useRefreshTargetedCreatorsNow } from "../features/creators/slp-creator-refresh-hooks";
 
 export function SlurpHome({ navigation, onNavigate, onLeave }: SlurpHomeProps) {
   const model = useSlurpHomeState({ navigation, onNavigate, onLeave });
-  const refreshAudienceNow = useRefreshCreatorFanActivityNow();
-  const refreshPostsNow = useRefreshTargetedCreatorsNow();
+  const refreshAudienceNow = useRefreshCreatorFanActivityNow({ notifications: false });
   const {
     localizeUi,
     accountsQuery,
@@ -90,7 +89,6 @@ export function SlurpHome({ navigation, onNavigate, onLeave }: SlurpHomeProps) {
     postCardCtx,
     enterFromGate,
     closeOnboarding,
-    beginEdit,
     redraftFromSource,
     confirmReviewedImagePrompts,
     toggleCreatorSubscription,
@@ -99,9 +97,6 @@ export function SlurpHome({ navigation, onNavigate, onLeave }: SlurpHomeProps) {
     openStoryComposer,
   } = model;
   const personaSourceIds = new Set(personas.map((persona) => persona.id));
-  const automationCreatorIds = (accountsQuery.data ?? [])
-    .filter((creator) => !creator.sourceAccountId || !personaSourceIds.has(creator.sourceAccountId))
-    .map((creator) => creator.id);
 
   const shellProps = {
     appMode: "slurp" as const,
@@ -166,13 +161,12 @@ export function SlurpHome({ navigation, onNavigate, onLeave }: SlurpHomeProps) {
     onOpenWallet: goToWallet,
     onOpenStudio: goToStudio,
     onGeneratePosts: () => {
-      if (automationCreatorIds.length > 0) {
-        refreshPostsNow.mutate({ accountIds: automationCreatorIds, access: "locked" });
-      }
+      onNavigate({ mode: "creator-settings", section: "automation", target: "automation", openRefresh: true });
     },
     onRunAudience: () => {
       refreshAudienceNow.mutate();
     },
+    audiencePending: refreshAudienceNow.isPending,
     notificationCount:
       (notificationUnseenCountQuery.data?.unseenCount ?? 0) +
       (unreadCountQuery.data?.unread ?? 0) +
@@ -201,15 +195,38 @@ export function SlurpHome({ navigation, onNavigate, onLeave }: SlurpHomeProps) {
     },
     onOpenSettings: openSettings,
     onCompose: openPostComposer,
-    // Every NoodleR branch spreads shellProps, so the lightbox mounts once wherever the user is.
-    overlays: postCardController.imageLightbox ? (
-      <ChatImageLightbox
-        image={postCardController.imageLightbox}
-        alt={postCardController.imageLightbox.prompt || "Slurp image"}
-        pinEnabled={false}
-        onClose={() => postCardController.setImageLightbox(null)}
-      />
-    ) : null,
+    // Every NoodleR branch spreads shellProps, so these mount once wherever the user is. The
+    // Creator settings modal is opened from Backstage, from a Creator's profile and from a
+    // settings search result, so it cannot belong to any one of those screens.
+    overlays: (
+      <>
+        {postCardController.imageLightbox && (
+          <ChatImageLightbox
+            image={postCardController.imageLightbox}
+            alt={postCardController.imageLightbox.prompt || "Slurp image"}
+            pinEnabled={false}
+            onClose={() => postCardController.setImageLightbox(null)}
+          />
+        )}
+        <SlpCreatorSettingsModal
+          onRedraft={(creator) => {
+            redraftFromSource(creator);
+            onNavigate({
+              mode: "creator",
+              view: "profile",
+              accountId: creator.id,
+              ...(navigation.mode === "creator-settings" ? { returnToSettings: navigation } : {}),
+            });
+          }}
+          onViewProfile={
+            navigation.mode === "creator-settings"
+              ? (creator) =>
+                  onNavigate({ mode: "creator", view: "profile", accountId: creator.id, returnToSettings: navigation })
+              : undefined
+          }
+        />
+      </>
+    ),
   } as const;
 
   if (navigation.mode === "creator-settings") {
@@ -225,14 +242,6 @@ export function SlurpHome({ navigation, onNavigate, onLeave }: SlurpHomeProps) {
           onNavigate={onNavigate}
           onAddCreators={() => setOnboardingMode("add-creators")}
           personaSourceIds={new Set(personas.map((persona) => persona.id))}
-          onEditCreator={(creator) => {
-            beginEdit(creator);
-            onNavigate({ mode: "creator", view: "profile", accountId: creator.id, returnToSettings: navigation });
-          }}
-          onRedraftCreator={(creator) => {
-            redraftFromSource(creator);
-            onNavigate({ mode: "creator", view: "profile", accountId: creator.id, returnToSettings: navigation });
-          }}
           onRestartOnboarding={() => {
             onboardingPresentedRef.current = true;
             setOnboardingState("entered");
@@ -339,10 +348,6 @@ export function SlurpHome({ navigation, onNavigate, onLeave }: SlurpHomeProps) {
         walletCoins={activeWalletCoins}
         onLoadMore={model.viewerQuery.loadMore}
         hasMore={Boolean(model.viewerQuery.data?.nextCursor)}
-        deletingPostIds={model.deletingPostIds}
-        deletedPostIds={model.deletedPostIds}
-        restoringPostIds={model.restoringPostIds}
-        onRestorePost={model.restoreNoodlePost}
         isLoading={viewerQuery.isLoading}
         isError={viewerQuery.isError}
         onRetry={() => void viewerQuery.refetch()}

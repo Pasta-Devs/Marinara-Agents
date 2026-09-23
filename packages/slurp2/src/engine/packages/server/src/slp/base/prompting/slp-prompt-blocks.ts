@@ -5,11 +5,13 @@ export const SLURP_PROMPT_IDS = [
   "fanActivity",
   "stageProfile",
   "ambientProfile",
+  "publicProfile",
   "arc",
   "pendingCommission",
   "pendingQuestion",
   "pendingOpener",
   "pendingDelivery",
+  "fanReply",
   "postGuidance",
   "conversationSchedule",
   "invitedPost",
@@ -154,6 +156,16 @@ const BASE_PROMPT_DESCRIPTIONS: SlurpPromptDescription[] = [
     ]),
   },
   {
+    id: "publicProfile",
+    group: "profiles",
+    blocks: descriptions([
+      ["task", "editable"],
+      ["profileRules", "editable"],
+      ["output", "required"],
+      ["profiles", "context"],
+    ]),
+  },
+  {
     id: "arc",
     group: "world",
     blocks: descriptions([
@@ -164,7 +176,7 @@ const BASE_PROMPT_DESCRIPTIONS: SlurpPromptDescription[] = [
       ["history", "context"],
     ]),
   },
-  ...(["pendingCommission", "pendingQuestion", "pendingOpener", "pendingDelivery"] as const).map(
+  ...(["pendingCommission", "pendingQuestion", "pendingOpener", "pendingDelivery", "fanReply"] as const).map(
     (id): SlurpPromptDescription => ({
       id,
       group: "messages",
@@ -335,6 +347,10 @@ const PROMPT_EDITABLE_DEFAULTS: SlurpPromptEditableDefaults = {
     profileRules:
       "Make every profile distinct and plausible as a recurring background user. Vary personalities, interests, and posting styles. Write concise profile metadata only.",
   },
+  publicProfile: {
+    task: "You set up fake Slurp social media profiles for existing Marinara Engine characters.",
+    profileRules: "Create concise profile metadata only. Do not write posts, replies, likes, or timeline content.",
+  },
   arc: {
     task: "Invent one life arc for a Slurp creator: something that happens in their own life over days or weeks and that they keep posting about.",
     arcRules:
@@ -351,6 +367,9 @@ const PROMPT_EDITABLE_DEFAULTS: SlurpPromptEditableDefaults = {
   },
   pendingDelivery: {
     task: "Rewrite this hand-over note as this creator giving a fan the piece they paid for. Use one or two warm sentences, no greeting, and do not describe the picture.",
+  },
+  fanReply: {
+    task: "Write this fan's next message in the conversation below, in their own voice. One or two sentences, no greeting, and never speak for the creator.",
   },
   postGuidance: {
     task: "Write one short instruction block for another AI that writes posts for a Slurp creator page.",

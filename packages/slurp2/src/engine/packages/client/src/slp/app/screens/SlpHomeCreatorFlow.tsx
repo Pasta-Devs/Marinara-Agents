@@ -4,6 +4,7 @@ import { EMPTY_SLP_CREATOR_POST_DRAFT, errorMessage, SlpCreatorFrame } from "./S
 import { StageProfileSourcePicker, DisclosureStep } from "./SlpScreenCreateProfile";
 import { toast } from "sonner";
 import { StageProfileForm } from "../../features/creators/SlpStageProfileForm";
+import { openSlpCreatorSettings } from "../../features/creators/settings/slp-creator-settings-store";
 import { ChevronRight, LayoutGrid, Pencil, Plus, Sparkles } from "lucide-react";
 import { cn } from "../../../lib/utils";
 import { SlurpCreatorProfileCard } from "../../modules/creator/SlpCreatorProfileCard";
@@ -32,7 +33,6 @@ export function renderSlurpHomeCreatorFlow({
   const {
     accountsQuery,
     autoPostSetupId,
-    beginEdit,
     cancelCreateProfile,
     changeDisclosure,
     clearNoodlerPostDraft,
@@ -331,7 +331,7 @@ export function renderSlurpHomeCreatorFlow({
               {
                 label: localizeUi("ui.slurp.profile.editProfile", { defaultValue: "Edit profile" }),
                 icon: Pencil,
-                action: () => beginEdit(selectedProfile),
+                action: () => openSlpCreatorSettings(selectedProfile.id, { tab: "identity" }),
               },
               {
                 label: localizeUi("ui.slurp.profile.createPost", { defaultValue: "Create post" }),
@@ -427,7 +427,7 @@ export function renderSlurpHomeCreatorFlow({
             isLoading={postsQuery.isLoading}
             isError={postsQuery.isError}
             onRetry={() => void postsQuery.refetch()}
-            onEdit={() => beginEdit(selectedProfile)}
+            onEdit={() => openSlpCreatorSettings(selectedProfile.id, { tab: "identity" })}
             onBack={() =>
               navigation.mode === "creator" && navigation.view === "profile" && navigation.returnToSettings
                 ? onNavigate(navigation.returnToSettings)

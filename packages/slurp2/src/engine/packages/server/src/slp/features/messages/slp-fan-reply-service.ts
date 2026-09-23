@@ -121,15 +121,16 @@ export async function replyAsSlurpFan(
     [
       {
         role: "system" as const,
+        // Its own prompt ID: sharing "pendingOpener" meant editing first messages also changed this.
         content: composeSlurpPromptBlocks(
-          "pendingOpener",
+          "fanReply",
           [
             {
               id: "task",
               kind: "editable",
               text: "Write this fan's next message in the conversation below, in their own voice. One or two sentences, no greeting, and never speak for the creator.",
             },
-            { id: "safety", kind: "required", text: shared.join("\n") },
+            { id: "safety", kind: "required", text: shared.slice(0, -1).join("\n") },
             { id: "output", kind: "required", text: shared.at(-1) ?? "Return JSON only." },
             { id: "source", kind: "context", text: "The supplied Slurp data follows." },
           ],
@@ -150,7 +151,7 @@ export async function replyAsSlurpFan(
       maxTokens: clampGenerationMaxOutputTokens({
         provider: connection.provider as APIProvider,
         model: connection.model,
-        maxTokens: 320,
+        maxTokens: 2048,
         maxTokensOverride: connection.maxTokensOverride,
       }),
       stream: false,

@@ -53,10 +53,17 @@ assert.equal(brief("public", "explicit").sexualLevel, "nudity");
 
 // The image brief says what the picture may show at every level, rather than one blanket refusal.
 const imageBrief = slurp2Source("packages/slurp2/src/engine/packages/server/src/slp/modules/feed/slp-image-brief.ts");
-assert.match(imageBrief, /LEVEL_LINES\[input\.sexualLevel\]/u, "the brief must state the level it was given");
+assert.match(imageBrief, /LEVEL_PHOTO\[input\.sexualLevel\]/u, "the brief must state the level it was given");
 for (const level of ["none", "suggestive", "nudity", "explicit"]) {
   assert.match(imageBrief, new RegExp(`\\b${level}:`, "u"), `${level} needs its own line`);
 }
+
+const creatorPublishing = slurp2Source(
+  "packages/slurp2/src/engine/packages/client/src/slp/features/creators/settings/SlpCreatorPublishingSection.tsx",
+);
+assert.match(creatorPublishing, /SLURP_EXPLICIT_LEVELS/u, "Creator settings must offer every picture level");
+assert.match(creatorPublishing, /creatorId: creator\.id, level/u, "the selected level must save as a Creator override");
+assert.match(creatorPublishing, /Use shared \(\{\{level\}\}\)/u, "inherit must show the active shared level");
 
 // An image model reads "poorly lit" and "dull" as instructions and returns exactly that.
 for (const path of [

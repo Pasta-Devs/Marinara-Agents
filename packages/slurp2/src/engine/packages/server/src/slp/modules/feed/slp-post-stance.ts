@@ -97,7 +97,9 @@ export function resolveSlurpPostStance(input: SlurpPostStanceInput): SlurpPostSt
   // Rule 2. Last night outranks this morning.
   if (state.exposure >= EXPOSED) {
     instructions.push(
-      "You put something out recently that went further than you usually go, and you are still sitting with it. Pull back a little today: quieter, more yourself, less on display.",
+      // Tone only. Phrased as "less on display" it overrode the Creator's level, so paid posts
+      // after a bold one came out as mundane updates.
+      "You put something out recently that went further than you usually go, and you are still sitting with it. Let that show in your tone; it does not change what this post shows.",
     );
     evidence.push({ layer: "exposure", value: slurpIntensityBand(state.exposure), effect: "pulls the post back" });
   }

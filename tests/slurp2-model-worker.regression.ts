@@ -21,7 +21,7 @@ const at = new Date("2026-09-14T12:30:00.000Z");
 const budget = slurpModelBudgetSchema.parse({ callsPerHour: 2, callsPerDay: 3, jobs: { rewrite: { maxPerDay: 1 } } });
 assert.match(
   fanActivityOperation,
-  /Math\.min\(settings\.fanActivityRunsPerDay, settings\.modelBudget\.jobs\.thread\.maxPerDay\)/u,
+  /Math\.min\(boosted, settings\.modelBudget\.jobs\.thread\.maxPerDay\)/u,
   "fan activity uses the lower configured and thread model limits",
 );
 assert.match(fanActivityOperation, /slpCreatorFanActivityRunLimit\(settings\),/gu);

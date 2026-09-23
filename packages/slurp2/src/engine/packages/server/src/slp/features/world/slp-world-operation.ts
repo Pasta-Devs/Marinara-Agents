@@ -112,13 +112,16 @@ export async function advanceSlurpWorld(db: DB, until = new Date()): Promise<Slu
   if (!lease) return { status: "busy", actions: 0 };
   try {
     const operation = await trySlpOperation("slurp-world-tick", async () => {
+      const storyStorage = createSlurpStorage(db);
+      // Occurrences are a clock/ledger concern, so they advance even when ambient activity is off.
+      await storyStorage.reconcileStoryEvents(until);
       const since = await readLastTick(db);
       if (!since) {
         await writeLastTick(db, until);
         return { status: "idle" as const, actions: 0 };
       }
 
-      const settings = await createSlurpStorage(db).getSettings();
+      const settings = await storyStorage.getSettings();
       const activity = slurpWorldActivityMultiplier(settings.worldActivity);
       const scale = slurpPlatformScaleMultiplier(settings.platformScale);
       const tuning = settings.simulationTuning;
@@ -680,6 +683,8 @@ export async function advanceSlurpWorld(db: DB, until = new Date()): Promise<Slu
         if (!messaging.proactiveMessages) continue;
         for (const tie of await population.listTiesForCreator(account.id)) {
           if (opened >= SLURP_MAX_CREATOR_OPENERS_PER_TICK) break;
+          // Generated fans never read or answer, so an opener to one is a thread nobody sees.
+          if (tie.memberId.startsWith("slurp-fan:")) continue;
           const daysSinceSeen = (until.getTime() - Date.parse(tie.lastSeenAt)) / 86_400_000;
           if (!Number.isFinite(daysSinceSeen)) continue;
           const existingThread = await messages.getThread(tie.memberId, account.id);

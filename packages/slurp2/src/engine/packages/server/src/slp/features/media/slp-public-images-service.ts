@@ -16,7 +16,6 @@ import { resolveImagePromptReviewSize } from "../../../services/image/image-prom
 import type { SlurpVisualBrief } from "../../base/media/slp-visual-brief.js";
 import { slurpVisualBriefPromptViolatesPolicy, slurpVisualBriefText } from "../../base/media/slp-visual-brief.js";
 import {
-  normalizeIllustratorAppearance,
   readIllustratorAppearance,
   resolveIllustratorCharacterReferences,
 } from "../../../services/image/illustrator-references.js";
@@ -28,8 +27,17 @@ import { createPromptOverridesStorage } from "../../../services/storage/prompt-o
 import { loadPrompt, NOODLE_IMAGE_POST } from "../../../services/prompt-overrides/index.js";
 import { generateSlpImageWithRetry } from "../../base/media/slp-image-retry.js";
 import { rewriteSlpImagePrompt } from "../../base/media/slp-image-prompt-rewrite.js";
-import { selectSlpImageProviderPrompt, stripAppearanceLabel } from "../../base/media/slp-image-prompt.js";
-import { resolveCreatorImageConnectionId } from "../../base/media/slp-image-connections.js";
+import { slpImageReferencesSupported } from "../../base/media/slp-image-references.js";
+import { resolveImageAppearance } from "./slp-appearance-service.js";
+import {
+  ensureSlpImageAppearance,
+  selectSlpImageProviderPrompt,
+  stripAppearanceLabel,
+} from "../../base/media/slp-image-prompt.js";
+import {
+  resolveCreatorImageConnectionId,
+  resolveCreatorImageStyleProfileId,
+} from "../../base/media/slp-image-connections.js";
 import type { ConnectionAdmissionMode } from "../../../services/generation/connection-admission.js";
 import {
   characterGalleryImageUrl,
@@ -93,9 +101,15 @@ function readProfessorMariReferenceImages(): string[] {
   });
 }
 
+/**
+ * The card's own appearance field, and nothing else.
+ *
+ * This used to fall back to the whole `description` when a card had no appearance field. Many
+ * downloaded cards have none, so their entire description — backstory, personality, scenario —
+ * was appended to every image prompt. A Creator's Stage appearance is the place to set a look.
+ */
 export function characterAppearanceFromRow(row: { data: unknown }) {
-  const data = parseRecord(row.data);
-  return readIllustratorAppearance(data) ?? normalizeIllustratorAppearance(data.description) ?? "";
+  return readIllustratorAppearance(parseRecord(row.data)) ?? "";
 }
 
 /**
@@ -134,7 +148,18 @@ export async function generateSlpPostImage(input: {
   admissionMode?: ConnectionAdmissionMode;
 }) {
   const imageSettings = await loadImageGenerationUserSettings(input.db);
+  const creatorStyleProfileId = await resolveCreatorImageStyleProfileId(input.db, input.account.id);
   const imageDefaults = resolveConnectionImageDefaults(input.imageConnection);
+  const selectedStyleProfileId = creatorStyleProfileId ?? input.settings.imageStyleProfileId;
+  if (imageDefaults && selectedStyleProfileId) {
+    imageDefaults.styleProfileId = selectedStyleProfileId;
+    for (const providerDefaults of [imageDefaults.automatic1111, imageDefaults.comfyui, imageDefaults.novelai]) {
+      if (providerDefaults) {
+        providerDefaults.promptPrefix = "";
+        providerDefaults.negativePromptPrefix = "";
+      }
+    }
+  }
   const imageModel = input.imageConnection.model || "";
   const imageBaseUrl = input.imageConnection.baseUrl || "https://image.pollinations.ai";
   const imageSource = input.imageConnection.imageGenerationSource || imageModel;
@@ -143,6 +168,7 @@ export async function generateSlpPostImage(input: {
     createConnectionsStorage(input.db),
     input.imageConnection.id,
   );
+  const allowAvatarReferences = slpImageReferencesSupported(input.imageConnection, imageFallback);
   // The Creator's own appearance, written on the Creator rather than borrowed from a card.
   //
   // It is applied unconditionally, unlike the block below it. `imageGenerationIncludeDescriptions`
@@ -150,7 +176,12 @@ export async function generateSlpPostImage(input: {
   // meant to decide whether the picture knows who the Creator is. With it off, a Creator with no
   // linked source, or a source card with an empty Appearance field, the image model received a
   // scene containing nobody and invented somebody — a different somebody every post.
-  const stageAppearance = input.account.settings.stage?.appearance?.trim() ?? "";
+  const stageAppearance = await resolveImageAppearance({
+    db: input.db,
+    account: input.account,
+    connectionId: input.settings.generationConnectionId,
+    mode: input.settings.appearanceProfileMode,
+  });
   let characterDescription = stageAppearance;
   let characterImageInstructions = "";
   let characterPersonality = "";
@@ -200,7 +231,7 @@ export async function generateSlpPostImage(input: {
         if (!stageAppearance && referenceResolution.appearanceBlock) {
           characterDescription = referenceResolution.appearanceBlock;
         }
-        if (input.settings.imageGenerationUseAvatarReferences) {
+        if (input.settings.imageGenerationUseAvatarReferences && allowAvatarReferences) {
           const builtInMariReferences =
             input.account.entityId === PROFESSOR_MARI_ID ? readProfessorMariReferenceImages() : [];
           const combinedReferences = [...builtInMariReferences, ...referenceResolution.referenceImages];
@@ -290,6 +321,7 @@ export async function generateSlpPostImage(input: {
         characterContext,
         styleGuidance,
         promptBlocks: slurpPromptContext(input.settings).blocks,
+        connectionId: input.settings.generationConnectionId,
       })
     : null;
   // The style profile is an Engine setting, not something the interpretation model owns. The
@@ -327,7 +359,7 @@ export async function generateSlpPostImage(input: {
     privateContext: [characterPersonality],
     guidanceContext: [configuredImageInstructions, connectionImageInstructions],
   });
-  const finalPrompt = finalPromptBase;
+  const finalPrompt = ensureSlpImageAppearance(finalPromptBase, stageAppearance);
   // A reviewer who cleared the negative prompt still gets the style profile's own negatives back,
   // for the same reason the positive prompt is recompiled above.
   const finalNegativePrompt = input.promptOverride

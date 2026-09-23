@@ -7,8 +7,11 @@ import { deliverDueSlurpCommissions } from "./commissions/slp-commission-deliver
 import { replyToSlurpMessage } from "./slp-message-operation.js";
 import { slurpPollBackoffMs } from "../../base/model/slp-poll-backoff.js";
 
-const INITIAL_DELAY_MS = 45_000;
-const POLL_MS = 60_000;
+const INITIAL_DELAY_MS = 15_000;
+// Delayed reply bubbles are timed in seconds, and a 60 s poll delivered every second bubble a
+// minute later. A tick is cheap reads unless something is due.
+// ponytail: fixed 15 s tick; deliver due bubbles on thread read if this is still too coarse.
+const POLL_MS = 15_000;
 
 /** Poll queued threads. Availability is checked again by the operation before generation. */
 export function startSlurpMessageScheduler(app: FastifyInstance, registerStop?: (stop: () => Promise<void>) => void) {

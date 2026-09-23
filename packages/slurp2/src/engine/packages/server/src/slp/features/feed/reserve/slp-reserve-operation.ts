@@ -1,4 +1,5 @@
 import type { DB } from "../../../../db/connection.js";
+import { slpIsBackgroundBusy, slpAdmissionRejectionCause } from "../../../base/host/slp-admission.js";
 import { recordSlurpContinuityEvent } from "../../../data/continuity/slp-continuity-storage.js";
 import { slurpContinuityIdentityOf } from "../../../modules/continuity/slp-continuity-rules.js";
 import { completeSlurpCampaignStageFor } from "../../../data/feed/slp-campaign-storage.js";
@@ -15,10 +16,6 @@ import { generateCreatorPostImage } from "../../media/slp-media-contract.js";
 import { tryCreatorAccountOperation } from "../../../base/locking/slp-account-operation-lock.js";
 import { createCharactersStorage } from "../../../../services/storage/characters.storage.js";
 import { createPromptOverridesStorage } from "../../../../services/storage/prompt-overrides.storage.js";
-import {
-  BackgroundConnectionBusyError,
-  ConnectionAttemptRejectedError,
-} from "../../../../services/generation/connection-admission.js";
 import {
   runSlurpAutoPostPollOperations,
   type SlurpReservePollOutcome,
@@ -277,9 +274,8 @@ export async function prepareNextCreatorReservePost(db: DB, at = new Date()): Pr
             };
           } catch (error) {
             if (
-              error instanceof BackgroundConnectionBusyError ||
-              (error instanceof ConnectionAttemptRejectedError &&
-                error.cause instanceof SlpCreatorAttemptUnavailableError)
+              slpIsBackgroundBusy(error) ||
+              slpAdmissionRejectionCause(error) instanceof SlpCreatorAttemptUnavailableError
             ) {
               payload = {
                 ...payload,
@@ -370,10 +366,9 @@ export async function prepareNextCreatorReservePost(db: DB, at = new Date()): Pr
       stagedMedia?.promote();
       return "prepared" as const;
     } catch (error) {
-      if (error instanceof BackgroundConnectionBusyError) return "busy" as const;
-      if (error instanceof ConnectionAttemptRejectedError && error.cause instanceof SlpCreatorAttemptUnavailableError) {
-        return error.cause.status;
-      }
+      if (slpIsBackgroundBusy(error)) return "busy" as const;
+      const rejection = slpAdmissionRejectionCause(error);
+      if (rejection instanceof SlpCreatorAttemptUnavailableError) return rejection.status;
       throw error;
     }
   });

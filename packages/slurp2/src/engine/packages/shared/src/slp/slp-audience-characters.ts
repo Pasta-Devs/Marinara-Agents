@@ -3,7 +3,7 @@
  *
  * Pure and leaf, like the other Slurp rule modules, so a test can import it without pulling in
  * `@marinara-engine/shared` — the constraint that made the privacy core untestable until it was
- * moved out of its service (see SLURP-AUDIT-TASKS.md T6).
+ * moved out of its service.
  *
  * A character fan is an account row, not a population member. It is shaped exactly like the six
  * ambient roster accounts: `kind: "random_user"`, identity carried in `entityId`. That is what

@@ -1,3 +1,4 @@
+import { toast } from "sonner";
 import { Activity, BookOpen, Image, MessageCircle, Sparkles, UsersRound, RefreshCw } from "lucide-react";
 
 import { BackstagePageHeader, SummaryRow } from "../../modules/settings/SlpSettingsKit";
@@ -22,7 +23,7 @@ export function SlpBackstageAutomationPanel(page: SlpBackstagePageProps) {
     schedulesRefreshing,
     setSchedulesRefreshing,
   } = page;
-  const go = (section: "world" | "automation" | "prompts", next: SlpBackstageTarget) =>
+  const go = (section: "world" | "automation" | "prompts" | "content", next: SlpBackstageTarget) =>
     page.onNavigate({ ...page.navigation, section, target: next });
   const onOff = (value: boolean) => (value ? t("ui.slurp.settings.overview.on") : t("ui.slurp.settings.overview.off"));
   const pauseLabel = (value: boolean) =>
@@ -35,7 +36,7 @@ export function SlpBackstageAutomationPanel(page: SlpBackstagePageProps) {
   return (
     <div className="space-y-4">
       <BackstagePageHeader
-        title={t("ui.slurp.settings.backstage.sections.automation")}
+        title={t("ui.slurp.settings.backstage.sections.automation", { defaultValue: "Publishing and automation" })}
         detail={t("ui.slurp.settings.backstage.landing.automationDetail", {
           defaultValue: "What Slurp does by itself. Pause anything here, or open it to change how it works.",
         })}
@@ -78,10 +79,21 @@ export function SlpBackstageAutomationPanel(page: SlpBackstagePageProps) {
             onClick={async () => {
               // One at a time: each refresh is a model call, and a second click must not start another round.
               setSchedulesRefreshing(true);
+              let failed = 0;
               try {
                 for (const creator of page.automationCreators) {
-                  await refreshConversationSchedule.mutateAsync(creator.id).catch(() => undefined);
+                  await refreshConversationSchedule
+                    .mutateAsync({ accountId: creator.id, quiet: true })
+                    .catch(() => (failed += 1));
                 }
+                const done = page.automationCreators.length - failed;
+                (failed ? toast.error : toast.success)(
+                  t("ui.slurp.settings.manual.schedulesDone", {
+                    defaultValue: "Schedules refreshed for {{done}} of {{total}} Creators.",
+                    done,
+                    total: page.automationCreators.length,
+                  }),
+                );
               } finally {
                 setSchedulesRefreshing(false);
               }
@@ -116,6 +128,19 @@ export function SlpBackstageAutomationPanel(page: SlpBackstagePageProps) {
         onOpen={() => go("automation", "general")}
       />
       <SummaryRow
+        icon={<BookOpen size={20} />}
+        title={t("ui.slurp.settings.backstage.landing.planAutomation", { defaultValue: "Story and Plan automation" })}
+        status={t(
+          `ui.slurp.settings.arcAutoMode${settings.arcAutoMode === "off" ? "Off" : settings.arcAutoMode === "suggest" ? "Suggest" : "Auto"}`,
+        )}
+        tone={settings.arcAutoMode === "off" ? "off" : "info"}
+        // One row for arc automation; a second "Automatic story arcs" row showed the same setting.
+        value={t(
+          `ui.slurp.settings.arcPace${settings.arcPace === "slow" ? "Slow" : settings.arcPace === "fast" ? "Fast" : "Normal"}`,
+        )}
+        onOpen={() => go("automation", "general")}
+      />
+      <SummaryRow
         icon={<Image size={20} />}
         title={t("ui.slurp.settings.backstage.landing.images", { defaultValue: "Image generation" })}
         status={imagesReady ? t("ui.slurp.settings.overview.ready") : t("ui.slurp.settings.overview.needsSetup")}
@@ -145,18 +170,6 @@ export function SlpBackstageAutomationPanel(page: SlpBackstagePageProps) {
         action={pauseLabel(settings.messagesAwayRepliesEnabled)}
         onAction={() => void update("messagesAwayRepliesEnabled", !settings.messagesAwayRepliesEnabled)}
         onOpen={() => go("world", "messaging")}
-      />
-      <SummaryRow
-        icon={<BookOpen size={20} />}
-        title={t("ui.slurp.settings.backstage.landing.arcs", { defaultValue: "Automatic story arcs" })}
-        status={t(
-          `ui.slurp.settings.arcAutoMode${settings.arcAutoMode === "off" ? "Off" : settings.arcAutoMode === "suggest" ? "Suggest" : "Auto"}`,
-        )}
-        tone={settings.arcAutoMode === "auto" ? "ok" : settings.arcAutoMode === "suggest" ? "info" : "off"}
-        value={t(
-          `ui.slurp.settings.arcPace${settings.arcPace === "slow" ? "Slow" : settings.arcPace === "fast" ? "Fast" : "Normal"}`,
-        )}
-        onOpen={() => go("world", "arcs")}
       />
       <SummaryRow
         icon={<Sparkles size={20} />}

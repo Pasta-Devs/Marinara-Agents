@@ -61,7 +61,12 @@ export function createEconomyStorage2(context: SlurpStorageContext) {
      * survives a refresh.
      *
      */
-    async unlockPost(viewerAccountId: string, postId: string): Promise<SlpPostUnlock | null> {
+    async unlockPost(
+      viewerAccountId: string,
+      postId: string,
+      requestedPrice?: number,
+      freeOnUnaffordable = false,
+    ): Promise<{ unlock: SlpPostUnlock; chargedAmount: number; created: boolean } | null> {
       return enqueueFinancial(async () => {
         const viewer = await this.getViewer(viewerAccountId);
         if (!viewer) return null;
@@ -70,7 +75,7 @@ export function createEconomyStorage2(context: SlurpStorageContext) {
         if (settings.walletEnabled) {
           const target = (await db.select().from(slpPosts).where(eq(slpPosts.id, postId)))[0];
           if (!target) return null;
-          price = slpCreatorUnlockPriceFromMetadata(mapPost(target).metadata);
+          price = requestedPrice ?? slpCreatorUnlockPriceFromMetadata(mapPost(target).metadata);
         }
         let created = false;
         const unlock = await db.transaction(async (tx) => {
@@ -112,7 +117,13 @@ export function createEconomyStorage2(context: SlurpStorageContext) {
             .where(and(eq(slpPostUnlocks.viewerAccountId, viewerAccountId), eq(slpPostUnlocks.postId, postId)));
           return rows[0] ? mapPostUnlock(rows[0]) : null;
         });
-        if (unlock && created && settings.walletEnabled) {
+        if (!unlock) return null;
+        let chargedAmount = 0;
+        if (!created && settings.walletEnabled) {
+          const wallet = await getWalletNow(viewerAccountId);
+          chargedAmount = Math.abs(wallet.receipts[postId]?.amount ?? 0);
+        }
+        if (created && settings.walletEnabled) {
           const walletKey = slurpWalletKey(viewerAccountId);
           const viewerSettingsKey = slurpViewerSettingsKey(viewerAccountId);
           const previousWalletValue = await settingsStore.get(walletKey);
@@ -122,8 +133,11 @@ export function createEconomyStorage2(context: SlurpStorageContext) {
           let earningsValue: string | null = null;
           let paymentCompleted = false;
           try {
-            const charged = spend(wallet, "unlock", price, new Date(), postId);
+            const charged =
+              spend(wallet, "unlock", price, new Date(), postId) ??
+              (freeOnUnaffordable ? spend(wallet, "unlock", 0, new Date(), postId) : null);
             if (!charged) return null;
+            chargedAmount = Math.abs(charged.receipts[postId]?.amount ?? 0);
             const post = (await db.select().from(slpPosts).where(eq(slpPosts.id, postId)))[0];
             if (post) {
               earningsKey = slurpEarningsKey(post.authorAccountId);
@@ -131,15 +145,16 @@ export function createEconomyStorage2(context: SlurpStorageContext) {
             }
             await writeWallet(viewerAccountId, charged);
             if (post) {
-              const share = Math.floor((price * settings.walletCreatorRevenueSharePercent) / 100);
+              const share = Math.floor((chargedAmount * settings.walletCreatorRevenueSharePercent) / 100);
               if (share > 0) {
                 await creditEarningsNow(post.authorAccountId, "unlock", share, `unlock: ${post.authorAccountId}`);
               }
-              await this.notifyCreatorIncome(post.authorAccountId, "unlock", price, viewerAccountId, post.id);
+              if (chargedAmount > 0)
+                await this.notifyCreatorIncome(post.authorAccountId, "unlock", chargedAmount, viewerAccountId, post.id);
               await this.advanceAudienceTie(viewerAccountId, post.authorAccountId, {
                 stage: "liker",
-                spent: price,
-                unlocked: price,
+                spent: chargedAmount,
+                unlocked: chargedAmount,
               });
             }
             paymentCompleted = true;
@@ -164,7 +179,7 @@ export function createEconomyStorage2(context: SlurpStorageContext) {
             }
           }
         }
-        return unlock;
+        return { unlock, chargedAmount: created && settings.walletEnabled ? chargedAmount : 0, created };
       });
     },
     /**

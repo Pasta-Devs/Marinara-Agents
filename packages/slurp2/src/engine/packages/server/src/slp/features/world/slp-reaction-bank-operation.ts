@@ -170,7 +170,7 @@ export async function topUpSlurpReactionBank(
         maxTokens: clampGenerationMaxOutputTokens({
           provider: connection.provider,
           model: connection.model,
-          maxTokens: 512 + 256 * Object.keys(targets).length,
+          maxTokens: 2048 + 256 * Object.keys(targets).length,
           maxTokensOverride: connection.maxTokensOverride,
         }),
         stream: false,

@@ -1,5 +1,25 @@
 # Slurp Remastered release notes
 
+## 0.2.28 — 2026-09-23
+
+- Creator settings now have a status overview and a mobile section picker.
+- Profile edits use the modal's shared save bar, and each Creator settings view has one scroll area.
+
+## 0.2.27 — 2026-09-23
+
+- Creator settings now keep profile drafts when you change sections and confirm before discarding them.
+- Creator settings are grouped by task, and the Creator roster shows attention reasons and bulk-change previews.
+
+## 0.2.26 — 2026-09-23
+
+- Image prompts preserve each Creator's appearance and follow the selected image guidance.
+- Choose an image style for each Creator, or let them use the global style.
+- Settings sections now use the shorter names Content and World.
+- Posts, messages, audience activity, story events, and image generation use clearer state and feedback handling.
+- Locked posts use each Creator's configured level, and occasions and story events reach posts and chats.
+- Owned posts are not sold again, audience activity reports results, and manual occasions can be started.
+- Callback posts preserve their shoot context, picture sets vary poses, and follow-ups handle reasoning models.
+
 ## 0.2.25 — 2026-09-22
 
 - Every generated picture keeps the Creator's appearance, planned action, expression, and mood even when image-prompt interpretation is unavailable.

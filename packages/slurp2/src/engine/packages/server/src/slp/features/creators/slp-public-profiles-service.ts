@@ -137,8 +137,9 @@ export async function generateMissingSlpProfiles(input: {
   const messages: ChatMessage[] = [
     {
       role: "system",
+      // Its own prompt ID: sharing "ambientProfile" meant an edit to audience profiles changed this.
       content: composeSlurpPromptBlocks(
-        "ambientProfile",
+        "publicProfile",
         [
           {
             id: "task",

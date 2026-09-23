@@ -92,6 +92,21 @@ export function SlurpCreatorBulkEdit({
       <option value="off">{t("ui.slurp.settings.creators.bulk.off")}</option>
     </>
   );
+  const changeSummary = [
+    ...(gender !== "keep"
+      ? [
+          `${t("ui.slurp.discover.genderLabel")}: ${gender ? t(`ui.slurp.discover.gender.${gender}`) : t("ui.slurp.discover.gender.unspecified")}`,
+        ]
+      : []),
+    ...(autoPosting !== "keep"
+      ? [`${t("ui.slurp.settings.creators.autoPost")}: ${t(`ui.slurp.settings.creators.bulk.${autoPosting}`)}`]
+      : []),
+    ...(images !== "keep"
+      ? [`${t("ui.slurp.settings.creators.images")}: ${t(`ui.slurp.settings.creators.bulk.${images}`)}`]
+      : []),
+    ...(addTags.length ? [`${t("ui.slurp.settings.creators.bulk.addTags")}: ${addTags.join(", ")}`] : []),
+    ...(removeTags.length ? [`${t("ui.slurp.settings.creators.bulk.removeTags")}: ${removeTags.join(", ")}`] : []),
+  ];
 
   const apply = async () => {
     const confirmed = await showConfirmDialog({
@@ -124,56 +139,97 @@ export function SlurpCreatorBulkEdit({
 
   return (
     <SettingsGroup title={t("ui.slurp.settings.creators.bulk.title", { count: creators.length })}>
-      <div className="grid gap-4 sm:grid-cols-3">
-        <Field label={t("ui.slurp.discover.genderLabel")}>
-          <select
-            value={gender}
-            onChange={(event) => setGender(event.target.value as typeof gender)}
-            className={selectClass}
+      <p className="text-xs leading-5 text-[var(--slurp-muted)]">
+        {t("ui.slurp.settings.creators.bulk.scope", {
+          defaultValue: "Choose fields to override. Fields set to Leave unchanged keep each Creator's current value.",
+        })}
+      </p>
+      <fieldset className="space-y-3">
+        <legend className="text-xs font-bold uppercase text-[var(--slurp-muted)]">
+          {t("ui.slurp.settings.creators.bulk.profileGroup", { defaultValue: "Profile" })}
+        </legend>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <Field label={t("ui.slurp.discover.genderLabel")}>
+            <select
+              value={gender}
+              onChange={(event) => setGender(event.target.value as typeof gender)}
+              className={selectClass}
+            >
+              <option value="keep">{t("ui.slurp.settings.creators.bulk.keep")}</option>
+              <option value="">{t("ui.slurp.discover.gender.unspecified")}</option>
+              {(["male", "female", "other"] as const).map((value) => (
+                <option key={value} value={value}>
+                  {t(`ui.slurp.discover.gender.${value}`)}
+                </option>
+              ))}
+            </select>
+          </Field>
+        </div>
+      </fieldset>
+      <fieldset className="space-y-3">
+        <legend className="text-xs font-bold uppercase text-[var(--slurp-muted)]">
+          {t("ui.slurp.settings.creators.bulk.publishingGroup", { defaultValue: "Publishing" })}
+        </legend>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <Field
+            label={t("ui.slurp.settings.creators.autoPost")}
+            detail={t("ui.slurp.settings.creators.bulk.personaNote")}
           >
-            <option value="keep">{t("ui.slurp.settings.creators.bulk.keep")}</option>
-            <option value="">{t("ui.slurp.discover.gender.unspecified")}</option>
-            {(["male", "female", "other"] as const).map((value) => (
-              <option key={value} value={value}>
-                {t(`ui.slurp.discover.gender.${value}`)}
-              </option>
-            ))}
-          </select>
-        </Field>
-        <Field
-          label={t("ui.slurp.settings.creators.autoPost")}
-          detail={t("ui.slurp.settings.creators.bulk.personaNote")}
-        >
-          <select
-            value={autoPosting}
-            onChange={(event) => setAutoPosting(event.target.value as Choice)}
-            className={selectClass}
-          >
-            {choiceOptions}
-          </select>
-        </Field>
-        <Field label={t("ui.slurp.settings.creators.images")}>
-          <select value={images} onChange={(event) => setImages(event.target.value as Choice)} className={selectClass}>
-            {choiceOptions}
-          </select>
-        </Field>
-      </div>
-      <TagChoices
-        legend={t("ui.slurp.settings.creators.bulk.addTags")}
-        tags={tagOptions}
-        picked={addTags}
-        limit={SLURP_DISCOVERY_TAG_LIMIT}
-        onChange={setAddTags}
-      />
-      {presentTags.length > 0 ? (
+            <select
+              value={autoPosting}
+              onChange={(event) => setAutoPosting(event.target.value as Choice)}
+              className={selectClass}
+            >
+              {choiceOptions}
+            </select>
+          </Field>
+          <Field label={t("ui.slurp.settings.creators.images")}>
+            <select
+              value={images}
+              onChange={(event) => setImages(event.target.value as Choice)}
+              className={selectClass}
+            >
+              {choiceOptions}
+            </select>
+          </Field>
+        </div>
+      </fieldset>
+      <fieldset className="space-y-3">
+        <legend className="text-xs font-bold uppercase text-[var(--slurp-muted)]">
+          {t("ui.slurp.settings.creators.bulk.profileTags", { defaultValue: "Tags" })}
+        </legend>
         <TagChoices
-          legend={t("ui.slurp.settings.creators.bulk.removeTags")}
-          tags={presentTags}
-          picked={removeTags}
-          onChange={setRemoveTags}
+          legend={t("ui.slurp.settings.creators.bulk.addTags")}
+          tags={tagOptions}
+          picked={addTags}
+          limit={SLURP_DISCOVERY_TAG_LIMIT}
+          onChange={setAddTags}
         />
-      ) : (
-        <p className="text-xs text-[var(--muted-foreground)]">{t("ui.slurp.settings.creators.bulk.noTags")}</p>
+        {presentTags.length > 0 ? (
+          <TagChoices
+            legend={t("ui.slurp.settings.creators.bulk.removeTags")}
+            tags={presentTags}
+            picked={removeTags}
+            onChange={setRemoveTags}
+          />
+        ) : (
+          <p className="text-xs text-[var(--muted-foreground)]">{t("ui.slurp.settings.creators.bulk.noTags")}</p>
+        )}
+      </fieldset>
+      {changeSummary.length > 0 && (
+        <div
+          className="space-y-1 rounded-lg bg-[var(--slurp-canvas)] p-3 ring-1 ring-inset ring-[var(--slurp-outline)]"
+          aria-live="polite"
+        >
+          <p className="text-xs font-bold">
+            {t("ui.slurp.settings.creators.bulk.pendingChanges", { defaultValue: "Changes to apply" })}
+          </p>
+          <ul className="list-inside list-disc text-xs leading-5 text-[var(--slurp-muted)]">
+            {changeSummary.map((change) => (
+              <li key={change}>{change}</li>
+            ))}
+          </ul>
+        </div>
       )}
       <button
         type="button"

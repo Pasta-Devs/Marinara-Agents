@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { slpIsAdmissionFailure } from "../../base/host/slp-admission.js";
 import { createSlurpPopulationStorage } from "../../data/audience/slp-audience-storage-funnel.js";
 import {
   planSlurpFanTypeRebalance,
@@ -27,7 +28,6 @@ import {
   slurpAudienceCharacterTraits,
 } from "../../../../../shared/src/slp/slp-audience-characters.js";
 import { runCreatorFanActivity, getCreatorFanActivityStatus } from "./slp-fan-activity-operation.js";
-import { isConnectionAdmissionFailure } from "../../../services/generation/connection-admission.js";
 import { getErrorMessage } from "../../modules/creators/slp-public-support.js";
 import { logger } from "../../../lib/logger.js";
 import type { FastifyInstance } from "fastify";
@@ -362,7 +362,8 @@ export async function slpAudienceRoutes(app: FastifyInstance, deps: SlpRouteDeps
         mode: "manual",
         debugMode: (req.body as { debugMode?: unknown } | undefined)?.debugMode === true,
       });
-      if (result.status === "disabled") return reply.code(404).send({ error: "Not Found" });
+      if (result.status === "disabled")
+        return reply.code(409).send({ error: "Audience activity is off. Turn it on under Audience first." });
       if (result.status === "busy") return reply.code(409).send({ error: "Slurp fan activity is already running." });
       if (result.status === "limit_reached")
         return reply.code(429).send({ error: "Today's audience activity limit has been reached." });
@@ -374,7 +375,7 @@ export async function slpAudienceRoutes(app: FastifyInstance, deps: SlpRouteDeps
       }
       return result;
     } catch (error) {
-      if (isConnectionAdmissionFailure(error)) return reply.code(409).send({ error: getErrorMessage(error) });
+      if (slpIsAdmissionFailure(error)) return reply.code(409).send({ error: getErrorMessage(error) });
       logger.error(error, "[slurp] Fan activity generation failed");
       return reply.code(500).send({ error: "Fan activity generation failed." });
     }

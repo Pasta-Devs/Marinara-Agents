@@ -445,7 +445,8 @@ export function splitSlurpReplyBurst(content: string, allow: boolean, limit = 3)
   if (!allow || trimmed.length < 90) return [trimmed];
   // Split on sentence ends only. Splitting mid-clause produces two fragments rather than two
   // messages, which reads worse than the paragraph it replaced.
-  const parts = trimmed.match(/[^.!?\n]+[.!?]*[\n]*/g)?.map((part) => part.trim()) ?? [];
+  const parts =
+    trimmed.match(/[^.!?\n]+[.!?…]*(?:\s*\p{Extended_Pictographic}\uFE0F?)*[\n]*/gu)?.map((part) => part.trim()) ?? [];
   const sentences = parts.filter(Boolean);
   if (sentences.length < 2) return [trimmed];
   // Pack into at most `limit` bubbles, keeping them roughly even so one is not a single word.
