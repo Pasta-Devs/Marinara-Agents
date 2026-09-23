@@ -135,17 +135,30 @@ export function useSlurpThreadViewState(props: SlurpThreadViewProps) {
   const thread = threadQuery.data?.thread ?? null;
   const activeConversationRef = useRef({ personaId, threadId });
   activeConversationRef.current = { personaId, threadId: thread?.id ?? threadId };
+  const messageSearchQuery = useSlurpMessageSearch(threadId, personaId, messageSearch);
+  const searchMessages = messageSearchQuery.data?.pages.flatMap((page) => page.messages) ?? [];
+  const searchMessageIds = useMemo(() => searchMessages.map((message) => message.id), [searchMessages]);
+  useEffect(() => {
+    if (
+      messageSearch &&
+      messageSearchIndex >= searchMessageIds.length - 1 &&
+      messageSearchQuery.hasNextPage &&
+      !messageSearchQuery.isFetchingNextPage
+    )
+      void messageSearchQuery.fetchNextPage();
+  }, [messageSearch, messageSearchIndex, searchMessageIds.length, messageSearchQuery]);
 
   const messages = useMemo(() => {
     const byId = new Map<string, SlurpMessage>();
     for (const message of loadedOlderMessages) byId.set(message.id, message);
     for (const message of threadQuery.data?.messages ?? []) byId.set(message.id, message);
+    for (const message of searchMessages) byId.set(message.id, message);
     return [...byId.values()].sort((left, right) =>
       left.createdAt === right.createdAt
         ? left.id.localeCompare(right.id)
         : left.createdAt.localeCompare(right.createdAt),
     );
-  }, [loadedOlderMessages, threadQuery.data?.messages]);
+  }, [loadedOlderMessages, searchMessages, threadQuery.data?.messages]);
   const creator = threadQuery.data?.creator;
   const counterpart = threadQuery.data?.counterpart ?? creator;
   const targetCreatorAccountId = thread?.creatorAccountId ?? creator?.id ?? creatorAccountId;
@@ -303,9 +316,6 @@ export function useSlurpThreadViewState(props: SlurpThreadViewProps) {
       .filter((message) => message.content.toLocaleLowerCase().includes(needle))
       .map((message) => message.id);
   }, [messageSearch, messages]);
-  const messageSearchQuery = useSlurpMessageSearch(threadId, personaId, messageSearch);
-  const searchMessages = messageSearchQuery.data?.messages ?? [];
-  const searchMessageIds = useMemo(() => searchMessages.map((message) => message.id), [searchMessages]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -361,19 +371,18 @@ export function useSlurpThreadViewState(props: SlurpThreadViewProps) {
 
   // Searching reaches the whole conversation, not only the part that happens to be mounted.
   // The id, not the list: each poll rebuilt the list and scrolled the reader back to the match.
-  const currentSearchMatch = searchMessageIds[messageSearchIndex] ?? messageSearchMatches[messageSearchIndex] ?? null;
+  const currentSearchMatch = searchMessageIds[messageSearchIndex] ?? null;
   useEffect(() => {
-    const match = searchMessageIds[messageSearchIndex] ?? currentSearchMatch;
+    const match = currentSearchMatch;
     if (!match) return;
     const position = timeline.findIndex((entry) => entry.kind === "message" && entry.message.id === match);
     if (position < 0) return;
     const needed = timeline.length - position + SLURP_MESSAGE_PAGE;
     setVisibleCount((current) => (current >= needed ? current : needed));
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- a new poll must not move the view.
   }, [currentSearchMatch, messageSearchIndex, searchMessageIds]);
 
   useEffect(() => {
-    const match = searchMessageIds[messageSearchIndex] ?? currentSearchMatch;
+    const match = currentSearchMatch;
     if (match) {
       const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
       // The id sits on a `display: contents` wrapper, which has no box to scroll to. Its last child
@@ -641,7 +650,7 @@ export function useSlurpThreadViewState(props: SlurpThreadViewProps) {
     promptDebug,
     activeCommission,
     toolTabs,
-    messageSearchMatches,
+    messageSearchMatches: searchMessageIds,
     closeDrawer,
     messageScrollRef,
     nextOlderCursor,

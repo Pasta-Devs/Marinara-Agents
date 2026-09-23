@@ -51,17 +51,15 @@ export async function reactToSlurpPayment(
     // One answer per spending spree, and not every payment. The decision comes before the marker:
     // a stored marker is a fan message, and the away scheduler answered it later even when this
     // path had decided to stay quiet.
-    const since = Date.now() - PAYMENT_REACTION_QUIET_MS;
-    const reactedRecently = (await messages.listMessages(thread.id, 30)).some(
-      (message) => Boolean(message.metadata?.paymentReaction) && Date.parse(String(message.createdAt)) >= since,
-    );
-    if (reactedRecently || Math.random() >= REACTION_CHANCE[input.kind]) return;
+    if (Math.random() >= REACTION_CHANCE[input.kind]) return;
+    const since = new Date(Date.now() - PAYMENT_REACTION_QUIET_MS).toISOString();
     const event = await messages.appendMessage(thread.id, {
       id: `payment-reaction:${input.kind}:${input.viewerAccountId}:${input.creatorAccountId}:${Date.now()}`,
       senderAccountId: input.viewerAccountId,
       role: "viewer",
       content: REACTION_TEXT[input.kind](input.amount),
       metadata: { paymentReaction: input.kind },
+      paymentReactionSince: since,
     });
     if (!event) return;
     await replyToSlurpMessage(db, { threadId: thread.id, triggerMessageId: event.id });

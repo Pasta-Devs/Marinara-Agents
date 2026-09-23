@@ -69,7 +69,10 @@ export function SlpSharePostModal({
           errorMessage(error, localizeUi("ui.slurp.post.shareFailed", { defaultValue: "Could not share the post." })),
         ),
       )
-      .finally(() => setSendingId(null));
+      .finally(() => {
+        void invalidateSlurpMessages(queryClient);
+        setSendingId(null);
+      });
   };
 
   return (

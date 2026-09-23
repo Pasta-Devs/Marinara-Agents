@@ -330,7 +330,7 @@ export async function resolveSlurpCreatorScheduleTraits(
   source: CreatorSource,
 ): Promise<unknown> {
   if (source.kind !== "character") return null;
-  return record(record((await characters.getById(source.entityId))?.data).extensions).conversationSchedule;
+  return record(record(record((await characters.getById(source.entityId))?.data).extensions).conversationSchedule);
 }
 
 export async function resolveSlurpCreatorAvailability(

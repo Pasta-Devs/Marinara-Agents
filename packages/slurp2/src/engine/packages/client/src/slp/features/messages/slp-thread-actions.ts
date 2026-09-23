@@ -274,7 +274,7 @@ function useSlurpThreadActions(state: SlurpThreadViewState) {
         confirmLabel: localizeUi("ui.slurp.messages.sendTipConfirm", { defaultValue: "Send tip" }),
       });
       if (!confirmed) return;
-      const tipKey = `${targetCreatorAccountId}:${amount}:${note}`;
+      const tipKey = `${personaId}:${targetCreatorAccountId}:${amount}:${note}`;
       if (tipRequestRef.current?.key !== tipKey) tipRequestRef.current = { id: newRequestId(), key: tipKey };
       const result = await tip.mutateAsync({
         personaId,

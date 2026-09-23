@@ -5,6 +5,8 @@
 // Its own module rather than more of `slurp.storage.ts`, which is already past five thousand
 // lines. It composes that storage for accounts, subscriptions, and the wallet instead of
 // reimplementing them, so a DM tip and a profile tip move coins through exactly one code path.
+import { and, desc, eq, gt } from "../../../db/file-query.js";
+import { newId } from "../../../utils/id-generator.js";
 import type { DB } from "../../../db/connection.js";
 import {
   slurpMessageClaims,
@@ -19,11 +21,23 @@ import {
   type SlurpMessageKind,
 } from "../../modules/messages/slp-messaging.js";
 import { mapMessage, now } from "./slp-messages-storage-helpers.js";
+import { isSlurpFileUniqueConstraintError } from "../../base/host/slp-file-errors.js";
+import { int } from "./slp-messages-storage-helpers.js";
+import { createSlurpPopulationStorage } from "../audience/slp-audience-storage-funnel.js";
 import type { SlurpMessage } from "./slp-messages-storage-types.js";
 import type { SlurpMessagesContext } from "./slp-messages-storage-context.js";
 
 export function createMessagesStorageConversation(context: SlurpMessagesContext) {
-  const { db, slurp } = context;
+  const {
+    db,
+    slurp,
+    messageUnlocks,
+    createSlurpPaymentIntent,
+    resetSlurpPaymentIntentAfterInsufficientFunds,
+    markSlurpPaymentIntentCharged,
+    persistSlurpPaymentCreditedAmount,
+    compensateSlurpPayment,
+  } = context;
   return {
     /** Append one message and roll the thread's preview, unread counts, and cached rapport. */
     async appendMessage(
@@ -42,6 +56,8 @@ export function createMessagesStorageConversation(context: SlurpMessagesContext)
         replyObligationCreatedAt?: string;
         preserveReplyObligation?: boolean;
         scheduledFollowUpId?: string;
+        replyBubbleId?: string;
+        paymentReactionSince?: string;
       },
     ): Promise<SlurpMessage | null> {
       const thread = await context.storage.getThreadById(threadId);
@@ -50,7 +66,7 @@ export function createMessagesStorageConversation(context: SlurpMessagesContext)
       const content = input.content ?? "";
       const price = Math.max(0, Math.trunc(input.price ?? 0));
       const timestamp = now();
-      if (input.role === "creator" && thread.state === "declined") return null;
+      if (thread.state === "declined") return null;
       const sender =
         input.role === "creator"
           ? await slurp.getNoodlerAccountById(input.senderAccountId)
@@ -83,7 +99,30 @@ export function createMessagesStorageConversation(context: SlurpMessagesContext)
           const currentRows = await tx.select().from(slurpThreads).where(eq(slurpThreads.id, threadId));
           const current = currentRows[0];
           if (!current) return;
-          if (input.role === "creator" && current.state === "declined") return;
+          if (current.state === "declined") return;
+          if (input.paymentReactionSince) {
+            const recentMessages = await tx
+              .select({ metadata: slurpMessages.metadata, createdAt: slurpMessages.createdAt })
+              .from(slurpMessages)
+              .where(eq(slurpMessages.threadId, threadId));
+            if (
+              recentMessages.some(
+                (row) =>
+                  String(row.createdAt) >= input.paymentReactionSince &&
+                  String(row.metadata ?? "").includes("paymentReaction"),
+              )
+            )
+              return;
+          }
+          if (input.replyBubbleId) {
+            const [bubble] = await tx
+              .select({ id: slurpReplyBubbles.id })
+              .from(slurpReplyBubbles)
+              .where(and(eq(slurpReplyBubbles.id, input.replyBubbleId), eq(slurpReplyBubbles.threadId, threadId)))
+              .limit(1);
+            if (!bubble) return;
+            await tx.delete(slurpReplyBubbles).where(eq(slurpReplyBubbles.id, input.replyBubbleId));
+          }
           if (input.scheduledFollowUpId) {
             const [followUp] = await tx
               .select({ status: slurpFollowUps.status })

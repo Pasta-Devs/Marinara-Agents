@@ -47,7 +47,7 @@ type SlurpRequestActionInput = {
   topic?: string;
   dueInHours?: number;
 };
-type SlurpRequestActionResult = "applied" | "not_found" | "already_answered" | "topic_required";
+type SlurpRequestActionResult = "applied" | "in_progress" | "not_found" | "already_answered" | "topic_required";
 
 // The "already answered" check reads before it writes, so two clicks both passed it and planned two
 // opportunities. One action per request at a time closes that gap in this process.
@@ -58,7 +58,7 @@ export async function applySlurpRequestAction(
   input: SlurpRequestActionInput,
   at = new Date(),
 ): Promise<SlurpRequestActionResult> {
-  if (requestsInFlight.has(input.requestId)) return "already_answered";
+  if (requestsInFlight.has(input.requestId)) return "in_progress";
   requestsInFlight.add(input.requestId);
   try {
     return await applyRequestActionOnce(db, input, at);

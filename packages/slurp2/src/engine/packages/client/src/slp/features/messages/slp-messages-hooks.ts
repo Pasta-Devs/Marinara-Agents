@@ -1,4 +1,4 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect } from "react";
 import { api } from "../../../lib/api-client.js";
 import { slpKeys } from "../../base/state/slp-query-keys.js";
@@ -105,12 +105,14 @@ export function useSlurpThread(threadId: string | null, personaId: string | null
   return query;
 }
 export function useSlurpMessageSearch(threadId: string | null, personaId: string | null, search: string) {
-  return useQuery({
+  return useInfiniteQuery({
     queryKey: [...messageKeys.thread(threadId ?? "none", personaId), "search", search.trim()],
-    queryFn: () =>
+    initialPageParam: null as { createdAt: string; id: string } | null,
+    queryFn: ({ pageParam }) =>
       api.get<{ messages: SlurpMessage[]; nextCursor: { createdAt: string; id: string } | null }>(
-        `/slurp2/messages/threads/${encodeURIComponent(threadId!)}?personaId=${encodeURIComponent(personaId!)}&search=${encodeURIComponent(search.trim())}&limit=120`,
+        `/slurp2/messages/threads/${encodeURIComponent(threadId!)}?personaId=${encodeURIComponent(personaId!)}&search=${encodeURIComponent(search.trim())}&limit=120${pageParam ? `&cursorAt=${encodeURIComponent(pageParam.createdAt)}&cursorId=${encodeURIComponent(pageParam.id)}` : ""}`,
       ),
+    getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
     enabled: Boolean(threadId && personaId && search.trim()),
     staleTime: 15_000,
   });

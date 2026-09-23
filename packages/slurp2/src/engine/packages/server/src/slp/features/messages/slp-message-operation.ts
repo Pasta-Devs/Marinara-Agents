@@ -135,7 +135,8 @@ export async function replyToSlurpMessage(
       : scheduled;
 
   const history = await messagesStore.listMessages(thread.id, 60);
-  const trigger = history.find((message) => message.id === input.triggerMessageId) ?? history[history.length - 1];
+  const trigger = history.find((message) => message.id === input.triggerMessageId);
+  if (!trigger) return { status: "ineligible" };
 
   // Momentum is how recently she was in this conversation. `thread.lastMessageAt` is the fan's own
   // message from a moment ago, which made every live reply "hot" and froze mood recovery.

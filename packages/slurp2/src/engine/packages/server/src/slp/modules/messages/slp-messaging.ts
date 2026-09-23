@@ -452,9 +452,11 @@ export function splitSlurpReplyBurst(content: string, allow: boolean, limit = 3)
     .filter(Boolean);
   // A lone "..." or "!!" is a lead-in to the next sentence, not a message of its own.
   const sentences: string[] = [];
-  for (const part of parts) {
+  for (const [index, part] of parts.entries()) {
     const last = sentences.at(-1);
     if (last !== undefined && /^[\p{P}\s]+$/u.test(last)) sentences[sentences.length - 1] = `${last} ${part}`;
+    else if (index === parts.length - 1 && /^[\p{P}\s]+$/u.test(part) && last !== undefined)
+      sentences[sentences.length - 1] = `${last}${part}`;
     else sentences.push(part);
   }
   if (sentences.length < 2) return [trimmed];

@@ -35,7 +35,10 @@ assert.match(dayPlan, /row\.error === undefined \|\| row\.error === null \|\| ty
 assert.match(dayPlan, /error !== undefined \? \{ error \} : \{\}/u);
 
 const arcEditor = source(`${slp}/client/src/slp/features/projects/SlpArcLibraryDraftEditor.tsx`);
-assert.match(arcEditor, /return \{\s*\.\.\.chapter,\s*label: chapter\.label\.trim\(\)/u);
+assert.match(
+  arcEditor,
+  /const \{ choice: _choice, effects: _effects, profile: _profile, \.\.\.baseChapter \} = chapter/u,
+);
 
 const storyPacks = source(`${slp}/server/src/slp/modules/world/events/slp-story-packs.ts`);
 assert.match(storyPacks, /hasCorePlaceholderHash/);
@@ -47,10 +50,16 @@ assert.match(threadRoutes, /parsed\.data\.search/u);
 
 const messageStorage = source(`${slp}/server/src/slp/data/messages/slp-messages-storage-base.ts`);
 assert.match(messageStorage, /const needle = search\?\.trim\(\)\.toLocaleLowerCase\(\)/u);
-assert.match(messageStorage, /\.limit\(needle \? 10_000 : bounded \+ 1\)/u);
+assert.match(
+  messageStorage,
+  /const readRows = \(pageCursor: \{ createdAt: string; id: string \} \| null, pageLimit: number\)/u,
+);
 
 const followUpStorage = source(`${slp}/server/src/slp/data/messages/slp-messages-storage-follow-ups.ts`);
-assert.match(followUpStorage, /followUps\.slice\(0, Math\.max\(0, 3 - pendingCount\)\)/u);
+assert.match(
+  followUpStorage,
+  /const retained = followUps\s*\.filter\(\(followUp\) => !pendingTypes\.has\(followUp\.type\)\)/u,
+);
 
 const scheduler = source(`${slp}/server/src/slp/features/messages/slp-message-scheduler-service.ts`);
 assert.doesNotMatch(scheduler, /failed = true;\s*logger\.warn\(error, "\[slurp-message\] Failed to deliver bubble/u);

@@ -69,8 +69,9 @@ export function startSlurpMessageScheduler(app: FastifyInstance, registerStop?: 
             // Keep the original trigger for obligation checks, but order the stored message by delivery.
             createdAt: new Date().toISOString(),
             replyObligationCreatedAt: bubble.createdAt,
+            replyBubbleId: bubble.id,
           });
-          if (stored) await replyQueue.remove(bubble.id);
+          if (stored === null) await replyQueue.remove(bubble.id);
         } catch (error) {
           logger.warn(error, "[slurp-message] Failed to deliver bubble %s", bubble.id);
         }

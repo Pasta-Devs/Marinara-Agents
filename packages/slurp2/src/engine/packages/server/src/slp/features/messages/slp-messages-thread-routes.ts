@@ -286,15 +286,7 @@ export async function slpMessagesThreadRoutes(app: FastifyInstance, messaging: S
     const thread = await messages.getThreadById(threadId);
     if (!thread || (thread.viewerAccountId !== viewer.id && !(await ownsCreator(viewer.id, thread.creatorAccountId))))
       return reply.code(404).send({ error: "Thread not found" });
-    // The editor's list can be up to one poll old. Notes the Creator wrote since then are kept, and
-    // an edited note keeps its promise tracking; replacing the list wholesale deleted both.
-    const base = new Set(parsed.data.baseNoteIds ?? thread.notes.map((note) => note.id));
-    const edited = parsed.data.notes.map((note) => {
-      const stored = note.id ? thread.notes.find((entry) => entry.id === note.id) : undefined;
-      return stored ? { ...stored, text: note.text, tier: note.tier } : note;
-    });
-    const writtenSince = thread.notes.filter((note) => !base.has(note.id));
-    return { notes: await messages.setThreadNotes(thread.id, [...edited, ...writtenSince]) };
+    return { notes: await messages.mergeThreadNotes(thread.id, parsed.data.notes, parsed.data.baseNoteIds) };
   });
 
   /**

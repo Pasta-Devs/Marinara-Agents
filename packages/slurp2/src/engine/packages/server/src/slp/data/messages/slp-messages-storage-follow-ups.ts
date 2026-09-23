@@ -127,7 +127,10 @@ export function createMessagesStorageFollowUps(context: SlurpMessagesContext) {
         ).map((row) => row.type),
       );
       const pendingCount = [...pendingTypes].length;
-      for (const followUp of followUps.slice(0, Math.max(0, 3 - pendingCount))) {
+      const retained = followUps
+        .filter((followUp) => !pendingTypes.has(followUp.type))
+        .slice(0, Math.max(0, 3 - pendingCount));
+      for (const followUp of retained) {
         if (pendingTypes.has(followUp.type)) continue;
         await db.insert(slurpFollowUps).values({
           ...followUp,
@@ -135,7 +138,7 @@ export function createMessagesStorageFollowUps(context: SlurpMessagesContext) {
           viewerAccountId: String(thread.viewerAccountId),
           creatorAccountId: String(thread.creatorAccountId),
           sequenceNumber: followUp.sequenceNumber == null ? null : String(followUp.sequenceNumber),
-          totalInSequence: followUp.totalInSequence == null ? null : String(followUp.totalInSequence),
+          totalInSequence: followUp.totalInSequence == null ? null : String(retained.length),
           status: "pending",
           claimedAt: null,
           sentAt: null,
@@ -498,6 +501,30 @@ export function createMessagesStorageFollowUps(context: SlurpMessagesContext) {
         .set({ notes: JSON.stringify(next), updatedAt: now() })
         .where(eq(slurpThreads.id, threadId));
       return next;
+    },
+    async mergeThreadNotes(
+      threadId: string,
+      notes: unknown,
+      baseNoteIds: readonly string[] | undefined,
+    ): Promise<SlurpThreadNote[]> {
+      return db.transaction(async (tx) => {
+        const [row] = await tx
+          .select({ notes: slurpThreads.notes })
+          .from(slurpThreads)
+          .where(eq(slurpThreads.id, threadId));
+        if (!row) return [];
+        const incoming = readStoredNotes(notes);
+        const base = new Set(baseNoteIds ?? readStoredNotes(row.notes).map((note) => note.id));
+        const current = readStoredNotes(row.notes);
+        const editedIds = new Set(incoming.map((note) => note.id));
+        const writtenSince = current.filter((note) => !base.has(note.id) && !editedIds.has(note.id));
+        const merged = readStoredNotes([...incoming, ...writtenSince]);
+        await tx
+          .update(slurpThreads)
+          .set({ notes: JSON.stringify(merged), updatedAt: now() })
+          .where(eq(slurpThreads.id, threadId));
+        return merged;
+      });
     },
     /** Clear one side's unread count and stamp the messages the other side sent. */
     async markRead(threadId: string, side: "viewer" | "creator"): Promise<void> {

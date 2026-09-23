@@ -33,7 +33,15 @@ export function slurpBubbleGroup(
     if (left?.kind !== "message" || right?.kind !== "message" || !left.message || !right.message) return false;
     const a = left.message;
     const b = right.message;
-    if (a.role !== b.role || UNGROUPED_KINDS.has(a.kind) || UNGROUPED_KINDS.has(b.kind)) return false;
+    if (
+      a.role !== b.role ||
+      a.kind !== b.kind ||
+      UNGROUPED_KINDS.has(a.kind) ||
+      UNGROUPED_KINDS.has(b.kind) ||
+      a.metadata.paymentReaction ||
+      b.metadata.paymentReaction
+    )
+      return false;
     if (b.id === breakBeforeId) return false;
     const gap = Date.parse(b.createdAt) - Date.parse(a.createdAt);
     return gap >= 0 && gap <= SLURP_BUBBLE_GROUP_MS && a.createdAt.slice(0, 10) === b.createdAt.slice(0, 10);
@@ -314,6 +322,7 @@ export function MessageBubble({
             <button
               type="button"
               disabled={!personaId || unlock.isPending}
+              onDoubleClick={(event) => event.stopPropagation()}
               onClick={async () => {
                 if (!personaId) return;
                 const confirmed = await showConfirmDialog({

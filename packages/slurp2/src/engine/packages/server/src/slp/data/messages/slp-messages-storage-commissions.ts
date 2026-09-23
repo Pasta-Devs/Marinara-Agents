@@ -128,8 +128,6 @@ export function createMessagesStorageCommissions(context: SlurpMessagesContext) 
     ): Promise<SlurpCommission | "open_request" | null> {
       const opened = await context.storage.openThread(viewerAccountId, creatorAccountId, "viewer");
       if (opened.status !== "ok") return null;
-      const open = await context.storage.listCommissionsForThread(opened.thread.id);
-      if (open.some((row) => row.state === "brief" || row.state === "quoted")) return "open_request";
       const timestamp = now();
       const row = {
         id: newId(),
@@ -145,7 +143,22 @@ export function createMessagesStorageCommissions(context: SlurpMessagesContext) 
         createdAt: timestamp,
         updatedAt: timestamp,
       };
-      await db.insert(slurpCommissions).values(row);
+      const created = await db.transaction(async (tx) => {
+        const open = await tx
+          .select({ state: slurpCommissions.state })
+          .from(slurpCommissions)
+          .where(
+            and(
+              eq(slurpCommissions.viewerAccountId, viewerAccountId),
+              eq(slurpCommissions.creatorAccountId, creatorAccountId),
+              inArray(slurpCommissions.state, ["brief", "quoted"]),
+            ),
+          );
+        if (open.length > 0) return false;
+        await tx.insert(slurpCommissions).values(row);
+        return true;
+      });
+      if (!created) return "open_request";
       await context.storage.appendMessage(opened.thread.id, {
         senderAccountId: viewerAccountId,
         role: "viewer",
@@ -598,6 +611,16 @@ export function createMessagesStorageCommissions(context: SlurpMessagesContext) 
       if (commission.state === "accepted" && by === "viewer" && !acceptedUndelivered) return commission;
       if (!acceptedUndelivered && commission.state !== "brief" && commission.state !== "quoted") return commission;
       if (acceptedUndelivered) {
+        const deliveryMessage = commission.deliveryMessageId
+          ? await context.storage.getMessageById(commission.deliveryMessageId)
+          : null;
+        if (deliveryMessage) {
+          await db
+            .update(slurpCommissions)
+            .set({ state: "delivered", updatedAt: now() })
+            .where(eq(slurpCommissions.id, id));
+          return context.storage.getCommission(id);
+        }
         const cancellationId = `commission:${id}:settlement`;
         const claimed = await db.transaction(async (tx) => {
           const current = (await tx.select().from(slurpCommissions).where(eq(slurpCommissions.id, id)))[0];
