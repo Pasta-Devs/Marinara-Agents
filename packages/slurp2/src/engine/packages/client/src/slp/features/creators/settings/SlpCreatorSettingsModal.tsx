@@ -194,30 +194,46 @@ export function SlpCreatorSettingsModal({
               {sections.map((section, index) => {
                 const Icon = section.icon;
                 const selected = section.id === activeSection?.id;
+                const previous = sections[index - 1];
                 return (
-                  <button
-                    key={section.id}
-                    id={`slp-creator-settings-tab-${section.id}`}
-                    type="button"
-                    role="tab"
-                    tabIndex={selected ? 0 : -1}
-                    aria-selected={selected}
-                    aria-controls="slp-creator-settings-panel"
-                    onKeyDown={(event) => moveTab(event, index)}
-                    onClick={() => setTab(section.id)}
-                    className={`inline-flex min-h-11 shrink-0 items-center gap-2 rounded-lg px-3 text-sm font-semibold transition-colors motion-reduce:transition-none ${focusRing} ${
-                      selected
-                        ? "bg-[var(--noodle-accent)]/15 text-[var(--slurp-text)]"
-                        : "text-[var(--slurp-muted)] hover:bg-[var(--slurp-canvas)] hover:text-[var(--slurp-text)]"
-                    }`}
-                  >
-                    <Icon
-                      size={15}
-                      aria-hidden="true"
-                      className={selected ? "text-[var(--noodle-accent)]" : undefined}
-                    />
-                    <span className="truncate">{t(section.labelKey, { defaultValue: section.defaultLabel })}</span>
-                  </button>
+                  <div key={section.id} className={previous?.group === section.group ? undefined : "pt-2 first:pt-0"}>
+                    {previous?.group !== section.group && (
+                      <p className="px-3 pb-1 text-[0.65rem] font-bold uppercase text-[var(--slurp-muted)]">
+                        {t(`ui.slurp.settings.creators.groups.${section.group}`, {
+                          defaultValue: {
+                            creator: "Creator",
+                            publishing: "Publishing",
+                            interaction: "Interaction",
+                            memory: "Memory",
+                            tools: "Tools",
+                            danger: "Danger zone",
+                          }[section.group],
+                        })}
+                      </p>
+                    )}
+                    <button
+                      id={`slp-creator-settings-tab-${section.id}`}
+                      type="button"
+                      role="tab"
+                      tabIndex={selected ? 0 : -1}
+                      aria-selected={selected}
+                      aria-controls="slp-creator-settings-panel"
+                      onKeyDown={(event) => moveTab(event, index)}
+                      onClick={() => setTab(section.id)}
+                      className={`inline-flex min-h-11 w-full shrink-0 items-center gap-2 rounded-lg px-3 text-start text-sm font-semibold transition-colors motion-reduce:transition-none ${focusRing} ${
+                        selected
+                          ? "bg-[var(--noodle-accent)]/15 text-[var(--slurp-text)]"
+                          : "text-[var(--slurp-muted)] hover:bg-[var(--slurp-canvas)] hover:text-[var(--slurp-text)]"
+                      }`}
+                    >
+                      <Icon
+                        size={15}
+                        aria-hidden="true"
+                        className={selected ? "text-[var(--noodle-accent)]" : undefined}
+                      />
+                      <span className="truncate">{t(section.labelKey, { defaultValue: section.defaultLabel })}</span>
+                    </button>
+                  </div>
                 );
               })}
             </div>

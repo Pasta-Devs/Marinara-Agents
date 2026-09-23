@@ -41,8 +41,6 @@ import {
 
 export type SlurpProfileImagePost = SlpPostCardModel & { imageUrl: string };
 
-type SlpCreatorComposerTool = "image" | "poll" | "media" | "access";
-
 export type SlpCreatorProfileTab = "posts" | "media" | "stories" | "subscribers" | "followers";
 
 // ---------------------------------------------------------------------------
@@ -573,7 +571,7 @@ export function StageProfileView({
                           like the rest, so it opens the one place they all live now. */}
                       <button
                         type="button"
-                        onClick={() => openSlpCreatorSettings(profile.id, { tab: "publishing" })}
+                        onClick={() => openSlpCreatorSettings(profile.id, { tab: "automation" })}
                         className="min-h-11 rounded-lg border border-[var(--noodle-divider)] px-3 text-xs font-bold hover:bg-[var(--accent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)]"
                       >
                         {autoPosting.enabled

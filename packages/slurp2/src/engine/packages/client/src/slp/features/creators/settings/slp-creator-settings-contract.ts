@@ -25,12 +25,13 @@ export type SlpCreatorSettingsSectionProps = {
   onViewProfile?: (creator: SlpCreatorSettingsCreator) => void;
   /** Reports unsaved profile edits to the modal dismissal guard. */
   onDirtyChange?: (dirty: boolean) => void;
+  mode?: "automation" | "content-rules" | "collaborations";
   /** True while this section is the visible tab. Sections gate their queries on it. */
   active: boolean;
 };
 
 /** Which tab owns a setting, so Backstage search can open the modal on the right section. */
 export const SLP_CREATOR_SETTING_TAB: Record<string, import("./slp-creator-settings-store").SlpCreatorSettingsTab> = {
-  creatorCollabs: "publishing",
-  characterImageInstructions: "images",
+  creatorCollabs: "collaborations",
+  characterImageInstructions: "production",
 };

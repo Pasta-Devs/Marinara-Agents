@@ -5,6 +5,13 @@ import { slurp2Source } from "./slurp2-source";
 const root = "packages/slurp2/src/engine/packages/client/src/slp/features/creators/";
 const modal = slurp2Source(`${root}settings/SlpCreatorSettingsModal.tsx`);
 const editor = slurp2Source(`${root}SlpCreatorProfileEditor.tsx`);
+const sections = slurp2Source(`${root}settings/slp-creator-settings-sections.ts`);
+const modalSections = slurp2Source(`${root}settings/SlpCreatorSettingsSections.tsx`);
+const publishingSections = slurp2Source(`${root}settings/SlpCreatorPublishingSection.tsx`);
+const profileScreen = slurp2Source(
+  "packages/slurp2/src/engine/packages/client/src/slp/app/screens/SlpScreenProfile.tsx",
+);
+const contract = slurp2Source(`${root}settings/slp-creator-settings-contract.ts`);
 
 assert.match(modal, /accountsQuery\.isError/u, "Creator load failures must render an error state");
 assert.match(modal, /accountsQuery\.refetch\(\)/u, "Creator load failures must offer retry");
@@ -14,5 +21,12 @@ assert.match(modal, /dirtyRef\.current &&[\s\S]*showConfirmDialog/u, "modal exit
 assert.match(modal, /onDirtyChange=\{section\.id === "identity"/u, "Identity reports dirty state to the modal");
 assert.match(editor, /onDirtyChange\?\.\(JSON\.stringify\(draft\) !== JSON\.stringify\(initialDraft\)\)/u);
 assert.match(editor, /onDirtyChange\?\.\(false\)/u, "save and discard clear the dirty state");
+assert.match(sections, /group: "creator" \| "publishing" \| "interaction" \| "memory" \| "tools" \| "danger"/u);
+assert.match(sections, /id: "content-rules"[\s\S]*group: "publishing"/u);
+assert.match(publishingSections, /mode === "content-rules"/u);
+assert.match(modalSections, /SettingAnchor settingKey="creatorCollabs"/u);
+assert.match(contract, /creatorCollabs: "collaborations"/u);
+assert.match(contract, /characterImageInstructions: "production"/u);
+assert.match(profileScreen, /tab: "automation"/u);
 
 console.log("slurp2 Creator settings safety regression passed");

@@ -6,13 +6,11 @@ import { showConfirmDialog } from "../../../../lib/app-dialogs";
 import { ScheduleSlotEditor } from "../../../modules/settings/SlpBackstageKit";
 import { errorMessage } from "../../../modules/settings/slp-backstage-format";
 import { SettingsGroup, Toggle } from "../../../modules/settings/SlpSettingsControls";
-import { SettingAnchor } from "../../../modules/settings/SlpSettingsKit";
 import {
   useCreatorReserveStatus,
   useUpdateCreatorAutoPosting,
   useUpdateCreatorScheduleSlot,
 } from "../../feed/slp-feed-contract";
-import { useSlurpSettings, useUpdateSlurpSettings } from "../../settings/slp-settings-contract";
 import {
   SLURP_EXPLICIT_LEVELS,
   SlurpPostGuidanceField,
@@ -20,10 +18,8 @@ import {
   useUpdateSlurpPostGuidance,
 } from "../../settings/slp-post-guidance-contract";
 import { accentButton, noteClass, quietButton } from "../slp-creator-classes";
-import { CreatorCollabsEditor } from "../SlpCreatorMetrics";
-import { useCreatorAccounts, useSlpPersonaBackedCreator } from "../slp-creators-hooks";
+import { useSlpPersonaBackedCreator } from "../slp-creators-hooks";
 import { useRefreshCreatorConversationSchedule } from "../slp-creator-refresh-hooks";
-import { SlurpCreatorStrategyGroup } from "../SlpCreatorStrategyGroup";
 import type { SlpCreatorSettingsSectionProps } from "./slp-creator-settings-contract";
 
 /**
@@ -33,7 +29,7 @@ import type { SlpCreatorSettingsSectionProps } from "./slp-creator-settings-cont
  * The prepared slots used to be a modal opened from Backstage. Inside the settings modal they are
  * a group like any other, so editing a slot no longer stacks a dialog on top of a dialog.
  */
-export function SlpCreatorPublishingSection({ creator, active }: SlpCreatorSettingsSectionProps) {
+export function SlpCreatorPublishingSection({ creator, active, mode = "automation" }: SlpCreatorSettingsSectionProps) {
   const { t } = useTranslation();
   const updateAuto = useUpdateCreatorAutoPosting();
   const updateScheduleSlot = useUpdateCreatorScheduleSlot();
@@ -41,177 +37,169 @@ export function SlpCreatorPublishingSection({ creator, active }: SlpCreatorSetti
   const reserveStatusQuery = useCreatorReserveStatus(active);
   const postGuidanceQuery = useSlurpPostGuidance(active);
   const updatePostGuidance = useUpdateSlurpPostGuidance();
-  const settingsQuery = useSlurpSettings();
-  const updateSettings = useUpdateSlurpSettings();
-  const accountsQuery = useCreatorAccounts(active);
   const personaBacked = useSlpPersonaBackedCreator(creator);
   const slots = reserveStatusQuery.data?.creators.find((entry) => entry.accountId === creator.id)?.slots ?? [];
-  const settings = settingsQuery.data;
 
   return (
     <div className="space-y-5">
-      <SettingsGroup title={t("ui.slurp.settings.creators.postingGroup")}>
-        {personaBacked ? (
-          <p className={noteClass}>{t("ui.slurp.settings.creators.personaAutomationDetail")}</p>
-        ) : (
-          <Toggle
-            label={t("ui.slurp.settings.creators.autoPost")}
-            value={creator.autoPosting.enabled}
-            onChange={(value) =>
-              updateAuto.mutate(
-                { accountId: creator.id, enabled: value },
-                { onError: (error) => toast.error(errorMessage(error)) },
-              )
-            }
-          />
-        )}
-      </SettingsGroup>
+      {mode === "automation" && (
+        <SettingsGroup title={t("ui.slurp.settings.creators.postingGroup")}>
+          {personaBacked ? (
+            <p className={noteClass}>{t("ui.slurp.settings.creators.personaAutomationDetail")}</p>
+          ) : (
+            <Toggle
+              label={t("ui.slurp.settings.creators.autoPost")}
+              value={creator.autoPosting.enabled}
+              onChange={(value) =>
+                updateAuto.mutate(
+                  { accountId: creator.id, enabled: value },
+                  { onError: (error) => toast.error(errorMessage(error)) },
+                )
+              }
+            />
+          )}
+        </SettingsGroup>
+      )}
 
-      <SettingsGroup title={t("ui.slurp.settings.creators.postingSchedule")}>
-        <p className={noteClass}>{t("ui.slurp.settings.creators.scheduleDetail")}</p>
-        {reserveStatusQuery.isLoading ? (
-          <div className="flex items-center justify-center gap-2 py-6 text-sm text-[var(--slurp-muted)]" role="status">
-            <Loader2 size={18} className="animate-spin motion-reduce:animate-none" aria-hidden="true" />
-            {t("ui.noodle.noodlerschedulemanagermodal.loadingStatus")}
-          </div>
-        ) : reserveStatusQuery.isError ? (
-          <div className="rounded-lg p-4 text-sm ring-1 ring-inset ring-[var(--slurp-danger)]/30">
-            <p>{t("ui.noodle.noodlerschedulemanagermodal.couldNotLoadStatus")}</p>
-            <button type="button" onClick={() => void reserveStatusQuery.refetch()} className={`mt-3 ${quietButton}`}>
-              <RefreshCw size={14} aria-hidden="true" />
-              {t("capabilities.actions.tryAgain")}
-            </button>
-          </div>
-        ) : slots.length > 0 ? (
-          <div className="space-y-3">
-            {slots.map((slot) => (
-              <ScheduleSlotEditor
-                key={`${slot.id}:${slot.publishAt}`}
-                slot={slot}
-                pending={updateScheduleSlot.isPending}
-                onSave={async (publishAt) => {
-                  try {
-                    await updateScheduleSlot.mutateAsync({ slotId: slot.id, publishAt });
-                    toast.success(t("ui.slurp.settings.creators.scheduleSaved"));
-                  } catch (error) {
-                    toast.error(errorMessage(error));
-                  }
-                }}
-              />
-            ))}
-          </div>
-        ) : (
-          <p className={noteClass}>{t("ui.slurp.settings.creators.scheduleEmpty")}</p>
-        )}
-      </SettingsGroup>
-
-      <SlurpCreatorStrategyGroup creator={creator} />
+      {mode === "automation" && (
+        <SettingsGroup title={t("ui.slurp.settings.creators.postingSchedule")}>
+          <p className={noteClass}>{t("ui.slurp.settings.creators.scheduleDetail")}</p>
+          {reserveStatusQuery.isLoading ? (
+            <div
+              className="flex items-center justify-center gap-2 py-6 text-sm text-[var(--slurp-muted)]"
+              role="status"
+            >
+              <Loader2 size={18} className="animate-spin motion-reduce:animate-none" aria-hidden="true" />
+              {t("ui.noodle.noodlerschedulemanagermodal.loadingStatus")}
+            </div>
+          ) : reserveStatusQuery.isError ? (
+            <div className="rounded-lg p-4 text-sm ring-1 ring-inset ring-[var(--slurp-danger)]/30">
+              <p>{t("ui.noodle.noodlerschedulemanagermodal.couldNotLoadStatus")}</p>
+              <button type="button" onClick={() => void reserveStatusQuery.refetch()} className={`mt-3 ${quietButton}`}>
+                <RefreshCw size={14} aria-hidden="true" />
+                {t("capabilities.actions.tryAgain")}
+              </button>
+            </div>
+          ) : slots.length > 0 ? (
+            <div className="space-y-3">
+              {slots.map((slot) => (
+                <ScheduleSlotEditor
+                  key={`${slot.id}:${slot.publishAt}`}
+                  slot={slot}
+                  pending={updateScheduleSlot.isPending}
+                  onSave={async (publishAt) => {
+                    try {
+                      await updateScheduleSlot.mutateAsync({ slotId: slot.id, publishAt });
+                      toast.success(t("ui.slurp.settings.creators.scheduleSaved"));
+                    } catch (error) {
+                      toast.error(errorMessage(error));
+                    }
+                  }}
+                />
+              ))}
+            </div>
+          ) : (
+            <p className={noteClass}>{t("ui.slurp.settings.creators.scheduleEmpty")}</p>
+          )}
+        </SettingsGroup>
+      )}
 
       {/* A creator who fishes for subscribers in public and pays it off behind the paywall needs
           their own two directions; empty means the global ones apply. */}
-      <SettingsGroup title={t("ui.slurp.settings.creators.guidanceGroup")}>
-        <p className={noteClass}>{t("ui.slurp.settings.creators.guidanceDetail")}</p>
-        <div className="space-y-2">
-          <p className="text-xs font-semibold text-[var(--slurp-text)]">
-            {t("ui.slurp.settings.prompts.explicitLevel", { defaultValue: "How far pictures go" })}
-          </p>
-          <p className="text-xs leading-5 text-[var(--slurp-muted)]">
-            {t("ui.slurp.settings.prompts.explicitLevelDetail", {
-              defaultValue:
-                "Locked posts go this far. Public posts stay one step below, so the free feed advertises the paid one. Housekeeping posts are never sexual.",
-            })}
-          </p>
-          {postGuidanceQuery.data && (
-            <div
-              className="flex flex-wrap gap-2"
-              role="group"
-              aria-label={t("ui.slurp.settings.prompts.explicitLevel")}
-            >
-              {["", ...SLURP_EXPLICIT_LEVELS].map((level) => {
-                const selected = (postGuidanceQuery.data.creators[creator.id]?.level ?? "") === level;
-                const effective = level || postGuidanceQuery.data.defaults.level || postGuidanceQuery.data.builtInLevel;
-                return (
-                  <button
-                    key={level || "inherit"}
-                    type="button"
-                    disabled={updatePostGuidance.isPending || postGuidanceQuery.isLoading || postGuidanceQuery.isError}
-                    aria-pressed={selected}
-                    onClick={() =>
-                      updatePostGuidance.mutate(
-                        { creatorId: creator.id, level },
-                        { onError: (error) => toast.error(errorMessage(error)) },
-                      )
-                    }
-                    className={`min-h-11 rounded-full px-3 text-xs font-semibold ring-1 ring-inset focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] disabled:opacity-50 ${selected ? "bg-[var(--slurp-nav-active)] text-[var(--slurp-text)] ring-[var(--noodle-accent)]/45" : "bg-[var(--slurp-canvas)] text-[var(--slurp-muted)] ring-[var(--slurp-outline)] hover:text-[var(--slurp-text)]"}`}
-                  >
-                    {level
-                      ? t(`ui.slurp.settings.prompts.explicitLevel.${level}`)
-                      : t("ui.slurp.settings.prompts.explicitLevelShipped", {
-                          level: t(`ui.slurp.settings.prompts.explicitLevel.${effective}`),
-                          defaultValue: "Use shared ({{level}})",
-                        })}
-                  </button>
-                );
+      {mode === "content-rules" && (
+        <SettingsGroup title={t("ui.slurp.settings.creators.guidanceGroup")}>
+          <p className={noteClass}>{t("ui.slurp.settings.creators.guidanceDetail")}</p>
+          <div className="space-y-2">
+            <p className="text-xs font-semibold text-[var(--slurp-text)]">
+              {t("ui.slurp.settings.prompts.explicitLevel", { defaultValue: "How far pictures go" })}
+            </p>
+            <p className="text-xs leading-5 text-[var(--slurp-muted)]">
+              {t("ui.slurp.settings.prompts.explicitLevelDetail", {
+                defaultValue:
+                  "Locked posts go this far. Public posts stay one step below, so the free feed advertises the paid one. Housekeeping posts are never sexual.",
               })}
-            </div>
-          )}
-        </div>
-        {(["public", "locked"] as const).map((access) => (
+            </p>
+            {postGuidanceQuery.data && (
+              <div
+                className="flex flex-wrap gap-2"
+                role="group"
+                aria-label={t("ui.slurp.settings.prompts.explicitLevel")}
+              >
+                {["", ...SLURP_EXPLICIT_LEVELS].map((level) => {
+                  const selected = (postGuidanceQuery.data.creators[creator.id]?.level ?? "") === level;
+                  const effective =
+                    level || postGuidanceQuery.data.defaults.level || postGuidanceQuery.data.builtInLevel;
+                  return (
+                    <button
+                      key={level || "inherit"}
+                      type="button"
+                      disabled={
+                        updatePostGuidance.isPending || postGuidanceQuery.isLoading || postGuidanceQuery.isError
+                      }
+                      aria-pressed={selected}
+                      onClick={() =>
+                        updatePostGuidance.mutate(
+                          { creatorId: creator.id, level },
+                          { onError: (error) => toast.error(errorMessage(error)) },
+                        )
+                      }
+                      className={`min-h-11 rounded-full px-3 text-xs font-semibold ring-1 ring-inset focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] disabled:opacity-50 ${selected ? "bg-[var(--slurp-nav-active)] text-[var(--slurp-text)] ring-[var(--noodle-accent)]/45" : "bg-[var(--slurp-canvas)] text-[var(--slurp-muted)] ring-[var(--slurp-outline)] hover:text-[var(--slurp-text)]"}`}
+                    >
+                      {level
+                        ? t(`ui.slurp.settings.prompts.explicitLevel.${level}`)
+                        : t("ui.slurp.settings.prompts.explicitLevelShipped", {
+                            level: t(`ui.slurp.settings.prompts.explicitLevel.${effective}`),
+                            defaultValue: "Use shared ({{level}})",
+                          })}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+          {(["public", "locked"] as const).map((access) => (
+            <SlurpPostGuidanceField
+              key={access}
+              access={access}
+              creatorId={creator.id}
+              guidance={postGuidanceQuery.data}
+              inherited={
+                postGuidanceQuery.data
+                  ? postGuidanceQuery.data.defaults[access] || postGuidanceQuery.data.builtIn[access]
+                  : ""
+              }
+              label={t(`ui.slurp.settings.prompts.${access}Guidance`)}
+              detail={t("ui.slurp.settings.creators.guidanceInherits")}
+              generateLabel={t("ui.slurp.settings.prompts.guidanceGenerate")}
+              clearLabel={t("ui.slurp.settings.creators.guidanceInherit")}
+              savedMessage={t("ui.slurp.settings.prompts.guidanceSavedAccess")}
+              disabled={postGuidanceQuery.isLoading || postGuidanceQuery.isError}
+            />
+          ))}
+        </SettingsGroup>
+      )}
+
+      {mode === "content-rules" && (
+        <SettingsGroup title={t("ui.slurp.settings.creators.contentMenuGroup", { defaultValue: "Content menu" })}>
           <SlurpPostGuidanceField
-            key={access}
-            access={access}
+            access="menu"
             creatorId={creator.id}
             guidance={postGuidanceQuery.data}
-            inherited={
-              postGuidanceQuery.data
-                ? postGuidanceQuery.data.defaults[access] || postGuidanceQuery.data.builtIn[access]
-                : ""
-            }
-            label={t(`ui.slurp.settings.prompts.${access}Guidance`)}
-            detail={t("ui.slurp.settings.creators.guidanceInherits")}
-            generateLabel={t("ui.slurp.settings.prompts.guidanceGenerate")}
-            clearLabel={t("ui.slurp.settings.creators.guidanceInherit")}
-            savedMessage={t("ui.slurp.settings.prompts.guidanceSavedAccess")}
+            inherited=""
+            label={t("ui.slurp.settings.creators.contentMenu", { defaultValue: "What this Creator offers" })}
+            detail={t("ui.slurp.settings.creators.contentMenuDetail", {
+              defaultValue:
+                "Private. List what this Creator offers and what they will not do. Posts, comment replies, and messages follow it. Fans never see it.",
+            })}
+            generateLabel=""
+            clearLabel={t("ui.slurp.settings.creators.contentMenuClear", { defaultValue: "Clear menu" })}
+            savedMessage={t("ui.slurp.settings.creators.contentMenuSaved", { defaultValue: "Content menu saved." })}
             disabled={postGuidanceQuery.isLoading || postGuidanceQuery.isError}
           />
-        ))}
-      </SettingsGroup>
+        </SettingsGroup>
+      )}
 
-      <SettingsGroup title={t("ui.slurp.settings.creators.collabsGroup", { defaultValue: "Collabs" })}>
-        <SettingAnchor settingKey="creatorCollabs">
-          {settings ? (
-            <CreatorCollabsEditor
-              creator={creator}
-              creators={accountsQuery.data ?? []}
-              collabs={settings.creatorCollabs}
-              onSave={(next) => updateSettings.mutate({ creatorCollabs: next })}
-              t={t}
-            />
-          ) : (
-            <p className={noteClass}>{t("ui.slurp.settings.loading", { defaultValue: "Loading…" })}</p>
-          )}
-        </SettingAnchor>
-      </SettingsGroup>
-
-      <SettingsGroup title={t("ui.slurp.settings.creators.contentMenuGroup", { defaultValue: "Content menu" })}>
-        <SlurpPostGuidanceField
-          access="menu"
-          creatorId={creator.id}
-          guidance={postGuidanceQuery.data}
-          inherited=""
-          label={t("ui.slurp.settings.creators.contentMenu", { defaultValue: "What this Creator offers" })}
-          detail={t("ui.slurp.settings.creators.contentMenuDetail", {
-            defaultValue:
-              "Private. List what this Creator offers and what they will not do. Posts, comment replies, and messages follow it. Fans never see it.",
-          })}
-          generateLabel=""
-          clearLabel={t("ui.slurp.settings.creators.contentMenuClear", { defaultValue: "Clear menu" })}
-          savedMessage={t("ui.slurp.settings.creators.contentMenuSaved", { defaultValue: "Content menu saved." })}
-          disabled={postGuidanceQuery.isLoading || postGuidanceQuery.isError}
-        />
-      </SettingsGroup>
-
-      {creator.scheduleStatus && creator.scheduleStatus.state !== "not-applicable" && (
+      {mode === "automation" && creator.scheduleStatus && creator.scheduleStatus.state !== "not-applicable" && (
         /* A stale or missing schedule is an attention state, so it uses the same tinted callout as
            a missing or changed source instead of a plain note. */
         <div
