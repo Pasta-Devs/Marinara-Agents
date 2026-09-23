@@ -72,7 +72,6 @@ export function startSlurpMessageScheduler(app: FastifyInstance, registerStop?: 
           });
           if (stored) await replyQueue.remove(bubble.id);
         } catch (error) {
-          failed = true;
           logger.warn(error, "[slurp-message] Failed to deliver bubble %s", bubble.id);
         }
       }
