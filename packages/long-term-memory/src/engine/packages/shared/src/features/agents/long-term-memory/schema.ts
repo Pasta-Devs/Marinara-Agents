@@ -2139,7 +2139,25 @@ export const ltmExtractionDroppedCandidateSchema = z
     snippet: z.string().min(1).max(280).optional(),
     issues: z.array(z.string().trim().min(1).max(240)).max(8).optional(),
     recovery: ltmExtractionRecoveryHintSchema.optional(),
-    recoveryCandidate: ltmEvidenceUnitSchema.optional(),
+    recoveryCandidate: ltmEvidenceUnitSchema
+      .extend({
+        subjectId: z.preprocess(
+          (value) =>
+            typeof value === "string"
+              ? value
+                  .trim()
+                  .replace(/([a-z0-9])([A-Z])/g, "$1_$2")
+                  .toLowerCase()
+                  .replace(/[^a-z0-9]+/g, "_")
+                  .replace(/^_+|_+$/g, "")
+                  .replace(/_+/g, "_")
+                  .slice(0, 120)
+                  .replace(/_+$/g, "")
+              : value,
+          ltmIdentifierSchema,
+        ),
+      })
+      .optional(),
   })
   .strict();
 

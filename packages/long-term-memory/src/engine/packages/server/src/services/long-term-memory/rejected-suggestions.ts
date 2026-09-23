@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import {
+  ltmExtractionDroppedCandidateSchema,
   ltmRejectedSuggestionSchema,
   type LtmExtractionDroppedCandidate,
   type LtmExtractionDraft,
@@ -108,7 +109,8 @@ export async function addRejectedSuggestions(draft: LtmExtractionDraft, root = g
     const existing = await readSuggestionsUnlocked(root);
     const byFingerprint = new Map(existing.map((item) => [item.fingerprint, item]));
     const timestamp = nowIso();
-    for (const candidate of candidates) {
+    for (const rawCandidate of candidates) {
+      const candidate = ltmExtractionDroppedCandidateSchema.parse(rawCandidate);
       const value = fingerprint(draft.source, candidate);
       const legacyValue = fingerprint(draft.source, candidate, false);
       const current =
