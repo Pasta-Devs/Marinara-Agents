@@ -1,5 +1,9 @@
 # Long-Term Memory changelog
 
+## 1.3.16 — 2026-09-23
+
+- Resolve trusted character and relationship identities from explicit keys and exact names; keep ambiguous aliases and fuzzy matches reviewable instead of assigning a subject without evidence.
+
 ## 1.3.15 — 2026-09-23
 
 - Normalize rejected recovery candidate subject IDs before validation and storage so mixed-case names remain available for review without changing canonical identity checks.

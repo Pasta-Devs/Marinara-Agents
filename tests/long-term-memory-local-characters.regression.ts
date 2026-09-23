@@ -30,6 +30,13 @@ function unit(input: {
 
 async function main() {
   const { compileLtmEvidenceUnits } = await import(`${source}/evidence-unit-compiler.ts`);
+  const { projectLtmDraftMutationGroup } = await import(`${source}/draft-projector.ts`);
+  const { ltmDraftMutationSchema, ltmDraftReviewChangeSchema } =
+    await import("../packages/long-term-memory/src/engine/packages/shared/src/features/agents/long-term-memory/schema.ts");
+  const { compileEvidenceUnitExtraction, parseEvidenceUnitPayload } = await import(
+    `${source}/evidence-unit-extraction.ts`
+  );
+  const { sourceHashForLtmSourceNote } = await import(`${source}/source-hash.ts`);
   const { normalizeStructuredSummaryEvidenceUnits } = await import(`${source}/structured-summary-normalizer.ts`);
   const { isLocalCharacterSubject, localCharacterScopeError, localCharacterSubjectForName, ltmScopeFamilyId } =
     await import(`${source}/chat-scope.ts`);
@@ -108,7 +115,7 @@ async function main() {
     ],
     existingNotes: [],
   });
-  assert.equal(shortNameContext.units[0]!.subjects?.[0]?.key, shortNameContext.units[1]!.subjects?.[0]?.key);
+  assert.notEqual(shortNameContext.units[0]!.subjects?.[0]?.key, shortNameContext.units[1]!.subjects?.[0]?.key);
 
   const compiled = compileLtmEvidenceUnits({
     units: resolved.units,
@@ -154,7 +161,11 @@ async function main() {
     ],
     existingNotes: [],
   });
-  assert.equal(onDemandFullName.units[0]!.subjects?.[0]?.key, validSubject.key);
+  assert.notEqual(
+    onDemandFullName.units[0]!.subjects?.[0]?.key,
+    validSubject.key,
+    "a longer name is not evidence of the same identity",
+  );
   assert.notEqual(
     localCharacterScopeError([localCharacterSubjectForName({ chatId: "chat-b", chatIds: ["chat-b"] }, "Mara")!], scope),
     null,
@@ -396,7 +407,10 @@ async function main() {
     for (const keys of [undefined, []]) {
       const result = keyedContext.resolve({ units: [{ ...candidate, subjectKeys: keys }], existingNotes: [] });
       assert.equal(result.units.length, 0);
-      assert.equal(result.droppedCandidates[0]!.reason, "ambiguous_subject");
+      assert.equal(
+        result.droppedCandidates[0]!.reason,
+        keys === undefined ? "ambiguous_subject" : "invalid_subject_cardinality",
+      );
     }
     const invalidKeys =
       bucket === "character_fact"
@@ -433,6 +447,359 @@ async function main() {
     existingNotes: [],
   });
   assert.equal((aliasCollisionResolution.diagnostics[0]!.details as any).collisionSource, "alias_collision");
+
+  const identityRoster = [
+    { kind: "character", id: "char_maria", name: "Maria", aliases: ["Marie"] },
+    { kind: "character", id: "char_marie", name: "Marie", aliases: ["Mimi"] },
+    { kind: "character", id: "char_one", name: "Samuel One", aliases: ["Sam"] },
+    { kind: "character", id: "char_two", name: "Samuel Two", aliases: ["Sam"] },
+    { kind: "character", id: "char_eloise", name: "Éloïse O'Neil", aliases: [] },
+    { kind: "character", id: "char_li", name: "李娜", aliases: [] },
+    { kind: "character", id: "char_ming", name: "李明", aliases: [] },
+    { kind: "character", id: "char_jose", name: "Jose", aliases: [] },
+    { kind: "character", id: "char_josé", name: "José", aliases: [] },
+  ];
+  const identityCatalog = buildTrustedLtmSubjectCatalog({
+    roster: identityRoster,
+    notes: [],
+  });
+  const resolveIdentity = (name: string, subjectId = "provider_subject", subjectKeys?: string[]) => {
+    const candidate = unit({
+      bucket: "character_fact",
+      subjectId,
+      subjectNames: [name],
+      subjectKeys,
+      text: `${name} waits.`,
+    });
+    return prepareLtmSubjectIdentityContext({ units: [candidate], catalog: identityCatalog, scope }).resolve({
+      units: [candidate],
+      existingNotes: [],
+    });
+  };
+  assert.deepEqual(resolveIdentity("Marie").units[0]?.subjectKeys, ["character:char_marie"]);
+  assert.deepEqual(resolveIdentity("Mimi").units[0]?.subjectKeys, ["character:char_marie"]);
+  assert.deepEqual(resolveIdentity("éloïse o'neil").units[0]?.subjectKeys, ["character:char_eloise"]);
+  assert.deepEqual(resolveIdentity("李娜").units[0]?.subjectKeys, ["character:char_li"]);
+  assert.deepEqual(resolveIdentity("李明").units[0]?.subjectKeys, ["character:char_ming"]);
+  const unicodeUnits = ["李娜", "李明"].map((name) =>
+    unit({ bucket: "character_fact", subjectId: "provider_subject", subjectNames: [name], text: `${name} waits.` }),
+  );
+  const unicodeResolution = prepareLtmSubjectIdentityContext({
+    units: unicodeUnits,
+    catalog: identityCatalog,
+    scope,
+  }).resolve({
+    units: unicodeUnits,
+    existingNotes: [],
+  });
+  const unicodeNotes = compileLtmEvidenceUnits({
+    units: unicodeResolution.units,
+    existingNotes: [],
+    scope,
+    modes: ["roleplay"],
+  }).mutations.filter((mutation) => mutation.kind === "create_note");
+  assert.equal(unicodeNotes.length, 2, "distinct Unicode names must not share a memory target");
+  assert.deepEqual(
+    new Set(unicodeNotes.map((mutation) => mutation.note.subjects?.[0]?.key)),
+    new Set(["character:char_li", "character:char_ming"]),
+  );
+  const accentedUnits = [
+    unit({
+      bucket: "character_fact",
+      subjectId: "jose",
+      subjectNames: ["Jose"],
+      subjectKeys: ["character:char_jose"],
+      text: "Jose waits.",
+    }),
+    unit({
+      bucket: "character_fact",
+      subjectId: "jose",
+      subjectNames: ["José"],
+      subjectKeys: ["character:char_josé"],
+      text: "José waits.",
+    }),
+  ];
+  const accentedResolution = prepareLtmSubjectIdentityContext({
+    units: accentedUnits,
+    catalog: identityCatalog,
+    scope,
+  }).resolve({ units: accentedUnits, existingNotes: [] });
+  const accentedNotes = compileLtmEvidenceUnits({
+    units: accentedResolution.units,
+    existingNotes: [],
+    scope,
+    modes: ["roleplay"],
+  }).mutations.filter((mutation) => mutation.kind === "create_note");
+  assert.deepEqual(
+    new Set(accentedNotes.map((mutation) => mutation.note.subjects?.[0]?.key)),
+    new Set(["character:char_jose", "character:char_josé"]),
+    "different trusted keys must not merge when their names fold to the same slug",
+  );
+  assert.deepEqual(resolveIdentity("Marie", "BAD incidental ID!").units[0]?.subjectKeys, ["character:char_marie"]);
+  const malformedInput = unit({
+    bucket: "character_fact",
+    subjectId: "BAD incidental ID!",
+    subjectNames: ["Marie"],
+    text: "Marie waits.",
+  });
+  const recoveredInput = parseEvidenceUnitPayload({ units: [malformedInput] }, "a".repeat(64));
+  assert.equal(recoveredInput.parserRejections, 0);
+  assert.deepEqual(
+    resolveIdentity(recoveredInput.response.units[0]!.subjectNames![0]!, recoveredInput.response.units[0]!.subjectId)
+      .units[0]?.subjectKeys,
+    ["character:char_marie"],
+  );
+  const malformedWorld = parseEvidenceUnitPayload(
+    { units: [{ ...malformedInput, bucket: "world_fact" }] },
+    "a".repeat(64),
+  );
+  assert.equal(malformedWorld.parserRejections, 1, "malformed IDs in other buckets remain invalid");
+  const malformedRelationship = parseEvidenceUnitPayload(
+    {
+      units: [
+        unit({
+          bucket: "relationship_state",
+          subjectId: "BAD relationship ID!",
+          subjectNames: ["Marie", "Maria"],
+          text: "Marie trusts Maria.",
+        }),
+      ],
+    },
+    "a".repeat(64),
+  );
+  assert.equal(malformedRelationship.parserRejections, 0);
+  assert.deepEqual(
+    prepareLtmSubjectIdentityContext({
+      units: malformedRelationship.response.units,
+      catalog: identityCatalog,
+      scope,
+    }).resolve({ units: malformedRelationship.response.units, existingNotes: [] }).units[0]?.subjectKeys,
+    ["character:char_maria", "character:char_marie"],
+  );
+  assert.equal(resolveIdentity("Mariya").units.length, 0, "fuzzy neighbors must not assign a subject");
+  const ambiguousAlias = resolveIdentity("Sam");
+  assert.equal(ambiguousAlias.units.length, 0);
+  assert.deepEqual((ambiguousAlias.diagnostics[0]?.details as any)?.competingSubjectKeys?.sort(), [
+    "character:char_one",
+    "character:char_two",
+  ]);
+  assert.deepEqual(ambiguousAlias.droppedCandidates[0]?.recoveryCandidate?.subjectNames, ["Sam"]);
+  assert.deepEqual(resolveIdentity("Sam", "bad!", ["character:char_two"]).units[0]?.subjectKeys, [
+    "character:char_two",
+  ]);
+  const selectedSam = unit({
+    bucket: "character_fact",
+    subjectId: "chosen_sam",
+    subjectNames: ["Sam"],
+    subjectKeys: ["character:char_two"],
+    text: "Sam waits.",
+  });
+  const repeatedSam = unit({
+    bucket: "character_fact",
+    subjectId: "another_sam",
+    subjectNames: ["Sam"],
+    text: "Sam speaks.",
+  });
+  const chosenContext = prepareLtmSubjectIdentityContext({
+    units: [selectedSam, repeatedSam],
+    catalog: identityCatalog,
+    scope,
+  });
+  const chosenResult = chosenContext.resolve({ units: [selectedSam, repeatedSam], existingNotes: [] });
+  assert.deepEqual(
+    chosenResult.units.map((candidate) => candidate.subjectKeys),
+    [["character:char_two"], ["character:char_two"]],
+  );
+  assert.equal(chosenContext.identityKeyForUnit(repeatedSam), chosenContext.identityKeyForUnit(selectedSam));
+  assert.equal(resolveIdentity("Sam").units.length, 0, "an alias choice cannot leak into a new context");
+  const chosenNotes = compileLtmEvidenceUnits({
+    units: chosenResult.units,
+    existingNotes: [],
+    scope,
+    modes: ["roleplay"],
+  }).mutations.filter((mutation) => mutation.kind === "create_note");
+  assert.equal(chosenNotes.length, 1);
+  const persistedChoice = { ...chosenNotes[0]!.note, createdAt: timestamp, updatedAt: timestamp, version: 1 };
+  assert.equal(persistedChoice.title, "Sam", "the chosen alias must survive the normal create-note path");
+  const savedChoiceCatalog = buildTrustedLtmSubjectCatalog({ roster: identityRoster, notes: [persistedChoice] as any });
+  const repeatContext = prepareLtmSubjectIdentityContext({ units: [repeatedSam], catalog: savedChoiceCatalog, scope });
+  assert.deepEqual(repeatContext.resolve({ units: [repeatedSam], existingNotes: [] }).units[0]?.subjectKeys, [
+    "character:char_two",
+  ]);
+  const existingSam = { ...persistedChoice, title: "Samuel Two" };
+  const existingCatalog = buildTrustedLtmSubjectCatalog({ roster: identityRoster, notes: [existingSam] as any });
+  const existingResolution = prepareLtmSubjectIdentityContext({
+    units: [selectedSam],
+    catalog: existingCatalog,
+    scope,
+  }).resolve({ units: [selectedSam], existingNotes: [existingSam] as any });
+  const updateExisting = compileLtmEvidenceUnits({
+    units: existingResolution.units,
+    existingNotes: [existingSam] as any,
+    scope,
+    modes: ["roleplay"],
+    aliasChoices: existingResolution.aliasChoices,
+  });
+  const titleMutation = updateExisting.mutations.find((mutation) => mutation.kind === "set_title");
+  assert.equal(ltmDraftMutationSchema.parse(titleMutation).kind, "set_title");
+  const existingProjection = projectLtmDraftMutationGroup({
+    existing: existingSam as any,
+    mutations: updateExisting.mutations,
+    context: { source: { sourceNoteId: "roleplay_source", sourceHash: "a".repeat(64) }, scope, modes: ["roleplay"] },
+    timestamp,
+  });
+  assert.equal(
+    ltmDraftReviewChangeSchema.parse(
+      existingProjection.mutations.find((mutation) => mutation.mutationId === titleMutation?.id)?.changes[0],
+    ).kind,
+    "title",
+  );
+  assert.equal(existingProjection.after.title, "Sam", "an explicit choice must persist on an existing canonical note");
+  const duplicateSource = {
+    ...sourceNote,
+    sections: { source: { text: "Sam knows the ancient language.", updatedAt: timestamp } },
+  };
+  const duplicateExisting = {
+    ...existingSam,
+    sections: { ...existingSam.sections, facts: { text: duplicateSource.sections.source.text, updatedAt: timestamp } },
+  };
+  const duplicateResult = compileEvidenceUnitExtraction({
+    unitResponse: {
+      summary: "Repeated fact with an explicit identity choice",
+      units: [
+        {
+          ...existingResolution.units[0]!,
+          text: duplicateSource.sections.source.text,
+          sourceHash: sourceHashForLtmSourceNote(duplicateSource),
+        },
+      ],
+    },
+    sourceText: duplicateSource.sections.source.text,
+    sourceNote: duplicateSource,
+    existingNotes: [duplicateExisting] as any,
+    aliasChoices: existingResolution.aliasChoices,
+    scope,
+    modes: ["roleplay"],
+    sourceHash: sourceHashForLtmSourceNote(duplicateSource),
+    skipStructuredBackfill: true,
+  });
+  assert.equal(duplicateResult.accounting.deduplications, 1);
+  assert.deepEqual(
+    duplicateResult.compiledResponse.mutations.map((mutation) => mutation.kind),
+    ["set_title"],
+    "deduplicated facts must retain the identity choice without rewriting the fact",
+  );
+  assert.equal(
+    compileEvidenceUnitExtraction({
+      unitResponse: { summary: "Invalid source hash", units: [existingResolution.units[0]!] },
+      sourceText: duplicateSource.sections.source.text,
+      sourceNote: duplicateSource,
+      existingNotes: [duplicateExisting] as any,
+      aliasChoices: existingResolution.aliasChoices,
+      scope,
+      modes: ["roleplay"],
+      sourceHash: sourceHashForLtmSourceNote(duplicateSource),
+      skipStructuredBackfill: true,
+    }).compiledResponse.mutations.length,
+    0,
+    "a rejected fact must not persist its identity choice",
+  );
+  const updatedCatalog = buildTrustedLtmSubjectCatalog({ roster: identityRoster, notes: [existingProjection.after] });
+  assert.deepEqual(
+    prepareLtmSubjectIdentityContext({ units: [repeatedSam], catalog: updatedCatalog, scope }).resolve({
+      units: [repeatedSam],
+      existingNotes: [],
+    }).units[0]?.subjectKeys,
+    ["character:char_two"],
+  );
+  assert.equal(
+    prepareLtmSubjectIdentityContext({
+      units: [repeatedSam],
+      catalog: updatedCatalog,
+      scope: { chatId: "chat-b" },
+    }).resolve({ units: [repeatedSam], existingNotes: [] }).units.length,
+    0,
+  );
+  const manualSam = { ...existingSam, title: "My protagonist" };
+  const manualUpdate = compileLtmEvidenceUnits({
+    units: existingResolution.units,
+    existingNotes: [manualSam] as any,
+    scope,
+    modes: ["roleplay"],
+    aliasChoices: existingResolution.aliasChoices,
+  });
+  assert.equal(
+    manualUpdate.mutations.some((mutation) => mutation.kind === "set_title"),
+    false,
+  );
+  assert.equal(
+    prepareLtmSubjectIdentityContext({
+      units: [repeatedSam],
+      catalog: savedChoiceCatalog,
+      scope: { chatId: "chat-b" },
+    }).resolve({ units: [repeatedSam], existingNotes: [] }).units.length,
+    0,
+    "persisted alias choice must not leak into another chat family",
+  );
+  const conflictingSam = { ...selectedSam, subjectId: "conflicting_sam", subjectKeys: ["character:char_one"] };
+  const contestedContext = prepareLtmSubjectIdentityContext({
+    units: [selectedSam, conflictingSam, repeatedSam],
+    catalog: identityCatalog,
+    scope,
+  });
+  assert.equal(contestedContext.resolve({ units: [repeatedSam], existingNotes: [] }).units.length, 0);
+  assert.equal(resolveIdentity("Marie", "provider_subject", ["character:unknown"]).units.length, 0);
+  assert.equal(
+    resolveIdentity("Marie", "provider_subject", []).units.length,
+    0,
+    "empty explicit keys must fail closed",
+  );
+  const emptyKeyCandidate = unit({
+    bucket: "character_fact",
+    subjectId: "Marie",
+    subjectKeys: [],
+    text: "Marie waits.",
+  });
+  assert.equal(
+    prepareLtmSubjectIdentityContext({ units: [emptyKeyCandidate], catalog: identityCatalog, scope }).resolve({
+      units: [emptyKeyCandidate],
+      existingNotes: [],
+      enforceTrustedSubjects: false,
+    }).units.length,
+    0,
+    "empty explicit keys cannot enter legacy fallback",
+  );
+  const lowercase = unit({
+    bucket: "character_fact",
+    subjectId: "elara",
+    subjectNames: ["elara"],
+    text: "elara waits.",
+  });
+  const lowercaseResolution = prepareLtmSubjectIdentityContext({
+    units: [lowercase],
+    catalog: { entries: [], notes: [] },
+    scope,
+    sourceBackedNpcSourceText: "elara waits.",
+  }).resolve({ units: [lowercase], existingNotes: [] });
+  assert.equal(
+    lowercaseResolution.units.length,
+    1,
+    "source-visible lowercase names can create scoped local identities",
+  );
+  const unicodeLocal = unit({
+    bucket: "character_fact",
+    subjectId: "li_na",
+    subjectNames: ["李娜"],
+    text: "李娜 waits.",
+  });
+  const unicodeLocalResolution = prepareLtmSubjectIdentityContext({
+    units: [unicodeLocal],
+    catalog: { entries: [], notes: [] },
+    scope,
+    sourceBackedNpcSourceText: "李娜 waits.",
+  }).resolve({ units: [unicodeLocal], existingNotes: [] });
+  assert.equal(unicodeLocalResolution.units.length, 1);
+  assert.ok(unicodeLocalResolution.units[0]!.subjects?.[0]?.key.startsWith("local_character:"));
 
   // --- I02: Preserve explicit participant names through structured backfill ---
   const structuredSummaryText = `## Relationships
@@ -593,7 +960,7 @@ async function main() {
       ref: { kind: "character" as const, id: "char_ashleigh_kestrel" },
     },
     name: "Ashleigh Kestrel",
-    aliases: [],
+    aliases: ["Ash", "Ashleigh"],
     canonicalSlug: "ashleigh_kestrel",
     provenance: "roster:character:char_ashleigh_kestrel",
   };
@@ -624,7 +991,7 @@ async function main() {
     [activeMara.key, activeMara.key],
   );
 
-  // 2. A short form of a longer roster name resolves to that roster identity instead of
+  // 2. An explicit roster alias resolves to that roster identity instead of
   //    inventing a provisional local character. The short name arrives after batch
   //    pre-resolution (structured backfill), so it resolves on demand.
   const shortFormContext = prepareLtmSubjectIdentityContext({
@@ -724,7 +1091,7 @@ async function main() {
     [activeMara.key],
   );
 
-  // 4. Batch-extracted name variants must canonicalize to one trusted identity
+  // 4. Batch-extracted explicitly aliased names must canonicalize to one trusted identity
   //    instead of forking provisional local characters from the surface form.
   const batchVariantUnits = [
     unit({ bucket: "character_fact", subjectId: "ash", subjectNames: ["Ash"], text: "Ash holds the line." }),
@@ -755,8 +1122,7 @@ async function main() {
     "short, first-name, and full-name variants must share one trusted identity",
   );
 
-  // 4b. A minor spelling variation of the trusted full name resolves to that
-  //     identity instead of forking a provisional local character.
+  // 4b. A minor spelling variation is a suggestion, not identity evidence.
   const spellingVariantUnit = unit({
     bucket: "character_fact",
     subjectId: "ashleigh_kestral",
@@ -770,8 +1136,13 @@ async function main() {
     sourceBackedNpcSourceText: "Ashleigh Kestral holds the line.",
     sourceBackedNpcSourceTitle: "Watch",
   }).resolve({ units: [spellingVariantUnit], existingNotes: [] });
-  assert.equal(spellingVariantResolution.droppedCandidates.length, 0);
-  assert.equal(spellingVariantResolution.units[0]!.subjects?.[0]?.key, "character:char_ashleigh_kestrel");
+  assert.equal(spellingVariantResolution.units.length, 0);
+  assert.deepEqual((spellingVariantResolution.diagnostics[0]?.details as any)?.competingSubjectKeys, [
+    "character:char_ashleigh_kestrel",
+  ]);
+  assert.deepEqual(spellingVariantResolution.droppedCandidates[0]?.recoveryCandidate?.subjectNames, [
+    "Ashleigh Kestral",
+  ]);
 
   // 4c. A first name shared by two trusted characters fails closed with
   //     actionable competing identities instead of picking one.
@@ -783,7 +1154,7 @@ async function main() {
           ref: { kind: "character" as const, id: "char_ashley_cooper" },
         },
         name: "Ashley Cooper",
-        aliases: [],
+        aliases: ["Ashley"],
         canonicalSlug: "ashley_cooper",
         provenance: "roster:character:char_ashley_cooper",
       },
@@ -793,7 +1164,7 @@ async function main() {
           ref: { kind: "character" as const, id: "char_ashley_dalton" },
         },
         name: "Ashley Dalton",
-        aliases: [],
+        aliases: ["Ashley"],
         canonicalSlug: "ashley_dalton",
         provenance: "roster:character:char_ashley_dalton",
       },
@@ -925,7 +1296,9 @@ async function main() {
     }),
   );
   const productionCatalog = buildTrustedLtmSubjectCatalog({
-    roster: [{ kind: "character", id: "char_ashleigh_kestrel", name: "Ashleigh Kestrel" }],
+    roster: [
+      { kind: "character", id: "char_ashleigh_kestrel", name: "Ashleigh Kestrel", aliases: ["Ash", "Ashleigh"] },
+    ],
     notes: [importedSourceNote],
     localSourceNotes: [importedSourceNote],
   });
@@ -954,8 +1327,7 @@ async function main() {
   );
   assert.equal(new Set(productionResolution.units.map((resolvedUnit) => resolvedUnit.subjectId)).size, 1);
 
-  // 4g. Without a roster match, source-visible variants still collapse to one canonical local
-  //     identity and one memory target instead of one target per surface form.
+  // 4g. Without a roster alias, source-visible names remain separate identities.
   const unrosteredCatalog = buildTrustedLtmSubjectCatalog({
     roster: [],
     notes: [importedSourceNote],
@@ -964,8 +1336,8 @@ async function main() {
   const unrosteredNames = unrosteredCatalog.entries
     .filter((entry) => isLocalCharacterSubject(entry.subject))
     .map((entry) => entry.name);
-  assert.equal(unrosteredNames.includes("Ash"), false, "short forms must not fork a local identity");
-  assert.equal(unrosteredNames.includes("Ashleigh"), false, "first names must not fork a local identity");
+  assert.equal(unrosteredNames.includes("Ash"), true);
+  assert.equal(unrosteredNames.includes("Ashleigh"), true);
   assert.equal(unrosteredNames.includes("Ashleigh Kestrel"), true, "the full form stays the canonical identity");
   const unrosteredResolution = prepareLtmSubjectIdentityContext({
     units: variantUnits,
@@ -977,14 +1349,13 @@ async function main() {
   assert.equal(unrosteredResolution.droppedCandidates.length, 0);
   assert.equal(
     new Set(unrosteredResolution.units.map((resolvedUnit) => resolvedUnit.subjects?.[0]?.key)).size,
-    1,
-    "source-visible variants must share one local identity",
+    3,
+    "source co-occurrence cannot prove short/full-name identity",
   );
-  assert.equal(new Set(unrosteredResolution.units.map((resolvedUnit) => resolvedUnit.subjectId)).size, 1);
+  assert.equal(new Set(unrosteredResolution.units.map((resolvedUnit) => resolvedUnit.subjectId)).size, 3);
   assert.ok(unrosteredResolution.units[0]!.subjects?.[0]?.key.startsWith("local_character:"));
 
-  // 4h. Source variants split across separate notes in one family must resolve to the same
-  //     canonical local identity and target regardless of note order.
+  // 4h. Separate source names stay distinct, regardless of note order.
   const variantNoteA = {
     ...sourceNote,
     id: "variant-note-a",
@@ -997,7 +1368,7 @@ async function main() {
     title: "variant-note-b",
     sections: { source: { text: "Ashleigh Kestrel departs.", updatedAt: timestamp } },
   };
-  const orderIdentities: Array<{ name: string; key: string }> = [];
+  const orderIdentities: Array<Array<{ name: string; key: string }>> = [];
   for (const orderedNotes of [
     [variantNoteA, variantNoteB],
     [variantNoteB, variantNoteA],
@@ -1008,10 +1379,15 @@ async function main() {
       localSourceNotes: orderedNotes,
     });
     const localEntries = orderedCatalog.entries.filter((entry) => isLocalCharacterSubject(entry.subject));
-    assert.equal(localEntries.length, 1, "split source variants must collapse to one local identity");
-    orderIdentities.push({ name: localEntries[0]!.name, key: localEntries[0]!.subject.key });
+    assert.ok(localEntries.some((entry) => entry.name === "Ash"));
+    assert.ok(localEntries.some((entry) => entry.name === "Ashleigh Kestrel"));
+    orderIdentities.push(
+      localEntries
+        .map((entry) => ({ name: entry.name, key: entry.subject.key }))
+        .sort((a, b) => a.name.localeCompare(b.name)),
+    );
   }
-  assert.deepEqual(orderIdentities[0], orderIdentities[1], "canonical source identity must not depend on note order");
+  assert.deepEqual(orderIdentities[0], orderIdentities[1], "source identities must not depend on note order");
 
   // 4i. A roster alias that is itself a variant of the source name must block a competing local
   //     identity, not only an exact-slug alias match.
@@ -1022,7 +1398,9 @@ async function main() {
     sections: { source: { text: "Ashleigh swings.", updatedAt: timestamp } },
   };
   const aliasCatalog = buildTrustedLtmSubjectCatalog({
-    roster: [{ kind: "character", id: "char_ash_kestrel", name: "Ash Kestrel", aliases: ["Ashleigh Kestrel"] }],
+    roster: [
+      { kind: "character", id: "char_ash_kestrel", name: "Ash Kestrel", aliases: ["Ashleigh Kestrel", "Ashleigh"] },
+    ],
     notes: [aliasSourceNote],
     localSourceNotes: [aliasSourceNote],
   });
@@ -1049,8 +1427,13 @@ async function main() {
   );
   const ambiguousAliasCatalog = buildTrustedLtmSubjectCatalog({
     roster: [
-      { kind: "character", id: "char_ash_kestrel", name: "Ash Kestrel", aliases: ["Ashleigh Kestrel"] },
-      { kind: "character", id: "char_ashford_kestrel", name: "Ashford Kestrel", aliases: ["Ashleigh Kestrel"] },
+      { kind: "character", id: "char_ash_kestrel", name: "Ash Kestrel", aliases: ["Ashleigh Kestrel", "Ashleigh"] },
+      {
+        kind: "character",
+        id: "char_ashford_kestrel",
+        name: "Ashford Kestrel",
+        aliases: ["Ashleigh Kestrel", "Ashleigh"],
+      },
     ],
     notes: [aliasSourceNote],
     localSourceNotes: [aliasSourceNote],

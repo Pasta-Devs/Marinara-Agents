@@ -590,8 +590,15 @@ function deterministicEvidenceUnitId(record: Record<string, unknown>, expectedSo
 function normalizedEvidenceUnitRecord(unit: unknown, expectedSourceHash: string, trustedEvidence: string[]): unknown {
   if (!unit || typeof unit !== "object" || Array.isArray(unit)) return unit;
   const record = unit as Record<string, unknown>;
+  const names = Array.isArray(record.subjectNames) ? record.subjectNames : [];
+  const expectedNames = record.bucket === "character_fact" ? 1 : record.bucket === "relationship_state" ? 2 : 0;
+  const recoverableNames =
+    names.length === expectedNames && names.every((name) => typeof name === "string" && name.trim());
   return {
     ...record,
+    ...(expectedNames && recoverableNames && !ltmEvidenceUnitSchema.shape.subjectId.safeParse(record.subjectId).success
+      ? { subjectId: normalizeRawIdentifier(names.join("_"), "subject") }
+      : {}),
     id: deterministicEvidenceUnitId(record, expectedSourceHash),
     sourceHash: expectedSourceHash,
     ...(record.evidence === undefined && trustedEvidence.length ? { evidence: trustedEvidence } : {}),
@@ -1363,6 +1370,7 @@ export function compileEvidenceUnitExtraction(options: {
   sourceText: string;
   sourceNote: LtmNote;
   existingNotes: LtmNote[];
+  aliasChoices?: ReadonlyMap<string, { title: string; canonicalName: string }>;
   scope: LtmScope;
   modes: LtmMode[];
   mode?: LtmMode;
@@ -1416,6 +1424,7 @@ export function compileEvidenceUnitExtraction(options: {
     ? compileLtmEvidenceUnits({
         units: closed.units,
         existingNotes: options.existingNotes,
+        aliasChoices: options.aliasChoices,
         scope: options.scope,
         modes: options.modes,
         mode: options.mode,
@@ -1425,7 +1434,24 @@ export function compileEvidenceUnitExtraction(options: {
         summary: options.unitResponse.summary,
         mutations: [],
       };
-  const compiledResponse = compiled;
+  const duplicateAliasUnits = keptUnits.filter(
+    (unit) => options.aliasChoices?.has(unit.id) && !dedupResult.deduplicated.includes(unit),
+  );
+  const duplicateTitles = duplicateAliasUnits.length
+    ? compileLtmEvidenceUnits({
+        units: duplicateAliasUnits,
+        existingNotes: options.existingNotes,
+        aliasChoices: options.aliasChoices,
+        scope: options.scope,
+        modes: options.modes,
+        mode: options.mode,
+      }).mutations.filter(
+        (mutation) =>
+          mutation.kind === "set_title" &&
+          !compiled.mutations.some((existing) => existing.kind === "set_title" && existing.noteId === mutation.noteId),
+      )
+    : [];
+  const compiledResponse = { ...compiled, mutations: [...compiled.mutations, ...duplicateTitles] };
   const diagnostics = [...validated.diagnostics, ...dedupResult.diagnostics, ...closed.diagnostics];
   if (options.unitResponse.incomplete) {
     diagnostics.push({

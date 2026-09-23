@@ -969,6 +969,7 @@
   "ui.longTermMemory.reviewqueue.superseded": "Superseded",
   "ui.longTermMemory.reviewqueue.updateSection": "Update section",
   "ui.longTermMemory.reviewqueue.updateSubjects": "Update subjects",
+  "ui.longTermMemory.reviewqueue.updateTitle": "Update title",
   "ui.longTermMemory.sourcesworkspace.characters": "Characters",
   "ui.longTermMemory.sourcesworkspace.chatSummaries": "Chat Summaries",
   "ui.longTermMemory.sourcesworkspace.contextChanged": "Context changed",
