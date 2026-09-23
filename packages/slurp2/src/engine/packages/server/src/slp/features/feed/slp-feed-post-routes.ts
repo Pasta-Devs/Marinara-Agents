@@ -711,28 +711,22 @@ export async function slpFeedPostRoutes(app: FastifyInstance, deps: SlpRouteDeps
     const existing = await noodle.getNoodlerPostById(id);
     if (!existing) return reply.code(404).send({ error: "Slurp post not found" });
     if (existing.authorAccountId !== accountId) return reply.code(403).send({ error: "Forbidden" });
-    const locked = await tryCreatorAccountOperation(existing.authorAccountId, () => noodle.softDeleteNoodlerPost(id));
+    const locked = await tryCreatorAccountOperation(existing.authorAccountId, async () => {
+      const [current, attachments] = await Promise.all([noodle.getNoodlerPostById(id), listSlurpPostMedia(app.db, id)]);
+      if (!current) return null;
+      const deleted = await noodle.deleteNoodlerPost(id);
+      return deleted
+        ? { deleted, mediaPaths: [readCreatorMediaPath(current), ...attachments.map((item) => item.mediaPath)] }
+        : null;
+    });
     if (!locked.acquired) {
       return reply.code(409).send({
         error: "Another operation for this Slurp account is already running.",
       });
     }
     if (!locked.value) return reply.code(404).send({ error: "Slurp post not found" });
-    return locked.value;
-  });
-  app.post("/slurp/posts/:id/restore", async (req, reply) => {
-    const body = (req.body ?? {}) as { accountId?: unknown };
-    const accountId = typeof body.accountId === "string" ? body.accountId : null;
-    if (!accountId) return reply.code(400).send({ error: "accountId is required" });
-    const { id } = req.params as { id: string };
-    const existing = await noodle.getNoodlerPostById(id, true);
-    if (!existing || existing.authorAccountId !== accountId)
-      return reply.code(404).send({ error: "Slurp post not found" });
-    const restored = await tryCreatorAccountOperation(accountId, () => noodle.restoreNoodlerPost(id));
-    if (!restored.acquired)
-      return reply.code(409).send({ error: "Another operation for this Slurp account is already running." });
-    if (!restored.value) return reply.code(409).send({ error: "This post can no longer be restored." });
-    return restored.value;
+    for (const mediaPath of locked.value.mediaPaths) unlinkCreatorMedia(mediaPath);
+    return locked.value.deleted;
   });
   /**
    * Draft one post for a directly invited character, optionally steered by the user's guidance.

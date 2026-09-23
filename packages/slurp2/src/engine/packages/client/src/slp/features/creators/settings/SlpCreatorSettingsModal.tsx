@@ -173,6 +173,7 @@ export function SlpCreatorSettingsModal({
       width="max-w-4xl"
       mobileFullscreen
       panelClassName="noodle-icon-scope"
+      contentClassName="flex flex-col"
       panelStyle={
         creator
           ? getSlpAccentStyle(profileAccent(creator.id), {

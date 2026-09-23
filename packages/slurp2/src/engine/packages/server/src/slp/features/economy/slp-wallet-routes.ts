@@ -3,6 +3,8 @@ import {
   slpCreatorUnlockSchema,
 } from "../../../../../shared/src/slp/slp-social.schema.js";
 import { type SlpCreatorSubscriber } from "../../../../../shared/src/slp/slp-social.types.js";
+import { randomInt } from "node:crypto";
+import { slpGambleUnlockPrice, slpHasGambleOffer } from "../../../../../shared/src/slp/slp-post-offers.js";
 import { z } from "zod";
 import { slurpDayKey, SLURP_DEV_CHEAT_MAX_COINS } from "../../modules/economy/slp-wallet.js";
 import {
@@ -335,22 +337,68 @@ export async function slpWalletRoutes(app: FastifyInstance, deps: SlpRouteDeps) 
     if (!viewer || !post || !creator || post.access !== "locked" || creatorBelongsToViewer(creator, viewer)) {
       return reply.code(404).send({ error: "Slurp post not found" });
     }
-    const unlock = await noodle.unlockPost(viewer.id, post.id);
+    const result = await noodle.unlockPost(viewer.id, post.id);
     // An affordable post that still fails is a different problem from an unaffordable one, so
     // the client can tell "top up" apart from "this post is gone".
-    if (!unlock) {
+    if (!result) {
       const wallet = await noodle.getWallet(viewer.id);
       const price = slpCreatorUnlockPriceFromMetadata(post.metadata);
       if (wallet.coins < price) return reply.code(402).send({ error: "Not enough coins", price, coins: wallet.coins });
       return reply.code(400).send({ error: "Could not unlock this post" });
     }
     // Fire and forget: the reply is a chat message, and the unlock must not wait on the model.
-    void reactToSlurpPayment(app.db, {
-      viewerAccountId: viewer.id,
-      creatorAccountId: creator.id,
-      kind: "unlock",
-      amount: slpCreatorUnlockPriceFromMetadata(post.metadata),
-    });
+    if (result.created && result.chargedAmount > 0)
+      void reactToSlurpPayment(app.db, {
+        viewerAccountId: viewer.id,
+        creatorAccountId: creator.id,
+        kind: "unlock",
+        amount: result.chargedAmount,
+      });
     return reply.code(201).send(buildViewerShell(await buildViewerContext(viewer)));
+  });
+  app.post("/slurp/posts/:id/gamble-unlock", async (req, reply) => {
+    const parsed = slpCreatorUnlockSchema.safeParse(req.body);
+    if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
+    const { id } = req.params as { id: string };
+    const [viewer, post] = await Promise.all([
+      resolveViewerPersona(parsed.data.personaId),
+      noodle.getNoodlerPostById(id),
+    ]);
+    const creator = post ? await noodle.getNoodlerAccountById(post.authorAccountId) : null;
+    if (
+      !viewer ||
+      !post ||
+      !creator ||
+      post.access !== "locked" ||
+      creatorBelongsToViewer(creator, viewer) ||
+      !slpHasGambleOffer(post.id)
+    ) {
+      return reply.code(404).send({ error: "Slurp post not found" });
+    }
+    const basePrice = slpCreatorUnlockPriceFromMetadata(post.metadata);
+    const free = randomInt(2) === 0;
+    const price = slpGambleUnlockPrice(basePrice, free);
+    const result = await noodle.unlockPost(viewer.id, post.id, price, true);
+    if (!result) {
+      const wallet = await noodle.getWallet(viewer.id);
+      if (wallet.coins < price) return reply.code(402).send({ error: "Not enough coins", price, coins: wallet.coins });
+      return reply.code(400).send({ error: "Could not unlock this post" });
+    }
+    if (result.created && result.chargedAmount > 0)
+      void reactToSlurpPayment(app.db, {
+        viewerAccountId: viewer.id,
+        creatorAccountId: creator.id,
+        kind: "unlock",
+        amount: result.chargedAmount,
+      });
+    return reply.code(201).send({
+      scope: buildViewerShell(await buildViewerContext(viewer)),
+      outcome: !result.created
+        ? "already-unlocked"
+        : free || price === 0 || result.chargedAmount === 0
+          ? "free"
+          : "triple-price",
+      amount: result.created ? result.chargedAmount : 0,
+    });
   });
 }

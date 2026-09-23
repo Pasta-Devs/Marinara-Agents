@@ -7,6 +7,7 @@ import type { SlpAccount } from "../../../../../shared/src/slp/slp-social.types.
 import { Avatar } from "../../base/chrome/SlpChrome";
 import { api } from "../../../lib/api-client.js";
 import { cn } from "../../../lib/utils";
+import { sortSlpPulseScheduled } from "./slp-pulse-order";
 
 export function SlpPulseCard({ open, onOpen }: { open: boolean; onOpen: () => void }) {
   const { t } = useUiTranslation();
@@ -345,7 +346,7 @@ function mergePulseTasks(
   );
   return {
     active: combined.filter((task) => isActiveTask(task.status)),
-    scheduled: combined.filter((task) => task.status === "scheduled"),
+    scheduled: sortSlpPulseScheduled(combined.filter((task) => task.status === "scheduled")),
     recent: combined.filter((task) => isTerminalTask(task.status)),
   };
 }
@@ -372,13 +373,25 @@ function groupPulseTasks(tasks: { active: PulseTask[]; scheduled: PulseTask[]; r
     grouped.set(id, current);
   };
   [...tasks.active, ...tasks.scheduled, ...tasks.recent].forEach(add);
-  const values = [...grouped.values()].sort(
-    (left, right) => Date.parse(right.tasks[0]?.updatedAt ?? "") - Date.parse(left.tasks[0]?.updatedAt ?? ""),
-  );
+  const values = [...grouped.values()].sort((left, right) => {
+    if (left.scheduled && right.scheduled) {
+      const nextPublish = Date.parse(left.tasks[0]?.publishAt ?? "") - Date.parse(right.tasks[0]?.publishAt ?? "");
+      if (Number.isFinite(nextPublish) && nextPublish !== 0) return nextPublish;
+    }
+    return Date.parse(right.tasks[0]?.updatedAt ?? "") - Date.parse(left.tasks[0]?.updatedAt ?? "");
+  });
   return {
     active: values.filter((group) => group.active && !group.attention),
     attention: values.filter((group) => group.attention),
-    scheduled: values.filter((group) => group.scheduled && !group.active && !group.attention),
+    scheduled: values
+      .filter((group) => group.scheduled && !group.active && !group.attention)
+      .sort((left, right) => {
+        const leftAt = Date.parse(left.tasks[0]?.publishAt ?? "");
+        const rightAt = Date.parse(right.tasks[0]?.publishAt ?? "");
+        if (Number.isFinite(leftAt) && Number.isFinite(rightAt) && leftAt !== rightAt) return leftAt - rightAt;
+        if (Number.isFinite(leftAt) !== Number.isFinite(rightAt)) return Number.isFinite(leftAt) ? -1 : 1;
+        return left.id.localeCompare(right.id);
+      }),
     recent: values.filter((group) => !group.active && !group.attention && !group.scheduled),
   };
 }
@@ -533,6 +546,7 @@ function PulseGroupCard({
   attention?: boolean;
 }) {
   const [expanded, setExpanded] = useState(false);
+  const [showAllTasks, setShowAllTasks] = useState(false);
   const latest = group.tasks[0];
   const label = pulseGroupLabel(group.kind, t);
   const scope =
@@ -563,7 +577,10 @@ function PulseGroupCard({
       >
         <button
           type="button"
-          onClick={() => setExpanded((value) => !value)}
+          onClick={() => {
+            if (expanded) setShowAllTasks(false);
+            setExpanded(!expanded);
+          }}
           aria-expanded={expanded}
           className="relative z-10 flex min-h-16 w-full items-center gap-3 rounded-xl px-3 py-2.5 text-start focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--noodle-accent)]"
         >
@@ -607,7 +624,7 @@ function PulseGroupCard({
       )}
       {expanded && group.tasks.length > 1 && (
         <div className="relative z-10 space-y-2 px-2 pb-2 pt-2">
-          {group.tasks.slice(0, 6).map((task) => (
+          {(showAllTasks ? group.tasks : group.tasks.slice(0, 6)).map((task) => (
             <PulseTaskRow
               key={task.id}
               task={task}
@@ -618,7 +635,19 @@ function PulseGroupCard({
             />
           ))}
           {group.tasks.length > 6 && (
-            <p className="px-2 text-[0.68rem] text-[var(--muted-foreground)]">+{group.tasks.length - 6} more</p>
+            <button
+              type="button"
+              onClick={() => setShowAllTasks((value) => !value)}
+              aria-expanded={showAllTasks}
+              className="min-h-9 rounded-md px-2 text-start text-[0.68rem] font-semibold text-[var(--noodle-accent)] hover:bg-[var(--noodle-accent)]/8 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)]"
+            >
+              {showAllTasks
+                ? t("ui.slurp.pulse.showFewer", { defaultValue: "Show fewer" })
+                : t("ui.slurp.pulse.moreTasks", {
+                    defaultValue: "+{{count}} more",
+                    count: group.tasks.length - 6,
+                  })}
+            </button>
           )}
         </div>
       )}

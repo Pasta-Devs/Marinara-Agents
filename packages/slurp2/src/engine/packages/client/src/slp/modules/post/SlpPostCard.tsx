@@ -352,6 +352,7 @@ export function SlpPostCard({
         surface !== "profile" &&
           postKind === "poll" &&
           "bg-[linear-gradient(145deg,var(--slurp-surface),color-mix(in_srgb,var(--noodle-accent)_5%,var(--slurp-surface)))]",
+        postMenuOpen && "relative z-40",
       )}
     >
       <div className="flex gap-3">

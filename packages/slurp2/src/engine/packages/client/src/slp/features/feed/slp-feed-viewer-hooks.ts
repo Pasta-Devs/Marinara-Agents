@@ -231,6 +231,26 @@ export function useUnlockCreatorPost() {
     },
   });
 }
+export function useGambleUnlockCreatorPost() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ postId, personaId }: { postId: string; personaId: string }) =>
+      api.post<{
+        scope: SlpCreatorViewerScope;
+        outcome: "free" | "triple-price" | "already-unlocked";
+        amount: number;
+      }>(`/slurp2/slurp/posts/${encodeURIComponent(postId)}/gamble-unlock`, { personaId }),
+    onSuccess: async (result, input) => {
+      await qc.cancelQueries({ queryKey: slpKeys.viewer(input.personaId) });
+      qc.setQueryData<SlpCreatorViewerScope | undefined>(slpKeys.viewer(input.personaId), (current) =>
+        mergeSlurpViewerShell(current, result.scope),
+      );
+      void qc.invalidateQueries({ queryKey: slpKeys.viewer(input.personaId) });
+      void qc.invalidateQueries({ queryKey: [...slpKeys.noodlerRoot(), "wallet", input.personaId] });
+      void qc.invalidateQueries({ queryKey: [...slpKeys.noodlerRoot(), "viewer-wallets"] });
+    },
+  });
+}
 export function useCreateCreatorInteraction() {
   const qc = useQueryClient();
   return useMutation({

@@ -21,7 +21,6 @@ const EXPECTED = [
   "POST /messages/creators/:creatorAccountId/request-fan-reply",
   "POST /messages/share-post",
   "POST /slurp/posts/:id/report",
-  "POST /slurp/posts/:id/restore",
   "ADDCONTENTTYPEPARSER application/zip",
   "DELETE /data",
   "DELETE /data/unused",
@@ -78,6 +77,7 @@ const EXPECTED = [
   "GET /slurp/fan-activity/status",
   "GET /slurp/first-posts/status",
   "GET /slurp/image-connections",
+  "GET /slurp/image-style-profiles",
   "GET /slurp/notifications",
   "GET /slurp/notifications/unseen-count",
   "GET /slurp/post-guidance",
@@ -158,6 +158,7 @@ const EXPECTED = [
   "POST /messages/threads/:threadId/reset",
   "POST /messages/threads/:threadId/viewer-image",
   "POST /messages/tip",
+  "POST /slurp/accounts/:id/appearance",
   "POST /slurp/accounts/:id/arc-library/generate",
   "POST /slurp/accounts/:id/artwork/generate",
   "POST /slurp/accounts/:id/auto-post/run-now",
@@ -192,6 +193,7 @@ const EXPECTED = [
   "POST /slurp/posts/:id/interactions",
   "POST /slurp/posts/:id/media",
   "POST /slurp/posts/:id/unlock",
+  "POST /slurp/posts/:id/gamble-unlock",
   "POST /slurp/posts/:postId/interactions/:interactionId/creator-reply",
   "POST /slurp/refresh/images",
   "POST /slurp/stage-profile-draft",
@@ -216,6 +218,7 @@ const EXPECTED = [
   "DELETE /story/facts/:id",
   "DELETE /story/opportunities/:id",
   "GET /story-packs/bundled",
+  "GET /story/calendar",
   "GET /story/timeline",
   "POST /story-packs/bundled/:id/preview",
   "POST /story-packs/export",
@@ -252,7 +255,10 @@ const ADDED_ROUTES = new Set([
   "POST /messages/share-post",
   "POST /slurp/wardrobe/lorebook-entries",
   "POST /slurp/posts/:id/report",
-  "POST /slurp/posts/:id/restore",
+  "POST /slurp/posts/:id/gamble-unlock",
+  "GET /slurp/image-style-profiles",
+  "GET /story/calendar",
+  "POST /slurp/accounts/:id/appearance",
   "DELETE /slurp/accounts/:id/wardrobe/:lookId",
   "GET /slurp/accounts/:id/wardrobe",
   "GET /slurp/wardrobe/lorebooks",
@@ -298,9 +304,9 @@ assert.deepEqual([...EXPECTED].sort(), mappedStagingRoutes, "the route mapping m
 const EXPECTED_HANDLER_COUNTS = {
   "features/ads": 18,
   "features/audience": 12,
-  "features/creators": 34,
+  "features/creators": 35,
   "features/discovery": 4,
-  "features/economy": 13,
+  "features/economy": 14,
   "features/feed": 35,
   "features/maintenance": 14,
   "features/media": 7,
@@ -309,9 +315,9 @@ const EXPECTED_HANDLER_COUNTS = {
   "features/onboarding": 4,
   "features/projects": 15,
   "features/settings": 7,
-  "features/world": 10,
+  "features/world": 11,
 } as const;
-const EXPECTED_METHOD_COUNTS = { DELETE: 14, GET: 70, PATCH: 16, POST: 111, PUT: 5 } as const;
+const EXPECTED_METHOD_COUNTS = { DELETE: 14, GET: 72, PATCH: 16, POST: 112, PUT: 5 } as const;
 
 const root = join(import.meta.dirname, "../packages/slurp2/src/engine/packages/server/src/slp");
 const registration = /\bapp\.(get|post|put|patch|delete|addContentTypeParser)(?:<[^()]*?>)?\(\s*["'`]([^"'`]+)["'`]/gu;
@@ -366,7 +372,7 @@ const methodCounts = Object.fromEntries(
     }, new Map<string, number>()),
 );
 assert.deepEqual(methodCounts, EXPECTED_METHOD_COUNTS, "HTTP method multiset changed from staging");
-assert.equal(foundRoutes.filter((route) => !route.startsWith("ADDCONTENTTYPEPARSER ")).length, 216);
+assert.equal(foundRoutes.filter((route) => !route.startsWith("ADDCONTENTTYPEPARSER ")).length, 219);
 assert.deepEqual(handlerCounts, EXPECTED_HANDLER_COUNTS, "handler count changed in a feature");
 assert.ok(foundRoutes.includes("POST /slurp/posts/:id/media"), "the renamed POST media route must remain registered");
 assert.ok(

@@ -280,22 +280,17 @@ export function useDeleteCreatorPost() {
       qc.setQueriesData<SlurpProfilePost[]>({ queryKey: slpKeys.noodlerPosts(input.accountId) }, (current) =>
         current?.filter((item) => item.managed?.id !== input.id),
       );
-      return Promise.resolve();
-    },
-  });
-}
-export function useRestoreCreatorPost() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: ({ id, accountId }: { id: string; accountId: string }) =>
-      api.post<SlpCreatorManagedPost>(`/slurp2/slurp/posts/${encodeURIComponent(id)}/restore`, { accountId }),
-    // Not awaited: React Query holds the caller's own onSuccess until this resolves, and refetching
-    // the whole viewer scope left the card sitting in "Restoring…" with its countdown still running
-    // for as long as the refetch took. The post is already in the cache, so let the UI come back
-    // immediately and let the refetch reconcile behind it.
-    onSuccess: (_post, input) => {
-      void qc.invalidateQueries({ queryKey: slpKeys.noodlerPosts(input.accountId) });
-      void qc.invalidateQueries({ queryKey: slpKeys.slpCreatorViewers() });
+      qc.setQueriesData<SlpCreatorViewerScope | undefined>({ queryKey: slpKeys.slpCreatorViewers() }, (current) =>
+        current
+          ? {
+              ...current,
+              creators: current.creators.map((creator) => ({
+                ...creator,
+                posts: creator.posts.filter((post) => post.id !== input.id),
+              })),
+            }
+          : current,
+      );
     },
   });
 }

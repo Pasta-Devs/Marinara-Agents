@@ -369,7 +369,8 @@ const addedCalls = [
   "get /slurp2/slurp/tasks",
   "get /slurp2/slurp/viewer/feed?personaId=${encodeURIComponent(personaId)}&tab=all&limit=20${cursorQuery(current.nextCursor)}",
   "get /slurp2/slurp/viewer/feed?personaId=${encodedPersonaId}&tab=all&limit=20",
-  "post /slurp2/slurp/posts/${encodeURIComponent(id)}/restore",
+  "post /slurp2/slurp/accounts/${encodeURIComponent(input.accountId)}/appearance",
+  "post /slurp2/story/events/${encodeURIComponent(eventId)}/start",
   "patch /slurp2/accounts/${encodeURIComponent(accountId)}/settings",
   "patch /slurp2/continuity/facts/${encodeURIComponent(input.id)}",
   "post /slurp2/continuity/${input.path}",
@@ -388,6 +389,7 @@ const addedCalls = [
   "post /slurp2/story/occurrences/${encodeURIComponent(input.id)}/status",
 ];
 const removedCalls = [
+  "post /slurp2/slurp/posts/${encodeURIComponent(id)}/restore",
   "patch /slurp2/accounts/${encodeURIComponent(accountId)}/settings",
   "get /slurp2/slurp/viewer?personaId=${encodedPersonaId}",
 ];
@@ -436,16 +438,16 @@ const counts = Object.fromEntries(
 assert.deepEqual(
   counts,
   {
-    useMutation: 154,
-    useQuery: 217,
+    useMutation: 156,
+    useQuery: 221,
     useInfiniteQuery: 5,
-    invalidateQueries: 124,
-    setQueryData: 20,
-    cancelQueries: 6,
+    invalidateQueries: 128,
+    setQueryData: 21,
+    cancelQueries: 7,
     removeQueries: 1,
     refetchQueries: 0,
     onMutate: 2,
-    onError: 15,
+    onError: 16,
     onSettled: 9,
   },
   "query and mutation wiring counts match the monolith plus the planner, continuity and story-pack hooks",
@@ -459,7 +461,7 @@ const invalidatorCalls = {
 };
 assert.deepEqual(
   invalidatorCalls,
-  { invalidateSlurpMessages: 26, invalidateSlurpProjects: 5, mergeSlurpViewerShell: 3 },
+  { invalidateSlurpMessages: 26, invalidateSlurpProjects: 5, mergeSlurpViewerShell: 4 },
   "shared invalidation helpers must stay wired to the same call sites",
 );
 
@@ -514,10 +516,10 @@ assert.match(
   "the API-client host override must survive",
 );
 
-// 7. The Creators panel must consume the setter names returned by its Backstage state contract.
+// 7. The Creators panel keeps its filter state and opens the shared settings modal.
 const creatorsPanel = readFileSync(join(slpRoot, "features/creators/SlpCreatorsPanel.tsx"), "utf8");
 assert.match(creatorsPanel, /setCreatorFilter:\s*setFilter/u);
-assert.match(creatorsPanel, /setCreatorTab:\s*setTab/u);
+assert.match(creatorsPanel, /openSlpCreatorSettings\(creator\.id\)/u);
 assert.doesNotMatch(creatorsPanel, /setSlpCreator(?:Filter|Tab)/u);
 
 // 8. No client `slp` file reaches into server `slp`; the shared rules are the only crossing point.

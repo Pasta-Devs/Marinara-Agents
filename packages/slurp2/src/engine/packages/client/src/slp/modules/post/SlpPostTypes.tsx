@@ -11,6 +11,14 @@ import type {
 } from "../../../../../shared/src/slp/slp-social.types.js";
 import type { ConversationMediaPickerTabId } from "../../../components/chat/ConversationMediaPickerPanel";
 import type { ChatImage } from "../../../hooks/use-gallery";
+import type { SlpDiscountOffer } from "../../../../../shared/src/slp/slp-post-offers.js";
+
+export type SlpPostUnlockOffer = SlpDiscountOffer & {
+  onUnlock: (postId: string, price: number) => void | Promise<void>;
+};
+export type SlpPostSubscriptionOffer = SlpDiscountOffer & {
+  onSubscribe: (creatorAccountId: string, subscribed: boolean, price: number) => void | Promise<void>;
+};
 
 export type ReplyComposerTool = "image" | "media";
 export type ActiveComposerMention = SlpTextMention & { query: string };
@@ -174,6 +182,14 @@ export interface SlpPostCardCtx {
   generatePostImage?: (post: Pick<SlpPostCardModel, "id" | "authorAccountId">, imagePrompt?: string) => void;
   generatingPostImageId?: string | null;
   sharePost?: (post: SlpPostCardModel) => void;
+  /** Optional event offer. Omit to keep the discounted unlock action hidden. */
+  unlockOffer?: SlpPostUnlockOffer;
+  /** Optional event offer. Omit to keep the discounted subscription action hidden. */
+  subscriptionOffer?: SlpPostSubscriptionOffer;
+  gambleUnlockPost?: (postId: string) => Promise<{
+    outcome: "free" | "triple-price" | "already-unlocked";
+    amount: number;
+  }>;
   reportPost?: (post: SlpPostCardModel) => void;
   /** Reply image/upload capability. Absent → the card hides all reply-image affordances. */
   media?: SlpPostCardMediaCap;
