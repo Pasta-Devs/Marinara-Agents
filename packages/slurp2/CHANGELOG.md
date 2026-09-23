@@ -1,5 +1,44 @@
 # Slurp Remastered release notes
 
+## 0.2.31 — 2026-09-23
+
+- Words that make an image model draw someone young (petite, heights, cute, kawaii, round face) are removed from every appearance sent to it, and the adult description is stronger.
+
+## 0.2.30 — 2026-09-23
+
+- Every generated picture now states an adult subject and excludes childlike or underage depictions in its negative prompt, on every image path.
+
+## 0.2.29 — 2026-09-23
+
+- Locked posts deliver the Creator's own level; captions are told how far a post goes.
+- Occasions, story facts, and arc opportunities now reach posts, DMs, replies, and arc ideas; manual occasions have a Start button.
+- Creators stop upselling posts a fan already bought; payment notes show as small chips; one reply per run of unlocks.
+- Replies say when the AI budget is used up, keep a share of it, and arrive faster.
+- Failed pictures show their error to managers only; audience activity runs and reports results.
+- Shorter, cleaner prompts: capped card fields, resolved macros, language rules, fewer contradictions.
+
+## 0.2.28 — 2026-09-23
+
+- Post pictures follow the post's scene: a short English prompt with the Creator's face and body, outfit, place, camera, and level, instead of a page of rules. Card descriptions and costumes no longer leak in.
+- New Image style setting picks an Engine style profile for Slurp pictures and replaces the connection's prompt prefixes.
+- Image instructions reach the scene; a model imagePrompt from post direction is used as the picture.
+- Image prompt refinement uses Slurp's own connection and handles reasoning models.
+- Callbacks keep their shoot's place and clothes; picture sets vary the pose.
+- Shorter post prompts; memory lines say what was posted.
+- Fixed scheduled follow-ups, empty fan-message rewrites, and automatic audience activity that never ran. Player DMs keep a share of the AI budget.
+- Occasions aimed at selected or random Creators now reach their prompts.
+
+## 0.2.27 — 2026-09-23
+
+- Creator settings restore the per-Creator picture sexual-level control, with the active shared level shown for inherited settings.
+- Image prompt refinement now uses Slurp's shared language connection resolver, including the plain default language connection.
+
+## 0.2.26 — 2026-09-22
+
+- Arcs and World events now share portable story tags, bounded influences, typed outcomes, automation policies, and immutable occurrence snapshots.
+- Story packs can be reviewed, selectively imported, updated without overwriting local edits, and exported as strict data-only JSON. Five optional themed packs join the original arc and calendar collections.
+- World events now have a durable timeline with suggestions, manual approval, participant snapshots, facts, and follow-up arc opportunities.
+
 ## 0.2.25 — 2026-09-22
 
 - Every generated picture keeps the Creator's appearance, planned action, expression, and mood even when image-prompt interpretation is unavailable.

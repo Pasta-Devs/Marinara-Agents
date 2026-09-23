@@ -290,7 +290,7 @@ function useSlpPulseTasks() {
     queryKey: ["slurp", "pulse", "tasks"],
     queryFn: () => api.get<PulseTasksResponse>("/slurp2/slurp/tasks"),
     refetchInterval: 30_000,
-    refetchIntervalInBackground: true,
+    refetchIntervalInBackground: false,
   });
 }
 

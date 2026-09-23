@@ -15,6 +15,7 @@ import { SlurpProfileSurface } from "../../features/creators/SlpProfileSurface";
 import { HelpTooltip } from "../../../components/ui/HelpTooltip";
 import { useTranslation as useUiTranslation } from "react-i18next";
 import { SlurpInlineAdTile } from "../../features/ads/SlpInlineAd";
+import { openSlpCreatorSettings } from "../../features/creators/settings/slp-creator-settings-store";
 import { SlurpDiscoveryProfileEditor } from "../../features/discovery/SlpDiscoveryProfileEditor";
 import {
   appendAudienceStance,
@@ -267,7 +268,8 @@ export function StageProfileView({
     composerOpenSignal,
     localizeUi,
     bannerSrc,
-    setAutomationOpen,
+    onRunNow,
+    runNowPending,
     creatorToolsOpen,
     setCreatorToolsOpen,
     locationDraft,
@@ -567,14 +569,28 @@ export function StageProfileView({
                     look like the place to go. */}
                   {!personaBackedCreator && (
                     <div className="flex flex-wrap gap-2 px-3 py-2 @min-[760px]:px-4">
+                      {/* Automation used to open a dialog of its own here. It is a Creator setting
+                          like the rest, so it opens the one place they all live now. */}
                       <button
                         type="button"
-                        onClick={() => setAutomationOpen(true)}
+                        onClick={() => openSlpCreatorSettings(profile.id, { tab: "publishing" })}
                         className="min-h-11 rounded-lg border border-[var(--noodle-divider)] px-3 text-xs font-bold hover:bg-[var(--accent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)]"
                       >
                         {autoPosting.enabled
                           ? localizeUi("ui.noodle.stageprofileview.automationOn")
                           : localizeUi("ui.noodle.stageprofileview.automation")}
+                      </button>
+                      {/* Generating a post talks to the provider, so it keeps its own disclosure
+                          gate and stays an action here rather than moving in with the settings. */}
+                      <button
+                        type="button"
+                        disabled={runNowPending}
+                        onClick={() => onRunNow(profile.id)}
+                        className="min-h-11 rounded-lg border border-[var(--noodle-divider)] px-3 text-xs font-bold hover:bg-[var(--accent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)] disabled:opacity-50"
+                      >
+                        {runNowPending
+                          ? localizeUi("ui.noodle.stageprofileview.running")
+                          : localizeUi("ui.noodle.stageprofileview.runNow")}
                       </button>
                     </div>
                   )}

@@ -155,11 +155,11 @@ export function createMessagesStorageConversation(context: SlurpMessagesContext)
           if (!current) return;
           if (input.role === "creator" && current.state === "declined") return;
           if (input.scheduledFollowUpId) {
-            const followUp = await tx
+            const [followUp] = await tx
               .select({ status: slurpFollowUps.status })
               .from(slurpFollowUps)
               .where(and(eq(slurpFollowUps.id, input.scheduledFollowUpId), eq(slurpFollowUps.threadId, threadId)))
-              .get();
+              .limit(1);
             if (followUp?.status !== "claimed") return;
           }
           await tx.insert(slurpMessages).values(message);

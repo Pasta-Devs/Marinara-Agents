@@ -1,4 +1,5 @@
 import { createSlpPoll, readSlpPollFromMetadata } from "../../../../../shared/src/slp/slp-polls.js";
+import { slpIsAdmissionFailure } from "../../base/host/slp-admission.js";
 import {
   slpCreatorCreateInteractionSchema,
   slpCreatorPostCreateWithMediaSchema,
@@ -30,7 +31,6 @@ import { createCreatorPost, updateCreatorPostWithMedia } from "./slp-post-operat
 import { isDirectlyInvitedSlpCharacter } from "../../modules/feed/slp-invited-post-draft-access.js";
 import { resolveSlurpTextConnection } from "../../base/identity/slp-connection.js";
 import { generateInvitedSlpPostDraft } from "./slp-invited-post-draft-service.js";
-import { isConnectionAdmissionFailure } from "../../../services/generation/connection-admission.js";
 import { getErrorMessage } from "../../modules/creators/slp-public-support.js";
 import { listSlurpPostMedia } from "../../data/feed/slp-post-media-storage.js";
 import type { FastifyInstance } from "fastify";
@@ -767,7 +767,7 @@ export async function slpFeedPostRoutes(app: FastifyInstance, deps: SlpRouteDeps
         promptInstructions: prompts.instructions,
       });
     } catch (error) {
-      if (isConnectionAdmissionFailure(error)) return reply.code(409).send({ error: getErrorMessage(error) });
+      if (slpIsAdmissionFailure(error)) return reply.code(409).send({ error: getErrorMessage(error) });
       logger.error(error, "[slurp] Invited post draft generation failed");
       return reply.code(500).send({ error: getErrorMessage(error) });
     }

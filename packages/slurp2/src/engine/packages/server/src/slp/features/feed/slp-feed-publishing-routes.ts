@@ -1,4 +1,6 @@
 import { slpCreatorGenerationRequestSchema } from "../../../../../shared/src/slp/slp-social-generation.schema.js";
+import { slpIsAdmissionFailure } from "../../base/host/slp-admission.js";
+import { loadImageGenerationUserSettings } from "../../../services/image/image-generation-settings.js";
 import { slpCreatorTargetedRefreshSchema } from "../../../../../shared/src/slp/slp-social.schema.js";
 import { z } from "zod";
 import { getSlurpPostGuidance, updateSlurpPostGuidance } from "../../data/settings/slp-post-guidance-storage.js";
@@ -20,10 +22,7 @@ import {
   refreshTargetedCreatorsNow,
 } from "./slp-post-operation.js";
 import { resolveSlurpAutomaticPostAccess } from "./slp-generation-service.js";
-import {
-  admissionModeForRequest,
-  isConnectionAdmissionFailure,
-} from "../../../services/generation/connection-admission.js";
+import { admissionModeForRequest } from "../../../services/generation/connection-admission.js";
 import type { FastifyInstance } from "fastify";
 import { slurpPostTypeSchema } from "../../modules/requests/slp-request-schemas.js";
 import {
@@ -178,6 +177,14 @@ export async function slpFeedPublishingRoutes(app: FastifyInstance, deps: SlpRou
 
   app.get("/slurp/image-connections", async () => getCreatorImageConnections(app.db));
 
+  // The Engine's image style profiles, so Slurp can pick one instead of always using the default.
+  app.get("/slurp/image-style-profiles", async () =>
+    (await loadImageGenerationUserSettings(app.db)).styleProfiles.profiles.map((profile) => ({
+      id: profile.id,
+      name: profile.name,
+    })),
+  );
+
   app.patch("/slurp/image-connections", async (req, reply) => {
     const body = z
       .object({
@@ -323,7 +330,7 @@ export async function slpFeedPublishingRoutes(app: FastifyInstance, deps: SlpRou
       }
       return reply.code(404).send({ error: "Slurp account not found." });
     } catch (error) {
-      if (isConnectionAdmissionFailure(error)) return reply.code(409).send({ error: getErrorMessage(error) });
+      if (slpIsAdmissionFailure(error)) return reply.code(409).send({ error: getErrorMessage(error) });
       logger.error(error, "[slurp] Slurp post generation failed");
       return reply.code(500).send({ error: "Slurp post generation failed." });
     }

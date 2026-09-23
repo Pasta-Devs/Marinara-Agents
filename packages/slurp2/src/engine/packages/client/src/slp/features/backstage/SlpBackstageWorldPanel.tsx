@@ -4,14 +4,17 @@ import { BackstagePageHeader, SummaryRow, type SummaryTone } from "../../modules
 import { outcomeSummary } from "./SlpBackstagePreview";
 import type { SlpBackstageTarget } from "../../base/navigation/slp-backstage-target";
 
-import { slurpActivePlatformEvents } from "../../../../../shared/src/slp/slp-platform-events.js";
-
 import type { SlpBackstagePageProps } from "./slp-backstage-contract";
 
 /** Features landing page: one row per area, plus the libraries that live behind them. */
 export function SlpBackstageWorldPanel(page: SlpBackstagePageProps) {
   const { t, adPool, settings, creators } = page;
-  const go = (next: SlpBackstageTarget) => page.onNavigate({ ...page.navigation, section: "world", target: next });
+  const go = (next: SlpBackstageTarget) =>
+    page.onNavigate({
+      ...page.navigation,
+      section: ["calendar", "events", "arcs", "packs"].includes(next) ? "content" : "world",
+      target: next,
+    });
   const onOff = (value: boolean) => (value ? t("ui.slurp.settings.overview.on") : t("ui.slurp.settings.overview.off"));
   const worldRows: Array<{
     target: SlpBackstageTarget;
@@ -28,9 +31,9 @@ export function SlpBackstageWorldPanel(page: SlpBackstagePageProps) {
       tone: settings.fanActivityEnabled ? "ok" : "off",
     },
     {
-      target: "arcs",
+      target: "audience",
       icon: <BookOpen size={20} />,
-      title: t("ui.slurp.settings.backstage.landing.stories", { defaultValue: "Arcs" }),
+      title: t("ui.slurp.settings.backstage.landing.stories", { defaultValue: "World simulation" }),
       status: t(
         `ui.slurp.settings.arcAutoMode${settings.arcAutoMode === "off" ? "Off" : settings.arcAutoMode === "suggest" ? "Suggest" : "Auto"}`,
       ),
@@ -42,13 +45,6 @@ export function SlpBackstageWorldPanel(page: SlpBackstagePageProps) {
       title: t("ui.slurp.settings.backstage.landing.discovery", { defaultValue: "Discovery tags" }),
       status: String(settings.discoveryTags.length),
       tone: settings.discoveryTags.length ? "info" : "warning",
-    },
-    {
-      target: "events",
-      icon: <CalendarDays size={20} />,
-      title: t("ui.slurp.settings.backstage.landing.events", { defaultValue: "Events and holidays" }),
-      status: String(slurpActivePlatformEvents(settings.platformEvents, new Date()).length),
-      tone: slurpActivePlatformEvents(settings.platformEvents, new Date()).length ? "ok" : "off",
     },
     {
       target: "messaging",
@@ -87,7 +83,7 @@ export function SlpBackstageWorldPanel(page: SlpBackstagePageProps) {
     },
     {
       target: "arcs",
-      label: t("ui.slurp.settings.backstage.landing.arcLibrary", { defaultValue: "Arc library" }),
+      label: t("ui.slurp.settings.backstage.landing.arcLibrary", { defaultValue: "Plan templates" }),
       count: settings.arcLibrary.length,
     },
     {
@@ -104,7 +100,7 @@ export function SlpBackstageWorldPanel(page: SlpBackstagePageProps) {
   return (
     <div className="space-y-4">
       <BackstagePageHeader
-        title={t("ui.slurp.settings.backstage.sections.world")}
+        title={t("ui.slurp.settings.backstage.sections.world", { defaultValue: "World and audience" })}
         detail={t("ui.slurp.settings.backstage.landing.worldDetail", {
           defaultValue: "Shape how your Slurp feels. Open an area to change it.",
         })}

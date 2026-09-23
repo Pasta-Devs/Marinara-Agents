@@ -20,6 +20,7 @@ import {
   readSlurpProject,
   makeSlurpProject,
 } from "./slp-project.js";
+import { slpArcBlueprintSchema } from "../../../../../shared/src/slp/slp-story-engine.js";
 
 export const SLURP_ARC_TYPE_NAME_MAX_LENGTH = 80;
 export const SLURP_DEFAULT_ARC_DURATION_DAYS = 14;
@@ -33,13 +34,29 @@ const seed = (
   id,
   name,
   description,
-  chapters: chapters.map(([label, minDays, maxDays]) => ({ label, minDays, maxDays })),
+  contentId: id,
+  chapters: chapters.map(([label, minDays, maxDays]) => ({
+    label,
+    minDays,
+    maxDays,
+    influences: [],
+    outcomes: [],
+    opportunities: [],
+  })),
   tags: [],
+  storyTags: [],
   tone: "",
   durationDays: SLURP_DEFAULT_ARC_DURATION_DAYS,
   enabled: true,
   builtin: true,
   hidden: false,
+  automation: "inherit",
+  provenance: {
+    packId: "slurp-everyday-life",
+    contentId: id,
+    packVersion: "1.0.0",
+    contentHash: "0".repeat(64),
+  },
 });
 
 /**
@@ -97,6 +114,15 @@ export function slurpArcLibraryFromLegacy(allowedKinds: unknown): SlurpArcType[]
     chapters: type.chapters.map((chapter) => ({ ...chapter })),
     enabled: allowed ? allowed.includes(type.id) : true,
   }));
+}
+
+/** Upgrade each saved blueprint independently so one damaged entry cannot erase the library. */
+export function slurpNormalizeArcLibrary(value: unknown, allowedKinds?: unknown): SlurpArcType[] {
+  if (!Array.isArray(value)) return slurpArcLibraryFromLegacy(allowedKinds);
+  return value.flatMap((item) => {
+    const parsed = slpArcBlueprintSchema.safeParse(item);
+    return parsed.success ? [parsed.data] : [];
+  });
 }
 
 export const SLURP_ARC_AUTO_MODES = ["off", "suggest", "auto"] as const;
@@ -342,13 +368,19 @@ export function slurpArcTypeFromProject(project: SlurpProject, id: string): Slur
       maxDays: project.phaseDays[index]?.max ?? 0,
       ...(project.choices[index] ? { choice: project.choices[index] } : {}),
       ...project.reach[index],
+      storyTags: [],
+      influences: [],
+      outcomes: [],
+      opportunities: [],
     })),
     ...(project.revertProfileAtEnd ? { revertProfileAtEnd: true } : {}),
     tags: [],
+    storyTags: [],
     tone: project.tone,
     durationDays: project.durationDays ?? SLURP_DEFAULT_ARC_DURATION_DAYS,
     enabled: true,
     builtin: false,
     hidden: false,
+    automation: "inherit",
   };
 }

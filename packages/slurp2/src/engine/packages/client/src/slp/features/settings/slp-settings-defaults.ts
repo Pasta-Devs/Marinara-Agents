@@ -32,6 +32,7 @@ export const SLURP_SETTINGS_SECTION_KEYS: Record<SlurpResettableSection, readonl
     "storyImageWidth",
     "storyImageHeight",
     "imageContextMode",
+    "imageStyleProfileId",
     "imageGenerationUseAvatarReferences",
     "imageGenerationIncludeDescriptions",
     "autoPostingImagesEnabled",
@@ -74,6 +75,7 @@ export const SLURP_SETTINGS_SECTION_KEYS: Record<SlurpResettableSection, readonl
     "arcPollHours",
     "arcStatEffects",
     "arcCrossovers",
+    "storyAutomation",
   ],
   messaging: [
     "messagesAwayRepliesEnabled",

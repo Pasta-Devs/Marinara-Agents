@@ -54,6 +54,78 @@ export function stripAppearanceLabel(value: string): string {
     .trim();
 }
 
+/**
+ * The body and face from a character card's appearance, without its clothes.
+ *
+ * Card appearance paragraphs describe a wardrobe too — "favours pastel dresses … for cosplay she
+ * wears a costume and carries a prop". Sent with every picture, the image model drew all of it,
+ * often as a second person in the costume. Clothing now comes from the post's own scene, so the
+ * sentences about clothes are dropped here. A Creator's own Stage appearance is trusted as written.
+ * ponytail: a keyword filter over sentences. If cards need finer handling, generate a look once
+ * per Creator with a language model and store it as Stage appearance.
+ */
+const CLOTHING_SENTENCE =
+  /\b(?:wear|wears|wearing|worn|dress|dresses|dressed|outfits?|cloth(?:es|ing)|fashion|favou?rs|cosplay|costumes?|accessor(?:y|ies)|carries|carrying|shoes|boots|jewel(?:ry|lery))\b/iu;
+const MAX_LOOK_LENGTH = 600;
+
+export function slurpImageLook(appearance: string): string {
+  const text = stripAppearanceLabel(appearance).replace(/\s+/gu, " ").trim();
+  if (!text) return "";
+  const kept = text
+    .split(/(?<=[.!?])\s+/u)
+    .filter((sentence) => !CLOTHING_SENTENCE.test(sentence))
+    .join(" ");
+  const look = slurpWithoutYouthCoding(kept || text);
+  return look.length <= MAX_LOOK_LENGTH ? look : `${look.slice(0, look.lastIndexOf(" ", MAX_LOOK_LENGTH))}`;
+}
+
+/**
+ * Words that make an image model draw someone young. "petite, a short height, a round cute face"
+ * came back as a childlike figure in an illustrated style, so these never reach the image model,
+ * whoever wrote them. The caption call still reads the full card.
+ */
+const YOUTH_CODING =
+  /\b(?:petite|tiny|small(?:-framed)?|short(?:\s+stature)?|little|cute|kawaii|girlish|boyish|childlike|child-like|baby(?:-faced|\s+face)?|youthful|young-looking|doll-like|loli|round(?:,)?\s+(?:cute\s+)?face|\d{2,3}\s?cm(?:\s+tall)?|standing at \d{2,3}\s?cm)\b,?/giu;
+
+export function slurpWithoutYouthCoding(value: string): string {
+  return value
+    .replace(YOUTH_CODING, "")
+    .replace(/\s+,/gu, ",")
+    .replace(/,\s*(?:,\s*)+/gu, ", ")
+    .replace(/\s{2,}/gu, " ")
+    .replace(/\b(?:and|with|a|an|distinctly|very|quite|really)\s*(?=[,.])/giu, "")
+    .replace(/\b(is|are)\s+and\s+/giu, "$1 ")
+    .replace(/\b(a|an)\s+(?:a|an)\b/giu, "$1")
+    .replace(/\s+([,.])/gu, "$1")
+    .replace(/,\s*\./gu, ".")
+    .replace(/,?\s+and\./giu, ".")
+    .trim();
+}
+
+/** Old post drafts were rule prose for a language model. They describe no picture and must not be reused. */
+export function slurpIsLegacyImageBrief(value: string | null | undefined): boolean {
+  return /^One photograph this person took/u.test(value?.trim() ?? "");
+}
+
+/**
+ * Every Slurp picture shows adults only, stated in the prompt and in the negative prompt.
+ *
+ * A petite, "cute", "kawaii" appearance rendered in an illustrated style came back childlike. A
+ * platform of adult creators can never depend on the appearance text or the style to imply age, so
+ * the anchor leads every prompt on every path — rewrite, fallback, review, and retry.
+ */
+export const SLURP_ADULT_NEGATIVE_PROMPT =
+  "child, children, minor, underage, childlike, child-like proportions, young girl, young boy, little girl, little boy, loli, shota, teen, teenager, school uniform, baby face";
+
+export function slurpAdultAnchor(gender: string | null | undefined): string {
+  const who = gender === "male" ? "adult man" : gender === "female" ? "adult woman" : "adult person";
+  return `Clearly an ${who} in their late twenties or older, with an adult face, defined cheekbones and jawline, and mature adult body proportions.`;
+}
+
+export function slurpWithAdultNegative(negative: string | null | undefined): string {
+  return [negative?.trim(), SLURP_ADULT_NEGATIVE_PROMPT].filter(Boolean).join(", ");
+}
+
 /** Select only the visual prompt that can be sent to an image provider. */
 export function selectSlpImageProviderPrompt(input: {
   rewrittenPrompt: string | null | undefined;

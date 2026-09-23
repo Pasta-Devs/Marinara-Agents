@@ -156,7 +156,8 @@ export async function slpWalletRoutes(app: FastifyInstance, deps: SlpRouteDeps) 
       await applySlurpTipEffectsForDatabase(app.db, tipOperationId).catch((error) =>
         app.log.error({ err: error }, "[slurp] profile tip effects failed"),
       );
-    await reactToSlurpPayment(app.db, {
+    // Fire and forget: the reply is a chat message, and the unlock must not wait on the model.
+    void reactToSlurpPayment(app.db, {
       viewerAccountId: viewer.id,
       creatorAccountId,
       kind: "tip",
@@ -343,7 +344,8 @@ export async function slpWalletRoutes(app: FastifyInstance, deps: SlpRouteDeps) 
       if (wallet.coins < price) return reply.code(402).send({ error: "Not enough coins", price, coins: wallet.coins });
       return reply.code(400).send({ error: "Could not unlock this post" });
     }
-    await reactToSlurpPayment(app.db, {
+    // Fire and forget: the reply is a chat message, and the unlock must not wait on the model.
+    void reactToSlurpPayment(app.db, {
       viewerAccountId: viewer.id,
       creatorAccountId: creator.id,
       kind: "unlock",

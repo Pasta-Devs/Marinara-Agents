@@ -4,6 +4,7 @@ import { SlpAudiencePanel } from "../../features/audience/SlpAudiencePanel";
 import { SlpBackstageAutomationPanel } from "../../features/backstage/SlpBackstageAutomationPanel";
 import { SlpBackstageOverviewPanel } from "../../features/backstage/SlpBackstageOverviewPanel";
 import { SlpBackstageWorldPanel } from "../../features/backstage/SlpBackstageWorldPanel";
+import { SlpBackstageContentPanel } from "../../features/backstage/SlpBackstageContentPanel";
 import { SlpCreatorImprovePanel } from "../../features/creators/SlpCreatorImprovePanel";
 import { SlpCreatorsPanel } from "../../features/creators/SlpCreatorsPanel";
 import { SlpDiscoveryPanel } from "../../features/discovery/SlpDiscoveryPanel";
@@ -16,6 +17,8 @@ import { SlpMessagingPanel } from "../../features/messages/SlpMessagingPanel";
 import { SlpProjectsPanel } from "../../features/projects/SlpProjectsPanel";
 import { SlpPromptsPanel } from "../../features/settings/SlpPromptsPanel";
 import { SlpWorldEventsPanel } from "../../features/world/SlpWorldEventsPanel";
+import { SlpPacksPanel } from "../../features/world/SlpPacksPanel";
+import { SlpCalendarPanel } from "../../features/world/SlpCalendarPanel";
 import type { SlpBackstageTarget } from "../../base/navigation/slp-backstage-target";
 
 /**
@@ -31,8 +34,11 @@ export const SLP_BACKSTAGE_PANELS: readonly SlpBackstagePanelEntry[] = [
   { target: "creators", Component: SlpCreatorsPanel },
   { target: "improve", Component: SlpCreatorImprovePanel },
   { target: "world", Component: SlpBackstageWorldPanel },
+  { target: "content", Component: SlpBackstageContentPanel },
   { target: "tags", Component: SlpDiscoveryPanel },
   { target: "events", Component: SlpWorldEventsPanel },
+  { target: "packs", Component: SlpPacksPanel },
+  { target: "calendar", Component: SlpCalendarPanel },
   { target: "arcs", Component: SlpProjectsPanel },
   { target: "messaging", Component: SlpMessagingPanel },
   { target: "audience", Component: SlpAudiencePanel },

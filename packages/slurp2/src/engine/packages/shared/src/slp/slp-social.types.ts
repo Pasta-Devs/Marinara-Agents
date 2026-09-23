@@ -298,6 +298,8 @@ export interface SlpCreatorStageProfile {
 }
 
 export interface SlpCreatorManagedStageProfile extends SlpCreatorStageProfile {
+  /** The Engine character or persona this Creator was made from. Empty when the source is gone. */
+  sourceAccountId: string | null;
   access: SlpAccountAccessSettings;
   autoPosting: SlpAutoPostingSettings;
   sourceStatus: SlpCreatorSourceStatus;

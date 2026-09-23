@@ -1,4 +1,5 @@
 import type { DB } from "../../../db/connection.js";
+import { slpIsAdmissionFailure } from "../../base/host/slp-admission.js";
 import { logger } from "../../../lib/logger.js";
 import { createCharactersStorage } from "../../../services/storage/characters.storage.js";
 import { createCharacterGalleryStorage } from "../../../services/storage/character-gallery.storage.js";
@@ -15,7 +16,6 @@ import {
 import { resolveCreatorImageConnectionId } from "../../base/media/slp-image-connections.js";
 import { resolveCreatorArtwork } from "./slp-public-profiles-service.js";
 import { tryCreatorAccountOperation } from "../../base/locking/slp-account-operation-lock.js";
-import { isConnectionAdmissionFailure } from "../../../services/generation/connection-admission.js";
 
 export type SlpCreatorArtworkOutcome = "idle" | "inherited" | "avatar" | "banner" | "unavailable";
 
@@ -211,7 +211,7 @@ export async function tryBackfillNextCreatorArtwork(db: DB): Promise<SlpCreatorA
     return await backfillNextCreatorArtwork(db);
   } catch (error) {
     // A busy connection is not a failure: nothing was sent, so the next poll may simply try again.
-    if (isConnectionAdmissionFailure(error)) return "idle";
+    if (slpIsAdmissionFailure(error)) return "idle";
     logger.warn(error, "[slurp] Creator artwork backfill failed");
     return "unavailable";
   }

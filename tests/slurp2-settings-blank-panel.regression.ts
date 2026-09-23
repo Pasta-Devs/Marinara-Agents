@@ -13,9 +13,17 @@ const backstage = readFileSync(`${clientRoot}/components/slurp/slurp-backstage.t
 const world = readFileSync(`${clientRoot}/components/slurp/SlurpBackstageWorld.tsx`, "utf8");
 const automation = readFileSync(`${clientRoot}/components/slurp/SlurpBackstageAutomation.tsx`, "utf8");
 
-assert.match(backstage, /arcs: "Arcs"/u, "the Features arc target must be labelled Arcs");
-assert.match(backstage, /world\("arcs", "arc library", "stories"\)/u, "stories must remain an arc search alias");
-assert.match(world, /landing\.stories[\s\S]*defaultValue: "Arcs"/u, "the Features landing row must use the Arcs label");
+assert.match(backstage, /arcs: "Plan templates"/u, "templates must use product vocabulary");
+assert.match(
+  backstage,
+  /content\("arcs", "plan templates", "stories"\)/u,
+  "stories must remain searchable as templates",
+);
+assert.match(
+  world,
+  /landing\.stories[\s\S]*defaultValue: "World simulation"/u,
+  "the World landing must describe world controls",
+);
 assert.match(
   automation,
   /settingKey="storyRate"[\s\S]*ui\.slurp\.settings\.storyRate/u,

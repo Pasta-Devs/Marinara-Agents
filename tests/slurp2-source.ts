@@ -59,7 +59,6 @@ export const SLURP2_SOURCE_MODULES: Record<string, readonly string[]> = {
     "packages/client/src/slp/features/creators/SlpCreatorRefreshModal.tsx",
     "packages/client/src/slp/features/economy/slp-economy-backstage-contract.ts",
     "packages/client/src/slp/features/feed/slp-feed-backstage-contract.ts",
-    "packages/client/src/slp/features/feed/SlpCreatorScheduleModal.tsx",
     "packages/client/src/slp/features/maintenance/slp-maintenance-backstage-contract.ts",
     "packages/client/src/slp/features/media/slp-media-backstage-contract.ts",
     "packages/client/src/slp/features/messages/slp-messages-backstage-contract.ts",
@@ -72,6 +71,14 @@ export const SLURP2_SOURCE_MODULES: Record<string, readonly string[]> = {
     "packages/client/src/slp/features/creators/SlpCreatorMetrics.tsx",
     "packages/client/src/slp/features/creators/SlpCreatorImprovePanel.tsx",
     "packages/client/src/slp/features/creators/slp-creator-classes.ts",
+    // The per-Creator detail this page used to expand inline is now one modal, opened from here,
+    // from a Creator's profile and from a settings search result.
+    "packages/client/src/slp/features/creators/settings/SlpCreatorSettingsModal.tsx",
+    "packages/client/src/slp/features/creators/settings/slp-creator-settings-sections.ts",
+    "packages/client/src/slp/features/creators/settings/SlpCreatorSettingsSections.tsx",
+    "packages/client/src/slp/features/creators/settings/SlpCreatorPublishingSection.tsx",
+    "packages/client/src/slp/features/creators/settings/slp-creator-settings-contract.ts",
+    "packages/client/src/slp/features/creators/settings/slp-creator-settings-store.ts",
   ],
   "packages/client/src/components/slurp/SlurpBackstageWorld.tsx": [
     "packages/client/src/slp/features/backstage/SlpBackstageWorldPanel.tsx",
@@ -276,6 +283,7 @@ export const SLURP2_SOURCE_MODULES: Record<string, readonly string[]> = {
     "packages/server/src/slp/data/projects/slp-projects-storage-1.ts",
     "packages/server/src/slp/data/projects/slp-projects-storage-2.ts",
     "packages/server/src/slp/data/economy/slp-economy-tail-storage.ts",
+    "packages/server/src/slp/data/world/slp-story-engine-storage.ts",
     "packages/server/src/slp/data/slp-storage.ts",
   ],
   "packages/server/src/services/storage/slurp-messages.storage.ts": [

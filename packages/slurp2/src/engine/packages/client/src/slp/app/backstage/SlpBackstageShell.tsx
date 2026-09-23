@@ -1,7 +1,6 @@
 import { AlertTriangle, CheckCircle2, Loader2, RefreshCw } from "lucide-react";
 
 import { useEffect } from "react";
-import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 
 import { showConfirmDialog } from "../../../lib/app-dialogs";
@@ -14,14 +13,11 @@ import {
 
 import { slurpAudiencePresetFor } from "../../../../../shared/src/slp/slp-tuning.js";
 import { SLP_BACKSTAGE_SECTION_LABELS, SLP_BACKSTAGE_TARGET_LABELS } from "../../base/navigation/slp-backstage-target";
-import {
-  confirmLeaveSlurpBackstage,
-  SlurpBackstageApplyBar,
-  useSlurpBackstageDraftGuard,
-} from "../../features/backstage/SlpBackstageControls";
+import { SlurpBackstageApplyBar, useSlurpBackstageDraftGuard } from "../../features/backstage/SlpBackstageControls";
 import { SlurpBackstageSearch, SlurpBackstageSubnav } from "../../features/backstage/SlpBackstageNavigation";
 import { errorMessage } from "../../modules/settings/slp-backstage-format";
 import { focusSettingAnchor } from "../../modules/settings/SlpSettingsKit";
+import { SLP_CREATOR_SETTING_TAB } from "../../features/creators/settings/slp-creator-settings-contract";
 
 import { useSlpBackstageController } from "./slp-backstage-controller";
 import { slpBackstagePanelFor } from "./slp-backstage-registry";
@@ -31,7 +27,6 @@ import {
 } from "../../features/backstage/slp-backstage-contract";
 import { SlpBackstageSectionRow } from "../../features/backstage/SlpBackstageSidebar";
 import { SlpCreatorRefreshModal } from "../../features/creators/SlpCreatorRefreshModal";
-import { SlpCreatorScheduleModal } from "../../features/feed/SlpCreatorScheduleModal";
 import { SlpPromptEditors } from "../../features/settings/SlpPromptEditors";
 
 /**
@@ -44,22 +39,14 @@ export function SlpBackstageShell({
   onNavigate,
   onAddCreators,
   personaSourceIds,
-  onEditCreator,
-  onRedraftCreator,
   onRestartOnboarding,
   viewerPersonaId,
 }: SlpBackstageShellProps) {
-  const { t: translate } = useTranslation();
-  // Opening a Creator's profile leaves Backstage, so staged changes ask stay or discard first.
   const controller = useSlpBackstageController({
     navigation,
     onNavigate,
     onAddCreators,
     personaSourceIds,
-    onEditCreator: (creator) =>
-      void confirmLeaveSlurpBackstage(translate).then((leave) => leave && onEditCreator(creator)),
-    onRedraftCreator: (creator) =>
-      void confirmLeaveSlurpBackstage(translate).then((leave) => leave && onRedraftCreator(creator)),
     onRestartOnboarding,
     viewerPersonaId,
   });
@@ -86,6 +73,9 @@ export function SlpBackstageShell({
   // A search result lands on its page first; once that page renders, bring the setting into view.
   useEffect(() => {
     if (!settingKey || !settingsReady) return;
+    // A setting that lives in the Creator settings modal is not on this page at all. The Creators
+    // page opens the modal for it and clears the key, so this must not clear it first.
+    if (settingKey in SLP_CREATOR_SETTING_TAB) return;
     const frame = requestAnimationFrame(() => {
       focusSettingAnchor(settingKey);
       onNavigate({ ...navigation, settingKey: undefined });
@@ -244,7 +234,6 @@ export function SlpBackstageShell({
         </div>
       </main>
       <SlpCreatorRefreshModal {...page} />
-      <SlpCreatorScheduleModal {...page} />
       <SlpPromptEditors {...page} />
     </>
   );

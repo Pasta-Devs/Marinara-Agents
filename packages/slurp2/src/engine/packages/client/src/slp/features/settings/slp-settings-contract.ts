@@ -53,6 +53,7 @@ export type SlurpSettings = {
   arcPollHours: number;
   arcStatEffects: "off" | "small" | "big";
   arcCrossovers: boolean;
+  storyAutomation: "manual" | "suggest" | "auto";
   arcLibrary: SlurpArcType[];
   discoveryTags: Array<{ tag: string; group: string }>;
   storyImageWidth: number;
@@ -70,6 +71,7 @@ export type SlurpSettings = {
   imageContextMode: "auto" | "imagePrompt" | "vision";
   imageContextConnectionId: string | null;
   imageGenerationConnectionId: string | null;
+  imageStyleProfileId: string | null;
   imageGenerationPrompt: string;
   imagePromptInterpretation: string;
   enableImageInterpretation: boolean;
@@ -183,6 +185,7 @@ export type SlurpPromptResultPreviewResponse = {
     action: string;
     expression: string;
     visualDirection: string;
+    outfit?: string;
   } | null;
   wardrobeSelection: { selectedId: string | null; requestedId: string | null; fallback: boolean };
   visualBrief: {

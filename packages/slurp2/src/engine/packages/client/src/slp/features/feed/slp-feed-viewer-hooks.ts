@@ -67,7 +67,9 @@ export function useCreatorViewer(personaId: string | null, enabled = true) {
     enabled: enabled && Boolean(personaId),
     staleTime: 30_000,
     gcTime: 10 * 60_000,
-    refetchInterval: enabled && personaId ? 30_000 : false,
+    // The unseen-count poll already announces new posts; the full page only needs a slow refresh.
+    // ponytail: fixed 2-minute poll; refetch on a count change if that feels stale.
+    refetchInterval: enabled && personaId ? 120_000 : false,
     refetchIntervalInBackground: false,
   });
   const loadMore = async () => {
@@ -118,7 +120,9 @@ export function useCreatorUnseenCount(personaId: string | null, enabled = true) 
       api.get<{ count: number }>(`/slurp2/slurp/viewer/unseen-count?personaId=${encodeURIComponent(personaId!)}`),
     enabled: enabled && Boolean(personaId),
     staleTime: 10_000,
-    refetchInterval: enabled && personaId ? 30_000 : false,
+    // The unseen-count poll already announces new posts; the full page only needs a slow refresh.
+    // ponytail: fixed 2-minute poll; refetch on a count change if that feels stale.
+    refetchInterval: enabled && personaId ? 120_000 : false,
     refetchIntervalInBackground: false,
   });
   const count = Math.max(0, Math.floor(data?.count ?? 0));

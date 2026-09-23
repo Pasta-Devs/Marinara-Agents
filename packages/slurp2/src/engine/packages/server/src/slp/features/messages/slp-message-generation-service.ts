@@ -12,7 +12,7 @@ import { type APIProvider } from "@marinara-engine/shared";
 import { type SlpAccount } from "../../../../../shared/src/slp/slp-social.types.js";
 import { isDebugAgentsEnabled } from "../../../config/runtime-config.js";
 import { resolveSlurpCreatorMenu } from "../../data/settings/slp-post-guidance-storage.js";
-import { slurpPlatformEventInstruction } from "../../../../../shared/src/slp/slp-platform-events.js";
+import { resolveSlurpEventInstruction } from "../world/slp-world-contract.js";
 import type { DB } from "../../../db/connection.js";
 import { logDebugOverride } from "../../../lib/logger.js";
 import { resolveBaseUrl } from "../../../services/generation/connection-base-url.js";
@@ -138,7 +138,14 @@ export function buildSlurpMessageChat(input: {
   disclosureMode: Parameters<typeof slpCreatorIdentityInstruction>[0];
   publicIdentity: Parameters<typeof slpCreatorIdentityInstruction>[1];
   /** What the creator has posted lately, so "loved your new set" can be answered. */
-  recentPosts: Array<{ id: string; title: string | null; content: string; access: string; imageUrl: string | null }>;
+  recentPosts: Array<{
+    id: string;
+    title: string | null;
+    content: string;
+    access: string;
+    imageUrl: string | null;
+    unlockedByFan?: boolean;
+  }>;
   /** What the pictures in the conversation show, keyed by message id. */
   imageContexts?: Map<string, string>;
   /** The Creator's private content menu. See `slurp-post-guidance.ts`. */
@@ -168,7 +175,8 @@ export function buildSlurpMessageChat(input: {
         kind: "context" as const,
         optional: true,
         text: input.generationGuidance.trim()
-          ? "Use the platform's saved creative direction below. It is trusted configuration."
+          ? // The line used to promise the direction "below" and never include it.
+            `## Creative direction\n${input.generationGuidance.trim()}\n## End creative direction`
           : "",
       },
       {
@@ -248,7 +256,7 @@ export function buildSlurpMessageChat(input: {
       {
         id: "style",
         kind: "editable" as const,
-        text: "This is a private chat, so write like one: lowercase is fine, contractions are fine, emojis are fine if they suit the persona.\nKeep it to a chat message, not an essay. One to four sentences unless the fan asked something that needs more.",
+        text: "This is a private chat, so write like one: lowercase is fine, contractions are fine, emojis are fine if they suit the persona.\nKeep it to a chat message, not an essay. One to four sentences unless the fan asked something that needs more.\nDo not reuse the opener, catchphrase, or emoji of your last few messages, and stay in the language of your recent messages.",
       },
       {
         id: "outputContract",
@@ -264,7 +272,7 @@ export function buildSlurpMessageChat(input: {
           '"stateSignals" is an array of up to three exact signals that describe what the fan did in this message. Allowed values: fan_shared_personal_fact, fan_remembered_creator_detail, fan_gave_respectful_compliment, fan_gave_welcome_adult_attention, fan_ignored_creator_question, fan_pushed_after_refusal, fan_requested_free_content, fan_paid_for_content, fan_completed_commission, fan_returned_after_silence, fan_mentioned_another_creator, fan_apologized, fan_broke_a_promise. Use only signals that are true. Do not invent a signal to justify the reply.',
           '"sharePost" is an optional zero-based index into yourRecentPosts. Use it only when sharing one of your recent posts fits the conversation. A non-subscriber may receive a friendly locked preview sometimes. Otherwise use null.',
           '"image" is either null or an object with a concrete visual "prompt" and optional short "caption". Use it only when a picture would feel natural, such as showing something, rewarding a warm fan, or making a pointed hostile gesture. Never use it for every reply. Keep the image inside the Creator content menu and relationship boundaries. Do not add nudity, explicit anatomy, or sexual activity unless the conversation and trusted Creator settings already call for it. Do not sexualize an ordinary update.',
-          '"followUp" is either null or an object {"type":"reminder"|"promise_delivery"|"task_update"|"check_in"|"recurring","timing":"30 minutes"|"2 hours"|"tonight"|"every 4 hours","count":1-5,"reason":"brief description","context":"optional details"}. Use it when you promise to follow up later, send updates, deliver something, remind them about something, or check in proactively. Examples: fan asks for reminder → {"type":"reminder","timing":"30 minutes","count":1,"reason":"medication reminder"}; you promise to send daily updates → {"type":"recurring","timing":"every 4 hours","count":3,"reason":"day updates"}; fan tips and you promise exclusive content → {"type":"promise_delivery","timing":"tonight","count":1,"reason":"exclusive photo for tip"}. Most messages use null.',
+          '"followUp" is either null or an object {"type":"reminder"|"promise_delivery"|"task_update"|"check_in"|"recurring","timing":"30 minutes"|"2 hours"|"tonight"|"every 4 hours","count":1-5,"reason":"brief description","context":"optional details"}. Use it when you promise to follow up later, send updates, deliver something, remind them about something, or check in proactively. Examples: you promise to tell them how the shoot went → {"type":"task_update","timing":"tonight","count":1,"reason":"shoot update"}; fan tips and you promise exclusive content → {"type":"promise_delivery","timing":"tonight","count":1,"reason":"exclusive photo for tip"}. Most messages use null.',
           "When the conversation is warm or close and the fan has shared something personal, ask one natural follow-up question sometimes. Do not ask a question in every reply, and do not use a question to avoid answering.",
         ].join("\n"),
       },
@@ -344,6 +352,7 @@ export function buildSlurpMessageChat(input: {
             // Never set for a locked post: its picture is withheld for the same reason as its text.
             image: input.imageContexts?.has(post.id) ? protect(input.imageContexts.get(post.id)) : undefined,
             access: post.access,
+            ...(post.access === "locked" ? { fanAlreadyUnlocked: Boolean(post.unlockedByFan) } : {}),
           })),
         }
       : {}),
@@ -361,7 +370,16 @@ export function buildSlurpMessageChat(input: {
           ? `[tipped you ${message.price} coins${message.content ? `: ${protect(message.content)}` : ""}]`
           : message.kind === "ppv"
             ? `[sent locked content for ${message.price} coins${message.unlockedAt ? ", which the fan unlocked" : ", still locked"}]`
-            : protect(message.content),
+            : message.kind === "post_preview"
+              ? // A bare title read as the fan typing it. Say what it is and whether they own it.
+                `[${message.role === "creator" ? "you shared" : "shared"} your post "${protect(String(message.metadata?.title ?? message.content))}"${
+                  message.metadata?.access === "locked"
+                    ? input.recentPosts?.some((post) => post.id === message.metadata?.postId && post.unlockedByFan)
+                      ? ", a locked post the fan already unlocked"
+                      : ", a locked post"
+                    : ""
+                }]`
+              : protect(message.content),
       image: input.imageContexts?.has(message.id) ? protect(input.imageContexts.get(message.id)) : undefined,
       at: message.createdAt,
     })),
@@ -476,6 +494,10 @@ export async function buildSlurpMessagePrompt(input: SlurpMessagePromptInput): P
     (fanMember ? slurpFanVoiceForPrompt(slurpResolveFanType(settings.fanTypes, fanMember).voice) : undefined);
   // The memory is the tie said out loud, and an invited character holds a tie like anybody else.
   const fanMemory = fanMember || isSlurpCharacterFanAccount(input.viewer) ? slurpFanMemoryForPrompt(tie) : undefined;
+  // What this fan already owns, so a Creator never tries to sell them a post they bought.
+  const unlockedPostIds = new Set(
+    (await slurp.listPostUnlocksForViewer(input.viewer.id).catch(() => [])).map((unlock) => unlock.postId),
+  );
   const recentPosts = recentPostRows
     .filter((post) => post.access !== "draft")
     .slice(0, RECENT_POSTS)
@@ -485,6 +507,7 @@ export async function buildSlurpMessagePrompt(input: SlurpMessagePromptInput): P
       content: post.content,
       access: post.access,
       imageUrl: post.imageUrl,
+      unlockedByFan: unlockedPostIds.has(post.id),
     }));
   // The arc the feed is posting about, so a DM and the feed come from the same life. Protected like
   // every other supplied value: a Secret Creator's arc title can name a real place.
@@ -571,7 +594,7 @@ export async function buildSlurpMessagePrompt(input: SlurpMessagePromptInput): P
     ...input,
     continuityInstruction,
     contentMenu: await resolveSlurpCreatorMenu(input.db, input.creator.id).catch(() => ""),
-    platformEvents: slurpPlatformEventInstruction(settings.platformEvents, new Date()),
+    platformEvents: await resolveSlurpEventInstruction(input.db, input.creator.id, new Date()),
     imageContexts,
     fanVoice,
     fanMemory,
@@ -604,7 +627,9 @@ function protectNoteOperation(
     publicIdentity,
     SLURP_NOTE_MAX_LENGTH,
   );
-  if (!text) return null;
+  // "Never record anything about payment" is only a prompt line, and stored notes were all payment
+  // notes that later fed "you'd need to subscribe" upsells. Enforced here.
+  if (!text || /\b(?:coins?|unlock\w*|subscri\w*|tips?|tipped|paid|pays?|payment|ppv)\b/iu.test(text)) return null;
   return operation.op === "add" ? { op: "add", text } : { op: "replace", id: operation.id, text };
 }
 
@@ -647,7 +672,7 @@ export async function generateSlurpMessageReply(input: SlurpMessagePromptInput):
     maxTokens: clampGenerationMaxOutputTokens({
       provider: input.connection.provider as APIProvider,
       model: input.connection.model,
-      maxTokens: 768,
+      maxTokens: 2048,
       maxTokensOverride: input.connection.maxTokensOverride,
     }),
     stream: false,

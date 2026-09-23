@@ -1,4 +1,5 @@
 import { existsSync, readFileSync } from "fs";
+import { slurpAdultAnchor, slurpWithAdultNegative } from "../../base/media/slp-image-prompt.js";
 import { dirname, resolve } from "path";
 import { fileURLToPath } from "url";
 import { PROFESSOR_MARI_ID } from "@marinara-engine/shared";
@@ -16,7 +17,6 @@ import { resolveImagePromptReviewSize } from "../../../services/image/image-prom
 import type { SlurpVisualBrief } from "../../base/media/slp-visual-brief.js";
 import { slurpVisualBriefPromptViolatesPolicy, slurpVisualBriefText } from "../../base/media/slp-visual-brief.js";
 import {
-  normalizeIllustratorAppearance,
   readIllustratorAppearance,
   resolveIllustratorCharacterReferences,
 } from "../../../services/image/illustrator-references.js";
@@ -93,9 +93,15 @@ function readProfessorMariReferenceImages(): string[] {
   });
 }
 
+/**
+ * The card's own appearance field, and nothing else.
+ *
+ * This used to fall back to the whole `description` when a card had no appearance field. Many
+ * downloaded cards have none, so their entire description — backstory, personality, scenario —
+ * was appended to every image prompt. A Creator's Stage appearance is the place to set a look.
+ */
 export function characterAppearanceFromRow(row: { data: unknown }) {
-  const data = parseRecord(row.data);
-  return readIllustratorAppearance(data) ?? normalizeIllustratorAppearance(data.description) ?? "";
+  return readIllustratorAppearance(parseRecord(row.data)) ?? "";
 }
 
 /**
@@ -290,6 +296,7 @@ export async function generateSlpPostImage(input: {
         characterContext,
         styleGuidance,
         promptBlocks: slurpPromptContext(input.settings).blocks,
+        connectionId: input.settings.generationConnectionId,
       })
     : null;
   // The style profile is an Engine setting, not something the interpretation model owns. The
@@ -327,12 +334,14 @@ export async function generateSlpPostImage(input: {
     privateContext: [characterPersonality],
     guidanceContext: [configuredImageInstructions, connectionImageInstructions],
   });
-  const finalPrompt = finalPromptBase;
+  const finalPrompt = `${slurpAdultAnchor(null)}\n\n${finalPromptBase}`;
   // A reviewer who cleared the negative prompt still gets the style profile's own negatives back,
   // for the same reason the positive prompt is recompiled above.
-  const finalNegativePrompt = input.promptOverride
-    ? input.promptOverride.negativePrompt?.trim() || compiledOverride?.negativePrompt || undefined
-    : compiledPrompt.negativePrompt || undefined;
+  const finalNegativePrompt = slurpWithAdultNegative(
+    input.promptOverride
+      ? input.promptOverride.negativePrompt?.trim() || compiledOverride?.negativePrompt || undefined
+      : compiledPrompt.negativePrompt || undefined,
+  );
   logDebugOverride(
     input.debugMode,
     "[debug/noodle/image] final image prompt for %s:\n%s",

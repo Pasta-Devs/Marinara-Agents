@@ -379,6 +379,13 @@ const addedCalls = [
   "delete /slurp2/slurp/accounts/${encodeURIComponent(creatorId)}/wardrobe/${encodeURIComponent(id)}",
   "post /slurp2/slurp/accounts/${encodeURIComponent(creatorId)}/wardrobe/import",
   "post /slurp2/slurp/wardrobe/lorebook-entries",
+  // Story packs: bundled gallery, preview, selective apply, export, and timeline actions.
+  "get /slurp2/story-packs/bundled",
+  "post /slurp2/story-packs/bundled/${encodeURIComponent(id)}/preview",
+  "post /slurp2/story-packs/export",
+  "post /slurp2/story-packs/preview",
+  "post /slurp2/story-packs/previews/${encodeURIComponent(input.previewId)}/apply",
+  "post /slurp2/story/occurrences/${encodeURIComponent(input.id)}/status",
 ];
 const removedCalls = [
   "patch /slurp2/accounts/${encodeURIComponent(accountId)}/settings",
@@ -429,10 +436,10 @@ const counts = Object.fromEntries(
 assert.deepEqual(
   counts,
   {
-    useMutation: 149,
-    useQuery: 211,
+    useMutation: 154,
+    useQuery: 217,
     useInfiniteQuery: 5,
-    invalidateQueries: 122,
+    invalidateQueries: 124,
     setQueryData: 20,
     cancelQueries: 6,
     removeQueries: 1,
@@ -441,7 +448,7 @@ assert.deepEqual(
     onError: 15,
     onSettled: 9,
   },
-  "query and mutation wiring counts match the monolith plus the 0.2.0 planner and continuity hooks",
+  "query and mutation wiring counts match the monolith plus the planner, continuity and story-pack hooks",
 );
 
 // The shared invalidators are still called directly from the mutation callbacks that owned them.

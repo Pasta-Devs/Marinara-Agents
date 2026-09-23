@@ -49,7 +49,8 @@ assert.match(server("features/messages/slp-follow-up-scheduler-service.ts"), /wo
 const send = server("features/messages/slp-messages-send-routes.ts");
 assert.doesNotMatch(send, /reply: outcome\.status === "replied" \? outcome\.message : null/u);
 assert.doesNotMatch(send, /reply: outcome\.message,/u);
-assert.match(send, /alreadyUnlocked \? null : await messages\.getThreadById/u);
+assert.match(send, /const firstUnlock = !alreadyUnlocked && !ppvReacting\.has\(message\.id\)/u);
+assert.match(send, /firstUnlock \? await messages\.getThreadById/u);
 
 // Draft-reply may answer for a hand-operated Creator.
 assert.match(server("features/messages/slp-messages-creator-routes.ts"), /operatorDraft: true/u);

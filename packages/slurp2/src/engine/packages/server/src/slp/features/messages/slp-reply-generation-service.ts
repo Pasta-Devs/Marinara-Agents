@@ -8,7 +8,7 @@ import {
 } from "../../../../../shared/src/slp/slp-social.types.js";
 import { isDebugAgentsEnabled } from "../../../config/runtime-config.js";
 import { resolveSlurpCreatorMenu } from "../../data/settings/slp-post-guidance-storage.js";
-import { slurpPlatformEventInstruction } from "../../../../../shared/src/slp/slp-platform-events.js";
+import { resolveSlurpEventInstruction } from "../world/slp-world-contract.js";
 import type { DB } from "../../../db/connection.js";
 import { logDebugOverride } from "../../../lib/logger.js";
 import { resolveBaseUrl } from "../../../services/generation/connection-base-url.js";
@@ -99,7 +99,7 @@ export function buildCreatorReplyMessages(input: {
       {
         id: "task",
         kind: "editable" as const,
-        text: "You write exactly one direct reply from one Slurp creator to one real viewer comment on the creator's post. Address the viewer's comment naturally and do not write for the viewer.",
+        text: "You write exactly one direct reply from one Slurp creator to one real viewer comment on the creator's post. Address the viewer's comment naturally and do not write for the viewer. Reply in the language of the comment.",
       },
       { id: "platform", kind: "required" as const, text: SLURP_PLATFORM_CONTEXT },
       { id: "safety", kind: "required" as const, text: NOODLER_UNTRUSTED_CONTENT_INSTRUCTION },
@@ -246,7 +246,7 @@ export async function generateCreatorReply(input: {
     creatorCondition,
     imageContext: imageContexts.get(input.post.id),
     contentMenu: await resolveSlurpCreatorMenu(input.db, input.creator.id).catch(() => ""),
-    platformEvents: slurpPlatformEventInstruction(settings.platformEvents, new Date()),
+    platformEvents: await resolveSlurpEventInstruction(input.db, input.creator.id, new Date()),
     promptBlocks: prompts.blocks,
     promptInstructions: prompts.instructions,
   });
@@ -260,7 +260,7 @@ export async function generateCreatorReply(input: {
     maxTokens: clampGenerationMaxOutputTokens({
       provider: input.connection.provider as APIProvider,
       model: input.connection.model,
-      maxTokens: 512,
+      maxTokens: 2048,
       maxTokensOverride: input.connection.maxTokensOverride,
     }),
     stream: false,

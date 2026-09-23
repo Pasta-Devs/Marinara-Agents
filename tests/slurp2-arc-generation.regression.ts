@@ -124,16 +124,27 @@ assert.deepEqual(
     name: arc.title,
     description: "Learning to bake bread",
     chapters: [
-      { label: "the starter", minDays: 5, maxDays: 5 },
-      { label: "the first loaf", minDays: 0, maxDays: 0 },
+      { label: "the starter", minDays: 5, maxDays: 5, storyTags: [], influences: [], outcomes: [], opportunities: [] },
+      {
+        label: "the first loaf",
+        minDays: 0,
+        maxDays: 0,
+        storyTags: [],
+        influences: [],
+        outcomes: [],
+        opportunities: [],
+      },
     ],
     tags: [],
+    storyTags: [],
     tone: "cozy",
     durationDays: 14,
     enabled: true,
     builtin: false,
     hidden: false,
+    automation: "inherit",
   },
+  "saving an AI draft fills the story-engine fields with empty defaults, not undefined",
 );
 
 // Tone reaches the post and DM arc lines; no tone adds nothing.

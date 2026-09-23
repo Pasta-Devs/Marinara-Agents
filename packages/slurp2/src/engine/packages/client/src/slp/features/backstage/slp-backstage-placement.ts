@@ -18,6 +18,7 @@ const place = (
   ...searchTerms: string[]
 ): SlpBackstagePlacement => ({ section, target, scope, searchTerms });
 const world = (target: SlpBackstageTarget, ...terms: string[]) => place("world", target, "all-slurp", ...terms);
+const content = (target: SlpBackstageTarget, ...terms: string[]) => place("content", target, "all-slurp", ...terms);
 const automation = (target: SlpBackstageTarget, ...terms: string[]) =>
   place("automation", target, "all-slurp", ...terms);
 const internal = (placement: SlpBackstagePlacement): SlpBackstagePlacement => ({ ...placement, internal: true });
@@ -56,19 +57,19 @@ export const SLP_BACKSTAGE_SETTING_PLACEMENT: Record<keyof SlurpSettings, SlpBac
   storyImagesEnabled: automation("images", "story posts", "image stories"),
   storyLifetimeHours: automation("images", "story lifetime", "moments"),
   teaserRate: world("wallet", "teaser", "free posts", "fish for subscribers"),
-  projectRate: world("arcs", "projects", "project rate"),
-  arcPace: world("arcs", "arc pace", "story speed"),
-  arcAffectsMood: world("arcs", "arc mood"),
-  arcFanReactions: world("arcs", "arc fan reactions"),
-  arcAutoMode: world("arcs", "automatic arcs", "story suggestions"),
-  arcCooldownWeeks: world("arcs", "arc cooldown"),
-  arcSource: world("arcs", "arc source", "generated stories"),
-  arcMaxConcurrentAuto: world("arcs", "concurrent arcs"),
-  arcDirectorMode: world("arcs", "arc director"),
-  arcPollHours: world("arcs", "arc polling"),
-  arcStatEffects: world("arcs", "arc stat effects"),
-  arcCrossovers: world("arcs", "arc crossovers"),
-  arcLibrary: world("arcs", "arc library", "stories"),
+  projectRate: automation("general", "plans", "plan rate"),
+  arcPace: automation("general", "plan pace", "story speed"),
+  arcAffectsMood: automation("general", "plan mood"),
+  arcFanReactions: automation("general", "plan fan reactions"),
+  arcAutoMode: automation("general", "automatic plans", "story suggestions"),
+  arcCooldownWeeks: automation("general", "plan cooldown"),
+  arcSource: automation("general", "plan source", "generated stories"),
+  arcMaxConcurrentAuto: automation("general", "concurrent plans"),
+  arcDirectorMode: automation("general", "plan director"),
+  arcPollHours: automation("general", "plan polling"),
+  arcStatEffects: automation("general", "plan stat effects"),
+  arcCrossovers: automation("general", "plan crossovers"),
+  arcLibrary: content("arcs", "plan templates", "stories"),
   discoveryTags: world("tags", "tags", "discovery", "categories"),
   storyImageWidth: automation("images", "story image width", "resolution"),
   storyImageHeight: automation("images", "story image height", "resolution"),
@@ -85,6 +86,7 @@ export const SLP_BACKSTAGE_SETTING_PLACEMENT: Record<keyof SlurpSettings, SlpBac
   imageContextMode: automation("images", "image context", "vision"),
   imageContextConnectionId: automation("images", "vision connection", "image description"),
   imageGenerationConnectionId: internal(automation("images", "image connection", "image model")),
+  imageStyleProfileId: automation("images", "image style", "style profile"),
   imageGenerationPrompt: prompts("image instructions", "image prompt"),
   imagePromptInterpretation: prompts("image prompt interpretation", "image prompt style", "Danbooru"),
   enableImageInterpretation: prompts("interpret image prompts"),
@@ -127,7 +129,8 @@ export const SLP_BACKSTAGE_SETTING_PLACEMENT: Record<keyof SlurpSettings, SlpBac
   fanRepliesPerRefresh: world("audience", "fan replies per refresh"),
   fanArchetypeWeights: world("audience", "fan type weights", "audience mix"),
   fanTypes: world("audience", "fan types", "audience personas"),
-  platformEvents: world("events", "events", "holidays", "christmas", "halloween", "special dates"),
+  platformEvents: content("events", "occasions", "holidays", "christmas", "halloween", "special dates"),
+  storyAutomation: content("events", "occasion automation", "suggestions", "automatic occasions"),
   messagesAwayRepliesEnabled: world("messaging", "away replies", "automatic messages"),
   messagesReplyBubbleLimit: world("messaging", "reply bubbles", "message length"),
   messagesDefaultDmPolicy: world("messaging", "DM policy", "message access"),

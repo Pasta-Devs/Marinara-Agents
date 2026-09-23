@@ -89,6 +89,15 @@ export function slurpModelWorkerAllows(budget: SlurpModelBudget, context: SlurpM
   return budget.mode !== "off" && (context === "present" || budget.mode === "background");
 }
 
+/**
+ * A quarter of every cap is held back for replies to the player. Priority only ordered the queue,
+ * so background continuity and rewrites could spend the whole day and a player's message waited
+ * until midnight UTC for an answer.
+ */
+export function slurpModelBudgetCap(cap: number, kind: SlurpModelJobKind): number {
+  return kind === "dm_reply" ? cap : cap - Math.floor(cap / 4);
+}
+
 export function spendSlurpModelBudget(
   budget: SlurpModelBudget,
   ledger: SlurpModelBudgetLedger,
@@ -98,8 +107,8 @@ export function spendSlurpModelBudget(
   const kindCalls = ledger.byKindToday[kind] ?? 0;
   if (
     !policy.enabled ||
-    budget.callsPerHour <= ledger.callsThisHour ||
-    budget.callsPerDay <= ledger.callsToday ||
+    slurpModelBudgetCap(budget.callsPerHour, kind) <= ledger.callsThisHour ||
+    slurpModelBudgetCap(budget.callsPerDay, kind) <= ledger.callsToday ||
     policy.maxPerDay <= kindCalls
   )
     return null;
@@ -120,10 +129,13 @@ export function slurpModelBudgetRetryAt(
 ): string | null {
   const policy = budget.jobs[kind];
   if (!policy.enabled || budget.callsPerHour === 0 || budget.callsPerDay === 0 || policy.maxPerDay === 0) return null;
-  if (ledger.callsToday >= budget.callsPerDay || (ledger.byKindToday[kind] ?? 0) >= policy.maxPerDay) {
+  if (
+    ledger.callsToday >= slurpModelBudgetCap(budget.callsPerDay, kind) ||
+    (ledger.byKindToday[kind] ?? 0) >= policy.maxPerDay
+  ) {
     return new Date(Date.UTC(at.getUTCFullYear(), at.getUTCMonth(), at.getUTCDate() + 1)).toISOString();
   }
-  if (ledger.callsThisHour >= budget.callsPerHour) {
+  if (ledger.callsThisHour >= slurpModelBudgetCap(budget.callsPerHour, kind)) {
     return new Date(
       Date.UTC(at.getUTCFullYear(), at.getUTCMonth(), at.getUTCDate(), at.getUTCHours() + 1),
     ).toISOString();

@@ -1,3 +1,5 @@
+import type { SlpArcBlueprint } from "../../../../../shared/src/slp/slp-story-engine.js";
+
 export type SlurpProject = {
   id: string;
   title: string;
@@ -79,16 +81,4 @@ export type SlurpCreatorArcConfig = {
   crossovers?: boolean;
 };
 /** Mirrors `SlurpArcType` on the server: one entry of the `arcLibrary` setting. */
-export type SlurpArcType = {
-  id: string;
-  name: string;
-  description: string;
-  chapters: ({ label: string; minDays: number; maxDays: number; choice?: SlurpArcChoice } & SlurpArcChapterReach)[];
-  revertProfileAtEnd?: boolean;
-  tags: string[];
-  tone: string;
-  durationDays: number;
-  enabled: boolean;
-  builtin: boolean;
-  hidden: boolean;
-};
+export type SlurpArcType = SlpArcBlueprint;

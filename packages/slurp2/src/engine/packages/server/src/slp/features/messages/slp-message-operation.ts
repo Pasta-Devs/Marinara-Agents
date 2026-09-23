@@ -6,6 +6,7 @@
  * send path and the offline scheduler from both answering the same message.
  */
 import type { DB } from "../../../db/connection.js";
+import { slurpInfluenceMultiplier } from "../../../../../shared/src/slp/slp-platform-events.js";
 import { logger } from "../../../lib/logger.js";
 import { createConnectionsStorage } from "../../../services/storage/connections.storage.js";
 import { resolveSlurpTextConnection } from "../../base/identity/slp-connection.js";
@@ -40,6 +41,8 @@ import { slurpCreatorStateCanUseMedia } from "../../modules/creators/slp-creator
 export type SlurpReplyOutcome =
   | { status: "replied"; message: SlurpMessage; pacing: SlurpReplyPacing }
   | { status: "queued"; pacing: SlurpReplyPacing }
+  /** The daily or hourly AI budget is spent; the reply is queued for `retryAt`. */
+  | { status: "budget"; retryAt: string; pacing: SlurpReplyPacing }
   /** The creator has stepped away from this conversation. `until` is when they come back. */
   | { status: "cooling"; until: string }
   | { status: "busy" }
@@ -93,7 +96,18 @@ export async function replyToSlurpMessage(
 
   const source = await slurp.resolveAccountSource(creator);
   const latestPost = await slurp.getNoodlerLatestPublishedPost(creator.id);
-  const replyDelays = await slurp.getSettings();
+  const settingsForDelays = await slurp.getSettings();
+  // Occasions may slow or speed replies ("messages.reply-delay"); the editor offered it, nothing read it.
+  const replyDelays = {
+    ...settingsForDelays,
+    messagesMaxReplyDelayMinutes: Math.max(
+      1,
+      Math.round(
+        settingsForDelays.messagesMaxReplyDelayMinutes *
+          slurpInfluenceMultiplier(settingsForDelays.platformEvents, new Date(), "messages.reply-delay"),
+      ),
+    ),
+  };
   const scheduled = source
     ? await resolveSlurpCreatorAvailability(
         createCharactersStorage(db),
@@ -288,7 +302,14 @@ export async function replyToSlurpMessage(
         delayed: queuedBubbles.map((bubble) => ({ ...bubble, id: `${claim.claimId}:${bubble.sequence}` })),
       });
       if (!stored) return { status: "ineligible" } as const;
-      if (reply.sharedPost) {
+      // Never echo a post already shared in this conversation: the creator used to send back the very
+      // post the fan had just shared, as if it were news.
+      const alreadyShared =
+        reply.sharedPost &&
+        history
+          .slice(-12)
+          .some((message) => message.kind === "post_preview" && message.metadata?.postId === reply.sharedPost!.id);
+      if (reply.sharedPost && !alreadyShared) {
         const postAccess = reply.sharedPost.access === "locked" ? "locked" : "public";
         const previewLocked =
           postAccess === "locked" ||
@@ -503,7 +524,8 @@ export async function replyToSlurpMessage(
       const retryAt = error.retryAt ?? (input.background ? new Date(Date.now() + 60 * 60_000).toISOString() : null);
       if (retryAt) {
         await messagesStore.setReplyNotBefore(thread.id, retryAt);
-        return { status: "queued", pacing };
+        // Said plainly to the player: "away" hid that the AI budget, not the Creator, was the reason.
+        return input.background ? { status: "queued", pacing } : { status: "budget", retryAt, pacing };
       }
       return { status: "ineligible" };
     }

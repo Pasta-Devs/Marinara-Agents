@@ -1,5 +1,6 @@
 import { SlpBootstrap } from "../../../../../shared/src/slp/slp-social.types.js";
 import { z } from "zod";
+import { slpArcBlueprintSchema } from "../../../../../shared/src/slp/slp-story-engine.js";
 import { SLURP_DISCOVERY_TAG_MAX_LENGTH, SLURP_DISCOVERY_TAG_SEED } from "../discovery/slp-discovery-profile.js";
 import {
   normalizeSlurpPromptBlockOverrides,
@@ -22,6 +23,7 @@ import {
 import { SLURP_ARC_MAX_DURATION_DAYS, SLURP_ARC_TONE_MAX_LENGTH } from "../projects/slp-project.js";
 import {
   slurpArcLibraryFromLegacy,
+  slurpNormalizeArcLibrary,
   SLURP_ARC_AUTO_MODES,
   SLURP_ARC_SOURCES,
   SLURP_ARC_TYPE_NAME_MAX_LENGTH,
@@ -129,69 +131,10 @@ export const slurpSettingsSchema = z.object({
   arcStatEffects: z.enum(SLURP_ARC_STAT_EFFECTS),
   /** Whether the world tick may start automatic arcs shared by two Creators. */
   arcCrossovers: z.boolean(),
+  /** Default event behavior. Imported blueprints inherit this safe suggestion policy. */
+  storyAutomation: z.enum(["manual", "suggest", "auto"]),
   /** Arc types Slurp and the player start arcs from. Replaces the v1 `arcAllowedKinds`. */
-  arcLibrary: z
-    .array(
-      z.object({
-        id: z.string().trim().min(1).max(128),
-        name: z.string().trim().min(1).max(SLURP_ARC_TYPE_NAME_MAX_LENGTH),
-        description: z.string().trim().max(SLURP_PROJECT_DIRECTION_MAX_LENGTH),
-        chapters: z
-          .array(
-            z.object({
-              label: z.string().trim().min(1).max(SLURP_PROJECT_CHAPTER_MAX_LENGTH),
-              minDays: z.number().int().min(0).max(90),
-              maxDays: z.number().int().min(0).max(90),
-              /** A fan poll at the end of this chapter; the winner's chapters are inserted after it. */
-              choice: z
-                .object({
-                  question: z.string().trim().min(1).max(240),
-                  options: z
-                    .array(
-                      z.object({
-                        label: z.string().trim().min(1).max(120),
-                        chapters: z
-                          .array(
-                            z.object({
-                              label: z.string().trim().min(1).max(SLURP_PROJECT_CHAPTER_MAX_LENGTH),
-                              minDays: z.number().int().min(0).max(90),
-                              maxDays: z.number().int().min(0).max(90),
-                            }),
-                          )
-                          .max(4),
-                      }),
-                    )
-                    .min(2)
-                    .max(4),
-                })
-                .optional(),
-              mood: z.enum(SLURP_MODIFIER_KINDS).optional(),
-              effects: z
-                .object({
-                  growth: z.number().int().min(-50).max(50).optional(),
-                  earnings: z.number().int().min(-50).max(50).optional(),
-                  loyalty: z.number().int().min(-50).max(50).optional(),
-                })
-                .optional(),
-              profile: z
-                .object({
-                  bio: z.string().trim().max(SLURP_ARC_BIO_MAX_LENGTH).optional(),
-                  location: z.string().trim().max(SLURP_ARC_LOCATION_MAX_LENGTH).optional(),
-                })
-                .optional(),
-            }),
-          )
-          .max(SLURP_PROJECT_MAX_CHAPTERS),
-        revertProfileAtEnd: z.boolean().optional(),
-        tags: z.array(z.string().trim().min(1).max(SLURP_DISCOVERY_TAG_MAX_LENGTH)).max(50),
-        tone: z.string().trim().max(SLURP_ARC_TONE_MAX_LENGTH).default(""),
-        durationDays: z.number().int().min(1).max(SLURP_ARC_MAX_DURATION_DAYS).default(14),
-        enabled: z.boolean(),
-        builtin: z.boolean(),
-        hidden: z.boolean().default(false),
-      }),
-    )
-    .max(200),
+  arcLibrary: z.array(slpArcBlueprintSchema).max(200),
   /** The curated Discover tags and the group each is shown under. Creators may still carry custom tags. */
   discoveryTags: z
     .array(
@@ -224,6 +167,12 @@ export const slurpSettingsSchema = z.object({
   /** Describes pictures for image context. Null uses the Creator text connection. */
   imageContextConnectionId: z.string().nullable(),
   imageGenerationConnectionId: z.string().nullable(),
+  /**
+   * Engine image style profile for Slurp pictures. Null uses the connection's profile, then the
+   * Engine default. When set, the connection's own prompt prefixes are left out: a chosen style
+   * replaces them rather than stacking on top of them.
+   */
+  imageStyleProfileId: z.string().nullable(),
   imageGenerationPrompt: z.string(),
   imagePromptInterpretation: z.string().max(20_000),
   enableImageInterpretation: z.boolean(),
@@ -496,6 +445,7 @@ export const DEFAULT_SLURP_SETTINGS: SlurpSettings = {
   arcPollHours: 24,
   arcStatEffects: "small",
   arcCrossovers: true,
+  storyAutomation: "suggest",
   arcLibrary: slurpArcLibraryFromLegacy(undefined),
   // 4:5. The composer crops an uploaded Story to whatever ratio is configured here, so the two
   // halves of the feature stay one shape.
@@ -511,6 +461,7 @@ export const DEFAULT_SLURP_SETTINGS: SlurpSettings = {
   imageContextMode: "auto",
   imageContextConnectionId: null,
   imageGenerationConnectionId: null,
+  imageStyleProfileId: null,
   imageGenerationPrompt: SLP_CREATOR_DEFAULT_IMAGE_GENERATION_PROMPT,
   imagePromptInterpretation: SLP_CREATOR_DEFAULT_IMAGE_PROMPT_INTERPRETATION,
   enableImageInterpretation: true,
@@ -679,7 +630,7 @@ export function normalizeSlurpSettings(raw: unknown): SlurpSettings {
   candidate.fanTypes = slurpNormalizeFanTypes(rawRecord.fanTypes ?? DEFAULT_SLURP_SETTINGS.fanTypes);
   // An empty list is a real choice; only a missing or non-array value falls back to the defaults.
   candidate.platformEvents = slurpNormalizePlatformEvents(rawRecord.platformEvents);
-  candidate.arcLibrary = rawRecord.arcLibrary ?? slurpArcLibraryFromLegacy(rawRecord.arcAllowedKinds);
+  candidate.arcLibrary = slurpNormalizeArcLibrary(rawRecord.arcLibrary, rawRecord.arcAllowedKinds);
   candidate.onboarding = rawRecord.onboarding ?? DEFAULT_SLURP_SETTINGS.onboarding;
   candidate.fanArchetypeWeights = {
     ...DEFAULT_SLURP_SETTINGS.fanArchetypeWeights,

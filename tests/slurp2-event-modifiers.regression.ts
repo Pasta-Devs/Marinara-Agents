@@ -43,11 +43,9 @@ const TARGET = "economy.subscription-price";
 const saleEvent = slurpPlatformEventSchema.parse({
   id: "regression-half-price",
   name: "Regression half-price sale",
-  month: 3,
-  day: 1,
-  durationDays: 3,
+  activation: { kind: "annual", month: 3, day: 1, durationDays: 3 },
   guidance: "A site-wide half-price sale is running.",
-  modifiers: [{ target: TARGET, operation: "multiply", value: 0.5 }],
+  influences: [{ target: TARGET, operation: "multiply", value: 0.5 }],
 });
 const events = [saleEvent];
 const during = new Date("2026-03-02T12:00:00Z");
@@ -70,24 +68,24 @@ assert.deepEqual(
   ["regression-half-price"],
 );
 assert.deepEqual(slurpActivePlatformEvents(events, outside), []);
-assert.equal(saleEvent.kind, "calendar");
+assert.equal(saleEvent.activation.kind, "annual");
 
 // --- Rounding happens once, and the result is clamped to the existing price range. ---
 assert.equal(slurpSubscriptionCharge(7, providerAt(events), during), 4, "7 * 0.5 = 3.5 rounds once to 4");
-const bigAdd = [{ ...saleEvent, modifiers: [{ target: TARGET, operation: "add" as const, value: 9999 }] }];
+const bigAdd = [{ ...saleEvent, influences: [{ target: TARGET, operation: "add" as const, value: 9999 }] }];
 assert.equal(slurpSubscriptionCharge(9000, providerAt(bigAdd), during), SLURP_SUBSCRIPTION_PRICE_MAX);
-const bigSubtract = [{ ...saleEvent, modifiers: [{ target: TARGET, operation: "add" as const, value: -9999 }] }];
+const bigSubtract = [{ ...saleEvent, influences: [{ target: TARGET, operation: "add" as const, value: -9999 }] }];
 assert.equal(slurpSubscriptionCharge(10, providerAt(bigSubtract), during), 0, "a charge never goes negative");
 // A zero multiplier is a legal free week, not an error.
-const freeWeek = [{ ...saleEvent, modifiers: [{ target: TARGET, operation: "multiply" as const, value: 0 }] }];
+const freeWeek = [{ ...saleEvent, influences: [{ target: TARGET, operation: "multiply" as const, value: 0 }] }];
 assert.equal(slurpSubscriptionCharge(100, providerAt(freeWeek), during), 0);
 
 // --- Multiplies run before adds, and overlapping events resolve in deterministic source order. ---
-const overlapA = { ...saleEvent, id: "aaa", modifiers: [{ target: TARGET, operation: "add" as const, value: 10 }] };
+const overlapA = { ...saleEvent, id: "aaa", influences: [{ target: TARGET, operation: "add" as const, value: 10 }] };
 const overlapB = {
   ...saleEvent,
   id: "bbb",
-  modifiers: [{ target: TARGET, operation: "multiply" as const, value: 0.5 }],
+  influences: [{ target: TARGET, operation: "multiply" as const, value: 0.5 }],
 };
 // 100 * 0.5 = 50, then + 10 = 60, whichever order the events are saved in.
 assert.equal(slurpSubscriptionCharge(100, providerAt([overlapA, overlapB]), during), 60);
@@ -161,10 +159,10 @@ for (const bad of rejects) assert.equal(slpModifierDraftSchema.safeParse(bad).su
 assert.equal(slpModifierDraftSchema.safeParse({ target: TARGET, operation: "multiply", value: 0.5 }).success, true);
 // A bad modifier is dropped on its own; the good one and the event both survive.
 const messy = slurpNormalizePlatformEvents([
-  { ...saleEvent, modifiers: [{ target: TARGET, operation: "multiply", value: 0.5 }, { target: "nope" }] },
+  { ...saleEvent, influences: [{ target: TARGET, operation: "multiply", value: 0.5 }, { target: "nope" }] },
 ]);
 assert.equal(messy.length, 1, "a broken modifier must not drop its event");
-assert.equal(messy[0]!.modifiers.length, 1);
+assert.equal(messy[0]!.influences.length, 1);
 // A broken event is still dropped whole, and a non-array still falls back to the defaults.
 assert.equal(slurpNormalizePlatformEvents([saleEvent, { id: "x" }]).length, 1);
 assert.equal(slurpNormalizePlatformEvents(undefined).length, slurpPlatformEventsDefault().length);
@@ -224,8 +222,8 @@ assert.doesNotMatch(
 
 // --- Slurp ships no default modifier and no default sale. ---
 for (const item of slurpPlatformEventsDefault()) {
-  assert.deepEqual(item.modifiers, [], `default event ${item.id} must carry no modifier`);
-  assert.equal(item.kind, "calendar");
+  assert.deepEqual(item.influences, [], `default event ${item.id} must carry no influence`);
+  assert.equal(item.activation.kind, "annual");
 }
 
 console.log("slurp2 event modifier regression passed");

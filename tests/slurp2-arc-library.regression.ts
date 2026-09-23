@@ -33,7 +33,7 @@ assert.ok(slurpArcLibraryFromLegacy(undefined).every((type) => type.enabled && t
 const storage = slurp2Source(
   join(import.meta.dirname, "..", "packages/slurp2/src/engine/packages/server/src/services/storage/slurp.storage.ts"),
 );
-assert.match(storage, /rawRecord\.arcLibrary \?\? slurpArcLibraryFromLegacy\(rawRecord\.arcAllowedKinds\)/u);
+assert.match(storage, /slurpNormalizeArcLibrary\(rawRecord\.arcLibrary, rawRecord\.arcAllowedKinds\)/u);
 assert.doesNotMatch(storage, /arcAllowedKinds: z\./u, "arcAllowedKinds is gone from the schema");
 assert.match(storage, /tags: replaceSlurpDiscoveryTag\(type\.tags, from, to\)/u, "tag rename reaches arc types");
 

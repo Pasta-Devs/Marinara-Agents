@@ -72,28 +72,33 @@ const RULES: Record<SlurpCameraSource, CameraSourceRule> = {
 };
 
 /**
- * The rule every source shares.
+ * The rule every source shares, for the post call that writes the caption and the scene.
  *
- * Stated as a prohibition rather than a preference, because the image model reliably reintroduces
- * the unexplained angle when this is phrased softly.
+ * Kept to the two facts the scene needs. The longer version ("describe the photograph, not the
+ * scene", "plain and imperfect is right") went into the caption call and into every image draft;
+ * the caption model turned it into the topic — nearly every post said its own picture was badly
+ * framed — and the image model, which reads prose rules as things to draw, got a list of the exact
+ * framings it was told to avoid. The picture side now uses `slurpCameraSourcePhoto` instead.
  */
-export const SLURP_CAMERA_SOURCE_RULE = [
-  "Describe the photograph, not the scene.",
-  "Never use a camera position nobody present could have reached: no floor-level, overhead, or across-the-room shot unless the camera source above put a camera there.",
-  // A point-of-view framing is the same unexplained-access problem wearing a different hat: it
-  // says the camera is somebody's eyes, so the image model supplies that somebody — an arm, a
-  // hand, a torso, or worse, reaching in from the near edge of the frame. The Creator is alone in
-  // most posts, and nothing in the scene ever paid for a second body. State it as a prohibition
-  // for the same reason as the line above: phrased as a preference, the framing comes straight
-  // back.
-  "The camera is a camera, never a person's eyes: no first-person or point-of-view framing, and no hands, arms, limbs, or any other part of a second body entering the frame.",
-  "Show only the people the company names. If the Creator is alone, the Creator is the only person, the only body, and the only anatomy in the picture.",
-  // Was "may be badly framed, poorly lit, partly blocked, or dull. Do not improve it." The intent
-  // was right — a candid phone picture, not an advertisement — but an image model reads "poorly
-  // lit" and "dull" as instructions and returns exactly that: a muddy, badly composed picture
-  // nobody wants to look at. Ask for the candour and rule out the mud separately.
-  "Keep it a photograph rather than an advertisement: available light, a real room, an unposed frame, no retouching and no studio setup. Plain and imperfect is right; blurry, muddy, underexposed, or hard to make out is not.",
-].join(" ");
+export const SLURP_CAMERA_SOURCE_RULE =
+  "The camera is a camera, never a person's eyes: no first-person or point-of-view framing. Show only the people the company names.";
+
+/**
+ * The source as words an image model can draw. Positive phrasing only: a diffusion model reads
+ * "no floor-level shot" as "floor-level shot".
+ */
+const PHOTO: Record<SlurpCameraSource, string> = {
+  selfie: "smartphone selfie taken at arm's length with the front camera",
+  mirror: "mirror selfie, the phone visible in the reflection",
+  tripod: "photo from a phone propped on a nearby surface on a self-timer, fixed slightly wide framing",
+  partner: "candid phone photo taken by someone standing a few steps away",
+  screenshot: "still frame from a phone video, slight motion blur, soft focus",
+  archive: "older phone photo from their own camera roll",
+};
+
+export function slurpCameraSourcePhoto(source: SlurpCameraSource): string {
+  return PHOTO[source];
+}
 
 /** The sources this variation can actually pay for. */
 export function slurpPermittedCameraSources(options: { companyCanHoldCamera: boolean }): readonly SlurpCameraSource[] {

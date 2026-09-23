@@ -250,12 +250,16 @@ export function slurpPostVariation(
  * drawn-then-discarded field for a while, which cost a weighted draw per post and showed a reader
  * of the deep-details panel a framing the picture never used.
  */
-export function slurpPostVariationInstruction(variation: SlurpPostVariation, cameraInstruction: string): string {
+export function slurpPostVariationInstruction(
+  variation: SlurpPostVariation,
+  cameraInstruction: string,
+  /** A callback's place and clothes belong to its shoot; a second, different place contradicted it. */
+  options: { shoot?: boolean } = {},
+): string {
   return [
     "# This post's angle",
     "Keep the person exactly as the character card describes them — face, body, style, voice. Change the situation, not the person.",
-    `Place: ${variation.place}.`,
-    `Moment: ${variation.moment}.`,
+    ...(options.shoot ? [] : [`Place: ${variation.place}.`, `Moment: ${variation.moment}.`]),
     cameraInstruction,
     `Company: ${variation.company}.`,
     ...(variation.story

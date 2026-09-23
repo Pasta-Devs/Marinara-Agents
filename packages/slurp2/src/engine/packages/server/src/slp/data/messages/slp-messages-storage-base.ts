@@ -435,7 +435,15 @@ export function createMessagesStorageBase(context: SlurpMessagesContext) {
       const thread = await context.storage.getThread(viewerAccountId, creatorAccountId);
       if (thread) {
         const messages = await context.storage.listMessages(thread.id, 500);
-        const fromViewer = messages.filter((message) => message.role === "viewer" && message.kind !== "tip");
+        // Payment markers and shared post cards are not things the fan wrote; counting them inflated
+        // rapport and double-counted unlocks that are already scored above.
+        const fromViewer = messages.filter(
+          (message) =>
+            message.role === "viewer" &&
+            message.kind !== "tip" &&
+            message.kind !== "post_preview" &&
+            !message.metadata?.paymentReaction,
+        );
         facts.viewerMessages = fromViewer.length;
         // A broadcast went to everybody, so counting it here let a mass send buy the reciprocity
         // score, which exists to measure whether this creator answers *you*.

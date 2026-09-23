@@ -40,6 +40,7 @@ import { slurpContinuityIdentityOf } from "../../modules/continuity/slp-continui
 
 const CHECKPOINT_KEY = "slurp2.continuity-checkpoints";
 /** Threads one drain reads. The rest wait for the next open; nothing here is urgent. */
+const SLURP_EXTRACTION_IDLE_MS = 30 * 60_000;
 const THREADS_PER_DRAIN = 3;
 
 type Checkpoints = Record<string, string>;
@@ -73,6 +74,9 @@ export async function drainSlurpContinuityExtraction(
   const checkpoints = await readCheckpoints(db);
   const threads = (await db.select().from(slurpThreads))
     .filter((thread) => String(thread.lastMessageAt) > (checkpoints[String(thread.id)] ?? ""))
+    // Wait for a quiet thread: one call per message spent half the day's budget on "<3" and payment
+    // markers. Read once the exchange has settled, as one batch.
+    .filter((thread) => Date.parse(String(thread.lastMessageAt)) <= at.getTime() - SLURP_EXTRACTION_IDLE_MS)
     .sort((left, right) => String(left.lastMessageAt).localeCompare(String(right.lastMessageAt)))
     .slice(0, THREADS_PER_DRAIN);
   if (threads.length === 0) return 0;
@@ -116,7 +120,11 @@ export async function drainSlurpContinuityExtraction(
     )
       .filter(
         (message) =>
-          String(message.createdAt) > since && String(message.kind) === "text" && String(message.content).trim(),
+          String(message.createdAt) > since &&
+          String(message.kind) === "text" &&
+          String(message.content).trim() &&
+          // Payment markers are bookkeeping, not something the fan said.
+          !String(message.metadata ?? "").includes("paymentReaction"),
       )
       .slice(0, SLURP_EXTRACTION_BATCH);
     const batch: SlurpExtractionMessage[] = fresh.map((message) => ({
@@ -125,7 +133,11 @@ export async function drainSlurpContinuityExtraction(
       content: String(message.content),
     }));
     const nextCheckpoint = fresh.at(-1) ? String(fresh.at(-1)!.createdAt) : String(thread.lastMessageAt);
-    if (!creator || !identity || batch.length === 0) {
+    // Generated fans never read or answer, and a batch with no real fan words holds no fact about
+    // the fan: these produced only junk notes from canned openers and sales lines.
+    const fanSpoke = batch.some((message) => message.role === "fan" && message.content.trim().length >= 20);
+    const generatedFan = String(thread.viewerAccountId ?? "").startsWith("slurp-fan:");
+    if (!creator || !identity || batch.length === 0 || !fanSpoke || generatedFan) {
       checkpoints[threadId] = nextCheckpoint;
       continue;
     }
@@ -146,7 +158,8 @@ export async function drainSlurpContinuityExtraction(
           maxTokens: clampGenerationMaxOutputTokens({
             provider: connection.provider as APIProvider,
             model: connection.model,
-            maxTokens: 900,
+            // Reasoning headroom: a reasoning model spends a small budget before it answers.
+            maxTokens: 2048,
             maxTokensOverride: connection.maxTokensOverride,
           }),
           stream: false,

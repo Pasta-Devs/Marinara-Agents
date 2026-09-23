@@ -1,3 +1,5 @@
+import { useTranslation as useUiTranslation } from "react-i18next";
+import { toast } from "sonner";
 import type { SlpAccountSettingsPatchInput } from "../../../../../shared/src/slp/slp-social-generation.schema.js";
 import type { SlpAccount, SlpCreatorFanActivitySettings } from "../../../../../shared/src/slp/slp-social.types.js";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -24,20 +26,35 @@ export function useUpdateCreatorFanActivity() {
 }
 export function useRefreshCreatorFanActivityNow() {
   const qc = useQueryClient();
+  const { t: localizeUi } = useUiTranslation();
+  // Toasts live in the hook: the button called mutate() with no callbacks, so success and failure
+  // were both silent.
   return useMutation({
     mutationKey: ["slurp", "audience-activity"],
     mutationFn: () =>
       api.post<{ status: string; created: number }>("/slurp2/slurp/fan-activity/refresh-now", {
         debugMode: useSlurpUIStore.getState().debugMode,
       }),
-    onSuccess: () =>
-      Promise.all([
+    onError: (error) =>
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : localizeUi("ui.slurp.settings.manual.audienceFailed", { defaultValue: "Audience activity failed." }),
+      ),
+    onSuccess: (result) => {
+      toast.success(
+        result.created > 0
+          ? localizeUi("ui.slurp.settings.audience.created", { count: result.created })
+          : localizeUi("ui.slurp.settings.audience.createdNone"),
+      );
+      return Promise.all([
         qc.invalidateQueries({
           queryKey: [...slpKeys.noodlerRoot(), "posts"],
         }),
         qc.invalidateQueries({ queryKey: slpKeys.slpCreatorViewers() }),
         qc.invalidateQueries({ queryKey: slpKeys.noodlerFanStatus() }),
-      ]),
+      ]);
+    },
   });
 }
 export function useCreatorFanActivityStatus(enabled = true) {

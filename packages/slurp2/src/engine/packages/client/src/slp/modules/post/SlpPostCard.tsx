@@ -501,12 +501,20 @@ export function SlpPostCard({
               <SlpPostImageNav total={post.images.length} index={activeImageIndex} onSelect={setActiveImageIndex} />
             )}
           </div>
-        ) : post.imagePrompt ? (
+        ) : post.imagePrompt && ctx.postManagement ? (
+          // Managers only. The draft is working material, and viewers were shown a block of prompt
+          // text under every post whose picture had not been drawn yet.
           <div className="relative mt-3 rounded-xl border border-[var(--noodle-accent)]/35 bg-[var(--noodle-accent)]/10 p-3 pr-14 text-xs leading-5">
             <span className="mb-1 flex items-center gap-1.5 font-semibold text-[var(--noodle-accent)]">
               <ImageIcon size={13} aria-hidden="true" />
-              {localizeUi("ui.noodle.noodlepostcard.imagePrompt")}
+              {post.metadata?.imageGenerationFailed === true
+                ? localizeUi("ui.slurp.image.failed", { defaultValue: "Picture failed" })
+                : localizeUi("ui.noodle.noodlepostcard.imagePrompt")}
             </span>
+            {post.metadata?.imageGenerationFailed === true &&
+              typeof post.metadata.imageGenerationError === "string" && (
+                <span className="mb-1 block text-[var(--muted-foreground)]">{post.metadata.imageGenerationError}</span>
+              )}
             {post.imagePrompt}
             {ctx.postManagement && ctx.generatePostImage && promptDraft === null && (
               <button
