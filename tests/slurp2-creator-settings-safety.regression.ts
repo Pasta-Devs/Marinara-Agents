@@ -31,6 +31,11 @@ assert.match(modal, /onDirtyChange=\{section\.id === "identity"/u, "Identity rep
 assert.match(editor, /onDirtyChange\?\.\(JSON\.stringify\(draft\) !== JSON\.stringify\(initialDraft\)\)/u);
 assert.match(editor, /onDirtyChange\?\.\(false\)/u, "save and discard clear the dirty state");
 assert.match(sections, /group: "creator" \| "publishing" \| "interaction" \| "memory" \| "tools" \| "danger"/u);
+assert.match(sections, /id: "overview"[\s\S]*Component: SlpCreatorOverviewSection/u);
+assert.match(modalSections, /export function SlpCreatorOverviewSection/u);
+assert.match(modalSections, /overviewNeedsReview/u);
+assert.match(modalSections, /useSlpCreatorSettingsStore\.getState\(\)\.setTab\(section\)/u);
+assert.match(sections, /defaultLabel: "Audience activity"/u);
 assert.match(sections, /id: "content-rules"[\s\S]*group: "publishing"/u);
 assert.match(publishingSections, /mode === "content-rules"/u);
 assert.match(modalSections, /SettingAnchor settingKey="creatorCollabs"/u);

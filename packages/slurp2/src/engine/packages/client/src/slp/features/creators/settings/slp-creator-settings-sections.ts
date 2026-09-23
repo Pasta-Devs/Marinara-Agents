@@ -1,6 +1,7 @@
 import {
   BookOpen,
   CalendarClock,
+  CircleAlert,
   Images,
   MessageCircle,
   Palette,
@@ -15,6 +16,7 @@ import {
 import type { ComponentType } from "react";
 
 import {
+  SlpCreatorOverviewSection,
   SlpCreatorAppearanceSection,
   SlpCreatorAutomationSection,
   SlpCreatorAudienceSection,
@@ -51,6 +53,14 @@ export type SlpCreatorSettingsSection = {
  */
 export const SLP_CREATOR_SETTINGS_SECTIONS: readonly SlpCreatorSettingsSection[] = [
   {
+    id: "overview",
+    group: "creator",
+    icon: CircleAlert,
+    labelKey: "ui.slurp.settings.creators.tabs.overview",
+    defaultLabel: "Overview",
+    Component: SlpCreatorOverviewSection,
+  },
+  {
     id: "identity",
     group: "creator",
     icon: UserRound,
@@ -78,8 +88,8 @@ export const SLP_CREATOR_SETTINGS_SECTIONS: readonly SlpCreatorSettingsSection[]
     id: "audience",
     group: "creator",
     icon: UsersRound,
-    labelKey: "ui.slurp.settings.creators.tabs.audience",
-    defaultLabel: "Audience",
+    labelKey: "ui.slurp.settings.creators.tabs.audienceActivity",
+    defaultLabel: "Audience activity",
     Component: SlpCreatorAudienceSection,
   },
   {

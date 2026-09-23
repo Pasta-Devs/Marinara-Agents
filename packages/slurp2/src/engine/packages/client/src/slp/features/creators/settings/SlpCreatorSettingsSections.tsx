@@ -19,6 +19,7 @@ import { useSetSlurpCreatorPrice } from "../../economy/slp-economy-contract";
 import { useSlurpSettings, useUpdateSlurpSettings } from "../../settings/slp-settings-contract";
 import { useSlurpUIStore } from "../../../base/state/slp-package-store";
 import { SlurpContinuityPanel } from "../SlpContinuityPanel";
+import { formatDateTime } from "../../../base/ui/slp-date-time";
 import { SlurpCreatorImprover } from "../SlpCreatorImprover";
 import { SlurpCreatorProfileEditor } from "../SlpCreatorProfileEditor";
 import { SlurpCreatorStrategyGroup } from "../SlpCreatorStrategyGroup";
@@ -34,8 +35,10 @@ import {
   useCreatorAppearanceAction,
 } from "../slp-creator-profile-hooks";
 import { useSlpPersonaBackedCreator } from "../slp-creators-hooks";
+import { useCreatorReserveStatus } from "../../feed/slp-feed-contract";
 import { accentButton, focusRing, noteClass, quietButton, selectClass } from "../slp-creator-classes";
 import type { SlpCreatorSettingsSectionProps } from "./slp-creator-settings-contract";
+import { useSlpCreatorSettingsStore } from "./slp-creator-settings-store";
 
 const FAN_ARCHETYPES = ["ordinary", "eccentric", "crossFandom", "raider", "organicDiscovery", "freeResource"] as const;
 
@@ -218,6 +221,157 @@ export function SlpCreatorIdentitySection({
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+export function SlpCreatorOverviewSection({ creator, active }: SlpCreatorSettingsSectionProps) {
+  const { t, i18n } = useTranslation();
+  const reserveStatus = useCreatorReserveStatus(active);
+  const status = reserveStatus.data?.creators.find((entry) => entry.accountId === creator.id);
+  const attention = [
+    ...(creator.sourceStatus.state === "missing"
+      ? [t("ui.slurp.settings.creators.sourceMissing")]
+      : creator.sourceStatus.state === "changed"
+        ? [t("ui.slurp.settings.creators.sourceChanged")]
+        : []),
+    ...(creator.appearanceState.source === "missing"
+      ? [t("ui.slurp.appearance.missing")]
+      : creator.appearanceState.needsReview
+        ? [t("ui.slurp.appearance.reviewNeeded")]
+        : []),
+  ];
+
+  const summaryButton = (
+    section:
+      | "identity"
+      | "appearance"
+      | "wardrobe"
+      | "audience"
+      | "automation"
+      | "content-rules"
+      | "production"
+      | "collaborations"
+      | "messages"
+      | "continuity",
+    label: string,
+    detail: string,
+  ) => (
+    <button
+      key={section}
+      type="button"
+      onClick={() => useSlpCreatorSettingsStore.getState().setTab(section)}
+      className="flex min-h-14 w-full items-center justify-between gap-4 border-b border-[var(--slurp-outline)] py-3 text-start last:border-b-0"
+    >
+      <span className="min-w-0">
+        <span className="block text-sm font-semibold">{label}</span>
+        <span className="block truncate text-xs text-[var(--slurp-muted)]">{detail}</span>
+      </span>
+      <span aria-hidden="true" className="text-sm text-[var(--noodle-accent)]">
+        ›
+      </span>
+    </button>
+  );
+
+  return (
+    <div className="space-y-5">
+      <div>
+        <h3 className="text-base font-bold">
+          {t("ui.slurp.settings.creators.overviewHeading", { defaultValue: "Creator overview" })}
+        </h3>
+        <p className="mt-1 text-sm leading-5 text-[var(--slurp-muted)]">
+          {t("ui.slurp.settings.creators.overviewDetail", { defaultValue: "Status and shortcuts for this Creator." })}
+        </p>
+      </div>
+
+      <section
+        className="space-y-2"
+        aria-label={t("ui.slurp.settings.creators.overviewStatus", { defaultValue: "Status" })}
+      >
+        <h4 className="text-xs font-bold uppercase text-[var(--slurp-muted)]">
+          {t("ui.slurp.settings.creators.overviewStatus", { defaultValue: "Status" })}
+        </h4>
+        {attention.length > 0 ? (
+          <div className="rounded-lg bg-[var(--slurp-warning)]/10 p-3 text-sm ring-1 ring-inset ring-[var(--slurp-warning)]/30">
+            <p className="font-semibold">
+              {t("ui.slurp.settings.creators.overviewNeedsReview", { defaultValue: "Needs review" })}
+            </p>
+            <ul className="mt-1 list-inside list-disc text-xs leading-5">
+              {attention.map((item) => (
+                <li key={item}>{item}</li>
+              ))}
+            </ul>
+          </div>
+        ) : (
+          <p className="rounded-lg bg-[var(--slurp-success)]/10 p-3 text-sm text-[var(--slurp-success)]">
+            {t("ui.slurp.settings.creators.overviewReady", { defaultValue: "No items need review." })}
+          </p>
+        )}
+        <p className="text-xs text-[var(--slurp-muted)]">
+          {creator.autoPosting.enabled
+            ? t("ui.slurp.settings.creators.filters.active")
+            : t("ui.slurp.settings.creators.filters.paused")}
+          {status?.nextPreparedAt
+            ? ` · ${t("ui.slurp.settings.creators.nextPost", { date: formatDateTime(status.nextPreparedAt, i18n.language) })}`
+            : ""}
+        </p>
+      </section>
+
+      <section aria-label={t("ui.slurp.settings.creators.overviewSections", { defaultValue: "Sections" })}>
+        <h4 className="text-xs font-bold uppercase text-[var(--slurp-muted)]">
+          {t("ui.slurp.settings.creators.overviewSections", { defaultValue: "Sections" })}
+        </h4>
+        {summaryButton(
+          "identity",
+          t("ui.slurp.settings.creators.tabs.profile", { defaultValue: "Profile" }),
+          creator.bio || t("ui.slurp.settings.creators.overviewProfileEmpty", { defaultValue: "Add a bio and voice." }),
+        )}
+        {summaryButton(
+          "appearance",
+          t("ui.slurp.settings.creators.tabs.appearance", { defaultValue: "Appearance" }),
+          t(`ui.slurp.appearance.source.${creator.appearanceState.source}`),
+        )}
+        {summaryButton(
+          "wardrobe",
+          t("ui.slurp.settings.creators.tabs.wardrobe", { defaultValue: "Wardrobe" }),
+          t("ui.slurp.wardrobe.title", { defaultValue: "Saved looks" }),
+        )}
+        {summaryButton(
+          "audience",
+          t("ui.slurp.settings.creators.tabs.audienceActivity", { defaultValue: "Audience activity" }),
+          t("ui.noodle.noodlerfanactivity.creatorTitle"),
+        )}
+        {summaryButton(
+          "automation",
+          t("ui.slurp.settings.creators.tabs.automation", { defaultValue: "Automation" }),
+          t("ui.slurp.settings.creators.postingSchedule"),
+        )}
+        {summaryButton(
+          "content-rules",
+          t("ui.slurp.settings.creators.tabs.contentRules", { defaultValue: "Content rules" }),
+          t("ui.slurp.settings.creators.guidanceGroup"),
+        )}
+        {summaryButton(
+          "production",
+          t("ui.slurp.settings.creators.tabs.production", { defaultValue: "Production" }),
+          t("ui.slurp.settings.creators.imagesGroup"),
+        )}
+        {summaryButton(
+          "collaborations",
+          t("ui.slurp.settings.creators.tabs.collaborations", { defaultValue: "Collaborations" }),
+          t("ui.slurp.settings.creators.collabsGroup", { defaultValue: "Collabs" }),
+        )}
+        {summaryButton(
+          "messages",
+          t("ui.slurp.settings.creators.tabs.messages", { defaultValue: "Messages" }),
+          t("ui.slurp.settings.creators.messagesWorldRules"),
+        )}
+        {summaryButton(
+          "continuity",
+          t("ui.slurp.settings.creators.tabs.continuity", { defaultValue: "Continuity" }),
+          t("ui.slurp.continuity.allCreatorsHint", { defaultValue: "Review memories for this Creator." }),
+        )}
+      </section>
     </div>
   );
 }

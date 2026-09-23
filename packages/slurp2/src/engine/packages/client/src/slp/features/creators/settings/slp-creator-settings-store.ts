@@ -8,6 +8,7 @@ import { create } from "zustand";
  * persisted — a modal that reopens itself after a reload is a surprise, not a convenience.
  */
 export type SlpCreatorSettingsTab =
+  | "overview"
   | "identity"
   | "appearance"
   | "wardrobe"
