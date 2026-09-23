@@ -1408,18 +1408,6 @@ export function compileEvidenceUnitExtraction(options: {
   const parserDroppedCandidates = options.parserDroppedCandidates ?? [];
   const parserRejectionCount = options.parserRejectionCount ?? parserDroppedCandidates.length;
   const preValidationDroppedCandidates = options.preValidationDroppedCandidates ?? [];
-  const allDroppedCandidates = [
-    ...parserDroppedCandidates,
-    ...preValidationDroppedCandidates,
-    ...validated.droppedCandidates,
-    ...closed.droppedCandidates,
-  ];
-  const droppedCandidates = allDroppedCandidates.slice(0, LTM_EXTRACTION_MAX_REJECTION_DETAILS);
-  const droppedCandidateCount =
-    parserRejectionCount +
-    preValidationDroppedCandidates.length +
-    validated.droppedCandidates.length +
-    closed.droppedCandidates.length;
   const compiled = closed.units.length
     ? compileLtmEvidenceUnits({
         units: closed.units,
@@ -1437,14 +1425,25 @@ export function compileEvidenceUnitExtraction(options: {
   const duplicateAliasUnits = keptUnits.filter(
     (unit) => options.aliasChoices?.has(unit.id) && !dedupResult.deduplicated.includes(unit),
   );
-  const eligibleDuplicateAliasUnits = closeSourceEventGraph(
-    duplicateAliasUnits,
-    options.sourceNote,
-    options.existingNotes,
-  ).units;
-  const duplicateTitles = eligibleDuplicateAliasUnits.length
+  const duplicateAliasClosure = closeSourceEventGraph(duplicateAliasUnits, options.sourceNote, options.existingNotes);
+  const rejectedAliasIds = new Set(duplicateAliasClosure.diagnostics.map((diagnostic) => diagnostic.mutationId));
+  const allDroppedCandidates = [
+    ...parserDroppedCandidates,
+    ...preValidationDroppedCandidates,
+    ...validated.droppedCandidates,
+    ...closed.droppedCandidates,
+    ...duplicateAliasClosure.droppedCandidates,
+  ];
+  const droppedCandidates = allDroppedCandidates.slice(0, LTM_EXTRACTION_MAX_REJECTION_DETAILS);
+  const droppedCandidateCount =
+    parserRejectionCount +
+    preValidationDroppedCandidates.length +
+    validated.droppedCandidates.length +
+    closed.droppedCandidates.length +
+    duplicateAliasClosure.droppedCandidates.length;
+  const duplicateTitles = duplicateAliasClosure.units.length
     ? compileLtmEvidenceUnits({
-        units: eligibleDuplicateAliasUnits,
+        units: duplicateAliasClosure.units,
         existingNotes: options.existingNotes,
         aliasChoices: options.aliasChoices,
         scope: options.scope,
@@ -1457,7 +1456,12 @@ export function compileEvidenceUnitExtraction(options: {
       )
     : [];
   const compiledResponse = { ...compiled, mutations: [...compiled.mutations, ...duplicateTitles] };
-  const diagnostics = [...validated.diagnostics, ...dedupResult.diagnostics, ...closed.diagnostics];
+  const diagnostics = [
+    ...validated.diagnostics,
+    ...dedupResult.diagnostics.filter((diagnostic) => !rejectedAliasIds.has(diagnostic.mutationId)),
+    ...closed.diagnostics,
+    ...duplicateAliasClosure.diagnostics,
+  ];
   if (options.unitResponse.incomplete) {
     diagnostics.push({
       severity: "warning",
@@ -1477,8 +1481,12 @@ export function compileEvidenceUnitExtraction(options: {
     normalizedAdditions: (options.normalizedAdditions ?? 0) + normalized.addedUnits,
     parserRejections: parserRejectionCount,
     validationRejections:
-      preValidationDroppedCandidates.length + validated.droppedCandidates.length + closed.droppedCandidates.length,
-    deduplications: validated.keptUnits.length - dedupResult.deduplicated.length,
+      preValidationDroppedCandidates.length +
+      validated.droppedCandidates.length +
+      closed.droppedCandidates.length +
+      duplicateAliasClosure.droppedCandidates.length,
+    deduplications:
+      validated.keptUnits.length - dedupResult.deduplicated.length - duplicateAliasClosure.droppedCandidates.length,
     keptUnits: closed.units.length,
   });
   const totalCandidates = accounting.providerCandidates + accounting.normalizedAdditions;

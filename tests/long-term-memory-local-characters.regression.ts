@@ -691,6 +691,29 @@ async function main() {
     "deduplicated facts must retain the identity choice without rewriting the fact",
   );
   assert.equal(duplicateResult.outcome.state, "success", "alias-only mutations are suggestions");
+  const unsupportedAlias = compileEvidenceUnitExtraction({
+    unitResponse: {
+      summary: "Repeated change without a source event",
+      units: [{ ...duplicateResult.unitResponse.units[0]!, claimKind: "change" as const }],
+    },
+    sourceText: duplicateSource.sections.source.text,
+    sourceNote: duplicateSource,
+    existingNotes: [duplicateExisting] as any,
+    aliasChoices: existingResolution.aliasChoices,
+    scope,
+    modes: ["roleplay"],
+    sourceHash: sourceHashForLtmSourceNote(duplicateSource),
+    skipStructuredBackfill: true,
+  });
+  assert.deepEqual(unsupportedAlias.compiledResponse.mutations, [], "unsupported aliases cannot rename notes");
+  assert.equal(unsupportedAlias.accounting.validationRejections, 1);
+  assert.equal(unsupportedAlias.accounting.deduplications, 0, "rejected aliases count only once");
+  assert.equal(unsupportedAlias.outcome.droppedUnits, 1, "rejected aliases keep the source retryable");
+  assert.equal(unsupportedAlias.outcome.droppedCandidates[0]?.validatorCode, "source_event_graph_open");
+  assert.equal(
+    unsupportedAlias.diagnostics.some((item) => item.code === "source_event_graph_open"),
+    true,
+  );
   assert.equal(
     compileEvidenceUnitExtraction({
       unitResponse: { summary: "Invalid source hash", units: [existingResolution.units[0]!] },
