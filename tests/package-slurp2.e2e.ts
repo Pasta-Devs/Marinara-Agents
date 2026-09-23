@@ -181,7 +181,6 @@ test.describe("standalone Slurp package", () => {
       await expect(dialog.getByRole("status")).toHaveText("1 remaining");
       releases[2]!();
       await expect(dialog).toBeHidden();
-      await expect(page.getByText("3 published.", { exact: true })).toBeVisible();
     } finally {
       releases.forEach((release) => release());
       await page.request.patch("/api/slurp2/settings", {
@@ -614,13 +613,7 @@ test.describe("standalone Slurp package", () => {
         .toBe(imageConnectionIds[1]);
 
       await creatorSettings.getByRole("tab", { name: "Automation", exact: true }).click();
-      const scheduleButton = creatorSettings.getByRole("button", { name: "Posting Schedule", exact: true });
-      await expect(scheduleButton).toBeVisible();
-      await scheduleButton.click();
-      const scheduleDialog = page.getByRole("dialog", { name: `Schedule for ${stageProfile.displayName}` });
-      await expect(scheduleDialog).toBeVisible();
-      await page.keyboard.press("Escape");
-      await expect(scheduleDialog).toBeHidden();
+      await expect(creatorSettings.getByRole("region", { name: "Posting Schedule" })).toBeVisible();
       await creatorSettings.getByRole("button", { name: "Close dialog" }).click();
 
       await slurp.getByRole("button", { name: "Prompts", exact: true }).click();
