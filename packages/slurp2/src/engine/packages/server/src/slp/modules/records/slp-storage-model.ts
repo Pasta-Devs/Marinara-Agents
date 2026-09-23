@@ -119,6 +119,7 @@ export function slpCreatorReservePolicyFingerprint(
     | "imagePromptInterpretation"
     | "imageGenerationUseAvatarReferences"
     | "imageGenerationIncludeDescriptions"
+    | "appearanceProfileMode"
     | "enableImageInterpretation"
     | "nightQuiet"
   >,
@@ -133,6 +134,7 @@ export function slpCreatorReservePolicyFingerprint(
         imagePromptInterpretation: settings.imagePromptInterpretation,
         imageGenerationUseAvatarReferences: settings.imageGenerationUseAvatarReferences,
         imageGenerationIncludeDescriptions: settings.imageGenerationIncludeDescriptions,
+        appearanceProfileMode: settings.appearanceProfileMode,
         enableImageInterpretation: settings.enableImageInterpretation,
         nightQuiet: settings.nightQuiet,
       }
@@ -341,6 +343,7 @@ export function normalizeSlpAccountSettings(value: unknown): SlurpSlpAccountSett
   const rawPrivacy = parseRecord(raw.privacy);
   const rawWallet = parseRecord(raw.wallet);
   const rawStage = parseRecord(raw.stage);
+  const rawAppearanceProfile = parseRecord(raw.appearanceProfile);
   const rawAvatarCrop = nestedOrLegacy(rawProfile, raw, "avatarCrop");
   const rawBannerUrl = nestedOrLegacy(rawProfile, raw, "bannerUrl");
   const rawLocation = nestedOrLegacy(rawProfile, raw, "location");
@@ -403,12 +406,38 @@ export function normalizeSlpAccountSettings(value: unknown): SlurpSlpAccountSett
     ...(stageFact(rawStage.wardrobe) !== undefined && { wardrobe: stageFact(rawStage.wardrobe)! }),
     ...(stageFact(rawStage.locations) !== undefined && { locations: stageFact(rawStage.locations)! }),
   };
+  const appearanceProfile =
+    typeof rawAppearanceProfile.text === "string" && rawAppearanceProfile.text.trim()
+      ? {
+          text: rawAppearanceProfile.text.trim().slice(0, SLURP_STAGE_FACT_MAX_LENGTH),
+          source:
+            rawAppearanceProfile.source === "source_appearance" ||
+            rawAppearanceProfile.source === "description" ||
+            rawAppearanceProfile.source === "avatar" ||
+            rawAppearanceProfile.source === "mixed"
+              ? rawAppearanceProfile.source
+              : "mixed",
+          sourceEntityId: typeof rawAppearanceProfile.sourceEntityId === "string" ? rawAppearanceProfile.sourceEntityId : "",
+          sourceRevisionToken:
+            typeof rawAppearanceProfile.sourceRevisionToken === "string" ? rawAppearanceProfile.sourceRevisionToken : "",
+          confidence:
+            rawAppearanceProfile.confidence === "high" ||
+            rawAppearanceProfile.confidence === "medium" ||
+            rawAppearanceProfile.confidence === "low"
+              ? rawAppearanceProfile.confidence
+              : "low",
+          status: rawAppearanceProfile.status === "accepted" ? "accepted" : "needs_review",
+          generatedAt: typeof rawAppearanceProfile.generatedAt === "string" ? rawAppearanceProfile.generatedAt : "",
+          acceptedAt: typeof rawAppearanceProfile.acceptedAt === "string" ? rawAppearanceProfile.acceptedAt : null,
+        }
+      : undefined;
   return {
     profile,
     ...(strategy && { strategy }),
     social,
     scheduler: normalizeScheduler(raw.scheduler),
     ...(Object.keys(stage).length > 0 && { stage }),
+    ...(appearanceProfile && { appearanceProfile }),
     privacy,
     wallet: { coins: normalizePersistedInteger(rawWallet.coins) ?? SLURP_DEFAULT_ECONOMY.startingCoins },
   };

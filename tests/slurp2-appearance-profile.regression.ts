@@ -1,10 +1,24 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  appearanceEvidenceFromSource,
   createSlpAppearanceProfile,
   resolveSlpAppearanceProfile,
   shouldAutoAcceptSlpAppearance,
 } from "../packages/slurp2/src/engine/packages/server/src/slp/modules/creators/slp-appearance-profile.ts";
+
+const source = {
+  publicDisplayName: "A", publicHandle: "a", name: "A", description: "Tall with silver hair.",
+  personality: "", scenario: "", appearance: "", backstory: "",
+};
+
+test("source fingerprints survive repeated resolution and use the entity id", () => {
+  const first = appearanceEvidenceFromSource(source, "character-id");
+  const second = appearanceEvidenceFromSource({ ...source }, "character-id");
+  assert.deepEqual(first, second);
+  assert.equal(first.sourceEntityId, "character-id");
+  assert.notEqual(first.sourceRevisionToken, appearanceEvidenceFromSource({ ...source, description: "Changed" }, "character-id").sourceRevisionToken);
+});
 
 test("stage appearance wins over a derived profile and source appearance", () => {
   const result = resolveSlpAppearanceProfile({
@@ -37,6 +51,24 @@ test("source appearance is usable without creating a Slurp copy", () => {
   assert.equal(result.text, "Adult woman with short brown hair.");
   assert.equal(result.profile, null);
   assert.equal(result.needsReview, false);
+});
+
+test("a live source appearance wins over a cached extraction", () => {
+  const result = resolveSlpAppearanceProfile({
+    profile: createSlpAppearanceProfile({ text: "Black hair.", source: "description", sourceEntityId: "source-1", sourceRevisionToken: "old", confidence: "high", accepted: true, now: "2026-09-23" }),
+    evidence: { sourceEntityId: "source-1", sourceRevisionToken: "new", sourceAppearance: "Silver hair." },
+  });
+  assert.equal(result.text, "Silver hair.");
+  assert.equal(result.needsReview, false);
+});
+
+test("a stale cached extraction is reused with review attention", () => {
+  const result = resolveSlpAppearanceProfile({
+    profile: createSlpAppearanceProfile({ text: "Black hair.", source: "description", sourceEntityId: "source-1", sourceRevisionToken: "old", confidence: "high", accepted: true, now: "2026-09-23" }),
+    evidence: { sourceEntityId: "source-1", sourceRevisionToken: "new" },
+  });
+  assert.equal(result.text, "Black hair.");
+  assert.equal(result.needsReview, true);
 });
 
 test("empty evidence is missing even when an avatar may exist", () => {

@@ -77,6 +77,7 @@ export type SlurpSettings = {
   enableImageInterpretation: boolean;
   imageGenerationUseAvatarReferences: boolean;
   imageGenerationIncludeDescriptions: boolean;
+  appearanceProfileMode: "ask" | "high_confidence" | "always";
   autoPostingImagesEnabled: boolean;
   allowRandomUsers: boolean;
   allowProfessorMari: boolean;

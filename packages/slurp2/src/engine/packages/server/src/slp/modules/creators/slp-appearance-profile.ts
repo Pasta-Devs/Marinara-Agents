@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import type {
   SlpAppearanceProfile,
   SlpAppearanceProfileMode,
@@ -25,14 +26,21 @@ function clean(value: string | null | undefined): string {
 
 export function appearanceEvidenceFromSource(
   source: SlpCreatorSourceSnapshot,
-  sourceRevisionToken: string,
+  sourceEntityId: string,
 ): SlpAppearanceEvidence {
   return {
-    sourceEntityId: source.publicHandle || source.publicDisplayName,
-    sourceRevisionToken,
+    sourceEntityId,
+    sourceRevisionToken: appearanceSourceFingerprint(sourceEntityId, source),
     sourceAppearance: source.appearance,
     description: source.description,
   };
+}
+
+/** Persisted cache keys must survive Engine restarts, unlike stage-draft HMAC tokens. */
+export function appearanceSourceFingerprint(sourceEntityId: string, source: SlpCreatorSourceSnapshot): string {
+  return createHash("sha256")
+    .update(JSON.stringify([sourceEntityId, source.appearance, source.description, source.scenario, source.backstory]))
+    .digest("hex");
 }
 
 export function resolveSlpAppearanceProfile(input: {
@@ -45,19 +53,24 @@ export function resolveSlpAppearanceProfile(input: {
     return { text: stageAppearance, profile: input.profile ?? null, needsReview: false, missing: false };
   }
 
+  const sourceAppearance = clean(input.evidence?.sourceAppearance);
+  if (sourceAppearance) {
+    return { text: sourceAppearance, profile: null, needsReview: false, missing: false };
+  }
+
   const profile = input.profile;
   if (profile?.text.trim()) {
     return {
       text: profile.text.trim(),
       profile,
-      needsReview: profile.status === "needs_review",
+      needsReview:
+        profile.status === "needs_review" ||
+        (input.evidence !== undefined &&
+          input.evidence !== null &&
+          (profile.sourceEntityId !== input.evidence.sourceEntityId ||
+            profile.sourceRevisionToken !== input.evidence.sourceRevisionToken)),
       missing: false,
     };
-  }
-
-  const sourceAppearance = clean(input.evidence?.sourceAppearance);
-  if (sourceAppearance) {
-    return { text: sourceAppearance, profile: null, needsReview: false, missing: false };
   }
 
   return { text: null, profile: null, needsReview: false, missing: true };

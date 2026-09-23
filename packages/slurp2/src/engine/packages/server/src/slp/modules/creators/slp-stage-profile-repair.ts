@@ -130,19 +130,15 @@ export function repairSlurpStageProfileDraft(
 /**
  * The stage facts out of a stage-profile input, or undefined when it carries none.
  *
- * `sourceAppearance` seeds an empty appearance on create only. A Creator drafted from a character
- * card already has a face written down; requiring the user to copy it across by hand is the reason
- * the field stayed empty, and an empty appearance is what let the image model invent a new person
- * for every post.
+ * The stage appearance is an intentional override. The linked source is resolved at image time.
  */
 export function slurpStageFacts(
   input: { appearance?: string; wardrobe?: string; locations?: string },
-  sourceAppearance?: string,
 ): SlpCreatorStageFacts | undefined {
   const fact = (value: string | undefined) => value?.trim().slice(0, SLURP_STAGE_FACT_MAX_LENGTH) || undefined;
   const facts: SlpCreatorStageFacts = {
-    ...((fact(input.appearance) ?? fact(sourceAppearance)) !== undefined && {
-      appearance: (fact(input.appearance) ?? fact(sourceAppearance))!,
+    ...(fact(input.appearance) !== undefined && {
+      appearance: fact(input.appearance)!,
     }),
     ...(fact(input.wardrobe) !== undefined && { wardrobe: fact(input.wardrobe)! }),
     ...(fact(input.locations) !== undefined && { locations: fact(input.locations)! }),

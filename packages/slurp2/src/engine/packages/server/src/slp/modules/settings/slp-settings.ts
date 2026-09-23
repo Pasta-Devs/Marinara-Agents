@@ -178,6 +178,7 @@ export const slurpSettingsSchema = z.object({
   enableImageInterpretation: z.boolean(),
   imageGenerationUseAvatarReferences: z.boolean(),
   imageGenerationIncludeDescriptions: z.boolean(),
+  appearanceProfileMode: z.enum(["ask", "high_confidence", "always"]),
   autoPostingImagesEnabled: z.boolean(),
   allowRandomUsers: z.boolean(),
   /** Ambient roster entity ids the user deleted; the seeder never recreates these. */
@@ -472,6 +473,7 @@ export const DEFAULT_SLURP_SETTINGS: SlurpSettings = {
   // reference image simply ignores the references.
   imageGenerationUseAvatarReferences: true,
   imageGenerationIncludeDescriptions: true,
+  appearanceProfileMode: "high_confidence",
   autoPostingImagesEnabled: false,
   allowRandomUsers: false,
   dismissedAmbientProfileIds: [],

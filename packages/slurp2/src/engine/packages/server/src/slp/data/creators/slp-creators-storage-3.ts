@@ -5,10 +5,12 @@ import { SlpAccountSettingsPatchInput } from "../../../../../shared/src/slp/slp-
 import {
   SlpAccount,
   SlpAccountSettings,
+  SlpAppearanceProfile,
   SlpCreatorSourceSnapshot,
 } from "../../../../../shared/src/slp/slp-social.types.js";
 import { SlurpStageProfileInput } from "../../modules/discovery/slp-discovery-profile.js";
 import { slurpStageFacts } from "../../modules/creators/slp-stage-profile-repair.js";
+import { appearanceSourceFingerprint } from "../../modules/creators/slp-appearance-profile.js";
 import { resolveSlurpCreatorScheduleStatus } from "../../modules/creators/slp-creator-schedule-context.js";
 import {
   slpAccounts,
@@ -323,11 +325,8 @@ export function createCreatorsStorage3(context: SlurpStorageContext) {
           tags: stageProfile.tags,
         },
         scheduler: { autoPosting: defaultAutoPostingSettings() },
-        // Seeded from the source card when the draft left it blank. A Creator made from a
-        // character already has a face; making the user retype it is how this stayed empty, and an
-        // empty appearance is why the same Creator looked like a different person every post.
-        ...(slurpStageFacts(stageProfile, sourceSnapshot?.appearance) && {
-          stage: slurpStageFacts(stageProfile, sourceSnapshot?.appearance)!,
+        ...(slurpStageFacts(stageProfile) && {
+          stage: slurpStageFacts(stageProfile)!,
         }),
         privacy: {
           identityDisclosure: stageProfile.disclosureMode,
@@ -410,6 +409,33 @@ export function createCreatorsStorage3(context: SlurpStorageContext) {
           .where(eq(slpAccounts.id, id));
         const updatedRows = await tx.select().from(slpAccounts).where(eq(slpAccounts.id, id));
         return updatedRows[0] ? mapAccount(updatedRows[0]) : null;
+      });
+    },
+    /** Accept a derived candidate only while its source evidence is still current. */
+    async saveNoodlerAppearanceProfile(
+      id: string,
+      profile: SlpAppearanceProfile,
+      replace = false,
+    ): Promise<SlpAccount | null> {
+      return db.transaction(async (tx) => {
+        const row = (await tx.select().from(slpAccounts).where(and(eq(slpAccounts.id, id), eq(slpAccounts.platform, "slurp"))))[0];
+        if (!row || (row.kind !== "character" && row.kind !== "persona")) return null;
+        const source = await resolveCreatorSourceSnapshot(db, {
+          kind: row.kind,
+          entityId: row.entityId,
+          displayName: row.displayName,
+          handle: row.handle,
+        });
+        if (!source || row.entityId !== profile.sourceEntityId ||
+          appearanceSourceFingerprint(row.entityId, source) !== profile.sourceRevisionToken) return null;
+        const settings = normalizeSlpAccountSettings(row.settings);
+        if (settings.stage?.appearance?.trim() || (settings.appearanceProfile && !replace)) return mapAccount(row);
+        await tx.update(slpAccounts).set({
+          settings: JSON.stringify({ ...settings, appearanceProfile: profile } satisfies SlpAccountSettings),
+          updatedAt: now(),
+        }).where(eq(slpAccounts.id, id));
+        const updated = (await tx.select().from(slpAccounts).where(eq(slpAccounts.id, id)))[0];
+        return updated ? mapAccount(updated) : null;
       });
     },
     async updateNoodlerAvatar(id: string, avatarUrl: string | null): Promise<SlpAccount | null> {
