@@ -1,9 +1,15 @@
 import { createHash } from "node:crypto";
 import type {
+  SlpAccount,
   SlpAppearanceProfile,
   SlpAppearanceProfileMode,
   SlpCreatorSourceSnapshot,
 } from "../../../../../shared/src/slp/slp-social.types.js";
+
+/** A Creator still points at its card when its public account has been removed or hidden. */
+export function appearanceSourceAccount(account: SlpAccount, linkedAccount?: SlpAccount | null): SlpAccount {
+  return linkedAccount ?? account;
+}
 
 export type SlpAppearanceEvidence = {
   sourceEntityId: string;

@@ -10,6 +10,7 @@ import { resolveCreatorSourceSnapshot } from "../../data/creators/slp-source-res
 import { resolveSlurpTextConnection } from "../../base/identity/slp-connection.js";
 import {
   appearanceEvidenceFromSource,
+  appearanceSourceAccount,
   createSlpAppearanceProfile,
   parseSlpAppearanceCandidate,
   resolveSlpAppearanceProfile,
@@ -43,21 +44,16 @@ export async function resolveImageAppearance(input: {
 
 async function resolveImageAppearanceOnce(input: Parameters<typeof resolveImageAppearance>[0]): Promise<string> {
   const storage = createSlurpStorage(input.db);
-  const sourceAccount =
-    input.sourceAccount === undefined
-      ? input.account.platform === "slurp" && input.account.sourceEntityId
-        ? await storage.resolveAccountSource(input.account)
-        : input.account
-      : input.sourceAccount;
-  const source = sourceAccount ? await resolveCreatorSourceSnapshot(input.db, sourceAccount) : null;
-  const evidence = source && sourceAccount ? appearanceEvidenceFromSource(source, sourceAccount.entityId) : null;
+  const sourceAccount = appearanceSourceAccount(input.account, input.sourceAccount);
+  const source = await resolveCreatorSourceSnapshot(input.db, sourceAccount);
+  const evidence = source ? appearanceEvidenceFromSource(source, sourceAccount.entityId) : null;
   const existing = resolveSlpAppearanceProfile({
     stageAppearance: input.account.settings.stage?.appearance,
     profile: input.account.settings.appearanceProfile,
     evidence,
   });
   if (existing.text && !input.regenerate) return existing.text;
-  if (!source || !sourceAccount || !evidence) {
+  if (!source || !evidence) {
     if (existing.text) return existing.text;
     throw new Error(MISSING_APPEARANCE);
   }

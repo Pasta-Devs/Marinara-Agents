@@ -2,11 +2,13 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   appearanceEvidenceFromSource,
+  appearanceSourceAccount,
   createSlpAppearanceProfile,
   parseSlpAppearanceCandidate,
   resolveSlpAppearanceProfile,
   shouldAutoAcceptSlpAppearance,
 } from "../packages/slurp2/src/engine/packages/server/src/slp/modules/creators/slp-appearance-profile.ts";
+import type { SlpAccount } from "../packages/slurp2/src/engine/packages/shared/src/slp/slp-social.types.ts";
 import {
   ensureSlpImageAppearance,
   selectSlpImageProviderPrompt,
@@ -23,6 +25,14 @@ const source = {
   appearance: "",
   backstory: "",
 };
+
+test("a Creator resolves its source card even without a linked public account", () => {
+  const creator = { kind: "character", entityId: "character-id" } as SlpAccount;
+  const linked = { kind: "character", entityId: "linked-id" } as SlpAccount;
+  assert.equal(appearanceSourceAccount(creator, null), creator);
+  assert.equal(appearanceSourceAccount(creator), creator);
+  assert.equal(appearanceSourceAccount(creator, linked), linked);
+});
 
 test("source fingerprints survive repeated resolution and use the entity id", () => {
   const first = appearanceEvidenceFromSource(source, "character-id");
