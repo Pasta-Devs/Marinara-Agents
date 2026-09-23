@@ -26,6 +26,15 @@ function needsAttention(creator: SlpCreatorManagedStageProfile) {
   );
 }
 
+function attentionReasons(creator: SlpCreatorManagedStageProfile, t: SlpBackstagePageProps["t"]) {
+  const reasons = [];
+  if (creator.sourceStatus.state === "missing") reasons.push(t("ui.slurp.settings.creators.sourceMissing"));
+  else if (creator.sourceStatus.state === "changed") reasons.push(t("ui.slurp.settings.creators.sourceChanged"));
+  if (creator.appearanceState.source === "missing") reasons.push(t("ui.slurp.appearance.missing"));
+  else if (creator.appearanceState.needsReview) reasons.push(t("ui.slurp.appearance.reviewNeeded"));
+  return reasons;
+}
+
 /**
  * Creators: a searchable directory, bulk edit, and the way in to one Creator's settings.
  *
@@ -99,10 +108,6 @@ export function SlpCreatorsPanel(page: SlpBackstagePageProps) {
           detail={t("ui.slurp.settings.creators.detail")}
         />
         <div className="flex flex-wrap gap-2">
-          <button type="button" onClick={openImprove} className={quietButton}>
-            <Sparkles size={14} className="text-[var(--noodle-accent)]" aria-hidden="true" />
-            {t("ui.slurp.settings.creators.improve", { defaultValue: "Improve with AI" })}
-          </button>
           <button
             type="button"
             aria-pressed={bulkCreatorIds !== null}
@@ -115,6 +120,10 @@ export function SlpCreatorsPanel(page: SlpBackstagePageProps) {
           <button type="button" onClick={onAddCreators} className={accentButton}>
             <UsersRound size={14} aria-hidden="true" />
             {t("ui.slurp.settings.creators.add")}
+          </button>
+          <button type="button" onClick={openImprove} className={quietButton}>
+            <Sparkles size={14} className="text-[var(--noodle-accent)]" aria-hidden="true" />
+            {t("ui.slurp.settings.creators.improve", { defaultValue: "Improve with AI" })}
           </button>
         </div>
       </div>
@@ -152,10 +161,6 @@ export function SlpCreatorsPanel(page: SlpBackstagePageProps) {
           )}
         </div>
       ) : null}
-
-      {!bulkCreatorIds && (
-        <SlpContinuityOverview onOpen={(creatorId) => openSlpCreatorSettings(creatorId, { tab: "continuity" })} />
-      )}
 
       {accountsQuery.isLoading ? (
         <div className="flex justify-center py-10 text-[var(--slurp-muted)]" role="status">
@@ -206,10 +211,7 @@ export function SlpCreatorsPanel(page: SlpBackstagePageProps) {
               </button>
             ))}
           </div>
-          <div
-            className="rounded-xl bg-[var(--slurp-surface-raised)] ring-1 ring-inset ring-[var(--slurp-outline)]"
-            aria-label={t("ui.slurp.settings.creators.listLabel")}
-          >
+          <div className="rounded-xl bg-[var(--slurp-surface-raised)] ring-1 ring-inset ring-[var(--slurp-outline)]">
             {visibleCreators.length === 0 && (
               <p className="p-5 text-center text-xs text-[var(--slurp-muted)]">
                 {t("ui.slurp.settings.creators.noMatches", { defaultValue: "No Creators match." })}
@@ -219,6 +221,7 @@ export function SlpCreatorsPanel(page: SlpBackstagePageProps) {
               const status = reserveStatusQuery.data?.creators.find((entry) => entry.accountId === creator.id);
               const selected = bulkCreatorIds ? bulkCreatorIds.has(creator.id) : false;
               const attention = needsAttention(creator);
+              const reasons = attentionReasons(creator, t);
               return (
                 <button
                   key={creator.id}
@@ -259,6 +262,11 @@ export function SlpCreatorsPanel(page: SlpBackstagePageProps) {
                         {t("ui.slurp.settings.creators.scheduleStale")}
                       </span>
                     )}
+                    {reasons.length > 0 && (
+                      <span className="mt-0.5 block truncate text-[0.68rem] font-semibold text-[var(--slurp-warning)]">
+                        {reasons.join(" · ")}
+                      </span>
+                    )}
                   </span>
                   <CreatorMetricsRow metrics={metricsById.get(creator.id)} t={t} />
                   <span
@@ -282,6 +290,9 @@ export function SlpCreatorsPanel(page: SlpBackstagePageProps) {
         <div className="rounded-xl p-8 text-center text-sm text-[var(--slurp-muted)] ring-1 ring-inset ring-dashed ring-[var(--slurp-outline)]">
           {t("ui.slurp.settings.creators.none")}
         </div>
+      )}
+      {!bulkCreatorIds && creators.length > 0 && (
+        <SlpContinuityOverview onOpen={(creatorId) => openSlpCreatorSettings(creatorId, { tab: "continuity" })} />
       )}
     </div>
   );

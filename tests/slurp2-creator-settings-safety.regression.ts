@@ -12,6 +12,15 @@ const profileScreen = slurp2Source(
   "packages/slurp2/src/engine/packages/client/src/slp/app/screens/SlpScreenProfile.tsx",
 );
 const contract = slurp2Source(`${root}settings/slp-creator-settings-contract.ts`);
+const creatorsPanel = slurp2Source(
+  "packages/slurp2/src/engine/packages/client/src/slp/features/creators/SlpCreatorsPanel.tsx",
+);
+const bulkEdit = slurp2Source(
+  "packages/slurp2/src/engine/packages/client/src/slp/features/creators/SlpCreatorBulkEdit.tsx",
+);
+const metrics = slurp2Source(
+  "packages/slurp2/src/engine/packages/client/src/slp/features/creators/SlpCreatorMetrics.tsx",
+);
 
 assert.match(modal, /accountsQuery\.isError/u, "Creator load failures must render an error state");
 assert.match(modal, /accountsQuery\.refetch\(\)/u, "Creator load failures must offer retry");
@@ -28,5 +37,13 @@ assert.match(modalSections, /SettingAnchor settingKey="creatorCollabs"/u);
 assert.match(contract, /creatorCollabs: "collaborations"/u);
 assert.match(contract, /characterImageInstructions: "production"/u);
 assert.match(profileScreen, /tab: "automation"/u);
+assert.match(creatorsPanel, /attentionReasons\(creator, t\)/u);
+assert.match(creatorsPanel, /reasons\.join\(" · "\)/u);
+assert.ok(creatorsPanel.indexOf("{!bulkCreatorIds && accountsQuery") < 0, "continuity no longer precedes the roster");
+assert.match(creatorsPanel, /<SlpContinuityOverview/u, "continuity remains available below the roster");
+assert.match(bulkEdit, /changeSummary/u);
+assert.match(bulkEdit, /pendingChanges/u);
+assert.match(bulkEdit, /Object\.keys\(patch\)\.length === 0/u, "empty bulk patches stay disabled");
+assert.match(metrics, /compact\.format\(metrics\.posts\)/u, "directory rows use compact metrics");
 
 console.log("slurp2 Creator settings safety regression passed");
