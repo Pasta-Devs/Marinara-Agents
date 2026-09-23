@@ -1,5 +1,10 @@
 # Slurp Remastered release notes
 
+## 0.2.27 — 2026-09-23
+
+- Creator settings now keep profile drafts when you change sections and confirm before discarding them.
+- Creator settings are grouped by task, and the Creator roster shows attention reasons and bulk-change previews.
+
 ## 0.2.26 — 2026-09-23
 
 - Image prompts preserve each Creator's appearance and follow the selected image guidance.
