@@ -215,8 +215,12 @@ export function SlurpMessagesView({
         });
         openFromList(result.thread.id);
         setComposePickerOpen(false);
-      } catch {
-        // The thread view exposes the request state if the target cannot be opened.
+      } catch (cause) {
+        toast.error(
+          cause instanceof Error
+            ? cause.message
+            : localizeUi("ui.slurp.messages.newChatFailed", { defaultValue: "Could not open that conversation." }),
+        );
       }
       return;
     }

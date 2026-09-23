@@ -52,4 +52,10 @@ assert.match(messageStorage, /\.limit\(needle \? 10_000 : bounded \+ 1\)/u);
 const followUpStorage = source(`${slp}/server/src/slp/data/messages/slp-messages-storage-follow-ups.ts`);
 assert.match(followUpStorage, /followUps\.slice\(0, Math\.max\(0, 3 - pendingCount\)\)/u);
 
+const scheduler = source(`${slp}/server/src/slp/features/messages/slp-message-scheduler-service.ts`);
+assert.doesNotMatch(scheduler, /failed = true;\s*logger\.warn\(error, "\[slurp-message\] Failed to deliver bubble/u);
+
+const messagesUi = source(`${slp}/client/src/slp/features/messages/SlpMessages.tsx`);
+assert.match(messagesUi, /ui\.slurp\.messages\.newChatFailed/u);
+
 console.log("slurp2 confirmed bugs regression passed");
