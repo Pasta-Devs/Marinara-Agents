@@ -138,7 +138,7 @@ export const slpGeneratedCreatorPostSchema = z
     scene: slpWardrobeSceneSchema.nullable().optional(),
     poll: slpPollInputSchema.nullable().optional(),
   })
-  .strict()
+  .strip()
   .transform(({ title, content, imagePrompt, scene }) => ({
     title,
     content,
@@ -148,7 +148,7 @@ export const slpGeneratedCreatorPostSchema = z
 
 export const slpGeneratedCreatorReplySchema = z
   .object({ content: z.string().trim().min(1).max(SLP_CREATOR_REPLY_CONTENT_MAX_LENGTH) })
-  .strict();
+  .strip();
 
 export const slpGeneratedInteractionSchema = z
   .object({
@@ -178,6 +178,7 @@ export const slpGeneratedInteractionSchema = z
       .nullish()
       .transform((value) => value ?? undefined),
   })
+  .strip()
   .superRefine((interaction, ctx) => {
     if (interaction.type === "vote" && interaction.pollOptionIndex === undefined) {
       ctx.addIssue({
@@ -195,23 +196,29 @@ export const slpGeneratedInteractionSchema = z
     }
   });
 
-export const slpGeneratedFanActivitySchema = z.object({
-  actorHandle: z.string().min(1),
-  creatorAccountId: z.string().min(1),
-  targetPostId: z.string().min(1),
-  type: z.enum(["like", "reply", "repost"]),
-  content: z.string().trim().max(2000).nullable().optional(),
-});
+export const slpGeneratedFanActivitySchema = z
+  .object({
+    actorHandle: z.string().min(1),
+    creatorAccountId: z.string().min(1),
+    targetPostId: z.string().min(1),
+    type: z.enum(["like", "reply", "repost"]),
+    content: z.string().trim().max(2000).nullable().optional(),
+  })
+  .strip();
 
-export const slpGeneratedFollowSchema = z.object({
-  actorHandle: z.string().min(1),
-  targetHandle: z.string().min(1),
-});
+export const slpGeneratedFollowSchema = z
+  .object({
+    actorHandle: z.string().min(1),
+    targetHandle: z.string().min(1),
+  })
+  .strip();
 
-export const slpGeneratedDigestSchema = z.object({
-  accountEntityIds: z.array(z.string().min(1)).default([]),
-  content: z.string().min(1).max(1200),
-});
+export const slpGeneratedDigestSchema = z
+  .object({
+    accountEntityIds: z.array(z.string().min(1)).default([]),
+    content: z.string().min(1).max(1200),
+  })
+  .strip();
 
 function boundedGeneratedProfileText(maxLength: number, minimumLength = 0) {
   return z
@@ -225,30 +232,38 @@ function boundedGeneratedProfileText(maxLength: number, minimumLength = 0) {
     .pipe(z.string().min(minimumLength).max(maxLength));
 }
 
-export const slpGeneratedProfileSchema = z.object({
-  entityId: z.string().min(1),
-  name: boundedGeneratedProfileText(120, 1),
-  handle: boundedGeneratedProfileText(40, 1),
-  bio: boundedGeneratedProfileText(500).default(""),
-  location: boundedGeneratedProfileText(120).default(""),
-});
+export const slpGeneratedProfileSchema = z
+  .object({
+    entityId: z.string().min(1),
+    name: boundedGeneratedProfileText(120, 1),
+    handle: boundedGeneratedProfileText(40, 1),
+    bio: boundedGeneratedProfileText(500).default(""),
+    location: boundedGeneratedProfileText(120).default(""),
+  })
+  .strip();
 
-export const slpGeneratedRefreshSchema = z.object({
-  posts: z.array(slpGeneratedPostSchema).default([]),
-  interactions: z.array(slpGeneratedInteractionSchema).default([]),
-  follows: z.array(slpGeneratedFollowSchema).default([]),
-  digests: z.array(slpGeneratedDigestSchema).default([]),
-});
+export const slpGeneratedRefreshSchema = z
+  .object({
+    posts: z.array(slpGeneratedPostSchema).default([]),
+    interactions: z.array(slpGeneratedInteractionSchema).default([]),
+    follows: z.array(slpGeneratedFollowSchema).default([]),
+    digests: z.array(slpGeneratedDigestSchema).default([]),
+  })
+  .strip();
 
-export const slpGeneratedFanRefreshSchema = z.object({
-  activities: z.array(slpGeneratedFanActivitySchema).default([]),
-});
+export const slpGeneratedFanRefreshSchema = z
+  .object({
+    activities: z.array(slpGeneratedFanActivitySchema).default([]),
+  })
+  .strip();
 
 export type SlpGeneratedFanRefresh = z.infer<typeof slpGeneratedFanRefreshSchema>;
 
-export const slpGeneratedProfilesSchema = z.object({
-  profiles: z.array(slpGeneratedProfileSchema).default([]),
-});
+export const slpGeneratedProfilesSchema = z
+  .object({
+    profiles: z.array(slpGeneratedProfileSchema).default([]),
+  })
+  .strip();
 
 export type SlpSettingsInput = z.infer<typeof slpSettingsSchema>;
 export type SlpSettingsUpdateInput = z.infer<typeof slpSettingsUpdateSchema>;

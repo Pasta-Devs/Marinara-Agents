@@ -190,17 +190,19 @@ export async function generateCreatorPostImage(input: {
   // meant to decide whether the picture knows who the Creator is. With it off, a Creator with no
   // linked source, or a source card with an empty Appearance field, the image model received a
   // scene containing nobody and invented somebody — a different somebody every post.
-  const stageAppearance = input.suppressStageAppearance
-    ? ""
-    : input.suppressCharacterContext
-      ? input.account.settings.stage?.appearance?.trim() || ""
-      : await resolveImageAppearance({
-          db: input.db,
-          account: input.account,
-          sourceAccount: input.linkedPublicAccount,
-          connectionId: input.settings.generationConnectionId,
-          mode: input.settings.appearanceProfileMode,
-        });
+  const includeAppearance = input.settings.imageGenerationIncludeDescriptions;
+  const stageAppearance =
+    input.suppressStageAppearance || !includeAppearance
+      ? ""
+      : input.suppressCharacterContext
+        ? input.account.settings.stage?.appearance?.trim() || ""
+        : await resolveImageAppearance({
+            db: input.db,
+            account: input.account,
+            sourceAccount: input.linkedPublicAccount,
+            connectionId: input.settings.generationConnectionId,
+            mode: input.settings.appearanceProfileMode,
+          });
   let characterDescription = stageAppearance;
   let characterImageInstructions = "";
   let characterPersonality = "";
@@ -227,7 +229,7 @@ export async function generateCreatorPostImage(input: {
   // Every mode shows the same body — it is the page. Reducing a concealed creator to a handful of
   // approved tokens made them shapeless without hiding anything linkable, since a build and a hair
   // colour identify nobody.
-  if (!stageAppearance && !input.suppressCharacterContext && sourceAppearance) {
+  if (includeAppearance && !stageAppearance && !input.suppressCharacterContext && sourceAppearance) {
     characterDescription = sourceAppearance;
   }
   if (referenceSubject) {

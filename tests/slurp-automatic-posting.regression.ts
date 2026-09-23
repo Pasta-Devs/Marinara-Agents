@@ -8,6 +8,16 @@ import { slurp2BackstageSource } from "./slurp2-backstage-source";
 import { slurp2Source } from "./slurp2-source";
 
 const storage = slurp2Source("packages/slurp2/src/engine/packages/server/src/services/storage/slurp.storage.ts");
+const reserveStorage = slurp2Source(
+  "packages/slurp2/src/engine/packages/server/src/slp/data/feed/reserve/slp-reserve-storage-2.ts",
+);
+const imageStorage = slurp2Source(
+  "packages/slurp2/src/engine/packages/server/src/slp/features/media/slp-images-service.ts",
+);
+const publicImageStorage = slurp2Source(
+  "packages/slurp2/src/engine/packages/server/src/slp/features/media/slp-public-images-service.ts",
+);
+const postPrompt = slurp2Source("packages/slurp2/src/engine/packages/server/src/slp/features/feed/slp-post-prompt.ts");
 const refreshScheduler = slurp2Source(
   "packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-refresh-scheduler.service.ts",
 );
@@ -64,6 +74,20 @@ assert.match(
 );
 assert.match(storage, /slurpCreatorPostingIntervalMs\(settings\.postsPerDay\)/u);
 assert.match(storage, /hasSlurpCreatorPostingIntervalConflict\(activityTimes, publishMs, settings\.postsPerDay\)/u);
+assert.doesNotMatch(
+  reserveStorage.slice(reserveStorage.indexOf("const invalidIds"), reserveStorage.indexOf("const invalidIdSet")),
+  /preserveFutureRows/u,
+  "future generated posts must survive source and policy snapshot changes",
+);
+assert.match(imageStorage, /const includeAppearance = input\.settings\.imageGenerationIncludeDescriptions/u);
+assert.match(imageStorage, /if \(includeAppearance && !stageAppearance && !input\.suppressCharacterContext/u);
+assert.match(publicImageStorage, /input\.settings\.imageGenerationIncludeDescriptions\s*\?/u);
+assert.doesNotMatch(postPrompt, /It is a phone picture rather than an advertisement/u);
+assert.match(
+  reserveStorage,
+  /reconcileNoodlerPreparedPosts\(at, options\)/u,
+  "startup reconciliation must pass its restart recovery mode to storage",
+);
 assert.match(
   storage,
   /latestCreatorPost\.createdAt\) \+ slurpCreatorPostingIntervalMs\(settings\.postsPerDay\) > at\.getTime\(\)/u,

@@ -1,5 +1,10 @@
 # Slurp Remastered release notes
 
+## 0.2.34 — 2026-09-23
+
+- Centralized Slurp connection settings, corrected image appearance controls, simplified Prompt Studio output, and tolerated unknown fields in valid structured model responses.
+- Future automatic posts now survive Engine restarts and source snapshot changes.
+
 ## 0.2.28 — 2026-09-23
 
 - Creator settings now have a status overview and a mobile section picker.

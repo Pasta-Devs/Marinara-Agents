@@ -8,7 +8,12 @@ import { slurpImageBrief, slurpImageNegativePrompt } from "../../modules/feed/sl
 import { slurpCameraSourcePhoto, type SlurpCameraSource } from "../../modules/feed/slp-camera-source.js";
 import { slurpVisualBriefFromSituation } from "../../modules/feed/slp-visual-brief.js";
 import { slurpPostSexualLevel } from "../../modules/feed/slp-post-guidance.js";
-import { slurpEffortPhoto, type SlurpPostEffort } from "../../modules/creators/slp-production-profile.js";
+import {
+  slurpEffortPhoto,
+  slurpProductionPhoto,
+  type SlurpPostEffort,
+  type SlurpProductionStyle,
+} from "../../modules/creators/slp-production-profile.js";
 import { slurpArcImageLine } from "../../modules/projects/slp-arc-progress.js";
 import { protectCreatorGeneratedIdentity } from "../../base/identity/slp-identity-protection.js";
 import type { SlpWardrobeLook, SlpWardrobeScene } from "../../../../../shared/src/slp/slp-wardrobe.js";
@@ -26,6 +31,7 @@ export function slurpPostPictureBriefs(input: {
   variation: SlurpPostVariation | null | undefined;
   camera: SlurpCameraSource | null | undefined;
   effort: SlurpPostEffort;
+  productionStyle?: SlurpProductionStyle;
   shoot?: { place: string; company: string; brief?: string } | null;
   axes: Pick<SlurpPostAxes, "intent"> | null | undefined;
   story?: boolean;
@@ -67,7 +73,7 @@ export function slurpPostPictureBriefs(input: {
           variation,
           story: input.story,
           shoot: input.shoot,
-          effortPhoto: slurpEffortPhoto(input.effort),
+          effortPhoto: `${slurpProductionPhoto(input.productionStyle ?? "homemade")}; ${slurpEffortPhoto(input.effort)}`,
           sexualLevel,
           stageFacts: input.stageFacts,
           scene: input.scene,

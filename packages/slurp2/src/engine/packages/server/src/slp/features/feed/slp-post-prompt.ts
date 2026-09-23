@@ -252,7 +252,7 @@ export function buildSlurpPostBlocks(input: SlurpPostPromptInput): SlurpPromptBl
             ? // The old contract asked for "subject, pose, setting, lighting, framing", which is a
               // scene brief. A brief with no gaps in it produces a photograph with no accident in
               // it, and the result reads as a shoot rather than as something a person posted.
-              "Return one JSON object with title, content, and imagePrompt. imagePrompt is required and describes the photograph this person actually took with the camera named above — what it caught, not what the moment was. It is a phone picture rather than an advertisement, so it may be plain and unposed, but it must still be a sharp, clearly visible picture. Do not stage it as a studio shoot, and do not add a camera position nobody present could reach. Never return null or an empty imagePrompt, and never put the post text or field names in it. Do not create a poll."
+              "Return one JSON object with title, content, and imagePrompt. imagePrompt is required. Never return null or an empty imagePrompt. Do not create a poll."
             : "Return one JSON object with title and content only. Do not create a poll or image prompt."
       }\nReturn JSON only. No prose outside the JSON object.`,
     },
