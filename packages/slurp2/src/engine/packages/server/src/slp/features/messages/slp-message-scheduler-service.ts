@@ -19,17 +19,26 @@ export function startSlurpMessageScheduler(app: FastifyInstance, registerStop?: 
   let timer: ReturnType<typeof setTimeout> | null = null;
   let active: Promise<void> | null = null;
   let consecutiveFailures = 0;
+  let deliveryTimer: ReturnType<typeof setTimeout> | null = null;
+  let delivering: Promise<void> | null = null;
   const schedule = (delay: number) => {
     if (!stopped) {
       timer = setTimeout(() => void poll(), delay);
       timer.unref?.();
     }
   };
-  const poll = async () => {
-    if (stopped || active) return;
-    active = (async () => {
+  // Delivery owes the model nothing, so it runs on its own clock. Sharing the reply loop's backoff
+  // held every delayed bubble for up to 30 minutes whenever one thread's generation kept failing.
+  const scheduleDelivery = (delay: number) => {
+    if (!stopped) {
+      deliveryTimer = setTimeout(() => void deliver(), delay);
+      deliveryTimer.unref?.();
+    }
+  };
+  const deliver = async () => {
+    if (stopped || delivering) return;
+    delivering = (async () => {
       const storage = createSlurpMessagesStorage(app.db);
-      let failed = false;
       // A commissioned piece is drawn and paid for at accept time and then held, so this owes the
       // model nothing — it is a clock running out. Done first, and separately, so a dead text
       // connection never keeps a finished commission from arriving.
@@ -47,8 +56,7 @@ export function startSlurpMessageScheduler(app: FastifyInstance, registerStop?: 
             !thread ||
             thread.state === "declined" ||
             bubble.senderAccountId !== thread.creatorAccountId ||
-            bubble.generationEpoch !== thread.generationEpoch ||
-            (thread.coolUntil && thread.coolUntil > new Date().toISOString())
+            bubble.generationEpoch !== thread.generationEpoch
           ) {
             await replyQueue.remove(bubble.id);
             continue;
@@ -61,13 +69,28 @@ export function startSlurpMessageScheduler(app: FastifyInstance, registerStop?: 
             // Keep the original trigger for obligation checks, but order the stored message by delivery.
             createdAt: new Date().toISOString(),
             replyObligationCreatedAt: bubble.createdAt,
+            replyBubbleId: bubble.id,
           });
-          if (stored) await replyQueue.remove(bubble.id);
+          if (stored === null) await replyQueue.remove(bubble.id);
         } catch (error) {
-          failed = true;
           logger.warn(error, "[slurp-message] Failed to deliver bubble %s", bubble.id);
         }
       }
+    })();
+    try {
+      await delivering;
+    } catch (error) {
+      logger.warn(error, "[slurp-message] bubble delivery failed");
+    } finally {
+      delivering = null;
+      scheduleDelivery(POLL_MS);
+    }
+  };
+  const poll = async () => {
+    if (stopped || active) return;
+    active = (async () => {
+      const storage = createSlurpMessagesStorage(app.db);
+      let failed = false;
       // Off means the background loop stays asleep. Queued bubbles and commissions above are not
       // gated on it: those are already-sent and already-paid-for, and holding them back would lose
       // half a reply rather than prevent one.
@@ -93,7 +116,13 @@ export function startSlurpMessageScheduler(app: FastifyInstance, registerStop?: 
           });
           // `replyToSlurpMessage` reports a provider failure instead of rejecting. Discarding it
           // left `consecutiveFailures` at zero, so a dead connection was retried at full rate.
-          if (outcome.status === "failed") failed = true;
+          if (outcome.status === "failed") {
+            failed = true;
+            // The failing thread steps back on its own. Left oldest-first, it took the first slot
+            // every tick and each retry spent model budget.
+            // ponytail: fixed 10 min per-thread wait; store a failure count if this needs to grow.
+            await storage.setReplyNotBefore(thread.id, new Date(Date.now() + 10 * 60_000).toISOString());
+          }
         }
       }
       if (failed) throw new Error("Queued Slurp reply generation failed");
@@ -114,10 +143,12 @@ export function startSlurpMessageScheduler(app: FastifyInstance, registerStop?: 
   const stop = async () => {
     stopped = true;
     if (timer) clearTimeout(timer);
-    await active?.catch(() => {});
+    if (deliveryTimer) clearTimeout(deliveryTimer);
+    await Promise.all([active?.catch(() => {}), delivering?.catch(() => {})]);
   };
   registerStop?.(stop);
   schedule(INITIAL_DELAY_MS);
+  scheduleDelivery(INITIAL_DELAY_MS);
   app.addHook("onClose", stop);
   return { stop };
 }

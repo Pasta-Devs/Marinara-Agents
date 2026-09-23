@@ -362,7 +362,14 @@ export async function slpMessagesSendRoutes(app: FastifyInstance, messaging: Slp
     // A retry or double-click on an unlocked message is a success, but not a second payment to react to.
     const alreadyUnlocked = Boolean((await messages.getMessageById(parsed.data.messageId))?.unlockedAt);
     const message = await messages.unlockMessage(viewer.id, parsed.data.messageId);
-    if (!message) return reply.code(402).send({ error: "PPV message cannot be unlocked." });
+    if (!message) {
+      // Only a failed charge is a coins problem. A missing, foreign or non-PPV message is not found.
+      const target = await messages.getMessageById(parsed.data.messageId);
+      const thread = target ? await messages.getThreadById(target.threadId) : null;
+      if (!target || target.kind !== "ppv" || thread?.viewerAccountId !== viewer.id)
+        return reply.code(404).send({ error: "Message not found" });
+      return reply.code(402).send({ error: "PPV message cannot be unlocked." });
+    }
     // Two concurrent clicks both read "not unlocked yet"; only the first may react.
     const firstUnlock = !alreadyUnlocked && !ppvReacting.has(message.id);
     if (firstUnlock) {

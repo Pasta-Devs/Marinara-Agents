@@ -52,6 +52,7 @@ export async function slpMessagesRequestRoutes(app: FastifyInstance, messaging: 
     });
     if (result === "not_found") return reply.code(404).send({ error: "Request not found" });
     if (result === "already_answered") return reply.code(409).send({ error: "This request already has an answer." });
+    if (result === "in_progress") return reply.code(409).send({ error: "This request is already being processed." });
     if (result === "topic_required") return reply.code(400).send({ error: "Name the kind of request to count it." });
     return { requests: await listSlurpThreadRequests(app.db, thread.id) };
   });

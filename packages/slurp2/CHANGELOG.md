@@ -1,5 +1,11 @@
 # Slurp Remastered release notes
 
+## 0.2.29 — 2026-09-23
+
+- Scheduled timeline refresh uses the saved daily setting again.
+- Delayed chat replies finish during a cool-off, and strict model output supports comment threads and invited posts.
+- Pulse shows failed first posts and audience failure details. Arc edits keep imported story fields.
+
 ## 0.2.28 — 2026-09-23
 
 - Creator settings now have a status overview and a mobile section picker.

@@ -395,7 +395,12 @@ export function previewSlpStoryPack(
     );
     const idConflict = list.find((item) => item.id === entry.id && item !== installed);
     const incomingHash = contentFingerprint(entry);
-    const locallyEdited = Boolean(installed && installed.provenance?.contentHash !== contentFingerprint(installed));
+    const hasCorePlaceholderHash = installed?.builtin === true && installed.provenance?.contentHash === "0".repeat(64);
+    const locallyEdited = Boolean(
+      installed &&
+      installed.provenance?.contentHash !== contentFingerprint(installed) &&
+      !(hasCorePlaceholderHash && contentFingerprint(installed) === incomingHash),
+    );
     const status = locallyEdited ? "local-edit" : installed ? "update" : idConflict ? "conflict" : "new";
     entries.push({
       kind,

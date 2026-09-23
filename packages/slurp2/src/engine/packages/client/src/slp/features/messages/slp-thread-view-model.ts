@@ -21,6 +21,7 @@ import {
   useSlurpCompose,
   useSlurpMessagePrompt,
   useSlurpOlderMessages,
+  useSlurpMessageSearch,
   useSlurpThread,
 } from "../../features/messages/slp-messages-hooks";
 import { useSlurpSettings, useUpdateSlurpSettings } from "../../features/settings/slp-settings-contract";
@@ -94,10 +95,7 @@ export function useSlurpThreadViewState(props: SlurpThreadViewProps) {
   const settingsQuery = useSlurpSettings();
   const connectionsQuery = useSlurpConnections(true);
   const updateSlurpSettings = useUpdateSlurpSettings();
-  const [tipMode, setTipMode] = useState<"now" | "with-message">("now");
   const [activeTipAmount, setActiveTipAmount] = useState<number | null>(null);
-  const [customTipAmount, setCustomTipAmount] = useState("");
-  const [customTipNote, setCustomTipNote] = useState("");
   const [standaloneTip, setStandaloneTip] = useState<SlurpMessage | null>(null);
   const [composerTipAmount, setComposerTipAmount] = useState(0);
   const [composerTipNote, setComposerTipNote] = useState("");
@@ -137,17 +135,30 @@ export function useSlurpThreadViewState(props: SlurpThreadViewProps) {
   const thread = threadQuery.data?.thread ?? null;
   const activeConversationRef = useRef({ personaId, threadId });
   activeConversationRef.current = { personaId, threadId: thread?.id ?? threadId };
+  const messageSearchQuery = useSlurpMessageSearch(threadId, personaId, messageSearch);
+  const searchMessages = messageSearchQuery.data?.pages.flatMap((page) => page.messages) ?? [];
+  const searchMessageIds = useMemo(() => searchMessages.map((message) => message.id), [searchMessages]);
+  useEffect(() => {
+    if (
+      messageSearch &&
+      messageSearchIndex >= searchMessageIds.length - 1 &&
+      messageSearchQuery.hasNextPage &&
+      !messageSearchQuery.isFetchingNextPage
+    )
+      void messageSearchQuery.fetchNextPage();
+  }, [messageSearch, messageSearchIndex, searchMessageIds.length, messageSearchQuery]);
 
   const messages = useMemo(() => {
     const byId = new Map<string, SlurpMessage>();
     for (const message of loadedOlderMessages) byId.set(message.id, message);
     for (const message of threadQuery.data?.messages ?? []) byId.set(message.id, message);
+    for (const message of searchMessages) byId.set(message.id, message);
     return [...byId.values()].sort((left, right) =>
       left.createdAt === right.createdAt
         ? left.id.localeCompare(right.id)
         : left.createdAt.localeCompare(right.createdAt),
     );
-  }, [loadedOlderMessages, threadQuery.data?.messages]);
+  }, [loadedOlderMessages, searchMessages, threadQuery.data?.messages]);
   const creator = threadQuery.data?.creator;
   const counterpart = threadQuery.data?.counterpart ?? creator;
   const targetCreatorAccountId = thread?.creatorAccountId ?? creator?.id ?? creatorAccountId;
@@ -287,9 +298,9 @@ export function useSlurpThreadViewState(props: SlurpThreadViewProps) {
             {
               id: "tip",
               icon: SlurpCoin,
-              label: localizeUi("ui.slurp.messages.addTip", { defaultValue: "Add a tip" }),
-              detail: localizeUi("ui.slurp.messages.addTipDetail", {
-                defaultValue: "Attach coins to your next message",
+              label: localizeUi("ui.slurp.messages.addTip", { defaultValue: "Send a tip" }),
+              detail: localizeUi("ui.slurp.messages.addTipDetailNowOrLater", {
+                defaultValue: "Now, or with your next message",
               }),
               group: "payment" as const,
             },
@@ -297,10 +308,6 @@ export function useSlurpThreadViewState(props: SlurpThreadViewProps) {
       ).slice(),
     [localizeUi, ownsCreator],
   );
-
-  useEffect(() => {
-    if (ownsCreator) setTipMode("now");
-  }, [ownsCreator]);
 
   const messageSearchMatches = useMemo(() => {
     const needle = messageSearch.trim().toLocaleLowerCase();
@@ -363,17 +370,19 @@ export function useSlurpThreadViewState(props: SlurpThreadViewProps) {
   }, [messageSearchOpen]);
 
   // Searching reaches the whole conversation, not only the part that happens to be mounted.
+  // The id, not the list: each poll rebuilt the list and scrolled the reader back to the match.
+  const currentSearchMatch = searchMessageIds[messageSearchIndex] ?? null;
   useEffect(() => {
-    const match = messageSearchMatches[messageSearchIndex];
+    const match = currentSearchMatch;
     if (!match) return;
     const position = timeline.findIndex((entry) => entry.kind === "message" && entry.message.id === match);
     if (position < 0) return;
     const needed = timeline.length - position + SLURP_MESSAGE_PAGE;
     setVisibleCount((current) => (current >= needed ? current : needed));
-  }, [messageSearchIndex, messageSearchMatches, timeline]);
+  }, [currentSearchMatch, messageSearchIndex, searchMessageIds]);
 
   useEffect(() => {
-    const match = messageSearchMatches[messageSearchIndex];
+    const match = currentSearchMatch;
     if (match) {
       const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
       // The id sits on a `display: contents` wrapper, which has no box to scroll to. Its last child
@@ -385,18 +394,23 @@ export function useSlurpThreadViewState(props: SlurpThreadViewProps) {
       });
     }
     // `visibleCount`: a match in an older page only exists after the effect above mounts it.
-  }, [messageSearchIndex, messageSearchMatches, visibleCount]);
+  }, [currentSearchMatch, messageSearchIndex, searchMessageIds, visibleCount]);
 
   useEffect(() => {
     const dialog = drawerRef.current;
     if (!dialog) return;
     if (drawerMode && !dialog.open) {
-      drawerTriggerRef.current = document.activeElement as HTMLButtonElement | null;
+      // The mobile header menu closes before the drawer opens, so focus is already on <body>.
+      // The menu button is then the control that opened it.
+      const active = document.activeElement;
+      drawerTriggerRef.current =
+        active instanceof HTMLButtonElement && active !== document.body ? active : headerMenuTriggerRef.current;
       dialog.showModal();
-      document.body.style.overflow = "hidden";
     } else if (!drawerMode && dialog.open) {
       dialog.close();
     }
+    // Every open tab locks the page. The cleanup ran on each tab switch and unlocked it.
+    if (drawerMode) document.body.style.overflow = "hidden";
     return () => {
       document.body.style.overflow = "";
     };
@@ -475,14 +489,25 @@ export function useSlurpThreadViewState(props: SlurpThreadViewProps) {
     setVisibleCount(SLURP_MESSAGE_PAGE);
   }, [threadId, creatorAccountId, personaId]);
 
+  // Was the reader at the end before the new content arrived? Measured after the render, a tall
+  // reply or a picture put the distance past the limit and the view stayed where it was.
+  const pinnedToBottomRef = useRef(true);
+  useEffect(() => {
+    const container = messageScrollRef.current;
+    if (!container) return;
+    const onScroll = () => {
+      pinnedToBottomRef.current = container.scrollHeight - container.scrollTop - container.clientHeight <= 96;
+    };
+    container.addEventListener("scroll", onScroll, { passive: true });
+    return () => container.removeEventListener("scroll", onScroll);
+  }, [thread?.id]);
+
   // State refreshes must never move the message viewport. New content only scrolls when the user
   // was already reading the end of the conversation.
   useEffect(() => {
-    const container = messageScrollRef.current;
-    if (!container || !bottomRef.current) return;
-    const distanceFromBottom = container.scrollHeight - container.scrollTop - container.clientHeight;
-    if (distanceFromBottom <= 96) bottomRef.current.scrollIntoView({ block: "end" });
-  }, [commissionTimelineKey, messages.length, typing, pending]);
+    if (!bottomRef.current || !pinnedToBottomRef.current) return;
+    bottomRef.current.scrollIntoView({ block: "end" });
+  }, [commissionTimelineKey, messages.length, typing, pending, hiddenReplyIds]);
 
   /**
    * Hold the reply behind a typing indicator for as long as the server said the creator would
@@ -546,14 +571,8 @@ export function useSlurpThreadViewState(props: SlurpThreadViewProps) {
     settingsQuery,
     connectionsQuery,
     updateSlurpSettings,
-    tipMode,
-    setTipMode,
     activeTipAmount,
     setActiveTipAmount,
-    customTipAmount,
-    setCustomTipAmount,
-    customTipNote,
-    setCustomTipNote,
     standaloneTip,
     setStandaloneTip,
     composerTipAmount,
@@ -631,7 +650,7 @@ export function useSlurpThreadViewState(props: SlurpThreadViewProps) {
     promptDebug,
     activeCommission,
     toolTabs,
-    messageSearchMatches,
+    messageSearchMatches: searchMessageIds,
     closeDrawer,
     messageScrollRef,
     nextOlderCursor,

@@ -1,4 +1,4 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect } from "react";
 import { api } from "../../../lib/api-client.js";
 import { slpKeys } from "../../base/state/slp-query-keys.js";
@@ -104,6 +104,19 @@ export function useSlurpThread(threadId: string | null, personaId: string | null
   }, [personaId, query.data?.thread?.id, queryClient]);
   return query;
 }
+export function useSlurpMessageSearch(threadId: string | null, personaId: string | null, search: string) {
+  return useInfiniteQuery({
+    queryKey: [...messageKeys.thread(threadId ?? "none", personaId), "search", search.trim()],
+    initialPageParam: null as { createdAt: string; id: string } | null,
+    queryFn: ({ pageParam }) =>
+      api.get<{ messages: SlurpMessage[]; nextCursor: { createdAt: string; id: string } | null }>(
+        `/slurp2/messages/threads/${encodeURIComponent(threadId!)}?personaId=${encodeURIComponent(personaId!)}&search=${encodeURIComponent(search.trim())}&limit=120${pageParam ? `&cursorAt=${encodeURIComponent(pageParam.createdAt)}&cursorId=${encodeURIComponent(pageParam.id)}` : ""}`,
+      ),
+    getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
+    enabled: Boolean(threadId && personaId && search.trim()),
+    staleTime: 15_000,
+  });
+}
 export function useSlurpOlderMessages() {
   return useMutation({
     mutationFn: (input: { threadId: string; personaId: string; cursor: { createdAt: string; id: string } }) =>
@@ -154,8 +167,11 @@ export function useSlurpRequestAction(threadId: string | null, personaId: string
         `/slurp2/messages/threads/${encodeURIComponent(threadId!)}/requests/${encodeURIComponent(input.requestId)}/action`,
         { personaId, action: input.action, ...(input.topic ? { topic: input.topic } : {}) },
       ),
-    onSuccess: (data) =>
-      queryClient.setQueryData([...messageKeys.thread(threadId ?? "none", personaId), "requests"], data),
+    onSuccess: (data) => {
+      queryClient.setQueryData([...messageKeys.thread(threadId ?? "none", personaId), "requests"], data);
+      // Fulfil, tease and delay schedule promises and follow-ups, which the Memories panel shows.
+      void queryClient.invalidateQueries({ queryKey: messageKeys.thread(threadId ?? "none", personaId) });
+    },
   });
 }
 
@@ -215,14 +231,25 @@ export function useSlurpStoryViews(storyId: string | null, personaId: string | n
   });
 }
 /** The rapport breakdown, read only by the Creator edit panel. */
-export function useSlurpRapport(creatorAccountId: string | null, personaId: string | null) {
+export function useSlurpRapport(
+  creatorAccountId: string | null,
+  personaId: string | null,
+  viewerAccountId: string | null,
+) {
   return useQuery({
-    queryKey: [...slpKeys.noodlerRoot(), "messages", "rapport", creatorAccountId ?? "none", personaId ?? "none"],
+    queryKey: [
+      ...slpKeys.noodlerRoot(),
+      "messages",
+      "rapport",
+      creatorAccountId ?? "none",
+      personaId ?? "none",
+      viewerAccountId ?? "none",
+    ],
     queryFn: () =>
       api.get<{ messaging: SlurpCreatorMessaging; rapport: SlurpRapport; facts: Record<string, unknown> }>(
-        `/slurp2/messages/creators/${encodeURIComponent(creatorAccountId!)}/rapport?personaId=${encodeURIComponent(personaId!)}`,
+        `/slurp2/messages/creators/${encodeURIComponent(creatorAccountId!)}/rapport?personaId=${encodeURIComponent(personaId!)}&viewerAccountId=${encodeURIComponent(viewerAccountId!)}`,
       ),
-    enabled: Boolean(creatorAccountId && personaId),
+    enabled: Boolean(creatorAccountId && personaId && viewerAccountId),
   });
 }
 /** A Creator's own message policy and prices, for the panel that edits them. */

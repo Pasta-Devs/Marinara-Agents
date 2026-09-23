@@ -9,6 +9,7 @@ import { SlurpEmptyArtwork } from "../../base/chrome/SlpEmptyArtwork";
 import { formatTime } from "../../base/ui/slp-date-time";
 import type { SlurpThread } from "../../features/messages/slp-messages-contract";
 import { useSlurpThreads } from "../../features/messages/slp-messages-hooks";
+import { toast } from "sonner";
 
 /** Tip amounts offered in a thread. Small enough to be a reflex, large enough to mean something. */
 /**
@@ -215,8 +216,11 @@ export function SlurpMessagesView({
         });
         openFromList(result.thread.id);
         setComposePickerOpen(false);
-      } catch {
-        // The thread view exposes the request state if the target cannot be opened.
+      } catch (cause) {
+        console.error("[slurp2] Failed to open conversation", cause);
+        toast.error(
+          localizeUi("ui.slurp.messages.newChatFailed", { defaultValue: "Could not open that conversation." }),
+        );
       }
       return;
     }

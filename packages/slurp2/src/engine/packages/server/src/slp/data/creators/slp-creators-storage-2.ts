@@ -266,7 +266,7 @@ export function createCreatorsStorage2(context: SlurpStorageContext) {
     ): Promise<PersistedSlpRefreshSchedule> {
       const settings = settingsOverride ?? (await this.getSettings());
       const current = await this.getRefreshSchedule();
-      const reconciled = reconcileSlpRefreshSchedule(current, 0, at);
+      const reconciled = reconcileSlpRefreshSchedule(current, settings.refreshesPerDay, at);
       if (!current || JSON.stringify(current) !== JSON.stringify(reconciled)) {
         await this.saveRefreshSchedule(reconciled);
       }

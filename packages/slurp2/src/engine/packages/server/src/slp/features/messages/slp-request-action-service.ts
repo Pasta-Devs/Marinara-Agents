@@ -39,18 +39,39 @@ export async function listSlurpThreadRequests(db: DB, threadId: string): Promise
  * Apply one action to one request. Each request takes one action: the answer is recorded once,
  * so a double click cannot promise the same content twice.
  */
+type SlurpRequestActionInput = {
+  threadId: string;
+  creatorAccountId: string;
+  requestId: string;
+  action: SlurpRequestAction;
+  topic?: string;
+  dueInHours?: number;
+};
+type SlurpRequestActionResult = "applied" | "in_progress" | "not_found" | "already_answered" | "topic_required";
+
+// The "already answered" check reads before it writes, so two clicks both passed it and planned two
+// opportunities. One action per request at a time closes that gap in this process.
+const requestsInFlight = new Set<string>();
+
 export async function applySlurpRequestAction(
   db: DB,
-  input: {
-    threadId: string;
-    creatorAccountId: string;
-    requestId: string;
-    action: SlurpRequestAction;
-    topic?: string;
-    dueInHours?: number;
-  },
+  input: SlurpRequestActionInput,
   at = new Date(),
-): Promise<"applied" | "not_found" | "already_answered" | "topic_required"> {
+): Promise<SlurpRequestActionResult> {
+  if (requestsInFlight.has(input.requestId)) return "in_progress";
+  requestsInFlight.add(input.requestId);
+  try {
+    return await applyRequestActionOnce(db, input, at);
+  } finally {
+    requestsInFlight.delete(input.requestId);
+  }
+}
+
+async function applyRequestActionOnce(
+  db: DB,
+  input: SlurpRequestActionInput,
+  at: Date,
+): Promise<SlurpRequestActionResult> {
   const [request] = await db
     .select()
     .from(slurpContinuityEvents)
