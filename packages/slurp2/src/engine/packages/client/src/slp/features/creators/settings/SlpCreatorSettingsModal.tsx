@@ -1,6 +1,7 @@
-import { Loader2 } from "lucide-react";
+import { Loader2, RefreshCw } from "lucide-react";
 import { useEffect, useRef, type CSSProperties, type KeyboardEvent } from "react";
 import { useTranslation } from "react-i18next";
+import { showConfirmDialog } from "../../../../lib/app-dialogs";
 
 import { Modal } from "../../../../components/ui/Modal";
 import { Avatar, getSlpAccentStyle } from "../../../base/chrome/SlpChrome";
@@ -38,6 +39,7 @@ export function SlpCreatorSettingsModal({
   const accountsQuery = useCreatorAccounts(creatorId !== null);
   const creator = accountsQuery.data?.find((entry) => entry.id === creatorId) ?? null;
   const panelRef = useRef<HTMLDivElement>(null);
+  const dirtyRef = useRef(false);
 
   const sections = SLP_CREATOR_SETTINGS_SECTIONS.filter(
     (section) => !section.available || !creator || section.available(creator),
@@ -90,12 +92,46 @@ export function SlpCreatorSettingsModal({
         name: creator.displayName,
       })
     : t("ui.slurp.settings.creators.settingsTitle", { defaultValue: "Creator settings" });
-  const Section = activeSection?.Component;
+  const requestClose = async () => {
+    if (
+      dirtyRef.current &&
+      !(await showConfirmDialog({
+        title: t("ui.slurp.settings.creators.unsavedTitle", { defaultValue: "Discard unsaved changes?" }),
+        message: t("ui.slurp.settings.creators.unsavedDetail", {
+          defaultValue: "Your profile changes are not saved.",
+        }),
+        confirmLabel: t("ui.slurp.settings.creators.discardChanges", { defaultValue: "Discard changes" }),
+        cancelLabel: t("ui.slurp.actions.cancel", { defaultValue: "Cancel" }),
+      }))
+    ) {
+      return;
+    }
+    dirtyRef.current = false;
+    close();
+  };
+  const requestNavigation = async (action: () => void) => {
+    if (
+      dirtyRef.current &&
+      !(await showConfirmDialog({
+        title: t("ui.slurp.settings.creators.unsavedTitle", { defaultValue: "Discard unsaved changes?" }),
+        message: t("ui.slurp.settings.creators.unsavedDetail", {
+          defaultValue: "Your profile changes are not saved.",
+        }),
+        confirmLabel: t("ui.slurp.settings.creators.discardChanges", { defaultValue: "Discard changes" }),
+        cancelLabel: t("ui.slurp.actions.cancel", { defaultValue: "Cancel" }),
+      }))
+    ) {
+      return;
+    }
+    dirtyRef.current = false;
+    close();
+    action();
+  };
 
   return (
     <Modal
       open={creatorId !== null}
-      onClose={close}
+      onClose={() => void requestClose()}
       title={title}
       width="max-w-4xl"
       mobileFullscreen
@@ -112,7 +148,15 @@ export function SlpCreatorSettingsModal({
           : undefined
       }
     >
-      {!creator ? (
+      {accountsQuery.isError ? (
+        <div className="flex min-h-32 flex-col items-center justify-center gap-3 p-5 text-center text-sm text-[var(--slurp-muted)]">
+          <p>{t("ui.slurp.settings.creators.loadError", { defaultValue: "Could not load this Creator." })}</p>
+          <button type="button" onClick={() => void accountsQuery.refetch()} className={quietButton}>
+            <RefreshCw size={14} aria-hidden="true" />
+            {t("capabilities.actions.tryAgain", { defaultValue: "Try again" })}
+          </button>
+        </div>
+      ) : !creator ? (
         <div
           className="flex min-h-32 items-center justify-center gap-2 text-sm text-[var(--slurp-muted)]"
           role="status"
@@ -134,8 +178,7 @@ export function SlpCreatorSettingsModal({
               <button
                 type="button"
                 onClick={() => {
-                  close();
-                  onViewProfile(creator);
+                  void requestNavigation(() => onViewProfile(creator));
                 }}
                 className={quietButton}
               >
@@ -187,23 +230,29 @@ export function SlpCreatorSettingsModal({
             tabIndex={-1}
             className="min-w-0 flex-1 sm:max-h-[65vh] sm:overflow-y-auto sm:border-s sm:border-[var(--slurp-outline)] sm:ps-4"
           >
-            {Section && activeSection && (
-              <Section
-                key={`${creator.id}:${activeSection.id}`}
-                creator={creator}
-                active
-                onClose={close}
-                onRedraft={
-                  onRedraft
-                    ? (entry) => {
-                        close();
-                        onRedraft(entry);
-                      }
-                    : undefined
-                }
-                onViewProfile={onViewProfile}
-              />
-            )}
+            {sections.map((section) => {
+              if (section.id !== "identity" && section.id !== activeSection?.id) return null;
+              const SectionComponent = section.Component;
+              return (
+                <div key={`${creator.id}:${section.id}`} hidden={section.id !== activeSection?.id}>
+                  <SectionComponent
+                    key={`${creator.id}:${section.id}`}
+                    creator={creator}
+                    active={section.id === activeSection?.id}
+                    onClose={requestClose}
+                    onDirtyChange={section.id === "identity" ? (dirty) => (dirtyRef.current = dirty) : undefined}
+                    onRedraft={
+                      onRedraft
+                        ? (entry) => {
+                            void requestNavigation(() => onRedraft(entry));
+                          }
+                        : undefined
+                    }
+                    onViewProfile={onViewProfile}
+                  />
+                </div>
+              );
+            })}
           </div>
         </div>
       )}

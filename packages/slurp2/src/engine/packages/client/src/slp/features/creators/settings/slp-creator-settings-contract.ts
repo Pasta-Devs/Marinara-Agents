@@ -23,6 +23,8 @@ export type SlpCreatorSettingsSectionProps = {
   onRedraft?: (creator: SlpCreatorSettingsCreator) => void;
   /** Open the Creator's public profile, leaving Backstage if that is where we are. */
   onViewProfile?: (creator: SlpCreatorSettingsCreator) => void;
+  /** Reports unsaved profile edits to the modal dismissal guard. */
+  onDirtyChange?: (dirty: boolean) => void;
   /** True while this section is the visible tab. Sections gate their queries on it. */
   active: boolean;
 };

@@ -35,7 +35,7 @@ import type { SlpCreatorSettingsSectionProps } from "./slp-creator-settings-cont
 const FAN_ARCHETYPES = ["ordinary", "eccentric", "crossFandom", "raider", "organicDiscovery", "freeResource"] as const;
 
 /** Who this Creator is: the full stage profile, plus whatever its Engine source is doing. */
-export function SlpCreatorIdentitySection({ creator, onRedraft }: SlpCreatorSettingsSectionProps) {
+export function SlpCreatorIdentitySection({ creator, onRedraft, onDirtyChange }: SlpCreatorSettingsSectionProps) {
   const { t } = useTranslation();
   const adoptSourceIdentity = useAdoptCreatorSourceIdentity();
   const dismissSourceChanges = useDismissCreatorSourceChanges();
@@ -60,6 +60,7 @@ export function SlpCreatorIdentitySection({ creator, onRedraft }: SlpCreatorSett
         key={`${creator.id}:${creator.appearance}`}
         creator={creator}
         onRedraft={onRedraft ? () => onRedraft(creator) : undefined}
+        onDirtyChange={onDirtyChange}
       />
       <section
         className="space-y-3 rounded-lg bg-[var(--slurp-surface-raised)] p-3 ring-1 ring-inset ring-[var(--slurp-outline)]"

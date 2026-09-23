@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import type {
@@ -27,27 +27,37 @@ import { errorMessage } from "../../modules/settings/slp-backstage-format";
 export function SlurpCreatorProfileEditor({
   creator,
   onRedraft,
+  onDirtyChange,
 }: {
   creator: SlpCreatorManagedStageProfile;
   onRedraft?: () => void;
+  onDirtyChange?: (dirty: boolean) => void;
 }) {
   const { t } = useTranslation();
   const updateProfile = useUpdateCreatorStageProfile();
   const uploadAvatar = useUploadCreatorAvatar();
   const useSourceAvatar = useUseCreatorSourceAvatar();
   const removeAvatar = useRemoveCreatorAvatar();
-  const [draft, setDraft] = useState<SlurpStageProfileInput>({
-    displayName: creator.displayName,
-    handle: creator.handle,
-    bio: creator.bio,
-    stagePersonality: creator.stagePersonality,
-    appearance: creator.appearance,
-    wardrobe: creator.wardrobe,
-    locations: creator.locations,
-    disclosureMode: creator.disclosureMode ?? "hinted",
-    gender: creator.gender,
-    tags: creator.tags,
-  });
+  const initialDraft = useMemo<SlurpStageProfileInput>(
+    () => ({
+      displayName: creator.displayName,
+      handle: creator.handle,
+      bio: creator.bio,
+      stagePersonality: creator.stagePersonality,
+      appearance: creator.appearance,
+      wardrobe: creator.wardrobe,
+      locations: creator.locations,
+      disclosureMode: creator.disclosureMode ?? "hinted",
+      gender: creator.gender,
+      tags: creator.tags,
+    }),
+    [creator],
+  );
+  const [draft, setDraft] = useState<SlurpStageProfileInput>(initialDraft);
+
+  useEffect(() => {
+    onDirtyChange?.(JSON.stringify(draft) !== JSON.stringify(initialDraft));
+  }, [draft, initialDraft, onDirtyChange]);
 
   const avatarFailed = (error: unknown) =>
     toast.error(errorMessage(error, t("ui.noodle.stageprofileform.couldNotUpdateAvatar")));
@@ -64,7 +74,11 @@ export function SlurpCreatorProfileEditor({
     updateProfile.mutate(
       { accountId: creator.id, ...input, ...(review.confirmAvatarReview && { confirmAvatarReview: true }) },
       {
-        onSuccess: () => toast.success(t("ui.noodle.noodlerhome.stageProfileUpdated")),
+        onSuccess: () => {
+          setDraft(input);
+          onDirtyChange?.(false);
+          toast.success(t("ui.noodle.noodlerhome.stageProfileUpdated"));
+        },
         onError: (error) => toast.error(errorMessage(error, t("ui.noodle.noodlerhome.couldNotSaveTheStageProfile"))),
       },
     );
@@ -99,20 +113,10 @@ export function SlurpCreatorProfileEditor({
       onUploadAvatar={(file) => uploadAvatar.mutate({ accountId: creator.id, file }, { onError: avatarFailed })}
       onUseSourceAvatar={() => useSourceAvatar.mutate({ accountId: creator.id }, { onError: avatarFailed })}
       onRemoveAvatar={() => removeAvatar.mutate({ accountId: creator.id }, { onError: avatarFailed })}
-      onCancel={() =>
-        setDraft({
-          displayName: creator.displayName,
-          handle: creator.handle,
-          bio: creator.bio,
-          stagePersonality: creator.stagePersonality,
-          appearance: creator.appearance,
-          wardrobe: creator.wardrobe,
-          locations: creator.locations,
-          disclosureMode: creator.disclosureMode ?? "hinted",
-          gender: creator.gender,
-          tags: creator.tags,
-        })
-      }
+      onCancel={() => {
+        setDraft(initialDraft);
+        onDirtyChange?.(false);
+      }}
       onSave={() => void save()}
     />
   );
