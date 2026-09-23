@@ -314,6 +314,14 @@ export interface SlpCreatorStageProfile {
   updatedAt: string;
 }
 
+/** Optional context for a single Creator avatar or banner generation request. */
+export type SlpCreatorArtworkPromptOptions = {
+  creatorDetails: boolean;
+  appearance: boolean;
+  sourceReferences: boolean;
+  composition: boolean;
+};
+
 export interface SlpCreatorManagedStageProfile extends SlpCreatorStageProfile {
   /** The Engine character or persona this Creator was made from. Empty when the source is gone. */
   sourceAccountId: string | null;

@@ -590,16 +590,14 @@ test.describe("standalone Slurp package", () => {
         .getByRole("button", { name: new RegExp(`^${stageProfile.displayName} @`) })
         .filter({ visible: true });
       await creatorRow.click();
-      await expect(creatorRow).toHaveAttribute("aria-expanded", "true");
-      const creatorSettings = slurp
-        .getByRole("region", { name: stageProfile.displayName, exact: true })
-        .filter({ visible: true });
+      const creatorSettings = page.getByRole("dialog", { name: `${stageProfile.displayName}'s settings` });
       await expect(creatorSettings).toBeVisible();
+      await creatorSettings.getByRole("tab", { name: "Identity", exact: true }).click();
       const profileName = creatorSettings.getByLabel("Stage name");
       const originalProfileName = await profileName.inputValue();
       await profileName.fill(`${originalProfileName} draft`);
       await creatorSettings.getByRole("tab", { name: "Production", exact: true }).click();
-      await creatorSettings.getByRole("tab", { name: "Profile", exact: true }).click();
+      await creatorSettings.getByRole("tab", { name: "Identity", exact: true }).click();
       await expect(profileName).toHaveValue(`${originalProfileName} draft`);
       await profileName.fill(originalProfileName);
       await creatorSettings.getByRole("tab", { name: "Production", exact: true }).click();
@@ -623,6 +621,7 @@ test.describe("standalone Slurp package", () => {
       await expect(scheduleDialog).toBeVisible();
       await page.keyboard.press("Escape");
       await expect(scheduleDialog).toBeHidden();
+      await creatorSettings.getByRole("button", { name: "Close dialog" }).click();
 
       await slurp.getByRole("button", { name: "Prompts", exact: true }).click();
       await slurp.getByRole("button", { name: "Edit prompt", exact: true }).first().click();

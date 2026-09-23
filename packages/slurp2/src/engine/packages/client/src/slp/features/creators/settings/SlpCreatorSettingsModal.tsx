@@ -1,5 +1,5 @@
 import { Check, ChevronDown, Loader2, RefreshCw, X } from "lucide-react";
-import { useEffect, useRef, useState, type CSSProperties, type KeyboardEvent } from "react";
+import { useCallback, useEffect, useRef, useState, type CSSProperties, type KeyboardEvent } from "react";
 import { useTranslation } from "react-i18next";
 import { showConfirmDialog } from "../../../../lib/app-dialogs";
 
@@ -50,6 +50,14 @@ export function SlpCreatorSettingsModal({
   const [sectionPickerOpen, setSectionPickerOpen] = useState(false);
   const sectionPickerRef = useRef<HTMLDivElement>(null);
   const sectionPickerTriggerRef = useRef<HTMLButtonElement>(null);
+  const reportProfileSaveState = useCallback(
+    (state: { isPending: boolean; dirty: boolean; save: () => void; discard: () => void }) => {
+      setProfileSaveState(state);
+      dirtyRef.current = state.dirty;
+      setProfileDirty(state.dirty);
+    },
+    [],
+  );
 
   const sections = SLP_CREATOR_SETTINGS_SECTIONS.filter(
     (section) => !section.available || !creator || section.available(creator),
@@ -172,8 +180,8 @@ export function SlpCreatorSettingsModal({
       title={title}
       width="max-w-4xl"
       mobileFullscreen
-      panelClassName="noodle-icon-scope"
-      contentClassName="flex flex-col"
+      panelClassName="noodle-icon-scope sm:h-[min(90dvh,52rem)]"
+      contentClassName="flex min-h-0 flex-col !overflow-hidden"
       panelStyle={
         creator
           ? getSlpAccentStyle(profileAccent(creator.id), {
@@ -204,7 +212,7 @@ export function SlpCreatorSettingsModal({
         </div>
       ) : (
         <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-hidden sm:flex-row">
-          <div className="flex min-w-0 shrink-0 flex-col gap-3 sm:w-52 sm:overflow-y-auto sm:overscroll-contain">
+          <div className="flex min-w-0 shrink-0 flex-col gap-3 sm:min-h-0 sm:w-52 sm:overflow-y-auto sm:overscroll-contain sm:pe-2">
             <div className="flex min-w-0 items-center gap-3">
               <Avatar account={creator} size="sm" />
               <div className="min-w-0 flex-1">
@@ -392,15 +400,7 @@ export function SlpCreatorSettingsModal({
                           }
                         : undefined
                     }
-                    onSaveStateChange={
-                      section.id === "identity"
-                        ? (state) => {
-                            setProfileSaveState(state);
-                            dirtyRef.current = state.dirty;
-                            setProfileDirty(state.dirty);
-                          }
-                        : undefined
-                    }
+                    onSaveStateChange={section.id === "identity" ? reportProfileSaveState : undefined}
                     onRedraft={
                       onRedraft
                         ? (entry) => {

@@ -4,6 +4,7 @@ import type {
   SlpStageProfileDraftRequest,
 } from "../../../../../shared/src/slp/slp-social-generation.schema.js";
 import type {
+  SlpCreatorArtworkPromptOptions,
   SlpAccount,
   SlpCreatorManagedStageProfile,
   SlpCreatorSourceSnapshot,
@@ -159,10 +160,21 @@ export function useUploadCreatorBanner() {
 }
 export function useGenerateCreatorArtwork() {
   return useCreatorAvatarMutation(
-    ({ accountId, kind, guidance }: { accountId: string; kind: "avatar" | "banner"; guidance?: string }) =>
+    ({
+      accountId,
+      kind,
+      guidance,
+      options,
+    }: {
+      accountId: string;
+      kind: "avatar" | "banner";
+      guidance?: string;
+      options?: SlpCreatorArtworkPromptOptions;
+    }) =>
       api.post<SlpCreatorStageProfile>(`/slurp2/slurp/accounts/${encodeURIComponent(accountId)}/artwork/generate`, {
         kind,
         guidance,
+        options,
       }),
   );
 }

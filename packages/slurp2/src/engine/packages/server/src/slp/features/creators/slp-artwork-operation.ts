@@ -16,6 +16,7 @@ import {
 import { resolveCreatorImageConnectionId } from "../../base/media/slp-image-connections.js";
 import { resolveCreatorArtwork } from "./slp-public-profiles-service.js";
 import { tryCreatorAccountOperation } from "../../base/locking/slp-account-operation-lock.js";
+import type { SlpCreatorArtworkPromptOptions } from "../../../../../shared/src/slp/slp-social.types.js";
 
 export type SlpCreatorArtworkOutcome = "idle" | "inherited" | "avatar" | "banner" | "unavailable";
 
@@ -27,11 +28,20 @@ export type SlpCreatorArtworkOutcome = "idle" | "inherited" | "avatar" | "banner
 function artworkPrompt(
   kind: "avatar" | "banner",
   profile: { displayName: string; bio: string; stagePersonality: string },
+  options: SlpCreatorArtworkPromptOptions,
 ): string {
   const voice = [profile.bio, profile.stagePersonality].filter(Boolean).join(" ").slice(0, 400);
-  return kind === "avatar"
-    ? `Standalone avatar portrait for ${profile.displayName}: one head-and-shoulders subject, looking at the camera, soft flattering light, shallow depth of field, centered composition, plain image with no interface or decorative frame. ${voice}`
-    : `Ultra-wide environmental cover banner for ${profile.displayName}: one continuous location or atmospheric scene that fits the creator, landscape composition, no text, no logos, no interface. The whole frame is that single scene, edge to edge. Never draw a second image inside it: no circular or rounded portrait, no avatar bubble, no badge, medallion, sticker, or framed headshot anywhere in the frame, and no empty circle waiting for one. If a person appears, keep them small, full-body or turned away, and part of the environment rather than presented as a portrait. ${voice}`;
+  return [
+    kind === "avatar" ? "Avatar image." : "Banner image.",
+    options.creatorDetails ? `For ${profile.displayName}. ${voice}` : "",
+    options.composition
+      ? kind === "avatar"
+        ? "One head-and-shoulders subject, looking at the camera, soft flattering light, shallow depth of field, centered composition, no interface or decorative frame."
+        : "One continuous ultra-wide environmental scene, edge to edge, no text, logo, avatar bubble, framed portrait, or interface. If a person appears, keep them small and part of the environment."
+      : "",
+  ]
+    .filter(Boolean)
+    .join(" ");
 }
 
 function artworkNegativePrompt(kind: "avatar" | "banner") {
@@ -48,7 +58,7 @@ function artworkCompositionGuard(kind: "avatar" | "banner") {
 
 export async function generateCreatorArtwork(
   db: DB,
-  input: { accountId: string; kind: "avatar" | "banner"; guidance?: string },
+  input: { accountId: string; kind: "avatar" | "banner"; guidance?: string; options?: SlpCreatorArtworkPromptOptions },
 ): Promise<"avatar" | "banner" | "missing" | "unavailable" | "busy"> {
   const noodle = createSlurpStorage(db);
   const locked = await tryCreatorAccountOperation(input.accountId, async () => {
@@ -63,17 +73,27 @@ export async function generateCreatorArtwork(
     if (!imageConnection) return "unavailable" as const;
     const settings = await noodle.getSettings();
     const guidance = input.guidance?.trim().slice(0, 2000);
+    const options = input.options ?? {
+      creatorDetails: true,
+      appearance: input.kind === "avatar",
+      sourceReferences: input.kind === "avatar",
+      composition: true,
+    };
     const image = await generateCreatorPostImage({
       account,
       linkedPublicAccount,
       disclosureMode,
-      postContent: account.bio,
+      postContent: options.creatorDetails ? account.bio : "",
       draftPrompt: [
-        artworkPrompt(input.kind, {
-          displayName: account.displayName,
-          bio: account.bio,
-          stagePersonality: account.settings.privacy.stagePersonality ?? "",
-        }),
+        artworkPrompt(
+          input.kind,
+          {
+            displayName: account.displayName,
+            bio: account.bio,
+            stagePersonality: account.settings.privacy.stagePersonality ?? "",
+          },
+          options,
+        ),
         guidance ? `User direction: ${guidance}` : "",
       ]
         .filter(Boolean)
@@ -87,9 +107,11 @@ export async function generateCreatorArtwork(
       previewOnly: false,
       width: input.kind === "banner" ? 1536 : 1024,
       height: input.kind === "banner" ? 512 : 1024,
-      compositionGuard: artworkCompositionGuard(input.kind),
-      negativePromptAdditions: artworkNegativePrompt(input.kind),
-      suppressCharacterContext: input.kind === "banner",
+      compositionGuard: options.composition ? artworkCompositionGuard(input.kind) : undefined,
+      negativePromptAdditions: options.composition ? artworkNegativePrompt(input.kind) : undefined,
+      suppressStageAppearance: !options.appearance,
+      suppressCreatorDetails: !options.creatorDetails,
+      suppressCharacterContext: !options.sourceReferences,
     });
     const mediaPath = image.metadata.noodlerMediaPath;
     if (typeof mediaPath !== "string") {

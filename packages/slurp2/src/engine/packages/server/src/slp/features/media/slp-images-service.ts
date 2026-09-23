@@ -146,6 +146,8 @@ export async function generateCreatorPostImage(input: {
   compositionGuard?: string;
   negativePromptAdditions?: string;
   suppressCharacterContext?: boolean;
+  suppressStageAppearance?: boolean;
+  suppressCreatorDetails?: boolean;
 }): Promise<{
   metadata: Record<string, unknown>;
   preview: Omit<SlpImagePromptReviewItem, "id"> | null;
@@ -183,18 +185,22 @@ export async function generateCreatorPostImage(input: {
 
   // The Creator's own appearance, written on the Creator rather than borrowed from a card.
   //
-  // It is applied unconditionally, unlike the block below it. `imageGenerationIncludeDescriptions`
-  // decides whether to pull the *source character's* description into the picture; it was never
+  // It is applied by default, unlike the block below it. Artwork requests can turn it off.
+  // `imageGenerationIncludeDescriptions` decides whether to pull the *source character's* description; it was never
   // meant to decide whether the picture knows who the Creator is. With it off, a Creator with no
   // linked source, or a source card with an empty Appearance field, the image model received a
   // scene containing nobody and invented somebody — a different somebody every post.
-  const stageAppearance = await resolveImageAppearance({
-    db: input.db,
-    account: input.account,
-    sourceAccount: input.linkedPublicAccount,
-    connectionId: input.settings.generationConnectionId,
-    mode: input.settings.appearanceProfileMode,
-  });
+  const stageAppearance = input.suppressStageAppearance
+    ? ""
+    : input.suppressCharacterContext
+      ? input.account.settings.stage?.appearance?.trim() || ""
+      : await resolveImageAppearance({
+          db: input.db,
+          account: input.account,
+          sourceAccount: input.linkedPublicAccount,
+          connectionId: input.settings.generationConnectionId,
+          mode: input.settings.appearanceProfileMode,
+        });
   let characterDescription = stageAppearance;
   let characterImageInstructions = "";
   let characterPersonality = "";
@@ -290,7 +296,7 @@ export async function generateCreatorPostImage(input: {
   if (!stageAppearance) characterDescription = slurpImageLook(characterDescription);
 
   const postPrompt = await loadPrompt(input.promptOverrides, NOODLE_IMAGE_POST, {
-    authorName: input.account.displayName,
+    authorName: input.suppressCreatorDetails ? "" : input.account.displayName,
     postContent: input.postContent,
     visualBrief: input.visualBrief,
     // The look leads, so the subject is the first thing the image model reads; the default

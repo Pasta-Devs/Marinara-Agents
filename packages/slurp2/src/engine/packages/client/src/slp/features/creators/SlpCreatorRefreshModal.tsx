@@ -23,10 +23,12 @@ export function SlpCreatorRefreshModal(page: SlpBackstagePageProps) {
   return (
     <Modal
       open={refreshModalOpen}
-      onClose={() => setRefreshModalOpen(false)}
+      onClose={() => {
+        if (!refreshCreators.isPending) setRefreshModalOpen(false);
+      }}
       title={t("ui.slurp.settings.refresh.title")}
       width="max-w-xl"
-      closeDisabled={false}
+      closeDisabled={refreshCreators.isPending}
       panelClassName="noodle-icon-scope"
       panelStyle={getSlpAccentStyle(SLP_PINK, {
         "--background": "var(--slurp-surface)",
@@ -124,10 +126,10 @@ export function SlpCreatorRefreshModal(page: SlpBackstagePageProps) {
             type="button"
             disabled={refreshCreators.isPending || refreshAccountIds.size === 0}
             onClick={() =>
-              (() => {
-                setRefreshModalOpen(false);
-                refreshCreators.mutate({ accountIds: [...refreshAccountIds], access: refreshAccess });
-              })()
+              refreshCreators.mutate(
+                { accountIds: [...refreshAccountIds], access: refreshAccess },
+                { onSettled: () => setRefreshModalOpen(false) },
+              )
             }
             className="inline-flex min-h-10 items-center gap-2 rounded-lg bg-[var(--noodle-accent)] px-4 text-xs font-bold text-zinc-950 [&_svg]:!text-zinc-950 disabled:opacity-50"
           >
