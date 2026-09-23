@@ -7,7 +7,6 @@ import { slurpSubscriptionCharge } from "../../modules/economy/slp-creator-prici
 import { slurpPlatformEventModifierSource } from "../../../../../shared/src/slp/slp-platform-events.js";
 import { createSlurpPopulationStorage } from "../audience/slp-audience-storage-funnel.js";
 import { slurpEarningsKey } from "../../modules/economy/slp-earnings.js";
-import { isCreatorHiddenFromViewer } from "../../base/identity/slp-access.js";
 import { slpAccounts, slpAccountSubscriptions, slpPosts, slpPostUnlocks } from "../../../db/schema/slurp.js";
 import { newId, now } from "../../../utils/id-generator.js";
 import { createAppSettingsStorage } from "../../../services/storage/app-settings.storage.js";
@@ -64,12 +63,7 @@ export function createEconomyStorage1(context: SlurpStorageContext) {
           .from(slpAccounts)
           .where(and(eq(slpAccounts.id, creatorAccountId), eq(slpAccounts.platform, "slurp")));
         const creator = creatorRows[0] ? mapAccount(creatorRows[0]) : null;
-        if (
-          !creator ||
-          (creator.sourceKind === "persona" && creator.sourceEntityId === viewerAccountId) ||
-          isCreatorHiddenFromViewer(creator, viewerAccountId)
-        )
-          return null;
+        if (!creator || (creator.sourceKind === "persona" && creator.sourceEntityId === viewerAccountId)) return null;
         const existing = await db
           .select()
           .from(slpAccountSubscriptions)

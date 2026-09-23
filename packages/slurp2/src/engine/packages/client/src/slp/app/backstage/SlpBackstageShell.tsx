@@ -75,8 +75,12 @@ export function SlpBackstageShell({
     setDraftPatch,
     saveState,
     save,
+    promptDraftCount,
+    discardPromptDraft,
+    applyPromptDraft,
   } = controller;
-  useSlurpBackstageDraftGuard(Object.keys(draftPatch).length);
+  const stagedChangeCount = Object.keys(draftPatch).length + promptDraftCount;
+  useSlurpBackstageDraftGuard(stagedChangeCount);
   const settingKey = navigation.settingKey;
   const settingsReady = Boolean(settings);
   // A search result lands on its page first; once that page renders, bring the setting into view.
@@ -218,14 +222,20 @@ export function SlpBackstageShell({
                     })()}
                   {Panel ? <Panel {...page} /> : null}
                   <SlurpBackstageApplyBar
-                    count={Object.keys(draftPatch).length}
+                    count={stagedChangeCount}
                     pending={updateSettings.isPending}
-                    onDiscard={() => setDraftPatch({})}
-                    onApply={() =>
-                      void save(draftPatch).then((saved) => {
-                        if (saved) setDraftPatch({});
-                      })
-                    }
+                    onDiscard={() => {
+                      setDraftPatch({});
+                      discardPromptDraft();
+                    }}
+                    onApply={() => {
+                      void (async () => {
+                        const settingsSaved = Object.keys(draftPatch).length === 0 ? true : await save(draftPatch);
+                        if (!settingsSaved) return;
+                        const promptsSaved = await applyPromptDraft();
+                        if (promptsSaved) setDraftPatch({});
+                      })();
+                    }}
                   />
                 </div>
               </div>

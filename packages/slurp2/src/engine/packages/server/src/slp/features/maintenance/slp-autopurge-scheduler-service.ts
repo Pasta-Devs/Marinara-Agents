@@ -4,6 +4,8 @@ import { createSlurpStorage } from "../../data/slp-storage.js";
 import { runSlurpAutopurge } from "./slp-autopurge.js";
 import { nextSlurpAutopurgeRunAt } from "../../../../../shared/src/slp/slp-autopurge-time.js";
 import { slurpPollBackoffMs } from "../../base/model/slp-poll-backoff.js";
+import { listSlurpPostMedia } from "../../data/feed/slp-post-media-storage.js";
+import { readCreatorMediaPath, unlinkCreatorMedia } from "../../base/media/slp-media.js";
 
 const POLL_MS = 60_000;
 
@@ -24,6 +26,13 @@ export function startSlurpAutopurgeScheduler(app: FastifyInstance, registerStop?
     if (active) return active;
     active = (async () => {
       const storage = createSlurpStorage(app.db);
+      for (const postId of await storage.listExpiredDeletedNoodlerPostIds()) {
+        const post = await storage.getNoodlerPostById(postId);
+        const attachments = await listSlurpPostMedia(app.db, postId);
+        await storage.deleteNoodlerPost(postId);
+        unlinkCreatorMedia(post ? readCreatorMediaPath(post) : null);
+        for (const attachment of attachments) unlinkCreatorMedia(attachment.mediaPath);
+      }
       const settings = await storage.getSettings();
       if (!settings.autopurgeEnabled) return;
       if (!settings.autopurgeNextRunAt) {

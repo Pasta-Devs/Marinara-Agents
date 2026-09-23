@@ -49,6 +49,7 @@ import {
   type SlurpModelWorkerContext,
 } from "../../base/model/slp-model-worker.js";
 import { composeSlurpPromptBlocks, type SlurpPromptBlockOverrides } from "../../base/prompting/slp-prompt-blocks.js";
+import { slurpPromptContext } from "../../base/prompting/slp-prompt-blocks.js";
 
 export type SlurpPendingKind = "commission" | "question" | "opener" | "delivery";
 
@@ -322,7 +323,7 @@ export async function drainSlurpPendingText(
             kind === "delivery" || !(member || characterFanVoice) ? undefined : slurpFanMemoryForPrompt(tie),
           placeholder,
           post: post ? { title: post.title, content: post.content } : null,
-          promptBlocks: settings.promptBlocks,
+          promptBlocks: slurpPromptContext(settings).blocks,
         }),
         {
           model: connection.model,

@@ -25,6 +25,7 @@ export function useUpdateCreatorFanActivity() {
 export function useRefreshCreatorFanActivityNow() {
   const qc = useQueryClient();
   return useMutation({
+    mutationKey: ["slurp", "audience-activity"],
     mutationFn: () =>
       api.post<{ status: string; created: number }>("/slurp2/slurp/fan-activity/refresh-now", {
         debugMode: useSlurpUIStore.getState().debugMode,

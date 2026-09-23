@@ -45,6 +45,7 @@ export const SLURP_SETTINGS_SECTION_KEYS: Record<SlurpResettableSection, readonl
     "imagePromptInterpretation",
     "promptPresets",
     "promptBlocks",
+    "promptInstructions",
   ],
   audience: [
     "audienceTone",
@@ -134,6 +135,7 @@ export const SLURP_SETTINGS_SECTION_KEYS: Record<SlurpResettableSection, readonl
  * no control in Settings.
  */
 export const SLURP_SETTINGS_NOT_RESET: readonly (keyof SlurpSettings)[] = [
+  "classicPromptBlocks",
   "fanTypes",
   "platformEvents",
   "creatorCollabs",

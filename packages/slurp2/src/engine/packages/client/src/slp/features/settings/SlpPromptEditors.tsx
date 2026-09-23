@@ -39,6 +39,7 @@ export function SlpPromptEditors(page: SlpBackstagePageProps) {
         }}
         onRestore={() => setGenerationGuidanceDraft(DEFAULT_SLURP_GENERATION_GUIDANCE)}
         pending={updateSettings.isPending}
+        saveLabel={t("ui.slurp.settings.prompts.applyDraft", { defaultValue: "Apply to draft" })}
       />
       <PromptEditor
         open={imagePromptEditorOpen}
@@ -54,6 +55,7 @@ export function SlpPromptEditors(page: SlpBackstagePageProps) {
         }}
         onRestore={() => setImagePromptDraft(DEFAULT_SLURP_IMAGE_GENERATION_PROMPT)}
         pending={updateSettings.isPending}
+        saveLabel={t("ui.slurp.settings.prompts.applyDraft", { defaultValue: "Apply to draft" })}
       />
     </>
   );

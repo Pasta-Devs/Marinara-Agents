@@ -456,6 +456,9 @@ export function SlurpMessagesView({
       </aside>
       {conversationOpen ? (
         <SlurpThreadView
+          // One instance per conversation. Reusing it across threads carried drafts, pending echoes,
+          // open tools, older pages and the send request id from one conversation into the next.
+          key={`${openThreadId ?? ""}:${composeWith ?? ""}`}
           threadId={openThreadId}
           creatorAccountId={composeWith}
           personaId={personaId}

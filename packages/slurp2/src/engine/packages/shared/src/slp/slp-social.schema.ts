@@ -82,7 +82,7 @@ export const DEFAULT_SLP_SETTINGS = {
   enableImagePrompts: false,
   imageGenerationConnectionId: null,
   imageGenerationPrompt:
-    "Create either a social-media-ready character image or an in-character meme for the post. For character images, mention build, clothing, visible appearance, pose, expression, setting, lighting, mood, and composition. For memes, mention meme format, visual gag, composition, and short readable caption/text when relevant.",
+    "Create a provider-ready image prompt for the supplied post. Preserve the post's subject, action, setting, mood, clothing, and established appearance. Use the Creator's personality to shape expression and presentation, not to invent a new event or sexualize an ordinary moment. Add nudity, explicit anatomy, or sexual activity only when the post or an explicit trusted instruction already requires it. Keep the image coherent and believable. Use only the visual details needed for this scene.",
   imageGenerationUseAvatarReferences: true,
   imageGenerationIncludeDescriptions: true,
   allowGalleryImageAttachments: false,
@@ -271,10 +271,25 @@ export const slpAccountSocialPatchSchema = slpAccountSocialSettingsSchema.pick({
   noodleFeedSeenAt: true,
 });
 
+/**
+ * One Creator strategy edit. `null` clears a value back to the derived default; an absent key
+ * leaves it alone. Bounds match `SLURP_STRATEGY_LIMITS` on the server.
+ */
+export const slpCreatorStrategyPatchSchema = z
+  .object({
+    style: z.enum(["homemade", "polished", "documentary", "theatrical"]).nullable().optional(),
+    skipRate: z.number().int().min(0).max(40).nullable().optional(),
+    textOnlyRate: z.number().int().min(0).max(100).nullable().optional(),
+    intentWeights: z.record(z.string(), z.number().int().min(0).max(100)).nullable().optional(),
+    strategyText: z.string().max(2000).nullable().optional(),
+  })
+  .strict();
+
 export const slpAccountSettingsPatchSchema = z.discriminatedUnion("subtree", [
   z.object({ subtree: z.literal("social"), patch: slpAccountSocialPatchSchema }).strict(),
   z.object({ subtree: z.literal("scheduler"), patch: slpAccountSchedulerPatchSchema }).strict(),
   z.object({ subtree: z.literal("privacy"), patch: slpAccountPrivacyPatchSchema }).strict(),
+  z.object({ subtree: z.literal("strategy"), patch: slpCreatorStrategyPatchSchema }).strict(),
 ]);
 
 const slpAccountIdentityUpdateShape = {
@@ -310,11 +325,19 @@ export const slpAmbientProfileRerollSchema = z
   })
   .strict();
 
+/**
+ * `appearance`, `wardrobe` and `locations` default to "" rather than being required: a Creator
+ * saved before these existed, and every generated draft that does not fill them in, must still
+ * validate. See `SlpCreatorStageFacts`.
+ */
 const slpStageProfileShape = {
   displayName: z.string().trim().min(1, "Enter a stage name.").max(120),
   handle: z.string().trim().min(1, "Enter a stage handle.").max(40),
   bio: z.string().trim().max(500),
   stagePersonality: z.string().trim().max(1000),
+  appearance: z.string().trim().max(2000).default(""),
+  wardrobe: z.string().trim().max(2000).default(""),
+  locations: z.string().trim().max(2000).default(""),
   disclosureMode: slpIdentityDisclosureSchema,
 };
 

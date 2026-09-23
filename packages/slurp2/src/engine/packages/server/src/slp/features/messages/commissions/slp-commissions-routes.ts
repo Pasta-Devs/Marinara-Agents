@@ -117,15 +117,25 @@ export async function slpCommissionsRoutes(app: FastifyInstance, messaging: SlpM
       const accepted = await messages.acceptCommission(commission.id);
       if (!accepted || accepted.state !== "accepted") {
         if (drawn && drawn !== "unavailable") drawn.compensate();
+        // Only a failed charge is a coins problem. A commission that was already accepted or
+        // declined meanwhile is a conflict, and "Not enough coins" there sent fans to top up.
+        if (accepted && accepted.state !== "quoted")
+          return reply.code(409).send({ error: "This commission was already answered." });
         return reply.code(402).send({ error: "Not enough coins." });
       }
-      await reactToSlurpPayment(app.db, {
-        viewerAccountId: commission.viewerAccountId,
-        creatorAccountId: commission.creatorAccountId,
-        kind: "commission",
-        amount: accepted.price,
-      });
-      if (!automatic || !drawn || drawn === "unavailable") return { commission: accepted };
+      // The thanks is a full model reply. It runs after the drawing is kept and its delivery
+      // scheduled, so a slow reply or a crash in it cannot leave a paid commission with no delivery.
+      const thank = () =>
+        reactToSlurpPayment(app.db, {
+          viewerAccountId: commission.viewerAccountId,
+          creatorAccountId: commission.creatorAccountId,
+          kind: "commission",
+          amount: accepted.price,
+        });
+      if (!automatic || !drawn || drawn === "unavailable") {
+        await thank();
+        return { commission: accepted };
+      }
 
       // Keep the drawing. It is finished, it is paid for, and it now has to survive until the
       // delivery is due — which may be after a restart, so the file cannot stay staged.
@@ -137,12 +147,18 @@ export async function slpCommissionsRoutes(app: FastifyInstance, messaging: SlpM
         deliverAt,
         mediaPath: drawn.mediaPath,
       });
-      if (scheduled) return { commission: scheduled };
+      if (scheduled) {
+        await thank();
+        return { commission: scheduled };
+      }
 
       // Nothing could be scheduled, so the wait is dropped rather than the delivery. The fan has
       // paid; handing them the piece now is worse pacing but it is not a loss.
       const outcome = await deliverAutomaticSlurpCommission(app.db, accepted, drawn.mediaPath);
-      if (outcome.status === "delivered") return { commission: outcome.commission };
+      if (outcome.status === "delivered") {
+        await thank();
+        return { commission: outcome.commission };
+      }
       return reply.code(500).send({
         error:
           outcome.status === "refunded"

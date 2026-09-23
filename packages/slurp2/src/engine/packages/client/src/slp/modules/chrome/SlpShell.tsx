@@ -19,7 +19,7 @@ import {
   X,
 } from "lucide-react";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
-import { type CSSProperties, useRef } from "react";
+import { type CSSProperties, useEffect, useRef, useState } from "react";
 import { cn } from "../../../lib/utils";
 import { useDialogFocusScope } from "../../../hooks/use-dialog-focus-scope";
 import { useTranslation as useUiTranslation } from "react-i18next";
@@ -40,6 +40,7 @@ import {
   SLURP_ROW_CLASS,
 } from "../../base/chrome/SlpChrome";
 import { PersonaIdentityCard, PersonaList } from "./SlpPersonaSwitcher";
+import { SlpPulseCard, SlpPulsePanel } from "./SlpPulse";
 import type { SlpShellProps } from "./slp-shell.types";
 
 export function SlpShell({
@@ -71,6 +72,9 @@ export function SlpShell({
   onOpenMessages,
   onOpenWallet,
   onOpenStudio,
+  onGeneratePosts,
+  onRunAudience,
+  onCompose,
   notificationCount = 0,
   hasOperatedCreator = false,
   walletBalanceLabel,
@@ -87,6 +91,10 @@ export function SlpShell({
   const { t: localizeUi } = useUiTranslation();
   const mobileDrawerRef = useRef<HTMLElement | null>(null);
   const mobileDrawerCloseRef = useRef<HTMLButtonElement | null>(null);
+  const pulsePanelRef = useRef<HTMLElement | null>(null);
+  const pulseCloseRef = useRef<HTMLButtonElement | null>(null);
+  const pulseTriggerRef = useRef<HTMLButtonElement | null>(null);
+  const [pulseOpen, setPulseOpen] = useState(false);
   const prefersReducedMotion = Boolean(useReducedMotion());
   const hasMorePersonaAccounts = visiblePersonaAccounts.length < sortedPersonaAccounts.length;
   const resolvedAppMode = appMode ?? (activeView === "noodler" ? "noodler" : "noodle");
@@ -108,6 +116,20 @@ export function SlpShell({
     onOpenMobileHomeDestination();
   };
   useDialogFocusScope(mobileDrawerOpen, mobileDrawerRef, mobileDrawerCloseRef);
+  useDialogFocusScope(pulseOpen, pulsePanelRef, pulseCloseRef, pulseTriggerRef);
+  useEffect(() => {
+    if (!pulseOpen) return;
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setPulseOpen(false);
+    };
+    document.addEventListener("keydown", closeOnEscape);
+    return () => document.removeEventListener("keydown", closeOnEscape);
+  }, [pulseOpen]);
+
+  const openPulse = () => {
+    pulseTriggerRef.current = document.activeElement instanceof HTMLButtonElement ? document.activeElement : null;
+    setPulseOpen(true);
+  };
 
   return (
     <SlpAccentContext.Provider value={accent}>
@@ -233,6 +255,7 @@ export function SlpShell({
                 </nav>
 
                 <div className="mt-auto pt-4">
+                  {slurpActive && <SlpPulseCard open={pulseOpen} onOpen={openPulse} />}
                   <PersonaIdentityCard
                     account={creatorIdentity ?? personaAccount}
                     personaBadge={creatorIdentity ? personaAccount : null}
@@ -435,6 +458,11 @@ export function SlpShell({
                       )}
                     </div>
                   )}
+                  {slurpActive && (
+                    <div className="mb-3">
+                      <SlpPulseCard open={pulseOpen} onOpen={openPulse} />
+                    </div>
+                  )}
                   <button
                     data-component="NoodleView.AccountSwitcher"
                     type="button"
@@ -530,6 +558,19 @@ export function SlpShell({
             ) : null}
           </div>
         </div>
+
+        <SlpPulsePanel
+          open={pulseOpen}
+          panelRef={pulsePanelRef}
+          closeRef={pulseCloseRef}
+          onClose={() => setPulseOpen(false)}
+          onCompose={onCompose}
+          onOpenMessages={onOpenMessages}
+          onOpenSettings={onOpenSettings}
+          onGeneratePosts={onGeneratePosts}
+          onRunAudience={onRunAudience}
+          accounts={sortedPersonaAccounts}
+        />
 
         <nav
           className="absolute inset-x-0 bottom-0 z-50 border-t border-[var(--noodle-divider)] bg-[var(--background)]/92 shadow-[0_-12px_30px_-24px_rgba(0,0,0,0.9)] backdrop-blur-xl @min-[1024px]:hidden"

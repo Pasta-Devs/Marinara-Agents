@@ -33,7 +33,7 @@ assert.deepEqual(resolve({}).instructions, []);
 assert.equal(slurpPostStanceInstruction(resolve({})), null);
 
 // Rule 1. Energy shapes effort in both directions, and never withholds the post.
-assert.match(joined({ energy: 10 }), /running low/iu);
+assert.match(joined({ energy: 10 }), /energy is low/iu);
 assert.match(joined({ energy: 90 }), /more involved/iu);
 assert.doesNotMatch(joined({ energy: 0 }), /do not post|skip/iu);
 
@@ -85,7 +85,7 @@ assert.deepEqual(
   ["energy", "exposure", "emotion", "day", "goal"],
 );
 // Precedence is the documented order, not the order the fields happen to be declared in.
-assert.ok(loaded.instructions[0]?.includes("running low"));
+assert.ok(loaded.instructions[0]?.includes("energy is low"));
 assert.ok(loaded.instructions[1]?.includes("further than you usually go"));
 
 // The block is labelled, so it cannot blur into the schedule section beneath it.

@@ -2,7 +2,7 @@ import { and, desc, eq, gt, inArray, or } from "../../../db/file-query.js";
 import { DEFAULT_SLP_CREATOR_REPLIES_PER_24_HOURS } from "../../../../../shared/src/slp/slp-social.schema.js";
 import { SlpInteraction, SlpPost } from "../../../../../shared/src/slp/slp-social.types.js";
 import { NOODLER_FAN_IDENTITY_PREFIX } from "../../modules/audience/slp-fan-identity-provider.js";
-import { canViewCreatorPost, isCreatorHiddenFromViewer } from "../../base/identity/slp-access.js";
+import { canViewCreatorPost } from "../../base/identity/slp-access.js";
 import {
   slpAccounts,
   slpAccountSubscriptions,
@@ -283,7 +283,6 @@ export function createFeedInteractionStorage1(context: SlurpStorageContext) {
         if (!postRow) return { status: "ineligible" };
 
         const creator = mapAccount(creatorRow);
-        if (isCreatorHiddenFromViewer(creator, viewerPersonaId)) return { status: "ineligible" };
         const post = mapManagedPost(postRow);
         const [subscriptions, unlocks] = await Promise.all([
           tx

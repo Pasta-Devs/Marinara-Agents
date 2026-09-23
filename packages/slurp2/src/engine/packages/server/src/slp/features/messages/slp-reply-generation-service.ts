@@ -20,7 +20,11 @@ import { parseGameJsonish } from "../../../services/game/jsonish.js";
 import { requireModelAnswer } from "../../base/model/slp-model-answer.js";
 import { withConnectionFallbackProvider } from "../../../services/llm/connection-fallback-provider.js";
 import type { ChatMessage } from "../../../services/llm/base-provider.js";
-import { composeSlurpPromptBlocks, type SlurpPromptBlockOverrides } from "../../base/prompting/slp-prompt-blocks.js";
+import {
+  composeSlurpPromptBlocks,
+  type SlurpPromptBlockOverrides,
+  type SlurpReusablePromptInstruction,
+} from "../../base/prompting/slp-prompt-blocks.js";
 import { createLLMProvider } from "../../../services/llm/provider-registry.js";
 import { createConnectionsStorage } from "../../../services/storage/connections.storage.js";
 import { describeSlurpPostCondition } from "../feed/slp-feed-contract.js";
@@ -43,6 +47,8 @@ import { createChatsStorage } from "../../../services/storage/chats.storage.js";
 import { createCharactersStorage } from "../../../services/storage/characters.storage.js";
 import { SLURP_PLATFORM_CONTEXT } from "../../modules/prompting/slp-prompt.js";
 import { resolveCreatorCharacterCanon } from "../../data/creators/slp-source-resolve.js";
+import { slurpPromptContext } from "../../base/prompting/slp-prompt-blocks.js";
+import { SLURP_PERFORMED_INTIMACY } from "../../modules/creators/slp-performance.js";
 
 type GenerationConnection = NonNullable<Awaited<ReturnType<ReturnType<typeof createConnectionsStorage>["getWithKey"]>>>;
 
@@ -83,6 +89,7 @@ export function buildCreatorReplyMessages(input: {
   /** Holidays and site events running today. See `slurp-platform-events.ts`. */
   platformEvents?: string | null;
   promptBlocks?: SlurpPromptBlockOverrides;
+  promptInstructions?: SlurpReusablePromptInstruction[];
 }): ChatMessage[] {
   const protect = (value: string | null | undefined) =>
     protectCreatorGeneratedIdentity(value, input.disclosureMode, input.publicIdentity) ?? "";
@@ -111,6 +118,12 @@ export function buildCreatorReplyMessages(input: {
         text: slpCreatorIdentityInstruction(input.disclosureMode, input.publicIdentity),
       },
       {
+        id: "performance",
+        kind: "context" as const,
+        optional: true,
+        text: SLURP_PERFORMED_INTIMACY,
+      },
+      {
         id: "style",
         kind: "editable" as const,
         text: "Keep the reply direct and brief: one or two short sentences, normally under 240 characters. Let the relationship set the warmth. A stranger gets a friendly but ordinary reply; somebody who has been here a long time or paid for a lot gets recognition, familiarity, and a callback to what they have given you.",
@@ -129,6 +142,7 @@ export function buildCreatorReplyMessages(input: {
       { id: "output", kind: "required" as const, text: "Return JSON only. No prose outside the JSON object." },
     ],
     input.promptBlocks,
+    input.promptInstructions,
   );
   const data = {
     ...(input.platformEvents ? { platformEvents: input.platformEvents } : {}),
@@ -202,6 +216,7 @@ export async function generateCreatorReply(input: {
   const disclosureMode = input.creator.settings.privacy.identityDisclosure ?? "open";
   const publicIdentity = await resolveNoodlerPublicIdentity(input.db, input.creator);
   const settings = await createSlurpStorage(input.db).getSettings();
+  const prompts = slurpPromptContext(settings);
   const source = await createSlurpStorage(input.db).resolveAccountSource(input.creator);
   const characterCanon = await resolveCreatorCharacterCanon(input.db, source, disclosureMode);
   const scheduleContext = source
@@ -232,7 +247,8 @@ export async function generateCreatorReply(input: {
     imageContext: imageContexts.get(input.post.id),
     contentMenu: await resolveSlurpCreatorMenu(input.db, input.creator.id).catch(() => ""),
     platformEvents: slurpPlatformEventInstruction(settings.platformEvents, new Date()),
-    promptBlocks: settings.promptBlocks,
+    promptBlocks: prompts.blocks,
+    promptInstructions: prompts.instructions,
   });
   const debugMode = input.debugMode === true || isDebugAgentsEnabled();
   const options = {

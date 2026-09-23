@@ -86,7 +86,7 @@ export function resolveSlurpPostStance(input: SlurpPostStanceInput): SlurpPostSt
   // Rule 1. Effort, never silence.
   if (state.energy <= TIRED_ENERGY) {
     instructions.push(
-      "You are running low today. Keep this short and low-effort — something you could put up without getting off the sofa. Do not perform enthusiasm you do not have.",
+      "Your energy is low today. Keep this concise, casual, and easy to make. Low energy changes the scale of the post, not its emotional tone; do not make the post sad unless the grounded emotion below says so.",
     );
     evidence.push({ layer: "energy", value: slurpIntensityBand(state.energy), effect: "shortens the post" });
   } else if (state.energy >= RESTED_ENERGY) {

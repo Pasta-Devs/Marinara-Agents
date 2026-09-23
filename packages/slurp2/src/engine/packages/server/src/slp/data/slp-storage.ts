@@ -4,6 +4,7 @@ import { createCreatorsStorage1 } from "./creators/slp-creators-storage-1.js";
 import { createCreatorsStorage2 } from "./creators/slp-creators-storage-2.js";
 import { createCreatorsStorage3 } from "./creators/slp-creators-storage-3.js";
 import { createCreatorsStorage4 } from "./creators/slp-creators-storage-4.js";
+import { createWardrobeStorage } from "./creators/slp-wardrobe-storage.js";
 import { createReserveStorage1 } from "./feed/reserve/slp-reserve-storage-1.js";
 import { createReserveStorage2 } from "./feed/reserve/slp-reserve-storage-2.js";
 import { createAudienceStorage1 } from "./audience/slp-audience-storage.js";
@@ -33,6 +34,7 @@ export function createSlurpStorage(db: DB) {
     createCreatorsStorage2(context),
     createCreatorsStorage3(context),
     createCreatorsStorage4(context),
+    createWardrobeStorage(context),
     createReserveStorage1(context),
     createReserveStorage2(context),
     createAudienceStorage1(context),

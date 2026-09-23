@@ -1,4 +1,7 @@
 import type { DB } from "../../../../db/connection.js";
+import { recordSlurpContinuityEvent } from "../../../data/continuity/slp-continuity-storage.js";
+import { slurpContinuityIdentityOf } from "../../../modules/continuity/slp-continuity-rules.js";
+import { completeSlurpCampaignStageFor } from "../../../data/feed/slp-campaign-storage.js";
 import { createConnectionsStorage } from "../../../../services/storage/connections.storage.js";
 import { resolveSlurpTextConnection } from "../../../base/identity/slp-connection.js";
 import { resolveCreatorImageConnectionId } from "../../../base/media/slp-image-connections.js";
@@ -6,6 +9,8 @@ import { createSlurpStorage } from "../../../data/slp-storage.js";
 import { slpCreatorReservePolicyFingerprint } from "../../../modules/records/slp-storage-model.js";
 import { hasSlurpCreatorPostingIntervalConflict } from "../../../modules/feed/slp-posting-interval.js";
 import { generateCreatorPost, resolveSlurpAutomaticPostAccess } from "../slp-generation-service.js";
+import { recordSlurpProviderPrompt } from "../slp-prepared-post.js";
+import { recordSlurpPromiseKept } from "../slp-post-plan-service.js";
 import { generateCreatorPostImage } from "../../media/slp-media-contract.js";
 import { tryCreatorAccountOperation } from "../../../base/locking/slp-account-operation-lock.js";
 import { createCharactersStorage } from "../../../../services/storage/characters.storage.js";
@@ -23,6 +28,14 @@ import { createCharacterGalleryStorage } from "../../../../services/storage/char
 import { createChatsStorage } from "../../../../services/storage/chats.storage.js";
 import { createGalleryStorage } from "../../../../services/storage/gallery.storage.js";
 import { pickGalleryAttachmentForAccount } from "../slp-generated-activity-service.js";
+import { slurpPlanSlot } from "../../../modules/feed/slp-planner.js";
+import { slurpCreatorStrategy } from "../../../modules/creators/slp-creator-strategy.js";
+import {
+  completeSlurpOpportunity,
+  findSlurpOpportunityBySlot,
+  planSlurpOpportunity,
+  slurpSkippedLastSlot,
+} from "../../../data/feed/slp-opportunity-storage.js";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -143,11 +156,54 @@ export async function prepareNextCreatorReservePost(db: DB, at = new Date()): Pr
   const locked = await tryCreatorAccountOperation(selectedAccount.id, async () => {
     const connection = await resolveSlurpTextConnection(createConnectionsStorage(db), settings.generationConnectionId);
     if (!connection) return "ineligible" as const;
+    // Whether this Creator posts at all, decided before any model is called. A quiet slot costs
+    // nothing: no text, no image, no attempt claim, and no failure mark. See `slp-planner.ts`.
+    const planned = await findSlurpOpportunityBySlot(db, selectedSlotId);
+    const decision =
+      planned?.workflow === "skip"
+        ? { skip: true as const, reason: planned.skipReason ?? ("quiet_day" as const) }
+        : planned
+          ? { skip: false as const }
+          : slurpPlanSlot(selectedAccount.id, await noodle.countNoodlerPostsByAccount(selectedAccount.id), {
+              skippedLast: await slurpSkippedLastSlot(db, selectedAccount.id),
+              skipRate: slurpCreatorStrategy(selectedAccount.id, selectedAccount.settings.strategy).skipRate,
+            });
+    if (decision.skip) {
+      await planSlurpOpportunity(db, {
+        creatorAccountId: selectedAccount.id,
+        slotId: selectedSlotId,
+        sequence: await noodle.countNoodlerPostsByAccount(selectedAccount.id),
+        workflow: "skip",
+        skipReason: decision.reason,
+        at,
+        dueAt: new Date(selectedPublishAt),
+      });
+      await noodle.skipNoodlerScheduledPost(selectedSlotId, selectedPublishAt, at);
+      // A quiet slot is part of the Creator's history too: later planning can see a quiet day.
+      // Private, because nobody announces the post they did not make.
+      const identity = slurpContinuityIdentityOf(selectedAccount);
+      if (identity) {
+        await recordSlurpContinuityEvent(db, {
+          ...identity,
+          eventType: "chosen_skip",
+          source: "slurp_post",
+          realityScope: "slurp",
+          audienceScope: "creator_private",
+          payload: { reason: decision.reason },
+          relatedIds: [selectedSlotId],
+          fingerprint: `skip:${selectedSlotId}`,
+          contribution: "system",
+          occurredAt: new Date(selectedPublishAt),
+        }).catch((error: unknown) => logger.warn(error, "[slurp] Could not record a chosen skip in continuity"));
+      }
+      return "skipped" as const;
+    }
     try {
       let payload = await generateCreatorPost(db, {
         account: selectedAccount,
         connection,
         prepareOnly: true,
+        slotId: selectedSlotId,
         admissionMode: {
           kind: "background",
           beforeAttempt: async () => {
@@ -169,7 +225,11 @@ export async function prepareNextCreatorReservePost(db: DB, at = new Date()): Pr
         publicationTime: new Date(selectedPublishAt),
         generatedAt: at,
       });
-      let stagedMedia: { promote: () => void; compensate: () => void } | null = null;
+      // A reused picture arrives already staged. It is promoted or dropped exactly like a generated
+      // one below, and never written into the stored payload as an object.
+      const { stagedMedia: reusedMedia, ...prepared } = payload;
+      payload = prepared;
+      let stagedMedia: { promote: () => void; compensate: () => void } | null = reusedMedia ?? null;
       if (selectedAccount.settings.scheduler.autoPosting?.imagesEnabled && payload.imagePrompt) {
         const imageConnectionId = await resolveCreatorImageConnectionId(db, selectedAccount.id);
         // Fall back to the default image connection when a creator's mapped
@@ -187,6 +247,7 @@ export async function prepareNextCreatorReservePost(db: DB, at = new Date()): Pr
               disclosureMode: selectedAccount.settings.privacy.identityDisclosure ?? "open",
               postContent: payload.content,
               draftPrompt: payload.imagePrompt,
+              visualBrief: payload.visualBrief ?? undefined,
               settings,
               characters: createCharactersStorage(db),
               promptOverrides: createPromptOverridesStorage(db),
@@ -205,6 +266,11 @@ export async function prepareNextCreatorReservePost(db: DB, at = new Date()): Pr
             // promoted first is owned by nothing if the row never lands, and staged files are
             // swept on restart.
             stagedMedia = image.stagedMedia ?? null;
+            const deepDetailsId =
+              typeof payload.metadata.deepDetailsId === "string" ? payload.metadata.deepDetailsId : null;
+            if (deepDetailsId) {
+              await recordSlurpProviderPrompt(db, deepDetailsId, image.providerPrompt);
+            }
             payload = {
               ...payload,
               metadata: { ...payload.metadata, ...image.metadata },
@@ -244,6 +310,7 @@ export async function prepareNextCreatorReservePost(db: DB, at = new Date()): Pr
       // still coming and is left alone; a gallery image is finished, so the failure marks go.
       if (
         settings.allowGalleryImageAttachments &&
+        payload.metadata.contentDelivery !== "text_only" &&
         typeof payload.metadata.noodlerMediaPath !== "string" &&
         payload.metadata.imageGenerationDeferred !== true
       ) {
@@ -283,6 +350,15 @@ export async function prepareNextCreatorReservePost(db: DB, at = new Date()): Pr
         if (!filled) {
           stagedMedia?.compensate();
           return "missed" as const;
+        }
+        // The plan is executed once the slot holds it. Publishing it later is mechanical.
+        const opportunity = await findSlurpOpportunityBySlot(db, selectedSlotId);
+        if (opportunity) {
+          await completeSlurpOpportunity(db, opportunity.id, { at: completedAt });
+          // The set's post id is not known until it publishes, so a scheduled set's teaser falls
+          // back to the newest locked picture, which by then is normally that set.
+          await completeSlurpCampaignStageFor(db, opportunity.id, { at: completedAt });
+          await recordSlurpPromiseKept(db, opportunity, { at: completedAt });
         }
       } catch (persistError) {
         // The row never landed, so the staged image belongs to nothing: drop it before rethrowing.

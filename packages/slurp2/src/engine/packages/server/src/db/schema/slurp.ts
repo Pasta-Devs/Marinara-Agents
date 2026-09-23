@@ -1,7 +1,7 @@
 // ──────────────────────────────────────────────
 // Schema: Slurp creator social media
 // ──────────────────────────────────────────────
-import { fileTable, text } from "../file-schema.js";
+import { fileTable, integer, text } from "../file-schema.js";
 
 export const slpAccounts = fileTable(
   "slurp2_accounts",
@@ -84,6 +84,30 @@ export const slpPosts = fileTable("slurp2_posts", {
   updatedAt: text("updated_at").notNull(),
 });
 
+/** Ordered secondary attachments. The primary remains on slurp2_posts for compatibility. */
+export const slpPostMedia = fileTable(
+  "slurp2_post_media",
+  {
+    id: text("id").primaryKey(),
+    postId: text("post_id").notNull(),
+    position: integer("position").notNull(),
+    imageUrl: text("image_url").notNull(),
+    imagePrompt: text("image_prompt"),
+    mediaPath: text("media_path").notNull(),
+    shootId: text("shoot_id"),
+    createdAt: text("created_at").notNull(),
+  },
+  { uniqueBy: [{ keys: ["postId", "position"] }] },
+);
+
+/** What went into each generated post: the full prompt, the plan, the draws. See `slp-deep-details.ts`. */
+export const slpPostDeepDetails = fileTable("slurp2_post_deep_details", {
+  id: text("id").primaryKey(),
+  creatorAccountId: text("creator_account_id").notNull(),
+  record: text("record").notNull(),
+  createdAt: text("created_at").notNull(),
+});
+
 export const slpAccountSubscriptions = fileTable(
   "slurp2_account_subscriptions",
   {
@@ -127,6 +151,22 @@ export const slpInteractions = fileTable(
       },
     ],
   },
+);
+
+export const slpReports = fileTable(
+  "slurp2_reports",
+  {
+    id: text("id").primaryKey(),
+    reporterAccountId: text("reporter_account_id").notNull(),
+    creatorAccountId: text("creator_account_id").notNull(),
+    targetType: text("target_type").notNull(),
+    targetId: text("target_id").notNull(),
+    reason: text("reason").notNull(),
+    details: text("details").notNull().default(""),
+    snapshot: text("snapshot").notNull().default("{}"),
+    createdAt: text("created_at").notNull(),
+  },
+  { uniqueBy: [{ keys: ["reporterAccountId", "targetType", "targetId"] }] },
 );
 
 export const slpCreatorCreatorReplyClaims = fileTable(
@@ -640,6 +680,215 @@ export const slurpPendingText = fileTable("slurp2_pending_text", {
 
 /** New name for the generalized queue; the physical table stays put so existing jobs survive. */
 export const slurpModelJobs = slurpPendingText;
+
+/**
+ * One planned shoot a Creator can post from more than once.
+ *
+ * A Creator who moves through four cinematic locations in an afternoon reads as a script. Real
+ * output comes in batches: one afternoon, one outfit, one room, several posts spread over days.
+ * A set drop opens a session here and later posts draw from it, which is what lets a caption say
+ * "one more from yesterday" and have the picture actually match.
+ */
+export const slurpShootSessions = fileTable("slurp2_shoot_sessions", {
+  id: text("id").primaryKey(),
+  creatorAccountId: text("creator_account_id").notNull(),
+  /** The variation axes the shoot was set up under, so later posts can reproduce its look. */
+  place: text("place").notNull(),
+  company: text("company").notNull(),
+  /** The camera that was set up. Later posts from this shoot cannot use a different one. */
+  cameraSource: text("camera_source").notNull(),
+  /** How many posts have drawn from this shoot, including the drop that opened it. */
+  shotsUsed: text("shots_used").notNull().default("1"),
+  shotsTaken: text("shots_taken").notNull().default("1"),
+  shotsSelected: text("shots_selected").notNull().default("1"),
+  effort: text("effort").notNull().default("medium"),
+  theme: text("theme").notNull().default("set"),
+  status: text("status").notNull().default("active"),
+  campaignId: text("campaign_id"),
+  capturedAt: text("captured_at").notNull().default(""),
+  /**
+   * The picture brief the drop was generated from, so a later picture keeps its clothes and light.
+   * Empty for shoots recorded before it existed: an unknown detail stays unknown, never invented.
+   */
+  brief: text("brief").notNull().default(""),
+  createdAt: text("created_at").notNull(),
+});
+
+/**
+ * One planned post, decided before anything is written.
+ *
+ * The feed used to be the only record that a Creator had considered posting. Nothing said why a
+ * post exists, and nothing at all was left behind when the answer was "not today" — a quiet
+ * afternoon was indistinguishable from a failed run. The planner writes its decision here first,
+ * so a retry repeats the decision instead of making a new one, and a chosen skip is a fact rather
+ * than an absence.
+ */
+export const slurpContentOpportunities = fileTable("slurp2_content_opportunities", {
+  id: text("id").primaryKey(),
+  creatorAccountId: text("creator_account_id").notNull(),
+  /** The scheduled slot this plan belongs to, when the scheduler asked for it. */
+  slotId: text("slot_id"),
+  /** How many posts the Creator had made when the plan was drawn. The draws seed off it. */
+  sequence: text("sequence").notNull(),
+  /** From `slp-content-axes.ts`. Empty for a skip: nothing is being delivered. */
+  intent: text("intent").notNull().default(""),
+  delivery: text("delivery").notNull().default(""),
+  workflow: text("workflow").notNull(),
+  access: text("access").notNull().default(""),
+  /** Why the Creator did not post. Set only when the workflow is `skip`. */
+  skipReason: text("skip_reason"),
+  /** The post this plan produced, once one exists. */
+  postId: text("post_id"),
+  /**
+   * The continuity event this plan answers, such as a fan request the Creator agreed to fulfil.
+   * A plan with a source event and no slot is a promise: it waits until the planner honours it.
+   */
+  sourceEventId: text("source_event_id"),
+  plannedAt: text("planned_at").notNull(),
+  dueAt: text("due_at"),
+  completedAt: text("completed_at"),
+});
+
+/**
+ * A short planned sequence around one set: the set, a public teaser for it, and a later callback.
+ *
+ * A creator page converts in sequences, not single posts. Without this every set was a one-off and
+ * nothing ever pointed at it again, so a paid drop had no teaser and no follow-up.
+ */
+export const slurpContentCampaigns = fileTable("slurp2_content_campaigns", {
+  id: text("id").primaryKey(),
+  creatorAccountId: text("creator_account_id").notNull(),
+  /** `open` while any stage can still run; `closed` once every stage is done, skipped, or expired. */
+  status: text("status").notNull(),
+  createdAt: text("created_at").notNull(),
+  expiresAt: text("expires_at").notNull(),
+});
+
+/** One step of a campaign. A stage runs only in a slot the planner hands it, never on its own. */
+export const slurpContentCampaignStages = fileTable("slurp2_content_campaign_stages", {
+  id: text("id").primaryKey(),
+  campaignId: text("campaign_id").notNull(),
+  creatorAccountId: text("creator_account_id").notNull(),
+  /** `set`, `teaser`, or `callback`. Also the stage's intent. */
+  kind: text("kind").notNull(),
+  position: text("position").notNull(),
+  /** The access this stage needs. A teaser only runs in a public slot. */
+  access: text("access").notNull().default(""),
+  /** `planned`, `claimed`, `completed`, `skipped`, or `cancelled`. */
+  status: text("status").notNull(),
+  opportunityId: text("opportunity_id"),
+  postId: text("post_id"),
+  /** Not before this time. A callback the same afternoon as its set is not a callback. */
+  dueAt: text("due_at").notNull(),
+  completedAt: text("completed_at"),
+});
+
+/**
+ * Durable Creator facts: boundaries, interests, plans, promises, circumstances.
+ *
+ * Keyed on the source Character or Persona as well as the Slurp account, because the source is the
+ * identity that owns canon. Not a second character card: only things that change or persist
+ * across Slurp operations belong here. See `shared/src/slp/slp-continuity.ts` for the scopes.
+ */
+export const slurpContinuityFacts = fileTable("slurp2_continuity_facts", {
+  id: text("id").primaryKey(),
+  sourceKind: text("source_kind").notNull(),
+  sourceEntityId: text("source_entity_id").notNull(),
+  creatorAccountId: text("creator_account_id").notNull(),
+  factType: text("fact_type").notNull(),
+  subject: text("subject").notNull().default(""),
+  text: text("text").notNull(),
+  audienceScope: text("audience_scope").notNull(),
+  realityScope: text("reality_scope").notNull(),
+  threadId: text("thread_id"),
+  confidence: text("confidence").notNull().default("1"),
+  salience: text("salience").notNull().default("0.5"),
+  status: text("status").notNull(),
+  source: text("source").notNull(),
+  evidence: text("evidence").notNull().default(""),
+  sourceHash: text("source_hash").notNull().default(""),
+  contribution: text("contribution").notNull(),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+  expiresAt: text("expires_at"),
+});
+
+/** Things that happened to or around a Creator. Same identity and scopes as facts. */
+export const slurpContinuityEvents = fileTable("slurp2_continuity_events", {
+  id: text("id").primaryKey(),
+  sourceKind: text("source_kind").notNull(),
+  sourceEntityId: text("source_entity_id").notNull(),
+  creatorAccountId: text("creator_account_id").notNull(),
+  eventType: text("event_type").notNull(),
+  source: text("source").notNull(),
+  realityScope: text("reality_scope").notNull(),
+  audienceScope: text("audience_scope").notNull(),
+  threadId: text("thread_id"),
+  payload: text("payload").notNull().default("{}"),
+  status: text("status").notNull(),
+  confidence: text("confidence").notNull().default("1"),
+  evidence: text("evidence").notNull().default(""),
+  relatedIds: text("related_ids").notNull().default("[]"),
+  /** Deterministic for system events, so the same thing is never recorded twice. */
+  fingerprint: text("fingerprint").notNull(),
+  contribution: text("contribution").notNull(),
+  occurredAt: text("occurred_at").notNull(),
+  createdAt: text("created_at").notNull(),
+  expiresAt: text("expires_at"),
+});
+
+/** Extracted changes waiting to be applied or reviewed. Nothing here is read by a prompt. */
+export const slurpContinuityProposals = fileTable("slurp2_continuity_proposals", {
+  id: text("id").primaryKey(),
+  creatorAccountId: text("creator_account_id").notNull(),
+  /** `fact` or `event`. */
+  target: text("target").notNull(),
+  /** The candidate record as JSON, validated before it was stored. */
+  candidate: text("candidate").notNull(),
+  risk: text("risk").notNull(),
+  confidence: text("confidence").notNull(),
+  sourceHash: text("source_hash").notNull(),
+  sourceMessageIds: text("source_message_ids").notNull().default("[]"),
+  extractionFingerprint: text("extraction_fingerprint").notNull().default(""),
+  status: text("status").notNull(),
+  reviewer: text("reviewer"),
+  revision: text("revision").notNull().default("1"),
+  createdAt: text("created_at").notNull(),
+  reviewedAt: text("reviewed_at"),
+});
+
+/** Explicit graph edges between planning, messages, shoots, campaigns, posts, and outcomes. */
+export const slurpContinuityLinks = fileTable(
+  "slurp2_continuity_links",
+  {
+    id: text("id").primaryKey(),
+    creatorAccountId: text("creator_account_id").notNull(),
+    fromType: text("from_type").notNull(),
+    fromId: text("from_id").notNull(),
+    toType: text("to_type").notNull(),
+    toId: text("to_id").notNull(),
+    relation: text("relation").notNull(),
+    createdAt: text("created_at").notNull(),
+  },
+  { uniqueBy: [{ keys: ["fromType", "fromId", "toType", "toId", "relation"] }] },
+);
+
+/**
+ * How often subscribers have asked for the same kind of thing.
+ *
+ * A topic label and a count, deliberately nothing else: no fan identity and no private request
+ * text. That is what lets demand shape Creator-wide planning without exposing who asked.
+ */
+export const slurpDemandTrends = fileTable("slurp2_creator_demand_trends", {
+  id: text("id").primaryKey(),
+  creatorAccountId: text("creator_account_id").notNull(),
+  /** Normalised, lowercase, bounded. The key a trend is counted under. */
+  topic: text("topic").notNull(),
+  count: text("count").notNull().default("1"),
+  firstSeenAt: text("first_seen_at").notNull(),
+  lastSeenAt: text("last_seen_at").notNull(),
+  expiresAt: text("expires_at").notNull(),
+});
 
 /** One cross-process lease for the free world tick. */
 export const slurpWorldClaims = fileTable("slurp2_world_claims", {
