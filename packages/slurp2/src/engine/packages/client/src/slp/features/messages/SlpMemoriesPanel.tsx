@@ -40,7 +40,7 @@ export function SlurpMemoriesPanel({
     if (!threadId || !personaId) return;
     setError(null);
     setNotes
-      .mutateAsync({ threadId, personaId, notes: next })
+      .mutateAsync({ threadId, personaId, notes: next, baseNoteIds: notes.map((note) => note.id) })
       .then(() => {
         setEditingId(null);
         setAddingTier(null);

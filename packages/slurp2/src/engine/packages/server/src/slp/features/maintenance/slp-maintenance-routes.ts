@@ -118,7 +118,7 @@ export async function slpMaintenanceRoutes(app: FastifyInstance, deps: SlpRouteD
               kind: "audience-activity",
               status: "running",
               updatedAt: now(),
-              detail: `${audience.usedRuns}/${audience.runLimit} runs used today`,
+              detail: audience.lastRun?.error ?? `${audience.usedRuns}/${audience.runLimit} runs used today`,
             }),
           ]
         : []),
@@ -198,7 +198,7 @@ export async function slpMaintenanceRoutes(app: FastifyInstance, deps: SlpRouteD
               kind: "audience-activity",
               status: audience.lastRun.status,
               updatedAt: audience.lastRun.finishedAt ?? undefined,
-              detail: `${audience.usedRuns}/${audience.runLimit} runs used today`,
+              detail: audience.lastRun.error ?? `${audience.usedRuns}/${audience.runLimit} runs used today`,
             }),
           ]
         : []),

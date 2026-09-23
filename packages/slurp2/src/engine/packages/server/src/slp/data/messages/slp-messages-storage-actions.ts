@@ -389,7 +389,7 @@ export function createMessagesStorageActions(context: SlurpMessagesContext) {
           updatedAt: timestamp,
         })
         .where(eq(slurpThreads.id, threadId));
-      await createSlurpReplyQueueStorage(db).removeForThread(threadId);
+      // A reply already stored for delivery remains owed during a cool-off.
     },
     /**
      * The creator ends the conversation.

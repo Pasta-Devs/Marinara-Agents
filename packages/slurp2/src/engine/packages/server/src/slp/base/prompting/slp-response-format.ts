@@ -120,7 +120,11 @@ function slpCreatorPostSchema(allowImagePrompt: boolean, allowScenePlan: boolean
       },
       // With images enabled the prompt is mandatory: a nullable field made models skip images.
       ...(allowImagePrompt
-        ? { imagePrompt: { type: "string", minLength: 1, maxLength: SLP_REPLY_HARD_MAX_LENGTH } }
+        ? {
+            imagePrompt: {
+              anyOf: [{ type: "string", minLength: 1, maxLength: SLP_REPLY_HARD_MAX_LENGTH }, { type: "null" }],
+            },
+          }
         : {}),
       ...(allowScenePlan
         ? {
@@ -266,8 +270,9 @@ const slpCreatorFanActivitySchema = {
     targetPostId: { type: "string" },
     type: { type: "string", enum: ["like", "reply"] },
     content: nullableString,
+    parentInteractionId: { anyOf: [{ type: "string" }, { type: "null" }] },
   },
-  required: ["actorHandle", "creatorAccountId", "targetPostId", "type", "content"],
+  required: ["actorHandle", "creatorAccountId", "targetPostId", "type", "content", "parentInteractionId"],
   additionalProperties: false,
 } as const;
 

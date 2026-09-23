@@ -55,6 +55,13 @@ async function readCheckpoints(db: DB): Promise<Checkpoints> {
   }
 }
 
+// A thread whose batch failed sits out for a while. It keeps the oldest `lastMessageAt`, so it
+// otherwise took a drain slot every time and a few broken threads starved every other one.
+// ponytail: in-memory, resets on restart; persist beside the checkpoints if restarts matter.
+const failedUntil = new Map<string, number>();
+const FAILED_THREAD_WAIT_MS = 30 * 60_000;
+const extractionInFlight = new Set<string>();
+
 /**
  * Read new messages in a few threads and turn explicit statements into continuity.
  *
@@ -74,6 +81,7 @@ export async function drainSlurpContinuityExtraction(
   const checkpoints = await readCheckpoints(db);
   const threads = (await db.select().from(slurpThreads))
     .filter((thread) => String(thread.lastMessageAt) > (checkpoints[String(thread.id)] ?? ""))
+    .filter((thread) => (failedUntil.get(String(thread.id)) ?? 0) <= at.getTime())
     // Wait for a quiet thread: one call per message spent half the day's budget on "<3" and payment
     // markers. Read once the exchange has settled, as one batch.
     .filter((thread) => Date.parse(String(thread.lastMessageAt)) <= at.getTime() - SLURP_EXTRACTION_IDLE_MS)
@@ -108,7 +116,15 @@ export async function drainSlurpContinuityExtraction(
   let recorded = 0;
   for (const thread of threads) {
     const threadId = String(thread.id);
-    const creator = await slurp.getNoodlerAccountById(String(thread.creatorAccountId));
+    if (extractionInFlight.has(threadId)) continue;
+    extractionInFlight.add(threadId);
+    let creator;
+    try {
+      creator = await slurp.getNoodlerAccountById(String(thread.creatorAccountId));
+    } catch (error) {
+      extractionInFlight.delete(threadId);
+      throw error;
+    }
     const identity = creator ? slurpContinuityIdentityOf(creator) : null;
     const since = checkpoints[threadId] ?? "";
     const fresh = (
@@ -139,9 +155,13 @@ export async function drainSlurpContinuityExtraction(
     const generatedFan = String(thread.viewerAccountId ?? "").startsWith("slurp-fan:");
     if (!creator || !identity || batch.length === 0 || !fanSpoke || generatedFan) {
       checkpoints[threadId] = nextCheckpoint;
+      extractionInFlight.delete(threadId);
       continue;
     }
-    if (!(await claimSlurpModelBudget(db, settings.modelBudget, "continuity", at))) break;
+    if (!(await claimSlurpModelBudget(db, settings.modelBudget, "continuity", at))) {
+      extractionInFlight.delete(threadId);
+      break;
+    }
     try {
       const prompt = slurpExtractionPrompt(creator.displayName, batch);
       const response = await provider.chatComplete(
@@ -233,9 +253,13 @@ export async function drainSlurpContinuityExtraction(
         recorded += 1;
       }
       checkpoints[threadId] = nextCheckpoint;
+      failedUntil.delete(threadId);
     } catch (error) {
+      failedUntil.set(threadId, at.getTime() + FAILED_THREAD_WAIT_MS);
       // The checkpoint stays put, so the same batch is read again next time.
       logger.warn(error, "[slurp-continuity] Extraction failed for one thread; it is retried later");
+    } finally {
+      extractionInFlight.delete(threadId);
     }
   }
   await createAppSettingsStorage(db).set(CHECKPOINT_KEY, JSON.stringify(checkpoints));

@@ -4,7 +4,17 @@ import { createSlurpMessagesStorage } from "../../data/slp-storage.js";
 import { createSlurpStorage } from "../../data/slp-storage.js";
 import { replyToSlurpMessage } from "../messages/slp-messages-contract.js";
 
-const PAYMENT_REACTION_QUIET_MS = 30 * 60_000;
+const PAYMENT_REACTION_QUIET_MS = 2 * 60 * 60_000;
+/**
+ * How often a payment earns a reply at all. A tip or a commission is a gesture aimed at her; an
+ * unlock is buying content she already priced, and a Creator who thanks every one reads as a bot.
+ */
+const REACTION_CHANCE: Record<SlurpPaymentReactionKind, number> = {
+  tip: 1,
+  commission: 1,
+  unlock: 0.3,
+  ppv: 0.3,
+};
 
 /** What the fan just paid for. The wording the Creator reacts to. */
 export type SlurpPaymentReactionKind = "tip" | "unlock" | "ppv" | "commission";
@@ -38,25 +48,20 @@ export async function reactToSlurpPayment(
     const thread = await messages.getThread(input.viewerAccountId, input.creatorAccountId);
     // No thread means no conversation to react in. Opening one uninvited is a different feature.
     if (!thread || thread.state !== "active") return;
+    // One answer per spending spree, and not every payment. The decision comes before the marker:
+    // a stored marker is a fan message, and the away scheduler answered it later even when this
+    // path had decided to stay quiet.
+    if (Math.random() >= REACTION_CHANCE[input.kind]) return;
+    const since = new Date(Date.now() - PAYMENT_REACTION_QUIET_MS).toISOString();
     const event = await messages.appendMessage(thread.id, {
       id: `payment-reaction:${input.kind}:${input.viewerAccountId}:${input.creatorAccountId}:${Date.now()}`,
       senderAccountId: input.viewerAccountId,
       role: "viewer",
       content: REACTION_TEXT[input.kind](input.amount),
       metadata: { paymentReaction: input.kind },
+      paymentReactionSince: since,
     });
     if (!event) return;
-    // One answer per spending spree. Every unlock used to trigger a full reply, so four of nine
-    // Creator messages in one thread were "you unlocked another one". The marker stays.
-    const recent = await messages.listMessages(thread.id, 20);
-    const since = Date.now() - PAYMENT_REACTION_QUIET_MS;
-    const reactedRecently = recent.some(
-      (message) =>
-        message.id !== event.id &&
-        Boolean(message.metadata?.paymentReaction) &&
-        Date.parse(String(message.createdAt)) >= since,
-    );
-    if (reactedRecently) return;
     await replyToSlurpMessage(db, { threadId: thread.id, triggerMessageId: event.id });
   } catch (error) {
     logger.warn(error, "[slurp-payment-reaction] Could not react to a %s payment", input.kind);
