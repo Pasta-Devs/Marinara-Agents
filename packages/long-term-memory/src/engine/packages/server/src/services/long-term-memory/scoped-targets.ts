@@ -34,7 +34,13 @@ export function canUpdateLtmScopedTarget(existingScope: LtmScope, incomingScope:
   const existingGlobal = isGlobalLtmScope(existingScope);
   const incomingGlobal = isGlobalLtmScope(incomingScope);
   if (existingGlobal || incomingGlobal) return existingGlobal && incomingGlobal;
-  return ltmScopesOverlap(existingScope, incomingScope, { includeGlobal: false });
+  if (!ltmScopesOverlap(existingScope, incomingScope, { includeGlobal: false })) return false;
+  return (
+    getLtmScopeChatIds(existingScope).every((id) => getLtmScopeChatIds(incomingScope).includes(id)) &&
+    getLtmScopeGroupIds(existingScope).every((id) => getLtmScopeGroupIds(incomingScope).includes(id)) &&
+    (existingScope.characterIds ?? []).every((id) => incomingScope.characterIds?.includes(id)) &&
+    getLtmScopePersonaIds(existingScope).every((id) => getLtmScopePersonaIds(incomingScope).includes(id))
+  );
 }
 
 export function equivalentLtmForkAvailability(left: LtmNote, right: LtmNote) {

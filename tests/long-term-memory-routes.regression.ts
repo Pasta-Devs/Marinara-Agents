@@ -5012,6 +5012,17 @@ async function main(routeScenario: RouteScenario) {
         chatId: "chat-persona-a",
         chatIds: ["chat-persona-a"],
       });
+      const groupedChatImport = await app.inject({
+        method: "POST",
+        url: "/api/long-term-memory/import/source-notes",
+        headers,
+        payload: { source: "chats", sourceIds: ["chat-a:summary-cross-branches"], chatId: "chat-a", extract: false },
+      });
+      assert.equal(groupedChatImport.statusCode, 200, groupedChatImport.body);
+      assert.deepEqual(groupedChatImport.json().imported[0].note.destinationScope, {
+        chatId: "chat-a",
+        chatIds: ["chat-a"],
+      });
       const implicitPersonaCreateNotes = implicitPersonaResult.draft.mutations.filter(
         (mutation: any) => mutation.kind === "create_note",
       );

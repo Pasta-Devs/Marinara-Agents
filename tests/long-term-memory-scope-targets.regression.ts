@@ -9,6 +9,10 @@ import {
   type ScopeTargetGroup,
 } from "../packages/long-term-memory/src/engine/packages/client/src/features/long-term-memory/scope-targets.js";
 import { getLtmChatDisplayName } from "../packages/long-term-memory/src/engine/packages/server/src/services/long-term-memory/chat-scope.js";
+import {
+  chatOnlyLtmScope,
+  matchesLtmScope,
+} from "../packages/long-term-memory/src/engine/packages/shared/src/features/agents/long-term-memory/scope.js";
 
 // Verify getLtmChatDisplayName helper handles metadata.branchName, stringified metadata, and empty/fallback values
 assert.equal(
@@ -37,6 +41,31 @@ assert.equal(
   "returns empty string when both branchName and chat.name are empty",
 );
 assert.equal(getLtmChatDisplayName(null), "", "handles null chat safely");
+
+const chatDestination = chatOnlyLtmScope("chat-x");
+assert.deepEqual(chatDestination, { chatId: "chat-x", chatIds: ["chat-x"] });
+assert.equal(
+  matchesLtmScope(
+    { id: "world_x", type: "world", scope: chatDestination },
+    {
+      scope: { chatId: "chat-y", personaIds: ["persona-p"], characterIds: ["character-a"], groupIds: ["group-g"] },
+      includeGlobal: false,
+    },
+  ),
+  false,
+);
+for (const scope of [{ personaIds: ["persona-p"] }, { characterIds: ["character-a"] }, { groupIds: ["group-g"] }]) {
+  assert.equal(
+    matchesLtmScope(
+      { id: "world_shared", type: "world", scope },
+      {
+        scope: { chatId: "chat-y", personaIds: ["persona-p"], characterIds: ["character-a"], groupIds: ["group-g"] },
+        includeGlobal: false,
+      },
+    ),
+    true,
+  );
+}
 
 const chats: ScopeTargetChat[] = [
   {

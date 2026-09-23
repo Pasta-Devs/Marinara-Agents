@@ -152,6 +152,18 @@ async function main() {
       updatedAt: "2026-07-17T00:00:00.000Z",
     },
     {
+      id: "chat-same-persona-other-character",
+      name: "Persona A with another character",
+      mode: "roleplay",
+      characterIds: ["character-b"],
+      groupId: null,
+      personaId: "persona-a",
+      connectionId: null,
+      metadata: {},
+      lastMessageAt: null,
+      updatedAt: "2026-07-17T00:00:00.000Z",
+    },
+    {
       id: "chat-other-persona",
       name: "Other persona chat",
       mode: "roleplay",
@@ -977,6 +989,11 @@ async function main() {
         note("world_pure_chat_cross_chat", "chat-a", `The ${scopedRecallText} is old-chat-only.`),
       );
       await storage.createNote(
+        note("world_persona_chat_only", "chat-persona-a", `The ${scopedRecallText} is only in persona chat A.`, {
+          scope: { chatId: "chat-persona-a", chatIds: ["chat-persona-a"] },
+        }),
+      );
+      await storage.createNote(
         note("world_persona_cross_chat", "chat-a", `The ${scopedRecallText} belongs to persona A.`, {
           scope: { chatId: "chat-a", chatIds: ["chat-a"], personaId: "persona-a" },
         }),
@@ -1008,8 +1025,14 @@ async function main() {
         {
           chatId: "chat-persona-a",
           characterIds: [],
-          matches: [/belongs to persona A/, /every persona A chat/],
+          matches: [/belongs to persona A/, /every persona A chat/, /only in persona chat A/],
           doesNotMatch: [],
+        },
+        {
+          chatId: "chat-same-persona-other-character",
+          characterIds: ["character-b"],
+          matches: [/every persona A chat/],
+          doesNotMatch: [/only in persona chat A/],
         },
         {
           chatId: "chat-other-persona",
