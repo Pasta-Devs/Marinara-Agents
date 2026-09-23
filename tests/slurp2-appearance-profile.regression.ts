@@ -7,11 +7,21 @@ import {
   resolveSlpAppearanceProfile,
   shouldAutoAcceptSlpAppearance,
 } from "../packages/slurp2/src/engine/packages/server/src/slp/modules/creators/slp-appearance-profile.ts";
-import { ensureSlpImageAppearance, selectSlpImageProviderPrompt } from "../packages/slurp2/src/engine/packages/server/src/slp/base/media/slp-image-prompt.ts";
+import {
+  ensureSlpImageAppearance,
+  selectSlpImageProviderPrompt,
+} from "../packages/slurp2/src/engine/packages/server/src/slp/base/media/slp-image-prompt.ts";
+import { slpImageReferencesSupported } from "../packages/slurp2/src/engine/packages/server/src/slp/base/media/slp-image-references.ts";
 
 const source = {
-  publicDisplayName: "A", publicHandle: "a", name: "A", description: "Tall with silver hair.",
-  personality: "", scenario: "", appearance: "", backstory: "",
+  publicDisplayName: "A",
+  publicHandle: "a",
+  name: "A",
+  description: "Tall with silver hair.",
+  personality: "",
+  scenario: "",
+  appearance: "",
+  backstory: "",
 };
 
 test("source fingerprints survive repeated resolution and use the entity id", () => {
@@ -19,7 +29,10 @@ test("source fingerprints survive repeated resolution and use the entity id", ()
   const second = appearanceEvidenceFromSource({ ...source }, "character-id");
   assert.deepEqual(first, second);
   assert.equal(first.sourceEntityId, "character-id");
-  assert.notEqual(first.sourceRevisionToken, appearanceEvidenceFromSource({ ...source, description: "Changed" }, "character-id").sourceRevisionToken);
+  assert.notEqual(
+    first.sourceRevisionToken,
+    appearanceEvidenceFromSource({ ...source, description: "Changed" }, "character-id").sourceRevisionToken,
+  );
 });
 
 test("stage appearance wins over a derived profile and source appearance", () => {
@@ -57,7 +70,15 @@ test("source appearance is usable without creating a Slurp copy", () => {
 
 test("a live source appearance wins over a cached extraction", () => {
   const result = resolveSlpAppearanceProfile({
-    profile: createSlpAppearanceProfile({ text: "Black hair.", source: "description", sourceEntityId: "source-1", sourceRevisionToken: "old", confidence: "high", accepted: true, now: "2026-09-23" }),
+    profile: createSlpAppearanceProfile({
+      text: "Black hair.",
+      source: "description",
+      sourceEntityId: "source-1",
+      sourceRevisionToken: "old",
+      confidence: "high",
+      accepted: true,
+      now: "2026-09-23",
+    }),
     evidence: { sourceEntityId: "source-1", sourceRevisionToken: "new", sourceAppearance: "Silver hair." },
   });
   assert.equal(result.text, "Silver hair.");
@@ -66,7 +87,15 @@ test("a live source appearance wins over a cached extraction", () => {
 
 test("a stale cached extraction is reused with review attention", () => {
   const result = resolveSlpAppearanceProfile({
-    profile: createSlpAppearanceProfile({ text: "Black hair.", source: "description", sourceEntityId: "source-1", sourceRevisionToken: "old", confidence: "high", accepted: true, now: "2026-09-23" }),
+    profile: createSlpAppearanceProfile({
+      text: "Black hair.",
+      source: "description",
+      sourceEntityId: "source-1",
+      sourceRevisionToken: "old",
+      confidence: "high",
+      accepted: true,
+      now: "2026-09-23",
+    }),
     evidence: { sourceEntityId: "source-1", sourceRevisionToken: "new" },
   });
   assert.equal(result.text, "Black hair.");
@@ -104,10 +133,21 @@ test("description extraction requires a supporting quote and never invents from 
 
 test("reviewed, rewritten, and fallback prompts all retain appearance", () => {
   for (const rewrittenPrompt of ["A portrait at a bus stop", null]) {
-    const selected = selectSlpImageProviderPrompt({ rewrittenPrompt, rawPrompt: "At a bus stop", rewriteAttempted: true });
+    const selected = selectSlpImageProviderPrompt({
+      rewrittenPrompt,
+      rawPrompt: "At a bus stop",
+      rewriteAttempted: true,
+    });
     const final = ensureSlpImageAppearance(selected, "Adult woman with green eyes and dark hair.");
     assert.match(final, /green eyes and dark hair/u);
     assert.match(final, /bus stop/u);
     assert.equal(ensureSlpImageAppearance(final, "Adult woman with green eyes and dark hair."), final);
   }
+});
+
+test("unsupported image providers and fallbacks receive text without avatar references", () => {
+  assert.equal(slpImageReferencesSupported({ imageService: "novelai", model: "nai-diffusion-4-full" }), false);
+  assert.equal(slpImageReferencesSupported({ imageService: "novelai", model: "nai-diffusion-4-5-full" }), true);
+  assert.equal(slpImageReferencesSupported({ imageService: "comfyui" }, { serviceHint: "pollinations" }), false);
+  assert.equal(slpImageReferencesSupported({ imageService: "pollinations" }), false);
 });

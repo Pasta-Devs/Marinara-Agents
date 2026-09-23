@@ -33,6 +33,7 @@ import {
   slpImageAuthFailure,
 } from "../../base/media/slp-image-retry.js";
 import { rewriteSlpImagePrompt } from "../../base/media/slp-image-prompt-rewrite.js";
+import { slpImageReferencesSupported } from "../../base/media/slp-image-references.js";
 import { resolveImageAppearance } from "./slp-appearance-service.js";
 import { type ConnectionAdmissionMode } from "../../../services/generation/connection-admission.js";
 import { characterAppearanceFromRow, characterSlpImageContextFromRow } from "./slp-public-images-service.js";
@@ -178,6 +179,7 @@ export async function generateCreatorPostImage(input: {
     createConnectionsStorage(input.db),
     input.imageConnection.id,
   );
+  const allowAvatarReferences = slpImageReferencesSupported(input.imageConnection, imageFallback);
 
   // The Creator's own appearance, written on the Creator rather than borrowed from a card.
   //
@@ -273,7 +275,11 @@ export async function generateCreatorPostImage(input: {
         ) {
           characterDescription = referenceResolution.appearanceBlock;
         }
-        if (input.settings.imageGenerationUseAvatarReferences && referenceResolution.referenceImages.length > 0) {
+        if (
+          input.settings.imageGenerationUseAvatarReferences &&
+          allowAvatarReferences &&
+          referenceResolution.referenceImages.length > 0
+        ) {
           referenceImages = Array.from(new Set(referenceResolution.referenceImages)).slice(0, 6);
         }
       }
@@ -427,7 +433,12 @@ export async function generateCreatorPostImage(input: {
       guidanceContext: [configuredImageInstructions, connectionImageInstructions],
     }),
   );
-  const finalPrompt = [ensureSlpImageAppearance(finalPromptBase, redactIdentity(stageAppearance)), input.compositionGuard].filter(Boolean).join("\n\n");
+  const finalPrompt = [
+    ensureSlpImageAppearance(finalPromptBase, redactIdentity(stageAppearance)),
+    input.compositionGuard,
+  ]
+    .filter(Boolean)
+    .join("\n\n");
   // A reviewer who cleared the negative prompt still gets the style profile's own negatives back,
   // for the same reason the positive prompt is recompiled above.
   const baseNegativePrompt =

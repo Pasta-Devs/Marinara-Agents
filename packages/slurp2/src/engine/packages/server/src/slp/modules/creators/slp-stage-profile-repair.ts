@@ -132,9 +132,11 @@ export function repairSlurpStageProfileDraft(
  *
  * The stage appearance is an intentional override. The linked source is resolved at image time.
  */
-export function slurpStageFacts(
-  input: { appearance?: string; wardrobe?: string; locations?: string },
-): SlpCreatorStageFacts | undefined {
+export function slurpStageFacts(input: {
+  appearance?: string;
+  wardrobe?: string;
+  locations?: string;
+}): SlpCreatorStageFacts | undefined {
   const fact = (value: string | undefined) => value?.trim().slice(0, SLURP_STAGE_FACT_MAX_LENGTH) || undefined;
   const facts: SlpCreatorStageFacts = {
     ...(fact(input.appearance) !== undefined && {

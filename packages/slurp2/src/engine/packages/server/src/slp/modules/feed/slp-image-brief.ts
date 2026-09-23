@@ -91,9 +91,14 @@ export function slurpImageBrief(input: {
   scene?: SlpWardrobeScene | null;
   selectedWardrobe?: { name: string; description: string } | null;
 }): string {
-  const shootBrief = input.shoot?.brief && !slurpIsLegacyImageBrief(input.shoot.brief) &&
-    !/\b(?:same (?:outfit|clothes|place|shoot)|earlier (?:shoot|photo|picture)|established (?:outfit|clothing|appearance))\b/iu.test(input.shoot.brief)
-    ? input.shoot.brief : "";
+  const shootBrief =
+    input.shoot?.brief &&
+    !slurpIsLegacyImageBrief(input.shoot.brief) &&
+    !/\b(?:same (?:outfit|clothes|place|shoot)|earlier (?:shoot|photo|picture)|established (?:outfit|clothing|appearance))\b/iu.test(
+      input.shoot.brief,
+    )
+      ? input.shoot.brief
+      : "";
   const outfit =
     input.selectedWardrobe?.description?.trim() ||
     input.scene?.outfit?.trim() ||

@@ -43,12 +43,13 @@ export function useRefreshCreatorFanActivityNow(options?: { notifications?: bool
           : localizeUi("ui.slurp.settings.manual.audienceFailed", { defaultValue: "Audience activity failed." }),
       ),
     onSuccess: (result) => {
-      options?.notifications !== false &&
+      if (options?.notifications !== false) {
         toast.success(
           result.created > 0
             ? localizeUi("ui.slurp.settings.audience.created", { count: result.created })
             : localizeUi("ui.slurp.settings.audience.createdNone"),
         );
+      }
       return Promise.all([
         qc.invalidateQueries({
           queryKey: [...slpKeys.noodlerRoot(), "posts"],

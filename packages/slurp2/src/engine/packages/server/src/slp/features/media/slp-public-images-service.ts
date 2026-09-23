@@ -27,8 +27,13 @@ import { createPromptOverridesStorage } from "../../../services/storage/prompt-o
 import { loadPrompt, NOODLE_IMAGE_POST } from "../../../services/prompt-overrides/index.js";
 import { generateSlpImageWithRetry } from "../../base/media/slp-image-retry.js";
 import { rewriteSlpImagePrompt } from "../../base/media/slp-image-prompt-rewrite.js";
+import { slpImageReferencesSupported } from "../../base/media/slp-image-references.js";
 import { resolveImageAppearance } from "./slp-appearance-service.js";
-import { ensureSlpImageAppearance, selectSlpImageProviderPrompt, stripAppearanceLabel } from "../../base/media/slp-image-prompt.js";
+import {
+  ensureSlpImageAppearance,
+  selectSlpImageProviderPrompt,
+  stripAppearanceLabel,
+} from "../../base/media/slp-image-prompt.js";
 import {
   resolveCreatorImageConnectionId,
   resolveCreatorImageStyleProfileId,
@@ -163,6 +168,7 @@ export async function generateSlpPostImage(input: {
     createConnectionsStorage(input.db),
     input.imageConnection.id,
   );
+  const allowAvatarReferences = slpImageReferencesSupported(input.imageConnection, imageFallback);
   // The Creator's own appearance, written on the Creator rather than borrowed from a card.
   //
   // It is applied unconditionally, unlike the block below it. `imageGenerationIncludeDescriptions`
@@ -225,7 +231,7 @@ export async function generateSlpPostImage(input: {
         if (!stageAppearance && referenceResolution.appearanceBlock) {
           characterDescription = referenceResolution.appearanceBlock;
         }
-        if (input.settings.imageGenerationUseAvatarReferences) {
+        if (input.settings.imageGenerationUseAvatarReferences && allowAvatarReferences) {
           const builtInMariReferences =
             input.account.entityId === PROFESSOR_MARI_ID ? readProfessorMariReferenceImages() : [];
           const combinedReferences = [...builtInMariReferences, ...referenceResolution.referenceImages];

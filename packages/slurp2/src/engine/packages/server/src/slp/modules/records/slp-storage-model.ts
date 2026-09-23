@@ -417,9 +417,12 @@ export function normalizeSlpAccountSettings(value: unknown): SlurpSlpAccountSett
             rawAppearanceProfile.source === "mixed"
               ? rawAppearanceProfile.source
               : "mixed",
-          sourceEntityId: typeof rawAppearanceProfile.sourceEntityId === "string" ? rawAppearanceProfile.sourceEntityId : "",
+          sourceEntityId:
+            typeof rawAppearanceProfile.sourceEntityId === "string" ? rawAppearanceProfile.sourceEntityId : "",
           sourceRevisionToken:
-            typeof rawAppearanceProfile.sourceRevisionToken === "string" ? rawAppearanceProfile.sourceRevisionToken : "",
+            typeof rawAppearanceProfile.sourceRevisionToken === "string"
+              ? rawAppearanceProfile.sourceRevisionToken
+              : "",
           confidence:
             rawAppearanceProfile.confidence === "high" ||
             rawAppearanceProfile.confidence === "medium" ||

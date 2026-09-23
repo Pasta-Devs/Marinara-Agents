@@ -3788,5 +3788,10 @@
   "ui.slurp.appearance.modeDetail": "Choose when Slurp accepts visual details extracted from a card. Pending details may still be used for pictures and appear in Needs attention.",
   "ui.slurp.appearance.mode.ask": "Review every extraction",
   "ui.slurp.appearance.mode.highConfidence": "Accept clear details automatically",
-  "ui.slurp.appearance.mode.always": "Accept every usable extraction"
+  "ui.slurp.appearance.mode.always": "Accept every usable extraction",
+  "ui.slurp.pulse.queueQueued": "{{count}} queued",
+  "ui.slurp.pulse.queueRecent": "{{count}} recent",
+  "ui.slurp.pulse.queueScheduled": "{{count}} scheduled",
+  "ui.slurp.pulse.queueWorking": "{{count}} working",
+  "ui.slurp.pulse.runningAudience": "Running audience"
 }

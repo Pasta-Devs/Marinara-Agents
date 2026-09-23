@@ -138,7 +138,9 @@ export const slpSettingsSchema = z.object({
   imageGenerationPrompt: z.string().max(4000).default(DEFAULT_SLP_SETTINGS.imageGenerationPrompt),
   imageGenerationUseAvatarReferences: z.boolean().default(DEFAULT_SLP_SETTINGS.imageGenerationUseAvatarReferences),
   imageGenerationIncludeDescriptions: z.boolean().default(DEFAULT_SLP_SETTINGS.imageGenerationIncludeDescriptions),
-  appearanceProfileMode: z.enum(["ask", "high_confidence", "always"]).default(DEFAULT_SLP_SETTINGS.appearanceProfileMode),
+  appearanceProfileMode: z
+    .enum(["ask", "high_confidence", "always"])
+    .default(DEFAULT_SLP_SETTINGS.appearanceProfileMode),
   allowGalleryImageAttachments: z.boolean().default(DEFAULT_SLP_SETTINGS.allowGalleryImageAttachments),
   imageCaptioningEnabled: z.boolean().default(DEFAULT_SLP_SETTINGS.imageCaptioningEnabled),
   imageCaptioningConnectionId: z.string().min(1).nullable().default(DEFAULT_SLP_SETTINGS.imageCaptioningConnectionId),
