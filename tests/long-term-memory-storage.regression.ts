@@ -71,6 +71,7 @@ async function main() {
     else globalThis.window = originalWindow;
   }
   const { configurePackageRuntime } = await import(`${source}/package-runtime.ts`);
+  const { readLtmDebugLog } = await import(`${source}/debug-log.ts`);
   const { getLongTermMemoryDirectories, getLongTermMemoryRoot, ltmRejectedSuggestionsPath, notePathForId } =
     await import(`${source}/paths.ts`);
   const { LongTermMemoryStorage } = await import(`${source}/storage.ts`);
@@ -448,7 +449,7 @@ async function main() {
             ...rejectionDraft.extractionOutcome,
             droppedCandidates: [
               {
-                index: 0,
+                index: 7,
                 reason: "invalid_format",
                 message: "Rejected candidate.",
                 snippet: "candidate",
@@ -469,7 +470,7 @@ async function main() {
             ...rejectionDraft.extractionOutcome,
             droppedCandidates: [
               {
-                index: 0,
+                index: 7,
                 reason: "invalid_format",
                 message: "Rejected candidate.",
                 snippet: "candidate",
@@ -816,6 +817,53 @@ async function main() {
         },
       });
       const draftStore = new LongTermMemoryDraftStore(root);
+      const rejectedSubjectId = "!!!";
+      const rejectedCandidateText = "Private recovery candidate text must not be logged.";
+      const rejectedSubjectOperationId = randomUUID();
+      await assert.rejects(
+        draftStore.createDraft({
+          source: { sourceNoteId: legacySource.id, chatId: "chat-a" },
+          scope: legacySource.scope,
+          modes: ["roleplay"],
+          response: { summary: "", mutations: [] },
+          operationId: rejectedSubjectOperationId,
+          outcome: {
+            state: "partial_success",
+            totalCandidates: 1,
+            keptUnits: 0,
+            droppedUnits: 1,
+            droppedCandidates: [
+              {
+                index: 7,
+                reason: "invalid_format",
+                message: "Rejected candidate.",
+                recoveryCandidate: {
+                  id: randomUUID(),
+                  bucket: "timeline_event",
+                  subjectId: rejectedSubjectId,
+                  sectionKey: "event",
+                  text: rejectedCandidateText,
+                  evidence: [`source_note:${legacySource.id}`],
+                  confidence: 0.9,
+                  salience: 0.8,
+                  status: "active",
+                  sourceHash: "a".repeat(64),
+                },
+              },
+            ],
+          },
+        }),
+        (error: any) =>
+          error.name === "ZodError" &&
+          error.issues.some((issue: any) => issue.path.join(".").endsWith("recoveryCandidate.subjectId")),
+      );
+      const subjectIdFailure = (await readLtmDebugLog({ operationId: rejectedSubjectOperationId }, root)).at(-1);
+      assert.equal(subjectIdFailure?.action, "recovery_subject_id_validation_failed");
+      assert.deepEqual(subjectIdFailure?.details?.rejectedSubjectIds, [
+        { candidateIndex: 7, subjectId: rejectedSubjectId },
+      ]);
+      const debugContents = await readFile(getLongTermMemoryDirectories(root).debugLog, "utf8");
+      assert.equal(debugContents.includes(rejectedCandidateText), false);
       let afterWriteRan = false;
       let afterWriteDraftId = "";
       await assert.rejects(

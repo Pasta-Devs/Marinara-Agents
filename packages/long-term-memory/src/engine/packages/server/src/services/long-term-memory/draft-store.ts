@@ -18,6 +18,7 @@ import { readJsonFile, writeJsonAtomic } from "./atomic-json.js";
 import { getLongTermMemoryDirectories, getLongTermMemoryRoot, safeJoin } from "./paths.js";
 import { LongTermMemoryStorage } from "./storage.js";
 import { extractionFingerprintForLtmSourceNote, sourceHashForLtmSourceNote } from "./source-hash.js";
+import { recordLtmDebugEvent } from "./debug-log.js";
 import { withLtmVaultLock } from "./vault-lock.js";
 
 export interface CreateLtmExtractionDraftInput {
@@ -129,7 +130,7 @@ export class LongTermMemoryDraftStore {
         };
         const timestamp = nowIso();
         const candidateCount = options.response.mutations.length;
-        const draft = ltmExtractionDraftSchema.parse({
+        const draftInput = {
           id: randomUUID(),
           status: "pending",
           createdAt: timestamp,
@@ -159,7 +160,49 @@ export class LongTermMemoryDraftStore {
             deduplications: 0,
             keptUnits: candidateCount,
           },
-        });
+        };
+        const parsedDraft = ltmExtractionDraftSchema.safeParse(draftInput);
+        if (!parsedDraft.success) {
+          const subjectIdIssues = new Map<number, { candidateIndex: number; subjectId: unknown }>();
+          for (const issue of parsedDraft.error.issues) {
+            const path = issue.path;
+            if (
+              path[0] !== "extractionOutcome" ||
+              path[1] !== "droppedCandidates" ||
+              typeof path[2] !== "number" ||
+              path[3] !== "recoveryCandidate" ||
+              path[4] !== "subjectId"
+            )
+              continue;
+            const droppedCandidate = options.outcome?.droppedCandidates[path[2]];
+            const candidate = droppedCandidate?.recoveryCandidate as { subjectId?: unknown } | undefined;
+            const subjectId = candidate?.subjectId;
+            subjectIdIssues.set(path[2], {
+              candidateIndex: droppedCandidate?.index ?? path[2],
+              subjectId:
+                typeof subjectId === "string"
+                  ? subjectId.slice(0, 240)
+                  : subjectId === null || typeof subjectId === "number" || typeof subjectId === "boolean"
+                    ? subjectId
+                    : `[${typeof subjectId}]`,
+            });
+          }
+          if (subjectIdIssues.size) {
+            await recordLtmDebugEvent({
+              root: this.root,
+              operationId: draftInput.operationId,
+              phase: "draft",
+              action: "recovery_subject_id_validation_failed",
+              status: "error",
+              sourceNoteId,
+              details: {
+                rejectedSubjectIds: Array.from(subjectIdIssues.values()).slice(0, 80),
+              },
+            }).catch(() => undefined);
+          }
+          throw parsedDraft.error;
+        }
+        const draft = parsedDraft.data;
         await writeJsonAtomic(draftPathForId(draft.id, this.root), draft);
         try {
           await this.supersedeOlderPendingDrafts(draft);
