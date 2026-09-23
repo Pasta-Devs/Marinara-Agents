@@ -714,6 +714,78 @@ async function main() {
     unsupportedAlias.diagnostics.some((item) => item.code === "source_event_graph_open"),
     true,
   );
+  const rejectedAlongsideAlias = {
+    ...duplicateResult.unitResponse.units[0]!,
+    id: randomUUID(),
+    claimKind: "change" as const,
+  };
+  const mixedAliasResult = compileEvidenceUnitExtraction({
+    unitResponse: {
+      summary: "Valid alias and unsupported duplicate change",
+      units: [duplicateResult.unitResponse.units[0]!, rejectedAlongsideAlias],
+    },
+    sourceText: duplicateSource.sections.source.text,
+    sourceNote: duplicateSource,
+    existingNotes: [duplicateExisting] as any,
+    aliasChoices: new Map([
+      ...existingResolution.aliasChoices,
+      [rejectedAlongsideAlias.id, existingResolution.aliasChoices.get(duplicateResult.unitResponse.units[0]!.id)!],
+    ]),
+    scope,
+    modes: ["roleplay"],
+    sourceHash: sourceHashForLtmSourceNote(duplicateSource),
+    skipStructuredBackfill: true,
+  });
+  assert.equal(mixedAliasResult.accounting.keptUnits, 0);
+  assert.equal(mixedAliasResult.outcome.droppedUnits, 1);
+  assert.deepEqual(
+    mixedAliasResult.compiledResponse.mutations.map((mutation) => mutation.kind),
+    ["set_title"],
+  );
+  assert.equal(mixedAliasResult.outcome.state, "partial_success", "alias mutation with a rejection is partial");
+  const eventSource = {
+    ...duplicateSource,
+    sections: {
+      source: { text: "Sam knows the ancient language. Sam learned it at the academy.", updatedAt: timestamp },
+    },
+  };
+  const eventHash = sourceHashForLtmSourceNote(eventSource);
+  const linkedAliasResult = compileEvidenceUnitExtraction({
+    unitResponse: {
+      summary: "Repeated change supported by a new event",
+      units: [
+        {
+          ...duplicateResult.unitResponse.units[0]!,
+          claimKind: "change" as const,
+          links: [{ target: "timeline_sam_learned", relation: "caused_by" as const }],
+          sourceHash: eventHash,
+        },
+        {
+          ...unit({ bucket: "character_fact", subjectId: "sam_learned", text: "Sam learned it at the academy." }),
+          bucket: "timeline_event" as const,
+          sectionKey: "event",
+          claimKind: "change" as const,
+          links: [{ target: eventSource.id, relation: "extracted_from" as const }],
+          sourceHash: eventHash,
+        },
+      ],
+    },
+    sourceText: eventSource.sections.source.text,
+    sourceNote: eventSource,
+    existingNotes: [duplicateExisting] as any,
+    aliasChoices: existingResolution.aliasChoices,
+    scope,
+    modes: ["roleplay"],
+    sourceHash: eventHash,
+    skipStructuredBackfill: true,
+  });
+  assert.equal(linkedAliasResult.accounting.deduplications, 1);
+  assert.equal(linkedAliasResult.accounting.validationRejections, 0);
+  assert.deepEqual(
+    linkedAliasResult.compiledResponse.mutations.map((mutation) => mutation.kind).sort(),
+    ["create_note", "set_title"],
+    "same-batch timeline events support deduplicated alias changes without duplicating the event",
+  );
   assert.equal(
     compileEvidenceUnitExtraction({
       unitResponse: { summary: "Invalid source hash", units: [existingResolution.units[0]!] },

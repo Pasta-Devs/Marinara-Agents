@@ -1425,7 +1425,12 @@ export function compileEvidenceUnitExtraction(options: {
   const duplicateAliasUnits = keptUnits.filter(
     (unit) => options.aliasChoices?.has(unit.id) && !dedupResult.deduplicated.includes(unit),
   );
-  const duplicateAliasClosure = closeSourceEventGraph(duplicateAliasUnits, options.sourceNote, options.existingNotes);
+  const duplicateAliasClosure = closeSourceEventGraph(
+    duplicateAliasUnits,
+    options.sourceNote,
+    options.existingNotes,
+    closed.units,
+  );
   const rejectedAliasIds = new Set(duplicateAliasClosure.diagnostics.map((diagnostic) => diagnostic.mutationId));
   const allDroppedCandidates = [
     ...parserDroppedCandidates,
@@ -1508,7 +1513,12 @@ export function compileEvidenceUnitExtraction(options: {
   };
 }
 
-function closeSourceEventGraph(units: LtmEvidenceUnit[], sourceNote: LtmNote, existingNotes: LtmNote[]) {
+function closeSourceEventGraph(
+  units: LtmEvidenceUnit[],
+  sourceNote: LtmNote,
+  existingNotes: LtmNote[],
+  supportUnits: readonly LtmEvidenceUnit[] = [],
+) {
   let kept = [...units];
   const droppedCandidates: LtmExtractionDroppedCandidate[] = [];
   const diagnostics: LtmExtractionDiagnostic[] = [];
@@ -1522,7 +1532,7 @@ function closeSourceEventGraph(units: LtmEvidenceUnit[], sourceNote: LtmNote, ex
           ? [note.id]
           : [],
       ),
-      ...kept
+      ...[...supportUnits, ...kept]
         .filter(
           (unit) =>
             unit.bucket === "timeline_event" &&
@@ -1601,7 +1611,9 @@ function summarizeExtractionOutcome(input: {
         ? "partial_success"
         : "success"
       : input.mutations > 0
-        ? "success"
+        ? droppedUnits > 0
+          ? "partial_success"
+          : "success"
         : "no_suggestions_created";
   return {
     state,
