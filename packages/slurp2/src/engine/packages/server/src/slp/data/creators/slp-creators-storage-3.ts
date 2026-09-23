@@ -10,7 +10,11 @@ import {
 } from "../../../../../shared/src/slp/slp-social.types.js";
 import { SlurpStageProfileInput } from "../../modules/discovery/slp-discovery-profile.js";
 import { slurpStageFacts } from "../../modules/creators/slp-stage-profile-repair.js";
-import { appearanceSourceFingerprint } from "../../modules/creators/slp-appearance-profile.js";
+import {
+  appearanceEvidenceFromSource,
+  appearanceSourceFingerprint,
+  resolveSlpAppearanceProfile,
+} from "../../modules/creators/slp-appearance-profile.js";
 import { resolveSlurpCreatorScheduleStatus } from "../../modules/creators/slp-creator-schedule-context.js";
 import {
   slpAccounts,
@@ -237,6 +241,14 @@ export function createCreatorsStorage3(context: SlurpStorageContext) {
           const disclosureMode = account.settings.privacy.identityDisclosure ?? null;
           const publicAccount = await this.resolveAccountSource(account);
           const currentSource = publicAccount ? await resolveCreatorSourceSnapshot(db, publicAccount) : null;
+          const appearance = resolveSlpAppearanceProfile({
+            stageAppearance: account.settings.stage?.appearance,
+            profile: account.settings.appearanceProfile,
+            evidence:
+              currentSource && publicAccount
+                ? appearanceEvidenceFromSource(currentSource, publicAccount.entityId)
+                : null,
+          });
           const baseline = account.settings.profile.noodlerSourceSnapshot;
           return {
             id: account.id,
@@ -253,6 +265,19 @@ export function createCreatorsStorage3(context: SlurpStorageContext) {
             disclosureMode,
             stagePersonality: account.settings.privacy.stagePersonality ?? "",
             appearance: account.settings.stage?.appearance ?? "",
+            appearanceState: {
+              source: account.settings.stage?.appearance?.trim()
+                ? "override"
+                : currentSource?.appearance?.trim()
+                  ? "linked"
+                  : appearance.profile
+                    ? "derived"
+                    : "missing",
+              text: appearance.text ?? "",
+              needsReview: appearance.needsReview,
+              linkedAppearance: currentSource?.appearance ?? "",
+              profile: appearance.profile,
+            },
             wardrobe: account.settings.stage?.wardrobe ?? "",
             locations: account.settings.stage?.locations ?? "",
             access: account.settings.privacy.access,
@@ -426,14 +451,58 @@ export function createCreatorsStorage3(context: SlurpStorageContext) {
           displayName: row.displayName,
           handle: row.handle,
         });
-        if (!source || row.entityId !== profile.sourceEntityId ||
-          appearanceSourceFingerprint(row.entityId, source) !== profile.sourceRevisionToken) return null;
+        if (
+          !source ||
+          row.entityId !== profile.sourceEntityId ||
+          appearanceSourceFingerprint(row.entityId, source) !== profile.sourceRevisionToken
+        )
+          return null;
         const settings = normalizeSlpAccountSettings(row.settings);
         if (settings.stage?.appearance?.trim() || (settings.appearanceProfile && !replace)) return mapAccount(row);
-        await tx.update(slpAccounts).set({
-          settings: JSON.stringify({ ...settings, appearanceProfile: profile } satisfies SlpAccountSettings),
-          updatedAt: now(),
-        }).where(eq(slpAccounts.id, id));
+        await tx
+          .update(slpAccounts)
+          .set({
+            settings: JSON.stringify({ ...settings, appearanceProfile: profile } satisfies SlpAccountSettings),
+            updatedAt: now(),
+          })
+          .where(eq(slpAccounts.id, id));
+        const updated = (await tx.select().from(slpAccounts).where(eq(slpAccounts.id, id)))[0];
+        return updated ? mapAccount(updated) : null;
+      });
+    },
+    async updateNoodlerAppearanceChoice(
+      id: string,
+      action: "accept" | "keep_override" | "clear_override" | "edit_override",
+      text?: string,
+    ): Promise<SlpAccount | null> {
+      return db.transaction(async (tx) => {
+        const row = (
+          await tx
+            .select()
+            .from(slpAccounts)
+            .where(and(eq(slpAccounts.id, id), eq(slpAccounts.platform, "slurp")))
+        )[0];
+        if (!row) return null;
+        const settings = normalizeSlpAccountSettings(row.settings);
+        if ((action === "accept" || action === "keep_override") && !settings.appearanceProfile?.text) return null;
+        if (action === "edit_override" && !text?.trim()) return null;
+        const stage = { ...settings.stage };
+        let profile = settings.appearanceProfile;
+        if (action === "accept" && profile) profile = { ...profile, status: "accepted", acceptedAt: now() };
+        if (action === "keep_override" && profile) stage.appearance = profile.text;
+        if (action === "edit_override") stage.appearance = text!.trim().slice(0, 2000);
+        if (action === "clear_override") delete stage.appearance;
+        await tx
+          .update(slpAccounts)
+          .set({
+            settings: JSON.stringify({
+              ...settings,
+              stage,
+              ...(profile && { appearanceProfile: profile }),
+            } satisfies SlpAccountSettings),
+            updatedAt: now(),
+          })
+          .where(eq(slpAccounts.id, id));
         const updated = (await tx.select().from(slpAccounts).where(eq(slpAccounts.id, id)))[0];
         return updated ? mapAccount(updated) : null;
       });

@@ -320,6 +320,13 @@ export interface SlpCreatorManagedStageProfile extends SlpCreatorStageProfile {
   access: SlpAccountAccessSettings;
   autoPosting: SlpAutoPostingSettings;
   sourceStatus: SlpCreatorSourceStatus;
+  appearanceState: {
+    source: "override" | "linked" | "derived" | "missing";
+    text: string;
+    needsReview: boolean;
+    linkedAppearance: string;
+    profile: SlpAppearanceProfile | null;
+  };
   fanActivity: SlpCreatorFanActivitySettings | null;
   /** What the user saved, and what the planner actually uses once derived defaults fill the gaps. */
   strategy: {

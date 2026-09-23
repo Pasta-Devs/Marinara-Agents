@@ -18,7 +18,12 @@ import { openSlpCreatorSettings } from "./settings/slp-creator-settings-store";
 const CREATOR_FILTERS: readonly SlpCreatorFilter[] = ["all", "active", "paused", "attention"];
 
 function needsAttention(creator: SlpCreatorManagedStageProfile) {
-  return creator.sourceStatus.state === "missing" || creator.sourceStatus.state === "changed";
+  return (
+    creator.sourceStatus.state === "missing" ||
+    creator.sourceStatus.state === "changed" ||
+    creator.appearanceState.source === "missing" ||
+    creator.appearanceState.needsReview
+  );
 }
 
 /**

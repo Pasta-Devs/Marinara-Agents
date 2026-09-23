@@ -86,6 +86,14 @@ export function SlpBackstageOverviewPanel(page: SlpBackstagePageProps) {
     });
   }
   for (const creator of creators) {
+    if (creator.appearanceState.source === "missing" || creator.appearanceState.needsReview) {
+      attention.push({
+        id: `appearance-${creator.id}`,
+        label: `${creator.displayName}: ${t(creator.appearanceState.source === "missing" ? "ui.slurp.appearance.missing" : "ui.slurp.appearance.reviewNeeded")}`,
+        section: "creators",
+        target: "creators",
+      });
+    }
     if (creator.sourceStatus.state === "missing" || creator.sourceStatus.state === "changed") {
       attention.push({
         id: `source-${creator.id}`,

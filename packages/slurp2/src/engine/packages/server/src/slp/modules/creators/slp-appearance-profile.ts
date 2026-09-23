@@ -65,6 +65,7 @@ export function resolveSlpAppearanceProfile(input: {
       profile,
       needsReview:
         profile.status === "needs_review" ||
+        !input.evidence ||
         (input.evidence !== undefined &&
           input.evidence !== null &&
           (profile.sourceEntityId !== input.evidence.sourceEntityId ||
@@ -93,12 +94,16 @@ export function parseSlpAppearanceCandidate(content: string, sourceText: string,
     const row = value as Record<string, unknown>;
     const text = typeof row.appearance === "string" ? row.appearance.trim().slice(0, 2000) : "";
     const quote = typeof row.evidence === "string" ? row.evidence.trim() : "";
-    if (!text || (quote && !sourceText.toLocaleLowerCase().includes(quote.toLocaleLowerCase())) ||
-      (!quote && !avatarAvailable)) return null;
+    if (
+      !text ||
+      (quote && !sourceText.toLocaleLowerCase().includes(quote.toLocaleLowerCase())) ||
+      (!quote && !avatarAvailable)
+    )
+      return null;
     return {
       text,
-      confidence: row.confidence === "high" && quote.length >= 24 ? "high" as const : "medium" as const,
-      source: quote ? "description" as const : "avatar" as const,
+      confidence: row.confidence === "high" && quote.length >= 24 ? ("high" as const) : ("medium" as const),
+      source: quote ? ("description" as const) : ("avatar" as const),
     };
   } catch {
     return null;

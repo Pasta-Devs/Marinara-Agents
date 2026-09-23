@@ -362,6 +362,23 @@ export function SlpImagesPanel(page: SlpBackstagePageProps) {
           />
         </summary>
         <div className="space-y-5 border-t border-[var(--slurp-outline)] p-4 sm:p-5">
+          <Field
+            settingKey="appearanceProfileMode"
+            label={t("ui.slurp.appearance.mode")}
+            detail={t("ui.slurp.appearance.modeDetail")}
+          >
+            <select
+              value={settings.appearanceProfileMode}
+              onChange={(event) =>
+                void update("appearanceProfileMode", event.target.value as SlurpSettings["appearanceProfileMode"])
+              }
+              className="min-h-11 w-full rounded-lg bg-[var(--slurp-canvas)] px-3 text-sm ring-1 ring-inset ring-[var(--slurp-outline)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)]"
+            >
+              <option value="ask">{t("ui.slurp.appearance.mode.ask")}</option>
+              <option value="high_confidence">{t("ui.slurp.appearance.mode.highConfidence")}</option>
+              <option value="always">{t("ui.slurp.appearance.mode.always")}</option>
+            </select>
+          </Field>
           <div className="grid gap-3 sm:grid-cols-2">
             <Toggle
               settingKey="imageGenerationUseAvatarReferences"

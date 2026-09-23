@@ -101,6 +101,21 @@ export function useUpdateCreatorStageProfile() {
       ]),
   });
 }
+export function useCreatorAppearanceAction() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: {
+      accountId: string;
+      action: "generate" | "regenerate" | "accept" | "keep_override" | "clear_override" | "edit_override";
+      text?: string;
+    }) =>
+      api.post<SlpCreatorManagedStageProfile>(
+        `/slurp2/slurp/accounts/${encodeURIComponent(input.accountId)}/appearance`,
+        { action: input.action, ...(input.text && { text: input.text }) },
+      ),
+    onSuccess: () => qc.invalidateQueries({ queryKey: slpKeys.noodlerAccounts() }),
+  });
+}
 export function useUpdateCreatorProfileLocation() {
   const qc = useQueryClient();
   return useMutation({

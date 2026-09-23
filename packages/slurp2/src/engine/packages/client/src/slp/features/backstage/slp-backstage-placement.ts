@@ -91,6 +91,7 @@ export const SLP_BACKSTAGE_SETTING_PLACEMENT: Record<keyof SlurpSettings, SlpBac
   imagePromptInterpretation: prompts("image prompt interpretation", "image prompt style", "Danbooru"),
   enableImageInterpretation: prompts("interpret image prompts"),
   imageGenerationUseAvatarReferences: automation("images", "avatar references"),
+  appearanceProfileMode: automation("images", "appearance profiles", "auto accept appearance"),
   imageGenerationIncludeDescriptions: automation("images", "image descriptions"),
   autoPostingImagesEnabled: automation("images", "automatic post images"),
   allowRandomUsers: world("audience", "random users", "ambient fans"),

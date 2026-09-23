@@ -1,4 +1,5 @@
 import { Trash2 } from "lucide-react";
+import { useState } from "react";
 import { toast } from "sonner";
 import { useTranslation } from "react-i18next";
 
@@ -25,6 +26,7 @@ import {
   useDeleteCreatorStageProfile,
   useAdoptCreatorSourceIdentity,
   useDismissCreatorSourceChanges,
+  useCreatorAppearanceAction,
 } from "../slp-creator-profile-hooks";
 import { useSlpPersonaBackedCreator } from "../slp-creators-hooks";
 import { accentButton, focusRing, noteClass, quietButton, selectClass } from "../slp-creator-classes";
@@ -37,14 +39,128 @@ export function SlpCreatorIdentitySection({ creator, onRedraft }: SlpCreatorSett
   const { t } = useTranslation();
   const adoptSourceIdentity = useAdoptCreatorSourceIdentity();
   const dismissSourceChanges = useDismissCreatorSourceChanges();
+  const appearanceAction = useCreatorAppearanceAction();
+  const [appearanceDraft, setAppearanceDraft] = useState<string | null>(null);
+  const appearance = creator.appearanceState;
+  const runAppearanceAction = (
+    action: "generate" | "regenerate" | "accept" | "keep_override" | "clear_override" | "edit_override",
+    text?: string,
+  ) =>
+    appearanceAction.mutate(
+      { accountId: creator.id, action, text },
+      {
+        onSuccess: () => setAppearanceDraft(null),
+        onError: (error) => toast.error(errorMessage(error)),
+      },
+    );
 
   return (
     <div className="space-y-4">
       <SlurpCreatorProfileEditor
-        key={creator.id}
+        key={`${creator.id}:${creator.appearance}`}
         creator={creator}
         onRedraft={onRedraft ? () => onRedraft(creator) : undefined}
       />
+      <section
+        className="space-y-3 rounded-lg bg-[var(--slurp-surface-raised)] p-3 ring-1 ring-inset ring-[var(--slurp-outline)]"
+        aria-label={t("ui.slurp.appearance.title")}
+      >
+        <h3 className="text-sm font-bold">{t("ui.slurp.appearance.title")}</h3>
+        <p className="text-xs leading-5 text-[var(--slurp-muted)]">{t("ui.slurp.appearance.process")}</p>
+        <p className="text-xs font-semibold" role="status">
+          {t(`ui.slurp.appearance.source.${appearance.source}`)}
+          {appearance.needsReview ? ` · ${t("ui.slurp.appearance.reviewNeeded")}` : ""}
+        </p>
+        {appearance.text ? (
+          <p className="whitespace-pre-wrap text-xs leading-5">{appearance.text}</p>
+        ) : (
+          <p className="text-xs text-[var(--slurp-warning)]">{t("ui.slurp.appearance.missing")}</p>
+        )}
+        <div className="flex flex-wrap gap-2">
+          {appearance.source === "missing" && (
+            <button
+              type="button"
+              disabled={appearanceAction.isPending}
+              onClick={() => runAppearanceAction("generate")}
+              className={quietButton}
+            >
+              {t("ui.slurp.appearance.generate")}
+            </button>
+          )}
+          {appearance.source === "derived" && (
+            <button
+              type="button"
+              disabled={appearanceAction.isPending}
+              onClick={() => runAppearanceAction("regenerate")}
+              className={quietButton}
+            >
+              {t("ui.slurp.appearance.regenerate")}
+            </button>
+          )}
+          {appearance.profile?.status === "needs_review" && appearance.source === "derived" && (
+            <button
+              type="button"
+              disabled={appearanceAction.isPending}
+              onClick={() => runAppearanceAction("accept")}
+              className={accentButton}
+            >
+              {t("ui.slurp.appearance.accept")}
+            </button>
+          )}
+          {appearance.source === "derived" && (
+            <button
+              type="button"
+              disabled={appearanceAction.isPending}
+              onClick={() => runAppearanceAction("keep_override")}
+              className={quietButton}
+            >
+              {t("ui.slurp.appearance.keepOverride")}
+            </button>
+          )}
+          {appearance.source === "override" && (
+            <button
+              type="button"
+              disabled={appearanceAction.isPending}
+              onClick={() => runAppearanceAction("clear_override")}
+              className={quietButton}
+            >
+              {t(appearance.linkedAppearance ? "ui.slurp.appearance.useLinked" : "ui.slurp.appearance.clearOverride")}
+            </button>
+          )}
+          {appearance.text && (
+            <button type="button" onClick={() => setAppearanceDraft(appearance.text)} className={quietButton}>
+              {t("ui.slurp.appearance.edit")}
+            </button>
+          )}
+        </div>
+        {appearanceDraft !== null && (
+          <div className="space-y-2">
+            <label className="block text-xs font-semibold" htmlFor={`appearance-draft-${creator.id}`}>
+              {t("ui.slurp.appearance.edit")}
+            </label>
+            <textarea
+              id={`appearance-draft-${creator.id}`}
+              value={appearanceDraft}
+              maxLength={2000}
+              onChange={(event) => setAppearanceDraft(event.target.value)}
+              className={`${selectClass} min-h-24 w-full`}
+            />
+            <div className="flex gap-2">
+              <button
+                type="button"
+                disabled={appearanceAction.isPending || !appearanceDraft.trim()}
+                onClick={() => runAppearanceAction("edit_override", appearanceDraft)}
+                className={accentButton}
+              >
+                {t("ui.slurp.appearance.saveOverride")}
+              </button>
+              <button type="button" onClick={() => setAppearanceDraft(null)} className={quietButton}>
+                {t("ui.slurp.appearance.cancel")}
+              </button>
+            </div>
+          </div>
+        )}
+      </section>
       {creator.sourceStatus.state === "missing" && (
         <p className="rounded-lg bg-[var(--slurp-danger)]/10 p-3 text-xs text-[var(--slurp-danger)] ring-1 ring-inset ring-[var(--slurp-danger)]/25">
           {t("ui.slurp.settings.creators.sourceMissing")}
