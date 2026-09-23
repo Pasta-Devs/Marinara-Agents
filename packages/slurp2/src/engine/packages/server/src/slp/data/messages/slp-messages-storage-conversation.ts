@@ -5,95 +5,25 @@
 // Its own module rather than more of `slurp.storage.ts`, which is already past five thousand
 // lines. It composes that storage for accounts, subscriptions, and the wallet instead of
 // reimplementing them, so a DM tip and a profile tip move coins through exactly one code path.
-import { tolerateMissingTables } from "../../base/host/slp-host-tables.js";
-import { and, asc, desc, eq, gt, inArray, isNotNull, isNull, lt, lte, or } from "../../../db/file-query.js";
-import { newId } from "../../../utils/id-generator.js";
 import type { DB } from "../../../db/connection.js";
-import { logger } from "../../../lib/logger.js";
 import {
-  slurpCommissions,
-  slurpPaymentCompensations,
   slurpMessageClaims,
   slurpMessages,
   slurpReplyBubbles,
   slurpFollowUps,
   slurpThreads,
 } from "../../../db/schema/slurp.js";
-import { isSlurpFileUniqueConstraintError } from "../../base/host/slp-file-errors.js";
-import { applySlurpMood, type SlurpMoodShift } from "../../modules/world/slp-mood.js";
 import {
-  applySlurpThreadNotes,
-  readStoredNotes,
-  type SlurpNoteOperation,
-  type SlurpThreadNote,
-} from "../../modules/messages/slp-thread-notes.js";
-import {
-  SLURP_THREAD_STATE_DEFAULT,
-  applySlurpThreadStateSignals,
-  type SlurpCreatorStateSignal,
-} from "../../modules/creators/slp-creator-state.js";
-import { activeSlurpStrikes } from "../../modules/world/slp-stance.js";
-import { SLURP_ONLINE_AFTER_DELIVERY_MINUTES } from "../../modules/messages/slp-conversation-momentum.js";
-import { createAppSettingsStorage } from "../../../services/storage/app-settings.storage.js";
-import { createSlurpEventsStorage } from "../notifications/slp-notification-storage.js";
-import { createSlurpPopulationStorage } from "../audience/slp-audience-storage-funnel.js";
-import {
-  slurpFanTypeCommissionBudget,
-  slurpFanTypeWeeklyBudget,
-  slurpResolveFanType,
-} from "../../../../../shared/src/slp/slp-fan-types.js";
-import {
-  admitSlurpThread,
-  readSlurpCreatorMessaging,
   slurpMessagePreview,
-  SLURP_CREATOR_MESSAGING_KEY,
-  SLURP_DEFAULT_CREATOR_MESSAGING,
   type SlurpCreatorMessaging,
   type SlurpMessageKind,
 } from "../../modules/messages/slp-messaging.js";
-import {
-  emptySlurpRapportFacts,
-  scoreSlurpRapport,
-  type SlurpRapport,
-  type SlurpRapportFacts,
-} from "../../modules/messages/slp-rapport.js";
-import { createSlurpReplyQueueStorage } from "./slp-reply-queue-storage.js";
-import { SLURP_COMMISSION_MAX_HAGGLE_ROUNDS, slurpCreatorHaggle } from "../../modules/economy/slp-creator-pricing.js";
-import { DAY, int, json, mapCommission, mapMessage, mapThread, now } from "./slp-messages-storage-helpers.js";
-import type {
-  SlurpCommission,
-  SlurpMessage,
-  SlurpSendResult,
-  SlurpThread,
-  SlurpThreadView,
-} from "./slp-messages-storage-types.js";
-import { createSlurpReplyMethods } from "./slp-reply-storage-methods.js";
+import { mapMessage, now } from "./slp-messages-storage-helpers.js";
+import type { SlurpMessage } from "./slp-messages-storage-types.js";
 import type { SlurpMessagesContext } from "./slp-messages-storage-context.js";
 
 export function createMessagesStorageConversation(context: SlurpMessagesContext) {
-  const {
-    db,
-    slurp,
-    settingsStore,
-    readMessagingBlob,
-    messagingDefaults,
-    messageUnlocks,
-    directMessageTips,
-    commissionOperations,
-    paymentIntentClaims,
-    slurpDatabases,
-    compensateSlurpPayment,
-    persistSlurpPaymentCreditedAmount,
-    createSlurpPaymentIntent,
-    resetSlurpPaymentIntentAfterInsufficientFunds,
-    markSlurpPaymentIntentCharged,
-    recoverChargingSlurpPayment,
-    completeSlurpPaymentIntent,
-    applySlurpTipEffects,
-    applyPaymentTieOnce,
-    hasCompletedSlurpPaymentOperation,
-    queueCommissionOperation,
-  } = context;
+  const { db, slurp } = context;
   return {
     /** Append one message and roll the thread's preview, unread counts, and cached rapport. */
     async appendMessage(
