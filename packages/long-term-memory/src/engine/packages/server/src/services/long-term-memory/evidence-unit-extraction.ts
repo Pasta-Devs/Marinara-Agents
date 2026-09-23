@@ -1437,9 +1437,14 @@ export function compileEvidenceUnitExtraction(options: {
   const duplicateAliasUnits = keptUnits.filter(
     (unit) => options.aliasChoices?.has(unit.id) && !dedupResult.deduplicated.includes(unit),
   );
-  const duplicateTitles = duplicateAliasUnits.length
+  const eligibleDuplicateAliasUnits = closeSourceEventGraph(
+    duplicateAliasUnits,
+    options.sourceNote,
+    options.existingNotes,
+  ).units;
+  const duplicateTitles = eligibleDuplicateAliasUnits.length
     ? compileLtmEvidenceUnits({
-        units: duplicateAliasUnits,
+        units: eligibleDuplicateAliasUnits,
         existingNotes: options.existingNotes,
         aliasChoices: options.aliasChoices,
         scope: options.scope,
@@ -1480,6 +1485,7 @@ export function compileEvidenceUnitExtraction(options: {
   const outcome = summarizeExtractionOutcome({
     totalCandidates,
     keptUnits: closed.units.length,
+    mutations: compiledResponse.mutations.length,
     droppedCandidates,
     droppedCandidateCount,
     deduplications: accounting.deduplications,
@@ -1578,6 +1584,7 @@ function summarizeExtractionOutcome(input: {
   droppedCandidateCount: number;
   deduplications: number;
   incomplete: boolean;
+  mutations: number;
 }): LtmExtractionOutcome {
   const droppedUnits = input.droppedCandidateCount;
   const state =
@@ -1585,7 +1592,9 @@ function summarizeExtractionOutcome(input: {
       ? droppedUnits > 0 || input.deduplications > 0
         ? "partial_success"
         : "success"
-      : "no_suggestions_created";
+      : input.mutations > 0
+        ? "success"
+        : "no_suggestions_created";
   return {
     state,
     incomplete: input.incomplete === true,

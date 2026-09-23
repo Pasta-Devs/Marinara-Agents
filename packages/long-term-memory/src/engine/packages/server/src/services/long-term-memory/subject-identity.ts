@@ -1609,13 +1609,13 @@ function sourceContainsWholeName(source: string | undefined, name: string) {
   const needle = name.toLowerCase();
   let offset = searchable.indexOf(needle);
   while (offset >= 0) {
-    const before = offset > 0 ? source[offset - 1]! : "";
+    const before = offset > 0 ? searchable[offset - 1]! : "";
     const afterIndex = offset + needle.length;
-    const after = source[afterIndex] ?? "";
+    const after = searchable[afterIndex] ?? "";
     const possessiveEnd =
       (after === "'" || after === "\u2019") &&
-      /s/i.test(source[afterIndex + 1] ?? "") &&
-      !SOURCE_BACKED_NAME_BOUNDARY_PATTERN.test(source[afterIndex + 2] ?? "");
+      /s/i.test(searchable[afterIndex + 1] ?? "") &&
+      !SOURCE_BACKED_NAME_BOUNDARY_PATTERN.test(searchable[afterIndex + 2] ?? "");
     if (
       (!before || !SOURCE_BACKED_NAME_BOUNDARY_PATTERN.test(before)) &&
       (!after || !SOURCE_BACKED_NAME_BOUNDARY_PATTERN.test(after) || possessiveEnd)

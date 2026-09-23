@@ -2,7 +2,7 @@
 
 ## 1.3.16 — 2026-09-23
 
-- Resolve trusted character and relationship identities from explicit keys and exact names; keep ambiguous aliases and fuzzy matches reviewable instead of assigning a subject without evidence.
+- Stop automatically binding short names and fuzzy spelling variants to characters; keep those matches reviewable instead of assigning a subject without evidence. A reviewed subject-bound alias choice can rename the existing canonical character note to the chosen alias.
 
 ## 1.3.15 — 2026-09-23
 

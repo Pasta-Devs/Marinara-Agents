@@ -670,6 +670,7 @@ async function main() {
         {
           ...existingResolution.units[0]!,
           text: duplicateSource.sections.source.text,
+          claimKind: "static" as const,
           sourceHash: sourceHashForLtmSourceNote(duplicateSource),
         },
       ],
@@ -689,6 +690,7 @@ async function main() {
     ["set_title"],
     "deduplicated facts must retain the identity choice without rewriting the fact",
   );
+  assert.equal(duplicateResult.outcome.state, "success", "alias-only mutations are suggestions");
   assert.equal(
     compileEvidenceUnitExtraction({
       unitResponse: { summary: "Invalid source hash", units: [existingResolution.units[0]!] },
@@ -785,6 +787,22 @@ async function main() {
     lowercaseResolution.units.length,
     1,
     "source-visible lowercase names can create scoped local identities",
+  );
+  const mixedCase = unit({
+    bucket: "character_fact",
+    subjectId: "elara",
+    subjectNames: ["Elara"],
+    text: "Elara waits.",
+  });
+  assert.equal(
+    prepareLtmSubjectIdentityContext({
+      units: [mixedCase],
+      catalog: { entries: [], notes: [] },
+      scope,
+      sourceBackedNpcSourceText: "ELARA waits.",
+    }).resolve({ units: [mixedCase], existingNotes: [] }).units.length,
+    1,
+    "case-insensitive name matches use consistent boundary offsets",
   );
   const unicodeLocal = unit({
     bucket: "character_fact",
