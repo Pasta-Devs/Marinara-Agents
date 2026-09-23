@@ -1,5 +1,10 @@
 # Long-Term Memory changelog
 
+## 1.3.14 — 2026-09-23
+
+- Keep current-chat source destinations exclusive to that chat, including chats in a group. Explicit persona, character, and group destinations remain shared across their matching chats.
+- Fork new chat-only evidence instead of adding it to a previously broader memory.
+
 ## 1.3.13 — 2026-09-22
 
 - Stop imported source notes from forking short, first-name, and full-name variants of one character into separate local memories, and keep a roster character's full name from being dropped as ambiguous when its variants appear in the source.

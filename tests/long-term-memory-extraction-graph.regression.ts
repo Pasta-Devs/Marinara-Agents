@@ -779,6 +779,34 @@ async function main() {
     true,
   );
   assert.notEqual(scopedVariantNoteId("world_legacy_scope", legacyScope), legacyNoteId);
+  const chatOnlyDestination = { chatId: "chat-a", chatIds: ["chat-a"] };
+  const narrowerResolution = await resolveScopedEvidenceUnitTargets({
+    units: [
+      unit(chat, {
+        bucket: "world_fact",
+        subjectId: "legacy_scope_fact",
+        sectionKey: "facts",
+        text: "Only chat A may see this new evidence.",
+        links: [{ target: chat.id, relation: "extracted_from" }],
+      }),
+    ],
+    existingNotes: [{ ...legacyNote, id: "world_legacy_scope_fact" }],
+    storage: {
+      getNotesByIds: async () =>
+        new Map([["world_legacy_scope_fact", { ...legacyNote, id: "world_legacy_scope_fact" }]]),
+    },
+    scope: chatOnlyDestination,
+  });
+  assert.equal(
+    narrowerResolution.remaps.has("world_legacy_scope_fact"),
+    true,
+    "chat-only evidence forks instead of updating a persona-visible memory",
+  );
+  assert.equal(
+    narrowerResolution.existingNotes.some((note) => note.id === "world_legacy_scope_fact"),
+    false,
+  );
+  assert.notEqual(narrowerResolution.units[0]?.subjectId, "legacy_scope_fact");
   const destinationScopeVariants = [
     { groupIds: ["group-a"], chatIds: ["chat-a"] },
     { groupIds: ["group-a"], chatIds: ["chat-b"] },

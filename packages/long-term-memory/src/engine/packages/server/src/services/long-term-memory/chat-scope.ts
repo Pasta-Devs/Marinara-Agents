@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import type { LtmMode, LtmScope, LtmSubject } from "../../../../shared/src/features/agents/long-term-memory/schema.js";
 import {
+  chatOnlyLtmScope,
   ltmModeForChatMode as sharedLtmModeForChatMode,
   withMergedLtmScopeLinks,
 } from "../../../../shared/src/features/agents/long-term-memory/scope.js";
@@ -65,11 +66,7 @@ export function resolveChatLtmScope(chat: {
 }
 
 export function resolveChatLtmWriteScope(chat: { id: string; groupId?: string | null }) {
-  return {
-    chatId: chat.id,
-    chatIds: [chat.id],
-    ...(chat.groupId ? { groupId: chat.groupId, groupIds: [chat.groupId] } : {}),
-  } satisfies LtmScope;
+  return chatOnlyLtmScope(chat.id);
 }
 
 export function ltmScopeFamilyId(scope: Pick<LtmScope, "chatId" | "chatIds" | "groupId" | "groupIds">) {

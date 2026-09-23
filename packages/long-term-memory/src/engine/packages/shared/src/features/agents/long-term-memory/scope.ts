@@ -9,6 +9,10 @@ export type LtmScopeMatcherInput = {
   includeGlobal?: boolean;
 };
 
+export function chatOnlyLtmScope(chatId: string): LtmScope {
+  return { chatId, chatIds: [chatId] };
+}
+
 export function getLtmScopeChatIds(scope: Pick<LtmScope, "chatId" | "chatIds"> | null | undefined): string[] {
   return uniqueStrings([scope?.chatId, ...(scope?.chatIds ?? [])]);
 }
