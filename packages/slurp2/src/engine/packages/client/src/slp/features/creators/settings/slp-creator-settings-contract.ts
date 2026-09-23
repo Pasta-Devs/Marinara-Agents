@@ -25,6 +25,7 @@ export type SlpCreatorSettingsSectionProps = {
   onViewProfile?: (creator: SlpCreatorSettingsCreator) => void;
   /** Reports unsaved profile edits to the modal dismissal guard. */
   onDirtyChange?: (dirty: boolean) => void;
+  onSaveStateChange?: (state: { isPending: boolean; dirty: boolean; save: () => void; discard: () => void }) => void;
   mode?: "automation" | "content-rules" | "collaborations";
   /** True while this section is the visible tab. Sections gate their queries on it. */
   active: boolean;

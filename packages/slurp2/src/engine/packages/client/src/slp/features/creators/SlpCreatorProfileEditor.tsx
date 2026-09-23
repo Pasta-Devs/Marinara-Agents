@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import type {
@@ -28,10 +28,12 @@ export function SlurpCreatorProfileEditor({
   creator,
   onRedraft,
   onDirtyChange,
+  onSaveStateChange,
 }: {
   creator: SlpCreatorManagedStageProfile;
   onRedraft?: () => void;
   onDirtyChange?: (dirty: boolean) => void;
+  onSaveStateChange?: (state: { isPending: boolean; dirty: boolean; save: () => void; discard: () => void }) => void;
 }) {
   const { t } = useTranslation();
   const updateProfile = useUpdateCreatorStageProfile();
@@ -54,13 +56,12 @@ export function SlurpCreatorProfileEditor({
     [creator],
   );
   const [draft, setDraft] = useState<SlurpStageProfileInput>(initialDraft);
-
-  useEffect(() => {
-    onDirtyChange?.(JSON.stringify(draft) !== JSON.stringify(initialDraft));
-  }, [draft, initialDraft, onDirtyChange]);
-
-  const avatarFailed = (error: unknown) =>
-    toast.error(errorMessage(error, t("ui.noodle.stageprofileform.couldNotUpdateAvatar")));
+  const saveStateRef = useRef<{ isPending: boolean; dirty: boolean; save: () => void; discard: () => void }>({
+    isPending: false,
+    dirty: false,
+    save: () => {},
+    discard: () => {},
+  });
 
   const save = async () => {
     const input = { ...draft, handle: draft.handle.replace(/^@+/u, "") };
@@ -83,6 +84,31 @@ export function SlurpCreatorProfileEditor({
       },
     );
   };
+
+  useEffect(() => {
+    onDirtyChange?.(JSON.stringify(draft) !== JSON.stringify(initialDraft));
+  }, [draft, initialDraft, onDirtyChange]);
+
+  saveStateRef.current = {
+    isPending: updateProfile.isPending,
+    dirty: JSON.stringify(draft) !== JSON.stringify(initialDraft),
+    save: () => void save(),
+    discard: () => {
+      setDraft(initialDraft);
+      onDirtyChange?.(false);
+    },
+  };
+
+  useEffect(() => {
+    onSaveStateChange?.({
+      isPending: updateProfile.isPending,
+      save: () => saveStateRef.current.save(),
+      discard: () => saveStateRef.current.discard(),
+    });
+  }, [onSaveStateChange, updateProfile.isPending]);
+
+  const avatarFailed = (error: unknown) =>
+    toast.error(errorMessage(error, t("ui.noodle.stageprofileform.couldNotUpdateAvatar")));
 
   return (
     <StageProfileForm
@@ -118,6 +144,7 @@ export function SlurpCreatorProfileEditor({
         onDirtyChange?.(false);
       }}
       onSave={() => void save()}
+      showFooter={false}
     />
   );
 }

@@ -1,4 +1,4 @@
-import { ChevronDown, Loader2, RefreshCw, X } from "lucide-react";
+import { Check, ChevronDown, Loader2, RefreshCw, X } from "lucide-react";
 import { useEffect, useRef, useState, type CSSProperties, type KeyboardEvent } from "react";
 import { useTranslation } from "react-i18next";
 import { showConfirmDialog } from "../../../../lib/app-dialogs";
@@ -40,6 +40,13 @@ export function SlpCreatorSettingsModal({
   const creator = accountsQuery.data?.find((entry) => entry.id === creatorId) ?? null;
   const panelRef = useRef<HTMLDivElement>(null);
   const dirtyRef = useRef(false);
+  const [profileDirty, setProfileDirty] = useState(false);
+  const [profileSaveState, setProfileSaveState] = useState<{
+    isPending: boolean;
+    dirty: boolean;
+    save: () => void;
+    discard: () => void;
+  } | null>(null);
   const [sectionPickerOpen, setSectionPickerOpen] = useState(false);
   const sectionPickerRef = useRef<HTMLDivElement>(null);
   const sectionPickerTriggerRef = useRef<HTMLButtonElement>(null);
@@ -87,6 +94,10 @@ export function SlpCreatorSettingsModal({
   // The tab rail scrolls independently of the section, so a long section never strands the tabs.
   useEffect(() => {
     panelRef.current?.scrollTo({ top: 0 });
+  }, [tab]);
+
+  useEffect(() => {
+    if (tab !== "identity") setProfileSaveState(null);
   }, [tab]);
 
   useEffect(() => {
@@ -191,8 +202,8 @@ export function SlpCreatorSettingsModal({
           {t("ui.slurp.settings.loading", { defaultValue: "Loading…" })}
         </div>
       ) : (
-        <div className="flex min-h-0 flex-col gap-4 sm:flex-row">
-          <div className="flex min-w-0 shrink-0 flex-col gap-3 sm:w-52">
+        <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-hidden sm:flex-row">
+          <div className="flex min-w-0 shrink-0 flex-col gap-3 sm:w-52 sm:overflow-y-auto sm:overscroll-contain">
             <div className="flex min-w-0 items-center gap-3">
               <Avatar account={creator} size="sm" />
               <div className="min-w-0 flex-1">
@@ -360,7 +371,7 @@ export function SlpCreatorSettingsModal({
             role="tabpanel"
             aria-labelledby={`slp-creator-settings-tab-${activeSection?.id}`}
             tabIndex={-1}
-            className="min-w-0 flex-1 sm:max-h-[65vh] sm:overflow-y-auto sm:border-s sm:border-[var(--slurp-outline)] sm:ps-4"
+            className="min-h-0 min-w-0 flex-1 overflow-y-auto overscroll-contain sm:border-s sm:border-[var(--slurp-outline)] sm:ps-4"
           >
             {sections.map((section) => {
               if (section.id !== "identity" && section.id !== activeSection?.id) return null;
@@ -372,7 +383,23 @@ export function SlpCreatorSettingsModal({
                     creator={creator}
                     active={section.id === activeSection?.id}
                     onClose={requestClose}
-                    onDirtyChange={section.id === "identity" ? (dirty) => (dirtyRef.current = dirty) : undefined}
+                    onDirtyChange={
+                      section.id === "identity"
+                        ? (dirty) => {
+                            dirtyRef.current = dirty;
+                            setProfileDirty(dirty);
+                          }
+                        : undefined
+                    }
+                    onSaveStateChange={
+                      section.id === "identity"
+                        ? (state) => {
+                            setProfileSaveState(state);
+                            dirtyRef.current = state.dirty;
+                            setProfileDirty(state.dirty);
+                          }
+                        : undefined
+                    }
                     onRedraft={
                       onRedraft
                         ? (entry) => {
@@ -386,6 +413,33 @@ export function SlpCreatorSettingsModal({
               );
             })}
           </div>
+          {tab === "identity" && profileSaveState && (
+            <div className="fixed inset-x-0 bottom-0 z-20 flex items-center justify-end gap-2 border-t border-[var(--slurp-outline)] bg-[var(--slurp-surface)] px-4 pb-[calc(0.75rem+env(safe-area-inset-bottom))] pt-3 sm:static sm:shrink-0 sm:bg-[var(--slurp-surface)] sm:px-0 sm:pb-0 sm:pt-3 sm:ps-56">
+              <button
+                type="button"
+                disabled={profileSaveState.isPending}
+                onClick={profileSaveState.discard}
+                className={quietButton}
+              >
+                {t("ui.slurp.creatorForm.cancel", { defaultValue: "Discard" })}
+              </button>
+              <button
+                type="button"
+                disabled={profileSaveState.isPending || !profileDirty}
+                onClick={profileSaveState.save}
+                className="inline-flex min-h-11 items-center gap-2 rounded-lg bg-[var(--noodle-accent)] px-4 text-sm font-bold text-zinc-950 disabled:opacity-50"
+              >
+                {profileSaveState.isPending ? (
+                  <Loader2 size={15} className="animate-spin motion-reduce:animate-none" aria-hidden="true" />
+                ) : (
+                  <Check size={15} aria-hidden="true" />
+                )}
+                {profileSaveState.isPending
+                  ? t("ui.noodle.stageprofileform.saving")
+                  : t("ui.noodle.stageprofileform.saveChanges")}
+              </button>
+            </div>
+          )}
         </div>
       )}
     </Modal>

@@ -392,6 +392,8 @@
   "ui.slurp.settings.creators.tabs.appearance": "Erscheinungsbild",
   "ui.slurp.settings.creators.tabs.overview": "Übersicht",
   "ui.slurp.settings.creators.tabs.audienceActivity": "Publikumsaktivität",
+  "ui.slurp.settings.creators.sectionsTitle": "Creator-Bereiche",
+  "ui.slurp.settings.creators.currentSection": "Aktuell",
   "ui.slurp.settings.creators.overviewHeading": "Creator-Übersicht",
   "ui.slurp.settings.creators.overviewDetail": "Status und Schnellzugriffe für diesen Creator.",
   "ui.slurp.settings.creators.overviewStatus": "Status",

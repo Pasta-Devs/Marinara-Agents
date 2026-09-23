@@ -27,12 +27,17 @@ assert.match(modal, /accountsQuery\.refetch\(\)/u, "Creator load failures must o
 assert.match(modal, /sections\.map\(\(section\) =>/u, "all sections stay mounted across tab changes");
 assert.match(modal, /hidden=\{section\.id !== activeSection\?\.id\}/u, "inactive sections stay out of view");
 assert.match(modal, /dirtyRef\.current &&[\s\S]*showConfirmDialog/u, "modal exit confirms dirty profile edits");
-assert.match(modal, /onDirtyChange=\{section\.id === "identity"/u, "Identity reports dirty state to the modal");
+assert.match(modal, /onSaveStateChange=[\s\S]*state\.dirty/u, "Identity reports dirty and save state to the modal");
 assert.match(modal, /aria-haspopup="dialog"/u, "mobile section picker has an announced trigger");
 assert.match(modal, /role="dialog"[\s\S]*aria-modal="true"/u, "mobile section picker is a modal dialog");
 assert.match(modal, /setSectionPickerOpen\(false\)[\s\S]*sectionPickerTriggerRef\.current\?\.focus\(\)/u);
 assert.match(modal, /className="hidden gap-1 sm:flex sm:flex-col"/u, "desktop keeps the vertical section list");
 assert.match(modal, /className=\{`inline-flex min-h-11 w-full items-center justify-between[\s\S]*sm:hidden/u);
+assert.match(modal, /className="min-h-0 min-w-0 flex-1 overflow-y-auto overscroll-contain/u);
+assert.match(modal, /profileSaveState &&[\s\S]*profileSaveState\.save/u, "modal owns the profile save footer");
+assert.match(modal, /profileSaveState\.discard/u, "modal footer can discard the profile draft");
+assert.match(editor, /showFooter=\{false\}/u, "nested profile footer is hidden in the modal");
+assert.match(editor, /onSaveStateChange\?\.\(/u, "profile editor reports save state to the modal");
 assert.match(editor, /onDirtyChange\?\.\(JSON\.stringify\(draft\) !== JSON\.stringify\(initialDraft\)\)/u);
 assert.match(editor, /onDirtyChange\?\.\(false\)/u, "save and discard clear the dirty state");
 assert.match(sections, /group: "creator" \| "publishing" \| "interaction" \| "memory" \| "tools" \| "danger"/u);

@@ -398,6 +398,8 @@
   "ui.slurp.settings.creators.tabs.appearance": "Wygląd",
   "ui.slurp.settings.creators.tabs.overview": "Przegląd",
   "ui.slurp.settings.creators.tabs.audienceActivity": "Aktywność odbiorców",
+  "ui.slurp.settings.creators.sectionsTitle": "Sekcje twórcy",
+  "ui.slurp.settings.creators.currentSection": "Bieżąca",
   "ui.slurp.settings.creators.overviewHeading": "Przegląd twórcy",
   "ui.slurp.settings.creators.overviewDetail": "Stan i skróty dla tego twórcy.",
   "ui.slurp.settings.creators.overviewStatus": "Stan",

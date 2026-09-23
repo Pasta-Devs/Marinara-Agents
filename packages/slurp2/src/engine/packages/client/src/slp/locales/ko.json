@@ -1235,6 +1235,8 @@
   "ui.slurp.settings.creators.tabs.appearance": "외모",
   "ui.slurp.settings.creators.tabs.overview": "개요",
   "ui.slurp.settings.creators.tabs.audienceActivity": "청중 활동",
+  "ui.slurp.settings.creators.sectionsTitle": "크리에이터 설정",
+  "ui.slurp.settings.creators.currentSection": "현재",
   "ui.slurp.settings.creators.overviewHeading": "크리에이터 개요",
   "ui.slurp.settings.creators.overviewDetail": "이 크리에이터의 상태와 바로 가기입니다.",
   "ui.slurp.settings.creators.overviewStatus": "상태",

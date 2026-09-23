@@ -3231,6 +3231,8 @@
   "ui.slurp.settings.creators.tabs.appearance": "Appearance",
   "ui.slurp.settings.creators.tabs.overview": "Overview",
   "ui.slurp.settings.creators.tabs.audienceActivity": "Audience activity",
+  "ui.slurp.settings.creators.sectionsTitle": "Creator sections",
+  "ui.slurp.settings.creators.currentSection": "Current",
   "ui.slurp.settings.creators.overviewHeading": "Creator overview",
   "ui.slurp.settings.creators.overviewDetail": "Status and shortcuts for this Creator.",
   "ui.slurp.settings.creators.overviewStatus": "Status",
