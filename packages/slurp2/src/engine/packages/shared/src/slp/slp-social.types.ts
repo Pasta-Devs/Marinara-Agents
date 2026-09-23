@@ -84,6 +84,21 @@ export interface SlpCreatorStageFacts {
   locations?: string;
 }
 
+export type SlpAppearanceProfileMode = "ask" | "high_confidence" | "always";
+
+export type SlpAppearanceProfileStatus = "accepted" | "needs_review";
+
+export interface SlpAppearanceProfile {
+  text: string;
+  source: "source_appearance" | "description" | "avatar" | "mixed";
+  sourceEntityId: string;
+  sourceRevisionToken: string;
+  confidence: "high" | "medium" | "low";
+  status: SlpAppearanceProfileStatus;
+  generatedAt: string;
+  acceptedAt: string | null;
+}
+
 export interface SlpAccountSocialSettings {
   followingAccountIds?: string[];
   followingAccountTimestamps?: Record<string, string>;
@@ -171,6 +186,8 @@ export interface SlpAccountSettings {
   privacy: SlpAccountPrivacySettings;
   /** See `SlpCreatorStageFacts`. Absent on a Creator nobody has filled in yet. */
   stage?: SlpCreatorStageFacts;
+  /** Cached, provider-neutral appearance text derived from source evidence. */
+  appearanceProfile?: SlpAppearanceProfile;
   wallet: SlpWalletSettings;
 }
 
