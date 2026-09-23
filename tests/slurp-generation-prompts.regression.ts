@@ -37,11 +37,11 @@ assert.match(generation, /imageGenerationPrompt: string;/u);
 assert.match(generation, /imageGenerationPrompt: settings\.imageGenerationPrompt,/u);
 assert.match(
   generation,
-  /Apply these image directions when writing imagePrompt\. They are instructions to you, not text to copy into imagePrompt/u,
+  /Apply these image directions when writing \$\{input\.allowScenePlan \? "the scene" : "imagePrompt"\}\. They are instructions to you, not text to copy/u,
 );
 assert.match(
   generation,
-  /input\.allowImagePrompt && input\.imageGenerationPrompt\.trim\(\)/u,
+  /\(input\.allowImagePrompt \|\| input\.allowScenePlan\) && input\.imageGenerationPrompt\.trim\(\)/u,
   "image guidance must only be added when image generation is active",
 );
 assert.equal(

@@ -74,6 +74,7 @@ export function SlpShell({
   onOpenStudio,
   onGeneratePosts,
   onRunAudience,
+  audiencePending,
   onCompose,
   notificationCount = 0,
   hasOperatedCreator = false,
@@ -569,6 +570,7 @@ export function SlpShell({
           onOpenSettings={onOpenSettings}
           onGeneratePosts={onGeneratePosts}
           onRunAudience={onRunAudience}
+          audiencePending={audiencePending}
           accounts={sortedPersonaAccounts}
         />
 

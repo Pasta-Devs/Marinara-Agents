@@ -71,7 +71,7 @@ const read = (path: string) => slurp2Source(join(root, path));
 
 const generation = read("services/slurp/slurp-generation.service.ts");
 // The model could not see what it had already depicted, so it reinvented the same picture.
-assert.match(generation, /post\.imagePrompt \? .*showed:.* : line/u);
+assert.match(generation, /showed \? `\$\{line\}\\n  \(showed: /u);
 // "Do not reuse their exact wording" is satisfied by eight captions about one desk.
 assert.match(generation, /Do not repeat a recent post's setting, activity, framing, or wardrobe/u);
 assert.match(

@@ -342,6 +342,24 @@
     "slurp2": {
       "versions": [
         {
+          "version": "0.2.28",
+          "date": "2026-09-23",
+          "notes": "- Creator settings now have a status overview and a mobile section picker.\n- Profile edits use the modal's shared save bar, and each Creator settings view has one scroll area.",
+          "highlight": false
+        },
+        {
+          "version": "0.2.27",
+          "date": "2026-09-23",
+          "notes": "- Creator settings now keep profile drafts when you change sections and confirm before discarding them.\n- Creator settings are grouped by task, and the Creator roster shows attention reasons and bulk-change previews.",
+          "highlight": false
+        },
+        {
+          "version": "0.2.26",
+          "date": "2026-09-23",
+          "notes": "- Image prompts preserve each Creator's appearance and follow the selected image guidance.\n- Choose an image style for each Creator, or let them use the global style.\n- Settings sections now use the shorter names Content and World.\n- Posts, messages, audience activity, story events, and image generation use clearer state and feedback handling.\n- Locked posts use each Creator's configured level, and occasions and story events reach posts and chats.\n- Owned posts are not sold again, audience activity reports results, and manual occasions can be started.\n- Callback posts preserve their shoot context, picture sets vary poses, and follow-ups handle reasoning models.",
+          "highlight": false
+        },
+        {
           "version": "0.2.25",
           "date": "2026-09-22",
           "notes": "- Every generated picture keeps the Creator's appearance, planned action, expression, and mood even when image-prompt interpretation is unavailable.\n- Creator personality and stage voice now shape visual presentation without being copied as private prompt text.",
@@ -441,24 +459,6 @@
           "version": "0.2.9",
           "date": "2026-09-21",
           "notes": "- Post image prompts now use a typed visual brief and preserve the planned scene through image interpretation.\n- Deleted posts now leave a sparkling restore slot for 60 seconds before permanent cleanup.",
-          "highlight": false
-        },
-        {
-          "version": "0.2.8",
-          "date": "2026-09-21",
-          "notes": "- Feed loading has a softer status animation, older drops show a progress state, and deleted posts leave the timeline with a short gentle exit.",
-          "highlight": false
-        },
-        {
-          "version": "0.2.7",
-          "date": "2026-09-21",
-          "notes": "- The feed loads its first page first, older posts load on demand, and post edits and deletes update the visible feed without a full reload.",
-          "highlight": false
-        },
-        {
-          "version": "0.2.6",
-          "date": "2026-09-21",
-          "notes": "- Creator posts now use the Engine's live Capability API generation integrations for text providers, image generation, fallback handling, and staged media writes.",
           "highlight": false
         }
       ]

@@ -16,7 +16,15 @@ const settingKeys = [...hooks.slice(settingsStart, settingsEnd).matchAll(/^\s{2}
   (match) => match[1],
 );
 
-assert.deepEqual(SLP_BACKSTAGE_SECTIONS, ["overview", "creators", "world", "automation", "prompts", "maintenance"]);
+assert.deepEqual(SLP_BACKSTAGE_SECTIONS, [
+  "overview",
+  "creators",
+  "world",
+  "content",
+  "automation",
+  "prompts",
+  "maintenance",
+]);
 assert.deepEqual(
   Object.keys(SLP_BACKSTAGE_SETTING_PLACEMENT).sort(),
   settingKeys.sort(),

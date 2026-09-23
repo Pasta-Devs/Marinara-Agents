@@ -1,4 +1,5 @@
 import { createSlpPoll, readSlpPollFromMetadata } from "../../../../../shared/src/slp/slp-polls.js";
+import { slpIsAdmissionFailure } from "../../base/host/slp-admission.js";
 import { type SlpGeneratedRefresh } from "../../../../../shared/src/slp/slp-social-generation.schema.js";
 import { type SlpAccount, type SlpInteractionType } from "../../../../../shared/src/slp/slp-social.types.js";
 import type { DB } from "../../../db/connection.js";
@@ -12,10 +13,7 @@ import { createSlurpStorage } from "../../data/slp-storage.js";
 import { type SlurpSettings } from "../../modules/settings/slp-settings.js";
 import { createPromptOverridesStorage } from "../../../services/storage/prompt-overrides.storage.js";
 import { canCreateGeneratedSlpInteraction } from "../../modules/feed/slp-interaction-policy.js";
-import {
-  isConnectionAdmissionFailure,
-  type ConnectionAdmissionMode,
-} from "../../../services/generation/connection-admission.js";
+import { type ConnectionAdmissionMode } from "../../../services/generation/connection-admission.js";
 import { normalizeSlpHandle } from "../../base/identity/slp-handle.js";
 import { normalizeSlpImagePrompt } from "../../base/media/slp-image-prompt.js";
 import { canGenerateSlpActivityForAccountKind } from "../../modules/prompting/slp-prompt.js";
@@ -147,7 +145,7 @@ export async function prepareGeneratedSlpMedia(input: {
       } catch (err) {
         // A busy image connection means this background run should yield and retry, not brand
         // the post with a permanent image failure it never actually suffered.
-        if (isConnectionAdmissionFailure(err)) throw err;
+        if (slpIsAdmissionFailure(err)) throw err;
         logger.warn(err, "[slurp] Failed to generate image for %s", account.displayName);
         prepared.imagePrompt = null;
         prepared.metadata.imageGenerationFailed = true;

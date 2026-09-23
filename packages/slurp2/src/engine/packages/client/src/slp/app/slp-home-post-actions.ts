@@ -1,5 +1,4 @@
-import { useEffect, useState } from "react";
-import { useQueryClient } from "@tanstack/react-query";
+import { useState } from "react";
 import { toast } from "sonner";
 import type { SlpPollInput } from "../../../../shared/src/slp/slp-social-generation.schema.js";
 import type { SlpAccount, SlpInteraction } from "../../../../shared/src/slp/slp-social.types.js";
@@ -17,10 +16,7 @@ import type {
   useDeleteCreatorPost,
   useReplaceCreatorPostImage,
   useUpdateCreatorPost,
-  useRestoreCreatorPost,
 } from "../features/feed/slp-feed-post-hooks";
-import { slpKeys } from "../base/state/slp-query-keys";
-import type { SlpCreatorViewerScope } from "../../../../shared/src/slp/slp-social.types";
 
 /**
  * Everything the viewer does to a post or a comment: react, vote, reply, edit, delete.
@@ -29,9 +25,6 @@ import type { SlpCreatorViewerScope } from "../../../../shared/src/slp/slp-socia
  * holds; they arrive as dependencies instead of being called again here, because calling a
  * mutation hook twice would give the host and this hook two separate mutation states.
  */
-/** A post inside its undo window: when the window closes, and the card the slot is drawn from. */
-export type SlpDeletedPostEntry = { expiresAt: number; card: SlpPostCardModel };
-
 export function useSlurpHomePostActions({
   localizeUi,
   viewerPersonaId,
@@ -45,7 +38,6 @@ export function useSlurpHomePostActions({
   replacePostImage,
   updatePost,
   deletePost,
-  restorePost,
 }: {
   localizeUi: (key: string, options?: Record<string, unknown>) => string;
   viewerPersonaId: string | null;
@@ -59,45 +51,7 @@ export function useSlurpHomePostActions({
   replacePostImage: ReturnType<typeof useReplaceCreatorPostImage>;
   updatePost: ReturnType<typeof useUpdateCreatorPost>;
   deletePost: ReturnType<typeof useDeleteCreatorPost>;
-  restorePost: ReturnType<typeof useRestoreCreatorPost>;
 }) {
-  const queryClient = useQueryClient();
-  const [deletingPostIds, setDeletingPostIds] = useState<Set<string>>(() => new Set());
-  // The card is kept beside the deadline, not just the id: the feed refetches on a timer and the
-  // server stops returning a deleted post, so the row that carries Restore has to be redrawable
-  // from here once the feed has forgotten it.
-  const [deletedPostIds, setDeletedPostIds] = useState<Map<string, SlpDeletedPostEntry>>(() => new Map());
-  const [restoringPostIds, setRestoringPostIds] = useState<Set<string>>(() => new Set());
-  useEffect(() => {
-    const timers = [...deletedPostIds.entries()]
-      .filter(([postId]) => !restoringPostIds.has(postId))
-      .map(([postId, entry]) =>
-        window.setTimeout(
-          () => {
-            queryClient.setQueriesData<SlpCreatorViewerScope | undefined>(
-              { queryKey: slpKeys.slpCreatorViewers() },
-              (current) =>
-                current
-                  ? {
-                      ...current,
-                      creators: current.creators.map((creator) => ({
-                        ...creator,
-                        posts: creator.posts.filter((post) => post.id !== postId),
-                      })),
-                    }
-                  : current,
-            );
-            setDeletedPostIds((current) => {
-              const next = new Map(current);
-              next.delete(postId);
-              return next;
-            });
-          },
-          Math.max(0, entry.expiresAt - Date.now()),
-        ),
-      );
-    return () => timers.forEach((timer) => window.clearTimeout(timer));
-  }, [deletedPostIds, restoringPostIds, queryClient]);
   const reactToPost = (post: SlpPostCardModel, type: "like", active = false) => {
     if (!viewerPersonaId) return;
     const onError = (error: unknown) =>
@@ -221,60 +175,11 @@ export function useSlurpHomePostActions({
       tone: "destructive",
     });
     if (!confirmed) return;
-    setDeletingPostIds((current) => new Set(current).add(post.id));
     deletePost.mutate(
       { id: post.id, accountId: post.authorAccountId },
       {
-        onError: (error) => {
-          setDeletingPostIds((current) => {
-            const next = new Set(current);
-            next.delete(post.id);
-            return next;
-          });
-          toast.error(errorMessage(error, localizeUi("ui.noodle.noodlerhome.couldNotDeleteThisPost")));
-        },
-        onSuccess: () => {
-          setDeletingPostIds((current) => {
-            const next = new Set(current);
-            next.delete(post.id);
-            return next;
-          });
-          setDeletedPostIds((current) => new Map(current).set(post.id, { expiresAt: Date.now() + 60_000, card: post }));
-        },
-      },
-    );
-  };
-  const restoreNoodlePost = (post: SlpPostCardModel) => {
-    if (restoringPostIds.has(post.id)) return;
-    setRestoringPostIds((current) => new Set(current).add(post.id));
-    restorePost.mutate(
-      { id: post.id, accountId: post.authorAccountId },
-      {
-        onError: (error) => {
-          setRestoringPostIds((current) => {
-            const next = new Set(current);
-            next.delete(post.id);
-            return next;
-          });
-          toast.error(
-            errorMessage(
-              error,
-              localizeUi("ui.slurp.feed.restoreFailed", { defaultValue: "Could not restore this post." }),
-            ),
-          );
-        },
-        onSuccess: () => {
-          setRestoringPostIds((current) => {
-            const next = new Set(current);
-            next.delete(post.id);
-            return next;
-          });
-          setDeletedPostIds((current) => {
-            const next = new Map(current);
-            next.delete(post.id);
-            return next;
-          });
-        },
+        onError: (error) =>
+          toast.error(errorMessage(error, localizeUi("ui.noodle.noodlerhome.couldNotDeleteThisPost"))),
       },
     );
   };
@@ -330,10 +235,6 @@ export function useSlurpHomePostActions({
     submitReply,
     savePost,
     deleteNoodlePost,
-    deletingPostIds,
-    restoreNoodlePost,
-    deletedPostIds,
-    restoringPostIds,
     editingReplyId,
     editingReplyContent,
     setEditingReplyContent,

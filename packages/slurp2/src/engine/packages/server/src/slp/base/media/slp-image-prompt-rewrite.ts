@@ -8,6 +8,7 @@ import { loadPrompt, NOODLE_IMAGE_INTERPRET } from "../../../services/prompt-ove
 import { composeSlurpPromptBlocks, type SlurpPromptBlockOverrides } from "../prompting/slp-prompt-blocks.js";
 import type { SlurpVisualBrief } from "./slp-visual-brief.js";
 import { slurpVisualBriefPolicyText, slurpVisualBriefText } from "./slp-visual-brief.js";
+import { resolveSlurpTextConnection } from "../identity/slp-connection.js";
 
 const MAX_REWRITTEN_PROMPT_LENGTH = 12_000;
 const MAX_INSTRUCTIONS_LENGTH = 5_000;
@@ -43,6 +44,12 @@ export async function rewriteSlpImagePrompt(input: {
   characterContext?: string;
   styleGuidance?: string;
   promptBlocks?: SlurpPromptBlockOverrides;
+  /**
+   * Slurp's own generation connection. Without it the rewrite ran on the Engine's agent default,
+   * which could be a reasoning model that spent the whole token budget thinking and returned
+   * nothing — every picture fell back, while the connection the player chose for Slurp sat unused.
+   */
+  connectionId?: string | null;
 }): Promise<string | null> {
   const instructions = input.instructions?.trim().replace(/\s+/g, " ").slice(0, MAX_INSTRUCTIONS_LENGTH) || "";
   const prompt = input.prompt.trim().slice(0, MAX_REWRITTEN_PROMPT_LENGTH);
@@ -61,7 +68,7 @@ export async function rewriteSlpImagePrompt(input: {
     const interpretationInstruction =
       input.interpretationInstruction?.trim() ||
       (await loadPrompt(createPromptOverridesStorage(input.db), NOODLE_IMAGE_INTERPRET, {}));
-    const textConnection = (await connections.getDefaultForAgents()) ?? (await connections.getFallbackForAgents());
+    const textConnection = await resolveSlurpTextConnection(connections, input.connectionId);
     if (!textConnection) return null;
 
     const runtime = await resolveIllustratorPromptRuntime({
@@ -134,15 +141,22 @@ export async function rewriteSlpImagePrompt(input: {
       ],
       {
         model: runtime.model,
-        ...(runtime.suppressModelParameters ? {} : { temperature: 0.3, maxTokens: 2_048 }),
+        // Headroom for reasoning connections: 2048 was spent entirely on thinking, with no answer.
+        ...(runtime.suppressModelParameters ? {} : { temperature: 0.3, maxTokens: 4_096 }),
         suppressModelParameters: runtime.suppressModelParameters,
         enableCaching: runtime.enableCaching,
         anthropicExtendedCacheTtl: runtime.anthropicExtendedCacheTtl,
       },
     );
     const parsed = parseRecord(result.content);
-    const rewritten =
-      typeof parsed.prompt === "string" ? parsed.prompt.trim().slice(0, MAX_REWRITTEN_PROMPT_LENGTH) : "";
+    // The default interpretation instruction says "return only the prompt", so a model that obeys it
+    // answers in plain text. That is a usable prompt, not a failure.
+    const plain = typeof result.content === "string" && !result.content.includes("{") ? result.content.trim() : "";
+    const rewritten = (typeof parsed.prompt === "string" ? parsed.prompt.trim() : plain).slice(
+      0,
+      MAX_REWRITTEN_PROMPT_LENGTH,
+    );
+    if (!rewritten) logger.warn("[slurp] Image prompt rewrite returned no prompt (empty or truncated answer)");
     return rewritten || null;
   } catch (error) {
     logger.warn(error, "[slurp] Image prompt instruction rewrite failed; using the original prompt");

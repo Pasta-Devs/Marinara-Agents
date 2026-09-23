@@ -215,10 +215,9 @@ export function isFollowUpDue(followUp: ScheduledFollowUp, now: Date = new Date(
  * Generate a follow-up message prompt context.
  */
 export function formatFollowUpContext(followUp: ScheduledFollowUp): string {
-  const timeAgo = Math.round((Date.now() - new Date(followUp.scheduledAt).getTime()) / 60_000);
-  const timing = timeAgo > 2 ? `about ${timeAgo} minutes ago` : "just now";
-
-  let context = `You scheduled a ${followUp.type} ${timing}. Reason: ${followUp.reason}.`;
+  // `scheduledAt` is when it came due, not when it was promised, so no "minutes ago" is stated:
+  // the old count told the model a false fact.
+  let context = `You promised a ${followUp.type} earlier and it is due now. Reason: ${followUp.reason}.`;
 
   if (followUp.sequenceNumber && followUp.totalInSequence) {
     context += ` This is update ${followUp.sequenceNumber} of ${followUp.totalInSequence}.`;

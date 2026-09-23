@@ -1,4 +1,4 @@
-import { isConnectionAdmissionFailure } from "../../../services/generation/connection-admission.js";
+import { slpIsAdmissionFailure } from "../../base/host/slp-admission.js";
 
 /**
  * A post whose image failed still publishes — the text is the post — so the picture is retried on
@@ -18,6 +18,17 @@ export function slpCreatorPostImageRetryAttempts(metadata: Record<string, unknow
   return Number.isFinite(attempts) && attempts > 0 ? attempts : 0;
 }
 
+/**
+ * A rejected key or permission will fail the same way on every retry. A 401 was retried up to six
+ * times per post; these errors now stop the attempt and spend the post's whole retry budget.
+ */
+export function slpImageAuthFailure(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error ?? "");
+  return /\((?:401|403)\)|\b(?:401|403)\b.*(?:unauthori[sz]ed|forbidden|api key)|invalid[_ ]api[_ ]key|invalid session/iu.test(
+    message,
+  );
+}
+
 export const SLP_IMAGE_GENERATION_MAX_ATTEMPTS = 2;
 export const SLP_IMAGE_GENERATION_RETRY_DELAY_MS = 500;
 
@@ -33,8 +44,12 @@ export async function generateSlpImageWithRetry<T>(
     } catch (error) {
       // A busy connection is not a transient provider fault: retrying cannot admit us any
       // sooner, and the caller needs the rejection now so the run defers instead of degrading.
-      if (isConnectionAdmissionFailure(error)) throw error;
+      if (slpIsAdmissionFailure(error)) throw error;
       lastError = error;
+      if (slpImageAuthFailure(error)) {
+        await onAttemptFailure?.(error, attempt, attempt);
+        throw error;
+      }
       await onAttemptFailure?.(error, attempt, SLP_IMAGE_GENERATION_MAX_ATTEMPTS);
       if (attempt < SLP_IMAGE_GENERATION_MAX_ATTEMPTS) {
         await new Promise((resolve) => setTimeout(resolve, SLP_IMAGE_GENERATION_RETRY_DELAY_MS * attempt));

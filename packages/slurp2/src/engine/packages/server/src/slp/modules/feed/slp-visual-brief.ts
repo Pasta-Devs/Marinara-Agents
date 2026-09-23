@@ -26,18 +26,15 @@ export function slurpVisualBriefFromSituation(input: {
 }): SlurpVisualBrief {
   const place = input.shoot?.place ?? input.scene?.setting?.trim() ?? input.variation.place;
   const company = input.shoot?.company ?? input.variation.company;
-  const action = input.shoot?.brief
-    ? "continuing the same shoot with the same clothing and light"
-    : input.scene?.action?.trim() || input.variation.moment;
+  // A callback still has this post's own action; only place, clothes, and light come from the shoot.
+  const action = input.scene?.action?.trim() || input.variation.moment;
   const intent = input.axes?.intent;
   return {
     subject: "the Creator",
     action,
     setting: place,
     company,
-    clothing: input.shoot?.brief
-      ? null
-      : input.clothing?.trim() || "the Creator's established clothing for this moment",
+    clothing: input.shoot?.brief ? null : input.clothing?.trim() || null,
     camera: input.cameraInstruction,
     mood:
       [input.scene?.expression, input.scene?.visualDirection, input.effortInstruction].filter(Boolean).join("; ") ||

@@ -54,6 +54,44 @@ export function stripAppearanceLabel(value: string): string {
     .trim();
 }
 
+/**
+ * The body and face from a character card's appearance, without its clothes.
+ *
+ * Card appearance paragraphs describe a wardrobe too — "favours pastel dresses … for cosplay she
+ * wears a costume and carries a prop". Sent with every picture, the image model drew all of it,
+ * often as a second person in the costume. Clothing now comes from the post's own scene, so the
+ * sentences about clothes are dropped here. A Creator's own Stage appearance is trusted as written.
+ * ponytail: a keyword filter over sentences. If cards need finer handling, generate a look once
+ * per Creator with a language model and store it as Stage appearance.
+ */
+const CLOTHING_SENTENCE =
+  /\b(?:wear|wears|wearing|worn|dress|dresses|dressed|outfits?|cloth(?:es|ing)|fashion|favou?rs|cosplay|costumes?|accessor(?:y|ies)|carries|carrying|shoes|boots|jewel(?:ry|lery))\b/iu;
+const MAX_LOOK_LENGTH = 600;
+
+export function slurpImageLook(appearance: string): string {
+  const text = stripAppearanceLabel(appearance).replace(/\s+/gu, " ").trim();
+  if (!text) return "";
+  const kept = text
+    .split(/(?<=[.!?])\s+/u)
+    .filter((sentence) => !CLOTHING_SENTENCE.test(sentence))
+    .join(" ");
+  const look = kept || text;
+  return look.length <= MAX_LOOK_LENGTH ? look : `${look.slice(0, look.lastIndexOf(" ", MAX_LOOK_LENGTH))}`;
+}
+
+/** Keep identity in the provider request even when review or rewrite replaces the draft. */
+export function ensureSlpImageAppearance(prompt: string, appearance: string): string {
+  const look = slurpImageLook(appearance);
+  if (!look) return prompt;
+  const normalized = (value: string) => value.toLocaleLowerCase().replace(/\s+/gu, " ").trim();
+  return normalized(prompt).includes(normalized(look)) ? prompt : `${look}\n${prompt}`;
+}
+
+/** Old post drafts were rule prose for a language model. They describe no picture and must not be reused. */
+export function slurpIsLegacyImageBrief(value: string | null | undefined): boolean {
+  return /^One photograph this person took/u.test(value?.trim() ?? "");
+}
+
 /** Select only the visual prompt that can be sent to an image provider. */
 export function selectSlpImageProviderPrompt(input: {
   rewrittenPrompt: string | null | undefined;

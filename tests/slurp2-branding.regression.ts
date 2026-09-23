@@ -24,7 +24,6 @@ const allowedStrings = new Set([
   "`${input.account.displayName} Noodle image`",
   // Noodle-timeline prompt text, still owned by the open timeline surface.
   '"No recent Noodle posts."',
-  '"Noodle only accepts confirmed adult accounts and personas. Every participant on Noodle is 18+; minors are not allowed on the platform. NSFW content is allowed, anything goes, and adult in-character drama, flirtation, gossip, and explicit references may appear when they fit the accounts involved."',
   // Storage keys and legacy comparison values.
   '"noodle.noodler-image-connections"',
 ]);

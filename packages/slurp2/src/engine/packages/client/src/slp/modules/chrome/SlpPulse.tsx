@@ -7,10 +7,11 @@ import type { SlpAccount } from "../../../../../shared/src/slp/slp-social.types.
 import { Avatar } from "../../base/chrome/SlpChrome";
 import { api } from "../../../lib/api-client.js";
 import { cn } from "../../../lib/utils";
+import { sortSlpPulseScheduled } from "./slp-pulse-order";
 
 export function SlpPulseCard({ open, onOpen }: { open: boolean; onOpen: () => void }) {
   const { t } = useUiTranslation();
-  const serverTasks = useSlpPulseTasks();
+  const serverTasks = useSlpPulseTasks(false);
   const activeCount = serverTasks.data?.tasks.filter((task) => isActiveTask(task.status)).length ?? 0;
   return (
     <button
@@ -60,6 +61,7 @@ export function SlpPulsePanel({
   onClose,
   onGeneratePosts,
   onRunAudience,
+  audiencePending = false,
   accounts = [],
 }: {
   open: boolean;
@@ -68,21 +70,23 @@ export function SlpPulsePanel({
   onClose: () => void;
   onGeneratePosts?: () => void;
   onRunAudience?: () => void;
+  audiencePending?: boolean;
   accounts?: SlpAccount[];
 }) {
   const { t } = useUiTranslation();
   const mutations = usePulseMutations();
-  const serverTasks = useSlpPulseTasks();
+  const serverTasks = useSlpPulseTasks(open);
   const tasks = mergePulseTasks(serverTasks.data?.tasks ?? [], mutations);
   const groups = groupPulseTasks(tasks);
+  const queueSummary = pulseQueueSummary(tasks, t);
   const taskAccounts = [...accounts, ...(serverTasks.data?.accounts ?? [])].filter(
     (account, index, all) => all.findIndex((candidate) => candidate.id === account.id) === index,
   );
   if (!open) return null;
 
-  const runAction = (action: (() => void) | undefined) => {
+  const runAction = (action: (() => void) | undefined, close = true) => {
     action?.();
-    if (action) onClose();
+    if (action && close) onClose();
   };
 
   return (
@@ -116,7 +120,7 @@ export function SlpPulsePanel({
               </h2>
             </div>
             <p className="mt-1 text-[0.68rem] text-[var(--muted-foreground)]">
-              {t("ui.slurp.pulse.description", { defaultValue: "Background activity" })}
+              {queueSummary || t("ui.slurp.pulse.description", { defaultValue: "Background activity" })}
             </p>
           </div>
           <button
@@ -146,8 +150,13 @@ export function SlpPulsePanel({
               />
               <PulseAction
                 icon={<Settings2 size={17} aria-hidden="true" />}
-                label={t("ui.slurp.pulse.runAudience", { defaultValue: "Run audience" })}
-                onClick={() => runAction(onRunAudience)}
+                label={
+                  audiencePending
+                    ? t("ui.slurp.pulse.runningAudience", { defaultValue: "Running audience" })
+                    : t("ui.slurp.pulse.runAudience", { defaultValue: "Run audience" })
+                }
+                onClick={() => runAction(onRunAudience, false)}
+                disabled={audiencePending}
               />
             </div>
           </section>
@@ -285,12 +294,13 @@ type PulseTasksResponse = {
   accounts: PulseAccount[];
 };
 
-function useSlpPulseTasks() {
+function useSlpPulseTasks(active = false) {
   return useQuery({
     queryKey: ["slurp", "pulse", "tasks"],
     queryFn: () => api.get<PulseTasksResponse>("/slurp2/slurp/tasks"),
-    refetchInterval: 30_000,
-    refetchIntervalInBackground: true,
+    refetchInterval: active ? 2_000 : 15_000,
+    refetchIntervalInBackground: false,
+    refetchOnWindowFocus: true,
   });
 }
 
@@ -318,13 +328,13 @@ function mergePulseTasks(
 ) {
   const server = serverTasks.map((task) => ({ ...task, source: "server" as const }));
   const client = [...mutations.active, ...mutations.recent].map((mutation) => {
-    const accountId = readAccountId(mutation.variables);
+    const accountIds = readAccountIds(mutation.variables);
     return {
       id: `client:${mutation.id}`,
       kind: mutation.key,
       status: mutation.status,
       updatedAt: new Date(mutation.submittedAt).toISOString(),
-      accountIds: accountId ? [accountId] : [],
+      accountIds,
       detail: null,
       progress: null,
       source: "client" as const,
@@ -336,7 +346,7 @@ function mergePulseTasks(
   );
   return {
     active: combined.filter((task) => isActiveTask(task.status)),
-    scheduled: combined.filter((task) => task.status === "scheduled"),
+    scheduled: sortSlpPulseScheduled(combined.filter((task) => task.status === "scheduled")),
     recent: combined.filter((task) => isTerminalTask(task.status)),
   };
 }
@@ -363,15 +373,46 @@ function groupPulseTasks(tasks: { active: PulseTask[]; scheduled: PulseTask[]; r
     grouped.set(id, current);
   };
   [...tasks.active, ...tasks.scheduled, ...tasks.recent].forEach(add);
-  const values = [...grouped.values()].sort(
-    (left, right) => Date.parse(right.tasks[0]?.updatedAt ?? "") - Date.parse(left.tasks[0]?.updatedAt ?? ""),
-  );
+  const values = [...grouped.values()].sort((left, right) => {
+    if (left.scheduled && right.scheduled) {
+      const nextPublish = Date.parse(left.tasks[0]?.publishAt ?? "") - Date.parse(right.tasks[0]?.publishAt ?? "");
+      if (Number.isFinite(nextPublish) && nextPublish !== 0) return nextPublish;
+    }
+    return Date.parse(right.tasks[0]?.updatedAt ?? "") - Date.parse(left.tasks[0]?.updatedAt ?? "");
+  });
   return {
     active: values.filter((group) => group.active && !group.attention),
     attention: values.filter((group) => group.attention),
-    scheduled: values.filter((group) => group.scheduled && !group.active && !group.attention),
+    scheduled: values
+      .filter((group) => group.scheduled && !group.active && !group.attention)
+      .sort((left, right) => {
+        const leftAt = Date.parse(left.tasks[0]?.publishAt ?? "");
+        const rightAt = Date.parse(right.tasks[0]?.publishAt ?? "");
+        if (Number.isFinite(leftAt) && Number.isFinite(rightAt) && leftAt !== rightAt) return leftAt - rightAt;
+        if (Number.isFinite(leftAt) !== Number.isFinite(rightAt)) return Number.isFinite(leftAt) ? -1 : 1;
+        return left.id.localeCompare(right.id);
+      }),
     recent: values.filter((group) => !group.active && !group.attention && !group.scheduled),
   };
+}
+
+function pulseQueueSummary(
+  tasks: { active: PulseTask[]; scheduled: PulseTask[]; recent: PulseTask[] },
+  t: (key: string, options?: Record<string, unknown>) => string,
+) {
+  const queued = tasks.active.filter((task) => ["queued", "prepared"].includes(task.status)).length;
+  const working = tasks.active.length - queued;
+  const scheduled = tasks.scheduled.length;
+  const recent = tasks.recent.length;
+  if (working === 0 && queued === 0 && scheduled === 0) return "";
+  return [
+    working > 0 ? t("ui.slurp.pulse.queueWorking", { defaultValue: "{{count}} working", count: working }) : "",
+    queued > 0 ? t("ui.slurp.pulse.queueQueued", { defaultValue: "{{count}} queued", count: queued }) : "",
+    scheduled > 0 ? t("ui.slurp.pulse.queueScheduled", { defaultValue: "{{count}} scheduled", count: scheduled }) : "",
+    recent > 0 ? t("ui.slurp.pulse.queueRecent", { defaultValue: "{{count}} recent", count: recent }) : "",
+  ]
+    .filter(Boolean)
+    .join(" · ");
 }
 
 function isActiveTask(status: string) {
@@ -505,6 +546,7 @@ function PulseGroupCard({
   attention?: boolean;
 }) {
   const [expanded, setExpanded] = useState(false);
+  const [showAllTasks, setShowAllTasks] = useState(false);
   const latest = group.tasks[0];
   const label = pulseGroupLabel(group.kind, t);
   const scope =
@@ -514,8 +556,17 @@ function PulseGroupCard({
         ? t("ui.slurp.pulse.taskCount", { defaultValue: "{{count}} items", count: group.tasks.length })
         : undefined;
   const running = group.active && !attention;
+  const names = group.accountIds
+    .map((id) => accounts.find((account) => account.id === id || account.entityId === id)?.displayName)
+    .filter((name): name is string => Boolean(name));
+  const nameSummary = names.length > 0 ? names.slice(0, 3).join(", ") + (names.length > 3 ? " …" : "") : null;
   return (
-    <div className="space-y-1">
+    <motion.div
+      className="space-y-1"
+      initial={{ opacity: 0, x: group.tasks[0]?.source === "client" ? 24 : 0 }}
+      animate={{ opacity: 1, x: 0 }}
+      transition={{ duration: 0.28, ease: "easeOut" }}
+    >
       <div
         className={cn(
           "relative rounded-xl ring-1 ring-inset",
@@ -526,7 +577,10 @@ function PulseGroupCard({
       >
         <button
           type="button"
-          onClick={() => setExpanded((value) => !value)}
+          onClick={() => {
+            if (expanded) setShowAllTasks(false);
+            setExpanded(!expanded);
+          }}
           aria-expanded={expanded}
           className="relative z-10 flex min-h-16 w-full items-center gap-3 rounded-xl px-3 py-2.5 text-start focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--noodle-accent)]"
         >
@@ -542,8 +596,11 @@ function PulseGroupCard({
           <span className="min-w-0 flex-1">
             <span className="block truncate text-sm font-semibold">{label}</span>
             <span className="block truncate text-xs text-[var(--muted-foreground)]">
-              {scope ?? taskSummary(group.tasks[0], t)}
+              {scope ?? nameSummary ?? taskSummary(group.tasks[0], t)}
             </span>
+            {nameSummary && scope && (
+              <span className="block truncate text-[0.68rem] text-[var(--muted-foreground)]">{nameSummary}</span>
+            )}
           </span>
           <span className="flex shrink-0 items-center gap-2 text-[0.68rem] font-semibold text-[var(--muted-foreground)]">
             {group.tasks.length > 1 && <span>{group.tasks.length}</span>}
@@ -567,7 +624,7 @@ function PulseGroupCard({
       )}
       {expanded && group.tasks.length > 1 && (
         <div className="relative z-10 space-y-2 px-2 pb-2 pt-2">
-          {group.tasks.slice(0, 6).map((task) => (
+          {(showAllTasks ? group.tasks : group.tasks.slice(0, 6)).map((task) => (
             <PulseTaskRow
               key={task.id}
               task={task}
@@ -578,11 +635,23 @@ function PulseGroupCard({
             />
           ))}
           {group.tasks.length > 6 && (
-            <p className="px-2 text-[0.68rem] text-[var(--muted-foreground)]">+{group.tasks.length - 6} more</p>
+            <button
+              type="button"
+              onClick={() => setShowAllTasks((value) => !value)}
+              aria-expanded={showAllTasks}
+              className="min-h-9 rounded-md px-2 text-start text-[0.68rem] font-semibold text-[var(--noodle-accent)] hover:bg-[var(--noodle-accent)]/8 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)]"
+            >
+              {showAllTasks
+                ? t("ui.slurp.pulse.showFewer", { defaultValue: "Show fewer" })
+                : t("ui.slurp.pulse.moreTasks", {
+                    defaultValue: "+{{count}} more",
+                    count: group.tasks.length - 6,
+                  })}
+            </button>
           )}
         </div>
       )}
-    </div>
+    </motion.div>
   );
 }
 
@@ -649,13 +718,16 @@ function formatPulseAge(value?: string) {
   return `${Math.floor(minutes / 60)}h`;
 }
 
-function readAccountId(variables: unknown): string | null {
-  if (!variables || typeof variables !== "object") return null;
+function readAccountIds(variables: unknown): string[] {
+  if (!variables || typeof variables !== "object") return [];
   const record = variables as Record<string, unknown>;
-  for (const key of ["accountId", "targetAccountId", "creatorAccountId"]) {
-    if (typeof record[key] === "string") return record[key];
+  if (Array.isArray(record.accountIds)) {
+    return record.accountIds.filter((id): id is string => typeof id === "string");
   }
-  return null;
+  for (const key of ["accountId", "targetAccountId", "creatorAccountId"]) {
+    if (typeof record[key] === "string") return [record[key]];
+  }
+  return [];
 }
 
 function pulseTaskLabel(key: string, t: (key: string, options?: Record<string, unknown>) => string) {
@@ -677,12 +749,23 @@ function pulseTaskLabel(key: string, t: (key: string, options?: Record<string, u
   return t(keyName, { defaultValue });
 }
 
-function PulseAction({ icon, label, onClick }: { icon: ReactNode; label: string; onClick: () => void }) {
+function PulseAction({
+  icon,
+  label,
+  onClick,
+  disabled = false,
+}: {
+  icon: ReactNode;
+  label: string;
+  onClick: () => void;
+  disabled?: boolean;
+}) {
   return (
     <button
       type="button"
       onClick={onClick}
-      className="flex min-h-14 items-center gap-2 rounded-xl bg-[var(--slurp-surface-raised)] px-3 text-start text-sm font-semibold ring-1 ring-inset ring-[var(--noodle-divider)] transition-[background-color,transform] hover:bg-[var(--accent)] active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)] motion-reduce:transition-none motion-reduce:active:scale-100"
+      disabled={disabled}
+      className="flex min-h-14 items-center gap-2 rounded-xl bg-[var(--slurp-surface-raised)] px-3 text-start text-sm font-semibold ring-1 ring-inset ring-[var(--noodle-divider)] transition-[background-color,transform] hover:bg-[var(--accent)] active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)] disabled:cursor-wait disabled:opacity-55 motion-reduce:transition-none motion-reduce:active:scale-100"
     >
       <span className="shrink-0 text-[var(--noodle-accent)]">{icon}</span>
       {label}

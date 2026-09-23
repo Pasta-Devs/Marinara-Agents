@@ -19,6 +19,7 @@ export type SlurpStageProfileInput = SlpStageProfileInput & {
   tags: string[];
 };
 export type SlurpManagedStageProfile = SlpCreatorManagedStageProfile & {
+  bannerUrl: string | null;
   gender: SlurpDiscoveryGender | null;
   tags: string[];
 };

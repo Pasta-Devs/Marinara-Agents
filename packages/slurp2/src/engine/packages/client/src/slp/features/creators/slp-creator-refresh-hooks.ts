@@ -12,18 +12,21 @@ export function useRefreshCreatorConversationSchedule() {
   // Toasts live here, not in mutate() callbacks: those are dropped if the caller unmounts first.
   return useMutation({
     mutationKey: ["slurp", "conversation-schedule"],
-    mutationFn: (accountId: string) =>
+    // `quiet` lets a batch show one summary instead of one toast per Creator.
+    mutationFn: (input: string | { accountId: string; quiet: true }) =>
       api.post<{ state: "active"; blocks: number }>(
-        `/slurp2/slurp/accounts/${encodeURIComponent(accountId)}/conversation-schedule/refresh`,
+        `/slurp2/slurp/accounts/${encodeURIComponent(typeof input === "string" ? input : input.accountId)}/conversation-schedule/refresh`,
       ),
-    onSuccess: () => {
-      toast.success(localizeUi("ui.slurp.settings.creators.scheduleRefreshed"));
+    onSuccess: (_result, input) => {
+      if (typeof input === "string") toast.success(localizeUi("ui.slurp.settings.creators.scheduleRefreshed"));
       return qc.invalidateQueries({ queryKey: slpKeys.noodlerAccounts() });
     },
-    onError: (error) =>
+    onError: (error, input) => {
+      if (typeof input !== "string") return;
       toast.error(
         error instanceof Error ? error.message : localizeUi("ui.slurp.settings.creators.scheduleRefreshFailed"),
-      ),
+      );
+    },
   });
 }
 export function useRefreshTargetedCreatorsNow(onRemaining?: (remaining: number) => void) {

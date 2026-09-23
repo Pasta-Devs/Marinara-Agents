@@ -462,7 +462,6 @@ function useSlurpHomeActions(state: SlurpHomeBaseState) {
   return {
     beginCreate,
     cancelCreateProfile,
-    beginEdit,
     closeProfileEditor,
     changeDisclosure,
     generateDraft,

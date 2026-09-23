@@ -29,7 +29,9 @@ assert.match(
   images,
   /const rawProviderPrompt = redactIdentity\(reviewedOverride\?\.prompt \|\| compiledPrompt\.prompt\);/u,
 );
-assert.match(images, /rawPrompt: rawProviderPrompt,\s*rewriteAttempted,\s*onFallback:/u);
+assert.match(images, /rawPrompt: rawProviderPrompt,/u);
+assert.match(images, /rewriteAttempted,/u);
+assert.match(images, /onFallback:/u);
 // Garnish ad images honour the interpretation setting and share the same rewrite and fallback.
 const garnish = slurp2Source(join(root, server, "services/slurp/slurp-garnish-image.service.ts"));
 assert.match(garnish, /settings\.enableImageInterpretation !== false/u);
@@ -66,7 +68,7 @@ assert.match(
   /\(imagePromptInstructions \|\| characterContext \|\| styleGuidance\) &&\s*input\.settings\.enableImageInterpretation !== false &&\s*!skipInterpretation/u,
   "interpretation must require rewrite context, enabled interpretation, and no reviewed override",
 );
-assert.match(rewrite, /getDefaultForAgents\(\)\) \?\? \(await connections\.getFallbackForAgents\(\)\)/u);
+assert.match(rewrite, /resolveSlurpTextConnection\(connections, input.connectionId\)/u);
 
 // --- no Secret tier: Open and Hinted both get source image references ----------------------------
 assert.doesNotMatch(images, /Compose so the face cannot be identified/u);

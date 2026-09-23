@@ -4,3 +4,4 @@ export type { SlpImagePromptReviewItem, StagedSlpPostMedia } from "./slp-public-
 export { findSlurpReuse, loadSlurpReuse } from "./slp-media-reuse-service.js";
 export type { SlurpReuseAvailability } from "./slp-media-reuse-service.js";
 export { generateSlurpSecondaryImages } from "./slp-multi-image-service.js";
+export { resolveImageAppearance } from "./slp-appearance-service.js";

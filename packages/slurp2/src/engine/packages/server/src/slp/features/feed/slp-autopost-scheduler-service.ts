@@ -1,4 +1,5 @@
 import type { FastifyInstance } from "fastify";
+import { slpIsAdmissionFailure } from "../../base/host/slp-admission.js";
 import { logger } from "../../../lib/logger.js";
 import { sweepStagedImages } from "../../../services/image/image-generation.js";
 import { createSlurpStorage } from "../../data/slp-storage.js";
@@ -92,23 +93,28 @@ export function startSlpAutoPostScheduler(app: FastifyInstance, registerStop?: (
         // when automatic posting is off, so this runs before the idle check returns.
         const artwork = await tryBackfillNextCreatorArtwork(app.db);
         if (artwork !== "idle" && artwork !== "unavailable")
-          logger.info("[noodle-autopost] Filled in a creator %s", artwork);
+          logger.info("[slurp-autopost] Filled in a creator %s", artwork);
         // A post whose picture failed published without it. Draw one of them per pass, so the
         // post gets its image back without a separate scheduler.
         const redrawn = await createCreatorSlpImagesService(app.db).retryNextFailedPostImage();
-        if (redrawn === "retried") logger.info("[noodle-autopost] Redrew a missing post image");
+        if (redrawn === "retried") logger.info("[slurp-autopost] Redrew a missing post image");
         const imageWorkFailed = artwork === "unavailable" || redrawn === "failed";
         imageWorkFailures = imageWorkFailed ? imageWorkFailures + 1 : 0;
         imageWorkNotBefore = imageWorkFailed ? Date.now() + slurpPollBackoffMs(POLL_MS, imageWorkFailures) : 0;
       }
       if (slpCreatorReservePollIsIdle(settings) && !(await noodle.hasNoodlerPreparedPosts())) return;
       const outcome = await runCreatorAutoPostPoll(app.db);
-      if (outcome.published > 0) logger.info("[noodle-autopost] Published %d due Slurp post(s)", outcome.published);
-      if (outcome.reserve === "prepared") logger.info("[noodle-autopost] Prepared one Slurp post");
-      if (outcome.reserve === "scheduled") logger.info("[noodle-autopost] Scheduled one on-demand Slurp post");
+      if (outcome.published > 0) logger.info("[slurp-autopost] Published %d due Slurp post(s)", outcome.published);
+      if (outcome.reserve === "prepared") logger.info("[slurp-autopost] Prepared one Slurp post");
+      if (outcome.reserve === "scheduled") logger.info("[slurp-autopost] Scheduled one on-demand Slurp post");
     } catch (error) {
-      failed = true;
-      logger.error(error, "[noodle-autopost] Reserve poll failed");
+      // A busy connection is the user working, not a failure: no error log and no backoff.
+      if (slpIsAdmissionFailure(error)) {
+        logger.debug("[slurp-autopost] Connection busy; the reserve poll waits for the next tick");
+      } else {
+        failed = true;
+        logger.error(error, "[slurp-autopost] Reserve poll failed");
+      }
     } finally {
       consecutiveFailures = failed ? consecutiveFailures + 1 : 0;
       schedule();
@@ -128,10 +134,10 @@ export function startSlpAutoPostScheduler(app: FastifyInstance, registerStop?: (
   running = (async () => {
     // Images staged by a process that was killed mid-preparation are referenced by nothing.
     const swept = sweepStagedImages();
-    if (swept > 0) logger.info("[noodle-autopost] Reclaimed %d staged image file(s)", swept);
+    if (swept > 0) logger.info("[slurp-autopost] Reclaimed %d staged image file(s)", swept);
     await createSlurpStorage(app.db).ensureNoodlerReserveState();
     await reconcileCreatorReserve(app.db);
-  })().catch((error) => logger.error(error, "[noodle-autopost] Startup reconciliation failed"));
+  })().catch((error) => logger.error(error, "[slurp-autopost] Startup reconciliation failed"));
   activePoll = running;
   schedule(INITIAL_DELAY_MS);
   app.addHook("onClose", async () => {
@@ -139,6 +145,6 @@ export function startSlpAutoPostScheduler(app: FastifyInstance, registerStop?: (
     if (timer) clearTimeout(timer);
     await running.catch(() => {});
   });
-  logger.info("[noodle-autopost] Private reserve scheduler started");
+  logger.info("[slurp-autopost] Private reserve scheduler started");
   return { stop };
 }

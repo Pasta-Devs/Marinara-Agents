@@ -24,6 +24,8 @@ export { BroadcastPanel };
 
 export const SLURP_REPLY_STATUS_FALLBACKS: Record<string, string> = {
   queued: "Your message is delivered. They reply when they next check their messages.",
+  budget:
+    "Your message is delivered. Slurp's AI budget is used up for now, so {{name}} answers once it resets. You can raise it under Audience → AI budget.",
   owed: "Your message is delivered. They have not answered yet.",
   cooling: "They stepped away from this conversation. Give them some time.",
   busy: "{{name}} is already writing back. Give it a moment.",

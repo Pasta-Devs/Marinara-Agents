@@ -27,7 +27,7 @@ export function startSlurpAutopurgeScheduler(app: FastifyInstance, registerStop?
     active = (async () => {
       const storage = createSlurpStorage(app.db);
       for (const postId of await storage.listExpiredDeletedNoodlerPostIds()) {
-        const post = await storage.getNoodlerPostById(postId);
+        const post = await storage.getNoodlerPostById(postId, true);
         const attachments = await listSlurpPostMedia(app.db, postId);
         await storage.deleteNoodlerPost(postId);
         unlinkCreatorMedia(post ? readCreatorMediaPath(post) : null);

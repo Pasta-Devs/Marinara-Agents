@@ -4,6 +4,8 @@ import { createSlurpMessagesStorage } from "../../data/slp-storage.js";
 import { createSlurpStorage } from "../../data/slp-storage.js";
 import { replyToSlurpMessage } from "../messages/slp-messages-contract.js";
 
+const PAYMENT_REACTION_QUIET_MS = 30 * 60_000;
+
 /** What the fan just paid for. The wording the Creator reacts to. */
 export type SlurpPaymentReactionKind = "tip" | "unlock" | "ppv" | "commission";
 
@@ -44,6 +46,17 @@ export async function reactToSlurpPayment(
       metadata: { paymentReaction: input.kind },
     });
     if (!event) return;
+    // One answer per spending spree. Every unlock used to trigger a full reply, so four of nine
+    // Creator messages in one thread were "you unlocked another one". The marker stays.
+    const recent = await messages.listMessages(thread.id, 20);
+    const since = Date.now() - PAYMENT_REACTION_QUIET_MS;
+    const reactedRecently = recent.some(
+      (message) =>
+        message.id !== event.id &&
+        Boolean(message.metadata?.paymentReaction) &&
+        Date.parse(String(message.createdAt)) >= since,
+    );
+    if (reactedRecently) return;
     await replyToSlurpMessage(db, { threadId: thread.id, triggerMessageId: event.id });
   } catch (error) {
     logger.warn(error, "[slurp-payment-reaction] Could not react to a %s payment", input.kind);

@@ -1,7 +1,8 @@
 import type { SlpAccountSettingsPatchInput } from "../../../../../shared/src/slp/slp-social-generation.schema.js";
-import type { SlpAccount } from "../../../../../shared/src/slp/slp-social.types.js";
+import type { SlpAccount, SlpCreatorManagedStageProfile } from "../../../../../shared/src/slp/slp-social.types.js";
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../../../lib/api-client.js";
+import { usePersonas } from "../../../hooks/use-creator-personas";
 import { slpKeys } from "../../base/state/slp-query-keys.js";
 import type { SlurpManagedStageProfile } from "../../base/state/slp-state-types.js";
 import type { SlurpCreatorBulkPatch, SlurpCreatorMetrics, SlurpScheduleStatus } from "./slp-creators-contract.js";
@@ -95,4 +96,15 @@ export function useUpdateCreatorStrategy() {
       } satisfies SlpAccountSettingsPatchInput),
     onSuccess: () => qc.invalidateQueries({ queryKey: slpKeys.noodlerAccounts() }),
   });
+}
+
+/**
+ * Whether this Creator is backed by an Engine persona — the viewer's own character rather than one
+ * Slurp runs. A persona-backed Creator posts only when its owner does, so automation controls are
+ * hidden for it rather than shown and ignored.
+ */
+export function useSlpPersonaBackedCreator(creator: Pick<SlpCreatorManagedStageProfile, "sourceAccountId"> | null) {
+  const personas = usePersonas();
+  if (!creator?.sourceAccountId) return false;
+  return (personas.data ?? []).some((persona) => persona.id === creator.sourceAccountId);
 }

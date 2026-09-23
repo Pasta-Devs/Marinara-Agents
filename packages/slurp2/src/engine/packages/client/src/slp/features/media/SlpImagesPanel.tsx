@@ -8,6 +8,7 @@ import type { SlurpSettings } from "../settings/slp-settings-contract";
 
 import type { SlpBackstagePageProps } from "../backstage/slp-backstage-contract";
 import { errorMessage } from "../../modules/settings/slp-backstage-format";
+import { useSlurpImageStyleProfiles } from "./slp-image-connection-hooks";
 
 /** Image generation: connections, sizes, context mode and what gets an image. */
 export function SlpImagesPanel(page: SlpBackstagePageProps) {
@@ -28,6 +29,7 @@ export function SlpImagesPanel(page: SlpBackstagePageProps) {
     imageDraft,
     setImageDraft,
   } = page;
+  const styleProfilesQuery = useSlurpImageStyleProfiles();
 
   return (
     <div className="space-y-4">
@@ -185,6 +187,25 @@ export function SlpImagesPanel(page: SlpBackstagePageProps) {
           </select>
         </Field>
       )}
+      <Field
+        settingKey="imageStyleProfileId"
+        label={t("ui.slurp.settings.images.styleProfile")}
+        detail={t("ui.slurp.settings.images.styleProfileDetail")}
+      >
+        <select
+          value={settings.imageStyleProfileId ?? ""}
+          disabled={styleProfilesQuery.isLoading || styleProfilesQuery.isError || updateSettings.isPending}
+          onChange={(event) => void update("imageStyleProfileId", event.target.value || null)}
+          className="min-h-11 w-full rounded-lg border border-[var(--slurp-outline)] bg-[var(--slurp-canvas)] px-3 text-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] disabled:opacity-50 sm:text-sm"
+        >
+          <option value="">{t("ui.slurp.settings.images.styleProfileDefault")}</option>
+          {(styleProfilesQuery.data ?? []).map((profile) => (
+            <option key={profile.id} value={profile.id}>
+              {profile.name}
+            </option>
+          ))}
+        </select>
+      </Field>
       <Toggle
         settingKey="allowGalleryImageAttachments"
         label={t("ui.slurp.settings.images.galleryFallback")}
@@ -341,6 +362,23 @@ export function SlpImagesPanel(page: SlpBackstagePageProps) {
           />
         </summary>
         <div className="space-y-5 border-t border-[var(--slurp-outline)] p-4 sm:p-5">
+          <Field
+            settingKey="appearanceProfileMode"
+            label={t("ui.slurp.appearance.mode")}
+            detail={t("ui.slurp.appearance.modeDetail")}
+          >
+            <select
+              value={settings.appearanceProfileMode}
+              onChange={(event) =>
+                void update("appearanceProfileMode", event.target.value as SlurpSettings["appearanceProfileMode"])
+              }
+              className="min-h-11 w-full rounded-lg bg-[var(--slurp-canvas)] px-3 text-sm ring-1 ring-inset ring-[var(--slurp-outline)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)]"
+            >
+              <option value="ask">{t("ui.slurp.appearance.mode.ask")}</option>
+              <option value="high_confidence">{t("ui.slurp.appearance.mode.highConfidence")}</option>
+              <option value="always">{t("ui.slurp.appearance.mode.always")}</option>
+            </select>
+          </Field>
           <div className="grid gap-3 sm:grid-cols-2">
             <Toggle
               settingKey="imageGenerationUseAvatarReferences"

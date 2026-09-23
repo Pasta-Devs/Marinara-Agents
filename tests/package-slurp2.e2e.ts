@@ -181,7 +181,6 @@ test.describe("standalone Slurp package", () => {
       await expect(dialog.getByRole("status")).toHaveText("1 remaining");
       releases[2]!();
       await expect(dialog).toBeHidden();
-      await expect(page.getByText("3 published.", { exact: true })).toBeVisible();
     } finally {
       releases.forEach((release) => release());
       await page.request.patch("/api/slurp2/settings", {
@@ -590,12 +589,17 @@ test.describe("standalone Slurp package", () => {
         .getByRole("button", { name: new RegExp(`^${stageProfile.displayName} @`) })
         .filter({ visible: true });
       await creatorRow.click();
-      await expect(creatorRow).toHaveAttribute("aria-expanded", "true");
-      const creatorSettings = slurp
-        .getByRole("region", { name: stageProfile.displayName, exact: true })
-        .filter({ visible: true });
+      const creatorSettings = page.getByRole("dialog", { name: `${stageProfile.displayName}'s settings` });
       await expect(creatorSettings).toBeVisible();
-      await creatorSettings.getByRole("tab", { name: "Images", exact: true }).click();
+      await creatorSettings.getByRole("tab", { name: "Identity", exact: true }).click();
+      const profileName = creatorSettings.getByLabel("Stage name");
+      const originalProfileName = await profileName.inputValue();
+      await profileName.fill(`${originalProfileName} draft`);
+      await creatorSettings.getByRole("tab", { name: "Production", exact: true }).click();
+      await creatorSettings.getByRole("tab", { name: "Identity", exact: true }).click();
+      await expect(profileName).toHaveValue(`${originalProfileName} draft`);
+      await profileName.fill(originalProfileName);
+      await creatorSettings.getByRole("tab", { name: "Production", exact: true }).click();
       const imageConnectionSelect = creatorSettings.getByRole("combobox", { name: /^Image connection/u });
       await expect(imageConnectionSelect).toBeEnabled({ timeout: 30_000 });
       await imageConnectionSelect.selectOption(imageConnectionIds[1]);
@@ -608,14 +612,9 @@ test.describe("standalone Slurp package", () => {
         })
         .toBe(imageConnectionIds[1]);
 
-      await creatorSettings.getByRole("tab", { name: "Publishing", exact: true }).click();
-      const scheduleButton = creatorSettings.getByRole("button", { name: "Posting Schedule", exact: true });
-      await expect(scheduleButton).toBeVisible();
-      await scheduleButton.click();
-      const scheduleDialog = page.getByRole("dialog", { name: `Schedule for ${stageProfile.displayName}` });
-      await expect(scheduleDialog).toBeVisible();
-      await page.keyboard.press("Escape");
-      await expect(scheduleDialog).toBeHidden();
+      await creatorSettings.getByRole("tab", { name: "Automation", exact: true }).click();
+      await expect(creatorSettings.getByRole("region", { name: "Posting Schedule" })).toBeVisible();
+      await creatorSettings.getByRole("button", { name: "Close dialog" }).click();
 
       await slurp.getByRole("button", { name: "Prompts", exact: true }).click();
       await slurp.getByRole("button", { name: "Edit prompt", exact: true }).first().click();

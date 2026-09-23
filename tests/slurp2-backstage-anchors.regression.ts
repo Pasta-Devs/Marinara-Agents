@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { join, dirname } from "node:path";
 
 import { slurp2Source } from "./slurp2-source";
@@ -8,6 +8,7 @@ import {
   type SlpBackstageTarget,
 } from "../packages/slurp2/src/engine/packages/client/src/slp/base/navigation/slp-backstage-target";
 import { SLP_BACKSTAGE_SETTING_PLACEMENT } from "../packages/slurp2/src/engine/packages/client/src/slp/features/backstage/slp-backstage-placement";
+import { SLP_CREATOR_SETTING_TAB } from "../packages/slurp2/src/engine/packages/client/src/slp/features/creators/settings/slp-creator-settings-contract";
 
 // Backstage is a thin host over one explicit panel registry. This proves the registry is complete,
 // unambiguous, statically inspectable, and that every searchable setting lands on a real anchor in
@@ -68,13 +69,37 @@ for (const entry of entries) {
 
 // --- every non-internal setting renders its anchor on its registered panel ---------------------
 
+// A Creator-scoped setting is not on a Backstage page at all: it lives in the Creator settings
+// modal, which the Creators page opens. Its anchor has to exist in one of that modal's sections,
+// and the modal has to be reachable from the page the placement names.
+const creatorSettingsDir = join(client, "slp/features/creators/settings");
+const creatorSettingsSource = readdirSync(creatorSettingsDir)
+  .filter((name) => /\.tsx?$/u.test(name))
+  .map((name) => readFileSync(join(creatorSettingsDir, name), "utf8"))
+  .join("\n");
 const missing = Object.entries(SLP_BACKSTAGE_SETTING_PLACEMENT)
-  .filter(
+  .filter(([key, placement]) => {
+    if (placement.internal) return false;
+    const host = placement.scope === "creator" ? creatorSettingsSource : read(panelFile.get(placement.target)!);
+    return !host.includes(`settingKey="${key}"`);
+  })
+  .map(
     ([key, placement]) =>
-      !placement.internal && !read(panelFile.get(placement.target)!).includes(`settingKey="${key}"`),
-  )
-  .map(([key, placement]) => `${key} -> ${panelFile.get(placement.target)}`);
+      `${key} -> ${placement.scope === "creator" ? "creator settings modal" : panelFile.get(placement.target)}`,
+  );
 assert.deepEqual(missing, [], "each non-internal setting has a SettingAnchor on its registered panel");
+
+// The modal is only a home for those settings if the page that owns them can open it, and if a
+// search result for one of them knows which tab to open.
+const creatorsPanel = read("slp/features/creators/SlpCreatorsPanel.tsx");
+assert.match(creatorsPanel, /openSlpCreatorSettings\(/u, "the Creators page opens the settings modal");
+for (const [key, placement] of Object.entries(SLP_BACKSTAGE_SETTING_PLACEMENT)) {
+  if (placement.internal || placement.scope !== "creator") continue;
+  assert.ok(
+    SLP_CREATOR_SETTING_TAB[key],
+    `${key} lives in the Creator settings modal, so it must name the tab a search result opens`,
+  );
+}
 
 // Internal settings stay host-only: they are runtime or setup state with no Backstage control, so
 // they are hidden from search and exempt from anchors. Keep that exemption honest and non-empty.
@@ -95,13 +120,13 @@ assert.match(shell, /\{Panel \? <Panel \{\.\.\.page\} \/> : null\}/u);
 assert.doesNotMatch(shell, /switch \(target\)/u, "the shell must not duplicate the registry with a switch");
 assert.equal(
   (shell.match(/\{\.\.\.page\} \/>/gu) ?? []).length,
-  4,
-  "the shell renders one registry panel plus its three overlays, and no hard-coded page list",
+  3,
+  "the shell renders one registry panel plus its two overlays, and no hard-coded page list",
 );
 
 // --- preserved negatives -------------------------------------------------------------------------
 
-// World and Automation stage edits through update()/updatePatch() so they reach Review and apply.
+// Settings controls stage edits through update()/updatePatch() so they reach Review and apply.
 // Library item editors use their own mutations and never call save(), so the allowlist is empty.
 const engine = join(import.meta.dirname, "../packages/slurp2/src/engine");
 const directSaveAllowlist: string[] = [];

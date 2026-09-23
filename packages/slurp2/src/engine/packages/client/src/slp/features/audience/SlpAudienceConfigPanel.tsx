@@ -131,10 +131,10 @@ export function SlurpAudienceConfigSettings({
                 {t("ui.slurp.settings.aiBudget.modes.off", { defaultValue: "Off — banks only" })}
               </option>
               <option value="present">
-                {t("ui.slurp.settings.aiBudget.modes.present", { defaultValue: "Only while Slurp is open" })}
+                {t("ui.slurp.settings.aiBudget.modes.present", { defaultValue: "Replies and activity you turned on" })}
               </option>
               <option value="background">
-                {t("ui.slurp.settings.aiBudget.modes.background", { defaultValue: "Also in the background" })}
+                {t("ui.slurp.settings.aiBudget.modes.background", { defaultValue: "Also background upkeep" })}
               </option>
             </select>
           </Field>

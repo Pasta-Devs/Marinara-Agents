@@ -231,6 +231,8 @@ function buildFanActivityMessages(input: {
           "Use only supplied creator IDs, actor handles, and post IDs. Never invent identifiers.",
           `Likes have null content. Replies are one short sentence, normally under ${prompts.replyMaxChars} characters, natural, relevant, and not repetitive.`,
           "Each post lists the comments already under it. Never repeat a point somebody has already made.",
+          // English comments under German posts read as a bot farm.
+          "Write each comment in the language of the post it is under, unless the actor's voice says otherwise.",
           'A creator may list what is "currentlyGoingOn" in their life. Regulars who know them may mention it now and then; most comments should still be about the post itself.',
           'To answer one of those comments instead of the post, set "parentInteractionId" to that comment\'s id. Leave it out to comment on the post itself. Some replies should answer other people; a comment section where nobody talks to anybody is a list, not a conversation.',
           "Each actor handle has a weight; prefer higher-weight actors more often, proportionally.",

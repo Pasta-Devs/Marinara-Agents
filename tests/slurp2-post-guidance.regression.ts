@@ -55,8 +55,8 @@ assert.match(
 );
 assert.match(
   SLURP_BUILT_IN_POST_GUIDANCE.locked,
-  /Premium does not have to mean sexual/u,
-  "premium value must not be reduced to sexual content",
+  /at the level this Creator offers/u,
+  "premium posts deliver the Creator's own level (maintainer decision 2026-09-23)",
 );
 assert.match(
   SLURP_BUILT_IN_POST_GUIDANCE.locked,

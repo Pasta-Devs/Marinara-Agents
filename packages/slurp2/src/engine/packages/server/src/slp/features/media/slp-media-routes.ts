@@ -165,6 +165,15 @@ export async function slpMediaRoutes(app: FastifyInstance, deps: SlpRouteDeps) {
       .object({
         kind: z.enum(["avatar", "banner"]),
         guidance: z.string().max(2000).optional(),
+        options: z
+          .object({
+            creatorDetails: z.boolean(),
+            appearance: z.boolean(),
+            sourceReferences: z.boolean(),
+            composition: z.boolean(),
+          })
+          .strict()
+          .optional(),
       })
       .safeParse(req.body ?? {});
     if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });

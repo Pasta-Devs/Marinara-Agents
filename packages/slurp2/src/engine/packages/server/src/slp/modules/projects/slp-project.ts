@@ -22,6 +22,7 @@
  */
 
 import { z } from "zod";
+import type { SlpArcBlueprint } from "../../../../../shared/src/slp/slp-story-engine.js";
 
 import { SLURP_MODIFIER_KINDS, type SlurpModifierKind } from "../creators/slp-creator-state.js";
 
@@ -314,25 +315,8 @@ export const SLURP_ARC_RANDOM_TWISTS = [
 
 export type SlurpArcOrigin = "manual" | "auto";
 
-/** One entry of the `arcLibrary` setting. A running arc copies it at start, so edits never reach running arcs. */
-export type SlurpArcType = {
-  id: string;
-  name: string;
-  description: string;
-  chapters: (SlurpArcTypeChapter & { choice?: SlurpArcChoice } & SlurpArcChapterReach)[];
-  revertProfileAtEnd?: boolean;
-  /** Only offered to Creators with one of these tags. Empty offers it to everyone. */
-  tags: string[];
-  tone: string;
-  /** Days an arc of this type runs when it has no chapters. */
-  durationDays: number;
-  /** Off: never picked automatically, still usable by hand. */
-  enabled: boolean;
-  /** Shipped entry; can be reset to its default. */
-  builtin: boolean;
-  /** A deleted built-in stays here hidden, so a reset can bring it back. */
-  hidden: boolean;
-};
+/** One portable arc blueprint. A running arc copies it at start, so later edits never reach it. */
+export type SlurpArcType = SlpArcBlueprint;
 export const SLURP_ARC_TONE_MAX_LENGTH = 80;
 export const SLURP_ARC_MAX_DURATION_DAYS = 365;
 

@@ -254,6 +254,8 @@ export function StageProfileForm({
   onCancel,
   onSave,
   onOpenRedraft,
+  showFooter = true,
+  showAvatarControls = true,
 }: {
   draft: SlurpStageProfileInput;
   source: { displayName: string; handle: string; avatarUrl?: string | null } | null;
@@ -281,6 +283,9 @@ export function StageProfileForm({
   onRemoveAvatar: () => void;
   onCancel: () => void;
   onSave: () => void;
+  showFooter?: boolean;
+  /** The Creator settings modal shows avatar actions beside the banner preview. */
+  showAvatarControls?: boolean;
   /** When set, the inline AI generator is replaced by a link into the redraft review. */
   onOpenRedraft?: () => void;
 }) {
@@ -449,7 +454,7 @@ export function StageProfileForm({
           </div>
         </div>
         <div className="mt-5 space-y-4">
-          {isEditing && avatar && (
+          {isEditing && avatar && showAvatarControls && (
             <div className="flex flex-col gap-4 rounded-lg border border-[var(--noodle-divider)] p-4 sm:flex-row sm:items-center">
               <div className="shrink-0">
                 <ProfileInitial profile={avatar} />
@@ -747,28 +752,30 @@ export function StageProfileForm({
           )}
         </div>
       </div>
-      <WizardFooter
-        step={2}
-        onBack={onCancel}
-        backLabel={localizeUi("ui.slurp.creatorForm.cancel")}
-        showProgress={!isEditing}
-        disabled={isPending || isGenerating}
-        finalAction={
-          <button
-            type="button"
-            onClick={onSave}
-            disabled={!canSave}
-            className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg bg-[var(--noodle-accent)] px-5 text-sm font-bold text-zinc-950 [&_svg]:!text-zinc-950 hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            {isPending ? <Loader2 size={16} className="animate-spin" /> : <Check size={16} />}
-            {isPending
-              ? localizeUi("ui.noodle.stageprofileform.saving")
-              : isEditing
-                ? localizeUi("ui.noodle.stageprofileform.saveChanges")
-                : localizeUi("ui.noodle.noodlehome.createStageProfile")}
-          </button>
-        }
-      />
+      {showFooter && (
+        <WizardFooter
+          step={2}
+          onBack={onCancel}
+          backLabel={localizeUi("ui.slurp.creatorForm.cancel")}
+          showProgress={!isEditing}
+          disabled={isPending || isGenerating}
+          finalAction={
+            <button
+              type="button"
+              onClick={onSave}
+              disabled={!canSave}
+              className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg bg-[var(--noodle-accent)] px-5 text-sm font-bold text-zinc-950 [&_svg]:!text-zinc-950 hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {isPending ? <Loader2 size={16} className="animate-spin" /> : <Check size={16} />}
+              {isPending
+                ? localizeUi("ui.noodle.stageprofileform.saving")
+                : isEditing
+                  ? localizeUi("ui.noodle.stageprofileform.saveChanges")
+                  : localizeUi("ui.noodle.noodlehome.createStageProfile")}
+            </button>
+          }
+        />
+      )}
     </div>
   );
 }

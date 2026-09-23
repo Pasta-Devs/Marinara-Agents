@@ -1,4 +1,5 @@
 import type { SlpAuthorSnapshot } from "../../../../../shared/src/slp/slp-social.types.js";
+import { slurpInfluenceMultiplier } from "../../../../../shared/src/slp/slp-platform-events.js";
 import type { DB } from "../../../db/connection.js";
 import { eq } from "../../../db/file-query.js";
 import { slpCreatorFanActivityState } from "../../../db/schema/slurp.js";
@@ -62,8 +63,16 @@ const FAN_RUN_NEWCOMERS = 2;
 const FAN_PLAN_RETENTION_DAYS = 7;
 const FAN_ACTIVITY_RECOVERY_MAX_AGE_MS = 15 * 60 * 1000;
 
-export function slpCreatorFanActivityRunLimit(settings: Pick<SlurpSettings, "fanActivityRunsPerDay" | "modelBudget">) {
-  return Math.min(settings.fanActivityRunsPerDay, settings.modelBudget.jobs.thread.maxPerDay);
+export function slpCreatorFanActivityRunLimit(
+  settings: Pick<SlurpSettings, "fanActivityRunsPerDay" | "modelBudget"> &
+    Partial<Pick<SlurpSettings, "platformEvents">>,
+  at = new Date(),
+) {
+  // Occasions may raise or lower audience activity ("audience.activity"); the budget cap still wins.
+  const boosted = Math.round(
+    settings.fanActivityRunsPerDay * slurpInfluenceMultiplier(settings.platformEvents ?? [], at, "audience.activity"),
+  );
+  return Math.min(boosted, settings.modelBudget.jobs.thread.maxPerDay);
 }
 
 export type SlpCreatorFanRunResult = {
@@ -347,7 +356,10 @@ export async function runCreatorFanActivity(input: {
         plan = claimSlpFanActivityRun(plan, run.id, at);
         run = plan.runs.find((candidate) => candidate.id === run!.id)!;
       }
-      const workerContext = input.mode === "manual" ? "present" : "background";
+      // Fan activity has its own on switch, and a scheduled run is what that switch asked for. Sent as
+      // "background", every run was refused under the default "present" budget mode — nothing
+      // detects presence — so automatic audience activity never ran. The daily caps still apply.
+      const workerContext = "present";
       if (
         !slurpModelWorkerAllows(settings.modelBudget, workerContext) ||
         !(await claimSlurpModelBudget(input.db, settings.modelBudget, "thread", at))
@@ -467,7 +479,8 @@ export async function getCreatorFanActivityStatus(db: DB, at = new Date()) {
     : null;
   return {
     localDate: plan?.localDate ?? localPlanDate(at),
-    usedRuns: automaticRuns.filter((run) => run.status !== "scheduled").length,
+    // Skipped runs spent nothing; counting them showed "5/6 used" on days when nothing ran.
+    usedRuns: automaticRuns.filter((run) => run.status !== "scheduled" && run.status !== "skipped").length,
     runLimit: slpCreatorFanActivityRunLimit(settings),
     lastRun,
   };

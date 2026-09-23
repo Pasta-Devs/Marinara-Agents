@@ -10,6 +10,7 @@
  * say "one more from yesterday" and have the picture actually match.
  */
 import type { SlurpCameraSource } from "./slp-camera-source.js";
+import { slurpIsLegacyImageBrief } from "../../base/media/slp-image-prompt.js";
 
 /**
  * Posts one shoot can produce, including the drop that opened it.
@@ -37,12 +38,16 @@ export function slurpShootInstruction(shoot: {
   company: string;
   cameraSource: SlurpCameraSource;
   shotsUsed: number;
+  /** Place, clothes, and light of the shoot, from `slurpShootContinuity`. */
+  brief?: string | null;
 }): string {
+  const brief = shoot.brief?.trim() && !slurpIsLegacyImageBrief(shoot.brief) ? shoot.brief.trim() : "";
   return [
     "# This one is from an earlier shoot",
     "You are posting another picture from something you already shot, not something happening now. Say so the way a person would, and do not describe it as if you were there this minute.",
     `That shoot was: ${shoot.place}, ${shoot.company}.`,
-    "The picture keeps that shoot's place, clothes, and light. Your caption is written now, so it may talk about anything.",
+    ...(brief ? [`The shoot's place, clothes, and light: ${brief}`] : []),
+    "The picture keeps that shoot's place, clothes, and light, so the scene's setting and outfit stay the same and only the pose and expression change. The rule against repeating a recent setting does not apply to this post. Your caption is written now, so it may talk about anything.",
     shoot.shotsUsed > 1 ? "You have already posted from this one, so do not introduce it again from scratch." : "",
   ]
     .filter(Boolean)
