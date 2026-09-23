@@ -1042,6 +1042,28 @@ async function main() {
     sourceBackedNpcSourceTitle: aliasSourceNote.title,
   }).resolve({ units: aliasUnits, existingNotes: [] });
   assert.equal(aliasResolution.droppedCandidates.length, 0);
+  assert.equal(
+    aliasResolution.units[0]!.subjects?.[0]?.key,
+    "character:char_ash_kestrel",
+    "an alias variant must resolve to the trusted roster identity instead of a provisional local target",
+  );
+  const ambiguousAliasCatalog = buildTrustedLtmSubjectCatalog({
+    roster: [
+      { kind: "character", id: "char_ash_kestrel", name: "Ash Kestrel", aliases: ["Ashleigh Kestrel"] },
+      { kind: "character", id: "char_ashford_kestrel", name: "Ashford Kestrel", aliases: ["Ashleigh Kestrel"] },
+    ],
+    notes: [aliasSourceNote],
+    localSourceNotes: [aliasSourceNote],
+  });
+  const ambiguousAliasResolution = prepareLtmSubjectIdentityContext({
+    units: aliasUnits,
+    catalog: ambiguousAliasCatalog,
+    scope,
+    sourceBackedNpcSourceText: aliasSourceNote.sections.source.text,
+    sourceBackedNpcSourceTitle: aliasSourceNote.title,
+  }).resolve({ units: aliasUnits, existingNotes: [] });
+  assert.equal(ambiguousAliasResolution.droppedCandidates.length, 1);
+  assert.equal(ambiguousAliasResolution.droppedCandidates[0]!.reason, "ambiguous_subject");
 
   for (const character of ["char-Mara", "char Mara"]) {
     const normalized = normalizeStructuredSummaryEvidenceUnits({

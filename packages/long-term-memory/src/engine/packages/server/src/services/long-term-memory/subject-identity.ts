@@ -1680,7 +1680,8 @@ function matchTrustedNameRelation(index: CatalogIndex, name: string, familyId: s
   const related = index.entries.filter(
     (entry) =>
       (!entry.familyId || entry.familyId === familyId) &&
-      (isLongerVersionOfName(entry.name, name, entry.aliases) ||
+      ([...entry.aliases].some((alias) => isVariantName(alias, name)) ||
+        isLongerVersionOfName(entry.name, name, entry.aliases) ||
         isLongerVersionOfName(name, entry.name, entry.aliases)),
   );
   const uniqueSubjects = new Map(related.map((entry) => [entry.subject.key, entry]));
