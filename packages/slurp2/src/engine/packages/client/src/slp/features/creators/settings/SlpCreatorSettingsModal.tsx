@@ -1,5 +1,5 @@
-import { Loader2, RefreshCw } from "lucide-react";
-import { useEffect, useRef, type CSSProperties, type KeyboardEvent } from "react";
+import { ChevronDown, Loader2, RefreshCw, X } from "lucide-react";
+import { useEffect, useRef, useState, type CSSProperties, type KeyboardEvent } from "react";
 import { useTranslation } from "react-i18next";
 import { showConfirmDialog } from "../../../../lib/app-dialogs";
 
@@ -40,6 +40,9 @@ export function SlpCreatorSettingsModal({
   const creator = accountsQuery.data?.find((entry) => entry.id === creatorId) ?? null;
   const panelRef = useRef<HTMLDivElement>(null);
   const dirtyRef = useRef(false);
+  const [sectionPickerOpen, setSectionPickerOpen] = useState(false);
+  const sectionPickerRef = useRef<HTMLDivElement>(null);
+  const sectionPickerTriggerRef = useRef<HTMLButtonElement>(null);
 
   const sections = SLP_CREATOR_SETTINGS_SECTIONS.filter(
     (section) => !section.available || !creator || section.available(creator),
@@ -85,6 +88,29 @@ export function SlpCreatorSettingsModal({
   useEffect(() => {
     panelRef.current?.scrollTo({ top: 0 });
   }, [tab]);
+
+  useEffect(() => {
+    if (!sectionPickerOpen) return;
+    sectionPickerRef.current?.querySelector<HTMLButtonElement>("[aria-current='page']")?.focus();
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        setSectionPickerOpen(false);
+        sectionPickerTriggerRef.current?.focus();
+        return;
+      }
+      if (event.key !== "ArrowDown" && event.key !== "ArrowUp") return;
+      const items = Array.from(
+        sectionPickerRef.current?.querySelectorAll<HTMLButtonElement>("button[data-section]") ?? [],
+      );
+      const index = items.indexOf(document.activeElement as HTMLButtonElement);
+      if (index < 0 || items.length === 0) return;
+      event.preventDefault();
+      items[(index + (event.key === "ArrowDown" ? 1 : -1) + items.length) % items.length]?.focus();
+    };
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, [sectionPickerOpen]);
 
   const title = creator
     ? t("ui.slurp.settings.creators.settingsTitle", {
@@ -185,11 +211,25 @@ export function SlpCreatorSettingsModal({
                 {t("ui.slurp.settings.creators.viewProfile")}
               </button>
             )}
-            {/* Horizontal and scrollable on a phone, a vertical rail once there is room for one. */}
+            <button
+              ref={sectionPickerTriggerRef}
+              type="button"
+              aria-haspopup="dialog"
+              aria-expanded={sectionPickerOpen}
+              onClick={() => setSectionPickerOpen(true)}
+              className={`inline-flex min-h-11 w-full items-center justify-between gap-2 rounded-lg bg-[var(--slurp-surface-raised)] px-3 text-start text-sm font-semibold ring-1 ring-inset ring-[var(--slurp-outline)] sm:hidden ${focusRing}`}
+            >
+              <span>
+                {t(activeSection?.labelKey ?? "ui.slurp.settings.creators.tabs.overview", {
+                  defaultValue: activeSection?.defaultLabel ?? "Overview",
+                })}
+              </span>
+              <ChevronDown size={16} aria-hidden="true" />
+            </button>
             <div
               role="tablist"
               aria-label={t("ui.slurp.settings.creators.tabsLabel", { defaultValue: "Creator settings" })}
-              className="-mx-1 flex gap-1 overflow-x-auto px-1 pb-1 [scrollbar-width:none] sm:mx-0 sm:flex-col sm:overflow-visible sm:px-0"
+              className="hidden gap-1 sm:flex sm:flex-col"
             >
               {sections.map((section, index) => {
                 const Icon = section.icon;
@@ -238,6 +278,82 @@ export function SlpCreatorSettingsModal({
               })}
             </div>
           </div>
+          {sectionPickerOpen && (
+            <div className="fixed inset-0 z-[10001] bg-black/55 sm:hidden" onClick={() => setSectionPickerOpen(false)}>
+              <div
+                ref={sectionPickerRef}
+                role="dialog"
+                aria-modal="true"
+                aria-label={t("ui.slurp.settings.creators.sectionsTitle", { defaultValue: "Creator sections" })}
+                className="absolute inset-x-0 bottom-0 max-h-[85dvh] overflow-y-auto rounded-t-xl bg-[var(--slurp-surface)] px-4 pb-[calc(1rem+env(safe-area-inset-bottom))] pt-3 shadow-2xl"
+                onClick={(event) => event.stopPropagation()}
+              >
+                <div className="sticky top-0 z-10 flex items-center justify-between bg-[var(--slurp-surface)] py-2">
+                  <div>
+                    <p className="text-sm font-bold">
+                      {t("ui.slurp.settings.creators.sectionsTitle", { defaultValue: "Creator sections" })}
+                    </p>
+                    <p className="text-xs text-[var(--slurp-muted)]">{creator.displayName}</p>
+                  </div>
+                  <button
+                    type="button"
+                    aria-label={t("capabilities.actions.close", { defaultValue: "Close" })}
+                    onClick={() => {
+                      setSectionPickerOpen(false);
+                      sectionPickerTriggerRef.current?.focus();
+                    }}
+                    className={`grid size-11 place-items-center rounded-lg ${focusRing}`}
+                  >
+                    <X size={18} aria-hidden="true" />
+                  </button>
+                </div>
+                {sections.map((section, index) => {
+                  const previous = sections[index - 1];
+                  const selected = section.id === activeSection?.id;
+                  const Icon = section.icon;
+                  return (
+                    <div key={section.id} className={previous?.group === section.group ? undefined : "pt-4"}>
+                      {previous?.group !== section.group && (
+                        <p className="px-2 pb-1 text-xs font-bold uppercase text-[var(--slurp-muted)]">
+                          {t(`ui.slurp.settings.creators.groups.${section.group}`, {
+                            defaultValue: {
+                              creator: "Creator",
+                              publishing: "Publishing",
+                              interaction: "Interaction",
+                              memory: "Memory",
+                              tools: "Tools",
+                              danger: "Danger zone",
+                            }[section.group],
+                          })}
+                        </p>
+                      )}
+                      <button
+                        type="button"
+                        data-section
+                        aria-current={selected ? "page" : undefined}
+                        onClick={() => {
+                          setTab(section.id);
+                          setSectionPickerOpen(false);
+                          sectionPickerTriggerRef.current?.focus();
+                        }}
+                        className={`flex min-h-12 w-full items-center gap-3 rounded-lg px-3 text-start text-sm font-semibold ${focusRing} ${selected ? "bg-[var(--noodle-accent)]/15 text-[var(--slurp-text)]" : "text-[var(--slurp-muted)] hover:bg-[var(--slurp-canvas)] hover:text-[var(--slurp-text)]"}`}
+                      >
+                        <Icon size={17} aria-hidden="true" />
+                        <span className="min-w-0 flex-1">
+                          {t(section.labelKey, { defaultValue: section.defaultLabel })}
+                        </span>
+                        {selected && (
+                          <span className="text-xs text-[var(--noodle-accent)]">
+                            {t("ui.slurp.settings.creators.currentSection", { defaultValue: "Current" })}
+                          </span>
+                        )}
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
           <div
             ref={panelRef}
             id="slp-creator-settings-panel"

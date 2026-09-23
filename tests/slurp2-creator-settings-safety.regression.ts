@@ -28,6 +28,11 @@ assert.match(modal, /sections\.map\(\(section\) =>/u, "all sections stay mounted
 assert.match(modal, /hidden=\{section\.id !== activeSection\?\.id\}/u, "inactive sections stay out of view");
 assert.match(modal, /dirtyRef\.current &&[\s\S]*showConfirmDialog/u, "modal exit confirms dirty profile edits");
 assert.match(modal, /onDirtyChange=\{section\.id === "identity"/u, "Identity reports dirty state to the modal");
+assert.match(modal, /aria-haspopup="dialog"/u, "mobile section picker has an announced trigger");
+assert.match(modal, /role="dialog"[\s\S]*aria-modal="true"/u, "mobile section picker is a modal dialog");
+assert.match(modal, /setSectionPickerOpen\(false\)[\s\S]*sectionPickerTriggerRef\.current\?\.focus\(\)/u);
+assert.match(modal, /className="hidden gap-1 sm:flex sm:flex-col"/u, "desktop keeps the vertical section list");
+assert.match(modal, /className=\{`inline-flex min-h-11 w-full items-center justify-between[\s\S]*sm:hidden/u);
 assert.match(editor, /onDirtyChange\?\.\(JSON\.stringify\(draft\) !== JSON\.stringify\(initialDraft\)\)/u);
 assert.match(editor, /onDirtyChange\?\.\(false\)/u, "save and discard clear the dirty state");
 assert.match(sections, /group: "creator" \| "publishing" \| "interaction" \| "memory" \| "tools" \| "danger"/u);
