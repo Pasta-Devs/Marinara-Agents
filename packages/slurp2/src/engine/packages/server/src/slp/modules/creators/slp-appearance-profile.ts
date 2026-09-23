@@ -83,6 +83,28 @@ export function shouldAutoAcceptSlpAppearance(
   return mode === "always" || (mode === "high_confidence" && confidence === "high");
 }
 
+/** A candidate must cite source text verbatim, or come from an attached avatar. */
+export function parseSlpAppearanceCandidate(content: string, sourceText: string, avatarAvailable: boolean) {
+  const match = /\{[\s\S]*\}/u.exec(content);
+  if (!match) return null;
+  try {
+    const value: unknown = JSON.parse(match[0]);
+    if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+    const row = value as Record<string, unknown>;
+    const text = typeof row.appearance === "string" ? row.appearance.trim().slice(0, 2000) : "";
+    const quote = typeof row.evidence === "string" ? row.evidence.trim() : "";
+    if (!text || (quote && !sourceText.toLocaleLowerCase().includes(quote.toLocaleLowerCase())) ||
+      (!quote && !avatarAvailable)) return null;
+    return {
+      text,
+      confidence: row.confidence === "high" && quote.length >= 24 ? "high" as const : "medium" as const,
+      source: quote ? "description" as const : "avatar" as const,
+    };
+  } catch {
+    return null;
+  }
+}
+
 export function createSlpAppearanceProfile(input: {
   text: string;
   source: SlpAppearanceProfile["source"];

@@ -33,6 +33,7 @@ import {
   slpImageAuthFailure,
 } from "../../base/media/slp-image-retry.js";
 import { rewriteSlpImagePrompt } from "../../base/media/slp-image-prompt-rewrite.js";
+import { resolveImageAppearance } from "./slp-appearance-service.js";
 import { type ConnectionAdmissionMode } from "../../../services/generation/connection-admission.js";
 import { characterAppearanceFromRow, characterSlpImageContextFromRow } from "./slp-public-images-service.js";
 import type { SlpImagePromptReviewItem, ReviewedSlpImagePrompt } from "./slp-public-images-service.js";
@@ -113,6 +114,7 @@ export async function generateCreatorPostImage(input: {
     | "imagePromptInterpretation"
     | "imageGenerationUseAvatarReferences"
     | "imageGenerationIncludeDescriptions"
+    | "appearanceProfileMode"
     | "enableImageInterpretation"
     | "imageWidth"
     | "imageHeight"
@@ -183,7 +185,13 @@ export async function generateCreatorPostImage(input: {
   // meant to decide whether the picture knows who the Creator is. With it off, a Creator with no
   // linked source, or a source card with an empty Appearance field, the image model received a
   // scene containing nobody and invented somebody — a different somebody every post.
-  const stageAppearance = input.account.settings.stage?.appearance?.trim() ?? "";
+  const stageAppearance = await resolveImageAppearance({
+    db: input.db,
+    account: input.account,
+    sourceAccount: input.linkedPublicAccount,
+    connectionId: input.settings.generationConnectionId,
+    mode: input.settings.appearanceProfileMode,
+  });
   let characterDescription = stageAppearance;
   let characterImageInstructions = "";
   let characterPersonality = "";

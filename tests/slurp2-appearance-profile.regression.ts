@@ -3,6 +3,7 @@ import test from "node:test";
 import {
   appearanceEvidenceFromSource,
   createSlpAppearanceProfile,
+  parseSlpAppearanceCandidate,
   resolveSlpAppearanceProfile,
   shouldAutoAcceptSlpAppearance,
 } from "../packages/slurp2/src/engine/packages/server/src/slp/modules/creators/slp-appearance-profile.ts";
@@ -89,4 +90,13 @@ test("profile mode only auto-accepts the configured confidence", () => {
   assert.equal(shouldAutoAcceptSlpAppearance("high_confidence", "medium"), false);
   assert.equal(shouldAutoAcceptSlpAppearance("high_confidence", "high"), true);
   assert.equal(shouldAutoAcceptSlpAppearance("always", "low"), true);
+});
+
+test("description extraction requires a supporting quote and never invents from empty evidence", () => {
+  const card = "She has shoulder-length silver hair and green eyes.";
+  const supported = JSON.stringify({ appearance: "Silver hair and green eyes.", evidence: card, confidence: "high" });
+  assert.equal(parseSlpAppearanceCandidate(supported, card, false)?.confidence, "high");
+  assert.equal(parseSlpAppearanceCandidate(supported, "Different card", false), null);
+  assert.equal(parseSlpAppearanceCandidate('{"appearance":"Blue eyes","evidence":""}', "", false), null);
+  assert.equal(parseSlpAppearanceCandidate('{"appearance":"Blue eyes","evidence":""}', "", true)?.source, "avatar");
 });

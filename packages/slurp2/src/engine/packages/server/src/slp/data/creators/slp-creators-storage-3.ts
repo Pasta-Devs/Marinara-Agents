@@ -418,7 +418,7 @@ export function createCreatorsStorage3(context: SlurpStorageContext) {
       replace = false,
     ): Promise<SlpAccount | null> {
       return db.transaction(async (tx) => {
-        const row = (await tx.select().from(slpAccounts).where(and(eq(slpAccounts.id, id), eq(slpAccounts.platform, "slurp"))))[0];
+        const row = (await tx.select().from(slpAccounts).where(eq(slpAccounts.id, id)))[0];
         if (!row || (row.kind !== "character" && row.kind !== "persona")) return null;
         const source = await resolveCreatorSourceSnapshot(db, {
           kind: row.kind,
