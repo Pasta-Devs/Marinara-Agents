@@ -2099,6 +2099,13 @@ export const ltmDraftMutationSchema = z.discriminatedUnion("kind", [
     .strip(),
   ltmDraftMutationBaseSchema
     .extend({
+      kind: z.literal("set_title"),
+      noteId: ltmNoteIdSchema,
+      title: ltmNoteTitleSchema,
+    })
+    .strip(),
+  ltmDraftMutationBaseSchema
+    .extend({
       kind: z.literal("set_subjects"),
       noteId: ltmNoteIdSchema,
       subjects: ltmSubjectsSchema,
@@ -2296,7 +2303,7 @@ export const ltmMutationDispositionSchema = z.enum(["new", "merge", "rewrite"]);
 
 export const ltmDraftReviewChangeSchema = z
   .object({
-    kind: z.enum(["section", "link", "keywords", "status", "subjects"]),
+    kind: z.enum(["section", "link", "keywords", "status", "subjects", "title"]),
     key: z.string().min(1).max(240),
     before: z.string().max(20_000).optional(),
     after: z.string().max(20_000),
