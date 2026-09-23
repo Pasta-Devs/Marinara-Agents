@@ -68,6 +68,84 @@
         "bytes": 1289358
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Engine/blob/staging/docs/game/getting-started.md#choosing-rules"
+    },
+    {
+      "manifest": {
+        "schemaVersion": 2,
+        "capabilityApi": {
+          "major": 1,
+          "minor": 9
+        },
+        "builtAgainst": {
+          "engineVersion": "2.4.6",
+          "engineCommit": "06bf1a6d68dab6ee08ae01e75327ec2043148501"
+        },
+        "id": "modern-life-sim",
+        "name": "Modern Life Sim",
+        "version": "0.1.0",
+        "description": "A modern life sim in its own Home tab: a town on a clock, a job, rent and needs, and a cast drawn from your character cards whose relationships grow scene by scene, with a visual-novel narrator for the scenes that matter. Install it, restart Marinara Engine when prompted, then open Home → Life Sim.",
+        "engine": {
+          "min": "2.4.4",
+          "maxExclusive": "4.0.0"
+        },
+        "kind": [
+          "agent"
+        ],
+        "entrypoints": {
+          "agents": "agents.json",
+          "client": "client.js",
+          "server": "server.mjs"
+        },
+        "contributions": {
+          "slots": [
+            "home-browser-tab"
+          ],
+          "homeBrowserTab": {
+            "label": "Life Sim",
+            "ariaLabel": "Open Modern Life Sim",
+            "iconPaths": [
+              "life-sim-icon.png"
+            ]
+          }
+        },
+        "files": [
+          {
+            "path": "agents.json",
+            "sha256": "ddcda224d65454296d5e3a69d376f26c33c39de4e0f935f014d5a0d8595483bd",
+            "bytes": 678
+          },
+          {
+            "path": "client.js",
+            "sha256": "5182e14356c989c5cf5cf07b8acf2f4c31d6cb1b1dd44ac6aa5d19932bccce53",
+            "bytes": 458692
+          },
+          {
+            "path": "server.mjs",
+            "sha256": "5a24f89562d3a813a76a1ff2304396135fd410ff9ee51d6ae9f900d536583f29",
+            "bytes": 231656
+          },
+          {
+            "path": "life-sim-icon.png",
+            "sha256": "6b5aa92f7be297f56ce4690cf4baa752f13681200570252fbf2e7a91e851d2ea",
+            "bytes": 7106
+          }
+        ],
+        "permissions": [
+          "network",
+          "routes",
+          "storage",
+          "ui"
+        ],
+        "restartRequired": true
+      },
+      "category": "misc",
+      "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/modern-life-sim.png",
+      "artifact": {
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/modern-life-sim-0.1.0.zip",
+        "sha256": "7d7f71a63a8bb34bac4f28a53b2ca5b35d91b4e2e0da5c45b7cba68e56d4bd3a",
+        "bytes": 700398
+      },
+      "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents/blob/main/packages/modern-life-sim/README.md"
     }
   ]
 }

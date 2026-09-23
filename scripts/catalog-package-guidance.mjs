@@ -137,6 +137,10 @@ export const OFFICIAL_PACKAGE_GUIDANCE = Object.freeze({
     modes: ["conversation", "roleplay", "game"],
     activation: "Install it, restart Marinara Engine when prompted, then open Home → Gacha Forge.",
   },
+  "modern-life-sim": {
+    modes: ["conversation", "roleplay", "game"],
+    activation: "Install it, restart Marinara Engine when prompted, then open Home → Life Sim.",
+  },
   pixelforge: {
     modes: ["game"],
     activation: "Install it, then choose Pixelforge as the Experience when creating a Game Mode chat.",
