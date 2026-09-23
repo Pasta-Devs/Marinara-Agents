@@ -85,6 +85,12 @@ export function SlpBackstageShell({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [settingKey, section, target, settingsReady]);
 
+  useEffect(() => {
+    if (!navigation.openRefresh || !settingsReady) return;
+    controller.openRefresh();
+    onNavigate({ ...navigation, openRefresh: undefined });
+  }, [navigation.openRefresh, settingsReady]);
+
   if (settingsQuery.isError)
     return (
       <main className="flex min-h-0 flex-1 flex-col items-center justify-center gap-3 p-6 text-sm text-[var(--muted-foreground)]">

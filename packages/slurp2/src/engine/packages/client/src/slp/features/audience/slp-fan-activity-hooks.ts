@@ -24,7 +24,7 @@ export function useUpdateCreatorFanActivity() {
     onSuccess: () => qc.invalidateQueries({ queryKey: slpKeys.noodlerAccounts() }),
   });
 }
-export function useRefreshCreatorFanActivityNow() {
+export function useRefreshCreatorFanActivityNow(options?: { notifications?: boolean }) {
   const qc = useQueryClient();
   const { t: localizeUi } = useUiTranslation();
   // Toasts live in the hook: the button called mutate() with no callbacks, so success and failure
@@ -36,17 +36,19 @@ export function useRefreshCreatorFanActivityNow() {
         debugMode: useSlurpUIStore.getState().debugMode,
       }),
     onError: (error) =>
+      options?.notifications !== false &&
       toast.error(
         error instanceof Error
           ? error.message
           : localizeUi("ui.slurp.settings.manual.audienceFailed", { defaultValue: "Audience activity failed." }),
       ),
     onSuccess: (result) => {
-      toast.success(
-        result.created > 0
-          ? localizeUi("ui.slurp.settings.audience.created", { count: result.created })
-          : localizeUi("ui.slurp.settings.audience.createdNone"),
-      );
+      options?.notifications !== false &&
+        toast.success(
+          result.created > 0
+            ? localizeUi("ui.slurp.settings.audience.created", { count: result.created })
+            : localizeUi("ui.slurp.settings.audience.createdNone"),
+        );
       return Promise.all([
         qc.invalidateQueries({
           queryKey: [...slpKeys.noodlerRoot(), "posts"],

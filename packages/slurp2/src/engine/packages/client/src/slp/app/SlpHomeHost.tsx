@@ -20,12 +20,10 @@ import { renderSlurpHomeCreatorFlow } from "./screens/SlpHomeCreatorFlow";
 import { renderSlurpHomeDestinations } from "./screens/SlpHomeDestinations";
 import { SlpHomeFeedRail } from "./screens/SlpHomeFeedRail";
 import { useRefreshCreatorFanActivityNow } from "../features/audience/slp-fan-activity-hooks";
-import { useRefreshTargetedCreatorsNow } from "../features/creators/slp-creator-refresh-hooks";
 
 export function SlurpHome({ navigation, onNavigate, onLeave }: SlurpHomeProps) {
   const model = useSlurpHomeState({ navigation, onNavigate, onLeave });
-  const refreshAudienceNow = useRefreshCreatorFanActivityNow();
-  const refreshPostsNow = useRefreshTargetedCreatorsNow();
+  const refreshAudienceNow = useRefreshCreatorFanActivityNow({ notifications: false });
   const {
     localizeUi,
     accountsQuery,
@@ -99,9 +97,6 @@ export function SlurpHome({ navigation, onNavigate, onLeave }: SlurpHomeProps) {
     openStoryComposer,
   } = model;
   const personaSourceIds = new Set(personas.map((persona) => persona.id));
-  const automationCreatorIds = (accountsQuery.data ?? [])
-    .filter((creator) => !creator.sourceAccountId || !personaSourceIds.has(creator.sourceAccountId))
-    .map((creator) => creator.id);
 
   const shellProps = {
     appMode: "slurp" as const,
@@ -166,13 +161,12 @@ export function SlurpHome({ navigation, onNavigate, onLeave }: SlurpHomeProps) {
     onOpenWallet: goToWallet,
     onOpenStudio: goToStudio,
     onGeneratePosts: () => {
-      if (automationCreatorIds.length > 0) {
-        refreshPostsNow.mutate({ accountIds: automationCreatorIds, access: "locked" });
-      }
+      onNavigate({ mode: "creator-settings", section: "automation", target: "automation", openRefresh: true });
     },
     onRunAudience: () => {
       refreshAudienceNow.mutate();
     },
+    audiencePending: refreshAudienceNow.isPending,
     notificationCount:
       (notificationUnseenCountQuery.data?.unseenCount ?? 0) +
       (unreadCountQuery.data?.unread ?? 0) +

@@ -60,6 +60,7 @@ export function SlpPulsePanel({
   onClose,
   onGeneratePosts,
   onRunAudience,
+  audiencePending = false,
   accounts = [],
 }: {
   open: boolean;
@@ -68,6 +69,7 @@ export function SlpPulsePanel({
   onClose: () => void;
   onGeneratePosts?: () => void;
   onRunAudience?: () => void;
+  audiencePending?: boolean;
   accounts?: SlpAccount[];
 }) {
   const { t } = useUiTranslation();
@@ -80,9 +82,9 @@ export function SlpPulsePanel({
   );
   if (!open) return null;
 
-  const runAction = (action: (() => void) | undefined) => {
+  const runAction = (action: (() => void) | undefined, close = true) => {
     action?.();
-    if (action) onClose();
+    if (action && close) onClose();
   };
 
   return (
@@ -146,8 +148,13 @@ export function SlpPulsePanel({
               />
               <PulseAction
                 icon={<Settings2 size={17} aria-hidden="true" />}
-                label={t("ui.slurp.pulse.runAudience", { defaultValue: "Run audience" })}
-                onClick={() => runAction(onRunAudience)}
+                label={
+                  audiencePending
+                    ? t("ui.slurp.pulse.runningAudience", { defaultValue: "Running audience" })
+                    : t("ui.slurp.pulse.runAudience", { defaultValue: "Run audience" })
+                }
+                onClick={() => runAction(onRunAudience, false)}
+                disabled={audiencePending}
               />
             </div>
           </section>
@@ -677,12 +684,23 @@ function pulseTaskLabel(key: string, t: (key: string, options?: Record<string, u
   return t(keyName, { defaultValue });
 }
 
-function PulseAction({ icon, label, onClick }: { icon: ReactNode; label: string; onClick: () => void }) {
+function PulseAction({
+  icon,
+  label,
+  onClick,
+  disabled = false,
+}: {
+  icon: ReactNode;
+  label: string;
+  onClick: () => void;
+  disabled?: boolean;
+}) {
   return (
     <button
       type="button"
       onClick={onClick}
-      className="flex min-h-14 items-center gap-2 rounded-xl bg-[var(--slurp-surface-raised)] px-3 text-start text-sm font-semibold ring-1 ring-inset ring-[var(--noodle-divider)] transition-[background-color,transform] hover:bg-[var(--accent)] active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)] motion-reduce:transition-none motion-reduce:active:scale-100"
+      disabled={disabled}
+      className="flex min-h-14 items-center gap-2 rounded-xl bg-[var(--slurp-surface-raised)] px-3 text-start text-sm font-semibold ring-1 ring-inset ring-[var(--noodle-divider)] transition-[background-color,transform] hover:bg-[var(--accent)] active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)] disabled:cursor-wait disabled:opacity-55 motion-reduce:transition-none motion-reduce:active:scale-100"
     >
       <span className="shrink-0 text-[var(--noodle-accent)]">{icon}</span>
       {label}

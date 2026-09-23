@@ -63,6 +63,7 @@ export interface SlpShellProps {
   onGeneratePosts?: () => void;
   /** Runs the audience activity pass. */
   onRunAudience?: () => void;
+  audiencePending?: boolean;
   /** Unseen activity, shown on the unified Inbox entry. */
   notificationCount?: number;
   /** The studio only exists for a persona that operates a Creator. */
