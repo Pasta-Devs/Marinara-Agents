@@ -292,7 +292,10 @@ export function SlpThreadHeader({ model }: { model: SlurpThreadViewModel }) {
             onKeyDown={(event) => {
               if (event.key !== "Escape") return;
               setMessageSearchOpen(false);
-              searchTriggerRef.current?.focus();
+              (searchTriggerRef.current?.offsetParent
+                ? searchTriggerRef.current
+                : headerMenuTriggerRef.current
+              )?.focus();
             }}
             placeholder={localizeUi("ui.slurp.messages.searchConversationPlaceholder", {
               defaultValue: "Search this conversation…",
@@ -334,7 +337,10 @@ export function SlpThreadHeader({ model }: { model: SlurpThreadViewModel }) {
             type="button"
             onClick={() => {
               setMessageSearchOpen(false);
-              searchTriggerRef.current?.focus();
+              (searchTriggerRef.current?.offsetParent
+                ? searchTriggerRef.current
+                : headerMenuTriggerRef.current
+              )?.focus();
             }}
             className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg text-[var(--muted-foreground)] transition-[background-color,transform] hover:bg-[var(--slurp-surface)] active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] motion-reduce:transition-none motion-reduce:active:scale-100"
             aria-label={localizeUi("ui.slurp.messages.closeSearch", { defaultValue: "Close search" })}

@@ -1484,8 +1484,8 @@ async function main() {
       sourceText: "Serafina Duvall entered the observatory.",
       catalog: identityCatalog,
     }).map((note: any) => note.id),
-    ["char_seraphina"],
-    "a unique spelling variation should select the trusted canonical identity note",
+    [],
+    "a spelling variation alone must not select a trusted identity note",
   );
   assert.deepEqual(
     trustedLtmIdentityNotesForSource({
@@ -1497,12 +1497,15 @@ async function main() {
   );
   const legacySpellingNote = identityNote("char_serafina_legacy", "Serafina Duvall");
   identityCatalog.notes.push(legacySpellingNote);
-  assert.equal(
-    analyzeTrustedLtmNoteSubjects(identityCatalog).matches.find((match: any) => match.note.id === legacySpellingNote.id)
-      ?.basis,
-    "spelling_variation",
-    "identity repair should expose the conservative fuzzy match basis",
+  const spellingIssue = analyzeTrustedLtmNoteSubjects(identityCatalog).unresolved.find(
+    (issue: any) => issue.note.id === legacySpellingNote.id,
   );
+  assert.equal(
+    spellingIssue?.basis,
+    "spelling_variation",
+    "identity repair should suggest rather than bind a fuzzy identity",
+  );
+  assert.deepEqual(spellingIssue?.candidateSubjectKeys, ["character:seraphina"]);
   const ambiguousCatalog = buildTrustedLtmSubjectCatalog({
     roster: [
       { kind: "character", id: "one", name: "Seraphina Duvall" },

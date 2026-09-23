@@ -584,6 +584,7 @@ async function extractLongTermMemoryFromSourceNoteInner(
     normalizedAdditions: normalizedExtraction.addedUnits,
     parserDroppedCandidates: extractionPayload.droppedCandidates,
     preValidationDroppedCandidates: identityResolution.droppedCandidates,
+    aliasChoices: identityResolution.aliasChoices,
     sourceText,
     sourceNote,
     existingNotes: compilerExistingNotes,

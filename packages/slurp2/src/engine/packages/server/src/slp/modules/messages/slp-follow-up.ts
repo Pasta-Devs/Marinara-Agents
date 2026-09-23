@@ -214,7 +214,7 @@ export function isFollowUpDue(followUp: ScheduledFollowUp, now: Date = new Date(
 /**
  * Generate a follow-up message prompt context.
  */
-export function formatFollowUpContext(followUp: ScheduledFollowUp): string {
+export function formatFollowUpContext(followUp: ScheduledFollowUp, promiseText?: string): string {
   // `scheduledAt` is when it came due, not when it was promised, so no "minutes ago" is stated:
   // the old count told the model a false fact.
   let context = `You promised a ${followUp.type} earlier and it is due now. Reason: ${followUp.reason}.`;
@@ -225,6 +225,11 @@ export function formatFollowUpContext(followUp: ScheduledFollowUp): string {
 
   if (followUp.context) {
     context += ` Context: ${followUp.context}`;
+  }
+
+  // The words she remembered, so the follow-up keeps the promise she actually made.
+  if (promiseText) {
+    context += ` What you promised: "${promiseText}". Keep this promise now.`;
   }
 
   return context;

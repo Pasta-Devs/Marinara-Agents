@@ -377,7 +377,9 @@ export async function slpAudienceRoutes(app: FastifyInstance, deps: SlpRouteDeps
     } catch (error) {
       if (slpIsAdmissionFailure(error)) return reply.code(409).send({ error: getErrorMessage(error) });
       logger.error(error, "[slurp] Fan activity generation failed");
-      return reply.code(500).send({ error: "Fan activity generation failed." });
+      return reply
+        .code(500)
+        .send({ error: error instanceof Error ? error.message.slice(0, 500) : "Fan activity generation failed." });
     }
   });
 

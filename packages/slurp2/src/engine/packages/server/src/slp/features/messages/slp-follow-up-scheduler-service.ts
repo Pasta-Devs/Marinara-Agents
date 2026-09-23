@@ -14,6 +14,8 @@ import { resolveSlurpCreatorAvailability } from "../../modules/creators/slp-crea
 import { createCharactersStorage } from "../../../services/storage/characters.storage.js";
 import { isCreatorNightQuietTime } from "../feed/slp-feed-contract.js";
 import { trySlpOperation } from "../../base/locking/slp-operation-lock.js";
+import { tryCreatorAccountOperation } from "../../base/locking/slp-account-operation-lock.js";
+import { incrementFollowUpCount } from "../../modules/messages/slp-thread-notes.js";
 
 const INITIAL_DELAY_MS = 60_000; // Start after 1 minute
 const POLL_MS = 120_000; // Check every 2 minutes
@@ -77,8 +79,20 @@ export function startSlurpFollowUpScheduler(app: FastifyInstance, registerStop?:
 
             const creator = await slurp.getNoodlerAccountById(threadRow.creatorAccountId);
             const viewer = await slurp.getViewer(threadRow.viewerAccountId);
-            if (!creator || !viewer) {
+            // A persona-backed Creator is operated by hand and never speaks on its own. A draft
+            // reply the operator asked for once could still schedule a follow-up for it.
+            if (!creator || !viewer || (creator.kind === "persona" && creator.sourceKind === "persona")) {
               await messages.cancelScheduledFollowUp(threadRow.id, followUp.id);
+              continue;
+            }
+            // The fan is waiting for an answer. The reply goes first; a follow-up sent now answered
+            // the fan's question too, and then the reply answered it a second time.
+            if (thread.needsReply) {
+              await messages.postponeScheduledFollowUp(
+                threadRow.id,
+                followUp.id,
+                new Date(Date.now() + 10 * 60_000).toISOString(),
+              );
               continue;
             }
 
@@ -127,80 +141,111 @@ export function startSlurpFollowUpScheduler(app: FastifyInstance, registerStop?:
             const subscriptions = await slurp.listSubscriptionsForViewer(threadRow.viewerAccountId);
             const subscribed = subscriptions.some((entry) => entry.creatorAccountId === threadRow.creatorAccountId);
 
-            // Add the scheduled reason to the normal guidance so the model knows why it is writing.
-            const reply = await generateSlurpMessageReply({
-              db: app.db,
-              creator,
-              viewer,
-              history,
-              rapport: thread.rapport,
-              subscribed,
-              dmPolicy: messaging.dmPolicy,
-              isRequest: false,
-              mood: thread.mood,
-              moodUpdatedAt: thread.moodUpdatedAt,
-              notes: thread.notes,
-              threadId: threadRow.id,
-              threadState: thread.threadState,
-              creatorState: await slurp.getCreatorState(threadRow.creatorAccountId),
-              dayVibe: await describeSlurpDayVibe(app.db, threadRow.creatorAccountId),
-              coolingOff,
-              strikes: activeSlurpStrikes(thread.strikes, thread.lastStrikeAt),
-              connection,
-              generationGuidance: formatFollowUpContext(followUp),
-              // A follow-up is a promise the Creator already made in a reply, like an away reply that
-              // `slp-message-operation` also sends as "present". As "background" it needed the global
-              // background mode, so with default settings every follow-up postponed itself forever.
-              workerContext: "present",
-            });
+            const promise = followUp.relatedNoteId
+              ? thread.notes.find((note) => note.id === followUp.relatedNoteId)
+              : undefined;
+            // Same lock as a normal reply, so the two can never write to this Creator at once.
+            const locked = await tryCreatorAccountOperation(threadRow.creatorAccountId, async () => {
+              // Add the scheduled reason to the normal guidance so the model knows why it is writing.
+              const reply = await generateSlurpMessageReply({
+                db: app.db,
+                creator,
+                viewer,
+                history,
+                rapport: thread.rapport,
+                subscribed,
+                dmPolicy: messaging.dmPolicy,
+                isRequest: false,
+                mood: thread.mood,
+                moodUpdatedAt: thread.moodUpdatedAt,
+                notes: thread.notes,
+                threadId: threadRow.id,
+                threadState: thread.threadState,
+                creatorState: await slurp.getCreatorState(threadRow.creatorAccountId),
+                dayVibe: await describeSlurpDayVibe(app.db, threadRow.creatorAccountId),
+                coolingOff,
+                strikes: activeSlurpStrikes(thread.strikes, thread.lastStrikeAt),
+                connection,
+                generationGuidance: formatFollowUpContext(followUp, promise?.text),
+                // A follow-up is a promise the Creator already made in a reply, like an away reply that
+                // `slp-message-operation` also sends as "present". As "background" it needed the global
+                // background mode, so with default settings every follow-up postponed itself forever.
+                workerContext: "present",
+              });
 
-            // Store the follow-up message
-            const timestamp = now();
-            const message = {
-              id: newId(),
-              threadId: threadRow.id,
-              role: "creator" as const,
-              kind: "text" as const,
-              content: reply.content,
-              price: 0,
-              imageUrl: null,
-              imageClaimToken: null,
-              imageLeaseUntil: null,
-              imageMetadata: null,
-              unlockedAt: null,
-              metadata: JSON.stringify({
-                followUp: true,
-                followUpType: followUp.type,
-                followUpSequence: followUp.sequenceNumber,
-              }),
-              createdAt: timestamp,
-            };
+              // Store the follow-up message
+              const timestamp = now();
+              const message = {
+                id: newId(),
+                threadId: threadRow.id,
+                role: "creator" as const,
+                kind: "text" as const,
+                content: reply.content,
+                price: 0,
+                imageUrl: null,
+                imageClaimToken: null,
+                imageLeaseUntil: null,
+                imageMetadata: null,
+                unlockedAt: null,
+                metadata: JSON.stringify({
+                  followUp: true,
+                  followUpType: followUp.type,
+                  followUpSequence: followUp.sequenceNumber,
+                }),
+                createdAt: timestamp,
+              };
 
-            const stored = await messages.appendMessage(threadRow.id, {
-              id: message.id,
-              senderAccountId: threadRow.creatorAccountId,
-              role: "creator",
-              content: message.content,
-              createdAt: message.createdAt,
-              preserveReplyObligation: true,
-              scheduledFollowUpId: followUp.id,
-              metadata: JSON.parse(message.metadata),
-            });
-            if (!stored) throw new Error(`Thread ${threadRow.id} disappeared while storing follow-up`);
-            await messages.recordReplyOutcome(threadRow.id, {
-              moodShift: reply.moodShift,
-              remember: reply.remember,
-              stateSignals: reply.stateSignals,
-            });
-            // A follow-up reply changes the Creator and the thread exactly like a normal reply does.
-            await slurp
-              .recordCreatorStateSignals(threadRow.creatorAccountId, reply.stateSignals)
-              .catch((error: unknown) =>
-                logger.warn(error, "[slurp-follow-up] Could not record creator state signals"),
+              const stored = await messages.appendMessage(threadRow.id, {
+                id: message.id,
+                senderAccountId: threadRow.creatorAccountId,
+                role: "creator",
+                content: message.content,
+                createdAt: message.createdAt,
+                preserveReplyObligation: true,
+                scheduledFollowUpId: followUp.id,
+                metadata: JSON.parse(message.metadata),
+              });
+              // The thread closed or the follow-up was cancelled while the model wrote. Nothing failed.
+              if (!stored) {
+                await messages.cancelScheduledFollowUp(threadRow.id, followUp.id);
+                return false;
+              }
+              await messages.recordReplyOutcome(threadRow.id, {
+                moodShift: reply.moodShift,
+                remember: reply.remember,
+                stateSignals: reply.stateSignals,
+              });
+              if (promise) {
+                // The promise was kept once more. The count shows in Memories and caps later nags.
+                const refreshed = await messages.getThreadById(threadRow.id);
+                const notes = refreshed?.notes ?? [];
+                await messages.setThreadNotes(
+                  threadRow.id,
+                  notes.map((note) => (note.id === promise.id ? incrementFollowUpCount(note) : note)),
+                );
+              }
+              // A follow-up reply changes the Creator and the thread exactly like a normal reply does.
+              await slurp
+                .recordCreatorStateSignals(threadRow.creatorAccountId, reply.stateSignals)
+                .catch((error: unknown) =>
+                  logger.warn(error, "[slurp-follow-up] Could not record creator state signals"),
+                );
+              await applyFollowUpBoundary(messages, threadRow.id, reply.latitude).catch((error: unknown) =>
+                logger.warn(error, "[slurp-follow-up] Could not apply the conversation boundary"),
               );
-            await applyFollowUpBoundary(messages, threadRow.id, reply.latitude).catch((error: unknown) =>
-              logger.warn(error, "[slurp-follow-up] Could not apply the conversation boundary"),
-            );
+
+              return true;
+            });
+            if (!locked.acquired) {
+              // A reply or another job holds this Creator. Try again shortly.
+              await messages.postponeScheduledFollowUp(
+                threadRow.id,
+                followUp.id,
+                new Date(Date.now() + 2 * 60_000).toISOString(),
+              );
+              continue;
+            }
+            if (!locked.value) continue;
 
             logger.info(
               "[slurp-follow-up] Sent %s follow-up for thread %s%s",

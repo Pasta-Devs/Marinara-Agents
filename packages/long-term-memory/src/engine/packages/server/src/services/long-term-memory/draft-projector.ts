@@ -30,7 +30,7 @@ import { renderSectionContributions, sectionContributions, sourceContribution } 
 export type LtmMutationDisposition = "new" | "merge" | "rewrite";
 export type LtmDraftProjectionContext = { source: LtmDraftSource; scope: LtmScope; modes: LtmMode[] };
 export type LtmProjectedChange = {
-  kind: "section" | "link" | "keywords" | "status" | "subjects";
+  kind: "section" | "link" | "keywords" | "status" | "subjects" | "title";
   key: string;
   before?: string;
   after: string;
@@ -295,6 +295,14 @@ function projectMutation(
   if (mutation.kind === "set_keywords")
     return { ...current, keywords: uniqueLtmKeywords([...current.keywords, ...mutation.keywords]) };
   if (mutation.kind === "set_status") return { ...current, status: mutation.status };
+  if (mutation.kind === "set_title") {
+    if (current.type !== "character" || !current.subjects)
+      throw new LtmDraftProjectionError(
+        `Long-term memory alias choice requires a bound character note: ${current.id}.`,
+        "invalid_subject_target",
+      );
+    return { ...current, title: mutation.title };
+  }
   if (current.type !== "character" && current.type !== "relationship")
     throw new LtmDraftProjectionError(
       `Long-term memory subjects cannot be assigned to ${current.type} note ${current.id}.`,
@@ -410,6 +418,7 @@ function changesForMutation(before: LtmNote | null, after: LtmNote, mutation: Lt
   if (mutation.kind === "set_keywords")
     return textChange("keywords", before?.keywords.join(", "), after.keywords.join(", "));
   if (mutation.kind === "set_status") return textChange("status", before?.status, after.status);
+  if (mutation.kind === "set_title") return textChange("title", before?.title, after.title);
   if (mutation.kind === "set_subjects")
     return before?.subjects && subjectsEqual(before.subjects, after.subjects)
       ? []
