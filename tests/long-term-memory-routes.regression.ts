@@ -5021,14 +5021,19 @@ async function main(routeScenario: RouteScenario) {
         method: "POST",
         url: "/api/long-term-memory/import/source-notes",
         headers,
-        payload: { source: "chats", sourceIds: ["chat-a:summary-chat-only-default"], chatId: "chat-a", extract: false },
+        payload: { source: "chats", sourceIds: ["chat-a:summary-chat-only-default"], chatId: "chat-a" },
       });
       assert.equal(groupedChatImport.statusCode, 200, groupedChatImport.body);
       assert.equal(groupedChatImport.json().imported.length, 1, groupedChatImport.body);
-      assert.deepEqual(groupedChatImport.json().imported[0].note.destinationScope, {
-        chatId: "chat-a",
-        chatIds: ["chat-a"],
-      });
+      const groupedChatResult = groupedChatImport.json().imported[0];
+      const groupedChatScope = { chatId: "chat-a", chatIds: ["chat-a"] };
+      assert.deepEqual(groupedChatResult.note.destinationScope, groupedChatScope);
+      assert.deepEqual(groupedChatResult.draft.scope, groupedChatScope);
+      const groupedCreateNotes = groupedChatResult.draft.mutations.filter(
+        (mutation: any) => mutation.kind === "create_note",
+      );
+      assert.ok(groupedCreateNotes.length > 0);
+      for (const mutation of groupedCreateNotes) assert.deepEqual(mutation.note.scope, groupedChatScope);
       const implicitPersonaCreateNotes = implicitPersonaResult.draft.mutations.filter(
         (mutation: any) => mutation.kind === "create_note",
       );
