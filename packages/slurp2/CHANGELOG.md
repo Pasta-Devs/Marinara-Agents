@@ -1,5 +1,10 @@
 # Slurp Remastered release notes
 
+## 0.2.28 — 2026-09-23
+
+- Creator settings now have a status overview and a mobile section picker.
+- Profile edits use the modal's shared save bar, and each Creator settings view has one scroll area.
+
 ## 0.2.27 — 2026-09-23
 
 - Creator settings now keep profile drafts when you change sections and confirm before discarding them.
