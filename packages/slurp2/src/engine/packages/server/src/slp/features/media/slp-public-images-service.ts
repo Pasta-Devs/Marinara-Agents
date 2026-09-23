@@ -28,7 +28,7 @@ import { loadPrompt, NOODLE_IMAGE_POST } from "../../../services/prompt-override
 import { generateSlpImageWithRetry } from "../../base/media/slp-image-retry.js";
 import { rewriteSlpImagePrompt } from "../../base/media/slp-image-prompt-rewrite.js";
 import { resolveImageAppearance } from "./slp-appearance-service.js";
-import { selectSlpImageProviderPrompt, stripAppearanceLabel } from "../../base/media/slp-image-prompt.js";
+import { ensureSlpImageAppearance, selectSlpImageProviderPrompt, stripAppearanceLabel } from "../../base/media/slp-image-prompt.js";
 import {
   resolveCreatorImageConnectionId,
   resolveCreatorImageStyleProfileId,
@@ -353,7 +353,7 @@ export async function generateSlpPostImage(input: {
     privateContext: [characterPersonality],
     guidanceContext: [configuredImageInstructions, connectionImageInstructions],
   });
-  const finalPrompt = finalPromptBase;
+  const finalPrompt = ensureSlpImageAppearance(finalPromptBase, stageAppearance);
   // A reviewer who cleared the negative prompt still gets the style profile's own negatives back,
   // for the same reason the positive prompt is recompiled above.
   const finalNegativePrompt = input.promptOverride

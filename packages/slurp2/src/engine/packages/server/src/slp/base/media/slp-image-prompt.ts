@@ -79,6 +79,14 @@ export function slurpImageLook(appearance: string): string {
   return look.length <= MAX_LOOK_LENGTH ? look : `${look.slice(0, look.lastIndexOf(" ", MAX_LOOK_LENGTH))}`;
 }
 
+/** Keep identity in the provider request even when review or rewrite replaces the draft. */
+export function ensureSlpImageAppearance(prompt: string, appearance: string): string {
+  const look = slurpImageLook(appearance);
+  if (!look) return prompt;
+  const normalized = (value: string) => value.toLocaleLowerCase().replace(/\s+/gu, " ").trim();
+  return normalized(prompt).includes(normalized(look)) ? prompt : `${look}\n${prompt}`;
+}
+
 /** Old post drafts were rule prose for a language model. They describe no picture and must not be reused. */
 export function slurpIsLegacyImageBrief(value: string | null | undefined): boolean {
   return /^One photograph this person took/u.test(value?.trim() ?? "");

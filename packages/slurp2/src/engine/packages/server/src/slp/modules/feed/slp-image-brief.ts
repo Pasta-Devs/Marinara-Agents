@@ -91,7 +91,9 @@ export function slurpImageBrief(input: {
   scene?: SlpWardrobeScene | null;
   selectedWardrobe?: { name: string; description: string } | null;
 }): string {
-  const shootBrief = input.shoot?.brief && !slurpIsLegacyImageBrief(input.shoot.brief) ? input.shoot.brief : "";
+  const shootBrief = input.shoot?.brief && !slurpIsLegacyImageBrief(input.shoot.brief) &&
+    !/\b(?:same (?:outfit|clothes|place|shoot)|earlier (?:shoot|photo|picture)|established (?:outfit|clothing|appearance))\b/iu.test(input.shoot.brief)
+    ? input.shoot.brief : "";
   const outfit =
     input.selectedWardrobe?.description?.trim() ||
     input.scene?.outfit?.trim() ||
@@ -104,7 +106,7 @@ export function slurpImageBrief(input: {
     // A callback keeps the shoot's clothes; its continuity text already names them.
     !shootBrief && outfit ? sentence(`Wearing ${outfit}`) : "",
     sentence(place),
-    input.shoot ? "" : sentence(input.scene?.visualDirection),
+    input.shoot && shootBrief ? "" : sentence(input.scene?.visualDirection),
     sentence(
       [input.cameraPhoto, input.story ? "vertical phone story photo" : "", input.effortPhoto]
         .filter(Boolean)

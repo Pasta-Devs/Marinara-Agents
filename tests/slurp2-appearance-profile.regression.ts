@@ -7,6 +7,7 @@ import {
   resolveSlpAppearanceProfile,
   shouldAutoAcceptSlpAppearance,
 } from "../packages/slurp2/src/engine/packages/server/src/slp/modules/creators/slp-appearance-profile.ts";
+import { ensureSlpImageAppearance, selectSlpImageProviderPrompt } from "../packages/slurp2/src/engine/packages/server/src/slp/base/media/slp-image-prompt.ts";
 
 const source = {
   publicDisplayName: "A", publicHandle: "a", name: "A", description: "Tall with silver hair.",
@@ -99,4 +100,14 @@ test("description extraction requires a supporting quote and never invents from 
   assert.equal(parseSlpAppearanceCandidate(supported, "Different card", false), null);
   assert.equal(parseSlpAppearanceCandidate('{"appearance":"Blue eyes","evidence":""}', "", false), null);
   assert.equal(parseSlpAppearanceCandidate('{"appearance":"Blue eyes","evidence":""}', "", true)?.source, "avatar");
+});
+
+test("reviewed, rewritten, and fallback prompts all retain appearance", () => {
+  for (const rewrittenPrompt of ["A portrait at a bus stop", null]) {
+    const selected = selectSlpImageProviderPrompt({ rewrittenPrompt, rawPrompt: "At a bus stop", rewriteAttempted: true });
+    const final = ensureSlpImageAppearance(selected, "Adult woman with green eyes and dark hair.");
+    assert.match(final, /green eyes and dark hair/u);
+    assert.match(final, /bus stop/u);
+    assert.equal(ensureSlpImageAppearance(final, "Adult woman with green eyes and dark hair."), final);
+  }
 });

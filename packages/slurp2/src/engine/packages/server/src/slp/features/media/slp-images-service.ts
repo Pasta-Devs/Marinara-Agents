@@ -40,6 +40,7 @@ import type { SlpImagePromptReviewItem, ReviewedSlpImagePrompt } from "./slp-pub
 import { characterNameFromRow } from "../../modules/creators/slp-public-support.js";
 import {
   selectSlpImageProviderPrompt,
+  ensureSlpImageAppearance,
   slurpImageLook,
   stripAppearanceLabel,
 } from "../../base/media/slp-image-prompt.js";
@@ -426,7 +427,7 @@ export async function generateCreatorPostImage(input: {
       guidanceContext: [configuredImageInstructions, connectionImageInstructions],
     }),
   );
-  const finalPrompt = [finalPromptBase, input.compositionGuard].filter(Boolean).join("\n\n");
+  const finalPrompt = [ensureSlpImageAppearance(finalPromptBase, redactIdentity(stageAppearance)), input.compositionGuard].filter(Boolean).join("\n\n");
   // A reviewer who cleared the negative prompt still gets the style profile's own negatives back,
   // for the same reason the positive prompt is recompiled above.
   const baseNegativePrompt =
