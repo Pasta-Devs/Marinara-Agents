@@ -67,6 +67,7 @@ import {
 } from "./source-task";
 import { buildScopeIndexes, type ScopeTargetChat, type ScopeTargets } from "./scope-targets";
 import {
+  chatOnlyLtmScope,
   ltmModeForChatMode,
   normalizeLtmScope,
   withMergedLtmScopeLinks,
@@ -1628,12 +1629,8 @@ export default function SourcesWorkspace({
       label: current ? localizeUi("ui.longTermMemory.sourcesworkspace.current") : chat.label,
       comment: current ? chat.label : undefined,
       kind: "chat",
-      sourceScope: current
-        ? (scopeTargets.data?.currentScope ?? { chatId: chat.id, chatIds: [chat.id] })
-        : { chatId: chat.id, chatIds: [chat.id] },
-      destinationScope: current
-        ? (scopeTargets.data?.currentScope ?? { chatId: chat.id, chatIds: [chat.id] })
-        : { chatId: chat.id, chatIds: [chat.id] },
+      sourceScope: current ? (scopeTargets.data?.currentScope ?? chatOnlyLtmScope(chat.id)) : chatOnlyLtmScope(chat.id),
+      destinationScope: chatOnlyLtmScope(chat.id),
       searchText: [chat.label, chat.mode, chat.groupId, chat.personaId, ...chat.characterIds].filter(Boolean).join(" "),
       ...(current ? { pinned: "current" as const } : {}),
     });
