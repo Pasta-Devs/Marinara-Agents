@@ -1,5 +1,9 @@
 # Long-Term Memory changelog
 
+## 1.3.15 — 2026-09-23
+
+- Normalize rejected recovery candidate subject IDs before validation and storage so mixed-case names remain available for review without changing canonical identity checks.
+
 ## 1.3.14 — 2026-09-23
 
 - Keep current-chat source destinations exclusive to that chat, including chats in a group. Explicit persona, character, and group destinations remain shared across their matching chats.
