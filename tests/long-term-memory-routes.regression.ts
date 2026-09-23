@@ -4685,6 +4685,11 @@ async function main(routeScenario: RouteScenario) {
           enabled: true,
         },
         {
+          id: "summary-chat-only-default",
+          content: "A grouped chat defaults to chat-only availability.",
+          enabled: true,
+        },
+        {
           id: "summary-cross-conflict-batch",
           content: "A conflicting destination must not stop other source notes.",
           enabled: true,
@@ -5016,9 +5021,10 @@ async function main(routeScenario: RouteScenario) {
         method: "POST",
         url: "/api/long-term-memory/import/source-notes",
         headers,
-        payload: { source: "chats", sourceIds: ["chat-a:summary-cross-branches"], chatId: "chat-a", extract: false },
+        payload: { source: "chats", sourceIds: ["chat-a:summary-chat-only-default"], chatId: "chat-a", extract: false },
       });
       assert.equal(groupedChatImport.statusCode, 200, groupedChatImport.body);
+      assert.equal(groupedChatImport.json().imported.length, 1, groupedChatImport.body);
       assert.deepEqual(groupedChatImport.json().imported[0].note.destinationScope, {
         chatId: "chat-a",
         chatIds: ["chat-a"],
