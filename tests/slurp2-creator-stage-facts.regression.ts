@@ -22,10 +22,9 @@ assert.deepEqual(settings.stage, {
 assert.equal(normalizeSlpAccountSettings({}).stage, undefined);
 assert.equal(normalizeSlpAccountSettings({ stage: { appearance: "   " } }).stage, undefined);
 
-// The source card seeds an empty appearance on create. Asking the user to retype a face that is
-// already written down is exactly how this field stayed empty.
-assert.equal(slurpStageFacts({ appearance: "" }, "red hair, short")?.appearance, "red hair, short");
-assert.equal(slurpStageFacts({ appearance: "her own" }, "red hair, short")?.appearance, "her own");
+// The source card stays live when the Creator has no intentional override.
+assert.equal(slurpStageFacts({ appearance: "" })?.appearance, undefined);
+assert.equal(slurpStageFacts({ appearance: "her own" })?.appearance, "her own");
 assert.equal(slurpStageFacts({}), undefined, "a profile with no facts stores no facts");
 
 // Her clothes reach the picture brief when the scene names none.
