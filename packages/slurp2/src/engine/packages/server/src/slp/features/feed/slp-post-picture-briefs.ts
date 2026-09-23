@@ -64,6 +64,7 @@ export function slurpPostPictureBriefs(input: {
   // Produce mode briefs the picture from the situation, never from the caption the model just
   // wrote. Identity protection still applies: the brief carries the Creator's own place and
   // company, so a Secret Creator's details must be redacted here exactly as they are in the text.
+  const effortPhoto = `${slurpProductionPhoto(input.productionStyle ?? "homemade")}; ${slurpEffortPhoto(input.effort)}`;
   const imageDraft =
     // A post direction can ask the model for its own imagePrompt; a returned one is honoured.
     normalizeSlpImagePrompt(input.modelImagePrompt) ??
@@ -73,7 +74,7 @@ export function slurpPostPictureBriefs(input: {
           variation,
           story: input.story,
           shoot: input.shoot,
-          effortPhoto: `${slurpProductionPhoto(input.productionStyle ?? "homemade")}; ${slurpEffortPhoto(input.effort)}`,
+          effortPhoto,
           sexualLevel,
           stageFacts: input.stageFacts,
           scene: input.scene,
@@ -94,7 +95,7 @@ export function slurpPostPictureBriefs(input: {
             variation,
             axes: input.axes,
             cameraInstruction: slurpCameraSourcePhoto(camera),
-            effortInstruction: slurpEffortPhoto(input.effort),
+            effortInstruction: effortPhoto,
             shoot: input.shoot,
             story: input.story,
             access: input.access,

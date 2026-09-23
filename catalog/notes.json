@@ -116,6 +116,12 @@
     "long-term-memory": {
       "versions": [
         {
+          "version": "1.3.16",
+          "date": "2026-09-23",
+          "notes": "- Stop automatically binding short names and fuzzy spelling variants to characters; keep those matches reviewable instead of assigning a subject without evidence. A reviewed subject-bound alias choice can rename the existing canonical character note to the chosen alias.",
+          "highlight": false
+        },
+        {
           "version": "1.3.15",
           "date": "2026-09-23",
           "notes": "- Normalize rejected recovery candidate subject IDs before validation and storage so mixed-case names remain available for review without changing canonical identity checks.",
@@ -228,12 +234,6 @@
           "date": "2026-09-10",
           "notes": "- Added a confirmed discard action for invalidated drafts, removing old proposals without changing saved memories.",
           "highlight": false
-        },
-        {
-          "version": "1.2.24",
-          "date": "2026-09-09",
-          "notes": "- Kept drafts with missing source notes visibly blocked without preventing review of other sources.\n- Showed context-loading error details alongside Retry and kept orphaned rejected suggestions accessible.",
-          "highlight": true
         }
       ]
     },
@@ -344,7 +344,13 @@
         {
           "version": "0.2.34",
           "date": "2026-09-23",
-          "notes": "- Centralized Slurp connection settings, corrected image appearance controls, simplified Prompt Studio output, and tolerated unknown fields in valid structured model responses.\n- Future automatic posts now survive Engine restarts and source snapshot changes.",
+          "notes": "- Manage text and image connections in one place. Missing saved connections stay visible until you choose a replacement, and connection load errors can be retried.\n- Image briefs now follow the Creator's production style, and future automatic posts survive Engine restarts and source snapshot changes.\n- Prompt Studio describes its output clearly, image appearance settings apply consistently, and valid model responses can include extra fields.",
+          "highlight": false
+        },
+        {
+          "version": "0.2.29",
+          "date": "2026-09-23",
+          "notes": "- Scheduled timeline refresh uses the saved daily setting again.\n- Delayed chat replies finish during a cool-off, and strict model output supports comment threads and invited posts.\n- Pulse shows failed first posts and audience failure details. Arc edits keep imported story fields.",
           "highlight": false
         },
         {
@@ -453,12 +459,6 @@
           "version": "0.2.11",
           "date": "2026-09-21",
           "notes": "- Deleted posts can be restored again, with pending and failure feedback.\n- Restore now pulls the deleted post's sparkles into the restore action.",
-          "highlight": false
-        },
-        {
-          "version": "0.2.10",
-          "date": "2026-09-21",
-          "notes": "- Normal, locked, profile, media, Story, and reply surfaces now use consistent three-dot action menus.\n- Posts now support direct sharing to Slurp messages and durable post or reply reports with snapshots.\n- Slurp now uses one canonical post card renderer.",
           "highlight": false
         }
       ]

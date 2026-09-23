@@ -63,6 +63,8 @@ import type {
 import { createSlurpReplyMethods } from "./slp-reply-storage-methods.js";
 import type { SlurpMessagesContext } from "./slp-messages-storage-context.js";
 
+const briefCreations = new Map<string, Promise<unknown>>();
+
 export function createMessagesStorageCommissions(context: SlurpMessagesContext) {
   const {
     db,
@@ -87,16 +89,45 @@ export function createMessagesStorageCommissions(context: SlurpMessagesContext) 
     hasCompletedSlurpPaymentOperation,
     queueCommissionOperation,
   } = context;
+  /**
+   * Did accepting this commission take coins from a player wallet? An audience commission and one
+   * accepted with the wallet off charged nobody. Reading the current wallet setting instead
+   * refunded coins nobody paid, and an audience refund had no credit to reverse and retried forever.
+   */
+  const commissionWasCharged = async (id: string): Promise<boolean> => {
+    const [intent] = await db
+      .select()
+      .from(slurpPaymentCompensations)
+      .where(eq(slurpPaymentCompensations.id, `commission:${id}:accept`));
+    return intent?.status === "charged" || intent?.status === "settled";
+  };
   return {
     async createCommission(
       viewerAccountId: string,
       creatorAccountId: string,
       brief: string,
     ): Promise<SlurpCommission | "open_request" | null> {
+      // The "one open brief" check reads before it writes, so a double click opened two briefs.
+      // One brief at a time per pair closes that gap in this process.
+      const key = `${viewerAccountId}:${creatorAccountId}`;
+      const previous = briefCreations.get(key) ?? Promise.resolve();
+      const current = previous
+        .catch(() => undefined)
+        .then(() => context.storage.createCommissionUnlocked(viewerAccountId, creatorAccountId, brief));
+      briefCreations.set(key, current);
+      try {
+        return await current;
+      } finally {
+        if (briefCreations.get(key) === current) briefCreations.delete(key);
+      }
+    },
+    async createCommissionUnlocked(
+      viewerAccountId: string,
+      creatorAccountId: string,
+      brief: string,
+    ): Promise<SlurpCommission | "open_request" | null> {
       const opened = await context.storage.openThread(viewerAccountId, creatorAccountId, "viewer");
       if (opened.status !== "ok") return null;
-      const open = await context.storage.listCommissionsForThread(opened.thread.id);
-      if (open.some((row) => row.state === "brief" || row.state === "quoted")) return "open_request";
       const timestamp = now();
       const row = {
         id: newId(),
@@ -112,7 +143,22 @@ export function createMessagesStorageCommissions(context: SlurpMessagesContext) 
         createdAt: timestamp,
         updatedAt: timestamp,
       };
-      await db.insert(slurpCommissions).values(row);
+      const created = await db.transaction(async (tx) => {
+        const open = await tx
+          .select({ state: slurpCommissions.state })
+          .from(slurpCommissions)
+          .where(
+            and(
+              eq(slurpCommissions.viewerAccountId, viewerAccountId),
+              eq(slurpCommissions.creatorAccountId, creatorAccountId),
+              inArray(slurpCommissions.state, ["brief", "quoted"]),
+            ),
+          );
+        if (open.length > 0) return false;
+        await tx.insert(slurpCommissions).values(row);
+        return true;
+      });
+      if (!created) return "open_request";
       await context.storage.appendMessage(opened.thread.id, {
         senderAccountId: viewerAccountId,
         role: "viewer",
@@ -158,47 +204,6 @@ export function createMessagesStorageCommissions(context: SlurpMessagesContext) 
     async getMessageById(id: string): Promise<SlurpMessage | null> {
       const rows = await db.select().from(slurpMessages).where(eq(slurpMessages.id, id));
       return rows[0] ? mapMessage(rows[0]) : null;
-    },
-    /** Replace a placeholder brief with the model's rewrite. Text only; nothing else moves. */
-    async rewriteCommissionBrief(id: string, brief: string): Promise<void> {
-      await db.update(slurpCommissions).set({ brief, updatedAt: now() }).where(eq(slurpCommissions.id, id));
-      const rows = await db.select().from(slurpCommissions).where(eq(slurpCommissions.id, id));
-      const commission = rows[0];
-      if (!commission) return;
-      const messages = await db.select().from(slurpMessages).where(eq(slurpMessages.threadId, commission.threadId));
-      const linked = messages.find((message) => {
-        try {
-          return JSON.parse(String(message.metadata ?? "{}"))?.commissionId === id;
-        } catch {
-          return false;
-        }
-      });
-      if (!linked) return;
-      await db.update(slurpMessages).set({ content: brief }).where(eq(slurpMessages.id, linked.id));
-      const latest = messages.sort((left, right) => right.createdAt.localeCompare(left.createdAt))[0];
-      if (latest?.id === linked.id) {
-        await db
-          .update(slurpThreads)
-          .set({ lastMessagePreview: brief.slice(0, 160), updatedAt: now() })
-          .where(eq(slurpThreads.id, commission.threadId));
-      }
-    },
-    /** Replace a placeholder message with the model's rewrite, and keep the inbox preview in step. */
-    async rewriteMessageContent(id: string, content: string): Promise<void> {
-      const rows = await db.select().from(slurpMessages).where(eq(slurpMessages.id, id));
-      const row = rows[0];
-      if (!row) return;
-      await db.update(slurpMessages).set({ content }).where(eq(slurpMessages.id, id));
-      const thread = await context.storage.getThreadById(String(row.threadId));
-      // The inbox row caches the last message, so rewriting the message without this leaves the
-      // list showing the placeholder next to a conversation that no longer contains it.
-      const latest = (await context.storage.listMessages(String(row.threadId), 1))[0];
-      if (thread && latest?.id === id) {
-        await db
-          .update(slurpThreads)
-          .set({ lastMessagePreview: content.slice(0, 160), updatedAt: now() })
-          .where(eq(slurpThreads.id, thread.id));
-      }
     },
     async getCommission(id: string): Promise<SlurpCommission | null> {
       const rows = await db.select().from(slurpCommissions).where(eq(slurpCommissions.id, id));
@@ -501,57 +506,6 @@ export function createMessagesStorageCommissions(context: SlurpMessagesContext) 
      * ship. Only an unpaid commission may be ended — once it is accepted the coins have moved, so
      * ending it there would need a refund path rather than a state change.
      */
-    /**
-     * Attach generated media to a message after it exists.
-     *
-     * The serving URL contains the message id, and `appendMessage` mints that id, so the image can
-     * only be bound once the row is written.
-     */
-    async setMessageMedia(messageId: string, imageUrl: string, mediaPath: string, imagePrompt?: string): Promise<void> {
-      const rows = await db.select().from(slurpMessages).where(eq(slurpMessages.id, messageId));
-      const row = rows[0];
-      if (!row) return;
-      const metadata = {
-        ...(json(row.metadata as string) ?? {}),
-        noodlerMediaPath: mediaPath,
-        // What the picture was drawn from, so image context can describe it without a vision call.
-        ...(imagePrompt ? { imagePrompt } : {}),
-      };
-      await db
-        .update(slurpMessages)
-        .set({ imageUrl, metadata: JSON.stringify(metadata) })
-        .where(eq(slurpMessages.id, messageId));
-    },
-    /** Keep a vision description of a message picture, tied to the picture it describes. */
-    async setMessageImageDescription(messageId: string, description: string, source: string): Promise<void> {
-      const row = (await db.select().from(slurpMessages).where(eq(slurpMessages.id, messageId)))[0];
-      if (!row) return;
-      const metadata = {
-        ...(json(row.metadata as string) ?? {}),
-        imageDescription: description,
-        imageDescriptionSource: source,
-      };
-      await db
-        .update(slurpMessages)
-        .set({ metadata: JSON.stringify(metadata) })
-        .where(eq(slurpMessages.id, messageId));
-    },
-    async setMessageReaction(
-      messageId: string,
-      viewerAccountId: string,
-      reaction: string | null,
-    ): Promise<SlurpMessage | null> {
-      const message = await context.storage.getMessageById(messageId);
-      if (!message) return null;
-      const thread = await context.storage.getThreadById(message.threadId);
-      if (!thread || thread.viewerAccountId !== viewerAccountId) return null;
-      const metadata = { ...message.metadata, reaction: reaction === "heart" ? "heart" : null };
-      await db
-        .update(slurpMessages)
-        .set({ metadata: JSON.stringify(metadata) })
-        .where(eq(slurpMessages.id, messageId));
-      return context.storage.getMessageById(messageId);
-    },
     async declineCommission(id: string, by: "creator" | "viewer"): Promise<SlurpCommission | null> {
       return queueCommissionOperation(id, () => context.storage.declineCommissionUnlocked(id, by));
     },
@@ -565,6 +519,16 @@ export function createMessagesStorageCommissions(context: SlurpMessagesContext) 
       if (commission.state === "accepted" && by === "viewer" && !acceptedUndelivered) return commission;
       if (!acceptedUndelivered && commission.state !== "brief" && commission.state !== "quoted") return commission;
       if (acceptedUndelivered) {
+        const deliveryMessage = commission.deliveryMessageId
+          ? await context.storage.getMessageById(commission.deliveryMessageId)
+          : null;
+        if (deliveryMessage) {
+          await db
+            .update(slurpCommissions)
+            .set({ state: "delivered", updatedAt: now() })
+            .where(eq(slurpCommissions.id, id));
+          return context.storage.getCommission(id);
+        }
         const cancellationId = `commission:${id}:settlement`;
         const claimed = await db.transaction(async (tx) => {
           const current = (await tx.select().from(slurpCommissions).where(eq(slurpCommissions.id, id)))[0];
@@ -572,7 +536,9 @@ export function createMessagesStorageCommissions(context: SlurpMessagesContext) 
             !current ||
             (current.state !== "accepted" && current.state !== "cancellation_pending") ||
             (current.state === "cancellation_pending" && current.cancellationId !== cancellationId) ||
-            current.deliveryId ||
+            // A delivery claim holds for five minutes, as in `deliverCommissionUnlocked`. A delivery
+            // that threw kept its claim forever, and the fan's cancel then did nothing.
+            (current.deliveryId && Date.parse(String(current.deliveryClaimedAt ?? "")) > Date.now() - 5 * 60 * 1000) ||
             (current.deliverAt && String(current.deliverAt) > new Date().toISOString())
           )
             return false;
@@ -586,8 +552,8 @@ export function createMessagesStorageCommissions(context: SlurpMessagesContext) 
           const pending = await context.storage.getCommission(id);
           if (pending?.state !== "cancellation_pending" || pending.cancellationId !== cancellationId) return pending;
         }
-        // With the wallet off, accept charged nothing, so a refund here would mint coins.
-        const { walletEnabled } = await slurp.getSettings();
+        // Only a real charge is refunded. Anything else would mint coins.
+        const walletEnabled = await commissionWasCharged(id);
         if (walletEnabled) {
           await completeSlurpPaymentIntent(slurp, `commission:${id}:accept`);
           await compensateSlurpPayment(
@@ -754,8 +720,8 @@ export function createMessagesStorageCommissions(context: SlurpMessagesContext) 
         return context.storage.getCommission(id);
       }
       if (!message) {
-        const settings = await slurp.getSettings();
-        if (settings.walletEnabled) {
+        const charged = await commissionWasCharged(id);
+        if (charged) {
           const compensationId = `commission:${id}:settlement`;
           await db
             .update(slurpCommissions)
@@ -785,7 +751,9 @@ export function createMessagesStorageCommissions(context: SlurpMessagesContext) 
           senderAccountId: commission.creatorAccountId,
           role: "creator",
           kind: "system",
-          content: "This commission could not be delivered. The payment was refunded.",
+          content: charged
+            ? "This commission could not be delivered. The payment was refunded."
+            : "This commission could not be delivered.",
           metadata: { commissionId: id },
         });
         return null;

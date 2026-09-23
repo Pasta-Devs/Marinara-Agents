@@ -137,9 +137,9 @@ export function slurpEffortInstruction(effort: SlurpPostEffort): string {
 
 /** The effort as words an image model can draw. The caption side keeps `slurpEffortInstruction`. */
 const EFFORT_PHOTO: Record<SlurpPostEffort, string> = {
-  low: "casual unedited phone snapshot, ordinary available light, sharp and clearly visible",
-  medium: "casual phone photo, natural light",
-  high: "carefully framed photo with good natural light",
+  low: "casual and unedited, taken on the first attempt",
+  medium: "casual, considered, and taken in a second attempt",
+  high: "carefully planned and selected from several attempts",
 };
 
 export function slurpEffortPhoto(effort: SlurpPostEffort): string {

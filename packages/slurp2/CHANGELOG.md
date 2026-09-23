@@ -2,8 +2,15 @@
 
 ## 0.2.34 — 2026-09-23
 
-- Centralized Slurp connection settings, corrected image appearance controls, simplified Prompt Studio output, and tolerated unknown fields in valid structured model responses.
-- Future automatic posts now survive Engine restarts and source snapshot changes.
+- Manage text and image connections in one place. Missing saved connections stay visible until you choose a replacement, and connection load errors can be retried.
+- Image briefs now follow the Creator's production style, and future automatic posts survive Engine restarts and source snapshot changes.
+- Prompt Studio describes its output clearly, image appearance settings apply consistently, and valid model responses can include extra fields.
+
+## 0.2.29 — 2026-09-23
+
+- Scheduled timeline refresh uses the saved daily setting again.
+- Delayed chat replies finish during a cool-off, and strict model output supports comment threads and invited posts.
+- Pulse shows failed first posts and audience failure details. Arc edits keep imported story fields.
 
 ## 0.2.28 — 2026-09-23
 

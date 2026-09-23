@@ -61,12 +61,13 @@ assert.match(service, /NOODLER_UNTRUSTED_CONTENT_INSTRUCTION/u);
 // A thread caches its last message, so rewriting one without updating the cache leaves the list
 // showing a placeholder next to a conversation that no longer contains it.
 const messageStorage = read("services/storage/slurp-messages.storage.ts");
+const messageActions = read("slp/data/messages/slp-messages-storage-actions.ts");
 assert.match(messageStorage, /async rewriteMessageContent\(/u);
 assert.match(messageStorage, /lastMessagePreview: content\.slice\(0, 160\)/u);
 assert.match(messageStorage, /latest\?\.id === id/u, "only the newest message owns the preview");
 
 // Rewrites are text only. Nothing about price, state, or authorship moves.
-assert.match(messageStorage, /Text only; nothing else moves\./u);
+assert.match(messageActions, /async rewriteCommissionBrief\(/u);
 
 const schema = read("db/schema/slurp.ts");
 assert.match(schema, /fileTable\("slurp2_pending_text"/u);

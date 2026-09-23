@@ -1,5 +1,9 @@
 # Long-Term Memory changelog
 
+## 1.3.16 — 2026-09-23
+
+- Stop automatically binding short names and fuzzy spelling variants to characters; keep those matches reviewable instead of assigning a subject without evidence. A reviewed subject-bound alias choice can rename the existing canonical character note to the chosen alias.
+
 ## 1.3.15 — 2026-09-23
 
 - Normalize rejected recovery candidate subject IDs before validation and storage so mixed-case names remain available for review without changing canonical identity checks.

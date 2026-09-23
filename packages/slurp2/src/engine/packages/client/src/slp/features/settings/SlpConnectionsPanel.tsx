@@ -53,38 +53,63 @@ export function SlpConnectionsPanel({ t, settings, update, connectionsQuery }: S
         detail="All Slurp model connections in one place. Existing settings pages keep shortcuts."
         scope="all-slurp"
       />
-      <div className="grid gap-3 sm:grid-cols-2">
-        {rows.map((row) => {
-          const state = status(row.value, row.connections, row.fallback);
-          return (
-            <Field key={row.key} label={row.label} detail={state.text}>
-              <select
-                value={row.value ?? ""}
-                disabled={connectionsQuery.isLoading || connectionsQuery.isError}
-                onChange={(event) => void update(row.key, event.target.value || null)}
-                className="min-h-11 w-full rounded-lg border border-[var(--slurp-outline)] bg-[var(--slurp-canvas)] px-3 text-sm"
-              >
-                <option value="">Use default</option>
-                {row.connections.map((connection) => (
-                  <option key={connection.id} value={connection.id}>
-                    {label(connection)}
-                  </option>
-                ))}
-              </select>
-              <p
-                className={`mt-2 inline-flex items-center gap-1 text-xs ${state.kind === "ok" ? "text-[var(--slurp-success)]" : "text-[var(--slurp-warning)]"}`}
-              >
-                {state.kind === "ok" ? (
-                  <CheckCircle2 size={13} aria-hidden="true" />
-                ) : (
-                  <AlertTriangle size={13} aria-hidden="true" />
-                )}
-                {state.text}
-              </p>
-            </Field>
-          );
-        })}
-      </div>
+      {connectionsQuery.isLoading ? (
+        <p role="status" className="rounded-lg bg-[var(--slurp-surface-raised)] p-4 text-sm text-[var(--slurp-muted)]">
+          Loading connections...
+        </p>
+      ) : connectionsQuery.isError ? (
+        <div
+          role="alert"
+          className="rounded-lg bg-[var(--slurp-surface-raised)] p-4 text-sm text-[var(--slurp-warning)] ring-1 ring-inset ring-[var(--slurp-outline)]"
+        >
+          <p>Unable to load connections.</p>
+          <button
+            type="button"
+            className="mt-3 min-h-11 rounded-md border border-[var(--slurp-outline)] px-3"
+            onClick={() => void connectionsQuery.refetch()}
+          >
+            Try again
+          </button>
+        </div>
+      ) : (
+        <div className="grid gap-3 sm:grid-cols-2">
+          {rows.map((row) => {
+            const state = status(row.value, row.connections, row.fallback);
+            const unavailableValue = row.value && !row.connections.some((connection) => connection.id === row.value);
+            return (
+              <Field key={row.key} label={row.label} detail={state.text}>
+                <select
+                  value={row.value ?? ""}
+                  onChange={(event) => void update(row.key, event.target.value || null)}
+                  className="min-h-11 w-full rounded-lg border border-[var(--slurp-outline)] bg-[var(--slurp-canvas)] px-3 text-sm"
+                >
+                  <option value="">Use default</option>
+                  {unavailableValue && (
+                    <option value={row.value!} disabled>
+                      Unavailable connection ({row.value})
+                    </option>
+                  )}
+                  {row.connections.map((connection) => (
+                    <option key={connection.id} value={connection.id}>
+                      {label(connection)}
+                    </option>
+                  ))}
+                </select>
+                <p
+                  className={`mt-2 inline-flex items-center gap-1 text-xs ${state.kind === "ok" ? "text-[var(--slurp-success)]" : "text-[var(--slurp-warning)]"}`}
+                >
+                  {state.kind === "ok" ? (
+                    <CheckCircle2 size={13} aria-hidden="true" />
+                  ) : (
+                    <AlertTriangle size={13} aria-hidden="true" />
+                  )}
+                  {state.text}
+                </p>
+              </Field>
+            );
+          })}
+        </div>
+      )}
       <div className="flex items-start gap-3 rounded-lg bg-[var(--slurp-surface-raised)] p-4 text-xs text-[var(--slurp-muted)] ring-1 ring-inset ring-[var(--slurp-outline)]">
         <Link2 size={16} className="mt-0.5 shrink-0" aria-hidden="true" />
         <p>

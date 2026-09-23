@@ -2442,7 +2442,7 @@
         },
         "id": "long-term-memory",
         "name": "Long-Term Memory",
-        "version": "1.3.15",
+        "version": "1.3.16",
         "description": "Extracts durable memories from chat summaries, character records, and lorebooks, then recalls relevant context from a package-owned vault. Enable it per chat from Chat Settings → Agents → Long-Term Memory. In Roleplay and Game, you can also add it from Chat Settings → Agents → Misc Agents.",
         "engine": {
           "min": "2.4.1",
@@ -2474,13 +2474,13 @@
           },
           {
             "path": "server.mjs",
-            "sha256": "9b4dd648da502e96d96335b3b577b379b0e065439233c58575b8590ee86cc9e5",
-            "bytes": 423915
+            "sha256": "54b0b90d0d91297b442c7479ebb1fe06aa3b594ab9159bcb735ff106e77177c3",
+            "bytes": 425923
           },
           {
             "path": "client.js",
-            "sha256": "e6cf29956d5ba243de3c83bcc3f870f95a035b39e9dd1716bd24281a687efa61",
-            "bytes": 913637
+            "sha256": "b61f1b652501e1a02b6c15485d88e4225b3d9d5e247545b337d54213eae27430",
+            "bytes": 913855
           }
         ],
         "permissions": [
@@ -2496,9 +2496,9 @@
       "category": "misc",
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/long-term-memory.png",
       "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/long-term-memory-1.3.15.zip",
-        "sha256": "a994ddad9b10bd2abccae7b1b2aea0e257756ef19f5776949046fef15f3d8eb7",
-        "bytes": 1340091
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/long-term-memory-1.3.16.zip",
+        "sha256": "6c3af2a4d098fad8ec4fc2a037f44fc8fd1b931c147d5a529e16ee5e21ef1682",
+        "bytes": 1342317
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents#long-term-memory"
     },
@@ -3235,13 +3235,13 @@
           },
           {
             "path": "server.mjs",
-            "sha256": "9584cfac90f0c8de1437bfb19e67d60dec1d44f2b860f0113a5e6164ca5bd1bd",
-            "bytes": 3161092
+            "sha256": "c6a9e83d31cc64b11233faf09377cad5e9b45c2a51afc74c61636b828bc00279",
+            "bytes": 2959975
           },
           {
             "path": "client.js",
-            "sha256": "1e8e9dcc92e9dbc801bf0336b50e95981716c2c4dd7b9508a5d9f110c153dc84",
-            "bytes": 3931827
+            "sha256": "c36a4257949f6a7198a806b499bf577386d5dc30cf11c7a434b8b99fa1e8f3f2",
+            "bytes": 3915182
           },
           {
             "path": "slurp2-logo.png",
@@ -3268,8 +3268,8 @@
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/slurp2.png",
       "artifact": {
         "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/slurp2-0.2.34.zip",
-        "sha256": "2e69e75e11e402e7e115a5a86996ce321ace58d99bf8d6f44d66a4ba99a865bf",
-        "bytes": 7249670
+        "sha256": "8ecf10becec416c91ad9e80860a15649d650d1f7029785f158186ae714561df6",
+        "bytes": 7031908
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents/blob/main/packages/slurp2/README.md"
     },

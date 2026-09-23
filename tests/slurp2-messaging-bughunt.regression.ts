@@ -35,7 +35,10 @@ assert.match(
   /status: "settled"[\s\S]{0,400}inArray\(slurpPaymentCompensations\.status, \["created", "charging", "charged", "settled"\]\)/u,
 );
 const commissions = server("data/messages/slp-messages-storage-commissions.ts");
-assert.match(commissions, /const \{ walletEnabled \} = await slurp\.getSettings\(\);\s*if \(walletEnabled\) \{/u);
+assert.match(
+  commissions,
+  /const settings = await slurp\.getSettings\(\);[\s\S]{0,200}if \(settings\.walletEnabled\) \{/u,
+);
 assert.match(commissions, /`commission:\$\{id\}:accept`,\s*\);\s*\/\/ Compensated[\s\S]{0,200}state: "declined"/u);
 assert.match(
   server("data/messages/slp-messages-storage-base.ts"),

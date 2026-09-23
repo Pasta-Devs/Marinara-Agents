@@ -13,6 +13,24 @@ export const SLURP2_RELEASES: Slurp2ReleaseEntry[] = [
     version: "0.2.34",
     date: "2026-09-23",
     notes: [
+      "Manage text and image connections in one place. Missing saved connections stay visible until you choose a replacement, and connection load errors can be retried.",
+      "Image briefs now follow the Creator's production style, and future automatic posts survive Engine restarts and source snapshot changes.",
+      "Prompt Studio describes its output clearly, image appearance settings apply consistently, and valid model responses can include extra fields.",
+    ],
+  },
+  {
+    version: "0.2.29",
+    date: "2026-09-23",
+    notes: [
+      "Scheduled timeline refresh uses the saved daily setting again.",
+      "Delayed chat replies finish during a cool-off, and strict model output supports comment threads and invited posts.",
+      "Pulse shows failed first posts and audience failure details. Arc edits keep imported story fields.",
+    ],
+  },
+  {
+    version: "0.2.28",
+    date: "2026-09-23",
+    notes: [
       "Creator settings have a status overview and a section picker that works on phones.",
       "Profile edits use one save bar, and settings use one scroll area.",
     ],

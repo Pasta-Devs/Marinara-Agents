@@ -30,6 +30,7 @@ export interface SlpFanActivityDayPlanRun {
   acceptedActivities: SlpFanAcceptedActivity[];
   claimedAt: string | null;
   finishedAt: string | null;
+  error?: string | null;
   manual?: boolean;
 }
 
@@ -125,7 +126,8 @@ function validRun(value: unknown): value is SlpFanActivityDayPlanRun {
     Array.isArray(row.acceptedActivities) &&
     row.acceptedActivities.every(validActivity) &&
     (row.claimedAt === null || isTimestamp(row.claimedAt)) &&
-    (row.finishedAt === null || isTimestamp(row.finishedAt))
+    (row.finishedAt === null || isTimestamp(row.finishedAt)) &&
+    (row.error === undefined || row.error === null || typeof row.error === "string")
   );
 }
 
@@ -332,13 +334,18 @@ export function finishSlpFanActivityRun(
   runId: string,
   status: "completed" | "skipped" | "abandoned",
   at: Date,
+  error?: string | null,
 ): PersistedSlpFanActivityDayPlan {
   if (status !== "completed" && status !== "skipped" && status !== "abandoned") {
     throw new Error("Invalid Slurp fan activity finish status.");
   }
   return {
     ...plan,
-    runs: plan.runs.map((run) => (run.id === runId ? { ...run, status, finishedAt: at.toISOString() } : run)),
+    runs: plan.runs.map((run) =>
+      run.id === runId
+        ? { ...run, status, finishedAt: at.toISOString(), ...(error !== undefined ? { error } : {}) }
+        : run,
+    ),
   };
 }
 

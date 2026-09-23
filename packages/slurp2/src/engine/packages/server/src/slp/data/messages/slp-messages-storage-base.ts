@@ -265,30 +265,47 @@ export function createMessagesStorageBase(context: SlurpMessagesContext) {
       threadId: string,
       limit = 120,
       cursor?: { createdAt: string; id: string } | null,
+      search?: string,
     ): Promise<{ messages: SlurpMessage[]; nextCursor: { createdAt: string; id: string } | null }> {
       const bounded = Math.max(1, Math.min(120, Math.trunc(limit)));
-      const rows = await db
-        .select()
-        .from(slurpMessages)
-        .where(
-          and(
-            eq(slurpMessages.threadId, threadId),
-            cursor
-              ? or(
-                  lt(slurpMessages.createdAt, cursor.createdAt),
-                  and(eq(slurpMessages.createdAt, cursor.createdAt), lt(slurpMessages.id, cursor.id)),
-                )
-              : undefined,
-          ),
-        )
-        .orderBy(desc(slurpMessages.createdAt), desc(slurpMessages.id))
-        .limit(bounded + 1);
-      const page = rows.slice(0, bounded);
+      const needle = search?.trim().toLocaleLowerCase();
+      const readRows = (pageCursor: { createdAt: string; id: string } | null, pageLimit: number) =>
+        db
+          .select()
+          .from(slurpMessages)
+          .where(
+            and(
+              eq(slurpMessages.threadId, threadId),
+              pageCursor
+                ? or(
+                    lt(slurpMessages.createdAt, pageCursor.createdAt),
+                    and(eq(slurpMessages.createdAt, pageCursor.createdAt), lt(slurpMessages.id, pageCursor.id)),
+                  )
+                : undefined,
+            ),
+          )
+          .orderBy(desc(slurpMessages.createdAt), desc(slurpMessages.id))
+          .limit(pageLimit);
+      const rows = needle ? [] : await readRows(cursor ?? null, bounded + 1);
+      let scanCursor = cursor ?? null;
+      let exhausted = false;
+      while (needle && rows.length < bounded + 1 && !exhausted) {
+        const batch = await readRows(scanCursor, Math.max(bounded, 120));
+        if (batch.length === 0) break;
+        scanCursor = { createdAt: String(batch.at(-1)!.createdAt), id: String(batch.at(-1)!.id) };
+        for (const row of batch) {
+          if (String(row.content).toLocaleLowerCase().includes(needle)) rows.push(row);
+          if (rows.length >= bounded + 1) break;
+        }
+        exhausted = batch.length < 120;
+      }
+      const filtered = rows;
+      const page = filtered.slice(0, bounded);
       const oldest = page[page.length - 1];
       return {
         messages: page.map(mapMessage).reverse(),
         nextCursor:
-          rows.length > bounded && oldest ? { createdAt: String(oldest.createdAt), id: String(oldest.id) } : null,
+          filtered.length > bounded && oldest ? { createdAt: String(oldest.createdAt), id: String(oldest.id) } : null,
       };
     },
     /**
