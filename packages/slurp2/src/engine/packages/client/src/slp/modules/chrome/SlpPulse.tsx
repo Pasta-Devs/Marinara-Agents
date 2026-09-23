@@ -522,7 +522,12 @@ function PulseGroupCard({
         : undefined;
   const running = group.active && !attention;
   return (
-    <div className="space-y-1">
+    <motion.div
+      className="space-y-1"
+      initial={{ opacity: 0, x: group.tasks[0]?.source === "client" ? 24 : 0 }}
+      animate={{ opacity: 1, x: 0 }}
+      transition={{ duration: 0.28, ease: "easeOut" }}
+    >
       <div
         className={cn(
           "relative rounded-xl ring-1 ring-inset",
@@ -589,7 +594,7 @@ function PulseGroupCard({
           )}
         </div>
       )}
-    </div>
+    </motion.div>
   );
 }
 
