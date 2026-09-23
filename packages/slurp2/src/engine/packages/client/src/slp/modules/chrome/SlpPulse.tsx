@@ -10,7 +10,7 @@ import { cn } from "../../../lib/utils";
 
 export function SlpPulseCard({ open, onOpen }: { open: boolean; onOpen: () => void }) {
   const { t } = useUiTranslation();
-  const serverTasks = useSlpPulseTasks();
+  const serverTasks = useSlpPulseTasks(false);
   const activeCount = serverTasks.data?.tasks.filter((task) => isActiveTask(task.status)).length ?? 0;
   return (
     <button
@@ -74,9 +74,10 @@ export function SlpPulsePanel({
 }) {
   const { t } = useUiTranslation();
   const mutations = usePulseMutations();
-  const serverTasks = useSlpPulseTasks();
+  const serverTasks = useSlpPulseTasks(open);
   const tasks = mergePulseTasks(serverTasks.data?.tasks ?? [], mutations);
   const groups = groupPulseTasks(tasks);
+  const queueSummary = pulseQueueSummary(tasks, t);
   const taskAccounts = [...accounts, ...(serverTasks.data?.accounts ?? [])].filter(
     (account, index, all) => all.findIndex((candidate) => candidate.id === account.id) === index,
   );
@@ -118,7 +119,7 @@ export function SlpPulsePanel({
               </h2>
             </div>
             <p className="mt-1 text-[0.68rem] text-[var(--muted-foreground)]">
-              {t("ui.slurp.pulse.description", { defaultValue: "Background activity" })}
+              {queueSummary || t("ui.slurp.pulse.description", { defaultValue: "Background activity" })}
             </p>
           </div>
           <button
@@ -292,12 +293,13 @@ type PulseTasksResponse = {
   accounts: PulseAccount[];
 };
 
-function useSlpPulseTasks() {
+function useSlpPulseTasks(active = false) {
   return useQuery({
     queryKey: ["slurp", "pulse", "tasks"],
     queryFn: () => api.get<PulseTasksResponse>("/slurp2/slurp/tasks"),
-    refetchInterval: 30_000,
+    refetchInterval: active ? 2_000 : 15_000,
     refetchIntervalInBackground: false,
+    refetchOnWindowFocus: true,
   });
 }
 
@@ -325,13 +327,13 @@ function mergePulseTasks(
 ) {
   const server = serverTasks.map((task) => ({ ...task, source: "server" as const }));
   const client = [...mutations.active, ...mutations.recent].map((mutation) => {
-    const accountId = readAccountId(mutation.variables);
+    const accountIds = readAccountIds(mutation.variables);
     return {
       id: `client:${mutation.id}`,
       kind: mutation.key,
       status: mutation.status,
       updatedAt: new Date(mutation.submittedAt).toISOString(),
-      accountIds: accountId ? [accountId] : [],
+      accountIds,
       detail: null,
       progress: null,
       source: "client" as const,
@@ -379,6 +381,25 @@ function groupPulseTasks(tasks: { active: PulseTask[]; scheduled: PulseTask[]; r
     scheduled: values.filter((group) => group.scheduled && !group.active && !group.attention),
     recent: values.filter((group) => !group.active && !group.attention && !group.scheduled),
   };
+}
+
+function pulseQueueSummary(
+  tasks: { active: PulseTask[]; scheduled: PulseTask[]; recent: PulseTask[] },
+  t: (key: string, options?: Record<string, unknown>) => string,
+) {
+  const queued = tasks.active.filter((task) => ["queued", "prepared"].includes(task.status)).length;
+  const working = tasks.active.length - queued;
+  const scheduled = tasks.scheduled.length;
+  const recent = tasks.recent.length;
+  if (working === 0 && queued === 0 && scheduled === 0) return "";
+  return [
+    working > 0 ? t("ui.slurp.pulse.queueWorking", { defaultValue: "{{count}} working", count: working }) : "",
+    queued > 0 ? t("ui.slurp.pulse.queueQueued", { defaultValue: "{{count}} queued", count: queued }) : "",
+    scheduled > 0 ? t("ui.slurp.pulse.queueScheduled", { defaultValue: "{{count}} scheduled", count: scheduled }) : "",
+    recent > 0 ? t("ui.slurp.pulse.queueRecent", { defaultValue: "{{count}} recent", count: recent }) : "",
+  ]
+    .filter(Boolean)
+    .join(" · ");
 }
 
 function isActiveTask(status: string) {
@@ -521,6 +542,10 @@ function PulseGroupCard({
         ? t("ui.slurp.pulse.taskCount", { defaultValue: "{{count}} items", count: group.tasks.length })
         : undefined;
   const running = group.active && !attention;
+  const names = group.accountIds
+    .map((id) => accounts.find((account) => account.id === id || account.entityId === id)?.displayName)
+    .filter((name): name is string => Boolean(name));
+  const nameSummary = names.length > 0 ? names.slice(0, 3).join(", ") + (names.length > 3 ? " …" : "") : null;
   return (
     <motion.div
       className="space-y-1"
@@ -554,8 +579,11 @@ function PulseGroupCard({
           <span className="min-w-0 flex-1">
             <span className="block truncate text-sm font-semibold">{label}</span>
             <span className="block truncate text-xs text-[var(--muted-foreground)]">
-              {scope ?? taskSummary(group.tasks[0], t)}
+              {scope ?? nameSummary ?? taskSummary(group.tasks[0], t)}
             </span>
+            {nameSummary && scope && (
+              <span className="block truncate text-[0.68rem] text-[var(--muted-foreground)]">{nameSummary}</span>
+            )}
           </span>
           <span className="flex shrink-0 items-center gap-2 text-[0.68rem] font-semibold text-[var(--muted-foreground)]">
             {group.tasks.length > 1 && <span>{group.tasks.length}</span>}
@@ -661,13 +689,16 @@ function formatPulseAge(value?: string) {
   return `${Math.floor(minutes / 60)}h`;
 }
 
-function readAccountId(variables: unknown): string | null {
-  if (!variables || typeof variables !== "object") return null;
+function readAccountIds(variables: unknown): string[] {
+  if (!variables || typeof variables !== "object") return [];
   const record = variables as Record<string, unknown>;
-  for (const key of ["accountId", "targetAccountId", "creatorAccountId"]) {
-    if (typeof record[key] === "string") return record[key];
+  if (Array.isArray(record.accountIds)) {
+    return record.accountIds.filter((id): id is string => typeof id === "string");
   }
-  return null;
+  for (const key of ["accountId", "targetAccountId", "creatorAccountId"]) {
+    if (typeof record[key] === "string") return [record[key]];
+  }
+  return [];
 }
 
 function pulseTaskLabel(key: string, t: (key: string, options?: Record<string, unknown>) => string) {
