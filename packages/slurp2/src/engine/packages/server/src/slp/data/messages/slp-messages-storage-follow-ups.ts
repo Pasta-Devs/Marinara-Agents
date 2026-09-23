@@ -58,6 +58,7 @@ import {
   type SlurpRapportFacts,
 } from "../../modules/messages/slp-rapport.js";
 import { createSlurpReplyQueueStorage } from "./slp-reply-queue-storage.js";
+import { unlinkCreatorMedia } from "../../base/media/slp-media.js";
 import { SLURP_COMMISSION_MAX_HAGGLE_ROUNDS, slurpCreatorHaggle } from "../../modules/economy/slp-creator-pricing.js";
 import { DAY, int, json, mapCommission, mapMessage, mapThread, now } from "./slp-messages-storage-helpers.js";
 import type {
@@ -115,7 +116,19 @@ export function createMessagesStorageFollowUps(context: SlurpMessagesContext) {
       const [thread] = await db.select().from(slurpThreads).where(eq(slurpThreads.id, threadId)).limit(1);
       if (!thread) return;
       const timestamp = now();
-      for (const followUp of followUps) {
+      // One pending follow-up of each kind per thread. Each reply that said "tonight" used to add
+      // another, and after downtime they all went out together.
+      const pendingTypes = new Set(
+        (
+          await db
+            .select({ type: slurpFollowUps.type })
+            .from(slurpFollowUps)
+            .where(and(eq(slurpFollowUps.threadId, threadId), inArray(slurpFollowUps.status, ["pending", "claimed"])))
+        ).map((row) => row.type),
+      );
+      const pendingCount = [...pendingTypes].length;
+      for (const followUp of followUps.slice(0, Math.max(0, 3 - pendingCount))) {
+        if (pendingTypes.has(followUp.type)) continue;
         await db.insert(slurpFollowUps).values({
           ...followUp,
           threadId,
@@ -295,7 +308,13 @@ export function createMessagesStorageFollowUps(context: SlurpMessagesContext) {
             ),
           ),
         );
-      return rows.map((row) => ({
+      // One follow-up per thread per tick, the earliest first. The rest wait for the next tick, so a
+      // backlog after downtime arrives spaced out instead of as a burst.
+      const earliest = new Map<string, (typeof rows)[number]>();
+      for (const row of rows.sort((left, right) => left.scheduledAt.localeCompare(right.scheduledAt))) {
+        if (!earliest.has(row.threadId)) earliest.set(row.threadId, row);
+      }
+      return [...earliest.values()].map((row) => ({
         id: row.threadId,
         viewerAccountId: row.viewerAccountId,
         creatorAccountId: row.creatorAccountId,
@@ -416,9 +435,21 @@ export function createMessagesStorageFollowUps(context: SlurpMessagesContext) {
      */
     async resetThread(threadId: string): Promise<void> {
       const timestamp = now();
+      // Pictures that only lived in these messages. Deleting the rows left the files on disk with
+      // no owner. A commission keeps its picture, because the commissions panel still shows it.
+      const orphanedMedia: string[] = [];
       await db.transaction(async (tx) => {
         const [thread] = await tx.select().from(slurpThreads).where(eq(slurpThreads.id, threadId)).limit(1);
         if (!thread) return;
+        const commissionMedia = new Set(
+          (await tx.select().from(slurpCommissions).where(eq(slurpCommissions.threadId, threadId)))
+            .map((row) => row.mediaPath)
+            .filter(Boolean),
+        );
+        for (const row of await tx.select().from(slurpMessages).where(eq(slurpMessages.threadId, threadId))) {
+          const path = json(row.metadata as string)?.noodlerMediaPath;
+          if (typeof path === "string" && path && !commissionMedia.has(path)) orphanedMedia.push(path);
+        }
         await tx.delete(slurpReplyBubbles).where(eq(slurpReplyBubbles.threadId, threadId));
         await tx.delete(slurpMessageClaims).where(eq(slurpMessageClaims.threadId, threadId));
         await tx.delete(slurpMessages).where(eq(slurpMessages.threadId, threadId));
@@ -451,6 +482,7 @@ export function createMessagesStorageFollowUps(context: SlurpMessagesContext) {
           })
           .where(eq(slurpThreads.id, threadId));
       });
+      for (const path of orphanedMedia) unlinkCreatorMedia(path);
     },
     /**
      * Replace what the creator remembers about this fan.

@@ -18,6 +18,7 @@ const messagePageSchema = personaQuerySchema.extend({
   cursorAt: z.string().datetime().optional(),
   cursorId: z.string().trim().min(1).max(200).optional(),
   limit: z.coerce.number().int().min(1).max(120).default(120),
+  search: z.string().trim().max(200).optional(),
 });
 
 /** The quote each open brief would get from the Creator's own pricing, for the quote form. */
@@ -135,6 +136,7 @@ export async function slpMessagesThreadRoutes(app: FastifyInstance, messaging: S
       parsed.data.cursorAt && parsed.data.cursorId
         ? { createdAt: parsed.data.cursorAt, id: parsed.data.cursorId }
         : null,
+      parsed.data.search,
     );
     return {
       thread: await freshView(thread.id, side),
@@ -273,6 +275,8 @@ export async function slpMessagesThreadRoutes(app: FastifyInstance, messaging: S
             }),
           )
           .max(SLURP_WORKING_NOTE_LIMIT + SLURP_LONGTERM_NOTE_LIMIT),
+        /** The note ids the editor was showing. Anything else was written since, and stays. */
+        baseNoteIds: z.array(z.string().max(32)).max(64).optional(),
       })
       .safeParse(req.body ?? {});
     if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
@@ -282,7 +286,15 @@ export async function slpMessagesThreadRoutes(app: FastifyInstance, messaging: S
     const thread = await messages.getThreadById(threadId);
     if (!thread || (thread.viewerAccountId !== viewer.id && !(await ownsCreator(viewer.id, thread.creatorAccountId))))
       return reply.code(404).send({ error: "Thread not found" });
-    return { notes: await messages.setThreadNotes(thread.id, parsed.data.notes) };
+    // The editor's list can be up to one poll old. Notes the Creator wrote since then are kept, and
+    // an edited note keeps its promise tracking; replacing the list wholesale deleted both.
+    const base = new Set(parsed.data.baseNoteIds ?? thread.notes.map((note) => note.id));
+    const edited = parsed.data.notes.map((note) => {
+      const stored = note.id ? thread.notes.find((entry) => entry.id === note.id) : undefined;
+      return stored ? { ...stored, text: note.text, tier: note.tier } : note;
+    });
+    const writtenSince = thread.notes.filter((note) => !base.has(note.id));
+    return { notes: await messages.setThreadNotes(thread.id, [...edited, ...writtenSince]) };
   });
 
   /**

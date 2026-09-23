@@ -6,6 +6,8 @@ import { Modal } from "../../../components/ui/Modal";
 import { errorMessage } from "../../modules/settings/slp-backstage-format";
 import { useSlurpComposeTargets, useSlurpThreads } from "./slp-messages-hooks";
 import { useShareSlpPost } from "../../modules/post/slp-post-action-hooks";
+import { useQueryClient } from "@tanstack/react-query";
+import { invalidateSlurpMessages } from "./slp-message-keys";
 import type { SlpPostCardModel } from "../../modules/post/SlpPostTypes";
 
 /**
@@ -32,6 +34,7 @@ export function SlpSharePostModal({
   const [newChat, setNewChat] = useState(false);
   const [sendingId, setSendingId] = useState<string | null>(null);
   const sharePost = useShareSlpPost();
+  const queryClient = useQueryClient();
   const targets = useSlurpComposeTargets(personaId, open);
   const threads = useSlurpThreads(open ? personaId : null);
 
@@ -56,6 +59,8 @@ export function SlpSharePostModal({
     void sharePost
       .mutateAsync({ personaId, creatorAccountId, postId: post.id })
       .then(() => {
+        // The shared card, and any thread it opened, show at once instead of on the next poll.
+        void invalidateSlurpMessages(queryClient);
         toast.success(localizeUi("ui.slurp.post.shared", { defaultValue: "Post shared." }));
         onClose();
       })

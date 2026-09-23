@@ -89,6 +89,7 @@ export function ArcLibraryDraftEditor({
               const bio = chapter.profile?.bio?.trim();
               const location = chapter.profile?.location?.trim();
               return {
+                ...chapter,
                 label: chapter.label.trim(),
                 minDays: chapter.minDays,
                 maxDays: Math.max(chapter.minDays, chapter.maxDays),

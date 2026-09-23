@@ -206,6 +206,20 @@ export function createMessagesStorageConversation(context: SlurpMessagesContext)
               updatedAt: timestamp,
             })
             .where(eq(slurpThreads.id, threadId));
+          if (input.role === "viewer") {
+            // The fan came back on their own, so "checking in on you" has nothing left to do.
+            // Promises, reminders and updates still owe the fan something and stay.
+            await tx
+              .update(slurpFollowUps)
+              .set({ status: "cancelled", cancelledAt: timestamp, updatedAt: timestamp })
+              .where(
+                and(
+                  eq(slurpFollowUps.threadId, threadId),
+                  eq(slurpFollowUps.type, "check_in"),
+                  eq(slurpFollowUps.status, "pending"),
+                ),
+              );
+          }
           if (input.scheduledFollowUpId) {
             await tx
               .update(slurpFollowUps)
@@ -305,6 +319,9 @@ export function createMessagesStorageConversation(context: SlurpMessagesContext)
         // A newer fan message voids this reply; the next one answers both messages together.
         if (latestRows[0]?.id !== claim.triggerMessageId) return;
         await tx.insert(slurpMessages).values(first);
+        // Bubbles still queued from an earlier reply were never seen and were not in this reply's
+        // prompt. Delivering them after this answer put an old thought below a new one.
+        await tx.delete(slurpReplyBubbles).where(eq(slurpReplyBubbles.threadId, threadId));
         if (rows.length > 0) await tx.insert(slurpReplyBubbles).values(rows);
         // Answering is reading. Nothing cleared this before, so `listThreadsAwaitingReply` kept
         // handing the same answered message back to the queued-reply scheduler and the creator

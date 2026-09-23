@@ -63,6 +63,8 @@ import type {
 import { createSlurpReplyMethods } from "./slp-reply-storage-methods.js";
 import type { SlurpMessagesContext } from "./slp-messages-storage-context.js";
 
+const briefCreations = new Map<string, Promise<unknown>>();
+
 export function createMessagesStorageCommissions(context: SlurpMessagesContext) {
   const {
     db,
@@ -87,8 +89,39 @@ export function createMessagesStorageCommissions(context: SlurpMessagesContext) 
     hasCompletedSlurpPaymentOperation,
     queueCommissionOperation,
   } = context;
+  /**
+   * Did accepting this commission take coins from a player wallet? An audience commission and one
+   * accepted with the wallet off charged nobody. Reading the current wallet setting instead
+   * refunded coins nobody paid, and an audience refund had no credit to reverse and retried forever.
+   */
+  const commissionWasCharged = async (id: string): Promise<boolean> => {
+    const [intent] = await db
+      .select()
+      .from(slurpPaymentCompensations)
+      .where(eq(slurpPaymentCompensations.id, `commission:${id}:accept`));
+    return intent?.status === "charged" || intent?.status === "settled";
+  };
   return {
     async createCommission(
+      viewerAccountId: string,
+      creatorAccountId: string,
+      brief: string,
+    ): Promise<SlurpCommission | "open_request" | null> {
+      // The "one open brief" check reads before it writes, so a double click opened two briefs.
+      // One brief at a time per pair closes that gap in this process.
+      const key = `${viewerAccountId}:${creatorAccountId}`;
+      const previous = briefCreations.get(key) ?? Promise.resolve();
+      const current = previous
+        .catch(() => undefined)
+        .then(() => context.storage.createCommissionUnlocked(viewerAccountId, creatorAccountId, brief));
+      briefCreations.set(key, current);
+      try {
+        return await current;
+      } finally {
+        if (briefCreations.get(key) === current) briefCreations.delete(key);
+      }
+    },
+    async createCommissionUnlocked(
       viewerAccountId: string,
       creatorAccountId: string,
       brief: string,
@@ -572,7 +605,9 @@ export function createMessagesStorageCommissions(context: SlurpMessagesContext) 
             !current ||
             (current.state !== "accepted" && current.state !== "cancellation_pending") ||
             (current.state === "cancellation_pending" && current.cancellationId !== cancellationId) ||
-            current.deliveryId ||
+            // A delivery claim holds for five minutes, as in `deliverCommissionUnlocked`. A delivery
+            // that threw kept its claim forever, and the fan's cancel then did nothing.
+            (current.deliveryId && Date.parse(String(current.deliveryClaimedAt ?? "")) > Date.now() - 5 * 60 * 1000) ||
             (current.deliverAt && String(current.deliverAt) > new Date().toISOString())
           )
             return false;
@@ -586,8 +621,8 @@ export function createMessagesStorageCommissions(context: SlurpMessagesContext) 
           const pending = await context.storage.getCommission(id);
           if (pending?.state !== "cancellation_pending" || pending.cancellationId !== cancellationId) return pending;
         }
-        // With the wallet off, accept charged nothing, so a refund here would mint coins.
-        const { walletEnabled } = await slurp.getSettings();
+        // Only a real charge is refunded. Anything else would mint coins.
+        const walletEnabled = await commissionWasCharged(id);
         if (walletEnabled) {
           await completeSlurpPaymentIntent(slurp, `commission:${id}:accept`);
           await compensateSlurpPayment(
@@ -754,8 +789,8 @@ export function createMessagesStorageCommissions(context: SlurpMessagesContext) 
         return context.storage.getCommission(id);
       }
       if (!message) {
-        const settings = await slurp.getSettings();
-        if (settings.walletEnabled) {
+        const charged = await commissionWasCharged(id);
+        if (charged) {
           const compensationId = `commission:${id}:settlement`;
           await db
             .update(slurpCommissions)
@@ -785,7 +820,9 @@ export function createMessagesStorageCommissions(context: SlurpMessagesContext) 
           senderAccountId: commission.creatorAccountId,
           role: "creator",
           kind: "system",
-          content: "This commission could not be delivered. The payment was refunded.",
+          content: charged
+            ? "This commission could not be delivered. The payment was refunded."
+            : "This commission could not be delivered.",
           metadata: { commissionId: id },
         });
         return null;

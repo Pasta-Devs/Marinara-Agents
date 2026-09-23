@@ -19,7 +19,10 @@ import { generateSlurpMessageReply, SlurpMessageBudgetUnavailableError } from ".
 import { describeSlurpDayVibe } from "../world/slp-world-contract.js";
 import { recoverSlurpMood } from "../../modules/world/slp-mood.js";
 import { activeSlurpStrikes, SLURP_COOL_OFF_HOURS, type SlurpStanceLatitude } from "../../modules/world/slp-stance.js";
-import { resolveSlurpCreatorAvailability } from "../../modules/creators/slp-creator-schedule-context.js";
+import {
+  resolveSlurpCreatorAvailability,
+  resolveSlurpCreatorScheduleTraits,
+} from "../../modules/creators/slp-creator-schedule-context.js";
 import {
   calculateConversationMomentum,
   extendedOnlineDurationMinutes,
@@ -37,6 +40,8 @@ import { generateSlurpCommissionImage } from "./commissions/slp-commission-image
 import { slurpMessageMediaUrl } from "../../base/media/slp-media.js";
 import { resolveSlurpMediaOffer } from "../../modules/economy/slp-media-offer.js";
 import { slurpCreatorStateCanUseMedia } from "../../modules/creators/slp-creator-state.js";
+import { createSlurpPopulationStorage } from "../../data/audience/slp-audience-storage-funnel.js";
+import type { SlpAccount } from "../../../../../shared/src/slp/slp-social.types.js";
 
 export type SlurpReplyOutcome =
   | { status: "replied"; message: SlurpMessage; pacing: SlurpReplyPacing }
@@ -75,10 +80,15 @@ export async function replyToSlurpMessage(
   const thread = await messagesStore.getThreadById(input.threadId);
   if (!thread || (thread.state !== "active" && thread.state !== "request")) return { status: "ineligible" };
 
-  const [creator, viewer] = await Promise.all([
+  const [creator, personaViewer] = await Promise.all([
     slurp.getNoodlerAccountById(thread.creatorAccountId),
     slurp.getViewer(thread.viewerAccountId),
   ]);
+  // A hand-operated Creator's fans are audience members, not personas. The draft still needs them
+  // as the one being answered; `getViewer` alone made every draft for them ineligible.
+  const viewer =
+    personaViewer ??
+    (input.operatorDraft && creator ? await resolveAudienceFanAccount(db, thread.viewerAccountId, creator) : null);
   // A persona-backed Creator is operated by hand: it never auto-posts and it never answers a DM
   // on its own either. The operator writes the answer through the draft-reply route.
   if (!creator || !viewer || (creator.kind === "persona" && creator.sourceKind === "persona" && !input.operatorDraft)) {
@@ -125,10 +135,15 @@ export async function replyToSlurpMessage(
       : scheduled;
 
   const history = await messagesStore.listMessages(thread.id, 60);
+  const trigger = history.find((message) => message.id === input.triggerMessageId) ?? history[history.length - 1];
 
-  // Calculate conversation momentum
+  // Momentum is how recently she was in this conversation. `thread.lastMessageAt` is the fan's own
+  // message from a moment ago, which made every live reply "hot" and froze mood recovery.
+  const lastCreatorMessageAt =
+    history.filter((message) => message.role === "creator" && message.createdAt <= (trigger?.createdAt ?? "~")).at(-1)
+      ?.createdAt ?? new Date(0).toISOString();
   const momentumAnalysis = calculateConversationMomentum(
-    thread.lastMessageAt,
+    lastCreatorMessageAt,
     history.map((m) => ({ role: m.role as "viewer" | "creator", createdAt: m.createdAt })),
   );
 
@@ -148,13 +163,14 @@ export async function replyToSlurpMessage(
   // subscription shape pacing and tone but cannot strand an already-started conversation.
   const isRequest = thread.state === "request";
   if (isRequest && history.some((message) => message.role === "creator")) return { status: "ineligible" };
-  const trigger = history.find((message) => message.id === input.triggerMessageId) ?? history[history.length - 1];
   const triggerObligationCreatedAt = trigger?.createdAt ?? new Date().toISOString();
   const subscriptions = await slurp.listSubscriptionsForViewer(thread.viewerAccountId);
   const subscribed = subscriptions.some((entry) => entry.creatorAccountId === thread.creatorAccountId);
 
-  // Read talkativeness profile from generated schedule if available
-  const talkativenessProfile = readTalkativenessProfile({});
+  // The generated Conversation Schedule carries how chatty this Creator is.
+  const talkativenessProfile = readTalkativenessProfile(
+    source ? await resolveSlurpCreatorScheduleTraits(createCharactersStorage(db), source) : null,
+  );
 
   // Calculate mood with recovery (but pause recovery if hot conversation + negative mood)
   const minutesSinceMoodUpdate = thread.moodUpdatedAt
@@ -185,7 +201,12 @@ export async function replyToSlurpMessage(
     if (completedReply) return { status: "replied", message: completedReply, pacing };
   }
   if ((pacing.mode === "queued" || pacing.mode === "delayed") && input.force !== true) {
-    await messagesStore.setReplyNotBefore(thread.id, new Date(Date.now() + pacing.notBeforeMs).toISOString());
+    // A wait already running is kept. Each new fan message used to restart it, so a fan who kept
+    // writing never got an answer until they stopped.
+    const running = thread.needsReply && thread.replyNotBeforeAt && thread.replyNotBeforeAt > new Date().toISOString();
+    if (!running) {
+      await messagesStore.setReplyNotBefore(thread.id, new Date(Date.now() + pacing.notBeforeMs).toISOString());
+    }
     // She has seen it and is not answering yet. That is the whole meaning of a queued reply, and
     // it was indistinguishable from the app being broken because nothing recorded the noticing.
     // "Seen, no reply" is the loudest thing this surface can say, and the timestamp already exists.
@@ -269,6 +290,22 @@ export async function replyToSlurpMessage(
           reply.moodShift !== "down",
         burstLimit,
       );
+      // The first bubble shows after its typing indicator, so the later ones wait for it as well.
+      // Unattended replies have no indicator on screen.
+      const firstPacing = slurpReplyPacing({
+        online: availability.online,
+        rapport: thread.rapport,
+        subscribed,
+        messageLength: trigger?.content.length ?? 0,
+        minutesUntilOnline: availability.minutesUntilOnline,
+        mood: currentMood,
+        momentum: momentumAnalysis.momentum,
+        replyLength: bubbles[0]!.length,
+        talkativeness: talkativenessProfile.talkativeness,
+        delays: replyDelays,
+        firstContact: !history.some((message) => message.role === "creator"),
+      });
+      const typingLeadMs = input.background ? 0 : firstPacing.typingMs;
       let stored = null;
       const queuedBubbles = [];
       for (const [index, bubble] of bubbles.entries()) {
@@ -292,7 +329,7 @@ export async function replyToSlurpMessage(
           threadId: thread.id,
           senderAccountId: thread.creatorAccountId,
           content: bubble,
-          deliverAt: new Date(Date.now() + delayMs).toISOString(),
+          deliverAt: new Date(Date.now() + typingLeadMs + delayMs).toISOString(),
           generationEpoch: thread.generationEpoch,
           createdAt: triggerObligationCreatedAt,
         });
@@ -493,29 +530,13 @@ export async function replyToSlurpMessage(
           }
         }
       }
-      return stored ? ({ status: "replied", message: stored } as const) : ({ status: "ineligible" } as const);
+      return stored
+        ? ({ status: "replied", message: stored, pacing: firstPacing } as const)
+        : ({ status: "ineligible" } as const);
     });
     // The account lock is already held by another Slurp operation on this creator. Nothing was
     // generated, so the caller may simply try again rather than treat this as a failure.
     if (!locked.acquired) return { status: "busy" };
-    if (locked.value.status === "replied") {
-      // Recalculate typing delay with actual reply content length
-      const actualReplyLength = locked.value.message.content.length;
-      const recalculatedPacing = slurpReplyPacing({
-        online: availability.online,
-        rapport: thread.rapport,
-        subscribed,
-        messageLength: trigger?.content.length ?? 0,
-        minutesUntilOnline: availability.minutesUntilOnline,
-        mood: currentMood,
-        momentum: momentumAnalysis.momentum,
-        replyLength: actualReplyLength,
-        talkativeness: talkativenessProfile.talkativeness,
-        delays: replyDelays,
-        firstContact: !history.some((message) => message.role === "creator"),
-      });
-      return { status: "replied", message: locked.value.message, pacing: recalculatedPacing };
-    }
     return locked.value;
   } catch (error) {
     if (error instanceof SlurpMessageBudgetUnavailableError) {
@@ -534,6 +555,30 @@ export async function replyToSlurpMessage(
   } finally {
     await release();
   }
+}
+
+/** An audience member or ambient account, shaped as the account the reply prompt reads. */
+async function resolveAudienceFanAccount(db: DB, fanId: string, creator: SlpAccount): Promise<SlpAccount | null> {
+  const account = await createSlurpStorage(db).getNoodlerAccountById(fanId);
+  if (account) return account;
+  const member = await createSlurpPopulationStorage(db)
+    .get(fanId)
+    .catch(() => null);
+  if (!member) return null;
+  // ponytail: borrows the Creator's settings and platform for the fields no prompt reads.
+  return {
+    ...creator,
+    id: member.id,
+    kind: "random_user",
+    entityId: member.id,
+    handle: member.handle,
+    displayName: member.displayName,
+    bio: "",
+    avatarUrl: null,
+    avatarCrop: null,
+    invited: false,
+    noodleAccountId: null,
+  };
 }
 
 /**

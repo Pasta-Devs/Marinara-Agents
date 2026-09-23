@@ -189,7 +189,17 @@ export async function slpCommissionsRoutes(app: FastifyInstance, messaging: SlpM
     if (!canCancel) {
       return reply.code(409).send({ error: "This commission can no longer be called off." });
     }
-    return { commission: await messages.declineCommission(commission.id, isCreator ? "creator" : "viewer") };
+    // Between accept and scheduling the delivery, `deliverAt` is still empty. A cancel in that
+    // window refunded the fan while the accept went on and reported a false failure.
+    if (commissionAcceptRequests.has(commission.id)) {
+      return reply.code(409).send({ error: "This commission is being accepted. Try again in a moment." });
+    }
+    const declined = await messages.declineCommission(commission.id, isCreator ? "creator" : "viewer");
+    // Nothing changed: a delivery holds it. Reporting success told the fan they were refunded.
+    if (declined?.state === "accepted") {
+      return reply.code(409).send({ error: "This commission is being delivered. Try again in a few minutes." });
+    }
+    return { commission: declined };
   });
 
   app.post("/messages/commissions/:commissionId/deliver", async (req, reply) => {
@@ -235,7 +245,7 @@ export async function slpCommissionsRoutes(app: FastifyInstance, messaging: SlpM
       if (!delivered || delivered.state !== "delivered" || !delivered.deliveryMessageId) {
         if (drawn && drawn !== "unavailable") drawn.compensate();
         // This used to answer 200 with a null commission after silently refunding the fan.
-        return reply.code(500).send({
+        return reply.code(delivered ? 409 : 500).send({
           error: delivered
             ? "This commission is no longer ready for delivery."
             : "Could not deliver that commission. The fan's payment was refunded.",

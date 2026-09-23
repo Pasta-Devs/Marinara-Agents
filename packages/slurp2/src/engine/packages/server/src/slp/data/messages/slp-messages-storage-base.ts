@@ -265,14 +265,17 @@ export function createMessagesStorageBase(context: SlurpMessagesContext) {
       threadId: string,
       limit = 120,
       cursor?: { createdAt: string; id: string } | null,
+      search?: string,
     ): Promise<{ messages: SlurpMessage[]; nextCursor: { createdAt: string; id: string } | null }> {
       const bounded = Math.max(1, Math.min(120, Math.trunc(limit)));
+      const needle = search?.trim().toLocaleLowerCase();
       const rows = await db
         .select()
         .from(slurpMessages)
         .where(
           and(
             eq(slurpMessages.threadId, threadId),
+            needle ? undefined : undefined,
             cursor
               ? or(
                   lt(slurpMessages.createdAt, cursor.createdAt),
@@ -282,13 +285,14 @@ export function createMessagesStorageBase(context: SlurpMessagesContext) {
           ),
         )
         .orderBy(desc(slurpMessages.createdAt), desc(slurpMessages.id))
-        .limit(bounded + 1);
-      const page = rows.slice(0, bounded);
+        .limit(needle ? 10_000 : bounded + 1);
+      const filtered = needle ? rows.filter((row) => String(row.content).toLocaleLowerCase().includes(needle)) : rows;
+      const page = filtered.slice(0, bounded);
       const oldest = page[page.length - 1];
       return {
         messages: page.map(mapMessage).reverse(),
         nextCursor:
-          rows.length > bounded && oldest ? { createdAt: String(oldest.createdAt), id: String(oldest.id) } : null,
+          filtered.length > bounded && oldest ? { createdAt: String(oldest.createdAt), id: String(oldest.id) } : null,
       };
     },
     /**
