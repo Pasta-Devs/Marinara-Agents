@@ -52,6 +52,26 @@ async function main() {
     false,
     "scope namespaces must not collide",
   );
+  assert.equal(
+    canUpdateLtmScopedTarget({ chatIds: ["chat-x"], personaIds: ["persona-p"] }, { chatIds: ["chat-x"] }),
+    false,
+    "a narrower extraction must not add evidence to a persona-visible note",
+  );
+  assert.equal(
+    canUpdateLtmScopedTarget({ chatIds: ["chat-x"], characterIds: ["character-a"] }, { chatIds: ["chat-x"] }),
+    false,
+    "a narrower extraction must not add evidence to a character-visible note",
+  );
+  assert.equal(
+    canUpdateLtmScopedTarget({ chatIds: ["chat-x"], groupIds: ["group-g"] }, { chatIds: ["chat-x"] }),
+    false,
+    "a narrower extraction must not add evidence to a group-visible note",
+  );
+  assert.equal(
+    canUpdateLtmScopedTarget({ chatIds: ["chat-x"] }, { chatIds: ["chat-x"], personaIds: ["persona-p"] }),
+    true,
+    "explicitly widening a destination remains possible",
+  );
 
   const createRoot = async (label: string) => {
     const dataDir = await mkdtemp(join(tmpdir(), `marinara-ltm-delta-${label}-`));

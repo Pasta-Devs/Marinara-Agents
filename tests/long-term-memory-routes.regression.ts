@@ -3276,6 +3276,7 @@ async function main(routeScenario: RouteScenario) {
                     typeof message.content === "string" &&
                     (message.content.includes("cross-extract") ||
                       message.content.includes("persona-write-scope") ||
+                      message.content.includes("chat-only-default") ||
                       message.content.includes("destination")),
                 );
                 let requiredEvidence = ["source"];
@@ -4685,6 +4686,11 @@ async function main(routeScenario: RouteScenario) {
           enabled: true,
         },
         {
+          id: "summary-chat-only-default",
+          content: "A grouped chat defaults to chat-only availability.",
+          enabled: true,
+        },
+        {
           id: "summary-cross-conflict-batch",
           content: "A conflicting destination must not stop other source notes.",
           enabled: true,
@@ -5012,6 +5018,23 @@ async function main(routeScenario: RouteScenario) {
         chatId: "chat-persona-a",
         chatIds: ["chat-persona-a"],
       });
+      const groupedChatImport = await app.inject({
+        method: "POST",
+        url: "/api/long-term-memory/import/source-notes",
+        headers,
+        payload: { source: "chats", sourceIds: ["chat-a:summary-chat-only-default"], chatId: "chat-a" },
+      });
+      assert.equal(groupedChatImport.statusCode, 200, groupedChatImport.body);
+      assert.equal(groupedChatImport.json().imported.length, 1, groupedChatImport.body);
+      const groupedChatResult = groupedChatImport.json().imported[0];
+      const groupedChatScope = { chatId: "chat-a", chatIds: ["chat-a"] };
+      assert.deepEqual(groupedChatResult.note.destinationScope, groupedChatScope);
+      assert.deepEqual(groupedChatResult.draft.scope, groupedChatScope);
+      const groupedCreateNotes = groupedChatResult.draft.mutations.filter(
+        (mutation: any) => mutation.kind === "create_note",
+      );
+      assert.ok(groupedCreateNotes.length > 0, groupedChatImport.body);
+      for (const mutation of groupedCreateNotes) assert.deepEqual(mutation.note.scope, groupedChatScope);
       const implicitPersonaCreateNotes = implicitPersonaResult.draft.mutations.filter(
         (mutation: any) => mutation.kind === "create_note",
       );
