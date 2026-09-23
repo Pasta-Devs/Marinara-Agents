@@ -3276,6 +3276,7 @@ async function main(routeScenario: RouteScenario) {
                     typeof message.content === "string" &&
                     (message.content.includes("cross-extract") ||
                       message.content.includes("persona-write-scope") ||
+                      message.content.includes("chat-only-default") ||
                       message.content.includes("destination")),
                 );
                 let requiredEvidence = ["source"];
@@ -5032,7 +5033,7 @@ async function main(routeScenario: RouteScenario) {
       const groupedCreateNotes = groupedChatResult.draft.mutations.filter(
         (mutation: any) => mutation.kind === "create_note",
       );
-      assert.ok(groupedCreateNotes.length > 0);
+      assert.ok(groupedCreateNotes.length > 0, groupedChatImport.body);
       for (const mutation of groupedCreateNotes) assert.deepEqual(mutation.note.scope, groupedChatScope);
       const implicitPersonaCreateNotes = implicitPersonaResult.draft.mutations.filter(
         (mutation: any) => mutation.kind === "create_note",
