@@ -342,39 +342,9 @@
     "slurp2": {
       "versions": [
         {
-          "version": "0.2.31",
-          "date": "2026-09-23",
-          "notes": "- Words that make an image model draw someone young (petite, heights, cute, kawaii, round face) are removed from every appearance sent to it, and the adult description is stronger.",
-          "highlight": false
-        },
-        {
-          "version": "0.2.30",
-          "date": "2026-09-23",
-          "notes": "- Every generated picture now states an adult subject and excludes childlike or underage depictions in its negative prompt, on every image path.",
-          "highlight": false
-        },
-        {
-          "version": "0.2.29",
-          "date": "2026-09-23",
-          "notes": "- Locked posts deliver the Creator's own level; captions are told how far a post goes.\n- Occasions, story facts, and arc opportunities now reach posts, DMs, replies, and arc ideas; manual occasions have a Start button.\n- Creators stop upselling posts a fan already bought; payment notes show as small chips; one reply per run of unlocks.\n- Replies say when the AI budget is used up, keep a share of it, and arrive faster.\n- Failed pictures show their error to managers only; audience activity runs and reports results.\n- Shorter, cleaner prompts: capped card fields, resolved macros, language rules, fewer contradictions.",
-          "highlight": false
-        },
-        {
-          "version": "0.2.28",
-          "date": "2026-09-23",
-          "notes": "- Post pictures follow the post's scene: a short English prompt with the Creator's face and body, outfit, place, camera, and level, instead of a page of rules. Card descriptions and costumes no longer leak in.\n- New Image style setting picks an Engine style profile for Slurp pictures and replaces the connection's prompt prefixes.\n- Image instructions reach the scene; a model imagePrompt from post direction is used as the picture.\n- Image prompt refinement uses Slurp's own connection and handles reasoning models.\n- Callbacks keep their shoot's place and clothes; picture sets vary the pose.\n- Shorter post prompts; memory lines say what was posted.\n- Fixed scheduled follow-ups, empty fan-message rewrites, and automatic audience activity that never ran. Player DMs keep a share of the AI budget.\n- Occasions aimed at selected or random Creators now reach their prompts.",
-          "highlight": false
-        },
-        {
-          "version": "0.2.27",
-          "date": "2026-09-23",
-          "notes": "- Creator settings restore the per-Creator picture sexual-level control, with the active shared level shown for inherited settings.\n- Image prompt refinement now uses Slurp's shared language connection resolver, including the plain default language connection.",
-          "highlight": false
-        },
-        {
           "version": "0.2.26",
-          "date": "2026-09-22",
-          "notes": "- Arcs and World events now share portable story tags, bounded influences, typed outcomes, automation policies, and immutable occurrence snapshots.\n- Story packs can be reviewed, selectively imported, updated without overwriting local edits, and exported as strict data-only JSON. Five optional themed packs join the original arc and calendar collections.\n- World events now have a durable timeline with suggestions, manual approval, participant snapshots, facts, and follow-up arc opportunities.",
+          "date": "2026-09-23",
+          "notes": "- Image prompts preserve each Creator's appearance and follow the selected image guidance.\n- Choose an image style for each Creator, or let them use the global style.\n- Settings sections now use the shorter names Content and World.\n- Posts, messages, audience activity, story events, and image generation use clearer state and feedback handling.\n- Locked posts use each Creator's configured level, and occasions and story events reach posts and chats.\n- Owned posts are not sold again, audience activity reports results, and manual occasions can be started.\n- Callback posts preserve their shoot context, picture sets vary poses, and follow-ups handle reasoning models.",
           "highlight": false
         },
         {
@@ -459,6 +429,36 @@
           "version": "0.2.12",
           "date": "2026-09-21",
           "notes": "- Fixed the deleted-post panel crash caused by missing restore state.\n- Wired post sharing to the active viewer persona.\n- Restored the report action on feed posts.",
+          "highlight": false
+        },
+        {
+          "version": "0.2.11",
+          "date": "2026-09-21",
+          "notes": "- Deleted posts can be restored again, with pending and failure feedback.\n- Restore now pulls the deleted post's sparkles into the restore action.",
+          "highlight": false
+        },
+        {
+          "version": "0.2.10",
+          "date": "2026-09-21",
+          "notes": "- Normal, locked, profile, media, Story, and reply surfaces now use consistent three-dot action menus.\n- Posts now support direct sharing to Slurp messages and durable post or reply reports with snapshots.\n- Slurp now uses one canonical post card renderer.",
+          "highlight": false
+        },
+        {
+          "version": "0.2.9",
+          "date": "2026-09-21",
+          "notes": "- Post image prompts now use a typed visual brief and preserve the planned scene through image interpretation.\n- Deleted posts now leave a sparkling restore slot for 60 seconds before permanent cleanup.",
+          "highlight": false
+        },
+        {
+          "version": "0.2.8",
+          "date": "2026-09-21",
+          "notes": "- Feed loading has a softer status animation, older drops show a progress state, and deleted posts leave the timeline with a short gentle exit.",
+          "highlight": false
+        },
+        {
+          "version": "0.2.7",
+          "date": "2026-09-21",
+          "notes": "- The feed loads its first page first, older posts load on demand, and post edits and deletes update the visible feed without a full reload.",
           "highlight": false
         }
       ]

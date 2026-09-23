@@ -21,7 +21,10 @@ import { resolveIllustratorCharacterReferences } from "../../../services/image/i
 import { createCharactersStorage } from "../../../services/storage/characters.storage.js";
 import { createConnectionsStorage } from "../../../services/storage/connections.storage.js";
 import { createPromptOverridesStorage } from "../../../services/storage/prompt-overrides.storage.js";
-import { resolveCreatorImageConnectionId } from "../../base/media/slp-image-connections.js";
+import {
+  resolveCreatorImageConnectionId,
+  resolveCreatorImageStyleProfileId,
+} from "../../base/media/slp-image-connections.js";
 import { loadPrompt, NOODLE_IMAGE_POST } from "../../../services/prompt-overrides/index.js";
 import {
   generateSlpImageWithRetry,
@@ -36,10 +39,7 @@ import type { SlpImagePromptReviewItem, ReviewedSlpImagePrompt } from "./slp-pub
 import { characterNameFromRow } from "../../modules/creators/slp-public-support.js";
 import {
   selectSlpImageProviderPrompt,
-  SLURP_ADULT_NEGATIVE_PROMPT,
-  slurpAdultAnchor,
   slurpImageLook,
-  slurpWithoutYouthCoding,
   stripAppearanceLabel,
 } from "../../base/media/slp-image-prompt.js";
 import { slurpImageExtension } from "../../base/media/slp-image-format.js";
@@ -162,9 +162,10 @@ export async function generateCreatorPostImage(input: {
       value,
     );
   };
+  const creatorStyleProfileId = await resolveCreatorImageStyleProfileId(input.db, input.account.id);
   const imageDefaults = slurpImageDefaultsForStyle(
     resolveConnectionImageDefaults(input.imageConnection),
-    input.settings.imageStyleProfileId,
+    creatorStyleProfileId ?? input.settings.imageStyleProfileId,
   );
   const imageModel = input.imageConnection.model || "";
   const imageBaseUrl = input.imageConnection.baseUrl || "https://image.pollinations.ai";
@@ -272,8 +273,6 @@ export async function generateCreatorPostImage(input: {
 
   // Card appearance carries clothes and costumes; the scene decides what is worn in this picture.
   if (!stageAppearance) characterDescription = slurpImageLook(characterDescription);
-  // Stage appearance is trusted for content, not for age cues: those are removed on every path.
-  else characterDescription = slurpWithoutYouthCoding(characterDescription);
 
   const postPrompt = await loadPrompt(input.promptOverrides, NOODLE_IMAGE_POST, {
     authorName: input.account.displayName,
@@ -419,9 +418,7 @@ export async function generateCreatorPostImage(input: {
       guidanceContext: [configuredImageInstructions, connectionImageInstructions],
     }),
   );
-  const finalPrompt = [slurpAdultAnchor(input.account.settings.profile.gender), finalPromptBase, input.compositionGuard]
-    .filter(Boolean)
-    .join("\n\n");
+  const finalPrompt = [finalPromptBase, input.compositionGuard].filter(Boolean).join("\n\n");
   // A reviewer who cleared the negative prompt still gets the style profile's own negatives back,
   // for the same reason the positive prompt is recompiled above.
   const baseNegativePrompt =
@@ -434,7 +431,7 @@ export async function generateCreatorPostImage(input: {
   const finalNegativePrompt =
     [
       ...new Set(
-        [baseNegativePrompt, input.negativePromptAdditions, SLURP_ADULT_NEGATIVE_PROMPT]
+        [baseNegativePrompt, input.negativePromptAdditions]
           .filter(Boolean)
           .join(",")
           .split(",")

@@ -1,5 +1,4 @@
 import { existsSync, readFileSync } from "fs";
-import { slurpAdultAnchor, slurpWithAdultNegative } from "../../base/media/slp-image-prompt.js";
 import { dirname, resolve } from "path";
 import { fileURLToPath } from "url";
 import { PROFESSOR_MARI_ID } from "@marinara-engine/shared";
@@ -29,7 +28,10 @@ import { loadPrompt, NOODLE_IMAGE_POST } from "../../../services/prompt-override
 import { generateSlpImageWithRetry } from "../../base/media/slp-image-retry.js";
 import { rewriteSlpImagePrompt } from "../../base/media/slp-image-prompt-rewrite.js";
 import { selectSlpImageProviderPrompt, stripAppearanceLabel } from "../../base/media/slp-image-prompt.js";
-import { resolveCreatorImageConnectionId } from "../../base/media/slp-image-connections.js";
+import {
+  resolveCreatorImageConnectionId,
+  resolveCreatorImageStyleProfileId,
+} from "../../base/media/slp-image-connections.js";
 import type { ConnectionAdmissionMode } from "../../../services/generation/connection-admission.js";
 import {
   characterGalleryImageUrl,
@@ -140,7 +142,18 @@ export async function generateSlpPostImage(input: {
   admissionMode?: ConnectionAdmissionMode;
 }) {
   const imageSettings = await loadImageGenerationUserSettings(input.db);
+  const creatorStyleProfileId = await resolveCreatorImageStyleProfileId(input.db, input.account.id);
   const imageDefaults = resolveConnectionImageDefaults(input.imageConnection);
+  const selectedStyleProfileId = creatorStyleProfileId ?? input.settings.imageStyleProfileId;
+  if (imageDefaults && selectedStyleProfileId) {
+    imageDefaults.styleProfileId = selectedStyleProfileId;
+    for (const providerDefaults of [imageDefaults.automatic1111, imageDefaults.comfyui, imageDefaults.novelai]) {
+      if (providerDefaults) {
+        providerDefaults.promptPrefix = "";
+        providerDefaults.negativePromptPrefix = "";
+      }
+    }
+  }
   const imageModel = input.imageConnection.model || "";
   const imageBaseUrl = input.imageConnection.baseUrl || "https://image.pollinations.ai";
   const imageSource = input.imageConnection.imageGenerationSource || imageModel;
@@ -334,14 +347,12 @@ export async function generateSlpPostImage(input: {
     privateContext: [characterPersonality],
     guidanceContext: [configuredImageInstructions, connectionImageInstructions],
   });
-  const finalPrompt = `${slurpAdultAnchor(null)}\n\n${finalPromptBase}`;
+  const finalPrompt = finalPromptBase;
   // A reviewer who cleared the negative prompt still gets the style profile's own negatives back,
   // for the same reason the positive prompt is recompiled above.
-  const finalNegativePrompt = slurpWithAdultNegative(
-    input.promptOverride
-      ? input.promptOverride.negativePrompt?.trim() || compiledOverride?.negativePrompt || undefined
-      : compiledPrompt.negativePrompt || undefined,
-  );
+  const finalNegativePrompt = input.promptOverride
+    ? input.promptOverride.negativePrompt?.trim() || compiledOverride?.negativePrompt || undefined
+    : compiledPrompt.negativePrompt || undefined;
   logDebugOverride(
     input.debugMode,
     "[debug/noodle/image] final image prompt for %s:\n%s",

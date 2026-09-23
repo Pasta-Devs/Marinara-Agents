@@ -57,7 +57,7 @@ export const SLP_BACKSTAGE_SECTION_LABELS: Record<SlpBackstageSection, string> =
   overview: "Overview",
   creators: "Creators",
   world: "Features",
-  content: "Content library",
+  content: "Content",
   automation: "Publishing and automation",
   prompts: "Prompts",
   maintenance: "Maintenance",

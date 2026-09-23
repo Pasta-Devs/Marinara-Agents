@@ -1,5 +1,5 @@
 // The splash screen needs the shipped version and its public notes inside the client bundle.
-export const SLURP2_VERSION = "0.2.31";
+export const SLURP2_VERSION = "0.2.26";
 
 export interface Slurp2ReleaseEntry {
   version: string;
@@ -10,48 +10,13 @@ export interface Slurp2ReleaseEntry {
 /** The public release history shown in the Engine splash screen. */
 export const SLURP2_RELEASES: Slurp2ReleaseEntry[] = [
   {
-    version: "0.2.31",
-    date: "2026-09-23",
-    notes: ["Generated pictures show clearly adult Creators, whatever the appearance text says."],
-  },
-  {
-    version: "0.2.30",
-    date: "2026-09-23",
-    notes: ["Every generated picture now clearly shows adults only."],
-  },
-  {
-    version: "0.2.29",
+    version: "0.2.26",
     date: "2026-09-23",
     notes: [
-      "Locked posts deliver each Creator's own level, and occasions and story events now reach their posts and chats.",
-      "Creators stop selling fans posts they already bought, and chat replies explain a used-up AI budget.",
-      "Manual occasions can be started from Occasions, and audience activity now runs and reports its results.",
-    ],
-  },
-  {
-    version: "0.2.29",
-    date: "2026-09-23",
-    notes: [
-      "A Creator answers a run of unlocks once, not after every payment.",
-      "Fan replies have their own prompt in Prompt Studio, and failed image keys are no longer retried.",
-    ],
-  },
-  {
-    version: "0.2.28",
-    date: "2026-09-23",
-    notes: [
-      "Post pictures follow the scene the post describes, with the Creator's own face and body and without stray costumes or second people.",
-      "Callback posts keep their shoot's place and clothes, and picture sets vary the pose.",
-      "New Image style setting: pick a style profile for Slurp pictures. Card descriptions no longer leak into image prompts.",
-      "Scheduled follow-ups save again, and fan messages no longer come back empty on reasoning models.",
-    ],
-  },
-  {
-    version: "0.2.25",
-    date: "2026-09-22",
-    notes: [
-      "Every generated picture keeps the Creator's appearance, planned action, expression, and mood even when image-prompt interpretation is unavailable.",
-      "Creator personality and stage voice now shape visual presentation without being copied as private prompt text.",
+      "Image prompts preserve each Creator's appearance and follow the selected image guidance.",
+      "Choose an image style for each Creator, or let them use the global style.",
+      "Settings sections now use the shorter names Content and World.",
+      "Posts, messages, audience activity, story events, and image generation use clearer state and feedback handling.",
     ],
   },
   {

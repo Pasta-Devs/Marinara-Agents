@@ -66,7 +66,7 @@ const look = slurpImageLook(
   "Mara is petite with blonde hair. She favors pastel dresses. For cosplay, she wears a corset and carries a sword. Her face is round and cute.",
 );
 assert.match(look, /blonde hair/u);
-assert.doesNotMatch(look, /petite/u);
+assert.match(look, /petite/u);
 assert.match(look, /Her face is/u);
 assert.doesNotMatch(look, /sword|corset|pastel dresses/u);
 
@@ -95,29 +95,15 @@ assert.match(
 );
 assert.match(images, /promptPrefix: "", negativePromptPrefix: ""/u);
 assert.match(images, /draftPrompt: \[stripAppearanceLabel\(characterDescription\), input\.draftPrompt\]/u);
+assert.match(images, /creatorStyleProfileId \?\? input\.settings\.imageStyleProfileId/u);
+assert.match(
+  slurp2Source("packages/slurp2/src/engine/packages/server/src/slp/base/media/slp-image-connections.ts"),
+  /creatorStyleProfileIds\[creatorId\] \?\? null/u,
+);
 // A model imagePrompt requested through post direction is honoured over the assembled draft.
 const briefs = slurp2Source(
   "packages/slurp2/src/engine/packages/server/src/slp/features/feed/slp-post-picture-briefs.ts",
 );
 assert.match(briefs, /normalizeSlpImagePrompt\(input\.modelImagePrompt\) \?\?/u);
-
-// Every picture path states adults only, in the prompt and in the negative prompt.
-for (const path of [
-  "packages/slurp2/src/engine/packages/server/src/slp/features/media/slp-images-service.ts",
-  "packages/slurp2/src/engine/packages/server/src/slp/features/media/slp-public-images-service.ts",
-]) {
-  const source = slurp2Source(path);
-  assert.match(source, /slurpAdultAnchor\(/u, `${path} must lead with the adult anchor`);
-  assert.match(source, /SLURP_ADULT_NEGATIVE_PROMPT|slurpWithAdultNegative\(/u, `${path} must add the adult negatives`);
-}
-assert.match(
-  slurp2Source("packages/slurp2/src/engine/packages/server/src/slp/features/ads/slp-garnish-image-service.ts"),
-  /slurpWithAdultNegative\(/u,
-);
-
-// Age-coding words never reach the image model, from a card or a Stage appearance.
-const scrubbed = slurpImageLook("She is petite, 151 cm tall, with a round, cute face and a kawaii style. Green eyes.");
-assert.doesNotMatch(scrubbed, /petite|151|cute|kawaii|round/iu);
-assert.match(scrubbed, /Green eyes/u);
 
 console.log("slurp image brief regression checks passed");

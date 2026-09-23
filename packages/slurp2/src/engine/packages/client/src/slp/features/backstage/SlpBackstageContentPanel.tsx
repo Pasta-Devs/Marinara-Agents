@@ -37,7 +37,7 @@ export function SlpBackstageContentPanel(page: SlpBackstagePageProps) {
   return (
     <div className="space-y-4">
       <BackstagePageHeader
-        title={t("ui.slurp.settings.backstage.sections.content", { defaultValue: "Content library" })}
+        title={t("ui.slurp.settings.backstage.sections.content", { defaultValue: "Content" })}
         detail="Manage reusable content separately from the rules that control how Slurp runs it."
         scope="all-slurp"
       />

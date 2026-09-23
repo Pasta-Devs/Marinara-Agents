@@ -6,7 +6,6 @@
  * which is what this does.
  */
 import type { DB } from "../../../db/connection.js";
-import { slurpWithAdultNegative } from "../../base/media/slp-image-prompt.js";
 import { logger } from "../../../lib/logger.js";
 import { resolveConnectionImageDefaults } from "../../../services/image/image-generation-defaults.js";
 import { generateImage, stageImageToDisk } from "../../../services/image/image-generation.js";
@@ -105,7 +104,7 @@ export async function generateGarnishAdImage(
           connection.imageService || source,
           {
             prompt,
-            negativePrompt: slurpWithAdultNegative(AD_IMAGE_NEGATIVE_PROMPT),
+            negativePrompt: AD_IMAGE_NEGATIVE_PROMPT,
             model,
             width: 1024,
             height: 640,

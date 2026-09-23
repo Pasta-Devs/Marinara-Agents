@@ -191,18 +191,28 @@ export async function slpFeedPublishingRoutes(app: FastifyInstance, deps: SlpRou
         defaultConnectionId: z.string().min(1).nullable().optional(),
         creatorId: z.string().min(1).optional(),
         connectionId: z.string().min(1).nullable().optional(),
+        styleProfileId: z.string().min(1).nullable().optional(),
       })
       .safeParse(req.body ?? {});
     if (!body.success) return reply.code(400).send({ error: body.error.flatten() });
-    const { creatorId, connectionId, defaultConnectionId } = body.data;
+    const { creatorId, connectionId, defaultConnectionId, styleProfileId } = body.data;
+    if (styleProfileId !== undefined && !creatorId) {
+      return reply.code(400).send({ error: "Set creatorId with a Creator image style override." });
+    }
     // A creatorId without a connectionId (or the reverse) silently did nothing.
-    if ((creatorId === undefined) !== (connectionId === undefined)) {
+    if ((creatorId === undefined) !== (connectionId === undefined) && styleProfileId === undefined) {
       return reply.code(400).send({
         error: "Set creatorId and connectionId together to map a Creator to an image connection.",
       });
     }
     if (creatorId && !(await noodle.getNoodlerAccountById(creatorId))) {
       return reply.code(404).send({ error: "Slurp stage profile not found" });
+    }
+    if (styleProfileId) {
+      const profiles = (await loadImageGenerationUserSettings(app.db)).styleProfiles.profiles;
+      if (!profiles.some((profile) => profile.id === styleProfileId)) {
+        return reply.code(404).send({ error: "Slurp image style profile not found" });
+      }
     }
     for (const candidateConnectionId of [defaultConnectionId, connectionId]) {
       if (candidateConnectionId === undefined || candidateConnectionId === null) continue;
@@ -213,13 +223,21 @@ export async function slpFeedPublishingRoutes(app: FastifyInstance, deps: SlpRou
     }
     return updateCreatorImageConnections(app.db, (current) => {
       const creatorConnectionIds = { ...current.creatorConnectionIds };
+      const creatorStyleProfileIds = { ...current.creatorStyleProfileIds };
       if (creatorId) {
-        if (connectionId) creatorConnectionIds[creatorId] = connectionId;
-        else delete creatorConnectionIds[creatorId];
+        if (connectionId !== undefined) {
+          if (connectionId) creatorConnectionIds[creatorId] = connectionId;
+          else delete creatorConnectionIds[creatorId];
+        }
+        if (styleProfileId !== undefined) {
+          if (styleProfileId) creatorStyleProfileIds[creatorId] = styleProfileId;
+          else delete creatorStyleProfileIds[creatorId];
+        }
       }
       return {
         defaultConnectionId: defaultConnectionId !== undefined ? defaultConnectionId : current.defaultConnectionId,
         creatorConnectionIds,
+        creatorStyleProfileIds,
       };
     });
   });

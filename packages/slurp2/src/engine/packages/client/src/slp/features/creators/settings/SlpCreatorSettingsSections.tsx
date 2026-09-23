@@ -7,7 +7,11 @@ import { errorMessage } from "../../../modules/settings/slp-backstage-format";
 import { Field, SettingsGroup, Toggle } from "../../../modules/settings/SlpSettingsControls";
 import { useUpdateCreatorFanActivity } from "../../audience/slp-audience-contract";
 import { useUpdateCreatorAutoPosting } from "../../feed/slp-feed-contract";
-import { useSlurpImageConnections, useUpdateSlurpImageConnections } from "../../media/slp-media-contract";
+import {
+  useSlurpImageConnections,
+  useSlurpImageStyleProfiles,
+  useUpdateSlurpImageConnections,
+} from "../../media/slp-media-contract";
 import { useSlurpConnections } from "../../../base/state/slp-host-connections";
 import { CreatorMessagingGroup, useSetSlurpCreatorMessaging } from "../../messages/slp-messages-contract";
 import { useSetSlurpCreatorPrice } from "../../economy/slp-economy-contract";
@@ -213,6 +217,7 @@ export function SlpCreatorImagesSection({ creator, active }: SlpCreatorSettingsS
   const updateAuto = useUpdateCreatorAutoPosting();
   const updateImages = useUpdateSlurpImageConnections();
   const imageSettingsQuery = useSlurpImageConnections(active);
+  const styleProfilesQuery = useSlurpImageStyleProfiles(active);
   const connectionsQuery = useSlurpConnections(active);
   const settingsQuery = useSlurpSettings();
   const updateSettings = useUpdateSlurpSettings();
@@ -259,6 +264,33 @@ export function SlpCreatorImagesSection({ creator, active }: SlpCreatorSettingsS
           {imageConnections.map((connection) => (
             <option key={connection.id} value={connection.id}>
               {connection.name ?? connection.model ?? connection.id}
+            </option>
+          ))}
+        </select>
+      </Field>
+      <Field
+        label={t("ui.slurp.settings.creators.imageStyle", { defaultValue: "Image style" })}
+        detail={t("ui.slurp.settings.creators.imageStyleDetail", {
+          defaultValue: "Use the global style or choose a style for this Creator.",
+        })}
+      >
+        <select
+          disabled={styleProfilesQuery.isLoading || styleProfilesQuery.isError || updateImages.isPending}
+          value={imageSettingsQuery.data?.creatorStyleProfileIds[creator.id] ?? ""}
+          onChange={(event) =>
+            updateImages.mutate(
+              { creatorId: creator.id, styleProfileId: event.target.value || null },
+              { onError: (error) => toast.error(errorMessage(error)) },
+            )
+          }
+          className={selectClass}
+        >
+          <option value="">
+            {t("ui.slurp.settings.creators.inheritImageStyle", { defaultValue: "Use global default" })}
+          </option>
+          {(styleProfilesQuery.data ?? []).map((profile) => (
+            <option key={profile.id} value={profile.id}>
+              {profile.name}
             </option>
           ))}
         </select>

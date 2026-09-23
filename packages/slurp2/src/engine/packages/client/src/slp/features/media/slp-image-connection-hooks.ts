@@ -5,6 +5,7 @@ import { slpKeys } from "../../base/state/slp-query-keys.js";
 export type SlurpImageConnections = {
   defaultConnectionId: string | null;
   creatorConnectionIds: Record<string, string>;
+  creatorStyleProfileIds: Record<string, string>;
 };
 export function useSlurpImageConnections(enabled = true) {
   return useQuery({
@@ -26,8 +27,12 @@ export function useSlurpImageStyleProfiles(enabled = true) {
 export function useUpdateSlurpImageConnections() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (patch: { defaultConnectionId?: string | null; creatorId?: string; connectionId?: string | null }) =>
-      api.patch<SlurpImageConnections>("/slurp2/slurp/image-connections", patch),
+    mutationFn: (patch: {
+      defaultConnectionId?: string | null;
+      creatorId?: string;
+      connectionId?: string | null;
+      styleProfileId?: string | null;
+    }) => api.patch<SlurpImageConnections>("/slurp2/slurp/image-connections", patch),
     onSuccess: (value) => qc.setQueryData(slpKeys.noodlerImageConnections(), value),
   });
 }

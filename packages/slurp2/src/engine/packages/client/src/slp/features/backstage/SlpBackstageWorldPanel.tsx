@@ -100,7 +100,7 @@ export function SlpBackstageWorldPanel(page: SlpBackstagePageProps) {
   return (
     <div className="space-y-4">
       <BackstagePageHeader
-        title={t("ui.slurp.settings.backstage.sections.world", { defaultValue: "World and audience" })}
+        title={t("ui.slurp.settings.backstage.sections.world", { defaultValue: "World" })}
         detail={t("ui.slurp.settings.backstage.landing.worldDetail", {
           defaultValue: "Shape how your Slurp feels. Open an area to change it.",
         })}

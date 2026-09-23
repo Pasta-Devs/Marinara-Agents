@@ -265,7 +265,7 @@ modules, rejected alternative, and migration consequence.
 - **Problem:** Slurp has several valid prompt controls: global prompt blocks, global generation and
   image settings, Creator stage and content settings, production strategy, current Creator state,
   and message relationship state. They were all expressed as prose. Image interpretation could
-  therefore treat a personality or adult image instruction as permission to change the post's scene.
+  therefore treat a personality or image instruction as permission to change the post's scene.
 - **Decision:** The post's subject, action, setting, clothing, and sexual intensity are the visual
   intent. The post prompt blocks and Creator settings may shape that intent, but image interpretation
   may only render it. Stable appearance and style add detail after intent. They may not add an event,
