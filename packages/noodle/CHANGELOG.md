@@ -1,5 +1,9 @@
 # Noodle release notes
 
+## 1.2.27 — 2026-09-24
+
+- Make Latest Posts a native Noodle widget with the Noodle logo, avatars, handles, media, polls, and live interaction counts.
+
 ## 1.2.26 — 2026-09-24
 
 - Give the Latest Posts Home widget a rich package-owned surface with live status, refresh controls, metadata, and direct Noodle navigation.

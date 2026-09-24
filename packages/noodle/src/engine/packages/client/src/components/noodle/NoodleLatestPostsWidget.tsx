@@ -1,11 +1,22 @@
-import { useQuery } from "@tanstack/react-query";
-import { ArrowUpRight, Image as ImageIcon, ListChecks, MessageCircle, RefreshCw, Sparkles } from "lucide-react";
+import { useQueries, useQuery } from "@tanstack/react-query";
+import {
+  ArrowUpRight,
+  Heart,
+  Image as ImageIcon,
+  ListChecks,
+  MessageCircle,
+  RefreshCw,
+  Repeat2,
+  Sparkles,
+} from "lucide-react";
 import type { CSSProperties } from "react";
 import { useTranslation } from "react-i18next";
 import { readNoodlePollFromMetadata } from "@marinara-engine/shared";
 import { api } from "../../lib/api-client";
 import { noodleKeys, useNoodle, type NoodlePostPage } from "../../hooks/use-noodle";
 import { formatTime } from "./NoodleDateTime";
+import { Avatar } from "./NoodleShell";
+import { countInteractions } from "./NoodlePostCard";
 
 export function NoodleLatestPostsWidget({
   active,
@@ -14,6 +25,8 @@ export function NoodleLatestPostsWidget({
   widgetLabel,
   widgetDescription,
   widgetAccent,
+  packageId,
+  packageVersion,
 }: {
   active: boolean;
   onOpenPost?: (postId: string) => void;
@@ -21,6 +34,8 @@ export function NoodleLatestPostsWidget({
   widgetLabel?: string;
   widgetDescription?: string;
   widgetAccent?: string;
+  packageId?: string;
+  packageVersion?: string | null;
 }) {
   const { t, i18n } = useTranslation();
   const bootstrap = useNoodle(active);
@@ -32,6 +47,15 @@ export function NoodleLatestPostsWidget({
     refetchOnMount: "always",
     refetchInterval: active ? 30_000 : false,
     refetchIntervalInBackground: false,
+  });
+  const posts = feed.data?.items ?? [];
+  const postDetails = useQueries({
+    queries: posts.map((post) => ({
+      queryKey: ["noodle", "post", post.id, "widget"],
+      queryFn: () => api.get<{ interactions: Array<{ type: string }> }>(`/noodle/posts/${encodeURIComponent(post.id)}`),
+      enabled: active,
+      staleTime: 15_000,
+    })),
   });
   if (feed.isPending || bootstrap.isPending) {
     return (
@@ -54,7 +78,6 @@ export function NoodleLatestPostsWidget({
       </div>
     );
   }
-  const posts = feed.data?.items ?? [];
   const stale = feed.dataUpdatedAt > 0 && Date.now() - feed.dataUpdatedAt > 60_000;
   if (posts.length === 0) {
     const needsSetup = (bootstrap.data?.accounts ?? []).length === 0;
@@ -77,17 +100,30 @@ export function NoodleLatestPostsWidget({
   }
   return (
     <div
-      className="flex h-full min-h-0 flex-col overflow-hidden rounded-[inherit] bg-[color-mix(in_srgb,var(--widget-accent,#28c7c1)_7%,var(--background))]"
-      style={{ "--widget-accent": widgetAccent === "violet" ? "#9b8cff" : "#28c7c1" } as CSSProperties}
+      className="flex h-full min-h-0 flex-col overflow-hidden rounded-[inherit] bg-[color-mix(in_srgb,var(--noodle-accent)_7%,var(--background))]"
+      style={{ "--widget-accent": "var(--noodle-accent)" } as CSSProperties}
     >
       <header className="shrink-0 border-b border-[color-mix(in_srgb,var(--widget-accent)_24%,var(--border))] bg-[color-mix(in_srgb,var(--widget-accent)_11%,transparent)] px-4 py-3">
         <div className="flex items-start justify-between gap-3">
           <div className="flex min-w-0 items-start gap-2.5">
-            <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-[color-mix(in_srgb,var(--widget-accent)_18%,var(--card))] text-[var(--widget-accent)]">
-              <Sparkles size="1rem" aria-hidden="true" />
+            <span className="mt-0.5 flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-[var(--noodle-accent)]/30 bg-[var(--noodle-accent)]/15 p-1.5">
+              <img
+                src={
+                  packageId && packageVersion
+                    ? `/api/capability-packages/${encodeURIComponent(packageId)}/assets/noodle-klusek.png?v=${encodeURIComponent(packageVersion)}`
+                    : undefined
+                }
+                alt=""
+                className="h-full w-full object-contain"
+              />
+              {!packageId || !packageVersion ? (
+                <Sparkles size="1rem" aria-hidden="true" className="text-[var(--noodle-accent)]" />
+              ) : null}
             </span>
             <div className="min-w-0">
-              <p className="text-[0.62rem] font-bold uppercase tracking-[0.16em] text-[var(--widget-accent)]">Noodle</p>
+              <p className="text-[0.62rem] font-bold uppercase tracking-[0.16em] text-[var(--noodle-accent)]">
+                Noodle public feed
+              </p>
               <h2 className="truncate text-sm font-bold text-[var(--foreground)]">
                 {widgetLabel ?? t("ui.noodle.widget.title")}
               </h2>
@@ -100,7 +136,7 @@ export function NoodleLatestPostsWidget({
             type="button"
             onClick={() => void feed.refetch()}
             aria-label={t("ui.noodle.widget.refresh")}
-            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-[var(--muted-foreground)] hover:bg-[var(--accent)] hover:text-[var(--foreground)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--widget-accent)]"
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-[var(--noodle-accent)] hover:bg-[var(--noodle-accent)]/15 hover:text-[var(--foreground)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)]"
           >
             <RefreshCw size="0.9rem" aria-hidden="true" />
           </button>
@@ -123,6 +159,10 @@ export function NoodleLatestPostsWidget({
         <div className="grid gap-2">
           {posts.map((post) => {
             const author = post.authorSnapshot?.displayName || t("ui.noodle.widget.unknownAuthor");
+            const details = postDetails[index]?.data?.interactions ?? [];
+            const likes = countInteractions(details as never, "like");
+            const replies = countInteractions(details as never, "reply");
+            const reposts = countInteractions(details as never, "repost");
             return (
               <button
                 key={post.id}
@@ -131,8 +171,14 @@ export function NoodleLatestPostsWidget({
                 className="group w-full rounded-2xl border border-[color-mix(in_srgb,var(--widget-accent)_18%,var(--border))] bg-[color-mix(in_srgb,var(--card)_82%,transparent)] p-3 text-left shadow-[0_8px_24px_-20px_var(--widget-accent)] transition-colors hover:border-[color-mix(in_srgb,var(--widget-accent)_40%,var(--border))] hover:bg-[color-mix(in_srgb,var(--widget-accent)_10%,var(--card))] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--widget-accent)]"
                 aria-label={t("ui.noodle.widget.openPost", { author })}
               >
-                <span className="flex min-w-0 items-baseline justify-between gap-2">
-                  <span className="truncate text-xs font-bold text-[var(--foreground)]">{author}</span>
+                <span className="flex min-w-0 items-center gap-2">
+                  {post.authorSnapshot ? <Avatar account={post.authorSnapshot} size="sm" /> : null}
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-xs font-bold text-[var(--foreground)]">{author}</span>
+                    <span className="block truncate text-[0.65rem] text-[var(--muted-foreground)]">
+                      @{post.authorSnapshot?.handle ?? "noodle"}
+                    </span>
+                  </span>
                   <time className="shrink-0 text-[0.65rem] text-[var(--muted-foreground)]" dateTime={post.createdAt}>
                     {formatTime(post.createdAt, i18n.language)}
                   </time>
@@ -158,6 +204,17 @@ export function NoodleLatestPostsWidget({
                     </span>
                   </span>
                 ) : null}
+                <span className="mt-2 flex items-center gap-3 text-[0.65rem] text-[var(--muted-foreground)]">
+                  <span className="inline-flex items-center gap-1">
+                    <Heart size="0.75rem" /> {likes}
+                  </span>
+                  <span className="inline-flex items-center gap-1">
+                    <MessageCircle size="0.75rem" /> {replies}
+                  </span>
+                  <span className="inline-flex items-center gap-1">
+                    <Repeat2 size="0.8rem" /> {reposts}
+                  </span>
+                </span>
               </button>
             );
           })}

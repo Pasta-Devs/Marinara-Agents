@@ -268,6 +268,12 @@
     "noodle": {
       "versions": [
         {
+          "version": "1.2.27",
+          "date": "2026-09-24",
+          "notes": "- Make Latest Posts a native Noodle widget with the Noodle logo, avatars, handles, media, polls, and live interaction counts.",
+          "highlight": false
+        },
+        {
           "version": "1.2.26",
           "date": "2026-09-24",
           "notes": "- Give the Latest Posts Home widget a rich package-owned surface with live status, refresh controls, metadata, and direct Noodle navigation.",

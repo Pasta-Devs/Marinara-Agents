@@ -88,6 +88,8 @@ function NoodlePackageRoot({ element }: { element: CapabilityElement }) {
                   widgetLabel={typeof props.widgetLabel === "string" ? props.widgetLabel : undefined}
                   widgetDescription={typeof props.widgetDescription === "string" ? props.widgetDescription : undefined}
                   widgetAccent={typeof props.widgetAccent === "string" ? props.widgetAccent : undefined}
+                  packageId={typeof props.packageId === "string" ? props.packageId : undefined}
+                  packageVersion={typeof props.packageVersion === "string" ? props.packageVersion : null}
                   onOpenPost={
                     typeof props.onOpenPost === "function" ? (props.onOpenPost as (postId: string) => void) : undefined
                   }
