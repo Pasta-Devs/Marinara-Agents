@@ -22,19 +22,36 @@ export function SlpConnectionsPanel({ t, settings, update, connectionsQuery }: S
       text: t("ui.slurp.settings.connections.unavailableStatus", { fallback }),
     };
   };
+  type Key =
+    | "generationConnectionId"
+    | "imageContextConnectionId"
+    | "imageGenerationConnectionId"
+    | "inlineAdsImageConnectionId";
+  const saveKey = (key: Key) => (id: string | null) => update(key, id);
   const rows = [
     {
       key: "generationConnectionId" as const,
       label: t("ui.slurp.settings.connections.textGeneration"),
       connections: textConnections,
       value: settings.generationConnectionId,
+      save: saveKey("generationConnectionId"),
       fallback: t("ui.slurp.settings.connections.defaultText"),
+    },
+    {
+      key: "modelBudget" as const,
+      label: t("ui.slurp.settings.connections.aiWriting"),
+      connections: textConnections,
+      value: settings.modelBudget.connectionId,
+      // The server falls back to the text generation connection, not the Engine default.
+      fallback: t("ui.slurp.settings.connections.textGenerationFallback"),
+      save: (id: string | null) => update("modelBudget", { ...settings.modelBudget, connectionId: id }),
     },
     {
       key: "imageContextConnectionId" as const,
       label: t("ui.slurp.settings.connections.imageContext"),
       connections: textConnections,
       value: settings.imageContextConnectionId,
+      save: saveKey("imageContextConnectionId"),
       fallback: t("ui.slurp.settings.connections.defaultText"),
     },
     {
@@ -42,6 +59,7 @@ export function SlpConnectionsPanel({ t, settings, update, connectionsQuery }: S
       label: t("ui.slurp.settings.connections.imageGeneration"),
       connections: imageConnections,
       value: settings.imageGenerationConnectionId,
+      save: saveKey("imageGenerationConnectionId"),
       fallback: t("ui.slurp.settings.connections.defaultImage"),
     },
     {
@@ -49,6 +67,7 @@ export function SlpConnectionsPanel({ t, settings, update, connectionsQuery }: S
       label: t("ui.slurp.settings.connections.adImages"),
       connections: imageConnections,
       value: settings.inlineAdsImageConnectionId,
+      save: saveKey("inlineAdsImageConnectionId"),
       fallback: t("ui.slurp.settings.connections.defaultImage"),
     },
   ];
@@ -86,7 +105,7 @@ export function SlpConnectionsPanel({ t, settings, update, connectionsQuery }: S
               <Field key={row.key} label={row.label} detail={state.text}>
                 <select
                   value={row.value ?? ""}
-                  onChange={(event) => void update(row.key, event.target.value || null)}
+                  onChange={(event) => void row.save(event.target.value || null)}
                   className="min-h-11 w-full rounded-lg border border-[var(--slurp-outline)] bg-[var(--slurp-canvas)] px-3 text-sm"
                 >
                   <option value="">{t("ui.slurp.settings.connections.useDefault")}</option>
