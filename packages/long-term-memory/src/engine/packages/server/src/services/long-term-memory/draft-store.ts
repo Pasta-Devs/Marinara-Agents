@@ -18,7 +18,7 @@ import { readJsonFile, writeJsonAtomic } from "./atomic-json.js";
 import { getLongTermMemoryDirectories, getLongTermMemoryRoot, safeJoin } from "./paths.js";
 import { LongTermMemoryStorage } from "./storage.js";
 import { extractionFingerprintForLtmSourceNote, sourceHashForLtmSourceNote } from "./source-hash.js";
-import { recordLtmDebugEvent } from "./debug-log.js";
+import { LTM_DEBUG_MAX_EVENT_BYTES, recordLtmDebugEvent } from "./debug-log.js";
 import { withLtmVaultLock } from "./vault-lock.js";
 
 export interface CreateLtmExtractionDraftInput {
@@ -188,6 +188,24 @@ export class LongTermMemoryDraftStore {
             });
           }
           if (subjectIdIssues.size) {
+            const event = {
+              id: randomUUID(),
+              ts: new Date().toISOString(),
+              operationId: draftInput.operationId,
+              phase: "draft" as const,
+              action: "recovery_subject_id_validation_failed",
+              status: "error" as const,
+              sourceNoteId,
+              details: { rejectedSubjectIds: [] as Array<{ candidateIndex: number; subjectId: unknown }> },
+            };
+            for (const rejected of subjectIdIssues.values()) {
+              if (event.details.rejectedSubjectIds.length === 80) break;
+              event.details.rejectedSubjectIds.push(rejected);
+              if (Buffer.byteLength(`${JSON.stringify(event)}\n`) > LTM_DEBUG_MAX_EVENT_BYTES) {
+                event.details.rejectedSubjectIds.pop();
+                break;
+              }
+            }
             await recordLtmDebugEvent({
               root: this.root,
               operationId: draftInput.operationId,
@@ -195,9 +213,7 @@ export class LongTermMemoryDraftStore {
               action: "recovery_subject_id_validation_failed",
               status: "error",
               sourceNoteId,
-              details: {
-                rejectedSubjectIds: Array.from(subjectIdIssues.values()).slice(0, 80),
-              },
+              details: event.details,
             }).catch(() => undefined);
           }
           throw parsedDraft.error;
