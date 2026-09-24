@@ -1,5 +1,9 @@
 # Noodle release notes
 
+## 1.2.32 — 2026-09-24
+
+- Fix compact widget mounting and provide Noodle theme variables inside isolated Home widget mounts.
+
 ## 1.2.31 — 2026-09-24
 
 - Add a compact Noodle Snapshot widget and make like and repost controls perform native Noodle interactions.

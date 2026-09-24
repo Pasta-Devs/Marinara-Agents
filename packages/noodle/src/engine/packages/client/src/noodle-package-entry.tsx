@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type CSSProperties } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import i18next from "i18next";
@@ -80,9 +80,18 @@ function NoodlePackageRoot({ element }: { element: CapabilityElement }) {
     <I18nextProvider i18n={localization}>
       <QueryClientProvider client={client}>
         <ModalPortalContext.Provider value={element}>
-          <div className="h-full min-h-0 overflow-hidden bg-[var(--background)] text-[var(--foreground)]">
+          <div
+            className="h-full min-h-0 overflow-hidden bg-[var(--background)] text-[var(--foreground)]"
+            style={
+              {
+                "--noodle-accent": "#7EA7FF",
+                "--noodle-divider": "color-mix(in srgb, #7EA7FF 28%, var(--border))",
+                "--noodle-accent-foreground": "#071226",
+              } as CSSProperties
+            }
+          >
             {element.getAttribute("view") === "widget" ? (
-              props.widgetId === "latest-posts" ? (
+              props.widgetId === "latest-posts" || props.widgetId === "latest-posts-compact" ? (
                 <NoodleLatestPostsWidget
                   active={props.active === true}
                   widgetLabel={typeof props.widgetLabel === "string" ? props.widgetLabel : undefined}
