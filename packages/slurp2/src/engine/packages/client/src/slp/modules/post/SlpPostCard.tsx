@@ -12,7 +12,7 @@ import { Avatar } from "../../base/chrome/SlpChrome";
 import { useTranslation as useUiTranslation } from "react-i18next";
 import { Image as ImageIcon } from "lucide-react";
 import { formatTime } from "../../base/ui/slp-date-time";
-import { fieldClass, labelClass, textareaClass } from "./SlpPostHelpers";
+import { fieldClass, labelClass, slpPostImagePrompt, textareaClass } from "./SlpPostHelpers";
 import {
   countInteractions,
   createSlpLightboxImage,
@@ -162,7 +162,11 @@ export function SlpPostCard({
   const [promptDraft, setPromptDraft] = useState<string | null>(null);
   const imageDescription =
     typeof post.metadata?.imageDescription === "string" ? post.metadata.imageDescription.trim() : "";
-  const hasImageContext = Boolean(post.imageUrl && (post.imagePrompt?.trim() || imageDescription));
+  // Once a picture exists, show and edit what the provider drew it from, not the draft.
+  const shownImagePrompt = post.imageUrl ? slpPostImagePrompt(post) : post.imagePrompt;
+  // The context panel describes the picture on screen, which in a set may not be the first one.
+  const contextImagePrompt = activeImage?.imagePrompt ?? shownImagePrompt;
+  const hasImageContext = Boolean(post.imageUrl && (contextImagePrompt?.trim() || imageDescription));
   const editablePost =
     post.imageUrl && (postImageSrc === null || postImageSrc !== failedImageUrl) ? post : { ...post, imageUrl: null };
   const postInteractions = post.interactions;
@@ -456,7 +460,7 @@ export function SlpPostCard({
                       createSlpLightboxImage(
                         `${post.id}:${activeImageIndex}`,
                         displayedImageUrl,
-                        activeImage?.imagePrompt ?? post.imagePrompt ?? "",
+                        activeImage?.imagePrompt ?? shownImagePrompt ?? "",
                       ),
                     );
                 }}
@@ -520,7 +524,7 @@ export function SlpPostCard({
             {ctx.postManagement && ctx.generatePostImage && promptDraft === null && (
               <button
                 type="button"
-                onClick={() => setPromptDraft(post.imagePrompt ?? "")}
+                onClick={() => setPromptDraft(shownImagePrompt ?? "")}
                 disabled={imageGenerationPending}
                 className="absolute right-2 top-2 flex h-10 w-10 items-center justify-center rounded-full text-[var(--noodle-accent)] transition-[background-color,transform] hover:bg-[var(--noodle-accent)]/15 active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)] disabled:opacity-50 motion-reduce:transition-none motion-reduce:active:scale-100"
                 title={localizeUi("ui.slurp.image.generate")}
@@ -573,13 +577,13 @@ export function SlpPostCard({
         )}
         {imageContextOpen && hasImageContext && (
           <div className="mt-3 space-y-2 rounded-xl border border-[var(--noodle-accent)]/35 bg-[var(--noodle-accent)]/10 p-3 text-xs leading-5">
-            {post.imagePrompt?.trim() && (
+            {contextImagePrompt?.trim() && (
               <div>
                 <span className="mb-1 flex items-center gap-1.5 font-semibold text-[var(--noodle-accent)]">
                   <ImageIcon size={13} aria-hidden="true" />
                   {localizeUi("ui.noodle.noodlepostcard.imagePrompt")}
                 </span>
-                <p className="whitespace-pre-wrap break-words">{post.imagePrompt}</p>
+                <p className="whitespace-pre-wrap break-words">{contextImagePrompt}</p>
               </div>
             )}
             {imageDescription && (

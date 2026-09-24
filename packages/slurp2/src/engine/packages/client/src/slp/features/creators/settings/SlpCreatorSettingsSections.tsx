@@ -34,7 +34,7 @@ import {
   useDismissCreatorSourceChanges,
   useCreatorAppearanceAction,
 } from "../slp-creator-profile-hooks";
-import { useSlpPersonaBackedCreator } from "../slp-creators-hooks";
+import { useSlpPersonaBackedCreator, useSlpViewerPersonaId } from "../slp-creators-hooks";
 import { useCreatorReserveStatus } from "../../feed/slp-feed-contract";
 import { accentButton, focusRing, noteClass, quietButton, selectClass } from "../slp-creator-classes";
 import type { SlpCreatorSettingsSectionProps } from "./slp-creator-settings-contract";
@@ -681,7 +681,7 @@ export function SlpCreatorMessagesSection({ creator, onClose }: SlpCreatorSettin
   const { t } = useTranslation();
   const setMessaging = useSetSlurpCreatorMessaging();
   const setPrice = useSetSlurpCreatorPrice();
-  const viewerPersonaId = useSlurpUIStore((state) => state.viewerPersonaId);
+  const viewerPersonaId = useSlpViewerPersonaId();
   const setNavigation = useSlurpUIStore((state) => state.setNavigation);
 
   /* Every Creator's policy and prices are the player's to set, world-run ones included: Slurp is

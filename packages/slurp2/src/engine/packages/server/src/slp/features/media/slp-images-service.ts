@@ -138,7 +138,7 @@ type CreatorPostImageResult = {
   metadata: Record<string, unknown>;
   preview: Omit<SlpImagePromptReviewItem, "id"> | null;
   stagedMedia: StagedGalleryImage | null;
-  /** Exact positive prompt sent to the image provider. Kept out of public post metadata. */
+  /** Exact positive prompt sent to the image provider. Also stored as `metadata.imageProviderPrompt`. */
   providerPrompt: string;
 };
 
@@ -620,6 +620,9 @@ async function generateCreatorPostImageRun(
       imageModel: imageModel || "unknown",
       imageStyleProfileId: compiledPrompt.profile.id,
       noodlerMediaPath: file.filePath,
+      // What the provider actually drew from, so every surface that shows or edits the picture's
+      // prompt shows this rather than the draft it started as.
+      imageProviderPrompt: finalPrompt,
     },
     preview: null,
     stagedMedia: file,

@@ -158,7 +158,7 @@ assert.doesNotMatch(
 const creatorPostCard = slurp2Source(join(pkg, "client/src/components/slurp/SlurpCreatorPostCard.tsx"));
 assert.match(
   creatorPostCard,
-  /ctx\.generatePostImage && \(\s*<button[\s\S]*?setPromptDraft\(post\.imagePrompt \?\? ""\)/u,
+  /ctx\.generatePostImage && \(\s*<button[\s\S]*?setPromptDraft\(slpPostImagePrompt\(post\) \?\? ""\)/u,
   "the post menu opens the image prompt editor for a new image or a redraw",
 );
 assert.match(

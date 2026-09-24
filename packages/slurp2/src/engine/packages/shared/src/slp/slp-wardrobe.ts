@@ -44,6 +44,10 @@ export const slpWardrobeSceneSchema = z
   })
   .strict();
 
+/** One more picture in a multi-image post: a full scene of its own, because the image model sees nothing else. */
+export const slpSceneShotSchema = slpWardrobeSceneSchema.omit({ wardrobeId: true }).strip();
+
+export type SlpSceneShot = z.infer<typeof slpSceneShotSchema>;
 export type SlpWardrobeLookInput = z.infer<typeof slpWardrobeLookInputSchema>;
 export type SlpWardrobeLook = z.infer<typeof slpWardrobeLookSchema>;
 export type SlpWardrobeImportDraft = z.infer<typeof slpWardrobeImportDraftSchema>;

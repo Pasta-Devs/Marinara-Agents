@@ -1,5 +1,5 @@
 // The splash screen needs the shipped version and its public notes inside the client bundle.
-export const SLURP2_VERSION = "0.2.36";
+export const SLURP2_VERSION = "0.2.37";
 
 export interface Slurp2ReleaseEntry {
   version: string;
@@ -9,6 +9,16 @@ export interface Slurp2ReleaseEntry {
 
 /** The public release history shown in the Engine splash screen. */
 export const SLURP2_RELEASES: Slurp2ReleaseEntry[] = [
+  {
+    version: "0.2.37",
+    date: "2026-09-24",
+    notes: [
+      "NanoGPT, xAI, and connections recognised only by their base URL now receive avatar reference images again.",
+      "Persona Creators can set Messages & Pricing again; the tab now uses the same viewer persona as the rest of Slurp.",
+      "Post cards, the picture viewer, and the redraw box show the exact prompt the picture was drawn from. A prompt you edit or keep in the redraw box is sent as written, not rewritten again.",
+      "Multi-picture posts plan every picture as its own complete scene, so a photo dump, a shoot, or a day out each gets pictures that make sense on their own.",
+    ],
+  },
   {
     version: "0.2.36",
     date: "2026-09-24",

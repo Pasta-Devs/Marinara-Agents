@@ -1,5 +1,12 @@
 # Slurp Remastered release notes
 
+## 0.2.37 — 2026-09-24
+
+- NanoGPT, xAI, and connections recognised only by their base URL now receive avatar reference images again.
+- Persona Creators can set Messages & Pricing again; the tab now uses the same viewer persona as the rest of Slurp.
+- Post cards, the picture viewer, and the redraw box show the exact prompt the picture was drawn from. A prompt you edit or keep in the redraw box is sent as written, not rewritten again.
+- Multi-picture posts plan every picture as its own complete scene, so a photo dump, a shoot, or a day out each gets pictures that make sense on their own.
+
 ## 0.2.36 — 2026-09-24
 
 - Deep details opens as a flowchart of the whole generation: each step shows what happens, why, which connection and model ran it, and the exact text that went in and came out. A Canvas view shows the same diagram to drag and zoom in every direction.

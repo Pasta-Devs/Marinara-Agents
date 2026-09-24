@@ -164,3 +164,9 @@ export function createSlpLightboxImage(id: string, url: string, prompt = ""): Ch
     url,
   };
 }
+
+/** The prompt the provider actually drew this post's picture from, else the draft it started as. */
+export function slpPostImagePrompt(post: { imagePrompt?: string | null; metadata?: Record<string, unknown> | null }) {
+  const sent = post.metadata?.imageProviderPrompt;
+  return (typeof sent === "string" && sent.trim()) || post.imagePrompt || null;
+}

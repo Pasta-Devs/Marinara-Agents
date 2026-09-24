@@ -49,7 +49,9 @@ assert.match(images, /const reviewedOverride = input\.retryStoredPrompt \? null 
 assert.match(images, /input\.promptOverride && !input\.retryStoredPrompt/u);
 
 // Every path that resends a stored draft must declare itself as such.
-assert.match(routes, /retryStoredPrompt: true,/u, "manual generate-image resends a stored draft");
+assert.match(routes, /retryStoredPrompt: !reviewedPrompt,/u, "manual generate-image resends a stored draft");
+// A prompt the user edited, or kept from the last picture, is theirs and goes out as written.
+assert.match(routes, /parsed\.data\.imagePrompt !== post\.imagePrompt\?\.trim\(\)/u);
 const retryFlags = [...images.matchAll(/retryStoredPrompt: true,/gu)];
 assert.equal(retryFlags.length, 1, "retryNextFailedPostImage must declare the stored prompt too");
 // The flag has to actually exist on the service input, not just be passed and ignored.
