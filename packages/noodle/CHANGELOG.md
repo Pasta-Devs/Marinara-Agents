@@ -1,5 +1,13 @@
 # Noodle release notes
 
+## 1.2.31 — 2026-09-24
+
+- Add a compact Noodle Snapshot widget and make like and repost controls perform native Noodle interactions.
+
+## 1.2.30 — 2026-09-24
+
+- Remove the manual refresh button from the Home widget. The feed continues to refresh automatically.
+
 ## 1.2.29 — 2026-09-24
 
 - Align the Home widget with Noodle timeline styling, show twenty posts, and make post summaries keyboard and pointer interactive.

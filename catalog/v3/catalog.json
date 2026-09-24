@@ -2711,7 +2711,7 @@
         },
         "id": "noodle",
         "name": "Noodle",
-        "version": "1.2.29",
+        "version": "1.2.31",
         "description": "Explore the Noodle public timeline as an optional local social world. Install it, restart Marinara Engine when prompted, then open Home → Noodle.",
         "localizations": {
           "de": {
@@ -2773,6 +2773,16 @@
               "accent": "cyan",
               "surface": "soft",
               "header": "banner"
+            },
+            {
+              "id": "latest-posts-compact",
+              "label": "Noodle Snapshot",
+              "description": "A compact view of recent Noodle posts",
+              "size": "compact",
+              "icon": "message",
+              "accent": "cyan",
+              "surface": "soft",
+              "header": "compact"
             }
           ]
         },
@@ -2789,8 +2799,8 @@
           },
           {
             "path": "client.js",
-            "sha256": "db52041e0f4b396f6eb099491211469a9b3c90905479f11ed68c313d5d00edba",
-            "bytes": 2378774
+            "sha256": "335e969832612d488eefa6fa79a3c6c559c743f8d6c1e906a879fe62395919c5",
+            "bytes": 2378535
           },
           {
             "path": "noodle-klusek.png",
@@ -2811,9 +2821,9 @@
       "category": "misc",
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/noodle.png",
       "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/noodle-1.2.29.zip",
-        "sha256": "4101ca049eb46ff7694545e73be0358bd78eb5ccb49d471fa6674997daf5056b",
-        "bytes": 4836780
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/noodle-1.2.31.zip",
+        "sha256": "08836e14e94d6fdfdc9ccfd2f126afcc3c4776f167e8113f54554c8d006b8bc7",
+        "bytes": 4836831
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents/blob/main/packages/noodle/README.md"
     },

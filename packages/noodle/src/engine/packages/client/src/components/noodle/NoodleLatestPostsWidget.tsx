@@ -17,6 +17,8 @@ import { noodleKeys, useNoodle, type NoodlePostPage } from "../../hooks/use-nood
 import { formatTime } from "./NoodleDateTime";
 import { Avatar } from "./NoodleShell";
 import { countInteractions } from "./NoodlePostCard";
+import { useUIStore } from "../../stores/noodle-package.store";
+import { useCreateNoodleInteraction, useRemoveNoodleInteraction } from "../../hooks/use-noodle";
 
 export function NoodleLatestPostsWidget({
   active,
@@ -27,6 +29,7 @@ export function NoodleLatestPostsWidget({
   widgetAccent,
   packageId,
   packageVersion,
+  compact = false,
 }: {
   active: boolean;
   onOpenPost?: (postId: string) => void;
@@ -36,12 +39,19 @@ export function NoodleLatestPostsWidget({
   widgetAccent?: string;
   packageId?: string;
   packageVersion?: string | null;
+  compact?: boolean;
 }) {
   const { t, i18n } = useTranslation();
   const bootstrap = useNoodle(active);
+  const selectedPersonaId = useUIStore((state) => state.noodleSelectedPersonaId);
+  const createInteraction = useCreateNoodleInteraction();
+  const removeInteraction = useRemoveNoodleInteraction();
+  const persona = (bootstrap.data?.accounts ?? []).find(
+    (account) => account.kind === "persona" && (account.entityId === selectedPersonaId || !selectedPersonaId),
+  );
   const feed = useQuery({
-    queryKey: [...noodleKeys.feed(), "home-widget", "latest-twenty"],
-    queryFn: () => api.get<NoodlePostPage>("/noodle/feed?limit=20"),
+    queryKey: [...noodleKeys.feed(), "home-widget", compact ? "compact" : "latest-twenty"],
+    queryFn: () => api.get<NoodlePostPage>(`/noodle/feed?limit=${compact ? 6 : 20}`),
     enabled: active,
     staleTime: 10_000,
     refetchOnMount: "always",
@@ -52,11 +62,20 @@ export function NoodleLatestPostsWidget({
   const postDetails = useQueries({
     queries: posts.map((post) => ({
       queryKey: ["noodle", "post", post.id, "widget"],
-      queryFn: () => api.get<{ interactions: Array<{ type: string }> }>(`/noodle/posts/${encodeURIComponent(post.id)}`),
+      queryFn: () =>
+        api.get<{ interactions: Array<{ type: string; actorAccountId?: string }> }>(
+          `/noodle/posts/${encodeURIComponent(post.id)}`,
+        ),
       enabled: active,
       staleTime: 15_000,
     })),
   });
+  const toggleInteraction = (postId: string, type: "like" | "repost", activeInteraction: boolean) => {
+    if (!persona) return;
+    const input = { postId, actorKind: "persona" as const, actorEntityId: persona.entityId, type };
+    if (activeInteraction) removeInteraction.mutate(input);
+    else createInteraction.mutate({ ...input, content: null });
+  };
   if (feed.isPending || bootstrap.isPending) {
     return (
       <p role="status" className="px-1 py-3 text-xs text-[var(--muted-foreground)]">
@@ -122,23 +141,17 @@ export function NoodleLatestPostsWidget({
             </span>
             <div className="min-w-0">
               <h2 className="truncate text-sm font-bold text-[var(--foreground)]">{t("ui.noodle.widget.title")}</h2>
-              <p className="mt-0.5 line-clamp-1 text-[0.68rem] text-[var(--muted-foreground)]">
-                {t("ui.noodle.widget.description")}
-              </p>
+              {!compact ? (
+                <p className="mt-0.5 line-clamp-1 text-[0.68rem] text-[var(--muted-foreground)]">
+                  {t("ui.noodle.widget.description")}
+                </p>
+              ) : null}
             </div>
           </div>
-          <button
-            type="button"
-            onClick={() => void feed.refetch()}
-            aria-label={t("ui.noodle.widget.refresh")}
-            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-[var(--noodle-accent)] hover:bg-[var(--noodle-accent)]/15 hover:text-[var(--foreground)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)]"
-          >
-            <RefreshCw size="0.9rem" aria-hidden="true" />
-          </button>
         </div>
-        <div className="mt-2 text-[0.63rem] text-[var(--muted-foreground)]">
-          {stale ? t("ui.noodle.widget.stale") : t("ui.noodle.widget.subtitle")}
-        </div>
+        {!compact && stale ? (
+          <div className="mt-2 text-[0.63rem] text-[var(--muted-foreground)]">{t("ui.noodle.widget.stale")}</div>
+        ) : null}
       </header>
       <div
         className="h-full min-h-0 overflow-y-auto overscroll-contain px-3 py-3"
@@ -165,7 +178,7 @@ export function NoodleLatestPostsWidget({
                     onOpenPost?.(post.id);
                   }
                 }}
-                className="group w-full rounded-xl border border-[var(--noodle-divider)] bg-[var(--background)] p-3 text-left transition-colors hover:border-[var(--noodle-accent)]/50 hover:bg-[var(--noodle-accent)]/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)]"
+                className="group w-full rounded-xl border border-[var(--noodle-accent)]/35 bg-[var(--background)] p-3 text-left transition-colors hover:border-[var(--noodle-accent)] hover:bg-[var(--noodle-accent)]/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)]"
                 aria-label={t("ui.noodle.widget.openPost", { author })}
               >
                 <span className="flex min-w-0 items-center gap-2">
@@ -206,7 +219,11 @@ export function NoodleLatestPostsWidget({
                     type="button"
                     onClick={(event) => {
                       event.stopPropagation();
-                      onOpenPost?.(post.id);
+                      toggleInteraction(
+                        post.id,
+                        "like",
+                        details.some((item) => item.type === "like" && item.actorAccountId === persona?.id),
+                      );
                     }}
                     className="inline-flex items-center gap-1 hover:text-[var(--noodle-accent)]"
                     aria-label={t("ui.noodle.widget.openPost", { author })}
@@ -228,7 +245,11 @@ export function NoodleLatestPostsWidget({
                     type="button"
                     onClick={(event) => {
                       event.stopPropagation();
-                      onOpenPost?.(post.id);
+                      toggleInteraction(
+                        post.id,
+                        "repost",
+                        details.some((item) => item.type === "repost" && item.actorAccountId === persona?.id),
+                      );
                     }}
                     className="inline-flex items-center gap-1 hover:text-[var(--noodle-accent)]"
                     aria-label={t("ui.noodle.widget.openPost", { author })}

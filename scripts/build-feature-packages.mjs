@@ -278,7 +278,7 @@ async function removeOwnedSourceSnapshots(excludedPaths) {
 const features = [
   {
     id: "noodle",
-    version: "1.2.29",
+    version: "1.2.31",
     minEngineVersion: "2.4.6",
     capabilityApi: { major: 1, minor: 35 },
     builtAgainst: { engineVersion: "2.4.6", engineCommit: "b5fc4f3254432745438388de1459eaba3e179423" },
@@ -342,6 +342,16 @@ const features = [
           accent: "cyan",
           surface: "soft",
           header: "banner",
+        },
+        {
+          id: "latest-posts-compact",
+          label: "Noodle Snapshot",
+          description: "A compact view of recent Noodle posts",
+          size: "compact",
+          icon: "message",
+          accent: "cyan",
+          surface: "soft",
+          header: "compact",
         },
       ],
     },

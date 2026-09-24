@@ -90,6 +90,7 @@ function NoodlePackageRoot({ element }: { element: CapabilityElement }) {
                   widgetAccent={typeof props.widgetAccent === "string" ? props.widgetAccent : undefined}
                   packageId={typeof props.packageId === "string" ? props.packageId : undefined}
                   packageVersion={typeof props.packageVersion === "string" ? props.packageVersion : null}
+                  compact={props.widgetId === "latest-posts-compact"}
                   onOpenPost={
                     typeof props.onOpenPost === "function" ? (props.onOpenPost as (postId: string) => void) : undefined
                   }
