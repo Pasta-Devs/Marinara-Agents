@@ -417,6 +417,7 @@ export async function generateCreatorPost(
     variation,
     camera,
     effort,
+    productionStyle: production.style,
     shoot,
     axes,
     story: storyVariation,

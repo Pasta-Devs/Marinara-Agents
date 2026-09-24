@@ -113,12 +113,7 @@ export function createReserveStorage2(context: SlurpStorageContext) {
           const account = mapAccount(accountRow);
           const source = await this.resolveAccountSource(account);
           const sourceSnapshot = source ? await resolveCreatorSourceSnapshot(db, source) : null;
-          if (
-            !account.settings.scheduler.autoPosting?.enabled ||
-            !source ||
-            !sourceSnapshot ||
-            current.policyFingerprint !== slpCreatorReservePolicyFingerprint(account, settings, source.updatedAt)
-          ) {
+          if (!account.settings.scheduler.autoPosting?.enabled || !source || !sourceSnapshot) {
             await tx
               .update(slpCreatorPreparedPosts)
               .set({ state: "discarded", updatedAt: at.toISOString() })
@@ -289,8 +284,7 @@ export function createReserveStorage2(context: SlurpStorageContext) {
             !account ||
             !source ||
             missingSourceAccountIds.has(item.creatorAccountId) ||
-            !account.settings.scheduler.autoPosting?.enabled ||
-            item.policyFingerprint !== slpCreatorReservePolicyFingerprint(account, settings, source.updatedAt)
+            !account.settings.scheduler.autoPosting?.enabled
           );
         })
         .map((item) => item.id);
