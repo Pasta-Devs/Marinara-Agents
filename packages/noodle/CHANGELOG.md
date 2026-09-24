@@ -1,5 +1,9 @@
 # Noodle release notes
 
+## 1.2.25 — 2026-09-24
+
+- Offer a large Home widget with a scrollable preview of the five newest public posts. Opening a preview takes you to that post in Noodle.
+
 ## 1.2.24 — 2026-09-15
 
 - Search icons and post menus keep Noodle's selected accent when Engine Chroma animates.

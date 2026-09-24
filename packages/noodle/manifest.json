@@ -1,8 +1,16 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
+  "capabilityApi": {
+    "major": 1,
+    "minor": 35
+  },
+  "builtAgainst": {
+    "engineVersion": "2.4.6",
+    "engineCommit": "fc285c3d2"
+  },
   "id": "noodle",
   "name": "Noodle",
-  "version": "1.2.24",
+  "version": "1.2.25",
   "description": "Explore the Noodle public timeline as an optional local social world. Install it, restart Marinara Engine when prompted, then open Home → Noodle.",
   "localizations": {
     "de": {
@@ -31,7 +39,7 @@
     }
   },
   "engine": {
-    "min": "2.4.4",
+    "min": "2.4.6",
     "maxExclusive": "4.0.0"
   },
   "kind": [
@@ -44,7 +52,8 @@
   },
   "contributions": {
     "slots": [
-      "home-browser-tab"
+      "home-browser-tab",
+      "home-widget"
     ],
     "homeBrowserTab": {
       "label": "Noodle",
@@ -52,7 +61,15 @@
       "iconPaths": [
         "noodle-klusek.png"
       ]
-    }
+    },
+    "homeWidgets": [
+      {
+        "id": "latest-posts",
+        "label": "Latest Posts",
+        "description": "The newest five posts on Noodle",
+        "size": "large"
+      }
+    ]
   },
   "files": [
     {
@@ -62,13 +79,13 @@
     },
     {
       "path": "server.mjs",
-      "sha256": "9a8c9371d2f8799251a28b90cd5fed6b855ad1eeef8123fe77c37b672e574360",
-      "bytes": 2218589
+      "sha256": "59b22b8e78ee7ac26ce2a2ad1f8efe7cf029b2243feea0c17af477d047595ca2",
+      "bytes": 2425599
     },
     {
       "path": "client.js",
-      "sha256": "621bd3fb265860feb6cb15d7b2f98f5462af2f2b7f5dbc7e7ad3441ea03aee1e",
-      "bytes": 2329165
+      "sha256": "70621597c8e644b34e9fc49298d6c70a9fdc6a9d79780d2bb1c3b582e9de2fed",
+      "bytes": 2371996
     },
     {
       "path": "noodle-klusek.png",

@@ -11,6 +11,7 @@ import polish from "./localization/locales/pl.json";
 import { AppDialogRenderer } from "./components/ui/AppDialogRenderer";
 import { ModalPortalContext } from "./components/ui/Modal";
 import { NoodleView } from "./components/noodle/NoodleView";
+import { NoodleLatestPostsWidget } from "./components/noodle/NoodleLatestPostsWidget";
 import { configureNoodlePackageState } from "./stores/noodle-package.store";
 
 const client = new QueryClient({
@@ -58,13 +59,13 @@ export function setNoodlePackageStyles(styleText: string) {
 
 function NoodlePackageRoot({ element }: { element: CapabilityElement }) {
   const [revision, redraw] = useState(0);
+  const props = element.capabilityProps ?? {};
   useEffect(() => {
     const update = () => redraw((value) => value + 1);
     element.addEventListener("marinara-capability-props", update);
     return () => element.removeEventListener("marinara-capability-props", update);
   }, [element]);
   useEffect(() => {
-    const props = element.capabilityProps ?? {};
     configureNoodlePackageState(props);
     const localizationContext = props.localization;
     const requestedLocale =
@@ -80,13 +81,32 @@ function NoodlePackageRoot({ element }: { element: CapabilityElement }) {
       <QueryClientProvider client={client}>
         <ModalPortalContext.Provider value={element}>
           <div className="h-full min-h-0 overflow-hidden bg-[var(--background)] text-[var(--foreground)]">
-            <NoodleView />
+            {element.getAttribute("view") === "widget" ? (
+              props.widgetId === "latest-posts" ? (
+                <NoodleLatestPostsWidget
+                  active={props.active === true}
+                  onOpenPost={
+                    typeof props.onOpenPost === "function" ? (props.onOpenPost as (postId: string) => void) : undefined
+                  }
+                  onOpenNoodle={
+                    typeof props.onOpenNoodle === "function" ? (props.onOpenNoodle as () => void) : undefined
+                  }
+                />
+              ) : null
+            ) : (
+              <NoodleView
+                focusPostId={typeof props.focusPostId === "string" ? props.focusPostId : null}
+                onFocusPostHandled={
+                  typeof props.onFocusPostHandled === "function" ? (props.onFocusPostHandled as () => void) : undefined
+                }
+              />
+            )}
             {/* The package bundles its own copy of the dialog store, so the host's
                 renderer never sees a dialog opened in here: showConfirmDialog would
                 resolve nothing and every confirmed action stopped silently. Render
                 the dialogs inside the package tree that opens them. */}
-            <AppDialogRenderer />
-            <Toaster richColors />
+            {element.getAttribute("view") !== "widget" && <AppDialogRenderer />}
+            {element.getAttribute("view") !== "widget" && <Toaster richColors />}
           </div>
         </ModalPortalContext.Provider>
       </QueryClientProvider>

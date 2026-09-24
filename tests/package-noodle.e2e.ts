@@ -164,6 +164,77 @@ test.beforeEach(async ({ page }) => {
 });
 
 test.describe("package-owned Noodle interface", () => {
+  test("Latest Posts can be added, read, hidden, and opened on desktop and mobile", async ({ page }) => {
+    const openWidgetManager = async () => {
+      const mobileBookmarks = page.locator('[data-component="HomeBrowserHub.MobileBookmarksTrigger"]');
+      if (await mobileBookmarks.isVisible()) {
+        await mobileBookmarks.click();
+        const menu = page.locator('[data-component="HomeBrowserHub.MobileBookmarksMenu"]');
+        await expect(menu).toBeVisible();
+        await menu.getByRole("button", { name: "Widgets", exact: true }).click();
+      } else {
+        await page.getByRole("button", { name: "Widgets", exact: true }).click();
+      }
+    };
+    const bootstrap = await page.request.get("/api/noodle");
+    expect(bootstrap.ok()).toBe(true);
+    const accounts = (await bootstrap.json()) as {
+      accounts: Array<{ entityId: string; kind: string; invited: boolean }>;
+    };
+    const author = accounts.accounts.find((account) => account.kind === "character" && account.invited);
+    expect(author).toBeDefined();
+    const content = `Widget post ${Date.now()}`;
+    const created = await page.request.post("/api/noodle/posts", {
+      data: { authorKind: "character", authorEntityId: author!.entityId, content },
+    });
+    expect(created.ok()).toBe(true);
+    const post = (await created.json()) as { id: string };
+    const generationRequests: string[] = [];
+    page.on("request", (request) => {
+      if (request.method() === "POST" && /\/api\/noodle\/(?:generate|refresh)/.test(new URL(request.url()).pathname)) {
+        generationRequests.push(request.url());
+      }
+    });
+
+    await page.goto("/");
+    const widget = page.locator('[data-home-widget-id="agent:package:noodle:latest-posts"]');
+    await expect(widget).toHaveCount(0);
+    await openWidgetManager();
+    const manager = page.getByRole("dialog", { name: "Home Widgets" });
+    await manager.getByRole("switch", { name: /Show Noodle.*Latest Posts/ }).click();
+    await page.keyboard.press("Escape");
+    await expect(widget).toBeVisible();
+    await expect(widget).toHaveAttribute("data-home-widget-size", "large");
+    const scrollRegion = widget.getByRole("region", { name: "Latest Noodle posts" });
+    await expect(scrollRegion).toContainText(content);
+    await scrollRegion.focus();
+    await expect(scrollRegion).toBeFocused();
+    await page.keyboard.press("ArrowDown");
+    expect(generationRequests).toEqual([]);
+    await widget
+      .getByRole("button", { name: /Open post by .* in Noodle/ })
+      .first()
+      .click();
+    await expect(page.locator(`[data-noodle-post-id="${post.id}"]`)).toBeVisible();
+
+    await page.getByRole("tab", { name: "Home" }).click();
+    await widget
+      .getByRole("button", { name: /Open post by .* in Noodle/ })
+      .first()
+      .click();
+    await expect(page.locator(`[data-noodle-post-id="${post.id}"]`)).toBeVisible();
+    await page.getByRole("tab", { name: "Home" }).click();
+    await page.setViewportSize({ width: 390, height: 844 });
+    await expect(page.locator("[data-home-grid-columns='1']")).toBeVisible();
+    await expect(widget).toBeVisible();
+    await openWidgetManager();
+    await page
+      .getByRole("dialog", { name: "Home Widgets" })
+      .getByRole("switch", { name: /Hide Noodle.*Latest Posts/ })
+      .click();
+    await expect(widget).toHaveCount(0);
+  });
+
   test("timeline posts can be edited, cancelled, and saved", async ({ page }, testInfo) => {
     const errors = collectUnexpectedErrors(page);
     const bootstrapResponse = await page.request.get("/api/noodle");
