@@ -1555,11 +1555,13 @@ async function main() {
       const autoChoiceResult = await applyLongTermMemoryDraft(autoChoiceDraft.id, {
         root,
         autoApplyLowRiskOnly: true,
+        editedMutations: [{ ...pendingCreate, summary: "Reviewed ambiguous target" }],
         rebuildIndexes: false,
       });
       assert.deepEqual(autoChoiceResult.appliedMutationIds, [independentCreate.id]);
       assert.deepEqual(autoChoiceResult.skippedMutationIds, [pendingCreate.id, dependentLink.id]);
       assert.equal(autoChoiceResult.draft.status, "pending");
+      assert.equal(autoChoiceResult.draft.mutations[0]?.summary, "Reviewed ambiguous target");
       assert.deepEqual(
         autoChoiceResult.draft.mutations.map((mutation) => mutation.id),
         [pendingCreate.id, dependentLink.id],

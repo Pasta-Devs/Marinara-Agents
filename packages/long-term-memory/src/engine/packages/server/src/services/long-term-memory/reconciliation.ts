@@ -654,6 +654,7 @@ async function applyInner(
       (mutation) =>
         (!selectedIds || selectedIds.has(mutation.id)) && (!options.autoApplyLowRiskOnly || lowRisk(mutation)),
     );
+    const autoApplyEligibleIds = options.autoApplyLowRiskOnly ? new Set(selected.map((mutation) => mutation.id)) : null;
     const autoIncludedMutationIds: string[] = [];
     if (selectedIds && !options.autoApplyLowRiskOnly) {
       const targets = new Set(
@@ -764,7 +765,7 @@ async function applyInner(
     if (options.editedMutations?.length) {
       const includedIds = new Set(selected.map((mutation) => mutation.id));
       for (const edit of options.editedMutations) {
-        if (!includedIds.has(edit.id))
+        if (!includedIds.has(edit.id) && !autoApplyEligibleIds?.has(edit.id))
           throw new LtmDraftApplyError(
             `Edited mutation ${edit.id} is not selected and cannot be auto-included. Select it or discard its edit before accepting this batch.`,
             409,
