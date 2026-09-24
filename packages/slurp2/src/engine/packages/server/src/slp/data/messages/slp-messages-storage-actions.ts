@@ -476,6 +476,7 @@ export function createMessagesStorageActions(context: SlurpMessagesContext) {
       if (!commission) return;
       const messages = await db.select().from(slurpMessages).where(eq(slurpMessages.threadId, commission.threadId));
       const linked = messages.find((message) => {
+        if (message.kind !== "commission_brief") return false;
         try {
           return JSON.parse(String(message.metadata ?? "{}"))?.commissionId === id;
         } catch {

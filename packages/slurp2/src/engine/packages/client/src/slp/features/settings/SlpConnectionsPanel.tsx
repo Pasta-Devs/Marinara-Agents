@@ -12,63 +12,69 @@ export function SlpConnectionsPanel({ t, settings, update, connectionsQuery }: S
   const imageConnections = connections.filter((connection) => connection.provider === "image_generation");
   const label = (connection: Connection) => connection.name ?? connection.model ?? connection.id;
   const status = (selected: string | null, available: Connection[], fallback: string) => {
-    if (!selected) return { kind: "fallback" as const, text: `Using ${fallback}.` };
-    if (available.some((connection) => connection.id === selected)) return { kind: "ok" as const, text: "Configured." };
-    return { kind: "fallback" as const, text: `Selected connection is unavailable. Using ${fallback}.` };
+    if (!selected)
+      return { kind: "fallback" as const, text: t("ui.slurp.settings.connections.usingDefault", { fallback }) };
+    if (available.some((connection) => connection.id === selected)) {
+      return { kind: "ok" as const, text: t("ui.slurp.settings.connections.configured") };
+    }
+    return {
+      kind: "fallback" as const,
+      text: t("ui.slurp.settings.connections.unavailableStatus", { fallback }),
+    };
   };
   const rows = [
     {
       key: "generationConnectionId" as const,
-      label: "Text generation",
+      label: t("ui.slurp.settings.connections.textGeneration"),
       connections: textConnections,
       value: settings.generationConnectionId,
-      fallback: "the default text connection",
+      fallback: t("ui.slurp.settings.connections.defaultText"),
     },
     {
       key: "imageContextConnectionId" as const,
-      label: "Image context",
+      label: t("ui.slurp.settings.connections.imageContext"),
       connections: textConnections,
       value: settings.imageContextConnectionId,
-      fallback: "the default text connection",
+      fallback: t("ui.slurp.settings.connections.defaultText"),
     },
     {
       key: "imageGenerationConnectionId" as const,
-      label: "Image generation",
+      label: t("ui.slurp.settings.connections.imageGeneration"),
       connections: imageConnections,
       value: settings.imageGenerationConnectionId,
-      fallback: "the default image connection",
+      fallback: t("ui.slurp.settings.connections.defaultImage"),
     },
     {
       key: "inlineAdsImageConnectionId" as const,
-      label: "Ad images",
+      label: t("ui.slurp.settings.connections.adImages"),
       connections: imageConnections,
       value: settings.inlineAdsImageConnectionId,
-      fallback: "the default image connection",
+      fallback: t("ui.slurp.settings.connections.defaultImage"),
     },
   ];
   return (
     <div className="space-y-4">
       <BackstagePageHeader
-        title="Connections"
-        detail="All Slurp model connections in one place. Existing settings pages keep shortcuts."
+        title={t("ui.slurp.settings.connections.title")}
+        detail={t("ui.slurp.settings.connections.detail")}
         scope="all-slurp"
       />
       {connectionsQuery.isLoading ? (
         <p role="status" className="rounded-lg bg-[var(--slurp-surface-raised)] p-4 text-sm text-[var(--slurp-muted)]">
-          Loading connections...
+          {t("ui.slurp.settings.connections.loading")}
         </p>
       ) : connectionsQuery.isError ? (
         <div
           role="alert"
           className="rounded-lg bg-[var(--slurp-surface-raised)] p-4 text-sm text-[var(--slurp-warning)] ring-1 ring-inset ring-[var(--slurp-outline)]"
         >
-          <p>Unable to load connections.</p>
+          <p>{t("ui.slurp.settings.connections.loadError")}</p>
           <button
             type="button"
             className="mt-3 min-h-11 rounded-md border border-[var(--slurp-outline)] px-3"
             onClick={() => void connectionsQuery.refetch()}
           >
-            Try again
+            {t("capabilities.actions.tryAgain")}
           </button>
         </div>
       ) : (
@@ -83,10 +89,10 @@ export function SlpConnectionsPanel({ t, settings, update, connectionsQuery }: S
                   onChange={(event) => void update(row.key, event.target.value || null)}
                   className="min-h-11 w-full rounded-lg border border-[var(--slurp-outline)] bg-[var(--slurp-canvas)] px-3 text-sm"
                 >
-                  <option value="">Use default</option>
+                  <option value="">{t("ui.slurp.settings.connections.useDefault")}</option>
                   {unavailableValue && (
                     <option value={row.value!} disabled>
-                      Unavailable connection ({row.value})
+                      {t("ui.slurp.settings.connections.unavailableOption", { id: row.value })}
                     </option>
                   )}
                   {row.connections.map((connection) => (
@@ -112,10 +118,7 @@ export function SlpConnectionsPanel({ t, settings, update, connectionsQuery }: S
       )}
       <div className="flex items-start gap-3 rounded-lg bg-[var(--slurp-surface-raised)] p-4 text-xs text-[var(--slurp-muted)] ring-1 ring-inset ring-[var(--slurp-outline)]">
         <Link2 size={16} className="mt-0.5 shrink-0" aria-hidden="true" />
-        <p>
-          Missing selections use the default connection for the same operation. This status stays visible until the
-          selection is fixed.
-        </p>
+        <p>{t("ui.slurp.settings.connections.missingSelectionDetail")}</p>
       </div>
     </div>
   );
