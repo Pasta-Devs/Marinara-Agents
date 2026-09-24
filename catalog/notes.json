@@ -56,6 +56,12 @@
     "gacha-forge": {
       "versions": [
         {
+          "version": "1.8.6",
+          "date": "2026-09-23",
+          "notes": "- Fixed: on a phone held upright, the Landscape only notice no longer covers the rest of Marinara. Characters, lorebooks and anything else you open over the game are reachable again.",
+          "highlight": false
+        },
+        {
           "version": "1.8.5",
           "date": "2026-09-21",
           "notes": "- The opening story is optional. Forge this world asks if you are sure, then whether to write it now or later; later, the world opens as soon as its cast is ready, with Summon unlocked, and Modes > Story writes it when you ask. If it fails while the world is being created, Skip the story for now keeps the world.\n- World creation keeps what you write and brings it back on any device, and has presets: save, load, rename, replace or delete a whole setup, from the wizard or from a world you already created.\n- Models that think a lot before answering (GLM, DeepSeek) no longer lose the first try of nearly every call to the output limit.\n- Fixed: a card, lorebook, connection or persona you create or change in Marinara shows up in the game as soon as you come back to it.\n- Fixed: a character made from a card or a Cast lorebook entry reads the World lorebook entries that name them.",
@@ -262,6 +268,12 @@
     "noodle": {
       "versions": [
         {
+          "version": "1.2.25",
+          "date": "2026-09-24",
+          "notes": "- Widgets on Homescreen now available.",
+          "highlight": false
+        },
+        {
           "version": "1.2.24",
           "date": "2026-09-15",
           "notes": "- Search icons and post menus keep Noodle's selected accent when Engine Chroma animates.",
@@ -341,6 +353,30 @@
     },
     "slurp2": {
       "versions": [
+        {
+          "version": "0.2.38",
+          "date": "2026-09-24",
+          "notes": "- Generated audience names now draw from one merged, much larger word bank (184,512 combinations, up from ~18,800) instead of a single fixed set of moody handles.\n- Generated names are CamelCase with no digits, spaces, or underscores (for example `MothHour` instead of `moth_hour_77`), so they read as a single word and two people never blur together in a dense list.",
+          "highlight": false
+        },
+        {
+          "version": "0.2.37",
+          "date": "2026-09-24",
+          "notes": "- NanoGPT, xAI, and connections recognised only by their base URL now receive avatar reference images again.\n- Persona Creators can set Messages & Pricing again; the tab now uses the same viewer persona as the rest of Slurp.\n- Post cards, the picture viewer, and the redraw box show the exact prompt the picture was drawn from. A prompt you edit or keep in the redraw box is sent as written, not rewritten again.\n- Multi-picture posts plan every picture as its own complete scene, so a photo dump, a shoot, or a day out each gets pictures that make sense on their own.",
+          "highlight": false
+        },
+        {
+          "version": "0.2.36",
+          "date": "2026-09-24",
+          "notes": "- Deep details opens as a flowchart of the whole generation: each step shows what happens, why, which connection and model ran it, and the exact text that went in and came out. A Canvas view shows the same diagram to drag and zoom in every direction.\n- Image runs now also record the prompt-rewrite model and its full chat, the fallback image connection, and which connection actually drew the picture.",
+          "highlight": false
+        },
+        {
+          "version": "0.2.35",
+          "date": "2026-09-24",
+          "notes": "- Deep details shows each post as numbered steps. Every image run records its settings, style profile, prompt rewrite, final prompt, and provider attempts in order.\n- The Connections panel includes the AI writing connection used for replies, messages, and audience activity.",
+          "highlight": false
+        },
         {
           "version": "0.2.34",
           "date": "2026-09-23",
@@ -435,30 +471,6 @@
           "version": "0.2.15",
           "date": "2026-09-21",
           "notes": "- Exposed restore pending state through the Home screen model so restore feedback renders immediately.",
-          "highlight": false
-        },
-        {
-          "version": "0.2.14",
-          "date": "2026-09-21",
-          "notes": "- Restored posts now return to the visible feed as soon as the restore response succeeds.",
-          "highlight": false
-        },
-        {
-          "version": "0.2.13",
-          "date": "2026-09-21",
-          "notes": "- Restore now gives immediate progress feedback.\n- The restore countdown pauses while the server restores the post.",
-          "highlight": false
-        },
-        {
-          "version": "0.2.12",
-          "date": "2026-09-21",
-          "notes": "- Fixed the deleted-post panel crash caused by missing restore state.\n- Wired post sharing to the active viewer persona.\n- Restored the report action on feed posts.",
-          "highlight": false
-        },
-        {
-          "version": "0.2.11",
-          "date": "2026-09-21",
-          "notes": "- Deleted posts can be restored again, with pending and failure feedback.\n- Restore now pulls the deleted post's sparkles into the restore action.",
           "highlight": false
         }
       ]

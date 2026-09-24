@@ -3,16 +3,6 @@ import { stageImageToDisk } from "../../../services/image/image-generation.js";
 import { NOODLER_MEDIA_PREFIX } from "../../base/media/slp-media.js";
 import type { SlurpVisualBrief } from "../../base/media/slp-visual-brief.js";
 import type { PreparedCreatorPostResult } from "./slp-generation-contract.js";
-import type { DB } from "../../../db/connection.js";
-import { logger } from "../../../lib/logger.js";
-import { setSlurpPostDeepDetailsProviderPrompt } from "../../data/feed/slp-post-deep-details-storage.js";
-
-export async function recordSlurpProviderPrompt(db: DB, deepDetailsId: string | null, prompt: string) {
-  if (!deepDetailsId) return;
-  await setSlurpPostDeepDetailsProviderPrompt(db, deepDetailsId, prompt).catch((error: unknown) => {
-    logger.warn(error, "[slurp] Could not add the provider prompt to deep details");
-  });
-}
 
 /** Assemble the scheduled/preview payload without letting generated media objects enter storage. */
 export function prepareSlurpCreatorPost(input: {

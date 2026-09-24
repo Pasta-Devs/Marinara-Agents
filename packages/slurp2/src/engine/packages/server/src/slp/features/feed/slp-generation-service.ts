@@ -1,7 +1,8 @@
 import { saveSlurpPostDeepDetails } from "../../data/feed/slp-post-deep-details-storage.js";
 import { slpIsAdmissionFailure } from "../../base/host/slp-admission.js";
 import { buildSlurpDeepDetailsRecord } from "./slp-deep-details-record.js";
-import { prepareSlurpCreatorPost, recordSlurpProviderPrompt } from "./slp-prepared-post.js";
+import { prepareSlurpCreatorPost } from "./slp-prepared-post.js";
+import { slurpDeepDetailsImageRunRecorder } from "../../data/feed/slp-post-deep-details-storage.js";
 import { type APIProvider } from "@marinara-engine/shared";
 import { createSlpPoll } from "../../../../../shared/src/slp/slp-polls.js";
 import { SLP_CREATOR_POST_TITLE_MAX_LENGTH } from "../../../../../shared/src/slp/slp-social.schema.js";
@@ -31,7 +32,7 @@ import { createConnectionsStorage } from "../../../services/storage/connections.
 import { createSlurpStorage } from "../../data/slp-storage.js";
 import { type SlurpAccount } from "../../modules/records/slp-storage-model.js";
 import { createPromptOverridesStorage } from "../../../services/storage/prompt-overrides.storage.js";
-import { generateCreatorPostImage } from "../media/slp-media-contract.js";
+import { generateCreatorPostImage, SLURP_SECONDARY_IMAGE_COUNT } from "../media/slp-media-contract.js";
 import { persistSlurpGeneratedImageSet } from "./slp-post-media-operation.js";
 import { slpCreatorUnlockPriceMetadata } from "../../modules/economy/slp-prices.js";
 import { persistCreatorPostWithUploadedMedia, type SlpCreatorPostMediaUpload } from "../../base/media/slp-media.js";
@@ -291,6 +292,8 @@ export async function generateCreatorPost(
   const briefedImage = Boolean(postImages && cameraInstruction && variation);
   const askModelForImagePrompt = postImages && !briefedImage;
   const askModelForScene = briefedImage;
+  // A set plans each extra picture as its own scene, the way Storyboard plans keyframes.
+  const sceneShots = askModelForScene && axes?.delivery === "multi_image_set" ? SLURP_SECONDARY_IMAGE_COUNT : 0;
   // The Creator's own state reached her direct messages and stopped there, so the feed was
   // written by somebody with no mood, no energy and no memory of last night. A failure here must
   // never cost a post: an unremarkable day is the same as no block at all.
@@ -329,6 +332,7 @@ export async function generateCreatorPost(
     project: project ? { project, posts: projectPosts } : undefined,
     allowImagePrompt: askModelForImagePrompt,
     allowScenePlan: askModelForScene,
+    sceneShots,
     wardrobePrompt: askModelForScene
       ? slurpWardrobePrompt(wardrobeLooks, input.request.access, recentWardrobeIds)
       : null,
@@ -371,6 +375,7 @@ export async function generateCreatorPost(
       allowImagePrompt: askModelForImagePrompt,
       allowScenePlan: askModelForScene,
       contentMaxLength: settings.postMaxLength,
+      sceneShots,
     }),
   } as const;
 
@@ -378,7 +383,7 @@ export async function generateCreatorPost(
     provider,
     messages,
     completionOptions,
-    { askModelForImagePrompt, askModelForScene, debugMode },
+    { askModelForImagePrompt, askModelForScene, sceneShots, debugMode },
   );
   compiledPrompt = sentMessages.map((message) => `# ${message.role}\n${message.content}`).join("\n\n");
 
@@ -412,7 +417,7 @@ export async function generateCreatorPost(
 
   // What the picture is, and what it may show. Assembled in one place so the two briefs cannot
   // disagree about the level, the shoot, or the effort.
-  const { draftImagePrompt, visualBrief, negativePrompt } = slurpPostPictureBriefs({
+  const { draftImagePrompt, visualBrief, negativePrompt, shotBriefs } = slurpPostPictureBriefs({
     project,
     variation,
     camera,
@@ -430,6 +435,7 @@ export async function generateCreatorPost(
     selectedWardrobe: wardrobeSelection.look,
     disclosureMode,
     publicIdentity,
+    shots: generated.shots.slice(0, sceneShots),
   });
 
   // Shoot bookkeeping, once the post definitely has text and its picture brief. A set drop opens a
@@ -712,8 +718,8 @@ export async function generateCreatorPost(
       preview = await generateCreatorPostImage({
         ...imageInput,
         previewOnly: true,
+        onImageRun: slurpDeepDetailsImageRunRecorder(db, deepDetailsId, "review"),
       });
-      await recordSlurpProviderPrompt(db, deepDetailsId, preview.providerPrompt);
     } catch (err) {
       if (slpIsAdmissionFailure(err)) throw err;
       logger.warn(err, "[slurp] Failed to prepare image prompt review for %s", account.displayName);
@@ -748,8 +754,8 @@ export async function generateCreatorPost(
     image = await generateCreatorPostImage({
       ...imageInput,
       previewOnly: false,
+      onImageRun: slurpDeepDetailsImageRunRecorder(db, deepDetailsId, "generation"),
     });
-    await recordSlurpProviderPrompt(db, deepDetailsId, image.providerPrompt);
   } catch (err) {
     // Same rule as the text leg: a busy connection is a deferral, so let it propagate to the
     // scheduler instead of persisting a post permanently marked as image-failed.
@@ -778,20 +784,9 @@ export async function generateCreatorPost(
     primary: { ...image, metadata: { ...image.metadata, ...(storyVariation ? { noodlerPostType: "story" } : {}) } },
     imageInput,
     multi: axes?.delivery === "multi_image_set",
+    shots: shotBriefs,
     shootId,
     persist,
   });
   return { post, imagePromptReview: null };
-}
-
-/**
- * Access for an automatic post: locked, except on this Creator's teaser slots, which go out free
- * to fish for subscribers. A player-chosen access never passes through here.
- */
-export async function resolveSlurpAutomaticPostAccess(
-  noodle: Pick<ReturnType<typeof createSlurpStorage>, "countNoodlerPostsByAccount" | "getSettings">,
-  accountId: string,
-): Promise<"public" | "locked"> {
-  const [sequence, settings] = await Promise.all([noodle.countNoodlerPostsByAccount(accountId), noodle.getSettings()]);
-  return slurpTeaserPost(accountId, sequence, settings.teaserRate) ? "public" : "locked";
 }

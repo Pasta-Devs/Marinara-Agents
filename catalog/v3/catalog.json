@@ -649,7 +649,7 @@
         },
         "id": "gacha-forge",
         "name": "Gacha Forge",
-        "version": "1.8.5",
+        "version": "1.8.6",
         "description": "A complete gacha game mode. Describe a world and Gacha Forge builds the rest: banners to pull on, a cast the model writes and paints for you, story chapters told by a visual-novel narrator, and the battles, gear and events that grow around them. Install it, restart Marinara Engine when prompted, then open Home → Gacha Forge.",
         "engine": {
           "min": "2.4.4",
@@ -938,8 +938,8 @@
           },
           {
             "path": "client.js",
-            "sha256": "acbb3e5d7f3b449b62251738ae91ec245ce5f89e25ea1f525dd01f334cdc8877",
-            "bytes": 1433495
+            "sha256": "f3535f4bec32e8201c7514fb7128e0fefd528542b67ef10e44c2fc314635a1d7",
+            "bytes": 1433941
           },
           {
             "path": "farm-asc.webp",
@@ -2171,9 +2171,9 @@
       "category": "misc",
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/gacha-forge.png",
       "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/gacha-forge-1.8.5.zip",
-        "sha256": "c5a94dd327b8a314f5e1311f46ce6f42f92ec4c9c0ac6f9ae288990ea0dfb82f",
-        "bytes": 7825768
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/gacha-forge-1.8.6.zip",
+        "sha256": "19bf8614549172b6921031fa90b4720b4f5cd7c5a52d99d93a57f7208c8d0d6f",
+        "bytes": 7826214
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents/blob/main/packages/gacha-forge/README.md"
     },
@@ -2700,10 +2700,18 @@
     },
     {
       "manifest": {
-        "schemaVersion": 1,
+        "schemaVersion": 2,
+        "capabilityApi": {
+          "major": 1,
+          "minor": 35
+        },
+        "builtAgainst": {
+          "engineVersion": "2.4.6",
+          "engineCommit": "2f5c8e314f8583cc274b488cfd309a2bc2a214d3"
+        },
         "id": "noodle",
         "name": "Noodle",
-        "version": "1.2.24",
+        "version": "1.2.25",
         "description": "Explore the Noodle public timeline as an optional local social world. Install it, restart Marinara Engine when prompted, then open Home → Noodle.",
         "localizations": {
           "de": {
@@ -2732,7 +2740,7 @@
           }
         },
         "engine": {
-          "min": "2.4.4",
+          "min": "2.4.6",
           "maxExclusive": "4.0.0"
         },
         "kind": [
@@ -2745,7 +2753,8 @@
         },
         "contributions": {
           "slots": [
-            "home-browser-tab"
+            "home-browser-tab",
+            "home-widget"
           ],
           "homeBrowserTab": {
             "label": "Noodle",
@@ -2753,7 +2762,29 @@
             "iconPaths": [
               "noodle-klusek.png"
             ]
-          }
+          },
+          "homeWidgets": [
+            {
+              "id": "latest-posts",
+              "label": "Latest Posts",
+              "description": "The newest twenty posts on Noodle",
+              "size": "large",
+              "icon": "sparkles",
+              "accent": "cyan",
+              "surface": "soft",
+              "header": "banner"
+            },
+            {
+              "id": "latest-posts-compact",
+              "label": "Noodle Snapshot",
+              "description": "A compact view of recent Noodle posts",
+              "size": "compact",
+              "icon": "message",
+              "accent": "cyan",
+              "surface": "soft",
+              "header": "compact"
+            }
+          ]
         },
         "files": [
           {
@@ -2763,13 +2794,13 @@
           },
           {
             "path": "server.mjs",
-            "sha256": "9a8c9371d2f8799251a28b90cd5fed6b855ad1eeef8123fe77c37b672e574360",
-            "bytes": 2218589
+            "sha256": "59b22b8e78ee7ac26ce2a2ad1f8efe7cf029b2243feea0c17af477d047595ca2",
+            "bytes": 2425599
           },
           {
             "path": "client.js",
-            "sha256": "621bd3fb265860feb6cb15d7b2f98f5462af2f2b7f5dbc7e7ad3441ea03aee1e",
-            "bytes": 2329165
+            "sha256": "c16a8f1a0cf318eb0ef677445029fb4b857c5c90e7aa33b2cfbd557be298e548",
+            "bytes": 2380932
           },
           {
             "path": "noodle-klusek.png",
@@ -2790,9 +2821,9 @@
       "category": "misc",
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/noodle.png",
       "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/noodle-1.2.24.zip",
-        "sha256": "fc34f67225c422ed754c7cede1a8961854677d730376f0b0b328e6c30006bab3",
-        "bytes": 4579666
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/noodle-1.2.25.zip",
+        "sha256": "b333d8b91aeadb81771ef28228ccc252e59a8bbed33d6a1e915282c30b76575b",
+        "bytes": 4839230
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents/blob/main/packages/noodle/README.md"
     },
@@ -3175,7 +3206,7 @@
         },
         "id": "slurp2",
         "name": "Slurp Remastered",
-        "version": "0.2.34",
+        "version": "0.2.38",
         "description": "The Slurp remaster. It installs beside Slurp Legacy and keeps its own separate data: create a local Creator profile from an Engine character or persona, publish public or locked posts, and simulate subscriptions and audience activity. Install it, restart Marinara Engine when prompted, then open Home → Slurp Remastered.",
         "localizations": {
           "de": {
@@ -3235,13 +3266,13 @@
           },
           {
             "path": "server.mjs",
-            "sha256": "a5d6c076054ad91d03fc2c486eadb991a5b7aceccaf122fe192335173028b20e",
-            "bytes": 2960015
+            "sha256": "3d8c00a2626562e32e1d778bbf3805a0bffcf2a3c177a8a1a422dcc044e567d5",
+            "bytes": 3174329
           },
           {
             "path": "client.js",
-            "sha256": "2dffd4e4e1345ab299799622db851d6b86e61c5c9fb2686894a72effdff876bb",
-            "bytes": 3920922
+            "sha256": "846895e811c865501ab87bf9d6b189dde1355d2615e52162838a4ac29417be53",
+            "bytes": 4009677
           },
           {
             "path": "slurp2-logo.png",
@@ -3267,9 +3298,9 @@
       "category": "misc",
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/slurp2.png",
       "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/slurp2-0.2.34.zip",
-        "sha256": "2e3b6cffbb3d5793740a205060cc3ce4af4e4a626050b992f3904ee05dbbd301",
-        "bytes": 7037688
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/slurp2-0.2.38.zip",
+        "sha256": "eb83404fd12e89c09e2f5284b1bfd351b3c3260c9c0b9a3af8ae7babaf50e40f",
+        "bytes": 7340757
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents/blob/main/packages/slurp2/README.md"
     },

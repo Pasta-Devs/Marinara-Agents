@@ -357,6 +357,14 @@ export const SLURP2_SOURCE_MODULES: Record<string, readonly string[]> = {
   "packages/server/src/services/slurp/slurp-image-retry.ts": ["packages/server/src/slp/base/media/slp-image-retry.ts"],
   "packages/server/src/services/slurp/slurp-images.service.ts": [
     "packages/server/src/slp/features/media/slp-images-service.ts",
+    "packages/server/src/slp/features/media/slp-image-run.ts",
+    "packages/server/src/slp/features/media/slp-reviewed-images-service.ts",
+  ],
+  // The reviewed and retried image claims moved out beside the pipeline they call.
+  "packages/server/src/slp/features/media/slp-images-service.ts": [
+    "packages/server/src/slp/features/media/slp-images-service.ts",
+    "packages/server/src/slp/features/media/slp-image-run.ts",
+    "packages/server/src/slp/features/media/slp-reviewed-images-service.ts",
   ],
   "packages/server/src/services/slurp/slurp-public-images.service.ts": [
     "packages/server/src/slp/features/media/slp-public-images-service.ts",
@@ -449,14 +457,17 @@ export const SLURP2_SOURCE_MODULES: Record<string, readonly string[]> = {
     "packages/server/src/slp/features/feed/slp-post-prompt.ts",
     "packages/server/src/slp/features/feed/slp-post-picture-briefs.ts",
     "packages/server/src/slp/features/feed/slp-prepared-post.ts",
+    "packages/server/src/slp/features/feed/slp-automatic-post-access.ts",
   ],
   // The model call and its correction turn moved into slp-post-prompt.ts (completeSlurpCreatorPost),
-  // and the two picture briefs into slp-post-picture-briefs.ts.
+  // and the two picture briefs into slp-post-picture-briefs.ts. Automatic post access moved to
+  // slp-automatic-post-access.ts.
   "packages/server/src/slp/features/feed/slp-generation-service.ts": [
     "packages/server/src/slp/features/feed/slp-generation-service.ts",
     "packages/server/src/slp/features/feed/slp-post-prompt.ts",
     "packages/server/src/slp/features/feed/slp-post-picture-briefs.ts",
     "packages/server/src/slp/features/feed/slp-prepared-post.ts",
+    "packages/server/src/slp/features/feed/slp-automatic-post-access.ts",
   ],
   "packages/server/src/services/slurp/slurp-post.operation.ts": [
     "packages/server/src/slp/features/feed/slp-post-operation.ts",

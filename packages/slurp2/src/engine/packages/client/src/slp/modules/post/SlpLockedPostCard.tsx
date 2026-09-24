@@ -14,6 +14,7 @@ import {
   Share2,
   Download,
   Dices,
+  ScanSearch,
 } from "lucide-react";
 import { useState } from "react";
 import type { SlpCreatorPostView, SlpCreatorStageProfile } from "../../../../../shared/src/slp/slp-social.types.js";
@@ -29,6 +30,7 @@ import { api } from "../../../lib/api-client";
 import { toast } from "sonner";
 import { slpHasGambleOffer } from "../../../../../shared/src/slp/slp-post-offers.js";
 import type { SlpPostSubscriptionOffer, SlpPostUnlockOffer } from "./SlpPostTypes";
+import { SlpDeepDetailsModal } from "./SlpDeepDetailsModal";
 
 const SLURP_FEED_MEDIA_RATIO_CLASS = "aspect-[4/3] sm:aspect-[16/10]";
 
@@ -94,6 +96,7 @@ export function LockedSlurpPostCard({
   const postMenuOpen = postMenuOpenProp ?? localPostMenuOpen;
   const setPostMenuOpen = setPostMenuOpenProp ?? setLocalPostMenuOpen;
   const [demoUnlocked, setDemoUnlocked] = useState(false);
+  const [deepDetailsOpen, setDeepDetailsOpen] = useState(false);
   const [activeImageIndex, setActiveImageIndex] = useState(0);
   const likeCount = post.likeCount ?? 0;
   const replyCount = post.replyCount ?? 0;
@@ -233,8 +236,25 @@ export function LockedSlurpPostCard({
           >
             <MoreHorizontal size={18} />
           </button>
+          {!demo && (
+            <SlpDeepDetailsModal postId={post.id} open={deepDetailsOpen} onClose={() => setDeepDetailsOpen(false)} />
+          )}
           {postMenuOpen && (
             <div className="absolute end-0 top-[calc(100%+0.25rem)] z-50 min-w-40 overflow-hidden rounded-lg border border-[var(--noodle-divider)] bg-[var(--background)] py-1 text-xs shadow-2xl shadow-black/30">
+              {/* Every Creator is the player's to manage, so a locked post opens its record like any other. */}
+              {!demo && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPostMenuOpen(false);
+                    setDeepDetailsOpen(true);
+                  }}
+                  className="flex min-h-10 w-full items-center gap-2 px-3 text-start hover:bg-[var(--accent)]"
+                >
+                  <ScanSearch size={14} />
+                  {localizeUi("ui.slurp.deepDetails.title", { defaultValue: "Deep details" })}
+                </button>
+              )}
               {onManage && (
                 <button
                   type="button"

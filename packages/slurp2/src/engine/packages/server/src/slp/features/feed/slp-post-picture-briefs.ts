@@ -16,7 +16,7 @@ import {
 } from "../../modules/creators/slp-production-profile.js";
 import { slurpArcImageLine } from "../../modules/projects/slp-arc-progress.js";
 import { protectCreatorGeneratedIdentity } from "../../base/identity/slp-identity-protection.js";
-import type { SlpWardrobeLook, SlpWardrobeScene } from "../../../../../shared/src/slp/slp-wardrobe.js";
+import type { SlpSceneShot, SlpWardrobeLook, SlpWardrobeScene } from "../../../../../shared/src/slp/slp-wardrobe.js";
 
 /**
  * The two pictures briefs for one post: the prose draft the image prompt is built from, and the
@@ -46,11 +46,15 @@ export function slurpPostPictureBriefs(input: {
   selectedWardrobe?: SlpWardrobeLook | null;
   disclosureMode: SlpIdentityDisclosure;
   publicIdentity: Parameters<typeof protectCreatorGeneratedIdentity>[2];
+  /** A set's extra pictures, as the post model planned them. */
+  shots?: readonly SlpSceneShot[];
 }): {
   draftImagePrompt: string | null;
   visualBrief: SlurpVisualBrief | undefined;
   /** What the level and the one-person rule forbid, for the provider's negative prompt. */
   negativePrompt: string | undefined;
+  /** One brief per planned extra picture, each complete on its own. */
+  shotBriefs: { draftPrompt: string; visualBrief: SlurpVisualBrief | undefined }[];
 } {
   const { variation, camera } = input;
   // Identity protection applies to the image prompt too, not only post text. The arc's chapter line
@@ -105,5 +109,17 @@ export function slurpPostPictureBriefs(input: {
           })
         : undefined,
     negativePrompt: input.postImages && camera && variation ? slurpImageNegativePrompt(sexualLevel) : undefined,
+    // Each extra picture is briefed exactly like the first, so it reaches the image model as a
+    // complete picture. A shot that names its own outfit wears it; otherwise it keeps the chosen look.
+    shotBriefs: (input.shots ?? []).flatMap((shot) => {
+      const brief = slurpPostPictureBriefs({
+        ...input,
+        shots: undefined,
+        modelImagePrompt: null,
+        scene: shot,
+        selectedWardrobe: shot.outfit?.trim() ? null : input.selectedWardrobe,
+      });
+      return brief.draftImagePrompt ? [{ draftPrompt: brief.draftImagePrompt, visualBrief: brief.visualBrief }] : [];
+    }),
   };
 }

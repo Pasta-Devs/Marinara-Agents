@@ -3,7 +3,11 @@ import { logger } from "../../../lib/logger.js";
 import { addSlurpPostMedia } from "../../data/feed/slp-post-media-storage.js";
 import { recordSlurpShootSelection } from "../../data/feed/slp-shoot-storage.js";
 import { slpCreatorPostMediaUrl } from "../../base/media/slp-media.js";
-import { generateCreatorPostImage, generateSlurpSecondaryImages } from "../media/slp-media-contract.js";
+import {
+  generateCreatorPostImage,
+  generateSlurpSecondaryImages,
+  type SlpSecondaryShot,
+} from "../media/slp-media-contract.js";
 
 type Generated = Awaited<ReturnType<typeof generateCreatorPostImage>>;
 type ImageInput = Parameters<typeof generateCreatorPostImage>[0];
@@ -16,6 +20,8 @@ export async function persistSlurpGeneratedImageSet<T>(input: {
   primary: Generated;
   imageInput: ImageInput;
   multi: boolean;
+  /** The post model's plan for the extra pictures; generic framings fill any it did not plan. */
+  shots?: readonly SlpSecondaryShot[];
   shootId?: string | null;
   persist: (extra: {
     id: string;
@@ -24,7 +30,7 @@ export async function persistSlurpGeneratedImageSet<T>(input: {
     metadata: Record<string, unknown>;
   }) => Promise<T>;
 }): Promise<T> {
-  const secondary = input.multi ? await generateSlurpSecondaryImages(input.imageInput) : [];
+  const secondary = input.multi ? await generateSlurpSecondaryImages(input.imageInput, input.shots) : [];
   try {
     input.primary.stagedMedia?.promote();
     const post = await input.persist({

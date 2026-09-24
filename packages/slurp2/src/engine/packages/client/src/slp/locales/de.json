@@ -185,6 +185,8 @@
   "ui.slurp.settings.connections.title": "Verbindungen",
   "ui.slurp.settings.connections.detail": "Alle Slurp-Modellverbindungen an einem Ort. Bestehende Einstellungsseiten behalten ihre Verknüpfungen.",
   "ui.slurp.settings.connections.textGeneration": "Textgenerierung",
+  "ui.slurp.settings.connections.aiWriting": "KI-Schreiben (Antworten, Nachrichten, Aktivität)",
+  "ui.slurp.settings.connections.textGenerationFallback": "die Textgenerierungsverbindung",
   "ui.slurp.settings.connections.imageContext": "Bildkontext",
   "ui.slurp.settings.connections.imageGeneration": "Bildgenerierung",
   "ui.slurp.settings.connections.adImages": "Anzeigenbilder",
