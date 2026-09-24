@@ -192,6 +192,7 @@ export function NoodleLatestPostsWidget({
                 role="button"
                 tabIndex={0}
                 onKeyDown={(event) => {
+                  if (event.target instanceof HTMLButtonElement) return;
                   if (event.key === "Enter" || event.key === " ") {
                     event.preventDefault();
                     onOpenPost?.(post.id);

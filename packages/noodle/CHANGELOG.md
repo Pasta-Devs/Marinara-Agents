@@ -1,44 +1,8 @@
 # Noodle release notes
 
-## 1.2.34 — 2026-09-24
-
-- Widgets on Homescreen now avaliable.
-
-## 1.2.33 — 2026-09-24
-
-- Add a subtle Noodle-blue background gradient and compact widget subtitle.
-
-## 1.2.32 — 2026-09-24
-
-- Fix compact widget mounting and provide Noodle theme variables inside isolated Home widget mounts.
-
-## 1.2.31 — 2026-09-24
-
-- Add a compact Noodle Snapshot widget and make like and repost controls perform native Noodle interactions.
-
-## 1.2.30 — 2026-09-24
-
-- Remove the manual refresh button from the Home widget. The feed continues to refresh automatically.
-
-## 1.2.29 — 2026-09-24
-
-- Align the Home widget with Noodle timeline styling, show twenty posts, and make post summaries keyboard and pointer interactive.
-
-## 1.2.28 — 2026-09-24
-
-- Fix a render error that could leave the native Latest Posts widget blank when posts were available.
-
-## 1.2.27 — 2026-09-24
-
-- Make Latest Posts a native Noodle widget with the Noodle logo, avatars, handles, media, polls, and live interaction counts.
-
-## 1.2.26 — 2026-09-24
-
-- Give the Latest Posts Home widget a rich package-owned surface with live status, refresh controls, metadata, and direct Noodle navigation.
-
 ## 1.2.25 — 2026-09-24
 
-- Offer a large Home widget with a scrollable preview of the five newest public posts. Opening a preview takes you to that post in Noodle.
+- Widgets on Homescreen now avaliable.
 
 ## 1.2.24 — 2026-09-15
 

@@ -278,10 +278,10 @@ async function removeOwnedSourceSnapshots(excludedPaths) {
 const features = [
   {
     id: "noodle",
-    version: "1.2.34",
+    version: "1.2.25",
     minEngineVersion: "2.4.6",
     capabilityApi: { major: 1, minor: 35 },
-    builtAgainst: { engineVersion: "2.4.6", engineCommit: "b5fc4f3254432745438388de1459eaba3e179423" },
+    builtAgainst: { engineVersion: "2.4.6", engineCommit: "46d20172d2aff99f8c3bc49b978cf81e68f3f624" },
     maxEngineExclusive: MAX_ENGINE_EXCLUSIVE,
     name: "Noodle",
     description: "Explore the Noodle public timeline as an optional local social world.",
