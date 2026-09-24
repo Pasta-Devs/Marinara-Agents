@@ -127,6 +127,7 @@ export function SlurpProfileMediaTile({
             source ? () => void downloadSlpShareCard(toSlpShareCardInput(post), `slurp-${post.id}.png`) : undefined
           }
           onOpenCreator={onOpenCreator}
+          deepDetailsPostId={post.id}
         />
       </div>
     </div>

@@ -1,5 +1,5 @@
 // The splash screen needs the shipped version and its public notes inside the client bundle.
-export const SLURP2_VERSION = "0.2.28";
+export const SLURP2_VERSION = "0.2.36";
 
 export interface Slurp2ReleaseEntry {
   version: string;
@@ -9,6 +9,40 @@ export interface Slurp2ReleaseEntry {
 
 /** The public release history shown in the Engine splash screen. */
 export const SLURP2_RELEASES: Slurp2ReleaseEntry[] = [
+  {
+    version: "0.2.36",
+    date: "2026-09-24",
+    notes: [
+      "Deep details opens as a flowchart of the whole generation: each step shows what happens, why, which connection and model ran it, and the exact text that went in and came out. A Canvas view shows the same diagram to drag and zoom in every direction.",
+      "Image runs now also record the prompt-rewrite model and its full chat, the fallback image connection, and which connection actually drew the picture.",
+    ],
+  },
+  {
+    version: "0.2.35",
+    date: "2026-09-24",
+    notes: [
+      "Deep details shows each post as numbered steps. Every image run records its settings, style profile, prompt rewrite, final prompt, and provider attempts in order.",
+      "The Connections panel includes the AI writing connection used for replies, messages, and audience activity.",
+    ],
+  },
+  {
+    version: "0.2.34",
+    date: "2026-09-23",
+    notes: [
+      "Manage text and image connections in one place. Missing saved connections stay visible until you choose a replacement, and connection load errors can be retried.",
+      "Image briefs now follow the Creator's production style, and future automatic posts survive Engine restarts and source snapshot changes.",
+      "Prompt Studio describes its output clearly, image appearance settings apply consistently, and valid model responses can include extra fields.",
+    ],
+  },
+  {
+    version: "0.2.29",
+    date: "2026-09-23",
+    notes: [
+      "Scheduled timeline refresh uses the saved daily setting again.",
+      "Delayed chat replies finish during a cool-off, and strict model output supports comment threads and invited posts.",
+      "Pulse shows failed first posts and audience failure details. Arc edits keep imported story fields.",
+    ],
+  },
   {
     version: "0.2.28",
     date: "2026-09-23",

@@ -1,9 +1,9 @@
-import { requestHintGuidance, TIP_PRESETS } from "./SlpMessages";
-import { ArrowDown, Plus, Send, X } from "lucide-react";
+import { requestHintGuidance } from "./SlpMessages";
+import { ArrowDown, ChevronLeft, Plus, Send, X } from "lucide-react";
 import { CommissionRequest } from "./commissions/SlpCommissions";
-import { CreatorMessageTools, FanImageTool } from "./SlpMessageTools";
+import { CreatorMessageTools, FanImageTool, SlurpTipPanel } from "./SlpMessageTools";
 import { cn } from "../../../lib/utils";
-import { SlurpCoin, SlurpCoinBurst } from "../../modules/coin/SlpCoin";
+import { SlurpCoin } from "../../modules/coin/SlpCoin";
 import { SlurpConnectionSwitcher } from "./SlpThreadChrome";
 import type { SlurpThreadViewModel } from "./slp-thread-actions";
 
@@ -20,8 +20,6 @@ export function SlpThreadComposer({ model }: { model: SlurpThreadViewModel }) {
     connectionPickerOpen,
     connectionsQuery,
     createCommission,
-    customTipAmount,
-    customTipNote,
     draft,
     draftReply,
     holdTyping,
@@ -38,27 +36,29 @@ export function SlpThreadComposer({ model }: { model: SlurpThreadViewModel }) {
     setComposerTipAmount,
     setComposerTipNote,
     setConnectionPickerOpen,
-    setCustomTipAmount,
-    setCustomTipNote,
     setDraft,
     setError,
     setPreparingImage,
     setReplyStatus,
     setRequestHint,
-    setTipMode,
     setToolTab,
     setToolsOpen,
     settingsQuery,
     submit,
     targetCreatorAccountId,
     thread,
-    tipMode,
     toolTab,
     toolTabs,
     toolsOpen,
     typing,
     updateSlurpSettings,
   } = model;
+  // These tools act on a conversation that exists. In a new chat they opened an empty panel.
+  const availableTabs = toolTabs.filter(
+    (tab) =>
+      thread || (tab.id !== "photo" && tab.id !== "generated-photo" && tab.id !== "request" && tab.id !== "creator"),
+  );
+  const activeTab = availableTabs.find((tab) => tab.id === toolTab) ?? null;
 
   return (
     <>
@@ -82,61 +82,86 @@ export function SlpThreadComposer({ model }: { model: SlurpThreadViewModel }) {
         )}
         <div className="mx-auto flex w-full max-w-2xl flex-col gap-2">
           {toolsOpen && (
-            <div className="flex flex-col gap-2 rounded-2xl bg-[var(--slurp-surface-raised)] p-3 ring-1 ring-inset ring-[var(--noodle-divider)] shadow-[var(--slurp-shadow-floating)]">
-              <div className="flex flex-col gap-3" aria-label="Message actions">
-                <div className="flex items-center justify-between gap-3 px-1">
-                  <div>
-                    <h2 className="text-sm font-black">Add to your message</h2>
-                    <p className="mt-0.5 text-xs text-[var(--muted-foreground)]">Choose one action to continue.</p>
-                  </div>
+            <div className="slurp-sheet-in flex max-h-[min(70dvh,34rem)] flex-col gap-2 overflow-y-auto overscroll-contain rounded-3xl bg-[var(--slurp-surface-raised)] p-3 ring-1 ring-inset ring-[var(--noodle-divider)] shadow-[var(--slurp-shadow-floating)]">
+              <div
+                role="group"
+                aria-label={localizeUi("ui.slurp.messages.messageActions", { defaultValue: "Message actions" })}
+                className="flex flex-col gap-3"
+              >
+                <div className="flex items-center justify-between gap-2 px-1">
+                  {activeTab ? (
+                    <button
+                      type="button"
+                      onClick={() => setToolTab(null)}
+                      className="-ml-1 flex min-h-9 items-center gap-1 rounded-lg pr-2 text-sm font-black focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)]"
+                    >
+                      <ChevronLeft size={18} aria-hidden="true" />
+                      <span className="sr-only">
+                        {localizeUi("ui.slurp.messages.backToActions", { defaultValue: "Back to actions" })}:
+                      </span>
+                      {activeTab.label}
+                    </button>
+                  ) : (
+                    <div>
+                      <h2 className="text-sm font-black">
+                        {localizeUi("ui.slurp.messages.addToMessage", { defaultValue: "Add to your message" })}
+                      </h2>
+                      <p className="mt-0.5 text-xs text-[var(--muted-foreground)]">
+                        {localizeUi("ui.slurp.messages.chooseAction", {
+                          defaultValue: "Choose one action to continue.",
+                        })}
+                      </p>
+                    </div>
+                  )}
                   <button
                     type="button"
                     onClick={() => setToolsOpen(false)}
-                    className="flex h-9 w-9 items-center justify-center rounded-lg text-[var(--muted-foreground)] hover:bg-[var(--slurp-surface)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)]"
-                    aria-label="Close message actions"
+                    className="flex h-10 w-10 items-center justify-center rounded-full text-[var(--muted-foreground)] hover:bg-[var(--slurp-surface)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)]"
+                    aria-label={localizeUi("ui.slurp.messages.closeActions", { defaultValue: "Close message actions" })}
                   >
                     <X size={16} aria-hidden="true" />
                   </button>
                 </div>
-                {(["media", "conversation", "payment", "creator"] as const).map((group) => {
-                  const items = toolTabs.filter((tab) => tab.group === group);
-                  if (items.length === 0) return null;
-                  const heading =
-                    group === "media"
-                      ? localizeUi("ui.slurp.messages.mediaActions", { defaultValue: "Media" })
-                      : group === "conversation"
-                        ? localizeUi("ui.slurp.messages.conversationActions", { defaultValue: "Conversation" })
-                        : group === "payment"
-                          ? localizeUi("ui.slurp.messages.paymentActions", { defaultValue: "Payments" })
-                          : localizeUi("ui.slurp.messages.creatorActions", { defaultValue: "Creator tools" });
-                  return (
-                    <section key={group} className="flex flex-col gap-1.5">
-                      <h3 className="px-1 text-[0.65rem] font-bold uppercase tracking-[0.08em] text-[var(--muted-foreground)]">
-                        {heading}
-                      </h3>
-                      <div className="grid gap-2 sm:grid-cols-2">
-                        {items.map((tab) => (
-                          <button
-                            key={tab.id}
-                            type="button"
-                            onClick={() => setToolTab(tab.id)}
-                            className="flex min-h-16 items-center gap-3 rounded-xl bg-[var(--slurp-surface)] px-3 text-left ring-1 ring-inset ring-[var(--noodle-divider)] transition-[background-color,transform] hover:bg-[var(--noodle-accent)]/[0.08] active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] motion-reduce:transition-none motion-reduce:active:scale-100"
-                          >
-                            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-[var(--noodle-accent)]/12 text-[var(--noodle-accent)]">
-                              <tab.icon size={18} aria-hidden="true" />
-                            </span>
-                            <span className="min-w-0">
-                              <span className="block truncate text-xs font-bold">{tab.label}</span>
-                              <span className="mt-0.5 block text-[0.68rem] leading-4 text-[var(--muted-foreground)]">
-                                {tab.detail}
+                {!activeTab &&
+                  (["media", "conversation", "payment", "creator"] as const).map((group) => {
+                    const items = availableTabs.filter((tab) => tab.group === group);
+                    if (items.length === 0) return null;
+                    const heading =
+                      group === "media"
+                        ? localizeUi("ui.slurp.messages.mediaActions", { defaultValue: "Media" })
+                        : group === "conversation"
+                          ? localizeUi("ui.slurp.messages.conversationActions", { defaultValue: "Conversation" })
+                          : group === "payment"
+                            ? localizeUi("ui.slurp.messages.paymentActions", { defaultValue: "Payments" })
+                            : localizeUi("ui.slurp.messages.creatorActions", { defaultValue: "Creator tools" });
+                    return (
+                      <section key={group} className="flex flex-col gap-1.5">
+                        <h3 className="px-1 text-[0.65rem] font-bold uppercase tracking-[0.08em] text-[var(--muted-foreground)]">
+                          {heading}
+                        </h3>
+                        <div className="grid gap-2 sm:grid-cols-2">
+                          {items.map((tab) => (
+                            <button
+                              key={tab.id}
+                              type="button"
+                              onClick={() => setToolTab(tab.id)}
+                              className="flex min-h-16 items-center gap-3 rounded-2xl bg-[var(--slurp-surface)] px-3 text-left ring-1 ring-inset ring-[var(--noodle-divider)] transition-[background-color,transform] hover:bg-[var(--noodle-accent)]/[0.08] active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] motion-reduce:transition-none motion-reduce:active:scale-100"
+                            >
+                              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-[var(--noodle-accent)]/12 text-[var(--noodle-accent)]">
+                                <tab.icon size={18} aria-hidden="true" />
                               </span>
-                            </span>
-                          </button>
-                        ))}
-                      </div>
-                    </section>
-                  );
-                })}
+                              <span className="min-w-0">
+                                <span className="block truncate text-xs font-bold">{tab.label}</span>
+                                <span className="mt-0.5 block text-[0.68rem] leading-4 text-[var(--muted-foreground)]">
+                                  {tab.detail}
+                                </span>
+                              </span>
+                            </button>
+                          ))}
+                        </div>
+                      </section>
+                    );
+                  })}
               </div>
 
               {toolTab === "commission" && (
@@ -209,7 +234,13 @@ export function SlpThreadComposer({ model }: { model: SlurpThreadViewModel }) {
                           setToolTab(null);
                         })
                         .catch((cause: unknown) =>
-                          setError(cause instanceof Error ? cause.message : "Could not ask for a reply."),
+                          setError(
+                            cause instanceof Error
+                              ? cause.message
+                              : localizeUi("ui.slurp.messages.requestFanReplyFailed", {
+                                  defaultValue: "Could not ask for a reply.",
+                                }),
+                          ),
                         );
                     }}
                     className="min-h-11 rounded-xl bg-[var(--noodle-accent)] px-4 text-xs font-bold text-zinc-950 disabled:opacity-50"
@@ -269,12 +300,20 @@ export function SlpThreadComposer({ model }: { model: SlurpThreadViewModel }) {
                           setToolTab(null);
                         })
                         .catch((cause: unknown) =>
-                          setError(cause instanceof Error ? cause.message : "Could not request a reply."),
+                          setError(
+                            cause instanceof Error
+                              ? cause.message
+                              : localizeUi("ui.slurp.messages.requestReplyFailed", {
+                                  defaultValue: "Could not request a reply.",
+                                }),
+                          ),
                         );
                     }}
                     className="min-h-11 rounded-xl bg-[var(--noodle-accent)] px-4 text-xs font-bold text-zinc-950 disabled:opacity-50"
                   >
-                    {requestReply.isPending ? "Requesting…" : "Request a reply"}
+                    {requestReply.isPending
+                      ? localizeUi("ui.slurp.messages.requesting", { defaultValue: "Requesting…" })
+                      : localizeUi("ui.slurp.messages.requestReply", { defaultValue: "Request a reply" })}
                   </button>
                 </div>
               )}
@@ -338,135 +377,50 @@ export function SlpThreadComposer({ model }: { model: SlurpThreadViewModel }) {
               )}
 
               {toolTab === "tip" && (
-                <>
-                  {/* Send now, or attach to the message being written. Both were on screen at once
-                  with near-identical rows, which is how you tip twice by accident. */}
-                  <div
-                    role="group"
-                    aria-label={localizeUi("ui.slurp.messages.tipMode", { defaultValue: "How to tip" })}
-                    className="flex items-center gap-1"
-                  >
-                    {(["now", "with-message"] as const).map((mode) => (
-                      <button
-                        key={mode}
-                        type="button"
-                        aria-pressed={tipMode === mode}
-                        disabled={mode === "with-message" && ownsCreator}
-                        onClick={() => setTipMode(mode)}
-                        className={cn(
-                          "min-h-9 rounded-full px-3 text-[0.7rem] font-bold text-[var(--muted-foreground)] ring-1 ring-inset ring-[var(--noodle-divider)] disabled:hidden",
-                          tipMode === mode &&
-                            "bg-[var(--noodle-accent)] text-zinc-950 [&_svg]:!text-zinc-950 ring-[var(--noodle-accent)]",
-                        )}
-                      >
-                        {mode === "now"
-                          ? localizeUi("ui.slurp.messages.tipNow", { defaultValue: "Send now" })
-                          : localizeUi("ui.slurp.messages.tipWithMessage", { defaultValue: "With my message" })}
-                      </button>
-                    ))}
-                  </div>
-
-                  {tipMode === "now" ? (
-                    <div className="flex flex-wrap items-center gap-1.5">
-                      <SlurpCoin size={15} />
-                      {TIP_PRESETS.map((amount) => (
-                        <button
-                          key={amount}
-                          type="button"
-                          disabled={busy || !personaId || !targetCreatorAccountId}
-                          onClick={() => sendTip(amount)}
-                          className="relative min-h-11 overflow-visible rounded-full px-3 text-xs font-bold text-[var(--noodle-accent)] ring-1 ring-inset ring-[var(--noodle-accent)]/40 transition-[background-color,transform] hover:bg-[var(--noodle-accent)]/10 active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] disabled:opacity-50 motion-reduce:transition-none motion-reduce:active:scale-100"
-                        >
-                          <SlurpCoinBurst active={activeTipAmount === amount} />
-                          {localizeUi("ui.slurp.messages.tipAmount", { defaultValue: "Tip {{amount}}", amount })}
-                        </button>
-                      ))}
-                      <label className="sr-only" htmlFor="slurp-custom-tip-amount">
-                        {localizeUi("ui.slurp.messages.customTipAmount", { defaultValue: "Custom tip amount" })}
-                      </label>
-                      <input
-                        id="slurp-custom-tip-amount"
-                        type="number"
-                        min={1}
-                        max={9999}
-                        value={customTipAmount}
-                        onChange={(event) => setCustomTipAmount(event.target.value)}
-                        placeholder={localizeUi("ui.slurp.messages.customTipPlaceholder", { defaultValue: "Other" })}
-                        className="h-11 w-20 rounded-full bg-[var(--slurp-surface)] px-3 text-xs tabular-nums outline-none ring-1 ring-inset ring-[var(--noodle-divider)] focus:ring-2 focus:ring-[var(--slurp-focus)]"
-                      />
-                      <label className="sr-only" htmlFor="slurp-custom-tip-note">
-                        {localizeUi("ui.slurp.messages.customTipNote", { defaultValue: "Tip note" })}
-                      </label>
-                      <input
-                        id="slurp-custom-tip-note"
-                        value={customTipNote}
-                        maxLength={280}
-                        onChange={(event) => setCustomTipNote(event.target.value)}
-                        placeholder={localizeUi("ui.slurp.messages.tipNotePlaceholder", { defaultValue: "Note" })}
-                        className="h-11 min-w-28 flex-1 rounded-full bg-[var(--slurp-surface)] px-3 text-xs outline-none ring-1 ring-inset ring-[var(--noodle-divider)] focus:ring-2 focus:ring-[var(--slurp-focus)]"
-                      />
-                      <button
-                        type="button"
-                        disabled={
-                          busy ||
-                          !personaId ||
-                          !targetCreatorAccountId ||
-                          !Number.isInteger(Number(customTipAmount)) ||
-                          Number(customTipAmount) < 1 ||
-                          Number(customTipAmount) > 9999
-                        }
-                        onClick={() => {
-                          void sendTip(Number(customTipAmount), customTipNote.trim(), {
-                            amount: customTipAmount,
-                            note: customTipNote,
-                          });
-                          setCustomTipAmount("");
-                          setCustomTipNote("");
-                        }}
-                        className="min-h-11 rounded-full bg-[var(--noodle-accent)] px-3 text-xs font-bold text-zinc-950 [&_svg]:!text-zinc-950 disabled:opacity-50"
-                      >
-                        {localizeUi("ui.slurp.messages.sendCustomTip", { defaultValue: "Send tip" })}
-                      </button>
-                    </div>
-                  ) : (
-                    <div className="flex flex-wrap items-center gap-2">
-                      {TIP_PRESETS.map((amount) => (
-                        <button
-                          key={`composer-tip-${amount}`}
-                          type="button"
-                          aria-pressed={composerTipAmount === amount}
-                          onClick={() => setComposerTipAmount((current) => (current === amount ? 0 : amount))}
-                          className={cn(
-                            "min-h-9 rounded-full px-2.5 text-xs font-bold ring-1 ring-inset ring-[var(--noodle-accent)]/40",
-                            composerTipAmount === amount &&
-                              "bg-[var(--noodle-accent)] text-zinc-950 [&_svg]:!text-zinc-950",
-                          )}
-                        >
-                          {amount}
-                        </button>
-                      ))}
-                      {composerTipAmount > 0 && (
-                        <input
-                          value={composerTipNote}
-                          maxLength={280}
-                          onChange={(event) => setComposerTipNote(event.target.value)}
-                          placeholder={localizeUi("ui.slurp.messages.tipNotePlaceholder", { defaultValue: "Tip note" })}
-                          className="h-9 min-w-32 flex-1 rounded-full bg-[var(--slurp-surface)] px-3 text-xs outline-none ring-1 ring-inset ring-[var(--noodle-divider)] focus:ring-2 focus:ring-[var(--slurp-focus)]"
-                        />
-                      )}
-                      <p className="w-full text-[0.65rem] text-[var(--muted-foreground)]">
-                        {localizeUi("ui.slurp.messages.tipWithMessageHint", {
-                          defaultValue: "The tip goes with the next message you send.",
-                        })}
-                      </p>
-                    </div>
-                  )}
-                </>
+                <SlurpTipPanel
+                  personaId={personaId}
+                  busy={busy || !targetCreatorAccountId}
+                  sendingAmount={activeTipAmount}
+                  allowAttach={!ownsCreator}
+                  onSendNow={(amount, note) => void sendTip(amount, note)}
+                  onAttach={(amount, note) => {
+                    setComposerTipAmount(amount);
+                    setComposerTipNote(note);
+                    setToolsOpen(false);
+                    setToolTab(null);
+                    composerRef.current?.focus();
+                  }}
+                />
               )}
             </div>
           )}
+          {composerTipAmount > 0 && (
+            <div className="slurp-bubble-in flex items-center gap-2 self-start rounded-full bg-[var(--noodle-accent)]/12 py-1 pl-3 pr-1 text-xs font-bold text-[var(--noodle-accent)] ring-1 ring-inset ring-[var(--noodle-accent)]/30">
+              <SlurpCoin size={14} />
+              {localizeUi("ui.slurp.messages.tipAttached", {
+                defaultValue: "{{amount}} coin tip goes with this message",
+                amount: composerTipAmount,
+              })}
+              {composerTipNote && (
+                <span className="max-w-40 truncate font-normal text-[var(--muted-foreground)]">
+                  “{composerTipNote}”
+                </span>
+              )}
+              <button
+                type="button"
+                onClick={() => {
+                  setComposerTipAmount(0);
+                  setComposerTipNote("");
+                }}
+                aria-label={localizeUi("ui.slurp.messages.removeTip", { defaultValue: "Remove tip" })}
+                className="flex h-7 w-7 items-center justify-center rounded-full hover:bg-[var(--noodle-accent)]/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)]"
+              >
+                <X size={13} aria-hidden="true" />
+              </button>
+            </div>
+          )}
           <form
-            className="flex items-end gap-0.5 rounded-2xl bg-[var(--slurp-surface)] p-1 shadow-sm ring-1 ring-inset ring-[var(--noodle-divider)] transition-shadow focus-within:ring-2 focus-within:ring-[var(--noodle-accent)]/55 motion-reduce:transition-none"
+            className="flex items-end gap-0.5 rounded-[1.4rem] bg-[var(--slurp-surface)] p-1 shadow-sm ring-1 ring-inset ring-[var(--noodle-divider)] transition-shadow focus-within:ring-2 focus-within:ring-[var(--noodle-accent)]/55 motion-reduce:transition-none"
             onClick={(event) => {
               // A tap on the bar's padding means "write here", as in the Engine chat box.
               if (event.target === event.currentTarget) composerRef.current?.focus();

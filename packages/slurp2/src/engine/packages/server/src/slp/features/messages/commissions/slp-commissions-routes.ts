@@ -30,7 +30,6 @@ const commissionDeliverySchema = z.object({
 // stop two rapid requests from drawing the same commission at once. Hold the whole route per
 // commission and make the second request retry after the first one finishes.
 const commissionDeliveryRequests = new Set<string>();
-const commissionAcceptRequests = new Set<string>();
 export async function slpCommissionsRoutes(app: FastifyInstance, messaging: SlpMessagesContext) {
   const { messages, ownsCreator, requireViewer, slurp } = messaging;
   app.post("/messages/commissions", async (req, reply) => {
@@ -83,91 +82,83 @@ export async function slpCommissionsRoutes(app: FastifyInstance, messaging: SlpM
     if (commission.state !== "quoted") {
       return reply.code(409).send({ error: "This commission is not waiting for payment." });
     }
-    if (commissionAcceptRequests.has(commission.id)) {
-      return reply.code(409).send({ error: "This commission is already being accepted." });
-    }
-    commissionAcceptRequests.add(commission.id);
     let drawn: Awaited<ReturnType<typeof generateSlurpCommissionImage>> | null = null;
-    try {
-      const creator = await slurp.getNoodlerAccountById(commission.creatorAccountId);
-      const automatic = Boolean(creator && creator.sourceKind !== "persona");
-      // Stage the character Creator's work before taking payment. A missing or failed image
-      // connection must leave the quote payable later, not charge the fan for an empty delivery.
-      if (automatic) {
-        // Drawing is the expensive part, so a fan who cannot pay must not get one drawn and thrown
-        // away on every retry. acceptCommission still checks again under the lock.
-        if ((await slurp.getSettings()).walletEnabled) {
-          const wallet = await slurp.getWallet(commission.viewerAccountId);
-          if (wallet.coins < commission.price) return reply.code(402).send({ error: "Not enough coins." });
-        }
-        try {
-          drawn = await generateSlurpCommissionImage(app.db, {
-            creatorAccountId: commission.creatorAccountId,
-            brief: commission.brief,
-          });
-        } catch (error) {
-          logger.warn(error, "[slurp-commission] Could not draw an automatic commission");
-          return reply.code(502).send({ error: "Could not create that commission yet. Try again later." });
-        }
-        if (drawn === "unavailable") {
-          return reply.code(404).send({ error: "No image generation connection is configured." });
-        }
+    const creator = await slurp.getNoodlerAccountById(commission.creatorAccountId);
+    const automatic = Boolean(creator && creator.sourceKind !== "persona");
+    // Stage the character Creator's work before taking payment. A missing or failed image
+    // connection must leave the quote payable later, not charge the fan for an empty delivery.
+    if (automatic) {
+      // Drawing is the expensive part, so a fan who cannot pay must not get one drawn and thrown
+      // away on every retry. acceptCommission still checks again under the lock.
+      if ((await slurp.getSettings()).walletEnabled) {
+        const wallet = await slurp.getWallet(commission.viewerAccountId);
+        if (wallet.coins < commission.price) return reply.code(402).send({ error: "Not enough coins." });
       }
-
-      const accepted = await messages.acceptCommission(commission.id);
-      if (!accepted || accepted.state !== "accepted") {
-        if (drawn && drawn !== "unavailable") drawn.compensate();
-        // Only a failed charge is a coins problem. A commission that was already accepted or
-        // declined meanwhile is a conflict, and "Not enough coins" there sent fans to top up.
-        if (accepted && accepted.state !== "quoted")
-          return reply.code(409).send({ error: "This commission was already answered." });
-        return reply.code(402).send({ error: "Not enough coins." });
-      }
-      // The thanks is a full model reply. It runs after the drawing is kept and its delivery
-      // scheduled, so a slow reply or a crash in it cannot leave a paid commission with no delivery.
-      const thank = () =>
-        reactToSlurpPayment(app.db, {
-          viewerAccountId: commission.viewerAccountId,
+      try {
+        drawn = await generateSlurpCommissionImage(app.db, {
           creatorAccountId: commission.creatorAccountId,
-          kind: "commission",
-          amount: accepted.price,
+          brief: commission.brief,
         });
-      if (!automatic || !drawn || drawn === "unavailable") {
-        await thank();
-        return { commission: accepted };
+      } catch (error) {
+        logger.warn(error, "[slurp-commission] Could not draw an automatic commission");
+        return reply.code(502).send({ error: "Could not create that commission yet. Try again later." });
       }
-
-      // Keep the drawing. It is finished, it is paid for, and it now has to survive until the
-      // delivery is due — which may be after a restart, so the file cannot stay staged.
-      drawn.promote();
-      const deliverAt = new Date(
-        Date.now() + slurpCommissionDeliveryDelayMs({ price: accepted.price, briefLength: commission.brief.length }),
-      ).toISOString();
-      const scheduled = await messages.scheduleCommissionDelivery(commission.id, {
-        deliverAt,
-        mediaPath: drawn.mediaPath,
-      });
-      if (scheduled) {
-        await thank();
-        return { commission: scheduled };
+      if (drawn === "unavailable") {
+        return reply.code(404).send({ error: "No image generation connection is configured." });
       }
-
-      // Nothing could be scheduled, so the wait is dropped rather than the delivery. The fan has
-      // paid; handing them the piece now is worse pacing but it is not a loss.
-      const outcome = await deliverAutomaticSlurpCommission(app.db, accepted, drawn.mediaPath);
-      if (outcome.status === "delivered") {
-        await thank();
-        return { commission: outcome.commission };
-      }
-      return reply.code(500).send({
-        error:
-          outcome.status === "refunded"
-            ? "Could not deliver that commission. Your payment was refunded."
-            : "Could not deliver that commission. It is paid for and still in progress.",
-      });
-    } finally {
-      commissionAcceptRequests.delete(commission.id);
     }
+
+    const accepted = await messages.acceptCommission(commission.id);
+    if (!accepted || accepted.state !== "accepted") {
+      if (drawn && drawn !== "unavailable") drawn.compensate();
+      // Only a failed charge is a coins problem. A commission that was already accepted or
+      // declined meanwhile is a conflict, and "Not enough coins" there sent fans to top up.
+      if (accepted && accepted.state !== "quoted")
+        return reply.code(409).send({ error: "This commission was already answered." });
+      return reply.code(402).send({ error: "Not enough coins." });
+    }
+    // The thanks is a full model reply. It runs after the drawing is kept and its delivery
+    // scheduled, so a slow reply or a crash in it cannot leave a paid commission with no delivery.
+    const thank = () =>
+      reactToSlurpPayment(app.db, {
+        viewerAccountId: commission.viewerAccountId,
+        creatorAccountId: commission.creatorAccountId,
+        kind: "commission",
+        amount: accepted.price,
+      });
+    if (!automatic || !drawn || drawn === "unavailable") {
+      await thank();
+      return { commission: accepted };
+    }
+
+    // Keep the drawing. It is finished, it is paid for, and it now has to survive until the
+    // delivery is due — which may be after a restart, so the file cannot stay staged.
+    drawn.promote();
+    const deliverAt = new Date(
+      Date.now() + slurpCommissionDeliveryDelayMs({ price: accepted.price, briefLength: commission.brief.length }),
+    ).toISOString();
+    const scheduled = await messages.scheduleCommissionDelivery(commission.id, {
+      deliverAt,
+      mediaPath: drawn.mediaPath,
+    });
+    if (scheduled) {
+      await thank();
+      return { commission: scheduled };
+    }
+
+    // Nothing could be scheduled, so the wait is dropped rather than the delivery. The fan has
+    // paid; handing them the piece now is worse pacing but it is not a loss.
+    const outcome = await deliverAutomaticSlurpCommission(app.db, accepted, drawn.mediaPath);
+    if (outcome.status === "delivered") {
+      await thank();
+      return { commission: outcome.commission };
+    }
+    return reply.code(500).send({
+      error:
+        outcome.status === "refunded"
+          ? "Could not deliver that commission. Your payment was refunded."
+          : "Could not deliver that commission. It is paid for and still in progress.",
+    });
   });
 
   /** Either side may end an unpaid commission: the Creator declines it, the fan takes it back. */
@@ -189,7 +180,14 @@ export async function slpCommissionsRoutes(app: FastifyInstance, messaging: SlpM
     if (!canCancel) {
       return reply.code(409).send({ error: "This commission can no longer be called off." });
     }
-    return { commission: await messages.declineCommission(commission.id, isCreator ? "creator" : "viewer") };
+    // Between accept and scheduling the delivery, `deliverAt` is still empty. A cancel in that
+    // window refunded the fan while the accept went on and reported a false failure.
+    const declined = await messages.declineCommission(commission.id, isCreator ? "creator" : "viewer");
+    // Nothing changed: a delivery holds it. Reporting success told the fan they were refunded.
+    if (declined?.state === "accepted") {
+      return reply.code(409).send({ error: "This commission is being delivered. Try again in a few minutes." });
+    }
+    return { commission: declined };
   });
 
   app.post("/messages/commissions/:commissionId/deliver", async (req, reply) => {
@@ -235,7 +233,7 @@ export async function slpCommissionsRoutes(app: FastifyInstance, messaging: SlpM
       if (!delivered || delivered.state !== "delivered" || !delivered.deliveryMessageId) {
         if (drawn && drawn !== "unavailable") drawn.compensate();
         // This used to answer 200 with a null commission after silently refunding the fan.
-        return reply.code(500).send({
+        return reply.code(delivered ? 409 : 500).send({
           error: delivered
             ? "This commission is no longer ready for delivery."
             : "Could not deliver that commission. The fan's payment was refunded.",

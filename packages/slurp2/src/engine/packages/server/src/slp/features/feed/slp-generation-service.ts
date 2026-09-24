@@ -1,7 +1,8 @@
 import { saveSlurpPostDeepDetails } from "../../data/feed/slp-post-deep-details-storage.js";
 import { slpIsAdmissionFailure } from "../../base/host/slp-admission.js";
 import { buildSlurpDeepDetailsRecord } from "./slp-deep-details-record.js";
-import { prepareSlurpCreatorPost, recordSlurpProviderPrompt } from "./slp-prepared-post.js";
+import { prepareSlurpCreatorPost } from "./slp-prepared-post.js";
+import { slurpDeepDetailsImageRunRecorder } from "../../data/feed/slp-post-deep-details-storage.js";
 import { type APIProvider } from "@marinara-engine/shared";
 import { createSlpPoll } from "../../../../../shared/src/slp/slp-polls.js";
 import { SLP_CREATOR_POST_TITLE_MAX_LENGTH } from "../../../../../shared/src/slp/slp-social.schema.js";
@@ -417,6 +418,7 @@ export async function generateCreatorPost(
     variation,
     camera,
     effort,
+    productionStyle: production.style,
     shoot,
     axes,
     story: storyVariation,
@@ -711,8 +713,8 @@ export async function generateCreatorPost(
       preview = await generateCreatorPostImage({
         ...imageInput,
         previewOnly: true,
+        onImageRun: slurpDeepDetailsImageRunRecorder(db, deepDetailsId, "review"),
       });
-      await recordSlurpProviderPrompt(db, deepDetailsId, preview.providerPrompt);
     } catch (err) {
       if (slpIsAdmissionFailure(err)) throw err;
       logger.warn(err, "[slurp] Failed to prepare image prompt review for %s", account.displayName);
@@ -747,8 +749,8 @@ export async function generateCreatorPost(
     image = await generateCreatorPostImage({
       ...imageInput,
       previewOnly: false,
+      onImageRun: slurpDeepDetailsImageRunRecorder(db, deepDetailsId, "generation"),
     });
-    await recordSlurpProviderPrompt(db, deepDetailsId, image.providerPrompt);
   } catch (err) {
     // Same rule as the text leg: a busy connection is a deferral, so let it propagate to the
     // scheduler instead of persisting a post permanently marked as image-failed.

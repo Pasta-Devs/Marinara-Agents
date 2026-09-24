@@ -357,6 +357,14 @@ export const SLURP2_SOURCE_MODULES: Record<string, readonly string[]> = {
   "packages/server/src/services/slurp/slurp-image-retry.ts": ["packages/server/src/slp/base/media/slp-image-retry.ts"],
   "packages/server/src/services/slurp/slurp-images.service.ts": [
     "packages/server/src/slp/features/media/slp-images-service.ts",
+    "packages/server/src/slp/features/media/slp-image-run.ts",
+    "packages/server/src/slp/features/media/slp-reviewed-images-service.ts",
+  ],
+  // The reviewed and retried image claims moved out beside the pipeline they call.
+  "packages/server/src/slp/features/media/slp-images-service.ts": [
+    "packages/server/src/slp/features/media/slp-images-service.ts",
+    "packages/server/src/slp/features/media/slp-image-run.ts",
+    "packages/server/src/slp/features/media/slp-reviewed-images-service.ts",
   ],
   "packages/server/src/services/slurp/slurp-public-images.service.ts": [
     "packages/server/src/slp/features/media/slp-public-images-service.ts",

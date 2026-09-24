@@ -139,11 +139,13 @@ export async function slpMessagesCreatorRoutes(app: FastifyInstance, messaging: 
     if (!thread || thread.creatorAccountId !== creatorAccountId) {
       return reply.code(404).send({ error: "Conversation not found" });
     }
-    const latest = (await messages.listMessages(thread.id, 1))[0];
-    if (!latest) return reply.code(400).send({ error: "Nothing to reply to yet." });
+    // The fan's newest message. The thread's newest can be a quote or the Creator's own bubble,
+    // which the reply claim refuses as "busy".
+    const latestId = await messages.latestViewerMessageId(thread.id);
+    if (!latestId) return reply.code(400).send({ error: "Nothing to reply to yet." });
     const outcome = await replyToSlurpMessage(app.db, {
       threadId: thread.id,
-      triggerMessageId: latest.id,
+      triggerMessageId: latestId,
       force: true,
       // `ownsCreator` only passes for a hand-operated Creator, which the operation otherwise never
       // answers for, so without this every draft came back ineligible.
@@ -319,20 +321,20 @@ export async function slpMessagesCreatorRoutes(app: FastifyInstance, messaging: 
    * deliberately absent from the thread UI, so the fiction is not broken by a visible meter.
    */
   app.get("/messages/creators/:creatorAccountId/rapport", async (req, reply) => {
-    const parsed = personaQuerySchema.safeParse(req.query);
+    const parsed = personaQuerySchema.extend({ viewerAccountId: z.string().trim().min(1) }).safeParse(req.query);
     if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
     const { creatorAccountId } = req.params as { creatorAccountId: string };
     const creator = await slurp.getNoodlerAccountById(creatorAccountId);
     if (!creator) return reply.code(404).send({ error: "Creator not found" });
-    const viewer = await requireViewer(parsed.data.personaId);
-    if (!viewer) return reply.code(404).send({ error: "Slurp persona not found" });
     if (!(await ownsCreator(parsed.data.personaId, creatorAccountId)))
       return reply.code(403).send({ error: "Only the Creator's owner can read rapport." });
+    // The fan's rapport with this Creator. The owner's own pair can never have a thread.
+    const fanId = parsed.data.viewerAccountId;
     const messaging = await messages.getCreatorMessaging(creatorAccountId);
     return {
       messaging,
-      rapport: await messages.rapportFor(viewer.id, creatorAccountId),
-      facts: await messages.rapportFactsFor(viewer.id, creatorAccountId),
+      rapport: await messages.rapportFor(fanId, creatorAccountId),
+      facts: await messages.rapportFactsFor(fanId, creatorAccountId),
     };
   });
 

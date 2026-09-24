@@ -1,4 +1,5 @@
-export { createCreatorSlpImagesService, generateCreatorPostImage } from "./slp-images-service.js";
+export { generateCreatorPostImage } from "./slp-images-service.js";
+export { createCreatorSlpImagesService } from "./slp-reviewed-images-service.js";
 export { generateSlpPostImage } from "./slp-public-images-service.js";
 export type { SlpImagePromptReviewItem, StagedSlpPostMedia } from "./slp-public-images-service.js";
 export { findSlurpReuse, loadSlurpReuse } from "./slp-media-reuse-service.js";

@@ -24,6 +24,7 @@ import { isLocalCharacterSubject } from "./chat-scope.js";
 export interface CompileLtmEvidenceUnitsOptions {
   units: LtmEvidenceUnit[];
   existingNotes: LtmNote[];
+  aliasChoices?: ReadonlyMap<string, { title: string; canonicalName: string }>;
   scope: LtmScope;
   modes: LtmMode[];
   mode?: LtmMode;
@@ -105,6 +106,30 @@ export function compileLtmEvidenceUnits(options: CompileLtmEvidenceUnitsOptions)
         note,
       });
       continue;
+    }
+
+    if (
+      target.noteType === "character" &&
+      existing.subjects &&
+      resolvedSubjects &&
+      subjectsEqual(existing.subjects, resolvedSubjects)
+    ) {
+      const choice = units
+        .map((unit) => options.aliasChoices?.get(unit.id))
+        .find((alias) => alias?.canonicalName === existing.title);
+      if (choice && choice.title !== existing.title) {
+        mutations.push({
+          id: randomUUID(),
+          claimKind,
+          kind: "set_title",
+          risk: "medium",
+          confidence,
+          summary: `Rename ${noteId} to the chosen subject alias`,
+          evidence,
+          noteId,
+          title: choice.title,
+        });
+      }
     }
 
     if (resolvedSubjects && !existing.subjects) {

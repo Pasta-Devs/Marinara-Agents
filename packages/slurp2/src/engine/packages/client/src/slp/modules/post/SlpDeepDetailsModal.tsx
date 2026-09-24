@@ -1,16 +1,21 @@
 import { useQuery } from "@tanstack/react-query";
-import { Check, Copy, Loader2 } from "lucide-react";
-import { useState, type ReactNode } from "react";
+import { Loader2 } from "lucide-react";
+import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Modal } from "../../../components/ui/Modal";
 import { api } from "../../../lib/api-client";
 import type { SlpDeepDetailsResponse } from "../../../../../shared/src/slp/slp-deep-details.js";
 import { slpKeys } from "../../base/state/slp-query-keys";
+import { buildSlpDeepDetailsFlow } from "./slp-deep-details-flow";
+import { SlpDeepDetailsCanvas } from "./SlpDeepDetailsCanvas";
+import { SlpDeepDetailsFlow } from "./SlpDeepDetailsFlow";
+import { SlpDeepDetailsImageRuns } from "./SlpDeepDetailsImageRuns";
+import { Block, Chip, CopyButton, formatTime, Rows, Section, str } from "./SlpDeepDetailsParts";
 
 /**
- * Deep details: everything that flowed into one post, from the plan and the draws to the literal
- * prompt and the model's raw answer. Every section is open and readable; nothing hides behind a
- * "view prompt" button.
+ * Deep details: everything that flowed into one post, as numbered steps in the order they ran —
+ * from the plan and the draws to the literal prompt, the model's raw answer, and every image run.
+ * Missing steps say "Not recorded"; nothing is filled in from today's settings.
  */
 export function SlpDeepDetailsModal({ postId, open, onClose }: { postId: string; open: boolean; onClose: () => void }) {
   const { t } = useTranslation();
@@ -21,6 +26,13 @@ export function SlpDeepDetailsModal({ postId, open, onClose }: { postId: string;
   });
   const data = query.data;
   const details = data?.details ?? null;
+  const imageRuns = details?.imageRuns ?? [];
+  const recorded = details ? "done" : "missing";
+  const [view, setView] = useState<"flow" | "canvas" | "data">("flow");
+  const [runChoice, setRunChoice] = useState<number | null>(null);
+  const runIndex = runChoice ?? imageRuns.length - 1;
+  const graph = data ? buildSlpDeepDetailsFlow(data, imageRuns[runIndex] ?? null) : null;
+  const shownView = graph ? view : "data";
 
   return (
     <Modal
@@ -84,234 +96,258 @@ export function SlpDeepDetailsModal({ postId, open, onClose }: { postId: string;
             </p>
           )}
 
-          <Section title="Why this post">
-            <Rows
-              rows={[
-                ["Plan", data.plan ? `${data.plan.workflow} · ${data.plan.id}` : null],
-                ["Planned", data.plan ? formatTime(data.plan.plannedAt) : null],
-                ["Due", data.plan?.dueAt ? formatTime(data.plan.dueAt) : null],
-                ["Completed", data.plan?.completedAt ? formatTime(data.plan.completedAt) : null],
-                ["Scheduled slot", data.plan?.slotId ?? null],
-                ["Answers request", data.plan?.sourceEventId ?? null],
-                ["Player direction", details?.direction ?? null],
-                ["Campaign", details?.plan.campaignId ?? null],
-                ["Shoot", details?.plan.shootId ?? str(data.post.metadata.shootId)],
-                ["Reused picture from", details?.plan.reusedFromPostId ?? str(data.post.metadata.reusedFromPostId)],
-                ["Subscribers asked for", details?.plan.demandTopic ?? null],
-                [
-                  "Project",
-                  details?.plan.project
-                    ? `${details.plan.project.title}${details.plan.project.chapter ? ` — ${details.plan.project.chapter}` : ""}`
-                    : null,
-                ],
-                ["Post number", details ? String(details.sequence + 1) : null],
-                ["Written", details ? formatTime(details.generatedAt) : null],
-                ["Publishes", details?.publicationTime ? formatTime(details.publicationTime) : null],
-              ]}
-            />
-          </Section>
-
-          {details && (
-            <Section title="The angle">
-              <Rows
-                rows={[
-                  ["Place", details.angle?.place ?? null],
-                  ["Moment", details.angle?.moment ?? null],
-                  ["Company", details.angle?.company ?? null],
-                  ["Framing", details.camera ? null : (details.angle?.framing ?? null)],
-                  ["Camera", details.camera],
-                  ["Effort", details.effort],
-                ]}
-              />
-            </Section>
-          )}
-
-          {details && (
-            <Section title="Creator strategy">
-              <Rows
-                rows={[
-                  ["Production style", details.strategy.style],
-                  ["Quiet slots", `${details.strategy.skipRate}%`],
-                  ["Lean on words", `${details.strategy.textOnlyRate} / 100`],
-                ]}
-              />
-              <WeightBars weights={details.strategy.intentWeights} highlight={details.plan.intent} />
-            </Section>
-          )}
-
-          {details && (
-            <Section title="Model">
-              <Rows
-                rows={[
-                  ["Provider", details.model.provider],
-                  ["Model", details.model.model],
-                  ["Temperature", details.model.temperature?.toString() ?? null],
-                  ["Top P", details.model.topP?.toString() ?? null],
-                  ["Max tokens", details.model.maxTokens?.toString() ?? null],
-                  ["Attempts", String(details.attempts)],
+          {graph && (
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="flex flex-wrap gap-2" role="group" aria-label="View">
+                {(
                   [
-                    "Model wrote the image prompt",
-                    details.askedModelForImagePrompt ? "yes" : "no, briefed from the situation",
-                  ],
-                ]}
-              />
-            </Section>
-          )}
-
-          {details && (
-            <Section
-              title="The prompt"
-              action={
-                <CopyButton
-                  value={details.messages.map((m) => `# ${m.role}\n${m.content}`).join("\n\n")}
-                  label="Copy prompt"
-                />
-              }
-            >
-              <div className="space-y-3">
-                {details.messages.map((message, index) => (
-                  <PromptMessage key={index} role={message.role} content={message.content} />
+                    ["flow", "Flowchart"],
+                    ["canvas", "Canvas"],
+                    ["data", "All data"],
+                  ] as const
+                ).map(([value, label]) => (
+                  <button
+                    key={value}
+                    type="button"
+                    aria-pressed={view === value}
+                    onClick={() => setView(value)}
+                    className={`min-h-10 rounded-lg border px-3 text-xs font-semibold transition-colors ${
+                      view === value
+                        ? "border-[var(--noodle-accent)] bg-[var(--noodle-accent)]/10 text-[var(--noodle-accent)]"
+                        : "border-[var(--border)] hover:bg-[var(--accent)]"
+                    }`}
+                  >
+                    {label}
+                  </button>
                 ))}
               </div>
-            </Section>
+              {imageRuns.length > 1 && view !== "data" && (
+                <label className="flex items-center gap-2 text-xs font-semibold">
+                  Image run
+                  <select
+                    value={runIndex}
+                    onChange={(event) => setRunChoice(Number(event.target.value))}
+                    className="min-h-10 rounded-lg border border-[var(--slurp-outline)] bg-[var(--slurp-canvas)] px-2 text-xs"
+                  >
+                    {imageRuns.map((run, index) => (
+                      <option key={`${run.startedAt}-${index}`} value={index}>
+                        {index + 1} of {imageRuns.length} · {run.trigger} · {run.result.status}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              )}
+            </div>
           )}
 
-          {details && (
-            <Section title="The answer">
-              <Rows
-                rows={[
-                  ["Title", details.modelOutput.title],
-                  ["Content", details.modelOutput.content],
-                  ["Image prompt", details.modelOutput.imagePrompt],
-                  ["Scene plan", details.modelOutput.scene ? JSON.stringify(details.modelOutput.scene, null, 2) : null],
-                  ["Requested wardrobe", details.wardrobeSelection?.requestedId ?? null],
-                  ["Selected wardrobe", details.wardrobeSelection?.selectedId ?? null],
-                  ["Wardrobe fallback", details.wardrobeSelection?.fallback ? "yes" : null],
-                ]}
-              />
-              <Block label="Raw response" text={details.rawResponse} />
-            </Section>
-          )}
+          {graph && shownView === "flow" && <SlpDeepDetailsFlow graph={graph} />}
+          {graph && shownView === "canvas" && <SlpDeepDetailsCanvas graph={graph} />}
 
-          <Section title="The picture">
-            <Rows
-              rows={[
-                ["Image brief", details?.imageBrief ?? null],
-                ["Typed visual brief", details?.visualBrief ? JSON.stringify(details.visualBrief, null, 2) : null],
-                ["Final provider prompt", details?.providerPrompt ?? null],
-                ["Stored image prompt", data.post.imagePrompt],
-                ["Provider", str(data.post.metadata.imageProvider)],
-                ["Image model", str(data.post.metadata.imageModel)],
-                ["Style profile", str(data.post.metadata.imageStyleProfileId)],
-                [
-                  "Generation failed",
-                  data.post.metadata.imageGenerationFailed === true
-                    ? (str(data.post.metadata.imageGenerationError) ?? "yes")
-                    : null,
-                ],
-                ["Attachments", data.post.images.length > 1 ? String(data.post.images.length) : null],
-              ]}
-            />
-            {data.post.images.slice(1).map((image) => (
-              <Block
-                key={image.position}
-                label={`Picture ${image.position + 1} prompt`}
-                text={image.imagePrompt ?? "—"}
-              />
-            ))}
-          </Section>
+          {shownView === "data" && (
+            <>
+              <Section title="Why this post" step={1} status={data.plan || details ? "done" : "missing"}>
+                <Rows
+                  rows={[
+                    ["Plan", data.plan ? `${data.plan.workflow} · ${data.plan.id}` : null],
+                    ["Planned", data.plan ? formatTime(data.plan.plannedAt) : null],
+                    ["Due", data.plan?.dueAt ? formatTime(data.plan.dueAt) : null],
+                    ["Completed", data.plan?.completedAt ? formatTime(data.plan.completedAt) : null],
+                    ["Scheduled slot", data.plan?.slotId ?? null],
+                    ["Answers request", data.plan?.sourceEventId ?? null],
+                    ["Player direction", details?.direction ?? null],
+                    ["Campaign", details?.plan.campaignId ?? null],
+                    ["Shoot", details?.plan.shootId ?? str(data.post.metadata.shootId)],
+                    ["Reused picture from", details?.plan.reusedFromPostId ?? str(data.post.metadata.reusedFromPostId)],
+                    ["Subscribers asked for", details?.plan.demandTopic ?? null],
+                    [
+                      "Project",
+                      details?.plan.project
+                        ? `${details.plan.project.title}${details.plan.project.chapter ? ` — ${details.plan.project.chapter}` : ""}`
+                        : null,
+                    ],
+                    ["Post number", details ? String(details.sequence + 1) : null],
+                    ["Written", details ? formatTime(details.generatedAt) : null],
+                    ["Publishes", details?.publicationTime ? formatTime(details.publicationTime) : null],
+                  ]}
+                />
+              </Section>
 
-          <Section title="Since it went up">
-            <Rows
-              rows={[
-                ["Likes", String(data.stats.likes)],
-                ["Replies", String(data.stats.replies)],
-                ["Unlocks", String(data.stats.unlocks)],
-                ["Last edited", data.post.updatedAt !== data.post.createdAt ? formatTime(data.post.updatedAt) : null],
-              ]}
-            />
-            {data.links.length > 0 && (
-              <ul className="mt-3 space-y-1 text-xs text-[var(--muted-foreground)]">
-                {data.links.map((link, index) => (
-                  <li key={index} className="break-all">
-                    {link.fromType} {link.fromId} —{link.relation}→ {link.toType} {link.toId}
-                  </li>
+              {details && (
+                <Section title="The angle" step={2} status={details.angle ? "done" : "skipped"}>
+                  <Rows
+                    rows={[
+                      ["Place", details.angle?.place ?? null],
+                      ["Moment", details.angle?.moment ?? null],
+                      ["Company", details.angle?.company ?? null],
+                      ["Framing", details.camera ? null : (details.angle?.framing ?? null)],
+                      ["Camera", details.camera],
+                      ["Effort", details.effort],
+                    ]}
+                  />
+                </Section>
+              )}
+
+              {details && (
+                <Section title="Creator strategy" step={3} status={recorded}>
+                  <Rows
+                    rows={[
+                      ["Production style", details.strategy.style],
+                      ["Quiet slots", `${details.strategy.skipRate}%`],
+                      ["Lean on words", `${details.strategy.textOnlyRate} / 100`],
+                    ]}
+                  />
+                  <WeightBars weights={details.strategy.intentWeights} highlight={details.plan.intent} />
+                </Section>
+              )}
+
+              {details && (
+                <Section title="Writing model" step={4} status={details.attempts > 1 ? "retried" : "done"}>
+                  <Rows
+                    rows={[
+                      ["Provider", details.model.provider],
+                      ["Model", details.model.model],
+                      ["Temperature", details.model.temperature?.toString() ?? null],
+                      ["Top P", details.model.topP?.toString() ?? null],
+                      ["Max tokens", details.model.maxTokens?.toString() ?? null],
+                      ["Attempts", String(details.attempts)],
+                      [
+                        "Model wrote the image prompt",
+                        details.askedModelForImagePrompt ? "yes" : "no, briefed from the situation",
+                      ],
+                    ]}
+                  />
+                </Section>
+              )}
+
+              {details && (
+                <Section
+                  title="Writing prompt"
+                  step={5}
+                  status="done"
+                  action={
+                    <CopyButton
+                      value={details.messages.map((m) => `# ${m.role}\n${m.content}`).join("\n\n")}
+                      label="Copy prompt"
+                    />
+                  }
+                >
+                  <div className="space-y-3">
+                    {details.messages.map((message, index) => (
+                      <PromptMessage key={index} role={message.role} content={message.content} />
+                    ))}
+                  </div>
+                </Section>
+              )}
+
+              {details && (
+                <Section title="The draft" step={6} status="done">
+                  <Rows
+                    rows={[
+                      ["Title", details.modelOutput.title],
+                      ["Content", details.modelOutput.content],
+                      ["Image prompt", details.modelOutput.imagePrompt],
+                      [
+                        "Scene plan",
+                        details.modelOutput.scene ? JSON.stringify(details.modelOutput.scene, null, 2) : null,
+                      ],
+                      ["Requested wardrobe", details.wardrobeSelection?.requestedId ?? null],
+                      ["Selected wardrobe", details.wardrobeSelection?.selectedId ?? null],
+                      ["Wardrobe fallback", details.wardrobeSelection?.fallback ? "yes" : null],
+                    ]}
+                  />
+                  <Block label="Raw response" text={details.rawResponse} collapsed />
+                </Section>
+              )}
+
+              <Section
+                title="Image brief"
+                step={details ? 7 : undefined}
+                status={details?.imageBrief ? "done" : "missing"}
+              >
+                <Rows
+                  rows={[
+                    ["Image brief", details?.imageBrief ?? null],
+                    ["Typed visual brief", details?.visualBrief ? JSON.stringify(details.visualBrief, null, 2) : null],
+                  ]}
+                />
+              </Section>
+
+              {imageRuns.length > 0 ? (
+                <SlpDeepDetailsImageRuns runs={imageRuns} firstStep={8} imageUrl={data.post.imageUrl} />
+              ) : (
+                details && (
+                  <p className="rounded-lg bg-[var(--slurp-surface-raised)] p-3 text-xs leading-5 text-[var(--muted-foreground)] ring-1 ring-inset ring-[var(--slurp-outline)]">
+                    {t("ui.slurp.deepDetails.imageRunsNotRecorded", {
+                      defaultValue:
+                        "Image settings, the prompt rewrite, and provider attempts were not recorded for this post. Posts made after this update record every image run.",
+                    })}
+                  </p>
+                )
+              )}
+
+              <Section title="The picture now">
+                <Rows
+                  rows={[
+                    ["Final provider prompt", imageRuns.length > 0 ? null : (details?.providerPrompt ?? null)],
+                    ["Stored image prompt", data.post.imagePrompt],
+                    ["Provider", str(data.post.metadata.imageProvider)],
+                    ["Image model", str(data.post.metadata.imageModel)],
+                    ["Style profile", str(data.post.metadata.imageStyleProfileId)],
+                    [
+                      "Generation failed",
+                      data.post.metadata.imageGenerationFailed === true
+                        ? (str(data.post.metadata.imageGenerationError) ?? "yes")
+                        : null,
+                    ],
+                    ["Attachments", data.post.images.length > 1 ? String(data.post.images.length) : null],
+                  ]}
+                />
+                {data.post.images.slice(1).map((image) => (
+                  <Block
+                    key={image.position}
+                    label={`Picture ${image.position + 1} prompt`}
+                    text={image.imagePrompt ?? "—"}
+                  />
                 ))}
-              </ul>
-            )}
-          </Section>
+              </Section>
 
-          <Section title="Tags and metadata">
-            <Rows
-              rows={Object.entries(data.post.metadata).map(([key, value]) => [
-                key,
-                typeof value === "string" ? value : JSON.stringify(value),
-              ])}
-              mono
-            />
-          </Section>
+              <Section title="Since it went up">
+                <Rows
+                  rows={[
+                    ["Likes", String(data.stats.likes)],
+                    ["Replies", String(data.stats.replies)],
+                    ["Unlocks", String(data.stats.unlocks)],
+                    [
+                      "Last edited",
+                      data.post.updatedAt !== data.post.createdAt ? formatTime(data.post.updatedAt) : null,
+                    ],
+                  ]}
+                />
+                {data.links.length > 0 && (
+                  <ul className="mt-3 space-y-1 text-xs text-[var(--muted-foreground)]">
+                    {data.links.map((link, index) => (
+                      <li key={index} className="break-all">
+                        {link.fromType} {link.fromId} —{link.relation}→ {link.toType} {link.toId}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </Section>
+
+              <Section title="Tags and metadata">
+                <Rows
+                  rows={Object.entries(data.post.metadata).map(([key, value]) => [
+                    key,
+                    typeof value === "string" ? value : JSON.stringify(value),
+                  ])}
+                  mono
+                />
+              </Section>
+            </>
+          )}
         </div>
       )}
     </Modal>
-  );
-}
-
-function str(value: unknown): string | null {
-  return typeof value === "string" && value ? value : null;
-}
-
-function formatTime(value: string): string {
-  const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? value : date.toLocaleString();
-}
-
-function Chip({ label, value }: { label: string; value: string | null }) {
-  if (!value) return null;
-  return (
-    <span className="inline-flex min-h-7 items-center gap-1.5 rounded-full bg-[var(--slurp-surface-raised)] px-2.5 text-xs ring-1 ring-inset ring-[var(--slurp-outline)]">
-      <span className="text-[var(--muted-foreground)]">{label}</span>
-      <span className="font-bold text-[var(--noodle-accent)]">{value}</span>
-    </span>
-  );
-}
-
-function Section({ title, action, children }: { title: string; action?: ReactNode; children: ReactNode }) {
-  return (
-    <section className="rounded-xl bg-[var(--slurp-surface-raised)] p-4 ring-1 ring-inset ring-[var(--slurp-outline)]">
-      <div className="mb-3 flex items-center justify-between gap-3">
-        <h4 className="text-xs font-black uppercase tracking-[0.12em] text-[var(--noodle-accent)]">{title}</h4>
-        {action}
-      </div>
-      {children}
-    </section>
-  );
-}
-
-function Rows({ rows, mono = false }: { rows: [string, string | null][]; mono?: boolean }) {
-  const shown = rows.filter((row): row is [string, string] => Boolean(row[1]));
-  if (shown.length === 0) return <p className="text-xs text-[var(--muted-foreground)]">—</p>;
-  return (
-    <dl className="grid gap-x-4 gap-y-2 sm:grid-cols-[minmax(8rem,12rem)_minmax(0,1fr)]">
-      {shown.map(([label, value]) => (
-        <div key={label} className="contents">
-          <dt className="text-xs font-semibold text-[var(--muted-foreground)]">{label}</dt>
-          <dd className={`min-w-0 whitespace-pre-wrap break-words text-xs leading-5 ${mono ? "font-mono" : ""}`}>
-            {value}
-          </dd>
-        </div>
-      ))}
-    </dl>
-  );
-}
-
-function Block({ label, text }: { label: string; text: string }) {
-  return (
-    <div className="mt-3">
-      <p className="mb-1 text-xs font-semibold text-[var(--muted-foreground)]">{label}</p>
-      <pre className="max-h-80 overflow-auto whitespace-pre-wrap break-words rounded-lg bg-[var(--slurp-canvas)] p-3 font-mono text-xs leading-5 ring-1 ring-inset ring-[var(--slurp-outline)]">
-        {text}
-      </pre>
-    </div>
   );
 }
 
@@ -364,24 +400,5 @@ function WeightBars({ weights, highlight }: { weights: Record<string, number>; h
         </div>
       ))}
     </div>
-  );
-}
-
-function CopyButton({ value, label }: { value: string; label: string }) {
-  const [copied, setCopied] = useState(false);
-  return (
-    <button
-      type="button"
-      onClick={() => {
-        void navigator.clipboard
-          .writeText(value)
-          .then(() => setCopied(true))
-          .catch(() => setCopied(false));
-      }}
-      className="inline-flex min-h-9 shrink-0 items-center gap-1.5 rounded-lg px-3 text-xs font-bold text-[var(--noodle-accent)] ring-1 ring-inset ring-[var(--slurp-outline)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)]"
-    >
-      {copied ? <Check size={14} aria-hidden="true" /> : <Copy size={14} aria-hidden="true" />}
-      {copied ? "Copied" : label}
-    </button>
   );
 }

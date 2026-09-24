@@ -315,6 +315,7 @@ export function SlurpMomentViewer({
                   : undefined
               }
               onOpenCreator={onOpenProfile ? openProfile : undefined}
+              deepDetailsPostId={moment.post.id}
             />
           </div>
           {onPrevious && (

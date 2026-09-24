@@ -453,7 +453,8 @@ export async function runCreatorFanActivity(input: {
         const created = await applyAcceptedActivities(input.db, plan, storedRun, settings, at);
         return { status: "generated", created, runId: run.id };
       } catch (error) {
-        plan = finishSlpFanActivityRun(plan, run.id, "abandoned", at);
+        const message = error instanceof Error ? error.message : String(error);
+        plan = finishSlpFanActivityRun(plan, run.id, "abandoned", at, message.slice(0, 500));
         await writePlan(input.db, plan);
         throw error;
       }

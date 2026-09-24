@@ -8,7 +8,12 @@ import { slurpImageBrief, slurpImageNegativePrompt } from "../../modules/feed/sl
 import { slurpCameraSourcePhoto, type SlurpCameraSource } from "../../modules/feed/slp-camera-source.js";
 import { slurpVisualBriefFromSituation } from "../../modules/feed/slp-visual-brief.js";
 import { slurpPostSexualLevel } from "../../modules/feed/slp-post-guidance.js";
-import { slurpEffortPhoto, type SlurpPostEffort } from "../../modules/creators/slp-production-profile.js";
+import {
+  slurpEffortPhoto,
+  slurpProductionPhoto,
+  type SlurpPostEffort,
+  type SlurpProductionStyle,
+} from "../../modules/creators/slp-production-profile.js";
 import { slurpArcImageLine } from "../../modules/projects/slp-arc-progress.js";
 import { protectCreatorGeneratedIdentity } from "../../base/identity/slp-identity-protection.js";
 import type { SlpWardrobeLook, SlpWardrobeScene } from "../../../../../shared/src/slp/slp-wardrobe.js";
@@ -26,6 +31,7 @@ export function slurpPostPictureBriefs(input: {
   variation: SlurpPostVariation | null | undefined;
   camera: SlurpCameraSource | null | undefined;
   effort: SlurpPostEffort;
+  productionStyle?: SlurpProductionStyle;
   shoot?: { place: string; company: string; brief?: string } | null;
   axes: Pick<SlurpPostAxes, "intent"> | null | undefined;
   story?: boolean;
@@ -58,6 +64,7 @@ export function slurpPostPictureBriefs(input: {
   // Produce mode briefs the picture from the situation, never from the caption the model just
   // wrote. Identity protection still applies: the brief carries the Creator's own place and
   // company, so a Secret Creator's details must be redacted here exactly as they are in the text.
+  const effortPhoto = `${slurpProductionPhoto(input.productionStyle ?? "homemade")}; ${slurpEffortPhoto(input.effort)}`;
   const imageDraft =
     // A post direction can ask the model for its own imagePrompt; a returned one is honoured.
     normalizeSlpImagePrompt(input.modelImagePrompt) ??
@@ -67,7 +74,7 @@ export function slurpPostPictureBriefs(input: {
           variation,
           story: input.story,
           shoot: input.shoot,
-          effortPhoto: slurpEffortPhoto(input.effort),
+          effortPhoto,
           sexualLevel,
           stageFacts: input.stageFacts,
           scene: input.scene,
@@ -88,7 +95,7 @@ export function slurpPostPictureBriefs(input: {
             variation,
             axes: input.axes,
             cameraInstruction: slurpCameraSourcePhoto(camera),
-            effortInstruction: slurpEffortPhoto(input.effort),
+            effortInstruction: effortPhoto,
             shoot: input.shoot,
             story: input.story,
             access: input.access,
