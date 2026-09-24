@@ -68,7 +68,7 @@ import {
   noodleActivityAt,
   noodleReplyBumpByPostId,
 } from "@marinara-engine/shared";
-import { ApiError } from "../../lib/api-client";
+import { api, ApiError } from "../../lib/api-client";
 import { showConfirmDialog } from "../../lib/app-dialogs";
 import { DEFAULT_NOODLE_SETTINGS, normalizeAvatarCrop, type AvatarCrop } from "@marinara-engine/shared";
 import { cn } from "../../lib/utils";
@@ -610,9 +610,11 @@ type NoodleHomeNavigation = Extract<NoodleNavigationState, { mode: "public" | "s
 interface NoodleHomeProps {
   navigation: NoodleHomeNavigation;
   onNavigate: (destination: NoodleNavigationState) => void;
+  focusPostId?: string | null;
+  onFocusPostHandled?: () => void;
 }
 
-export function NoodleHome({ navigation, onNavigate }: NoodleHomeProps) {
+export function NoodleHome({ navigation, onNavigate, focusPostId, onFocusPostHandled }: NoodleHomeProps) {
   const { t: localizeUi, i18n } = useUiTranslation();
   const selectedPersonaId = useUIStore((state) => state.noodleSelectedPersonaId);
   const setSelectedPersonaId = useUIStore((state) => state.setNoodleSelectedPersonaId);
@@ -754,6 +756,46 @@ export function NoodleHome({ navigation, onNavigate }: NoodleHomeProps) {
   const [activeReplyComposerTool, setActiveReplyComposerTool] = useState<ReplyComposerTool | null>(null);
   const [imageLightbox, setImageLightbox] = useState<ChatImage | null>(null);
   const [notificationFocusTarget, setNotificationFocusTarget] = useState<NoodleNotificationFocusTarget | null>(null);
+  const [focusedPostResult, setFocusedPostResult] = useState<{
+    post: NoodlePost;
+    interactions: NoodleInteraction[];
+  } | null>(null);
+  const requestedPostIdRef = useRef<string | null>(null);
+  const onFocusPostHandledRef = useRef(onFocusPostHandled);
+  onFocusPostHandledRef.current = onFocusPostHandled;
+  useEffect(() => {
+    if (!focusPostId) {
+      requestedPostIdRef.current = null;
+      return;
+    }
+    if (requestedPostIdRef.current === focusPostId) return;
+    requestedPostIdRef.current = focusPostId;
+    let cancelled = false;
+    void api
+      .get<{ post: NoodlePost; interactions: NoodleInteraction[] }>(`/noodle/posts/${encodeURIComponent(focusPostId)}`)
+      .then((result) => {
+        if (cancelled) return;
+        setFocusedPostResult(result);
+        setPostSearch("");
+        setTimelineTab("main");
+        onNavigate({ mode: "public", view: "home" });
+        setNotificationFocusTarget({ postId: result.post.id, interactionId: null });
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setPostSearch("");
+          setTimelineTab("main");
+          onNavigate({ mode: "public", view: "home" });
+          toast.error(localizeUi("ui.noodle.noodlehome.postUnavailable"));
+        }
+      })
+      .finally(() => {
+        if (!cancelled) onFocusPostHandledRef.current?.();
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [focusPostId, localizeUi, onNavigate]);
   const [highlightedInteractionId, setHighlightedInteractionId] = useState<string | null>(null);
   const [notificationReadOverrides, setNotificationReadOverrides] = useState<Record<string, string>>({});
   const [editingRefreshTime, setEditingRefreshTime] = useState<string | null>(null);
@@ -878,20 +920,24 @@ export function NoodleHome({ navigation, onNavigate }: NoodleHomeProps) {
     () => sortedPersonaAccounts.slice(0, personaAccountLimit),
     [personaAccountLimit, sortedPersonaAccounts],
   );
-  const posts = useMemo(
-    () => (notificationViewActive ? (notificationDataQuery.data?.posts ?? feedPosts) : feedPosts),
-    [feedPosts, notificationDataQuery.data?.posts, notificationViewActive],
-  );
-  const interactions = useMemo(
-    () => [
+  const posts = useMemo(() => {
+    const available = notificationViewActive ? (notificationDataQuery.data?.posts ?? feedPosts) : feedPosts;
+    return focusedPostResult && !available.some((post) => post.id === focusedPostResult.post.id)
+      ? [focusedPostResult.post, ...available]
+      : available;
+  }, [feedPosts, focusedPostResult, notificationDataQuery.data?.posts, notificationViewActive]);
+  const interactions = useMemo(() => {
+    const unique = new Map<string, NoodleInteraction>();
+    for (const item of [
       ...(data?.interactions ?? []),
-      ...feedInteractions.filter((item) => !(data?.interactions ?? []).some((current) => current.id === item.id)),
-      ...(notificationDataQuery.data?.interactions ?? []).filter(
-        (item) => !(data?.interactions ?? []).some((current) => current.id === item.id),
-      ),
-    ],
-    [data?.interactions, feedInteractions, notificationDataQuery.data?.interactions],
-  );
+      ...feedInteractions,
+      ...(focusedPostResult?.interactions ?? []),
+      ...(notificationDataQuery.data?.interactions ?? []),
+    ]) {
+      if (!unique.has(item.id)) unique.set(item.id, item);
+    }
+    return Array.from(unique.values());
+  }, [data?.interactions, feedInteractions, focusedPostResult, notificationDataQuery.data?.interactions]);
   const interactionsByPostId = useMemo(() => {
     const grouped = new Map<string, NoodleInteraction[]>();
     for (const interaction of interactions) {
@@ -2104,6 +2150,7 @@ export function NoodleHome({ navigation, onNavigate }: NoodleHomeProps) {
 
   useEffect(() => {
     if (activeNoodleView !== "home" || !notificationFocusTarget) return;
+    if (isLoading) return;
     const frame = window.requestAnimationFrame(() => {
       const timeline = timelineScrollRef.current;
       if (!timeline) return;
@@ -2129,7 +2176,7 @@ export function NoodleHome({ navigation, onNavigate }: NoodleHomeProps) {
       setNotificationFocusTarget(null);
     });
     return () => window.cancelAnimationFrame(frame);
-  }, [activeNoodleView, notificationFocusTarget, prefersReducedMotion]);
+  }, [activeNoodleView, isLoading, notificationFocusTarget, prefersReducedMotion]);
 
   useEffect(() => {
     if (!highlightedInteractionId) return;
@@ -2719,6 +2766,7 @@ export function NoodleHome({ navigation, onNavigate }: NoodleHomeProps) {
             clearReplyComposer();
           }
           if (editingPostId === postId) cancelEditingPost();
+          setFocusedPostResult((current) => (current?.post.id === postId ? null : current));
           setConfirmAction(null);
         },
         onError: (error) =>
@@ -2763,6 +2811,7 @@ export function NoodleHome({ navigation, onNavigate }: NoodleHomeProps) {
     if (confirmAction.kind === "cleanup-unused") {
       cleanupUnusedData.mutate(undefined, {
         onSuccess: (counts) => {
+          setFocusedPostResult(null);
           setConfirmAction(null);
           toast.success(
             localizeUi("ui.noodle.noodlehome.cleanupUnusedNoodleDataDone", {
@@ -2800,6 +2849,7 @@ export function NoodleHome({ navigation, onNavigate }: NoodleHomeProps) {
     }
     resetNoodleTimeline.mutate(undefined, {
       onSuccess: () => {
+        setFocusedPostResult(null);
         clearReplyComposer();
         setPostMenuId(null);
         cancelEditingPost();
