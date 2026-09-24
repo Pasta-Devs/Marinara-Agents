@@ -246,6 +246,41 @@ async function main() {
     existingNotes: [],
   });
   assert.equal(pairConflict.units.length, 0, "locale-ordered unresolved pairs must block matching targets");
+  const conflictingPairs = {
+    entries: [
+      { ...mara, subject: { key: "character:a" }, name: "A", canonicalSlug: "a" },
+      { ...mara, subject: { key: "character:b" }, name: "B", canonicalSlug: "b" },
+      { ...mara, subject: { key: "character:c" }, name: "C", canonicalSlug: "c" },
+      { ...mara, subject: { key: "character:d" }, name: "D", canonicalSlug: "d" },
+    ],
+    notes: [{ ...conflicted, id: "rel_a_b", type: "relationship" as const, title: "C D" }] as any[],
+  };
+  const conflictingIssue = analyzeTrustedLtmNoteSubjects(conflictingPairs).unresolved[0];
+  assert.equal(conflictingIssue?.basis, "conflicting_identifiers");
+  assert.deepEqual(conflictingIssue.candidateSubjectPairs, [
+    ["character:c", "character:d"],
+    ["character:a", "character:b"],
+  ]);
+  const conflictingPairResolution = prepareLtmSubjectIdentityContext({
+    units: [],
+    catalog: conflictingPairs,
+    scope,
+  }).resolve({
+    units: [
+      unit({
+        bucket: "relationship_state",
+        subjectId: "a_b",
+        subjectKeys: ["character:a", "character:b"],
+        text: "A and B changed.",
+      }),
+    ],
+    existingNotes: [],
+  });
+  assert.equal(
+    conflictingPairResolution.units.length,
+    0,
+    "both matched relationship identities must remain unresolved",
+  );
   const linked = prepareLtmSubjectIdentityContext({
     units: [],
     catalog: {

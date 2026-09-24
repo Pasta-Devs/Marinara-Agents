@@ -1462,6 +1462,63 @@ async function main() {
         choiceMutation.id,
       ]);
 
+      const wideChoice = await storage.createNote({
+        ...noteInput,
+        id: "char_link_choice_wide",
+        type: "character",
+        scope: { chatId: "chat-a", chatIds: ["chat-a", "chat-b"] },
+        links: [],
+      });
+      const wideMutation = {
+        ...choiceMutation,
+        id: randomUUID(),
+        link: { ...choiceMutation.link, target: wideChoice.id },
+      };
+      const wideDraft = await draftStore.createDraft({
+        source: { sourceNoteId: canonicalSourceId, chatId: "chat-a" },
+        scope: legacySource.scope,
+        modes: legacySource.modes,
+        response: { summary: "Select an overlapping target", mutations: [wideMutation] },
+        diagnostics: [
+          {
+            severity: "warning",
+            code: "ambiguous_subject_link_target",
+            noteId: choiceOwner.id,
+            message: "Choose a target",
+            details: {
+              linkTarget: wideChoice.id,
+              linkRelation: "affects_character",
+              candidateTargetNoteIds: [wideChoice.id, choiceTarget.id],
+            },
+          },
+        ],
+      });
+      const wideOptions = {
+        root,
+        mutationIds: [wideMutation.id],
+        linkChoices: [
+          {
+            mutationId: wideMutation.id,
+            linkTarget: wideChoice.id,
+            linkRelation: "affects_character" as const,
+            selectedTarget: wideChoice.id,
+          },
+        ],
+        rebuildIndexes: false,
+      };
+      assert.deepEqual((await preflightLongTermMemoryDraft(wideDraft.id, wideOptions)).readyMutationIds, [
+        wideMutation.id,
+      ]);
+      await storage.updateNote(wideChoice.id, { scope: { chatId: "chat-z", chatIds: ["chat-z"] } });
+      await assert.rejects(
+        applyLongTermMemoryDraft(wideDraft.id, wideOptions),
+        (error: unknown) => error instanceof LtmDraftApplyError && error.code === "ltm_draft_ambiguous_link_scope",
+      );
+      await storage.updateNote(wideChoice.id, { scope: { chatId: "chat-a", chatIds: ["chat-a", "chat-b"] } });
+      assert.deepEqual((await applyLongTermMemoryDraft(wideDraft.id, wideOptions)).appliedMutationIds, [
+        wideMutation.id,
+      ]);
+
       const siblingId = "char_sibling_choice";
       const siblingCreate = {
         ...choiceMutation,
@@ -1524,6 +1581,12 @@ async function main() {
         id: randomUUID(),
         link: { ...choiceMutation.link, target: pendingCreate.note.id },
       };
+      const sameNoteLink = {
+        ...choiceMutation,
+        id: randomUUID(),
+        noteId: pendingCreate.note.id,
+        link: { ...choiceMutation.link, target: siblingId },
+      };
       const independentCreate = {
         ...siblingCreate,
         id: randomUUID(),
@@ -1533,7 +1596,10 @@ async function main() {
         source: { sourceNoteId: canonicalSourceId, chatId: "chat-a" },
         scope: legacySource.scope,
         modes: legacySource.modes,
-        response: { summary: "Auto-apply safe work", mutations: [pendingCreate, dependentLink, independentCreate] },
+        response: {
+          summary: "Auto-apply safe work",
+          mutations: [pendingCreate, dependentLink, sameNoteLink, independentCreate],
+        },
         diagnostics: [
           {
             severity: "warning",
@@ -1559,12 +1625,12 @@ async function main() {
         rebuildIndexes: false,
       });
       assert.deepEqual(autoChoiceResult.appliedMutationIds, [independentCreate.id]);
-      assert.deepEqual(autoChoiceResult.skippedMutationIds, [pendingCreate.id, dependentLink.id]);
+      assert.deepEqual(autoChoiceResult.skippedMutationIds, [pendingCreate.id, dependentLink.id, sameNoteLink.id]);
       assert.equal(autoChoiceResult.draft.status, "pending");
       assert.equal(autoChoiceResult.draft.mutations[0]?.summary, "Reviewed ambiguous target");
       assert.deepEqual(
         autoChoiceResult.draft.mutations.map((mutation) => mutation.id),
-        [pendingCreate.id, dependentLink.id],
+        [pendingCreate.id, dependentLink.id, sameNoteLink.id],
       );
       assert.equal(await storage.getNote(pendingCreate.note.id), null);
 

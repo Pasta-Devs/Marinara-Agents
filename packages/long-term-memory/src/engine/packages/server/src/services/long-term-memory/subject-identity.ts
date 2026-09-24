@@ -791,9 +791,10 @@ export function analyzeTrustedLtmNoteSubjects(catalog: TrustedLtmSubjectCatalog)
         ...ambiguous.flatMap((attempt) => attempt.keys.flatMap((key) => key.split("\u0000"))),
         ...[...matchedBySubjects.values()].flatMap((attempt) => attempt.entries.map(subjectEntryKey)),
       ]),
-      candidateSubjectPairs: uniqueSubjectPairs(
-        ambiguous.flatMap((attempt) => attempt.keys.map((key) => key.split("\u0000"))),
-      ),
+      candidateSubjectPairs: uniqueSubjectPairs([
+        ...ambiguous.flatMap((attempt) => attempt.keys.map((key) => key.split("\u0000"))),
+        ...[...matchedBySubjects.values()].map((attempt) => attempt.entries.map(subjectEntryKey)),
+      ]),
     });
   }
 

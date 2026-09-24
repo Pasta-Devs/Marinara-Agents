@@ -8,6 +8,7 @@ import {
   type LtmExtractionDraft,
   type LtmNote,
 } from "../../../../shared/src/features/agents/long-term-memory/schema.js";
+import { ltmScopesOverlap } from "../../../../shared/src/features/agents/long-term-memory/scope.js";
 import { recordLtmDebugEvent, withLtmDebugOperation } from "./debug-log.js";
 import {
   groupLtmDraftMutationsByNote,
@@ -163,7 +164,7 @@ function assertCurrentAmbiguousLinkTargets(
           409,
           "ltm_draft_ambiguous_link_stale",
         );
-      if (!canUpdateLtmScopedTarget(target.scope, draft.scope))
+      if (!ltmScopesOverlap(target.scope, draft.scope, { includeGlobal: false }))
         throw new LtmDraftApplyError(
           `The selected link target ${target.id} is outside the draft scope. Choose another target.`,
           409,
@@ -755,13 +756,20 @@ async function applyInner(
         choice,
       ]),
     );
+    const excludedAmbiguousCreateIds = new Set<string>();
     selected = selected.filter((mutation) => {
       const original = originalDraftMutations.find((item) => item.id === mutation.id)!;
       const error = ambiguousLtmDraftLinkChoiceError(draft, original, mutation, linkChoices);
       if (error && !options.autoApplyLowRiskOnly) throw error;
+      if (error && mutation.kind === "create_note") excludedAmbiguousCreateIds.add(mutation.note.id);
       return !error;
     });
-    if (options.autoApplyLowRiskOnly) selected = await filterAutoApplyDependencies(storage, selected);
+    if (options.autoApplyLowRiskOnly) {
+      selected = selected.filter(
+        (mutation) => mutation.kind === "create_note" || !excludedAmbiguousCreateIds.has(mutation.noteId),
+      );
+      selected = await filterAutoApplyDependencies(storage, selected);
+    }
     if (options.editedMutations?.length) {
       const includedIds = new Set(selected.map((mutation) => mutation.id));
       for (const edit of options.editedMutations) {
