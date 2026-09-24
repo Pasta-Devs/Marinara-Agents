@@ -105,12 +105,18 @@ export function ambiguousLtmDraftLinkChoiceError(
     const chosen = links(edited).filter(
       (link) => link.relation === details.linkRelation && link.target === choice?.selectedTarget,
     );
+    const candidates = links(edited).filter(
+      (link) =>
+        link.relation === details.linkRelation &&
+        (link.target === details.linkTarget || details.candidateTargetNoteIds!.includes(link.target)),
+    );
     if (
       !choice ||
       choice.linkTarget !== details.linkTarget ||
       choice.linkRelation !== details.linkRelation ||
       !details.candidateTargetNoteIds.includes(choice.selectedTarget) ||
-      chosen.length !== 1
+      chosen.length !== 1 ||
+      (edited.kind === "create_note" && candidates.length !== 1)
     )
       return new LtmDraftApplyError(
         `Choose a scoped target for ${details.linkTarget} from ${details.candidateTargetNoteIds.join(", ")} before accepting mutation ${original.id}.`,

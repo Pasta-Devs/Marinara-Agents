@@ -1609,7 +1609,7 @@ async function main() {
             details: {
               linkTarget: choiceTarget.id,
               linkRelation: "affects_character",
-              candidateTargetNoteIds: [choiceTarget.id, siblingId],
+              candidateTargetNoteIds: [choiceTarget.id, siblingId, wideChoice.id],
             },
           },
         ],
@@ -1633,6 +1633,55 @@ async function main() {
         [pendingCreate.id, dependentLink.id, sameNoteLink.id],
       );
       assert.equal(await storage.getNote(pendingCreate.note.id), null);
+      const pendingChoice = {
+        mutationId: pendingCreate.id,
+        linkTarget: choiceTarget.id,
+        linkRelation: "affects_character" as const,
+        selectedTarget: siblingId,
+      };
+      for (const extraTarget of [choiceTarget.id, wideChoice.id]) {
+        await assert.rejects(
+          applyLongTermMemoryDraft(autoChoiceDraft.id, {
+            root,
+            mutationIds: [pendingCreate.id],
+            editedMutations: [
+              {
+                ...pendingCreate,
+                note: {
+                  ...pendingCreate.note,
+                  links: [
+                    { target: siblingId, relation: "affects_character" },
+                    { target: extraTarget, relation: "affects_character" },
+                  ],
+                },
+              },
+            ],
+            linkChoices: [pendingChoice],
+            rebuildIndexes: false,
+          }),
+          (error: unknown) => error instanceof LtmDraftApplyError && error.code === "ltm_draft_ambiguous_link",
+        );
+      }
+      assert.equal((await draftStore.getDraft(autoChoiceDraft.id))?.status, "pending");
+      assert.equal(await storage.getNote(pendingCreate.note.id), null);
+      const unrelatedLinkPreflight = await preflightLongTermMemoryDraft(autoChoiceDraft.id, {
+        root,
+        mutationIds: [pendingCreate.id],
+        editedMutations: [
+          {
+            ...pendingCreate,
+            note: {
+              ...pendingCreate.note,
+              links: [
+                { target: siblingId, relation: "affects_character" },
+                { target: choiceTarget.id, relation: "involves" },
+              ],
+            },
+          },
+        ],
+        linkChoices: [pendingChoice],
+      });
+      assert.deepEqual(unrelatedLinkPreflight.readyMutationIds, [pendingCreate.id]);
 
       const ghostTarget = await storage.getNote("world_static_evidence");
       assert.equal(
