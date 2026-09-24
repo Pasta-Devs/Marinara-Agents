@@ -278,7 +278,7 @@ export function NoodleLatestPostsWidget({
           })}
         </div>
       </div>
-      {onOpenNoodle ? (
+      {!compact && onOpenNoodle ? (
         <footer className="shrink-0 border-t border-[color-mix(in_srgb,var(--widget-accent)_18%,var(--border))] px-3 py-2">
           <button
             type="button"
