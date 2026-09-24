@@ -1,4 +1,5 @@
 import type { DB } from "../../../db/connection.js";
+import type { ChatMessage } from "../../../services/llm/base-provider.js";
 import { logger } from "../../../lib/logger.js";
 import { resolveBaseUrl } from "../../../services/generation/connection-base-url.js";
 import { resolveIllustratorPromptRuntime } from "../../../services/generation/illustrator-prompt-runtime.js";
@@ -85,7 +86,7 @@ export async function rewriteSlpImagePrompt(input: {
       connections,
       resolveBaseUrl,
     });
-    const messages = [
+    const messages: ChatMessage[] = [
       {
         role: "system",
         content: composeSlurpPromptBlocks(

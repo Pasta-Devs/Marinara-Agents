@@ -202,7 +202,7 @@ function ImageRunSteps({
               ? "skipped"
               : "missing"
             : run.attempts.at(-1)?.ok
-              ? failedAttempts > 0
+              ? failedAttempts > 0 || run.attempts.some((attempt) => attempt.servedBy)
                 ? "retried"
                 : "done"
               : "failed"
@@ -229,6 +229,16 @@ function ImageRunSteps({
                   {attempt.ok ? "Succeeded" : "Failed"}
                 </span>
                 {attempt.error && <span className="basis-full break-words">{attempt.error}</span>}
+                {attempt.servedBy && (
+                  <span className="basis-full">
+                    Served by fallback: {[attempt.servedBy.model, attempt.servedBy.name].filter(Boolean).join(" · ")}
+                  </span>
+                )}
+                {attempt.effectivePrompt && (
+                  <span className="basis-full">
+                    <Block label="Prompt the provider received" text={attempt.effectivePrompt} collapsed />
+                  </span>
+                )}
               </li>
             ))}
           </ol>
