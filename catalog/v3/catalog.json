@@ -2707,11 +2707,11 @@
         },
         "builtAgainst": {
           "engineVersion": "2.4.6",
-          "engineCommit": "fc285c3d271cb1aae4ec86858c250eb36197f07a"
+          "engineCommit": "b5fc4f3254432745438388de1459eaba3e179423"
         },
         "id": "noodle",
         "name": "Noodle",
-        "version": "1.2.25",
+        "version": "1.2.26",
         "description": "Explore the Noodle public timeline as an optional local social world. Install it, restart Marinara Engine when prompted, then open Home → Noodle.",
         "localizations": {
           "de": {
@@ -2768,7 +2768,11 @@
               "id": "latest-posts",
               "label": "Latest Posts",
               "description": "The newest five posts on Noodle",
-              "size": "large"
+              "size": "large",
+              "icon": "sparkles",
+              "accent": "cyan",
+              "surface": "soft",
+              "header": "banner"
             }
           ]
         },
@@ -2785,8 +2789,8 @@
           },
           {
             "path": "client.js",
-            "sha256": "70621597c8e644b34e9fc49298d6c70a9fdc6a9d79780d2bb1c3b582e9de2fed",
-            "bytes": 2371996
+            "sha256": "6c014de298f7e91ecd246aec9e3b1cb881dc6fa17ebc8f86b0b36f445932e934",
+            "bytes": 2379364
           },
           {
             "path": "noodle-klusek.png",
@@ -2807,9 +2811,9 @@
       "category": "misc",
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/noodle.png",
       "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/noodle-1.2.25.zip",
-        "sha256": "0a64a3cccc78fa676b638fb0d784b1b15de6014aa3413df560396a7b2e52e7bc",
-        "bytes": 4829893
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/noodle-1.2.26.zip",
+        "sha256": "0339415231b5ca03dd54a1083f7d5af9a28ee24f13e8251138ecc83f502628f0",
+        "bytes": 4837370
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents/blob/main/packages/noodle/README.md"
     },

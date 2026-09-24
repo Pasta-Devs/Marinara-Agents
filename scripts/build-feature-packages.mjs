@@ -278,10 +278,10 @@ async function removeOwnedSourceSnapshots(excludedPaths) {
 const features = [
   {
     id: "noodle",
-    version: "1.2.25",
+    version: "1.2.26",
     minEngineVersion: "2.4.6",
     capabilityApi: { major: 1, minor: 35 },
-    builtAgainst: { engineVersion: "2.4.6", engineCommit: "fc285c3d271cb1aae4ec86858c250eb36197f07a" },
+    builtAgainst: { engineVersion: "2.4.6", engineCommit: "b5fc4f3254432745438388de1459eaba3e179423" },
     maxEngineExclusive: MAX_ENGINE_EXCLUSIVE,
     name: "Noodle",
     description: "Explore the Noodle public timeline as an optional local social world.",
@@ -333,7 +333,16 @@ const features = [
         iconPaths: ["noodle-klusek.png"],
       },
       homeWidgets: [
-        { id: "latest-posts", label: "Latest Posts", description: "The newest five posts on Noodle", size: "large" },
+        {
+          id: "latest-posts",
+          label: "Latest Posts",
+          description: "The newest five posts on Noodle",
+          size: "large",
+          icon: "sparkles",
+          accent: "cyan",
+          surface: "soft",
+          header: "banner",
+        },
       ],
     },
   },
