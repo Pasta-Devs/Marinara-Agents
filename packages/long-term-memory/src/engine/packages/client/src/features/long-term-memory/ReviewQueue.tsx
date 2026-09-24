@@ -23,6 +23,7 @@ import { selectLtmPluralForm, useLtmTranslation } from "./localization";
 import { LtmWorkspace, type LtmWorkspacePane } from "./LtmWorkspace";
 import {
   ambiguousLinkChoiceTarget,
+  ambiguousLinkUnresolvedChoiceValue,
   ambiguousLinkDetails,
   replaceAmbiguousLinkTarget,
   type AmbiguousLinkDiagnostic,
@@ -750,7 +751,7 @@ function AmbiguousLinkChoice({
   mutation: LtmDraftMutation;
   diagnostic: AmbiguousLinkDiagnostic;
   noteById: ReadonlyMap<string, LtmNote>;
-  onChange: (mutation: LtmDraftMutation) => void;
+  onChange: (mutation: LtmDraftMutation, hasChoice: boolean) => void;
 }) {
   const { t: localizeUi } = useLtmTranslation();
   const details = ambiguousLinkDetails(diagnostic);
@@ -775,9 +776,12 @@ function AmbiguousLinkChoice({
           aria-label={localizeUi("ui.longTermMemory.reviewqueue.ambiguousLinkChoiceLabel")}
           className={inputClass}
           value={selectedTarget}
-          onChange={(event) => onChange(replaceAmbiguousLinkTarget(mutation, details, event.target.value))}
+          onChange={(event) => {
+            const hasChoice = event.target.value !== ambiguousLinkUnresolvedChoiceValue(details);
+            onChange(replaceAmbiguousLinkTarget(mutation, details, event.target.value), hasChoice);
+          }}
         >
-          <option value={details.linkTarget}>
+          <option value={ambiguousLinkUnresolvedChoiceValue(details)}>
             {localizeUi("ui.longTermMemory.reviewqueue.ambiguousLinkChoiceUnresolved")}
           </option>
           {details.candidateTargetNoteIds.map((candidateId) => (
@@ -1685,10 +1689,10 @@ export default function ReviewQueue({
     });
   };
 
-  const updateMutation = (original: LtmDraftMutation, next: LtmDraftMutation) => {
+  const updateMutation = (original: LtmDraftMutation, next: LtmDraftMutation, forceEdit = false) => {
     setEditedById((current) => {
       const updated = new Map(current);
-      if (sameMutation(original, next)) updated.delete(original.id);
+      if (!forceEdit && sameMutation(original, next)) updated.delete(original.id);
       else updated.set(original.id, next);
       return updated;
     });
@@ -2561,7 +2565,7 @@ export default function ReviewQueue({
                 mutation={mutation}
                 diagnostic={diagnostic}
                 noteById={noteById}
-                onChange={(next) => updateMutation(mutation, next)}
+                onChange={(next, hasChoice) => updateMutation(row.mutation, next, hasChoice)}
               />
             ))}
             {preflight ? (

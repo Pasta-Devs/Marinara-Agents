@@ -11,7 +11,7 @@ const diagnostic = {
   details: {
     linkTarget: "char_mara",
     linkRelation: "affects_character",
-    candidateTargetNoteIds: ["char_mara", "char_mara_other"],
+    candidateTargetNoteIds: ["char_mara", "char_mara_other", "char_mara_third"],
   },
 };
 
@@ -29,10 +29,13 @@ const original = {
 
 const chosen = replaceAmbiguousLinkTarget(original, diagnostic.details, "char_mara_other");
 assert.equal((chosen as { link: { target: string } }).link.target, "char_mara_other");
+const secondChoice = replaceAmbiguousLinkTarget(chosen as never, diagnostic.details, "char_mara_third");
+assert.equal((secondChoice as { link: { target: string } }).link.target, "char_mara_third");
 
 // After selection the control must stay visible and reflect the chosen target.
 assert.equal(display(chosen as never, diagnostic), "char_mara_other");
-assert.equal(display(original, diagnostic), "char_mara");
+assert.notEqual(display(original, diagnostic), "char_mara");
+assert.equal(display(original, diagnostic)?.startsWith("\u0000unresolved:"), true);
 // A selection outside the candidate set cannot be represented; hide the control.
 assert.equal(
   display(

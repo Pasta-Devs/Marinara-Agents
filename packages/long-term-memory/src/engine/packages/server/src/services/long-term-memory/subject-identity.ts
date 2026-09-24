@@ -826,7 +826,11 @@ export function trustedLtmIdentityNotesForSource({
   if (detected.size === 0) return [];
 
   const analysis = analyzeTrustedLtmNoteSubjects(effectiveCatalog);
-  const unresolvedKeys = new Set(analysis.unresolved.flatMap((issue) => issue.candidateSubjectKeys));
+  const unresolvedKeys = new Set(
+    analysis.unresolved.flatMap((issue) =>
+      issue.candidateSubjectKeys.map((subjectKey) => `${issue.note.type}\0${subjectKey}`),
+    ),
+  );
   const selected = new Map<string, TrustedLtmNoteSubjectMatch[]>();
   for (const match of analysis.matches) {
     if (!match.subjects.every((subject) => detected.has(subject.key))) continue;
@@ -835,7 +839,9 @@ export function trustedLtmIdentityNotesForSource({
   }
   return [...selected.values()]
     .filter(
-      (matches) => matches.length === 1 && !matches[0]!.subjects.some((subject) => unresolvedKeys.has(subject.key)),
+      (matches) =>
+        matches.length === 1 &&
+        !matches[0]!.subjects.some((subject) => unresolvedKeys.has(`${matches[0]!.note.type}\0${subject.key}`)),
     )
     .map((matches) => matches[0]!.note)
     .sort((left, right) => left.id.localeCompare(right.id));
@@ -906,9 +912,10 @@ export function prepareLtmSubjectIdentityContext({
   const unresolvedBySubject = new Map<string, string[]>();
   for (const issue of analyzeTrustedLtmNoteSubjects(effectiveCatalog).unresolved) {
     for (const key of issue.candidateSubjectKeys) {
-      const ids = unresolvedBySubject.get(key) ?? [];
+      const compositeKey = `${issue.note.type}\0${key}`;
+      const ids = unresolvedBySubject.get(compositeKey) ?? [];
       ids.push(issue.note.id);
-      unresolvedBySubject.set(key, ids);
+      unresolvedBySubject.set(compositeKey, ids);
     }
   }
   const batchNames = preResolveBatchSubjectNames({
@@ -2072,8 +2079,11 @@ function identityTargetConflict(
 ): Extract<SubjectMatch, { status: "ambiguous" }> | null {
   const subjects = sortSubjects(entries.map((entry) => entry.subject));
   const type = bucket === "character_fact" ? "character" : "relationship";
+  const unresolvedIds = uniqueStrings(
+    entries.flatMap((entry) => unresolved.get(`${type}\0${entry.subject.key}`) ?? []),
+  );
   const ids = uniqueStrings([
-    ...entries.flatMap((entry) => unresolved.get(entry.subject.key) ?? []),
+    ...unresolvedIds,
     ...notes
       .filter(
         (note) =>
@@ -2083,7 +2093,7 @@ function identityTargetConflict(
       )
       .map((note) => note.id),
   ]);
-  if (ids.length < 2 && !entries.some((entry) => unresolved.has(entry.subject.key))) return null;
+  if (ids.length < 2 && unresolvedIds.length === 0) return null;
   return {
     status: "ambiguous",
     basis: "legacy_note_conflict",
