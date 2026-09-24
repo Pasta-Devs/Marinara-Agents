@@ -1,5 +1,9 @@
 # Long-Term Memory changelog
 
+## 1.3.18 — 2026-09-24
+
+- Surface conflicting legacy ID/title and duplicate subject notes during extraction instead of selecting one automatically; leave identity merges to the existing explicit preview and confirmation flow. Block ambiguous link application until the draft's link is explicitly edited to a scoped candidate.
+
 ## 1.3.17 — 2026-09-24
 
 - Record bounded diagnostics for invalid recovery candidate subject IDs when draft validation fails, without logging candidate memory text.

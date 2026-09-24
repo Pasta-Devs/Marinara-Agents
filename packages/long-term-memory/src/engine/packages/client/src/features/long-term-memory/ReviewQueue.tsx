@@ -21,6 +21,12 @@ import { Button, IconButton, InfoPopover, inputClass, StatusSurface } from "./sh
 import type { LongTermMemoryDestinationProps } from "./types";
 import { selectLtmPluralForm, useLtmTranslation } from "./localization";
 import { LtmWorkspace, type LtmWorkspacePane } from "./LtmWorkspace";
+import {
+  ambiguousLinkChoiceTarget,
+  ambiguousLinkDetails,
+  replaceAmbiguousLinkTarget,
+  type AmbiguousLinkDiagnostic,
+} from "./review-queue-ambiguous-link";
 
 type ReviewRow = {
   sourceNoteId: string;
@@ -732,6 +738,56 @@ function SelectionCheckbox({
       />
       <span className={compact ? "sr-only" : undefined}>{label}</span>
     </label>
+  );
+}
+
+function AmbiguousLinkChoice({
+  mutation,
+  diagnostic,
+  noteById,
+  onChange,
+}: {
+  mutation: LtmDraftMutation;
+  diagnostic: AmbiguousLinkDiagnostic;
+  noteById: ReadonlyMap<string, LtmNote>;
+  onChange: (mutation: LtmDraftMutation) => void;
+}) {
+  const { t: localizeUi } = useLtmTranslation();
+  const details = ambiguousLinkDetails(diagnostic);
+  if (!details) return null;
+  const selectedTarget = ambiguousLinkChoiceTarget(mutation, diagnostic);
+  if (selectedTarget === null) return null;
+  return (
+    <div
+      data-ltm-review-link-choice
+      className="mari-editor-panel mari-editor-panel--soft space-y-2 border-[var(--marinara-editor-warning)]/45 p-3 text-xs"
+    >
+      <p className="font-semibold">{localizeUi("ui.longTermMemory.reviewqueue.ambiguousLinkChoiceTitle")}</p>
+      <p className="text-[var(--muted-foreground)]">
+        {localizeUi("ui.longTermMemory.reviewqueue.ambiguousLinkChoiceDescription", {
+          target: details.linkTarget,
+        })}
+      </p>
+      <label className="block space-y-1 font-medium">
+        <span>{localizeUi("ui.longTermMemory.reviewqueue.ambiguousLinkChoiceLabel")}</span>
+        <select
+          data-ltm-review-link-choice-select
+          aria-label={localizeUi("ui.longTermMemory.reviewqueue.ambiguousLinkChoiceLabel")}
+          className={inputClass}
+          value={selectedTarget}
+          onChange={(event) => onChange(replaceAmbiguousLinkTarget(mutation, details, event.target.value))}
+        >
+          <option value={details.linkTarget}>
+            {localizeUi("ui.longTermMemory.reviewqueue.ambiguousLinkChoiceUnresolved")}
+          </option>
+          {details.candidateTargetNoteIds.map((candidateId) => (
+            <option key={candidateId} value={candidateId}>
+              {noteById.get(candidateId)?.title?.trim() || candidateId}
+            </option>
+          ))}
+        </select>
+      </label>
+    </div>
   );
 }
 
@@ -2499,6 +2555,15 @@ export default function ReviewQueue({
                 ))}
               </div>
             ) : null}
+            {row.diagnostics.map((diagnostic, index) => (
+              <AmbiguousLinkChoice
+                key={`${diagnostic.code}-choice-${index}`}
+                mutation={mutation}
+                diagnostic={diagnostic}
+                noteById={noteById}
+                onChange={(next) => updateMutation(mutation, next)}
+              />
+            ))}
             {preflight ? (
               <div
                 data-ltm-review-preflight

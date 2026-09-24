@@ -40,8 +40,12 @@ async function main() {
   const { normalizeStructuredSummaryEvidenceUnits } = await import(`${source}/structured-summary-normalizer.ts`);
   const { isLocalCharacterSubject, localCharacterScopeError, localCharacterSubjectForName, ltmScopeFamilyId } =
     await import(`${source}/chat-scope.ts`);
-  const { buildTrustedLtmSubjectCatalog, prepareLtmSubjectIdentityContext, trustedLtmIdentityNotesForSource } =
-    await import(`${source}/subject-identity.ts`);
+  const {
+    analyzeTrustedLtmNoteSubjects,
+    buildTrustedLtmSubjectCatalog,
+    prepareLtmSubjectIdentityContext,
+    trustedLtmIdentityNotesForSource,
+  } = await import(`${source}/subject-identity.ts`);
 
   const sourceNote = {
     id: "roleplay-source",
@@ -59,6 +63,197 @@ async function main() {
     version: 1,
   };
   const scope = { chatId: "chat-a", chatIds: ["chat-a"] };
+  const mara = {
+    subject: { key: "character:mara", ref: { kind: "character", id: "mara" } },
+    name: "Mara",
+    aliases: [],
+    canonicalSlug: "mara",
+  };
+  const rowan = {
+    subject: { key: "character:rowan", ref: { kind: "character", id: "rowan" } },
+    name: "Rowan",
+    aliases: [],
+    canonicalSlug: "rowan",
+  };
+  const conflicted = {
+    ...sourceNote,
+    id: "char_mara",
+    title: "Rowan",
+    type: "character" as const,
+    subjects: undefined,
+  };
+  const collisionCatalog = { entries: [mara, rowan], notes: [conflicted] as any[] };
+  assert.deepEqual(
+    analyzeTrustedLtmNoteSubjects(collisionCatalog).unresolved.map((issue) => issue.basis),
+    ["conflicting_identifiers"],
+  );
+  const collision = prepareLtmSubjectIdentityContext({
+    units: [unit({ bucket: "character_fact", subjectId: "mara", subjectNames: ["Mara"], text: "Mara travels." })],
+    catalog: collisionCatalog,
+    scope,
+  }).resolve({
+    units: [unit({ bucket: "character_fact", subjectId: "mara", subjectNames: ["Mara"], text: "Mara travels." })],
+    existingNotes: [],
+  });
+  assert.equal(collision.units.length, 0, "a conflicting legacy ID/title must not be an extraction target");
+  assert.equal(collision.diagnostics[0]?.code, "ambiguous_subject_identity");
+  const duplicates = {
+    entries: [mara],
+    notes: [
+      { ...conflicted, title: "Mara", id: "char_mara_old" },
+      { ...conflicted, title: "Mara", id: "char_mara_new" },
+    ] as any[],
+  };
+  const duplicateResolution = prepareLtmSubjectIdentityContext({
+    units: [unit({ bucket: "character_fact", subjectId: "mara", subjectNames: ["Mara"], text: "Mara travels." })],
+    catalog: duplicates,
+    scope,
+  }).resolve({
+    units: [unit({ bucket: "character_fact", subjectId: "mara", subjectNames: ["Mara"], text: "Mara travels." })],
+    existingNotes: [],
+  });
+  assert.equal(duplicateResolution.units.length, 0, "duplicate legacy notes require an explicit merge");
+  assert.deepEqual(
+    trustedLtmIdentityNotesForSource({ sourceText: "Mara travels.", catalog: duplicates }),
+    [],
+    "source lookup must not silently pick one duplicate",
+  );
+  const duplicateLocal = buildTrustedLtmSubjectCatalog({
+    roster: [],
+    notes: ["one", "two"].map((id) => ({
+      ...conflicted,
+      id: `char_mara_${id}`,
+      title: "Mara Ellison",
+      subjects: [
+        {
+          key: `local_character:chat_chat_a:mara-${id}`,
+          ref: { kind: "local_character" as const, id: `chat_chat_a:mara-${id}` },
+        },
+      ],
+    })) as any,
+  });
+  for (const name of ["Mara", "Mara Ellison"]) {
+    const value = prepareLtmSubjectIdentityContext({
+      units: [
+        unit({
+          bucket: "character_fact",
+          subjectId: name.replaceAll(" ", "_"),
+          subjectNames: [name],
+          text: "Mara travels.",
+        }),
+      ],
+      catalog: duplicateLocal,
+      scope,
+    }).resolve({
+      units: [
+        unit({
+          bucket: "character_fact",
+          subjectId: name.replaceAll(" ", "_"),
+          subjectNames: [name],
+          text: "Mara travels.",
+        }),
+      ],
+      existingNotes: [],
+    });
+    assert.equal(value.units.length, 0, `${name} must expose the duplicate local identity`);
+  }
+  const linked = prepareLtmSubjectIdentityContext({
+    units: [],
+    catalog: {
+      entries: [
+        mara,
+        {
+          ...mara,
+          subject: { key: "character:mara-other", ref: { kind: "character" as const, id: "mara-other" } },
+          canonicalSlug: "mara_other",
+        },
+        rowan,
+      ],
+      notes: [],
+    },
+    scope,
+  }).resolve({
+    units: [
+      unit({ bucket: "character_fact", subjectId: "mara", subjectKeys: ["character:mara"], text: "First Mara." }),
+      unit({ bucket: "character_fact", subjectId: "mara", subjectKeys: ["character:mara-other"], text: "Other Mara." }),
+      {
+        ...unit({
+          bucket: "character_fact",
+          subjectId: "rowan",
+          subjectKeys: ["character:rowan"],
+          text: "Rowan visits.",
+        }),
+        links: [{ target: "char_mara", relation: "affects_character" as const }],
+      },
+    ],
+    existingNotes: [],
+  });
+  const ambiguousLink = linked.diagnostics.find((item) => item.code === "ambiguous_subject_link_target");
+  assert.ok(
+    ambiguousLink,
+    `ambiguous link choices must remain visible on the draft: ${JSON.stringify(linked.diagnostics)}`,
+  );
+  assert.equal((ambiguousLink.details as any).candidateTargetNoteIds.length, 2);
+  const namedCollision = prepareLtmSubjectIdentityContext({
+    units: [],
+    catalog: { entries: [mara, { ...rowan, name: "Nara", canonicalSlug: "nara" }], notes: [] },
+    scope,
+  }).resolve({
+    units: [
+      unit({ bucket: "character_fact", subjectId: "mara", subjectKeys: ["character:mara"], text: "Mara travels." }),
+      unit({ bucket: "character_fact", subjectId: "mara", subjectKeys: ["character:rowan"], text: "Nara travels." }),
+      {
+        ...unit({
+          bucket: "character_fact",
+          subjectId: "rowan",
+          subjectKeys: ["character:rowan"],
+          text: "Rowan visits.",
+        }),
+        links: [{ target: "char_mara", relation: "affects_character" as const }],
+      },
+    ],
+    existingNotes: [],
+  });
+  assert.ok(
+    namedCollision.diagnostics.some((item) => item.code === "ambiguous_subject_link_target"),
+    "an exact name must not override conflicting batch link targets",
+  );
+  const { ambiguousLtmDraftLinkChoiceError } = await import(`${source}/reconciliation.ts`);
+  const originalLinkMutation = {
+    id: "link-choice",
+    kind: "add_link" as const,
+    noteId: ambiguousLink.noteId!,
+    link: { target: "char_mara", relation: "affects_character" as const },
+  } as any;
+  const linkDraft = { diagnostics: linked.diagnostics };
+  assert.equal(
+    ambiguousLtmDraftLinkChoiceError(linkDraft, originalLinkMutation, originalLinkMutation, new Set())?.code,
+    "ltm_draft_ambiguous_link",
+  );
+  assert.equal(
+    ambiguousLtmDraftLinkChoiceError(
+      linkDraft,
+      originalLinkMutation,
+      {
+        ...originalLinkMutation,
+        link: { ...originalLinkMutation.link, target: "char_unrelated" },
+      },
+      new Set(["link-choice"]),
+    )?.code,
+    "ltm_draft_ambiguous_link",
+  );
+  assert.equal(
+    ambiguousLtmDraftLinkChoiceError(
+      linkDraft,
+      originalLinkMutation,
+      {
+        ...originalLinkMutation,
+        link: { ...originalLinkMutation.link, target: (ambiguousLink.details as any).candidateTargetNoteIds[1] },
+      },
+      new Set(["link-choice"]),
+    ),
+    null,
+  );
   const context = prepareLtmSubjectIdentityContext({
     units: [
       unit({ bucket: "character_fact", subjectId: "mara", subjectNames: ["Mara"], text: "Mara trusts Rowan." }),

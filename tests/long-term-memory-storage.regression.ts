@@ -77,7 +77,9 @@ async function main() {
   const { LongTermMemoryStorage } = await import(`${source}/storage.ts`);
   const { invalidateLtmVaultSnapshot, readLtmVaultSnapshot } = await import(`${source}/vault-snapshot.ts`);
   const { LongTermMemoryDraftStore } = await import(`${source}/draft-store.ts`);
-  const { applyLongTermMemoryDraft, preflightLongTermMemoryDraft } = await import(`${source}/reconciliation.ts`);
+  const { applyLongTermMemoryDraft, preflightLongTermMemoryDraft, LtmDraftApplyError } = await import(
+    `${source}/reconciliation.ts`
+  );
   const { compileEvidenceUnitExtraction, sourceMetadataForEvidenceUnitDraft } = await import(
     `${source}/evidence-unit-extraction.ts`
   );
@@ -1383,6 +1385,74 @@ async function main() {
         rebuildIndexes: false,
       });
       assert.deepEqual(staticApplied.appliedMutationIds, [staticMutationId]);
+
+      const choiceSubject = { key: "character:link-choice", ref: { kind: "character" as const, id: "link-choice" } };
+      const choiceTarget = await storage.createNote({
+        ...noteInput,
+        id: "char_link_choice",
+        type: "character",
+        scope: legacySource.scope,
+        subjects: [choiceSubject],
+        links: [],
+      });
+      const choiceOwner = await storage.createNote({
+        ...noteInput,
+        id: "world_link_choice",
+        scope: legacySource.scope,
+        links: [],
+      });
+      const choiceMutation = {
+        id: randomUUID(),
+        kind: "add_link" as const,
+        claimKind: "static" as const,
+        risk: "low" as const,
+        confidence: 0.9,
+        summary: "Choose a character link",
+        evidence: [`source_note:${canonicalSourceId}`],
+        noteId: choiceOwner.id,
+        link: { target: choiceTarget.id, relation: "affects_character" as const },
+      };
+      const choiceDraft = await draftStore.createDraft({
+        source: { sourceNoteId: canonicalSourceId, chatId: "chat-a" },
+        scope: legacySource.scope,
+        modes: legacySource.modes,
+        response: { summary: "Ambiguous link", mutations: [choiceMutation] },
+        diagnostics: [
+          {
+            severity: "warning",
+            code: "ambiguous_subject_link_target",
+            noteId: choiceOwner.id,
+            message: "Choose a target",
+            details: {
+              linkTarget: choiceTarget.id,
+              linkRelation: "affects_character",
+              candidateTargetNoteIds: [choiceTarget.id, "char_other_choice"],
+              candidateSubjectKeys: {
+                [choiceTarget.id]: [choiceSubject.key],
+                char_other_choice: ["character:other-choice"],
+              },
+            },
+          },
+        ],
+      });
+      const choiceOptions = {
+        root,
+        mutationIds: [choiceMutation.id],
+        editedMutations: [choiceMutation],
+        rebuildIndexes: false,
+      };
+      assert.equal((await preflightLongTermMemoryDraft(choiceDraft.id, choiceOptions)).readyMutationIds.length, 1);
+      await storage.updateNote(choiceTarget.id, { status: "archived" });
+      await assert.rejects(
+        applyLongTermMemoryDraft(choiceDraft.id, choiceOptions),
+        (error: unknown) => error instanceof LtmDraftApplyError && error.code === "ltm_draft_ambiguous_link_stale",
+      );
+      assert.equal((await new LongTermMemoryDraftStore(root).getDraft(choiceDraft.id))?.status, "pending");
+      assert.deepEqual((await storage.getNote(choiceOwner.id))?.links, []);
+      await storage.updateNote(choiceTarget.id, { status: "active" });
+      assert.deepEqual((await applyLongTermMemoryDraft(choiceDraft.id, choiceOptions)).appliedMutationIds, [
+        choiceMutation.id,
+      ]);
 
       const ghostTarget = await storage.getNote("world_static_evidence");
       assert.equal(
