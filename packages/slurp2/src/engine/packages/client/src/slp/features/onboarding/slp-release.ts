@@ -1,5 +1,5 @@
 // The splash screen needs the shipped version and its public notes inside the client bundle.
-export const SLURP2_VERSION = "0.2.37";
+export const SLURP2_VERSION = "0.2.38";
 
 export interface Slurp2ReleaseEntry {
   version: string;

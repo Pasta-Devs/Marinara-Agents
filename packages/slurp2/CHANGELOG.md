@@ -1,5 +1,10 @@
 # Slurp Remastered release notes
 
+## 0.2.38 — 2026-09-24
+
+- Generated audience names now draw from one merged, much larger word bank (184,512 combinations, up from ~18,800) instead of a single fixed set of moody handles.
+- Generated names are CamelCase with no digits, spaces, or underscores (for example `MothHour` instead of `moth_hour_77`), so they read as a single word and two people never blur together in a dense list.
+
 ## 0.2.37 — 2026-09-24
 
 - NanoGPT, xAI, and connections recognised only by their base URL now receive avatar reference images again.

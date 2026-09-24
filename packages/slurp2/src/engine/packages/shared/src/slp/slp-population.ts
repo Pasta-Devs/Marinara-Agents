@@ -28,8 +28,9 @@ import {
 } from "./slp-fan-types.js";
 
 /**
- * Handle stems. Chosen to read as usernames a person picked rather than as generated strings:
- * concrete nouns, slightly off-kilter, no adjectives that sound like a brand.
+ * Handle stems, one merged bank. Used to be five separate flavour presets; merged into one pool
+ * so every generated member draws from the same, much larger set of combinations instead of
+ * picking a flavour up front.
  */
 const FIRST = [
   "moth",
@@ -134,8 +135,190 @@ const SECOND = [
   "verandah",
 ] as const;
 
-/** Appended when a handle collides, so two people can share a name without sharing a handle. */
-const SUFFIXES = ["", "_", "01", "x", "77", "_ii", "23", "9"] as const;
+const MORE_FIRST = [
+  "feral",
+  "moonlit",
+  "starlit",
+  "unhinged",
+  "chronic",
+  "delulu",
+  "insufferable",
+  "sobbing",
+  "screaming",
+  "obsessed",
+  "unwell",
+  "local",
+  "certified",
+  "professional",
+  "parttime",
+  "fulltime",
+  "secret",
+  "undercover",
+  "reformed",
+  "retired",
+  "aspiring",
+  "unofficial",
+  "unrepentant",
+  "unemployed",
+  "cursed",
+  "chronically",
+  "genuinely",
+  "actually",
+  "mildly",
+  "extremely",
+  "allegedly",
+  "formerly",
+  "currently",
+  "permanently",
+  "weirdly",
+  "suspiciously",
+  "aggressively",
+  "blatantly",
+  "sunny",
+  "gentle",
+  "warm",
+  "soft",
+  "kind",
+  "honey",
+  "cottage",
+  "morning",
+  "evening",
+  "sleepy",
+  "drowsy",
+  "humble",
+  "homely",
+  "tender",
+  "mellow",
+  "snug",
+  "dreamy",
+  "hazy",
+  "mild",
+  "diamond",
+  "platinum",
+  "golden",
+  "scarlet",
+  "crimson",
+  "electric",
+  "neon",
+  "radiant",
+  "glossy",
+  "glittering",
+  "dazzling",
+  "lush",
+  "opulent",
+  "luminous",
+  "iridescent",
+  "shimmering",
+  "plush",
+  "sultry",
+] as const;
+
+const MORE_SECOND = [
+  "shipper",
+  "reader",
+  "lurker",
+  "anon",
+  "stan",
+  "commenter",
+  "bookmarker",
+  "enjoyer",
+  "theorist",
+  "historian",
+  "archivist",
+  "completionist",
+  "rewatcher",
+  "rereader",
+  "apologist",
+  "defender",
+  "hypeman",
+  "hypewoman",
+  "propagandist",
+  "evangelist",
+  "annotator",
+  "footnoter",
+  "menace",
+  "gremlin",
+  "disaster",
+  "nuisance",
+  "hazard",
+  "liability",
+  "wildcard",
+  "troll",
+  "poster",
+  "instigator",
+  "bystander",
+  "witness",
+  "commentator",
+  "spectator",
+  "onlooker",
+  "rando",
+  "weirdo",
+  "oddball",
+  "agitator",
+  "porch",
+  "teacup",
+  "blanket",
+  "meadow",
+  "hearth",
+  "breeze",
+  "candle",
+  "kettle",
+  "pantry",
+  "quilt",
+  "hammock",
+  "veranda",
+  "greenhouse",
+  "bakery",
+  "farmstead",
+  "cabin",
+  "nook",
+  "starlet",
+  "icon",
+  "diva",
+  "bombshell",
+  "headline",
+  "spotlight",
+  "runway",
+  "legend",
+  "empress",
+  "vixen",
+  "showgirl",
+  "socialite",
+  "muse",
+  "siren",
+  "sensation",
+  "superstar",
+  "trendsetter",
+  "tastemaker",
+  "heartthrob",
+  "phenomenon",
+] as const;
+
+const dedupe = <T>(values: readonly T[]): T[] => [...new Set(values)];
+
+/** Every handle stem, merged into one pool: no flavour presets, just a much bigger set of combinations. */
+const ALL_FIRST = dedupe([...FIRST, ...MORE_FIRST]);
+const ALL_SECOND = dedupe([...SECOND, ...MORE_SECOND]);
+
+/**
+ * Appended when a handle collides, so two people can share a name without sharing a handle.
+ *
+ * Letters only, no digits, no underscore or space — a handle and its display name are both a
+ * single unbroken run of characters, so the suffix has to read the same way.
+ *
+ * A plain name is unambiguous the vast majority of the time — 184k combinations against a named
+ * cast of 30 barely ever collides — so a marker is rare, not a coin flip on every member.
+ */
+const NO_SUFFIX = { handle: "", display: "" } as const;
+const SUFFIX_MARKERS = [
+  { handle: "x", display: "X" },
+  { handle: "ii", display: "II" },
+  { handle: "iii", display: "III" },
+  { handle: "jr", display: "Jr" },
+  { handle: "prime", display: "Prime" },
+] as const;
+/** How often a member gets a marker at all, out of 100. */
+const SUFFIX_MARKER_CHANCE = 8;
 
 /** Funnel stages, in order. The index is meaningful: a higher index is a closer relationship. */
 export const SLURP_FUNNEL_STAGES = [
@@ -231,23 +414,25 @@ export function generateSlurpPopulationMember(
   joinedAt: Date,
   fanTypes: readonly SlurpFanType[] = SLURP_BUILTIN_FAN_TYPES,
 ): SlurpPopulationMember {
-  const first = pick(FIRST, seed, "first");
-  const second = pick(SECOND, seed, "second");
-  const suffix = pick(SUFFIXES, seed, "suffix");
+  const first = pick(ALL_FIRST, seed, "first");
+  const second = pick(ALL_SECOND, seed, "second");
+  const suffix =
+    hash(`suffixroll:${seed}`) % 100 < SUFFIX_MARKER_CHANCE ? pick(SUFFIX_MARKERS, seed, "suffix") : NO_SUFFIX;
+  // Swapping which stem leads doubles the space for free: "MothHour" and "HourMoth" are two
+  // different people drawn from the same pair.
+  const reversed = hash(`order:${seed}`) % 2 === 1;
+  const [a, b] = reversed ? [second, first] : [first, second];
   // Who they are comes first: traits, hour, archetype and appetite all hang off the Fan Type now,
   // rather than being four unrelated hashes of the same seed.
   const fanType = slurpPickFanType(fanTypes, seed);
   const id = `${SLURP_POPULATION_MEMBER_PREFIX}${seed}`;
   return {
     id,
-    handle: `${first}_${second}${suffix}`,
-    // The numeric suffixes carry into the display name, the symbol ones do not. Without this the
-    // 18,816 handles collapsed into 2,352 display names, and a named cast of thirty is well inside
-    // the birthday bound for that — two different people read as one person in the same list.
-    // "Moth Hour 77" is how a real handle collision reads; "Moth Hour _ii" is not.
-    // ponytail: five name buckets per stem pair, not eight. Add a display-name bank if a cast ever
-    // grows past thirty.
-    displayName: `${titleCase(first)} ${titleCase(second)}${/^\d+$/.test(suffix) ? ` ${suffix}` : ""}`,
+    // No separator: a bare, lowercase run so it reads as a handle someone picked, not a slug.
+    handle: `${a}${b}${suffix.handle}`,
+    // CamelCase instead of a space, so two people never blur into one string in a dense list, and
+    // a collision suffix ("MothHourII") stays part of the same unbroken run as the rest of the name.
+    displayName: `${titleCase(a)}${titleCase(b)}${suffix.display}`,
     archetype: fanType.engineArchetype,
     fanTypeId: fanType.id,
     traits: slurpFanTypeTraits(fanType, seed),
@@ -263,7 +448,7 @@ export function generateSlurpPopulationMember(
  * Exported so a test can assert it stays far above any population Slurp would ever materialise —
  * the whole point is that the cast never runs out.
  */
-export const SLURP_POPULATION_NAME_SPACE = FIRST.length * SECOND.length * SUFFIXES.length;
+export const SLURP_POPULATION_NAME_SPACE = ALL_FIRST.length * ALL_SECOND.length * 2 * (1 + SUFFIX_MARKERS.length);
 
 /**
  * How likely this person is to be around at a given hour.
