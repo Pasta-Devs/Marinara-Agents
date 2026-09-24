@@ -119,7 +119,7 @@ export function NoodleLatestPostsWidget({
   }
   return (
     <div
-      className="flex h-full min-h-0 flex-col overflow-hidden rounded-[inherit] bg-[var(--background)]"
+      className="flex h-full min-h-0 flex-col overflow-hidden rounded-[inherit] bg-[linear-gradient(145deg,color-mix(in_srgb,var(--noodle-accent)_8%,var(--background)),var(--background)_62%,color-mix(in_srgb,var(--noodle-accent)_4%,var(--background)))]"
       style={{ "--widget-accent": "var(--noodle-accent)" } as CSSProperties}
     >
       <header className="shrink-0 border-b border-[color-mix(in_srgb,var(--widget-accent)_24%,var(--border))] bg-[color-mix(in_srgb,var(--widget-accent)_11%,transparent)] px-4 py-3">
@@ -141,11 +141,9 @@ export function NoodleLatestPostsWidget({
             </span>
             <div className="min-w-0">
               <h2 className="truncate text-sm font-bold text-[var(--foreground)]">{t("ui.noodle.widget.title")}</h2>
-              {!compact ? (
-                <p className="mt-0.5 line-clamp-1 text-[0.68rem] text-[var(--muted-foreground)]">
-                  {t("ui.noodle.widget.description")}
-                </p>
-              ) : null}
+              <p className="mt-0.5 line-clamp-1 text-[0.68rem] text-[var(--muted-foreground)]">
+                {compact ? t("ui.noodle.widget.compactDescription") : t("ui.noodle.widget.description")}
+              </p>
             </div>
           </div>
         </div>

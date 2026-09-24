@@ -268,6 +268,12 @@
     "noodle": {
       "versions": [
         {
+          "version": "1.2.33",
+          "date": "2026-09-24",
+          "notes": "- Add a subtle Noodle-blue background gradient and compact widget subtitle.",
+          "highlight": false
+        },
+        {
           "version": "1.2.32",
           "date": "2026-09-24",
           "notes": "- Fix compact widget mounting and provide Noodle theme variables inside isolated Home widget mounts.",

@@ -1,5 +1,9 @@
 # Noodle release notes
 
+## 1.2.33 — 2026-09-24
+
+- Add a subtle Noodle-blue background gradient and compact widget subtitle.
+
 ## 1.2.32 — 2026-09-24
 
 - Fix compact widget mounting and provide Noodle theme variables inside isolated Home widget mounts.

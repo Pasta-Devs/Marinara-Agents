@@ -1269,6 +1269,7 @@
   "ui.noodle.viewerhub.viewValue1": "View {{value1}}",
   "ui.noodle.widget.empty": "No posts yet. Open Noodle to start the timeline.",
   "ui.noodle.widget.description": "A quick pulse from the public timeline.",
+  "ui.noodle.widget.compactDescription": "A compact look at what is happening now.",
   "ui.noodle.widget.image": "Image",
   "ui.noodle.widget.loading": "Loading the latest posts…",
   "ui.noodle.widget.live": "Live feed",
