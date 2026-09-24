@@ -21,7 +21,7 @@ import {
   refreshAllCreatorsNow,
   refreshTargetedCreatorsNow,
 } from "./slp-post-operation.js";
-import { resolveSlurpAutomaticPostAccess } from "./slp-generation-service.js";
+import { resolveSlurpAutomaticPostAccess } from "./slp-automatic-post-access.js";
 import { admissionModeForRequest } from "../../../services/generation/connection-admission.js";
 import type { FastifyInstance } from "fastify";
 import { slurpPostTypeSchema } from "../../modules/requests/slp-request-schemas.js";

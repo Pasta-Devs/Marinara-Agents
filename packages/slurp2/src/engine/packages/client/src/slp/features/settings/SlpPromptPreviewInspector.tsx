@@ -351,16 +351,6 @@ function PreviewResultCard({ label, data }: { label: string; data: SlurpPromptRe
       </p>
       {data.title && <h4 className="mt-2 text-sm font-bold text-balance">{data.title}</h4>}
       <p className="mt-2 whitespace-pre-wrap break-words text-sm leading-6">{data.content}</p>
-      {data.imagePrompt && (
-        <details className="mt-3 rounded-md bg-[var(--slurp-surface-raised)] ring-1 ring-inset ring-[var(--slurp-outline)]">
-          <summary className="min-h-10 cursor-pointer px-3 py-2 text-xs font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)]">
-            {t("ui.slurp.settings.prompts.previewImagePrompt", { defaultValue: "Image prompt" })}
-          </summary>
-          <p className="border-t border-[var(--slurp-outline)] p-3 text-xs leading-5 text-[var(--slurp-muted)]">
-            {data.imagePrompt}
-          </p>
-        </details>
-      )}
       {data.scene && (
         <details
           open

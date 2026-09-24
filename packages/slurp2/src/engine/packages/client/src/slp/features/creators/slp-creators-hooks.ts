@@ -2,7 +2,8 @@ import type { SlpAccountSettingsPatchInput } from "../../../../../shared/src/slp
 import type { SlpAccount, SlpCreatorManagedStageProfile } from "../../../../../shared/src/slp/slp-social.types.js";
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../../../lib/api-client.js";
-import { usePersonas } from "../../../hooks/use-creator-personas";
+import { useActivePersona, usePersonas } from "../../../hooks/use-creator-personas";
+import { useSlurpUIStore } from "../../base/state/slp-package-store";
 import { slpKeys } from "../../base/state/slp-query-keys.js";
 import type { SlurpManagedStageProfile } from "../../base/state/slp-state-types.js";
 import type { SlurpCreatorBulkPatch, SlurpCreatorMetrics, SlurpScheduleStatus } from "./slp-creators-contract.js";
@@ -103,6 +104,19 @@ export function useUpdateCreatorStrategy() {
  * Slurp runs. A persona-backed Creator posts only when its owner does, so automation controls are
  * hidden for it rather than shown and ignored.
  */
+/** The persona browsing Slurp: the stored pick while it still exists, else the Engine's active persona. */
+export function useSlpViewerPersonaId() {
+  const personas = usePersonas().data ?? [];
+  const activePersonaId = useActivePersona().data?.id;
+  const storedPersonaId = useSlurpUIStore((state) => state.viewerPersonaId);
+  return (
+    (storedPersonaId && personas.some((persona) => persona.id === storedPersonaId) ? storedPersonaId : null) ??
+    activePersonaId ??
+    personas[0]?.id ??
+    null
+  );
+}
+
 export function useSlpPersonaBackedCreator(creator: Pick<SlpCreatorManagedStageProfile, "sourceAccountId"> | null) {
   const personas = usePersonas();
   if (!creator?.sourceAccountId) return false;
