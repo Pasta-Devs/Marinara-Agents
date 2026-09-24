@@ -56,6 +56,12 @@
     "gacha-forge": {
       "versions": [
         {
+          "version": "1.8.6",
+          "date": "2026-09-23",
+          "notes": "- Fixed: on a phone held upright, the Landscape only notice no longer covers the rest of Marinara. Characters, lorebooks and anything else you open over the game are reachable again.",
+          "highlight": false
+        },
+        {
           "version": "1.8.5",
           "date": "2026-09-21",
           "notes": "- The opening story is optional. Forge this world asks if you are sure, then whether to write it now or later; later, the world opens as soon as its cast is ready, with Summon unlocked, and Modes > Story writes it when you ask. If it fails while the world is being created, Skip the story for now keeps the world.\n- World creation keeps what you write and brings it back on any device, and has presets: save, load, rename, replace or delete a whole setup, from the wizard or from a world you already created.\n- Models that think a lot before answering (GLM, DeepSeek) no longer lose the first try of nearly every call to the output limit.\n- Fixed: a card, lorebook, connection or persona you create or change in Marinara shows up in the game as soon as you come back to it.\n- Fixed: a character made from a card or a Cast lorebook entry reads the World lorebook entries that name them.",
