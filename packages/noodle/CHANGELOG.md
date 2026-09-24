@@ -1,5 +1,9 @@
 # Noodle release notes
 
+## 1.3.0 — 2026-09-24
+
+- Widgets on Homescreen now avaliable.
+
 ## 1.2.33 — 2026-09-24
 
 - Add a subtle Noodle-blue background gradient and compact widget subtitle.

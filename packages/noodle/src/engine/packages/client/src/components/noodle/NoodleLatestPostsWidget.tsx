@@ -1,4 +1,4 @@
-import { useQueries, useQuery } from "@tanstack/react-query";
+import { useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   ArrowUpRight,
   Heart,
@@ -46,6 +46,7 @@ export function NoodleLatestPostsWidget({
   const selectedPersonaId = useUIStore((state) => state.noodleSelectedPersonaId);
   const createInteraction = useCreateNoodleInteraction();
   const removeInteraction = useRemoveNoodleInteraction();
+  const queryClient = useQueryClient();
   const persona = (bootstrap.data?.accounts ?? []).find(
     (account) => account.kind === "persona" && (account.entityId === selectedPersonaId || !selectedPersonaId),
   );
@@ -73,8 +74,9 @@ export function NoodleLatestPostsWidget({
   const toggleInteraction = (postId: string, type: "like" | "repost", activeInteraction: boolean) => {
     if (!persona) return;
     const input = { postId, actorKind: "persona" as const, actorEntityId: persona.entityId, type };
-    if (activeInteraction) removeInteraction.mutate(input);
-    else createInteraction.mutate({ ...input, content: null });
+    const refreshCounts = () => queryClient.invalidateQueries({ queryKey: ["noodle", "post", postId, "widget"] });
+    if (activeInteraction) removeInteraction.mutate(input, { onSuccess: refreshCounts });
+    else createInteraction.mutate({ ...input, content: null }, { onSuccess: refreshCounts });
   };
   if (feed.isPending || bootstrap.isPending) {
     return (
@@ -83,13 +85,29 @@ export function NoodleLatestPostsWidget({
       </p>
     );
   }
-  if (feed.isError || bootstrap.isError) {
+  if ((feed.isError || bootstrap.isError) && posts.length === 0) {
+    const hasCachedPosts = posts.length > 0;
+    const errorMessage =
+      feed.error instanceof Error
+        ? feed.error.message
+        : bootstrap.error instanceof Error
+          ? bootstrap.error.message
+          : "";
+    const adminSecretMissing = /admin.secret|x-admin-secret|403/i.test(errorMessage);
     return (
-      <div role="alert" className="flex h-full min-h-0 flex-col items-start justify-center gap-2 px-1">
-        <p className="text-xs text-[var(--muted-foreground)]">{t("ui.noodle.widget.unavailable")}</p>
+      <div role="alert" className="flex h-full min-h-0 flex-col items-center justify-center gap-2 px-5 text-center">
+        <p className="text-sm font-semibold text-[var(--foreground)]">
+          {hasCachedPosts ? t("ui.noodle.widget.refreshFailed") : t("ui.noodle.widget.unavailable")}
+        </p>
+        <p className="max-w-sm text-xs leading-relaxed text-[var(--muted-foreground)]">
+          {adminSecretMissing ? t("ui.noodle.widget.adminSecretMissing") : t("ui.noodle.widget.loadReason")}
+        </p>
         <button
           type="button"
-          onClick={() => void feed.refetch()}
+          onClick={() => {
+            if (feed.isError) void feed.refetch();
+            if (bootstrap.isError) void bootstrap.refetch();
+          }}
           className="inline-flex min-h-10 items-center gap-2 rounded-lg px-2 text-xs font-semibold text-[var(--foreground)] hover:bg-[var(--accent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--primary)]"
         >
           <RefreshCw size="0.875rem" aria-hidden="true" /> {t("ui.noodle.widget.retry")}
@@ -98,6 +116,7 @@ export function NoodleLatestPostsWidget({
     );
   }
   const stale = feed.dataUpdatedAt > 0 && Date.now() - feed.dataUpdatedAt > 60_000;
+  const refreshFailed = feed.isError || bootstrap.isError;
   if (posts.length === 0) {
     const needsSetup = (bootstrap.data?.accounts ?? []).length === 0;
     return (
@@ -147,8 +166,10 @@ export function NoodleLatestPostsWidget({
             </div>
           </div>
         </div>
-        {!compact && stale ? (
-          <div className="mt-2 text-[0.63rem] text-[var(--muted-foreground)]">{t("ui.noodle.widget.stale")}</div>
+        {!compact && (stale || refreshFailed) ? (
+          <div className="mt-2 text-[0.63rem] text-[var(--muted-foreground)]">
+            {t(refreshFailed ? "ui.noodle.widget.refreshFailed" : "ui.noodle.widget.stale")}
+          </div>
         ) : null}
       </header>
       <div
