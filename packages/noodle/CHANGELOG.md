@@ -1,6 +1,6 @@
 # Noodle release notes
 
-## 1.3.0 — 2026-09-24
+## 1.2.34 — 2026-09-24
 
 - Widgets on Homescreen now avaliable.
 
