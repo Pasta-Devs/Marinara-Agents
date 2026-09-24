@@ -1,5 +1,9 @@
 # Noodle release notes
 
+## 1.2.25 — 2026-09-24
+
+- Widgets on Homescreen now available.
+
 ## 1.2.24 — 2026-09-15
 
 - Search icons and post menus keep Noodle's selected accent when Engine Chroma animates.

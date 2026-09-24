@@ -268,6 +268,12 @@
     "noodle": {
       "versions": [
         {
+          "version": "1.2.25",
+          "date": "2026-09-24",
+          "notes": "- Widgets on Homescreen now available.",
+          "highlight": false
+        },
+        {
           "version": "1.2.24",
           "date": "2026-09-15",
           "notes": "- Search icons and post menus keep Noodle's selected accent when Engine Chroma animates.",
