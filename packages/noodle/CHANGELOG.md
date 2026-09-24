@@ -2,7 +2,7 @@
 
 ## 1.2.25 — 2026-09-24
 
-- Widgets on Homescreen now avaliable.
+- Widgets on Homescreen now available.
 
 ## 1.2.24 — 2026-09-15
 
