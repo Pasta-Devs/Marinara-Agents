@@ -14,7 +14,7 @@ export function buildSlurpDeepDetailsRecord(ctx: {
     generatedAt?: Date;
     publicationTime?: Date;
     request: { noodlerPostGuide?: string; access: string };
-    connection: { provider?: unknown; model?: unknown };
+    connection: { id?: unknown; name?: unknown; provider?: unknown; model?: unknown };
   };
   sequence: number;
   completionOptions: object;
@@ -51,6 +51,8 @@ export function buildSlurpDeepDetailsRecord(ctx: {
     model: {
       provider: String(ctx.input.connection.provider ?? ""),
       model: String(ctx.input.connection.model ?? ""),
+      connectionId: typeof ctx.input.connection.id === "string" ? ctx.input.connection.id : null,
+      connectionName: typeof ctx.input.connection.name === "string" ? ctx.input.connection.name : null,
       temperature: numberOrNull((ctx.completionOptions as Record<string, unknown>).temperature),
       topP: numberOrNull((ctx.completionOptions as Record<string, unknown>).topP),
       maxTokens: numberOrNull((ctx.completionOptions as Record<string, unknown>).maxTokens),

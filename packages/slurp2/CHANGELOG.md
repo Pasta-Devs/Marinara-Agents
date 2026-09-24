@@ -1,5 +1,15 @@
 # Slurp Remastered release notes
 
+## 0.2.36 — 2026-09-24
+
+- Deep details opens as a flowchart of the whole generation: each step shows what happens, why, which connection and model ran it, and the exact text that went in and came out. A Canvas view shows the same diagram to drag and zoom in every direction.
+- Image runs now also record the prompt-rewrite model and its full chat, the fallback image connection, and which connection actually drew the picture.
+
+## 0.2.35 — 2026-09-24
+
+- Deep details shows each post as numbered steps. Every image run records its settings, style profile, prompt rewrite, final prompt, and provider attempts in order.
+- The Connections panel includes the AI writing connection used for replies, messages, and audience activity.
+
 ## 0.2.34 — 2026-09-23
 
 - Manage text and image connections in one place. Missing saved connections stay visible until you choose a replacement, and connection load errors can be retried.

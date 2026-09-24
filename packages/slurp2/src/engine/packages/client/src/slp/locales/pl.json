@@ -185,6 +185,8 @@
   "ui.slurp.settings.connections.title": "Połączenia",
   "ui.slurp.settings.connections.detail": "Wszystkie połączenia modeli Slurp w jednym miejscu. Istniejące strony ustawień zachowują skróty.",
   "ui.slurp.settings.connections.textGeneration": "Generowanie tekstu",
+  "ui.slurp.settings.connections.aiWriting": "Pisanie AI (odpowiedzi, wiadomości, aktywność)",
+  "ui.slurp.settings.connections.textGenerationFallback": "połączenie generowania tekstu",
   "ui.slurp.settings.connections.imageContext": "Kontekst obrazu",
   "ui.slurp.settings.connections.imageGeneration": "Generowanie obrazów",
   "ui.slurp.settings.connections.adImages": "Obrazy reklam",

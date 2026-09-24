@@ -16,6 +16,9 @@ export type SlpDeepDetailsRecord = {
   model: {
     provider: string;
     model: string;
+    /** Absent on records made before 0.2.36. */
+    connectionId?: string | null;
+    connectionName?: string | null;
     temperature: number | null;
     topP: number | null;
     maxTokens: number | null;
@@ -37,7 +40,8 @@ export type SlpDeepDetailsRecord = {
     demandTopic: string | null;
     project: { id: string; title: string; chapter: string | null } | null;
   };
-  angle: { place: string; moment: string; company: string; framing: string } | null;
+  /** `framing` appears only on older records; the camera source replaced it. */
+  angle: { place: string; moment: string; company: string; framing?: string } | null;
   camera: string | null;
   effort: string | null;
   strategy: {
@@ -77,7 +81,74 @@ export type SlpDeepDetailsRecord = {
   } | null;
   /** Exact positive prompt sent to the image provider, stored only in this Creator-private record. */
   providerPrompt?: string | null;
+  /** Every image run for this post, oldest first, capped to the last few. Absent on older records. */
+  imageRuns?: SlpDeepDetailsImageRun[];
   askedModelForImagePrompt: boolean;
+};
+
+/**
+ * One pass through the image pipeline, recorded as it ran. Values are the ones in force at that
+ * moment, never re-read from current settings. Holds no API key, base URL, or other credential.
+ */
+export type SlpDeepDetailsImageRun = {
+  /** What started the run: the first post generation, a prompt review, a reviewed confirmation, a retry, or the reserve. */
+  trigger: "generation" | "review" | "reviewed" | "retry" | "reserve";
+  startedAt: string;
+  connection: {
+    id: string;
+    name: string | null;
+    provider: string | null;
+    model: string | null;
+    source: string | null;
+    service: string | null;
+    hasFallback: boolean;
+    /** Which setting picked this connection: the Creator's own, Slurp's default, or the Engine default. */
+    chosenBy?: "creator" | "slurp" | "engine";
+    /** The connection the Engine retries on when this one fails. Absent before 0.2.36. */
+    fallback?: { id: string; name: string; model: string | null } | null;
+  };
+  size: { width: number | null; height: number | null };
+  styleProfile: {
+    id: string;
+    name: string;
+    /** Where the choice came from: the Creator's own setting, or the Slurp-wide one. */
+    chosenBy: "creator" | "slurp" | "none";
+    styleText: string;
+    positiveTags: string;
+    negativeTags: string;
+  };
+  settings: { includeDescriptions: boolean; avatarReferences: boolean; interpretation: boolean };
+  appearance: { source: "stage" | "source-card" | "reference" | "none"; text: string };
+  referenceImages: number;
+  /** The image template as rendered, before the style profile was applied. */
+  templatePrompt: string;
+  /** The template after the style profile was applied. */
+  styledPrompt: string;
+  rewrite: {
+    status: "skipped" | "accepted" | "rejected" | "failed";
+    /** The text connection and model that ran the rewrite. Absent before 0.2.36. */
+    model?: { connectionId: string; connectionName: string | null; model: string } | null;
+    /** The full chat sent to the rewrite model. Absent before 0.2.36. */
+    messages?: { role: string; content: string }[];
+    input: string | null;
+    output: string | null;
+    reason: string | null;
+  };
+  finalPrompt: string | null;
+  negativePrompt: string | null;
+  attempts: {
+    attempt: number;
+    startedAt: string;
+    durationMs: number;
+    route: "host" | "bundled";
+    ok: boolean;
+    error: string | null;
+    /** Set when the primary connection failed and the Engine's fallback connection drew the picture. */
+    servedBy?: { id: string; name: string; model: string | null } | null;
+    /** The prompt the provider actually received, when the Engine changed it (a flattened or fallback prompt). */
+    effectivePrompt?: string | null;
+  }[];
+  result: { status: "saved" | "preview" | "failed"; mediaPath: string | null; error: string | null };
 };
 
 export type SlpDeepDetailsResponse = {

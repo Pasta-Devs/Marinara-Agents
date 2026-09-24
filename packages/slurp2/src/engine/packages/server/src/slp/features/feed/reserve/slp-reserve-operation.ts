@@ -10,7 +10,7 @@ import { createSlurpStorage } from "../../../data/slp-storage.js";
 import { slpCreatorReservePolicyFingerprint } from "../../../modules/records/slp-storage-model.js";
 import { hasSlurpCreatorPostingIntervalConflict } from "../../../modules/feed/slp-posting-interval.js";
 import { generateCreatorPost, resolveSlurpAutomaticPostAccess } from "../slp-generation-service.js";
-import { recordSlurpProviderPrompt } from "../slp-prepared-post.js";
+import { slurpDeepDetailsImageRunRecorder } from "../../../data/feed/slp-post-deep-details-storage.js";
 import { recordSlurpPromiseKept } from "../slp-post-plan-service.js";
 import { generateCreatorPostImage } from "../../media/slp-media-contract.js";
 import { tryCreatorAccountOperation } from "../../../base/locking/slp-account-operation-lock.js";
@@ -258,16 +258,12 @@ export async function prepareNextCreatorReservePost(db: DB, at = new Date()): Pr
               // and made "8 posts/day" secretly mean two pools of 8. Keep background admission
               // for connection concurrency, but book no separate image quota.
               admissionMode: { kind: "background" },
+              onImageRun: slurpDeepDetailsImageRunRecorder(db, payload.metadata.deepDetailsId, "reserve"),
             });
             // Promotion is deferred until the prepared row is durably committed below: a file
             // promoted first is owned by nothing if the row never lands, and staged files are
             // swept on restart.
             stagedMedia = image.stagedMedia ?? null;
-            const deepDetailsId =
-              typeof payload.metadata.deepDetailsId === "string" ? payload.metadata.deepDetailsId : null;
-            if (deepDetailsId) {
-              await recordSlurpProviderPrompt(db, deepDetailsId, image.providerPrompt);
-            }
             payload = {
               ...payload,
               metadata: { ...payload.metadata, ...image.metadata },
