@@ -85,6 +85,9 @@ function NoodlePackageRoot({ element }: { element: CapabilityElement }) {
               props.widgetId === "latest-posts" ? (
                 <NoodleLatestPostsWidget
                   active={props.active === true}
+                  widgetLabel={typeof props.widgetLabel === "string" ? props.widgetLabel : undefined}
+                  widgetDescription={typeof props.widgetDescription === "string" ? props.widgetDescription : undefined}
+                  widgetAccent={typeof props.widgetAccent === "string" ? props.widgetAccent : undefined}
                   onOpenPost={
                     typeof props.onOpenPost === "function" ? (props.onOpenPost as (postId: string) => void) : undefined
                   }

@@ -1,5 +1,9 @@
 # Noodle release notes
 
+## 1.2.26 — 2026-09-24
+
+- Give the Latest Posts Home widget a rich package-owned surface with live status, refresh controls, metadata, and direct Noodle navigation.
+
 ## 1.2.25 — 2026-09-24
 
 - Offer a large Home widget with a scrollable preview of the five newest public posts. Opening a preview takes you to that post in Noodle.
