@@ -186,58 +186,51 @@ export function NoodleLatestPostsWidget({
             const replies = countInteractions(details as never, "reply");
             const reposts = countInteractions(details as never, "repost");
             return (
-              <div
+              <article
                 key={post.id}
-                onClick={(event) => {
-                  if (event.target instanceof HTMLButtonElement) return;
-                  onOpenPost?.(post.id);
-                }}
-                role="button"
-                tabIndex={0}
-                onKeyDown={(event) => {
-                  if (event.target instanceof HTMLButtonElement) return;
-                  if (event.key === "Enter" || event.key === " ") {
-                    event.preventDefault();
-                    onOpenPost?.(post.id);
-                  }
-                }}
-                className="group w-full rounded-xl border border-[var(--noodle-accent)]/35 bg-[var(--background)] p-3 text-left transition-colors hover:border-[var(--noodle-accent)] hover:bg-[var(--noodle-accent)]/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)]"
-                aria-label={t("ui.noodle.widget.openPost", { author })}
+                className="group w-full rounded-xl border border-[var(--noodle-accent)]/35 bg-[var(--background)] p-3 text-left transition-colors hover:border-[var(--noodle-accent)] hover:bg-[var(--noodle-accent)]/5"
               >
-                <span className="flex min-w-0 items-center gap-2">
-                  {post.authorSnapshot ? <Avatar account={post.authorSnapshot} size="sm" /> : null}
-                  <span className="min-w-0 flex-1">
-                    <span className="block truncate text-xs font-bold text-[var(--foreground)]">{author}</span>
-                    <span className="block truncate text-[0.65rem] text-[var(--muted-foreground)]">
-                      @{post.authorSnapshot?.handle ?? "noodle"}
-                    </span>
-                  </span>
-                  <time className="shrink-0 text-[0.65rem] text-[var(--muted-foreground)]" dateTime={post.createdAt}>
-                    {formatTime(post.createdAt, i18n.language)}
-                  </time>
-                </span>
-                <span className="mt-1 line-clamp-3 whitespace-pre-wrap break-words text-xs leading-relaxed text-[var(--foreground)]/80">
-                  {post.content}
-                </span>
-                {post.imageUrl || readNoodlePollFromMetadata(post.metadata) ? (
-                  <span className="mt-2 flex items-center gap-2 text-[0.65rem] text-[var(--muted-foreground)]">
-                    {post.imageUrl ? (
-                      <span className="inline-flex items-center gap-1">
-                        <ImageIcon size="0.75rem" aria-hidden="true" /> {t("ui.noodle.widget.image")}
+                <button
+                  type="button"
+                  onClick={() => onOpenPost?.(post.id)}
+                  className="block w-full text-left focus-visible:rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)]"
+                  aria-label={t("ui.noodle.widget.openPost", { author })}
+                >
+                  <span className="flex min-w-0 items-center gap-2">
+                    {post.authorSnapshot ? <Avatar account={post.authorSnapshot} size="sm" /> : null}
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-xs font-bold text-[var(--foreground)]">{author}</span>
+                      <span className="block truncate text-[0.65rem] text-[var(--muted-foreground)]">
+                        @{post.authorSnapshot?.handle ?? "noodle"}
                       </span>
-                    ) : null}
-                    {readNoodlePollFromMetadata(post.metadata) ? (
-                      <span className="inline-flex items-center gap-1">
-                        <ListChecks size="0.75rem" aria-hidden="true" /> {t("ui.noodle.widget.poll")}
-                      </span>
-                    ) : null}
-                    <span className="ml-auto inline-flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
-                      <MessageCircle size="0.75rem" aria-hidden="true" />
-                      <ArrowUpRight size="0.75rem" aria-hidden="true" />
                     </span>
+                    <time className="shrink-0 text-[0.65rem] text-[var(--muted-foreground)]" dateTime={post.createdAt}>
+                      {formatTime(post.createdAt, i18n.language)}
+                    </time>
                   </span>
-                ) : null}
-                <span className="mt-2 flex items-center gap-3 text-[0.65rem] text-[var(--muted-foreground)]">
+                  <span className="mt-1 line-clamp-3 whitespace-pre-wrap break-words text-xs leading-relaxed text-[var(--foreground)]/80">
+                    {post.content}
+                  </span>
+                  {post.imageUrl || readNoodlePollFromMetadata(post.metadata) ? (
+                    <span className="mt-2 flex items-center gap-2 text-[0.65rem] text-[var(--muted-foreground)]">
+                      {post.imageUrl ? (
+                        <span className="inline-flex items-center gap-1">
+                          <ImageIcon size="0.75rem" aria-hidden="true" /> {t("ui.noodle.widget.image")}
+                        </span>
+                      ) : null}
+                      {readNoodlePollFromMetadata(post.metadata) ? (
+                        <span className="inline-flex items-center gap-1">
+                          <ListChecks size="0.75rem" aria-hidden="true" /> {t("ui.noodle.widget.poll")}
+                        </span>
+                      ) : null}
+                      <span className="ml-auto inline-flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
+                        <MessageCircle size="0.75rem" aria-hidden="true" />
+                        <ArrowUpRight size="0.75rem" aria-hidden="true" />
+                      </span>
+                    </span>
+                  ) : null}
+                </button>
+                <div className="mt-2 flex items-center gap-3 text-[0.65rem] text-[var(--muted-foreground)]">
                   <button
                     type="button"
                     onClick={(event) => {
@@ -279,8 +272,8 @@ export function NoodleLatestPostsWidget({
                   >
                     <Repeat2 size="0.8rem" /> {reposts}
                   </button>
-                </span>
-              </div>
+                </div>
+              </article>
             );
           })}
         </div>
