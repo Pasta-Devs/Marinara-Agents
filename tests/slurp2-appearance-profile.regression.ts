@@ -174,4 +174,7 @@ test("unsupported image providers and fallbacks receive text without avatar refe
   assert.equal(slpImageReferencesSupported({ imageService: "pollinations" }), false);
   assert.equal(slpImageReferencesSupported({ imageService: "nanogpt", model: "hidream" }), true);
   assert.equal(slpImageReferencesSupported({ model: "flux-kontext", baseUrl: "https://nano-gpt.com/api/v1" }), true);
+  const openRouter = "https://openrouter.ai/api/v1";
+  assert.equal(slpImageReferencesSupported({ model: "google/gemini-3.1-flash-image", baseUrl: openRouter }), true);
+  assert.equal(slpImageReferencesSupported({ model: "krea/krea-2-medium", baseUrl: openRouter }), false);
 });

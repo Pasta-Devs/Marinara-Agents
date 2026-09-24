@@ -164,7 +164,9 @@ export function SlpPostCard({
     typeof post.metadata?.imageDescription === "string" ? post.metadata.imageDescription.trim() : "";
   // Once a picture exists, show and edit what the provider drew it from, not the draft.
   const shownImagePrompt = post.imageUrl ? slpPostImagePrompt(post) : post.imagePrompt;
-  const hasImageContext = Boolean(post.imageUrl && (shownImagePrompt?.trim() || imageDescription));
+  // The context panel describes the picture on screen, which in a set may not be the first one.
+  const contextImagePrompt = activeImage?.imagePrompt ?? shownImagePrompt;
+  const hasImageContext = Boolean(post.imageUrl && (contextImagePrompt?.trim() || imageDescription));
   const editablePost =
     post.imageUrl && (postImageSrc === null || postImageSrc !== failedImageUrl) ? post : { ...post, imageUrl: null };
   const postInteractions = post.interactions;
@@ -575,13 +577,13 @@ export function SlpPostCard({
         )}
         {imageContextOpen && hasImageContext && (
           <div className="mt-3 space-y-2 rounded-xl border border-[var(--noodle-accent)]/35 bg-[var(--noodle-accent)]/10 p-3 text-xs leading-5">
-            {shownImagePrompt?.trim() && (
+            {contextImagePrompt?.trim() && (
               <div>
                 <span className="mb-1 flex items-center gap-1.5 font-semibold text-[var(--noodle-accent)]">
                   <ImageIcon size={13} aria-hidden="true" />
                   {localizeUi("ui.noodle.noodlepostcard.imagePrompt")}
                 </span>
-                <p className="whitespace-pre-wrap break-words">{shownImagePrompt}</p>
+                <p className="whitespace-pre-wrap break-words">{contextImagePrompt}</p>
               </div>
             )}
             {imageDescription && (
