@@ -14,6 +14,7 @@ import { useState } from "react";
 import { useTranslation as useUiTranslation } from "react-i18next";
 import { toast } from "sonner";
 import type { SlpPostCardCtx, SlpPostCardModel } from "./SlpPostTypes";
+import { slpPostImagePrompt } from "./SlpPostHelpers";
 import { api } from "../../../lib/api-client";
 import { downloadSlpShareCard, toSlpShareCardInput } from "./slp-share-card";
 import { SlpDeepDetailsModal } from "./SlpDeepDetailsModal";
@@ -238,7 +239,7 @@ export function SlpPostMenu({
                   role="menuitem"
                   onClick={() => {
                     ctx.setPostMenuId(null);
-                    setPromptDraft(post.imagePrompt ?? "");
+                    setPromptDraft(slpPostImagePrompt(post) ?? "");
                   }}
                   disabled={imageGenerationPending}
                   className="flex min-h-10 w-full items-center gap-2 px-3 text-start transition-colors hover:bg-[var(--accent)] disabled:opacity-50"

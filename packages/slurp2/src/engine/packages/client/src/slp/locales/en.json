@@ -3491,7 +3491,6 @@
   "ui.slurp.settings.prompts.comparingCurrent": "Generating current result…",
   "ui.slurp.settings.prompts.compareCurrent": "Compare with current",
   "ui.slurp.settings.prompts.compareError": "Could not generate the currently applied result.",
-  "ui.slurp.settings.prompts.previewImagePrompt": "Image prompt",
   "ui.slurp.settings.prompts.fullGenerationPreviewNote": "This runs the post generator with the selected Creator and current settings.",
   "ui.slurp.settings.prompts.blockPreviewNote": "This shows the compiled prompt blocks. Runtime data can add more context during generation.",
   "ui.slurp.settings.prompts.recipeView": "Recipe view",

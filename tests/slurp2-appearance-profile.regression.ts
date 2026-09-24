@@ -172,4 +172,6 @@ test("unsupported image providers and fallbacks receive text without avatar refe
   assert.equal(slpImageReferencesSupported({ imageService: "novelai", model: "nai-diffusion-4-5-full" }), true);
   assert.equal(slpImageReferencesSupported({ imageService: "comfyui" }, { serviceHint: "pollinations" }), false);
   assert.equal(slpImageReferencesSupported({ imageService: "pollinations" }), false);
+  assert.equal(slpImageReferencesSupported({ imageService: "nanogpt", model: "hidream" }), true);
+  assert.equal(slpImageReferencesSupported({ model: "flux-kontext", baseUrl: "https://nano-gpt.com/api/v1" }), true);
 });

@@ -681,10 +681,13 @@ export async function slpFeedPostRoutes(app: FastifyInstance, deps: SlpRouteDeps
     if (imagePrompt !== post.imagePrompt || previousImageUrl) {
       await noodle.updatePostMedia(post.id, { imagePrompt, ...(previousImageUrl ? { imageUrl: null } : {}) });
     }
+    // A prompt the user typed or kept from the last picture goes to the provider as written. Only
+    // the stored draft is rebuilt through the template and the rewrite, as an automatic retry is.
+    const reviewedPrompt = Boolean(parsed.data.imagePrompt) && parsed.data.imagePrompt !== post.imagePrompt?.trim();
     const result = await slpCreatorImages.generateReviewedImages({
       prompts: [{ id: post.id, prompt: imagePrompt }],
       debugMode: parsed.data.debugMode === true,
-      retryStoredPrompt: true,
+      retryStoredPrompt: !reviewedPrompt,
     });
     const updated = await noodle.getNoodlerPostById(id);
     if (result.ok && updated?.imageUrl) return updated;
