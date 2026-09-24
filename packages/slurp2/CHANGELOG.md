@@ -1,5 +1,11 @@
 # Slurp Remastered release notes
 
+## 0.2.34 — 2026-09-23
+
+- Manage text and image connections in one place. Missing saved connections stay visible until you choose a replacement, and connection load errors can be retried.
+- Image briefs now follow the Creator's production style, and future automatic posts survive Engine restarts and source snapshot changes.
+- Prompt Studio describes its output clearly, image appearance settings apply consistently, and valid model responses can include extra fields.
+
 ## 0.2.29 — 2026-09-23
 
 - Scheduled timeline refresh uses the saved daily setting again.

@@ -13,6 +13,7 @@ import { SlpPublishingPanel } from "../../features/feed/SlpPublishingPanel";
 import { SlpAutopurgePanel } from "../../features/maintenance/SlpAutopurgePanel";
 import { SlpBackupPanel } from "../../features/maintenance/SlpBackupPanel";
 import { SlpImagesPanel } from "../../features/media/SlpImagesPanel";
+import { SlpConnectionsPanel } from "../../features/settings/SlpConnectionsPanel";
 import { SlpMessagingPanel } from "../../features/messages/SlpMessagingPanel";
 import { SlpProjectsPanel } from "../../features/projects/SlpProjectsPanel";
 import { SlpPromptsPanel } from "../../features/settings/SlpPromptsPanel";
@@ -47,6 +48,7 @@ export const SLP_BACKSTAGE_PANELS: readonly SlpBackstagePanelEntry[] = [
   { target: "automation", Component: SlpBackstageAutomationPanel },
   { target: "general", Component: SlpPublishingPanel },
   { target: "images", Component: SlpImagesPanel },
+  { target: "connections", Component: SlpConnectionsPanel },
   { target: "prompts", Component: SlpPromptsPanel },
   { target: "autopurge", Component: SlpAutopurgePanel },
   { target: "advanced", Component: SlpBackupPanel },

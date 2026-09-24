@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import { useTranslation as useUiTranslation } from "react-i18next";
 import { cn } from "../../../lib/utils";
 import { SlurpCoin, SlurpCoinAmount, SlurpCoinBurst } from "../../modules/coin/SlpCoin";
-import { useSlurpWallet } from "../economy/slp-economy-hooks";
+import { useSlurpWallet } from "../economy/slp-economy-contract";
 import { TIP_PRESETS } from "./SlpMessages";
 import {
   useBroadcastSlurpMessage,
