@@ -1,5 +1,37 @@
 # Slurp Remastered release notes
 
+## 0.2.34 — 2026-09-23
+
+- Manage text and image connections in one place. Missing saved connections stay visible until you choose a replacement, and connection load errors can be retried.
+- Image briefs now follow the Creator's production style, and future automatic posts survive Engine restarts and source snapshot changes.
+- Prompt Studio describes its output clearly, image appearance settings apply consistently, and valid model responses can include extra fields.
+
+## 0.2.29 — 2026-09-23
+
+- Scheduled timeline refresh uses the saved daily setting again.
+- Delayed chat replies finish during a cool-off, and strict model output supports comment threads and invited posts.
+- Pulse shows failed first posts and audience failure details. Arc edits keep imported story fields.
+
+## 0.2.28 — 2026-09-23
+
+- Creator settings now have a status overview and a mobile section picker.
+- Profile edits use the modal's shared save bar, and each Creator settings view has one scroll area.
+
+## 0.2.27 — 2026-09-23
+
+- Creator settings now keep profile drafts when you change sections and confirm before discarding them.
+- Creator settings are grouped by task, and the Creator roster shows attention reasons and bulk-change previews.
+
+## 0.2.26 — 2026-09-23
+
+- Image prompts preserve each Creator's appearance and follow the selected image guidance.
+- Choose an image style for each Creator, or let them use the global style.
+- Settings sections now use the shorter names Content and World.
+- Posts, messages, audience activity, story events, and image generation use clearer state and feedback handling.
+- Locked posts use each Creator's configured level, and occasions and story events reach posts and chats.
+- Owned posts are not sold again, audience activity reports results, and manual occasions can be started.
+- Callback posts preserve their shoot context, picture sets vary poses, and follow-ups handle reasoning models.
+
 ## 0.2.25 — 2026-09-22
 
 - Every generated picture keeps the Creator's appearance, planned action, expression, and mood even when image-prompt interpretation is unavailable.

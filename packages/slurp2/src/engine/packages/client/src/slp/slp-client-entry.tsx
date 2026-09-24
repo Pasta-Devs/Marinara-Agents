@@ -58,6 +58,46 @@ let slurpPackageStyles = "";
 const SLURP_ICON_COLOR_FIX =
   "[data-marinara-accent-animation] .mari-chrome-token-scope svg:not(.mari-rgb-static-icon){color:inherit;stroke:currentColor;}";
 
+const SLURP_TOAST_STYLES = `
+  [data-sonner-toaster][data-sonner-theme] {
+    --width: min(380px, calc(100vw - 32px));
+    z-index: 100;
+  }
+  [data-sonner-toast].slp-toast {
+    width: var(--width);
+    min-height: 52px;
+    padding: 12px 14px;
+    border: 1px solid color-mix(in srgb, var(--slurp-outline, currentColor) 72%, transparent);
+    border-radius: 16px;
+    background: var(--slurp-surface-raised, var(--background));
+    color: var(--slurp-text, var(--foreground));
+    box-shadow: 0 16px 40px color-mix(in srgb, #000 24%, transparent), 0 0 0 1px color-mix(in srgb, #fff 5%, transparent) inset;
+    backdrop-filter: blur(16px);
+  }
+  [data-sonner-toast].slp-toast [data-title] { font-weight: 700; line-height: 1.25; }
+  [data-sonner-toast].slp-toast [data-description] { color: var(--slurp-muted, var(--muted-foreground)); line-height: 1.35; }
+  [data-sonner-toast].slp-toast [data-button] {
+    border-radius: 999px;
+    background: var(--noodle-accent, var(--slurp-accent, currentColor));
+    color: var(--slurp-surface, var(--background));
+    font-weight: 700;
+  }
+  [data-sonner-toaster][data-x-position="right"] { right: 16px; }
+  [data-sonner-toaster][data-y-position="bottom"] { bottom: max(16px, env(safe-area-inset-bottom)); }
+  @media (max-width: 640px) {
+    [data-sonner-toaster][data-x-position="right"] {
+      right: 0;
+      left: 0;
+      width: 100%;
+      align-items: center;
+    }
+    [data-sonner-toaster][data-y-position="bottom"] { bottom: max(12px, env(safe-area-inset-bottom)); }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    [data-sonner-toast].slp-toast { transition: none; }
+  }
+`;
+
 function syncSlurpPackageStyles() {
   const existing = document.getElementById(SLURP_STYLE_ID);
   if (!document.querySelector(SLURP_ELEMENT_TAG) || !slurpPackageStyles) {
@@ -67,7 +107,7 @@ function syncSlurpPackageStyles() {
 
   const style = existing ?? document.createElement("style");
   style.id = SLURP_STYLE_ID;
-  style.textContent = `${slurpPackageStyles}\n${SLURP_ICON_COLOR_FIX}`;
+  style.textContent = `${slurpPackageStyles}\n${SLURP_ICON_COLOR_FIX}\n${SLURP_TOAST_STYLES}`;
   if (!existing) document.head.appendChild(style);
 }
 
@@ -158,7 +198,15 @@ function SlurpPackageRoot({ element }: { element: CapabilityElement }) {
             <SlurpErrorBoundary>
               <SlpApp navigation={navigation} onNavigate={setNavigation} onLeave={onLeave} />
               <AppDialogRenderer />
-              <Toaster richColors />
+              <Toaster
+                position="bottom-right"
+                richColors
+                closeButton
+                toastOptions={{
+                  duration: 4000,
+                  classNames: { toast: "slp-toast" },
+                }}
+              />
             </SlurpErrorBoundary>
           </div>
         </ModalPortalContext.Provider>

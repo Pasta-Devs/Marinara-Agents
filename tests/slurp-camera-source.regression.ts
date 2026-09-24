@@ -3,6 +3,7 @@ import {
   SLURP_CAMERA_SOURCE_RULE,
   SLURP_CAMERA_SOURCES,
   slurpCameraSourceInstruction,
+  slurpCameraSourcePhoto,
   slurpPermittedCameraSources,
   slurpPostCameraSource,
 } from "../packages/slurp2/src/engine/packages/server/src/slp/modules/feed/slp-camera-source.ts";
@@ -56,11 +57,16 @@ for (const sequence of [Number.NaN, -5, 1.7, Number.POSITIVE_INFINITY]) {
   );
 }
 
-// Every source carries the prohibition. Stated softly, the image model reintroduces the
-// unexplained angle, so it must be present on every single one.
+// Every source carries the shared rule, and the caption call no longer gets the "describe the
+// photograph / plain and imperfect" prose that turned into caption content.
 for (const source of SLURP_CAMERA_SOURCES) {
-  assert.match(slurpCameraSourceInstruction(source), /Describe the photograph, not the scene/u);
   assert.ok(slurpCameraSourceInstruction(source).includes(SLURP_CAMERA_SOURCE_RULE));
+  assert.doesNotMatch(slurpCameraSourceInstruction(source), /Describe the photograph|imperfect/u);
+  assert.doesNotMatch(
+    slurpCameraSourcePhoto(source),
+    /\b(?:no|never|not)\b/iu,
+    `${source} photo phrase must be positive`,
+  );
 }
 
 // The camera replaced the free-floating framing axis rather than being added alongside it. The

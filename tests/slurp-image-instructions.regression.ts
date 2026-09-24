@@ -242,7 +242,11 @@ for (const source of [images, publicImages]) {
     "art style and image preferences must reach the provider; personality is checked at any length",
   );
   assert.match(source, /selectSlpImageProviderPrompt/u);
-  assert.match(source, /fallbackPrefix: \[\s*characterDescription/u, "fallbacks must lead with Creator appearance");
+  // Creator posts carry the clothing-free look inside the rendered template; a full card paragraph as
+  // a prefix pushed the scene past the length cap. Public posts still lead with appearance.
+  if (source === images) assert.match(source, /slurpImageLook\(characterDescription\)/u, "creator look must be used");
+  else
+    assert.match(source, /fallbackPrefix: \[\s*characterDescription/u, "fallbacks must lead with Creator appearance");
   // Both fallback paths — interpretation disabled, and a rejected rewrite — must still carry style.
   assert.match(source, /compiledDraft|compiledPrompt/u);
   // A reviewed prompt is recompiled so the style profile survives the review path.
@@ -253,7 +257,7 @@ for (const source of [images, publicImages]) {
   // failed, or was rejected — the style looked intermittent rather than broken.
   assert.match(
     source,
-    /const compiledRewrittenPrompt = rewrittenPrompt\s*\?\s*compileImagePrompt\(\{/u,
+    /const compiledRewrittenPrompt = rewrittenPrompt\s*\?\s*compile(?:Slurp)?ImagePrompt\(\{/u,
     "a successful rewrite must be recompiled before it reaches the provider",
   );
   assert.match(

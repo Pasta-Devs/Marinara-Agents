@@ -33,7 +33,7 @@ export const slurpDmReplySchema = z.object({
   stateSignals: z.array(z.enum(SLURP_CREATOR_STATE_SIGNALS)).max(3).optional().catch(undefined),
   sharePost: z.number().int().min(0).max(4).optional().catch(undefined),
   image: z
-    .object({ prompt: z.string().trim().min(3).max(1000), caption: z.string().trim().max(500).optional() })
+    .object({ prompt: z.string().trim().min(3).max(1000), caption: z.string().trim().max(500).nullish() })
     .nullable()
     .optional()
     .catch(undefined),
@@ -54,7 +54,7 @@ export const slurpDmReplySchema = z.object({
       timing: z.string().trim().min(1).max(50),
       count: z.number().int().min(1).max(10).optional(),
       reason: z.string().trim().min(1).max(200),
-      context: z.string().trim().max(500).optional(),
+      context: z.string().trim().max(500).nullish(),
     })
     .nullable()
     .optional()
@@ -132,7 +132,7 @@ export function readSlurpDmReply(value: unknown): SlurpDmReply {
             timing: parsed.data.followUp.timing,
             count: parsed.data.followUp.count,
             reason: parsed.data.followUp.reason,
-            context: parsed.data.followUp.context,
+            context: parsed.data.followUp.context ?? undefined,
           },
         }
       : {}),

@@ -1,5 +1,5 @@
 import { useDismissablePopover } from "./SlpMessageInsights";
-import { useLayoutEffect } from "react";
+import { useLayoutEffect, useRef } from "react";
 import { toast } from "sonner";
 import { isCommissionRequest } from "./commissions/SlpCommissions";
 import { showConfirmDialog } from "../../../lib/app-dialogs";
@@ -40,8 +40,6 @@ function useSlurpThreadActions(state: SlurpThreadViewState) {
     setCommissionPrefill,
     setComposerTipAmount,
     setComposerTipNote,
-    setCustomTipAmount,
-    setCustomTipNote,
     setDraft,
     setError,
     setHeaderMenuOpen,
@@ -64,6 +62,10 @@ function useSlurpThreadActions(state: SlurpThreadViewState) {
     typing,
     typingTimeoutRef,
   } = state;
+
+  // A retried tip reuses its id until it succeeds, like a retried message. A new id on each tap
+  // charged twice when the first request had landed before it timed out.
+  const tipRequestRef = useRef<{ id: string; key: string } | null>(null);
 
   const holdTyping = (ms: number, replyId?: string) => {
     const conversation = activeConversationRef.current;
@@ -134,7 +136,8 @@ function useSlurpThreadActions(state: SlurpThreadViewState) {
     bottomRef.current?.scrollIntoView({ block: "end", behavior: reduceMotion ? "auto" : "smooth" });
   };
 
-  const submit = async (force = false) => {
+  /** `skipCommissionCheck`: the fan chose "Send as message" in the commission sheet. Fees still apply. */
+  const submit = async (skipCommissionCheck = false) => {
     const content = draft.trim();
     if (!content || !personaId || !targetCreatorAccountId || busy) return;
     const cheatMatch = /^\/cheat(?:\s+([\s\S]*))?$/iu.exec(content);
@@ -176,14 +179,14 @@ function useSlurpThreadActions(state: SlurpThreadViewState) {
       return;
     }
     const optimisticStartedAt = Date.now();
-    if (!force && !ownsCreator && isCommissionRequest(content)) {
+    if (!skipCommissionCheck && !ownsCreator && isCommissionRequest(content)) {
       setCommissionPrefill(content);
       setToolsOpen(true);
       setToolTab("commission");
       return;
     }
     const feeDue = !thread || thread.requestFeePaid <= 0;
-    if (!force && !ownsCreator && feeDue && messaging?.dmPolicy === "paid" && !subscribed && messaging.requestFee > 0) {
+    if (!ownsCreator && feeDue && messaging?.dmPolicy === "paid" && !subscribed && messaging.requestFee > 0) {
       const confirmed = await showConfirmDialog({
         title: localizeUi("ui.slurp.messages.sendRequestTitle", { defaultValue: "Send message request?" }),
         message: localizeUi("ui.slurp.messages.sendRequestDetail", {
@@ -255,13 +258,8 @@ function useSlurpThreadActions(state: SlurpThreadViewState) {
     }
   };
 
-  const sendTip = async (amount: number, note = "", restore?: { amount: string; note: string }) => {
+  const sendTip = async (amount: number, note = "") => {
     if (!personaId || !targetCreatorAccountId || busy) return;
-    const restoreCustomTip = () => {
-      if (!restore) return;
-      setCustomTipAmount(restore.amount);
-      setCustomTipNote(restore.note);
-    };
     setError(null);
     setActiveTipAmount(amount);
     try {
@@ -275,21 +273,22 @@ function useSlurpThreadActions(state: SlurpThreadViewState) {
         }),
         confirmLabel: localizeUi("ui.slurp.messages.sendTipConfirm", { defaultValue: "Send tip" }),
       });
-      if (!confirmed) {
-        restoreCustomTip();
-        return;
-      }
+      if (!confirmed) return;
+      const tipKey = `${personaId}:${targetCreatorAccountId}:${amount}:${note}`;
+      if (tipRequestRef.current?.key !== tipKey) tipRequestRef.current = { id: newRequestId(), key: tipKey };
       const result = await tip.mutateAsync({
         personaId,
         creatorAccountId: targetCreatorAccountId,
         amount,
         note,
-        requestId: newRequestId(),
+        requestId: tipRequestRef.current.id,
       });
+      tipRequestRef.current = null;
       setStandaloneTip(result.message);
+      setToolsOpen(false);
+      setToolTab(null);
       if (result.reply) holdTyping(result.typingMs ?? 0, result.reply.id);
     } catch (cause) {
-      restoreCustomTip();
       setError(
         cause instanceof Error
           ? cause.message

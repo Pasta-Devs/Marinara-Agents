@@ -39,8 +39,6 @@ import {
   SlurpPostDialog,
   LoadMoreFeedButton,
 } from "./SlpHomeHelpers";
-import { SlpDeletedPostSlot } from "./SlpDeletedPostSlot";
-import type { SlpDeletedPostEntry } from "../slp-home-post-actions";
 import { deriveSlurpHubView } from "./slp-hub-view";
 import { useSlurpHubDiscoveryFilters } from "./slp-hub-discovery-filters";
 import { SlurpInlineSuggestedCreators } from "./SlpScreenSuggestedCreators";
@@ -90,10 +88,6 @@ export function ViewerHub({
   walletCoins,
   onLoadMore,
   hasMore,
-  deletingPostIds,
-  deletedPostIds,
-  restoringPostIds = new Set<string>(),
-  onRestorePost,
 }: {
   personas: Persona[];
   personasLoading: boolean;
@@ -111,10 +105,6 @@ export function ViewerHub({
   walletCoins: number;
   onLoadMore: () => Promise<boolean>;
   hasMore: boolean;
-  deletingPostIds: Set<string>;
-  deletedPostIds: Map<string, SlpDeletedPostEntry>;
-  restoringPostIds?: Set<string>;
-  onRestorePost: (post: ReturnType<typeof toSlpPostCardModel>) => void;
   isLoading: boolean;
   isError: boolean;
   onRetry: () => void;
@@ -265,16 +255,26 @@ export function ViewerHub({
   }
   const dividerIndex = lastNewIndex >= 0 && lastNewIndex < feed.length - 1 ? lastNewIndex + 1 : -1;
   const renderFeedPost = ({ post, creator }: (typeof searchResults)[number]) => (
-    <SlurpAccessTransition key={post.id} postId={post.id} locked={post.locked}>
+    <SlurpAccessTransition
+      key={post.id}
+      postId={post.id}
+      locked={post.locked}
+      menuOpen={postCardCtx.postMenuId === post.id}
+    >
       {post.locked ? (
         <LockedSlurpPostCard
           post={post}
           profile={creator.profile}
           subscriptionPrice={creator.subscriptionPrice}
+          postMenuOpen={postCardCtx.postMenuId === post.id}
+          setPostMenuOpen={(open) => postCardCtx.setPostMenuId(open ? post.id : null)}
           subscribed={creator.subscribed}
           unlockPending={unlockPending}
           subscriptionPending={togglePending}
           onUnlock={onUnlock}
+          onGambleUnlock={postCardCtx.gambleUnlockPost}
+          unlockOffer={postCardCtx.unlockOffer}
+          subscriptionOffer={postCardCtx.subscriptionOffer}
           onToggleSubscription={onToggleSubscription}
           onOpenProfile={postCardCtx.openAuthorProfile}
         />
@@ -556,49 +556,21 @@ export function ViewerHub({
             />
           ) : (
             <div className="space-y-4 bg-[var(--slurp-canvas)] px-3 pb-6 sm:px-4">
-              {/* A post inside its undo window that the feed no longer carries. The feed refetches
-                  on a timer and the server stops returning a deleted post, which used to take the
-                  row — and the Restore button on it — off screen mid-countdown, so the undo read
-                  as "nothing happened, and then the post vanished".
-                  ponytail: these sit at the top rather than in the post's old place. Splice them
-                  back by createdAt if the jump bothers anyone. */}
-              {[...deletedPostIds.entries()]
-                .filter(([postId]) => !feed.some((item) => item.post.id === postId))
-                .map(([postId, entry]) => (
-                  <SlpDeletedPostSlot
-                    key={postId}
-                    deleting={deletingPostIds.has(postId)}
-                    restoring={restoringPostIds.has(postId)}
-                    expiresAt={entry.expiresAt}
-                    onRestore={() => onRestorePost(entry.card)}
-                  />
-                ))}
               <AnimatePresence initial={false} mode="popLayout">
                 {visibleFeed.map((item, index) => (
                   <motion.div
                     key={item.post.id}
                     layout
                     initial={false}
-                    animate={
-                      deletingPostIds.has(item.post.id)
-                        ? { opacity: 1, height: "auto", y: 0 }
-                        : { opacity: 1, height: "auto", y: 0 }
-                    }
+                    animate={{ opacity: 1, height: "auto", y: 0 }}
                     transition={reduceMotion ? { duration: 0 } : { duration: 0.28, ease: "easeOut" }}
-                    className="overflow-hidden"
+                    className={
+                      postCardCtx.postMenuId === item.post.id ? "relative z-40 overflow-visible" : "overflow-hidden"
+                    }
                   >
                     <Fragment>
                       {index === dividerIndex && <NewSinceLastVisitDivider />}
-                      {deletingPostIds.has(item.post.id) || deletedPostIds.has(item.post.id) ? (
-                        <SlpDeletedPostSlot
-                          deleting={deletingPostIds.has(item.post.id)}
-                          restoring={restoringPostIds.has(item.post.id)}
-                          expiresAt={deletedPostIds.get(item.post.id)?.expiresAt}
-                          onRestore={() => onRestorePost(toSlpPostCardModel(item.post, item.creator.profile))}
-                        />
-                      ) : (
-                        renderFeedPost(item)
-                      )}
+                      {renderFeedPost(item)}
                       {(() => {
                         // One place decides whether this row gets an ad. The slot
                         // maths used to be copy-pasted six times inside the JSX.

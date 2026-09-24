@@ -4,11 +4,11 @@ import {
   slurpPromptDescriptions,
   slurpPromptEditableDefaults,
 } from "../../base/prompting/slp-prompt-blocks.js";
+import { slpIsAdmissionFailure } from "../../base/host/slp-admission.js";
 import { DEFAULT_SLURP_SETTINGS, slurpSettingsSchema } from "../../modules/settings/slp-settings.js";
 import { getSlurpModelBudgetLedger } from "../../base/model/slp-model-worker.js";
 import { resolveSlurpTextConnection } from "../../base/identity/slp-connection.js";
 import { createConnectionsStorage } from "../../../services/storage/connections.storage.js";
-import { isConnectionAdmissionFailure } from "../../../services/generation/connection-admission.js";
 import type { FastifyInstance } from "fastify";
 import type { SlpRouteDeps } from "../viewer/slp-viewer-contract.js";
 import { z } from "zod";
@@ -116,7 +116,7 @@ export async function slpSettingsRoutes(app: FastifyInstance, deps: SlpRouteDeps
         providerPrompt: result.providerPrompt,
       };
     } catch (error) {
-      if (isConnectionAdmissionFailure(error)) return reply.code(409).send({ error: getErrorMessage(error) });
+      if (slpIsAdmissionFailure(error)) return reply.code(409).send({ error: getErrorMessage(error) });
       return reply.code(500).send({ error: `Prompt preview failed: ${getErrorMessage(error)}` });
     }
   });

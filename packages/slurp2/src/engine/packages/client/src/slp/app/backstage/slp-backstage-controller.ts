@@ -12,6 +12,7 @@ import { useSlpMaintenanceBackstageState } from "../../features/maintenance/slp-
 import { useSlpMediaBackstageState } from "../../features/media/slp-media-backstage-contract";
 import { useSlpMessagesBackstageState } from "../../features/messages/slp-messages-backstage-contract";
 import { useSlpPromptsBackstageState } from "../../features/settings/slp-prompts-backstage-contract";
+import { useSlpProjectsBackstageState } from "../../features/projects/slp-projects-backstage-contract";
 import { useSlpSettingsDraft } from "../../features/settings/slp-settings-backstage-contract";
 import type { SlurpSettings } from "../../features/settings/slp-settings-contract";
 
@@ -46,6 +47,7 @@ export function useSlpBackstageController(
   const economy = useSlpEconomyBackstageState();
   const maintenance = useSlpMaintenanceBackstageState({ section, target, settings, save });
   const prompts = useSlpPromptsBackstageState({ settings, updatePatch: draft.updatePatch });
+  const projects = useSlpProjectsBackstageState();
 
   return {
     ...host,
@@ -59,6 +61,7 @@ export function useSlpBackstageController(
     ...economy,
     ...maintenance,
     ...prompts,
+    ...projects,
     settings,
     openRefresh: () => host.openRefreshFor(feed.autoPostingCreators, creators.automationCreators),
   };

@@ -1,4 +1,5 @@
 import type { SlpAccount, SlpIdentityDisclosure } from "../../../../../shared/src/slp/slp-social.types.js";
+import { slpIsAdmissionFailure } from "../../base/host/slp-admission.js";
 import type { DB } from "../../../db/connection.js";
 import { logger, logDebugOverride } from "../../../lib/logger.js";
 import { newId } from "../../../utils/id-generator.js";
@@ -14,24 +15,36 @@ import { resolveConnectionImageDefaults } from "../../../services/image/image-ge
 import { compileImagePrompt, resolveImageStyleGuidanceText } from "../../../services/image/image-prompt-compiler.js";
 import { resolveImagePromptReviewSize } from "../../../services/image/image-prompt-review.js";
 import type { SlurpVisualBrief } from "../../base/media/slp-visual-brief.js";
-import { slurpVisualBriefPromptViolatesPolicy, slurpVisualBriefText } from "../../base/media/slp-visual-brief.js";
+import { slurpVisualBriefPromptViolatesPolicy } from "../../base/media/slp-visual-brief.js";
 import { loadImageGenerationUserSettings } from "../../../services/image/image-generation-settings.js";
 import { resolveIllustratorCharacterReferences } from "../../../services/image/illustrator-references.js";
 import { createCharactersStorage } from "../../../services/storage/characters.storage.js";
 import { createConnectionsStorage } from "../../../services/storage/connections.storage.js";
 import { createPromptOverridesStorage } from "../../../services/storage/prompt-overrides.storage.js";
-import { resolveCreatorImageConnectionId } from "../../base/media/slp-image-connections.js";
-import { loadPrompt, NOODLE_IMAGE_POST } from "../../../services/prompt-overrides/index.js";
-import { generateSlpImageWithRetry, slpCreatorPostImageRetryAttempts } from "../../base/media/slp-image-retry.js";
-import { rewriteSlpImagePrompt } from "../../base/media/slp-image-prompt-rewrite.js";
 import {
-  isConnectionAdmissionFailure,
-  type ConnectionAdmissionMode,
-} from "../../../services/generation/connection-admission.js";
+  resolveCreatorImageConnectionId,
+  resolveCreatorImageStyleProfileId,
+} from "../../base/media/slp-image-connections.js";
+import { loadPrompt, NOODLE_IMAGE_POST } from "../../../services/prompt-overrides/index.js";
+import {
+  generateSlpImageWithRetry,
+  SLP_CREATOR_POST_IMAGE_RETRY_LIMIT,
+  slpCreatorPostImageRetryAttempts,
+  slpImageAuthFailure,
+} from "../../base/media/slp-image-retry.js";
+import { rewriteSlpImagePrompt } from "../../base/media/slp-image-prompt-rewrite.js";
+import { slpImageReferencesSupported } from "../../base/media/slp-image-references.js";
+import { resolveImageAppearance } from "./slp-appearance-service.js";
+import { type ConnectionAdmissionMode } from "../../../services/generation/connection-admission.js";
 import { characterAppearanceFromRow, characterSlpImageContextFromRow } from "./slp-public-images-service.js";
 import type { SlpImagePromptReviewItem, ReviewedSlpImagePrompt } from "./slp-public-images-service.js";
 import { characterNameFromRow } from "../../modules/creators/slp-public-support.js";
-import { selectSlpImageProviderPrompt, stripAppearanceLabel } from "../../base/media/slp-image-prompt.js";
+import {
+  selectSlpImageProviderPrompt,
+  ensureSlpImageAppearance,
+  slurpImageLook,
+  stripAppearanceLabel,
+} from "../../base/media/slp-image-prompt.js";
 import { slurpImageExtension } from "../../base/media/slp-image-format.js";
 import { slurpPromptContext } from "../../base/prompting/slp-prompt-blocks.js";
 
@@ -40,6 +53,43 @@ const REVIEWED_IMAGE_CLAIM_RENEW_MS = 30 * 1000;
 
 function imageClaimLeaseUntil() {
   return new Date(Date.now() + REVIEWED_IMAGE_CLAIM_LEASE_MS).toISOString();
+}
+
+/**
+ * Apply Slurp's chosen style profile. The profile rides on the defaults, where the compiler reads
+ * it, and the connection's own prompt prefixes are dropped: a chosen style replaces them. Both the
+ * compiler and the provider added those prefixes, so a picked style used to arrive underneath the
+ * connection's positive and negative prompts rather than replacing them.
+ */
+/**
+ * The Engine compiler, minus the "auto" profile's style text. That text is an instruction for a
+ * prompt-writing model ("Infer a consistent visual style …"); the Engine's own illustrator replaces
+ * it with the style its model inferred, but Slurp has no such step when interpretation is off, so it
+ * reached the image model as literal words. The rewrite still receives it as style guidance.
+ */
+function compileSlurpImagePrompt(input: Parameters<typeof compileImagePrompt>[0]) {
+  const compiled = compileImagePrompt(input);
+  return compiled.profile.baseStyle === "auto"
+    ? compileImagePrompt({ ...input, omitProfileStyleText: true })
+    : compiled;
+}
+
+type SlurpImageDefaults = ReturnType<typeof resolveConnectionImageDefaults>;
+
+function slurpImageDefaultsForStyle(
+  defaults: SlurpImageDefaults,
+  styleProfileId: string | null | undefined,
+): SlurpImageDefaults {
+  if (!defaults || !styleProfileId) return defaults;
+  const withoutPrefixes = <V extends object | undefined>(value: V): V =>
+    value ? { ...value, promptPrefix: "", negativePromptPrefix: "" } : value;
+  return {
+    ...defaults,
+    styleProfileId,
+    automatic1111: withoutPrefixes(defaults.automatic1111),
+    comfyui: withoutPrefixes(defaults.comfyui),
+    novelai: withoutPrefixes(defaults.novelai),
+  };
 }
 
 type ImageConnection = NonNullable<Awaited<ReturnType<ReturnType<typeof createConnectionsStorage>["getWithKey"]>>>;
@@ -66,11 +116,14 @@ export async function generateCreatorPostImage(input: {
     | "imagePromptInterpretation"
     | "imageGenerationUseAvatarReferences"
     | "imageGenerationIncludeDescriptions"
+    | "appearanceProfileMode"
     | "enableImageInterpretation"
     | "imageWidth"
     | "imageHeight"
     | "characterImageInstructions"
     | "promptBlocks"
+    | "generationConnectionId"
+    | "imageStyleProfileId"
   >;
   characters: ReturnType<typeof createCharactersStorage>;
   promptOverrides: ReturnType<typeof createPromptOverridesStorage>;
@@ -93,6 +146,8 @@ export async function generateCreatorPostImage(input: {
   compositionGuard?: string;
   negativePromptAdditions?: string;
   suppressCharacterContext?: boolean;
+  suppressStageAppearance?: boolean;
+  suppressCreatorDetails?: boolean;
 }): Promise<{
   metadata: Record<string, unknown>;
   preview: Omit<SlpImagePromptReviewItem, "id"> | null;
@@ -113,7 +168,11 @@ export async function generateCreatorPostImage(input: {
       value,
     );
   };
-  const imageDefaults = resolveConnectionImageDefaults(input.imageConnection);
+  const creatorStyleProfileId = await resolveCreatorImageStyleProfileId(input.db, input.account.id);
+  const imageDefaults = slurpImageDefaultsForStyle(
+    resolveConnectionImageDefaults(input.imageConnection),
+    creatorStyleProfileId ?? input.settings.imageStyleProfileId,
+  );
   const imageModel = input.imageConnection.model || "";
   const imageBaseUrl = input.imageConnection.baseUrl || "https://image.pollinations.ai";
   const imageSource = input.imageConnection.imageGenerationSource || imageModel;
@@ -122,15 +181,28 @@ export async function generateCreatorPostImage(input: {
     createConnectionsStorage(input.db),
     input.imageConnection.id,
   );
+  const allowAvatarReferences = slpImageReferencesSupported(input.imageConnection, imageFallback);
 
   // The Creator's own appearance, written on the Creator rather than borrowed from a card.
   //
-  // It is applied unconditionally, unlike the block below it. `imageGenerationIncludeDescriptions`
-  // decides whether to pull the *source character's* description into the picture; it was never
+  // It is applied by default, unlike the block below it. Artwork requests can turn it off.
+  // `imageGenerationIncludeDescriptions` decides whether to pull the *source character's* description; it was never
   // meant to decide whether the picture knows who the Creator is. With it off, a Creator with no
   // linked source, or a source card with an empty Appearance field, the image model received a
   // scene containing nobody and invented somebody — a different somebody every post.
-  const stageAppearance = input.account.settings.stage?.appearance?.trim() ?? "";
+  const includeAppearance = input.settings.imageGenerationIncludeDescriptions;
+  const stageAppearance =
+    input.suppressStageAppearance || !includeAppearance
+      ? ""
+      : input.suppressCharacterContext
+        ? input.account.settings.stage?.appearance?.trim() || ""
+        : await resolveImageAppearance({
+            db: input.db,
+            account: input.account,
+            sourceAccount: input.linkedPublicAccount,
+            connectionId: input.settings.generationConnectionId,
+            mode: input.settings.appearanceProfileMode,
+          });
   let characterDescription = stageAppearance;
   let characterImageInstructions = "";
   let characterPersonality = "";
@@ -157,7 +229,7 @@ export async function generateCreatorPostImage(input: {
   // Every mode shows the same body — it is the page. Reducing a concealed creator to a handful of
   // approved tokens made them shapeless without hiding anything linkable, since a build and a hair
   // colour identify nobody.
-  if (!stageAppearance && !input.suppressCharacterContext && sourceAppearance) {
+  if (includeAppearance && !stageAppearance && !input.suppressCharacterContext && sourceAppearance) {
     characterDescription = sourceAppearance;
   }
   if (referenceSubject) {
@@ -211,20 +283,29 @@ export async function generateCreatorPostImage(input: {
         ) {
           characterDescription = referenceResolution.appearanceBlock;
         }
-        if (input.settings.imageGenerationUseAvatarReferences && referenceResolution.referenceImages.length > 0) {
+        if (
+          input.settings.imageGenerationUseAvatarReferences &&
+          allowAvatarReferences &&
+          referenceResolution.referenceImages.length > 0
+        ) {
           referenceImages = Array.from(new Set(referenceResolution.referenceImages)).slice(0, 6);
         }
       }
     }
   }
 
+  // Card appearance carries clothes and costumes; the scene decides what is worn in this picture.
+  if (!stageAppearance) characterDescription = slurpImageLook(characterDescription);
+
   const postPrompt = await loadPrompt(input.promptOverrides, NOODLE_IMAGE_POST, {
-    authorName: input.account.displayName,
+    authorName: input.suppressCreatorDetails ? "" : input.account.displayName,
     postContent: input.postContent,
     visualBrief: input.visualBrief,
-    draftPrompt: input.draftPrompt,
+    // The look leads, so the subject is the first thing the image model reads; the default
+    // template put it after the scene, and the picture began with an action nobody was doing.
+    draftPrompt: [stripAppearanceLabel(characterDescription), input.draftPrompt].filter(Boolean).join("\n"),
     userInstructions: input.settings.imageGenerationPrompt,
-    characterDescription: stripAppearanceLabel(characterDescription),
+    characterDescription: "",
     characterImageInstructions,
     // Empty on purpose. The default template concatenates this straight into the prompt the image
     // provider receives, and "arrogant, impatient with staged sentimentality" is not a visual
@@ -234,7 +315,7 @@ export async function generateCreatorPostImage(input: {
     // that genuinely wants it can still read the character card.
     characterPersonality: "",
   });
-  const compiledPrompt = compileImagePrompt({
+  const compiledPrompt = compileSlurpImagePrompt({
     kind: "illustration",
     prompt: postPrompt,
     styleProfiles: imageSettings.styleProfiles,
@@ -246,7 +327,7 @@ export async function generateCreatorPostImage(input: {
   // style values the prompt already carries, so an approved prompt is never double-styled.
   const overridePrompt = input.promptOverride?.prompt.trim();
   const compiledOverride = overridePrompt
-    ? compileImagePrompt({
+    ? compileSlurpImagePrompt({
         kind: "illustration",
         prompt: overridePrompt,
         styleProfiles: imageSettings.styleProfiles,
@@ -258,7 +339,7 @@ export async function generateCreatorPostImage(input: {
   // path did, so the draft is compiled too.
   const draftPrompt = input.draftPrompt.trim();
   const compiledDraft = draftPrompt
-    ? compileImagePrompt({
+    ? compileSlurpImagePrompt({
         kind: "illustration",
         prompt: draftPrompt,
         styleProfiles: imageSettings.styleProfiles,
@@ -322,6 +403,7 @@ export async function generateCreatorPostImage(input: {
         characterContext,
         styleGuidance,
         promptBlocks: slurpPromptContext(input.settings).blocks,
+        connectionId: input.settings.generationConnectionId,
       })
     : null;
   // The style profile is an Engine setting, not something the interpretation model owns. The
@@ -331,7 +413,7 @@ export async function generateCreatorPostImage(input: {
   // setting looked intermittent rather than broken. The compiler dedupes against the prompt it is
   // given, so a rewrite that kept its style is not styled twice.
   const compiledRewrittenPrompt = rewrittenPrompt
-    ? compileImagePrompt({
+    ? compileSlurpImagePrompt({
         kind: "illustration",
         prompt: rewrittenPrompt,
         styleProfiles: imageSettings.styleProfiles,
@@ -345,13 +427,10 @@ export async function generateCreatorPostImage(input: {
   const finalPromptBase = redactIdentity(
     selectSlpImageProviderPrompt({
       rewrittenPrompt: acceptedRewrittenPrompt,
+      // The rendered template already holds the draft, the look, and the image habits. A prefix of
+      // the full card appearance plus the typed brief used to go first and push the scene past the
+      // length cap, so the image model received an appearance paragraph and no picture.
       rawPrompt: rawProviderPrompt,
-      fallbackPrefix: [
-        characterDescription ? `Appearance: ${stripAppearanceLabel(characterDescription)}` : "",
-        input.visualBrief ? slurpVisualBriefText(input.visualBrief) : "",
-      ]
-        .filter(Boolean)
-        .join("\n"),
       rewriteAttempted,
       onFallback: (reason) =>
         logger.warn("[slurp] Image prompt rewrite unusable (%s); sending the capped draft", reason),
@@ -362,7 +441,12 @@ export async function generateCreatorPostImage(input: {
       guidanceContext: [configuredImageInstructions, connectionImageInstructions],
     }),
   );
-  const finalPrompt = [finalPromptBase, input.compositionGuard].filter(Boolean).join("\n\n");
+  const finalPrompt = [
+    ensureSlpImageAppearance(finalPromptBase, redactIdentity(stageAppearance)),
+    input.compositionGuard,
+  ]
+    .filter(Boolean)
+    .join("\n\n");
   // A reviewer who cleared the negative prompt still gets the style profile's own negatives back,
   // for the same reason the positive prompt is recompiled above.
   const baseNegativePrompt =
@@ -371,8 +455,18 @@ export async function generateCreatorPostImage(input: {
         reviewedOverride?.negativePrompt ||
         undefined
       : compiledPrompt.negativePrompt || undefined;
+  // Deduplicated: the style profile and the level both add "text, watermark" and the like.
   const finalNegativePrompt =
-    [baseNegativePrompt, input.negativePromptAdditions].filter(Boolean).join(", ") || undefined;
+    [
+      ...new Set(
+        [baseNegativePrompt, input.negativePromptAdditions]
+          .filter(Boolean)
+          .join(",")
+          .split(",")
+          .map((term) => term.trim())
+          .filter(Boolean),
+      ),
+    ].join(", ") || undefined;
   const outputWidth = input.width ?? input.settings.imageWidth;
   const outputHeight = input.height ?? input.settings.imageHeight;
   logDebugOverride(
@@ -578,7 +672,7 @@ export function createCreatorSlpImagesService(db: DB) {
         clearInterval(renewalTimer);
         // A busy connection sent nothing, so it is not an attempt: hand the post back
         // untouched and let a later pass draw it.
-        if (isConnectionAdmissionFailure(error)) {
+        if (slpIsAdmissionFailure(error)) {
           await noodle.releasePostImageClaim(claimed.id, claimToken);
           deferred += 1;
           continue;
@@ -586,7 +680,9 @@ export function createCreatorSlpImagesService(db: DB) {
         logger.warn(error, "[slurp] Failed to generate reviewed image for %s", account.displayName);
         await renewClaim();
         if (claimOwned) {
-          const attempts = slpCreatorPostImageRetryAttempts(claimed.metadata) + 1;
+          const attempts = slpImageAuthFailure(error)
+            ? SLP_CREATOR_POST_IMAGE_RETRY_LIMIT
+            : slpCreatorPostImageRetryAttempts(claimed.metadata) + 1;
           await noodle.finalizePostImageClaim(claimed.id, claimToken, {
             imageUrl: null,
             // The prompt survives a provider failure *and* a spent budget. Spending the budget

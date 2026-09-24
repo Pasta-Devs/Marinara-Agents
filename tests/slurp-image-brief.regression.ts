@@ -1,79 +1,109 @@
 import assert from "node:assert/strict";
-import { slurpImageBrief } from "../packages/slurp2/src/engine/packages/server/src/slp/modules/feed/slp-image-brief.ts";
-import { slurpCameraSourceInstruction } from "../packages/slurp2/src/engine/packages/server/src/slp/modules/feed/slp-camera-source.ts";
+import {
+  slurpImageBrief,
+  slurpImageNegativePrompt,
+  slurpShootContinuity,
+} from "../packages/slurp2/src/engine/packages/server/src/slp/modules/feed/slp-image-brief.ts";
+import { slurpCameraSourcePhoto } from "../packages/slurp2/src/engine/packages/server/src/slp/modules/feed/slp-camera-source.ts";
 import { slurpPostVariation } from "../packages/slurp2/src/engine/packages/server/src/slp/modules/feed/slp-post-variation.ts";
+import {
+  selectSlpImageProviderPrompt,
+  slurpImageLook,
+} from "../packages/slurp2/src/engine/packages/server/src/slp/base/media/slp-image-prompt.ts";
 import { slurp2Source } from "./slurp2-source";
 
 const variation = slurpPostVariation("creator-a", 2);
+const scene = {
+  wardrobeId: null,
+  setting: "a park bench at night under an orange street lamp",
+  action: "sitting with her knees pulled up",
+  expression: "calm, looking past the lamp",
+  visualDirection: "grainy warm light, tight crop",
+  outfit: "pastel sweater slipping off one shoulder",
+};
 const brief = slurpImageBrief({
-  cameraInstruction: slurpCameraSourceInstruction("tripod"),
+  cameraPhoto: slurpCameraSourcePhoto("screenshot"),
   variation,
-  story: false,
-  sexualLevel: "none",
+  sexualLevel: "suggestive",
+  scene,
 });
 
-// The brief comes from the situation that was decided before any text existed.
-assert.ok(brief.includes(variation.place), "the brief must carry where they are");
-assert.ok(brief.includes(variation.moment), "the brief must carry what they are in the middle of");
-assert.ok(brief.includes(variation.company), "the brief must carry who is around");
-assert.match(brief, /Camera: propped up or on a timer/u);
-// Without a line about the subject the rewrite reliably adds undress the situation never called
-// for. At "none" that line is still the refusal; at the levels above it, it is a ceiling.
-assert.match(brief, /Do not add exposed skin/u);
+// The scene the post model planned is the picture: every field reaches the draft, in order.
+for (const value of Object.values(scene).filter(Boolean)) assert.ok(brief.includes(value as string), value as string);
+assert.ok(brief.indexOf(scene.action) < brief.indexOf(scene.setting), "action leads the draft");
+// A draft is for an image model: short, positive, and free of rule prose that becomes content.
+assert.ok(brief.length < 700, `draft too long: ${brief.length}`);
+assert.doesNotMatch(brief, /Describe the photograph|Never |no first-person|One photograph this person/u);
+assert.match(brief, /still frame from a phone video/u);
+
+// The level is a positive phrase; what it forbids goes to the negative prompt.
+assert.match(slurpImageNegativePrompt("suggestive"), /nipples/u);
+assert.match(slurpImageNegativePrompt("explicit"), /second person/u);
+assert.doesNotMatch(slurpImageNegativePrompt("explicit"), /nudity/u);
+
+// A callback keeps the shoot's place and clothes and never nests an earlier draft.
+const continuity = slurpShootContinuity({ scene, outfit: scene.outfit });
+assert.ok(continuity?.includes(scene.setting) && continuity.includes(scene.outfit));
+const callback = slurpImageBrief({
+  cameraPhoto: slurpCameraSourcePhoto("tripod"),
+  variation,
+  sexualLevel: "none",
+  scene: { ...scene, setting: "a different place", outfit: "a different outfit" },
+  shoot: { place: "bench", company: "alone", brief: continuity! },
+});
+assert.ok(callback.includes(scene.setting) && !callback.includes("a different place"));
+assert.ok(!callback.includes("a different outfit"));
+const legacy = slurpImageBrief({
+  cameraPhoto: slurpCameraSourcePhoto("tripod"),
+  variation,
+  sexualLevel: "none",
+  shoot: { place: "the kitchen", company: "alone", brief: "One photograph this person took and posted.\nRules" },
+});
+assert.doesNotMatch(legacy, /One photograph/u, "a legacy prose brief must not be nested");
+
+// Card appearance loses its clothes and costumes; body and face stay.
+const look = slurpImageLook(
+  "Mara is petite with blonde hair. She favors pastel dresses. For cosplay, she wears a corset and carries a sword. Her face is round and cute.",
+);
+assert.match(look, /blonde hair/u);
+assert.match(look, /petite/u);
+assert.match(look, /Her face is/u);
+assert.doesNotMatch(look, /sword|corset|pastel dresses/u);
+
+// A failed rewrite falls back to the rendered template, not a card paragraph that pushes the scene out.
+const raw = `${brief}\n\n${look}`;
+assert.equal(selectSlpImageProviderPrompt({ rewrittenPrompt: null, rawPrompt: raw, rewriteAttempted: true }), raw);
+
+// The rewrite runs on Slurp's own generation connection, with reasoning headroom.
+const rewrite = slurp2Source(
+  "packages/slurp2/src/engine/packages/server/src/slp/base/media/slp-image-prompt-rewrite.ts",
+);
+assert.match(rewrite, /resolveSlurpTextConnection\(connections, input\.connectionId\)/u);
+assert.doesNotMatch(rewrite, /maxTokens: 2_048/u);
+
+// A card without an Appearance field must not send its whole description to the image model.
+const publicImages = slurp2Source(
+  "packages/slurp2/src/engine/packages/server/src/slp/features/media/slp-public-images-service.ts",
+);
+assert.doesNotMatch(publicImages, /normalizeIllustratorAppearance\(data\.description\)/u);
+// The "auto" style text is an instruction for a prompt writer, not words for the image model; a
+// chosen Slurp style replaces the connection's prompt prefixes; the look leads the prompt.
+const images = slurp2Source("packages/slurp2/src/engine/packages/server/src/slp/features/media/slp-images-service.ts");
 assert.match(
-  slurpImageBrief({
-    cameraInstruction: slurpCameraSourceInstruction("tripod"),
-    variation,
-    story: false,
-    sexualLevel: "explicit",
-  }),
-  /may be explicit/u,
-  "a paid post must be allowed to deliver what it sells",
+  images,
+  /baseStyle === "auto"\s*\?\s*compileImagePrompt\(\{ \.\.\.input, omitProfileStyleText: true \}\)/u,
 );
-
-// A Story still has to be a phone picture, not a production.
+assert.match(images, /promptPrefix: "", negativePromptPrefix: ""/u);
+assert.match(images, /draftPrompt: \[stripAppearanceLabel\(characterDescription\), input\.draftPrompt\]/u);
+assert.match(images, /creatorStyleProfileId \?\? input\.settings\.imageStyleProfileId/u);
 assert.match(
-  slurpImageBrief({
-    cameraInstruction: slurpCameraSourceInstruction("selfie"),
-    variation,
-    story: true,
-    sexualLevel: "none",
-  }),
-  /Story/u,
+  slurp2Source("packages/slurp2/src/engine/packages/server/src/slp/base/media/slp-image-connections.ts"),
+  /creatorStyleProfileIds\[creatorId\] \?\? null/u,
 );
-assert.doesNotMatch(
-  slurpImageBrief({
-    cameraInstruction: slurpCameraSourceInstruction("selfie"),
-    variation,
-    story: false,
-    sexualLevel: "none",
-  }),
-  /Story/u,
+// A model imagePrompt requested through post direction is honoured over the assembled draft.
+const briefs = slurp2Source(
+  "packages/slurp2/src/engine/packages/server/src/slp/features/feed/slp-post-picture-briefs.ts",
 );
-
-// The point of the module: the picture is briefed without the caption. The brief builder takes no
-// post text at all, so a caption cannot reach it even by accident.
-const source = slurp2Source("packages/slurp2/src/engine/packages/server/src/slp/modules/feed/slp-image-brief.ts");
-const signature = /export function slurpImageBrief\(input: \{([\s\S]*?)\}\): string/u.exec(source)?.[1] ?? "";
-assert.ok(signature.length > 0, "could not read the brief's parameter type");
-for (const field of ["content", "caption", "title", "post", "text"]) {
-  assert.doesNotMatch(
-    signature,
-    new RegExp(`(^|\\s)${field}\\??:`, "u"),
-    `the brief must not take "${field}": a picture briefed from the caption is an illustration of it`,
-  );
-}
-
-// Produce mode must stop asking the post call for an imagePrompt, or the caption-derived brief
-// would still be written and the decoupling would be cosmetic.
-const generation = slurp2Source(
-  "packages/slurp2/src/engine/packages/server/src/slp/features/feed/slp-generation-service.ts",
-);
-assert.match(generation, /allowImagePrompt: askModelForImagePrompt/u);
-assert.match(generation, /const askModelForImagePrompt = postImages && !briefedImage/u);
-// The response schema and the correction turn must agree with the post call, or a produce-mode
-// retry would demand a field the prompt no longer asks for.
-assert.equal(generation.match(/allowImagePrompt: askModelForImagePrompt/gu)?.length, 2);
-assert.match(generation, /allowScenePlan: askModelForScene/u);
+assert.match(briefs, /normalizeSlpImagePrompt\(input\.modelImagePrompt\) \?\?/u);
 
 console.log("slurp image brief regression checks passed");

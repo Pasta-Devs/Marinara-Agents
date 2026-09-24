@@ -9,6 +9,7 @@ import { SlurpEmptyArtwork } from "../../base/chrome/SlpEmptyArtwork";
 import { formatTime } from "../../base/ui/slp-date-time";
 import type { SlurpThread } from "../../features/messages/slp-messages-contract";
 import { useSlurpThreads } from "../../features/messages/slp-messages-hooks";
+import { toast } from "sonner";
 
 /** Tip amounts offered in a thread. Small enough to be a reflex, large enough to mean something. */
 /**
@@ -24,6 +25,8 @@ export { BroadcastPanel };
 
 export const SLURP_REPLY_STATUS_FALLBACKS: Record<string, string> = {
   queued: "Your message is delivered. They reply when they next check their messages.",
+  budget:
+    "Your message is delivered. Slurp's AI budget is used up for now, so {{name}} answers once it resets. You can raise it under Audience → AI budget.",
   owed: "Your message is delivered. They have not answered yet.",
   cooling: "They stepped away from this conversation. Give them some time.",
   busy: "{{name}} is already writing back. Give it a moment.",
@@ -213,8 +216,11 @@ export function SlurpMessagesView({
         });
         openFromList(result.thread.id);
         setComposePickerOpen(false);
-      } catch {
-        // The thread view exposes the request state if the target cannot be opened.
+      } catch (cause) {
+        console.error("[slurp2] Failed to open conversation", cause);
+        toast.error(
+          localizeUi("ui.slurp.messages.newChatFailed", { defaultValue: "Could not open that conversation." }),
+        );
       }
       return;
     }

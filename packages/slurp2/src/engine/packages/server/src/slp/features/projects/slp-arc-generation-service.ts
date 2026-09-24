@@ -45,6 +45,8 @@ export function buildSlurpArcGenerationMessages(input: {
   gender: string | null;
   tags: readonly string[];
   brief?: string;
+  /** Open story hooks from occasions: tags to lean toward and facts to stay consistent with. */
+  storyHooks?: readonly string[];
   recentPosts: readonly string[];
   libraryNames: readonly string[];
   pastArcTitles: readonly string[];
@@ -114,6 +116,9 @@ export function buildSlurpArcGenerationMessages(input: {
         `Gender: ${input.gender ?? "not set"}`,
         `Tags: ${input.tags.join(", ") || "none"}`,
         ...(input.brief?.trim() ? ["", "# Player brief", input.brief.trim().slice(0, 2_000)] : []),
+        ...(input.storyHooks?.length
+          ? ["", "# Story hooks from recent world events (lean toward these when they fit)", ...input.storyHooks]
+          : []),
         "",
         "# Recent posts",
         ...(input.recentPosts.length ? input.recentPosts.map((post) => `- ${post}`) : ["None yet."]),
@@ -188,6 +193,19 @@ export async function generateSlurpArc(
       gender: creator.settings.profile.gender,
       tags: creator.settings.profile.tags,
       brief,
+      // Occasions leave arc opportunities and facts behind; arc generation never saw them.
+      storyHooks: [
+        ...(await slurp.listArcOpportunities().catch(() => []))
+          .filter(
+            (item) => item.creatorId === creator.id && (!item.expiresAt || Date.parse(item.expiresAt) > Date.now()),
+          )
+          .map((item) => `- Themes: ${item.storyTags.join(", ")}`),
+        ...(await slurp.listStoryFacts().catch(() => []))
+          .filter(
+            (fact) => fact.creatorId === creator.id && (!fact.expiresAt || Date.parse(fact.expiresAt) > Date.now()),
+          )
+          .map((fact) => `- Fact: ${fact.label}`),
+      ].slice(0, 10),
       recentPosts: posts.map((post) => `${post.title ? `${post.title} — ` : ""}${post.content}`.slice(0, 200)),
       libraryNames: settings.arcLibrary.filter((type) => !type.hidden).map((type) => type.name),
       pastArcTitles: (await slurp.listProjects(creator.id)).map((project) => project.title),

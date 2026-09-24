@@ -29,6 +29,7 @@ import { slurpDiscoveryTagNameSchema } from "../../modules/requests/slp-request-
 import type { SlpRouteDeps } from "../viewer/slp-viewer-contract.js";
 import { slurpPromptContext } from "../../base/prompting/slp-prompt-blocks.js";
 import { slpWardrobeRoutes } from "./slp-wardrobe-routes.js";
+import { resolveImageAppearance } from "../media/slp-media-contract.js";
 
 const slpStageProfileUpdateRequestSchema = slpStageProfileUpdateSchema.extend({
   ...slurpDiscoveryProfileSchema.shape,
@@ -102,6 +103,38 @@ export async function slpCreatorsRoutes(app: FastifyInstance, deps: SlpRouteDeps
 
   app.get("/slurp/accounts", async (_req, reply) => {
     return noodle.listNoodlerStageProfiles();
+  });
+
+  app.post("/slurp/accounts/:id/appearance", async (req, reply) => {
+    const parsed = z
+      .object({
+        action: z.enum(["generate", "regenerate", "accept", "keep_override", "clear_override", "edit_override"]),
+        text: z.string().trim().min(1).max(2000).optional(),
+      })
+      .strict()
+      .safeParse(req.body);
+    if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
+    const { id } = req.params as { id: string };
+    const account = await noodle.getNoodlerAccountById(id);
+    if (!account) return reply.code(404).send({ error: "Creator account not found" });
+    if (parsed.data.action === "generate" || parsed.data.action === "regenerate") {
+      const settings = await noodle.getSettings();
+      try {
+        await resolveImageAppearance({
+          db: app.db,
+          account,
+          connectionId: settings.generationConnectionId,
+          mode: settings.appearanceProfileMode,
+          regenerate: parsed.data.action === "regenerate",
+        });
+      } catch (error) {
+        return reply.code(422).send({ error: getErrorMessage(error) });
+      }
+    } else {
+      const updated = await noodle.updateNoodlerAppearanceChoice(id, parsed.data.action, parsed.data.text);
+      if (!updated) return reply.code(400).send({ error: "Appearance action is unavailable for this Creator." });
+    }
+    return (await noodle.listNoodlerStageProfiles()).find((profile) => profile.id === id);
   });
 
   app.post("/slurp/accounts/:id/conversation-schedule/refresh", async (req, reply) => {

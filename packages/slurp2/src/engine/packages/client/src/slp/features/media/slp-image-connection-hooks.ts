@@ -5,6 +5,7 @@ import { slpKeys } from "../../base/state/slp-query-keys.js";
 export type SlurpImageConnections = {
   defaultConnectionId: string | null;
   creatorConnectionIds: Record<string, string>;
+  creatorStyleProfileIds: Record<string, string>;
 };
 export function useSlurpImageConnections(enabled = true) {
   return useQuery({
@@ -14,11 +15,24 @@ export function useSlurpImageConnections(enabled = true) {
     staleTime: 10_000,
   });
 }
+/** The Engine's image style profiles, for Slurp's own style choice. */
+export function useSlurpImageStyleProfiles(enabled = true) {
+  return useQuery({
+    queryKey: [...slpKeys.noodlerImageConnections(), "style-profiles"],
+    queryFn: () => api.get<{ id: string; name: string }[]>("/slurp2/slurp/image-style-profiles"),
+    enabled,
+    staleTime: 60_000,
+  });
+}
 export function useUpdateSlurpImageConnections() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (patch: { defaultConnectionId?: string | null; creatorId?: string; connectionId?: string | null }) =>
-      api.patch<SlurpImageConnections>("/slurp2/slurp/image-connections", patch),
+    mutationFn: (patch: {
+      defaultConnectionId?: string | null;
+      creatorId?: string;
+      connectionId?: string | null;
+      styleProfileId?: string | null;
+    }) => api.patch<SlurpImageConnections>("/slurp2/slurp/image-connections", patch),
     onSuccess: (value) => qc.setQueryData(slpKeys.noodlerImageConnections(), value),
   });
 }

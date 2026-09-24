@@ -131,7 +131,7 @@ export async function generateInvitedSlpPostDraft(
     maxTokens: clampGenerationMaxOutputTokens({
       provider: connection.provider as APIProvider,
       model: connection.model,
-      maxTokens: 1024,
+      maxTokens: 2048,
       maxTokensOverride: connection.maxTokensOverride,
     }),
     stream: false,

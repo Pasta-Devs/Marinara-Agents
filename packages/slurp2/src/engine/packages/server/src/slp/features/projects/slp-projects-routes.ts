@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { slpIsAdmissionFailure } from "../../base/host/slp-admission.js";
 import {
   SLURP_GOAL_LABEL_MAX_LENGTH,
   SLURP_GOAL_MIN_TARGET,
@@ -26,7 +27,6 @@ import {
 import { slurpCrossoverForViewer } from "../../modules/projects/slp-arc-crossover.js";
 import { isSlurpViewerActorAccount } from "../../modules/settings/slp-settings.js";
 import { generateSlurpArc, SlurpArcGenerationFailure } from "./slp-arc-generation-service.js";
-import { isConnectionAdmissionFailure } from "../../../services/generation/connection-admission.js";
 import type { FastifyInstance } from "fastify";
 import type { SlpRouteDeps } from "../viewer/slp-viewer-contract.js";
 
@@ -369,7 +369,7 @@ export async function slpProjectsRoutes(app: FastifyInstance, deps: SlpRouteDeps
     try {
       raw = await generateSlurpArc(app.db, creator.id, [], "", { kind: "foreground" });
     } catch (error) {
-      if (isConnectionAdmissionFailure(error)) return reply.code(409).send({ error: "Generation already in progress" });
+      if (slpIsAdmissionFailure(error)) return reply.code(409).send({ error: "Generation already in progress" });
       if (error instanceof SlurpArcGenerationFailure)
         return reply.code(502).send({ error: error.message, debug: { rawResponse: error.rawResponse } });
       throw error;
@@ -393,7 +393,7 @@ export async function slpProjectsRoutes(app: FastifyInstance, deps: SlpRouteDeps
     try {
       raw = await generateSlurpArc(app.db, creator.id, [], parsed.data.brief, { kind: "foreground" });
     } catch (error) {
-      if (isConnectionAdmissionFailure(error)) return reply.code(409).send({ error: "Generation already in progress" });
+      if (slpIsAdmissionFailure(error)) return reply.code(409).send({ error: "Generation already in progress" });
       if (error instanceof SlurpArcGenerationFailure)
         return reply.code(502).send({ error: error.message, debug: { rawResponse: error.rawResponse } });
       throw error;

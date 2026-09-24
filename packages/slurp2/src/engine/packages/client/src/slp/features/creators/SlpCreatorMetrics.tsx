@@ -46,13 +46,9 @@ export function CreatorMetricsTotals({ metrics, t }: { metrics: SlurpCreatorMetr
 export function CreatorMetricsRow({ metrics, t }: { metrics: SlurpCreatorMetrics | undefined; t: Translate }) {
   if (!metrics) return null;
   return (
-    <span className="hidden shrink-0 gap-4 text-end md:flex">
-      {METRIC_KEYS.map((key) => (
-        <span key={key} className="w-12">
-          <span className="block text-sm font-bold tabular-nums">{compact.format(metrics[key])}</span>
-          <span className="block truncate text-[0.62rem] text-[var(--slurp-muted)]">{metricLabel(t, key)}</span>
-        </span>
-      ))}
+    <span className="hidden shrink-0 text-end lg:block">
+      <span className="block text-sm font-bold tabular-nums">{compact.format(metrics.posts)}</span>
+      <span className="block text-[0.62rem] text-[var(--slurp-muted)]">{metricLabel(t, "posts")}</span>
     </span>
   );
 }

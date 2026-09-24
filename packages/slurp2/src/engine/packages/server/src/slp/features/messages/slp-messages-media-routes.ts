@@ -157,7 +157,10 @@ export async function slpMessagesMediaRoutes(app: FastifyInstance, messaging: Sl
           mediaReason: offer.reason,
         },
       });
-      if (!message) return reply.code(404).send({ error: "Thread not found" });
+      if (!message) {
+        drawn.compensate();
+        return reply.code(404).send({ error: "Thread not found" });
+      }
       drawn.promote();
       await messages.setMessageMedia(message.id, slurpMessageMediaUrl(message.id), drawn.mediaPath);
       return { message: { ...message, imageUrl: slurpMessageMediaUrl(message.id) } };
@@ -193,6 +196,8 @@ export async function slpMessagesMediaRoutes(app: FastifyInstance, messaging: Sl
       thread.creatorAccountId !== parsed.data.creatorAccountId
     )
       return reply.code(404).send({ error: "Thread not found" });
+    // `/messages/send` refuses a closed thread through `openThread`; these routes append directly.
+    if (thread.state === "declined") return reply.code(403).send({ error: "This conversation is closed." });
     const staged = stageSlurpMessageMedia(decoded.media);
     try {
       const sent = await messages.appendMessage(thread.id, {
@@ -202,7 +207,10 @@ export async function slpMessagesMediaRoutes(app: FastifyInstance, messaging: Sl
         imageUrl: slurpMessageMediaUrl("pending"),
         metadata: { noodlerMediaPath: staged.filePath, uploaded: true },
       });
-      if (!sent) return reply.code(404).send({ error: "Thread not found" });
+      if (!sent) {
+        staged.compensate();
+        return reply.code(404).send({ error: "Thread not found" });
+      }
       staged.promote();
       await messages.setMessageMedia(sent.id, slurpMessageMediaUrl(sent.id), staged.filePath);
       const outcome = await replyToSlurpMessage(app.db, { threadId, triggerMessageId: sent.id });
@@ -233,6 +241,8 @@ export async function slpMessagesMediaRoutes(app: FastifyInstance, messaging: Sl
       thread.creatorAccountId !== parsed.data.creatorAccountId
     )
       return reply.code(404).send({ error: "Thread not found" });
+    // `/messages/send` refuses a closed thread through `openThread`; these routes append directly.
+    if (thread.state === "declined") return reply.code(403).send({ error: "This conversation is closed." });
     if (thread.coolUntil && thread.coolUntil > new Date().toISOString())
       return reply.code(409).send({ error: "This conversation is cooling off." });
     const recentImage = (await messages.listMessages(thread.id)).some(
@@ -256,7 +266,10 @@ export async function slpMessagesMediaRoutes(app: FastifyInstance, messaging: Sl
         unlockedAt: new Date().toISOString(),
         metadata: { noodlerMediaPath: drawn.mediaPath, generatedContext: "viewer", imagePrompt: parsed.data.prompt },
       });
-      if (!message) return reply.code(404).send({ error: "Thread not found" });
+      if (!message) {
+        drawn.compensate();
+        return reply.code(404).send({ error: "Thread not found" });
+      }
       drawn.promote();
       await messages.setMessageMedia(message.id, slurpMessageMediaUrl(message.id), drawn.mediaPath);
       const outcome = await replyToSlurpMessage(app.db, { threadId, triggerMessageId: message.id });

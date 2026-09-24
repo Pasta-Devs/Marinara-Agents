@@ -1,8 +1,7 @@
 # Slurp2 source architecture
 
 Paths are relative to `packages/slurp2/src/engine/`. The rules below are enforced by
-`tests/slurp2-architecture.regression.ts`; this document explains them. The migration toward this
-layout is tracked in `SLURP-MODULE-PLAN.md` and `SLURP-MODULE-STATUS.md` at the repository root.
+`tests/slurp2-architecture.regression.ts`; this document explains them.
 
 ## Roots
 

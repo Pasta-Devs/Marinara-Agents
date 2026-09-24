@@ -4,6 +4,7 @@ import { SlpAudiencePanel } from "../../features/audience/SlpAudiencePanel";
 import { SlpBackstageAutomationPanel } from "../../features/backstage/SlpBackstageAutomationPanel";
 import { SlpBackstageOverviewPanel } from "../../features/backstage/SlpBackstageOverviewPanel";
 import { SlpBackstageWorldPanel } from "../../features/backstage/SlpBackstageWorldPanel";
+import { SlpBackstageContentPanel } from "../../features/backstage/SlpBackstageContentPanel";
 import { SlpCreatorImprovePanel } from "../../features/creators/SlpCreatorImprovePanel";
 import { SlpCreatorsPanel } from "../../features/creators/SlpCreatorsPanel";
 import { SlpDiscoveryPanel } from "../../features/discovery/SlpDiscoveryPanel";
@@ -12,10 +13,13 @@ import { SlpPublishingPanel } from "../../features/feed/SlpPublishingPanel";
 import { SlpAutopurgePanel } from "../../features/maintenance/SlpAutopurgePanel";
 import { SlpBackupPanel } from "../../features/maintenance/SlpBackupPanel";
 import { SlpImagesPanel } from "../../features/media/SlpImagesPanel";
+import { SlpConnectionsPanel } from "../../features/settings/SlpConnectionsPanel";
 import { SlpMessagingPanel } from "../../features/messages/SlpMessagingPanel";
 import { SlpProjectsPanel } from "../../features/projects/SlpProjectsPanel";
 import { SlpPromptsPanel } from "../../features/settings/SlpPromptsPanel";
 import { SlpWorldEventsPanel } from "../../features/world/SlpWorldEventsPanel";
+import { SlpPacksPanel } from "../../features/world/SlpPacksPanel";
+import { SlpCalendarPanel } from "../../features/world/SlpCalendarPanel";
 import type { SlpBackstageTarget } from "../../base/navigation/slp-backstage-target";
 
 /**
@@ -31,8 +35,11 @@ export const SLP_BACKSTAGE_PANELS: readonly SlpBackstagePanelEntry[] = [
   { target: "creators", Component: SlpCreatorsPanel },
   { target: "improve", Component: SlpCreatorImprovePanel },
   { target: "world", Component: SlpBackstageWorldPanel },
+  { target: "content", Component: SlpBackstageContentPanel },
   { target: "tags", Component: SlpDiscoveryPanel },
   { target: "events", Component: SlpWorldEventsPanel },
+  { target: "packs", Component: SlpPacksPanel },
+  { target: "calendar", Component: SlpCalendarPanel },
   { target: "arcs", Component: SlpProjectsPanel },
   { target: "messaging", Component: SlpMessagingPanel },
   { target: "audience", Component: SlpAudiencePanel },
@@ -41,6 +48,7 @@ export const SLP_BACKSTAGE_PANELS: readonly SlpBackstagePanelEntry[] = [
   { target: "automation", Component: SlpBackstageAutomationPanel },
   { target: "general", Component: SlpPublishingPanel },
   { target: "images", Component: SlpImagesPanel },
+  { target: "connections", Component: SlpConnectionsPanel },
   { target: "prompts", Component: SlpPromptsPanel },
   { target: "autopurge", Component: SlpAutopurgePanel },
   { target: "advanced", Component: SlpBackupPanel },

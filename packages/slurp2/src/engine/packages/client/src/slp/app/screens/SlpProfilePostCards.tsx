@@ -187,18 +187,28 @@ export function SlpProfilePostCards({ model }: { model: StageProfileViewModel })
           const itemId = item.kind === "locked" || item.kind === "controller-locked" ? item.post.id : item.model.id;
           const locked = item.kind === "locked" || item.kind === "controller-locked";
           return (
-            <SlurpAccessTransition key={itemId} postId={itemId} locked={locked}>
+            <SlurpAccessTransition
+              key={itemId}
+              postId={itemId}
+              locked={locked}
+              menuOpen={postCardCtx.postMenuId === itemId}
+            >
               {item.kind === "locked" || item.kind === "controller-locked" ? (
                 <div className="p-3 @min-[680px]:px-0">
                   <LockedSlurpPostCard
                     post={item.post}
                     profile={profile}
                     subscriptionPrice={viewerCreator?.subscriptionPrice}
+                    postMenuOpen={postCardCtx.postMenuId === itemId}
+                    setPostMenuOpen={(open) => postCardCtx.setPostMenuId(open ? itemId : null)}
                     controllerOnly={item.kind === "controller-locked"}
                     subscribed={viewerCreator?.subscribed ?? false}
                     unlockPending={unlockPending}
                     subscriptionPending={subscriptionPending}
                     onUnlock={onUnlock}
+                    onGambleUnlock={postCardCtx.gambleUnlockPost}
+                    unlockOffer={postCardCtx.unlockOffer}
+                    subscriptionOffer={postCardCtx.subscriptionOffer}
                     onToggleSubscription={onToggleSubscription}
                     onManage={() => {
                       setRevealedManagedPostIds((current) => {

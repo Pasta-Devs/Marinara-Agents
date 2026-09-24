@@ -62,6 +62,13 @@ export function SlpReportModal({
         </p>
       ) : (
         <div className="space-y-4 p-4">
+          {report.isError && (
+            <p role="alert" className="text-sm text-red-400">
+              {report.error instanceof Error
+                ? report.error.message
+                : localizeUi("ui.slurp.post.reportFailed", { defaultValue: "The report could not be sent." })}
+            </p>
+          )}
           <label className="block space-y-1 text-sm font-semibold">
             <span>{localizeUi("ui.slurp.post.reportReason", { defaultValue: "Reason" })}</span>
             <select

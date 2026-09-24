@@ -135,6 +135,26 @@ export function slurpEffortInstruction(effort: SlurpPostEffort): string {
   return EFFORT_INSTRUCTIONS[effort];
 }
 
+/** The effort as words an image model can draw. The caption side keeps `slurpEffortInstruction`. */
+const EFFORT_PHOTO: Record<SlurpPostEffort, string> = {
+  low: "casual and unedited, taken on the first attempt",
+  medium: "casual, considered, and taken in a second attempt",
+  high: "carefully planned and selected from several attempts",
+};
+
+export function slurpEffortPhoto(effort: SlurpPostEffort): string {
+  return EFFORT_PHOTO[effort];
+}
+
+export function slurpProductionPhoto(style: SlurpProductionStyle): string {
+  return {
+    homemade: "personal phone picture, ordinary available light",
+    polished: "carefully composed personal photograph, deliberate lighting and framing",
+    documentary: "observational personal photograph, available light and unembellished framing",
+    theatrical: "deliberately staged personal photograph, controlled lighting and expressive composition",
+  }[style];
+}
+
 /** The profile as prompt text, for the post. */
 export function slurpProductionInstruction(profile: SlurpProductionProfile): string {
   return ["# How you make things", profile.transparency].join("\n");

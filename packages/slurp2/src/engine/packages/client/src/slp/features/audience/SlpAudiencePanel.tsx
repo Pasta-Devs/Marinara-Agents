@@ -6,7 +6,6 @@ import { SlurpSimulationSettings } from "./SlpSimulationPanel";
 import { SlurpFanTypesSettings } from "./SlpFanTypesPanel";
 import { SlurpAudienceConfigSettings } from "./SlpAudienceConfigPanel";
 
-import { toast } from "sonner";
 import { SettingAnchor } from "../../modules/settings/SlpSettingsKit";
 
 import type { SlurpAudienceCharacterGroup, SlurpAudienceCharacterSummary } from "./slp-audience-contract";
@@ -15,7 +14,6 @@ import type { SlurpSettings } from "../settings/slp-settings-contract";
 
 import { SLURP_AUDIENCE_PRESETS, slurpAudiencePresetPatch } from "../../../../../shared/src/slp/slp-tuning.js";
 import type { SlpBackstagePageProps } from "../backstage/slp-backstage-contract";
-import { errorMessage } from "../../modules/settings/slp-backstage-format";
 import { ChoiceRow } from "../../modules/settings/SlpBackstageKit";
 import { AmbientProfilesPanel } from "./SlpAmbientProfilesPanel";
 
@@ -52,17 +50,7 @@ export function SlpAudiencePanel(page: SlpBackstagePageProps) {
         />
         <button
           type="button"
-          onClick={() =>
-            refreshFans.mutate(undefined, {
-              onSuccess: (result) =>
-                toast.success(
-                  result.created > 0
-                    ? t("ui.slurp.settings.audience.created", { count: result.created })
-                    : t("ui.slurp.settings.audience.createdNone"),
-                ),
-              onError: (error) => toast.error(errorMessage(error)),
-            })
-          }
+          onClick={() => refreshFans.mutate()}
           disabled={refreshFans.isPending || !settings.fanActivityEnabled}
           className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-[var(--border)] px-3 text-xs font-semibold hover:bg-[var(--accent)] disabled:opacity-50"
         >

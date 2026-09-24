@@ -116,6 +116,24 @@
     "long-term-memory": {
       "versions": [
         {
+          "version": "1.3.16",
+          "date": "2026-09-23",
+          "notes": "- Stop automatically binding short names and fuzzy spelling variants to characters; keep those matches reviewable instead of assigning a subject without evidence. A reviewed subject-bound alias choice can rename the existing canonical character note to the chosen alias.",
+          "highlight": false
+        },
+        {
+          "version": "1.3.15",
+          "date": "2026-09-23",
+          "notes": "- Normalize rejected recovery candidate subject IDs before validation and storage so mixed-case names remain available for review without changing canonical identity checks.",
+          "highlight": false
+        },
+        {
+          "version": "1.3.14",
+          "date": "2026-09-23",
+          "notes": "- Keep current-chat source destinations exclusive to that chat, including chats in a group. Explicit persona, character, and group destinations remain shared across their matching chats.\n- Fork new chat-only evidence instead of adding it to a previously broader memory.",
+          "highlight": false
+        },
+        {
           "version": "1.3.13",
           "date": "2026-09-22",
           "notes": "- Stop imported source notes from forking short, first-name, and full-name variants of one character into separate local memories, and keep a roster character's full name from being dropped as ambiguous when its variants appear in the source.\n- Keep genuinely ambiguous names failing closed against the trusted identities that compete for them.",
@@ -215,24 +233,6 @@
           "version": "1.2.25",
           "date": "2026-09-10",
           "notes": "- Added a confirmed discard action for invalidated drafts, removing old proposals without changing saved memories.",
-          "highlight": false
-        },
-        {
-          "version": "1.2.24",
-          "date": "2026-09-09",
-          "notes": "- Kept drafts with missing source notes visibly blocked without preventing review of other sources.\n- Showed context-loading error details alongside Retry and kept orphaned rejected suggestions accessible.",
-          "highlight": true
-        },
-        {
-          "version": "1.2.23",
-          "date": "2026-09-06",
-          "notes": "- Restored responsive Memory Vault and Sources loading by deferring local-character discovery.\n- Reused one aggregate local-character catalog and kept its loading and retry state visible.",
-          "highlight": true
-        },
-        {
-          "version": "1.2.22",
-          "date": "2026-09-06",
-          "notes": "- Kept user-selected source targets valid while isolating parent chat context transitions.\n- Prevented stale source previews and details from rendering during scope changes.",
           "highlight": false
         }
       ]
@@ -342,6 +342,36 @@
     "slurp2": {
       "versions": [
         {
+          "version": "0.2.34",
+          "date": "2026-09-23",
+          "notes": "- Manage text and image connections in one place. Missing saved connections stay visible until you choose a replacement, and connection load errors can be retried.\n- Image briefs now follow the Creator's production style, and future automatic posts survive Engine restarts and source snapshot changes.\n- Prompt Studio describes its output clearly, image appearance settings apply consistently, and valid model responses can include extra fields.",
+          "highlight": false
+        },
+        {
+          "version": "0.2.29",
+          "date": "2026-09-23",
+          "notes": "- Scheduled timeline refresh uses the saved daily setting again.\n- Delayed chat replies finish during a cool-off, and strict model output supports comment threads and invited posts.\n- Pulse shows failed first posts and audience failure details. Arc edits keep imported story fields.",
+          "highlight": false
+        },
+        {
+          "version": "0.2.28",
+          "date": "2026-09-23",
+          "notes": "- Creator settings now have a status overview and a mobile section picker.\n- Profile edits use the modal's shared save bar, and each Creator settings view has one scroll area.",
+          "highlight": false
+        },
+        {
+          "version": "0.2.27",
+          "date": "2026-09-23",
+          "notes": "- Creator settings now keep profile drafts when you change sections and confirm before discarding them.\n- Creator settings are grouped by task, and the Creator roster shows attention reasons and bulk-change previews.",
+          "highlight": false
+        },
+        {
+          "version": "0.2.26",
+          "date": "2026-09-23",
+          "notes": "- Image prompts preserve each Creator's appearance and follow the selected image guidance.\n- Choose an image style for each Creator, or let them use the global style.\n- Settings sections now use the shorter names Content and World.\n- Posts, messages, audience activity, story events, and image generation use clearer state and feedback handling.\n- Locked posts use each Creator's configured level, and occasions and story events reach posts and chats.\n- Owned posts are not sold again, audience activity reports results, and manual occasions can be started.\n- Callback posts preserve their shoot context, picture sets vary poses, and follow-ups handle reasoning models.",
+          "highlight": false
+        },
+        {
           "version": "0.2.25",
           "date": "2026-09-22",
           "notes": "- Every generated picture keeps the Creator's appearance, planned action, expression, and mood even when image-prompt interpretation is unavailable.\n- Creator personality and stage voice now shape visual presentation without being copied as private prompt text.",
@@ -429,36 +459,6 @@
           "version": "0.2.11",
           "date": "2026-09-21",
           "notes": "- Deleted posts can be restored again, with pending and failure feedback.\n- Restore now pulls the deleted post's sparkles into the restore action.",
-          "highlight": false
-        },
-        {
-          "version": "0.2.10",
-          "date": "2026-09-21",
-          "notes": "- Normal, locked, profile, media, Story, and reply surfaces now use consistent three-dot action menus.\n- Posts now support direct sharing to Slurp messages and durable post or reply reports with snapshots.\n- Slurp now uses one canonical post card renderer.",
-          "highlight": false
-        },
-        {
-          "version": "0.2.9",
-          "date": "2026-09-21",
-          "notes": "- Post image prompts now use a typed visual brief and preserve the planned scene through image interpretation.\n- Deleted posts now leave a sparkling restore slot for 60 seconds before permanent cleanup.",
-          "highlight": false
-        },
-        {
-          "version": "0.2.8",
-          "date": "2026-09-21",
-          "notes": "- Feed loading has a softer status animation, older drops show a progress state, and deleted posts leave the timeline with a short gentle exit.",
-          "highlight": false
-        },
-        {
-          "version": "0.2.7",
-          "date": "2026-09-21",
-          "notes": "- The feed loads its first page first, older posts load on demand, and post edits and deletes update the visible feed without a full reload.",
-          "highlight": false
-        },
-        {
-          "version": "0.2.6",
-          "date": "2026-09-21",
-          "notes": "- Creator posts now use the Engine's live Capability API generation integrations for text providers, image generation, fallback handling, and staged media writes.",
           "highlight": false
         }
       ]

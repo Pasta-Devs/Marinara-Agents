@@ -39,6 +39,8 @@ export const slpWardrobeSceneSchema = z
     action: z.string().trim().max(500),
     expression: z.string().trim().max(300),
     visualDirection: z.string().trim().max(500),
+    /** What they wear in this photo. Optional so scenes stored before it existed still parse. */
+    outfit: z.string().trim().max(300).optional(),
   })
   .strict();
 

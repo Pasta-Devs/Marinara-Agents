@@ -120,7 +120,11 @@ function slpCreatorPostSchema(allowImagePrompt: boolean, allowScenePlan: boolean
       },
       // With images enabled the prompt is mandatory: a nullable field made models skip images.
       ...(allowImagePrompt
-        ? { imagePrompt: { type: "string", minLength: 1, maxLength: SLP_REPLY_HARD_MAX_LENGTH } }
+        ? {
+            imagePrompt: {
+              anyOf: [{ type: "string", minLength: 1, maxLength: SLP_REPLY_HARD_MAX_LENGTH }, { type: "null" }],
+            },
+          }
         : {}),
       ...(allowScenePlan
         ? {
@@ -132,8 +136,9 @@ function slpCreatorPostSchema(allowImagePrompt: boolean, allowScenePlan: boolean
                 action: { type: "string", maxLength: 500 },
                 expression: { type: "string", maxLength: 300 },
                 visualDirection: { type: "string", maxLength: 500 },
+                outfit: { type: "string", maxLength: 300 },
               },
-              required: ["wardrobeId", "setting", "action", "expression", "visualDirection"],
+              required: ["wardrobeId", "setting", "action", "expression", "visualDirection", "outfit"],
               additionalProperties: false,
             },
           }
@@ -221,8 +226,39 @@ const slpCreatorDmSchema = {
         ],
       },
     },
+    // The prompt asks for these three too. Strict schemas forbid any field they do not list, so on
+    // a json_schema connection the Creator could never share a post, send a picture, or promise one.
+    sharePost: { type: ["integer", "null"] },
+    image: {
+      anyOf: [
+        {
+          type: "object",
+          properties: { prompt: { type: "string" }, caption: { type: ["string", "null"] } },
+          required: ["prompt", "caption"],
+          additionalProperties: false,
+        },
+        { type: "null" },
+      ],
+    },
+    followUp: {
+      anyOf: [
+        {
+          type: "object",
+          properties: {
+            type: { type: "string", enum: ["reminder", "promise_delivery", "task_update", "check_in", "recurring"] },
+            timing: { type: "string" },
+            count: { type: "integer" },
+            reason: { type: "string" },
+            context: { type: ["string", "null"] },
+          },
+          required: ["type", "timing", "count", "reason", "context"],
+          additionalProperties: false,
+        },
+        { type: "null" },
+      ],
+    },
   },
-  required: ["content", "moodShift", "remember", "stateSignals"],
+  required: ["content", "moodShift", "remember", "stateSignals", "sharePost", "image", "followUp"],
   additionalProperties: false,
 } as const;
 
@@ -234,8 +270,9 @@ const slpCreatorFanActivitySchema = {
     targetPostId: { type: "string" },
     type: { type: "string", enum: ["like", "reply"] },
     content: nullableString,
+    parentInteractionId: { anyOf: [{ type: "string" }, { type: "null" }] },
   },
-  required: ["actorHandle", "creatorAccountId", "targetPostId", "type", "content"],
+  required: ["actorHandle", "creatorAccountId", "targetPostId", "type", "content", "parentInteractionId"],
   additionalProperties: false,
 } as const;
 

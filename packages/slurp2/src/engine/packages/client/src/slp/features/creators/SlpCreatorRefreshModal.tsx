@@ -1,12 +1,8 @@
 import { Loader2, Sparkles } from "lucide-react";
 
-import { toast } from "sonner";
-
 import { Modal } from "../../../components/ui/Modal";
 
 import { Avatar, getSlpAccentStyle, SLP_PINK } from "../../base/chrome/SlpChrome";
-
-import { errorMessage } from "../../modules/settings/slp-backstage-format";
 
 import type { SlpBackstagePageProps } from "../backstage/slp-backstage-contract";
 
@@ -21,14 +17,15 @@ export function SlpCreatorRefreshModal(page: SlpBackstagePageProps) {
     refreshRemaining,
     refreshAccess,
     setRefreshAccess,
-    accountsQuery,
     refreshCreators,
     automationCreators,
   } = page;
   return (
     <Modal
       open={refreshModalOpen}
-      onClose={() => setRefreshModalOpen(false)}
+      onClose={() => {
+        if (!refreshCreators.isPending) setRefreshModalOpen(false);
+      }}
       title={t("ui.slurp.settings.refresh.title")}
       width="max-w-xl"
       closeDisabled={refreshCreators.isPending}
@@ -131,36 +128,7 @@ export function SlpCreatorRefreshModal(page: SlpBackstagePageProps) {
             onClick={() =>
               refreshCreators.mutate(
                 { accountIds: [...refreshAccountIds], access: refreshAccess },
-                {
-                  onSuccess: ({ outcomes }) => {
-                    const generated = outcomes.filter((outcome) => outcome.status === "generated").length;
-                    const skipped = outcomes.filter((outcome) => outcome.status === "skipped").length;
-                    const failed = outcomes.length - generated - skipped;
-                    setRefreshModalOpen(false);
-                    toast.success(t("ui.slurp.settings.refresh.result", { count: generated }));
-                    // Name the Creators that did not post, so a short batch is never a mystery.
-                    const names = (wanted: (status: string) => boolean) =>
-                      outcomes
-                        .filter((outcome) => wanted(outcome.status))
-                        .map(
-                          (outcome) =>
-                            accountsQuery.data?.find((creator) => creator.id === outcome.accountId)?.displayName ??
-                            outcome.accountId,
-                        )
-                        .join(", ");
-                    if (skipped)
-                      toast(t("ui.slurp.settings.refresh.skipped", { count: skipped }), {
-                        description: names((status) => status === "skipped"),
-                        duration: 10_000,
-                      });
-                    if (failed)
-                      toast.error(t("ui.slurp.settings.refresh.failed", { count: failed }), {
-                        description: names((status) => status !== "generated" && status !== "skipped"),
-                        duration: 10_000,
-                      });
-                  },
-                  onError: (error) => toast.error(errorMessage(error)),
-                },
+                { onSettled: () => setRefreshModalOpen(false) },
               )
             }
             className="inline-flex min-h-10 items-center gap-2 rounded-lg bg-[var(--noodle-accent)] px-4 text-xs font-bold text-zinc-950 [&_svg]:!text-zinc-950 disabled:opacity-50"

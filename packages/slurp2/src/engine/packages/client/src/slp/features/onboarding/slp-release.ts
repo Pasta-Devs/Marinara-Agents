@@ -1,5 +1,5 @@
 // The splash screen needs the shipped version and its public notes inside the client bundle.
-export const SLURP2_VERSION = "0.2.25";
+export const SLURP2_VERSION = "0.2.34";
 
 export interface Slurp2ReleaseEntry {
   version: string;
@@ -10,11 +10,47 @@ export interface Slurp2ReleaseEntry {
 /** The public release history shown in the Engine splash screen. */
 export const SLURP2_RELEASES: Slurp2ReleaseEntry[] = [
   {
-    version: "0.2.25",
-    date: "2026-09-22",
+    version: "0.2.34",
+    date: "2026-09-23",
     notes: [
-      "Every generated picture keeps the Creator's appearance, planned action, expression, and mood even when image-prompt interpretation is unavailable.",
-      "Creator personality and stage voice now shape visual presentation without being copied as private prompt text.",
+      "Manage text and image connections in one place. Missing saved connections stay visible until you choose a replacement, and connection load errors can be retried.",
+      "Image briefs now follow the Creator's production style, and future automatic posts survive Engine restarts and source snapshot changes.",
+      "Prompt Studio describes its output clearly, image appearance settings apply consistently, and valid model responses can include extra fields.",
+    ],
+  },
+  {
+    version: "0.2.29",
+    date: "2026-09-23",
+    notes: [
+      "Scheduled timeline refresh uses the saved daily setting again.",
+      "Delayed chat replies finish during a cool-off, and strict model output supports comment threads and invited posts.",
+      "Pulse shows failed first posts and audience failure details. Arc edits keep imported story fields.",
+    ],
+  },
+  {
+    version: "0.2.28",
+    date: "2026-09-23",
+    notes: [
+      "Creator settings have a status overview and a section picker that works on phones.",
+      "Profile edits use one save bar, and settings use one scroll area.",
+    ],
+  },
+  {
+    version: "0.2.27",
+    date: "2026-09-23",
+    notes: [
+      "Creator settings keep profile drafts when you change sections and confirm before discarding them.",
+      "Creator settings are grouped by task, and the roster shows attention reasons and bulk-change previews.",
+    ],
+  },
+  {
+    version: "0.2.26",
+    date: "2026-09-23",
+    notes: [
+      "Image prompts preserve each Creator's appearance and follow the selected image guidance.",
+      "Choose an image style for each Creator, or let them use the global style.",
+      "Settings sections now use the shorter names Content and World.",
+      "Posts, messages, audience activity, story events, and image generation use clearer state and feedback handling.",
     ],
   },
   {

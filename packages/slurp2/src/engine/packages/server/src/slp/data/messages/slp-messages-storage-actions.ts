@@ -389,7 +389,7 @@ export function createMessagesStorageActions(context: SlurpMessagesContext) {
           updatedAt: timestamp,
         })
         .where(eq(slurpThreads.id, threadId));
-      await createSlurpReplyQueueStorage(db).removeForThread(threadId);
+      // A reply already stored for delivery remains owed during a cool-off.
     },
     /**
      * The creator ends the conversation.
@@ -411,6 +411,87 @@ export function createMessagesStorageActions(context: SlurpMessagesContext) {
         })
         .where(eq(slurpThreads.id, threadId));
       await createSlurpReplyQueueStorage(db).removeForThread(threadId);
+    },
+    /** Attach generated media after appendMessage mints its serving URL's message id. */
+    async setMessageMedia(messageId: string, imageUrl: string, mediaPath: string, imagePrompt?: string): Promise<void> {
+      const row = (await db.select().from(slurpMessages).where(eq(slurpMessages.id, messageId)))[0];
+      if (!row) return;
+      const metadata = {
+        ...(json(row.metadata as string) ?? {}),
+        noodlerMediaPath: mediaPath,
+        ...(imagePrompt ? { imagePrompt } : {}),
+      };
+      await db
+        .update(slurpMessages)
+        .set({ imageUrl, metadata: JSON.stringify(metadata) })
+        .where(eq(slurpMessages.id, messageId));
+    },
+    /** Keep a vision description of a message picture, tied to the picture it describes. */
+    async setMessageImageDescription(messageId: string, description: string, source: string): Promise<void> {
+      const row = (await db.select().from(slurpMessages).where(eq(slurpMessages.id, messageId)))[0];
+      if (!row) return;
+      const metadata = {
+        ...(json(row.metadata as string) ?? {}),
+        imageDescription: description,
+        imageDescriptionSource: source,
+      };
+      await db
+        .update(slurpMessages)
+        .set({ metadata: JSON.stringify(metadata) })
+        .where(eq(slurpMessages.id, messageId));
+    },
+    async setMessageReaction(
+      messageId: string,
+      viewerAccountId: string,
+      reaction: string | null,
+    ): Promise<SlurpMessage | null> {
+      const message = await context.storage.getMessageById(messageId);
+      if (!message) return null;
+      const thread = await context.storage.getThreadById(message.threadId);
+      if (!thread || thread.viewerAccountId !== viewerAccountId) return null;
+      await db
+        .update(slurpMessages)
+        .set({ metadata: JSON.stringify({ ...message.metadata, reaction: reaction === "heart" ? "heart" : null }) })
+        .where(eq(slurpMessages.id, messageId));
+      return context.storage.getMessageById(messageId);
+    },
+    /** Replace a placeholder message with the model's rewrite, and keep the inbox preview in step. */
+    async rewriteMessageContent(id: string, content: string): Promise<void> {
+      const row = (await db.select().from(slurpMessages).where(eq(slurpMessages.id, id)))[0];
+      if (!row) return;
+      await db.update(slurpMessages).set({ content }).where(eq(slurpMessages.id, id));
+      const thread = await context.storage.getThreadById(String(row.threadId));
+      const latest = (await context.storage.listMessages(String(row.threadId), 1))[0];
+      if (thread && latest?.id === id) {
+        await db
+          .update(slurpThreads)
+          .set({ lastMessagePreview: content.slice(0, 160), updatedAt: now() })
+          .where(eq(slurpThreads.id, thread.id));
+      }
+    },
+    /** Replace a placeholder commission brief with the model's rewrite. */
+    async rewriteCommissionBrief(id: string, brief: string): Promise<void> {
+      await db.update(slurpCommissions).set({ brief, updatedAt: now() }).where(eq(slurpCommissions.id, id));
+      const commission = (await db.select().from(slurpCommissions).where(eq(slurpCommissions.id, id)))[0];
+      if (!commission) return;
+      const messages = await db.select().from(slurpMessages).where(eq(slurpMessages.threadId, commission.threadId));
+      const linked = messages.find((message) => {
+        if (message.kind !== "commission_brief") return false;
+        try {
+          return JSON.parse(String(message.metadata ?? "{}"))?.commissionId === id;
+        } catch {
+          return false;
+        }
+      });
+      if (!linked) return;
+      await db.update(slurpMessages).set({ content: brief }).where(eq(slurpMessages.id, linked.id));
+      const latest = messages.sort((left, right) => right.createdAt.localeCompare(left.createdAt))[0];
+      if (latest?.id === linked.id) {
+        await db
+          .update(slurpThreads)
+          .set({ lastMessagePreview: brief.slice(0, 160), updatedAt: now() })
+          .where(eq(slurpThreads.id, commission.threadId));
+      }
     },
     /**
      * Set extended online availability for a thread (hot conversation keeps Creator online).

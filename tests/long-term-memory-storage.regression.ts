@@ -422,7 +422,7 @@ async function main() {
       const completeRecoveryCandidate = {
         id: randomUUID(),
         bucket: "timeline_event",
-        subjectId: "argument_strained_trust",
+        subjectId: "O’Malley Smith",
         sectionKey: "facts",
         text: "A complete recovered candidate whose original text is longer than the display preview. ".repeat(5),
         claimKind: "static",
@@ -459,7 +459,28 @@ async function main() {
         } as any,
         root,
       );
+      assert.equal(completeRecovery[0]?.candidate.recoveryCandidate?.subjectId, "o_malley_smith");
       assert.equal(completeRecovery[0]?.candidate.recoveryCandidate?.text, completeRecoveryCandidate.text);
+      const normalizedRepeat = await addRejectedSuggestions(
+        {
+          ...rejectionDraft,
+          source: completeRecoverySource,
+          extractionOutcome: {
+            ...rejectionDraft.extractionOutcome,
+            droppedCandidates: [
+              {
+                index: 0,
+                reason: "invalid_format",
+                message: "Rejected candidate.",
+                snippet: "candidate",
+                recoveryCandidate: { ...completeRecoveryCandidate, subjectId: "o_malley_smith" },
+              },
+            ],
+          },
+        } as any,
+        root,
+      );
+      assert.equal(normalizedRepeat[0]?.id, completeRecovery[0]?.id);
       assert.equal(completeRecovery[0]?.candidate.recoveryCandidate?.confidence, 0.91);
       assert.deepEqual(completeRecovery[0]?.candidate.recoveryCandidate?.evidence, completeRecoveryCandidate.evidence);
       const completeRecoveryBackup = await exportLongTermMemoryData(root);

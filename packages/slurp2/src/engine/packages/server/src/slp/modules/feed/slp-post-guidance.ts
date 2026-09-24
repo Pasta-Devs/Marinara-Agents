@@ -39,6 +39,21 @@ export type SlurpExplicitLevel = SlurpVisualSexualLevel;
 export const SLURP_BUILT_IN_EXPLICIT_LEVEL: SlurpExplicitLevel = "suggestive";
 
 export type SlurpPostAccess = "public" | "locked";
+
+/**
+ * The one statement of how far this post goes, for the caption call. Only the picture used to be
+ * told; the text was steered by five softer blocks that disagreed, and paid posts came out tame.
+ */
+const LEVEL_TEXT: Record<SlurpExplicitLevel, string> = {
+  none: "This post is not sexual.",
+  suggestive: "This post may be flirty and suggestive, teasing rather than explicit.",
+  nudity: "This post may show and talk about you nude, the way this page's paid posts do.",
+  explicit: "This post may be fully explicit, the way this page's paid posts are. Write it that way when it fits.",
+};
+
+export function slurpPostLevelInstruction(level: SlurpExplicitLevel): string {
+  return `How far this post goes: ${LEVEL_TEXT[level]}`;
+}
 /**
  * `menu` is the Creator's private content menu: what they offer and what they will not do. It
  * rides along in this blob because it is the same kind of per-Creator direction, but it has no
@@ -66,7 +81,7 @@ export const SLURP_BUILT_IN_POST_GUIDANCE: Omit<SlurpPostGuidanceEntry, "level">
     "This post is public and may be a reader's first impression. Make it complete and worthwhile on its own: share a specific moment, thought, update, or image that expresses who you are and gives people something real to react to. When paid material is relevant, create honest curiosity by saving only the genuinely premium continuation for it; do not withhold the meaning of this post or turn every public post into a repetitive subscription pitch.",
   menu: "",
   locked:
-    "This post is the premium continuation for someone who already subscribed or paid to unlock it. Deliver the promised extra value immediately through greater intimacy, candor, access, detail, or exclusivity that fits who you are and what led here; do not give them another sales pitch or another layer of artificial withholding. Premium does not have to mean sexual, but it must feel more personal or substantial than a public post and end as a satisfying payoff rather than a preview.",
+    "This post is the premium continuation for someone who already subscribed or paid to unlock it. Deliver the promised extra value immediately through greater intimacy, candor, access, detail, or exclusivity that fits who you are and what led here; do not give them another sales pitch or another layer of artificial withholding. It must feel more personal, revealing, or substantial than a public post, at the level this Creator offers, and end as a satisfying payoff rather than a preview.",
 };
 
 const emptyEntry = (): SlurpPostGuidanceEntry => ({ public: "", locked: "", menu: "", level: "" });

@@ -231,8 +231,10 @@ function buildFanActivityMessages(input: {
           "Use only supplied creator IDs, actor handles, and post IDs. Never invent identifiers.",
           `Likes have null content. Replies are one short sentence, normally under ${prompts.replyMaxChars} characters, natural, relevant, and not repetitive.`,
           "Each post lists the comments already under it. Never repeat a point somebody has already made.",
+          // English comments under German posts read as a bot farm.
+          "Write each comment in the language of the post it is under, unless the actor's voice says otherwise.",
           'A creator may list what is "currentlyGoingOn" in their life. Regulars who know them may mention it now and then; most comments should still be about the post itself.',
-          'To answer one of those comments instead of the post, set "parentInteractionId" to that comment\'s id. Leave it out to comment on the post itself. Some replies should answer other people; a comment section where nobody talks to anybody is a list, not a conversation.',
+          'To answer one of those comments instead of the post, set "parentInteractionId" to that comment\'s id. Use null to comment on the post itself. Some replies should answer other people; a comment section where nobody talks to anybody is a list, not a conversation.',
           "Each actor handle has a weight; prefer higher-weight actors more often, proportionally.",
           "An actor's voice is how that kind of person writes. Follow it; it outranks any general style note for that actor's own lines.",
           "Actors carry traits and a relationship to the creator. Write each reply as that specific person: a long-standing paying regular does not sound like somebody who arrived yesterday, and somebody whose trait is 'emoji only' does not write a paragraph.",
@@ -258,7 +260,7 @@ function buildFanActivityMessages(input: {
       {
         id: "output",
         kind: "required",
-        text: 'Return JSON only, shaped as {"activities":[{"creatorAccountId":"...","actorHandle":"...","targetPostId":"...","type":"like"|"reply","content":null|"...","parentInteractionId":"..."}]}. Use exactly these field names; "parentInteractionId" is optional.',
+        text: 'Return JSON only, shaped as {"activities":[{"creatorAccountId":"...","actorHandle":"...","targetPostId":"...","type":"like"|"reply","content":null|"...","parentInteractionId":null|"..."}]}. Use exactly these field names. Set "parentInteractionId" to null for a post-level comment.',
       },
       { id: "audience", kind: "context", text: "The supplied audience data follows." },
     ],

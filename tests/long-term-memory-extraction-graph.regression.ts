@@ -779,6 +779,34 @@ async function main() {
     true,
   );
   assert.notEqual(scopedVariantNoteId("world_legacy_scope", legacyScope), legacyNoteId);
+  const chatOnlyDestination = { chatId: "chat-a", chatIds: ["chat-a"] };
+  const narrowerResolution = await resolveScopedEvidenceUnitTargets({
+    units: [
+      unit(chat, {
+        bucket: "world_fact",
+        subjectId: "legacy_scope_fact",
+        sectionKey: "facts",
+        text: "Only chat A may see this new evidence.",
+        links: [{ target: chat.id, relation: "extracted_from" }],
+      }),
+    ],
+    existingNotes: [{ ...legacyNote, id: "world_legacy_scope_fact" }],
+    storage: {
+      getNotesByIds: async () =>
+        new Map([["world_legacy_scope_fact", { ...legacyNote, id: "world_legacy_scope_fact" }]]),
+    },
+    scope: chatOnlyDestination,
+  });
+  assert.equal(
+    narrowerResolution.remaps.has("world_legacy_scope_fact"),
+    true,
+    "chat-only evidence forks instead of updating a persona-visible memory",
+  );
+  assert.equal(
+    narrowerResolution.existingNotes.some((note) => note.id === "world_legacy_scope_fact"),
+    false,
+  );
+  assert.notEqual(narrowerResolution.units[0]?.subjectId, "legacy_scope_fact");
   const destinationScopeVariants = [
     { groupIds: ["group-a"], chatIds: ["chat-a"] },
     { groupIds: ["group-a"], chatIds: ["chat-b"] },
@@ -1456,8 +1484,8 @@ async function main() {
       sourceText: "Serafina Duvall entered the observatory.",
       catalog: identityCatalog,
     }).map((note: any) => note.id),
-    ["char_seraphina"],
-    "a unique spelling variation should select the trusted canonical identity note",
+    [],
+    "a spelling variation alone must not select a trusted identity note",
   );
   assert.deepEqual(
     trustedLtmIdentityNotesForSource({
@@ -1469,12 +1497,15 @@ async function main() {
   );
   const legacySpellingNote = identityNote("char_serafina_legacy", "Serafina Duvall");
   identityCatalog.notes.push(legacySpellingNote);
-  assert.equal(
-    analyzeTrustedLtmNoteSubjects(identityCatalog).matches.find((match: any) => match.note.id === legacySpellingNote.id)
-      ?.basis,
-    "spelling_variation",
-    "identity repair should expose the conservative fuzzy match basis",
+  const spellingIssue = analyzeTrustedLtmNoteSubjects(identityCatalog).unresolved.find(
+    (issue: any) => issue.note.id === legacySpellingNote.id,
   );
+  assert.equal(
+    spellingIssue?.basis,
+    "spelling_variation",
+    "identity repair should suggest rather than bind a fuzzy identity",
+  );
+  assert.deepEqual(spellingIssue?.candidateSubjectKeys, ["character:seraphina"]);
   const ambiguousCatalog = buildTrustedLtmSubjectCatalog({
     roster: [
       { kind: "character", id: "one", name: "Seraphina Duvall" },

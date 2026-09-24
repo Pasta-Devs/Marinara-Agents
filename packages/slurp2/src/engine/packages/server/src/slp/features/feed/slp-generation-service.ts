@@ -1,4 +1,5 @@
 import { saveSlurpPostDeepDetails } from "../../data/feed/slp-post-deep-details-storage.js";
+import { slpIsAdmissionFailure } from "../../base/host/slp-admission.js";
 import { buildSlurpDeepDetailsRecord } from "./slp-deep-details-record.js";
 import { prepareSlurpCreatorPost, recordSlurpProviderPrompt } from "./slp-prepared-post.js";
 import { type APIProvider } from "@marinara-engine/shared";
@@ -13,17 +14,18 @@ import { logger, logDebugOverride } from "../../../lib/logger.js";
 import { clampGenerationMaxOutputTokens } from "../../../services/generation/output-token-limits.js";
 import { resolveStoredChatOptions } from "../../../services/generation/generation-parameters.js";
 import { slpSamplingOptions } from "../../base/prompting/slp-sampling-options.js";
-import {
-  isConnectionAdmissionFailure,
-  type ConnectionAdmissionMode,
-} from "../../../services/generation/connection-admission.js";
+import { type ConnectionAdmissionMode } from "../../../services/generation/connection-admission.js";
 import { resolveCreatorImageConnectionId } from "../../base/media/slp-image-connections.js";
 import {
   resolveSlurpCreatorMenu,
   resolveSlurpExplicitLevel,
   resolveSlurpPostGuidance,
 } from "../../data/settings/slp-post-guidance-storage.js";
-import { SLURP_BUILT_IN_EXPLICIT_LEVEL, slurpPostSexualLevel } from "../../modules/feed/slp-post-guidance.js";
+import {
+  SLURP_BUILT_IN_EXPLICIT_LEVEL,
+  slurpPostLevelInstruction,
+  slurpPostSexualLevel,
+} from "../../modules/feed/slp-post-guidance.js";
 import { createCharactersStorage } from "../../../services/storage/characters.storage.js";
 import { createConnectionsStorage } from "../../../services/storage/connections.storage.js";
 import { createSlurpStorage } from "../../data/slp-storage.js";
@@ -42,7 +44,6 @@ import {
   slurpPostVariationInstruction,
   slurpTeaserPost,
 } from "../../modules/feed/slp-post-variation.js";
-import { slurpArcImageLine } from "../../modules/projects/slp-arc-progress.js";
 import { slurpArcRotation, slurpProjectChapter } from "../../modules/projects/slp-arc-progress.js";
 import { resolveSlurpCreatorScheduleContext } from "../creators/slp-creators-contract.js";
 import { createSlurpMessagesStorage } from "../../data/slp-storage.js";
@@ -55,7 +56,7 @@ import { createGalleryStorage } from "../../../services/storage/gallery.storage.
 import { pickGalleryAttachmentForAccount } from "./slp-generated-activity-service.js";
 import { protectCreatorGeneratedIdentity, type PublicIdentity } from "../../base/identity/slp-identity-protection.js";
 import { resolveCreatorCharacterCanon } from "../../data/creators/slp-source-resolve.js";
-import { slurpPlatformEventInstruction } from "../../../../../shared/src/slp/slp-platform-events.js";
+import { resolveSlurpEventInstruction } from "../world/slp-world-contract.js";
 import { slpCreatorPublicIdentityFor, protectBoundedCreatorGeneratedText } from "./slp-public-identity.js";
 import {
   FormattedCreatorGenerationRequest,
@@ -80,7 +81,7 @@ import {
 } from "../../base/prompting/slp-prompt-blocks.js";
 import { slurpCameraSourceInstruction, slurpPostCameraSource } from "../../modules/feed/slp-camera-source.js";
 import { slurpPostPictureBriefs } from "./slp-post-picture-briefs.js";
-import { slurpVisualBriefFromSituation } from "../../modules/feed/slp-visual-brief.js";
+import { slurpShootContinuity } from "../../modules/feed/slp-image-brief.js";
 import { slurpContentAxesInstruction, slurpIntentFormat } from "../../modules/feed/slp-content-axes.js";
 import { planSlurpPost, recordSlurpPostOutcome } from "./slp-post-plan-service.js";
 import { slurpShootInstruction } from "../../modules/feed/slp-shoot.js";
@@ -192,9 +193,7 @@ export async function generateCreatorPost(
           return "";
         })
     : "";
-  // The rotating angle for this post. Skipped when the player has directed the post themselves —
-  // their direction is the angle, and a second one would fight it.
-  // One sequence for both rotations, so the project and the variation cannot drift out of step.
+  // Rotating angle, skipped for directed posts; one sequence keeps project and variation in step.
   const sequence = await noodle.countNoodlerPostsByAccount(account.id);
   const wardrobeLooks = await noodle.listWardrobeLooks(account.id).catch(() => []);
   const recentWardrobeIds = recentPosts
@@ -226,11 +225,7 @@ export async function generateCreatorPost(
   const strategy = slurpCreatorStrategy(account.id, account.settings.strategy);
   const production = strategy.production;
   const effort = slurpPostEffort(production, sequence, account.id);
-  // A Story is a picture with a line under it, so a run that produces no image publishes an
-  // ordinary post instead. The flag is only honoured on the path that commits an image below.
-  // A Story the player asked for outranks the rotation, which never fires on a directed post.
-  // Hoisted above the prompt build because the axes below need it; computing it twice
-  // would let the two copies disagree about whether this post is a Story.
+  // A Story needs a picture; a player-requested Story outranks the rotation. Computed once, here.
   const storyVariation =
     ((input.allowStory !== false && variation?.story === true && settings.storyImagesEnabled) ||
       input.request.postType === "story") &&
@@ -315,16 +310,19 @@ export async function generateCreatorPost(
     recentPosts,
     // A variation carries its own format, so an automatic post stops always being a caption.
     request: { ...input.request, format },
-    variationInstruction: variation ? slurpPostVariationInstruction(variation, cameraInstruction) : undefined,
+    variationInstruction: variation
+      ? slurpPostVariationInstruction(variation, cameraInstruction, { shoot: !!shoot })
+      : undefined,
     conditionInstruction: conditionInstruction ?? undefined,
     eventInstruction:
-      slurpPlatformEventInstruction(
-        settings.platformEvents,
-        input.publicationTime ?? input.generatedAt ?? new Date(),
-      ) ?? undefined,
+      (await resolveSlurpEventInstruction(db, account.id, input.publicationTime ?? input.generatedAt ?? new Date())) ??
+      undefined,
     accessInstruction: [
       await resolveSlurpPostGuidance(db, account.id, input.request.access),
       isTeaser ? SLURP_TEASER_INSTRUCTION : "",
+      slurpPostLevelInstruction(
+        slurpPostSexualLevel({ level: explicitLevel, access: input.request.access, intent: axes?.intent }),
+      ),
     ]
       .filter(Boolean)
       .join("\n\n"),
@@ -414,11 +412,12 @@ export async function generateCreatorPost(
 
   // What the picture is, and what it may show. Assembled in one place so the two briefs cannot
   // disagree about the level, the shoot, or the effort.
-  const { draftImagePrompt, visualBrief } = slurpPostPictureBriefs({
+  const { draftImagePrompt, visualBrief, negativePrompt } = slurpPostPictureBriefs({
     project,
     variation,
-    cameraInstruction,
+    camera,
     effort,
+    productionStyle: production.style,
     shoot,
     axes,
     story: storyVariation,
@@ -443,10 +442,13 @@ export async function generateCreatorPost(
     if (axes?.intent === "set" && camera && variation) {
       const opened = await openSlurpShoot(db, {
         creatorAccountId: account.id,
-        place: variation.place,
+        place: generated.scene?.setting?.trim() || variation.place, // concrete, so callbacks name it
         company: variation.company,
         cameraSource: camera,
-        brief: draftImagePrompt,
+        brief: slurpShootContinuity({
+          scene: generated.scene,
+          outfit: wardrobeSelection.look?.description ?? generated.scene?.outfit,
+        }),
         effort,
         theme: axes.intent,
         campaignId,
@@ -580,6 +582,7 @@ export async function generateCreatorPost(
       db,
       debugMode,
       admissionMode: input.admissionMode,
+      negativePromptAdditions: negativePrompt,
       ...(storyVariation ? { width: settings.storyImageWidth, height: settings.storyImageHeight } : {}),
     };
   };
@@ -712,7 +715,7 @@ export async function generateCreatorPost(
       });
       await recordSlurpProviderPrompt(db, deepDetailsId, preview.providerPrompt);
     } catch (err) {
-      if (isConnectionAdmissionFailure(err)) throw err;
+      if (slpIsAdmissionFailure(err)) throw err;
       logger.warn(err, "[slurp] Failed to prepare image prompt review for %s", account.displayName);
       const fallback = await galleryFallback();
       if (fallback.imageUrl) return { post: await persist(fallback), imagePromptReview: null };
@@ -750,7 +753,7 @@ export async function generateCreatorPost(
   } catch (err) {
     // Same rule as the text leg: a busy connection is a deferral, so let it propagate to the
     // scheduler instead of persisting a post permanently marked as image-failed.
-    if (isConnectionAdmissionFailure(err)) throw err;
+    if (slpIsAdmissionFailure(err)) throw err;
     logger.warn(err, "[slurp] Failed to generate image for %s", account.displayName);
     const fallback = await galleryFallback();
     if (fallback.imageUrl) return { post: await persist(fallback), imagePromptReview: null };

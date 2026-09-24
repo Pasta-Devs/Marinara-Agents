@@ -324,6 +324,15 @@ export async function resolveSlurpCreatorScheduleStatus(
   return today?.length ? { state: "active", blocks: today.length } : { state: "empty-today" };
 }
 
+/** The stored Conversation Schedule object, which also carries talkativeness. */
+export async function resolveSlurpCreatorScheduleTraits(
+  characters: { getById(id: string): Promise<ScheduleCharacter> },
+  source: CreatorSource,
+): Promise<unknown> {
+  if (source.kind !== "character") return null;
+  return record(record(record((await characters.getById(source.entityId))?.data).extensions).conversationSchedule);
+}
+
 export async function resolveSlurpCreatorAvailability(
   characters: { getById(id: string): Promise<ScheduleCharacter> },
   source: CreatorSource,

@@ -239,10 +239,12 @@ import { SlpPostCard } from "../../modules/post/SlpPostCard";
 export function SlurpAccessTransition({
   postId,
   locked,
+  menuOpen = false,
   children,
 }: {
   postId: string;
   locked: boolean;
+  menuOpen?: boolean;
   children: ReactNode;
 }) {
   const reduceMotion = useReducedMotion();
@@ -262,13 +264,18 @@ export function SlurpAccessTransition({
     <motion.div
       layout={reduceMotion ? false : "size"}
       transition={{ type: "spring", duration: 0.58, bounce: 0 }}
-      style={{ contentVisibility: "auto", containIntrinsicSize: "auto 720px" }}
+      style={
+        menuOpen
+          ? { position: "relative", zIndex: 40 }
+          : { contentVisibility: "auto", containIntrinsicSize: "auto 720px" }
+      }
       data-slurp-access-transition={postId}
     >
       <AnimatePresence initial={false} mode="popLayout">
         <motion.div
           key={locked ? "locked" : "revealed"}
           className="relative"
+          style={menuOpen ? { zIndex: 40 } : undefined}
           initial={reduceMotion ? { opacity: 0 } : { opacity: 0, scale: 0.985, filter: "blur(4px)" }}
           animate={{ opacity: 1, scale: 1, filter: "blur(0px)" }}
           exit={reduceMotion ? { opacity: 0 } : { opacity: 0, scale: 0.992, filter: "blur(4px)" }}

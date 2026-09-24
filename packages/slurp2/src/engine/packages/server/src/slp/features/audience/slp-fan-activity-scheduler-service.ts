@@ -28,12 +28,12 @@ export function startCreatorFanActivityScheduler(
     try {
       const result = await active;
       if (result.status === "generated" || result.status === "resumed") {
-        logger.info("[noodler-fan] Audience run %s created %d interactions", result.status, result.created);
+        logger.info("[slurp-fan] Audience run %s created %d interactions", result.status, result.created);
       }
       consecutiveFailures = 0;
     } catch (error) {
       consecutiveFailures += 1;
-      logger.warn(error, "[noodler-fan] Automatic audience activity failed");
+      logger.warn(error, "[slurp-fan] Automatic audience activity failed");
     } finally {
       active = null;
       schedule(slurpPollBackoffMs(POLL_MS, consecutiveFailures));

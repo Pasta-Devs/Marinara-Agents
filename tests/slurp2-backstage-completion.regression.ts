@@ -44,8 +44,13 @@ assert.match(
 assert.match(workflow, /\+\{\(avatarTotal/u, "a compact avatar stack must expose the remaining Creator count");
 assert.match(
   creators,
-  /setSelectedCreatorId\(creator\.id\);[\s\S]*setTab\("profile"\);/u,
-  "selecting a Creator must return to the safe Profile tab",
+  /openSlpCreatorSettings\(creator\.id\)/u,
+  "selecting a Creator opens its settings, which start on the safe Identity tab",
+);
+assert.match(
+  creators,
+  /tab: "identity",\s*\n?\s*settingKey/u,
+  "the settings store opens on Identity unless the caller asks for another tab",
 );
 
 // The Profile rail shortcuts must reach the composer itself, not only the panel around it.

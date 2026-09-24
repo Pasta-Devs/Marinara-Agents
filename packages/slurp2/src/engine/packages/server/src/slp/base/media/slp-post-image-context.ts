@@ -7,7 +7,7 @@ import {
 } from "../../../services/generation/image-captioning-runtime.js";
 import { createLLMProvider } from "../../../services/llm/provider-registry.js";
 import { createConnectionsStorage } from "../../../services/storage/connections.storage.js";
-import { normalizeSlpImagePrompt } from "./slp-image-prompt.js";
+import { normalizeSlpImagePrompt, slurpIsLegacyImageBrief } from "./slp-image-prompt.js";
 import { slpCreatorPostMediaUrl, slurpMessageMediaUrl } from "./slp-media.js";
 import {
   isUnsupportedSlpVisionInputError,
@@ -87,7 +87,8 @@ export async function prepareSlurpPostImageContexts(input: {
   const visionPosts: SlurpImageContextPost[] = [];
   for (const post of input.posts) {
     if ((!input.allowLocked && post.access === "locked") || !post.imageUrl) continue;
-    const prompt = normalizeSlpImagePrompt(post.imagePrompt);
+    // Legacy drafts are rule prose, not a description of the picture.
+    const prompt = slurpIsLegacyImageBrief(post.imagePrompt) ? null : normalizeSlpImagePrompt(post.imagePrompt);
     const saved =
       post.metadata.imageDescriptionSource === imageSource(post) && typeof post.metadata.imageDescription === "string"
         ? post.metadata.imageDescription.trim()

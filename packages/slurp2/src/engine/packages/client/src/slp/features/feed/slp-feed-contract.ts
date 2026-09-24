@@ -28,3 +28,10 @@ export type SlpCreatorPostDraftImage = {
   crop: SlpPostImageCrop | null;
 };
 export type SlpCreatorContentFormat = "caption" | "announcement" | "long_form";
+
+// The Creator settings modal owns one Creator's automation and prepared publishing slots.
+export {
+  useCreatorReserveStatus,
+  useUpdateCreatorAutoPosting,
+  useUpdateCreatorScheduleSlot,
+} from "./slp-feed-schedule-hooks.js";

@@ -132,6 +132,7 @@ const mutationLabels: Record<LtmDraftMutation["kind"], string> = {
   add_link: "ui.longTermMemory.reviewqueue.addLink",
   set_keywords: "ui.longTermMemory.reviewqueue.replaceKeywords",
   set_status: "ui.longTermMemory.reviewqueue.changeStatus",
+  set_title: "ui.longTermMemory.reviewqueue.updateTitle",
   set_subjects: "ui.longTermMemory.reviewqueue.updateSubjects",
 };
 
@@ -362,6 +363,7 @@ function mutationProposedText(mutation: LtmDraftMutation, noteById: ReadonlyMap<
   if (mutation.kind === "update_section") return mutation.section.text.trim();
   if (mutation.kind === "set_keywords") return mutation.keywords.join(", ");
   if (mutation.kind === "set_status") return mutation.status;
+  if (mutation.kind === "set_title") return mutation.title;
   if (mutation.kind === "set_subjects") return mutation.subjects.map((subject) => subject.key).join(", ");
   if (mutation.kind === "add_link") return noteById.get(mutation.link.target)?.title?.trim() || mutation.link.target;
   return "";

@@ -390,7 +390,7 @@ const features = [
   },
   {
     id: "slurp2",
-    version: "0.2.25",
+    version: "0.2.34",
     minEngineVersion: "2.4.6",
     maxEngineExclusive: MAX_ENGINE_EXCLUSIVE,
     name: "Slurp Remastered",
@@ -455,7 +455,7 @@ const features = [
   },
   {
     id: "long-term-memory",
-    version: "1.3.13",
+    version: "1.3.16",
     minEngineVersion: "2.4.1",
     maxEngineExclusive: MAX_ENGINE_EXCLUSIVE,
     name: "Long-Term Memory",
@@ -1766,7 +1766,9 @@ for (const feature of selectedFeatures) {
           builtAgainst: boundary.builtAgainst,
         }
       : {}),
-    ...(feature.capabilityApi ? { capabilityApi: feature.capabilityApi, builtAgainst: feature.builtAgainst } : {}),
+    ...(feature.capabilityApi && !boundary
+      ? { capabilityApi: feature.capabilityApi, builtAgainst: feature.builtAgainst }
+      : {}),
     id: feature.id,
     name: feature.name,
     version,

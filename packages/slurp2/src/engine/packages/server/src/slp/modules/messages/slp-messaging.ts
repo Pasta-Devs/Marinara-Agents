@@ -445,8 +445,20 @@ export function splitSlurpReplyBurst(content: string, allow: boolean, limit = 3)
   if (!allow || trimmed.length < 90) return [trimmed];
   // Split on sentence ends only. Splitting mid-clause produces two fragments rather than two
   // messages, which reads worse than the paragraph it replaced.
-  const parts = trimmed.match(/[^.!?\n]+[.!?]*[\n]*/g)?.map((part) => part.trim()) ?? [];
-  const sentences = parts.filter(Boolean);
+  // A sentence ends at punctuation followed by a space, so "3.5k" and "v1.2" stay whole.
+  const parts = trimmed
+    .split(/(?<=[.!?…]["')\]]?(?:\s*\p{Extended_Pictographic}\uFE0F?)*)\s+|\n+/u)
+    .map((part) => part.trim())
+    .filter(Boolean);
+  // A lone "..." or "!!" is a lead-in to the next sentence, not a message of its own.
+  const sentences: string[] = [];
+  for (const [index, part] of parts.entries()) {
+    const last = sentences.at(-1);
+    if (last !== undefined && /^[\p{P}\s]+$/u.test(last)) sentences[sentences.length - 1] = `${last} ${part}`;
+    else if (index === parts.length - 1 && /^[\p{P}\s]+$/u.test(part) && last !== undefined)
+      sentences[sentences.length - 1] = `${last}${part}`;
+    else sentences.push(part);
+  }
   if (sentences.length < 2) return [trimmed];
   // Pack into at most `limit` bubbles, keeping them roughly even so one is not a single word.
   const target = Math.min(limit, Math.max(2, Math.round(sentences.length / 2)));

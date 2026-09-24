@@ -40,6 +40,7 @@ import { slurpContinuityIdentityOf } from "../../modules/continuity/slp-continui
 
 const CHECKPOINT_KEY = "slurp2.continuity-checkpoints";
 /** Threads one drain reads. The rest wait for the next open; nothing here is urgent. */
+const SLURP_EXTRACTION_IDLE_MS = 30 * 60_000;
 const THREADS_PER_DRAIN = 3;
 
 type Checkpoints = Record<string, string>;
@@ -53,6 +54,13 @@ async function readCheckpoints(db: DB): Promise<Checkpoints> {
     return {};
   }
 }
+
+// A thread whose batch failed sits out for a while. It keeps the oldest `lastMessageAt`, so it
+// otherwise took a drain slot every time and a few broken threads starved every other one.
+// ponytail: in-memory, resets on restart; persist beside the checkpoints if restarts matter.
+const failedUntil = new Map<string, number>();
+const FAILED_THREAD_WAIT_MS = 30 * 60_000;
+const extractionInFlight = new Set<string>();
 
 /**
  * Read new messages in a few threads and turn explicit statements into continuity.
@@ -73,6 +81,10 @@ export async function drainSlurpContinuityExtraction(
   const checkpoints = await readCheckpoints(db);
   const threads = (await db.select().from(slurpThreads))
     .filter((thread) => String(thread.lastMessageAt) > (checkpoints[String(thread.id)] ?? ""))
+    .filter((thread) => (failedUntil.get(String(thread.id)) ?? 0) <= at.getTime())
+    // Wait for a quiet thread: one call per message spent half the day's budget on "<3" and payment
+    // markers. Read once the exchange has settled, as one batch.
+    .filter((thread) => Date.parse(String(thread.lastMessageAt)) <= at.getTime() - SLURP_EXTRACTION_IDLE_MS)
     .sort((left, right) => String(left.lastMessageAt).localeCompare(String(right.lastMessageAt)))
     .slice(0, THREADS_PER_DRAIN);
   if (threads.length === 0) return 0;
@@ -104,7 +116,15 @@ export async function drainSlurpContinuityExtraction(
   let recorded = 0;
   for (const thread of threads) {
     const threadId = String(thread.id);
-    const creator = await slurp.getNoodlerAccountById(String(thread.creatorAccountId));
+    if (extractionInFlight.has(threadId)) continue;
+    extractionInFlight.add(threadId);
+    let creator;
+    try {
+      creator = await slurp.getNoodlerAccountById(String(thread.creatorAccountId));
+    } catch (error) {
+      extractionInFlight.delete(threadId);
+      throw error;
+    }
     const identity = creator ? slurpContinuityIdentityOf(creator) : null;
     const since = checkpoints[threadId] ?? "";
     const fresh = (
@@ -116,7 +136,11 @@ export async function drainSlurpContinuityExtraction(
     )
       .filter(
         (message) =>
-          String(message.createdAt) > since && String(message.kind) === "text" && String(message.content).trim(),
+          String(message.createdAt) > since &&
+          String(message.kind) === "text" &&
+          String(message.content).trim() &&
+          // Payment markers are bookkeeping, not something the fan said.
+          !String(message.metadata ?? "").includes("paymentReaction"),
       )
       .slice(0, SLURP_EXTRACTION_BATCH);
     const batch: SlurpExtractionMessage[] = fresh.map((message) => ({
@@ -125,11 +149,19 @@ export async function drainSlurpContinuityExtraction(
       content: String(message.content),
     }));
     const nextCheckpoint = fresh.at(-1) ? String(fresh.at(-1)!.createdAt) : String(thread.lastMessageAt);
-    if (!creator || !identity || batch.length === 0) {
+    // Generated fans never read or answer, and a batch with no real fan words holds no fact about
+    // the fan: these produced only junk notes from canned openers and sales lines.
+    const fanSpoke = batch.some((message) => message.role === "fan" && message.content.trim().length >= 20);
+    const generatedFan = String(thread.viewerAccountId ?? "").startsWith("slurp-fan:");
+    if (!creator || !identity || batch.length === 0 || !fanSpoke || generatedFan) {
       checkpoints[threadId] = nextCheckpoint;
+      extractionInFlight.delete(threadId);
       continue;
     }
-    if (!(await claimSlurpModelBudget(db, settings.modelBudget, "continuity", at))) break;
+    if (!(await claimSlurpModelBudget(db, settings.modelBudget, "continuity", at))) {
+      extractionInFlight.delete(threadId);
+      break;
+    }
     try {
       const prompt = slurpExtractionPrompt(creator.displayName, batch);
       const response = await provider.chatComplete(
@@ -146,7 +178,8 @@ export async function drainSlurpContinuityExtraction(
           maxTokens: clampGenerationMaxOutputTokens({
             provider: connection.provider as APIProvider,
             model: connection.model,
-            maxTokens: 900,
+            // Reasoning headroom: a reasoning model spends a small budget before it answers.
+            maxTokens: 2048,
             maxTokensOverride: connection.maxTokensOverride,
           }),
           stream: false,
@@ -220,9 +253,13 @@ export async function drainSlurpContinuityExtraction(
         recorded += 1;
       }
       checkpoints[threadId] = nextCheckpoint;
+      failedUntil.delete(threadId);
     } catch (error) {
+      failedUntil.set(threadId, at.getTime() + FAILED_THREAD_WAIT_MS);
       // The checkpoint stays put, so the same batch is read again next time.
       logger.warn(error, "[slurp-continuity] Extraction failed for one thread; it is retried later");
+    } finally {
+      extractionInFlight.delete(threadId);
     }
   }
   await createAppSettingsStorage(db).set(CHECKPOINT_KEY, JSON.stringify(checkpoints));

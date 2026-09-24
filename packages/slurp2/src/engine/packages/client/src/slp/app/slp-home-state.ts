@@ -24,7 +24,6 @@ import {
   useConfirmCreatorImagePrompts,
   useCreateCreatorPost,
   useDeleteCreatorPost,
-  useRestoreCreatorPost,
   useGenerateCreatorSlpPost,
   useGenerateCreatorPostImage,
   useLoadCreatorPostImage,
@@ -39,6 +38,7 @@ import {
   useMarkCreatorFeedSeen,
   useCreatorUnseenCount,
   useCreatorViewer,
+  useGambleUnlockCreatorPost,
   useRemoveCreatorInteraction,
   useToggleCreatorFollow,
   useToggleCreatorSubscription,
@@ -271,12 +271,12 @@ export function useSlurpHomeBaseState({ navigation, onNavigate, onLeave }: Slurp
   const toggleFollow = useToggleCreatorFollow();
   const toggleSubscription = useToggleCreatorSubscription();
   const unlockPost = useUnlockCreatorPost();
+  const gambleUnlockPost = useGambleUnlockCreatorPost();
   const createInteraction = useCreateCreatorInteraction();
   const triggerCreatorReply = useTriggerCreatorReply();
   const removeInteraction = useRemoveCreatorInteraction();
   const updatePost = useUpdateCreatorPost();
   const deletePost = useDeleteCreatorPost();
-  const restorePost = useRestoreCreatorPost();
   const updateInteraction = useUpdateCreatorInteraction();
   const deleteInteraction = useDeleteCreatorInteraction();
   const [draftNoodleAccountId, setDraftNoodleAccountId] = useState<string | null>(null);
@@ -458,9 +458,6 @@ export function useSlurpHomeBaseState({ navigation, onNavigate, onLeave }: Slurp
     submitReply,
     savePost,
     deleteNoodlePost,
-    deletingPostIds,
-    deletedPostIds,
-    restoringPostIds,
     editingReplyId,
     setEditingReplyId,
     editingReplyContent,
@@ -482,7 +479,6 @@ export function useSlurpHomeBaseState({ navigation, onNavigate, onLeave }: Slurp
     replacePostImage,
     updatePost,
     deletePost,
-    restorePost,
   });
   const postCardController = useSlpPostCardController({
     postShowMoreLength: slurpSettingsQuery.data?.postShowMoreLength,
@@ -543,6 +539,16 @@ export function useSlurpHomeBaseState({ navigation, onNavigate, onLeave }: Slurp
     ...postCardController.ctx,
     generatePostImage: handleGeneratePostImage,
     generatingPostImageId,
+    gambleUnlockPost: viewerPersonaId
+      ? async (postId: string) => {
+          try {
+            return await gambleUnlockPost.mutateAsync({ postId, personaId: viewerPersonaId });
+          } catch (error) {
+            toast.error(errorMessage(error, localizeUi("ui.noodle.noodlerhome.couldNotUnlockThisPost")));
+            throw error;
+          }
+        }
+      : undefined,
     // Undefined without a persona rather than a no-op handler: the menu then falls back to its
     // own share-card download instead of the item doing nothing at all when it is clicked.
     // Sharing used to post straight to the creator who wrote the post — the one chat the reader
@@ -760,9 +766,6 @@ export function useSlurpHomeBaseState({ navigation, onNavigate, onLeave }: Slurp
     submitReply,
     savePost,
     deleteNoodlePost,
-    deletingPostIds,
-    deletedPostIds,
-    restoringPostIds,
     editingReplyId,
     setEditingReplyId,
     editingReplyContent,
