@@ -1,5 +1,9 @@
 # Noodle release notes
 
+## 1.2.29 — 2026-09-24
+
+- Align the Home widget with Noodle timeline styling, show twenty posts, and make post summaries keyboard and pointer interactive.
+
 ## 1.2.28 — 2026-09-24
 
 - Fix a render error that could leave the native Latest Posts widget blank when posts were available.

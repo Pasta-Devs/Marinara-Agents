@@ -40,8 +40,8 @@ export function NoodleLatestPostsWidget({
   const { t, i18n } = useTranslation();
   const bootstrap = useNoodle(active);
   const feed = useQuery({
-    queryKey: [...noodleKeys.feed(), "home-widget", "latest-five"],
-    queryFn: () => api.get<NoodlePostPage>("/noodle/feed?limit=5"),
+    queryKey: [...noodleKeys.feed(), "home-widget", "latest-twenty"],
+    queryFn: () => api.get<NoodlePostPage>("/noodle/feed?limit=20"),
     enabled: active,
     staleTime: 10_000,
     refetchOnMount: "always",
@@ -100,13 +100,13 @@ export function NoodleLatestPostsWidget({
   }
   return (
     <div
-      className="flex h-full min-h-0 flex-col overflow-hidden rounded-[inherit] bg-[color-mix(in_srgb,var(--noodle-accent)_7%,var(--background))]"
+      className="flex h-full min-h-0 flex-col overflow-hidden rounded-[inherit] bg-[var(--background)]"
       style={{ "--widget-accent": "var(--noodle-accent)" } as CSSProperties}
     >
       <header className="shrink-0 border-b border-[color-mix(in_srgb,var(--widget-accent)_24%,var(--border))] bg-[color-mix(in_srgb,var(--widget-accent)_11%,transparent)] px-4 py-3">
         <div className="flex items-start justify-between gap-3">
           <div className="flex min-w-0 items-start gap-2.5">
-            <span className="mt-0.5 flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-[var(--noodle-accent)]/30 bg-[var(--noodle-accent)]/15 p-1.5">
+            <span className="mt-0.5 flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-2xl bg-[var(--noodle-accent)]/10 p-1.5">
               <img
                 src={
                   packageId && packageVersion
@@ -121,14 +121,9 @@ export function NoodleLatestPostsWidget({
               ) : null}
             </span>
             <div className="min-w-0">
-              <p className="text-[0.62rem] font-bold uppercase tracking-[0.16em] text-[var(--noodle-accent)]">
-                Noodle public feed
-              </p>
-              <h2 className="truncate text-sm font-bold text-[var(--foreground)]">
-                {widgetLabel ?? t("ui.noodle.widget.title")}
-              </h2>
+              <h2 className="truncate text-sm font-bold text-[var(--foreground)]">{t("ui.noodle.widget.title")}</h2>
               <p className="mt-0.5 line-clamp-1 text-[0.68rem] text-[var(--muted-foreground)]">
-                {widgetDescription ?? t("ui.noodle.widget.description")}
+                {t("ui.noodle.widget.description")}
               </p>
             </div>
           </div>
@@ -141,13 +136,8 @@ export function NoodleLatestPostsWidget({
             <RefreshCw size="0.9rem" aria-hidden="true" />
           </button>
         </div>
-        <div className="mt-2 flex items-center gap-2 text-[0.63rem] text-[var(--muted-foreground)]">
-          <span className="inline-flex items-center gap-1">
-            <span className="h-1.5 w-1.5 rounded-full bg-[var(--widget-accent)]" /> {t("ui.noodle.widget.live")}
-          </span>
-          <span aria-hidden="true">•</span>
-          <span>{t("ui.noodle.widget.latestCount", { count: posts.length })}</span>
-          {stale ? <span className="ml-auto">{t("ui.noodle.widget.stale")}</span> : null}
+        <div className="mt-2 text-[0.63rem] text-[var(--muted-foreground)]">
+          {stale ? t("ui.noodle.widget.stale") : t("ui.noodle.widget.subtitle")}
         </div>
       </header>
       <div
@@ -164,11 +154,18 @@ export function NoodleLatestPostsWidget({
             const replies = countInteractions(details as never, "reply");
             const reposts = countInteractions(details as never, "repost");
             return (
-              <button
+              <div
                 key={post.id}
-                type="button"
                 onClick={() => onOpenPost?.(post.id)}
-                className="group w-full rounded-2xl border border-[color-mix(in_srgb,var(--widget-accent)_18%,var(--border))] bg-[color-mix(in_srgb,var(--card)_82%,transparent)] p-3 text-left shadow-[0_8px_24px_-20px_var(--widget-accent)] transition-colors hover:border-[color-mix(in_srgb,var(--widget-accent)_40%,var(--border))] hover:bg-[color-mix(in_srgb,var(--widget-accent)_10%,var(--card))] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--widget-accent)]"
+                role="button"
+                tabIndex={0}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter" || event.key === " ") {
+                    event.preventDefault();
+                    onOpenPost?.(post.id);
+                  }
+                }}
+                className="group w-full rounded-xl border border-[var(--noodle-divider)] bg-[var(--background)] p-3 text-left transition-colors hover:border-[var(--noodle-accent)]/50 hover:bg-[var(--noodle-accent)]/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)]"
                 aria-label={t("ui.noodle.widget.openPost", { author })}
               >
                 <span className="flex min-w-0 items-center gap-2">
@@ -205,17 +202,41 @@ export function NoodleLatestPostsWidget({
                   </span>
                 ) : null}
                 <span className="mt-2 flex items-center gap-3 text-[0.65rem] text-[var(--muted-foreground)]">
-                  <span className="inline-flex items-center gap-1">
+                  <button
+                    type="button"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      onOpenPost?.(post.id);
+                    }}
+                    className="inline-flex items-center gap-1 hover:text-[var(--noodle-accent)]"
+                    aria-label={t("ui.noodle.widget.openPost", { author })}
+                  >
                     <Heart size="0.75rem" /> {likes}
-                  </span>
-                  <span className="inline-flex items-center gap-1">
+                  </button>
+                  <button
+                    type="button"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      onOpenPost?.(post.id);
+                    }}
+                    className="inline-flex items-center gap-1 hover:text-[var(--noodle-accent)]"
+                    aria-label={t("ui.noodle.widget.openPost", { author })}
+                  >
                     <MessageCircle size="0.75rem" /> {replies}
-                  </span>
-                  <span className="inline-flex items-center gap-1">
+                  </button>
+                  <button
+                    type="button"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      onOpenPost?.(post.id);
+                    }}
+                    className="inline-flex items-center gap-1 hover:text-[var(--noodle-accent)]"
+                    aria-label={t("ui.noodle.widget.openPost", { author })}
+                  >
                     <Repeat2 size="0.8rem" /> {reposts}
-                  </span>
+                  </button>
                 </span>
-              </button>
+              </div>
             );
           })}
         </div>

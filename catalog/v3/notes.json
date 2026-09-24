@@ -268,6 +268,12 @@
     "noodle": {
       "versions": [
         {
+          "version": "1.2.29",
+          "date": "2026-09-24",
+          "notes": "- Align the Home widget with Noodle timeline styling, show twenty posts, and make post summaries keyboard and pointer interactive.",
+          "highlight": false
+        },
+        {
           "version": "1.2.28",
           "date": "2026-09-24",
           "notes": "- Fix a render error that could leave the native Latest Posts widget blank when posts were available.",

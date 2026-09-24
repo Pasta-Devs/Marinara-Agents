@@ -1281,6 +1281,7 @@
   "ui.noodle.widget.scrollLabel": "Latest Noodle posts",
   "ui.noodle.widget.setup": "Set up Noodle to see posts here.",
   "ui.noodle.widget.stale": "Older posts shown. Refreshing…",
+  "ui.noodle.widget.subtitle": "From the Noodle timeline",
   "ui.noodle.widget.title": "Latest Posts",
   "ui.noodle.widget.unavailable": "Noodle posts are unavailable right now.",
   "ui.noodle.widget.unknownAuthor": "Noodle user",
