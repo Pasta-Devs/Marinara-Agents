@@ -276,16 +276,27 @@ export function SlpPostSurfaceMenu({
   onDownload,
   onShare,
   onOpenCreator,
+  deepDetailsPostId,
 }: {
   onDownload?: () => void;
   onShare?: () => void;
   onOpenCreator?: () => void;
+  /** The post whose Deep details this menu opens; omit on surfaces that are not the player's to manage. */
+  deepDetailsPostId?: string;
 }) {
   const { t: localizeUi } = useUiTranslation();
   const [open, setOpen] = useState(false);
+  const [deepDetailsOpen, setDeepDetailsOpen] = useState(false);
   const close = () => setOpen(false);
   return (
     <div className="relative">
+      {deepDetailsPostId && (
+        <SlpDeepDetailsModal
+          postId={deepDetailsPostId}
+          open={deepDetailsOpen}
+          onClose={() => setDeepDetailsOpen(false)}
+        />
+      )}
       <button
         type="button"
         aria-label={localizeUi("ui.noodle.noodlepostcard.postActions")}
@@ -325,6 +336,19 @@ export function SlpPostSurfaceMenu({
               className="flex min-h-10 w-full items-center gap-2 px-3 text-start hover:bg-white/10"
             >
               <Share2 size={14} /> {localizeUi("ui.slurp.post.share", { defaultValue: "Share post" })}
+            </button>
+          )}
+          {deepDetailsPostId && (
+            <button
+              type="button"
+              role="menuitem"
+              onClick={() => {
+                close();
+                setDeepDetailsOpen(true);
+              }}
+              className="flex min-h-10 w-full items-center gap-2 px-3 text-start hover:bg-white/10"
+            >
+              <ScanSearch size={14} /> {localizeUi("ui.slurp.deepDetails.title", { defaultValue: "Deep details" })}
             </button>
           )}
           {onOpenCreator && (

@@ -390,7 +390,7 @@ const features = [
   },
   {
     id: "slurp2",
-    version: "0.2.34",
+    version: "0.2.36",
     minEngineVersion: "2.4.6",
     maxEngineExclusive: MAX_ENGINE_EXCLUSIVE,
     name: "Slurp Remastered",
@@ -455,7 +455,7 @@ const features = [
   },
   {
     id: "long-term-memory",
-    version: "1.3.16",
+    version: "1.3.17",
     minEngineVersion: "2.4.1",
     maxEngineExclusive: MAX_ENGINE_EXCLUSIVE,
     name: "Long-Term Memory",
