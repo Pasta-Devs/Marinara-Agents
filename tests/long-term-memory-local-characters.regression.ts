@@ -183,6 +183,69 @@ async function main() {
     true,
     "duplicate named identity notes must leave a link unresolved",
   );
+  const conflictedLink = prepareLtmSubjectIdentityContext({
+    units: [],
+    catalog: {
+      ...collisionCatalog,
+      entries: [
+        ...collisionCatalog.entries,
+        {
+          ...mara,
+          subject: { key: "character:jules", ref: { kind: "character" as const, id: "jules" } },
+          name: "Jules",
+          canonicalSlug: "jules",
+        },
+      ],
+    },
+    scope,
+  }).resolve({
+    units: [
+      {
+        ...unit({
+          bucket: "character_fact",
+          subjectId: "jules",
+          subjectKeys: ["character:jules"],
+          text: "Jules notices Mara.",
+        }),
+        links: [{ target: "mara", relation: "affects_character" as const }],
+      },
+    ],
+    existingNotes: [],
+  });
+  assert.equal(conflictedLink.units[0]?.links[0]?.target, "mara");
+  assert.deepEqual(
+    (conflictedLink.diagnostics.find((item) => item.code === "ambiguous_subject_link_target")?.details as any)
+      ?.candidateTargetNoteIds,
+    ["char_mara"],
+    "an unresolved legacy identity must block canonical link fallback",
+  );
+  const pairEntries = [
+    { ...mara, subject: { key: "character:z" }, name: "A", canonicalSlug: "a" },
+    { ...mara, subject: { key: "character:é" }, name: "B C", canonicalSlug: "b_c" },
+    { ...mara, subject: { key: "character:x" }, name: "A B", canonicalSlug: "a_b" },
+    { ...mara, subject: { key: "character:y" }, name: "C", canonicalSlug: "c" },
+  ];
+  const pairCatalog = {
+    entries: pairEntries,
+    notes: [{ ...conflicted, id: "rel_a_b_c", type: "relationship" as const, title: "A B C" }] as any[],
+  };
+  assert.ok(
+    analyzeTrustedLtmNoteSubjects(pairCatalog).unresolved[0]?.candidateSubjectPairs?.some(
+      (pair) => pair.includes("character:z") && pair.includes("character:é"),
+    ),
+  );
+  const pairConflict = prepareLtmSubjectIdentityContext({ units: [], catalog: pairCatalog, scope }).resolve({
+    units: [
+      unit({
+        bucket: "relationship_state",
+        subjectId: "a_b_c",
+        subjectKeys: ["character:z", "character:é"],
+        text: "Their relationship changed.",
+      }),
+    ],
+    existingNotes: [],
+  });
+  assert.equal(pairConflict.units.length, 0, "locale-ordered unresolved pairs must block matching targets");
   const linked = prepareLtmSubjectIdentityContext({
     units: [],
     catalog: {

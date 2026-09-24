@@ -1462,6 +1462,110 @@ async function main() {
         choiceMutation.id,
       ]);
 
+      const siblingId = "char_sibling_choice";
+      const siblingCreate = {
+        ...choiceMutation,
+        id: randomUUID(),
+        kind: "create_note" as const,
+        summary: "Create sibling link candidate",
+        note: { ...noteInput, id: siblingId, type: "character", scope: legacySource.scope, links: [] },
+      };
+      const siblingLink = { ...choiceMutation, link: { ...choiceMutation.link, target: siblingId } };
+      const siblingDraft = await draftStore.createDraft({
+        source: { sourceNoteId: canonicalSourceId, chatId: "chat-a" },
+        scope: legacySource.scope,
+        modes: legacySource.modes,
+        response: { summary: "Select a sibling candidate", mutations: [siblingCreate, choiceMutation] },
+        diagnostics: [
+          {
+            severity: "warning",
+            code: "ambiguous_subject_link_target",
+            noteId: choiceOwner.id,
+            message: "Choose a target",
+            details: {
+              linkTarget: choiceTarget.id,
+              linkRelation: "affects_character",
+              candidateTargetNoteIds: [choiceTarget.id, siblingId],
+            },
+          },
+        ],
+      });
+      const siblingOptions = {
+        root,
+        mutationIds: [siblingCreate.id, choiceMutation.id],
+        editedMutations: [siblingLink],
+        linkChoices: [
+          {
+            mutationId: choiceMutation.id,
+            linkTarget: choiceTarget.id,
+            linkRelation: "affects_character" as const,
+            selectedTarget: siblingId,
+          },
+        ],
+        rebuildIndexes: false,
+      };
+      assert.deepEqual((await applyLongTermMemoryDraft(siblingDraft.id, siblingOptions)).appliedMutationIds, [
+        siblingCreate.id,
+        choiceMutation.id,
+      ]);
+      assert.ok((await storage.getNote(choiceOwner.id))?.links.some((link) => link.target === siblingId));
+
+      const pendingCreate = {
+        ...siblingCreate,
+        id: randomUUID(),
+        note: {
+          ...siblingCreate.note,
+          id: "char_pending_choice",
+          links: [{ target: choiceTarget.id, relation: "affects_character" as const }],
+        },
+      };
+      const dependentLink = {
+        ...choiceMutation,
+        id: randomUUID(),
+        link: { ...choiceMutation.link, target: pendingCreate.note.id },
+      };
+      const independentCreate = {
+        ...siblingCreate,
+        id: randomUUID(),
+        note: { ...noteInput, id: "world_independent_choice", scope: legacySource.scope, links: [] },
+      };
+      const autoChoiceDraft = await draftStore.createDraft({
+        source: { sourceNoteId: canonicalSourceId, chatId: "chat-a" },
+        scope: legacySource.scope,
+        modes: legacySource.modes,
+        response: { summary: "Auto-apply safe work", mutations: [pendingCreate, dependentLink, independentCreate] },
+        diagnostics: [
+          {
+            severity: "warning",
+            code: "ambiguous_subject_link_target",
+            noteId: pendingCreate.note.id,
+            message: "Choose a target",
+            details: {
+              linkTarget: choiceTarget.id,
+              linkRelation: "affects_character",
+              candidateTargetNoteIds: [choiceTarget.id, siblingId],
+            },
+          },
+        ],
+      });
+      await assert.rejects(
+        applyLongTermMemoryDraft(autoChoiceDraft.id, { root, rebuildIndexes: false }),
+        (error: unknown) => error instanceof LtmDraftApplyError && error.code === "ltm_draft_ambiguous_link",
+      );
+      const autoChoiceResult = await applyLongTermMemoryDraft(autoChoiceDraft.id, {
+        root,
+        autoApplyLowRiskOnly: true,
+        rebuildIndexes: false,
+      });
+      assert.deepEqual(autoChoiceResult.appliedMutationIds, [independentCreate.id]);
+      assert.deepEqual(autoChoiceResult.skippedMutationIds, [pendingCreate.id, dependentLink.id]);
+      assert.equal(autoChoiceResult.draft.status, "pending");
+      assert.deepEqual(
+        autoChoiceResult.draft.mutations.map((mutation) => mutation.id),
+        [pendingCreate.id, dependentLink.id],
+      );
+      assert.equal(await storage.getNote(pendingCreate.note.id), null);
+
       const ghostTarget = await storage.getNote("world_static_evidence");
       assert.equal(
         ghostTarget?.sections.facts?.contributions?.[0]?.owner,

@@ -921,7 +921,7 @@ export function prepareLtmSubjectIdentityContext({
         ? (issue.candidateSubjectPairs ?? [])
         : issue.candidateSubjectKeys.map((key) => [key]);
     for (const pair of keys) {
-      const key = pair.sort().join("\u0000");
+      const key = pair.sort((left, right) => left.localeCompare(right)).join("\u0000");
       const compositeKey = `${issue.note.type}\0${key}`;
       const ids = unresolvedBySubject.get(compositeKey) ?? [];
       ids.push(issue.note.id);
@@ -1338,9 +1338,6 @@ function resolveLtmSubjectIdentitiesWithContext({
         });
         return link;
       }
-      const target = resolveIdentityLinkTarget(link.target, link.relation, index, catalog, legacyBindings);
-      if (target?.note) targetNotes.set(target.note.id, target.note);
-      if (target) return { ...link, target: target.noteId };
       const match =
         link.relation === "affects_character"
           ? matchLegacyCharacter(index, stripNotePrefix(normalizeSubjectIdentifier(link.target, "")))
@@ -1348,26 +1345,29 @@ function resolveLtmSubjectIdentitiesWithContext({
             ? matchRelationship(index, stripNotePrefix(normalizeSubjectIdentifier(link.target, "")))
             : null;
       const bucket = link.relation === "affects_character" ? "character_fact" : "relationship_state";
-      if (
-        match?.status === "matched" &&
-        identityTargetCandidates(catalog.notes, legacyBindings, match.entries, bucket).length > 1
-      ) {
+      const conflict =
+        match?.status === "matched"
+          ? identityTargetConflict(catalog.notes, legacyBindings, unresolvedBySubject, match.entries, bucket)
+          : null;
+      if (conflict) {
         diagnostics.push({
           severity: "warning",
           code: "ambiguous_subject_link_target",
           candidateIndex: item.candidateIndex,
           mutationId: item.unit.id,
           noteId: noteIdForEvidenceUnit(item.unit),
-          message: `Link target '${link.target}' matches multiple existing identity notes. Choose a scoped target by editing the draft link before accepting it.`,
+          message: `Link target '${link.target}' matches unresolved identity notes. Choose a scoped target by editing the draft link before accepting it.`,
           details: {
             linkTarget: link.target,
             linkRelation: link.relation,
-            candidateTargetNoteIds: identityTargetCandidates(catalog.notes, legacyBindings, match.entries, bucket).map(
-              (note) => note.id,
-            ),
+            candidateTargetNoteIds: conflict.competingRecords.map((record) => record.key),
           },
         });
+        return link;
       }
+      const target = resolveIdentityLinkTarget(link.target, link.relation, index, catalog, legacyBindings);
+      if (target?.note) targetNotes.set(target.note.id, target.note);
+      if (target) return { ...link, target: target.noteId };
       return link;
     }),
   }));
@@ -2194,7 +2194,7 @@ function identityTargetCandidates(
 function uniqueSubjectPairs(pairs: string[][]) {
   const unique = new Map<string, string[]>();
   for (const pair of pairs) {
-    const sorted = [...pair].sort();
+    const sorted = [...pair].sort((left, right) => left.localeCompare(right));
     if (sorted.length) unique.set(sorted.join("\u0000"), sorted);
   }
   return [...unique.values()];

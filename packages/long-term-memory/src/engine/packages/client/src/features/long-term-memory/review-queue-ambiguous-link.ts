@@ -14,12 +14,14 @@ export function ambiguousLinkUnresolvedChoiceValue(details: AmbiguousLinkDetails
 
 export function ambiguousLinkDetails(diagnostic: AmbiguousLinkDiagnostic) {
   if (diagnostic.code !== "ambiguous_subject_link_target") return null;
-  const details = diagnostic.details as {
-    linkTarget?: string;
-    linkRelation?: string;
-    candidateTargetNoteIds?: string[];
-  };
-  if (!details.linkTarget || !details.linkRelation || !details.candidateTargetNoteIds?.length) return null;
+  const details = diagnostic.details as
+    | {
+        linkTarget?: string;
+        linkRelation?: string;
+        candidateTargetNoteIds?: string[];
+      }
+    | undefined;
+  if (!details?.linkTarget || !details?.linkRelation || !details?.candidateTargetNoteIds?.length) return null;
   return details;
 }
 

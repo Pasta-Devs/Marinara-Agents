@@ -3,6 +3,7 @@
 import assert from "node:assert/strict";
 import {
   ambiguousLinkChoiceTarget as display,
+  ambiguousLinkDetails,
   replaceAmbiguousLinkTarget,
 } from "../packages/long-term-memory/src/engine/packages/client/src/features/long-term-memory/review-queue-ambiguous-link.ts";
 
@@ -49,5 +50,6 @@ assert.equal(
 );
 // No diagnostic details means no control.
 assert.equal(display(original, { code: "other" } as never), null);
+assert.equal(ambiguousLinkDetails({ code: "ambiguous_subject_link_target" } as never), null);
 
 console.log("ltm-review-queue-ambiguous-link regression passed");

@@ -136,6 +136,7 @@ function assertCurrentAmbiguousLinkTargets(
   draft: LtmExtractionDraft,
   mutations: readonly LtmDraftMutation[],
   existing: ReadonlyMap<string, LtmNote>,
+  createIds: ReadonlySet<string>,
 ) {
   for (const mutation of mutations) {
     const links = mutationLinks(mutation);
@@ -148,6 +149,7 @@ function assertCurrentAmbiguousLinkTargets(
         (link) => details.candidateTargetNoteIds!.includes(link.target) && link.relation === details.linkRelation,
       );
       if (chosen.length !== 1) continue;
+      if (createIds.has(chosen[0]!.target)) continue;
       const target = existing.get(chosen[0]!.target);
       if (!target)
         throw new LtmDraftApplyError(
@@ -238,7 +240,7 @@ async function preflight(storage: LongTermMemoryStorage, draft: LtmExtractionDra
   if (storedLinkTargets.length) {
     existing = new Map([...existing, ...(await storage.getNotesByIds(storedLinkTargets))]);
   }
-  assertCurrentAmbiguousLinkTargets(draft, mutations, existing);
+  assertCurrentAmbiguousLinkTargets(draft, mutations, existing, createIds);
   for (const id of links)
     if (!createIds.has(id) && !existing.has(id)) throw new Error(`Long-term memory draft link target not found: ${id}`);
   for (const id of required)
@@ -652,7 +654,6 @@ async function applyInner(
       (mutation) =>
         (!selectedIds || selectedIds.has(mutation.id)) && (!options.autoApplyLowRiskOnly || lowRisk(mutation)),
     );
-    if (options.autoApplyLowRiskOnly) selected = await filterAutoApplyDependencies(storage, selected);
     const autoIncludedMutationIds: string[] = [];
     if (selectedIds && !options.autoApplyLowRiskOnly) {
       const targets = new Set(
@@ -753,11 +754,13 @@ async function applyInner(
         choice,
       ]),
     );
-    for (const mutation of selected) {
+    selected = selected.filter((mutation) => {
       const original = originalDraftMutations.find((item) => item.id === mutation.id)!;
       const error = ambiguousLtmDraftLinkChoiceError(draft, original, mutation, linkChoices);
-      if (error) throw error;
-    }
+      if (error && !options.autoApplyLowRiskOnly) throw error;
+      return !error;
+    });
+    if (options.autoApplyLowRiskOnly) selected = await filterAutoApplyDependencies(storage, selected);
     if (options.editedMutations?.length) {
       const includedIds = new Set(selected.map((mutation) => mutation.id));
       for (const edit of options.editedMutations) {
