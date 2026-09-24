@@ -6,7 +6,7 @@
   },
   "builtAgainst": {
     "engineVersion": "2.4.6",
-    "engineCommit": "46d20172d2aff99f8c3bc49b978cf81e68f3f624"
+    "engineCommit": "ea46abdb23f7f08b47daadfe1377c1a372fff6d3"
   },
   "id": "noodle",
   "name": "Noodle",
@@ -98,8 +98,8 @@
     },
     {
       "path": "client.js",
-      "sha256": "c6e41e12cd7031e73267a3ef3b22c745cbecc67d6a5312b8dcb7436454b82655",
-      "bytes": 2381215
+      "sha256": "16b83398554fa5f21b76d30d75e6ba9c723ee0bb11835f073799e8b9ccda69e7",
+      "bytes": 2381218
     },
     {
       "path": "noodle-klusek.png",

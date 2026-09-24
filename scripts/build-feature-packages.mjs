@@ -281,7 +281,7 @@ const features = [
     version: "1.2.25",
     minEngineVersion: "2.4.6",
     capabilityApi: { major: 1, minor: 35 },
-    builtAgainst: { engineVersion: "2.4.6", engineCommit: "46d20172d2aff99f8c3bc49b978cf81e68f3f624" },
+    builtAgainst: { engineVersion: "2.4.6", engineCommit: "ea46abdb23f7f08b47daadfe1377c1a372fff6d3" },
     maxEngineExclusive: MAX_ENGINE_EXCLUSIVE,
     name: "Noodle",
     description: "Explore the Noodle public timeline as an optional local social world.",
