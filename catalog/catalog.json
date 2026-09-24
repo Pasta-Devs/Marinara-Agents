@@ -2707,7 +2707,7 @@
         },
         "builtAgainst": {
           "engineVersion": "2.4.6",
-          "engineCommit": "fc285c3d2"
+          "engineCommit": "fc285c3d271cb1aae4ec86858c250eb36197f07a"
         },
         "id": "noodle",
         "name": "Noodle",
@@ -2808,8 +2808,8 @@
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/noodle.png",
       "artifact": {
         "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/noodle-1.2.25.zip",
-        "sha256": "984cc08c6bf2c1b92c6f1c06e5821e139209d55910651114be9efe7fb671fc4c",
-        "bytes": 4829862
+        "sha256": "0a64a3cccc78fa676b638fb0d784b1b15de6014aa3413df560396a7b2e52e7bc",
+        "bytes": 4829893
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents/blob/main/packages/noodle/README.md"
     },
