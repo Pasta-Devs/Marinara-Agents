@@ -188,7 +188,10 @@ export function NoodleLatestPostsWidget({
             return (
               <div
                 key={post.id}
-                onClick={() => onOpenPost?.(post.id)}
+                onClick={(event) => {
+                  if (event.target instanceof HTMLButtonElement) return;
+                  onOpenPost?.(post.id);
+                }}
                 role="button"
                 tabIndex={0}
                 onKeyDown={(event) => {

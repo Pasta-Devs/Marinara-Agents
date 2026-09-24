@@ -2150,6 +2150,7 @@ export function NoodleHome({ navigation, onNavigate, focusPostId, onFocusPostHan
 
   useEffect(() => {
     if (activeNoodleView !== "home" || !notificationFocusTarget) return;
+    if (isLoading) return;
     const frame = window.requestAnimationFrame(() => {
       const timeline = timelineScrollRef.current;
       if (!timeline) return;
@@ -2175,7 +2176,7 @@ export function NoodleHome({ navigation, onNavigate, focusPostId, onFocusPostHan
       setNotificationFocusTarget(null);
     });
     return () => window.cancelAnimationFrame(frame);
-  }, [activeNoodleView, notificationFocusTarget, prefersReducedMotion]);
+  }, [activeNoodleView, isLoading, notificationFocusTarget, prefersReducedMotion]);
 
   useEffect(() => {
     if (!highlightedInteractionId) return;
@@ -2810,6 +2811,7 @@ export function NoodleHome({ navigation, onNavigate, focusPostId, onFocusPostHan
     if (confirmAction.kind === "cleanup-unused") {
       cleanupUnusedData.mutate(undefined, {
         onSuccess: (counts) => {
+          setFocusedPostResult(null);
           setConfirmAction(null);
           toast.success(
             localizeUi("ui.noodle.noodlehome.cleanupUnusedNoodleDataDone", {
@@ -2847,6 +2849,7 @@ export function NoodleHome({ navigation, onNavigate, focusPostId, onFocusPostHan
     }
     resetNoodleTimeline.mutate(undefined, {
       onSuccess: () => {
+        setFocusedPostResult(null);
         clearReplyComposer();
         setPostMenuId(null);
         cancelEditingPost();
