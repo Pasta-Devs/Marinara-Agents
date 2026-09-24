@@ -56,10 +56,12 @@ export function replaceAmbiguousLinkTarget(mutation: LtmDraftMutation, details: 
 export function ambiguousLinkChoiceTarget(
   mutation: LtmDraftMutation,
   diagnostic: AmbiguousLinkDiagnostic,
+  explicitTarget?: string,
 ): string | null {
   const details = ambiguousLinkDetails(diagnostic);
   if (!details) return null;
   const targets = new Set([details.linkTarget, ...details.candidateTargetNoteIds]);
+  if (explicitTarget && details.candidateTargetNoteIds.includes(explicitTarget)) return explicitTarget;
   if (mutation.kind === "create_note") {
     const matches = mutation.note.links.filter(
       (link) => link.relation === details.linkRelation && targets.has(link.target),

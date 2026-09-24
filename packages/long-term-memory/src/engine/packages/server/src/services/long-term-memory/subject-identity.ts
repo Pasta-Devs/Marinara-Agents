@@ -101,6 +101,7 @@ export type TrustedLtmNoteSubjectIssue = {
   reason: "ambiguous" | "untrusted" | "invalid_cardinality";
   basis: string;
   candidateSubjectKeys: string[];
+  candidateSubjectPairs?: string[][];
 };
 
 export type CompetingSubjectRecord = {
@@ -730,6 +731,7 @@ export function analyzeTrustedLtmNoteSubjects(catalog: TrustedLtmSubjectCatalog)
           reason: "invalid_cardinality",
           basis: "bound_subjects",
           candidateSubjectKeys: note.subjects.map((subject) => subject.key),
+          candidateSubjectPairs: [sortSubjects(note.subjects).map((subject) => subject.key)],
         });
         continue;
       }
@@ -789,6 +791,9 @@ export function analyzeTrustedLtmNoteSubjects(catalog: TrustedLtmSubjectCatalog)
         ...ambiguous.flatMap((attempt) => attempt.keys.flatMap((key) => key.split("\u0000"))),
         ...[...matchedBySubjects.values()].flatMap((attempt) => attempt.entries.map(subjectEntryKey)),
       ]),
+      candidateSubjectPairs: uniqueSubjectPairs(
+        ambiguous.flatMap((attempt) => attempt.keys.map((key) => key.split("\u0000"))),
+      ),
     });
   }
 
@@ -911,7 +916,12 @@ export function prepareLtmSubjectIdentityContext({
   const legacyBindings = inferLegacyBindings(effectiveCatalog, index);
   const unresolvedBySubject = new Map<string, string[]>();
   for (const issue of analyzeTrustedLtmNoteSubjects(effectiveCatalog).unresolved) {
-    for (const key of issue.candidateSubjectKeys) {
+    const keys =
+      issue.note.type === "relationship"
+        ? (issue.candidateSubjectPairs ?? [])
+        : issue.candidateSubjectKeys.map((key) => [key]);
+    for (const pair of keys) {
+      const key = pair.sort().join("\u0000");
       const compositeKey = `${issue.note.type}\0${key}`;
       const ids = unresolvedBySubject.get(compositeKey) ?? [];
       ids.push(issue.note.id);
@@ -1331,6 +1341,33 @@ function resolveLtmSubjectIdentitiesWithContext({
       const target = resolveIdentityLinkTarget(link.target, link.relation, index, catalog, legacyBindings);
       if (target?.note) targetNotes.set(target.note.id, target.note);
       if (target) return { ...link, target: target.noteId };
+      const match =
+        link.relation === "affects_character"
+          ? matchLegacyCharacter(index, stripNotePrefix(normalizeSubjectIdentifier(link.target, "")))
+          : link.relation === "affects_relationship"
+            ? matchRelationship(index, stripNotePrefix(normalizeSubjectIdentifier(link.target, "")))
+            : null;
+      const bucket = link.relation === "affects_character" ? "character_fact" : "relationship_state";
+      if (
+        match?.status === "matched" &&
+        identityTargetCandidates(catalog.notes, legacyBindings, match.entries, bucket).length > 1
+      ) {
+        diagnostics.push({
+          severity: "warning",
+          code: "ambiguous_subject_link_target",
+          candidateIndex: item.candidateIndex,
+          mutationId: item.unit.id,
+          noteId: noteIdForEvidenceUnit(item.unit),
+          message: `Link target '${link.target}' matches multiple existing identity notes. Choose a scoped target by editing the draft link before accepting it.`,
+          details: {
+            linkTarget: link.target,
+            linkRelation: link.relation,
+            candidateTargetNoteIds: identityTargetCandidates(catalog.notes, legacyBindings, match.entries, bucket).map(
+              (note) => note.id,
+            ),
+          },
+        });
+      }
       return link;
     }),
   }));
@@ -2080,7 +2117,7 @@ function identityTargetConflict(
   const subjects = sortSubjects(entries.map((entry) => entry.subject));
   const type = bucket === "character_fact" ? "character" : "relationship";
   const unresolvedIds = uniqueStrings(
-    entries.flatMap((entry) => unresolved.get(`${type}\0${entry.subject.key}`) ?? []),
+    [unresolved.get(`${type}\0${subjects.map((subject) => subject.key).join("\u0000")}`) ?? []].flat(),
   );
   const ids = uniqueStrings([
     ...unresolvedIds,
@@ -2133,8 +2170,34 @@ function resolveIdentityLinkTarget(
         : null;
   if (!match || match.status !== "matched") return null;
   const bucket = relation === "affects_character" ? "character_fact" : "relationship_state";
+  if (identityTargetCandidates(catalog.notes, legacyBindings, match.entries, bucket).length > 1) return null;
   const note = chooseIdentityTarget(catalog.notes, legacyBindings, match.entries, bucket);
   return { noteId: note?.id ?? canonicalNoteIdForEntries(match.entries, bucket), note };
+}
+
+function identityTargetCandidates(
+  notes: LtmNote[],
+  legacyBindings: Map<string, LtmSubject[]>,
+  entries: TrustedLtmSubjectCatalogEntry[],
+  bucket: LtmEvidenceUnit["bucket"],
+) {
+  const type = bucket === "character_fact" ? "character" : "relationship";
+  const subjects = sortSubjects(entries.map((entry) => entry.subject));
+  return notes.filter(
+    (note) =>
+      note.type === type &&
+      note.status !== "archived" &&
+      subjectsEqual(note.subjects ?? legacyBindings.get(note.id), subjects),
+  );
+}
+
+function uniqueSubjectPairs(pairs: string[][]) {
+  const unique = new Map<string, string[]>();
+  for (const pair of pairs) {
+    const sorted = [...pair].sort();
+    if (sorted.length) unique.set(sorted.join("\u0000"), sorted);
+  }
+  return [...unique.values()];
 }
 
 function canonicalNoteIdForEntries(entries: TrustedLtmSubjectCatalogEntry[], bucket: LtmEvidenceUnit["bucket"]) {

@@ -34,6 +34,9 @@ assert.equal((secondChoice as { link: { target: string } }).link.target, "char_m
 
 // After selection the control must stay visible and reflect the chosen target.
 assert.equal(display(chosen as never, diagnostic), "char_mara_other");
+const originalChoice = replaceAmbiguousLinkTarget(original, diagnostic.details, "char_mara");
+assert.equal(display(originalChoice as never, diagnostic), display(original, diagnostic));
+assert.equal(display(originalChoice as never, diagnostic, "char_mara"), "char_mara");
 assert.notEqual(display(original, diagnostic), "char_mara");
 assert.equal(display(original, diagnostic)?.startsWith("\u0000unresolved:"), true);
 // A selection outside the candidate set cannot be represented; hide the control.

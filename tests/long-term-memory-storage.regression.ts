@@ -1439,6 +1439,14 @@ async function main() {
         root,
         mutationIds: [choiceMutation.id],
         editedMutations: [choiceMutation],
+        linkChoices: [
+          {
+            mutationId: choiceMutation.id,
+            linkTarget: choiceTarget.id,
+            linkRelation: "affects_character" as const,
+            selectedTarget: choiceTarget.id,
+          },
+        ],
         rebuildIndexes: false,
       };
       assert.equal((await preflightLongTermMemoryDraft(choiceDraft.id, choiceOptions)).readyMutationIds.length, 1);

@@ -157,6 +157,32 @@ async function main() {
     });
     assert.equal(value.units.length, 0, `${name} must expose the duplicate local identity`);
   }
+  const duplicateLinkCatalog = {
+    entries: [mara, rowan],
+    notes: [
+      { ...conflicted, id: "char_mara_old", title: "Mara" },
+      { ...conflicted, id: "char_mara_new", title: "Mara" },
+    ] as any[],
+  };
+  const duplicateLinkResolution = prepareLtmSubjectIdentityContext({
+    units: [],
+    catalog: duplicateLinkCatalog,
+    scope,
+  }).resolve({
+    units: [
+      {
+        ...unit({ bucket: "character_fact", subjectId: "rowan", subjectNames: ["Rowan"], text: "Rowan notices Mara." }),
+        links: [{ target: "mara", relation: "affects_character" as const }],
+      },
+    ],
+    existingNotes: [],
+  });
+  assert.equal(duplicateLinkResolution.units[0]?.links[0]?.target, "mara");
+  assert.equal(
+    duplicateLinkResolution.diagnostics.some((item) => item.code === "ambiguous_subject_link_target"),
+    true,
+    "duplicate named identity notes must leave a link unresolved",
+  );
   const linked = prepareLtmSubjectIdentityContext({
     units: [],
     catalog: {
@@ -227,7 +253,7 @@ async function main() {
   } as any;
   const linkDraft = { diagnostics: linked.diagnostics };
   assert.equal(
-    ambiguousLtmDraftLinkChoiceError(linkDraft, originalLinkMutation, originalLinkMutation, new Set())?.code,
+    ambiguousLtmDraftLinkChoiceError(linkDraft, originalLinkMutation, originalLinkMutation)?.code,
     "ltm_draft_ambiguous_link",
   );
   assert.equal(
@@ -238,7 +264,17 @@ async function main() {
         ...originalLinkMutation,
         link: { ...originalLinkMutation.link, target: "char_unrelated" },
       },
-      new Set(["link-choice"]),
+      new Map([
+        [
+          "link-choice\u0000affects_character\u0000char_mara",
+          {
+            mutationId: "link-choice",
+            linkTarget: "char_mara",
+            linkRelation: "affects_character",
+            selectedTarget: "char_unrelated",
+          },
+        ],
+      ]),
     )?.code,
     "ltm_draft_ambiguous_link",
   );
@@ -250,7 +286,17 @@ async function main() {
         ...originalLinkMutation,
         link: { ...originalLinkMutation.link, target: (ambiguousLink.details as any).candidateTargetNoteIds[1] },
       },
-      new Set(["link-choice"]),
+      new Map([
+        [
+          "link-choice\u0000affects_character\u0000char_mara",
+          {
+            mutationId: "link-choice",
+            linkTarget: "char_mara",
+            linkRelation: "affects_character",
+            selectedTarget: (ambiguousLink.details as any).candidateTargetNoteIds[1],
+          },
+        ],
+      ]),
     ),
     null,
   );

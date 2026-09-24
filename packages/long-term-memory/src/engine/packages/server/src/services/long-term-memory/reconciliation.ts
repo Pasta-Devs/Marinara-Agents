@@ -2,6 +2,7 @@ import {
   hasLtmSourceSummarySceneTag,
   isLtmSourceLikeNote,
   ltmDraftMutationSchema,
+  type LtmDraftLinkChoice,
   type LtmDraftMutation,
   type LtmDraftPreflightResponse,
   type LtmExtractionDraft,
@@ -31,6 +32,7 @@ export interface ApplyLtmDraftOptions {
   autoApplyLowRiskOnly?: boolean;
   mutationIds?: string[];
   editedMutations?: Array<{ id: string } & Record<string, unknown>>;
+  linkChoices?: LtmDraftLinkChoice[];
   operationId?: string;
 }
 export interface ApplyLtmDraftResult {
@@ -86,7 +88,7 @@ export function ambiguousLtmDraftLinkChoiceError(
   draft: Pick<LtmExtractionDraft, "diagnostics">,
   original: LtmDraftMutation,
   edited: LtmDraftMutation,
-  explicitEdits: ReadonlySet<string>,
+  linkChoices: ReadonlyMap<string, LtmDraftLinkChoice> = new Map(),
 ) {
   const noteId = mutationTargetId(original);
   for (const diagnostic of draft.diagnostics ?? []) {
@@ -98,12 +100,19 @@ export function ambiguousLtmDraftLinkChoiceError(
       mutation.kind === "create_note" ? mutation.note.links : mutation.kind === "add_link" ? [mutation.link] : [];
     if (!links(original).some((link) => link.target === details.linkTarget && link.relation === details.linkRelation))
       continue;
+    const choice = linkChoices.get(linkChoiceKey(original.id, details.linkTarget, details.linkRelation));
     const chosen = links(edited).filter(
-      (link) => link.relation === details.linkRelation && details.candidateTargetNoteIds!.includes(link.target),
+      (link) => link.relation === details.linkRelation && link.target === choice?.selectedTarget,
     );
-    if (!explicitEdits.has(original.id) || chosen.length !== 1)
+    if (
+      !choice ||
+      choice.linkTarget !== details.linkTarget ||
+      choice.linkRelation !== details.linkRelation ||
+      !details.candidateTargetNoteIds.includes(choice.selectedTarget) ||
+      chosen.length !== 1
+    )
       return new LtmDraftApplyError(
-        `Choose a scoped target for ${details.linkTarget} from ${details.candidateTargetNoteIds.join(", ")} by editing mutation ${original.id} before accepting.`,
+        `Choose a scoped target for ${details.linkTarget} from ${details.candidateTargetNoteIds.join(", ")} before accepting mutation ${original.id}.`,
         409,
         "ltm_draft_ambiguous_link",
       );
@@ -113,6 +122,10 @@ export function ambiguousLtmDraftLinkChoiceError(
 
 function mutationTargetId(mutation: LtmDraftMutation) {
   return mutation.kind === "create_note" ? mutation.note.id : mutation.noteId;
+}
+
+function linkChoiceKey(mutationId: string, linkTarget: string, linkRelation: string) {
+  return `${mutationId}\u0000${linkRelation}\u0000${linkTarget}`;
 }
 
 function mutationLinks(mutation: LtmDraftMutation) {
@@ -309,6 +322,7 @@ export async function preflightLongTermMemoryDraft(
     root?: string;
     mutationIds: string[];
     editedMutations?: Array<{ id: string } & Record<string, unknown>>;
+    linkChoices?: LtmDraftLinkChoice[];
     bulk?: boolean;
   },
 ): Promise<LtmDraftPreflightResponse> {
@@ -368,10 +382,15 @@ export async function preflightLongTermMemoryDraft(
       blockers.set(mutationId, [...(blockers.get(mutationId) ?? []), { code, message }]);
   };
 
-  const explicitEdits = new Set((options.editedMutations ?? []).map((edit) => edit.id));
+  const linkChoices = new Map(
+    (options.linkChoices ?? []).map((choice) => [
+      linkChoiceKey(choice.mutationId, choice.linkTarget, choice.linkRelation),
+      choice,
+    ]),
+  );
   for (const mutation of mutations) {
     const original = draft.mutations.find((item) => item.id === mutation.id)!;
-    const error = ambiguousLtmDraftLinkChoiceError(draft, original, mutation, explicitEdits);
+    const error = ambiguousLtmDraftLinkChoiceError(draft, original, mutation, linkChoices);
     if (error) addBlocker([mutation.id], error);
   }
 
@@ -432,7 +451,7 @@ export async function preflightLongTermMemoryDraft(
   }
   for (const mutation of preflightMutations.filter((item) => !selectedIds.has(item.id))) {
     const original = draft.mutations.find((item) => item.id === mutation.id)!;
-    const error = ambiguousLtmDraftLinkChoiceError(draft, original, mutation, explicitEdits);
+    const error = ambiguousLtmDraftLinkChoiceError(draft, original, mutation, linkChoices);
     if (error) addBlocker([mutation.id], error);
   }
   const autoIncludedIds = preflightMutations
@@ -728,10 +747,15 @@ async function applyInner(
         }
       }
     }
-    const explicitEdits = new Set((options.editedMutations ?? []).map((edit) => edit.id));
+    const linkChoices = new Map(
+      (options.linkChoices ?? []).map((choice) => [
+        linkChoiceKey(choice.mutationId, choice.linkTarget, choice.linkRelation),
+        choice,
+      ]),
+    );
     for (const mutation of selected) {
       const original = originalDraftMutations.find((item) => item.id === mutation.id)!;
-      const error = ambiguousLtmDraftLinkChoiceError(draft, original, mutation, explicitEdits);
+      const error = ambiguousLtmDraftLinkChoiceError(draft, original, mutation, linkChoices);
       if (error) throw error;
     }
     if (options.editedMutations?.length) {

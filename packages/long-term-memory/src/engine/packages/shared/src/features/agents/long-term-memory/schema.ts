@@ -742,23 +742,25 @@ export const ltmSourceDerivedMemoriesResponseSchema = z
   })
   .strict();
 
+export const ltmLinkRelationSchema = z.enum([
+  "occurred_in",
+  "triggered_by",
+  "resolved_in",
+  "evidenced_by",
+  "affects_relationship",
+  "affects_character",
+  "caused_by",
+  "involves",
+  "blocks",
+  "planted_in",
+  "paid_off_in",
+  "extracted_from",
+]);
+
 export const ltmLinkSchema = z
   .object({
     target: ltmNoteIdSchema,
-    relation: z.enum([
-      "occurred_in",
-      "triggered_by",
-      "resolved_in",
-      "evidenced_by",
-      "affects_relationship",
-      "affects_character",
-      "caused_by",
-      "involves",
-      "blocks",
-      "planted_in",
-      "paid_off_in",
-      "extracted_from",
-    ]),
+    relation: ltmLinkRelationSchema,
     aspect: z.string().max(50).optional(),
   })
   .strict();
@@ -2366,6 +2368,17 @@ export const ltmDraftReviewResponseSchema = z
   })
   .strict();
 
+export const ltmDraftLinkChoiceSchema = z
+  .object({
+    mutationId: z.string().uuid(),
+    linkTarget: ltmNoteIdSchema,
+    linkRelation: ltmLinkRelationSchema,
+    selectedTarget: ltmNoteIdSchema,
+  })
+  .strict();
+
+export type LtmDraftLinkChoice = z.infer<typeof ltmDraftLinkChoiceSchema>;
+
 export const ltmDraftPreflightRequestSchema = z
   .object({
     mutationIds: z
@@ -2374,6 +2387,7 @@ export const ltmDraftPreflightRequestSchema = z
       .max(1_000)
       .refine((ids) => new Set(ids).size === ids.length, "Mutation IDs must be unique."),
     editedMutations: z.array(ltmDraftMutationSchema).max(1_000).optional(),
+    linkChoices: z.array(ltmDraftLinkChoiceSchema).max(1_000).optional(),
     bulk: z.boolean().default(false),
   })
   .strict();

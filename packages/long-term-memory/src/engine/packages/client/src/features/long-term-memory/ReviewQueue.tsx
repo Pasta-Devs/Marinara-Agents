@@ -2,7 +2,9 @@ import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Check, ChevronRight, Loader2, X } from "lucide-react";
 import {
+  ltmDraftLinkChoiceSchema,
   ltmDraftMutationSchema,
+  type LtmDraftLinkChoice,
   type LtmDraftMutation,
   type LtmDraftPreflightResponse,
   type LtmDraftReviewDraft,
@@ -53,7 +55,12 @@ type AcceptRequest = {
   draftId: string;
   mutationIds: string[];
   editedMutations: LtmDraftMutation[];
+  linkChoices: LtmDraftLinkChoice[];
 };
+
+function linkChoiceKey(mutationId: string, linkTarget: string, linkRelation: string) {
+  return `${mutationId}\u0000${linkRelation}\u0000${linkTarget}`;
+}
 
 type SkipDraftResponse = {
   mutationIds: string[];
@@ -91,6 +98,7 @@ type PersistedReviewState = {
       mutationFingerprints: Array<[string, string]>;
       selectedIds: string[];
       editedMutations: Array<[string, LtmDraftMutation]>;
+      linkChoices?: Array<[string, LtmDraftLinkChoice]>;
     }
   >;
 };
@@ -350,6 +358,11 @@ function parsePersistedMutation(value: unknown): LtmDraftMutation | null {
   return parsed.success ? parsed.data : null;
 }
 
+function parsePersistedLinkChoice(value: unknown): LtmDraftLinkChoice | null {
+  const parsed = ltmDraftLinkChoiceSchema.safeParse(value);
+  return parsed.success ? parsed.data : null;
+}
+
 function mutationHasOverlongText(mutation: LtmDraftMutation) {
   return mutation.kind === "append_section"
     ? mutation.text.length > MAX_APPEND_TEXT_LENGTH
@@ -432,7 +445,17 @@ function isPersistedReviewState(value: unknown, chatId: string | null): value is
           typeof entry[0] === "string" &&
           entry[1] &&
           typeof entry[1] === "object",
-      )
+      ) &&
+      (!draft.linkChoices ||
+        (Array.isArray(draft.linkChoices) &&
+          draft.linkChoices.every(
+            (entry) =>
+              Array.isArray(entry) &&
+              entry.length === 2 &&
+              typeof entry[0] === "string" &&
+              entry[1] &&
+              typeof entry[1] === "object",
+          )))
     );
   });
 }
@@ -526,6 +549,7 @@ function buildPersistedReviewState(
   chatId: string | null | undefined,
   selectedIds: ReadonlySet<string>,
   editedById: ReadonlyMap<string, LtmDraftMutation>,
+  linkChoicesById: ReadonlyMap<string, LtmDraftLinkChoice>,
 ) {
   if (!reviewData || !reviewDataSignature || reviewStateHydrated !== `${reviewStateKey}:${reviewDataSignature}`)
     return null;
@@ -540,7 +564,8 @@ function buildPersistedReviewState(
     const mutationIds = new Set(pendingMutations.map((mutation) => mutation.id));
     const selected = [...selectedIds].filter((id) => mutationIds.has(id));
     const editedMutations = [...editedById].filter(([id]) => mutationIds.has(id));
-    if (selected.length || editedMutations.length) {
+    const linkChoices = [...linkChoicesById].filter(([, choice]) => mutationIds.has(choice.mutationId));
+    if (selected.length || editedMutations.length || linkChoices.length) {
       drafts[draftId] = {
         savedAt: Date.now(),
         draftFingerprint: draftReviewFingerprint(item),
@@ -548,6 +573,7 @@ function buildPersistedReviewState(
         mutationFingerprints: pendingMutations.map((mutation) => [mutation.id, mutationFingerprint(mutation)]),
         selectedIds: selected,
         editedMutations,
+        linkChoices,
       };
     }
   }
@@ -746,17 +772,19 @@ function AmbiguousLinkChoice({
   mutation,
   diagnostic,
   noteById,
+  explicitTarget,
   onChange,
 }: {
   mutation: LtmDraftMutation;
   diagnostic: AmbiguousLinkDiagnostic;
   noteById: ReadonlyMap<string, LtmNote>;
-  onChange: (mutation: LtmDraftMutation, hasChoice: boolean) => void;
+  explicitTarget?: string;
+  onChange: (mutation: LtmDraftMutation, selectedTarget: string | null) => void;
 }) {
   const { t: localizeUi } = useLtmTranslation();
   const details = ambiguousLinkDetails(diagnostic);
   if (!details) return null;
-  const selectedTarget = ambiguousLinkChoiceTarget(mutation, diagnostic);
+  const selectedTarget = ambiguousLinkChoiceTarget(mutation, diagnostic, explicitTarget);
   if (selectedTarget === null) return null;
   return (
     <div
@@ -777,8 +805,9 @@ function AmbiguousLinkChoice({
           className={inputClass}
           value={selectedTarget}
           onChange={(event) => {
-            const hasChoice = event.target.value !== ambiguousLinkUnresolvedChoiceValue(details);
-            onChange(replaceAmbiguousLinkTarget(mutation, details, event.target.value), hasChoice);
+            const selected =
+              event.target.value === ambiguousLinkUnresolvedChoiceValue(details) ? null : event.target.value;
+            onChange(replaceAmbiguousLinkTarget(mutation, details, event.target.value), selected);
           }}
         >
           <option value={ambiguousLinkUnresolvedChoiceValue(details)}>
@@ -1278,6 +1307,7 @@ export default function ReviewQueue({
   const selectedSourceIsExtractable = noteById.get(effectiveSourceId ?? "")?.type === "source";
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [editedById, setEditedById] = useState<Map<string, LtmDraftMutation>>(new Map());
+  const [linkChoicesById, setLinkChoicesById] = useState<Map<string, LtmDraftLinkChoice>>(new Map());
   const [reviewedIds, setReviewedIds] = useState<Set<string>>(new Set());
   const [reviewStateHydrated, setReviewStateHydrated] = useState<string | null>(null);
   const [running, setRunning] = useState<"accept" | "skip" | null>(null);
@@ -1300,6 +1330,7 @@ export default function ReviewQueue({
   const batchControllerRef = useRef<AbortController | null>(null);
   const selectedIdsRef = useRef(selectedIds);
   const editedByIdRef = useRef(editedById);
+  const linkChoicesByIdRef = useRef(linkChoicesById);
   const reviewDataRef = useRef(review.data);
   const reviewDataSignatureRef = useRef<string | null>(null);
   const reviewStateHydratedRef = useRef<string | null>(null);
@@ -1321,6 +1352,7 @@ export default function ReviewQueue({
   );
   selectedIdsRef.current = selectedIds;
   editedByIdRef.current = editedById;
+  linkChoicesByIdRef.current = linkChoicesById;
   reviewDataRef.current = review.data;
   reviewDataSignatureRef.current = reviewDataSignature;
   reviewStateHydratedRef.current = reviewStateHydrated;
@@ -1334,6 +1366,7 @@ export default function ReviewQueue({
       chatId,
       selectedIdsRef.current,
       editedByIdRef.current,
+      linkChoicesByIdRef.current,
     );
     if (!state) return true;
     const persisted = writePersistedReviewState(key, state);
@@ -1363,6 +1396,7 @@ export default function ReviewQueue({
   useEffect(() => {
     setSelectedIds(new Set());
     setEditedById(new Map());
+    setLinkChoicesById(new Map());
     setReviewedIds(new Set());
     setResult(null);
     setReviewStateHydrated(null);
@@ -1402,13 +1436,13 @@ export default function ReviewQueue({
     return () => window.removeEventListener("pagehide", handlePageHide);
   }, []);
   useEffect(() => {
-    if (reviewStatePersisted || !editedById.size) {
+    if (reviewStatePersisted || (!editedById.size && !linkChoicesById.size)) {
       onSaveRequest?.(null);
       return;
     }
     onSaveRequest?.(async () => flushReviewStateRef.current());
     return () => onSaveRequest?.(null);
-  }, [editedById.size, onSaveRequest, reviewStatePersisted]);
+  }, [editedById.size, linkChoicesById.size, onSaveRequest, reviewStatePersisted]);
   useEffect(
     () => () => {
       mountedRef.current = false;
@@ -1446,9 +1480,10 @@ export default function ReviewQueue({
     }
     const hydrationKey = `${reviewStateKey}:${reviewDataSignature}`;
     if (reviewStateHydrated === hydrationKey) return;
-    if (selectedIds.size || editedById.size) {
+    if (selectedIds.size || editedById.size || linkChoicesById.size) {
       setSelectedIds(new Set());
       setEditedById(new Map());
+      setLinkChoicesById(new Map());
       setReviewStateMismatch(true);
       setReviewStateMessage(localizeUi("ui.longTermMemory.reviewqueue.savedReviewStateDiscarded"));
       setReviewStateHydrated(hydrationKey);
@@ -1458,6 +1493,7 @@ export default function ReviewQueue({
     const persisted = persistedResult.state;
     const restoredSelectedIds = new Set<string>();
     const restoredEdits = new Map<string, LtmDraftMutation>();
+    const restoredLinkChoices = new Map<string, LtmDraftLinkChoice>();
     let discardedState = false;
     const currentDrafts = new Map(
       review.data.sources.flatMap((source) => source.drafts.map((item) => [item.draft.id, item] as const)),
@@ -1493,9 +1529,26 @@ export default function ReviewQueue({
         if (parsed?.id === id) restoredEdits.set(id, parsed);
         else discardedState = true;
       }
+      for (const [key, choice] of saved.linkChoices ?? []) {
+        const parsed = parsePersistedLinkChoice(choice);
+        if (!parsed || !currentMutationIds.has(parsed.mutationId)) {
+          discardedState = true;
+          continue;
+        }
+        if (
+          savedMutationFingerprints.get(parsed.mutationId) !==
+          mutationFingerprint(currentMutations.get(parsed.mutationId)!)
+        ) {
+          discardedState = true;
+          continue;
+        }
+        if (parsed.mutationId === key.split("\u0000", 1)[0]) restoredLinkChoices.set(key, parsed);
+        else discardedState = true;
+      }
     }
     setSelectedIds(restoredSelectedIds);
     setEditedById(restoredEdits);
+    setLinkChoicesById(restoredLinkChoices);
     setReviewStateMessage(
       persistedResult.error
         ? localizeUi(
@@ -1520,6 +1573,7 @@ export default function ReviewQueue({
     reviewStateKey,
     selectedIds.size,
     editedById.size,
+    linkChoicesById.size,
   ]);
 
   useEffect(() => {
@@ -1536,7 +1590,15 @@ export default function ReviewQueue({
         persistenceTimerRef.current = null;
       }
     };
-  }, [editedById, review.isSuccess, reviewDataSignature, reviewStateHydrated, reviewStateKey, selectedIds]);
+  }, [
+    editedById,
+    linkChoicesById,
+    review.isSuccess,
+    reviewDataSignature,
+    reviewStateHydrated,
+    reviewStateKey,
+    selectedIds,
+  ]);
 
   const { rowByMutationId, rows } = useMemo(() => buildReviewRows(review.data), [review.data]);
   const mutationDisplayLabels = useMemo(
@@ -1591,8 +1653,11 @@ export default function ReviewQueue({
     );
   const reviewDraftTitle = (item: LtmDraftReviewDraft) => draftDisplayTitle(item, localizeUi);
   useEffect(
-    () => onDirtyChange?.(reviewStateMismatch || (!reviewStatePersisted && editedById.size > 0)),
-    [editedById.size, onDirtyChange, reviewStateMismatch, reviewStatePersisted],
+    () =>
+      onDirtyChange?.(
+        reviewStateMismatch || (!reviewStatePersisted && (editedById.size > 0 || linkChoicesById.size > 0)),
+      ),
+    [editedById.size, linkChoicesById.size, onDirtyChange, reviewStateMismatch, reviewStatePersisted],
   );
   useEffect(() => () => onDirtyChange?.(false), [onDirtyChange]);
 
@@ -1699,6 +1764,29 @@ export default function ReviewQueue({
     clearPreflight();
   };
 
+  const updateLinkChoice = (
+    mutation: LtmDraftMutation,
+    diagnostic: AmbiguousLinkDiagnostic,
+    selectedTarget: string | null,
+  ) => {
+    const details = ambiguousLinkDetails(diagnostic);
+    if (!details) return;
+    const key = linkChoiceKey(mutation.id, details.linkTarget, details.linkRelation);
+    setLinkChoicesById((current) => {
+      const next = new Map(current);
+      if (selectedTarget) {
+        next.set(key, {
+          mutationId: mutation.id,
+          linkTarget: details.linkTarget,
+          linkRelation: details.linkRelation as LtmDraftLinkChoice["linkRelation"],
+          selectedTarget,
+        });
+      } else next.delete(key);
+      return next;
+    });
+    clearPreflight();
+  };
+
   const invalidClosureEditIds = (applicableRows: readonly ReviewRow[], allRows: readonly ReviewRow[] = rows) => {
     const invalidIds: string[] = [];
     for (const [draftId, selectedDraftRows] of groupByDraft(applicableRows)) {
@@ -1735,6 +1823,9 @@ export default function ReviewQueue({
         draftId,
         mutationIds,
         editedMutations: [...editedById].filter(([id]) => mutationIds.includes(id)).map(([, edited]) => edited),
+        linkChoices: [...linkChoicesById]
+          .filter(([, choice]) => mutationIds.includes(choice.mutationId))
+          .map(([, choice]) => choice),
       };
     });
 
@@ -1744,6 +1835,7 @@ export default function ReviewQueue({
         draftId: request.draftId,
         mutationIds: request.mutationIds,
         editedMutations: request.editedMutations,
+        linkChoices: request.linkChoices,
       })),
     );
 
@@ -1836,6 +1928,7 @@ export default function ReviewQueue({
               {
                 mutationIds: requestBody.mutationIds,
                 ...(requestBody.editedMutations.length ? { editedMutations: requestBody.editedMutations } : {}),
+                ...(requestBody.linkChoices.length ? { linkChoices: requestBody.linkChoices } : {}),
                 bulk: requestBody.mutationIds.length > 1,
               },
               controller.signal,
@@ -1920,6 +2013,9 @@ export default function ReviewQueue({
                 mutationIds: [...readyIds],
                 ...(requestBody.editedMutations.length
                   ? { editedMutations: requestBody.editedMutations.filter((mutation) => readyIds.has(mutation.id)) }
+                  : {}),
+                ...(requestBody.linkChoices.length
+                  ? { linkChoices: requestBody.linkChoices.filter((choice) => readyIds.has(choice.mutationId)) }
                   : {}),
               },
               controller.signal,
@@ -2565,7 +2661,17 @@ export default function ReviewQueue({
                 mutation={mutation}
                 diagnostic={diagnostic}
                 noteById={noteById}
-                onChange={(next, hasChoice) => updateMutation(row.mutation, next, hasChoice)}
+                explicitTarget={(() => {
+                  const details = ambiguousLinkDetails(diagnostic);
+                  return details
+                    ? linkChoicesById.get(linkChoiceKey(row.mutation.id, details.linkTarget, details.linkRelation))
+                        ?.selectedTarget
+                    : undefined;
+                })()}
+                onChange={(next, selectedTarget) => {
+                  updateMutation(row.mutation, next);
+                  updateLinkChoice(row.mutation, diagnostic, selectedTarget);
+                }}
               />
             ))}
             {preflight ? (
