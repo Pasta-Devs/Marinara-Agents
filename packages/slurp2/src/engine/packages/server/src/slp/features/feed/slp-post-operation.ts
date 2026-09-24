@@ -18,7 +18,8 @@ import { createConnectionsStorage } from "../../../services/storage/connections.
 import { resolveSlurpTextConnection } from "../../base/identity/slp-connection.js";
 import { createSlurpStorage } from "../../data/slp-storage.js";
 import { slpCreatorUnlockPriceMetadata } from "../../modules/economy/slp-prices.js";
-import { generateCreatorPost, resolveSlurpAutomaticPostAccess } from "./slp-generation-service.js";
+import { generateCreatorPost } from "./slp-generation-service.js";
+import { resolveSlurpAutomaticPostAccess } from "./slp-automatic-post-access.js";
 import type { SlpCreatorContentFormat } from "./slp-generation-service.js";
 import type { ConnectionAdmissionMode } from "../../../services/generation/connection-admission.js";
 import {

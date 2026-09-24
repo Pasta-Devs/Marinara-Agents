@@ -92,6 +92,8 @@ export type SlurpPostPromptInput = {
   allowImagePrompt: boolean;
   /** Automatic image posts return a creative scene plan; Slurp renders the provider prompt. */
   allowScenePlan?: boolean;
+  /** Extra pictures in a multi-image post, each planned as its own scene in `shots`. */
+  sceneShots?: number;
   wardrobePrompt?: string | null;
   imageGenerationPrompt: string;
   generationGuidance: string;
@@ -247,7 +249,8 @@ export function buildSlurpPostBlocks(input: SlurpPostPromptInput): SlurpPromptBl
       kind: "required" as const,
       text: `${
         input.allowScenePlan
-          ? "Return one JSON object with title, content, and scene. scene must contain wardrobeId, setting, action, expression, visualDirection, and outfit. Choose wardrobeId from the supplied Creator wardrobe when one is available; otherwise use null. The scene describes the specific attractive, believable photograph that belongs with this caption, and it goes to an image model as written: write every scene field in English, even when the caption is in another language, as concrete visible facts rather than rules. setting and action must make the variation concrete without changing the character, company, camera source, or access level. outfit is exactly what they are wearing in this photo (or what little they are wearing). visualDirection is one short memorable composition, lighting, or prop detail—not provider tags, identity, or policy. Do not return imagePrompt or a poll."
+          ? "Return one JSON object with title, content, and scene. scene must contain wardrobeId, setting, action, expression, visualDirection, and outfit. Choose wardrobeId from the supplied Creator wardrobe when one is available; otherwise use null. The scene describes the specific attractive, believable photograph that belongs with this caption, and it goes to an image model as written: write every scene field in English, even when the caption is in another language, as concrete visible facts rather than rules. setting and action must make the variation concrete without changing the character, company, camera source, or access level. outfit is exactly what they are wearing in this photo (or what little they are wearing). visualDirection is one short memorable composition, lighting, or prop detail—not provider tags, identity, or policy. Do not return imagePrompt or a poll." +
+            (input.sceneShots ? `\n${slurpSceneShotsInstruction(input.sceneShots)}` : "")
           : input.allowImagePrompt
             ? // The old contract asked for "subject, pose, setting, lighting, framing", which is a
               // scene brief. A brief with no gaps in it produces a photograph with no accident in
@@ -364,6 +367,20 @@ export function slpCreatorTitleFromContent(content: string): string {
   return `${(lastSpace > 20 ? clipped.slice(0, lastSpace) : clipped).replace(/[.!?,;:\s]+$/u, "")}…`;
 }
 
+/**
+ * The plan for the extra pictures of a multi-image post, written like Storyboard keyframes: the
+ * model decides what kind of set it is, then writes every picture as a complete scene, because an
+ * image model draws each one alone and cannot see the others.
+ */
+export function slurpSceneShotsInstruction(count: number): string {
+  return [
+    `This post is a set of ${count + 1} pictures. scene is picture 1, and shots holds pictures 2 to ${count + 1} in order, with the same fields as scene except wardrobeId.`,
+    "First decide from the caption what kind of set it is: one shoot (same outfit and place, a clearly different pose, angle, or framing each time), a photo dump from a trip or a day (different places and moments), or an outing told in a few moments. Plan the pictures to match.",
+    "Each picture is drawn by an image model that sees nothing but that picture's own fields. Write every field in full for every picture: when the outfit or place stays the same, repeat its full description word for word. Never write same, again, another, still, as before, or anything that refers to a different picture.",
+    "Each picture must differ visibly from the others in action, pose, framing, or place.",
+  ].join(" ");
+}
+
 export function parseCreatorPost(content: string) {
   const parsed = parseGameJsonish(requireModelAnswer(content, "a creator post"));
   // Many LLMs (especially local models via Ollama/KoboldCPP) wrap the expected object
@@ -383,8 +400,9 @@ export async function completeSlurpCreatorPost(
   {
     askModelForImagePrompt,
     askModelForScene,
+    sceneShots = 0,
     debugMode,
-  }: { askModelForImagePrompt: boolean; askModelForScene?: boolean; debugMode: boolean },
+  }: { askModelForImagePrompt: boolean; askModelForScene?: boolean; sceneShots?: number; debugMode: boolean },
 ) {
   let sentMessages: ChatMessage[] = messages;
   let attempts = 1;
@@ -409,7 +427,7 @@ export async function completeSlurpCreatorPost(
       {
         role: "user",
         content: askModelForScene
-          ? "The response was not one valid Slurp-post JSON object. Return exactly one object with title, content, and scene. scene must contain wardrobeId, setting, action, expression, visualDirection, and outfit, written in English. Do not include imagePrompt or a poll. Return JSON only."
+          ? `The response was not one valid Slurp-post JSON object. Return exactly one object with title, content, ${sceneShots ? "scene, and shots" : "and scene"}. scene must contain wardrobeId, setting, action, expression, visualDirection, and outfit, written in English.${sceneShots ? ` shots is a list of exactly ${sceneShots} objects with setting, action, expression, visualDirection, and outfit.` : ""} Do not include imagePrompt or a poll. Return JSON only.`
           : askModelForImagePrompt
             ? "The response was not one valid Slurp-post JSON object. Return exactly one object with title, content, and imagePrompt. title and imagePrompt must both be non-empty. Do not include a poll. Return JSON only."
             : "The response was not one valid Slurp-post JSON object. Return exactly one object with title and content only. Do not include a poll or image prompt. Return JSON only.",

@@ -9,7 +9,7 @@ import {
   slurpIntentFitsAccess,
 } from "./slp-content-axes.js";
 import { z } from "zod";
-import { slpWardrobeSceneSchema } from "./slp-wardrobe.js";
+import { slpSceneShotSchema, slpWardrobeSceneSchema } from "./slp-wardrobe.js";
 import {
   SLP_CREATOR_POST_CONTENT_MAX_LENGTH,
   SLP_CREATOR_POST_GUIDE_MAX_LENGTH,
@@ -136,14 +136,17 @@ export const slpGeneratedCreatorPostSchema = z
     content: z.string().trim().min(1).max(SLP_CREATOR_POST_CONTENT_MAX_LENGTH),
     imagePrompt: z.string().max(2000).nullable().optional(),
     scene: slpWardrobeSceneSchema.nullable().optional(),
+    // Extra pictures are a bonus: a malformed list falls back to generic alternates, never fails the post.
+    shots: z.array(slpSceneShotSchema).max(3).nullable().optional().catch(null),
     poll: slpPollInputSchema.nullable().optional(),
   })
   .strip()
-  .transform(({ title, content, imagePrompt, scene }) => ({
+  .transform(({ title, content, imagePrompt, scene, shots }) => ({
     title,
     content,
     imagePrompt: imagePrompt ?? null,
     scene: scene ?? null,
+    shots: shots ?? [],
   }));
 
 export const slpGeneratedCreatorReplySchema = z

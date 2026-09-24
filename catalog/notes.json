@@ -348,6 +348,12 @@
     "slurp2": {
       "versions": [
         {
+          "version": "0.2.37",
+          "date": "2026-09-24",
+          "notes": "- NanoGPT, xAI, and connections recognised only by their base URL now receive avatar reference images again.\n- Persona Creators can set Messages & Pricing again; the tab now uses the same viewer persona as the rest of Slurp.\n- Post cards, the picture viewer, and the redraw box show the exact prompt the picture was drawn from. A prompt you edit or keep in the redraw box is sent as written, not rewritten again.\n- Multi-picture posts plan every picture as its own complete scene, so a photo dump, a shoot, or a day out each gets pictures that make sense on their own.",
+          "highlight": false
+        },
+        {
           "version": "0.2.36",
           "date": "2026-09-24",
           "notes": "- Deep details opens as a flowchart of the whole generation: each step shows what happens, why, which connection and model ran it, and the exact text that went in and came out. A Canvas view shows the same diagram to drag and zoom in every direction.\n- Image runs now also record the prompt-rewrite model and its full chat, the fallback image connection, and which connection actually drew the picture.",
@@ -459,12 +465,6 @@
           "version": "0.2.14",
           "date": "2026-09-21",
           "notes": "- Restored posts now return to the visible feed as soon as the restore response succeeds.",
-          "highlight": false
-        },
-        {
-          "version": "0.2.13",
-          "date": "2026-09-21",
-          "notes": "- Restore now gives immediate progress feedback.\n- The restore countdown pauses while the server restores the post.",
           "highlight": false
         }
       ]

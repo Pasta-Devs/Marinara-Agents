@@ -9,7 +9,8 @@ import { resolveCreatorImageConnectionId } from "../../../base/media/slp-image-c
 import { createSlurpStorage } from "../../../data/slp-storage.js";
 import { slpCreatorReservePolicyFingerprint } from "../../../modules/records/slp-storage-model.js";
 import { hasSlurpCreatorPostingIntervalConflict } from "../../../modules/feed/slp-posting-interval.js";
-import { generateCreatorPost, resolveSlurpAutomaticPostAccess } from "../slp-generation-service.js";
+import { generateCreatorPost } from "../slp-generation-service.js";
+import { resolveSlurpAutomaticPostAccess } from "../slp-automatic-post-access.js";
 import { slurpDeepDetailsImageRunRecorder } from "../../../data/feed/slp-post-deep-details-storage.js";
 import { recordSlurpPromiseKept } from "../slp-post-plan-service.js";
 import { generateCreatorPostImage } from "../../media/slp-media-contract.js";
