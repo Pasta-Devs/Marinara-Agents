@@ -1,5 +1,9 @@
 # Noodle release notes
 
+## 1.2.28 — 2026-09-24
+
+- Fix a render error that could leave the native Latest Posts widget blank when posts were available.
+
 ## 1.2.27 — 2026-09-24
 
 - Make Latest Posts a native Noodle widget with the Noodle logo, avatars, handles, media, polls, and live interaction counts.

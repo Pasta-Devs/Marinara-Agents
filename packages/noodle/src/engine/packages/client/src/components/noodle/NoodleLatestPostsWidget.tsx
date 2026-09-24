@@ -157,7 +157,7 @@ export function NoodleLatestPostsWidget({
         aria-label={t("ui.noodle.widget.scrollLabel")}
       >
         <div className="grid gap-2">
-          {posts.map((post) => {
+          {posts.map((post, index) => {
             const author = post.authorSnapshot?.displayName || t("ui.noodle.widget.unknownAuthor");
             const details = postDetails[index]?.data?.interactions ?? [];
             const likes = countInteractions(details as never, "like");

@@ -268,6 +268,12 @@
     "noodle": {
       "versions": [
         {
+          "version": "1.2.28",
+          "date": "2026-09-24",
+          "notes": "- Fix a render error that could leave the native Latest Posts widget blank when posts were available.",
+          "highlight": false
+        },
+        {
           "version": "1.2.27",
           "date": "2026-09-24",
           "notes": "- Make Latest Posts a native Noodle widget with the Noodle logo, avatars, handles, media, polls, and live interaction counts.",
