@@ -28,6 +28,7 @@ import {
   assertRulesetCombat,
   assertRulesetCreatures,
   assertRulesetPackageContract,
+  assertRulesetReactions,
   assertRulesetScaled,
   isRulesetCatalogAssetPath,
 } from "./ruleset-package-checks.mjs";
@@ -93,6 +94,8 @@ for (const id of packageIds) {
   // So are the combat block and the bestiary that is written in its names.
   assertRulesetCombat(manifest, rulesetDocument);
   assertRulesetCreatures(manifest, rulesetDocument, catalogSources);
+  // And a reaction that names the moment it waits for, which has its own version too.
+  assertRulesetReactions(manifest, rulesetDocument, catalogSources);
 
   // Written back only when something actually changed, so a no-op rebuild leaves
   // the tree byte-identical and does not show up as a spurious diff in a PR.

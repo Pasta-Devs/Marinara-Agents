@@ -97,6 +97,34 @@ const OLD_CONDITION_EFFECTS = Object.freeze([
 // whole file rather than ignoring the key.
 export const RULESET_STRIKE_CAP_MIN_CAPABILITY_API = Object.freeze({ major: 1, minor: 32 });
 
+// A catalog entry may name the moment its reaction waits for: an object where
+// `true` said only that it is not taken on a turn, which puts it on no menu. The
+// key sits in a strict file, so an older Engine refuses the whole catalog rather
+// than reading the object as a boolean.
+export const RULESET_REACTION_MOMENT_MIN_CAPABILITY_API = Object.freeze({ major: 1, minor: 33 });
+const RULESET_REACTION_MOMENTS = Object.freeze(["aimed", "harmed"]);
+const RULESET_REACTION_AT = Object.freeze(["source", "chosen"]);
+
+// A bestiary creature may carry a sheet in the ruleset's own terms, built the way
+// a party member is. Its health, defense, initiative, speed, abilities and saves
+// then come from the sheet and are not also given beside it. It needs no actions
+// of its own, and may still carry printed ones up to the usual limit. A new key
+// in a strict catalog, so an older Engine refuses the whole file.
+export const RULESET_CREATURE_SHEET_MIN_CAPABILITY_API = Object.freeze({ major: 1, minor: 34 });
+const RULESET_CREATURE_SHEET_REPLACES = Object.freeze([
+  "health",
+  "defense",
+  "initiativeModifier",
+  "speed",
+  "abilities",
+  "saves",
+]);
+const RULESET_CREATURE_SHEET_KEYS = Object.freeze(["abilities", "skills", "saves", "bonuses", "fields", "lists"]);
+// The mark a picked row carries, naming the catalog entry it came from.
+export const RULESET_CATALOG_ROW_KEY = "_catalog";
+// The Engine's own default for the per-skill and per-save bonus range.
+const RULESET_DEFAULT_BONUS_RANGE = Object.freeze({ min: -20, max: 40 });
+
 // What the Engine's own schema allows a distance, in the ruleset's own unit.
 const RULESET_DISTANCE_MAX = 10000;
 const RULESET_DISTANCE_LABEL_MAX = 12;
@@ -1029,6 +1057,167 @@ export function assertRulesetCombat(manifest, document) {
  *  every one of them is checked against the file beside it, exactly as the Engine checks them when
  *  it reads the catalog. `catalogSources` maps each `catalogs/<id>.json` path to its raw bytes, so
  *  this stays a pure function a test can drive with fixtures. */
+/** Assert every catalog entry's reaction, and report how many name a moment.
+ *
+ *  `true` has been legal since the key existed. An object names WHICH moment the entry waits for:
+ *  `on` is aimed or harmed, `at` source or chosen, and only an aimed one may cancel, because what
+ *  has already happened cannot be called off. The Engine's own rules, restated at this shape. */
+export function assertRulesetReactions(manifest, document, catalogSources = new Map()) {
+  const id = manifest?.id ?? "package";
+  let moments = 0;
+  for (const catalog of Array.isArray(document?.catalogs) ? document.catalogs : []) {
+    if (catalog?.holds === "creatures") continue;
+    for (const entry of catalogEntryList(catalog, catalogSources) ?? []) {
+      const reaction = entry?.mechanics?.reaction;
+      if (reaction === undefined || reaction === true || reaction === false) continue;
+      const where = `${id} catalog "${catalog.id}" entry "${entry.id}"`;
+      const api = RULESET_REACTION_MOMENT_MIN_CAPABILITY_API;
+      if (!meetsCapabilityApi(manifest, api)) {
+        throw new Error(
+          `${where} names the moment it waits for and must declare capability API ${api.major}.${api.minor} or newer`,
+        );
+      }
+      if (!reaction || typeof reaction !== "object" || Array.isArray(reaction)) {
+        throw new Error(`${where} has a reaction of ${JSON.stringify(reaction)}, not true or a moment`);
+      }
+      for (const key of Object.keys(reaction)) {
+        if (!["on", "at", "cancels"].includes(key)) throw new Error(`${where} reaction has an unknown key "${key}"`);
+      }
+      if (!RULESET_REACTION_MOMENTS.includes(reaction.on)) {
+        throw new Error(
+          `${where} waits for ${JSON.stringify(reaction.on)}, not one of ${RULESET_REACTION_MOMENTS.join(", ")}`,
+        );
+      }
+      if (reaction.at !== undefined && !RULESET_REACTION_AT.includes(reaction.at)) {
+        throw new Error(
+          `${where} is pointed at ${JSON.stringify(reaction.at)}, not one of ${RULESET_REACTION_AT.join(", ")}`,
+        );
+      }
+      if (reaction.cancels !== undefined && reaction.cancels !== true) {
+        throw new Error(`${where} reaction cancels must be true when it is given`);
+      }
+      if (reaction.cancels && reaction.on !== "aimed") {
+        throw new Error(`${where} cancels a moment that has already happened: only an "aimed" reaction cancels`);
+      }
+      moments += 1;
+    }
+  }
+  return moments;
+}
+
+/** What is wrong with one value for one field or column, or null: a number in its range (whole
+ *  where it says so), one of its values, true or false, text within its length, dice text. */
+function cellIssue(spec, value) {
+  switch (spec.type) {
+    case "number":
+      if (typeof value !== "number" || !Number.isFinite(value)) return `takes a number, not ${JSON.stringify(value)}`;
+      if (spec.integer !== false && !Number.isInteger(value)) return `takes a whole number, not ${value}`;
+      if (value < spec.min || value > spec.max) return `is ${value}, outside ${spec.min} to ${spec.max}`;
+      return null;
+    case "boolean":
+      return typeof value === "boolean" ? null : `takes true or false, not ${JSON.stringify(value)}`;
+    case "enum":
+      return spec.values.includes(value)
+        ? null
+        : `takes one of ${spec.values.join(", ")}, not ${JSON.stringify(value)}`;
+    case "dice":
+      return typeof value === "string" && value.length <= 40 ? null : `takes dice text, not ${JSON.stringify(value)}`;
+    default:
+      if (typeof value !== "string") return `takes text, not ${JSON.stringify(value)}`;
+      // The Engine only holds text to a length the field declares.
+      return spec.maxLength === undefined || value.length <= spec.maxLength
+        ? null
+        : `is longer than ${spec.maxLength} characters`;
+  }
+}
+
+/** A creature's sheet, against the ruleset that declares it: every id is one the sheet declares,
+ *  every value one that field, score, bonus or column can hold, and a picked row names a catalog
+ *  that feeds its list. The Engine's own rules at this shape, with one addition: a row naming an
+ *  entry of a catalog FILE is checked against that file too, which the Engine cannot do when it
+ *  reads the ruleset alone. A package ships both, so a dangling name here is always a bug. */
+function assertCreatureSheet(document, sheet, where, names, catalogSources) {
+  if (!sheet || typeof sheet !== "object" || Array.isArray(sheet)) throw new Error(`${where} sheet is not an object`);
+  for (const key of Object.keys(sheet)) {
+    if (!RULESET_CREATURE_SHEET_KEYS.includes(key)) throw new Error(`${where} sheet has an unknown key "${key}"`);
+  }
+  const declared = document?.sheet ?? {};
+  const abilities = new Map((declared.abilities ?? []).map((ability) => [ability.id, ability]));
+  for (const [ability, score] of Object.entries(sheet.abilities ?? {})) {
+    const spec = abilities.get(ability);
+    if (!spec) throw new Error(`${where} sheet names unknown ability ${JSON.stringify(ability)}`);
+    if (!Number.isInteger(score) || score < spec.min || score > spec.max) {
+      throw new Error(`${where} sheet sets ${ability} to ${JSON.stringify(score)}, outside ${spec.min} to ${spec.max}`);
+    }
+  }
+  const tiers = (document?.resolution?.proficiencyTiers ?? []).map((tier) => tier.id);
+  for (const [key, ids, offered] of [
+    ["skills", names.skills, declared.skillTiers],
+    ["saves", names.saves, declared.saveTiers],
+  ]) {
+    const allowed = new Set(offered ?? tiers);
+    for (const [target, tier] of Object.entries(sheet[key] ?? {})) {
+      if (!ids.has(target))
+        throw new Error(`${where} sheet names unknown ${key.slice(0, -1)} ${JSON.stringify(target)}`);
+      if (!allowed.has(tier)) {
+        throw new Error(`${where} sheet sets ${target} to ${JSON.stringify(tier)}, not a tier offered for ${key}`);
+      }
+    }
+  }
+  const range = declared.bonusRange ?? RULESET_DEFAULT_BONUS_RANGE;
+  for (const [target, bonus] of Object.entries(sheet.bonuses ?? {})) {
+    if (!names.skills.has(target) && !names.saves.has(target)) {
+      throw new Error(`${where} sheet gives a bonus to unknown skill or save ${JSON.stringify(target)}`);
+    }
+    if (!Number.isInteger(bonus) || bonus < range.min || bonus > range.max) {
+      throw new Error(
+        `${where} sheet gives ${target} a bonus of ${JSON.stringify(bonus)}, outside ${range.min} to ${range.max}`,
+      );
+    }
+  }
+  for (const [fieldId, value] of Object.entries(sheet.fields ?? {})) {
+    const field = names.fields.get(fieldId);
+    if (!field) throw new Error(`${where} sheet names unknown field ${JSON.stringify(fieldId)}`);
+    const issue = cellIssue(field, value);
+    if (issue) throw new Error(`${where} sheet field "${fieldId}" ${issue}`);
+  }
+  for (const [listId, rows] of Object.entries(sheet.lists ?? {})) {
+    const list = names.lists.get(listId);
+    if (!list) throw new Error(`${where} sheet names unknown list ${JSON.stringify(listId)}`);
+    if (!Array.isArray(rows) || rows.length > list.maxItems) {
+      throw new Error(`${where} sheet list "${listId}" holds more than its ${list.maxItems} rows, or is not a list`);
+    }
+    const columns = new Map(list.columns.map((column) => [column.id, column]));
+    rows.forEach((row, index) => {
+      const at = `${where} sheet list "${listId}" row ${index}`;
+      for (const [column, value] of Object.entries(row ?? {})) {
+        if (column === RULESET_CATALOG_ROW_KEY) continue;
+        const spec = columns.get(column);
+        if (!spec) throw new Error(`${at} sets unknown column ${JSON.stringify(column)}`);
+        const issue = cellIssue(spec, value);
+        if (issue) throw new Error(`${at} column "${column}" ${issue}`);
+      }
+      for (const spec of list.columns) {
+        if (spec.required && row?.[spec.id] === undefined)
+          throw new Error(`${at} leaves required column "${spec.id}" empty`);
+      }
+      const mark = row?.[RULESET_CATALOG_ROW_KEY];
+      if (mark === undefined) return;
+      const slash = typeof mark === "string" ? mark.indexOf("/") : -1;
+      if (slash <= 0 || slash === mark.length - 1)
+        throw new Error(`${at} names ${JSON.stringify(mark)}, not <catalog>/<entry>`);
+      const catalog = (document?.catalogs ?? []).find((candidate) => candidate?.id === mark.slice(0, slash));
+      if (!catalog?.feeds?.includes(listId)) {
+        throw new Error(`${at} names ${JSON.stringify(mark)}, and no catalog of that name feeds "${listId}"`);
+      }
+      const entries = catalogEntryList(catalog, catalogSources);
+      if (entries && !entries.some((entry) => entry?.id === mark.slice(slash + 1))) {
+        throw new Error(`${at} names ${JSON.stringify(mark)}, which that catalog does not hold`);
+      }
+    });
+  }
+}
+
 export function assertRulesetCreatures(manifest, document, catalogSources = new Map()) {
   const id = manifest?.id ?? "package";
   const catalogs = Array.isArray(document?.catalogs) ? document.catalogs : [];
@@ -1079,22 +1268,38 @@ export function assertRulesetCreatures(manifest, document, catalogSources = new 
       count += 1;
       if (!tiers.has(creature.tier))
         throw new Error(`${where} names unknown threat tier ${JSON.stringify(creature.tier)}`);
-      // The three numbers a fight cannot be built without. The Engine requires all of them (health a
-      // whole number from 1, or dice; defense a whole number from 0; a whole initiative modifier), and
-      // nothing on the combat path would stand in for a missing one.
-      const health = creature.health;
-      const healthIsNumber = Number.isInteger(health) && health >= 1;
-      const healthIsDice = health !== null && typeof health === "object" && typeof health.dice === "string";
-      if (!healthIsNumber && !healthIsDice) {
-        throw new Error(`${where} needs health: a whole number from 1, or dice, not ${JSON.stringify(health)}`);
-      }
-      if (!Number.isInteger(creature.defense) || creature.defense < 0) {
-        throw new Error(`${where} needs a defense: a whole number from 0, not ${JSON.stringify(creature.defense)}`);
-      }
-      if (!Number.isInteger(creature.initiativeModifier)) {
-        throw new Error(
-          `${where} needs an initiativeModifier: a whole number, not ${JSON.stringify(creature.initiativeModifier)}`,
-        );
+      if (creature.sheet !== undefined) {
+        // Written in the ruleset's own terms: the sheet says each number once, in one place.
+        const sheetApi = RULESET_CREATURE_SHEET_MIN_CAPABILITY_API;
+        if (!meetsCapabilityApi(manifest, sheetApi)) {
+          throw new Error(
+            `${where} carries a sheet and must declare capability API ${sheetApi.major}.${sheetApi.minor} or newer`,
+          );
+        }
+        for (const key of RULESET_CREATURE_SHEET_REPLACES) {
+          if (creature[key] !== undefined) {
+            throw new Error(`${where} carries a sheet, which says its ${key}, so it does not also give one`);
+          }
+        }
+        assertCreatureSheet(document, creature.sheet, where, names, catalogSources);
+      } else {
+        // The three numbers a fight cannot be built without. The Engine requires all of them (health
+        // a whole number from 1, or dice; defense a whole number from 0; a whole initiative
+        // modifier), and nothing on the combat path would stand in for a missing one.
+        const health = creature.health;
+        const healthIsNumber = Number.isInteger(health) && health >= 1;
+        const healthIsDice = health !== null && typeof health === "object" && typeof health.dice === "string";
+        if (!healthIsNumber && !healthIsDice) {
+          throw new Error(`${where} needs health: a whole number from 1, or dice, not ${JSON.stringify(health)}`);
+        }
+        if (!Number.isInteger(creature.defense) || creature.defense < 0) {
+          throw new Error(`${where} needs a defense: a whole number from 0, not ${JSON.stringify(creature.defense)}`);
+        }
+        if (!Number.isInteger(creature.initiativeModifier)) {
+          throw new Error(
+            `${where} needs an initiativeModifier: a whole number, not ${JSON.stringify(creature.initiativeModifier)}`,
+          );
+        }
       }
       // Health written as dice is thrown when the fight is created, so dice nobody can throw would
       // build an opponent with no hit points at all.
@@ -1132,9 +1337,13 @@ export function assertRulesetCreatures(manifest, document, catalogSources = new 
           `${where} carries ${creature.traits.length} traits, over the ${RULESET_CREATURE_MAX_TRAITS} limit`,
         );
       }
-      const actions = creature.actions;
-      if (!Array.isArray(actions) || actions.length === 0 || actions.length > RULESET_CREATURE_MAX_ACTIONS) {
-        throw new Error(`${where} carries 1 to ${RULESET_CREATURE_MAX_ACTIONS} actions, not ${actions?.length}`);
+      // A creature with a sheet does what its sheet's lists give it, so it may have no actions of its own.
+      const actions = creature.sheet !== undefined ? (creature.actions ?? []) : creature.actions;
+      const fewest = creature.sheet !== undefined ? 0 : 1;
+      if (!Array.isArray(actions) || actions.length < fewest || actions.length > RULESET_CREATURE_MAX_ACTIONS) {
+        throw new Error(
+          `${where} carries ${fewest} to ${RULESET_CREATURE_MAX_ACTIONS} actions, not ${actions?.length}`,
+        );
       }
       const byId = new Map();
       for (const action of actions) {
