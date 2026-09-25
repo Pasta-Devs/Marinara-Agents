@@ -1,5 +1,10 @@
 # Slurp Remastered release notes
 
+## 0.2.64 — 2026-09-25
+
+- A Creator's Storylines tab follows the Slurp settings by default and shows their values. Turn on "Own value" on a row to set it for this Creator; turn it off to follow Slurp again.
+- Storyline types for one Creator are picked with tappable chips, and all controls in the tab have full-size touch targets.
+
 ## 0.2.63 — 2026-09-25
 
 - Storylines settings show every choice at once: story activity presets are cards with a short description, and the start, pace and source settings are button rows instead of dropdowns.

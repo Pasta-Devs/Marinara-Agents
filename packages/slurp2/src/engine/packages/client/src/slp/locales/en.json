@@ -2595,8 +2595,7 @@
   "ui.slurp.projects.customType": "Custom",
   "ui.slurp.projects.durationDays": "Days until it ends",
   "ui.slurp.projects.config.heading": "Storyline settings",
-  "ui.slurp.projects.config.global": "Global ({{value}})",
-  "ui.slurp.projects.config.reset": "Reset to global",
+  "ui.slurp.projects.config.reset": "Use Slurp settings for all",
   "ui.slurp.projects.config.autoMode": "Automatic storylines",
   "ui.slurp.projects.config.source": "Source",
   "ui.slurp.projects.config.sourceLibrary": "Library",
@@ -2607,7 +2606,6 @@
   "ui.slurp.projects.config.maxActive": "Storylines running at once",
   "ui.slurp.projects.config.types": "Types",
   "ui.slurp.projects.config.allTypes": "All enabled types",
-  "ui.slurp.projects.config.chosenTypes": "Chosen types",
   "ui.slurp.settings.arcPace": "Storyline speed",
   "ui.slurp.settings.arcPaceDetail": "How long each chapter lasts. Storylines you wrote yourself move on after every post.",
   "ui.slurp.settings.arcPaceSlow": "Slow",
@@ -3971,5 +3969,8 @@
   "ui.slurp.continuity.source.chat": "Chat",
   "ui.slurp.continuity.source.roleplay": "Roleplay",
   "ui.slurp.continuity.source.game": "Game",
-  "ui.slurp.continuity.eventType.report_received": "Report received"
+  "ui.slurp.continuity.eventType.report_received": "Report received",
+  "ui.slurp.settings.override.own": "Own value",
+  "ui.slurp.settings.override.usesSlurp": "Uses the Slurp setting: {{value}}",
+  "ui.slurp.settings.override.slurpValue": "Slurp setting: {{value}}"
 }

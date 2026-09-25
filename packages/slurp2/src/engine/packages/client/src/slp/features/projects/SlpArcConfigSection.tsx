@@ -1,9 +1,19 @@
 // Arc configuration section, split out of components/slurp/SlurpProjectsPanel.tsx in Slice 10.
 
+import type { ReactNode } from "react";
 import { useTranslation as useUiTranslation } from "react-i18next";
+import { NumberSetting } from "../../modules/settings/SlpSettingsControls";
+import { ChoiceSetting, OverrideField, type ChoiceOption } from "../../modules/settings/SlpSettingsInputs";
 import type { SlurpArcType, SlurpCreatorArcConfig } from "./slp-projects-contract";
 import { useSlurpArcConfig, useUpdateSlurpArcConfig } from "./slp-projects-hooks";
 
+/** Mirrors the server default in `resolveSlurpArcConfig`. */
+const GLOBAL_MAX_ACTIVE = 3;
+
+/**
+ * Per-Creator storyline overrides. Every field follows the Slurp-wide setting until "Own value" is
+ * on; turning it off deletes the stored field, so the Creator follows later Slurp-wide changes.
+ */
 export function ArcConfigSection({
   personaId,
   creatorAccountId,
@@ -28,48 +38,18 @@ export function ArcConfigSection({
     else next[key] = value;
     save(next);
   };
-  const globalLabel = (value: string | number) =>
-    localizeUi("ui.slurp.projects.config.global", { defaultValue: "Global ({{value}})", value });
-  const field = "w-full rounded border border-[var(--noodle-divider)] bg-transparent px-2 py-1 text-xs";
 
-  const select = <K extends keyof SlurpCreatorArcConfig>(
-    key: K,
-    label: string,
-    globalValue: string | number,
-    options: { value: string; label: string }[],
-    parse: (value: string) => SlurpCreatorArcConfig[K],
-  ) => (
-    <label className="flex flex-col gap-1 text-[0.7rem] font-semibold">
-      {label}
-      <select
-        value={config[key] === undefined ? "" : String(config[key])}
-        disabled={busy}
-        onChange={(event) => setField(key, event.target.value === "" ? undefined : parse(event.target.value))}
-        className={field}
-      >
-        <option value="">{globalLabel(globalValue)}</option>
-        {options.map((option) => (
-          <option key={option.value} value={option.value}>
-            {option.label}
-          </option>
-        ))}
-      </select>
-    </label>
-  );
-
-  const autoModes = [
+  const autoModes: ChoiceOption<NonNullable<SlurpCreatorArcConfig["autoMode"]>>[] = [
     { value: "off", label: localizeUi("ui.slurp.settings.arcAutoModeOff", { defaultValue: "Off" }) },
     { value: "suggest", label: localizeUi("ui.slurp.settings.arcAutoModeSuggest", { defaultValue: "Suggest" }) },
     { value: "auto", label: localizeUi("ui.slurp.settings.arcAutoModeAuto", { defaultValue: "Automatic" }) },
   ];
-  const paces = [
+  const paces: ChoiceOption<NonNullable<SlurpCreatorArcConfig["pace"]>>[] = [
     { value: "slow", label: localizeUi("ui.slurp.settings.arcPaceSlow", { defaultValue: "Slow" }) },
     { value: "normal", label: localizeUi("ui.slurp.settings.arcPaceNormal", { defaultValue: "Normal" }) },
     { value: "fast", label: localizeUi("ui.slurp.settings.arcPaceFast", { defaultValue: "Fast" }) },
   ];
-  const numbers = (max: number) =>
-    Array.from({ length: max }, (_, index) => ({ value: String(index + 1), label: String(index + 1) }));
-  const sources = [
+  const sources: ChoiceOption<NonNullable<SlurpCreatorArcConfig["source"]>>[] = [
     { value: "library", label: localizeUi("ui.slurp.projects.config.sourceLibrary", { defaultValue: "Library" }) },
     {
       value: "generated",
@@ -77,113 +57,189 @@ export function ArcConfigSection({
     },
     { value: "mixed", label: localizeUi("ui.slurp.projects.config.sourceMixed", { defaultValue: "Mixed" }) },
   ];
+  const maxActive: ChoiceOption<"1" | "2" | "3">[] = [
+    { value: "1", label: "1" },
+    { value: "2", label: "2" },
+    { value: "3", label: "3" },
+  ];
+  const onOff: ChoiceOption<"true" | "false">[] = [
+    { value: "true", label: localizeUi("ui.slurp.projects.config.on", { defaultValue: "On" }) },
+    { value: "false", label: localizeUi("ui.slurp.projects.config.off", { defaultValue: "Off" }) },
+  ];
+  const labelOf = (options: readonly ChoiceOption<string>[], value: string) =>
+    options.find((option) => option.value === value)?.label ?? value;
+  const enabledTypeIds = library.filter((type) => type.enabled).map((type) => type.id);
   const allowed = config.allowedTypeIds;
 
+  /** One override row: the stored field, or the Slurp-wide value when there is none. */
+  const override = <K extends keyof SlurpCreatorArcConfig>(
+    key: K,
+    label: string,
+    inherited: SlurpCreatorArcConfig[K],
+    inheritedLabel: string,
+    control: (value: NonNullable<SlurpCreatorArcConfig[K]>) => ReactNode,
+  ) => (
+    <OverrideField
+      label={label}
+      inheritedValue={inheritedLabel}
+      overridden={config[key] !== undefined}
+      disabled={busy}
+      onOverride={() => setField(key, inherited)}
+      onReset={() => setField(key, undefined)}
+    >
+      {config[key] !== undefined && control(config[key] as NonNullable<SlurpCreatorArcConfig[K]>)}
+    </OverrideField>
+  );
+
   return (
-    <div className="mt-4 flex flex-col gap-2 border-t border-[var(--noodle-divider)] pt-3">
-      <div className="flex items-center justify-between gap-3">
+    <div className="mt-4 flex flex-col gap-3 border-t border-[var(--noodle-divider)] pt-4">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <h3 className="text-xs font-bold uppercase tracking-[0.12em] text-[var(--muted-foreground)]">
-          {localizeUi("ui.slurp.projects.config.heading", { defaultValue: "Arc settings" })}
+          {localizeUi("ui.slurp.projects.config.heading", { defaultValue: "Storyline settings" })}
         </h3>
         <button
           type="button"
           onClick={() => save({})}
-          className="text-[0.7rem] font-semibold underline disabled:opacity-50"
+          className="min-h-11 text-sm font-semibold underline disabled:opacity-50"
           disabled={busy || Object.keys(config).length === 0}
         >
-          {localizeUi("ui.slurp.projects.config.reset", { defaultValue: "Reset to global" })}
+          {localizeUi("ui.slurp.projects.config.reset", { defaultValue: "Use Slurp settings for all" })}
         </button>
       </div>
-      {select(
+      {override(
         "autoMode",
-        localizeUi("ui.slurp.projects.config.autoMode", { defaultValue: "Starting storylines" }),
-        autoModes.find((mode) => mode.value === global.arcAutoMode)?.label ?? global.arcAutoMode,
-        autoModes,
-        (value) => value as SlurpCreatorArcConfig["autoMode"],
+        localizeUi("ui.slurp.projects.config.autoMode", { defaultValue: "Automatic storylines" }),
+        global.arcAutoMode as SlurpCreatorArcConfig["autoMode"],
+        labelOf(autoModes, global.arcAutoMode),
+        (value) => (
+          <ChoiceSetting
+            labelHidden
+            label={localizeUi("ui.slurp.projects.config.autoMode")}
+            options={autoModes}
+            value={value}
+            disabled={busy}
+            onChange={(next) => setField("autoMode", next)}
+          />
+        ),
       )}
-      {select(
+      {override(
         "source",
         localizeUi("ui.slurp.projects.config.source", { defaultValue: "Source" }),
-        sources.find((source) => source.value === global.arcSource)?.label ?? global.arcSource,
-        sources,
-        (value) => value as SlurpCreatorArcConfig["source"],
+        global.arcSource as SlurpCreatorArcConfig["source"],
+        labelOf(sources, global.arcSource),
+        (value) => (
+          <ChoiceSetting
+            labelHidden
+            label={localizeUi("ui.slurp.projects.config.source")}
+            options={sources}
+            value={value}
+            disabled={busy}
+            onChange={(next) => setField("source", next)}
+          />
+        ),
       )}
-      {select(
+      {override(
         "cooldownWeeks",
-        localizeUi("ui.slurp.projects.config.cooldownWeeks", { defaultValue: "Weeks between automatic arcs" }),
+        localizeUi("ui.slurp.projects.config.cooldownWeeks", { defaultValue: "Weeks between automatic storylines" }),
         global.arcCooldownWeeks,
-        numbers(8),
-        Number,
+        String(global.arcCooldownWeeks),
+        (value) => (
+          <label className="block">
+            <span className="sr-only">{localizeUi("ui.slurp.projects.config.cooldownWeeks")}</span>
+            <NumberSetting
+              value={value}
+              min={1}
+              max={8}
+              disabled={busy}
+              onSave={(next) => setField("cooldownWeeks", next)}
+            />
+          </label>
+        ),
       )}
-      {select(
+      {override(
         "pace",
-        localizeUi("ui.slurp.projects.config.pace", { defaultValue: "Arc speed" }),
-        paces.find((pace) => pace.value === global.arcPace)?.label ?? global.arcPace,
-        paces,
-        (value) => value as SlurpCreatorArcConfig["pace"],
+        localizeUi("ui.slurp.projects.config.pace", { defaultValue: "Storyline speed" }),
+        global.arcPace as SlurpCreatorArcConfig["pace"],
+        labelOf(paces, global.arcPace),
+        (value) => (
+          <ChoiceSetting
+            labelHidden
+            label={localizeUi("ui.slurp.projects.config.pace")}
+            options={paces}
+            value={value}
+            disabled={busy}
+            onChange={(next) => setField("pace", next)}
+          />
+        ),
       )}
-      {select(
+      {override(
         "maxActive",
-        localizeUi("ui.slurp.projects.config.maxActive", { defaultValue: "Arcs running at once" }),
-        3,
-        numbers(3),
-        Number,
+        localizeUi("ui.slurp.projects.config.maxActive", { defaultValue: "Storylines running at once" }),
+        GLOBAL_MAX_ACTIVE,
+        String(GLOBAL_MAX_ACTIVE),
+        (value) => (
+          <ChoiceSetting
+            labelHidden
+            label={localizeUi("ui.slurp.projects.config.maxActive")}
+            options={maxActive}
+            value={String(value) as "1" | "2" | "3"}
+            disabled={busy}
+            onChange={(next) => setField("maxActive", Number(next))}
+          />
+        ),
       )}
-      {(() => {
-        const toggles = [
-          { value: "true", label: localizeUi("ui.slurp.projects.config.on", { defaultValue: "On" }) },
-          { value: "false", label: localizeUi("ui.slurp.projects.config.off", { defaultValue: "Off" }) },
-        ];
-        return select(
-          "crossovers",
-          localizeUi("ui.slurp.projects.config.crossovers", { defaultValue: "Automatic crossovers" }),
-          toggles[global.arcCrossovers ? 0 : 1]!.label,
-          toggles,
-          (value) => value === "true",
-        );
-      })()}
-      <label className="flex flex-col gap-1 text-[0.7rem] font-semibold">
-        {localizeUi("ui.slurp.projects.config.types", { defaultValue: "Types" })}
-        <select
-          value={allowed ? "chosen" : ""}
-          disabled={busy}
-          onChange={(event) =>
-            setField(
-              "allowedTypeIds",
-              event.target.value ? library.filter((type) => type.enabled).map((type) => type.id) : undefined,
-            )
-          }
-          className={field}
-        >
-          <option value="">
-            {globalLabel(localizeUi("ui.slurp.projects.config.allTypes", { defaultValue: "All enabled types" }))}
-          </option>
-          <option value="chosen">
-            {localizeUi("ui.slurp.projects.config.chosenTypes", { defaultValue: "Chosen types" })}
-          </option>
-        </select>
-      </label>
-      {allowed && (
-        <div className="flex flex-col gap-1">
-          {library.map((type) => (
-            <label key={type.id} className="flex items-center gap-2 text-[0.7rem]">
-              <input
-                type="checkbox"
-                checked={allowed.includes(type.id)}
-                disabled={busy}
-                onChange={(event) =>
-                  setField(
-                    "allowedTypeIds",
-                    event.target.checked ? [...allowed, type.id] : allowed.filter((id) => id !== type.id),
-                  )
-                }
-              />
-              {type.name}
-            </label>
-          ))}
-        </div>
+      {override(
+        "crossovers",
+        localizeUi("ui.slurp.projects.config.crossovers", { defaultValue: "Automatic crossovers" }),
+        global.arcCrossovers,
+        labelOf(onOff, String(global.arcCrossovers)),
+        (value) => (
+          <ChoiceSetting
+            labelHidden
+            label={localizeUi("ui.slurp.projects.config.crossovers")}
+            options={onOff}
+            value={value ? "true" : "false"}
+            disabled={busy}
+            onChange={(next) => setField("crossovers", next === "true")}
+          />
+        ),
       )}
-      {mutation.error && <p className="text-[0.7rem] text-[var(--destructive)]">{mutation.error.message}</p>}
+      {override(
+        "allowedTypeIds",
+        localizeUi("ui.slurp.projects.config.types", { defaultValue: "Types" }),
+        enabledTypeIds,
+        localizeUi("ui.slurp.projects.config.allTypes", { defaultValue: "All enabled types" }),
+        () => (
+          <div className="flex flex-wrap gap-2">
+            {library.map((type) => {
+              const on = Boolean(allowed?.includes(type.id));
+              return (
+                <label
+                  key={type.id}
+                  className={`inline-flex min-h-11 cursor-pointer items-center gap-2 rounded-full px-3 text-sm ring-1 ring-inset focus-within:ring-2 focus-within:ring-[var(--slurp-focus,var(--noodle-accent))] ${on ? "bg-[var(--slurp-nav-active)] font-semibold ring-[var(--noodle-accent)]/45" : "text-[var(--slurp-muted,var(--muted-foreground))] ring-[var(--slurp-outline,var(--border))]"}`}
+                >
+                  <input
+                    type="checkbox"
+                    className="sr-only"
+                    checked={on}
+                    disabled={busy}
+                    onChange={(event) =>
+                      setField(
+                        "allowedTypeIds",
+                        event.target.checked
+                          ? [...(allowed ?? []), type.id]
+                          : (allowed ?? []).filter((id) => id !== type.id),
+                      )
+                    }
+                  />
+                  {type.name}
+                </label>
+              );
+            })}
+          </div>
+        ),
+      )}
+      {mutation.error && <p className="text-sm text-[var(--destructive)]">{mutation.error.message}</p>}
     </div>
   );
 }

@@ -3,7 +3,9 @@
  * instead of hiding them in a dropdown. Dynamic lists (connections, profiles) stay `<select>`.
  */
 import type { LucideIcon } from "lucide-react";
+import type { ReactNode } from "react";
 import { useId } from "react";
+import { useTranslation } from "react-i18next";
 import { SettingAnchor, type SlpSettingKey } from "./SlpSettingsKit";
 
 export type ChoiceOption<T extends string> = {
@@ -34,8 +36,11 @@ export function ChoiceSetting<T extends string>({
   variant = "segmented",
   disabled = false,
   disabledReason,
+  labelHidden = false,
 }: {
   label: string;
+  /** The label is still announced; hide it when a surrounding row already shows it. */
+  labelHidden?: boolean;
   detail?: string;
   settingKey?: SlpSettingKey;
   options: readonly ChoiceOption<T>[];
@@ -52,7 +57,7 @@ export function ChoiceSetting<T extends string>({
     options.length <= SEGMENT_MAX_OPTIONS && options.every((option) => option.label.length <= SEGMENT_MAX_LABEL);
   const group = (
     <fieldset disabled={off} className="min-w-0 space-y-2">
-      <legend className="float-left w-full text-sm font-semibold">{label}</legend>
+      <legend className={labelHidden ? "sr-only" : "float-left w-full text-sm font-semibold"}>{label}</legend>
       {detail && <p className="clear-left text-xs leading-5 text-[var(--muted-foreground)]">{detail}</p>}
       {disabledReason && (
         <p className="clear-left text-xs font-semibold leading-5 text-[var(--slurp-muted,var(--muted-foreground))]">
@@ -115,4 +120,72 @@ export function ChoiceSetting<T extends string>({
     </fieldset>
   );
   return settingKey ? <SettingAnchor settingKey={settingKey}>{group}</SettingAnchor> : group;
+}
+
+/**
+ * A per-Creator setting that follows the Slurp-wide value until the player turns on "Own value".
+ * Off shows the inherited value; on shows the real control. Turning it off deletes the override,
+ * so the Creator follows later Slurp-wide changes again.
+ */
+export function OverrideField({
+  label,
+  detail,
+  inheritedValue,
+  overridden,
+  onOverride,
+  onReset,
+  disabled = false,
+  children,
+}: {
+  label: string;
+  detail?: string;
+  /** Already localized, e.g. "Suggest". */
+  inheritedValue: string;
+  overridden: boolean;
+  /** Writes the current Slurp-wide value as this Creator's own value. */
+  onOverride: () => void;
+  onReset: () => void;
+  disabled?: boolean;
+  children: ReactNode;
+}) {
+  const { t } = useTranslation();
+  const labelId = useId();
+  return (
+    <div
+      className={`space-y-3 rounded-lg p-3 ring-1 ring-inset ${overridden ? "bg-[var(--slurp-surface-raised,var(--background))] ring-[var(--noodle-accent)]/35" : "ring-[var(--slurp-outline,var(--border))]"}`}
+    >
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p id={labelId} className="text-sm font-semibold">
+            {label}
+          </p>
+          {detail && <p className="mt-0.5 text-xs leading-5 text-[var(--muted-foreground)]">{detail}</p>}
+          <p className="mt-1 text-xs leading-5 text-[var(--slurp-muted,var(--muted-foreground))]">
+            {overridden
+              ? t("ui.slurp.settings.override.slurpValue", { value: inheritedValue })
+              : t("ui.slurp.settings.override.usesSlurp", { value: inheritedValue })}
+          </p>
+        </div>
+        <label
+          className={`inline-flex min-h-11 shrink-0 items-center gap-2 text-xs font-semibold ${disabled ? "cursor-not-allowed opacity-50" : "cursor-pointer"}`}
+        >
+          <span>{t("ui.slurp.settings.override.own")}</span>
+          <input
+            type="checkbox"
+            role="switch"
+            aria-describedby={labelId}
+            disabled={disabled}
+            checked={overridden}
+            onChange={(event) => (event.target.checked ? onOverride() : onReset())}
+            className="peer sr-only"
+          />
+          <span
+            aria-hidden="true"
+            className="relative h-6 w-10 shrink-0 rounded-full bg-[var(--muted-foreground)]/25 shadow-inner transition-colors after:absolute after:left-1 after:top-1 after:h-4 after:w-4 after:rounded-full after:bg-white after:shadow-sm after:transition-transform peer-checked:bg-[var(--noodle-accent)] peer-checked:after:translate-x-4 peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-[var(--noodle-accent)] motion-reduce:transition-none motion-reduce:after:transition-none"
+          />
+        </label>
+      </div>
+      {overridden && children}
+    </div>
+  );
 }

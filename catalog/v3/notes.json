@@ -360,6 +360,12 @@
     "slurp2": {
       "versions": [
         {
+          "version": "0.2.64",
+          "date": "2026-09-25",
+          "notes": "- A Creator's Storylines tab follows the Slurp settings by default and shows their values. Turn on \"Own value\" on a row to set it for this Creator; turn it off to follow Slurp again.\n- Storyline types for one Creator are picked with tappable chips, and all controls in the tab have full-size touch targets.",
+          "highlight": false
+        },
+        {
           "version": "0.2.63",
           "date": "2026-09-25",
           "notes": "- Storylines settings show every choice at once: story activity presets are cards with a short description, and the start, pace and source settings are button rows instead of dropdowns.\n- Audience presets, scale, tone and world activity use the same button rows.",
@@ -471,12 +477,6 @@
           "version": "0.2.45",
           "date": "2026-09-25",
           "notes": "- New with Beats: Shared ideas (off by default). Once a day Slurp collects a few seasonal and platform moments, and once a week typical moments per topic tag. Beats fill them in with each Creator's own places and work, and each idea is used by at most two Creators a day.\n- New with Shared ideas: Slurp-wide events (off by default). The daily idea call may start one short themed event for all Creators; it shows under Platform events and ends by itself.",
-          "highlight": false
-        },
-        {
-          "version": "0.2.44",
-          "date": "2026-09-25",
-          "notes": "- With Beats on, each post knows where the Creator's day stands when it goes out and what they did just before, from their Conversation Schedule or, without one, from a typical day read once from their card.\n- Beats reads each card one more time after this update, to add that typical day.",
           "highlight": false
         }
       ]
