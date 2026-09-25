@@ -1,5 +1,9 @@
 # Slurp Remastered release notes
 
+## 0.2.54 — 2026-09-25
+
+- Hinted and Secret Creators without an avatar or banner get their artwork drawn again. The automatic backfill failed for them every minute with a "creatorDetails" error in the log.
+
 ## 0.2.53 — 2026-09-25
 
 - Each Creator's Continuity tab now lists their recent signals: everything around them in the last two weeks from every source (posts, notes, messages, promises, their schedule, platform events, and other Creators' posts) in one place. Private messages show only what kind of thing happened.

@@ -182,11 +182,17 @@ export async function backfillNextCreatorArtwork(db: DB): Promise<SlpCreatorArtw
       linkedPublicAccount,
       disclosureMode,
       postContent: account.bio,
-      draftPrompt: artworkPrompt(kind, {
-        displayName: account.displayName,
-        bio: account.bio,
-        stagePersonality: account.settings.privacy.stagePersonality ?? "",
-      }),
+      // The same defaults the artwork editor starts from. The options were missing here, so every
+      // backfill for a hinted or secret Creator threw on `options.creatorDetails` once a minute.
+      draftPrompt: artworkPrompt(
+        kind,
+        {
+          displayName: account.displayName,
+          bio: account.bio,
+          stagePersonality: account.settings.privacy.stagePersonality ?? "",
+        },
+        { creatorDetails: true, appearance: kind === "avatar", sourceReferences: kind === "avatar", composition: true },
+      ),
       settings,
       characters: createCharactersStorage(db),
       promptOverrides: createPromptOverridesStorage(db),

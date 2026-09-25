@@ -360,6 +360,12 @@
     "slurp2": {
       "versions": [
         {
+          "version": "0.2.54",
+          "date": "2026-09-25",
+          "notes": "- Hinted and Secret Creators without an avatar or banner get their artwork drawn again. The automatic backfill failed for them every minute with a \"creatorDetails\" error in the log.",
+          "highlight": false
+        },
+        {
           "version": "0.2.53",
           "date": "2026-09-25",
           "notes": "- Each Creator's Continuity tab now lists their recent signals: everything around them in the last two weeks from every source (posts, notes, messages, promises, their schedule, platform events, and other Creators' posts) in one place. Private messages show only what kind of thing happened.",
@@ -471,12 +477,6 @@
           "version": "0.2.35",
           "date": "2026-09-24",
           "notes": "- Deep details shows each post as numbered steps. Every image run records its settings, style profile, prompt rewrite, final prompt, and provider attempts in order.\n- The Connections panel includes the AI writing connection used for replies, messages, and audience activity.",
-          "highlight": false
-        },
-        {
-          "version": "0.2.34",
-          "date": "2026-09-23",
-          "notes": "- Manage text and image connections in one place. Missing saved connections stay visible until you choose a replacement, and connection load errors can be retried.\n- Image briefs now follow the Creator's production style, and future automatic posts survive Engine restarts and source snapshot changes.\n- Prompt Studio describes its output clearly, image appearance settings apply consistently, and valid model responses can include extra fields.",
           "highlight": false
         }
       ]

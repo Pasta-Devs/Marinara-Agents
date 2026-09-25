@@ -1,5 +1,5 @@
 // The splash screen needs the shipped version and its public notes inside the client bundle.
-export const SLURP2_VERSION = "0.2.53";
+export const SLURP2_VERSION = "0.2.54";
 
 export interface Slurp2ReleaseEntry {
   version: string;
@@ -9,6 +9,13 @@ export interface Slurp2ReleaseEntry {
 
 /** The public release history shown in the Engine splash screen. */
 export const SLURP2_RELEASES: Slurp2ReleaseEntry[] = [
+  {
+    version: "0.2.54",
+    date: "2026-09-25",
+    notes: [
+      'Hinted and Secret Creators without an avatar or banner get their artwork drawn again. The automatic backfill failed for them every minute with a "creatorDetails" error in the log.',
+    ],
+  },
   {
     version: "0.2.53",
     date: "2026-09-25",
