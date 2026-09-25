@@ -17,7 +17,6 @@ import {
 import type { ComponentType } from "react";
 
 import {
-  SlpCreatorOverviewSection,
   SlpCreatorAppearanceSection,
   SlpCreatorAutomationSection,
   SlpCreatorAudienceSection,
@@ -31,6 +30,7 @@ import {
   SlpCreatorProductionSection,
   SlpCreatorWardrobeSection,
 } from "./SlpCreatorSettingsSections";
+import { SlpCreatorOverviewSection } from "./SlpCreatorOverviewSection";
 import { SlpCreatorStorylinesSection } from "./SlpCreatorStorylinesSection";
 import type { SlpCreatorSettingsCreator, SlpCreatorSettingsSectionProps } from "./slp-creator-settings-contract";
 import type { SlpCreatorSettingsBlock, SlpCreatorSettingsTab } from "./slp-creator-settings-store";

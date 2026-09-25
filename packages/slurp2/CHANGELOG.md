@@ -1,5 +1,9 @@
 # Slurp Remastered release notes
 
+## 0.2.68 — 2026-09-25
+
+- Creator settings open on an Overview status page: what needs review, whether the Creator posts (with a live Auto-post switch), the next post, running storylines, notes waiting in Memory, and a way into each part.
+
 ## 0.2.67 — 2026-09-25
 
 - Creator settings have 7 tabs instead of 14: Overview, Profile (identity, appearance, wardrobe), Posting (automation, production, storylines, collaborations), Content rules, Fans & messages, Memory and Tools. Each merged tab shows its parts under their own headings.

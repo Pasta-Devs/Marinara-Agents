@@ -56,9 +56,20 @@ assert.match(editor, /onDirtyChange\?\.\(JSON\.stringify\(draft\) !== JSON\.stri
 assert.match(editor, /onDirtyChange\?\.\(false\)/u, "save and discard clear the dirty state");
 assert.match(sections, /id: "overview"[\s\S]*Component: SlpCreatorOverviewSection/u);
 assert.doesNotMatch(sections, /group:/u, "seven tabs need no group headings");
-assert.match(modalSections, /export function SlpCreatorOverviewSection/u);
-assert.match(modalSections, /overviewNeedsReview/u);
-assert.match(modalSections, /useSlpCreatorSettingsStore\.getState\(\)\.setTab\(section\)/u);
+const overview = slurp2Source(`${root}settings/SlpCreatorOverviewSection.tsx`);
+assert.match(overview, /export function SlpCreatorOverviewSection/u);
+assert.match(overview, /overviewNeedsReview/u);
+assert.match(overview, /useSlpCreatorSettingsStore\.getState\(\)\.setTab\(block\)/u, "every tile opens its block");
+for (const block of ["automation", "storylines", "continuity", "audience"]) {
+  assert.match(overview, new RegExp(`block="${block}"`, "u"), `a status tile opens ${block}`);
+}
+assert.match(overview, /role="switch"[\s\S]*updateAuto\.mutate/u, "auto-post is switchable from the overview");
+assert.match(
+  overview,
+  /useSlurpContinuity\(active \? creator\.id : null\)/u,
+  "memory counts load only while the tab is visible",
+);
+assert.doesNotMatch(modalSections, /SlpCreatorOverviewSection/u);
 assert.match(sections, /defaultLabel: "Audience activity"/u);
 assert.match(sections, /id: "content-rules",[\s\S]*blocks: blocks\("content-rules"\)/u);
 assert.match(publishingSections, /mode === "content-rules"/u);
@@ -95,7 +106,7 @@ for (const [block, tab] of [
 ]) {
   assert.match(store, new RegExp(`\\n  "?${block}"?: "${tab}",`, "u"), `${block} opens ${tab}`);
 }
-assert.match(store, /tab: slpCreatorSettingsTabFor\(options\?\.tab \?\? "profile"\)/u);
+assert.match(store, /tab: slpCreatorSettingsTabFor\(options\?\.tab \?\? "overview"\)/u);
 assert.match(
   store,
   /setTab: \(tab\) => set\(\{ tab: slpCreatorSettingsTabFor\(tab\), settingKey: slpCreatorBlockAnchor\(tab\) \}\)/u,

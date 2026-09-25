@@ -360,6 +360,12 @@
     "slurp2": {
       "versions": [
         {
+          "version": "0.2.68",
+          "date": "2026-09-25",
+          "notes": "- Creator settings open on an Overview status page: what needs review, whether the Creator posts (with a live Auto-post switch), the next post, running storylines, notes waiting in Memory, and a way into each part.",
+          "highlight": false
+        },
+        {
           "version": "0.2.67",
           "date": "2026-09-25",
           "notes": "- Creator settings have 7 tabs instead of 14: Overview, Profile (identity, appearance, wardrobe), Posting (automation, production, storylines, collaborations), Content rules, Fans & messages, Memory and Tools. Each merged tab shows its parts under their own headings.\n- Links and search results that named an old tab open the new tab and scroll to the right part.",
@@ -471,12 +477,6 @@
           "version": "0.2.49",
           "date": "2026-09-25",
           "notes": "- With Beats on, each post plans how far it goes: most posts go as far as the Creator's explicit-level dial allows, some are softer, and none go below what the character's card is like. Caption and picture use the same level, and Deep details show it.",
-          "highlight": false
-        },
-        {
-          "version": "0.2.48",
-          "date": "2026-09-25",
-          "notes": "- With Beats on, a Creator's schedule decides where they are: moments at the place or work they are at right now come first, and a moment about somewhere else is posted as a plan, a memory, or a wish.\n- A post due while the Creator sleeps or drives is written as if posted just before, and never mentions being awake or on the road. Gym, set, class, and similar blocks stay good post material.\n- On an arc's big day, such as moving day, the arc chapter decides what the Creator does, not the usual weekly schedule.",
           "highlight": false
         }
       ]

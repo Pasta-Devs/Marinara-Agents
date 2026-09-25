@@ -85,12 +85,12 @@ type SlpCreatorSettingsState = {
 
 export const useSlpCreatorSettingsStore = create<SlpCreatorSettingsState>((set) => ({
   creatorId: null,
-  tab: "profile",
+  tab: "overview",
   settingKey: null,
   open: (creatorId, options) =>
     set({
       creatorId,
-      tab: slpCreatorSettingsTabFor(options?.tab ?? "profile"),
+      tab: slpCreatorSettingsTabFor(options?.tab ?? "overview"),
       settingKey: options?.settingKey ?? slpCreatorBlockAnchor(options?.tab),
     }),
   setTab: (tab) => set({ tab: slpCreatorSettingsTabFor(tab), settingKey: slpCreatorBlockAnchor(tab) }),

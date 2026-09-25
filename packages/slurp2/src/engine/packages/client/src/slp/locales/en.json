@@ -3973,5 +3973,18 @@
   "ui.slurp.settings.creators.tabs.posting": "Posting",
   "ui.slurp.settings.creators.tabs.fans": "Fans & messages",
   "ui.slurp.settings.creators.tabs.memory": "Memory",
-  "ui.slurp.settings.creators.tabs.tools": "Tools"
+  "ui.slurp.settings.creators.tabs.tools": "Tools",
+  "ui.slurp.settings.creators.overview.openLabel": "Open {{name}}",
+  "ui.slurp.settings.creators.overview.autoPost": "Auto-post",
+  "ui.slurp.settings.creators.overview.planned_one": "{{count}} post planned",
+  "ui.slurp.settings.creators.overview.planned_other": "{{count}} posts planned",
+  "ui.slurp.settings.creators.overview.running_one": "{{count}} storyline running",
+  "ui.slurp.settings.creators.overview.running_other": "{{count}} storylines running",
+  "ui.slurp.settings.creators.overview.suggested_one": "{{count}} suggestion waiting",
+  "ui.slurp.settings.creators.overview.suggested_other": "{{count}} suggestions waiting",
+  "ui.slurp.settings.creators.overview.waiting_one": "{{count}} note waiting for you",
+  "ui.slurp.settings.creators.overview.waiting_other": "{{count}} notes waiting for you",
+  "ui.slurp.settings.creators.overview.notes_one": "{{count}} thing remembered",
+  "ui.slurp.settings.creators.overview.notes_other": "{{count}} things remembered",
+  "ui.slurp.settings.creators.overview.fansDetail": "Audience activity, messages and prices."
 }
