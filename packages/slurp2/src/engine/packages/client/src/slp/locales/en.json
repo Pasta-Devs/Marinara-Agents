@@ -1985,7 +1985,7 @@
   "ui.slurp.settings.backstage.sections.maintenance": "Maintenance",
   "ui.slurp.settings.backstage.sections.overview": "Overview",
   "ui.slurp.settings.backstage.sections.world": "World",
-  "ui.slurp.settings.backstage.sections.content": "Stories & events",
+  "ui.slurp.settings.backstage.sections.content": "Stories",
   "ui.slurp.settings.creators.imageStyle": "Image style",
   "ui.slurp.settings.creators.imageStyleDetail": "Use the global style or choose a style for this Creator.",
   "ui.slurp.settings.creators.inheritImageStyle": "Use global default",
@@ -3987,5 +3987,7 @@
   "ui.slurp.settings.creators.overview.notes_other": "{{count}} things remembered",
   "ui.slurp.settings.creators.overview.fansDetail": "Audience activity, messages and prices.",
   "ui.slurp.settings.creators.anotherDay": "Another day",
-  "ui.slurp.settings.creators.schedulePast": "Pick a time in the future."
+  "ui.slurp.settings.creators.schedulePast": "Pick a time in the future.",
+  "ui.slurp.settings.backstage.sections.models": "Models & connections",
+  "ui.slurp.settings.backstage.sections.fans": "Fans & money"
 }

@@ -1,5 +1,5 @@
 // The splash screen needs the shipped version and its public notes inside the client bundle.
-export const SLURP2_VERSION = "0.2.69";
+export const SLURP2_VERSION = "0.2.70";
 
 export interface Slurp2ReleaseEntry {
   version: string;
@@ -9,6 +9,15 @@ export interface Slurp2ReleaseEntry {
 
 /** The public release history shown in the Engine splash screen. */
 export const SLURP2_RELEASES: Slurp2ReleaseEntry[] = [
+  {
+    version: "0.2.70",
+    date: "2026-09-25",
+    notes: [
+      "Settings have new sections in order of use: Overview, Models & connections, Creators, Posting, Stories, World, Fans & money, Writing & content level, Maintenance.",
+      "Models & connections holds Connections and Image generation, right under Overview. World holds Events and Calendar; Fans & money holds Audience, Messaging rules, Coins and access, Ads and Discovery; Stories holds Storylines, Storyline types and Packs.",
+      "Old links and saved places open the page in its new section.",
+    ],
+  },
   {
     version: "0.2.69",
     date: "2026-09-25",

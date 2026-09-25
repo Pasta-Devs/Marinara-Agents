@@ -1,5 +1,11 @@
 # Slurp Remastered release notes
 
+## 0.2.70 — 2026-09-25
+
+- Settings have new sections in order of use: Overview, Models & connections, Creators, Posting, Stories, World, Fans & money, Writing & content level, Maintenance.
+- Models & connections holds Connections and Image generation, right under Overview. World holds Events and Calendar; Fans & money holds Audience, Messaging rules, Coins and access, Ads and Discovery; Stories holds Storylines, Storyline types and Packs.
+- Old links and saved places open the page in its new section.
+
 ## 0.2.69 — 2026-09-25
 
 - A Creator's posting schedule is a day list: each upcoming post shows its time, which you change in place and which saves when you leave the field. "Another day" moves a post to a new day at the same time. The 8 Save buttons are gone.

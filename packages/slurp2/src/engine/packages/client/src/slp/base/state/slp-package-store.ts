@@ -5,6 +5,7 @@ import {
   isSlpBackstageTarget,
   SLP_BACKSTAGE_DEFAULT_TARGET,
   SLP_LEGACY_SETTINGS_DESTINATION,
+  slpBackstageSectionFor,
   targetBelongsToSection,
 } from "../navigation/slp-backstage-target";
 
@@ -90,9 +91,7 @@ function normalizeSettingsNavigation(value: Record<string, unknown>): Record<str
   if (legacy) return { ...value, ...legacy };
   if (!isSlpBackstageSection(value.section)) return value;
   const target = isSlpBackstageTarget(value.target) ? value.target : SLP_BACKSTAGE_DEFAULT_TARGET[value.section];
-  return targetBelongsToSection(value.section, target)
-    ? { ...value, target }
-    : { ...value, target: SLP_BACKSTAGE_DEFAULT_TARGET[value.section] };
+  return { ...value, section: slpBackstageSectionFor(value.section, target), target };
 }
 
 function readRecord(key: string): Record<string, unknown> | null {
@@ -151,7 +150,11 @@ export const useSlurpUIStore = create<SlurpPackageState>((set, get) => ({
   navigation: initialState.navigation ?? { mode: "creator", view: "hub" },
   viewerPersonaId: initialState.viewerPersonaId ?? null,
   onboardingState: initialState.onboardingState ?? "unseen",
-  setNavigation: (navigation) => {
+  setNavigation: (next) => {
+    const navigation =
+      next.mode === "creator-settings" && next.section && next.target
+        ? { ...next, section: slpBackstageSectionFor(next.section, next.target) }
+        : next;
     set({ navigation });
     persistSlurpState({
       navigation,
