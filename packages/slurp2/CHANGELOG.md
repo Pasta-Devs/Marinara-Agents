@@ -1,5 +1,9 @@
 # Slurp Remastered release notes
 
+## 0.2.52 — 2026-09-25
+
+- Posts prepared ahead of time are written again when the Creator's character card, Conversation Schedule, disclosure, or stage voice changes before they go out, instead of publishing what was true when they were prepared.
+
 ## 0.2.51 — 2026-09-25
 
 - Each Creator's Continuity tab now shows what the Beats planner read from their card: people, places, work, things, habits, running jokes, their typical day, and their heat range. You can correct it, and your version is used until the card changes; Read card again starts over.

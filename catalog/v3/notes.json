@@ -360,6 +360,12 @@
     "slurp2": {
       "versions": [
         {
+          "version": "0.2.52",
+          "date": "2026-09-25",
+          "notes": "- Posts prepared ahead of time are written again when the Creator's character card, Conversation Schedule, disclosure, or stage voice changes before they go out, instead of publishing what was true when they were prepared.",
+          "highlight": false
+        },
+        {
           "version": "0.2.51",
           "date": "2026-09-25",
           "notes": "- Each Creator's Continuity tab now shows what the Beats planner read from their card: people, places, work, things, habits, running jokes, their typical day, and their heat range. You can correct it, and your version is used until the card changes; Read card again starts over.",
@@ -471,12 +477,6 @@
           "version": "0.2.29",
           "date": "2026-09-23",
           "notes": "- Scheduled timeline refresh uses the saved daily setting again.\n- Delayed chat replies finish during a cool-off, and strict model output supports comment threads and invited posts.\n- Pulse shows failed first posts and audience failure details. Arc edits keep imported story fields.",
-          "highlight": false
-        },
-        {
-          "version": "0.2.28",
-          "date": "2026-09-23",
-          "notes": "- Creator settings now have a status overview and a mobile section picker.\n- Profile edits use the modal's shared save bar, and each Creator settings view has one scroll area.",
           "highlight": false
         }
       ]

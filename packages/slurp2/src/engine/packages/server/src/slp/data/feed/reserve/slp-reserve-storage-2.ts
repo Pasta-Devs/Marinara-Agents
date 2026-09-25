@@ -19,7 +19,11 @@ import {
   elapsedPreparedSlotMs,
   TERMINAL_PREPARED_POST_RETENTION_MS,
 } from "../../host/slp-storage-constants.js";
-import { slpCreatorReservePolicyFingerprint, parseRecord } from "../../../modules/records/slp-storage-model.js";
+import {
+  slpCreatorReservePolicyFingerprint,
+  slpReservePolicyStale,
+  parseRecord,
+} from "../../../modules/records/slp-storage-model.js";
 import type { SlpCreatorPreparedPostPayload, SlurpReserveStatus } from "../../../modules/records/slp-storage-model.js";
 import { mapAccount, snapshotForAccount } from "../../host/slp-storage-mappers.js";
 import type { SlurpStorageContext } from "../../host/slp-storage-context.js";
@@ -117,6 +121,29 @@ export function createReserveStorage2(context: SlurpStorageContext) {
             await tx
               .update(slpCreatorPreparedPosts)
               .set({ state: "discarded", updatedAt: at.toISOString() })
+              .where(eq(slpCreatorPreparedPosts.id, current.id));
+            return false;
+          }
+          // Written for an older card, schedule, disclosure, or voice: back to a scheduled slot, so the
+          // next poll writes it again for the Creator as they are now. The slot is kept, not lost.
+          const fingerprint = slpCreatorReservePolicyFingerprint(account, settings, source.updatedAt ?? null);
+          if (slpReservePolicyStale(current.policyFingerprint, fingerprint)) {
+            discardedMediaPaths.push(
+              String(parseRecord(parseRecord(current.payload).metadata).noodlerMediaPath ?? "") || null,
+            );
+            await tx
+              .update(slpCreatorPreparedPosts)
+              .set({
+                generatedAt: at.toISOString(),
+                payload: "{}",
+                policyFingerprint: fingerprint,
+                state: "scheduled",
+                publishedPostId: null,
+                imageState: "none",
+                imageClaimToken: null,
+                imageClaimLeaseUntil: null,
+                updatedAt: at.toISOString(),
+              })
               .where(eq(slpCreatorPreparedPosts.id, current.id));
             return false;
           }

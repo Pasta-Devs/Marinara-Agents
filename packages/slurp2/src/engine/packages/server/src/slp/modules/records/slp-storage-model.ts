@@ -160,6 +160,26 @@ export function slpCreatorReservePolicyFingerprint(
   });
 }
 
+/** The fingerprint fields that change what a prepared post says: its card (and schedule), identity, and voice. */
+const CONTENT_POLICY_FIELDS = ["sourceKind", "sourceId", "sourceUpdatedAt", "disclosure", "stagePersonality"] as const;
+
+/**
+ * Whether a prepared post was written for a card, schedule, disclosure, or stage voice that has
+ * changed since. The fingerprint was stored but never compared, so in pre_generate mode a post
+ * written hours earlier published with the old card and the old day. Only content fields count:
+ * the rest of the fingerprint (account timestamps, media policy) changes too often to rewrite on,
+ * and an unreadable stored value is not treated as stale.
+ */
+export function slpReservePolicyStale(stored: unknown, current: string): boolean {
+  try {
+    const before = JSON.parse(String(stored)) as Record<string, unknown>;
+    const now = JSON.parse(current) as Record<string, unknown>;
+    return CONTENT_POLICY_FIELDS.some((field) => (before[field] ?? null) !== (now[field] ?? null));
+  } catch {
+    return false;
+  }
+}
+
 /**
  * Rewrite the linked-source ID inside a stored reserve fingerprint. Profile import can rename a
  * colliding account, and the fingerprint carries that ID, so without this every restored prepared
