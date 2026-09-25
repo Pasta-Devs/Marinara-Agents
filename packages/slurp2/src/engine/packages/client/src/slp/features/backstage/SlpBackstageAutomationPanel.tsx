@@ -138,7 +138,7 @@ export function SlpBackstageAutomationPanel(page: SlpBackstagePageProps) {
         value={t(
           `ui.slurp.settings.arcPace${settings.arcPace === "slow" ? "Slow" : settings.arcPace === "fast" ? "Fast" : "Normal"}`,
         )}
-        onOpen={() => go("automation", "general")}
+        onOpen={() => go("content", "storylines")}
       />
       <SummaryRow
         icon={<Image size={20} />}

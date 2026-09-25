@@ -75,10 +75,10 @@ export function SlpCalendarPanel(page: SlpBackstagePageProps) {
     () => [...(calendar.data?.items ?? [])].sort((a, b) => Date.parse(a.startsAt) - Date.parse(b.startsAt)),
     [calendar.data?.items],
   );
-  const open = (target: "events" | "arcs" | "packs" | "general") =>
+  const open = (target: "events" | "arcs" | "packs" | "storylines") =>
     page.onNavigate({
       ...page.navigation,
-      section: target === "general" ? "automation" : "content",
+      section: "content",
       target,
     });
   const createPlanFromOccasion = async (item: SlpStoryCalendarItem) => {
@@ -363,11 +363,11 @@ export function SlpCalendarPanel(page: SlpBackstagePageProps) {
         <button
           type="button"
           className="rounded-xl bg-[var(--slurp-surface-raised)] p-4 text-start ring-1 ring-inset ring-[var(--slurp-outline)] hover:bg-[var(--slurp-canvas)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)]"
-          onClick={() => open("general")}
+          onClick={() => open("storylines")}
         >
-          <span className="block text-sm font-black">Open Plan automation</span>
+          <span className="block text-sm font-black">Open storyline rules</span>
           <span className="mt-1 block text-xs leading-5 text-[var(--slurp-muted)]">
-            Set how Plans start and progress. Reusable templates live in Storyline types.
+            Set how storylines start and move on. Reusable types live in Storyline types.
           </span>
         </button>
         <button

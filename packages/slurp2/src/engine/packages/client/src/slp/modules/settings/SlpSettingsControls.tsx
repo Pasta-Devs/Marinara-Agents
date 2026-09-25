@@ -4,7 +4,7 @@
  * The Backstage host composes panels rather than drawing controls itself, so these live here as a
  * reusable module: every feature panel and the simulation panel draw the same control set.
  */
-import { CircleHelp } from "lucide-react";
+import { ChevronRight, CircleHelp } from "lucide-react";
 import type { ReactNode } from "react";
 import { useEffect, useRef, useState } from "react";
 import { SettingAnchor, type SlpSettingKey } from "./SlpSettingsKit";
@@ -195,8 +195,13 @@ export function Toggle({
 export function AdvancedGroup({ title, children }: { title: string; children: ReactNode }) {
   return (
     <details className="group rounded-xl ring-1 ring-inset ring-[var(--slurp-outline)]">
-      <summary className="flex min-h-11 cursor-pointer items-center px-4 text-sm font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)]">
-        {title}
+      <summary className="flex min-h-11 cursor-pointer list-none items-center gap-3 px-4 text-sm font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] [&::-webkit-details-marker]:hidden">
+        <span className="flex-1">{title}</span>
+        <ChevronRight
+          size={17}
+          className="transition-transform group-open:rotate-90 rtl:rotate-180"
+          aria-hidden="true"
+        />
       </summary>
       <div className="space-y-4 px-4 pb-4">{children}</div>
     </details>

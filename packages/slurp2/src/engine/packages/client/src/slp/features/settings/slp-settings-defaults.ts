@@ -23,6 +23,8 @@ export const SLURP_SETTINGS_SECTION_KEYS: Record<SlurpResettableSection, readonl
     "autoPostingScheduleEnabled",
     "autoPostGenerationMode",
     "nightQuiet",
+    "postPlanner",
+    "teaserRate",
   ],
   images: [
     "imageWidth",
@@ -42,9 +44,6 @@ export const SLURP_SETTINGS_SECTION_KEYS: Record<SlurpResettableSection, readonl
   prompts: [
     "generationGuidance",
     "enableLorebookContext",
-    "postPlanner",
-    "sharedPreseed",
-    "sharedWorldEvents",
     "imageGenerationPrompt",
     "enableImageInterpretation",
     "imagePromptInterpretation",
@@ -67,6 +66,8 @@ export const SLURP_SETTINGS_SECTION_KEYS: Record<SlurpResettableSection, readonl
     "modelBudget",
   ],
   arcs: [
+    "sharedPreseed",
+    "sharedWorldEvents",
     "projectRate",
     "arcPace",
     "arcAffectsMood",
@@ -100,7 +101,6 @@ export const SLURP_SETTINGS_SECTION_KEYS: Record<SlurpResettableSection, readonl
     "messagesStalePostAwayMaxMinutes",
   ],
   wallet: [
-    "teaserRate",
     "walletEnabled",
     "walletUnlockCost",
     "walletSubscriptionCost",

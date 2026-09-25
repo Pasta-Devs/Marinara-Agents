@@ -1,5 +1,9 @@
 # Slurp Remastered release notes
 
+## 0.2.60 — 2026-09-25
+
+- The Storylines card in Posting and the storyline button in the Calendar now open the new Storylines page, and the Advanced block shows an arrow.
+
 ## 0.2.59 — 2026-09-25
 
 - New Story activity preset on the Storylines page: Calm, Lively, or Hands-off sets events, storylines, and shared ideas in one step; your own mix shows as Custom.
