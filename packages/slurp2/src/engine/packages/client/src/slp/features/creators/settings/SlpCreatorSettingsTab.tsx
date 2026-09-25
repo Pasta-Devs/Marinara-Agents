@@ -1,6 +1,7 @@
 import { useTranslation } from "react-i18next";
 
 import { SettingAnchor } from "../../../modules/settings/SlpSettingsKit";
+import { StatusStrip } from "../../../modules/settings/SlpSettingsInputs";
 import type { SlpCreatorSettingsSectionProps } from "./slp-creator-settings-contract";
 import type { SlpCreatorSettingsSection } from "./slp-creator-settings-sections";
 
@@ -18,6 +19,15 @@ export function SlpCreatorSettingsTab({
   const headed = visible.length > 1;
   return (
     <div className="space-y-8">
+      {headed && (
+        <StatusStrip
+          label={t("ui.slurp.settings.strip.jump")}
+          items={visible.map((block) => ({
+            label: t(block.labelKey, { defaultValue: block.defaultLabel }),
+            settingKey: `block:${block.id}`,
+          }))}
+        />
+      )}
       {visible.map((block) => {
         const Block = block.Component;
         const content = (

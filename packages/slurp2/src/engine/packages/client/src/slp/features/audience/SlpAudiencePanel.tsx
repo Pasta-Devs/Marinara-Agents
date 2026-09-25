@@ -14,7 +14,7 @@ import type { SlurpSettings } from "../settings/slp-settings-contract";
 
 import { SLURP_AUDIENCE_PRESETS, slurpAudiencePresetPatch } from "../../../../../shared/src/slp/slp-tuning.js";
 import type { SlpBackstagePageProps } from "../backstage/slp-backstage-contract";
-import { ChoiceSetting } from "../../modules/settings/SlpSettingsInputs";
+import { ChoiceSetting, StatusStrip } from "../../modules/settings/SlpSettingsInputs";
 import { AmbientProfilesPanel } from "./SlpAmbientProfilesPanel";
 
 /** Audience: crowd scale, tone, fan types, the reaction bank and simulation tuning. */
@@ -41,12 +41,33 @@ export function SlpAudiencePanel(page: SlpBackstagePageProps) {
     audienceCharacterGroupsQuery,
   } = page;
 
+  const onOff = (value: boolean) => t(value ? "ui.slurp.settings.overview.on" : "ui.slurp.settings.overview.off");
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <BackstagePageHeader
           title={t("ui.slurp.settings.audience.title")}
           detail={t("ui.slurp.settings.audience.detail")}
+        />
+        <StatusStrip
+          label={t("ui.slurp.settings.strip.label")}
+          items={[
+            {
+              label: t("ui.slurp.settings.strip.fans"),
+              value: onOff(settings.fanActivityEnabled),
+              settingKey: "fanActivityEnabled",
+            },
+            {
+              label: t("ui.slurp.settings.strip.scale"),
+              value: t(`ui.slurp.settings.audience.scale.${settings.platformScale}`),
+              settingKey: "platformScale",
+            },
+            {
+              label: t("ui.slurp.settings.strip.tone"),
+              value: t(`ui.slurp.settings.audience.tone.${settings.audienceTone}`),
+              settingKey: "audienceTone",
+            },
+          ]}
         />
         <button
           type="button"

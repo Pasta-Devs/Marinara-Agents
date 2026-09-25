@@ -1,7 +1,7 @@
 import { AlertTriangle, CheckCircle2, Image, Sparkles } from "lucide-react";
 
 import { AdvancedGroup, Field, NumberSetting, SettingsGroup, Toggle } from "../../modules/settings/SlpSettingsControls";
-import { ChoiceSetting } from "../../modules/settings/SlpSettingsInputs";
+import { ChoiceSetting, StatusStrip } from "../../modules/settings/SlpSettingsInputs";
 import { toast } from "sonner";
 import { BackstagePageHeader, BackstageWizard } from "../../modules/settings/SlpSettingsKit";
 
@@ -32,6 +32,7 @@ export function SlpImagesPanel(page: SlpBackstagePageProps) {
   } = page;
   const styleProfilesQuery = useSlurpImageStyleProfiles();
 
+  const cap = (value: string) => value.charAt(0).toUpperCase() + value.slice(1);
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -39,6 +40,25 @@ export function SlpImagesPanel(page: SlpBackstagePageProps) {
           title={t("ui.slurp.settings.images.title")}
           detail={t("ui.slurp.settings.images.detail")}
           scope="all-slurp"
+        />
+        <StatusStrip
+          label={t("ui.slurp.settings.strip.label")}
+          items={[
+            {
+              label: t("ui.slurp.settings.strip.context"),
+              value: t(
+                `ui.slurp.settings.images.context${settings.imageContextMode === "imagePrompt" ? "Prompt" : cap(settings.imageContextMode)}`,
+              ),
+              settingKey: "imageContextMode",
+            },
+            {
+              label: t("ui.slurp.settings.strip.appearance"),
+              value: t(
+                `ui.slurp.appearance.mode.${settings.appearanceProfileMode === "high_confidence" ? "highConfidence" : settings.appearanceProfileMode}`,
+              ),
+              settingKey: "appearanceProfileMode",
+            },
+          ]}
         />
         <button
           type="button"

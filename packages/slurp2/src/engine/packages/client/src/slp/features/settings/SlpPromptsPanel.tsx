@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 import { Field, Toggle } from "../../modules/settings/SlpSettingsControls";
 import { PromptCard } from "../../modules/settings/SlpBackstageKit";
 import { BackstagePageHeader, SettingAnchor } from "../../modules/settings/SlpSettingsKit";
+import { StatusStrip } from "../../modules/settings/SlpSettingsInputs";
 import {
   DEFAULT_SLURP_GENERATION_GUIDANCE,
   SLURP_GUIDANCE_LEVELS,
@@ -211,6 +212,10 @@ export function SlpPromptsPanel(page: SlpBackstagePageProps) {
             />
           </SettingAnchor>
         }
+      />
+      <StatusStrip
+        label={t("ui.slurp.settings.strip.label")}
+        items={[{ label: t("ui.slurp.settings.strip.contentLevel"), settingKey: "postGuidance" }]}
       />
       <SettingAnchor settingKey="promptBlocks">
         <SettingAnchor settingKey="promptInstructions">

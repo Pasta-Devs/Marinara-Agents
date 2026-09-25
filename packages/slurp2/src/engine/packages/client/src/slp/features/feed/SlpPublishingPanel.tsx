@@ -9,7 +9,7 @@ import {
   SettingsGroup,
   Toggle,
 } from "../../modules/settings/SlpSettingsControls";
-import { ChoiceSetting } from "../../modules/settings/SlpSettingsInputs";
+import { ChoiceSetting, StatusStrip } from "../../modules/settings/SlpSettingsInputs";
 
 import { BackstagePageHeader, SettingAnchor } from "../../modules/settings/SlpSettingsKit";
 
@@ -36,12 +36,40 @@ export function SlpPublishingPanel(page: SlpBackstagePageProps) {
     activityPreset,
     openRefresh,
   } = page;
+  const onOff = (value: boolean) => t(value ? "ui.slurp.settings.overview.on" : "ui.slurp.settings.overview.off");
+  const cap = (value: string) => value.charAt(0).toUpperCase() + value.slice(1);
   return (
     <div className="space-y-4">
       <BackstagePageHeader
         title={t("ui.slurp.settings.publishing.title")}
         detail={t("ui.slurp.settings.publishing.detail")}
         scope="all-slurp"
+      />
+      <StatusStrip
+        label={t("ui.slurp.settings.strip.label")}
+        items={[
+          {
+            label: t("ui.slurp.settings.strip.perDay"),
+            value: String(settings.postsPerDay),
+            settingKey: "postsPerDay",
+          },
+          {
+            label: t("ui.slurp.settings.strip.stories"),
+            value: t(`ui.slurp.settings.storyRate${cap(settings.storyRate)}`),
+            settingKey: "storyRate",
+          },
+          { label: t("ui.slurp.settings.strip.quiet"), value: onOff(settings.nightQuiet), settingKey: "nightQuiet" },
+          {
+            label: t("ui.slurp.settings.strip.ideas"),
+            value: t(`ui.slurp.settings.prompts.postPlanner${cap(settings.postPlanner)}`),
+            settingKey: "postPlanner",
+          },
+          {
+            label: t("ui.slurp.settings.strip.teasers"),
+            value: t(`ui.slurp.settings.storyRate${cap(settings.teaserRate)}`),
+            settingKey: "teaserRate",
+          },
+        ]}
       />
       <div className="flex flex-wrap items-center justify-between gap-4 rounded-xl bg-[var(--slurp-surface-raised,var(--background))] p-4 shadow-sm ring-1 ring-inset ring-[var(--border)] sm:p-5">
         <div>

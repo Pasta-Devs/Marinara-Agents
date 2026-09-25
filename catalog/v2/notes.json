@@ -360,6 +360,12 @@
     "slurp2": {
       "versions": [
         {
+          "version": "0.2.72",
+          "date": "2026-09-26",
+          "notes": "- Storylines, Publishing, Images, Audience, Messaging and Prompts show their current settings as a row of chips under the page title. Tap a chip to jump to that setting, even inside a folded block.\n- Creator settings tabs with several parts start with a \"Jump to\" row.",
+          "highlight": false
+        },
+        {
           "version": "0.2.71",
           "date": "2026-09-25",
           "notes": "- Bounded numbers are sliders with a value chip: weeks between storylines, storylines at once, wallet day start, weekly price change and creator revenue share. A slider saves when you let go.\n- Posts per day, storyline check interval and carryover limits have − and + buttons.\n- Messaging reply and away delays are four min–max rows instead of eight separate fields; the lower value can never pass the upper one.",
@@ -471,12 +477,6 @@
           "version": "0.2.53",
           "date": "2026-09-25",
           "notes": "- Each Creator's Continuity tab now lists their recent signals: everything around them in the last two weeks from every source (posts, notes, messages, promises, their schedule, platform events, and other Creators' posts) in one place. Private messages show only what kind of thing happened.",
-          "highlight": false
-        },
-        {
-          "version": "0.2.52",
-          "date": "2026-09-25",
-          "notes": "- Posts prepared ahead of time are written again when the Creator's character card, Conversation Schedule, disclosure, or stage voice changes before they go out, instead of publishing what was true when they were prepared.",
           "highlight": false
         }
       ]

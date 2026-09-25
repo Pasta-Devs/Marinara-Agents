@@ -11,7 +11,7 @@ import {
   RangeSetting,
 } from "../../modules/settings/SlpSettingsControls";
 import { BackstagePageHeader } from "../../modules/settings/SlpSettingsKit";
-import { ChoiceSetting } from "../../modules/settings/SlpSettingsInputs";
+import { ChoiceSetting, StatusStrip } from "../../modules/settings/SlpSettingsInputs";
 import type { SlurpSettings } from "../settings/slp-settings-contract";
 import {
   SLURP_STORY_ACTIVITY_PRESET_ORDER,
@@ -32,12 +32,44 @@ export function SlpStorylinesPanel(page: SlpBackstagePageProps) {
   const { t } = useTranslation();
   const beats = settings.postPlanner === "beats";
   const activity = slurpStoryActivityPresetFor(settings);
+  const onOff = (value: boolean) => t(value ? "ui.slurp.settings.overview.on" : "ui.slurp.settings.overview.off");
+  const cap = (value: string) => value.charAt(0).toUpperCase() + value.slice(1);
   return (
     <div className="space-y-5">
       <BackstagePageHeader
         title={t("ui.slurp.settings.planAutomation.title", { defaultValue: "Storylines" })}
         detail={t("ui.slurp.settings.planAutomation.detail")}
         scope="all-slurp"
+      />
+      <StatusStrip
+        label={t("ui.slurp.settings.strip.label")}
+        items={[
+          {
+            label: t("ui.slurp.settings.strip.storylines"),
+            value: t(`ui.slurp.settings.arcAutoMode${cap(settings.arcAutoMode)}`),
+            settingKey: "arcAutoMode",
+          },
+          {
+            label: t("ui.slurp.settings.strip.events"),
+            value: t(`ui.slurp.settings.events.automation${cap(settings.storyAutomation)}`),
+            settingKey: "storyAutomation",
+          },
+          {
+            label: t("ui.slurp.settings.strip.often"),
+            value: t(`ui.slurp.settings.projectRate${cap(settings.projectRate)}`),
+            settingKey: "projectRate",
+          },
+          {
+            label: t("ui.slurp.settings.strip.speed"),
+            value: t(`ui.slurp.settings.arcPace${cap(settings.arcPace)}`),
+            settingKey: "arcPace",
+          },
+          {
+            label: t("ui.slurp.settings.strip.sharedIdeas"),
+            value: onOff(settings.sharedPreseed),
+            settingKey: "sharedPreseed",
+          },
+        ]}
       />
       <GuidanceBox title={t("ui.slurp.settings.arcs.guideTitle")} detail={t("ui.slurp.settings.arcs.guideDetail")} />
       <ChoiceSetting

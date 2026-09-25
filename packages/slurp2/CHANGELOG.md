@@ -1,5 +1,10 @@
 # Slurp Remastered release notes
 
+## 0.2.72 — 2026-09-26
+
+- Storylines, Publishing, Images, Audience, Messaging and Prompts show their current settings as a row of chips under the page title. Tap a chip to jump to that setting, even inside a folded block.
+- Creator settings tabs with several parts start with a "Jump to" row.
+
 ## 0.2.71 — 2026-09-25
 
 - Bounded numbers are sliders with a value chip: weeks between storylines, storylines at once, wallet day start, weekly price change and creator revenue share. A slider saves when you let go.

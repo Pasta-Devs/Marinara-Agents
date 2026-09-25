@@ -115,4 +115,28 @@ for (const key of ["postsPerDay", "carryoverHours", "carryoverMaxItems"]) {
   assert.match(panels.publishing, new RegExp(`<NumberSetting\\s+stepper[^>]*?value=\\{settings\\.${key}\\}`, "su"));
 }
 
+// Each main page shows its current settings as chips; a chip jumps to its control.
+assert.match(inputs, /onClick=\{\(\) => focusSettingAnchor\(item\.settingKey!\)\}/u);
+const prompts = slurp2Source(`${root}features/settings/SlpPromptsPanel.tsx`);
+for (const [name, source] of [
+  ["publishing", panels.publishing],
+  ["images", panels.images],
+  ["messaging", panels.messaging],
+  ["storylines", storylines],
+  ["audience", audience],
+  ["prompts", prompts],
+] as const) {
+  assert.match(
+    source,
+    /<BackstagePageHeader[\s\S]*?\/>\s*<StatusStrip/u,
+    `${name} shows a status strip under its header`,
+  );
+}
+assert.match(prompts, /settingKey: "postGuidance"/u, "the content level is one tap away on Prompts");
+assert.match(
+  slurp2Source(`${root}features/creators/settings/SlpCreatorSettingsTab.tsx`),
+  /headed && \(\s*<StatusStrip[\s\S]*settingKey: `block:\$\{block\.id\}`/u,
+  "merged creator tabs start with a jump row",
+);
+
 console.log("slurp2 settings inputs ok");

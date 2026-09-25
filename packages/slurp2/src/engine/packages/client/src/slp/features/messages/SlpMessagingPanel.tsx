@@ -9,7 +9,7 @@ import {
   SettingsGroup,
   Toggle,
 } from "../../modules/settings/SlpSettingsControls";
-import { ChoiceSetting } from "../../modules/settings/SlpSettingsInputs";
+import { ChoiceSetting, StatusStrip } from "../../modules/settings/SlpSettingsInputs";
 
 import type { SlurpSettings } from "../settings/slp-settings-contract";
 
@@ -29,12 +29,29 @@ export function SlpMessagingPanel(page: SlpBackstagePageProps) {
     setMessagingDraft,
   } = page;
 
+  const onOff = (value: boolean) => t(value ? "ui.slurp.settings.overview.on" : "ui.slurp.settings.overview.off");
+  const cap = (value: string) => value.charAt(0).toUpperCase() + value.slice(1);
   return (
     <div className="space-y-5">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <BackstagePageHeader
           title={t("ui.slurp.settings.messaging.title")}
           detail={t("ui.slurp.settings.messaging.detail")}
+        />
+        <StatusStrip
+          label={t("ui.slurp.settings.strip.label")}
+          items={[
+            {
+              label: t("ui.slurp.settings.strip.dms"),
+              value: t(`ui.slurp.settings.messaging.dmPolicy${cap(settings.messagesDefaultDmPolicy)}`),
+              settingKey: "messagesDefaultDmPolicy",
+            },
+            {
+              label: t("ui.slurp.settings.strip.away"),
+              value: onOff(settings.messagesAwayRepliesEnabled),
+              settingKey: "messagesAwayRepliesEnabled",
+            },
+          ]}
         />
         <button
           type="button"

@@ -6,7 +6,7 @@ import { X, type LucideIcon } from "lucide-react";
 import type { ReactNode } from "react";
 import { useId, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { SettingAnchor, type SlpSettingKey } from "./SlpSettingsKit";
+import { focusSettingAnchor, SettingAnchor, type SlpSettingKey } from "./SlpSettingsKit";
 
 export type ChoiceOption<T extends string> = {
   value: T;
@@ -259,5 +259,44 @@ export function ChipListInput({
         />
       </div>
     </div>
+  );
+}
+
+export type StatusStripItem = { label: string; value?: string; settingKey?: SlpSettingKey };
+
+/**
+ * What a page is set to right now, as a row of chips under its header. A chip with a setting key
+ * jumps to that control (opening a folded block if needed). Chips, not a sentence: a sentence with
+ * links cannot be reordered for other languages.
+ */
+export function StatusStrip({ label, items }: { label: string; items: readonly StatusStripItem[] }) {
+  return (
+    <ul aria-label={label} className="flex flex-wrap gap-2">
+      {items.map((item) => {
+        const content = (
+          <>
+            <span className="text-[var(--slurp-muted,var(--muted-foreground))]">{item.label}</span>
+            {item.value && <span className="font-semibold">{item.value}</span>}
+          </>
+        );
+        const chip =
+          "inline-flex min-h-11 items-center gap-1.5 rounded-full bg-[var(--slurp-surface-raised,var(--accent))] px-3 text-sm ring-1 ring-inset ring-[var(--slurp-outline,var(--border))]";
+        return (
+          <li key={item.settingKey ?? item.label}>
+            {item.settingKey ? (
+              <button
+                type="button"
+                onClick={() => focusSettingAnchor(item.settingKey!)}
+                className={`${chip} hover:ring-[var(--noodle-accent)]/45 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus,var(--noodle-accent))]`}
+              >
+                {content}
+              </button>
+            ) : (
+              <span className={chip}>{content}</span>
+            )}
+          </li>
+        );
+      })}
+    </ul>
   );
 }
