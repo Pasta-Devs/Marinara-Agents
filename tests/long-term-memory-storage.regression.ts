@@ -1461,6 +1461,61 @@ async function main() {
       assert.deepEqual((await applyLongTermMemoryDraft(choiceDraft.id, choiceOptions)).appliedMutationIds, [
         choiceMutation.id,
       ]);
+      await storage.updateNote(choiceTarget.id, { status: "archived" });
+      const archivedSibling = await storage.createNote({
+        ...noteInput,
+        id: "char_archived_sibling",
+        type: "character",
+        scope: legacySource.scope,
+        links: [],
+      });
+      await storage.updateNote(archivedSibling.id, { status: "archived" });
+      const archivedSiblingOwner = await storage.createNote({
+        ...noteInput,
+        id: "world_archived_sibling_owner",
+        scope: legacySource.scope,
+        links: [],
+      });
+      const originalSiblingChoice = { ...choiceMutation, id: randomUUID(), noteId: archivedSiblingOwner.id };
+      const archivedSiblingLink = {
+        ...choiceMutation,
+        id: randomUUID(),
+        noteId: archivedSiblingOwner.id,
+        link: { ...choiceMutation.link, target: archivedSibling.id },
+      };
+      const archivedSiblingDraft = await draftStore.createDraft({
+        source: { sourceNoteId: canonicalSourceId, chatId: "chat-a" },
+        scope: legacySource.scope,
+        modes: legacySource.modes,
+        response: {
+          summary: "Sibling link with its own target",
+          mutations: [originalSiblingChoice, archivedSiblingLink],
+        },
+        diagnostics: [
+          {
+            severity: "warning",
+            code: "ambiguous_subject_link_target",
+            noteId: archivedSiblingOwner.id,
+            message: "Choose a target for the original mutation",
+            details: {
+              linkTarget: choiceTarget.id,
+              linkRelation: "affects_character",
+              candidateTargetNoteIds: [choiceTarget.id, archivedSibling.id],
+            },
+          },
+        ],
+      });
+      const archivedSiblingResult = await applyLongTermMemoryDraft(archivedSiblingDraft.id, {
+        root,
+        mutationIds: [archivedSiblingLink.id],
+        rebuildIndexes: false,
+      });
+      assert.deepEqual(archivedSiblingResult.appliedMutationIds, [archivedSiblingLink.id]);
+      assert.deepEqual(archivedSiblingResult.skippedMutationIds, [originalSiblingChoice.id]);
+      assert.ok(
+        (await storage.getNote(archivedSiblingOwner.id))?.links.some((link) => link.target === archivedSibling.id),
+      );
+      await storage.updateNote(choiceTarget.id, { status: "active" });
 
       const wideChoice = await storage.createNote({
         ...noteInput,

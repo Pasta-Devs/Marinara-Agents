@@ -142,16 +142,27 @@ function mutationLinks(mutation: LtmDraftMutation) {
 function assertCurrentAmbiguousLinkTargets(
   draft: LtmExtractionDraft,
   mutations: readonly LtmDraftMutation[],
+  originals: readonly LtmDraftMutation[],
   existing: ReadonlyMap<string, LtmNote>,
   createIds: ReadonlySet<string>,
 ) {
   for (const mutation of mutations) {
     const links = mutationLinks(mutation);
+    const original = originals.find((item) => item.id === mutation.id)!;
     for (const diagnostic of draft.diagnostics ?? []) {
       if (diagnostic.code !== "ambiguous_subject_link_target" || diagnostic.noteId !== mutationTargetId(mutation))
         continue;
-      const details = diagnostic.details as { linkRelation?: string; candidateTargetNoteIds?: string[] } | undefined;
-      if (!details?.linkRelation || !details.candidateTargetNoteIds?.length) continue;
+      const details = diagnostic.details as
+        { linkTarget?: string; linkRelation?: string; candidateTargetNoteIds?: string[] } | undefined;
+      if (
+        !details?.linkTarget ||
+        !details.linkRelation ||
+        !details.candidateTargetNoteIds?.length ||
+        !mutationLinks(original).some(
+          (link) => link.target === details.linkTarget && link.relation === details.linkRelation,
+        )
+      )
+        continue;
       const chosen = links.filter(
         (link) => details.candidateTargetNoteIds!.includes(link.target) && link.relation === details.linkRelation,
       );
@@ -218,7 +229,12 @@ async function assertFresh(storage: LongTermMemoryStorage, draft: LtmExtractionD
     );
 }
 
-async function preflight(storage: LongTermMemoryStorage, draft: LtmExtractionDraft, mutations: LtmDraftMutation[]) {
+async function preflight(
+  storage: LongTermMemoryStorage,
+  draft: LtmExtractionDraft,
+  mutations: LtmDraftMutation[],
+  originals: readonly LtmDraftMutation[] = draft.mutations,
+) {
   const createIds = new Set<string>();
   const required = new Set<string>();
   const links = new Set<string>();
@@ -247,7 +263,7 @@ async function preflight(storage: LongTermMemoryStorage, draft: LtmExtractionDra
   if (storedLinkTargets.length) {
     existing = new Map([...existing, ...(await storage.getNotesByIds(storedLinkTargets))]);
   }
-  assertCurrentAmbiguousLinkTargets(draft, mutations, existing, createIds);
+  assertCurrentAmbiguousLinkTargets(draft, mutations, originals, existing, createIds);
   for (const id of links)
     if (!createIds.has(id) && !existing.has(id)) throw new Error(`Long-term memory draft link target not found: ${id}`);
   for (const id of required)
@@ -817,7 +833,7 @@ async function applyInner(
         "ltm_draft_no_pending_mutations",
       );
     }
-    const projection = await preflight(storage, draft, selected);
+    const projection = await preflight(storage, draft, selected, originalDraftMutations);
     const userSelectedCount = selectedIds
       ? selected.filter((mutation) => selectedIds.has(mutation.id)).length
       : selected.length;
