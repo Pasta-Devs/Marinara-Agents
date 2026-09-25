@@ -215,7 +215,8 @@ assert.match(storage, /hasSlurpCreatorPostingIntervalConflict\(activityTimes, pu
 assert.match(routes, /result === "conflict"/u);
 assert.match(hooks, /slots: SlurpScheduleSlot\[\]/u);
 assert.match(settingsUi, /useUpdateCreatorScheduleSlot/u);
-assert.match(settingsUi, /type="datetime-local"/u);
+assert.match(settingsUi, /<ScheduleAgenda/u);
+assert.match(settingsUi, /type="time"[\s\S]*onBlur=\{commitTime\}/u, "a slot time saves when the field is left");
 assert.match(homeUi, /onRunNow\(profile\.id\)/u);
 assert.match(onboardingUi, /providerConfirmationOpen/u);
 for (const key of ["ui.slurp.providerDisclosure.generationDetail", "ui.slurp.providerDisclosure.onboardingDetail"]) {

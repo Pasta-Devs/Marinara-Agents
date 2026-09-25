@@ -5,7 +5,7 @@
 import { Modal } from "../../../components/ui/Modal";
 import { Avatar } from "../../base/chrome/SlpChrome";
 import type { SlurpReserveStatus, SlurpScheduleSlot } from "../../base/state/slp-state-types";
-import { formatClockTime, formatDateTime } from "../../base/ui/slp-date-time";
+import { formatClockTime } from "../../base/ui/slp-date-time";
 import type { SlpCreatorManagedStageProfile } from "../../../../../shared/src/slp/slp-social.types.js";
 import {
   Activity,
@@ -25,53 +25,120 @@ import {
 import { useState } from "react";
 import type { ReactNode } from "react";
 import { useTranslation } from "react-i18next";
-import { localDateTimeValue } from "./slp-backstage-format";
+import { toast } from "sonner";
+import { slpLocalDay, slpLocalTime, slpScheduleDays, slpSlotAtTime, slpSlotOnDay } from "./slp-schedule-agenda";
 
-export function ScheduleSlotEditor({
+/**
+ * The posting schedule as a day list. Each row edits only the time; "Another day" moves the slot
+ * to a new day at the same time. A change saves when the field is left, so there is no Save button.
+ */
+export function ScheduleAgenda({
+  slots,
+  pending,
+  onMove,
+}: {
+  slots: readonly SlurpScheduleSlot[];
+  pending: boolean;
+  onMove: (slot: SlurpScheduleSlot, publishAt: string) => Promise<void>;
+}) {
+  const { i18n } = useTranslation();
+  const dayLabel = new Intl.DateTimeFormat(i18n.language, { weekday: "long", month: "short", day: "numeric" });
+  return (
+    <div className="space-y-4">
+      {slpScheduleDays(slots).map(({ day, slots: daySlots }) => (
+        <section key={day} aria-label={dayLabel.format(new Date(`${day}T12:00`))} className="space-y-1.5">
+          <h4 className="text-xs font-bold uppercase tracking-wide text-[var(--slurp-muted,var(--muted-foreground))]">
+            {dayLabel.format(new Date(`${day}T12:00`))}
+          </h4>
+          <ul className="divide-y divide-[var(--slurp-outline,var(--border))] rounded-lg ring-1 ring-inset ring-[var(--slurp-outline,var(--border))]">
+            {daySlots.map((slot) => (
+              <ScheduleAgendaRow
+                key={`${slot.id}:${slot.publishAt}`}
+                slot={slot}
+                pending={pending}
+                onMove={(publishAt) => onMove(slot, publishAt)}
+              />
+            ))}
+          </ul>
+        </section>
+      ))}
+    </div>
+  );
+}
+
+function ScheduleAgendaRow({
   slot,
   pending,
-  onSave,
+  onMove,
 }: {
   slot: SlurpScheduleSlot;
   pending: boolean;
-  onSave: (publishAt: string) => Promise<void>;
+  onMove: (publishAt: string) => Promise<void>;
 }) {
-  const { t, i18n } = useTranslation();
-  const [draft, setDraft] = useState(() => localDateTimeValue(slot.publishAt));
-  const parsed = Date.parse(draft);
-  const unchanged = !Number.isNaN(parsed) && new Date(parsed).toISOString() === slot.publishAt;
-  const valid = !Number.isNaN(parsed) && parsed > Date.now();
+  const { t } = useTranslation();
+  const [time, setTime] = useState(() => slpLocalTime(slot.publishAt));
+  const [dayOpen, setDayOpen] = useState(false);
+  const commitTime = () => {
+    if (time === slpLocalTime(slot.publishAt)) return;
+    const next = slpSlotAtTime(slot.publishAt, time);
+    if (next) void onMove(next);
+    else {
+      toast.error(t("ui.slurp.settings.creators.schedulePast"));
+      setTime(slpLocalTime(slot.publishAt));
+    }
+  };
+  const inputClass =
+    "min-h-11 rounded-lg bg-[var(--slurp-canvas,var(--background))] px-3 text-base tabular-nums ring-1 ring-inset ring-[var(--slurp-outline,var(--border))] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)] disabled:opacity-50 sm:text-sm";
   return (
-    <div className="rounded-lg border border-[var(--border)] p-3">
-      <div className="mb-2 flex items-center justify-between gap-2 text-xs text-[var(--muted-foreground)]">
-        <span>
-          {slot.state === "prepared"
-            ? t("ui.slurp.settings.creators.prepared")
-            : t("ui.slurp.settings.creators.scheduled")}
-        </span>
-        <span>{formatDateTime(slot.publishAt, i18n.language)}</span>
-      </div>
-      <div className="flex flex-col gap-2 sm:flex-row">
+    <li className="flex flex-wrap items-center gap-2 px-3 py-2">
+      <input
+        type="time"
+        aria-label={t("ui.slurp.settings.creators.publicationTime")}
+        value={time}
+        disabled={pending}
+        onChange={(event) => setTime(event.target.value)}
+        onBlur={commitTime}
+        onKeyDown={(event) => event.key === "Enter" && event.currentTarget.blur()}
+        className={inputClass}
+      />
+      <span
+        className={`rounded-full px-2 py-0.5 text-xs font-semibold ${slot.state === "prepared" ? "bg-[var(--slurp-success)]/12 text-[var(--slurp-success)]" : "bg-[var(--slurp-canvas,var(--accent))] text-[var(--slurp-muted,var(--muted-foreground))]"}`}
+      >
+        {slot.state === "prepared"
+          ? t("ui.slurp.settings.creators.prepared")
+          : t("ui.slurp.settings.creators.scheduled")}
+      </span>
+      {dayOpen ? (
         <input
-          type="datetime-local"
-          aria-label={t("ui.slurp.settings.creators.publicationTime")}
-          value={draft}
-          min={localDateTimeValue(new Date(Date.now() + 60_000).toISOString())}
+          type="date"
+          autoFocus
+          aria-label={t("ui.slurp.settings.creators.anotherDay")}
+          defaultValue={slpLocalDay(slot.publishAt)}
+          min={slpLocalDay(new Date().toISOString())}
           disabled={pending}
-          onChange={(event) => setDraft(event.target.value)}
-          className="min-h-11 min-w-0 flex-1 rounded-lg border border-[var(--border)] bg-[var(--slurp-canvas,var(--background))] px-3 text-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)] disabled:opacity-50 sm:text-sm"
+          onBlur={(event) => {
+            setDayOpen(false);
+            const day = event.currentTarget.value;
+            if (!day || day === slpLocalDay(slot.publishAt)) return;
+            const next = slpSlotOnDay(slot.publishAt, day);
+            if (next) void onMove(next);
+            else toast.error(t("ui.slurp.settings.creators.schedulePast"));
+          }}
+          onKeyDown={(event) => event.key === "Enter" && event.currentTarget.blur()}
+          className={`ms-auto ${inputClass}`}
         />
+      ) : (
         <button
           type="button"
-          disabled={pending || unchanged || !valid}
-          onClick={() => void onSave(new Date(parsed).toISOString())}
-          className="inline-flex min-h-10 items-center justify-center gap-1.5 rounded-lg bg-[var(--noodle-accent)] px-4 text-xs font-bold text-[var(--noodle-accent-foreground)] disabled:opacity-45"
+          disabled={pending}
+          onClick={() => setDayOpen(true)}
+          className="ms-auto min-h-11 rounded-lg px-3 text-sm font-semibold text-[var(--noodle-accent)] hover:bg-[var(--slurp-canvas,var(--accent))] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)] disabled:opacity-50"
         >
-          {pending ? <Loader2 size={13} className="animate-spin" /> : <Save size={13} />}
-          {t("ui.slurp.settings.creators.saveTime")}
+          {t("ui.slurp.settings.creators.anotherDay")}
         </button>
-      </div>
-    </div>
+      )}
+      {pending && <Loader2 size={15} className="animate-spin motion-reduce:animate-none" aria-hidden="true" />}
+    </li>
   );
 }
 

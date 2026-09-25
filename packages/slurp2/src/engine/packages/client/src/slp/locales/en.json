@@ -2056,14 +2056,13 @@
   "ui.slurp.settings.creators.prepared": "Prepared",
   "ui.slurp.settings.creators.publicationTime": "Publication time",
   "ui.slurp.settings.creators.reviewRedraft": "Review and redraft",
-  "ui.slurp.settings.creators.saveTime": "Save time",
   "ui.slurp.settings.creators.schedule": "Schedule",
   "ui.slurp.settings.creators.schedule.active": "Following this character’s Conversation Schedule today.",
   "ui.slurp.settings.creators.schedule.disabled": "Conversation Schedules are turned off for this character, so this Creator has no daily routine or availability.",
   "ui.slurp.settings.creators.schedule.empty-today": "This character’s Conversation Schedule has nothing set for today. Until it does, Slurp guesses when this Creator is online from their last post, unless “Always reachable without a schedule” is on in Messaging settings.",
   "ui.slurp.settings.creators.schedule.missing": "This character has no Conversation Schedule. Slurp guesses when this Creator is online from their last post, unless “Always reachable without a schedule” is on in Messaging settings.",
   "ui.slurp.settings.creators.schedule.stale": "This character’s Conversation Schedule is from an earlier week. Slurp repeats it as a weekly routine. Regenerate it for a fresh week.",
-  "ui.slurp.settings.creators.scheduleDetail": "Change publication times for upcoming posts. Posts per day remains the volume control.",
+  "ui.slurp.settings.creators.scheduleDetail": "Change the time of an upcoming post. It saves when you leave the field. Posts per day stays the volume control.",
   "ui.slurp.settings.creators.scheduleEmpty": "No upcoming scheduled posts yet.",
   "ui.slurp.settings.creators.scheduleLabel": "Edit schedule for {{name}}",
   "ui.slurp.settings.creators.scheduleSaved": "Publication time updated.",
@@ -3986,5 +3985,7 @@
   "ui.slurp.settings.creators.overview.waiting_other": "{{count}} notes waiting for you",
   "ui.slurp.settings.creators.overview.notes_one": "{{count}} thing remembered",
   "ui.slurp.settings.creators.overview.notes_other": "{{count}} things remembered",
-  "ui.slurp.settings.creators.overview.fansDetail": "Audience activity, messages and prices."
+  "ui.slurp.settings.creators.overview.fansDetail": "Audience activity, messages and prices.",
+  "ui.slurp.settings.creators.anotherDay": "Another day",
+  "ui.slurp.settings.creators.schedulePast": "Pick a time in the future."
 }

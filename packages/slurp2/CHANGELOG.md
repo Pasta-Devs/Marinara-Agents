@@ -1,5 +1,9 @@
 # Slurp Remastered release notes
 
+## 0.2.69 — 2026-09-25
+
+- A Creator's posting schedule is a day list: each upcoming post shows its time, which you change in place and which saves when you leave the field. "Another day" moves a post to a new day at the same time. The 8 Save buttons are gone.
+
 ## 0.2.68 — 2026-09-25
 
 - Creator settings open on an Overview status page: what needs review, whether the Creator posts (with a live Auto-post switch), the next post, running storylines, notes waiting in Memory, and a way into each part.

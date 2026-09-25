@@ -1007,7 +1007,6 @@
   "ui.slurp.settings.creators.prepared": "준비됨",
   "ui.slurp.settings.creators.scheduled": "예약됨",
   "ui.slurp.settings.creators.publicationTime": "게시 시간",
-  "ui.slurp.settings.creators.saveTime": "시간 저장",
   "ui.slurp.settings.refresh.title": "게시물 생성",
   "ui.slurp.settings.saveState.saving": "저장 중…",
   "ui.slurp.settings.saveState.saved": "저장됨",

@@ -3,7 +3,7 @@ import { toast } from "sonner";
 import { useTranslation } from "react-i18next";
 
 import { showConfirmDialog } from "../../../../lib/app-dialogs";
-import { ScheduleSlotEditor } from "../../../modules/settings/SlpBackstageKit";
+import { ScheduleAgenda } from "../../../modules/settings/SlpBackstageKit";
 import { errorMessage } from "../../../modules/settings/slp-backstage-format";
 import { SettingsGroup, Toggle } from "../../../modules/settings/SlpSettingsControls";
 import {
@@ -81,23 +81,18 @@ export function SlpCreatorPublishingSection({ creator, active, mode = "automatio
               </button>
             </div>
           ) : slots.length > 0 ? (
-            <div className="space-y-3">
-              {slots.map((slot) => (
-                <ScheduleSlotEditor
-                  key={`${slot.id}:${slot.publishAt}`}
-                  slot={slot}
-                  pending={updateScheduleSlot.isPending}
-                  onSave={async (publishAt) => {
-                    try {
-                      await updateScheduleSlot.mutateAsync({ slotId: slot.id, publishAt });
-                      toast.success(t("ui.slurp.settings.creators.scheduleSaved"));
-                    } catch (error) {
-                      toast.error(errorMessage(error));
-                    }
-                  }}
-                />
-              ))}
-            </div>
+            <ScheduleAgenda
+              slots={slots}
+              pending={updateScheduleSlot.isPending}
+              onMove={async (slot, publishAt) => {
+                try {
+                  await updateScheduleSlot.mutateAsync({ slotId: slot.id, publishAt });
+                  toast.success(t("ui.slurp.settings.creators.scheduleSaved"));
+                } catch (error) {
+                  toast.error(errorMessage(error));
+                }
+              }}
+            />
           ) : (
             <p className={noteClass}>{t("ui.slurp.settings.creators.scheduleEmpty")}</p>
           )}

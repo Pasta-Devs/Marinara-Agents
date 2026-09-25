@@ -161,7 +161,6 @@
   "ui.slurp.settings.creators.prepared": "Przygotowany",
   "ui.slurp.settings.creators.scheduled": "Zaplanowany",
   "ui.slurp.settings.creators.publicationTime": "Godzina publikacji",
-  "ui.slurp.settings.creators.saveTime": "Zapisz godzinę",
   "ui.slurp.settings.refresh.title": "Generuj posty",
   "ui.slurp.settings.saveState.saving": "Zapisywanie…",
   "ui.slurp.settings.saveState.saved": "Zapisano",
