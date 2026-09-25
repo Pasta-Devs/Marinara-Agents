@@ -59,6 +59,7 @@ const pending = slurp2Source(join(root, "services/slurp/slurp-pending-text.servi
 const scheduler = slurp2Source(join(root, "services/slurp/slurp-world-scheduler.service.ts"));
 const messages = slurp2Source(join(root, "services/slurp/slurp-message.operation.ts"));
 const followUps = slurp2Source(join(root, "services/slurp/slurp-follow-up-scheduler.service.ts"));
+const generation = slurp2Source(join(root, "services/slurp/slurp-message-generation.service.ts"));
 assert.match(pending, /modelBudget\.jobs/u, "queued jobs read the live per-kind policy");
 assert.match(pending, /\.sort\(/u, "queued jobs are ordered before the drain limit");
 assert.match(schema, /export const slurpModelJobs = slurpPendingText/u, "existing rewrite jobs migrate in place");
@@ -73,5 +74,9 @@ assert.match(messages, /return \{ status: "queued", pacing \}/u);
 // not also require the global background-worker switch.
 assert.match(messages, /workerContext: "present"/u);
 assert.match(followUps, /postponeScheduledFollowUp/u);
+// Replies to the player's own send are chat, not upkeep; only the scheduler's answers spend caps.
+assert.match(messages, /playerSend: input\.background !== true/u);
+assert.match(generation, /!input\.playerSend && !\(await claimSlurpModelBudget\(input\.db, budget, "dm_reply"\)\)/u);
+assert.match(generation, /input\.playerSend && !budget\.jobs\.dm_reply\.enabled/u, "the DM job switch still applies");
 
 console.log("slurp2 model worker regression passed");

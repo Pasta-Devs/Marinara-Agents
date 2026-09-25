@@ -360,6 +360,12 @@
     "slurp2": {
       "versions": [
         {
+          "version": "0.2.73",
+          "date": "2026-09-26",
+          "notes": "- Your own messages no longer use the AI budget: a Creator answers a message you send or a tip you give at once, even when the hourly or daily limit is reached. Only answers that arrive while you are away count against it. The mode and the DM replies switch still apply.",
+          "highlight": false
+        },
+        {
           "version": "0.2.72",
           "date": "2026-09-26",
           "notes": "- Storylines, Publishing, Images, Audience, Messaging and Prompts show their current settings as a row of chips under the page title. Tap a chip to jump to that setting, even inside a folded block.\n- Creator settings tabs with several parts start with a \"Jump to\" row.",
@@ -471,12 +477,6 @@
           "version": "0.2.54",
           "date": "2026-09-25",
           "notes": "- Hinted and Secret Creators without an avatar or banner get their artwork drawn again. The automatic backfill failed for them every minute with a \"creatorDetails\" error in the log.",
-          "highlight": false
-        },
-        {
-          "version": "0.2.53",
-          "date": "2026-09-25",
-          "notes": "- Each Creator's Continuity tab now lists their recent signals: everything around them in the last two weeks from every source (posts, notes, messages, promises, their schedule, platform events, and other Creators' posts) in one place. Private messages show only what kind of thing happened.",
           "highlight": false
         }
       ]

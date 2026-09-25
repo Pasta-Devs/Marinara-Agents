@@ -1,5 +1,9 @@
 # Slurp Remastered release notes
 
+## 0.2.73 — 2026-09-26
+
+- Your own messages no longer use the AI budget: a Creator answers a message you send or a tip you give at once, even when the hourly or daily limit is reached. Only answers that arrive while you are away count against it. The mode and the DM replies switch still apply.
+
 ## 0.2.72 — 2026-09-26
 
 - Storylines, Publishing, Images, Audience, Messaging and Prompts show their current settings as a row of chips under the page title. Tap a chip to jump to that setting, even inside a folded block.

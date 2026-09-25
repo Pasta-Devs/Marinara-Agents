@@ -275,6 +275,8 @@ export async function replyToSlurpMessage(
         // audience messages arrived, but no Creator could answer them.
         workerContext: "present",
         skipBudgetCap: input.force === true && input.background !== true,
+        // Only the scheduler's unattended answers are budgeted upkeep.
+        playerSend: input.background !== true,
       });
       // Two or three messages when the conversation is going well, one when it is not. A creator
       // who always answers in exactly one tidy block reads as a form letter.

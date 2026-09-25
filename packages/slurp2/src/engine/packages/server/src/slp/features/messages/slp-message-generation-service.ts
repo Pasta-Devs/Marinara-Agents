@@ -423,6 +423,8 @@ export type SlurpMessagePromptInput = {
   workerContext?: SlurpModelWorkerContext;
   /** A player pressed Force reply now: no budget setting, cap or mode may swallow that press. */
   skipBudgetCap?: boolean;
+  /** The player is waiting on this answer: it neither checks nor spends the hourly and daily caps. */
+  playerSend?: boolean;
   /**
    * The availability the reply operation already paced this reply by. Recomputing it here from the
    * schedule alone ignored an open conversation window, so an instant reply was told "you are not free".
@@ -639,7 +641,11 @@ export async function generateSlurpMessageReply(input: SlurpMessagePromptInput):
   const context = input.workerContext ?? "present";
   if (!input.skipBudgetCap && !slurpModelWorkerAllows(budget, context))
     throw new SlurpMessageBudgetUnavailableError(null);
-  if (!input.skipBudgetCap && !(await claimSlurpModelBudget(input.db, budget, "dm_reply")))
+  // A reply to the player's own send is chat, not upkeep: the mode and the DM job switch still
+  // apply, the caps do not. Counting it let four messages an hour stall a conversation.
+  if (!input.skipBudgetCap && input.playerSend && !budget.jobs.dm_reply.enabled)
+    throw new SlurpMessageBudgetUnavailableError(null);
+  if (!input.skipBudgetCap && !input.playerSend && !(await claimSlurpModelBudget(input.db, budget, "dm_reply")))
     throw new SlurpMessageBudgetUnavailableError(
       slurpModelBudgetRetryAt(budget, await getSlurpModelBudgetLedger(input.db), "dm_reply"),
     );
