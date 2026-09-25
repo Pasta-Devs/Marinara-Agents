@@ -507,7 +507,7 @@ const SPELL_RIDERS = new Map([
   ["srd_false-life", { kind: "buff", targets: "self", temporary: { dice: "1d4+4" } }],
   // Four damage cantrips the fixture gives no damage roll for, although it carries the larger rolls
   // they reach at 5th level and up, so without these rows they were utility spells a fight never
-  // offered. Each states the 1st-level roll its own text prints; the growth still comes from the
+  // offered. Each states the base damage roll its own text prints; the growth still comes from the
   // fixture's per-level options.
   // "The target must succeed on a dexterity saving throw or take 1d8 radiant damage."
   ["srd_sacred-flame", { kind: "attack", amount: { dice: "1d8" }, damageType: "radiant" }],
@@ -1030,7 +1030,7 @@ function spellBudget(fields) {
 
 /** A cantrip's damage read off the source's own per-character-level options: the EXTRA dice it
  *  throws at each level its count goes up, which is exactly what `scales.table` holds. `stated` is
- *  the 1st-level roll a SPELL_RIDERS row gives for a cantrip the fixture carries none for. Eldritch
+ *  the base damage roll a SPELL_RIDERS row gives for a cantrip the fixture carries none for. Eldritch
  *  Blast has no such options in the source, because it adds beams rather than dice, so it correctly
  *  gets none. A table that raised a different die, or lowered a count, is left out rather than
  *  approximated. */

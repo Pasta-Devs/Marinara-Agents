@@ -297,7 +297,7 @@ fixes that itself.
 **Five spells print damage the machine-readable source leaves out.** It carries only the larger rolls
 Sacred Flame, Acid Splash, Poison Spray and Vicious Mockery reach at 5th level and up, and none at all
 for Spiritual Weapon, so all five used to ship as utility spells a fight never offered. Each now
-carries the 1st-level roll its own text prints, and the four cantrips still grow with your level off
+carries the base damage roll its own text prints, and the four cantrips still grow with your level off
 the source's own table. The build stops if the source ever gives one of them a roll of its own.
 
 **A creature carries how far its actions reach.** The bestiary's 828 actions divide up exactly, each
