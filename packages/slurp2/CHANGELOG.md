@@ -1,5 +1,10 @@
 # Slurp Remastered release notes
 
+## 0.2.39 — 2026-09-25
+
+- Moments now remain available for the configured retention period even when newer feed posts fill the first page.
+- Follow-ups no longer retry forever when a Creator has no known return time.
+
 ## 0.2.38 — 2026-09-24
 
 - Generated audience names now draw from one merged, much larger word bank (184,512 combinations, up from ~18,800) instead of a single fixed set of moody handles.

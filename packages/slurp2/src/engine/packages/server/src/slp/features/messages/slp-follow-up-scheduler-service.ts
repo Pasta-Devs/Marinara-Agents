@@ -112,7 +112,7 @@ export function startSlurpFollowUpScheduler(app: FastifyInstance, registerStop?:
                 )
               : { online: true, activity: null, minutesUntilOnline: 0 };
             const quiet = settings.nightQuiet && isCreatorNightQuietTime(new Date());
-            if (coolingOff || quiet || !availability.online) {
+            if (coolingOff || quiet || (!availability.online && availability.minutesUntilOnline !== null)) {
               const delayMinutes = coolingOff
                 ? Math.max(1, Math.ceil((Date.parse(thread.coolUntil as string) - Date.now()) / 60_000))
                 : Math.max(15, availability.minutesUntilOnline || 60);

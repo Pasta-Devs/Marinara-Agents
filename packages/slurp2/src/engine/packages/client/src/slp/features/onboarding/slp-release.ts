@@ -1,5 +1,5 @@
 // The splash screen needs the shipped version and its public notes inside the client bundle.
-export const SLURP2_VERSION = "0.2.38";
+export const SLURP2_VERSION = "0.2.39";
 
 export interface Slurp2ReleaseEntry {
   version: string;
@@ -9,6 +9,14 @@ export interface Slurp2ReleaseEntry {
 
 /** The public release history shown in the Engine splash screen. */
 export const SLURP2_RELEASES: Slurp2ReleaseEntry[] = [
+  {
+    version: "0.2.39",
+    date: "2026-09-25",
+    notes: [
+      "Moments now remain available for the configured retention period even when newer feed posts fill the first page.",
+      "Follow-ups no longer retry forever when a Creator has no known return time.",
+    ],
+  },
   {
     version: "0.2.37",
     date: "2026-09-24",

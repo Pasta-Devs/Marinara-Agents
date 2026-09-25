@@ -144,10 +144,23 @@ export async function slpFeedViewerRoutes(app: FastifyInstance, deps: SlpRouteDe
           : null,
       limit: parsed.data.limit,
     });
-    const projected = await projectViewerPosts(context, page.items);
+    // The chronological page is intentionally small, but Moments use their own retention window.
+    // Read recent Stories separately so a busy feed cannot push an active Moment out of the shelf.
+    const settings = await noodle.getSettings();
+    const recentStories = (
+      await noodle.listNoodlerPostsByAccounts(accounts.map((account) => account.id), 50, {
+        since: new Date(Date.now() - settings.storyLifetimeHours * 60 * 60 * 1000).toISOString(),
+      })
+    ).values();
+    const storyItems = [...recentStories].flat().filter((post) => post.metadata.noodlerPostType === "story");
+    const feedItems = [
+      ...page.items,
+      ...storyItems.filter((story) => !page.items.some((post) => post.id === story.id)),
+    ];
+    const projected = await projectViewerPosts(context, feedItems);
     return {
       ...buildViewerShell(context),
-      items: page.items.flatMap((post) => {
+      items: feedItems.flatMap((post) => {
         const view = projected.get(post.id);
         return view ? [{ creatorAccountId: post.authorAccountId, post: view }] : [];
       }),
