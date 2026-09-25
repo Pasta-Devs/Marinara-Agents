@@ -2,8 +2,6 @@ import { BackstagePageHeader, FineTune } from "../../modules/settings/SlpSetting
 
 import { Field, NumberSetting, Toggle } from "../../modules/settings/SlpSettingsControls";
 
-import type { SlurpSettings } from "../settings/slp-settings-contract";
-
 import type { SlpBackstagePageProps } from "../backstage/slp-backstage-contract";
 
 /** Coins and access: unlock and subscription pricing, rewards and revenue share. */
@@ -43,25 +41,6 @@ export function SlpWalletPanel(page: SlpBackstagePageProps) {
         value={settings.walletEnabled}
         onChange={(value) => update("walletEnabled", value)}
       />
-      <Field
-        settingKey="teaserRate"
-        label={t("ui.slurp.settings.wallet.teaserRate", { defaultValue: "Free teaser posts" })}
-        detail={t("ui.slurp.settings.wallet.teaserRateDetail", {
-          defaultValue:
-            "How often an automatic post goes out free. Creators for whom it fits use it to win subscribers; the rest just post something free.",
-        })}
-      >
-        <select
-          value={settings.teaserRate}
-          onChange={(event) => void update("teaserRate", event.target.value as SlurpSettings["teaserRate"])}
-          className="min-h-11 w-full rounded-lg bg-[var(--slurp-canvas)] px-3 text-base ring-1 ring-inset ring-[var(--slurp-outline)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] sm:text-sm"
-        >
-          <option value="off">{t("ui.slurp.settings.storyRateOff")}</option>
-          <option value="rare">{t("ui.slurp.settings.storyRateRare")}</option>
-          <option value="regular">{t("ui.slurp.settings.storyRateRegular")}</option>
-          <option value="often">{t("ui.slurp.settings.storyRateOften")}</option>
-        </select>
-      </Field>
       <Field
         settingKey="walletUnlockCost"
         label={t("ui.slurp.settings.wallet.unlockCost", { defaultValue: "Unlock a post" })}

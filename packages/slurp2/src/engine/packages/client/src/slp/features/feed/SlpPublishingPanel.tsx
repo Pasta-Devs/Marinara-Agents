@@ -228,41 +228,47 @@ export function SlpPublishingPanel(page: SlpBackstagePageProps) {
           />
         </Field>
       )}
-      {settings.autoPostingScheduleEnabled && (
-        <>
-          <Field
-            settingKey="storyRate"
-            label={t("ui.slurp.settings.storyRate")}
-            detail={t("ui.slurp.settings.storyRateDetail")}
-          >
-            <select
-              value={settings.storyRate}
-              disabled={updateSettings.isPending}
-              onChange={(event) => void update("storyRate", event.target.value as SlurpSettings["storyRate"])}
-              className="min-h-11 w-full rounded-lg border border-[var(--slurp-outline)] bg-[var(--slurp-canvas)] px-3 text-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] disabled:opacity-50 sm:text-sm"
-            >
-              <option value="off">{t("ui.slurp.settings.storyRateOff")}</option>
-              <option value="rare">{t("ui.slurp.settings.storyRateRare")}</option>
-              <option value="regular">{t("ui.slurp.settings.storyRateRegular")}</option>
-              <option value="often">{t("ui.slurp.settings.storyRateOften")}</option>
-            </select>
-          </Field>
-        </>
-      )}
-      {settings.autoPostingScheduleEnabled ? (
-        <Toggle
-          settingKey="nightQuiet"
-          label={t("ui.slurp.settings.quietHours")}
-          detail={t("ui.slurp.settings.quietHoursDetail")}
-          value={settings.nightQuiet}
-          onChange={(value) => update("nightQuiet", value)}
-        />
-      ) : (
+      {/* Shown even when it has no effect, with the reason, so the setting is never a surprise. */}
+      <Field
+        settingKey="storyRate"
+        label={t("ui.slurp.settings.storyRate")}
+        detail={t("ui.slurp.settings.storyRateDetail")}
+        disabledReason={
+          !settings.autoPostingScheduleEnabled
+            ? t("ui.slurp.settings.hints.autoPostingOnly")
+            : !settings.autoPostingImagesEnabled
+              ? t("ui.slurp.settings.hints.needsImages")
+              : null
+        }
+      >
+        <select
+          value={settings.storyRate}
+          disabled={
+            updateSettings.isPending || !settings.autoPostingScheduleEnabled || !settings.autoPostingImagesEnabled
+          }
+          onChange={(event) => void update("storyRate", event.target.value as SlurpSettings["storyRate"])}
+          className="min-h-11 w-full rounded-lg border border-[var(--slurp-outline)] bg-[var(--slurp-canvas)] px-3 text-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] disabled:opacity-50 sm:text-sm"
+        >
+          <option value="off">{t("ui.slurp.settings.storyRateOff")}</option>
+          <option value="rare">{t("ui.slurp.settings.storyRateRare")}</option>
+          <option value="regular">{t("ui.slurp.settings.storyRateRegular")}</option>
+          <option value="often">{t("ui.slurp.settings.storyRateOften")}</option>
+        </select>
+      </Field>
+      {!settings.autoPostingScheduleEnabled && (
         <GuidanceBox
           title={t("ui.slurp.settings.publishing.manualTitle")}
           detail={t("ui.slurp.settings.publishing.manualDetail")}
         />
       )}
+      <Toggle
+        settingKey="nightQuiet"
+        label={t("ui.slurp.settings.quietHours")}
+        detail={t("ui.slurp.settings.quietHoursDetail")}
+        value={settings.nightQuiet}
+        onChange={(value) => update("nightQuiet", value)}
+        disabledReason={settings.autoPostingScheduleEnabled ? null : t("ui.slurp.settings.hints.autoPostingOnly")}
+      />
       <div className="grid gap-3 sm:grid-cols-2">
         <Field
           settingKey="postMaxLength"
@@ -337,6 +343,43 @@ export function SlpPublishingPanel(page: SlpBackstagePageProps) {
           </div>
         )}
       </div>
+      {/* What each automatic post is: where its idea comes from and whether it goes out free. */}
+      <SettingsGroup title={t("ui.slurp.settings.publishing.whatGetsPosted")}>
+        <Field
+          settingKey="postPlanner"
+          label={t("ui.slurp.settings.prompts.postPlanner")}
+          detail={t("ui.slurp.settings.prompts.postPlannerDetail")}
+        >
+          <select
+            value={settings.postPlanner}
+            disabled={updateSettings.isPending}
+            onChange={(event) => void update("postPlanner", event.target.value as SlurpSettings["postPlanner"])}
+            className="min-h-11 w-full rounded-lg border border-[var(--slurp-outline)] bg-[var(--slurp-canvas)] px-3 text-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] disabled:opacity-50 sm:text-sm"
+          >
+            <option value="beats">{t("ui.slurp.settings.prompts.postPlannerBeats")}</option>
+            <option value="classic">{t("ui.slurp.settings.prompts.postPlannerClassic")}</option>
+          </select>
+        </Field>
+        <Field
+          settingKey="teaserRate"
+          label={t("ui.slurp.settings.wallet.teaserRate", { defaultValue: "Free teaser posts" })}
+          detail={t("ui.slurp.settings.wallet.teaserRateDetail", {
+            defaultValue:
+              "How often an automatic post goes out free. Creators for whom it fits use it to win subscribers; the rest just post something free.",
+          })}
+        >
+          <select
+            value={settings.teaserRate}
+            onChange={(event) => void update("teaserRate", event.target.value as SlurpSettings["teaserRate"])}
+            className="min-h-11 w-full rounded-lg bg-[var(--slurp-canvas)] px-3 text-base ring-1 ring-inset ring-[var(--slurp-outline)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] sm:text-sm"
+          >
+            <option value="off">{t("ui.slurp.settings.storyRateOff")}</option>
+            <option value="rare">{t("ui.slurp.settings.storyRateRare")}</option>
+            <option value="regular">{t("ui.slurp.settings.storyRateRegular")}</option>
+            <option value="often">{t("ui.slurp.settings.storyRateOften")}</option>
+          </select>
+        </Field>
+      </SettingsGroup>
       <details className="group rounded-xl bg-[var(--slurp-surface-raised)] ring-1 ring-inset ring-[var(--slurp-outline)]">
         <summary className="flex min-h-14 cursor-pointer list-none items-center gap-3 px-4 text-sm font-bold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--slurp-focus)] [&::-webkit-details-marker]:hidden">
           <FileText size={17} className="text-[var(--slurp-violet)]" aria-hidden="true" />
@@ -348,25 +391,24 @@ export function SlpPublishingPanel(page: SlpBackstagePageProps) {
           />
         </summary>
         <div className="space-y-5 border-t border-[var(--slurp-outline)] p-4 sm:p-5">
-          {settings.autoPostingScheduleEnabled && (
-            <Field
-              settingKey="autoPostGenerationMode"
-              label={t("ui.slurp.settings.generationMode")}
-              detail={t("ui.slurp.settings.generationModeDetail")}
+          <Field
+            settingKey="autoPostGenerationMode"
+            label={t("ui.slurp.settings.generationMode")}
+            detail={t("ui.slurp.settings.generationModeDetail")}
+            disabledReason={settings.autoPostingScheduleEnabled ? null : t("ui.slurp.settings.hints.autoPostingOnly")}
+          >
+            <select
+              value={settings.autoPostGenerationMode}
+              disabled={updateSettings.isPending || !settings.autoPostingScheduleEnabled}
+              onChange={(event) =>
+                void update("autoPostGenerationMode", event.target.value as SlurpSettings["autoPostGenerationMode"])
+              }
+              className="min-h-11 w-full rounded-lg border border-[var(--slurp-outline)] bg-[var(--slurp-canvas)] px-3 text-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] disabled:opacity-50 sm:text-sm"
             >
-              <select
-                value={settings.autoPostGenerationMode}
-                disabled={updateSettings.isPending}
-                onChange={(event) =>
-                  void update("autoPostGenerationMode", event.target.value as SlurpSettings["autoPostGenerationMode"])
-                }
-                className="min-h-11 w-full rounded-lg border border-[var(--slurp-outline)] bg-[var(--slurp-canvas)] px-3 text-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] disabled:opacity-50 sm:text-sm"
-              >
-                <option value="pre_generate">{t("ui.slurp.settings.generationModePreGenerate")}</option>
-                <option value="on_demand">{t("ui.slurp.settings.generationModeOnDemand")}</option>
-              </select>
-            </Field>
-          )}
+              <option value="pre_generate">{t("ui.slurp.settings.generationModePreGenerate")}</option>
+              <option value="on_demand">{t("ui.slurp.settings.generationModeOnDemand")}</option>
+            </select>
+          </Field>
           <Field
             settingKey="generationConnectionId"
             label={t("ui.slurp.settings.connections.creatorText")}
@@ -397,174 +439,6 @@ export function SlpPublishingPanel(page: SlpBackstagePageProps) {
           />
         </div>
       </details>
-      <section className="space-y-5 border-t border-[var(--slurp-outline)] pt-6">
-        <BackstagePageHeader
-          title={t("ui.slurp.settings.planAutomation.title", { defaultValue: "Storylines" })}
-          detail={t("ui.slurp.settings.planAutomation.detail", {
-            defaultValue: "Control how Plans start, progress, and affect Creators and their audiences.",
-          })}
-          scope="all-slurp"
-        />
-        <GuidanceBox
-          title={t("ui.slurp.settings.arcs.guideTitle", { defaultValue: "Set the Plan rules once" })}
-          detail={t("ui.slurp.settings.arcs.guideDetail", {
-            defaultValue: "These settings apply to every Creator. Use Creator settings to make one profile different.",
-          })}
-        />
-        <SettingsGroup title={t("ui.slurp.settings.arcs.behaviorGroup", { defaultValue: "Plan behavior" })}>
-          <Field
-            settingKey="projectRate"
-            label={t("ui.slurp.settings.projectRate")}
-            detail={t("ui.slurp.settings.projectRateDetail")}
-          >
-            <select
-              value={settings.projectRate}
-              disabled={updateSettings.isPending}
-              onChange={(event) => void update("projectRate", event.target.value as SlurpSettings["projectRate"])}
-              className="min-h-11 w-full rounded-lg border border-[var(--slurp-outline)] bg-[var(--slurp-canvas)] px-3 text-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] disabled:opacity-50 sm:text-sm"
-            >
-              <option value="off">{t("ui.slurp.settings.projectRateOff")}</option>
-              <option value="rare">{t("ui.slurp.settings.projectRateRare")}</option>
-              <option value="regular">{t("ui.slurp.settings.projectRateRegular")}</option>
-              <option value="often">{t("ui.slurp.settings.projectRateOften")}</option>
-            </select>
-          </Field>
-          <Field
-            settingKey="arcPace"
-            label={t("ui.slurp.settings.arcPace")}
-            detail={t("ui.slurp.settings.arcPaceDetail")}
-          >
-            <select
-              value={settings.arcPace}
-              disabled={updateSettings.isPending}
-              onChange={(event) => void update("arcPace", event.target.value as SlurpSettings["arcPace"])}
-              className="min-h-11 w-full rounded-lg border border-[var(--slurp-outline)] bg-[var(--slurp-canvas)] px-3 text-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] disabled:opacity-50 sm:text-sm"
-            >
-              <option value="slow">{t("ui.slurp.settings.arcPaceSlow")}</option>
-              <option value="normal">{t("ui.slurp.settings.arcPaceNormal")}</option>
-              <option value="fast">{t("ui.slurp.settings.arcPaceFast")}</option>
-            </select>
-          </Field>
-          <Toggle
-            settingKey="arcAffectsMood"
-            label={t("ui.slurp.settings.arcAffectsMood")}
-            detail={t("ui.slurp.settings.arcAffectsMoodDetail")}
-            value={settings.arcAffectsMood}
-            onChange={(value) => update("arcAffectsMood", value)}
-          />
-          <Toggle
-            settingKey="arcFanReactions"
-            label={t("ui.slurp.settings.arcFanReactions")}
-            detail={t("ui.slurp.settings.arcFanReactionsDetail")}
-            value={settings.arcFanReactions}
-            onChange={(value) => update("arcFanReactions", value)}
-          />
-          <Toggle
-            settingKey="arcDirectorMode"
-            label={t("ui.slurp.settings.arcDirectorMode")}
-            detail={t("ui.slurp.settings.arcDirectorModeDetail")}
-            value={settings.arcDirectorMode}
-            onChange={(value) => update("arcDirectorMode", value)}
-          />
-          <Toggle
-            settingKey="arcCrossovers"
-            label={t("ui.slurp.settings.arcCrossovers")}
-            detail={t("ui.slurp.settings.arcCrossoversDetail")}
-            value={settings.arcCrossovers}
-            onChange={(value) => update("arcCrossovers", value)}
-          />
-          <Field
-            settingKey="arcPollHours"
-            label={t("ui.slurp.settings.arcPollHours")}
-            detail={t("ui.slurp.settings.arcPollHoursDetail")}
-          >
-            <NumberSetting
-              value={settings.arcPollHours}
-              min={1}
-              max={168}
-              onSave={(value) => update("arcPollHours", value)}
-            />
-          </Field>
-          <Field
-            settingKey="arcStatEffects"
-            label={t("ui.slurp.settings.arcStatEffects")}
-            detail={t("ui.slurp.settings.arcStatEffectsDetail")}
-          >
-            <select
-              value={settings.arcStatEffects}
-              disabled={updateSettings.isPending}
-              onChange={(event) => void update("arcStatEffects", event.target.value as SlurpSettings["arcStatEffects"])}
-              className="min-h-11 w-full rounded-lg border border-[var(--slurp-outline)] bg-[var(--slurp-canvas)] px-3 text-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] disabled:opacity-50 sm:text-sm"
-            >
-              <option value="off">{t("ui.slurp.settings.arcStatEffectsOff")}</option>
-              <option value="small">{t("ui.slurp.settings.arcStatEffectsSmall")}</option>
-              <option value="big">{t("ui.slurp.settings.arcStatEffectsBig")}</option>
-            </select>
-          </Field>
-        </SettingsGroup>
-        <SettingsGroup title={t("ui.slurp.settings.arcs.automaticGroup", { defaultValue: "Automatic Plans" })}>
-          <Field
-            settingKey="arcAutoMode"
-            label={t("ui.slurp.settings.arcAutoMode")}
-            detail={t("ui.slurp.settings.arcAutoModeDetail")}
-          >
-            <select
-              value={settings.arcAutoMode}
-              disabled={updateSettings.isPending}
-              onChange={(event) => void update("arcAutoMode", event.target.value as SlurpSettings["arcAutoMode"])}
-              className="min-h-11 w-full rounded-lg border border-[var(--slurp-outline)] bg-[var(--slurp-canvas)] px-3 text-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] disabled:opacity-50 sm:text-sm"
-            >
-              <option value="off">{t("ui.slurp.settings.arcAutoModeOff")}</option>
-              <option value="suggest">{t("ui.slurp.settings.arcAutoModeSuggest")}</option>
-              <option value="auto">{t("ui.slurp.settings.arcAutoModeAuto")}</option>
-            </select>
-          </Field>
-          {settings.arcAutoMode !== "off" && (
-            <>
-              <Field
-                settingKey="arcSource"
-                label={t("ui.slurp.settings.arcSource")}
-                detail={t("ui.slurp.settings.arcSourceDetail")}
-              >
-                <select
-                  value={settings.arcSource}
-                  disabled={updateSettings.isPending}
-                  onChange={(event) => void update("arcSource", event.target.value as SlurpSettings["arcSource"])}
-                  className="min-h-11 w-full rounded-lg border border-[var(--slurp-outline)] bg-[var(--slurp-canvas)] px-3 text-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] disabled:opacity-50 sm:text-sm"
-                >
-                  <option value="library">{t("ui.slurp.projects.config.sourceLibrary")}</option>
-                  <option value="generated">{t("ui.slurp.projects.config.sourceGenerated")}</option>
-                  <option value="mixed">{t("ui.slurp.projects.config.sourceMixed")}</option>
-                </select>
-              </Field>
-              <Field
-                settingKey="arcCooldownWeeks"
-                label={t("ui.slurp.settings.arcCooldownWeeks")}
-                detail={t("ui.slurp.settings.arcCooldownWeeksDetail")}
-              >
-                <NumberSetting
-                  value={settings.arcCooldownWeeks}
-                  min={1}
-                  max={8}
-                  onSave={(value) => update("arcCooldownWeeks", value)}
-                />
-              </Field>
-              <Field
-                settingKey="arcMaxConcurrentAuto"
-                label={t("ui.slurp.settings.arcMaxConcurrentAuto")}
-                detail={t("ui.slurp.settings.arcMaxConcurrentAutoDetail")}
-              >
-                <NumberSetting
-                  value={settings.arcMaxConcurrentAuto}
-                  min={1}
-                  max={20}
-                  onSave={(value) => update("arcMaxConcurrentAuto", value)}
-                />
-              </Field>
-            </>
-          )}
-        </SettingsGroup>
-      </section>
     </div>
   );
 }

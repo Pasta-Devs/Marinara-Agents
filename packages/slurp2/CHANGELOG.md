@@ -1,5 +1,10 @@
 # Slurp Remastered release notes
 
+## 0.2.58 — 2026-09-25
+
+- Settings are easier to find: Stories & events has a new Storylines page with one "Start things by themselves" card for events and storylines, the storyline rules, and Shared ideas; Posting has a new "What gets posted" group with post ideas and free teaser posts.
+- Settings that have no effect right now stay visible and say why, for example "Only for automatic posting", instead of disappearing. Rarely needed storyline settings sit under Advanced.
+
 ## 0.2.57 — 2026-09-25
 
 - Clearer names in Settings: arcs, plans, and projects are now called storylines, occasions are events, and the post planner is "Post ideas come from". Several help texts were corrected, among them the event automation text, which wrongly said it also starts storylines.

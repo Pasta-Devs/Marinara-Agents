@@ -1,4 +1,4 @@
-import { BookOpen, CalendarDays, PackageOpen, Sparkles } from "lucide-react";
+import { BookOpen, CalendarDays, PackageOpen, Sparkles, Workflow } from "lucide-react";
 
 import { BackstagePageHeader, SummaryRow } from "../../modules/settings/SlpSettingsKit";
 import type { SlpBackstageTarget } from "../../base/navigation/slp-backstage-target";
@@ -8,6 +8,12 @@ export function SlpBackstageContentPanel(page: SlpBackstagePageProps) {
   const { t, settings } = page;
   const go = (target: SlpBackstageTarget) => page.onNavigate({ ...page.navigation, section: "content", target });
   const rows: Array<{ target: SlpBackstageTarget; icon: React.ReactNode; title: string; detail: string }> = [
+    {
+      target: "storylines",
+      icon: <Workflow size={19} aria-hidden="true" />,
+      title: "Storylines",
+      detail: "Whether events and storylines start by themselves, how storylines behave, and shared ideas.",
+    },
     {
       target: "calendar",
       icon: <CalendarDays size={19} aria-hidden="true" />,
@@ -24,7 +30,7 @@ export function SlpBackstageContentPanel(page: SlpBackstagePageProps) {
       target: "arcs",
       icon: <BookOpen size={19} aria-hidden="true" />,
       title: "Storyline types",
-      detail: "Edit reusable story templates. Active Plans keep their own copy.",
+      detail: "Edit reusable storyline types. Running storylines keep their own copy.",
     },
     {
       target: "packs",

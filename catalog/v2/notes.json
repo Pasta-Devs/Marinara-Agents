@@ -360,6 +360,12 @@
     "slurp2": {
       "versions": [
         {
+          "version": "0.2.58",
+          "date": "2026-09-25",
+          "notes": "- Settings are easier to find: Stories & events has a new Storylines page with one \"Start things by themselves\" card for events and storylines, the storyline rules, and Shared ideas; Posting has a new \"What gets posted\" group with post ideas and free teaser posts.\n- Settings that have no effect right now stay visible and say why, for example \"Only for automatic posting\", instead of disappearing. Rarely needed storyline settings sit under Advanced.",
+          "highlight": false
+        },
+        {
           "version": "0.2.57",
           "date": "2026-09-25",
           "notes": "- Clearer names in Settings: arcs, plans, and projects are now called storylines, occasions are events, and the post planner is \"Post ideas come from\". Several help texts were corrected, among them the event automation text, which wrongly said it also starts storylines.",
@@ -471,12 +477,6 @@
           "version": "0.2.39",
           "date": "2026-09-25",
           "notes": "- Moments now remain available for the configured retention period even when newer feed posts fill the first page.\n- Follow-ups no longer retry forever when a Creator has no known return time.",
-          "highlight": false
-        },
-        {
-          "version": "0.2.38",
-          "date": "2026-09-24",
-          "notes": "- Generated audience names now draw from one merged, much larger word bank (184,512 combinations, up from ~18,800) instead of a single fixed set of moody handles.\n- Generated names are CamelCase with no digits, spaces, or underscores (for example `MothHour` instead of `moth_hour_77`), so they read as a single word and two people never blur together in a dense list.",
           "highlight": false
         }
       ]

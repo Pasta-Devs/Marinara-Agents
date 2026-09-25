@@ -16,12 +16,14 @@ export function NumberSetting({
   onSave,
   /** Whole numbers by default. Tuning has rates and multipliers that are legitimately fractional. */
   integer = true,
+  disabled = false,
 }: {
   value: number;
   min: number;
   max: number;
   onSave: (value: number) => Promise<boolean> | boolean | void;
   integer?: boolean;
+  disabled?: boolean;
 }) {
   const [draft, setDraft] = useState(String(value));
   useEffect(() => setDraft(String(value)), [value]);
@@ -52,6 +54,7 @@ export function NumberSetting({
   return (
     <input
       type="number"
+      disabled={disabled}
       step={integer ? 1 : "any"}
       min={min}
       max={max}
@@ -63,7 +66,7 @@ export function NumberSetting({
       }}
       onBlur={() => void commit()}
       onKeyDown={(event) => event.key === "Enter" && event.currentTarget.blur()}
-      className="h-11 w-full rounded-lg border border-[var(--border)] bg-[var(--slurp-canvas,var(--background))] px-3 text-base outline-none transition-colors focus:border-[var(--noodle-accent)] focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)]/30 sm:text-sm"
+      className="h-11 w-full rounded-lg border border-[var(--border)] bg-[var(--slurp-canvas,var(--background))] px-3 text-base outline-none transition-colors focus:border-[var(--noodle-accent)] focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)]/30 disabled:opacity-50 sm:text-sm"
     />
   );
 }
@@ -101,12 +104,18 @@ export function Field({
   label,
   detail,
   settingKey,
+  disabledReason,
   children,
 }: {
   label: string;
   detail?: string;
   /** Marks the field as the Backstage search target for this setting. */
   settingKey?: SlpSettingKey;
+  /**
+   * Why this setting has no effect right now ("Needs …"). The control stays visible, so the player
+   * sees it exists; the caller disables its own input.
+   */
+  disabledReason?: string | null;
   children: ReactNode;
 }) {
   const field = (
@@ -120,6 +129,11 @@ export function Field({
         )}
       </span>
       {detail && <span className="block text-xs font-normal leading-5 text-[var(--muted-foreground)]">{detail}</span>}
+      {disabledReason && (
+        <span className="block text-xs font-semibold leading-5 text-[var(--slurp-muted,var(--muted-foreground))]">
+          {disabledReason}
+        </span>
+      )}
       {children}
     </label>
   );
@@ -132,6 +146,7 @@ export function Toggle({
   onChange,
   compact = false,
   settingKey,
+  disabledReason,
 }: {
   label: string;
   detail?: string;
@@ -140,21 +155,26 @@ export function Toggle({
   compact?: boolean;
   /** Marks the toggle as the Backstage search target for this setting. */
   settingKey?: SlpSettingKey;
+  /** Why this toggle has no effect right now. It stays visible and is disabled. */
+  disabledReason?: string | null;
 }) {
+  const disabled = Boolean(disabledReason);
   const toggle = (
     <label
       data-slurp-setting-toggle
-      className={`group relative flex ${compact ? "min-h-11" : "min-h-16"} cursor-pointer items-center justify-between gap-4 rounded-lg bg-[var(--slurp-surface-raised,var(--background))] px-3 py-2 text-sm shadow-[var(--slurp-shadow-raised)] ring-1 ring-inset ring-transparent transition-[background-color,box-shadow] hover:bg-[var(--accent)]/40 hover:ring-[var(--border)] focus-within:ring-2 focus-within:ring-[var(--noodle-accent)] motion-reduce:transition-none`}
+      className={`group relative flex ${compact ? "min-h-11" : "min-h-16"} ${disabled ? "cursor-not-allowed opacity-60" : "cursor-pointer"} items-center justify-between gap-4 rounded-lg bg-[var(--slurp-surface-raised,var(--background))] px-3 py-2 text-sm shadow-[var(--slurp-shadow-raised)] ring-1 ring-inset ring-transparent transition-[background-color,box-shadow] hover:bg-[var(--accent)]/40 hover:ring-[var(--border)] focus-within:ring-2 focus-within:ring-[var(--noodle-accent)] motion-reduce:transition-none`}
     >
       <span className="min-w-0">
         <span className="block font-semibold">{label}</span>
         {detail && (
           <span className="mt-1 block text-xs font-normal leading-5 text-[var(--muted-foreground)]">{detail}</span>
         )}
+        {disabledReason && <span className="mt-1 block text-xs font-semibold leading-5">{disabledReason}</span>}
       </span>
       <input
         type="checkbox"
         role="switch"
+        disabled={disabled}
         checked={value}
         onChange={(event) => onChange(event.target.checked)}
         className="peer sr-only"
@@ -166,4 +186,19 @@ export function Toggle({
     </label>
   );
   return settingKey ? <SettingAnchor settingKey={settingKey}>{toggle}</SettingAnchor> : toggle;
+}
+
+/**
+ * Rarely needed settings, one level deep. More than two disclosure levels hurt usability
+ * (NN/g, progressive disclosure), so an Advanced block never nests another.
+ */
+export function AdvancedGroup({ title, children }: { title: string; children: ReactNode }) {
+  return (
+    <details className="group rounded-xl ring-1 ring-inset ring-[var(--slurp-outline)]">
+      <summary className="flex min-h-11 cursor-pointer items-center px-4 text-sm font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)]">
+        {title}
+      </summary>
+      <div className="space-y-4 px-4 pb-4">{children}</div>
+    </details>
+  );
 }
