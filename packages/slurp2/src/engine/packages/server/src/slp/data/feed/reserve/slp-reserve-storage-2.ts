@@ -12,18 +12,14 @@ import {
   slpCreatorPreparedPosts,
 } from "../../../../db/schema/slurp.js";
 import { newId } from "../../../../utils/id-generator.js";
-import { resolveCreatorSourceSnapshot } from "../../creators/slp-source-resolve.js";
+import { resolveCreatorSourceSnapshot, slpCreatorReserveFingerprintFor } from "../../creators/slp-source-resolve.js";
 import { slurpCreatorPostingIntervalMs } from "../../../modules/feed/slp-posting-interval.js";
 import {
   ROLLING_DAY_MS,
   elapsedPreparedSlotMs,
   TERMINAL_PREPARED_POST_RETENTION_MS,
 } from "../../host/slp-storage-constants.js";
-import {
-  slpCreatorReservePolicyFingerprint,
-  slpReservePolicyStale,
-  parseRecord,
-} from "../../../modules/records/slp-storage-model.js";
+import { slpReservePolicyStale, parseRecord } from "../../../modules/records/slp-storage-model.js";
 import type { SlpCreatorPreparedPostPayload, SlurpReserveStatus } from "../../../modules/records/slp-storage-model.js";
 import { mapAccount, snapshotForAccount } from "../../host/slp-storage-mappers.js";
 import type { SlurpStorageContext } from "../../host/slp-storage-context.js";
@@ -126,7 +122,7 @@ export function createReserveStorage2(context: SlurpStorageContext) {
           }
           // Written for an older card, schedule, disclosure, or voice: back to a scheduled slot, so the
           // next poll writes it again for the Creator as they are now. The slot is kept, not lost.
-          const fingerprint = slpCreatorReservePolicyFingerprint(account, settings, source.updatedAt ?? null);
+          const fingerprint = await slpCreatorReserveFingerprintFor(db, account, settings, source);
           if (slpReservePolicyStale(current.policyFingerprint, fingerprint)) {
             discardedMediaPaths.push(
               String(parseRecord(parseRecord(current.payload).metadata).noodlerMediaPath ?? "") || null,

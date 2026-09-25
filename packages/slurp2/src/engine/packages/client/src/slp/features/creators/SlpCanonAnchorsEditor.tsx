@@ -23,6 +23,7 @@ export function SlpCanonAnchorsEditor({ creatorId }: { creatorId: string }) {
   useEffect(() => {
     if (state) setDraft(slpCanonAnchorDraft(state.anchors));
   }, [state]);
+  if (query.isError) return <p className={noteClass}>{t("ui.slurp.canonAnchors.loadFailed")}</p>;
   if (!state) return <p className={noteClass}>{t("ui.slurp.settings.loading", { defaultValue: "Loading…" })}</p>;
   const busy = save.isPending || reread.isPending;
   const status = !state.hasCard

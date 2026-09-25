@@ -146,7 +146,7 @@ export async function slpContinuityRoutes(app: FastifyInstance) {
       (account) => account.sourceKind === "character" && account.sourceEntityId === characterId,
     );
     if (accounts.length === 0) return reply.code(404).send({ error: "This character has no Slurp page." });
-    const sourceHash = slurpChatMomentKey(chatId, messageId);
+    const sourceHash = slurpChatMomentKey(chatId, messageId, text);
     const saved = [];
     for (const account of accounts) {
       const identity = slurpContinuityIdentityOf(account);

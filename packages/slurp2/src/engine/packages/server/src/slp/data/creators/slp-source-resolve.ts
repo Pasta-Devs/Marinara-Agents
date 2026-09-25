@@ -5,6 +5,8 @@ import type {
   SlpCreatorSourceSnapshot,
   SlpIdentityDisclosure,
 } from "../../../../../shared/src/slp/slp-social.types.js";
+import { createHash } from "node:crypto";
+import { slpCreatorReservePolicyFingerprint } from "../../modules/records/slp-storage-model.js";
 import type { DB } from "../../../db/connection.js";
 import { createCharactersStorage } from "../../../services/storage/characters.storage.js";
 import { parseRecord } from "../../modules/creators/slp-public-support.js";
@@ -107,4 +109,41 @@ export async function resolveCreatorSourceSnapshot(
     };
   }
   return null;
+}
+
+/**
+ * A hash of what a prepared post was written from: the card as a post reads it and the
+ * Conversation Schedule. The source row's `updatedAt` could not serve: the Engine bumps it on every
+ * conversation status change, so posts were rewritten for edits that never happened.
+ */
+export async function resolveCreatorSourceContentHash(
+  db: DB,
+  publicAccount: Pick<SlpAccount, "kind" | "entityId"> | null,
+  disclosureMode: SlpIdentityDisclosure,
+): Promise<string | null> {
+  if (!publicAccount) return null;
+  const canon = await resolveCreatorCharacterCanon(db, publicAccount, disclosureMode);
+  const character =
+    publicAccount.kind === "character" ? await createCharactersStorage(db).getById(publicAccount.entityId) : null;
+  const schedule = character
+    ? (parseRecord(parseRecord(character.data).extensions).conversationSchedule ?? null)
+    : null;
+  return createHash("sha256")
+    .update(`${canon}\n${JSON.stringify(schedule)}`)
+    .digest("hex");
+}
+
+/** The reserve fingerprint for a slot, with the content hash staleness is judged on. */
+export async function slpCreatorReserveFingerprintFor(
+  db: DB,
+  account: Parameters<typeof slpCreatorReservePolicyFingerprint>[0],
+  settings: Parameters<typeof slpCreatorReservePolicyFingerprint>[1],
+  source: (Pick<SlpAccount, "kind" | "entityId"> & { updatedAt?: string | null }) | null,
+): Promise<string> {
+  const contentHash = await resolveCreatorSourceContentHash(
+    db,
+    source,
+    account.settings.privacy.identityDisclosure ?? "open",
+  ).catch(() => null);
+  return slpCreatorReservePolicyFingerprint(account, settings, source?.updatedAt ?? null, contentHash);
 }

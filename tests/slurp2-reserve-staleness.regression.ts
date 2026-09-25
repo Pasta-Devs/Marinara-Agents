@@ -6,6 +6,7 @@ const fingerprint = (overrides: Record<string, unknown> = {}) =>
     sourceKind: "character",
     sourceId: "char-1",
     sourceUpdatedAt: "2026-09-25T08:00:00.000Z",
+    contentHash: "hash-a",
     stageProfileUpdatedAt: "2026-09-25T08:00:00.000Z",
     disclosure: "open",
     stagePersonality: "dry and warm",
@@ -14,10 +15,21 @@ const fingerprint = (overrides: Record<string, unknown> = {}) =>
     ...overrides,
   });
 
-// A card or schedule edit (source updatedAt), a disclosure change, or a new stage voice make a
+// A card or schedule edit (content hash), a disclosure change, or a new stage voice make a
 // prepared post stale.
 assert.equal(slpReservePolicyStale(fingerprint(), fingerprint()), false);
-assert.equal(slpReservePolicyStale(fingerprint(), fingerprint({ sourceUpdatedAt: "2026-09-25T09:00:00.000Z" })), true);
+// The Engine bumps the source's updatedAt on every conversation status change: not a content edit.
+assert.equal(slpReservePolicyStale(fingerprint(), fingerprint({ sourceUpdatedAt: "2026-09-25T09:00:00.000Z" })), false);
+assert.equal(
+  slpReservePolicyStale(fingerprint(), fingerprint({ contentHash: "hash-b" })),
+  true,
+  "a card or schedule edit",
+);
+// A fingerprint written before the content hash existed is not judged on it.
+assert.equal(
+  slpReservePolicyStale(fingerprint({ contentHash: undefined }), fingerprint({ contentHash: "hash-b" })),
+  false,
+);
 assert.equal(slpReservePolicyStale(fingerprint(), fingerprint({ disclosure: "secret" })), true);
 assert.equal(slpReservePolicyStale(fingerprint(), fingerprint({ stagePersonality: "loud" })), true);
 // Account timestamps and media policy change too often to rewrite posts on.

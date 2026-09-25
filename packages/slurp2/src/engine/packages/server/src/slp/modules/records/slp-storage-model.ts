@@ -131,6 +131,8 @@ export function slpCreatorReservePolicyFingerprint(
     | "nightQuiet"
   >,
   sourceUpdatedAt?: string | null,
+  /** See `resolveCreatorSourceContentHash`. What staleness is judged on. */
+  contentHash?: string | null,
 ): string {
   // Pick the policy fields explicitly: callers pass the whole settings object, and
   // serializing it wholesale would invalidate every prepared post on any unrelated
@@ -150,6 +152,7 @@ export function slpCreatorReservePolicyFingerprint(
     sourceKind: account.sourceKind,
     sourceId: account.sourceEntityId,
     sourceUpdatedAt: sourceUpdatedAt ?? null,
+    contentHash: contentHash ?? null,
     stageProfileUpdatedAt: account.updatedAt,
     disclosure: account.settings.privacy.identityDisclosure ?? "open",
     stagePersonality: account.settings.privacy.stagePersonality ?? "",
@@ -161,7 +164,7 @@ export function slpCreatorReservePolicyFingerprint(
 }
 
 /** The fingerprint fields that change what a prepared post says: its card (and schedule), identity, and voice. */
-const CONTENT_POLICY_FIELDS = ["sourceKind", "sourceId", "sourceUpdatedAt", "disclosure", "stagePersonality"] as const;
+const CONTENT_POLICY_FIELDS = ["sourceKind", "sourceId", "disclosure", "stagePersonality"] as const;
 
 /**
  * Whether a prepared post was written for a card, schedule, disclosure, or stage voice that has
@@ -174,7 +177,9 @@ export function slpReservePolicyStale(stored: unknown, current: string): boolean
   try {
     const before = JSON.parse(String(stored)) as Record<string, unknown>;
     const now = JSON.parse(current) as Record<string, unknown>;
-    return CONTENT_POLICY_FIELDS.some((field) => (before[field] ?? null) !== (now[field] ?? null));
+    // A fingerprint from before the content hash existed is not judged on it.
+    const contentChanged = typeof before.contentHash === "string" && before.contentHash !== now.contentHash;
+    return contentChanged || CONTENT_POLICY_FIELDS.some((field) => (before[field] ?? null) !== (now[field] ?? null));
   } catch {
     return false;
   }

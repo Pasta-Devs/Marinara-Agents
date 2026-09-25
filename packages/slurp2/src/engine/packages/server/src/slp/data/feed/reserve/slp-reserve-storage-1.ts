@@ -13,7 +13,8 @@ import {
   slurpCreatorPostingIntervalMs,
 } from "../../../modules/feed/slp-posting-interval.js";
 import { SLP_CREATOR_RESERVE_STATE_ID, ROLLING_DAY_MS } from "../../host/slp-storage-constants.js";
-import { slpCreatorReservePolicyFingerprint, parseRecord } from "../../../modules/records/slp-storage-model.js";
+import { parseRecord } from "../../../modules/records/slp-storage-model.js";
+import { slpCreatorReserveFingerprintFor } from "../../creators/slp-source-resolve.js";
 import type {
   SlpCreatorPreparedPostPayload,
   SlpCreatorPreparedPostState,
@@ -316,7 +317,7 @@ export function createReserveStorage1(context: SlurpStorageContext) {
             publishAt: new Date(publishMs).toISOString(),
             generatedAt: timestamp,
             payload: "{}",
-            policyFingerprint: slpCreatorReservePolicyFingerprint(account, settings, source?.updatedAt ?? null),
+            policyFingerprint: await slpCreatorReserveFingerprintFor(db, account, settings, source),
             state: "scheduled",
             publishedPostId: null,
             imageState: "none",

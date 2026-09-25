@@ -443,6 +443,8 @@ export function slurpArcBeat(project: {
  * the top of the range and some are softer, never above the dial and never below the card's own
  * floor. Access and intent still apply afterwards, exactly as they do to the dial.
  */
+const CARD_HEAT_LEVEL = [0, 1, 1, 3] as const;
+
 export function slurpPlannedExplicitLevel(
   dial: SlurpVisualSexualLevel,
   floor: number,
@@ -450,7 +452,9 @@ export function slurpPlannedExplicitLevel(
   sequence: number,
 ): SlurpVisualSexualLevel {
   const top = SLURP_VISUAL_SEXUAL_LEVELS.indexOf(dial);
-  const bottom = Math.min(top, Math.max(0, Math.round(floor)));
+  // The card scale (wholesome, flirty, suggestive, explicit) onto the level scale (none,
+  // suggestive, nudity, explicit): flirty and suggestive both sit at "suggestive".
+  const bottom = Math.min(top, CARD_HEAT_LEVEL[Math.min(3, Math.max(0, Math.round(floor)))]!);
   return slurpWeightedPick(
     "heat",
     seed,

@@ -26,6 +26,7 @@ const KIND_WEIGHT: Record<SlurpReferenceKind, number> = { chat: 2, promise: 2, s
 
 type ReferencePost = {
   id: string;
+  access: string;
   title: string | null;
   createdAt: string;
   metadata: Record<string, unknown>;
@@ -49,8 +50,9 @@ export function slurpReferenceCandidates(input: {
       if (post.metadata.contentIntent === "set" && post.title?.trim()) {
         return [{ kind: "set", id: `set:${post.id}`, text: `your earlier set "${post.title.trim()}"` }];
       }
+      // A locked post's moment stays with its buyers; a set's title is public either way.
       const beat = post.metadata.slurpBeat as { line?: unknown } | undefined;
-      return typeof beat?.line === "string" && beat.line.trim()
+      return post.access === "public" && typeof beat?.line === "string" && beat.line.trim()
         ? [{ kind: "post", id: `post:${post.id}`, text: `an earlier post of yours: ${beat.line.trim()}` }]
         : [];
     });

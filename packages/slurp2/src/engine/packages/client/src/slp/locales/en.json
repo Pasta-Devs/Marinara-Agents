@@ -2873,6 +2873,8 @@
   "ui.slurp.settings.prompts.postPlannerDetail": "Beats (the default) first picks a concrete moment from the Creator's own card, such as a person, place, or piece of work from their life, fits it into their day, and tells the writer not to invent other people or past events. Classic lets the model choose what an ordinary post is about. Posts you direct, promises, and campaigns work the same in both.",
   "ui.slurp.settings.prompts.postPlannerClassic": "Classic",
   "ui.slurp.settings.prompts.postPlannerBeats": "Beats",
+  "ui.slurp.signals.loadFailed": "Could not load the signals. Try again later.",
+  "ui.slurp.canonAnchors.loadFailed": "Could not load the canon anchors. Try again later.",
   "ui.slurp.signals.title": "Recent signals",
   "ui.slurp.signals.detail": "Everything around this Creator in the last two weeks, from every source: posts, notes, messages, promises, their schedule, platform events, and what other Creators posted. Private messages show only what kind of thing happened.",
   "ui.slurp.signals.empty": "Nothing in the last two weeks.",

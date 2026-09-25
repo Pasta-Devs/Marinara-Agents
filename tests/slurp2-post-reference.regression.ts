@@ -14,11 +14,30 @@ const daysAgo = (days: number) => new Date(at.getTime() - days * 86_400_000).toI
 // Candidates are facts, not captions: a beat line, a set title, a saved chat moment, a delivered label.
 const candidates = slurpReferenceCandidates({
   posts: [
-    { id: "fresh", title: "Today", createdAt: daysAgo(0.2), metadata: { slurpBeat: { line: "too fresh" } } },
-    { id: "p1", title: "Cape", createdAt: daysAgo(3), metadata: { slurpBeat: { line: "You finish the red cape" } } },
-    { id: "s1", title: "Neon set", createdAt: daysAgo(5), metadata: { contentIntent: "set" } },
-    { id: "plain", title: "Coffee", createdAt: daysAgo(4), metadata: {} },
-    { id: "old", title: "Old", createdAt: daysAgo(45), metadata: { slurpBeat: { line: "too old" } } },
+    {
+      id: "fresh",
+      access: "public",
+      title: "Today",
+      createdAt: daysAgo(0.2),
+      metadata: { slurpBeat: { line: "too fresh" } },
+    },
+    {
+      id: "p1",
+      access: "public",
+      title: "Cape",
+      createdAt: daysAgo(3),
+      metadata: { slurpBeat: { line: "You finish the red cape" } },
+    },
+    { id: "s1", access: "locked", title: "Neon set", createdAt: daysAgo(5), metadata: { contentIntent: "set" } },
+    { id: "plain", access: "public", title: "Coffee", createdAt: daysAgo(4), metadata: {} },
+    {
+      id: "lockedbeat",
+      access: "locked",
+      title: "Paid",
+      createdAt: daysAgo(3),
+      metadata: { slurpBeat: { line: "LOCKED_MOMENT" } },
+    },
+    { id: "old", access: "public", title: "Old", createdAt: daysAgo(45), metadata: { slurpBeat: { line: "too old" } } },
   ],
   chatMoments: [{ id: "f1", text: "the evening at the bar with the regulars" }],
   keptPromises: [
@@ -33,6 +52,10 @@ assert.deepEqual(
 );
 assert.equal(candidates[0]!.text, "an earlier post of yours: You finish the red cape");
 assert.ok(!candidates.some((candidate) => /Coffee/u.test(candidate.text)), "a caption without a beat is never quoted");
+assert.ok(
+  !candidates.some((candidate) => /LOCKED_MOMENT/u.test(candidate.text)),
+  "a locked post's moment stays private",
+);
 
 // About one post in three refers back, and a recent reference is not repeated.
 let referred = 0;

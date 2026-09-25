@@ -7,7 +7,7 @@ import { createConnectionsStorage } from "../../../../services/storage/connectio
 import { resolveSlurpTextConnection } from "../../../base/identity/slp-connection.js";
 import { resolveCreatorImageConnectionId } from "../../../base/media/slp-image-connections.js";
 import { createSlurpStorage } from "../../../data/slp-storage.js";
-import { slpCreatorReservePolicyFingerprint } from "../../../modules/records/slp-storage-model.js";
+import { slpCreatorReserveFingerprintFor } from "../../../data/creators/slp-source-resolve.js";
 import { hasSlurpCreatorPostingIntervalConflict } from "../../../modules/feed/slp-posting-interval.js";
 import { generateCreatorPost } from "../slp-generation-service.js";
 import { resolveSlurpAutomaticPostAccess } from "../slp-automatic-post-access.js";
@@ -140,7 +140,7 @@ export async function prepareNextCreatorReservePost(db: DB, at = new Date()): Pr
     slotId = await noodle.createNoodlerScheduledPost({
       creatorAccountId: account.id,
       publishAt,
-      policyFingerprint: slpCreatorReservePolicyFingerprint(account, settings, source?.updatedAt ?? null),
+      policyFingerprint: await slpCreatorReserveFingerprintFor(db, account, settings, source),
       createdAt: at.toISOString(),
     });
     if (!slotId) return "holding";
@@ -334,10 +334,11 @@ export async function prepareNextCreatorReservePost(db: DB, at = new Date()): Pr
           generatedAt: completedAt.toISOString(),
           expectedPublishAt: selectedPublishAt,
           payload,
-          policyFingerprint: slpCreatorReservePolicyFingerprint(
+          policyFingerprint: await slpCreatorReserveFingerprintFor(
+            db,
             selectedAccount,
             settings,
-            (await noodle.resolveAccountSource(selectedAccount))?.updatedAt ?? null,
+            await noodle.resolveAccountSource(selectedAccount),
           ),
         });
         if (!filled) {

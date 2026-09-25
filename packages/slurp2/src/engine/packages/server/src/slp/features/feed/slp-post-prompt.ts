@@ -188,7 +188,13 @@ export function buildSlurpPostBlocks(input: SlurpPostPromptInput): SlurpPromptBl
       id: "memory",
       kind: "context" as const,
       optional: true,
-      text: input.continuityInstruction?.trim() ?? "",
+      // Notes can carry card names (a beat's anchor); a Hinted or Secret Creator's are redacted here too.
+      text:
+        protectCreatorGeneratedIdentity(
+          input.continuityInstruction?.trim() ?? "",
+          input.disclosureMode,
+          input.publicIdentity,
+        ) ?? "",
     },
     // What this post is for, as opposed to what it is about. Without it every post is the same
     // kind of post: something happened, here is a picture, here is what it meant.

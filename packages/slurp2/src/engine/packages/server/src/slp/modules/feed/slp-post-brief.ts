@@ -130,7 +130,11 @@ export function slurpPostBriefSection(
   /** Where the day stands at publication, from the schedule or the card's routine. */
   day?: SlurpDayMoment | null,
 ): string {
-  const named = beat.cast.length ? `${beat.cast.map(protect).join(", ")}. Nobody else is named.` : "no named people.";
+  // A named person is there even when the drawn company line says "alone": the beat decides.
+  const companyAlone = Boolean(company?.trim()) && /^alone\b/iu.test(company!.trim());
+  const named = beat.cast.length
+    ? `${beat.cast.map(protect).join(", ")}${companyAlone ? ", with you for this moment whatever the company line says" : ""}. Nobody else is named.`
+    : "no named people.";
   return [
     SLURP_POST_BRIEF_HEADER,
     `What happens: ${protect(beat.line)}`,
@@ -206,6 +210,14 @@ export type SlurpClaimCheck = { ok: boolean; problems: string[]; claims: SlurpBe
  * ponytail: word overlap is a naive support test for earlier events. Upgrade to an LLM claim
  * check only if the evaluation shows it misses real inventions.
  */
+// Names are short ("Mia", "Kai"): people match on words of two letters or more, minus fillers.
+const NAME_FILLERS = new Set(["my", "our", "his", "her", "the", "and", "of", "with"]);
+const nameWords = (value: string) =>
+  value
+    .toLocaleLowerCase()
+    .split(/[^\p{L}\p{N}]+/u)
+    .filter((word) => word.length >= 2 && !NAME_FILLERS.has(word));
+
 export function checkSlurpBeatClaims(
   claims: SlurpBeatClaims | null,
   beat: SlurpBeat,
@@ -213,7 +225,12 @@ export function checkSlurpBeatClaims(
   unnamedOthers = false,
 ): SlurpClaimCheck {
   if (!claims) return { ok: true, problems: [], claims: null };
-  const known = [...beat.cast, ...selfNames].flatMap(words);
+  // Anyone the brief itself names: the cast, the Creator, an arc chapter, and a callback.
+  const known = new Set(
+    [...beat.cast, ...selfNames, beat.anchorKind === "arc" ? beat.line : "", beat.reference?.text ?? ""].flatMap(
+      nameWords,
+    ),
+  );
   const supported = new Set([
     ...words(beat.line),
     ...words(beat.anchor),
@@ -222,9 +239,9 @@ export function checkSlurpBeatClaims(
   ]);
   const people = claims.people.filter(
     (person) =>
-      !AUDIENCE.test(person.trim()) &&
+      !AUDIENCE.test(person.trim().replace(/^(?:my|our|the)\s+/iu, "")) &&
       !(unnamedOthers && UNNAMED.test(person.trim())) &&
-      !words(person).some((word) => known.includes(word)),
+      !nameWords(person).some((word) => known.has(word)),
   );
   const events = claims.earlierEvents.filter((event) => !words(event).some((word) => supported.has(word)));
   const problems = [

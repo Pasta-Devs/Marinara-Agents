@@ -70,7 +70,11 @@ assert.ok(
 );
 // The block carries the approved notes and nothing else when there are none.
 const postPrompt = slurp2Source("packages/slurp2/src/engine/packages/server/src/slp/features/feed/slp-post-prompt.ts");
-assert.match(postPrompt, /id: "memory",[\s\S]*?text: input\.continuityInstruction\?\.trim\(\) \?\? "",/u);
+// 0.2.56: identity-protected, since beat notes can carry card names.
+assert.match(
+  postPrompt,
+  /id: "memory",[\s\S]*?protectCreatorGeneratedIdentity\(\s*input\.continuityInstruction\?\.trim\(\) \?\? "",/u,
+);
 
 // A post reads post scopes; a reply reads its own thread's. Neither picks its own permissions.
 const plan = slurp2Source("packages/slurp2/src/engine/packages/server/src/slp/features/feed/slp-post-plan-service.ts");

@@ -391,4 +391,41 @@ assert.match(
   );
 }
 
+// Review fixes: short names, arc and callback people, "my followers", company vs cast, heat map.
+{
+  const mia = { ...personBeat, cast: ["Mia (sister)"] };
+  const ok = (people: string[], beat = mia, unnamed = false) =>
+    checkSlurpBeatClaims({ people, earlierEvents: [], stateChanges: [] }, beat, ["Eve"], unnamed).ok;
+  assert.equal(ok(["Mia"]), true, "a three-letter cast name is not invented");
+  assert.equal(ok(["Eve"]), true, "the Creator's own short name");
+  assert.equal(ok(["my followers"]), true);
+  assert.equal(ok(["Marco"]), false, "an invented name is still caught");
+  const arc = slurpArcBeat({
+    title: "Moving in with Leo",
+    direction: "",
+    chapters: ["Leo carries the boxes"],
+    chapter: 0,
+  });
+  assert.equal(ok(["Leo"], arc), true, "people the arc chapter names");
+  const withRef = {
+    ...personBeat,
+    cast: [],
+    reference: { kind: "chat" as const, id: "chat:1", text: "the night Kai stayed late" },
+  };
+  assert.equal(ok(["Kai"], withRef), true, "people the callback names");
+  assert.match(
+    slurpPostBriefSection(mia, new Date(), (value) => value, "alone with the room to themselves"),
+    /Cast: Mia \(sister\), with you for this moment whatever the company line says\./u,
+  );
+  // Card "suggestive" (2) sits at level suggestive, not nudity.
+  for (let sequence = 0; sequence < 50; sequence += 1) {
+    assert.notEqual(slurpPlannedExplicitLevel("explicit", 2, "creator-z", sequence), "none");
+  }
+  let suggestive = 0;
+  for (let sequence = 0; sequence < 200; sequence += 1) {
+    if (slurpPlannedExplicitLevel("explicit", 2, "creator-z", sequence) === "suggestive") suggestive += 1;
+  }
+  assert.ok(suggestive > 0, "a suggestive card can still be planned at suggestive");
+}
+
 console.log("slurp2 post beats regression checks passed");

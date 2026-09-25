@@ -267,7 +267,8 @@ const reschedule = storage.slice(
 );
 assert.match(
   reschedule,
-  /policyFingerprint: slpCreatorReservePolicyFingerprint\(account, settings, source\?\.updatedAt/u,
+  // 0.2.56: the fingerprint carries the content hash staleness is judged on.
+  /policyFingerprint: await slpCreatorReserveFingerprintFor\(db, account, settings, source\)/u,
 );
 
 async function testPollOrdering() {

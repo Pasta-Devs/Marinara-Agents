@@ -18,7 +18,9 @@ export function SlpCreatorSignalsList({ creatorId }: { creatorId: string }) {
         {t("ui.slurp.signals.title")}
       </h3>
       <p className={noteClass}>{t("ui.slurp.signals.detail")}</p>
-      {!signals ? (
+      {query.isError ? (
+        <p className={noteClass}>{t("ui.slurp.signals.loadFailed")}</p>
+      ) : !signals ? (
         <p className={noteClass}>{t("ui.slurp.settings.loading", { defaultValue: "Loading…" })}</p>
       ) : signals.length === 0 ? (
         <p className={noteClass}>{t("ui.slurp.signals.empty")}</p>

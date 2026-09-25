@@ -640,6 +640,25 @@ export async function findSlurpContinuityFactBySourceHash(
     .select()
     .from(slurpContinuityFacts)
     .where(eq(slurpContinuityFacts.creatorAccountId, creatorAccountId));
-  const row = rows.find((entry) => entry.sourceHash === sourceHash);
+  // A retracted or rejected note does not block saving the same thing again.
+  const row = rows.find(
+    (entry) => entry.sourceHash === sourceHash && entry.status !== "retracted" && entry.status !== "rejected",
+  );
   return row ? mapFact(row) : null;
+}
+
+/** A Creator's facts whose source hash starts with `prefix`, newest first. */
+export async function listSlurpContinuityFactsBySourcePrefix(
+  db: DB,
+  creatorAccountId: string,
+  prefix: string,
+): Promise<SlurpContinuityFact[]> {
+  const rows = await db
+    .select()
+    .from(slurpContinuityFacts)
+    .where(eq(slurpContinuityFacts.creatorAccountId, creatorAccountId));
+  return rows
+    .filter((row) => String(row.sourceHash ?? "").startsWith(prefix))
+    .map((row) => mapFact(row as Record<string, unknown>))
+    .sort((left, right) => right.createdAt.localeCompare(left.createdAt));
 }

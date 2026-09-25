@@ -1,5 +1,5 @@
 // The splash screen needs the shipped version and its public notes inside the client bundle.
-export const SLURP2_VERSION = "0.2.55";
+export const SLURP2_VERSION = "0.2.56";
 
 export interface Slurp2ReleaseEntry {
   version: string;
@@ -9,6 +9,17 @@ export interface Slurp2ReleaseEntry {
 
 /** The public release history shown in the Engine splash screen. */
 export const SLURP2_RELEASES: Slurp2ReleaseEntry[] = [
+  {
+    version: "0.2.56",
+    date: "2026-09-25",
+    notes: [
+      "A Creator's limits and saved notes no longer drop out of post and message prompts after a week of Beats posts; only the newest few post notes stay active.",
+      "Beats no longer rejects correct short names such as Mia or Kai, or people an arc chapter or a callback names, so fewer posts are rewritten.",
+      "Posts that answer a promise or a campaign step keep it when they are retried or rewritten, and prepared posts are only rewritten when the character card or schedule really changed.",
+      "Several moments saved from one chat without a message id are all kept, and Canon anchors you edited are not replaced by a background read.",
+      "Smaller Beats fixes: the heat floor matches the card, a named person is never told to be alone, an arc teaser gets no second subject, and a locked post's moment is never a callback in a public post.",
+    ],
+  },
   {
     version: "0.2.55",
     date: "2026-09-25",

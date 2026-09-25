@@ -1,5 +1,13 @@
 # Slurp Remastered release notes
 
+## 0.2.56 — 2026-09-25
+
+- A Creator's limits and saved notes no longer drop out of post and message prompts after a week of Beats posts; only the newest few post notes stay active.
+- Beats no longer rejects correct short names such as Mia or Kai, or people an arc chapter or a callback names, so fewer posts are rewritten.
+- Posts that answer a promise or a campaign step keep it when they are retried or rewritten, and prepared posts are only rewritten when the character card or schedule really changed.
+- Several moments saved from one chat without a message id are all kept, and Canon anchors you edited are not replaced by a background read.
+- Smaller Beats fixes: the heat floor matches the card, a named person is never told to be alone, an arc teaser gets no second subject, and a locked post's moment is never a callback in a public post.
+
 ## 0.2.55 — 2026-09-25
 
 - Beats is now the default post planner. Ordinary posts are built from each Creator's own card, day, and history instead of letting the model choose the subject. Classic stays available under Prompts.

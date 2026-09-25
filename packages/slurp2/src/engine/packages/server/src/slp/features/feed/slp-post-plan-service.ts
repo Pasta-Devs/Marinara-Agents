@@ -86,14 +86,18 @@ export async function planSlurpPost(
   const chosen = request.contentIntent;
   // A promise the Creator made in a thread comes first among automatic reasons to post: it was
   // made to a person. It still never outranks the player's own direction or purpose.
+  // A retried or rewritten slot keeps its commitment. A claimed promise has this slot on its row and
+  // a claimed campaign stage names its plan, so neither is "due" any more; the slot's own plan is.
+  const slotPlan = slotId && !previewOnly ? await findSlurpOpportunityBySlot(db, slotId).catch(() => null) : null;
   const promise =
     !directed && !chosen && !previewOnly
-      ? await findDueSlurpPromise(db, account.id, { at, access: request.access ?? "public" }).catch(
+      ? ((slotPlan?.sourceEventId ? slotPlan : null) ??
+        (await findDueSlurpPromise(db, account.id, { at, access: request.access ?? "public" }).catch(
           (error: unknown) => {
             logger.warn(error, "[slurp] Could not read promises; this post is planned on its own");
             return null;
           },
-        )
+        )))
       : null;
   // A due campaign stage takes an undirected slot the same way a chosen purpose would. It never
   // outranks the player: a directed or purpose-picked post leaves the campaign waiting.
@@ -104,18 +108,21 @@ export async function planSlurpPost(
           return [];
         })
       : [];
-  const stage = slurpNextCampaignStage(stages, { at, access: request.access ?? "public" });
+  const stage =
+    (slotPlan
+      ? stages.find((entry) => entry.status === "claimed" && entry.opportunityId === slotPlan.id)
+      : undefined) ?? slurpNextCampaignStage(stages, { at, access: request.access ?? "public" });
   const forced =
     chosen ??
     (promise?.intent === "request" || promise?.intent === "teaser" ? promise.intent : undefined) ??
     (stage ? slurpCampaignStageIntent(stage.kind) : undefined);
   // Beat-first for ordinary slots only: direction, a chosen purpose, a promise, and a campaign stage
   // stay intent-first. A retry repeats the beat its slot already stored. No beat means classic.
+  // An arc post in a teaser slot gets no beat: a card beat beside the project block contradicted it.
   const beat =
-    ctx.beats && !directed && !forced && !promise && !stage
-      ? ((slotId ? (await findSlurpOpportunityBySlot(db, slotId).catch(() => null))?.beat : null) ??
-        // An arc chapter takes an ordinary slot; a teaser slot keeps its card beat.
-        (isTeaser ? null : ctx.beats.arc) ??
+    ctx.beats && !directed && !forced && !promise && !stage && !(isTeaser && ctx.beats.arc)
+      ? (slotPlan?.beat ??
+        ctx.beats.arc ??
         (await planSlurpBeat(db, {
           accountId: account.id,
           sequence,
@@ -251,7 +258,8 @@ export async function planSlurpPost(
   let campaignId = stage?.campaignId ?? null;
   if (opportunity) {
     try {
-      if (stage) await moveSlurpCampaignStage(db, stage, "claimed", { at, opportunityId: opportunity.id });
+      if (stage && stage.status !== "claimed")
+        await moveSlurpCampaignStage(db, stage, "claimed", { at, opportunityId: opportunity.id });
       else if (axes?.intent === "set") {
         campaignId = await openSlurpCampaign(db, {
           creatorAccountId: account.id,

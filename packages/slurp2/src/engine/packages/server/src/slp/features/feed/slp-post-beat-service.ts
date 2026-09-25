@@ -28,7 +28,9 @@ import {
 import {
   createSlurpContinuityFact,
   hasSlurpContinuityFact,
+  listSlurpContinuityFactsBySourcePrefix,
   listSlurpContinuityFor,
+  moveSlurpContinuityStatus,
 } from "../../data/continuity/slp-continuity-storage.js";
 import { slurpContinuityIdentityOf } from "../../modules/continuity/slp-continuity-rules.js";
 import {
@@ -53,6 +55,8 @@ export type SlurpBeatContext = {
 };
 
 const ANCHORS_KEY = "slurp2.canon-anchors";
+/** Beat facts kept active at once; older ones expire so real notes are not crowded out. */
+const SLURP_ACTIVE_BEAT_FACTS = 3;
 // Bumped when the extraction asks for more (v2 added the routine), so every cache refreshes once.
 const ANCHORS_VERSION = "v2";
 const anchorKey = (canonText: string) => createHash("sha256").update(`${ANCHORS_VERSION}:${canonText}`).digest("hex");
@@ -77,11 +81,21 @@ async function readAnchorCache(db: DB): Promise<AnchorCache> {
   }
 }
 
-/** `null` removes the entry, so the next Beats post reads the card again. */
-function writeAnchors(db: DB, accountId: string, entry: AnchorCache[string] | null): Promise<unknown> {
+/**
+ * `null` removes the entry, so the next Beats post reads the card again. `keepEdited` is for the
+ * background read: it never replaces the player's own anchors for the same card.
+ */
+function writeAnchors(
+  db: DB,
+  accountId: string,
+  entry: AnchorCache[string] | null,
+  keepEdited = false,
+): Promise<unknown> {
   writeQueue = writeQueue
     .then(async () => {
       const cache = await readAnchorCache(db);
+      const stored = cache[accountId];
+      if (keepEdited && entry && stored?.edited && stored.key === entry.key) return;
       if (entry) cache[accountId] = entry;
       else delete cache[accountId];
       await createAppSettingsStorage(db).set(ANCHORS_KEY, JSON.stringify(cache));
@@ -138,7 +152,7 @@ async function extractAnchors(db: DB, accountId: string, key: string, context: S
     await completeSlurpBeatJson(context, slurpCanonAnchorsPrompt(context.canonText), "canon anchors"),
   );
   // A card with nothing concrete is stored too, so it is not re-read before every post.
-  await writeAnchors(db, accountId, { key, anchors });
+  await writeAnchors(db, accountId, { key, anchors }, true);
 }
 
 /**
@@ -248,6 +262,16 @@ export async function recordSlurpBeatFacts(
         },
         at,
       );
+    }
+    // Only the newest few stay active. The memory block and DM replies keep the newest facts, so a
+    // week of beat posts used to push the Creator's limits and saved notes out of both.
+    const beatFacts = await listSlurpContinuityFactsBySourcePrefix(db, account.id, "beat:");
+    // Ordered by the post they came from (expiry is post time + a week), not by when they were written.
+    const active = beatFacts
+      .filter((entry) => entry.status === "active")
+      .sort((left, right) => String(right.expiresAt).localeCompare(String(left.expiresAt)));
+    for (const fact of active.slice(SLURP_ACTIVE_BEAT_FACTS)) {
+      await moveSlurpContinuityStatus(db, "fact", fact.id, "expired", at);
     }
   } catch (error) {
     logger.warn(error, "[slurp] Could not record facts from published beat posts");
