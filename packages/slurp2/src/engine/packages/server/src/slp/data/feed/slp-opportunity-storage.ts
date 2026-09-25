@@ -206,13 +206,16 @@ export async function readSlurpBeatHistory(db: DB, creatorAccountId: string, at:
     .sort((left, right) => right.plannedAt.localeCompare(left.plannedAt));
   const own = rows.filter((row) => row.creatorAccountId === creatorAccountId).slice(0, 6);
   const globalCounts: Partial<Record<SlurpBeatType, number>> = {};
+  const sharedToday: Record<string, number> = {};
   for (const row of rows.filter((entry) => entry.plannedAt >= since)) {
     globalCounts[row.beat.type] = (globalCounts[row.beat.type] ?? 0) + 1;
+    if (row.beat.sharedId) sharedToday[row.beat.sharedId] = (sharedToday[row.beat.sharedId] ?? 0) + 1;
   }
   return {
     recentOwn: own.map((row) => row.beat.type),
     recentAnchors: own.map((row) => row.beat.anchor),
     globalCounts,
+    sharedToday,
   };
 }
 

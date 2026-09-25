@@ -21,6 +21,10 @@
 
 import type { SlurpContentIntent } from "../../../../../shared/src/slp/slp-content-axes.js";
 import { slurpWeightedPick } from "./slp-weighted.js";
+import type { SlurpSharedIdea } from "./slp-shared-preseed.js";
+
+/** Shared ideas weigh more than a deck line of the same kind, so level 1 is actually used. */
+const SHARED_IDEA_BOOST = 1.5;
 
 export const SLURP_BEAT_TYPES = [
   "achievement",
@@ -66,6 +70,8 @@ export type SlurpBeat = {
   /** Named people in the beat. Empty means alone. */
   cast: string[];
   place: string | null;
+  /** The shared idea this beat came from, for the per-day cap. Absent for a deck beat. */
+  sharedId?: string;
 };
 
 type SlurpBeatDeck = {
@@ -221,6 +227,8 @@ export type SlurpBeatHistory = {
   recentAnchors: readonly string[];
   /** Beat types across all Creators in the last day, this one included. */
   globalCounts: Partial<Record<SlurpBeatType, number>>;
+  /** Shared ideas used across all Creators in the last day. Absent on callers that predate them. */
+  sharedToday?: Readonly<Record<string, number>>;
 };
 
 /**
@@ -236,11 +244,22 @@ export function selectSlurpBeat(
   anchors: SlurpCanonAnchors,
   history: SlurpBeatHistory,
   intents: readonly SlurpContentIntent[],
+  /** Level 1 ideas this Creator may use today, already under their daily cap. */
+  shared: readonly SlurpSharedIdea[] = [],
 ): SlurpBeat | null {
+  // Deck lines and shared ideas share one shape: [anchor kind, template, weight, shared id].
+  const linesFor = (type: SlurpBeatType) =>
+    [
+      ...DECKS[type].lines.map(([kind, template]) => [kind, template, CANON_KIND_WEIGHT[kind], undefined] as const),
+      ...shared
+        .filter((idea) => idea.type === type)
+        .map(
+          (idea) =>
+            [idea.anchorKind, idea.template, CANON_KIND_WEIGHT[idea.anchorKind] * SHARED_IDEA_BOOST, idea.id] as const,
+        ),
+    ].filter(([kind]) => anchorValues(anchors, kind).length > 0);
   const eligible = SLURP_BEAT_TYPES.filter(
-    (type) =>
-      DECKS[type].intents.some((intent) => intents.includes(intent)) &&
-      DECKS[type].lines.some(([kind]) => anchorValues(anchors, kind).length > 0),
+    (type) => DECKS[type].intents.some((intent) => intents.includes(intent)) && linesFor(type).length > 0,
   );
   const cap = slurpBeatThemeCap(history.globalCounts);
   const weigh = (capped: boolean) =>
@@ -257,13 +276,11 @@ export function selectSlurpBeat(
   const weighted = weigh(true).some((option) => option.weight > 0) ? weigh(true) : weigh(false);
   if (!weighted.some((option) => option.weight > 0)) return null;
   const type = slurpWeightedPick("beatType", creatorAccountId, sequence, weighted);
-  const [anchorKind, template] = slurpWeightedPick(
+  const [anchorKind, template, , sharedId] = slurpWeightedPick(
     "beatLine",
     creatorAccountId,
     sequence,
-    DECKS[type].lines
-      .filter(([kind]) => anchorValues(anchors, kind).length > 0)
-      .map((line) => ({ value: line, weight: CANON_KIND_WEIGHT[line[0]] })),
+    linesFor(type).map((line) => ({ value: line, weight: line[2] })),
   );
   const values = anchorValues(anchors, anchorKind);
   const anchor = slurpWeightedPick(
@@ -295,6 +312,7 @@ export function selectSlurpBeat(
     line: template.replace("{a}", anchor),
     cast: person ? [person.relation ? `${person.name} (${person.relation})` : person.name] : [],
     place,
+    ...(sharedId ? { sharedId } : {}),
   };
 }
 
@@ -319,6 +337,7 @@ export function parseSlurpBeat(raw: unknown): SlurpBeat | null {
       line: beat.line,
       cast: Array.isArray(beat.cast) ? beat.cast.filter((entry): entry is string => typeof entry === "string") : [],
       place: typeof beat.place === "string" ? beat.place : null,
+      ...(typeof beat.sharedId === "string" ? { sharedId: beat.sharedId } : {}),
     };
   } catch {
     return null;

@@ -12,6 +12,7 @@ import { slpSamplingOptions } from "../../base/prompting/slp-sampling-options.js
 import { readSlurpBeatHistory } from "../../data/feed/slp-opportunity-storage.js";
 import type { SlurpContentIntent } from "../../../../../shared/src/slp/slp-content-axes.js";
 import { selectSlurpBeat, type SlurpBeat, type SlurpCanonAnchors } from "../../modules/feed/slp-post-beat.js";
+import { slurpUsableSharedIdeas, type SlurpSharedIdea } from "../../modules/feed/slp-shared-preseed.js";
 import {
   normalizeSlurpCanonAnchors,
   slurpBeatFactFromPost,
@@ -32,6 +33,8 @@ export type SlurpBeatContext = {
   canonText: string;
   connection: SlurpBeatConnection;
   fallbackConnection: Parameters<typeof createSlurpPostProvider>[0]["fallbackConnection"];
+  /** Level 1, when the shared-ideas setting is on: the Creator's tags and the Slurp-wide event toggle. */
+  shared?: { tags: readonly string[]; worldEvents: boolean } | null;
 };
 
 const ANCHORS_KEY = "slurp2.canon-anchors";
@@ -70,16 +73,23 @@ function writeAnchors(db: DB, accountId: string, entry: AnchorCache[string]): Pr
   return writeQueue;
 }
 
-/** One extraction call. Never awaited by a post. */
-async function extractAnchors(db: DB, accountId: string, key: string, context: SlurpBeatContext): Promise<void> {
+/**
+ * One small JSON call for the beats planner (anchors, world tick, niche patterns). Not a slot of its
+ * own: it runs beside the post that noticed the cache was stale, and nothing waits on it.
+ */
+export async function completeSlurpBeatJson(
+  context: Pick<SlurpBeatContext, "connection" | "fallbackConnection">,
+  prompt: { system: string; user: string },
+  label: string,
+  /** Extractions stay close to the card; idea generation needs more range. */
+  temperature = 0.2,
+): Promise<unknown> {
   const { connection } = context;
-  // Not a slot of its own: it runs beside the post that noticed the card changed.
   const provider = createSlurpPostProvider({
     connection,
     fallbackConnection: context.fallbackConnection,
     admissionMode: { kind: "none" },
   });
-  const prompt = slurpCanonAnchorsPrompt(context.canonText);
   const response = await completeSlurpWithHost(
     provider,
     [
@@ -90,7 +100,7 @@ async function extractAnchors(db: DB, accountId: string, key: string, context: S
       model: connection.model,
       ...slpSamplingOptions(
         resolveStoredChatOptions(connection.defaultParameters, connection.provider, connection.model),
-        { temperature: 0.2, topP: 0.9 },
+        { temperature, topP: 0.9 },
       ),
       maxTokens: clampGenerationMaxOutputTokens({
         provider: connection.provider as APIProvider,
@@ -102,8 +112,13 @@ async function extractAnchors(db: DB, accountId: string, key: string, context: S
       stream: false,
     },
   );
+  return parseGameJsonish(requireModelAnswer(response.content ?? "", label));
+}
+
+/** One extraction call. Never awaited by a post. */
+async function extractAnchors(db: DB, accountId: string, key: string, context: SlurpBeatContext): Promise<void> {
   const anchors = normalizeSlurpCanonAnchors(
-    parseGameJsonish(requireModelAnswer(response.content ?? "", "canon anchors")),
+    await completeSlurpBeatJson(context, slurpCanonAnchorsPrompt(context.canonText), "canon anchors"),
   );
   // A card with nothing concrete is stored too, so it is not re-read before every post.
   await writeAnchors(db, accountId, { key, anchors });
@@ -148,13 +163,18 @@ export async function planSlurpBeat(
     context: SlurpBeatContext;
     intents: readonly SlurpContentIntent[];
     at: Date;
+    /** Level 1 ideas before the daily cap. See `slurpSharedIdeasFor`. */
+    shared?: { world: SlurpSharedIdea[]; niche: Record<string, SlurpSharedIdea[]>; topics: string[] } | null;
   },
 ): Promise<SlurpBeat | null> {
   try {
     const anchors = await slurpBeatAnchorsFor(db, input.accountId, input.context, input.at);
     if (!anchors) return null;
     const history = await readSlurpBeatHistory(db, input.accountId, input.at);
-    return selectSlurpBeat(input.accountId, input.sequence, anchors, history, input.intents);
+    const shared = input.shared
+      ? slurpUsableSharedIdeas({ ...input.shared, usedToday: history.sharedToday ?? {} })
+      : [];
+    return selectSlurpBeat(input.accountId, input.sequence, anchors, history, input.intents, shared);
   } catch (error) {
     logger.warn(error, "[slurp] Beat planning failed; this post uses the classic planner");
     return null;

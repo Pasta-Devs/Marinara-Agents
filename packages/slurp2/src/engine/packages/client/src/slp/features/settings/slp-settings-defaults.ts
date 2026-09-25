@@ -43,6 +43,8 @@ export const SLURP_SETTINGS_SECTION_KEYS: Record<SlurpResettableSection, readonl
     "generationGuidance",
     "enableLorebookContext",
     "postPlanner",
+    "sharedPreseed",
+    "sharedWorldEvents",
     "imageGenerationPrompt",
     "enableImageInterpretation",
     "imagePromptInterpretation",

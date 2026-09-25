@@ -113,6 +113,24 @@ export function SlpPromptsPanel(page: SlpBackstagePageProps) {
                 <option value="beats">{t("ui.slurp.settings.prompts.postPlannerBeats")}</option>
               </select>
             </Field>
+            {settings.postPlanner === "beats" && (
+              <Toggle
+                settingKey="sharedPreseed"
+                label={t("ui.slurp.settings.prompts.sharedPreseed")}
+                detail={t("ui.slurp.settings.prompts.sharedPreseedDetail")}
+                value={settings.sharedPreseed}
+                onChange={(value) => update("sharedPreseed", value)}
+              />
+            )}
+            {settings.postPlanner === "beats" && settings.sharedPreseed && (
+              <Toggle
+                settingKey="sharedWorldEvents"
+                label={t("ui.slurp.settings.prompts.sharedWorldEvents")}
+                detail={t("ui.slurp.settings.prompts.sharedWorldEventsDetail")}
+                value={settings.sharedWorldEvents}
+                onChange={(value) => update("sharedWorldEvents", value)}
+              />
+            )}
           </PromptOptions>
         </SlpPromptOutcomeSection>
 

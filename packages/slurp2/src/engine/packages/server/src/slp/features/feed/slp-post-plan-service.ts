@@ -23,6 +23,7 @@ import {
   planSlurpOpportunity,
 } from "../../data/feed/slp-opportunity-storage.js";
 import { planSlurpBeat, type SlurpBeatContext } from "./slp-post-beat-service.js";
+import { slurpSharedIdeasFor } from "./slp-shared-preseed-service.js";
 import { slurpBeatIntents } from "../../modules/feed/slp-post-beat.js";
 import { topSlurpDemandTrend } from "../../data/feed/slp-demand-storage.js";
 import { eq } from "../../../db/file-query.js";
@@ -119,6 +120,15 @@ export async function planSlurpPost(
           context: ctx.beats,
           intents: isTeaser ? ["teaser"] : ["casual", "set", "behind_the_scenes", "appreciation", "business"],
           at,
+          shared:
+            ctx.beats.shared && !previewOnly
+              ? await slurpSharedIdeasFor(db, {
+                  tags: ctx.beats.shared.tags,
+                  context: ctx.beats,
+                  at,
+                  worldEvents: ctx.beats.shared.worldEvents,
+                })
+              : null,
         })))
       : null;
   const drawn =

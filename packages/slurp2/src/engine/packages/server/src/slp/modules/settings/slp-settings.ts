@@ -255,6 +255,13 @@ export const slurpSettingsSchema = z.object({
    * concrete beat from the Creator's card first. See `modules/feed/slp-post-beat.ts`.
    */
   postPlanner: z.enum(["classic", "beats"]),
+  /**
+   * Beats only: a daily world tick and weekly niche patterns per topical tag add shared beat ideas.
+   * See `modules/feed/slp-shared-preseed.ts`.
+   */
+  sharedPreseed: z.boolean(),
+  /** With the shared preseed on, the world tick may also start a real Slurp-wide platform event. */
+  sharedWorldEvents: z.boolean(),
   enableImagePrompts: z.boolean(),
   maxImagesPerRefresh: z.number().int().min(0).max(24),
   maxGeneratedPostsPerRefresh: z.number().int().min(0).max(24),
@@ -504,6 +511,8 @@ export const DEFAULT_SLURP_SETTINGS: SlurpSettings = {
   includeCharacterSchedules: false,
   enableLorebookContext: false,
   postPlanner: "classic",
+  sharedPreseed: false,
+  sharedWorldEvents: false,
   enableImagePrompts: false,
   maxImagesPerRefresh: 0,
   maxGeneratedPostsPerRefresh: 4,

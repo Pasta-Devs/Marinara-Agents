@@ -107,6 +107,8 @@ export type SlurpSettings = {
   includeCharacterSchedules: boolean;
   enableLorebookContext: boolean;
   postPlanner: "classic" | "beats";
+  sharedPreseed: boolean;
+  sharedWorldEvents: boolean;
   enableImagePrompts: boolean;
   maxImagesPerRefresh: number;
   maxGeneratedPostsPerRefresh: number;

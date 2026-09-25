@@ -232,7 +232,14 @@ export async function generateCreatorPost(
       dueAt: input.publicationTime ?? null,
       beats:
         settings.postPlanner === "beats"
-          ? { canonText: sourceCharacterContext, connection: input.connection, fallbackConnection }
+          ? {
+              canonText: sourceCharacterContext,
+              connection: input.connection,
+              fallbackConnection,
+              shared: settings.sharedPreseed
+                ? { tags: account.settings.profile.tags ?? [], worldEvents: settings.sharedWorldEvents }
+                : null,
+            }
           : null,
     });
   // The rotation varies length; the intent rules out lengths that contradict its job.
