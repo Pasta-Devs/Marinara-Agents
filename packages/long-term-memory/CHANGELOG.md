@@ -1,5 +1,9 @@
 # Long-Term Memory changelog
 
+## 1.3.19 — 2026-09-24
+
+- Keep distinct trusted characters and relationship pairs on separate memory targets, preserve resolved target identities through normalization, and bound provider-generated event IDs after server naming.
+
 ## 1.3.18 — 2026-09-24
 
 - Surface conflicting legacy ID/title and duplicate subject notes during extraction instead of selecting one automatically; leave identity merges to the existing explicit preview and confirmation flow. Block ambiguous link application until the draft's link is explicitly edited to a scoped candidate.

@@ -60,7 +60,7 @@ async function main() {
       status?: "active" | "resolved";
       links?: Array<{
         target: string;
-        relation: "extracted_from" | "evidenced_by" | "caused_by" | "resolved_in";
+        relation: "extracted_from" | "evidenced_by" | "caused_by" | "resolved_in" | "affects_character" | "involves";
       }>;
       subjectNames?: string[];
       dimensionChanges?: Record<string, number>;
@@ -676,6 +676,116 @@ async function main() {
     parsedSourcePrefixedLink.response.units[0]?.links,
     [{ target: chat.id, relation: "extracted_from" }],
     "source_note:<id> extracted_from targets must normalize to the source note id",
+  );
+  const nearLimitEvent = parseEvidenceUnitPayload(
+    {
+      summary: "Near-limit provider event",
+      units: [
+        unit(chat, {
+          bucket: "timeline_event",
+          subjectId: `event_${"a".repeat(105)}`,
+          sectionKey: "event",
+          text: "Mara learned the observatory script.",
+          links: [{ target: chat.id, relation: "extracted_from" }],
+        }),
+        unit(chat, {
+          bucket: "character_fact",
+          subjectId: "mara",
+          sectionKey: "facts",
+          text: "Mara learned the observatory script.",
+          links: [{ target: `event_${"a".repeat(105)}`, relation: "caused_by" }],
+        }),
+      ],
+    },
+    sourceHash,
+  );
+  const boundedEvent = normalizeStructuredSummaryEvidenceUnits({
+    units: nearLimitEvent.response.units,
+    sourceText: chat.sections.source.text,
+    sourceNote: chat,
+    sourceHash,
+  }).units[0]!;
+  assert.equal(
+    ltmNoteIdSchema.safeParse(`timeline_${boundedEvent.subjectId}`).success,
+    true,
+    "provider event IDs must leave room for server-added prefix and source suffix",
+  );
+  assert.deepEqual(
+    nearLimitEvent.response.units[1]?.links,
+    [{ target: `timeline_${nearLimitEvent.response.units[0]?.subjectId}`, relation: "caused_by" }],
+    "same-response links must follow a bounded provider target",
+  );
+  const sharedLongSubject = `shared_${"a".repeat(115)}`;
+  const sharedLongSubjectResponse = parseEvidenceUnitPayload(
+    {
+      summary: "Shared near-limit provider targets",
+      units: [
+        {
+          ...unit(chat, {
+            bucket: "timeline_event",
+            subjectId: sharedLongSubject,
+            sectionKey: "event",
+            text: "Mara opened the observatory gate.",
+          }),
+          links: [
+            { target: sharedLongSubject, relation: "affects_character" },
+            { target: sharedLongSubject, relation: "involves" },
+          ],
+        },
+        {
+          ...unit(chat, {
+            bucket: "character_fact",
+            subjectId: sharedLongSubject,
+            sectionKey: "facts",
+            text: "Mara opened the observatory gate.",
+          }),
+          links: [{ target: sharedLongSubject, relation: "caused_by" }],
+        },
+      ],
+    },
+    sourceHash,
+  );
+  const sharedTimeline = sharedLongSubjectResponse.response.units.find(
+    (candidate) => candidate.bucket === "timeline_event",
+  )!;
+  const sharedCharacter = sharedLongSubjectResponse.response.units.find(
+    (candidate) => candidate.bucket === "character_fact",
+  )!;
+  assert.deepEqual(
+    sharedTimeline.links,
+    [{ target: `char_${sharedCharacter.subjectId}`, relation: "affects_character" }],
+    "relation-aware remapping must route a shared bare subject to the character target",
+  );
+  assert.deepEqual(
+    sharedCharacter.links,
+    [{ target: `timeline_${sharedTimeline.subjectId}`, relation: "caused_by" }],
+    "relation-aware remapping must route a shared bare subject to the timeline target",
+  );
+  const ambiguousGenericResponse = parseEvidenceUnitPayload(
+    {
+      summary: "Ambiguous generic target",
+      units: [
+        unit(chat, {
+          bucket: "timeline_event",
+          subjectId: "shared_identity",
+          sectionKey: "event",
+          text: "Mara opened the observatory gate.",
+          links: [{ target: "shared_identity", relation: "involves" }],
+        }),
+        unit(chat, {
+          bucket: "character_fact",
+          subjectId: "shared_identity",
+          sectionKey: "facts",
+          text: "Mara opened the observatory gate.",
+        }),
+      ],
+    },
+    sourceHash,
+  );
+  assert.deepEqual(
+    ambiguousGenericResponse.response.units[0]?.links,
+    [],
+    "generic links must fail closed when matching timeline and character targets conflict",
   );
   const oversizedPayload = parseEvidenceUnitPayload(
     {
@@ -1338,6 +1448,82 @@ async function main() {
     mode: "roleplay",
   });
   assert.equal(subjectIdentityRejection.droppedCandidates[0]?.validatorCode, "untrusted_subject_identity");
+  const collisionCatalog = buildTrustedLtmSubjectCatalog({
+    roster: [
+      { kind: "character", id: "alex-a", name: "Alex" },
+      { kind: "character", id: "alex-b", name: "Alex" },
+      { kind: "character", id: "rowan-a", name: "Rowan" },
+      { kind: "character", id: "rowan-b", name: "Rowan" },
+    ],
+    notes: [],
+  });
+  const collisionChat = sourceNote(
+    "source_identity_collisions",
+    { kind: "chat_summary", sourceId: "chat-c", entryId: "summary-c" },
+    "alex-a remembers the gate. alex-b remembers the gate. Pair a trusts the other. Pair b trusts the other.",
+  );
+  const collisionUnits = [
+    ...["alex-a", "alex-b"].map((id) => ({
+      ...unit(collisionChat, {
+        bucket: "character_fact" as const,
+        subjectId: "alex",
+        sectionKey: "facts",
+        claimKind: "static",
+        text: `${id} remembers the gate.`,
+      }),
+      subjectKeys: [`character:${id}`],
+    })),
+    ...["a", "b"].map((suffix) => ({
+      ...unit(collisionChat, {
+        bucket: "relationship_state" as const,
+        subjectId: "alex_rowan",
+        sectionKey: "state",
+        claimKind: "static",
+        text: `Pair ${suffix} trusts the other.`,
+      }),
+      subjectKeys: [`character:alex-${suffix}`, `character:rowan-${suffix}`],
+    })),
+  ];
+  const collisionResolution = resolveLtmSubjectIdentities({
+    units: collisionUnits,
+    catalog: collisionCatalog,
+    existingNotes: [],
+    scope: {},
+    mode: "roleplay",
+  });
+  assert.equal(collisionResolution.units.length, 4);
+  const collisionIds = collisionResolution.units.map((resolved: any) =>
+    resolved.bucket === "character_fact" ? `char_${resolved.subjectId}` : `rel_${resolved.subjectId}`,
+  );
+  assert.equal(new Set(collisionIds).size, 4, "distinct trusted identities must have distinct targets");
+  const collisionCompilation = compile(collisionChat, collisionResolution.units, true);
+  assert.deepEqual(
+    new Set(
+      collisionCompilation.compiledResponse.mutations.map((mutation: any) =>
+        mutation.kind === "create_note" ? mutation.note.id : mutation.noteId,
+      ),
+    ),
+    new Set(collisionIds),
+    "normalization and compilation must not mix facts from different identities",
+  );
+  for (const [index, id] of collisionIds.entries()) {
+    const created = collisionCompilation.compiledResponse.mutations.find(
+      (mutation: any) => mutation.kind === "create_note" && mutation.note.id === id,
+    );
+    assert.equal(
+      Object.values((created as any)?.note.sections ?? {}).some((section: any) =>
+        section.text.includes(collisionUnits[index]!.text),
+      ),
+      true,
+      "each distinct target must receive only its own fact",
+    );
+  }
+  const resolvedVoice = { ...collisionResolution.units[0]!, subjectId: "alex_voice", sectionKey: "voice" };
+  assert.equal(
+    normalizeStructuredSummaryEvidenceUnits({ units: [resolvedVoice], sourceText: "", sourceHash }).units[0]?.subjectId,
+    "alex_voice",
+    "a subject-bound target ending in a section name must not be stripped again",
+  );
   const canonicalIdentityNote = identityNote("char_seraphina", "Seraphina Duvall", [
     identityCatalog.entries.find((entry: any) => entry.name === "Seraphina Duvall")!.subject,
   ]);

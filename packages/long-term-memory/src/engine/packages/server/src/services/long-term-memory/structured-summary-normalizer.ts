@@ -318,11 +318,13 @@ function normalizeSourceEventGraph(units: LtmEvidenceUnit[], sourceNote: LtmNote
 
 function normalizeTargetShapeUnit(unit: LtmEvidenceUnit): LtmEvidenceUnit {
   if (unit.bucket === "character_fact") {
-    const normalized = normalizeSubjectSectionSuffix({
-      subjectId: stripUnitSubjectPrefix(unit.bucket, unit.subjectId),
-      sectionKey: unit.sectionKey,
-      suffixes: CHARACTER_SUBJECT_SECTION_SUFFIXES,
-    });
+    const normalized = unit.subjects?.length
+      ? { subjectId: stripUnitSubjectPrefix(unit.bucket, unit.subjectId), sectionKey: unit.sectionKey }
+      : normalizeSubjectSectionSuffix({
+          subjectId: stripUnitSubjectPrefix(unit.bucket, unit.subjectId),
+          sectionKey: unit.sectionKey,
+          suffixes: CHARACTER_SUBJECT_SECTION_SUFFIXES,
+        });
     return {
       ...unit,
       subjectId: normalized.subjectId,
@@ -547,11 +549,13 @@ function normalizeUnit(
   }
 
   if (unit.bucket === "character_fact") {
-    const normalized = normalizeSubjectSectionSuffix({
-      subjectId: stripUnitSubjectPrefix(unit.bucket, unit.subjectId),
-      sectionKey: unit.sectionKey,
-      suffixes: CHARACTER_SUBJECT_SECTION_SUFFIXES,
-    });
+    const normalized = unit.subjects?.length
+      ? { subjectId: stripUnitSubjectPrefix(unit.bucket, unit.subjectId), sectionKey: unit.sectionKey }
+      : normalizeSubjectSectionSuffix({
+          subjectId: stripUnitSubjectPrefix(unit.bucket, unit.subjectId),
+          sectionKey: unit.sectionKey,
+          suffixes: CHARACTER_SUBJECT_SECTION_SUFFIXES,
+        });
     return {
       ...unit,
       subjectId: normalized.subjectId,
