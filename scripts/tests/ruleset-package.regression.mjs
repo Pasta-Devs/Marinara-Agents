@@ -2241,11 +2241,28 @@ for (const [what, edit, message] of [
   document.catalogs[0].entries[0].creature.sheet.lists.spells[0]._catalog = "tricks/zap";
   assert.throws(() => assertRulesetCreatures(sheetManifest, document, sources), /which that catalog does not hold/u);
 }
+// Text is held only to a length the ruleset declares, exactly as the Engine holds a row.
+{
+  const document = sheetDocument();
+  document.sheet = {
+    ...sheetRuleset,
+    fields: sheetRuleset.fields.map((field) =>
+      field.id === "mood" ? { id: "mood", label: "Mood", type: "text" } : field,
+    ),
+  };
+  document.catalogs[0].entries[0].creature.sheet.fields.mood = "grimly jolly";
+  assert.equal(assertRulesetCreatures(sheetManifest, document), 1);
+}
 // The shipped casters: every one a sheet, and every spell row one of the package's own spells.
 {
   const bestiary = JSON.parse(shippedCatalogSources.get("catalogs/creatures.json"));
   const casters = bestiary.entries.filter((entry) => entry.creature.sheet);
   assert.equal(casters.length, 12, "the twelve slot casters of the SRD are sheets");
+  // SRD 5.1 prints the Priest's Religion as +4 where the fixture says +5: Intelligence 13 and a 5th
+  // level proficiency of 3 make exactly 4, so the corrected sheet carries no bonus there.
+  const priest = casters.find((entry) => entry.id === "priest").creature.sheet;
+  assert.equal(priest.skills.religion, "proficient");
+  assert.equal(priest.bonuses.religion, undefined, "the Priest's Religion is the printed +4");
   for (const entry of casters) {
     assert.ok(entry.creature.sheet.lists.spells.length > 0, `${entry.id} prepares spells`);
     assert.ok(

@@ -553,6 +553,14 @@ const WEAPON_PROPERTY_CORRECTIONS = new Map([
 // purpose rather than shipped as an attack for 0 damage.
 const SKIPPED_WEAPONS = new Set(["srd_net"]);
 
+// Numbers where the fixture disagrees with the stat block SRD 5.1 prints, keyed by creature pk and
+// fixture field. Each row states both, so a fixture that is later fixed stops the build instead of
+// being corrected twice.
+const CREATURE_FIELD_CORRECTIONS = new Map([
+  // SRD 5.1, Priest: "Skills Medicine +7, Persuasion +3, Religion +4". The fixture gives Religion +5.
+  ["srd_priest", { skill_bonus_religion: { printed: 4, fixture: 5 } }],
+]);
+
 // The sheet has one Level field, because a ruleset sheet has no notion of a class
 // and cannot have one per class. A resource that follows a class table therefore
 // reads the character's TOTAL level, which is right for a single-class character
@@ -2695,14 +2703,14 @@ function casterSheet(pk, fields, casting, speed, sources, report) {
     sheet.saves.map((save) => {
       const key = `saving_throw_${ABILITY_NAMES.get(save.ability) ?? fail(`the save ${save.id} reads no ability`)}`;
       if (!(key in fields)) fail(`the source has no ${key} for ${pk}`);
-      return [save.id, fields[key]];
+      return [save.id, printedField(pk, fields, key)];
     }),
   );
   const printedSkills = new Map(
     sheet.skills.map((skill) => {
       const key = `skill_bonus_${skill.id}`;
       if (!(key in fields)) fail(`the source has no ${key} for ${pk}`);
-      return [skill.id, fields[key]];
+      return [skill.id, printedField(pk, fields, key)];
     }),
   );
   for (const [id, printed] of printedSaves) if (printed !== null) build.saves[id] = proficient;
@@ -2752,6 +2760,26 @@ function casterSheet(pk, fields, casting, speed, sources, report) {
       `DC ${signed(build.fields.spell_dc_extra ?? 0)}, ${Object.keys(build.bonuses).length} save/skill bonus(es)`,
   );
   return build;
+}
+
+/** One number of a stat block as SRD 5.1 prints it: the fixture's, unless a correction above says the
+ *  fixture has it wrong. */
+function printedField(pk, fields, key) {
+  const correction = CREATURE_FIELD_CORRECTIONS.get(pk)?.[key];
+  if (!correction) return fields[key];
+  if (fields[key] !== correction.fixture) {
+    fail(`${pk} now gives ${key} as ${fields[key]}, so its correction to ${correction.printed} is stale`);
+  }
+  return correction.printed;
+}
+
+/** Every correction names a creature the source still has and a field it still carries, so a row can
+ *  never sit in the table doing nothing. */
+function assertCreatureFieldCorrections(records) {
+  for (const [pk, corrections] of CREATURE_FIELD_CORRECTIONS) {
+    const record = records.find((entry) => entry.pk === pk) ?? fail(`${pk} is corrected but is not in the source`);
+    for (const key of Object.keys(corrections)) printedField(pk, record.fields, key);
+  }
 }
 
 function signed(number) {
@@ -3733,6 +3761,7 @@ for (const entry of spells) {
   creatureSources.spellsByName.set(name, entry);
 }
 assertCreatureAliases(creatureRecords, creatureActions);
+assertCreatureFieldCorrections(creatureRecords);
 report.aliasShapedPairs.push(...aliasShapedPairs(creatureRecords, creatureActions));
 
 const parsedCreatures = creatureRecords

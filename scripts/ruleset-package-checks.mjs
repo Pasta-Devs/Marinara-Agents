@@ -1124,7 +1124,10 @@ function cellIssue(spec, value) {
       return typeof value === "string" && value.length <= 40 ? null : `takes dice text, not ${JSON.stringify(value)}`;
     default:
       if (typeof value !== "string") return `takes text, not ${JSON.stringify(value)}`;
-      return value.length <= spec.maxLength ? null : `is longer than ${spec.maxLength} characters`;
+      // The Engine only holds text to a length the field declares.
+      return spec.maxLength === undefined || value.length <= spec.maxLength
+        ? null
+        : `is longer than ${spec.maxLength} characters`;
   }
 }
 

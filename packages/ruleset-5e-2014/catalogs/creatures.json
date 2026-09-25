@@ -14334,7 +14334,7 @@
           "abilities": { "str": 10, "dex": 10, "con": 12, "int": 13, "wis": 16, "cha": 13 },
           "skills": { "medicine": "proficient", "persuasion": "proficient", "religion": "proficient" },
           "saves": {},
-          "bonuses": { "medicine": 1, "persuasion": -1, "religion": 1 },
+          "bonuses": { "medicine": 1, "persuasion": -1 },
           "fields": {
             "level": 5,
             "class": "Cleric",
