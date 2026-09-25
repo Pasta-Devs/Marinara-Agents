@@ -4,6 +4,14 @@
 
 - Keep distinct trusted characters and relationship pairs on separate memory targets, preserve resolved target identities through normalization, and bound provider-generated event IDs after server naming.
 
+## 1.3.18 — 2026-09-24
+
+- Surface conflicting legacy ID/title and duplicate subject notes during extraction instead of selecting one automatically; leave identity merges to the existing explicit preview and confirmation flow. Block ambiguous link application until the draft's link is explicitly edited to a scoped candidate.
+
+## 1.3.17 — 2026-09-24
+
+- Record bounded diagnostics for invalid recovery candidate subject IDs when draft validation fails, without logging candidate memory text.
+
 ## 1.3.16 — 2026-09-23
 
 - Stop automatically binding short names and fuzzy spelling variants to characters; keep those matches reviewable instead of assigning a subject without evidence. A reviewed subject-bound alias choice can rename the existing canonical character note to the chosen alias.

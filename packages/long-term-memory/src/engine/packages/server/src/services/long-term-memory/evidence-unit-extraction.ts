@@ -153,7 +153,7 @@ type RawSubjectTargets = Map<string, string | null>;
 
 type RawEvidenceUnitTargetHints = {
   targetNoteIds: Set<string>;
-  remappedNoteIds: Map<string, string>;
+  remappedNoteIds: Map<string, string | null>;
   remappedSubjectTargets: Map<string, Set<string>>;
   timelineSubjects: RawSubjectTargets;
   threadSubjects: RawSubjectTargets;
@@ -646,10 +646,11 @@ function normalizeEvidenceUnitResponse(raw: unknown, expectedSourceHash: string,
     const next = normalizedUnits[index] as Record<string, unknown> | undefined;
     if (typeof old.bucket !== "string" || typeof old.subjectId !== "string" || typeof next?.subjectId !== "string")
       continue;
-    const before = noteIdForRawEvidenceUnit(old.bucket, normalizeRawIdentifier(old.subjectId, ""), "");
-    const after = noteIdForRawEvidenceUnit(old.bucket, next.subjectId, "");
+    const sectionKey = typeof old.sectionKey === "string" ? normalizeRawIdentifier(old.sectionKey, "") : "";
+    const before = noteIdForRawEvidenceUnit(old.bucket, normalizeRawIdentifier(old.subjectId, ""), sectionKey);
+    const after = noteIdForRawEvidenceUnit(old.bucket, next.subjectId, sectionKey);
     if (before && after && before !== after) {
-      targetHints.remappedNoteIds.set(before, after);
+      addRemappedNoteId(targetHints.remappedNoteIds, before, after);
       addSubjectTarget(targetHints.remappedSubjectTargets, normalizeRawIdentifier(old.subjectId, ""), after);
       addRemappedSubjectHint(
         targetHints,
@@ -724,6 +725,11 @@ function addSubjectTarget(targets: Map<string, Set<string>>, subjectId: string, 
   const current = targets.get(subjectId) ?? new Set<string>();
   current.add(noteId);
   targets.set(subjectId, current);
+}
+
+function addRemappedNoteId(remapped: Map<string, string | null>, before: string, after: string) {
+  const existing = remapped.get(before);
+  remapped.set(before, existing === undefined || existing === after ? after : null);
 }
 
 function addSubjectHint(targets: RawSubjectTargets, subjectId: string, noteId: string) {
@@ -841,7 +847,7 @@ function normalizeRawLinkTarget(
   const identifier = normalizeRawIdentifier(sourceNoteMatch?.[1] ?? value, "");
   if (!identifier) return null;
   if (sourceNoteMatch) return identifier;
-  if (hints.remappedNoteIds.has(identifier)) return hints.remappedNoteIds.get(identifier)!;
+  if (hints.remappedNoteIds.has(identifier)) return hints.remappedNoteIds.get(identifier) ?? null;
   const rawWasIdentifier = rawText === identifier;
   if (hints.targetNoteIds.has(identifier)) return identifier;
 
