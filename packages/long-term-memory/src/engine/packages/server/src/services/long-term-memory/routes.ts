@@ -7,6 +7,7 @@ import {
   ltmBulkNoteResultSchema,
   ltmConflictSchema,
   ltmDraftMutationSchema,
+  ltmDraftLinkChoiceSchema,
   ltmDraftPreflightRequestSchema,
   ltmDraftPreflightResponseSchema,
   ltmDraftReviewResponseSchema,
@@ -388,6 +389,7 @@ const acceptDraftBody = z
     mutationIds: z.array(z.string().uuid()).min(1).optional(),
     lowRiskOnly: z.boolean().optional(),
     editedMutations: z.array(ltmDraftMutationSchema).optional(),
+    linkChoices: z.array(ltmDraftLinkChoiceSchema).max(1_000).optional(),
   })
   .strict()
   .default({});
@@ -1418,6 +1420,7 @@ export function createLongTermMemoryRoutes(runtime: {
             root,
             mutationIds: body.mutationIds,
             editedMutations: body.editedMutations,
+            linkChoices: body.linkChoices,
             bulk: body.bulk,
           });
         } catch (error) {
@@ -1439,6 +1442,7 @@ export function createLongTermMemoryRoutes(runtime: {
             actor: "maintenance_api",
             mutationIds: body.mutationIds,
             editedMutations: body.editedMutations,
+            linkChoices: body.linkChoices,
             autoApplyLowRiskOnly: body.lowRiskOnly,
             operationId: randomUUID(),
           });
