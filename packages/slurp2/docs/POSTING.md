@@ -24,7 +24,7 @@ In order of precedence:
 Intents: `casual`, `teaser`, `set`, `behind_the_scenes`, `request`, `appreciation`, `callback`,
 `business`.
 
-With the **Beats** post planner (setting `postPlanner`, default `classic`), step 4 is beat-first: a
+With the **Beats** post planner (setting `postPlanner`, default `beats` since 0.2.55), step 4 is beat-first: a
 beat type is drawn from the Creator's canon-anchor palette, weighted down for this Creator's recent
 beats and capped across all Creators in the last day, then filled with one canon anchor and one
 written situation template. The intent is drawn only from the intents that beat can serve. The

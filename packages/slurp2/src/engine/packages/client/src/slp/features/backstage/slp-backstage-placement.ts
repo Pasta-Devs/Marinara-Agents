@@ -134,7 +134,7 @@ export const SLP_BACKSTAGE_SETTING_PLACEMENT: Record<keyof SlurpSettings, SlpBac
   fanArchetypeWeights: world("audience", "fan type weights", "audience mix"),
   fanTypes: world("audience", "fan types", "audience personas"),
   platformEvents: content("events", "occasions", "holidays", "christmas", "halloween", "special dates"),
-  storyAutomation: content("events", "occasion automation", "suggestions", "automatic occasions"),
+  storyAutomation: content("events", "occasion automation", "suggestions", "automatic occasions", "start events"),
   messagesAwayRepliesEnabled: world("messaging", "away replies", "automatic messages"),
   messagesReplyBubbleLimit: world("messaging", "reply bubbles", "message length"),
   messagesDefaultDmPolicy: world("messaging", "DM policy", "message access"),

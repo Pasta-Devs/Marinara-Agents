@@ -12,25 +12,25 @@ export function SlpBackstageContentPanel(page: SlpBackstagePageProps) {
       target: "calendar",
       icon: <CalendarDays size={19} aria-hidden="true" />,
       title: "Calendar",
-      detail: "View occasions, active Plans, and recent activity.",
+      detail: "View events, active storylines, and recent activity.",
     },
     {
       target: "events",
       icon: <Sparkles size={19} aria-hidden="true" />,
-      title: "Occasions",
-      detail: "Manage holidays, special dates, and scheduled campaigns.",
+      title: "Events",
+      detail: "Manage holidays, special dates, and platform events.",
     },
     {
       target: "arcs",
       icon: <BookOpen size={19} aria-hidden="true" />,
-      title: "Plan templates",
+      title: "Storyline types",
       detail: "Edit reusable story templates. Active Plans keep their own copy.",
     },
     {
       target: "packs",
       icon: <PackageOpen size={19} aria-hidden="true" />,
       title: "Packs",
-      detail: "Import and export optional collections of Occasions and Plan templates.",
+      detail: "Import and export optional collections of Events and Storyline types.",
     },
   ];
 

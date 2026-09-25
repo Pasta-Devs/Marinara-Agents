@@ -24,7 +24,7 @@ const LANES = [
   { id: "tags", label: "Tag curator", detail: "Discovery tags. New tags are created when you apply." },
   { id: "publishing", label: "Publishing setup", detail: "Turns on auto-posting. No model call." },
 ] as const;
-const DEFERRED_LANES = ["Art direction", "Fan types and reactions", "Arc starters", "Messaging", "Ads"];
+const DEFERRED_LANES = ["Art direction", "Fan types and reactions", "Storyline starters", "Messaging", "Ads"];
 
 type Checkup = {
   creator: SlpCreatorManagedStageProfile;

@@ -233,8 +233,8 @@ export function SlpDeepDetailsModal({ postId, open, onClose }: { postId: string;
                   <Rows
                     rows={[
                       ["Production style", details.strategy.style],
-                      ["Quiet slots", `${details.strategy.skipRate}%`],
-                      ["Lean on words", `${details.strategy.textOnlyRate} / 100`],
+                      ["Skipped posts", `${details.strategy.skipRate}%`],
+                      ["Posts without pictures", `${details.strategy.textOnlyRate} / 100`],
                     ]}
                   />
                   <WeightBars weights={details.strategy.intentWeights} highlight={details.plan.intent} />

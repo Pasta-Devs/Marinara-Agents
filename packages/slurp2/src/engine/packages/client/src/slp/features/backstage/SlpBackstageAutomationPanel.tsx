@@ -36,7 +36,7 @@ export function SlpBackstageAutomationPanel(page: SlpBackstagePageProps) {
   return (
     <div className="space-y-4">
       <BackstagePageHeader
-        title={t("ui.slurp.settings.backstage.sections.automation", { defaultValue: "Publishing and automation" })}
+        title={t("ui.slurp.settings.backstage.sections.automation", { defaultValue: "Posting" })}
         detail={t("ui.slurp.settings.backstage.landing.automationDetail", {
           defaultValue: "What Slurp does by itself. Pause anything here, or open it to change how it works.",
         })}
@@ -129,7 +129,7 @@ export function SlpBackstageAutomationPanel(page: SlpBackstagePageProps) {
       />
       <SummaryRow
         icon={<BookOpen size={20} />}
-        title={t("ui.slurp.settings.backstage.landing.planAutomation", { defaultValue: "Story and Plan automation" })}
+        title={t("ui.slurp.settings.backstage.landing.planAutomation", { defaultValue: "Storylines" })}
         status={t(
           `ui.slurp.settings.arcAutoMode${settings.arcAutoMode === "off" ? "Off" : settings.arcAutoMode === "suggest" ? "Suggest" : "Auto"}`,
         )}

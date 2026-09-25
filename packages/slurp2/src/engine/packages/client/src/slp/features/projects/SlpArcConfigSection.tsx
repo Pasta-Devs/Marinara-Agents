@@ -96,7 +96,7 @@ export function ArcConfigSection({
       </div>
       {select(
         "autoMode",
-        localizeUi("ui.slurp.projects.config.autoMode", { defaultValue: "Automatic arcs" }),
+        localizeUi("ui.slurp.projects.config.autoMode", { defaultValue: "Starting storylines" }),
         autoModes.find((mode) => mode.value === global.arcAutoMode)?.label ?? global.arcAutoMode,
         autoModes,
         (value) => value as SlurpCreatorArcConfig["autoMode"],

@@ -23,7 +23,7 @@ export function SlpWorldEventsPanel(page: SlpBackstagePageProps) {
           label={t("ui.slurp.settings.events.automationLabel", { defaultValue: "Story automation" })}
           detail={t("ui.slurp.settings.events.automationDetail", {
             defaultValue:
-              "What happens when an event or arc wants to start. Events set to follow this setting use it; the rest keep their own choice.",
+              "When an event's dates come, Slurp can wait for you, suggest it, or start it. This affects events only; storylines have their own setting. Events with their own choice keep it.",
           })}
         >
           <select

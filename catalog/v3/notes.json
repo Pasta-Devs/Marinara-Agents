@@ -360,6 +360,12 @@
     "slurp2": {
       "versions": [
         {
+          "version": "0.2.57",
+          "date": "2026-09-25",
+          "notes": "- Clearer names in Settings: arcs, plans, and projects are now called storylines, occasions are events, and the post planner is \"Post ideas come from\". Several help texts were corrected, among them the event automation text, which wrongly said it also starts storylines.",
+          "highlight": false
+        },
+        {
           "version": "0.2.56",
           "date": "2026-09-25",
           "notes": "- A Creator's limits and saved notes no longer drop out of post and message prompts after a week of Beats posts; only the newest few post notes stay active.\n- Beats no longer rejects correct short names such as Mia or Kai, or people an arc chapter or a callback names, so fewer posts are rewritten.\n- Posts that answer a promise or a campaign step keep it when they are retried or rewritten, and prepared posts are only rewritten when the character card or schedule really changed.\n- Several moments saved from one chat without a message id are all kept, and Canon anchors you edited are not replaced by a background read.\n- Smaller Beats fixes: the heat floor matches the card, a named person is never told to be alone, an arc teaser gets no second subject, and a locked post's moment is never a callback in a public post.",
@@ -471,12 +477,6 @@
           "version": "0.2.38",
           "date": "2026-09-24",
           "notes": "- Generated audience names now draw from one merged, much larger word bank (184,512 combinations, up from ~18,800) instead of a single fixed set of moody handles.\n- Generated names are CamelCase with no digits, spaces, or underscores (for example `MothHour` instead of `moth_hour_77`), so they read as a single word and two people never blur together in a dense list.",
-          "highlight": false
-        },
-        {
-          "version": "0.2.37",
-          "date": "2026-09-24",
-          "notes": "- NanoGPT, xAI, and connections recognised only by their base URL now receive avatar reference images again.\n- Persona Creators can set Messages & Pricing again; the tab now uses the same viewer persona as the rest of Slurp.\n- Post cards, the picture viewer, and the redraw box show the exact prompt the picture was drawn from. A prompt you edit or keep in the redraw box is sent as written, not rewritten again.\n- Multi-picture posts plan every picture as its own complete scene, so a photo dump, a shoot, or a day out each gets pictures that make sense on their own.",
           "highlight": false
         }
       ]

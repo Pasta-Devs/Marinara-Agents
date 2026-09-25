@@ -21,7 +21,7 @@ const metricLabel = (t: Translate, key: (typeof METRIC_KEYS)[number]) =>
       replies: "Replies",
       earnings: "Earned",
       unread: "Unread",
-      arcs: "Arcs",
+      arcs: "Storylines",
     }[key],
   });
 const compact = new Intl.NumberFormat(undefined, { notation: "compact", maximumFractionDigits: 1 });

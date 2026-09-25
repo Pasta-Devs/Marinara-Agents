@@ -2,14 +2,14 @@ import { BackstagePageHeader, SettingAnchor } from "../../modules/settings/SlpSe
 import { ArcLibraryEditor } from "./SlpArcLibraryEditor";
 import type { SlpBackstagePageProps } from "../backstage/slp-backstage-contract";
 
-/** Reusable Plan templates. Runtime behavior is configured under Publishing and automation. */
+/** Reusable Storyline types. Runtime behavior is configured under Posting. */
 export function SlpProjectsPanel(page: SlpBackstagePageProps) {
   const { viewerPersonaId, t, updateSettings, settings, selectedCreatorId, update } = page;
 
   return (
     <div className="space-y-6">
       <BackstagePageHeader
-        title={t("ui.slurp.settings.planTemplates.title", { defaultValue: "Plan templates" })}
+        title={t("ui.slurp.settings.planTemplates.title", { defaultValue: "Storyline types" })}
         detail={t("ui.slurp.settings.planTemplates.detail", {
           defaultValue: "Reusable story structures. Each new Plan gets its own copy of a template.",
         })}

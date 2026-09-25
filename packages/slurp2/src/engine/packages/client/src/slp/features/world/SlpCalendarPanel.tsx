@@ -106,7 +106,7 @@ export function SlpCalendarPanel(page: SlpBackstagePageProps) {
           <p className="text-xs font-bold uppercase tracking-[0.16em] text-[var(--noodle-accent)]">When</p>
           <h2 className="mt-1 text-2xl font-black tracking-tight">Your Slurp calendar</h2>
           <p className="mt-2 max-w-2xl text-sm leading-6 text-[var(--slurp-muted)]">
-            Occasions are context. Active items are work in progress. Nothing publishes only because it appears here.
+            Events are context. Active items are work in progress. Nothing publishes only because it appears here.
           </p>
         </div>
         <div className="flex gap-2">
@@ -138,7 +138,7 @@ export function SlpCalendarPanel(page: SlpBackstagePageProps) {
           aria-label="Calendar legend"
         >
           <span className="inline-flex items-center gap-2 rounded-full bg-[var(--slurp-violet)]/10 px-3 py-2">
-            <Sparkles size={13} aria-hidden="true" /> Occasion
+            <Sparkles size={13} aria-hidden="true" /> Event
           </span>
           <span className="inline-flex items-center gap-2 rounded-full bg-[var(--noodle-accent)]/10 px-3 py-2">
             <Clock3 size={13} aria-hidden="true" /> Plan or activity
@@ -271,7 +271,7 @@ export function SlpCalendarPanel(page: SlpBackstagePageProps) {
                       <span className="block truncate text-sm font-bold">{item.title}</span>
                       <span className="mt-1 block text-xs text-[var(--slurp-muted)]">
                         {dayLabel.format(new Date(item.startsAt))} ·{" "}
-                        {item.kind === "occasion" ? "Occasion" : item.kind === "plan" ? "Plan" : "Running occasion"}
+                        {item.kind === "occasion" ? "Event" : item.kind === "plan" ? "Storyline" : "Running event"}
                       </span>
                     </span>
                     <span className="shrink-0 text-xs font-semibold capitalize text-[var(--slurp-muted)]">
@@ -294,10 +294,10 @@ export function SlpCalendarPanel(page: SlpBackstagePageProps) {
             <div>
               <p className="text-xs font-bold uppercase tracking-[0.14em] text-[var(--slurp-muted)]">
                 {selectedItem.kind === "occasion"
-                  ? "Occasion"
+                  ? "Event"
                   : selectedItem.kind === "plan"
-                    ? "Plan"
-                    : "Running occasion"}
+                    ? "Storyline"
+                    : "Running event"}
               </p>
               <h3 id="slurp-calendar-selection" className="mt-1 text-lg font-black">
                 {selectedItem.title}
@@ -329,7 +329,7 @@ export function SlpCalendarPanel(page: SlpBackstagePageProps) {
             className={`${buttonClass} mt-4`}
             onClick={() => open(selectedItem.kind === "occasion" ? "events" : "arcs")}
           >
-            {selectedItem.kind === "occasion" ? "Edit Occasion" : "Open Plan templates"}
+            {selectedItem.kind === "occasion" ? "Edit Event" : "Open Storyline types"}
           </button>
           {selectedItem.kind === "occasion" && (
             <button
@@ -338,7 +338,7 @@ export function SlpCalendarPanel(page: SlpBackstagePageProps) {
               disabled={!page.selectedCreatorId || !page.viewerPersonaId || createPlan.isPending}
               onClick={() => void createPlanFromOccasion(selectedItem)}
             >
-              {createPlan.isPending ? "Creating Plan…" : "Create Plan from occasion"}
+              {createPlan.isPending ? "Creating storyline…" : "Create storyline from event"}
             </button>
           )}
           {selectedItem.kind === "occasion" && (!page.selectedCreatorId || !page.viewerPersonaId) && (
@@ -367,7 +367,7 @@ export function SlpCalendarPanel(page: SlpBackstagePageProps) {
         >
           <span className="block text-sm font-black">Open Plan automation</span>
           <span className="mt-1 block text-xs leading-5 text-[var(--slurp-muted)]">
-            Set how Plans start and progress. Reusable templates live in Plan templates.
+            Set how Plans start and progress. Reusable templates live in Storyline types.
           </span>
         </button>
         <button
@@ -377,7 +377,7 @@ export function SlpCalendarPanel(page: SlpBackstagePageProps) {
         >
           <span className="block text-sm font-black">Open Packs</span>
           <span className="mt-1 block text-xs leading-5 text-[var(--slurp-muted)]">
-            Import reusable Occasions and Plan templates.
+            Import reusable Events and Storyline types.
           </span>
         </button>
       </section>

@@ -93,7 +93,7 @@ export function SlurpCreatorStrategyGroup({ creator }: { creator: SlpCreatorMana
       {rate(
         "skipRate",
         40,
-        t("ui.slurp.settings.creators.strategy.skipLabel", { defaultValue: "Quiet slots" }),
+        t("ui.slurp.settings.creators.strategy.skipLabel", { defaultValue: "Skipped posts" }),
         t("ui.slurp.settings.creators.strategy.skipDetail", {
           defaultValue: "How often a scheduled slot stays empty. Never two in a row.",
         }),
@@ -101,7 +101,7 @@ export function SlurpCreatorStrategyGroup({ creator }: { creator: SlpCreatorMana
       {rate(
         "textOnlyRate",
         100,
-        t("ui.slurp.settings.creators.strategy.textLabel", { defaultValue: "Lean on words" }),
+        t("ui.slurp.settings.creators.strategy.textLabel", { defaultValue: "Posts without pictures" }),
         t("ui.slurp.settings.creators.strategy.textDetail", {
           defaultValue:
             "How often a post goes out without a picture. 50 is the default balance. Sets always have pictures.",

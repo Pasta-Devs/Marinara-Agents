@@ -83,7 +83,7 @@ export function SlpBackstageWorldPanel(page: SlpBackstagePageProps) {
     },
     {
       target: "arcs",
-      label: t("ui.slurp.settings.backstage.landing.arcLibrary", { defaultValue: "Plan templates" }),
+      label: t("ui.slurp.settings.backstage.landing.arcLibrary", { defaultValue: "Storyline types" }),
       count: settings.arcLibrary.length,
     },
     {

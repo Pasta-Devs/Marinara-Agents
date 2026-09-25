@@ -1,5 +1,9 @@
 # Slurp Remastered release notes
 
+## 0.2.57 — 2026-09-25
+
+- Clearer names in Settings: arcs, plans, and projects are now called storylines, occasions are events, and the post planner is "Post ideas come from". Several help texts were corrected, among them the event automation text, which wrongly said it also starts storylines.
+
 ## 0.2.56 — 2026-09-25
 
 - A Creator's limits and saved notes no longer drop out of post and message prompts after a week of Beats posts; only the newest few post notes stay active.

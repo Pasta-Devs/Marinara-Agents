@@ -21,12 +21,12 @@ const SOURCES: Record<SourceId, { title: string; where: string; what: string }> 
   },
   memory: {
     title: "Memory and schedule",
-    where: "Backstage › Content, Backstage › Publishing and automation › Automation, and the Creator's history",
-    what: "What already happened and what is due: continuity notes, arcs, subscriber requests, earlier posts, and the schedule.",
+    where: "Backstage › Stories & events, Backstage › Posting › Automation, and the Creator's history",
+    what: "What already happened and what is due: continuity notes, storylines, subscriber requests, earlier posts, and the schedule.",
   },
   slurp: {
     title: "Slurp settings",
-    where: "Backstage › Publishing and automation › Images and Connections",
+    where: "Backstage › Posting › Images and Connections",
     what: "Slurp-wide defaults: text and image connections, image style, image size, and appearance options.",
   },
   prompts: {
@@ -62,11 +62,7 @@ export function originTable(details: SlpDeepDetailsRecord, run: SlpDeepDetailsIm
     : run.appearance.source === "stage"
       ? from("creator", "Appearance", `${creator} › Profile`)
       : run.appearance.source === "none"
-        ? from(
-            "slurp",
-            "Include descriptions (off, or nothing written)",
-            "Backstage › Publishing and automation › Images",
-          )
+        ? from("slurp", "Include descriptions (off, or nothing written)", "Backstage › Posting › Images")
         : from(
             ["card", "slurp"],
             "Appearance, used because the Creator has none",
@@ -77,14 +73,14 @@ export function originTable(details: SlpDeepDetailsRecord, run: SlpDeepDetailsIm
     chosenBy === "creator"
       ? from("creator", "Image style", `${creator} › Images`)
       : chosenBy === "slurp"
-        ? from("slurp", "Image style", "Backstage › Publishing and automation › Images")
+        ? from("slurp", "Image style", "Backstage › Posting › Images")
         : from("engine", "Connection or Engine default style");
   const connectionBy = run?.connection.chosenBy;
   const imageConnection: Origin =
     connectionBy === "creator"
       ? from("creator", "Image connection", `${creator} › Images`)
       : connectionBy === "slurp"
-        ? from("slurp", "Image generation connection", "Backstage › Publishing and automation › Connections")
+        ? from("slurp", "Image generation connection", "Backstage › Posting › Connections")
         : connectionBy === "engine"
           ? from("engine", "Default image connection", "Marinara Settings › Connections")
           : from(["creator", "slurp", "engine"], "Image connection: Creator, then Slurp, then Engine default");
@@ -95,14 +91,14 @@ export function originTable(details: SlpDeepDetailsRecord, run: SlpDeepDetailsIm
   return {
     "strategy:Production style": from("creator", "Posting strategy › Production style", creator),
     "strategy:Intent weights": from("creator", "Posting strategy › Intent weights", creator),
-    "strategy:Quiet slots": from("creator", "Posting strategy › Quiet slots", creator),
-    "strategy:Lean on words": from("creator", "Posting strategy › Text-only rate", creator),
+    "strategy:Skipped posts": from("creator", "Posting strategy › Skipped posts", creator),
+    "strategy:Posts without pictures": from("creator", "Posting strategy › Text-only rate", creator),
     "request:Workflow": from("memory", "Schedule or run-now request"),
     "request:Due": from("memory", "Schedule slot"),
     "request:Player direction": from("memory", "Your direction for this post (Guide)"),
     "request:Subscribers asked for": from("memory", "Subscriber requests"),
     "request:Campaign": from("memory", "Campaigns"),
-    "request:Project": from("memory", "Arcs", "Backstage › Content › Arcs"),
+    "request:Project": from("memory", "Storylines", "Backstage › Stories & events › Storylines"),
     "plan:Post number": from("memory", "The Creator's post count"),
     "plan:Intent weights": step("Creator strategy", "Intent weights"),
     "plan:Access setting": from("creator", "Automatic post access", creator),
@@ -150,11 +146,7 @@ export function originTable(details: SlpDeepDetailsRecord, run: SlpDeepDetailsIm
     "final:Rewrite, styled again": chosenText,
     "final:Styled template": chosenText,
     "final:Look": step("Appearance", "Look"),
-    "final:Size": from(
-      "slurp",
-      "Image width and height (Story size for stories)",
-      "Backstage › Publishing and automation › Images",
-    ),
+    "final:Size": from("slurp", "Image width and height (Story size for stories)", "Backstage › Posting › Images"),
     "final:Negative prompt": step("Style profile and Brief the picture", "Negative tags and content level"),
     "provider:Connection": imageConnection,
     "provider:Final prompt": step("Assemble the final prompt", "Final prompt"),

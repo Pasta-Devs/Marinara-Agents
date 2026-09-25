@@ -71,7 +71,7 @@ export function ArcLibraryEditor({
         !Array.isArray((parsed as { chapters?: unknown }).chapters) ||
         !Array.isArray((parsed as { tags?: unknown }).tags)
       )
-        throw new Error("This file is not a valid Slurp Arc.");
+        throw new Error("This file is not a valid Slurp storyline type.");
       const value = parsed as SlurpArcType;
       const imported: SlurpArcType = {
         ...value,

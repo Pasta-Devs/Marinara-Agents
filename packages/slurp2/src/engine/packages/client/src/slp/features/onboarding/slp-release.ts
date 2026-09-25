@@ -1,5 +1,5 @@
 // The splash screen needs the shipped version and its public notes inside the client bundle.
-export const SLURP2_VERSION = "0.2.56";
+export const SLURP2_VERSION = "0.2.57";
 
 export interface Slurp2ReleaseEntry {
   version: string;
@@ -9,6 +9,13 @@ export interface Slurp2ReleaseEntry {
 
 /** The public release history shown in the Engine splash screen. */
 export const SLURP2_RELEASES: Slurp2ReleaseEntry[] = [
+  {
+    version: "0.2.57",
+    date: "2026-09-25",
+    notes: [
+      'Clearer names in Settings: arcs, plans, and projects are now called storylines, occasions are events, and the post planner is "Post ideas come from". Several help texts were corrected, among them the event automation text, which wrongly said it also starts storylines.',
+    ],
+  },
   {
     version: "0.2.56",
     date: "2026-09-25",

@@ -57,10 +57,10 @@ export const SLP_BACKSTAGE_DEFAULT_TARGET: Record<SlpBackstageSection, SlpBackst
 export const SLP_BACKSTAGE_SECTION_LABELS: Record<SlpBackstageSection, string> = {
   overview: "Overview",
   creators: "Creators",
-  world: "Features",
-  content: "Content",
-  automation: "Publishing and automation",
-  prompts: "Prompts",
+  world: "World",
+  content: "Stories & events",
+  automation: "Posting",
+  prompts: "Writing & content level",
   maintenance: "Maintenance",
 };
 
@@ -71,9 +71,9 @@ export const SLP_BACKSTAGE_TARGET_LABELS: Record<SlpBackstageTarget, string> = {
   world: "All areas",
   automation: "Automation overview",
   tags: "Discovery",
-  events: "Occasions",
+  events: "Events",
   calendar: "Calendar",
-  arcs: "Plan templates",
+  arcs: "Storyline types",
   packs: "Packs",
   messaging: "Messaging rules",
   audience: "Audience",

@@ -196,7 +196,7 @@ export function SlpStoryPacksPanel({ arcs, events }: { arcs: SlurpArcType[]; eve
                     <div>
                       <h3 className="font-bold">{entry.name}</h3>
                       <p className="text-xs text-[var(--slurp-muted)]">
-                        {entry.kind === "arc" ? "Plan template" : "Occasion"} · {entry.status.replace("-", " ")}
+                        {entry.kind === "arc" ? "Storyline type" : "Event"} · {entry.status.replace("-", " ")}
                       </p>
                     </div>
                     {entry.kind === "arc" && (
@@ -231,7 +231,7 @@ export function SlpStoryPacksPanel({ arcs, events }: { arcs: SlurpArcType[]; eve
                     <div className="grid gap-3">
                       <div className="grid gap-2 sm:grid-cols-2">
                         <label className="grid gap-1 text-xs font-semibold">
-                          Plan template name
+                          Storyline type name
                           <input
                             className="min-h-10 rounded-lg border border-[var(--slurp-outline)] bg-[var(--slurp-canvas)] px-3 text-sm"
                             value={(editedEntries[entryKey(entry)] as SlpArcBlueprint).name}

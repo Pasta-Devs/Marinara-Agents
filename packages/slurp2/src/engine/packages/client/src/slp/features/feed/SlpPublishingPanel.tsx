@@ -399,7 +399,7 @@ export function SlpPublishingPanel(page: SlpBackstagePageProps) {
       </details>
       <section className="space-y-5 border-t border-[var(--slurp-outline)] pt-6">
         <BackstagePageHeader
-          title={t("ui.slurp.settings.planAutomation.title", { defaultValue: "Story and Plan automation" })}
+          title={t("ui.slurp.settings.planAutomation.title", { defaultValue: "Storylines" })}
           detail={t("ui.slurp.settings.planAutomation.detail", {
             defaultValue: "Control how Plans start, progress, and affect Creators and their audiences.",
           })}

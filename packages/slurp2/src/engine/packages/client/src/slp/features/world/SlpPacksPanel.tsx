@@ -7,7 +7,7 @@ export function SlpPacksPanel({ settings }: SlpBackstagePageProps) {
     <div className="space-y-6">
       <BackstagePageHeader
         title="Packs"
-        detail="Optional, reusable content. Import a Pack to review its Occasions and Plan templates before you add them."
+        detail="Optional, reusable content. Import a Pack to review its Events and Storyline types before you add them."
         scope="all-slurp"
       />
       <SlpStoryPacksPanel arcs={settings.arcLibrary} events={settings.platformEvents} />
