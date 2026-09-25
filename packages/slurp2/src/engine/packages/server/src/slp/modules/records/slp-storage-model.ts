@@ -75,6 +75,13 @@ export type SlpCreatorPostPageOptions = {
   limit: number;
 };
 
+export type SlpCreatorStoryQueryOptions = {
+  accountIds: string[];
+  creatorSearchAccountIds?: string[];
+  search?: string;
+  since: string;
+};
+
 export type SlpCreatorPreparedPostPayload = {
   title: string | null;
   content: string;

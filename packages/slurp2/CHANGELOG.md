@@ -1,5 +1,9 @@
 # Slurp Remastered release notes
 
+## 0.2.40 — 2026-09-25
+
+- Retained Moments use bounded Story reads and follow feed search and pagination rules.
+
 ## 0.2.39 — 2026-09-25
 
 - Moments now remain available for the configured retention period even when newer feed posts fill the first page.
