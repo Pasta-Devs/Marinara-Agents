@@ -126,8 +126,16 @@ function slpCreatorPostSchema(
   allowScenePlan: boolean,
   contentMaxLength: number,
   sceneShots: number,
+  claims: boolean,
 ) {
   const withShots = allowScenePlan && sceneShots > 0;
+  const required = withShots
+    ? ["title", "content", "scene", "shots"]
+    : allowScenePlan
+      ? ["title", "content", "scene"]
+      : allowImagePrompt
+        ? ["title", "content", "imagePrompt"]
+        : ["title", "content"];
   return {
     type: "object",
     properties: {
@@ -165,17 +173,22 @@ function slpCreatorPostSchema(
       ...(withShots
         ? { shots: { type: "array", minItems: sceneShots, maxItems: sceneShots, items: slpSceneShotJsonSchema } }
         : {}),
+      // The beats planner's self-declared claims, compared with the brief in code.
+      ...(claims ? { claims: slpBeatClaimsJsonSchema } : {}),
     },
-    required: withShots
-      ? ["title", "content", "scene", "shots"]
-      : allowScenePlan
-        ? ["title", "content", "scene"]
-        : allowImagePrompt
-          ? ["title", "content", "imagePrompt"]
-          : ["title", "content"],
+    required: claims ? [...required, "claims"] : required,
     additionalProperties: false,
   } as const;
 }
+
+const stringList = { type: "array", items: { type: "string", maxLength: 200 } } as const;
+
+const slpBeatClaimsJsonSchema = {
+  type: "object",
+  properties: { people: stringList, earlierEvents: stringList, stateChanges: stringList },
+  required: ["people", "earlierEvents", "stateChanges"],
+  additionalProperties: false,
+} as const;
 
 const slpCreatorProfileSchema = {
   type: "object",
@@ -315,6 +328,7 @@ export function slpResponseFormat(
     allowScenePlan?: boolean;
     contentMaxLength?: number;
     sceneShots?: number;
+    claims?: boolean;
   } = {},
 ): { type: string; [key: string]: unknown } {
   if (!isOpenAIGpt56Model(model)) return { type: "json_object" };
@@ -346,6 +360,7 @@ export function slpResponseFormat(
                     options.allowScenePlan === true,
                     options.contentMaxLength ?? SLP_POST_HARD_MAX_LENGTH,
                     options.sceneShots ?? 0,
+                    options.claims === true,
                   );
   return {
     type: "json_schema",

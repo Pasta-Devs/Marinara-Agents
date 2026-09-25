@@ -19,8 +19,11 @@ import {
   claimSlurpPromise,
   completeSlurpOpportunity,
   findDueSlurpPromise,
+  findSlurpOpportunityBySlot,
   planSlurpOpportunity,
 } from "../../data/feed/slp-opportunity-storage.js";
+import { planSlurpBeat, type SlurpBeatContext } from "./slp-post-beat-service.js";
+import { slurpBeatIntents } from "../../modules/feed/slp-post-beat.js";
 import { topSlurpDemandTrend } from "../../data/feed/slp-demand-storage.js";
 import { eq } from "../../../db/file-query.js";
 import { slurpContinuityEvents } from "../../../db/schema/slurp.js";
@@ -58,6 +61,8 @@ export async function planSlurpPost(
     slotId?: string | null;
     at: Date;
     dueAt?: Date | null;
+    /** Set when the beats planner is on. See `slp-post-beat-service.ts`. */
+    beats?: SlurpBeatContext | null;
   },
 ) {
   const {
@@ -103,6 +108,19 @@ export async function planSlurpPost(
     chosen ??
     (promise?.intent === "request" || promise?.intent === "teaser" ? promise.intent : undefined) ??
     (stage ? slurpCampaignStageIntent(stage.kind) : undefined);
+  // Beat-first for ordinary slots only: direction, a chosen purpose, a promise, and a campaign stage
+  // stay intent-first. A retry repeats the beat its slot already stored. No beat means classic.
+  const beat =
+    ctx.beats && !directed && !forced && !promise && !stage
+      ? ((slotId ? (await findSlurpOpportunityBySlot(db, slotId).catch(() => null))?.beat : null) ??
+        (await planSlurpBeat(db, {
+          accountId: account.id,
+          sequence,
+          context: ctx.beats,
+          intents: isTeaser ? ["teaser"] : ["casual", "set", "behind_the_scenes", "appreciation", "business"],
+          at,
+        })))
+      : null;
   const drawn =
     !directed || forced
       ? slurpPostAxes(account.id, sequence, {
@@ -112,6 +130,7 @@ export async function planSlurpPost(
           intentWeights: forced ? slurpOnlyIntent(forced) : strategy.intentWeights,
           textOnlyRate: strategy.textOnlyRate,
           access: request.access ?? "public",
+          intentsAllowed: beat ? slurpBeatIntents(beat.type) : undefined,
         })
       : null;
   const drawnAxes =
@@ -208,6 +227,7 @@ export async function planSlurpPost(
             access: request.access ?? "",
             at: at,
             dueAt: dueAt ?? null,
+            beat,
           }).catch((error: unknown) => {
             // A post must never fail over planner bookkeeping.
             logger.warn(error, "[slurp] Could not record a content plan; the post stands on its own");
@@ -261,6 +281,7 @@ export async function planSlurpPost(
     demandTopic: demand?.topic ?? null,
     continuityInstruction,
     campaignId,
+    beat,
   };
 }
 

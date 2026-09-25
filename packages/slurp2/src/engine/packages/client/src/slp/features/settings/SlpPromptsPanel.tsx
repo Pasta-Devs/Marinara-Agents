@@ -55,7 +55,9 @@ export function SlpPromptsPanel(page: SlpBackstagePageProps) {
           summary={t("ui.slurp.settings.prompts.voiceOutcomeDetail", {
             defaultValue: "Tone, language, maturity, and context shared across Creator writing.",
           })}
-          customized={!generationGuidanceIsDefault || settings.enableLorebookContext}
+          customized={
+            !generationGuidanceIsDefault || settings.enableLorebookContext || settings.postPlanner !== "classic"
+          }
         >
           <PromptCard
             title={t("ui.slurp.settings.prompts.generationGuidance")}
@@ -96,6 +98,21 @@ export function SlpPromptsPanel(page: SlpBackstagePageProps) {
               value={settings.enableLorebookContext}
               onChange={(value) => update("enableLorebookContext", value)}
             />
+            <Field
+              settingKey="postPlanner"
+              label={t("ui.slurp.settings.prompts.postPlanner")}
+              detail={t("ui.slurp.settings.prompts.postPlannerDetail")}
+            >
+              <select
+                value={settings.postPlanner}
+                disabled={updateSettings.isPending}
+                onChange={(event) => void update("postPlanner", event.target.value as "classic" | "beats")}
+                className="min-h-11 w-full rounded-lg border border-[var(--slurp-outline)] bg-[var(--slurp-canvas)] px-3 text-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] disabled:opacity-50 sm:text-sm"
+              >
+                <option value="classic">{t("ui.slurp.settings.prompts.postPlannerClassic")}</option>
+                <option value="beats">{t("ui.slurp.settings.prompts.postPlannerBeats")}</option>
+              </select>
+            </Field>
           </PromptOptions>
         </SlpPromptOutcomeSection>
 

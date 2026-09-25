@@ -173,6 +173,8 @@ export function slurpPostAxes(
     textOnlyRate?: number;
     /** Who will be able to read this. A locked post never teases what the reader already owns. */
     access?: "public" | "locked";
+    /** The intents a planned beat can serve. See `slp-post-beat.ts`. Absent means any. */
+    intentsAllowed?: readonly SlurpContentIntent[];
   },
 ): SlurpPostAxes {
   // A Story can be a thank-you or a request as well as a passing moment. It cannot be a set or a
@@ -180,7 +182,8 @@ export function slurpPostAxes(
   const options = intentOptions(decided.intentWeights).filter(
     (option) =>
       (!decided.story || (option.value !== "set" && option.value !== "callback")) &&
-      slurpIntentFitsAccess(option.value, decided.access ?? "public"),
+      slurpIntentFitsAccess(option.value, decided.access ?? "public") &&
+      (!decided.intentsAllowed || decided.intentsAllowed.includes(option.value)),
   );
   const intent: SlurpContentIntent = decided.teaser
     ? "teaser"

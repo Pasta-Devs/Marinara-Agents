@@ -59,6 +59,7 @@ export async function slpDeepDetailsRoutes(app: FastifyInstance, deps: SlpRouteD
             completedAt: text(plan.completedAt),
             sourceEventId: text(plan.sourceEventId),
             slotId: text(plan.slotId),
+            topic: text(plan.topic),
           }
         : null,
       links: links

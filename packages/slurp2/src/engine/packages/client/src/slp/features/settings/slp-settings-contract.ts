@@ -106,6 +106,7 @@ export type SlurpSettings = {
   enableEnhancedTimelineWriting: boolean;
   includeCharacterSchedules: boolean;
   enableLorebookContext: boolean;
+  postPlanner: "classic" | "beats";
   enableImagePrompts: boolean;
   maxImagesPerRefresh: number;
   maxGeneratedPostsPerRefresh: number;

@@ -84,6 +84,28 @@ export type SlpDeepDetailsRecord = {
   /** Every image run for this post, oldest first, capped to the last few. Absent on older records. */
   imageRuns?: SlpDeepDetailsImageRun[];
   askedModelForImagePrompt: boolean;
+  /**
+   * Which planner wrote the post, the beat it chose (with its anchor, cast, and place), and the
+   * writer's claim check. `beat` is null when the post was intent-first or fell back to classic.
+   * Absent on records made before 0.2.42.
+   */
+  planner?: {
+    mode: "classic" | "beats";
+    beat: {
+      type: string;
+      anchorKind: string;
+      anchor: string;
+      line: string;
+      cast: string[];
+      place: string | null;
+    } | null;
+    claimCheck: {
+      ok: boolean;
+      problems: string[];
+      claims: { people: string[]; earlierEvents: string[]; stateChanges: string[] } | null;
+      revised?: boolean;
+    } | null;
+  };
 };
 
 /**
@@ -175,6 +197,8 @@ export type SlpDeepDetailsResponse = {
     completedAt: string | null;
     sourceEventId: string | null;
     slotId: string | null;
+    /** What a kept promise delivers, in the Creator's own label. */
+    topic?: string | null;
   } | null;
   links: { fromType: string; fromId: string; toType: string; toId: string; relation: string }[];
   stats: { likes: number; replies: number; unlocks: number };

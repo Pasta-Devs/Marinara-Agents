@@ -51,8 +51,7 @@ import { resolveSlurpCreatorScheduleContext } from "../creators/slp-creators-con
 import { createSlurpMessagesStorage } from "../../data/slp-storage.js";
 import { createChatsStorage } from "../../../services/storage/chats.storage.js";
 import { type SlpCreatorContentFormat } from "../../base/prompting/slp-content-format.js";
-import { slpLorebookTokenBudget } from "../../modules/prompting/slp-prompt.js";
-import { processLorebooks } from "../../../services/lorebook/index.js";
+import { resolveSlurpPostLore } from "./slp-post-lore.js";
 import { createCharacterGalleryStorage } from "../../../services/storage/character-gallery.storage.js";
 import { createGalleryStorage } from "../../../services/storage/gallery.storage.js";
 import { pickGalleryAttachmentForAccount } from "./slp-generated-activity-service.js";
@@ -168,34 +167,12 @@ export async function generateCreatorPost(
   // Concealed modes get the same seed the stage profile draft uses; disclosure limits what may be
   // said, not who this is.
   const sourceCharacterContext = await resolveCreatorCharacterCanon(db, linkedPublicAccount, disclosureMode);
-  // The Engine's own lorebook scan, as Noodle uses it: off until the player opts in, scoped to this
-  // Creator's source, and read-only. Recent posts and the card give keyword entries something to match.
-  // Lore is a nicety, so a failed scan costs the post its lore, never the post.
-  const loreContext = settings.enableLorebookContext
-    ? await processLorebooks(
-        db,
-        [
-          ...recentPosts
-            .slice()
-            .reverse()
-            .map((post) => ({ role: "user", content: post.content })),
-          ...(sourceCharacterContext ? [{ role: "user", content: sourceCharacterContext }] : []),
-        ],
-        null,
-        {
-          characterIds: linkedPublicAccount?.kind === "character" ? [linkedPublicAccount.entityId] : [],
-          personaId: linkedPublicAccount?.kind === "persona" ? linkedPublicAccount.entityId : null,
-          tokenBudget: slpLorebookTokenBudget(1),
-          generationTriggers: ["slurp"],
-          previewOnly: true,
-        },
-      )
-        .then((result) => [result.worldInfoBefore, result.worldInfoAfter].filter(Boolean).join("\n"))
-        .catch((error: unknown) => {
-          logger.warn(error, "[slurp] Lorebook context failed; generating the post without it");
-          return "";
-        })
-    : "";
+  const loreContext = await resolveSlurpPostLore(db, {
+    settings,
+    recentPosts,
+    sourceCharacterContext,
+    source: linkedPublicAccount,
+  });
   // Rotating angle, skipped for directed posts; one sequence keeps project and variation in step.
   const sequence = await noodle.countNoodlerPostsByAccount(account.id);
   const wardrobeLooks = await noodle.listWardrobeLooks(account.id).catch(() => []);
@@ -238,7 +215,7 @@ export async function generateCreatorPost(
     input.request.access === "public" && !directed && slurpTeaserPost(account.id, sequence, settings.teaserRate);
   // What this post is for, as opposed to what it is about, and how it goes out. Story and teaser
   // are passed in rather than chosen again, so the decisions cannot contradict each other.
-  const { axes, shoot, reusedMedia, reusedSource, opportunity, demandTopic, continuityInstruction, campaignId } =
+  const { axes, shoot, reusedMedia, reusedSource, opportunity, demandTopic, continuityInstruction, campaignId, beat } =
     await planSlurpPost(db, {
       account,
       request: input.request,
@@ -252,6 +229,10 @@ export async function generateCreatorPost(
       slotId: input.slotId,
       at: input.generatedAt ?? new Date(),
       dueAt: input.publicationTime ?? null,
+      beats:
+        settings.postPlanner === "beats"
+          ? { canonText: sourceCharacterContext, connection: input.connection, fallbackConnection }
+          : null,
     });
   // The rotation varies length; the intent rules out lengths that contradict its job.
   const format = input.request.format ?? (variation ? slurpIntentFormat(axes?.intent, variation.format) : "caption");
@@ -322,7 +303,7 @@ export async function generateCreatorPost(
     // A variation carries its own format, so an automatic post stops always being a caption.
     request: { ...input.request, format },
     variationInstruction: variation
-      ? slurpPostVariationInstruction(variation, cameraInstruction, { shoot: !!shoot })
+      ? slurpPostVariationInstruction(variation, cameraInstruction, { shoot: !!shoot, beat: !!beat })
       : undefined,
     conditionInstruction: conditionInstruction ?? undefined,
     eventInstruction:
@@ -354,6 +335,8 @@ export async function generateCreatorPost(
     contentTypeInstruction,
     continuityInstruction,
     productionInstruction: slurpStrategyInstruction(strategy),
+    beat,
+    beatCompany: variation?.company,
     generatedAt: input.generatedAt ?? new Date(),
     publicationTime: input.publicationTime,
   });
@@ -384,14 +367,29 @@ export async function generateCreatorPost(
       allowScenePlan: askModelForScene,
       contentMaxLength: settings.postMaxLength,
       sceneShots,
+      claims: Boolean(beat),
     }),
   } as const;
 
-  const { generated, content, sentMessages, attempts } = await completeSlurpCreatorPost(
+  const { generated, content, sentMessages, attempts, claimCheck } = await completeSlurpCreatorPost(
     provider,
     messages,
     completionOptions,
-    { askModelForImagePrompt, askModelForScene, sceneShots, debugMode },
+    {
+      askModelForImagePrompt,
+      askModelForScene,
+      sceneShots,
+      debugMode,
+      beat: beat && {
+        beat,
+        company: variation?.company,
+        selfNames: [
+          account.displayName,
+          publicIdentity?.displayName ?? "",
+          ...(publicIdentity?.sourceIdentifiers ?? []),
+        ],
+      },
+    },
   );
   compiledPrompt = sentMessages.map((message) => `# ${message.role}\n${message.content}`).join("\n\n");
 
@@ -529,6 +527,7 @@ export async function generateCreatorPost(
         draftImagePrompt,
         askModelForImagePrompt,
         wardrobeSelection,
+        planner: { mode: settings.postPlanner, beat, claimCheck },
       }),
     }).catch((error: unknown) => {
       logger.warn(error, "[slurp] Could not record deep details for a post");

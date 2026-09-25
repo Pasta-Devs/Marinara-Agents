@@ -254,12 +254,13 @@ export function slurpPostVariationInstruction(
   variation: SlurpPostVariation,
   cameraInstruction: string,
   /** A callback's place and clothes belong to its shoot; a second, different place contradicted it. */
-  options: { shoot?: boolean } = {},
+  options: { shoot?: boolean; beat?: boolean } = {},
 ): string {
   return [
     "# This post's angle",
     "Keep the person exactly as the character card describes them — face, body, style, voice. Change the situation, not the person.",
-    ...(options.shoot ? [] : [`Place: ${variation.place}.`, `Moment: ${variation.moment}.`]),
+    // A planned beat states the place and the moment itself; the vague axes would contradict it.
+    ...(options.shoot || options.beat ? [] : [`Place: ${variation.place}.`, `Moment: ${variation.moment}.`]),
     cameraInstruction,
     `Company: ${variation.company}.`,
     ...(variation.story
@@ -267,7 +268,9 @@ export function slurpPostVariationInstruction(
           "This one is a Story, not a feed post: the picture carries it and the text is one short line under it. Write for something that disappears in a day, not for the profile grid.",
         ]
       : []),
-    "Let their own life supply the specifics. These are directions to vary along, not a scene to copy.",
+    ...(options.beat
+      ? []
+      : ["Let their own life supply the specifics. These are directions to vary along, not a scene to copy."]),
     "This angle is for this post only. Do not turn it into an ongoing change in their life.",
   ].join("\n");
 }

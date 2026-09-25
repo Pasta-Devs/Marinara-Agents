@@ -749,6 +749,11 @@ export const slurpContentOpportunities = fileTable("slurp2_content_opportunities
    * wording: it reaches a public post.
    */
   topic: text("topic"),
+  /**
+   * The beat an ordinary slot was planned around (beats planner only), as JSON. A retry repeats
+   * it, and editorial memory counts beat types from it.
+   */
+  beat: text("beat"),
   plannedAt: text("planned_at").notNull(),
   dueAt: text("due_at"),
   completedAt: text("completed_at"),

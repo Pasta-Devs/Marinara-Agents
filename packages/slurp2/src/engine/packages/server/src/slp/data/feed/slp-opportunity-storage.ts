@@ -8,6 +8,12 @@ import type {
   SlurpContentWorkflow,
 } from "../../../../../shared/src/slp/slp-content-axes.js";
 import type { SlurpSkipReason } from "../../modules/feed/slp-planner.js";
+import {
+  parseSlurpBeat,
+  type SlurpBeat,
+  type SlurpBeatHistory,
+  type SlurpBeatType,
+} from "../../modules/feed/slp-post-beat.js";
 
 export type SlurpContentOpportunity = {
   id: string;
@@ -22,6 +28,7 @@ export type SlurpContentOpportunity = {
   postId: string | null;
   sourceEventId: string | null;
   topic: string | null;
+  beat: SlurpBeat | null;
   plannedAt: string;
   dueAt: string | null;
   completedAt: string | null;
@@ -45,6 +52,7 @@ function mapOpportunity(row: Record<string, unknown>): SlurpContentOpportunity {
     postId: row.postId ? String(row.postId) : null,
     sourceEventId: row.sourceEventId ? String(row.sourceEventId) : null,
     topic: row.topic ? String(row.topic) : null,
+    beat: row.beat ? parseSlurpBeat(row.beat) : null,
     plannedAt: String(row.plannedAt),
     dueAt: row.dueAt ? String(row.dueAt) : null,
     completedAt: row.completedAt ? String(row.completedAt) : null,
@@ -71,6 +79,7 @@ export async function planSlurpOpportunity(
     skipReason?: SlurpSkipReason;
     sourceEventId?: string | null;
     topic?: string | null;
+    beat?: SlurpBeat | null;
     at: Date;
     dueAt?: Date | null;
   },
@@ -92,6 +101,7 @@ export async function planSlurpOpportunity(
     postId: null,
     sourceEventId: input.sourceEventId ?? null,
     topic: input.topic ?? null,
+    beat: input.beat ? JSON.stringify(input.beat) : null,
     plannedAt: input.at.toISOString(),
     dueAt: input.dueAt ? input.dueAt.toISOString() : null,
     // A skip is over the moment it is made. Nothing else happens to it.
@@ -180,6 +190,30 @@ export async function claimSlurpPromise(
     .where(eq(slurpContentOpportunities.id, id));
   const [row] = await db.select().from(slurpContentOpportunities).where(eq(slurpContentOpportunities.id, id));
   return row ? mapOpportunity(row) : null;
+}
+
+const SLURP_BEAT_WINDOW_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * Editorial memory for the beats planner: this Creator's last beats and every Creator's beat types
+ * in the last day. One read of the plan table, which keeps only 40 plans per Creator.
+ */
+export async function readSlurpBeatHistory(db: DB, creatorAccountId: string, at: Date): Promise<SlurpBeatHistory> {
+  const since = new Date(at.getTime() - SLURP_BEAT_WINDOW_MS).toISOString();
+  const rows = (await db.select().from(slurpContentOpportunities))
+    .map(mapOpportunity)
+    .filter((row): row is SlurpContentOpportunity & { beat: SlurpBeat } => Boolean(row.beat))
+    .sort((left, right) => right.plannedAt.localeCompare(left.plannedAt));
+  const own = rows.filter((row) => row.creatorAccountId === creatorAccountId).slice(0, 6);
+  const globalCounts: Partial<Record<SlurpBeatType, number>> = {};
+  for (const row of rows.filter((entry) => entry.plannedAt >= since)) {
+    globalCounts[row.beat.type] = (globalCounts[row.beat.type] ?? 0) + 1;
+  }
+  return {
+    recentOwn: own.map((row) => row.beat.type),
+    recentAnchors: own.map((row) => row.beat.anchor),
+    globalCounts,
+  };
 }
 
 /** Whether the Creator's last plan was a quiet slot, so the planner does not stack two. */

@@ -24,6 +24,14 @@ In order of precedence:
 Intents: `casual`, `teaser`, `set`, `behind_the_scenes`, `request`, `appreciation`, `callback`,
 `business`.
 
+With the **Beats** post planner (setting `postPlanner`, default `classic`), step 4 is beat-first: a
+beat type is drawn from the Creator's canon-anchor palette, weighted down for this Creator's recent
+beats and capped across all Creators in the last day, then filled with one canon anchor and one
+written situation template. The intent is drawn only from the intents that beat can serve. The
+beat is stored on the plan, becomes a `# This post` brief (cast, place, time, what came before, free
+zone), and the writer declares its claims so code can check them. Missing anchors or any failure
+fall back to the classic draw for that post.
+
 ## 3. How does it go out?
 
 Delivery is separate from intent, so a Story or a plain text post can also be a thank-you or a
@@ -84,6 +92,7 @@ promise is recorded in the thread it was made in, and the ledger records that th
 | Continuity scopes and reading | `shared/src/slp/slp-continuity.ts`, `server/src/slp/modules/continuity/slp-continuity-rules.ts` |
 | Message extraction            | `server/src/slp/modules/continuity/slp-continuity-extraction.ts`                                |
 | Request actions               | `server/src/slp/modules/messages/slp-request-actions.ts`                                        |
+| Beats, brief, claim check     | `server/src/slp/modules/feed/slp-post-beat.ts`, `server/src/slp/modules/feed/slp-post-brief.ts` |
 | The whole flow, joined        | `server/src/slp/features/feed/slp-post-plan-service.ts`                                         |
 
 `tests/slurp-posting-flow.regression.ts` proves these stay joined in this order.

@@ -118,6 +118,7 @@ export const SLP_BACKSTAGE_SETTING_PLACEMENT: Record<keyof SlurpSettings, SlpBac
   enableEnhancedTimelineWriting: internal(automation("general", "enhanced timeline writing")),
   includeCharacterSchedules: internal(automation("general", "character schedules")),
   enableLorebookContext: prompts("lorebook context"),
+  postPlanner: prompts("post planner", "beats", "subjects"),
   enableImagePrompts: internal(automation("images", "image prompts")),
   maxImagesPerRefresh: internal(automation("images", "images per refresh")),
   maxGeneratedPostsPerRefresh: internal(automation("general", "posts per refresh")),

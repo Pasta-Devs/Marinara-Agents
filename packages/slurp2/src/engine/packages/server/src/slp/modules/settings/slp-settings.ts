@@ -250,6 +250,11 @@ export const slurpSettingsSchema = z.object({
   enableEnhancedTimelineWriting: z.boolean(),
   includeCharacterSchedules: z.boolean(),
   enableLorebookContext: z.boolean(),
+  /**
+   * How ordinary posts are planned. `classic` lets the model pick the subject; `beats` picks a
+   * concrete beat from the Creator's card first. See `modules/feed/slp-post-beat.ts`.
+   */
+  postPlanner: z.enum(["classic", "beats"]),
   enableImagePrompts: z.boolean(),
   maxImagesPerRefresh: z.number().int().min(0).max(24),
   maxGeneratedPostsPerRefresh: z.number().int().min(0).max(24),
@@ -498,6 +503,7 @@ export const DEFAULT_SLURP_SETTINGS: SlurpSettings = {
   enableEnhancedTimelineWriting: false,
   includeCharacterSchedules: false,
   enableLorebookContext: false,
+  postPlanner: "classic",
   enableImagePrompts: false,
   maxImagesPerRefresh: 0,
   maxGeneratedPostsPerRefresh: 4,

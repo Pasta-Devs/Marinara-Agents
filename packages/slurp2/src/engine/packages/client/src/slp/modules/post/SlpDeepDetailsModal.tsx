@@ -154,6 +154,7 @@ export function SlpDeepDetailsModal({ postId, open, onClose }: { postId: string;
                     ["Completed", data.plan?.completedAt ? formatTime(data.plan.completedAt) : null],
                     ["Scheduled slot", data.plan?.slotId ?? null],
                     ["Answers request", data.plan?.sourceEventId ?? null],
+                    ["Promised subject", data.plan?.topic ?? null],
                     ["Player direction", details?.direction ?? null],
                     ["Campaign", details?.plan.campaignId ?? null],
                     ["Shoot", details?.plan.shootId ?? str(data.post.metadata.shootId)],
@@ -181,7 +182,35 @@ export function SlpDeepDetailsModal({ postId, open, onClose }: { postId: string;
                       ["Company", details.angle?.company ?? null],
                       ["Framing", details.camera ? null : (details.angle?.framing ?? null)],
                       ["Camera", details.camera],
+                      // The drawn composition tag leads the camera phrase the image brief received.
+                      ["Shot", details.camera ? (details.visualBrief?.camera ?? null) : null],
                       ["Effort", details.effort],
+                      ["Planner", details.planner?.mode ?? null],
+                      [
+                        "Beat",
+                        details.planner?.beat ? `${details.planner.beat.type}: ${details.planner.beat.line}` : null,
+                      ],
+                      [
+                        "Anchor",
+                        details.planner?.beat
+                          ? `${details.planner.beat.anchorKind}: ${details.planner.beat.anchor}`
+                          : null,
+                      ],
+                      [
+                        "Cast",
+                        details.planner?.beat ? details.planner.beat.cast.join(", ") || "no named people" : null,
+                      ],
+                      ["Beat place", details.planner?.beat?.place ?? null],
+                      [
+                        "Claim check",
+                        details.planner?.claimCheck
+                          ? details.planner.claimCheck.ok
+                            ? details.planner.claimCheck.revised
+                              ? "passed after one revision"
+                              : "passed"
+                            : `${details.planner.claimCheck.revised ? "still off after revision" : "mismatch"}: ${details.planner.claimCheck.problems.join("; ")}`
+                          : null,
+                      ],
                     ]}
                   />
                 </Section>

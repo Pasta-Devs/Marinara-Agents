@@ -42,6 +42,7 @@ export const SLURP_SETTINGS_SECTION_KEYS: Record<SlurpResettableSection, readonl
   prompts: [
     "generationGuidance",
     "enableLorebookContext",
+    "postPlanner",
     "imageGenerationPrompt",
     "enableImageInterpretation",
     "imagePromptInterpretation",
