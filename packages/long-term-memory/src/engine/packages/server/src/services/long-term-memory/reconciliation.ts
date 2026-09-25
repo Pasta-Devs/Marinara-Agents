@@ -167,7 +167,26 @@ function assertCurrentAmbiguousLinkTargets(
         (link) => details.candidateTargetNoteIds!.includes(link.target) && link.relation === details.linkRelation,
       );
       if (chosen.length !== 1) continue;
-      if (createIds.has(chosen[0]!.target)) continue;
+      if (createIds.has(chosen[0]!.target)) {
+        const create = mutations.find(
+          (item): item is Extract<LtmDraftMutation, { kind: "create_note" }> =>
+            item.kind === "create_note" && item.note.id === chosen[0]!.target,
+        )!;
+        const status =
+          mutations
+            .filter(
+              (item): item is Extract<LtmDraftMutation, { kind: "set_status" }> =>
+                item.kind === "set_status" && item.noteId === create.note.id,
+            )
+            .at(-1)?.status ?? (existing.get(create.note.id)?.status === "archived" ? "archived" : create.note.status);
+        if (status === "archived")
+          throw new LtmDraftApplyError(
+            `The selected link target ${create.note.id} is archived. Choose another target.`,
+            409,
+            "ltm_draft_ambiguous_link_stale",
+          );
+        continue;
+      }
       const target = existing.get(chosen[0]!.target);
       if (!target)
         throw new LtmDraftApplyError(

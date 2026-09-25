@@ -1622,6 +1622,65 @@ async function main() {
       ]);
       assert.ok((await storage.getNote(choiceOwner.id))?.links.some((link) => link.target === siblingId));
 
+      for (const archiveByMutation of [false, true]) {
+        const candidateId = archiveByMutation ? "char_archived_by_status" : "char_archived_at_create";
+        const archivedCreate = {
+          ...siblingCreate,
+          id: randomUUID(),
+          note: {
+            ...siblingCreate.note,
+            id: candidateId,
+            status: archiveByMutation ? ("active" as const) : ("archived" as const),
+          },
+        };
+        const archiveStatus = {
+          ...choiceMutation,
+          id: randomUUID(),
+          kind: "set_status" as const,
+          noteId: candidateId,
+          status: "archived" as const,
+        };
+        const originalLink = { ...choiceMutation, id: randomUUID() };
+        const archivedMutations = [archivedCreate, ...(archiveByMutation ? [archiveStatus] : []), originalLink];
+        const archivedDraft = await draftStore.createDraft({
+          source: { sourceNoteId: canonicalSourceId, chatId: "chat-a" },
+          scope: legacySource.scope,
+          modes: legacySource.modes,
+          response: { summary: "Archive selected candidate in draft", mutations: archivedMutations },
+          diagnostics: [
+            {
+              severity: "warning",
+              code: "ambiguous_subject_link_target",
+              noteId: choiceOwner.id,
+              message: "Choose a target",
+              details: {
+                linkTarget: choiceTarget.id,
+                linkRelation: "affects_character",
+                candidateTargetNoteIds: [choiceTarget.id, candidateId],
+              },
+            },
+          ],
+        });
+        await assert.rejects(
+          applyLongTermMemoryDraft(archivedDraft.id, {
+            root,
+            mutationIds: archivedMutations.map((mutation) => mutation.id),
+            editedMutations: [{ ...originalLink, link: { ...originalLink.link, target: candidateId } }],
+            linkChoices: [
+              {
+                mutationId: originalLink.id,
+                linkTarget: choiceTarget.id,
+                linkRelation: "affects_character",
+                selectedTarget: candidateId,
+              },
+            ],
+            rebuildIndexes: false,
+          }),
+          (error: unknown) => error instanceof LtmDraftApplyError && error.code === "ltm_draft_ambiguous_link_stale",
+        );
+        assert.equal(await storage.getNote(candidateId), null);
+      }
+
       const pendingCreate = {
         ...siblingCreate,
         id: randomUUID(),
