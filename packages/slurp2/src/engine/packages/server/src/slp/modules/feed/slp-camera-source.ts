@@ -43,18 +43,21 @@ type CameraSourceRule = {
   needsHelper?: boolean;
 };
 
+// The device is a fact about feasibility, never an object in the scene. "Their own phone, held in
+// their own hand" made the scene writer put a phone in every picture, and a visible phone reads as
+// a mirror that is not there. Only the mirror source keeps the phone: it is really in the shot.
 const RULES: Record<SlurpCameraSource, CameraSourceRule> = {
   selfie: {
     instruction:
-      "Camera: their own phone, held in their own hand. The camera can be no further away than their arm reaches, and the holding arm is visible or clearly implied. No angle they could not reach while holding it.",
+      "Camera: they took it themselves at arm's length. The camera can be no further away than their arm reaches, so the framing is close, from about eye level or a little above. No angle they could not reach.",
   },
   mirror: {
     instruction:
-      "Camera: their own phone, photographed in a mirror. The phone is visible in the reflection and partly covers them. The framing is whatever the mirror allows, not whatever flatters them.",
+      "Camera: a shot of their reflection in a mirror, so the phone in their hand shows in the reflection and partly covers them. The framing is whatever the mirror allows, not whatever flatters them.",
   },
   tripod: {
     instruction:
-      "Camera: propped up or on a timer, and they walked into frame. They are not holding a phone. The camera does not move, so the framing is fixed and a little too wide, and they had to place it somewhere a real surface exists.",
+      "Camera: propped up or on a timer, and they walked into frame with their hands free. The camera does not move, so the framing is fixed and a little too wide, and it stands somewhere a real surface exists.",
   },
   partner: {
     instruction:
@@ -67,7 +70,7 @@ const RULES: Record<SlurpCameraSource, CameraSourceRule> = {
   },
   archive: {
     instruction:
-      "Camera: none today. This is an older picture out of their own camera roll, so it does not match today's place, light, or clothes, and they know that.",
+      "Camera: none today. This is an older picture of theirs, so it does not match today's place, light, or clothes, and they know that.",
   },
 };
 
@@ -81,23 +84,62 @@ const RULES: Record<SlurpCameraSource, CameraSourceRule> = {
  * framings it was told to avoid. The picture side now uses `slurpCameraSourcePhoto` instead.
  */
 export const SLURP_CAMERA_SOURCE_RULE =
-  "The camera is a camera, never a person's eyes: no first-person or point-of-view framing. Show only the people the company names.";
+  "The camera is a camera, never a person's eyes: no first-person or point-of-view framing. Show only the people the company names. Describe what the picture shows and how it is framed, not the device that took it.";
 
 /**
  * The source as words an image model can draw. Positive phrasing only: a diffusion model reads
  * "no floor-level shot" as "floor-level shot".
  */
 const PHOTO: Record<SlurpCameraSource, string> = {
-  selfie: "smartphone selfie taken at arm's length with the front camera",
+  selfie: "close framing from arm's length, slightly above eye level, looking at viewer",
   mirror: "mirror selfie, the phone visible in the reflection",
-  tripod: "photo from a phone propped on a nearby surface on a self-timer, fixed slightly wide framing",
-  partner: "candid phone photo taken by someone standing a few steps away",
-  screenshot: "still frame from a phone video, slight motion blur, soft focus",
-  archive: "older phone photo from their own camera roll",
+  tripod: "self-timer photo from a nearby surface at chest height, hands free, fixed slightly wide framing",
+  partner: "candid photo taken from a few steps away",
+  screenshot: "still frame from a video, slight motion blur, soft focus",
+  archive: "older snapshot from their own archive, slightly dated look",
 };
 
 export function slurpCameraSourcePhoto(source: SlurpCameraSource): string {
   return PHOTO[source];
+}
+
+/**
+ * Angle and crop, as the composition tags image models already know (Danbooru/NovelAI vocabulary:
+ * `upper body`, `cowboy shot`, `from side` …). Natural-language models read them as plain words,
+ * and the optional image rewrite can restyle them, so one phrase serves both.
+ *
+ * Every source used to draw the same framing every time, so a Creator's feed was one picture
+ * repeated. Each option is one the source can physically explain: an arm's-length shot is never a
+ * wide shot, and only somebody else holding the camera can stand behind or below them. `pov` is
+ * left out on purpose: it adds a first-person body, which the source rule forbids.
+ */
+const FRAMINGS: Record<SlurpCameraSource, readonly string[]> = {
+  selfie: ["close-up, from above", "upper body, from above", "portrait, upper body"],
+  mirror: ["full body", "cowboy shot", "upper body"],
+  tripod: ["full body, from front", "cowboy shot, from side", "full body, from side", "wide shot"],
+  partner: [
+    "upper body, from side",
+    "cowboy shot",
+    "full body, from behind, looking back",
+    "full body, from below",
+    "wide shot",
+  ],
+  screenshot: ["upper body", "cowboy shot, dutch angle"],
+  archive: ["upper body", "full body", "cowboy shot"],
+};
+
+/**
+ * The picture's framing and source as one phrase. `seed` is anything that differs per picture —
+ * the scene's action does — so a set's shots and a Creator's posts do not all share one angle.
+ */
+export function slurpCameraSourceShot(source: SlurpCameraSource, seed: string): string {
+  const framing = slurpWeightedPick(
+    "framing",
+    seed,
+    0,
+    FRAMINGS[source].map((value) => ({ value, weight: 1 })),
+  );
+  return `${framing}, ${PHOTO[source]}`;
 }
 
 /** The sources this variation can actually pay for. */

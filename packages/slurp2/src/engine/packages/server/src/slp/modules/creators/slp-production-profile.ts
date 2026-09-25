@@ -125,7 +125,7 @@ export function slurpPostEffort(
 }
 
 const EFFORT_INSTRUCTIONS: Record<SlurpPostEffort, string> = {
-  low: "Effort: none. Whatever the phone caught on the first take: an offhand crop, ordinary room light, nothing arranged or tidied. Still sharp and clearly visible — careless, not broken.",
+  low: "Effort: none. Whatever the first take caught: an offhand crop, ordinary room light, nothing arranged or tidied. Still sharp and clearly visible — careless, not broken.",
   medium: "Effort: a bit. They looked at it, they took a second one, and they stopped there.",
   high: "Effort: real. They set this up, fixed the light, and chose this frame out of several. It still has to be a picture a person could take where they are.",
 };
@@ -148,7 +148,7 @@ export function slurpEffortPhoto(effort: SlurpPostEffort): string {
 
 export function slurpProductionPhoto(style: SlurpProductionStyle): string {
   return {
-    homemade: "personal phone picture, ordinary available light",
+    homemade: "personal snapshot, ordinary available light",
     polished: "carefully composed personal photograph, deliberate lighting and framing",
     documentary: "observational personal photograph, available light and unembellished framing",
     theatrical: "deliberately staged personal photograph, controlled lighting and expressive composition",

@@ -5,7 +5,7 @@ import type { SlurpExplicitLevel, SlurpPostAccess } from "../../modules/feed/slp
 import type { SlpIdentityDisclosure } from "../../../../../shared/src/slp/slp-social.types.js";
 import { normalizeSlpImagePrompt } from "../../base/media/slp-image-prompt.js";
 import { slurpImageBrief, slurpImageNegativePrompt } from "../../modules/feed/slp-image-brief.js";
-import { slurpCameraSourcePhoto, type SlurpCameraSource } from "../../modules/feed/slp-camera-source.js";
+import { slurpCameraSourceShot, type SlurpCameraSource } from "../../modules/feed/slp-camera-source.js";
 import { slurpVisualBriefFromSituation } from "../../modules/feed/slp-visual-brief.js";
 import { slurpPostSexualLevel } from "../../modules/feed/slp-post-guidance.js";
 import {
@@ -69,12 +69,16 @@ export function slurpPostPictureBriefs(input: {
   // wrote. Identity protection still applies: the brief carries the Creator's own place and
   // company, so a Secret Creator's details must be redacted here exactly as they are in the text.
   const effortPhoto = `${slurpProductionPhoto(input.productionStyle ?? "homemade")}; ${slurpEffortPhoto(input.effort)}`;
+  // Seeded by what this picture shows, so each post and each shot of a set gets its own angle.
+  const cameraShot = camera
+    ? slurpCameraSourceShot(camera, [input.scene?.action, variation?.place, variation?.moment].join("|"))
+    : "";
   const imageDraft =
     // A post direction can ask the model for its own imagePrompt; a returned one is honoured.
     normalizeSlpImagePrompt(input.modelImagePrompt) ??
     (camera && variation
       ? slurpImageBrief({
-          cameraPhoto: slurpCameraSourcePhoto(camera),
+          cameraPhoto: cameraShot,
           variation,
           story: input.story,
           shoot: input.shoot,
@@ -98,7 +102,7 @@ export function slurpPostPictureBriefs(input: {
         ? slurpVisualBriefFromSituation({
             variation,
             axes: input.axes,
-            cameraInstruction: slurpCameraSourcePhoto(camera),
+            cameraInstruction: cameraShot,
             effortInstruction: effortPhoto,
             shoot: input.shoot,
             story: input.story,

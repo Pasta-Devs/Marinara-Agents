@@ -7,6 +7,7 @@ import { planSlurpOpportunity } from "../../data/feed/slp-opportunity-storage.js
 import { bumpSlurpDemandTrend } from "../../data/feed/slp-demand-storage.js";
 import { slurpContinuityIdentityOf } from "../../modules/continuity/slp-continuity-rules.js";
 import { slurpRequestActionEffect, type SlurpRequestAction } from "../../modules/messages/slp-request-actions.js";
+import { normalizeSlurpDemandTopic } from "../../modules/feed/slp-demand.js";
 
 export type SlurpThreadRequest = {
   id: string;
@@ -100,6 +101,7 @@ async function applyRequestActionOnce(
         workflow: "planned",
         intent: effect.promise.intent,
         sourceEventId: input.requestId,
+        topic: input.topic ? normalizeSlurpDemandTopic(input.topic) || null : null,
         at,
         dueAt: new Date(at.getTime() + effect.promise.dueInHours * 60 * 60_000),
       })

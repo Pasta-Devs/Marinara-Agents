@@ -1,5 +1,5 @@
 // The splash screen needs the shipped version and its public notes inside the client bundle.
-export const SLURP2_VERSION = "0.2.40";
+export const SLURP2_VERSION = "0.2.41";
 
 export interface Slurp2ReleaseEntry {
   version: string;
@@ -9,6 +9,18 @@ export interface Slurp2ReleaseEntry {
 
 /** The public release history shown in the Engine splash screen. */
 export const SLURP2_RELEASES: Slurp2ReleaseEntry[] = [
+  {
+    version: "0.2.41",
+    date: "2026-09-25",
+    notes: [
+      "Casual posts are no longer told to be dull; they share one thing from the Creator's day in their own way.",
+      "Camera choices describe framing instead of equipment, so pictures stop showing a phone unless it is a mirror shot.",
+      "The label you type on a fulfilled, teased, or delayed request now tells the promised post what to deliver.",
+      "Posts no longer see their own older captions word for word: only the last post is quoted, older ones appear as subjects, and other Creators' recent subjects are listed so the feed stops repeating one topic.",
+      "Pictures now vary their angle and crop with composition tags image models know (upper body, cowboy shot, from side, and more), chosen to fit who could have taken the shot.",
+      "The post prompt's timing, repetition, and scene rules are shorter, and the last texts that put a phone into scenes are gone.",
+    ],
+  },
   {
     version: "0.2.40",
     date: "2026-09-25",

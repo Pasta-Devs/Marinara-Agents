@@ -69,7 +69,7 @@ const MOMENTS = [
   "between two ordinary parts of their day",
   "getting ready rather than ready",
   "taking a short break before carrying on",
-  "pausing because their phone was already in their hand",
+  "on the way somewhere, caught between two steps",
 ] as const;
 
 /**

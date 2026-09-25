@@ -6,6 +6,7 @@ import { errorMessage } from "../../modules/settings/slp-backstage-format";
 import { useSlurpRequestAction, useSlurpThreadRequests, type SlurpThreadRequest } from "./slp-messages-hooks";
 
 const ACTIONS = ["fulfill", "tease", "delay", "decline", "aggregate", "ignore"] as const;
+const TOPIC_ACTIONS = new Set<string>(["fulfill", "tease", "delay", "aggregate"]);
 
 /**
  * What the fan asked for, and what the Creator did about it.
@@ -37,7 +38,8 @@ export function SlurpThreadRequestsPanel({
       return;
     }
     apply.mutate(
-      { requestId: request.id, action, ...(action === "aggregate" ? { topic } : {}) },
+      // The label is what a kept promise delivers too, so it travels with every action that makes one.
+      { requestId: request.id, action, ...(topic && TOPIC_ACTIONS.has(action) ? { topic } : {}) },
       { onError: (error) => toast.error(errorMessage(error)) },
     );
   };
@@ -69,7 +71,7 @@ export function SlurpThreadRequestsPanel({
                 value={topics[request.id] ?? ""}
                 onChange={(event) => setTopics((current) => ({ ...current, [request.id]: event.target.value }))}
                 placeholder={t("ui.slurp.messages.requests.topicPlaceholder", {
-                  defaultValue: "Label for counting, e.g. red dress set",
+                  defaultValue: "What they asked for, e.g. red dress set",
                 })}
                 maxLength={60}
                 className="min-h-10 w-full rounded-lg bg-[var(--slurp-canvas)] px-3 text-sm ring-1 ring-inset ring-[var(--slurp-outline)]"

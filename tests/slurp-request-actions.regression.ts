@@ -54,6 +54,16 @@ assert.match(service, /bumpSlurpDemandTrend\(db, input\.creatorAccountId, input\
 assert.doesNotMatch(service, /bumpSlurpDemandTrend\([^)]*request\.payload/u);
 // A promise is a planned opportunity tied to the request that caused it.
 assert.match(service, /workflow: "planned",[\s\S]*?sourceEventId: input\.requestId,/u);
+// A promise carries what it delivers: the Creator's typed label, never the request text.
+assert.match(service, /topic: input\.topic \? normalizeSlurpDemandTopic\(input\.topic\) \|\| null : null,/u);
+assert.doesNotMatch(service, /topic: [^,\n]*request\.payload/u);
+const generation = slurp2Source(
+  "packages/slurp2/src/engine/packages/server/src/slp/features/feed/slp-generation-service.ts",
+);
+assert.match(
+  generation,
+  /You promised a subscriber this: \$\{opportunity\.topic\}\.[^`]*Do not name or quote anyone\./u,
+);
 
 // Routes: only the Creator's side may read or answer requests.
 const routes = slurp2Source(

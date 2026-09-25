@@ -4,6 +4,7 @@ import {
   SLURP_CAMERA_SOURCES,
   slurpCameraSourceInstruction,
   slurpCameraSourcePhoto,
+  slurpCameraSourceShot,
   slurpPermittedCameraSources,
   slurpPostCameraSource,
 } from "../packages/slurp2/src/engine/packages/server/src/slp/modules/feed/slp-camera-source.ts";
@@ -69,13 +70,41 @@ for (const source of SLURP_CAMERA_SOURCES) {
   );
 }
 
+// A device named in the picture or the scene gets drawn. Only a mirror shot really shows the phone.
+for (const source of SLURP_CAMERA_SOURCES.filter((entry) => entry !== "mirror")) {
+  assert.doesNotMatch(
+    slurpCameraSourcePhoto(source),
+    /\b(?:phone|smartphone|camera|tripod)\b/iu,
+    `${source} photo names a device`,
+  );
+  assert.doesNotMatch(
+    slurpCameraSourceInstruction(source),
+    /\b(?:phone|smartphone)\b/iu,
+    `${source} scene names a phone`,
+  );
+}
+
+// Framing is a composition tag the source can explain, varied per picture, and never a device.
+for (const source of SLURP_CAMERA_SOURCES) {
+  const shots = new Set(Array.from({ length: 40 }, (_, index) => slurpCameraSourceShot(source, `scene-${index}`)));
+  assert.ok(shots.size > 1, `${source} always draws the same framing`);
+  assert.equal(slurpCameraSourceShot(source, "same"), slurpCameraSourceShot(source, "same"), "framing is reproducible");
+  for (const shot of shots) {
+    assert.ok(shot.endsWith(slurpCameraSourcePhoto(source)), `${source} framing lost its source phrase`);
+    assert.doesNotMatch(shot, /\b(?:no|never|not|pov)\b/iu, `${source} framing must be positive and not first-person`);
+  }
+}
+for (let index = 0; index < 40; index += 1) {
+  assert.doesNotMatch(slurpCameraSourceShot("selfie", `s-${index}`), /full body|wide shot|from behind|from below/u);
+}
+
 // The camera replaced the free-floating framing axis rather than being added alongside it. The
 // axis is gone entirely now: emitting both reintroduced the unexplained cameraman underneath the
 // fix, and keeping it drawn-but-discarded cost a draw per post and lied in the deep-details panel.
 const variation = slurpPostVariation("creator-a", 3);
 const produce = slurpPostVariationInstruction(variation, slurpCameraSourceInstruction("selfie"));
 assert.doesNotMatch(produce, /Framing for the image:/u);
-assert.match(produce, /Camera: their own phone/u);
+assert.match(produce, /Camera: they took it themselves/u);
 assert.ok(!("framing" in variation), "the discarded framing axis must not come back");
 // The rest of the angle survives, so no situational variety was lost with it.
 for (const line of [`Place: ${variation.place}.`, `Moment: ${variation.moment}.`, `Company: ${variation.company}.`]) {

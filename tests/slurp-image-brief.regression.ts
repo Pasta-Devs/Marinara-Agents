@@ -34,7 +34,7 @@ assert.ok(brief.indexOf(scene.action) < brief.indexOf(scene.setting), "action le
 // A draft is for an image model: short, positive, and free of rule prose that becomes content.
 assert.ok(brief.length < 700, `draft too long: ${brief.length}`);
 assert.doesNotMatch(brief, /Describe the photograph|Never |no first-person|One photograph this person/u);
-assert.match(brief, /still frame from a phone video/u);
+assert.match(brief, /still frame from a video/u);
 
 // The level is a positive phrase; what it forbids goes to the negative prompt.
 assert.match(slurpImageNegativePrompt("suggestive"), /nipples/u);

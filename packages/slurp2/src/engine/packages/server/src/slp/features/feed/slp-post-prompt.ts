@@ -1,4 +1,3 @@
-import { slurpIsLegacyImageBrief } from "../../base/media/slp-image-prompt.js";
 import {
   slpGeneratedCreatorPostSchema,
   type SlpCreatorGenerationRequest,
@@ -9,6 +8,7 @@ import {
   type SlpCreatorStageFacts,
   type SlpIdentityDisclosure,
 } from "../../../../../shared/src/slp/slp-social.types.js";
+import { formatSlurpPostHistory } from "../../modules/feed/slp-post-history.js";
 import { parseGameJsonish } from "../../../services/game/jsonish.js";
 import { logDebugOverride } from "../../../lib/logger.js";
 import { requireModelAnswer } from "../../base/model/slp-model-answer.js";
@@ -49,34 +49,6 @@ const NOODLER_FORMAT_PROMPTS: Record<SlpCreatorContentFormat, string> = {
     "Format: long_form. Target 500-2000 body characters with readable paragraphs. Only this format can use long text.",
 };
 
-const SLURP_HISTORY_IMAGE_LENGTH = 240;
-
-/**
- * Recent posts, including what each one showed.
- *
- * The image prompt used to be left out, so the model could not see that it had described the same
- * desk in the same pose eight times running. It rewrote the caption each time and reinvented an
- * identical picture, because nothing told it what the picture had been.
- */
-function formatCreatorPostHistory(posts: SlpCreatorManagedPost[], protect: (value: string) => string): string {
-  if (posts.length === 0) return "No previous posts on this Slurp page.";
-  return posts
-    .slice()
-    .reverse()
-    .map((post) => {
-      const line = `- ${post.createdAt}: ${post.title ? `${protect(post.title)} — ` : ""}${protect(post.content)}`;
-      // The picture's first lines are its action, expression, and outfit; the rest is camera and
-      // level wording that repeats on every post. Legacy rule-prose drafts say nothing about the
-      // picture and made up most of a 27 KB prompt, so they are left out.
-      const showed =
-        post.imagePrompt && !slurpIsLegacyImageBrief(post.imagePrompt)
-          ? post.imagePrompt.replace(/\s+/gu, " ").trim().slice(0, SLURP_HISTORY_IMAGE_LENGTH)
-          : "";
-      return showed ? `${line}\n  (showed: ${protect(showed)})` : line;
-    })
-    .join("\n");
-}
-
 export type SlurpPostPromptInput = {
   account: Pick<SlpAccount, "displayName" | "handle" | "bio">;
   stagePersonality: string;
@@ -87,7 +59,10 @@ export type SlurpPostPromptInput = {
   stageFacts?: SlpCreatorStageFacts;
   disclosureMode: SlpIdentityDisclosure;
   publicIdentity: PublicIdentity | null;
+  /** Newest first. Only the first is quoted; see `formatSlurpPostHistory`. */
   recentPosts: SlpCreatorManagedPost[];
+  /** Recent public titles from other Creators, so the feed does not repeat itself. */
+  otherCreatorSubjects?: readonly string[];
   request: Pick<FormattedCreatorGenerationRequest, "noodlerPostGuide" | "format">;
   allowImagePrompt: boolean;
   /** Automatic image posts return a creative scene plan; Slurp renders the provider prompt. */
@@ -225,7 +200,7 @@ export function buildSlurpPostBlocks(input: SlurpPostPromptInput): SlurpPromptBl
     {
       id: "continuity",
       kind: "editable" as const,
-      text: "Recent posts provide continuity. Do not repeat a recent post's setting, activity, framing, or wardrobe, and do not reuse its wording. If the last few posts happened in one place, this one happens somewhere else. Do not comment on how good or bad the picture is, its framing, or its light unless that is the point of the post. Do not narrate how the picture was taken (camera, timer, tripod, video still), and let the notes about how you are today shape the tone without restating them. Write the title and content in the language of your bio and recent posts.\nEvery post needs a title: a short specific headline of at most 80 characters, never a repeat of the body text.",
+      text: "Do not repeat a recent post's setting, activity, framing, or wardrobe, or a subject another Creator just posted about, and do not reuse wording. Do not rate the picture or narrate how it was taken unless that is the point of the post. Let how you are today shape the tone without restating it. Write the title and content in the language of your bio and recent posts.\nEvery post needs a title: a short specific headline of at most 80 characters, never a repeat of the body text.",
     },
     {
       id: "imageDirection",
@@ -249,7 +224,7 @@ export function buildSlurpPostBlocks(input: SlurpPostPromptInput): SlurpPromptBl
       kind: "required" as const,
       text: `${
         input.allowScenePlan
-          ? "Return one JSON object with title, content, and scene. scene must contain wardrobeId, setting, action, expression, visualDirection, and outfit. Choose wardrobeId from the supplied Creator wardrobe when one is available; otherwise use null. The scene describes the specific attractive, believable photograph that belongs with this caption, and it goes to an image model as written: write every scene field in English, even when the caption is in another language, as concrete visible facts rather than rules. setting and action must make the variation concrete without changing the character, company, camera source, or access level. outfit is exactly what they are wearing in this photo (or what little they are wearing). visualDirection is one short memorable composition, lighting, or prop detail—not provider tags, identity, or policy. Do not return imagePrompt or a poll." +
+          ? "Return one JSON object with title, content, and scene. scene has wardrobeId (from the supplied wardrobe, or null), setting, action, expression, visualDirection, and outfit. The scene is the attractive, believable photograph for this caption and goes to an image model as written: write every scene field in English as concrete visible facts. setting and action make the angle concrete without changing the person, company, camera source, or access level. outfit is exactly what they wear in this photo (or what little). visualDirection is one memorable composition, light, or prop detail, not tags or policy. Do not return imagePrompt or a poll." +
             (input.sceneShots ? `\n${slurpSceneShotsInstruction(input.sceneShots)}` : "")
           : input.allowImagePrompt
             ? // The old contract asked for "subject, pose, setting, lighting, framing", which is a
@@ -309,7 +284,7 @@ export function buildNoodlerPostMessages(input: SlurpPostPromptInput): ChatMessa
     buildSlurpPostTimingContext(input.generatedAt ?? new Date(), input.publicationTime),
     "",
     "# Recent Slurp posts",
-    formatCreatorPostHistory(input.recentPosts, protect),
+    formatSlurpPostHistory(input.recentPosts, protect, input.otherCreatorSubjects),
     ...(input.variationInstruction ? ["", input.variationInstruction] : []),
     ...(input.project
       ? [

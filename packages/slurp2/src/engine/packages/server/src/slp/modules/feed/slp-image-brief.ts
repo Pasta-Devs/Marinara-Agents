@@ -72,7 +72,7 @@ export function slurpShootContinuity(input: {
 }
 
 export function slurpImageBrief(input: {
-  /** From `slurpCameraSourcePhoto`: how the photo was taken, as a visual phrase. */
+  /** From `slurpCameraSourceShot`: framing and how the photo was taken, as a visual phrase. */
   cameraPhoto: string;
   variation: SlurpPostVariation;
   /** A Story is a picture with one line under it, so the picture has to carry the post alone. */
@@ -113,9 +113,7 @@ export function slurpImageBrief(input: {
     sentence(place),
     input.shoot && shootBrief ? "" : sentence(input.scene?.visualDirection),
     sentence(
-      [input.cameraPhoto, input.story ? "vertical phone story photo" : "", input.effortPhoto]
-        .filter(Boolean)
-        .join(", "),
+      [input.cameraPhoto, input.story ? "vertical story photo" : "", input.effortPhoto].filter(Boolean).join(", "),
     ),
     sentence(LEVEL_PHOTO[input.sexualLevel]),
     "The only person in the photo.",

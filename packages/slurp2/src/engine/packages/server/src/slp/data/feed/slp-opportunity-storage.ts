@@ -21,6 +21,7 @@ export type SlurpContentOpportunity = {
   skipReason: SlurpSkipReason | null;
   postId: string | null;
   sourceEventId: string | null;
+  topic: string | null;
   plannedAt: string;
   dueAt: string | null;
   completedAt: string | null;
@@ -43,6 +44,7 @@ function mapOpportunity(row: Record<string, unknown>): SlurpContentOpportunity {
     skipReason: (row.skipReason ? String(row.skipReason) : null) as SlurpSkipReason | null,
     postId: row.postId ? String(row.postId) : null,
     sourceEventId: row.sourceEventId ? String(row.sourceEventId) : null,
+    topic: row.topic ? String(row.topic) : null,
     plannedAt: String(row.plannedAt),
     dueAt: row.dueAt ? String(row.dueAt) : null,
     completedAt: row.completedAt ? String(row.completedAt) : null,
@@ -68,6 +70,7 @@ export async function planSlurpOpportunity(
     access?: string;
     skipReason?: SlurpSkipReason;
     sourceEventId?: string | null;
+    topic?: string | null;
     at: Date;
     dueAt?: Date | null;
   },
@@ -88,6 +91,7 @@ export async function planSlurpOpportunity(
     skipReason: input.skipReason ?? null,
     postId: null,
     sourceEventId: input.sourceEventId ?? null,
+    topic: input.topic ?? null,
     plannedAt: input.at.toISOString(),
     dueAt: input.dueAt ? input.dueAt.toISOString() : null,
     // A skip is over the moment it is made. Nothing else happens to it.

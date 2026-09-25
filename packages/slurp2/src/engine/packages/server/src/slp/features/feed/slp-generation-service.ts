@@ -30,6 +30,7 @@ import {
 import { createCharactersStorage } from "../../../services/storage/characters.storage.js";
 import { createConnectionsStorage } from "../../../services/storage/connections.storage.js";
 import { createSlurpStorage } from "../../data/slp-storage.js";
+import { listSlurpOtherCreatorSubjects } from "../../data/feed/slp-feed-subjects-storage.js";
 import { type SlurpAccount } from "../../modules/records/slp-storage-model.js";
 import { createPromptOverridesStorage } from "../../../services/storage/prompt-overrides.storage.js";
 import { generateCreatorPostImage, SLURP_SECONDARY_IMAGE_COUNT } from "../media/slp-media-contract.js";
@@ -149,6 +150,7 @@ export async function generateCreatorPost(
     admissionMode: input.admissionMode ?? { kind: "foreground" },
   });
   const recentPosts = await noodle.listNoodlerPostsByAccount(account.id, 8);
+  const otherCreatorSubjects = await listSlurpOtherCreatorSubjects(db, account.id, input.generatedAt ?? new Date());
   const disclosureMode = account.settings.privacy.identityDisclosure ?? "open";
   const linkedPublicAccount = await noodle.resolveAccountSource(account as SlurpAccount);
   const scheduleContext = linkedPublicAccount
@@ -280,6 +282,11 @@ export async function generateCreatorPost(
         shoot ? slurpShootInstruction(shoot) : "",
         // A count under a label the Creator typed. Never a fan, never their words.
         demandTopic ? `Several subscribers have asked for: ${demandTopic}. Do not name or quote anyone.` : "",
+        // A kept promise says what was promised, in the Creator's own label from the request panel.
+        // Without it a "request" post had to invent what somebody asked for.
+        opportunity?.topic
+          ? `You promised a subscriber this: ${opportunity.topic}. This post ${axes.intent === "teaser" ? "teases" : "delivers"} it. Do not name or quote anyone.`
+          : "",
       ]
         .filter(Boolean)
         .join("\n")
@@ -311,6 +318,7 @@ export async function generateCreatorPost(
     disclosureMode,
     publicIdentity,
     recentPosts,
+    otherCreatorSubjects,
     // A variation carries its own format, so an automatic post stops always being a caption.
     request: { ...input.request, format },
     variationInstruction: variation

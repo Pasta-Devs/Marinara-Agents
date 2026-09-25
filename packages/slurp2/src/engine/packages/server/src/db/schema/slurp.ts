@@ -744,6 +744,11 @@ export const slurpContentOpportunities = fileTable("slurp2_content_opportunities
    * A plan with a source event and no slot is a promise: it waits until the planner honours it.
    */
   sourceEventId: text("source_event_id"),
+  /**
+   * What a promise delivers, in the Creator's own words from the request panel. Never the fan's
+   * wording: it reaches a public post.
+   */
+  topic: text("topic"),
   plannedAt: text("planned_at").notNull(),
   dueAt: text("due_at"),
   completedAt: text("completed_at"),

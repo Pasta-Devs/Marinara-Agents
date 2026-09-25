@@ -43,7 +43,7 @@ import { slurpWeightedPick } from "./slp-weighted.js";
  */
 const JOBS: Record<SlurpContentIntent, string> = {
   casual:
-    "This one is not selling anything. Talk about your actual day like a person with a life outside this, and let it be dull.",
+    "This one is not selling anything. Share one thing from your actual day that you would tell a friend about, the way only you would tell it.",
   teaser:
     "This one is bait. Show enough that somebody wants the rest, say less than you want to, and do not resolve it.",
   set: "This is a planned shoot you have been working on. You may say it took effort, that there is more of it, or when the rest lands.",

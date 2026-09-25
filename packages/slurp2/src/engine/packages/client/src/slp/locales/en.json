@@ -3612,7 +3612,7 @@
   "ui.slurp.settings.aiBudget.job.continuity": "Continuity notes from messages",
   "ui.slurp.messages.requests.title": "Requests",
   "ui.slurp.messages.requests.topicRequired": "Name the kind of request first.",
-  "ui.slurp.messages.requests.topicPlaceholder": "Label for counting, e.g. red dress set",
+  "ui.slurp.messages.requests.topicPlaceholder": "What they asked for, e.g. red dress set",
   "ui.slurp.messages.requests.action.fulfill": "Fulfil",
   "ui.slurp.messages.requests.action.tease": "Tease",
   "ui.slurp.messages.requests.action.delay": "Delay",
