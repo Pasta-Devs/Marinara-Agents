@@ -90,4 +90,29 @@ for (const source of Object.values(panels)) assert.doesNotMatch(source, /<detail
 assert.doesNotMatch(panels.publishing, /BackstageWizard|paceWizardOpen/u);
 assert.doesNotMatch(slurp2Source(`${root}features/feed/slp-feed-backstage-contract.ts`), /paceWizardOpen|paceDraft/u);
 
+// Numbers: one save queue, a slider that saves on release, steppers and min/max pairs.
+const controls = slurp2Source(`${root}modules/settings/SlpSettingsControls.tsx`);
+assert.equal((controls.match(/saveGenerationRef\.current !== saveGeneration/gu) ?? []).length, 1, "one save queue");
+assert.equal(
+  (controls.match(/useQueuedSave\(value, onSave\)/gu) ?? []).length,
+  2,
+  "NumberSetting and RangeSetting share it",
+);
+assert.match(
+  controls,
+  /type="range"[\s\S]*onChange=\{\(event\) => setDraft\(event\.target\.value\)\}[\s\S]*onPointerUp=\{commit\}[\s\S]*onKeyUp=\{commit\}[\s\S]*onBlur=\{commit\}/u,
+);
+assert.match(
+  controls,
+  /max=\{Math\.min\(bounds\[1\], max\.value\)\}[\s\S]*min=\{Math\.max\(bounds\[0\], min\.value\)\}/u,
+  "a lower bound never passes the upper one",
+);
+assert.equal((panels.messaging.match(/<RangePairField/gu) ?? []).length, 4, "eight delay inputs become four rows");
+for (const key of ["arcCooldownWeeks", "arcMaxConcurrentAuto"]) {
+  assert.match(storylines, new RegExp(`<RangeSetting[^>]*?value=\\{settings\\.${key}\\}`, "su"));
+}
+for (const key of ["postsPerDay", "carryoverHours", "carryoverMaxItems"]) {
+  assert.match(panels.publishing, new RegExp(`<NumberSetting\\s+stepper[^>]*?value=\\{settings\\.${key}\\}`, "su"));
+}
+
 console.log("slurp2 settings inputs ok");

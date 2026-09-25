@@ -1,5 +1,11 @@
 # Slurp Remastered release notes
 
+## 0.2.71 — 2026-09-25
+
+- Bounded numbers are sliders with a value chip: weeks between storylines, storylines at once, wallet day start, weekly price change and creator revenue share. A slider saves when you let go.
+- Posts per day, storyline check interval and carryover limits have − and + buttons.
+- Messaging reply and away delays are four min–max rows instead of eight separate fields; the lower value can never pass the upper one.
+
 ## 0.2.70 — 2026-09-25
 
 - Settings have new sections in order of use: Overview, Models & connections, Creators, Posting, Stories, World, Fans & money, Writing & content level, Maintenance.

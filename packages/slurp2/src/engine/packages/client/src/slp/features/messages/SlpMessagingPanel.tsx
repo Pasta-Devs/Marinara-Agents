@@ -1,7 +1,14 @@
 import { MessageCircle } from "lucide-react";
 import { BackstagePageHeader, BackstageWizard } from "../../modules/settings/SlpSettingsKit";
 
-import { AdvancedGroup, Field, NumberSetting, SettingsGroup, Toggle } from "../../modules/settings/SlpSettingsControls";
+import {
+  AdvancedGroup,
+  Field,
+  NumberSetting,
+  RangePairField,
+  SettingsGroup,
+  Toggle,
+} from "../../modules/settings/SlpSettingsControls";
 import { ChoiceSetting } from "../../modules/settings/SlpSettingsInputs";
 
 import type { SlurpSettings } from "../settings/slp-settings-contract";
@@ -159,7 +166,7 @@ export function SlpMessagingPanel(page: SlpBackstagePageProps) {
         />
         <AdvancedGroup
           title={t("ui.slurp.settings.backstage.landing.delayFineTune", { defaultValue: "Exact reply delays" })}
-          count={10}
+          count={6}
         >
           <div className="grid gap-4 sm:grid-cols-2">
             <Field
@@ -186,102 +193,76 @@ export function SlpMessagingPanel(page: SlpBackstagePageProps) {
                 onSave={(value) => update("messagesMaxReplyDelayMinutes", value)}
               />
             </Field>
-            <Field
-              settingKey="messagesHighRapportDelayMinMinutes"
-              label={t("ui.slurp.settings.messaging.highRapportDelayMin")}
-              detail={t("ui.slurp.settings.messaging.highRapportDelayMinDetail")}
-            >
-              <NumberSetting
-                value={settings.messagesHighRapportDelayMinMinutes}
-                min={0}
-                max={1440}
-                onSave={(value) => update("messagesHighRapportDelayMinMinutes", value)}
-              />
-            </Field>
-            <Field
-              settingKey="messagesHighRapportDelayMaxMinutes"
-              label={t("ui.slurp.settings.messaging.highRapportDelayMax")}
-              detail={t("ui.slurp.settings.messaging.highRapportDelayMaxDetail")}
-            >
-              <NumberSetting
-                value={settings.messagesHighRapportDelayMaxMinutes}
-                min={0}
-                max={1440}
-                onSave={(value) => update("messagesHighRapportDelayMaxMinutes", value)}
-              />
-            </Field>
-            <Field
-              settingKey="messagesMediumRapportDelayMinMinutes"
-              label={t("ui.slurp.settings.messaging.mediumRapportDelayMin")}
-              detail={t("ui.slurp.settings.messaging.mediumRapportDelayMinDetail")}
-            >
-              <NumberSetting
-                value={settings.messagesMediumRapportDelayMinMinutes}
-                min={0}
-                max={1440}
-                onSave={(value) => update("messagesMediumRapportDelayMinMinutes", value)}
-              />
-            </Field>
-            <Field
-              settingKey="messagesMediumRapportDelayMaxMinutes"
-              label={t("ui.slurp.settings.messaging.mediumRapportDelayMax")}
-              detail={t("ui.slurp.settings.messaging.mediumRapportDelayMaxDetail")}
-            >
-              <NumberSetting
-                value={settings.messagesMediumRapportDelayMaxMinutes}
-                min={0}
-                max={1440}
-                onSave={(value) => update("messagesMediumRapportDelayMaxMinutes", value)}
-              />
-            </Field>
-            <Field
-              settingKey="messagesRecentPostAwayMinMinutes"
-              label={t("ui.slurp.settings.messaging.recentPostAwayMin")}
-              detail={t("ui.slurp.settings.messaging.recentPostAwayMinDetail")}
-            >
-              <NumberSetting
-                value={settings.messagesRecentPostAwayMinMinutes}
-                min={0}
-                max={1440}
-                onSave={(value) => update("messagesRecentPostAwayMinMinutes", value)}
-              />
-            </Field>
-            <Field
-              settingKey="messagesRecentPostAwayMaxMinutes"
-              label={t("ui.slurp.settings.messaging.recentPostAwayMax")}
-              detail={t("ui.slurp.settings.messaging.recentPostAwayMaxDetail")}
-            >
-              <NumberSetting
-                value={settings.messagesRecentPostAwayMaxMinutes}
-                min={0}
-                max={1440}
-                onSave={(value) => update("messagesRecentPostAwayMaxMinutes", value)}
-              />
-            </Field>
-            <Field
-              settingKey="messagesStalePostAwayMinMinutes"
-              label={t("ui.slurp.settings.messaging.stalePostAwayMin")}
-              detail={t("ui.slurp.settings.messaging.stalePostAwayMinDetail")}
-            >
-              <NumberSetting
-                value={settings.messagesStalePostAwayMinMinutes}
-                min={0}
-                max={1440}
-                onSave={(value) => update("messagesStalePostAwayMinMinutes", value)}
-              />
-            </Field>
-            <Field
-              settingKey="messagesStalePostAwayMaxMinutes"
-              label={t("ui.slurp.settings.messaging.stalePostAwayMax")}
-              detail={t("ui.slurp.settings.messaging.stalePostAwayMaxDetail")}
-            >
-              <NumberSetting
-                value={settings.messagesStalePostAwayMaxMinutes}
-                min={0}
-                max={1440}
-                onSave={(value) => update("messagesStalePostAwayMaxMinutes", value)}
-              />
-            </Field>
+          </div>
+          <div className="space-y-5">
+            <RangePairField
+              label={t("ui.slurp.settings.messaging.highRapportDelay")}
+              unit={t("ui.slurp.settings.units.minutes")}
+              bounds={[0, 1440]}
+              min={{
+                settingKey: "messagesHighRapportDelayMinMinutes",
+                label: t("ui.slurp.settings.messaging.highRapportDelayMin"),
+                value: settings.messagesHighRapportDelayMinMinutes,
+                onSave: (value) => update("messagesHighRapportDelayMinMinutes", value),
+              }}
+              max={{
+                settingKey: "messagesHighRapportDelayMaxMinutes",
+                label: t("ui.slurp.settings.messaging.highRapportDelayMax"),
+                value: settings.messagesHighRapportDelayMaxMinutes,
+                onSave: (value) => update("messagesHighRapportDelayMaxMinutes", value),
+              }}
+            />
+            <RangePairField
+              label={t("ui.slurp.settings.messaging.mediumRapportDelay")}
+              unit={t("ui.slurp.settings.units.minutes")}
+              bounds={[0, 1440]}
+              min={{
+                settingKey: "messagesMediumRapportDelayMinMinutes",
+                label: t("ui.slurp.settings.messaging.mediumRapportDelayMin"),
+                value: settings.messagesMediumRapportDelayMinMinutes,
+                onSave: (value) => update("messagesMediumRapportDelayMinMinutes", value),
+              }}
+              max={{
+                settingKey: "messagesMediumRapportDelayMaxMinutes",
+                label: t("ui.slurp.settings.messaging.mediumRapportDelayMax"),
+                value: settings.messagesMediumRapportDelayMaxMinutes,
+                onSave: (value) => update("messagesMediumRapportDelayMaxMinutes", value),
+              }}
+            />
+            <RangePairField
+              label={t("ui.slurp.settings.messaging.recentPostAway")}
+              unit={t("ui.slurp.settings.units.minutes")}
+              bounds={[0, 1440]}
+              min={{
+                settingKey: "messagesRecentPostAwayMinMinutes",
+                label: t("ui.slurp.settings.messaging.recentPostAwayMin"),
+                value: settings.messagesRecentPostAwayMinMinutes,
+                onSave: (value) => update("messagesRecentPostAwayMinMinutes", value),
+              }}
+              max={{
+                settingKey: "messagesRecentPostAwayMaxMinutes",
+                label: t("ui.slurp.settings.messaging.recentPostAwayMax"),
+                value: settings.messagesRecentPostAwayMaxMinutes,
+                onSave: (value) => update("messagesRecentPostAwayMaxMinutes", value),
+              }}
+            />
+            <RangePairField
+              label={t("ui.slurp.settings.messaging.stalePostAway")}
+              unit={t("ui.slurp.settings.units.minutes")}
+              bounds={[0, 1440]}
+              min={{
+                settingKey: "messagesStalePostAwayMinMinutes",
+                label: t("ui.slurp.settings.messaging.stalePostAwayMin"),
+                value: settings.messagesStalePostAwayMinMinutes,
+                onSave: (value) => update("messagesStalePostAwayMinMinutes", value),
+              }}
+              max={{
+                settingKey: "messagesStalePostAwayMaxMinutes",
+                label: t("ui.slurp.settings.messaging.stalePostAwayMax"),
+                value: settings.messagesStalePostAwayMaxMinutes,
+                onSave: (value) => update("messagesStalePostAwayMaxMinutes", value),
+              }}
+            />
           </div>
         </AdvancedGroup>
       </SettingsGroup>

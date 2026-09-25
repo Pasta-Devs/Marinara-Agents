@@ -1,6 +1,6 @@
 import { BackstagePageHeader } from "../../modules/settings/SlpSettingsKit";
 
-import { AdvancedGroup, Field, NumberSetting, Toggle } from "../../modules/settings/SlpSettingsControls";
+import { AdvancedGroup, Field, NumberSetting, Toggle, RangeSetting } from "../../modules/settings/SlpSettingsControls";
 
 import type { SlpBackstagePageProps } from "../backstage/slp-backstage-contract";
 
@@ -92,11 +92,12 @@ export function SlpWalletPanel(page: SlpBackstagePageProps) {
             defaultValue: "How far one weekly adjustment may move a price. Zero freezes prices.",
           })}
         >
-          <NumberSetting
+          <RangeSetting
             value={settings.pricingMaxWeeklyChangePercent}
             min={0}
             max={100}
             onSave={(value) => update("pricingMaxWeeklyChangePercent", value)}
+            format={(percent) => `${percent} %`}
           />
         </Field>
       )}
@@ -125,11 +126,12 @@ export function SlpWalletPanel(page: SlpBackstagePageProps) {
           label={t("ui.slurp.settings.wallet.dayStartHour")}
           detail={t("ui.slurp.settings.wallet.dayStartHourDetail")}
         >
-          <NumberSetting
+          <RangeSetting
             value={settings.walletDayStartHour}
             min={0}
             max={23}
             onSave={(value) => update("walletDayStartHour", value)}
+            format={(hour) => `${String(hour).padStart(2, "0")}:00`}
           />
         </Field>
         <Field
@@ -202,11 +204,12 @@ export function SlpWalletPanel(page: SlpBackstagePageProps) {
               "When a fan pays one of your own creators, this share reaches your wallet. Zero means your creators earn nothing.",
           })}
         >
-          <NumberSetting
+          <RangeSetting
             value={settings.walletCreatorRevenueSharePercent}
             min={0}
             max={100}
             onSave={(value) => update("walletCreatorRevenueSharePercent", value)}
+            format={(percent) => `${percent} %`}
           />
         </Field>
       </AdvancedGroup>

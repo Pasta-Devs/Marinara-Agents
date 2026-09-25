@@ -3989,5 +3989,12 @@
   "ui.slurp.settings.creators.anotherDay": "Another day",
   "ui.slurp.settings.creators.schedulePast": "Pick a time in the future.",
   "ui.slurp.settings.backstage.sections.models": "Models & connections",
-  "ui.slurp.settings.backstage.sections.fans": "Fans & money"
+  "ui.slurp.settings.backstage.sections.fans": "Fans & money",
+  "ui.slurp.settings.messaging.highRapportDelay": "Reply delay for close fans",
+  "ui.slurp.settings.messaging.mediumRapportDelay": "Reply delay for regular fans",
+  "ui.slurp.settings.messaging.recentPostAway": "Away time after posting in the last 2 hours",
+  "ui.slurp.settings.messaging.stalePostAway": "Away time after posting 2 to 12 hours ago",
+  "ui.slurp.settings.units.minutes": "min",
+  "ui.slurp.settings.units.weeks_one": "{{count}} week",
+  "ui.slurp.settings.units.weeks_other": "{{count}} weeks"
 }

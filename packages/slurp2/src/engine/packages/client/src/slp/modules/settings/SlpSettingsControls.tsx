@@ -9,37 +9,18 @@ import type { ReactNode } from "react";
 import { useEffect, useRef, useState } from "react";
 import { SettingAnchor, type SlpSettingKey } from "./SlpSettingsKit";
 
-export function NumberSetting({
-  value,
-  min,
-  max,
-  onSave,
-  /** Whole numbers by default. Tuning has rates and multipliers that are legitimately fractional. */
-  integer = true,
-  disabled = false,
-}: {
-  value: number;
-  min: number;
-  max: number;
-  onSave: (value: number) => Promise<boolean> | boolean | void;
-  integer?: boolean;
-  disabled?: boolean;
-}) {
+/**
+ * Saves a number in order. A slow older request cannot land after a newer one and persist a stale
+ * value; a queued save is skipped once a later edit supersedes it. The generation token, not the
+ * value, decides: 1 -> 2 -> 1 would otherwise let the first save's failure recovery match the last.
+ * Rejections are swallowed so one failed save does not wedge the queue for every save after it.
+ */
+function useQueuedSave(value: number, onSave: (value: number) => Promise<boolean> | boolean | void) {
   const [draft, setDraft] = useState(String(value));
   useEffect(() => setDraft(String(value)), [value]);
   const saveQueueRef = useRef(Promise.resolve());
   const saveGenerationRef = useRef(0);
-  const commit = async (raw = draft, resetInvalid = true) => {
-    const next = Number(raw);
-    if (!raw.trim() || !(integer ? Number.isInteger(next) : Number.isFinite(next)) || next < min || next > max) {
-      if (resetInvalid) setDraft(String(value));
-      return;
-    }
-    // Serialize saves so a slow older request can't land after a newer one and persist a
-    // stale value; skip a queued save (and its failure recovery) once a later edit has
-    // already superseded it. Compare a generation token, not the value itself — a sequence
-    // like 1 -> 2 -> 1 would otherwise let the first save's failure recovery match the last.
-    // Swallow rejections so one failed save doesn't wedge the queue for every save after it.
+  const save = async (next: number) => {
     const saveGeneration = ++saveGenerationRef.current;
     saveQueueRef.current = saveQueueRef.current.then(async () => {
       if (saveGenerationRef.current !== saveGeneration) return;
@@ -51,9 +32,47 @@ export function NumberSetting({
     });
     await saveQueueRef.current;
   };
-  return (
+  return { draft, setDraft, save };
+}
+
+const stepButton =
+  "inline-flex size-11 shrink-0 items-center justify-center rounded-lg text-lg font-semibold ring-1 ring-inset ring-[var(--border)] hover:bg-[var(--accent)]/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)] disabled:opacity-40";
+
+export function NumberSetting({
+  value,
+  min,
+  max,
+  onSave,
+  /** Whole numbers by default. Tuning has rates and multipliers that are legitimately fractional. */
+  integer = true,
+  disabled = false,
+  /** Adds − and + buttons: for small counts a player nudges rather than types. */
+  stepper = false,
+  label,
+}: {
+  value: number;
+  min: number;
+  max: number;
+  onSave: (value: number) => Promise<boolean> | boolean | void;
+  integer?: boolean;
+  disabled?: boolean;
+  stepper?: boolean;
+  /** Accessible name when the number has no visible label of its own. */
+  label?: string;
+}) {
+  const { draft, setDraft, save } = useQueuedSave(value, onSave);
+  const commit = async (raw = draft, resetInvalid = true) => {
+    const next = Number(raw);
+    if (!raw.trim() || !(integer ? Number.isInteger(next) : Number.isFinite(next)) || next < min || next > max) {
+      if (resetInvalid) setDraft(String(value));
+      return;
+    }
+    await save(next);
+  };
+  const input = (
     <input
       type="number"
+      aria-label={label}
       disabled={disabled}
       step={integer ? 1 : "any"}
       min={min}
@@ -66,8 +85,137 @@ export function NumberSetting({
       }}
       onBlur={() => void commit()}
       onKeyDown={(event) => event.key === "Enter" && event.currentTarget.blur()}
-      className="h-11 w-full rounded-lg border border-[var(--border)] bg-[var(--slurp-canvas,var(--background))] px-3 text-base outline-none transition-colors focus:border-[var(--noodle-accent)] focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)]/30 disabled:opacity-50 sm:text-sm"
+      className="h-11 w-full min-w-0 rounded-lg border border-[var(--border)] bg-[var(--slurp-canvas,var(--background))] px-3 text-base tabular-nums outline-none transition-colors focus:border-[var(--noodle-accent)] focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)]/30 disabled:opacity-50 sm:text-sm"
     />
+  );
+  if (!stepper) return input;
+  const current = Number(draft);
+  const nudge = (delta: number) => {
+    const next = Math.min(max, Math.max(min, (Number.isFinite(current) ? current : value) + delta));
+    setDraft(String(next));
+    void commit(String(next));
+  };
+  return (
+    <span className="flex items-center gap-2">
+      <button
+        type="button"
+        aria-label="−1"
+        disabled={disabled || current <= min}
+        onClick={() => nudge(-1)}
+        className={stepButton}
+      >
+        −
+      </button>
+      {input}
+      <button
+        type="button"
+        aria-label="+1"
+        disabled={disabled || current >= max}
+        onClick={() => nudge(1)}
+        className={stepButton}
+      >
+        +
+      </button>
+    </span>
+  );
+}
+
+/**
+ * A slider for a bounded, small range where the position matters more than the exact digit. It
+ * saves when the thumb is let go, not on every move. Exact money values stay typed.
+ */
+export function RangeSetting({
+  value,
+  min,
+  max,
+  step = 1,
+  format = String,
+  onSave,
+  disabled = false,
+  label,
+}: {
+  value: number;
+  min: number;
+  max: number;
+  step?: number;
+  /** The chip text, e.g. "3 weeks" or "07:00". */
+  format?: (value: number) => string;
+  onSave: (value: number) => Promise<boolean> | boolean | void;
+  disabled?: boolean;
+  label?: string;
+}) {
+  const { draft, setDraft, save } = useQueuedSave(value, onSave);
+  const commit = () => {
+    const next = Number(draft);
+    if (next !== value && Number.isFinite(next)) void save(next);
+  };
+  return (
+    <span className="flex items-center gap-3">
+      <input
+        type="range"
+        aria-label={label}
+        aria-valuetext={format(Number(draft))}
+        disabled={disabled}
+        min={min}
+        max={max}
+        step={step}
+        value={draft}
+        onChange={(event) => setDraft(event.target.value)}
+        onPointerUp={commit}
+        onKeyUp={commit}
+        onBlur={commit}
+        className="h-11 min-w-0 flex-1 accent-[var(--noodle-accent)] disabled:opacity-50"
+      />
+      <span className="min-w-16 rounded-full bg-[var(--slurp-canvas,var(--accent))] px-2.5 py-1 text-center text-sm font-semibold tabular-nums">
+        {format(Number(draft))}
+      </span>
+    </span>
+  );
+}
+
+/** One label, two numbers: a lower and an upper bound side by side, "to" between them. */
+export function RangePairField({
+  label,
+  detail,
+  unit,
+  bounds,
+  min,
+  max,
+}: {
+  label: string;
+  detail?: string;
+  unit: string;
+  bounds: [number, number];
+  min: { settingKey: SlpSettingKey; label: string; value: number; onSave: (value: number) => unknown };
+  max: { settingKey: SlpSettingKey; label: string; value: number; onSave: (value: number) => unknown };
+}) {
+  return (
+    <fieldset className="min-w-0 space-y-2">
+      <legend className="text-sm font-semibold">{label}</legend>
+      {detail && <p className="text-xs leading-5 text-[var(--muted-foreground)]">{detail}</p>}
+      <div className="grid grid-cols-[1fr_auto_1fr_auto] items-center gap-2 text-sm">
+        <SettingAnchor settingKey={min.settingKey}>
+          <NumberSetting
+            label={min.label}
+            value={min.value}
+            min={bounds[0]}
+            max={Math.min(bounds[1], max.value)}
+            onSave={(value) => void min.onSave(value)}
+          />
+        </SettingAnchor>
+        <span className="text-[var(--muted-foreground)]">–</span>
+        <SettingAnchor settingKey={max.settingKey}>
+          <NumberSetting
+            label={max.label}
+            value={max.value}
+            min={Math.max(bounds[0], min.value)}
+            max={bounds[1]}
+            onSave={(value) => void max.onSave(value)}
+          />
+        </SettingAnchor>
+        <span className="text-xs text-[var(--muted-foreground)]">{unit}</span>
+      </div>
+    </fieldset>
   );
 }
 

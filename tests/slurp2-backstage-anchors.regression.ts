@@ -81,7 +81,8 @@ const missing = Object.entries(SLP_BACKSTAGE_SETTING_PLACEMENT)
   .filter(([key, placement]) => {
     if (placement.internal) return false;
     const host = placement.scope === "creator" ? creatorSettingsSource : read(panelFile.get(placement.target)!);
-    return !host.includes(`settingKey="${key}"`);
+    // A pair control takes its keys as props (`settingKey: "…"`) and draws the anchors itself.
+    return !host.includes(`settingKey="${key}"`) && !host.includes(`settingKey: "${key}"`);
   })
   .map(
     ([key, placement]) =>

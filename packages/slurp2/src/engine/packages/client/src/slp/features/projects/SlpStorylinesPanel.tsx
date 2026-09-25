@@ -8,6 +8,7 @@ import {
   NumberSetting,
   SettingsGroup,
   Toggle,
+  RangeSetting,
 } from "../../modules/settings/SlpSettingsControls";
 import { BackstagePageHeader } from "../../modules/settings/SlpSettingsKit";
 import { ChoiceSetting } from "../../modules/settings/SlpSettingsInputs";
@@ -171,12 +172,13 @@ export function SlpStorylinesPanel(page: SlpBackstagePageProps) {
           label={t("ui.slurp.settings.arcCooldownWeeks")}
           detail={t("ui.slurp.settings.arcCooldownWeeksDetail")}
         >
-          <NumberSetting
+          <RangeSetting
             disabled={settings.arcAutoMode === "off"}
             value={settings.arcCooldownWeeks}
             min={1}
             max={8}
             onSave={(value) => update("arcCooldownWeeks", value)}
+            format={(weeks) => t("ui.slurp.settings.units.weeks", { count: weeks })}
           />
         </Field>
         <Field
@@ -185,7 +187,7 @@ export function SlpStorylinesPanel(page: SlpBackstagePageProps) {
           label={t("ui.slurp.settings.arcMaxConcurrentAuto")}
           detail={t("ui.slurp.settings.arcMaxConcurrentAutoDetail")}
         >
-          <NumberSetting
+          <RangeSetting
             disabled={settings.arcAutoMode === "off"}
             value={settings.arcMaxConcurrentAuto}
             min={1}
@@ -213,6 +215,7 @@ export function SlpStorylinesPanel(page: SlpBackstagePageProps) {
           detail={t("ui.slurp.settings.arcPollHoursDetail")}
         >
           <NumberSetting
+            stepper
             value={settings.arcPollHours}
             min={1}
             max={168}

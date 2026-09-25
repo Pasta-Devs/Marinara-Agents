@@ -111,6 +111,7 @@ export function SlpPublishingPanel(page: SlpBackstagePageProps) {
           detail={t("ui.slurp.settings.postsPerDayDetail")}
         >
           <NumberSetting
+            stepper
             value={settings.postsPerDay}
             min={1}
             max={96}
@@ -209,6 +210,7 @@ export function SlpPublishingPanel(page: SlpBackstagePageProps) {
               detail={t("ui.slurp.settings.carryover.hoursDetail")}
             >
               <NumberSetting
+                stepper
                 value={settings.carryoverHours}
                 min={1}
                 max={24 * 365}
@@ -221,6 +223,7 @@ export function SlpPublishingPanel(page: SlpBackstagePageProps) {
               detail={t("ui.slurp.settings.carryover.maxItemsDetail")}
             >
               <NumberSetting
+                stepper
                 value={settings.carryoverMaxItems}
                 min={1}
                 max={100}
