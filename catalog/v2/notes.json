@@ -360,6 +360,12 @@
     "slurp2": {
       "versions": [
         {
+          "version": "0.2.62",
+          "date": "2026-09-25",
+          "notes": "- The Identity tab in Creator settings uses the full width again; the Save bar sits at the bottom of the tab.\n- Memory shows readable names instead of raw ids such as multi_image_set, in Recent plans, filters, proposals and signals.",
+          "highlight": false
+        },
+        {
           "version": "0.2.61",
           "date": "2026-09-25",
           "notes": "- The Creator settings window no longer shows \"{{name}}'s settings\" while it loads.",
@@ -471,12 +477,6 @@
           "version": "0.2.43",
           "date": "2026-09-25",
           "notes": "- With Beats on, what a published post was about becomes a note Slurp remembers for a week, so the next post can follow on from it without copying its caption.\n- With Beats on, no earlier caption is quoted to the writer any more; recent posts appear only as subjects.",
-          "highlight": false
-        },
-        {
-          "version": "0.2.42",
-          "date": "2026-09-25",
-          "notes": "- New experimental post planner in Prompts: Beats. It picks what an ordinary post is about from the Creator's own card (a person, a place, their work, a running joke) instead of letting every Creator drift to the same subjects. Classic stays the default.\n- With Beats on, Slurp reads each Creator's card once in the background and reads it again only after the card changes. Until then, and whenever something goes wrong, posts use the classic planner.\n- Beats vary the kind of moment (a win, a showcase, a moment with someone, an opinion, a small mishap, and more) per Creator and across the whole feed, so no single kind takes over.\n- Beats tell the writer who is there, where, and when, and that it must not invent other people, past events, or life changes. If a post does anyway, it gets one rewrite; Deep details show the result.\n- Deep details now show the planner, the beat with its anchor and cast, the claim check, the picture's shot, and the subject a kept promise delivers.",
           "highlight": false
         }
       ]

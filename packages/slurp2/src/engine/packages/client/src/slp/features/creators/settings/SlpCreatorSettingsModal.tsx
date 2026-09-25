@@ -413,34 +413,35 @@ export function SlpCreatorSettingsModal({
                 </div>
               );
             })}
+            {/* Inside the panel, so the bar never takes width from the tab content. */}
+            {tab === "identity" && profileSaveState && (
+              <div className="sticky bottom-0 z-10 mt-4 flex items-center justify-end gap-2 border-t border-[var(--slurp-outline)] bg-[var(--slurp-surface)] pb-[calc(0.75rem+env(safe-area-inset-bottom))] pt-3">
+                <button
+                  type="button"
+                  disabled={profileSaveState.isPending}
+                  onClick={profileSaveState.discard}
+                  className={quietButton}
+                >
+                  {t("ui.slurp.creatorForm.cancel", { defaultValue: "Discard" })}
+                </button>
+                <button
+                  type="button"
+                  disabled={profileSaveState.isPending || !profileDirty}
+                  onClick={profileSaveState.save}
+                  className="inline-flex min-h-11 items-center gap-2 rounded-lg bg-[var(--noodle-accent)] px-4 text-sm font-bold text-zinc-950 disabled:opacity-50"
+                >
+                  {profileSaveState.isPending ? (
+                    <Loader2 size={15} className="animate-spin motion-reduce:animate-none" aria-hidden="true" />
+                  ) : (
+                    <Check size={15} aria-hidden="true" />
+                  )}
+                  {profileSaveState.isPending
+                    ? t("ui.noodle.stageprofileform.saving")
+                    : t("ui.noodle.stageprofileform.saveChanges")}
+                </button>
+              </div>
+            )}
           </div>
-          {tab === "identity" && profileSaveState && (
-            <div className="fixed inset-x-0 bottom-0 z-20 flex items-center justify-end gap-2 border-t border-[var(--slurp-outline)] bg-[var(--slurp-surface)] px-4 pb-[calc(0.75rem+env(safe-area-inset-bottom))] pt-3 sm:static sm:shrink-0 sm:bg-[var(--slurp-surface)] sm:px-0 sm:pb-0 sm:pt-3 sm:ps-56">
-              <button
-                type="button"
-                disabled={profileSaveState.isPending}
-                onClick={profileSaveState.discard}
-                className={quietButton}
-              >
-                {t("ui.slurp.creatorForm.cancel", { defaultValue: "Discard" })}
-              </button>
-              <button
-                type="button"
-                disabled={profileSaveState.isPending || !profileDirty}
-                onClick={profileSaveState.save}
-                className="inline-flex min-h-11 items-center gap-2 rounded-lg bg-[var(--noodle-accent)] px-4 text-sm font-bold text-zinc-950 disabled:opacity-50"
-              >
-                {profileSaveState.isPending ? (
-                  <Loader2 size={15} className="animate-spin motion-reduce:animate-none" aria-hidden="true" />
-                ) : (
-                  <Check size={15} aria-hidden="true" />
-                )}
-                {profileSaveState.isPending
-                  ? t("ui.noodle.stageprofileform.saving")
-                  : t("ui.noodle.stageprofileform.saveChanges")}
-              </button>
-            </div>
-          )}
         </div>
       )}
     </Modal>

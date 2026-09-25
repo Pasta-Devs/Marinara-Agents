@@ -22,6 +22,14 @@ import {
 
 const PROMOTION_TARGETS = ["creator_private", "creator_public", "cross_platform"] as const;
 
+type ContinuityLabelKind = "factType" | "eventType" | "scope" | "status" | "source" | "delivery";
+
+/** One label for every stored continuity value, so no raw id like `multi_image_set` reaches the screen. */
+export function continuityLabel(t: ReturnType<typeof useTranslation>["t"], kind: ContinuityLabelKind, value: string) {
+  const key = kind === "delivery" ? `ui.slurp.composer.delivery.${value}` : `ui.slurp.continuity.${kind}.${value}`;
+  return t(key, { defaultValue: value.replaceAll("_", " ") });
+}
+
 /**
  * What this Creator remembers, and what is waiting to be remembered.
  *
@@ -61,7 +69,7 @@ export function SlurpContinuityPanel({ creatorAccountId }: { creatorAccountId: s
     );
   }
 
-  const scope = (value: string) => t(`ui.slurp.continuity.scope.${value}`, { defaultValue: value });
+  const scope = (value: string) => continuityLabel(t, "scope", value);
   const factLine = (fact: SlurpContinuityFactView) => (
     <article key={fact.id} className="space-y-2 rounded-lg bg-[var(--slurp-surface-raised)] p-3">
       <p className="text-sm leading-6 text-pretty">
@@ -78,8 +86,8 @@ export function SlurpContinuityPanel({ creatorAccountId }: { creatorAccountId: s
         )}
       </p>
       <p className="text-xs text-[var(--slurp-muted)]">
-        {t(`ui.slurp.continuity.factType.${fact.factType}`, { defaultValue: fact.factType })} ·{" "}
-        {scope(fact.audienceScope)} · {t(`ui.slurp.continuity.status.${fact.status}`, { defaultValue: fact.status })} ·{" "}
+        {continuityLabel(t, "factType", fact.factType)} · {scope(fact.audienceScope)} ·{" "}
+        {continuityLabel(t, "status", fact.status)} ·{" "}
         {t(`ui.slurp.continuity.contribution.${fact.contribution}`, { defaultValue: fact.contribution })} ·{" "}
         {formatDateTime(fact.updatedAt, i18n.language)}
       </p>
@@ -160,7 +168,8 @@ export function SlurpContinuityPanel({ creatorAccountId }: { creatorAccountId: s
             <article key={proposal.id} className="space-y-2 rounded-lg bg-[var(--slurp-surface-raised)] p-3">
               <p className="text-sm leading-6 text-pretty">{String(proposal.candidate.text ?? "")}</p>
               <p className="text-xs text-[var(--slurp-muted)]">
-                {String(proposal.candidate.factType ?? "")} · {scope(String(proposal.candidate.audienceScope ?? ""))} ·{" "}
+                {continuityLabel(t, "factType", String(proposal.candidate.factType ?? ""))} ·{" "}
+                {scope(String(proposal.candidate.audienceScope ?? ""))} ·{" "}
                 {t("ui.slurp.continuity.confidence", { defaultValue: "Confidence" })}{" "}
                 {Math.round(proposal.confidence * 100)}%
               </p>
@@ -202,7 +211,19 @@ export function SlurpContinuityPanel({ creatorAccountId }: { creatorAccountId: s
                 <option value="">{t("ui.slurp.continuity.filter.any", { defaultValue: "Any" })}</option>
                 {(values as readonly string[]).map((value) => (
                   <option key={value} value={value}>
-                    {value.replaceAll("_", " ")}
+                    {continuityLabel(
+                      t,
+                      key === "type"
+                        ? (SLURP_CONTINUITY_FACT_TYPES as readonly string[]).includes(value)
+                          ? "factType"
+                          : "eventType"
+                        : key === "scope"
+                          ? "scope"
+                          : key === "status"
+                            ? "status"
+                            : "source",
+                      value,
+                    )}
                   </option>
                 ))}
               </select>
@@ -269,7 +290,9 @@ export function SlurpContinuityPanel({ creatorAccountId }: { creatorAccountId: s
                 <span className="text-xs text-[var(--slurp-muted)]">
                   {plan.skipReason
                     ? t(`ui.slurp.continuity.skipReason.${plan.skipReason}`, { defaultValue: plan.skipReason })
-                    : (plan.delivery ?? "")}{" "}
+                    : plan.delivery
+                      ? continuityLabel(t, "delivery", plan.delivery)
+                      : ""}{" "}
                   · {formatDateTime(plan.plannedAt, i18n.language)}
                   {plan.sourceEventId ? ` · ${t("ui.slurp.continuity.promised", { defaultValue: "promised" })}` : ""}
                 </span>
@@ -283,9 +306,7 @@ export function SlurpContinuityPanel({ creatorAccountId }: { creatorAccountId: s
         <ul className="space-y-1 text-sm">
           {(query.data?.events ?? []).slice(0, 25).map((event) => (
             <li key={event.id} className="flex flex-wrap items-baseline gap-2">
-              <span className="font-semibold">
-                {t(`ui.slurp.continuity.eventType.${event.eventType}`, { defaultValue: event.eventType })}
-              </span>
+              <span className="font-semibold">{continuityLabel(t, "eventType", event.eventType)}</span>
               <span className="text-xs text-[var(--slurp-muted)]">
                 {scope(event.audienceScope)} · {formatDateTime(event.occurredAt, i18n.language)}
               </span>

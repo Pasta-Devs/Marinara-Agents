@@ -3958,5 +3958,18 @@
   "ui.slurp.messages.tipMore": "More",
   "ui.slurp.messages.tipNotEnough": "Not enough coins",
   "ui.slurp.messages.tipNoteOptional": "Note (optional)",
-  "ui.slurp.messages.tipSendNow": "Send tip now"
+  "ui.slurp.messages.tipSendNow": "Send tip now",
+  "ui.slurp.continuity.source.slurp_message": "Slurp message",
+  "ui.slurp.continuity.source.slurp_post": "Slurp post",
+  "ui.slurp.continuity.source.shoot": "Shoot",
+  "ui.slurp.continuity.source.campaign": "Campaign",
+  "ui.slurp.continuity.source.payment": "Payment",
+  "ui.slurp.continuity.source.commission": "Commission",
+  "ui.slurp.continuity.source.creator_profile": "Creator profile",
+  "ui.slurp.continuity.source.user": "You",
+  "ui.slurp.continuity.source.noodle": "Chat app",
+  "ui.slurp.continuity.source.chat": "Chat",
+  "ui.slurp.continuity.source.roleplay": "Roleplay",
+  "ui.slurp.continuity.source.game": "Game",
+  "ui.slurp.continuity.eventType.report_received": "Report received"
 }

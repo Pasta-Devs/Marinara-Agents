@@ -1,5 +1,6 @@
 import { useTranslation } from "react-i18next";
 import { formatDateTime } from "../../base/ui/slp-date-time";
+import { continuityLabel } from "./SlpContinuityPanel";
 import { noteClass } from "./slp-creator-classes";
 import { useSlurpCreatorSignals } from "./slp-signal-hooks";
 
@@ -35,7 +36,7 @@ export function SlpCreatorSignalsList({ creatorId }: { creatorId: string }) {
               <p className="text-[0.7rem] leading-5 text-[var(--slurp-muted)]">
                 {[
                   t(`ui.slurp.signals.source.${signal.source}`, { defaultValue: signal.source }),
-                  signal.audienceScope.replace(/_/gu, " "),
+                  continuityLabel(t, "scope", signal.audienceScope),
                   formatDateTime(signal.at, i18n.language),
                 ].join(" · ")}
               </p>

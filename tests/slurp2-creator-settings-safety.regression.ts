@@ -40,6 +40,12 @@ assert.match(modal, /className=\{`inline-flex min-h-11 w-full items-center justi
 assert.match(modal, /className="min-h-0 min-w-0 flex-1 overflow-y-auto overscroll-contain/u);
 assert.match(modal, /profileSaveState &&[\s\S]*profileSaveState\.save/u, "modal owns the profile save footer");
 assert.match(modal, /profileSaveState\.discard/u, "modal footer can discard the profile draft");
+assert.match(
+  modal,
+  /role="tabpanel"[\s\S]*sticky bottom-0[\s\S]*profileSaveState\.save[\s\S]*<\/div>\n\s*<\/div>\n\s*\)\}\n\s*<\/Modal>/u,
+  "the profile save bar sits inside the tab panel, so it never takes width from the tab content",
+);
+assert.doesNotMatch(modal, /sm:ps-56/u, "the save bar is no longer a padded column beside the panel");
 assert.match(editor, /showFooter=\{false\}/u, "nested profile footer is hidden in the modal");
 assert.match(editor, /showAvatarControls=\{false\}/u, "the artwork editor replaces the old avatar-only controls");
 assert.match(editor, /useUploadCreatorAvatar\(\)/u);

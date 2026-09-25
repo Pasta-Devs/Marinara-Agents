@@ -1,5 +1,10 @@
 # Slurp Remastered release notes
 
+## 0.2.62 — 2026-09-25
+
+- The Identity tab in Creator settings uses the full width again; the Save bar sits at the bottom of the tab.
+- Memory shows readable names instead of raw ids such as multi_image_set, in Recent plans, filters, proposals and signals.
+
 ## 0.2.61 — 2026-09-25
 
 - The Creator settings window no longer shows "{{name}}'s settings" while it loads.
