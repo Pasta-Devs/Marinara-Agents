@@ -6,7 +6,7 @@ const route = slurp2Source(
 );
 
 assert.match(route, /storyLifetimeHours \* 60 \* 60 \* 1000/u);
-assert.match(route, /listNoodlerPostsByAccounts\(accounts\.map\(\(account\) => account\.id\), 50/u);
+assert.match(route, /listNoodlerPostsByAccounts\(\s*accounts\.map\(\(account\) => account\.id\),\s*50/u);
 assert.doesNotMatch(route, /maxRows: 200/u, "the story read must not drop older active Moments under feed load");
 assert.match(route, /post\.metadata\.noodlerPostType === "story"/u);
 assert.match(route, /storyItems\.filter\(\(story\) => !page\.items\.some\(\(post\) => post\.id === story\.id\)\)/u);

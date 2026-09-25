@@ -148,9 +148,13 @@ export async function slpFeedViewerRoutes(app: FastifyInstance, deps: SlpRouteDe
     // Read recent Stories separately so a busy feed cannot push an active Moment out of the shelf.
     const settings = await noodle.getSettings();
     const recentStories = (
-      await noodle.listNoodlerPostsByAccounts(accounts.map((account) => account.id), 50, {
-        since: new Date(Date.now() - settings.storyLifetimeHours * 60 * 60 * 1000).toISOString(),
-      })
+      await noodle.listNoodlerPostsByAccounts(
+        accounts.map((account) => account.id),
+        50,
+        {
+          since: new Date(Date.now() - settings.storyLifetimeHours * 60 * 60 * 1000).toISOString(),
+        },
+      )
     ).values();
     const storyItems = [...recentStories].flat().filter((post) => post.metadata.noodlerPostType === "story");
     const feedItems = [
