@@ -12,6 +12,7 @@ const root = join(import.meta.dirname, "..", "packages", "slurp2");
 const manifest = JSON.parse(readFileSync(join(root, "manifest.json"), "utf8")) as { version: string };
 const changelog = readFileSync(join(root, "CHANGELOG.md"), "utf8");
 const expectedVersions = [
+  "0.2.46",
   "0.2.45",
   "0.2.44",
   "0.2.43",
@@ -52,7 +53,7 @@ const expectedVersions = [
   "0.0.22",
 ];
 
-assert.equal(SLURP2_VERSION, "0.2.45");
+assert.equal(SLURP2_VERSION, "0.2.46");
 assert.equal(SLURP2_VERSION, manifest.version);
 for (const version of expectedVersions) assert.match(changelog, new RegExp(`^## ${version} — `, "mu"));
 assert.deepEqual(

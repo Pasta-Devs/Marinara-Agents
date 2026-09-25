@@ -123,7 +123,9 @@ export function slurpPostBriefSection(
     `Time: ${slurpPartOfDay(at)}, just before the publication time.`,
     ...(day ? [`Right now in your day: ${protect(day.current)}. The beat happens within it.`] : []),
     `Just before: ${day?.previous ? protect(day.previous) : "nothing relevant"}.`,
-    "Free zone: you may invent reactions, feelings, sensory detail, jokes, and wording. Do not add people, earlier events, times, or lasting changes to your life.",
+    beat.anchorKind === "arc"
+      ? "Free zone: you may invent reactions, feelings, sensory detail, jokes, and wording. This chapter may change your life as the arc says; do not add people, other earlier events, or times."
+      : "Free zone: you may invent reactions, feelings, sensory detail, jokes, and wording. Do not add people, earlier events, times, or lasting changes to your life.",
     'Claims: beside title and content, return claims: {"people": [], "earlierEvents": [], "stateChanges": []}. List everyone present or mentioned by name or role, every earlier event you refer to, and every lasting change to your life. Use empty lists when there are none.',
     "# End this post",
   ].join("\n");
@@ -191,7 +193,8 @@ export function checkSlurpBeatClaims(
   const problems = [
     ...people.map((person) => `person not in the cast: ${person}`),
     ...events.map((event) => `earlier event not in the brief: ${event}`),
-    ...claims.stateChanges.map((change) => `lasting change: ${change}`),
+    // An arc chapter is a change by design (moving day); only a free-standing beat may not add one.
+    ...(beat.anchorKind === "arc" ? [] : claims.stateChanges.map((change) => `lasting change: ${change}`)),
   ];
   return { ok: problems.length === 0, problems, claims };
 }

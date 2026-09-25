@@ -1,9 +1,15 @@
 import assert from "node:assert/strict";
+import {
+  SLURP_ARC_LIBRARY_SEED,
+  slurpAutoArcPick,
+  slurpArcTypeIsOnce,
+} from "../packages/slurp2/src/engine/packages/server/src/slp/modules/projects/slp-arc-library.ts";
 import { slurpTimelineMoment } from "../packages/slurp2/src/engine/packages/server/src/slp/modules/creators/slp-creator-schedule-context.ts";
 import {
   SLURP_BEAT_TYPES,
   parseSlurpBeat,
   selectSlurpBeat,
+  slurpArcBeat,
   slurpBeatIntents,
   slurpBeatThemeCap,
   type SlurpBeatHistory,
@@ -234,6 +240,65 @@ assert.match(
     ],
   });
   assert.deepEqual(anchors?.routine, [{ time: "08:00", activity: "opening the bar" }], "only HH:MM blocks survive");
+}
+
+// Arcs on the beat rails: the chapter is the beat, the chapter before it is named, and the claim
+// check allows the change an arc chapter is.
+{
+  const arc = slurpArcBeat({
+    title: "Moving house",
+    direction: "",
+    chapters: ["packing up", "moving day", "settling in"],
+    chapter: 1,
+  });
+  assert.equal(arc.anchorKind, "arc");
+  assert.equal(arc.type, "routine_twist");
+  assert.equal(arc.line, "Moving house, now: moving day. It follows: packing up.");
+  assert.equal(slurpArcBeat({ title: "T", direction: "", chapters: ["a", "b"], chapter: 1 }).type, "achievement");
+  const claims = { people: [], earlierEvents: ["packing up"], stateChanges: ["moved into a new flat"] };
+  assert.equal(checkSlurpBeatClaims(claims, arc, ["Tamsin"]).ok, true, "an arc chapter may change a life");
+  assert.match(
+    slurpPostBriefSection(arc, new Date(), (value) => value),
+    /This chapter may change your life/u,
+  );
+}
+
+// Knockout: a once-type (moving) never starts automatically again for a Creator who had it.
+{
+  const moving = SLURP_ARC_LIBRARY_SEED.find((type) => type.id === "moving")!;
+  const trip = SLURP_ARC_LIBRARY_SEED.find((type) => type.id === "trip")!;
+  assert.equal(slurpArcTypeIsOnce(moving), true);
+  assert.equal(slurpArcTypeIsOnce(trip), false);
+  assert.equal(slurpArcTypeIsOnce({ ...trip, once: true }), true, "a custom type can opt in");
+  const pastMove = { typeId: "moving", status: "completed" } as never;
+  let movedAgain = false;
+  for (let day = 0; day < 400; day += 1) {
+    const pick = slurpAutoArcPick({
+      creatorAccountId: "creator-k",
+      at: new Date(Date.UTC(2026, 0, 1) + day * 86_400_000),
+      projects: [pastMove],
+      library: [moving, trip],
+      creatorTags: [],
+      lastAutoAt: null,
+      cooldownWeeks: 1,
+    });
+    if (pick && "type" in pick && pick.type.id === "moving") movedAgain = true;
+  }
+  assert.equal(movedAgain, false, "a Creator who moved never moves again on their own");
+  let movedFresh = false;
+  for (let day = 0; day < 400 && !movedFresh; day += 1) {
+    const pick = slurpAutoArcPick({
+      creatorAccountId: "creator-k",
+      at: new Date(Date.UTC(2026, 0, 1) + day * 86_400_000),
+      projects: [],
+      library: [moving, trip],
+      creatorTags: [],
+      lastAutoAt: null,
+      cooldownWeeks: 1,
+    });
+    movedFresh = Boolean(pick && "type" in pick && pick.type.id === "moving");
+  }
+  assert.equal(movedFresh, true, "without a past move the same draw does pick moving");
 }
 
 console.log("slurp2 post beats regression checks passed");

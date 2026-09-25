@@ -114,6 +114,8 @@ export async function planSlurpPost(
   const beat =
     ctx.beats && !directed && !forced && !promise && !stage
       ? ((slotId ? (await findSlurpOpportunityBySlot(db, slotId).catch(() => null))?.beat : null) ??
+        // An arc chapter takes an ordinary slot; a teaser slot keeps its card beat.
+        (isTeaser ? null : ctx.beats.arc) ??
         (await planSlurpBeat(db, {
           accountId: account.id,
           sequence,

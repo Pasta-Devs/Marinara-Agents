@@ -159,6 +159,8 @@ export const slpArcBlueprintSchema = z
       )
       .max(12),
     revertProfileAtEnd: z.boolean().optional(),
+    /** A life event a Creator has only once (moving, a new job): never started automatically again. */
+    once: z.boolean().optional(),
     tags,
     storyTags: tags,
     tone: z.string().trim().max(80).default(""),

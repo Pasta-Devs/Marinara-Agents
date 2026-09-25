@@ -35,6 +35,8 @@ export type SlurpBeatContext = {
   fallbackConnection: Parameters<typeof createSlurpPostProvider>[0]["fallbackConnection"];
   /** Level 1, when the shared-ideas setting is on: the Creator's tags and the Slurp-wide event toggle. */
   shared?: { tags: readonly string[]; worldEvents: boolean } | null;
+  /** This post continues an active arc: its chapter is the beat. See `slurpArcBeat`. */
+  arc?: SlurpBeat | null;
 };
 
 const ANCHORS_KEY = "slurp2.canon-anchors";

@@ -23,6 +23,17 @@ import {
 import { slpArcBlueprintSchema } from "../../../../../shared/src/slp/slp-story-engine.js";
 
 export const SLURP_ARC_TYPE_NAME_MAX_LENGTH = 80;
+
+/**
+ * Shipped types that are a once-in-a-while life event. Characters moved house three times because
+ * nothing stopped the same automatic arc from coming back; stored libraries predate `once`, so the
+ * shipped ids decide when the field is missing.
+ */
+const SLURP_ONCE_ARC_TYPE_IDS = new Set(["moving", "new_job", "breakup"]);
+
+export function slurpArcTypeIsOnce(type: Pick<SlurpArcType, "id" | "builtin" | "once">): boolean {
+  return type.once ?? (type.builtin && SLURP_ONCE_ARC_TYPE_IDS.has(type.id));
+}
 export const SLURP_DEFAULT_ARC_DURATION_DAYS = 14;
 
 const seed = (
@@ -281,6 +292,8 @@ export function slurpAutoArcPick(input: {
       type.enabled &&
       !type.hidden &&
       (!input.allowedTypeIds || input.allowedTypeIds.includes(type.id)) &&
+      // Knockout: a once-type this Creator already had, in any state, never comes back on its own.
+      !(slurpArcTypeIsOnce(type) && input.projects.some((project) => project.typeId === type.id)) &&
       (type.tags.length === 0 || type.tags.some((tag) => creatorTags.has(tag.toLocaleLowerCase()))),
   );
   const source = input.source ?? "library";

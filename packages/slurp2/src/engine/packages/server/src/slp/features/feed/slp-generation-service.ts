@@ -34,6 +34,7 @@ import { createPromptOverridesStorage } from "../../../services/storage/prompt-o
 import { generateCreatorPostImage, SLURP_SECONDARY_IMAGE_COUNT } from "../media/slp-media-contract.js";
 import { finishSlurpPostImage } from "./slp-post-media-operation.js";
 import { recordSlurpBeatFacts, resolveSlurpBeatDay } from "./slp-post-beat-service.js";
+import { slurpArcBeat } from "../../modules/feed/slp-post-beat.js";
 import { slpCreatorUnlockPriceMetadata } from "../../modules/economy/slp-prices.js";
 import { persistCreatorPostWithUploadedMedia, type SlpCreatorPostMediaUpload } from "../../base/media/slp-media.js";
 import { slpResponseFormat } from "../../base/prompting/slp-response-format.js";
@@ -236,6 +237,7 @@ export async function generateCreatorPost(
               canonText: sourceCharacterContext,
               connection: input.connection,
               fallbackConnection,
+              arc: project ? slurpArcBeat(project) : null,
               shared: settings.sharedPreseed
                 ? { tags: account.settings.profile.tags ?? [], worldEvents: settings.sharedWorldEvents }
                 : null,

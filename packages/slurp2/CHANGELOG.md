@@ -1,5 +1,10 @@
 # Slurp Remastered release notes
 
+## 0.2.46 — 2026-09-25
+
+- Life-event arcs such as moving house, a new job, or a breakup now happen at most once per Creator when Slurp starts arcs by itself.
+- With Beats on, a post that continues an arc is about the arc's current chapter, instead of an unrelated moment beside it.
+
 ## 0.2.45 — 2026-09-25
 
 - New with Beats: Shared ideas (off by default). Once a day Slurp collects a few seasonal and platform moments, and once a week typical moments per topic tag. Beats fill them in with each Creator's own places and work, and each idea is used by at most two Creators a day.

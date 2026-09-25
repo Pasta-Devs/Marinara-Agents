@@ -64,7 +64,8 @@ export type SlurpCanonAnchors = {
 /** One chosen beat. Stored on the content opportunity, so a retry repeats it. */
 export type SlurpBeat = {
   type: SlurpBeatType;
-  anchorKind: SlurpAnchorKind;
+  /** `arc`: the beat is the Creator's active arc chapter, not a card anchor. */
+  anchorKind: SlurpAnchorKind | "arc";
   anchor: string;
   line: string;
   /** Named people in the beat. Empty means alone. */
@@ -324,7 +325,7 @@ export function parseSlurpBeat(raw: unknown): SlurpBeat | null {
     const beat = value as Record<string, unknown>;
     if (
       !SLURP_BEAT_TYPES.includes(beat.type as SlurpBeatType) ||
-      !SLURP_ANCHOR_KINDS.includes(beat.anchorKind as SlurpAnchorKind) ||
+      !(beat.anchorKind === "arc" || SLURP_ANCHOR_KINDS.includes(beat.anchorKind as SlurpAnchorKind)) ||
       typeof beat.anchor !== "string" ||
       typeof beat.line !== "string"
     ) {
@@ -332,7 +333,7 @@ export function parseSlurpBeat(raw: unknown): SlurpBeat | null {
     }
     return {
       type: beat.type as SlurpBeatType,
-      anchorKind: beat.anchorKind as SlurpAnchorKind,
+      anchorKind: beat.anchorKind as SlurpAnchorKind | "arc",
       anchor: beat.anchor,
       line: beat.line,
       cast: Array.isArray(beat.cast) ? beat.cast.filter((entry): entry is string => typeof entry === "string") : [],
@@ -342,4 +343,30 @@ export function parseSlurpBeat(raw: unknown): SlurpBeat | null {
   } catch {
     return null;
   }
+}
+
+/**
+ * An arc post's beat: its current chapter. An arc post used to get an unrelated card beat and the
+ * chapter beside it, so the brief and the project block pulled in two directions. The chapter
+ * before it is named, so the writer may refer to it without the claim check calling it invented.
+ */
+export function slurpArcBeat(project: {
+  title: string;
+  direction: string;
+  chapters: readonly string[];
+  chapter: number;
+}): SlurpBeat {
+  const current = project.chapters[project.chapter]?.trim() ?? "";
+  const previous = project.chapter > 0 ? (project.chapters[project.chapter - 1]?.trim() ?? "") : "";
+  const last = project.chapters.length > 0 && project.chapter >= project.chapters.length - 1;
+  return {
+    type: project.chapter === 0 ? "anticipation" : last ? "achievement" : "routine_twist",
+    anchorKind: "arc",
+    anchor: project.title,
+    line: current
+      ? `${project.title}, now: ${current}.${previous ? ` It follows: ${previous}.` : ""}`
+      : `${project.title} goes on: ${project.direction.trim().slice(0, 160)}`,
+    cast: [],
+    place: null,
+  };
 }
