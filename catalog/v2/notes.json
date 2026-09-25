@@ -360,6 +360,12 @@
     "slurp2": {
       "versions": [
         {
+          "version": "0.2.65",
+          "date": "2026-09-25",
+          "notes": "- Life details sit right after \"Waiting for you\" in a Creator's Memory tab. People, places, work, things, habits and running jokes are chips: type and press Enter to add, tap the cross to remove.\n- The heat range of a card is picked with button rows, and the note filters fold away behind the search box, with the number of active filters shown.",
+          "highlight": false
+        },
+        {
           "version": "0.2.64",
           "date": "2026-09-25",
           "notes": "- A Creator's Storylines tab follows the Slurp settings by default and shows their values. Turn on \"Own value\" on a row to set it for this Creator; turn it off to follow Slurp again.\n- Storyline types for one Creator are picked with tappable chips, and all controls in the tab have full-size touch targets.",
@@ -471,12 +477,6 @@
           "version": "0.2.46",
           "date": "2026-09-25",
           "notes": "- Life-event arcs such as moving house, a new job, or a breakup now happen at most once per Creator when Slurp starts arcs by itself.\n- With Beats on, a post that continues an arc is about the arc's current chapter, instead of an unrelated moment beside it.",
-          "highlight": false
-        },
-        {
-          "version": "0.2.45",
-          "date": "2026-09-25",
-          "notes": "- New with Beats: Shared ideas (off by default). Once a day Slurp collects a few seasonal and platform moments, and once a week typical moments per topic tag. Beats fill them in with each Creator's own places and work, and each idea is used by at most two Creators a day.\n- New with Shared ideas: Slurp-wide events (off by default). The daily idea call may start one short themed event for all Creators; it shows under Platform events and ends by itself.",
           "highlight": false
         }
       ]

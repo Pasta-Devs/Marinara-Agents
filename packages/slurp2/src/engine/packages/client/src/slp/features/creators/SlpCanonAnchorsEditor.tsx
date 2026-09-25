@@ -3,11 +3,18 @@ import { toast } from "sonner";
 import { useTranslation } from "react-i18next";
 import { textareaClass } from "../../modules/post/SlpPostHelpers";
 import { errorMessage } from "../../modules/settings/slp-backstage-format";
-import { accentButton, noteClass, quietButton, selectClass } from "./slp-creator-classes";
+import { ChipListInput, ChoiceSetting } from "../../modules/settings/SlpSettingsInputs";
+import { accentButton, noteClass, quietButton } from "./slp-creator-classes";
 import { useSlurpCanonAnchorMutations, useSlurpCanonAnchors } from "./slp-canon-anchor-hooks";
 import { slpCanonAnchorDraft, slpCanonAnchorsFromDraft, type SlpCanonAnchorDraft } from "./slp-canon-anchor-text";
 
-const LIST_FIELDS = ["people", "places", "work", "objects", "habits", "runningJokes", "routine"] as const;
+const LIST_FIELDS = ["people", "places", "work", "objects", "habits", "runningJokes"] as const;
+/** The draft keeps one entry per line, so the chip editor and the text parser share one format. */
+const entries = (text: string) =>
+  text
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean);
 const HEAT_LEVELS = [0, 1, 2, 3] as const;
 
 /**
@@ -53,36 +60,43 @@ export function SlpCanonAnchorsEditor({ creatorId }: { creatorId: string }) {
       <p className={noteClass}>
         {t("ui.slurp.canonAnchors.detail")} {status}
       </p>
-      <div className="grid gap-3 sm:grid-cols-2">
+      <div className="grid gap-3 lg:grid-cols-2">
         {LIST_FIELDS.map((field) => (
-          <label key={field} className="block space-y-1">
-            <span className="text-xs font-semibold">{t(`ui.slurp.canonAnchors.${field}`)}</span>
-            <textarea
-              rows={3}
-              disabled={busy || !state.hasCard}
-              value={draft[field]}
-              onChange={(event) => setDraft((current) => ({ ...current, [field]: event.target.value }))}
-              placeholder={t(`ui.slurp.canonAnchors.${field}Placeholder`)}
-              className={`${textareaClass} !min-h-0`}
-            />
-          </label>
+          <ChipListInput
+            key={field}
+            label={t(`ui.slurp.canonAnchors.${field}`)}
+            values={entries(draft[field])}
+            disabled={busy || !state.hasCard}
+            onChange={(values) => setDraft((current) => ({ ...current, [field]: values.join("\n") }))}
+            placeholder={t(`ui.slurp.canonAnchors.${field}Placeholder`)}
+          />
         ))}
+      </div>
+      {/* Routine is time + activity pairs, one per line: text, not chips. */}
+      <label className="block space-y-1">
+        <span className="text-xs font-semibold">{t("ui.slurp.canonAnchors.routine")}</span>
+        <textarea
+          rows={3}
+          disabled={busy || !state.hasCard}
+          value={draft.routine}
+          onChange={(event) => setDraft((current) => ({ ...current, routine: event.target.value }))}
+          placeholder={t("ui.slurp.canonAnchors.routinePlaceholder")}
+          className={`${textareaClass} !min-h-0`}
+        />
+      </label>
+      <div className="grid gap-3 lg:grid-cols-2">
         {(["heatMin", "heatMax"] as const).map((field) => (
-          <label key={field} className="block space-y-1">
-            <span className="text-xs font-semibold">{t(`ui.slurp.canonAnchors.${field}`)}</span>
-            <select
-              value={draft[field]}
-              disabled={busy || !state.hasCard}
-              onChange={(event) => setDraft((current) => ({ ...current, [field]: Number(event.target.value) }))}
-              className={selectClass}
-            >
-              {HEAT_LEVELS.map((level) => (
-                <option key={level} value={level}>
-                  {t(`ui.slurp.canonAnchors.heat${level}`)}
-                </option>
-              ))}
-            </select>
-          </label>
+          <ChoiceSetting
+            key={field}
+            label={t(`ui.slurp.canonAnchors.${field}`)}
+            options={HEAT_LEVELS.map((level) => ({
+              value: String(level) as "0" | "1" | "2" | "3",
+              label: t(`ui.slurp.canonAnchors.heat${level}`),
+            }))}
+            value={String(draft[field]) as "0" | "1" | "2" | "3"}
+            disabled={busy || !state.hasCard}
+            onChange={(level) => setDraft((current) => ({ ...current, [field]: Number(level) }))}
+          />
         ))}
       </div>
       <div className="flex flex-wrap gap-2">

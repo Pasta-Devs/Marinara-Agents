@@ -47,4 +47,18 @@ for (const key of ["autoMode", "source", "cooldownWeeks", "pace", "maxActive", "
   assert.match(arcConfig, new RegExp(`override\\(\\s*"${key}"`, "u"), `${key} is an override row`);
 }
 
+// Chips: Enter adds (entries may contain commas), Backspace on empty removes, 44 px remove target.
+assert.match(inputs, /event\.key === "Enter"/u);
+assert.doesNotMatch(inputs, /event\.key === ","/u);
+assert.match(inputs, /event\.key === "Backspace" && !draft && values\.length > 0/u);
+assert.match(inputs, /size-11 shrink-0/u);
+
+// Memory: search stays visible, the rest of the filters fold.
+const continuity = slurp2Source(`${root}features/creators/SlpContinuityPanel.tsx`);
+assert.match(
+  continuity,
+  /type="search"[\s\S]*<AdvancedGroup[\s\S]*type="range"[\s\S]*type="date"[\s\S]*<\/AdvancedGroup>/u,
+);
+assert.match(continuity, /\{lifeDetails\}\s*<SettingsGroup title=\{t\("ui\.slurp\.continuity\.factsGroup"/u);
+
 console.log("slurp2 settings inputs ok");

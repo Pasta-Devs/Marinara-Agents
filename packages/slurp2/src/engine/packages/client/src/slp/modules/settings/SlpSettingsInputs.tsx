@@ -2,9 +2,9 @@
  * Choice controls for fixed option sets, so a setting with three short answers shows all three
  * instead of hiding them in a dropdown. Dynamic lists (connections, profiles) stay `<select>`.
  */
-import type { LucideIcon } from "lucide-react";
+import { X, type LucideIcon } from "lucide-react";
 import type { ReactNode } from "react";
-import { useId } from "react";
+import { useId, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { SettingAnchor, type SlpSettingKey } from "./SlpSettingsKit";
 
@@ -186,6 +186,78 @@ export function OverrideField({
         </label>
       </div>
       {overridden && children}
+    </div>
+  );
+}
+
+/**
+ * A list of short entries as chips. Enter adds the typed entry (entries may contain commas);
+ * Backspace in an empty input removes the last chip. Editing a chip is remove and add again.
+ */
+export function ChipListInput({
+  label,
+  values,
+  onChange,
+  placeholder,
+  disabled = false,
+}: {
+  label: string;
+  values: readonly string[];
+  onChange: (values: string[]) => void;
+  placeholder?: string;
+  disabled?: boolean;
+}) {
+  const { t } = useTranslation();
+  const [draft, setDraft] = useState("");
+  const inputId = useId();
+  const add = () => {
+    const next = draft.trim();
+    if (next && !values.includes(next)) onChange([...values, next]);
+    setDraft("");
+  };
+  return (
+    <div className="space-y-2">
+      <label htmlFor={inputId} className="block text-xs font-semibold">
+        {label}
+      </label>
+      <div
+        className={`flex min-h-11 flex-wrap items-center gap-1.5 rounded-lg bg-[var(--slurp-canvas,var(--background))] p-1.5 ring-1 ring-inset ring-[var(--slurp-outline,var(--border))] focus-within:ring-2 focus-within:ring-[var(--slurp-focus,var(--noodle-accent))] ${disabled ? "opacity-50" : ""}`}
+      >
+        {values.map((value) => (
+          <span
+            key={value}
+            className="inline-flex max-w-full items-center rounded-full bg-[var(--slurp-surface-raised,var(--accent))] ps-3 text-sm ring-1 ring-inset ring-[var(--slurp-outline,var(--border))]"
+          >
+            <span className="min-w-0 truncate">{value}</span>
+            <button
+              type="button"
+              disabled={disabled}
+              onClick={() => onChange(values.filter((entry) => entry !== value))}
+              aria-label={t("ui.slurp.settings.chips.remove", { value })}
+              className="inline-flex size-11 shrink-0 items-center justify-center rounded-full text-[var(--slurp-muted,var(--muted-foreground))] hover:text-[var(--slurp-text,var(--foreground))] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus,var(--noodle-accent))] -my-2"
+            >
+              <X size={14} aria-hidden="true" />
+            </button>
+          </span>
+        ))}
+        <input
+          id={inputId}
+          value={draft}
+          disabled={disabled}
+          placeholder={placeholder}
+          onChange={(event) => setDraft(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key === "Enter") {
+              event.preventDefault();
+              add();
+            } else if (event.key === "Backspace" && !draft && values.length > 0) {
+              onChange(values.slice(0, -1));
+            }
+          }}
+          onBlur={add}
+          className="min-h-9 min-w-32 flex-1 bg-transparent px-2 text-base outline-none placeholder:text-[var(--muted-foreground)] sm:text-sm"
+        />
+      </div>
     </div>
   );
 }

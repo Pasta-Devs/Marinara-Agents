@@ -1,5 +1,10 @@
 # Slurp Remastered release notes
 
+## 0.2.65 — 2026-09-25
+
+- Life details sit right after "Waiting for you" in a Creator's Memory tab. People, places, work, things, habits and running jokes are chips: type and press Enter to add, tap the cross to remove.
+- The heat range of a card is picked with button rows, and the note filters fold away behind the search box, with the number of active filters shown.
+
 ## 0.2.64 — 2026-09-25
 
 - A Creator's Storylines tab follows the Slurp settings by default and shows their values. Turn on "Own value" on a row to set it for this Creator; turn it off to follow Slurp again.

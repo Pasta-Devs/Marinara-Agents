@@ -723,12 +723,16 @@ export function SlpCreatorContinuitySection({ creator }: SlpCreatorSettingsSecti
   const lifeIdeas = useSlurpSettings().data?.postPlanner !== "classic";
   return (
     <div className="space-y-6">
-      <SlurpContinuityPanel creatorAccountId={creator.id} />
-      {lifeIdeas ? (
-        <SlpCanonAnchorsEditor creatorId={creator.id} />
-      ) : (
-        <p className={noteClass}>{t("ui.slurp.canonAnchors.classicNote")}</p>
-      )}
+      <SlurpContinuityPanel
+        creatorAccountId={creator.id}
+        lifeDetails={
+          lifeIdeas ? (
+            <SlpCanonAnchorsEditor creatorId={creator.id} />
+          ) : (
+            <p className={noteClass}>{t("ui.slurp.canonAnchors.classicNote")}</p>
+          )
+        }
+      />
       <SlpCreatorSignalsList creatorId={creator.id} />
     </div>
   );

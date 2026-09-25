@@ -1,7 +1,7 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
-import { SettingsGroup } from "../../modules/settings/SlpSettingsControls";
+import { AdvancedGroup, SettingsGroup } from "../../modules/settings/SlpSettingsControls";
 import { errorMessage } from "../../modules/settings/slp-backstage-format";
 import { formatDateTime } from "../../base/ui/slp-date-time";
 import { quietButton, selectClass } from "./slp-creator-classes";
@@ -22,6 +22,12 @@ import {
 
 const PROMOTION_TARGETS = ["creator_private", "creator_public", "cross_platform"] as const;
 
+/** `YYYY-MM-DD` of an ISO time in the viewer's time zone, for a date input. */
+const localDate = (iso: string) => {
+  const date = new Date(iso);
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+};
+
 type ContinuityLabelKind = "factType" | "eventType" | "scope" | "status" | "source" | "delivery";
 
 /** One label for every stored continuity value, so no raw id like `multi_image_set` reaches the screen. */
@@ -38,12 +44,20 @@ export function continuityLabel(t: ReturnType<typeof useTranslation>["t"], kind:
  * change here is explicit — approve, reject, edit, retract, or publish — and publishing writes a
  * new public note rather than changing the private one.
  */
-export function SlurpContinuityPanel({ creatorAccountId }: { creatorAccountId: string }) {
+export function SlurpContinuityPanel({
+  creatorAccountId,
+  lifeDetails,
+}: {
+  creatorAccountId: string;
+  /** Shown right after "Waiting for you": what a player corrects most, above the long lists. */
+  lifeDetails?: ReactNode;
+}) {
   const { t, i18n } = useTranslation();
   const act = useSlurpContinuityAction(creatorAccountId);
   const edit = useSlurpContinuityEdit(creatorAccountId);
   const [filter, setFilter] = useState("");
   const [filters, setFilters] = useState<SlurpContinuityFilters>({});
+  const activeFilters = Object.values(filters).filter(Boolean).length;
   const query = useSlurpContinuity(creatorAccountId, filters);
   const [draft, setDraft] = useState<{ id: string; text: string } | null>(null);
   const busy = act.isPending || edit.isPending;
@@ -193,77 +207,102 @@ export function SlurpContinuityPanel({ creatorAccountId }: { creatorAccountId: s
         )}
       </SettingsGroup>
 
+      {lifeDetails}
+
       <SettingsGroup title={t("ui.slurp.continuity.factsGroup", { defaultValue: "What they remember" })}>
-        <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
-          {[
-            ["type", "Type", [...SLURP_CONTINUITY_FACT_TYPES, ...SLURP_CONTINUITY_EVENT_TYPES]],
-            ["source", "Source", SLURP_CONTINUITY_SOURCES],
-            ["scope", "Scope", SLURP_AUDIENCE_SCOPES],
-            ["status", "Status", SLURP_CONTINUITY_STATUSES],
-          ].map(([key, label, values]) => (
-            <label key={String(key)} className="space-y-1 text-xs font-semibold">
-              <span>{t(`ui.slurp.continuity.filter.${key}`, { defaultValue: String(label) })}</span>
-              <select
-                className={selectClass}
-                value={filters[key as keyof SlurpContinuityFilters] ?? ""}
-                onChange={(event) => setFilters((current) => ({ ...current, [String(key)]: event.target.value }))}
-              >
-                <option value="">{t("ui.slurp.continuity.filter.any", { defaultValue: "Any" })}</option>
-                {(values as readonly string[]).map((value) => (
-                  <option key={value} value={value}>
-                    {continuityLabel(
-                      t,
-                      key === "type"
-                        ? (SLURP_CONTINUITY_FACT_TYPES as readonly string[]).includes(value)
-                          ? "factType"
-                          : "eventType"
-                        : key === "scope"
-                          ? "scope"
-                          : key === "status"
-                            ? "status"
-                            : "source",
-                      value,
-                    )}
-                  </option>
-                ))}
-              </select>
-            </label>
-          ))}
-          <label className="space-y-1 text-xs font-semibold">
-            <span>{t("ui.slurp.continuity.filter.confidence", { defaultValue: "Minimum confidence" })}</span>
-            <input
-              className={selectClass}
-              type="number"
-              min="0"
-              max="1"
-              step="0.05"
-              value={filters.minConfidence ?? ""}
-              onChange={(event) => setFilters((current) => ({ ...current, minConfidence: event.target.value }))}
-            />
-          </label>
-          {(["from", "to"] as const).map((key) => (
-            <label key={key} className="space-y-1 text-xs font-semibold">
-              <span>{t(`ui.slurp.continuity.filter.${key}`, { defaultValue: key === "from" ? "From" : "To" })}</span>
+        <input
+          type="search"
+          value={filter}
+          onChange={(event) => setFilter(event.target.value)}
+          aria-label={t("ui.slurp.continuity.search", { defaultValue: "Search notes" })}
+          placeholder={t("ui.slurp.continuity.search", { defaultValue: "Search notes" })}
+          className={selectClass}
+        />
+        <AdvancedGroup
+          title={
+            activeFilters
+              ? t("ui.slurp.continuity.filtersActive", { count: activeFilters })
+              : t("ui.slurp.continuity.filters")
+          }
+        >
+          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+            {[
+              ["type", "Type", [...SLURP_CONTINUITY_FACT_TYPES, ...SLURP_CONTINUITY_EVENT_TYPES]],
+              ["source", "Source", SLURP_CONTINUITY_SOURCES],
+              ["scope", "Scope", SLURP_AUDIENCE_SCOPES],
+              ["status", "Status", SLURP_CONTINUITY_STATUSES],
+            ].map(([key, label, values]) => (
+              <label key={String(key)} className="space-y-1 text-xs font-semibold">
+                <span>{t(`ui.slurp.continuity.filter.${key}`, { defaultValue: String(label) })}</span>
+                <select
+                  className={selectClass}
+                  value={filters[key as keyof SlurpContinuityFilters] ?? ""}
+                  onChange={(event) => setFilters((current) => ({ ...current, [String(key)]: event.target.value }))}
+                >
+                  <option value="">{t("ui.slurp.continuity.filter.any", { defaultValue: "Any" })}</option>
+                  {(values as readonly string[]).map((value) => (
+                    <option key={value} value={value}>
+                      {continuityLabel(
+                        t,
+                        key === "type"
+                          ? (SLURP_CONTINUITY_FACT_TYPES as readonly string[]).includes(value)
+                            ? "factType"
+                            : "eventType"
+                          : key === "scope"
+                            ? "scope"
+                            : key === "status"
+                              ? "status"
+                              : "source",
+                        value,
+                      )}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            ))}
+            <label className="space-y-1 text-xs font-semibold">
+              <span>
+                {t("ui.slurp.continuity.filter.confidence", { defaultValue: "Minimum confidence" })}:{" "}
+                {Math.round(Number(filters.minConfidence || 0) * 100)} %
+              </span>
               <input
-                className={selectClass}
-                type="datetime-local"
-                value={filters[key]?.slice(0, 16) ?? ""}
+                className="block h-11 w-full accent-[var(--noodle-accent)]"
+                type="range"
+                min="0"
+                max="1"
+                step="0.05"
+                value={filters.minConfidence || "0"}
                 onChange={(event) =>
                   setFilters((current) => ({
                     ...current,
-                    [key]: event.target.value ? new Date(event.target.value).toISOString() : "",
+                    minConfidence: event.target.value === "0" ? "" : event.target.value,
                   }))
                 }
               />
             </label>
-          ))}
-        </div>
-        <input
-          value={filter}
-          onChange={(event) => setFilter(event.target.value)}
-          placeholder={t("ui.slurp.continuity.search", { defaultValue: "Search notes" })}
-          className={selectClass}
-        />
+            {(["from", "to"] as const).map((key) => (
+              <label key={key} className="space-y-1 text-xs font-semibold">
+                <span>{t(`ui.slurp.continuity.filter.${key}`, { defaultValue: key === "from" ? "From" : "To" })}</span>
+                <input
+                  className={selectClass}
+                  type="date"
+                  value={filters[key] ? localDate(filters[key]) : ""}
+                  onChange={(event) =>
+                    setFilters((current) => ({
+                      ...current,
+                      // A day filter covers the whole local day on both ends.
+                      [key]: event.target.value
+                        ? new Date(
+                            `${event.target.value}T${key === "from" ? "00:00:00" : "23:59:59.999"}`,
+                          ).toISOString()
+                        : "",
+                    }))
+                  }
+                />
+              </label>
+            ))}
+          </div>
+        </AdvancedGroup>
         {facts.length === 0 ? (
           <p className="text-sm text-[var(--slurp-muted)]">
             {t("ui.slurp.continuity.noFacts", { defaultValue: "Nothing yet." })}
