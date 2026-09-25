@@ -1,3 +1,7 @@
+## 1.8.7 — 2026-09-25
+- Fixed: world creation lists your whole character card library. It stopped at 100 cards, so a library larger than that died around the letter M and the cards past it showed in your cast as “No longer in your library”.
+- Fixed: loading a preset no longer leaves out cards it could not see — it reads the whole library before deciding what the Engine still has.
+
 ## 1.8.6 — 2026-09-23
 - Fixed: on a phone held upright, the Landscape only notice no longer covers the rest of Marinara. Characters, lorebooks and anything else you open over the game are reachable again.
 
