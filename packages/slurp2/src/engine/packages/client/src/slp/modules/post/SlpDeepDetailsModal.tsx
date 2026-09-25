@@ -187,6 +187,12 @@ export function SlpDeepDetailsModal({ postId, open, onClose }: { postId: string;
                       ["Effort", details.effort],
                       ["Planner", details.planner?.mode ?? null],
                       [
+                        "Heat",
+                        details.planner?.heat
+                          ? `${details.planner.heat.planned} (dial: ${details.planner.heat.dial})`
+                          : null,
+                      ],
+                      [
                         "Beat",
                         details.planner?.beat ? `${details.planner.beat.type}: ${details.planner.beat.line}` : null,
                       ],

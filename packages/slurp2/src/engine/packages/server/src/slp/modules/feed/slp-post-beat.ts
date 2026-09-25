@@ -21,6 +21,7 @@
 
 import type { SlurpContentIntent } from "../../../../../shared/src/slp/slp-content-axes.js";
 import { slurpWeightedPick } from "./slp-weighted.js";
+import { SLURP_VISUAL_SEXUAL_LEVELS, type SlurpVisualSexualLevel } from "../../base/media/slp-visual-brief.js";
 import type { SlurpSharedIdea } from "./slp-shared-preseed.js";
 
 /** Shared ideas weigh more than a deck line of the same kind, so level 1 is actually used. */
@@ -91,6 +92,8 @@ export type SlurpBeat = {
   sharedId?: string;
   /** The beat's place is not where the schedule has them now: posted as a plan or a memory. */
   elsewhere?: boolean;
+  /** The card's lowest heat (0-3), so a planned post never goes softer than the character is. */
+  heatFloor?: number;
 };
 
 type SlurpBeatDeck = {
@@ -356,6 +359,7 @@ export function selectSlurpBeat(
     place,
     ...(sharedId ? { sharedId } : {}),
     ...(anchorKind === "places" && activity && !fits(anchor) ? { elsewhere: true } : {}),
+    heatFloor: anchors.heat.min,
   };
 }
 
@@ -382,6 +386,7 @@ export function parseSlurpBeat(raw: unknown): SlurpBeat | null {
       place: typeof beat.place === "string" ? beat.place : null,
       ...(typeof beat.sharedId === "string" ? { sharedId: beat.sharedId } : {}),
       ...(beat.elsewhere === true ? { elsewhere: true } : {}),
+      ...(typeof beat.heatFloor === "number" ? { heatFloor: beat.heatFloor } : {}),
     };
   } catch {
     return null;
@@ -412,4 +417,26 @@ export function slurpArcBeat(project: {
     cast: [],
     place: null,
   };
+}
+
+/**
+ * How far this post goes, drawn per post up to the Creator's dial. Every post used to sit at the
+ * dial, and a model that plays it safe then made every post equally tame; now most posts sit at
+ * the top of the range and some are softer, never above the dial and never below the card's own
+ * floor. Access and intent still apply afterwards, exactly as they do to the dial.
+ */
+export function slurpPlannedExplicitLevel(
+  dial: SlurpVisualSexualLevel,
+  floor: number,
+  seed: string,
+  sequence: number,
+): SlurpVisualSexualLevel {
+  const top = SLURP_VISUAL_SEXUAL_LEVELS.indexOf(dial);
+  const bottom = Math.min(top, Math.max(0, Math.round(floor)));
+  return slurpWeightedPick(
+    "heat",
+    seed,
+    sequence,
+    SLURP_VISUAL_SEXUAL_LEVELS.slice(bottom, top + 1).map((value, index) => ({ value, weight: (index + 1) ** 2 })),
+  );
 }

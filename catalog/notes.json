@@ -360,6 +360,12 @@
     "slurp2": {
       "versions": [
         {
+          "version": "0.2.49",
+          "date": "2026-09-25",
+          "notes": "- With Beats on, each post plans how far it goes: most posts go as far as the Creator's explicit-level dial allows, some are softer, and none go below what the character's card is like. Caption and picture use the same level, and Deep details show it.",
+          "highlight": false
+        },
+        {
           "version": "0.2.48",
           "date": "2026-09-25",
           "notes": "- With Beats on, a Creator's schedule decides where they are: moments at the place or work they are at right now come first, and a moment about somewhere else is posted as a plan, a memory, or a wish.\n- A post due while the Creator sleeps or drives is written as if posted just before, and never mentions being awake or on the road. Gym, set, class, and similar blocks stay good post material.\n- On an arc's big day, such as moving day, the arc chapter decides what the Creator does, not the usual weekly schedule.",
@@ -471,12 +477,6 @@
           "version": "0.2.26",
           "date": "2026-09-23",
           "notes": "- Image prompts preserve each Creator's appearance and follow the selected image guidance.\n- Choose an image style for each Creator, or let them use the global style.\n- Settings sections now use the shorter names Content and World.\n- Posts, messages, audience activity, story events, and image generation use clearer state and feedback handling.\n- Locked posts use each Creator's configured level, and occasions and story events reach posts and chats.\n- Owned posts are not sold again, audience activity reports results, and manual occasions can be started.\n- Callback posts preserve their shoot context, picture sets vary poses, and follow-ups handle reasoning models.",
-          "highlight": false
-        },
-        {
-          "version": "0.2.25",
-          "date": "2026-09-22",
-          "notes": "- Every generated picture keeps the Creator's appearance, planned action, expression, and mood even when image-prompt interpretation is unavailable.\n- Creator personality and stage voice now shape visual presentation without being copied as private prompt text.",
           "highlight": false
         }
       ]

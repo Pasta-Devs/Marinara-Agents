@@ -1,5 +1,9 @@
 # Slurp Remastered release notes
 
+## 0.2.49 — 2026-09-25
+
+- With Beats on, each post plans how far it goes: most posts go as far as the Creator's explicit-level dial allows, some are softer, and none go below what the character's card is like. Caption and picture use the same level, and Deep details show it.
+
 ## 0.2.48 — 2026-09-25
 
 - With Beats on, a Creator's schedule decides where they are: moments at the place or work they are at right now come first, and a moment about somewhere else is posted as a plan, a memory, or a wish.

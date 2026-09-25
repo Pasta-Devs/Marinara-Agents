@@ -10,6 +10,7 @@ import {
   parseSlurpBeat,
   selectSlurpBeat,
   slurpArcBeat,
+  slurpPlannedExplicitLevel,
   slurpBeatIntents,
   slurpBeatThemeCap,
   type SlurpBeatHistory,
@@ -368,6 +369,25 @@ assert.match(
   assert.match(
     slurpPostBriefSection(arc, new Date(), (value) => value, null, { current: "working the bar", previous: null }),
     /Your usual plan for now: working the bar\. Today the arc changes that: the chapter decides what you do\./u,
+  );
+}
+
+// Heat plan: never above the dial, never below the card's floor, mostly at the top.
+{
+  const levels = ["none", "suggestive", "nudity", "explicit"];
+  const counts: Record<string, number> = {};
+  for (let sequence = 0; sequence < 400; sequence += 1) {
+    const level = slurpPlannedExplicitLevel("nudity", 1, "creator-h", sequence);
+    counts[level] = (counts[level] ?? 0) + 1;
+    assert.ok(levels.indexOf(level) >= 1 && levels.indexOf(level) <= 2, level);
+  }
+  assert.ok((counts.nudity ?? 0) > (counts.suggestive ?? 0) * 2, JSON.stringify(counts));
+  assert.equal(slurpPlannedExplicitLevel("none", 3, "creator-h", 1), "none", "the dial always wins");
+  assert.equal(slurpPlannedExplicitLevel("explicit", 3, "creator-h", 1), "explicit", "an explicit card stays explicit");
+  assert.equal(
+    slurpPlannedExplicitLevel("nudity", 1, "creator-h", 7),
+    slurpPlannedExplicitLevel("nudity", 1, "creator-h", 7),
+    "a retry plans the same heat",
   );
 }
 

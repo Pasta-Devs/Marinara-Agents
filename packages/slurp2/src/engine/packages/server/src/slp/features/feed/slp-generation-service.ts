@@ -34,7 +34,7 @@ import { createPromptOverridesStorage } from "../../../services/storage/prompt-o
 import { generateCreatorPostImage, SLURP_SECONDARY_IMAGE_COUNT } from "../media/slp-media-contract.js";
 import { finishSlurpPostImage } from "./slp-post-media-operation.js";
 import { recordSlurpBeatFacts, resolveSlurpBeatDay } from "./slp-post-beat-service.js";
-import { slurpArcBeat } from "../../modules/feed/slp-post-beat.js";
+import { slurpArcBeat, slurpPlannedExplicitLevel } from "../../modules/feed/slp-post-beat.js";
 import { slpCreatorUnlockPriceMetadata } from "../../modules/economy/slp-prices.js";
 import { persistCreatorPostWithUploadedMedia, type SlpCreatorPostMediaUpload } from "../../base/media/slp-media.js";
 import { slpResponseFormat } from "../../base/prompting/slp-response-format.js";
@@ -311,7 +311,11 @@ export async function generateCreatorPost(
   const contentMenu = await resolveSlurpCreatorMenu(db, account.id).catch(() => "");
   // How far this Creator's pictures go. A read failure must not cost a post, and the shipped level
   // is what an install with nothing configured would have used anyway.
-  const explicitLevel = await resolveSlurpExplicitLevel(db, account.id).catch(() => SLURP_BUILT_IN_EXPLICIT_LEVEL);
+  const dialLevel = await resolveSlurpExplicitLevel(db, account.id).catch(() => SLURP_BUILT_IN_EXPLICIT_LEVEL);
+  // Beats plan the heat per post, up to the dial; caption and picture both read this one level.
+  const explicitLevel = beat
+    ? slurpPlannedExplicitLevel(dialLevel, beat.heatFloor ?? 0, account.id, sequence)
+    : dialLevel;
   const messages = buildNoodlerPostMessages({
     account,
     sourceCharacterContext,
@@ -550,7 +554,7 @@ export async function generateCreatorPost(
         draftImagePrompt,
         askModelForImagePrompt,
         wardrobeSelection,
-        planner: { mode: settings.postPlanner, beat, claimCheck },
+        planner: { mode: settings.postPlanner, beat, claimCheck, heat: { dial: dialLevel, planned: explicitLevel } },
       }),
     }).catch((error: unknown) => {
       logger.warn(error, "[slurp] Could not record deep details for a post");

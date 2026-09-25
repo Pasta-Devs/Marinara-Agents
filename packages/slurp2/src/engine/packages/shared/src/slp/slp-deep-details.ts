@@ -105,6 +105,8 @@ export type SlpDeepDetailsRecord = {
       claims: { people: string[]; earlierEvents: string[]; stateChanges: string[] } | null;
       revised?: boolean;
     } | null;
+    /** The Creator's dial and the level this post was planned at (Beats). Absent before 0.2.49. */
+    heat?: { dial: string; planned: string };
   };
 };
 
