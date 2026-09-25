@@ -208,6 +208,12 @@ export function SlpDeepDetailsModal({ postId, open, onClose }: { postId: string;
                       ],
                       ["Beat place", details.planner?.beat?.place ?? null],
                       [
+                        "Callback",
+                        details.planner?.beat?.reference
+                          ? `${details.planner.beat.reference.kind}: ${details.planner.beat.reference.text}`
+                          : null,
+                      ],
+                      [
                         "Claim check",
                         details.planner?.claimCheck
                           ? details.planner.claimCheck.ok

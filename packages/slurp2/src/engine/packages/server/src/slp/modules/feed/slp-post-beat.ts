@@ -23,6 +23,7 @@ import type { SlurpContentIntent } from "../../../../../shared/src/slp/slp-conte
 import { slurpWeightedPick } from "./slp-weighted.js";
 import { SLURP_VISUAL_SEXUAL_LEVELS, type SlurpVisualSexualLevel } from "../../base/media/slp-visual-brief.js";
 import type { SlurpSharedIdea } from "./slp-shared-preseed.js";
+import { SLURP_REFERENCE_KINDS, type SlurpBeatReference } from "./slp-post-reference.js";
 
 /** Shared ideas weigh more than a deck line of the same kind, so level 1 is actually used. */
 const SHARED_IDEA_BOOST = 1.5;
@@ -94,6 +95,8 @@ export type SlurpBeat = {
   elsewhere?: boolean;
   /** The card's lowest heat (0-3), so a planned post never goes softer than the character is. */
   heatFloor?: number;
+  /** Something real this post may refer back to. See `slp-post-reference.ts`. */
+  reference?: SlurpBeatReference;
 };
 
 type SlurpBeatDeck = {
@@ -251,6 +254,8 @@ export type SlurpBeatHistory = {
   globalCounts: Partial<Record<SlurpBeatType, number>>;
   /** Shared ideas used across all Creators in the last day. Absent on callers that predate them. */
   sharedToday?: Readonly<Record<string, number>>;
+  /** References this Creator's last beats used, so one callback is not repeated. */
+  recentReferences?: readonly string[];
 };
 
 /**
@@ -364,6 +369,18 @@ export function selectSlurpBeat(
 }
 
 /** Parse a stored beat. Anything malformed reads as no beat, never as a broken plan. */
+function parseReference(raw: unknown): { reference: SlurpBeatReference } | null {
+  const value = raw && typeof raw === "object" ? (raw as Record<string, unknown>) : null;
+  if (
+    !value ||
+    !SLURP_REFERENCE_KINDS.includes(value.kind as SlurpBeatReference["kind"]) ||
+    typeof value.id !== "string" ||
+    typeof value.text !== "string"
+  )
+    return null;
+  return { reference: { kind: value.kind as SlurpBeatReference["kind"], id: value.id, text: value.text } };
+}
+
 export function parseSlurpBeat(raw: unknown): SlurpBeat | null {
   try {
     const value = typeof raw === "string" ? (JSON.parse(raw) as unknown) : raw;
@@ -387,6 +404,7 @@ export function parseSlurpBeat(raw: unknown): SlurpBeat | null {
       ...(typeof beat.sharedId === "string" ? { sharedId: beat.sharedId } : {}),
       ...(beat.elsewhere === true ? { elsewhere: true } : {}),
       ...(typeof beat.heatFloor === "number" ? { heatFloor: beat.heatFloor } : {}),
+      ...(parseReference(beat.reference) ?? {}),
     };
   } catch {
     return null;

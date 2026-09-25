@@ -9,7 +9,7 @@ import { createAppSettingsStorage } from "../../../services/storage/app-settings
 import { completeSlurpWithHost, createSlurpPostProvider } from "../../base/host/slp-generation-integrations.js";
 import { requireModelAnswer } from "../../base/model/slp-model-answer.js";
 import { slpSamplingOptions } from "../../base/prompting/slp-sampling-options.js";
-import { readSlurpBeatHistory } from "../../data/feed/slp-opportunity-storage.js";
+import { listSlurpOpportunities, readSlurpBeatHistory } from "../../data/feed/slp-opportunity-storage.js";
 import type { SlurpContentIntent } from "../../../../../shared/src/slp/slp-content-axes.js";
 import {
   selectSlurpBeat,
@@ -18,12 +18,18 @@ import {
   type SlurpDayMoment,
 } from "../../modules/feed/slp-post-beat.js";
 import { slurpUsableSharedIdeas, type SlurpSharedIdea } from "../../modules/feed/slp-shared-preseed.js";
+import { selectSlurpReference, slurpReferenceCandidates } from "../../modules/feed/slp-post-reference.js";
+import { createSlurpStorage } from "../../data/slp-storage.js";
 import {
   normalizeSlurpCanonAnchors,
   slurpBeatFactFromPost,
   slurpCanonAnchorsPrompt,
 } from "../../modules/feed/slp-post-brief.js";
-import { createSlurpContinuityFact, hasSlurpContinuityFact } from "../../data/continuity/slp-continuity-storage.js";
+import {
+  createSlurpContinuityFact,
+  hasSlurpContinuityFact,
+  listSlurpContinuityFor,
+} from "../../data/continuity/slp-continuity-storage.js";
 import { slurpContinuityIdentityOf } from "../../modules/continuity/slp-continuity-rules.js";
 import {
   resolveSlurpCreatorScheduleBlocks,
@@ -183,7 +189,7 @@ export async function planSlurpBeat(
     const shared = input.shared
       ? slurpUsableSharedIdeas({ ...input.shared, usedToday: history.sharedToday ?? {} })
       : [];
-    return selectSlurpBeat(
+    const beat = selectSlurpBeat(
       input.accountId,
       input.sequence,
       anchors,
@@ -192,6 +198,14 @@ export async function planSlurpBeat(
       shared,
       input.context.day?.current ?? null,
     );
+    if (!beat) return null;
+    const reference = selectSlurpReference(
+      input.accountId,
+      input.sequence,
+      await readReferenceCandidates(db, input.accountId, input.at),
+      history.recentReferences ?? [],
+    );
+    return reference ? { ...beat, reference } : beat;
   } catch (error) {
     logger.warn(error, "[slurp] Beat planning failed; this post uses the classic planner");
     return null;
@@ -264,5 +278,27 @@ export async function resolveSlurpBeatDay(
   } catch (error) {
     logger.warn(error, "[slurp] Could not place the post in the Creator's day");
     return null;
+  }
+}
+
+/** Everything this Creator could refer back to. A failed read means no callback, never no post. */
+async function readReferenceCandidates(db: DB, accountId: string, at: Date) {
+  try {
+    const [posts, continuity, plans] = await Promise.all([
+      createSlurpStorage(db).listNoodlerPostsByAccount(accountId, 30),
+      listSlurpContinuityFor(db, accountId, "public_post", { at }),
+      listSlurpOpportunities(db, accountId, 40),
+    ]);
+    return slurpReferenceCandidates({
+      posts,
+      chatMoments: continuity.facts.filter((fact) => fact.source === "chat"),
+      keptPromises: plans
+        .filter((plan) => plan.workflow === "completed" && plan.topic)
+        .map((plan) => ({ id: plan.id, topic: plan.topic ?? "", completedAt: plan.completedAt })),
+      at,
+    });
+  } catch (error) {
+    logger.warn(error, "[slurp] Could not read callback references");
+    return [];
   }
 }

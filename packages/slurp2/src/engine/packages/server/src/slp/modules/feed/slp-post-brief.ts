@@ -147,6 +147,12 @@ export function slurpPostBriefSection(
       ? ["That place is not where you are right now: post about it from where you are, as a plan, a memory, or a wish."]
       : []),
     `Time: ${slurpPartOfDay(at)}, just before the publication time.`,
+    // One real earlier thing, as a fact. Mentioning it is optional; inventing more of it is not.
+    ...(beat.reference
+      ? [
+          `Callback: you may refer back to ${protect(beat.reference.text)}, in passing. Add nothing about it that is not stated here.`,
+        ]
+      : []),
     ...(day ? [slurpDayLine(beat, day, protect)] : []),
     `Just before: ${day?.previous ? protect(day.previous) : "nothing relevant"}.`,
     beat.anchorKind === "arc"
@@ -208,7 +214,12 @@ export function checkSlurpBeatClaims(
 ): SlurpClaimCheck {
   if (!claims) return { ok: true, problems: [], claims: null };
   const known = [...beat.cast, ...selfNames].flatMap(words);
-  const supported = new Set([...words(beat.line), ...words(beat.anchor), ...words(beat.place ?? "")]);
+  const supported = new Set([
+    ...words(beat.line),
+    ...words(beat.anchor),
+    ...words(beat.place ?? ""),
+    ...words(beat.reference?.text ?? ""),
+  ]);
   const people = claims.people.filter(
     (person) =>
       !AUDIENCE.test(person.trim()) &&

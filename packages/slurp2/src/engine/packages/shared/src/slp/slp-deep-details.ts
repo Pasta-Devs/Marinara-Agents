@@ -98,6 +98,8 @@ export type SlpDeepDetailsRecord = {
       line: string;
       cast: string[];
       place: string | null;
+      /** The callback this post could refer back to. Absent before 0.2.50. */
+      reference?: { kind: string; text: string };
     } | null;
     claimCheck: {
       ok: boolean;

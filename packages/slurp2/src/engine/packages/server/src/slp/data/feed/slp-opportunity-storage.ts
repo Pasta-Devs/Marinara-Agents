@@ -214,6 +214,7 @@ export async function readSlurpBeatHistory(db: DB, creatorAccountId: string, at:
   return {
     recentOwn: own.map((row) => row.beat.type),
     recentAnchors: own.map((row) => row.beat.anchor),
+    recentReferences: own.flatMap((row) => (row.beat.reference ? [row.beat.reference.id] : [])),
     globalCounts,
     sharedToday,
   };

@@ -1,5 +1,9 @@
 # Slurp Remastered release notes
 
+## 0.2.50 — 2026-09-25
+
+- With Beats on, about one post in three may refer back to something real: an earlier post, an earlier set, a moment saved from a chat, or a request the Creator delivered. Slurp passes the fact itself, never an old caption, and Deep details show it.
+
 ## 0.2.49 — 2026-09-25
 
 - With Beats on, each post plans how far it goes: most posts go as far as the Creator's explicit-level dial allows, some are softer, and none go below what the character's card is like. Caption and picture use the same level, and Deep details show it.
