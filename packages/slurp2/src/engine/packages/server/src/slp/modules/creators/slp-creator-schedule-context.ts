@@ -238,6 +238,47 @@ const minutesOfDay = (time: string): number | null => {
 };
 
 /**
+ * Where the day stands at `localNow`: the block running now and the one before it. A block runs
+ * until the next one starts; before the first block, yesterday's last one is still running. Used
+ * for the post brief's day plan, from a schedule or from a routine extracted from the card.
+ */
+export function slurpTimelineMoment(
+  blocks: readonly { time: string; activity: string }[],
+  localNow: Date,
+): { current: string; previous: string | null } | null {
+  const timeline = blocks
+    .map((block) => ({ at: minutesOfDay(block.time), activity: block.activity.trim() }))
+    .filter((block): block is { at: number; activity: string } => block.at !== null && Boolean(block.activity))
+    .sort((left, right) => left.at - right.at);
+  if (timeline.length === 0) return null;
+  const nowMinutes = localNow.getHours() * 60 + localNow.getMinutes();
+  let index = -1;
+  for (const [position, block] of timeline.entries()) if (block.at <= nowMinutes) index = position;
+  const at = (position: number) => timeline[(position + timeline.length) % timeline.length]!.activity;
+  const current = at(index === -1 ? timeline.length - 1 : index);
+  const previous = timeline.length > 1 ? at((index === -1 ? timeline.length - 1 : index) - 1) : null;
+  return { current, previous: previous === current ? null : previous };
+}
+
+/** Today's schedule blocks for a character-backed Creator, or null when there is no usable schedule. */
+export async function resolveSlurpCreatorScheduleBlocks(
+  characters: { getById(id: string): Promise<ScheduleCharacter> },
+  source: CreatorSource,
+  now: Date = new Date(),
+  timeZone?: string,
+): Promise<{ blocks: { time: string; activity: string }[]; localNow: Date } | null> {
+  if (source.kind !== "character") return null;
+  const character = await characters.getById(source.entityId);
+  if (!scheduleEnabled(character)) return null;
+  const schedule = parseSlurpWeekSchedule(record(record(character?.data).extensions).conversationSchedule);
+  if (!schedule || schedule.enabled === false) return null;
+  const localNow = zonedDate(now, timeZone);
+  const days = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
+  const today = schedule.days[days[(localNow.getDay() + 6) % 7]!];
+  return today?.length ? { blocks: today, localNow } : null;
+}
+
+/**
  * Whether the creator is reachable right now, from the same parsed week schedule the prompt
  * context is built from. One parser, so the text a creator says about their day and the delay
  * before they answer can never disagree.

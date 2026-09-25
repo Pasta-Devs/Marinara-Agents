@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { slurpTimelineMoment } from "../packages/slurp2/src/engine/packages/server/src/slp/modules/creators/slp-creator-schedule-context.ts";
 import {
   SLURP_BEAT_TYPES,
   parseSlurpBeat,
@@ -200,6 +201,39 @@ assert.match(
   assert.equal(fact?.audienceScope, "creator_private", "a locked post's moment stays with the Creator");
   assert.equal(fact?.expiresAt.toISOString(), "2026-10-02T10:00:00.000Z");
   assert.equal(slurpBeatFactFromPost({ ...post, metadata: {} }), null);
+}
+
+// The day plan: the block running at publication and the one before, from a schedule or a routine.
+{
+  const day = [
+    { time: "07:30", activity: "breakfast at home" },
+    { time: "10:00", activity: "working the bar" },
+    { time: "23:00", activity: "asleep" },
+  ];
+  assert.deepEqual(slurpTimelineMoment(day, new Date(2026, 8, 25, 12, 0)), {
+    current: "working the bar",
+    previous: "breakfast at home",
+  });
+  // Before the first block, last night's block is still running.
+  assert.deepEqual(slurpTimelineMoment(day, new Date(2026, 8, 25, 5, 0)), {
+    current: "asleep",
+    previous: "working the bar",
+  });
+  assert.equal(slurpTimelineMoment([], new Date()), null);
+  const brief = slurpPostBriefSection(personBeat, new Date(2026, 8, 25, 12), (value) => value, null, {
+    current: "working the bar",
+    previous: "breakfast at home",
+  });
+  assert.match(brief, /Right now in your day: working the bar\./u);
+  assert.match(brief, /Just before: breakfast at home\./u);
+  const anchors = normalizeSlurpCanonAnchors({
+    places: ["the bar"],
+    routine: [
+      { time: "08:00", activity: "opening the bar" },
+      { time: "late", activity: "bad time" },
+    ],
+  });
+  assert.deepEqual(anchors?.routine, [{ time: "08:00", activity: "opening the bar" }], "only HH:MM blocks survive");
 }
 
 console.log("slurp2 post beats regression checks passed");

@@ -53,6 +53,8 @@ export type SlurpCanonAnchors = {
   palette: Partial<Record<SlurpBeatType, number>>;
   /** 0 wholesome, 1 flirty, 2 suggestive, 3 explicit, as the card supports. */
   heat: { min: number; max: number };
+  /** A typical day from the card, for Creators without a Conversation Schedule. Absent on old caches. */
+  routine?: { time: string; activity: string }[];
 };
 
 /** One chosen beat. Stored on the content opportunity, so a retry repeats it. */

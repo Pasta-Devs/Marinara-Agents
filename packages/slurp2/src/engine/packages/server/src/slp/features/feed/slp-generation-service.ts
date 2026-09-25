@@ -33,7 +33,7 @@ import { type SlurpAccount } from "../../modules/records/slp-storage-model.js";
 import { createPromptOverridesStorage } from "../../../services/storage/prompt-overrides.storage.js";
 import { generateCreatorPostImage, SLURP_SECONDARY_IMAGE_COUNT } from "../media/slp-media-contract.js";
 import { finishSlurpPostImage } from "./slp-post-media-operation.js";
-import { recordSlurpBeatFacts } from "./slp-post-beat-service.js";
+import { recordSlurpBeatFacts, resolveSlurpBeatDay } from "./slp-post-beat-service.js";
 import { slpCreatorUnlockPriceMetadata } from "../../modules/economy/slp-prices.js";
 import { persistCreatorPostWithUploadedMedia, type SlpCreatorPostMediaUpload } from "../../base/media/slp-media.js";
 import { slpResponseFormat } from "../../base/prompting/slp-response-format.js";
@@ -338,6 +338,15 @@ export async function generateCreatorPost(
     productionInstruction: slurpStrategyInstruction(strategy),
     beat,
     beatCompany: variation?.company,
+    beatDay: beat
+      ? await resolveSlurpBeatDay(db, {
+          accountId: account.id,
+          canonText: sourceCharacterContext,
+          source: linkedPublicAccount,
+          characters: createCharactersStorage(db),
+          at: input.publicationTime ?? input.generatedAt ?? new Date(),
+        })
+      : null,
     generatedAt: input.generatedAt ?? new Date(),
     publicationTime: input.publicationTime,
   });

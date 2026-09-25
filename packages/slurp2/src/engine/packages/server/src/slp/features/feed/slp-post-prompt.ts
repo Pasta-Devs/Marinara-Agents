@@ -113,6 +113,8 @@ export type SlurpPostPromptInput = {
   beat?: SlurpBeat | null;
   /** The variation's company line, so the brief's cast agrees with it. */
   beatCompany?: string | null;
+  /** Where the Creator's day stands at publication. See `resolveSlurpBeatDay`. */
+  beatDay?: { current: string; previous: string | null } | null;
 };
 
 /**
@@ -308,6 +310,7 @@ export function buildNoodlerPostMessages(input: SlurpPostPromptInput): ChatMessa
             input.publicationTime ?? input.generatedAt ?? new Date(),
             protect,
             input.beatCompany,
+            input.beatDay,
           ),
         ]
       : []),

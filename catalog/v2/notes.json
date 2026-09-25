@@ -360,6 +360,12 @@
     "slurp2": {
       "versions": [
         {
+          "version": "0.2.44",
+          "date": "2026-09-25",
+          "notes": "- With Beats on, each post knows where the Creator's day stands when it goes out and what they did just before, from their Conversation Schedule or, without one, from a typical day read once from their card.\n- Beats reads each card one more time after this update, to add that typical day.",
+          "highlight": false
+        },
+        {
           "version": "0.2.43",
           "date": "2026-09-25",
           "notes": "- With Beats on, what a published post was about becomes a note Slurp remembers for a week, so the next post can follow on from it without copying its caption.\n- With Beats on, no earlier caption is quoted to the writer any more; recent posts appear only as subjects.",
@@ -471,12 +477,6 @@
           "version": "0.2.21",
           "date": "2026-09-22",
           "notes": "- Wardrobe import can scan whole selected lorebooks or only individually selected enabled entries, while retaining the same evidence-backed review before anything is saved.\n- Prompt Studio shows the exact final positive prompt sent to the image provider after appearance, selected clothing, camera, visual policy, style, and interpretation are applied.\n- Successful immediate and scheduled automatic images record that exact provider prompt only in the Creator-private Deep Details record, never public post metadata.\n- Scheduled posts now pass the same typed visual brief into image interpretation as immediate posts.",
-          "highlight": false
-        },
-        {
-          "version": "0.2.20",
-          "date": "2026-09-22",
-          "notes": "- Creators now own up to 64 complete wardrobe looks with model summaries, exact image descriptions, tags, public/locked suitability, provenance, and timestamps.\n- AI imports from the linked character, selected lorebooks, pasted text, or the legacy wardrobe note stay in an editable evidence-backed review until confirmed.\n- Automatic image posts return a scene plan with wardrobe ID, setting, action, expression, and visual direction. Slurp validates the choice, falls back to the least-recent compatible look, and then expands its exact clothing.\n- Prompt Studio and Deep Details show the scene, fallback, typed visual brief, and assembled image brief. Expert overrides can rewrite or disable every prompt block.\n- Random variations no longer invent loneliness, interruption, sleeplessness, or a low-income mood. Real events and character traits still affect tone.",
           "highlight": false
         }
       ]

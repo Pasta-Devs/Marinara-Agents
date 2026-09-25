@@ -19,6 +19,10 @@ import {
 } from "../../modules/feed/slp-post-brief.js";
 import { createSlurpContinuityFact, hasSlurpContinuityFact } from "../../data/continuity/slp-continuity-storage.js";
 import { slurpContinuityIdentityOf } from "../../modules/continuity/slp-continuity-rules.js";
+import {
+  resolveSlurpCreatorScheduleBlocks,
+  slurpTimelineMoment,
+} from "../../modules/creators/slp-creator-schedule-context.js";
 import type { SlpCreatorManagedPost } from "../../../../../shared/src/slp/slp-social.types.js";
 
 type SlurpBeatConnection = Parameters<typeof createSlurpPostProvider>[0]["connection"] & { model: string };
@@ -31,6 +35,9 @@ export type SlurpBeatContext = {
 };
 
 const ANCHORS_KEY = "slurp2.canon-anchors";
+// Bumped when the extraction asks for more (v2 added the routine), so every cache refreshes once.
+const ANCHORS_VERSION = "v2";
+const anchorKey = (canonText: string) => createHash("sha256").update(`${ANCHORS_VERSION}:${canonText}`).digest("hex");
 const FAILED_WAIT_MS = 30 * 60_000;
 
 /** Keyed by a hash of the card text the post prompt sees, so a card edit re-extracts. */
@@ -113,7 +120,7 @@ export async function slurpBeatAnchorsFor(
   at: Date,
 ): Promise<SlurpCanonAnchors | null> {
   if (!context.canonText.trim()) return null;
-  const key = createHash("sha256").update(context.canonText).digest("hex");
+  const key = anchorKey(context.canonText);
   const cached = (await readAnchorCache(db))[accountId];
   if (cached?.key === key) return cached.anchors;
   if (!inFlight.has(accountId) && (failedUntil.get(accountId) ?? 0) <= at.getTime()) {
@@ -191,5 +198,34 @@ export async function recordSlurpBeatFacts(
     }
   } catch (error) {
     logger.warn(error, "[slurp] Could not record facts from published beat posts");
+  }
+}
+
+/**
+ * Where the Creator's day stands when the post goes out: from their Conversation Schedule, or from
+ * the routine the anchor extraction read out of the card. Null when neither exists; the brief then
+ * says nothing about the day rather than inventing one.
+ */
+export async function resolveSlurpBeatDay(
+  db: DB,
+  input: {
+    accountId: string;
+    canonText: string;
+    source: Parameters<typeof resolveSlurpCreatorScheduleBlocks>[1] | null;
+    characters: Parameters<typeof resolveSlurpCreatorScheduleBlocks>[0];
+    at: Date;
+  },
+): Promise<{ current: string; previous: string | null } | null> {
+  try {
+    const scheduled = input.source
+      ? await resolveSlurpCreatorScheduleBlocks(input.characters, input.source, input.at)
+      : null;
+    if (scheduled) return slurpTimelineMoment(scheduled.blocks, scheduled.localNow);
+    const cached = (await readAnchorCache(db))[input.accountId];
+    const routine = cached?.key === anchorKey(input.canonText) ? cached.anchors?.routine : undefined;
+    return routine?.length ? slurpTimelineMoment(routine, input.at) : null;
+  } catch (error) {
+    logger.warn(error, "[slurp] Could not place the post in the Creator's day");
+    return null;
   }
 }

@@ -1,5 +1,10 @@
 # Slurp Remastered release notes
 
+## 0.2.44 — 2026-09-25
+
+- With Beats on, each post knows where the Creator's day stands when it goes out and what they did just before, from their Conversation Schedule or, without one, from a typical day read once from their card.
+- Beats reads each card one more time after this update, to add that typical day.
+
 ## 0.2.43 — 2026-09-25
 
 - With Beats on, what a published post was about becomes a note Slurp remembers for a week, so the next post can follow on from it without copying its caption.
