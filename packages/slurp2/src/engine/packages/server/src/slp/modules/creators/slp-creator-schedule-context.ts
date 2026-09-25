@@ -238,14 +238,23 @@ const minutesOfDay = (time: string): number | null => {
 };
 
 /**
+ * Blocks nobody posts from. Narrower than `SLURP_AWAY_ACTIVITIES` on purpose: a Creator at the gym,
+ * on set, or in class cannot answer a DM quickly, but that is exactly where a post comes from.
+ */
+export const SLURP_NO_POST_ACTIVITIES = ["sleep", "asleep", "sleeping", "bed", "driving"] as const;
+
+/**
  * Where the day stands at `localNow`: the block running now and the one before it. A block runs
  * until the next one starts; before the first block, yesterday's last one is still running. Used
  * for the post brief's day plan, from a schedule or from a routine extracted from the card.
+ *
+ * A post due while they sleep or drive was written just before: the moment steps back to the last
+ * block they could post from, and `queued` says so.
  */
 export function slurpTimelineMoment(
   blocks: readonly { time: string; activity: string }[],
   localNow: Date,
-): { current: string; previous: string | null } | null {
+): { current: string; previous: string | null; queued: boolean } | null {
   const timeline = blocks
     .map((block) => ({ at: minutesOfDay(block.time), activity: block.activity.trim() }))
     .filter((block): block is { at: number; activity: string } => block.at !== null && Boolean(block.activity))
@@ -254,10 +263,17 @@ export function slurpTimelineMoment(
   const nowMinutes = localNow.getHours() * 60 + localNow.getMinutes();
   let index = -1;
   for (const [position, block] of timeline.entries()) if (block.at <= nowMinutes) index = position;
+  if (index === -1) index = timeline.length - 1;
   const at = (position: number) => timeline[(position + timeline.length) % timeline.length]!.activity;
-  const current = at(index === -1 ? timeline.length - 1 : index);
-  const previous = timeline.length > 1 ? at((index === -1 ? timeline.length - 1 : index) - 1) : null;
-  return { current, previous: previous === current ? null : previous };
+  const noPost = (activity: string) =>
+    SLURP_NO_POST_ACTIVITIES.some((needle) => activity.toLowerCase().includes(needle));
+  let steps = 0;
+  while (noPost(at(index - steps)) && steps < timeline.length - 1) steps += 1;
+  const current = at(index - steps);
+  // A day of nothing but sleep has no block to step back to; say nothing rather than "asleep".
+  if (noPost(current)) return null;
+  const previous = timeline.length > 1 ? at(index - steps - 1) : null;
+  return { current, previous: previous === current ? null : previous, queued: steps > 0 };
 }
 
 /** Today's schedule blocks for a character-backed Creator, or null when there is no usable schedule. */

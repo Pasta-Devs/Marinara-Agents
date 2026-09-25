@@ -11,7 +11,12 @@ import { requireModelAnswer } from "../../base/model/slp-model-answer.js";
 import { slpSamplingOptions } from "../../base/prompting/slp-sampling-options.js";
 import { readSlurpBeatHistory } from "../../data/feed/slp-opportunity-storage.js";
 import type { SlurpContentIntent } from "../../../../../shared/src/slp/slp-content-axes.js";
-import { selectSlurpBeat, type SlurpBeat, type SlurpCanonAnchors } from "../../modules/feed/slp-post-beat.js";
+import {
+  selectSlurpBeat,
+  type SlurpBeat,
+  type SlurpCanonAnchors,
+  type SlurpDayMoment,
+} from "../../modules/feed/slp-post-beat.js";
 import { slurpUsableSharedIdeas, type SlurpSharedIdea } from "../../modules/feed/slp-shared-preseed.js";
 import {
   normalizeSlurpCanonAnchors,
@@ -37,6 +42,8 @@ export type SlurpBeatContext = {
   shared?: { tags: readonly string[]; worldEvents: boolean } | null;
   /** This post continues an active arc: its chapter is the beat. See `slurpArcBeat`. */
   arc?: SlurpBeat | null;
+  /** Where the day stands at publication; its block weighs the beat's place and work. */
+  day?: SlurpDayMoment | null;
 };
 
 const ANCHORS_KEY = "slurp2.canon-anchors";
@@ -176,7 +183,15 @@ export async function planSlurpBeat(
     const shared = input.shared
       ? slurpUsableSharedIdeas({ ...input.shared, usedToday: history.sharedToday ?? {} })
       : [];
-    return selectSlurpBeat(input.accountId, input.sequence, anchors, history, input.intents, shared);
+    return selectSlurpBeat(
+      input.accountId,
+      input.sequence,
+      anchors,
+      history,
+      input.intents,
+      shared,
+      input.context.day?.current ?? null,
+    );
   } catch (error) {
     logger.warn(error, "[slurp] Beat planning failed; this post uses the classic planner");
     return null;
@@ -237,7 +252,7 @@ export async function resolveSlurpBeatDay(
     characters: Parameters<typeof resolveSlurpCreatorScheduleBlocks>[0];
     at: Date;
   },
-): Promise<{ current: string; previous: string | null } | null> {
+): Promise<SlurpDayMoment | null> {
   try {
     const scheduled = input.source
       ? await resolveSlurpCreatorScheduleBlocks(input.characters, input.source, input.at)

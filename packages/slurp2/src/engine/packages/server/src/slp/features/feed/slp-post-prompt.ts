@@ -17,7 +17,7 @@ import {
   slurpPostBriefSection,
   type SlurpClaimCheck,
 } from "../../modules/feed/slp-post-brief.js";
-import type { SlurpBeat } from "../../modules/feed/slp-post-beat.js";
+import type { SlurpBeat, SlurpDayMoment } from "../../modules/feed/slp-post-beat.js";
 import { parseGameJsonish } from "../../../services/game/jsonish.js";
 import { logDebugOverride } from "../../../lib/logger.js";
 import { requireModelAnswer } from "../../base/model/slp-model-answer.js";
@@ -114,7 +114,7 @@ export type SlurpPostPromptInput = {
   /** The variation's company line, so the brief's cast agrees with it. */
   beatCompany?: string | null;
   /** Where the Creator's day stands at publication. See `resolveSlurpBeatDay`. */
-  beatDay?: { current: string; previous: string | null } | null;
+  beatDay?: SlurpDayMoment | null;
 };
 
 /**

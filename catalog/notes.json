@@ -360,6 +360,12 @@
     "slurp2": {
       "versions": [
         {
+          "version": "0.2.48",
+          "date": "2026-09-25",
+          "notes": "- With Beats on, a Creator's schedule decides where they are: moments at the place or work they are at right now come first, and a moment about somewhere else is posted as a plan, a memory, or a wish.\n- A post due while the Creator sleeps or drives is written as if posted just before, and never mentions being awake or on the road. Gym, set, class, and similar blocks stay good post material.\n- On an arc's big day, such as moving day, the arc chapter decides what the Creator does, not the usual weekly schedule.",
+          "highlight": false
+        },
+        {
           "version": "0.2.47",
           "date": "2026-09-25",
           "notes": "- Slurp can now take a moment saved from an Engine chat and keep it as a private note for that character's Creator pages. The button in chats comes with a later Engine update.",
@@ -471,12 +477,6 @@
           "version": "0.2.25",
           "date": "2026-09-22",
           "notes": "- Every generated picture keeps the Creator's appearance, planned action, expression, and mood even when image-prompt interpretation is unavailable.\n- Creator personality and stage voice now shape visual presentation without being copied as private prompt text.",
-          "highlight": false
-        },
-        {
-          "version": "0.2.24",
-          "date": "2026-09-22",
-          "notes": "- Payments: recovery no longer refunds a tip or unlock that is still going through, a refund is never marked paid again, and cancelling a commission with the wallet off no longer creates coins. A persona can no longer tip its own Creator.\n- Promised follow-ups arrive with default settings, stop after a second failure, and read \"1.5 hours\" and \"2 days\" correctly.\n- Locked content is hidden in every reply. A second unlock no longer triggers a second reaction. \"Let them answer\" works for a Creator you play.\n- Desktop chats no longer leak drafts, pending messages, tools or older pages into the next conversation. Editing a failed message sends the new text.\n- Enter no longer sends during input-method composition, in-chat search scrolls to its match, and a pending commission cancellation can be retried.",
           "highlight": false
         }
       ]

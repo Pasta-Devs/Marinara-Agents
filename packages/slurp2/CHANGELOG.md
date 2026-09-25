@@ -1,5 +1,11 @@
 # Slurp Remastered release notes
 
+## 0.2.48 — 2026-09-25
+
+- With Beats on, a Creator's schedule decides where they are: moments at the place or work they are at right now come first, and a moment about somewhere else is posted as a plan, a memory, or a wish.
+- A post due while the Creator sleeps or drives is written as if posted just before, and never mentions being awake or on the road. Gym, set, class, and similar blocks stay good post material.
+- On an arc's big day, such as moving day, the arc chapter decides what the Creator does, not the usual weekly schedule.
+
 ## 0.2.47 — 2026-09-25
 
 - Slurp can now take a moment saved from an Engine chat and keep it as a private note for that character's Creator pages. The button in chats comes with a later Engine update.

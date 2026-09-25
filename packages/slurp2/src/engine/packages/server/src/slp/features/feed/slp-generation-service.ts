@@ -212,6 +212,17 @@ export async function generateCreatorPost(
   // Same slot the scheduler used to choose free access, so only its teasers read as one.
   const isTeaser =
     input.request.access === "public" && !directed && slurpTeaserPost(account.id, sequence, settings.teaserRate);
+  // Where the day stands at publication, before planning: the schedule decides where they are.
+  const beatDay =
+    settings.postPlanner === "beats"
+      ? await resolveSlurpBeatDay(db, {
+          accountId: account.id,
+          canonText: sourceCharacterContext,
+          source: linkedPublicAccount,
+          characters: createCharactersStorage(db),
+          at: input.publicationTime ?? input.generatedAt ?? new Date(),
+        })
+      : null;
   // Beats mode keeps the last posts as facts, not quotes, so they are written before planning.
   if (settings.postPlanner === "beats" && !input.previewOnly)
     await recordSlurpBeatFacts(db, account, recentPosts, input.generatedAt ?? new Date());
@@ -238,6 +249,7 @@ export async function generateCreatorPost(
               connection: input.connection,
               fallbackConnection,
               arc: project ? slurpArcBeat(project) : null,
+              day: beatDay,
               shared: settings.sharedPreseed
                 ? { tags: account.settings.profile.tags ?? [], worldEvents: settings.sharedWorldEvents }
                 : null,
@@ -347,15 +359,7 @@ export async function generateCreatorPost(
     productionInstruction: slurpStrategyInstruction(strategy),
     beat,
     beatCompany: variation?.company,
-    beatDay: beat
-      ? await resolveSlurpBeatDay(db, {
-          accountId: account.id,
-          canonText: sourceCharacterContext,
-          source: linkedPublicAccount,
-          characters: createCharactersStorage(db),
-          at: input.publicationTime ?? input.generatedAt ?? new Date(),
-        })
-      : null,
+    beatDay: beat ? beatDay : null,
     generatedAt: input.generatedAt ?? new Date(),
     publicationTime: input.publicationTime,
   });

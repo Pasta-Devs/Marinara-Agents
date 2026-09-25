@@ -61,6 +61,22 @@ export type SlurpCanonAnchors = {
   routine?: { time: string; activity: string }[];
 };
 
+/** Where the Creator's day stands when the post goes out. `queued`: written just before sleep or a drive. */
+export type SlurpDayMoment = { current: string; previous: string | null; queued?: boolean };
+
+const STOP_WORDS = new Set(["the", "and", "her", "his", "their", "with", "for", "you", "your", "from", "into", "at"]);
+const activityWords = (value: string) =>
+  value
+    .toLocaleLowerCase()
+    .split(/[^\p{L}\p{N}]+/u)
+    .filter((word) => word.length >= 3 && !STOP_WORDS.has(word));
+
+/** Whether a card place or piece of work is what the schedule block is about ("the bar" in "working the bar"). */
+export function slurpAnchorFitsActivity(anchor: string, activity: string): boolean {
+  const words = new Set(activityWords(activity));
+  return activityWords(anchor).some((word) => words.has(word));
+}
+
 /** One chosen beat. Stored on the content opportunity, so a retry repeats it. */
 export type SlurpBeat = {
   type: SlurpBeatType;
@@ -73,6 +89,8 @@ export type SlurpBeat = {
   place: string | null;
   /** The shared idea this beat came from, for the per-day cap. Absent for a deck beat. */
   sharedId?: string;
+  /** The beat's place is not where the schedule has them now: posted as a plan or a memory. */
+  elsewhere?: boolean;
 };
 
 type SlurpBeatDeck = {
@@ -247,16 +265,33 @@ export function selectSlurpBeat(
   intents: readonly SlurpContentIntent[],
   /** Level 1 ideas this Creator may use today, already under their daily cap. */
   shared: readonly SlurpSharedIdea[] = [],
+  /**
+   * What the schedule has them doing now. The schedule decides where they are: places and work
+   * that match it weigh more, a place that does not is drawn rarely and posted as a plan or memory.
+   */
+  activity: string | null = null,
 ): SlurpBeat | null {
+  const fits = (value: string) => Boolean(activity) && slurpAnchorFitsActivity(value, activity!);
+  const anyFits = (kind: SlurpAnchorKind) => anchorValues(anchors, kind).some(fits);
+  // ponytail: word overlap decides "fits"; a card place worded unlike the schedule reads as elsewhere.
+  const kindFit = (kind: SlurpAnchorKind) =>
+    !activity ? 1 : kind === "places" ? (anyFits("places") ? 2 : 0.25) : kind === "work" && anyFits("work") ? 2 : 1;
   // Deck lines and shared ideas share one shape: [anchor kind, template, weight, shared id].
   const linesFor = (type: SlurpBeatType) =>
     [
-      ...DECKS[type].lines.map(([kind, template]) => [kind, template, CANON_KIND_WEIGHT[kind], undefined] as const),
+      ...DECKS[type].lines.map(
+        ([kind, template]) => [kind, template, CANON_KIND_WEIGHT[kind] * kindFit(kind), undefined] as const,
+      ),
       ...shared
         .filter((idea) => idea.type === type)
         .map(
           (idea) =>
-            [idea.anchorKind, idea.template, CANON_KIND_WEIGHT[idea.anchorKind] * SHARED_IDEA_BOOST, idea.id] as const,
+            [
+              idea.anchorKind,
+              idea.template,
+              CANON_KIND_WEIGHT[idea.anchorKind] * SHARED_IDEA_BOOST * kindFit(idea.anchorKind),
+              idea.id,
+            ] as const,
         ),
     ].filter(([kind]) => anchorValues(anchors, kind).length > 0);
   const eligible = SLURP_BEAT_TYPES.filter(
@@ -290,20 +325,26 @@ export function selectSlurpBeat(
     sequence,
     values.map((value, index) => ({
       value,
-      // Earlier entries are the card's most central canon; a recently used one steps back.
-      weight: (values.length - index) * (history.recentAnchors.slice(0, 6).includes(value) ? 0.25 : 1),
+      // Earlier entries are the card's most central canon; a recently used one steps back, and one the
+      // schedule block is about steps forward.
+      weight:
+        (values.length - index) *
+        (history.recentAnchors.slice(0, 6).includes(value) ? 0.25 : 1) *
+        ((anchorKind === "places" || anchorKind === "work") && fits(value) ? 4 : 1),
     })),
   );
   const person = anchorKind === "people" ? anchors.people.find((entry) => entry.name === anchor) : undefined;
+  // With a schedule, the ambient place is one the block is about, or none: the schedule says where.
+  const places = activity ? anchors.places.filter(fits) : anchors.places;
   const place =
     anchorKind === "places"
       ? anchor
-      : anchors.places.length
+      : places.length
         ? slurpWeightedPick(
             "beatPlace",
             creatorAccountId,
             sequence,
-            anchors.places.map((value, index) => ({ value, weight: anchors.places.length - index })),
+            places.map((value, index) => ({ value, weight: places.length - index })),
           )
         : null;
   return {
@@ -314,6 +355,7 @@ export function selectSlurpBeat(
     cast: person ? [person.relation ? `${person.name} (${person.relation})` : person.name] : [],
     place,
     ...(sharedId ? { sharedId } : {}),
+    ...(anchorKind === "places" && activity && !fits(anchor) ? { elsewhere: true } : {}),
   };
 }
 
@@ -339,6 +381,7 @@ export function parseSlurpBeat(raw: unknown): SlurpBeat | null {
       cast: Array.isArray(beat.cast) ? beat.cast.filter((entry): entry is string => typeof entry === "string") : [],
       place: typeof beat.place === "string" ? beat.place : null,
       ...(typeof beat.sharedId === "string" ? { sharedId: beat.sharedId } : {}),
+      ...(beat.elsewhere === true ? { elsewhere: true } : {}),
     };
   } catch {
     return null;

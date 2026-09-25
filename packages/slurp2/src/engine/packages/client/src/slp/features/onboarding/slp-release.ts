@@ -1,5 +1,5 @@
 // The splash screen needs the shipped version and its public notes inside the client bundle.
-export const SLURP2_VERSION = "0.2.47";
+export const SLURP2_VERSION = "0.2.48";
 
 export interface Slurp2ReleaseEntry {
   version: string;
@@ -9,6 +9,15 @@ export interface Slurp2ReleaseEntry {
 
 /** The public release history shown in the Engine splash screen. */
 export const SLURP2_RELEASES: Slurp2ReleaseEntry[] = [
+  {
+    version: "0.2.48",
+    date: "2026-09-25",
+    notes: [
+      "With Beats on, a Creator's schedule decides where they are: moments at the place or work they are at right now come first, and a moment about somewhere else is posted as a plan, a memory, or a wish.",
+      "A post due while the Creator sleeps or drives is written as if posted just before, and never mentions being awake or on the road. Gym, set, class, and similar blocks stay good post material.",
+      "On an arc's big day, such as moving day, the arc chapter decides what the Creator does, not the usual weekly schedule.",
+    ],
+  },
   {
     version: "0.2.47",
     date: "2026-09-25",

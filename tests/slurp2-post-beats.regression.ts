@@ -219,12 +219,25 @@ assert.match(
   assert.deepEqual(slurpTimelineMoment(day, new Date(2026, 8, 25, 12, 0)), {
     current: "working the bar",
     previous: "breakfast at home",
+    queued: false,
   });
-  // Before the first block, last night's block is still running.
+  // Before the first block, last night's sleep is still running: nobody posts asleep, so the
+  // post was written in the last block before it.
   assert.deepEqual(slurpTimelineMoment(day, new Date(2026, 8, 25, 5, 0)), {
-    current: "asleep",
-    previous: "working the bar",
+    current: "working the bar",
+    previous: "breakfast at home",
+    queued: true,
   });
+  // Gym and set are post material, not "cannot post".
+  assert.equal(
+    slurpTimelineMoment([{ time: "09:00", activity: "gym session" }], new Date(2026, 8, 25, 10))?.current,
+    "gym session",
+  );
+  assert.equal(
+    slurpTimelineMoment([{ time: "00:00", activity: "asleep" }], new Date()),
+    null,
+    "only sleep: say nothing",
+  );
   assert.equal(slurpTimelineMoment([], new Date()), null);
   const brief = slurpPostBriefSection(personBeat, new Date(2026, 8, 25, 12), (value) => value, null, {
     current: "working the bar",
@@ -299,6 +312,63 @@ assert.match(
     movedFresh = Boolean(pick && "type" in pick && pick.type.id === "moving");
   }
   assert.equal(movedFresh, true, "without a past move the same draw does pick moving");
+}
+
+// The schedule decides where they are: a place the block is about wins, another is rare and
+// becomes a plan or a memory.
+{
+  const barAnchors = {
+    people: [],
+    places: ["the bar", "the beach"],
+    work: ["mixing cocktails"],
+    objects: [],
+    habits: [],
+    runningJokes: [],
+    palette: {},
+    heat: { min: 0, max: 1 },
+  };
+  const history = { recentOwn: [], recentAnchors: [], globalCounts: {} };
+  let beach = 0;
+  let bar = 0;
+  for (let sequence = 0; sequence < 300; sequence += 1) {
+    const beat = selectSlurpBeat("creator-b", sequence, barAnchors, history, ["casual"], [], "working the bar");
+    if (!beat) continue;
+    if (beat.anchor === "the beach") {
+      beach += 1;
+      assert.equal(beat.elsewhere, true, "the beach during a bar shift is posted as a plan or memory");
+    }
+    if (beat.anchor === "the bar" || beat.place === "the bar") bar += 1;
+    if (beat.anchor !== "the beach")
+      assert.notEqual(beat.place, "the beach", "the ambient place is never one the schedule contradicts");
+  }
+  assert.ok(bar > beach * 3, `bar ${bar} vs beach ${beach}`);
+  const elsewhere = {
+    ...personBeat,
+    anchorKind: "places" as const,
+    anchor: "the beach",
+    place: "the beach",
+    elsewhere: true,
+  };
+  assert.match(
+    slurpPostBriefSection(elsewhere, new Date(), (value) => value, null, {
+      current: "working the bar",
+      previous: null,
+    }),
+    /not where you are right now: post about it from where you are, as a plan, a memory, or a wish/u,
+  );
+  assert.match(
+    slurpPostBriefSection(personBeat, new Date(), (value) => value, null, {
+      current: "working the bar",
+      previous: null,
+      queued: true,
+    }),
+    /You wrote this post just before; do not mention sleeping, being awake, or being on the road\./u,
+  );
+  const arc = slurpArcBeat({ title: "Moving house", direction: "", chapters: ["moving day"], chapter: 0 });
+  assert.match(
+    slurpPostBriefSection(arc, new Date(), (value) => value, null, { current: "working the bar", previous: null }),
+    /Your usual plan for now: working the bar\. Today the arc changes that: the chapter decides what you do\./u,
+  );
 }
 
 console.log("slurp2 post beats regression checks passed");

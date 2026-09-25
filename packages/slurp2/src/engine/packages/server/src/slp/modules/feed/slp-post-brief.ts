@@ -9,7 +9,13 @@
  * zone, and the writer declares its claims beside the caption so code can compare them.
  */
 
-import { SLURP_BEAT_TYPES, type SlurpBeat, type SlurpBeatType, type SlurpCanonAnchors } from "./slp-post-beat.js";
+import {
+  SLURP_BEAT_TYPES,
+  type SlurpBeat,
+  type SlurpBeatType,
+  type SlurpCanonAnchors,
+  type SlurpDayMoment,
+} from "./slp-post-beat.js";
 
 const ANCHOR_LIST_MAX = 6;
 const ANCHOR_TEXT_MAX = 60;
@@ -95,6 +101,16 @@ export function slurpPartOfDay(at: Date): string {
 
 export const SLURP_POST_BRIEF_HEADER = "# This post";
 
+/** The brief's line about the Creator's day. An arc chapter outranks the routine for its post. */
+function slurpDayLine(beat: SlurpBeat, day: SlurpDayMoment, protect: (value: string) => string): string {
+  const now = protect(day.current);
+  if (beat.anchorKind === "arc")
+    return `Your usual plan for now: ${now}. Today the arc changes that: the chapter decides what you do.`;
+  if (day.queued)
+    return `Right now in your day: ${now}. You wrote this post just before; do not mention sleeping, being awake, or being on the road.`;
+  return `Right now in your day: ${now}. The beat happens within it.`;
+}
+
 /**
  * The brief as one delimited section of the user message. Custom prompt layouts rewrite system
  * blocks, not the user message, so the brief survives them. `protect` applies identity protection
@@ -112,16 +128,26 @@ export function slurpPostBriefSection(
   /** The variation's company line. Unnamed people it allows are not a cast violation. */
   company?: string | null,
   /** Where the day stands at publication, from the schedule or the card's routine. */
-  day?: { current: string; previous: string | null } | null,
+  day?: SlurpDayMoment | null,
 ): string {
   const named = beat.cast.length ? `${beat.cast.map(protect).join(", ")}. Nobody else is named.` : "no named people.";
   return [
     SLURP_POST_BRIEF_HEADER,
     `What happens: ${protect(beat.line)}`,
     `Cast: ${named}${slurpCompanyAllowsOthers(company) ? ` Anyone else stays unnamed, as the company line says: ${company!.trim()}.` : beat.cast.length ? "" : " You are alone."}`,
-    `Place: ${beat.place ? protect(beat.place) : "wherever today's schedule puts you. Do not name a new place."}`,
+    `Place: ${
+      beat.place
+        ? protect(beat.place)
+        : day
+          ? "where your day has you right now. Do not name a new place."
+          : "wherever today's schedule puts you. Do not name a new place."
+    }`,
+    // The schedule decides where they are; a beat about somewhere else is posted from here.
+    ...(beat.elsewhere
+      ? ["That place is not where you are right now: post about it from where you are, as a plan, a memory, or a wish."]
+      : []),
     `Time: ${slurpPartOfDay(at)}, just before the publication time.`,
-    ...(day ? [`Right now in your day: ${protect(day.current)}. The beat happens within it.`] : []),
+    ...(day ? [slurpDayLine(beat, day, protect)] : []),
     `Just before: ${day?.previous ? protect(day.previous) : "nothing relevant"}.`,
     beat.anchorKind === "arc"
       ? "Free zone: you may invent reactions, feelings, sensory detail, jokes, and wording. This chapter may change your life as the arc says; do not add people, other earlier events, or times."
