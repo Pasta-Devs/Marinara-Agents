@@ -7,16 +7,16 @@
         "schemaVersion": 2,
         "capabilityApi": {
           "major": 1,
-          "minor": 32
+          "minor": 34
         },
         "builtAgainst": {
           "engineVersion": "2.4.6",
-          "engineCommit": "4398962ff6be03568615298d318bca8a546472fe"
+          "engineCommit": "e15c9e558d5043ded89dbedf86f1bf3d130f2fa5"
         },
         "id": "ruleset-5e-2014",
         "name": "5e (SRD 5.1)",
-        "version": "0.7.0",
-        "description": "Provides 5e SRD 5.1 rules for Game Mode ability checks, skill checks, saving throws, and the full character sheet, plus pickable SRD spells, class features and weapons so you do not type them row by row, and class resources the sheet keeps current as you level up. It also brings 5e combat itself: a battle in a new game on this ruleset is fought by these rules on screen, with attack rolls against Armor Class, advantage and disadvantage, criticals, saving throws, conditions, concentration, death saves and spell slots spent off your sheet, against a bestiary of 319 SRD monsters the Game Master can name or a new opponent built on the measured challenge scale. With the Tactical combat style the fight is played on a board measured in feet: Speed becomes squares you walk, weapons reach 5 or 10 feet, bows carry to their long range at disadvantage, half cover adds 2 to Armor Class, spells land as cones, lines and bursts, and walking out of a reach draws an attack. The Classic style plays the same fight without positions. Not yet: chosen reactions, three-quarters cover, elevation, and the window a legendary action is spent in. After installing, choose it under Rules in the Game Mode setup wizard when you create a new game.",
+        "version": "0.8.0",
+        "description": "Provides 5e SRD 5.1 rules for Game Mode ability checks, skill checks, saving throws, and the full character sheet, plus pickable SRD spells, class features and weapons so you do not type them row by row, and class resources the sheet keeps current as you level up. It also brings 5e combat itself: a battle in a new game on this ruleset is fought by these rules on screen, with attack rolls against Armor Class, advantage and disadvantage, criticals, saving throws, conditions, concentration, death saves and spell slots spent off your sheet, against a bestiary of 319 SRD monsters the Game Master can name or a new opponent built on the measured challenge scale. Its spellcasters cast from their own spell slots, and Hellish Rebuke answers whoever hurts you. With the Tactical combat style the fight is played on a board measured in feet: Speed becomes squares you walk, weapons reach 5 or 10 feet, bows carry to their long range at disadvantage, half cover adds 2 to Armor Class, spells land as cones, lines and bursts, and walking out of a reach lets an enemy strike at you. The Classic style plays the same fight without positions. Not yet: Counterspell, Shield, three-quarters cover and elevation. After installing, choose it under Rules in the Game Mode setup wizard when you create a new game.",
         "engine": {
           "min": "2.4.6",
           "maxExclusive": "4.0.0"
@@ -38,13 +38,13 @@
         "files": [
           {
             "path": "ruleset.json",
-            "sha256": "e6f1bf800f9ef2c3e5417b87ce3f75d600bdd4221865109e81d33413c3709a97",
-            "bytes": 85434
+            "sha256": "813a4826e611ea9a733875fb8682745391f2a007e9cf712f74084ab1c2c4dc15",
+            "bytes": 86734
           },
           {
             "path": "catalogs/spells.json",
-            "sha256": "42a62a7a2c7a09cefdf6c8afe03be6b0bda63209ffb6bfb553ef39e661c7ed25",
-            "bytes": 312265
+            "sha256": "e07388f62c282487996ad37a83eadb2cbf8a9d087119332e3d71c482e7631e62",
+            "bytes": 313495
           },
           {
             "path": "catalogs/features.json",
@@ -53,8 +53,8 @@
           },
           {
             "path": "catalogs/creatures.json",
-            "sha256": "801f89f37e469bde842f9bffcffb98a05f115e9004503fdefdb0204a56079008",
-            "bytes": 689420
+            "sha256": "6c4fb84bbea532b62aa7bea33e0d1fb43e9c97c0326ce7fb3caad5c8d6b4bed5",
+            "bytes": 761667
           }
         ],
         "permissions": [],
@@ -63,9 +63,9 @@
       "category": "misc",
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/ruleset-5e-2014.png",
       "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/ruleset-5e-2014-0.7.0.zip",
-        "sha256": "678d5e001be4c8ccef231cda375825296093c06f4369b965a2c3d2f17e9e0850",
-        "bytes": 1289358
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/ruleset-5e-2014-0.8.0.zip",
+        "sha256": "b2f61fb1d8ea5a6a75d103e1db84c7a44b16cb1d87cbe3092cf9c8c6bc42a68e",
+        "bytes": 1364203
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Engine/blob/staging/docs/game/getting-started.md#choosing-rules"
     }

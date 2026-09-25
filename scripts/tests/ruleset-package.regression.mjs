@@ -14,6 +14,7 @@ import {
   assertRulesetCombat,
   assertRulesetCreatures,
   assertRulesetPackageContract,
+  assertRulesetReactions,
   assertRulesetScaled,
   isRulesetCatalogAssetPath,
   isRulesetPackage,
@@ -1992,6 +1993,266 @@ assert.throws(
     bestiary.entries.every((entry) => entry.creature.actions.every((action) => !(action.sequence && action.area))),
     "no shipped multiattack carries a shape of its own",
   );
+}
+
+// ── Reaction moments (Capability API 1.33) ──
+//
+// An entry may name the moment its reaction waits for. `true` keeps meaning a reaction taken on no
+// menu, so only the object is gated, and only what the Engine can open is allowed: harm, or being
+// aimed at, pointed back at the source or at whoever the holder picks, and a cancel only on an aim.
+
+const momentManifest = rulesetManifest({ capabilityApi: { major: 1, minor: 33 } });
+const momentDocument = (reaction) => {
+  const document = bestiaryDocument();
+  document.catalogs.push({
+    id: "tricks",
+    label: "Tricks",
+    feeds: ["spells"],
+    entries: [
+      {
+        id: "sear",
+        label: "Sear",
+        rows: [{ list: "spells", values: { name: "Sear" } }],
+        mechanics: { kind: "attack", reaction },
+      },
+    ],
+  });
+  return document;
+};
+assert.equal(
+  assertRulesetReactions(shippedManifest, parsedAsset, shippedCatalogSources),
+  1,
+  "the shipped package names one moment, Hellish Rebuke's",
+);
+assert.equal(assertRulesetReactions(rulesetManifest(), momentDocument(true)), 0, "true needs no 1.33");
+assert.throws(
+  () =>
+    assertRulesetReactions(
+      rulesetManifest({ capabilityApi: { major: 1, minor: 32 } }),
+      momentDocument({ on: "harmed" }),
+    ),
+  /entry "sear" names the moment it waits for and must declare capability API 1\.33 or newer/u,
+);
+for (const reaction of [
+  { on: "harmed" },
+  { on: "harmed", at: "source" },
+  { on: "aimed", at: "chosen" },
+  { on: "aimed", cancels: true },
+]) {
+  assert.equal(assertRulesetReactions(momentManifest, momentDocument(reaction)), 1, JSON.stringify(reaction));
+}
+for (const [reaction, message] of [
+  [null, /has a reaction of null, not true or a moment/u],
+  ["soon", /has a reaction of "soon", not true or a moment/u],
+  [[], /has a reaction of \[\], not true or a moment/u],
+  [{ on: "harmed", why: "spite" }, /reaction has an unknown key "why"/u],
+  [{ on: "fallen" }, /waits for "fallen", not one of aimed, harmed/u],
+  [{ at: "source" }, /waits for undefined, not one of aimed, harmed/u],
+  [{ on: "harmed", at: "everyone" }, /is pointed at "everyone", not one of source, chosen/u],
+  [{ on: "aimed", cancels: false }, /reaction cancels must be true when it is given/u],
+  [{ on: "harmed", cancels: true }, /cancels a moment that has already happened: only an "aimed" reaction cancels/u],
+]) {
+  assert.throws(
+    () => assertRulesetReactions(momentManifest, momentDocument(reaction)),
+    message,
+    JSON.stringify(reaction),
+  );
+}
+// A catalog asset is read too, and a creature's printed reactions are nothing this gate reads.
+{
+  const document = momentDocument(true);
+  const tricks = document.catalogs.pop();
+  document.catalogs.push({ ...tricks, entries: undefined, asset: "catalogs/tricks.json" });
+  const sources = new Map([
+    [
+      "catalogs/tricks.json",
+      JSON.stringify({ entries: [{ ...tricks.entries[0], mechanics: { reaction: { on: "near" } } }] }),
+    ],
+  ]);
+  assert.throws(() => assertRulesetReactions(momentManifest, document, sources), /waits for "near"/u);
+}
+
+// ── Creatures written as sheets (Capability API 1.34) ──
+//
+// A bestiary creature may carry a sheet in the ruleset's own terms, which a fight builds exactly as it
+// builds a party member. The sheet then says every number once, so none of the six it replaces may
+// also be given, and it is held to what the ruleset's own sheet declares, value by value.
+
+const sheetManifest = rulesetManifest({ capabilityApi: { major: 1, minor: 34 } });
+const sheetRuleset = {
+  ...combatSheet,
+  abilities: [{ id: "str", label: "Strength", min: 1, max: 30, default: 10 }],
+  skills: [{ id: "athletics", label: "Athletics", ability: "str" }],
+  saveTiers: ["none", "proficient"],
+  bonusRange: { min: -5, max: 5 },
+  fields: [
+    { id: "ac", label: "Armor Class", type: "number", min: 0, max: 30 },
+    { id: "speed", label: "Speed", type: "number", min: 0, max: 120 },
+    { id: "mood", label: "Mood", type: "text", maxLength: 10 },
+    { id: "calling", label: "Calling", type: "enum", values: ["none", "wizard"] },
+  ],
+  lists: [
+    ...combatSheet.lists.filter((list) => list.id !== "spells"),
+    {
+      id: "spells",
+      label: "Spells",
+      maxItems: 2,
+      columns: [
+        { id: "name", label: "Name", type: "text", maxLength: 80, required: true },
+        { id: "level", label: "Level", type: "number", min: 0, max: 9 },
+        { id: "prepared", label: "Prepared", type: "boolean" },
+      ],
+    },
+  ],
+};
+const casterSheet = () => ({
+  abilities: { str: 14 },
+  skills: { athletics: "expertise" },
+  saves: { str_save: "proficient" },
+  bonuses: { athletics: -1, str_save: 2 },
+  fields: { ac: 15, speed: 30, mood: "grim", calling: "wizard" },
+  lists: { spells: [{ name: "Sear", level: 1, prepared: true, _catalog: "tricks/sear" }] },
+});
+const sheetDocument = (edit = () => {}, sheet = casterSheet()) => {
+  const document = momentDocument(true);
+  document.sheet = sheetRuleset;
+  document.resolution = { proficiencyTiers: [{ id: "none" }, { id: "proficient" }, { id: "expertise" }] };
+  const block = document.catalogs[0].entries[0].creature;
+  for (const key of ["health", "defense", "initiativeModifier", "speed", "abilities", "saves"]) delete block[key];
+  block.sheet = sheet;
+  edit(block);
+  return document;
+};
+
+assert.equal(assertRulesetCreatures(sheetManifest, sheetDocument()), 1);
+assert.throws(
+  () => assertRulesetCreatures(momentManifest, sheetDocument()),
+  /entry "hound" carries a sheet and must declare capability API 1\.34 or newer/u,
+);
+// Its lists are what it does, so actions of its own are optional; the cap still holds.
+assert.equal(
+  assertRulesetCreatures(
+    sheetManifest,
+    sheetDocument((block) => (block.actions = [])),
+  ),
+  1,
+);
+assert.equal(
+  assertRulesetCreatures(
+    sheetManifest,
+    sheetDocument((block) => delete block.actions),
+  ),
+  1,
+);
+assert.throws(
+  () =>
+    assertRulesetCreatures(
+      sheetManifest,
+      sheetDocument((block) => (block.actions = 7)),
+    ),
+  /carries 0 to \d+ actions, not undefined/u,
+);
+// And a plain creature still needs its first one.
+assert.throws(
+  () =>
+    assertRulesetCreatures(
+      creatureManifest,
+      bestiaryDocument((block) => (block.actions = [])),
+    ),
+  /carries 1 to \d+ actions, not 0/u,
+);
+for (const key of ["health", "defense", "initiativeModifier", "speed", "abilities", "saves"]) {
+  assert.throws(
+    () =>
+      assertRulesetCreatures(
+        sheetManifest,
+        sheetDocument((block) => (block[key] = creature()[key] ?? 1)),
+      ),
+    new RegExp(`carries a sheet, which says its ${key}, so it does not also give one`, "u"),
+    key,
+  );
+}
+for (const [what, edit, message] of [
+  ["a key", (sheet) => (sheet.feats = {}), /sheet has an unknown key "feats"/u],
+  ["an ability", (sheet) => (sheet.abilities = { luck: 3 }), /sheet names unknown ability "luck"/u],
+  ["a score", (sheet) => (sheet.abilities = { str: 31 }), /sheet sets str to 31, outside 1 to 30/u],
+  ["a fraction", (sheet) => (sheet.abilities = { str: 12.5 }), /sheet sets str to 12\.5, outside 1 to 30/u],
+  ["a skill", (sheet) => (sheet.skills = { juggling: "proficient" }), /sheet names unknown skill "juggling"/u],
+  ["a save", (sheet) => (sheet.saves = { luck_save: "proficient" }), /sheet names unknown save "luck_save"/u],
+  [
+    "a narrowed tier",
+    (sheet) => (sheet.saves = { str_save: "expertise" }),
+    /sheet sets str_save to "expertise", not a tier offered for saves/u,
+  ],
+  ["a tier", (sheet) => (sheet.skills = { athletics: "legend" }), /sets athletics to "legend", not a tier offered/u],
+  ["a bonus", (sheet) => (sheet.bonuses = { luck: 1 }), /gives a bonus to unknown skill or save "luck"/u],
+  ["a large bonus", (sheet) => (sheet.bonuses = { athletics: 6 }), /gives athletics a bonus of 6, outside -5 to 5/u],
+  ["a field", (sheet) => (sheet.fields = { hue: 1 }), /sheet names unknown field "hue"/u],
+  ["a number", (sheet) => (sheet.fields = { ac: "15" }), /sheet field "ac" takes a number, not "15"/u],
+  ["a range", (sheet) => (sheet.fields = { ac: 31 }), /sheet field "ac" is 31, outside 0 to 30/u],
+  ["a whole number", (sheet) => (sheet.fields = { ac: 1.5 }), /sheet field "ac" takes a whole number, not 1\.5/u],
+  ["a length", (sheet) => (sheet.fields = { mood: "grimly jolly" }), /field "mood" is longer than 10 characters/u],
+  [
+    "a value",
+    (sheet) => (sheet.fields = { calling: "bard" }),
+    /field "calling" takes one of none, wizard, not "bard"/u,
+  ],
+  ["a list", (sheet) => (sheet.lists = { feats: [] }), /sheet names unknown list "feats"/u],
+  [
+    "too many rows",
+    (sheet) => (sheet.lists = { spells: [{ name: "A" }, { name: "B" }, { name: "C" }] }),
+    /sheet list "spells" holds more than its 2 rows/u,
+  ],
+  ["a column", (sheet) => (sheet.lists = { spells: [{ name: "A", colour: "red" }] }), /sets unknown column "colour"/u],
+  ["a cell", (sheet) => (sheet.lists = { spells: [{ name: "A", level: "one" }] }), /column "level" takes a number/u],
+  ["a required cell", (sheet) => (sheet.lists = { spells: [{ level: 1 }] }), /leaves required column "name" empty/u],
+  ["a mark", (sheet) => (sheet.lists.spells[0]._catalog = "sear"), /names "sear", not <catalog>\/<entry>/u],
+  [
+    "a catalog",
+    (sheet) => (sheet.lists.spells[0]._catalog = "beasts/hound"),
+    /names "beasts\/hound", and no catalog of that name feeds "spells"/u,
+  ],
+  [
+    "an entry",
+    (sheet) => (sheet.lists.spells[0]._catalog = "tricks/zap"),
+    /names "tricks\/zap", which that catalog does not hold/u,
+  ],
+]) {
+  const sheet = casterSheet();
+  edit(sheet);
+  assert.throws(
+    () =>
+      assertRulesetCreatures(
+        sheetManifest,
+        sheetDocument(() => {}, sheet),
+      ),
+    message,
+    what,
+  );
+}
+// A picked row naming an entry of a catalog FILE is checked against the file, which the Engine
+// cannot do from the ruleset alone.
+{
+  const document = sheetDocument();
+  const tricks = document.catalogs.pop();
+  document.catalogs.push({ ...tricks, entries: undefined, asset: "catalogs/tricks.json" });
+  const sources = new Map([["catalogs/tricks.json", JSON.stringify({ entries: tricks.entries })]]);
+  assert.equal(assertRulesetCreatures(sheetManifest, document, sources), 1);
+  document.catalogs[0].entries[0].creature.sheet.lists.spells[0]._catalog = "tricks/zap";
+  assert.throws(() => assertRulesetCreatures(sheetManifest, document, sources), /which that catalog does not hold/u);
+}
+// The shipped casters: every one a sheet, and every spell row one of the package's own spells.
+{
+  const bestiary = JSON.parse(shippedCatalogSources.get("catalogs/creatures.json"));
+  const casters = bestiary.entries.filter((entry) => entry.creature.sheet);
+  assert.equal(casters.length, 12, "the twelve slot casters of the SRD are sheets");
+  for (const entry of casters) {
+    assert.ok(entry.creature.sheet.lists.spells.length > 0, `${entry.id} prepares spells`);
+    assert.ok(
+      entry.creature.sheet.lists.spells.every((row) => row._catalog?.startsWith("spells/")),
+      `${entry.id}'s spells are the package's own`,
+    );
+  }
 }
 
 // A shape and a target count live on the same action on purpose: the count is what a fight WITHOUT

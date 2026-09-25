@@ -4,6 +4,12 @@
     "ruleset-5e-2014": {
       "versions": [
         {
+          "version": "0.8.0",
+          "date": "2026-09-25",
+          "notes": "- Twelve SRD spellcasters now cast their spells in a fight: the Acolyte, Priest, Cult Fanatic, Druid, Mage, Archmage, Lich, Mummy Lord, both nagas and both sphinxes. Each fights off its own sheet, spending its own spell slots, at the spell attack, save DC, saves and skills its stat block prints. Its printed attacks stay.\n- Hellish Rebuke works. When something damages you, the fight asks whether you cast it, and the flames go back at whoever hurt you.\n- Sacred Flame, Acid Splash, Poison Spray and Vicious Mockery deal their damage, which grows with your level, and Spiritual Weapon strikes once as you cast it. Before, a fight never offered them.\n- Two new spellcasting fields on your sheet, Spell attack: other bonus and Spell save DC: other bonus, for a magic item or anything else that adds to them.\n- Counterspell, Shield and Feather Fall still stay off the menu, and the README says why. Innate spellcasting and hag covens stay as traits.\n- Needs an Engine with Capability API 1.34.",
+          "highlight": true
+        },
+        {
           "version": "0.7.0",
           "date": "2026-09-20",
           "notes": "- Extra Attack works. Set Attacks per Attack action on your sheet and one Attack buys that many strikes: the first spends the action and the rest are free. A crossbow still fires once, because it loads.\n- Sneak Attack is a rider your rogue simply has: hit with a finesse or ranged weapon while you have advantage, or while another enemy stands beside your target. It grows with the Rogue table, 1d6 to 10d6.\n- Action Surge hands you a second action and costs nothing. Cunning Action puts Dash, Disengage and Hide on your menu for a bonus action.\n- Dodge now also gives advantage on Dexterity saves. Charmed stops you turning on the charmer and lifts if they go down, frightened stops you walking closer, restrained hampers Dexterity saves, and petrified halves all damage.\n- A monster's blow carries its second damage clause, so a dragon's bite burns again.\n- Weapon rows you already picked know none of the new columns. Pick them again, or tick the boxes.\n- Needs an Engine with Capability API 1.32.",

@@ -48,7 +48,22 @@
           }
         }
       ],
-      "mechanics": { "kind": "utility", "range": 60, "save": { "save": "dex_save", "onSuccess": "negates" } }
+      "mechanics": {
+        "kind": "attack",
+        "range": 60,
+        "amount": { "dice": "1d6" },
+        "damageType": "acid",
+        "save": { "save": "dex_save", "onSuccess": "negates" },
+        "scales": {
+          "from": { "field": "level" },
+          "table": [
+            [1, 0],
+            [5, 1],
+            [11, 2],
+            [17, 3]
+          ]
+        }
+      }
     },
     {
       "id": "aid",
@@ -3835,7 +3850,7 @@
         "save": { "save": "dex_save", "onSuccess": "half" },
         "cost": [{ "pool": "slots_1", "amount": 1 }],
         "perCostStep": { "dice": "1d10" },
-        "reaction": true,
+        "reaction": { "on": "harmed", "at": "source" },
         "budget": "reaction"
       }
     },
@@ -5389,7 +5404,22 @@
           }
         }
       ],
-      "mechanics": { "kind": "utility", "range": 10, "save": { "save": "con_save", "onSuccess": "negates" } }
+      "mechanics": {
+        "kind": "attack",
+        "range": 10,
+        "amount": { "dice": "1d12" },
+        "damageType": "poison",
+        "save": { "save": "con_save", "onSuccess": "negates" },
+        "scales": {
+          "from": { "field": "level" },
+          "table": [
+            [1, 0],
+            [5, 1],
+            [11, 2],
+            [17, 3]
+          ]
+        }
+      }
     },
     {
       "id": "polymorph",
@@ -6053,7 +6083,22 @@
           }
         }
       ],
-      "mechanics": { "kind": "utility", "range": 60, "save": { "save": "dex_save", "onSuccess": "negates" } }
+      "mechanics": {
+        "kind": "attack",
+        "range": 60,
+        "amount": { "dice": "1d8" },
+        "damageType": "radiant",
+        "save": { "save": "dex_save", "onSuccess": "negates" },
+        "scales": {
+          "from": { "field": "level" },
+          "table": [
+            [1, 0],
+            [5, 1],
+            [11, 2],
+            [17, 3]
+          ]
+        }
+      }
     },
     {
       "id": "sanctuary",
@@ -6715,8 +6760,10 @@
         }
       ],
       "mechanics": {
-        "kind": "utility",
+        "kind": "attack",
         "range": 60,
+        "amount": { "dice": "1d8" },
+        "damageType": "force",
         "attackRoll": true,
         "cost": [{ "pool": "slots_2", "amount": 1 }],
         "budget": "bonus"
@@ -7329,7 +7376,22 @@
           }
         }
       ],
-      "mechanics": { "kind": "utility", "range": 60, "save": { "save": "wis_save", "onSuccess": "negates" } }
+      "mechanics": {
+        "kind": "attack",
+        "range": 60,
+        "amount": { "dice": "1d4" },
+        "damageType": "psychic",
+        "save": { "save": "wis_save", "onSuccess": "negates" },
+        "scales": {
+          "from": { "field": "level" },
+          "table": [
+            [1, 0],
+            [5, 1],
+            [11, 2],
+            [17, 3]
+          ]
+        }
+      }
     },
     {
       "id": "wall-of-fire",

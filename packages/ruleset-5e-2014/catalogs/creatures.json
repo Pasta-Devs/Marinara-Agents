@@ -98,11 +98,79 @@
         "environment": ["Desert", "Hills", "Temple", "Urban"]
       },
       "creature": {
-        "health": { "dice": "2d8" },
-        "defense": 10,
-        "speed": 30,
-        "initiativeModifier": 0,
-        "abilities": { "str": 10, "dex": 10, "con": 10, "int": 10, "wis": 14, "cha": 11 },
+        "sheet": {
+          "abilities": { "str": 10, "dex": 10, "con": 10, "int": 10, "wis": 14, "cha": 11 },
+          "skills": { "medicine": "proficient", "religion": "proficient" },
+          "saves": {},
+          "bonuses": {},
+          "fields": {
+            "level": 1,
+            "class": "Cleric",
+            "ac": 10,
+            "speed": 30,
+            "hp_max": 9,
+            "spellcasting_ability": "wis",
+            "slots_max_1": 3
+          },
+          "lists": {
+            "spells": [
+              {
+                "name": "Light",
+                "level": 0,
+                "ritual": false,
+                "concentration": false,
+                "prepared": true,
+                "notes": "Evocation. Casting time: action. Range: Touch. Duration: 1 hour. Components: V, M.",
+                "_catalog": "spells/light"
+              },
+              {
+                "name": "Sacred Flame",
+                "level": 0,
+                "ritual": false,
+                "concentration": false,
+                "prepared": true,
+                "notes": "Evocation. Casting time: action. Range: 60 feet. Duration: instantaneous. Components: V, S.",
+                "_catalog": "spells/sacred-flame"
+              },
+              {
+                "name": "Thaumaturgy",
+                "level": 0,
+                "ritual": false,
+                "concentration": false,
+                "prepared": true,
+                "notes": "Transmutation. Casting time: action. Range: 30 feet. Duration: 1 minute. Components: V.",
+                "_catalog": "spells/thaumaturgy"
+              },
+              {
+                "name": "Bless",
+                "level": 1,
+                "ritual": false,
+                "concentration": true,
+                "prepared": true,
+                "notes": "Enchantment. Casting time: action. Range: 30 feet. Duration: 1 minute. Components: V, S, M.",
+                "_catalog": "spells/bless"
+              },
+              {
+                "name": "Cure Wounds",
+                "level": 1,
+                "ritual": false,
+                "concentration": false,
+                "prepared": true,
+                "notes": "Evocation. Casting time: action. Range: Touch. Duration: instantaneous. Components: V, S.",
+                "_catalog": "spells/cure-wounds"
+              },
+              {
+                "name": "Sanctuary",
+                "level": 1,
+                "ritual": false,
+                "concentration": false,
+                "prepared": true,
+                "notes": "Abjuration. Casting time: bonus action. Range: 30 feet. Duration: 1 minute. Components: V, S, M.",
+                "_catalog": "spells/sanctuary"
+              }
+            ]
+          }
+        },
         "tier": "cr_1_4",
         "traits": [
           {
@@ -2493,12 +2561,180 @@
       "summary": "Large monstrosity, lawful neutral. Armor Class 17, 199 hit points, challenge rating 17.",
       "filters": { "challenge": 17, "type": "Monstrosity", "size": "Large", "environment": ["Desert", "Ruins"] },
       "creature": {
-        "health": { "dice": "19d10+95" },
-        "defense": 17,
-        "speed": 40,
-        "initiativeModifier": 0,
-        "abilities": { "str": 22, "dex": 10, "con": 20, "int": 16, "wis": 18, "cha": 23 },
-        "saves": { "dex_save": 6, "con_save": 11, "int_save": 9, "wis_save": 10 },
+        "sheet": {
+          "abilities": { "str": 22, "dex": 10, "con": 20, "int": 16, "wis": 18, "cha": 23 },
+          "skills": { "arcana": "proficient", "perception": "proficient", "religion": "proficient" },
+          "saves": {
+            "dex_save": "proficient",
+            "con_save": "proficient",
+            "int_save": "proficient",
+            "wis_save": "proficient"
+          },
+          "bonuses": {
+            "dex_save": 2,
+            "con_save": 2,
+            "int_save": 2,
+            "wis_save": 2,
+            "arcana": 2,
+            "perception": 2,
+            "religion": 8
+          },
+          "fields": {
+            "level": 12,
+            "class": "Cleric",
+            "ac": 17,
+            "speed": 40,
+            "hp_max": 199,
+            "spellcasting_ability": "wis",
+            "slots_max_1": 4,
+            "slots_max_2": 3,
+            "slots_max_3": 3,
+            "slots_max_4": 3,
+            "slots_max_5": 2,
+            "slots_max_6": 1,
+            "spell_attack_extra": 2,
+            "spell_dc_extra": 2
+          },
+          "lists": {
+            "spells": [
+              {
+                "name": "Sacred Flame",
+                "level": 0,
+                "ritual": false,
+                "concentration": false,
+                "prepared": true,
+                "notes": "Evocation. Casting time: action. Range: 60 feet. Duration: instantaneous. Components: V, S.",
+                "_catalog": "spells/sacred-flame"
+              },
+              {
+                "name": "Spare the Dying",
+                "level": 0,
+                "ritual": false,
+                "concentration": false,
+                "prepared": true,
+                "notes": "Necromancy. Casting time: action. Range: Touch. Duration: instantaneous. Components: V, S.",
+                "_catalog": "spells/spare-the-dying"
+              },
+              {
+                "name": "Thaumaturgy",
+                "level": 0,
+                "ritual": false,
+                "concentration": false,
+                "prepared": true,
+                "notes": "Transmutation. Casting time: action. Range: 30 feet. Duration: 1 minute. Components: V.",
+                "_catalog": "spells/thaumaturgy"
+              },
+              {
+                "name": "Command",
+                "level": 1,
+                "ritual": false,
+                "concentration": false,
+                "prepared": true,
+                "notes": "Enchantment. Casting time: action. Range: 60 feet. Duration: 1 round. Components: V.",
+                "_catalog": "spells/command"
+              },
+              {
+                "name": "Detect Evil and Good",
+                "level": 1,
+                "ritual": false,
+                "concentration": true,
+                "prepared": true,
+                "notes": "Divination. Casting time: action. Range: Self. Duration: 10 minutes. Components: V, S.",
+                "_catalog": "spells/detect-evil-and-good"
+              },
+              {
+                "name": "Detect Magic",
+                "level": 1,
+                "ritual": true,
+                "concentration": true,
+                "prepared": true,
+                "notes": "Divination. Casting time: action. Range: Self. Duration: 10 minutes. Components: V, S.",
+                "_catalog": "spells/detect-magic"
+              },
+              {
+                "name": "Lesser Restoration",
+                "level": 2,
+                "ritual": false,
+                "concentration": false,
+                "prepared": true,
+                "notes": "Abjuration. Casting time: action. Range: Touch. Duration: instantaneous. Components: V, S.",
+                "_catalog": "spells/lesser-restoration"
+              },
+              {
+                "name": "Zone of Truth",
+                "level": 2,
+                "ritual": false,
+                "concentration": false,
+                "prepared": true,
+                "notes": "Enchantment. Casting time: action. Range: 60 feet. Duration: 10 minutes. Components: V, S.",
+                "_catalog": "spells/zone-of-truth"
+              },
+              {
+                "name": "Dispel Magic",
+                "level": 3,
+                "ritual": false,
+                "concentration": false,
+                "prepared": true,
+                "notes": "Abjuration. Casting time: action. Range: 120 feet. Duration: instantaneous. Components: V, S.",
+                "_catalog": "spells/dispel-magic"
+              },
+              {
+                "name": "Tongues",
+                "level": 3,
+                "ritual": false,
+                "concentration": false,
+                "prepared": true,
+                "notes": "Divination. Casting time: action. Range: Touch. Duration: 1 hour. Components: V, M.",
+                "_catalog": "spells/tongues"
+              },
+              {
+                "name": "Banishment",
+                "level": 4,
+                "ritual": false,
+                "concentration": true,
+                "prepared": true,
+                "notes": "Abjuration. Casting time: action. Range: 60 feet. Duration: 1 minute. Components: V, S, M.",
+                "_catalog": "spells/banishment"
+              },
+              {
+                "name": "Freedom of Movement",
+                "level": 4,
+                "ritual": false,
+                "concentration": false,
+                "prepared": true,
+                "notes": "Abjuration. Casting time: action. Range: Touch. Duration: 1 hour. Components: V, S, M.",
+                "_catalog": "spells/freedom-of-movement"
+              },
+              {
+                "name": "Flame Strike",
+                "level": 5,
+                "ritual": false,
+                "concentration": false,
+                "prepared": true,
+                "notes": "Evocation. Casting time: action. Range: 60 feet. Duration: instantaneous. Components: V, S, M.",
+                "_catalog": "spells/flame-strike"
+              },
+              {
+                "name": "Greater Restoration",
+                "level": 5,
+                "ritual": false,
+                "concentration": false,
+                "prepared": true,
+                "notes": "Abjuration. Casting time: action. Range: Touch. Duration: instantaneous. Components: V, S, M.",
+                "_catalog": "spells/greater-restoration"
+              },
+              {
+                "name": "Heroes' Feast",
+                "level": 6,
+                "ritual": false,
+                "concentration": false,
+                "prepared": true,
+                "notes": "Conjuration. Casting time: 10 minutes. Range: 30 feet. Duration: instantaneous. Components: V, S, M.",
+                "_catalog": "spells/heroes-feast"
+              }
+            ]
+          }
+        },
         "immune": ["bludgeoning", "piercing", "psychic", "slashing"],
         "conditionImmunities": ["charmed", "frightened"],
         "tier": "cr_17",
@@ -2698,12 +2934,260 @@
         "environment": ["Forest", "Laboratory", "Urban"]
       },
       "creature": {
-        "health": { "dice": "18d8+18" },
-        "defense": 12,
-        "speed": 30,
-        "initiativeModifier": 2,
-        "abilities": { "str": 10, "dex": 14, "con": 12, "int": 20, "wis": 15, "cha": 16 },
-        "saves": { "int_save": 9, "wis_save": 6 },
+        "sheet": {
+          "abilities": { "str": 10, "dex": 14, "con": 12, "int": 20, "wis": 15, "cha": 16 },
+          "skills": { "arcana": "proficient", "history": "proficient" },
+          "saves": { "int_save": "proficient", "wis_save": "proficient" },
+          "bonuses": { "int_save": -2, "wis_save": -2, "arcana": 2, "history": 2 },
+          "fields": {
+            "level": 18,
+            "class": "Wizard",
+            "ac": 12,
+            "speed": 30,
+            "hp_max": 99,
+            "spellcasting_ability": "int",
+            "slots_max_1": 4,
+            "slots_max_2": 3,
+            "slots_max_3": 3,
+            "slots_max_4": 3,
+            "slots_max_5": 3,
+            "slots_max_6": 1,
+            "slots_max_7": 1,
+            "slots_max_8": 1,
+            "slots_max_9": 1,
+            "spell_attack_extra": -2,
+            "spell_dc_extra": -2
+          },
+          "lists": {
+            "spells": [
+              {
+                "name": "Fire Bolt",
+                "level": 0,
+                "ritual": false,
+                "concentration": false,
+                "prepared": true,
+                "notes": "Evocation. Casting time: action. Range: 120 feet. Duration: instantaneous. Components: V, S.",
+                "_catalog": "spells/fire-bolt"
+              },
+              {
+                "name": "Light",
+                "level": 0,
+                "ritual": false,
+                "concentration": false,
+                "prepared": true,
+                "notes": "Evocation. Casting time: action. Range: Touch. Duration: 1 hour. Components: V, M.",
+                "_catalog": "spells/light"
+              },
+              {
+                "name": "Mage Hand",
+                "level": 0,
+                "ritual": false,
+                "concentration": false,
+                "prepared": true,
+                "notes": "Conjuration. Casting time: action. Range: 30 feet. Duration: 1 minute. Components: V, S.",
+                "_catalog": "spells/mage-hand"
+              },
+              {
+                "name": "Prestidigitation",
+                "level": 0,
+                "ritual": false,
+                "concentration": false,
+                "prepared": true,
+                "notes": "Transmutation. Casting time: action. Range: 10 feet. Duration: 1 hour. Components: V, S.",
+                "_catalog": "spells/prestidigitation"
+              },
+              {
+                "name": "Shocking Grasp",
+                "level": 0,
+                "ritual": false,
+                "concentration": false,
+                "prepared": true,
+                "notes": "Evocation. Casting time: action. Range: Touch. Duration: instantaneous. Components: V, S.",
+                "_catalog": "spells/shocking-grasp"
+              },
+              {
+                "name": "Detect Magic",
+                "level": 1,
+                "ritual": true,
+                "concentration": true,
+                "prepared": true,
+                "notes": "Divination. Casting time: action. Range: Self. Duration: 10 minutes. Components: V, S.",
+                "_catalog": "spells/detect-magic"
+              },
+              {
+                "name": "Identify",
+                "level": 1,
+                "ritual": true,
+                "concentration": false,
+                "prepared": true,
+                "notes": "Divination. Casting time: 1 minute. Range: Touch. Duration: instantaneous. Components: V, S, M.",
+                "_catalog": "spells/identify"
+              },
+              {
+                "name": "Mage Armor",
+                "level": 1,
+                "ritual": false,
+                "concentration": false,
+                "prepared": true,
+                "notes": "Abjuration. Casting time: action. Range: Touch. Duration: 8 hours. Components: V, S, M.",
+                "_catalog": "spells/mage-armor"
+              },
+              {
+                "name": "Magic Missile",
+                "level": 1,
+                "ritual": false,
+                "concentration": false,
+                "prepared": true,
+                "notes": "Evocation. Casting time: action. Range: 120 feet. Duration: instantaneous. Components: V, S.",
+                "_catalog": "spells/magic-missile"
+              },
+              {
+                "name": "Detect Thoughts",
+                "level": 2,
+                "ritual": false,
+                "concentration": true,
+                "prepared": true,
+                "notes": "Divination. Casting time: action. Range: Self. Duration: 1 minute. Components: V, S, M.",
+                "_catalog": "spells/detect-thoughts"
+              },
+              {
+                "name": "Mirror Image",
+                "level": 2,
+                "ritual": false,
+                "concentration": false,
+                "prepared": true,
+                "notes": "Illusion. Casting time: action. Range: Self. Duration: 1 minute. Components: V, S.",
+                "_catalog": "spells/mirror-image"
+              },
+              {
+                "name": "Misty Step",
+                "level": 2,
+                "ritual": false,
+                "concentration": false,
+                "prepared": true,
+                "notes": "Conjuration. Casting time: bonus action. Range: Self. Duration: instantaneous. Components: V.",
+                "_catalog": "spells/misty-step"
+              },
+              {
+                "name": "Counterspell",
+                "level": 3,
+                "ritual": false,
+                "concentration": false,
+                "prepared": true,
+                "notes": "Abjuration. Casting time: reaction. Range: 60 feet. Duration: instantaneous. Components: S.",
+                "_catalog": "spells/counterspell"
+              },
+              {
+                "name": "Fly",
+                "level": 3,
+                "ritual": false,
+                "concentration": true,
+                "prepared": true,
+                "notes": "Transmutation. Casting time: action. Range: Touch. Duration: 10 minutes. Components: V, S, M.",
+                "_catalog": "spells/fly"
+              },
+              {
+                "name": "Lightning Bolt",
+                "level": 3,
+                "ritual": false,
+                "concentration": false,
+                "prepared": true,
+                "notes": "Evocation. Casting time: action. Range: Self. Duration: instantaneous. Components: V, S, M.",
+                "_catalog": "spells/lightning-bolt"
+              },
+              {
+                "name": "Banishment",
+                "level": 4,
+                "ritual": false,
+                "concentration": true,
+                "prepared": true,
+                "notes": "Abjuration. Casting time: action. Range: 60 feet. Duration: 1 minute. Components: V, S, M.",
+                "_catalog": "spells/banishment"
+              },
+              {
+                "name": "Fire Shield",
+                "level": 4,
+                "ritual": false,
+                "concentration": false,
+                "prepared": true,
+                "notes": "Evocation. Casting time: action. Range: Self. Duration: 10 minutes. Components: V, S, M.",
+                "_catalog": "spells/fire-shield"
+              },
+              {
+                "name": "Stoneskin",
+                "level": 4,
+                "ritual": false,
+                "concentration": true,
+                "prepared": true,
+                "notes": "Abjuration. Casting time: action. Range: Touch. Duration: 1 hour. Components: V, S, M.",
+                "_catalog": "spells/stoneskin"
+              },
+              {
+                "name": "Cone of Cold",
+                "level": 5,
+                "ritual": false,
+                "concentration": false,
+                "prepared": true,
+                "notes": "Evocation. Casting time: action. Range: Self. Duration: instantaneous. Components: V, S, M.",
+                "_catalog": "spells/cone-of-cold"
+              },
+              {
+                "name": "Scrying",
+                "level": 5,
+                "ritual": false,
+                "concentration": true,
+                "prepared": true,
+                "notes": "Divination. Casting time: 10 minutes. Range: Self. Duration: 10 minutes. Components: V, S, M.",
+                "_catalog": "spells/scrying"
+              },
+              {
+                "name": "Wall of Force",
+                "level": 5,
+                "ritual": false,
+                "concentration": true,
+                "prepared": true,
+                "notes": "Evocation. Casting time: action. Range: 120 feet. Duration: 10 minutes. Components: V, S, M.",
+                "_catalog": "spells/wall-of-force"
+              },
+              {
+                "name": "Globe of Invulnerability",
+                "level": 6,
+                "ritual": false,
+                "concentration": true,
+                "prepared": true,
+                "notes": "Abjuration. Casting time: action. Range: Self. Duration: 1 minute. Components: V, S, M.",
+                "_catalog": "spells/globe-of-invulnerability"
+              },
+              {
+                "name": "Teleport",
+                "level": 7,
+                "ritual": false,
+                "concentration": false,
+                "prepared": true,
+                "notes": "Conjuration. Casting time: action. Range: 10 feet. Duration: instantaneous. Components: V.",
+                "_catalog": "spells/teleport"
+              },
+              {
+                "name": "Mind Blank",
+                "level": 8,
+                "ritual": false,
+                "concentration": false,
+                "prepared": true,
+                "notes": "Abjuration. Casting time: action. Range: Touch. Duration: 24 hours. Components: V, S.",
+                "_catalog": "spells/mind-blank"
+              },
+              {
+                "name": "Time Stop",
+                "level": 9,
+                "ritual": false,
+                "concentration": false,
+                "prepared": true,
+                "notes": "Transmutation. Casting time: action. Range: Self. Duration: instantaneous. Components: V.",
+                "_catalog": "spells/time-stop"
+              }
+            ]
+          }
+        },
         "resist": ["piercing"],
         "tier": "cr_12",
         "traits": [
@@ -4903,11 +5387,98 @@
         "environment": ["Desert", "Forest", "Hills", "Ruins", "Sewer", "Temple", "Urban"]
       },
       "creature": {
-        "health": { "dice": "6d8+6" },
-        "defense": 13,
-        "speed": 30,
-        "initiativeModifier": 2,
-        "abilities": { "str": 11, "dex": 14, "con": 12, "int": 10, "wis": 13, "cha": 14 },
+        "sheet": {
+          "abilities": { "str": 11, "dex": 14, "con": 12, "int": 10, "wis": 13, "cha": 14 },
+          "skills": { "deception": "proficient", "persuasion": "proficient", "religion": "proficient" },
+          "saves": {},
+          "bonuses": {},
+          "fields": {
+            "level": 4,
+            "class": "Cleric",
+            "ac": 13,
+            "speed": 30,
+            "hp_max": 22,
+            "spellcasting_ability": "wis",
+            "slots_max_1": 4,
+            "slots_max_2": 3
+          },
+          "lists": {
+            "spells": [
+              {
+                "name": "Light",
+                "level": 0,
+                "ritual": false,
+                "concentration": false,
+                "prepared": true,
+                "notes": "Evocation. Casting time: action. Range: Touch. Duration: 1 hour. Components: V, M.",
+                "_catalog": "spells/light"
+              },
+              {
+                "name": "Sacred Flame",
+                "level": 0,
+                "ritual": false,
+                "concentration": false,
+                "prepared": true,
+                "notes": "Evocation. Casting time: action. Range: 60 feet. Duration: instantaneous. Components: V, S.",
+                "_catalog": "spells/sacred-flame"
+              },
+              {
+                "name": "Thaumaturgy",
+                "level": 0,
+                "ritual": false,
+                "concentration": false,
+                "prepared": true,
+                "notes": "Transmutation. Casting time: action. Range: 30 feet. Duration: 1 minute. Components: V.",
+                "_catalog": "spells/thaumaturgy"
+              },
+              {
+                "name": "Command",
+                "level": 1,
+                "ritual": false,
+                "concentration": false,
+                "prepared": true,
+                "notes": "Enchantment. Casting time: action. Range: 60 feet. Duration: 1 round. Components: V.",
+                "_catalog": "spells/command"
+              },
+              {
+                "name": "Inflict Wounds",
+                "level": 1,
+                "ritual": false,
+                "concentration": false,
+                "prepared": true,
+                "notes": "Necromancy. Casting time: action. Range: Touch. Duration: instantaneous. Components: V, S.",
+                "_catalog": "spells/inflict-wounds"
+              },
+              {
+                "name": "Shield of Faith",
+                "level": 1,
+                "ritual": false,
+                "concentration": true,
+                "prepared": true,
+                "notes": "Abjuration. Casting time: bonus action. Range: 60 feet. Duration: 10 minutes. Components: V, S, M.",
+                "_catalog": "spells/shield-of-faith"
+              },
+              {
+                "name": "Hold Person",
+                "level": 2,
+                "ritual": false,
+                "concentration": true,
+                "prepared": true,
+                "notes": "Enchantment. Casting time: action. Range: 60 feet. Duration: 1 minute. Components: V, S, M.",
+                "_catalog": "spells/hold-person"
+              },
+              {
+                "name": "Spiritual Weapon",
+                "level": 2,
+                "ritual": false,
+                "concentration": false,
+                "prepared": true,
+                "notes": "Evocation. Casting time: bonus action. Range: 60 feet. Duration: 1 minute. Components: V, S.",
+                "_catalog": "spells/spiritual-weapon"
+              }
+            ]
+          }
+        },
         "tier": "cr_2",
         "traits": [
           {
@@ -5677,11 +6248,107 @@
         "environment": ["Arctic", "Coast", "Desert", "Forest", "Grassland", "Hills", "Mountain", "Swamp", "Underworld"]
       },
       "creature": {
-        "health": { "dice": "5d8+5" },
-        "defense": 11,
-        "speed": 30,
-        "initiativeModifier": 1,
-        "abilities": { "str": 10, "dex": 12, "con": 13, "int": 12, "wis": 15, "cha": 11 },
+        "sheet": {
+          "abilities": { "str": 10, "dex": 12, "con": 13, "int": 12, "wis": 15, "cha": 11 },
+          "skills": { "medicine": "proficient", "nature": "proficient", "perception": "proficient" },
+          "saves": {},
+          "bonuses": {},
+          "fields": {
+            "level": 4,
+            "class": "Druid",
+            "ac": 11,
+            "speed": 30,
+            "hp_max": 27,
+            "spellcasting_ability": "wis",
+            "slots_max_1": 4,
+            "slots_max_2": 3
+          },
+          "lists": {
+            "spells": [
+              {
+                "name": "Druidcraft",
+                "level": 0,
+                "ritual": false,
+                "concentration": false,
+                "prepared": true,
+                "notes": "Transmutation. Casting time: action. Range: 30 feet. Duration: instantaneous. Components: V, S.",
+                "_catalog": "spells/druidcraft"
+              },
+              {
+                "name": "Produce Flame",
+                "level": 0,
+                "ritual": false,
+                "concentration": false,
+                "prepared": true,
+                "notes": "Conjuration. Casting time: action. Range: Self. Duration: 10 minutes. Components: V, S.",
+                "_catalog": "spells/produce-flame"
+              },
+              {
+                "name": "Shillelagh",
+                "level": 0,
+                "ritual": false,
+                "concentration": false,
+                "prepared": true,
+                "notes": "Transmutation. Casting time: bonus action. Range: Touch. Duration: 1 minute. Components: V, S, M.",
+                "_catalog": "spells/shillelagh"
+              },
+              {
+                "name": "Entangle",
+                "level": 1,
+                "ritual": false,
+                "concentration": true,
+                "prepared": true,
+                "notes": "Conjuration. Casting time: action. Range: 90 feet. Duration: 1 minute. Components: V, S.",
+                "_catalog": "spells/entangle"
+              },
+              {
+                "name": "Longstrider",
+                "level": 1,
+                "ritual": false,
+                "concentration": false,
+                "prepared": true,
+                "notes": "Transmutation. Casting time: action. Range: Touch. Duration: 1 hour. Components: V, S, M.",
+                "_catalog": "spells/longstrider"
+              },
+              {
+                "name": "Speak with Animals",
+                "level": 1,
+                "ritual": true,
+                "concentration": false,
+                "prepared": true,
+                "notes": "Divination. Casting time: action. Range: Self. Duration: 10 minutes. Components: V, S.",
+                "_catalog": "spells/speak-with-animals"
+              },
+              {
+                "name": "Thunderwave",
+                "level": 1,
+                "ritual": false,
+                "concentration": false,
+                "prepared": true,
+                "notes": "Evocation. Casting time: action. Range: Self. Duration: instantaneous. Components: V, S.",
+                "_catalog": "spells/thunderwave"
+              },
+              {
+                "name": "Animal Messenger",
+                "level": 2,
+                "ritual": true,
+                "concentration": false,
+                "prepared": true,
+                "notes": "Enchantment. Casting time: action. Range: 30 feet. Duration: 24 hours. Components: V, S, M.",
+                "_catalog": "spells/animal-messenger"
+              },
+              {
+                "name": "Barkskin",
+                "level": 2,
+                "ritual": false,
+                "concentration": true,
+                "prepared": true,
+                "notes": "Transmutation. Casting time: action. Range: Touch. Duration: 1 hour. Components: V, S, M.",
+                "_catalog": "spells/barkskin"
+              }
+            ]
+          }
+        },
         "tier": "cr_2",
         "traits": [
           {
@@ -8973,12 +9640,171 @@
         "environment": ["Astral Plane", "Caves", "Desert", "Forest", "Mountain", "Ruins", "Temple"]
       },
       "creature": {
-        "health": { "dice": "15d10+45" },
-        "defense": 18,
-        "speed": 40,
-        "initiativeModifier": 4,
-        "abilities": { "str": 19, "dex": 18, "con": 16, "int": 16, "wis": 19, "cha": 18 },
-        "saves": { "dex_save": 8, "con_save": 7, "int_save": 7, "wis_save": 8, "cha_save": 8 },
+        "sheet": {
+          "abilities": { "str": 19, "dex": 18, "con": 16, "int": 16, "wis": 19, "cha": 18 },
+          "skills": {},
+          "saves": {
+            "dex_save": "proficient",
+            "con_save": "proficient",
+            "int_save": "proficient",
+            "wis_save": "proficient",
+            "cha_save": "proficient"
+          },
+          "bonuses": {},
+          "fields": {
+            "level": 11,
+            "class": "Cleric",
+            "ac": 18,
+            "speed": 40,
+            "hp_max": 127,
+            "spellcasting_ability": "wis",
+            "slots_max_1": 4,
+            "slots_max_2": 3,
+            "slots_max_3": 3,
+            "slots_max_4": 3,
+            "slots_max_5": 2,
+            "slots_max_6": 1
+          },
+          "lists": {
+            "spells": [
+              {
+                "name": "Mending",
+                "level": 0,
+                "ritual": false,
+                "concentration": false,
+                "prepared": true,
+                "notes": "Transmutation. Casting time: 1 minute. Range: Touch. Duration: instantaneous. Components: V, S, M.",
+                "_catalog": "spells/mending"
+              },
+              {
+                "name": "Sacred Flame",
+                "level": 0,
+                "ritual": false,
+                "concentration": false,
+                "prepared": true,
+                "notes": "Evocation. Casting time: action. Range: 60 feet. Duration: instantaneous. Components: V, S.",
+                "_catalog": "spells/sacred-flame"
+              },
+              {
+                "name": "Thaumaturgy",
+                "level": 0,
+                "ritual": false,
+                "concentration": false,
+                "prepared": true,
+                "notes": "Transmutation. Casting time: action. Range: 30 feet. Duration: 1 minute. Components: V.",
+                "_catalog": "spells/thaumaturgy"
+              },
+              {
+                "name": "Command",
+                "level": 1,
+                "ritual": false,
+                "concentration": false,
+                "prepared": true,
+                "notes": "Enchantment. Casting time: action. Range: 60 feet. Duration: 1 round. Components: V.",
+                "_catalog": "spells/command"
+              },
+              {
+                "name": "Cure Wounds",
+                "level": 1,
+                "ritual": false,
+                "concentration": false,
+                "prepared": true,
+                "notes": "Evocation. Casting time: action. Range: Touch. Duration: instantaneous. Components: V, S.",
+                "_catalog": "spells/cure-wounds"
+              },
+              {
+                "name": "Shield of Faith",
+                "level": 1,
+                "ritual": false,
+                "concentration": true,
+                "prepared": true,
+                "notes": "Abjuration. Casting time: bonus action. Range: 60 feet. Duration: 10 minutes. Components: V, S, M.",
+                "_catalog": "spells/shield-of-faith"
+              },
+              {
+                "name": "Calm Emotions",
+                "level": 2,
+                "ritual": false,
+                "concentration": true,
+                "prepared": true,
+                "notes": "Enchantment. Casting time: action. Range: 60 feet. Duration: 1 minute. Components: V, S.",
+                "_catalog": "spells/calm-emotions"
+              },
+              {
+                "name": "Hold Person",
+                "level": 2,
+                "ritual": false,
+                "concentration": true,
+                "prepared": true,
+                "notes": "Enchantment. Casting time: action. Range: 60 feet. Duration: 1 minute. Components: V, S, M.",
+                "_catalog": "spells/hold-person"
+              },
+              {
+                "name": "Bestow Curse",
+                "level": 3,
+                "ritual": false,
+                "concentration": true,
+                "prepared": true,
+                "notes": "Necromancy. Casting time: action. Range: Touch. Duration: 1 minute. Components: V, S.",
+                "_catalog": "spells/bestow-curse"
+              },
+              {
+                "name": "Clairvoyance",
+                "level": 3,
+                "ritual": false,
+                "concentration": true,
+                "prepared": true,
+                "notes": "Divination. Casting time: 10 minutes. Range: 1 mile. Duration: 10 minutes. Components: V, S, M.",
+                "_catalog": "spells/clairvoyance"
+              },
+              {
+                "name": "Banishment",
+                "level": 4,
+                "ritual": false,
+                "concentration": true,
+                "prepared": true,
+                "notes": "Abjuration. Casting time: action. Range: 60 feet. Duration: 1 minute. Components: V, S, M.",
+                "_catalog": "spells/banishment"
+              },
+              {
+                "name": "Freedom of Movement",
+                "level": 4,
+                "ritual": false,
+                "concentration": false,
+                "prepared": true,
+                "notes": "Abjuration. Casting time: action. Range: Touch. Duration: 1 hour. Components: V, S, M.",
+                "_catalog": "spells/freedom-of-movement"
+              },
+              {
+                "name": "Flame Strike",
+                "level": 5,
+                "ritual": false,
+                "concentration": false,
+                "prepared": true,
+                "notes": "Evocation. Casting time: action. Range: 60 feet. Duration: instantaneous. Components: V, S, M.",
+                "_catalog": "spells/flame-strike"
+              },
+              {
+                "name": "Geas",
+                "level": 5,
+                "ritual": false,
+                "concentration": false,
+                "prepared": true,
+                "notes": "Enchantment. Casting time: 1 minute. Range: 60 feet. Duration: 30 days. Components: V.",
+                "_catalog": "spells/geas"
+              },
+              {
+                "name": "True Seeing",
+                "level": 6,
+                "ritual": false,
+                "concentration": false,
+                "prepared": true,
+                "notes": "Divination. Casting time: action. Range: Touch. Duration: 1 hour. Components: V, S, M.",
+                "_catalog": "spells/true-seeing"
+              }
+            ]
+          }
+        },
         "immune": ["poison"],
         "conditionImmunities": ["charmed", "poisoned"],
         "tier": "cr_10",
@@ -9026,11 +9852,169 @@
       "summary": "Large monstrosity, lawful neutral. Armor Class 17, 136 hit points, challenge rating 11.",
       "filters": { "challenge": 11, "type": "Monstrosity", "size": "Large", "environment": ["Desert", "Ruins"] },
       "creature": {
-        "health": { "dice": "16d10+48" },
-        "defense": 17,
-        "speed": 40,
-        "initiativeModifier": 2,
-        "abilities": { "str": 18, "dex": 15, "con": 16, "int": 18, "wis": 18, "cha": 18 },
+        "sheet": {
+          "abilities": { "str": 18, "dex": 15, "con": 16, "int": 18, "wis": 18, "cha": 18 },
+          "skills": {
+            "arcana": "proficient",
+            "history": "proficient",
+            "perception": "proficient",
+            "religion": "proficient"
+          },
+          "saves": {},
+          "bonuses": { "arcana": 4, "history": 4 },
+          "fields": {
+            "level": 9,
+            "class": "Wizard",
+            "ac": 17,
+            "speed": 40,
+            "hp_max": 136,
+            "spellcasting_ability": "int",
+            "slots_max_1": 4,
+            "slots_max_2": 3,
+            "slots_max_3": 3,
+            "slots_max_4": 3,
+            "slots_max_5": 1
+          },
+          "lists": {
+            "spells": [
+              {
+                "name": "Mage Hand",
+                "level": 0,
+                "ritual": false,
+                "concentration": false,
+                "prepared": true,
+                "notes": "Conjuration. Casting time: action. Range: 30 feet. Duration: 1 minute. Components: V, S.",
+                "_catalog": "spells/mage-hand"
+              },
+              {
+                "name": "Minor Illusion",
+                "level": 0,
+                "ritual": false,
+                "concentration": false,
+                "prepared": true,
+                "notes": "Illusion. Casting time: action. Range: 30 feet. Duration: 1 minute. Components: S, M.",
+                "_catalog": "spells/minor-illusion"
+              },
+              {
+                "name": "Prestidigitation",
+                "level": 0,
+                "ritual": false,
+                "concentration": false,
+                "prepared": true,
+                "notes": "Transmutation. Casting time: action. Range: 10 feet. Duration: 1 hour. Components: V, S.",
+                "_catalog": "spells/prestidigitation"
+              },
+              {
+                "name": "Detect Magic",
+                "level": 1,
+                "ritual": true,
+                "concentration": true,
+                "prepared": true,
+                "notes": "Divination. Casting time: action. Range: Self. Duration: 10 minutes. Components: V, S.",
+                "_catalog": "spells/detect-magic"
+              },
+              {
+                "name": "Identify",
+                "level": 1,
+                "ritual": true,
+                "concentration": false,
+                "prepared": true,
+                "notes": "Divination. Casting time: 1 minute. Range: Touch. Duration: instantaneous. Components: V, S, M.",
+                "_catalog": "spells/identify"
+              },
+              {
+                "name": "Shield",
+                "level": 1,
+                "ritual": false,
+                "concentration": false,
+                "prepared": true,
+                "notes": "Abjuration. Casting time: reaction. Range: Self. Duration: 1 round. Components: V, S.",
+                "_catalog": "spells/shield"
+              },
+              {
+                "name": "Darkness",
+                "level": 2,
+                "ritual": false,
+                "concentration": true,
+                "prepared": true,
+                "notes": "Evocation. Casting time: action. Range: 60 feet. Duration: 10 minutes. Components: V, M.",
+                "_catalog": "spells/darkness"
+              },
+              {
+                "name": "Locate Object",
+                "level": 2,
+                "ritual": false,
+                "concentration": true,
+                "prepared": true,
+                "notes": "Divination. Casting time: action. Range: Self. Duration: 10 minutes. Components: V, S, M.",
+                "_catalog": "spells/locate-object"
+              },
+              {
+                "name": "Suggestion",
+                "level": 2,
+                "ritual": false,
+                "concentration": true,
+                "prepared": true,
+                "notes": "Enchantment. Casting time: action. Range: 30 feet. Duration: 8 hours. Components: V, M.",
+                "_catalog": "spells/suggestion"
+              },
+              {
+                "name": "Dispel Magic",
+                "level": 3,
+                "ritual": false,
+                "concentration": false,
+                "prepared": true,
+                "notes": "Abjuration. Casting time: action. Range: 120 feet. Duration: instantaneous. Components: V, S.",
+                "_catalog": "spells/dispel-magic"
+              },
+              {
+                "name": "Remove Curse",
+                "level": 3,
+                "ritual": false,
+                "concentration": false,
+                "prepared": true,
+                "notes": "Abjuration. Casting time: action. Range: Touch. Duration: instantaneous. Components: V, S.",
+                "_catalog": "spells/remove-curse"
+              },
+              {
+                "name": "Tongues",
+                "level": 3,
+                "ritual": false,
+                "concentration": false,
+                "prepared": true,
+                "notes": "Divination. Casting time: action. Range: Touch. Duration: 1 hour. Components: V, M.",
+                "_catalog": "spells/tongues"
+              },
+              {
+                "name": "Banishment",
+                "level": 4,
+                "ritual": false,
+                "concentration": true,
+                "prepared": true,
+                "notes": "Abjuration. Casting time: action. Range: 60 feet. Duration: 1 minute. Components: V, S, M.",
+                "_catalog": "spells/banishment"
+              },
+              {
+                "name": "Greater Invisibility",
+                "level": 4,
+                "ritual": false,
+                "concentration": true,
+                "prepared": true,
+                "notes": "Illusion. Casting time: action. Range: Touch. Duration: 1 minute. Components: V, S.",
+                "_catalog": "spells/greater-invisibility"
+              },
+              {
+                "name": "Legend Lore",
+                "level": 5,
+                "ritual": false,
+                "concentration": false,
+                "prepared": true,
+                "notes": "Divination. Casting time: 10 minutes. Range: Self. Duration: instantaneous. Components: V, S, M.",
+                "_catalog": "spells/legend-lore"
+              }
+            ]
+          }
+        },
         "resist": ["bludgeoning", "piercing", "slashing"],
         "immune": ["psychic"],
         "conditionImmunities": ["charmed", "frightened"],
@@ -10477,12 +11461,282 @@
         "environment": ["Laboratory", "Ruins", "Shadowfell", "Tomb"]
       },
       "creature": {
-        "health": { "dice": "18d8+54" },
-        "defense": 17,
-        "speed": 30,
-        "initiativeModifier": 3,
-        "abilities": { "str": 11, "dex": 16, "con": 16, "int": 20, "wis": 14, "cha": 16 },
-        "saves": { "con_save": 10, "int_save": 12, "wis_save": 9 },
+        "sheet": {
+          "abilities": { "str": 11, "dex": 16, "con": 16, "int": 20, "wis": 14, "cha": 16 },
+          "skills": {
+            "arcana": "proficient",
+            "history": "proficient",
+            "insight": "proficient",
+            "perception": "proficient"
+          },
+          "saves": { "con_save": "proficient", "int_save": "proficient", "wis_save": "proficient" },
+          "bonuses": {
+            "con_save": 1,
+            "int_save": 1,
+            "wis_save": 1,
+            "arcana": 7,
+            "history": 1,
+            "insight": 1,
+            "perception": 1
+          },
+          "fields": {
+            "level": 18,
+            "class": "Wizard",
+            "ac": 17,
+            "speed": 30,
+            "hp_max": 135,
+            "spellcasting_ability": "int",
+            "slots_max_1": 4,
+            "slots_max_2": 3,
+            "slots_max_3": 3,
+            "slots_max_4": 3,
+            "slots_max_5": 3,
+            "slots_max_6": 1,
+            "slots_max_7": 1,
+            "slots_max_8": 1,
+            "slots_max_9": 1,
+            "spell_attack_extra": 1,
+            "spell_dc_extra": 1
+          },
+          "lists": {
+            "spells": [
+              {
+                "name": "Mage Hand",
+                "level": 0,
+                "ritual": false,
+                "concentration": false,
+                "prepared": true,
+                "notes": "Conjuration. Casting time: action. Range: 30 feet. Duration: 1 minute. Components: V, S.",
+                "_catalog": "spells/mage-hand"
+              },
+              {
+                "name": "Prestidigitation",
+                "level": 0,
+                "ritual": false,
+                "concentration": false,
+                "prepared": true,
+                "notes": "Transmutation. Casting time: action. Range: 10 feet. Duration: 1 hour. Components: V, S.",
+                "_catalog": "spells/prestidigitation"
+              },
+              {
+                "name": "Ray of Frost",
+                "level": 0,
+                "ritual": false,
+                "concentration": false,
+                "prepared": true,
+                "notes": "Evocation. Casting time: action. Range: 60 feet. Duration: instantaneous. Components: V, S.",
+                "_catalog": "spells/ray-of-frost"
+              },
+              {
+                "name": "Detect Magic",
+                "level": 1,
+                "ritual": true,
+                "concentration": true,
+                "prepared": true,
+                "notes": "Divination. Casting time: action. Range: Self. Duration: 10 minutes. Components: V, S.",
+                "_catalog": "spells/detect-magic"
+              },
+              {
+                "name": "Magic Missile",
+                "level": 1,
+                "ritual": false,
+                "concentration": false,
+                "prepared": true,
+                "notes": "Evocation. Casting time: action. Range: 120 feet. Duration: instantaneous. Components: V, S.",
+                "_catalog": "spells/magic-missile"
+              },
+              {
+                "name": "Shield",
+                "level": 1,
+                "ritual": false,
+                "concentration": false,
+                "prepared": true,
+                "notes": "Abjuration. Casting time: reaction. Range: Self. Duration: 1 round. Components: V, S.",
+                "_catalog": "spells/shield"
+              },
+              {
+                "name": "Thunderwave",
+                "level": 1,
+                "ritual": false,
+                "concentration": false,
+                "prepared": true,
+                "notes": "Evocation. Casting time: action. Range: Self. Duration: instantaneous. Components: V, S.",
+                "_catalog": "spells/thunderwave"
+              },
+              {
+                "name": "Detect Thoughts",
+                "level": 2,
+                "ritual": false,
+                "concentration": true,
+                "prepared": true,
+                "notes": "Divination. Casting time: action. Range: Self. Duration: 1 minute. Components: V, S, M.",
+                "_catalog": "spells/detect-thoughts"
+              },
+              {
+                "name": "Invisibility",
+                "level": 2,
+                "ritual": false,
+                "concentration": true,
+                "prepared": true,
+                "notes": "Illusion. Casting time: action. Range: Touch. Duration: 1 hour. Components: V, S, M.",
+                "_catalog": "spells/invisibility"
+              },
+              {
+                "name": "Acid Arrow",
+                "level": 2,
+                "ritual": false,
+                "concentration": false,
+                "prepared": true,
+                "notes": "Evocation. Casting time: action. Range: 90 feet. Duration: instantaneous. Components: V, S, M.",
+                "_catalog": "spells/acid-arrow"
+              },
+              {
+                "name": "Mirror Image",
+                "level": 2,
+                "ritual": false,
+                "concentration": false,
+                "prepared": true,
+                "notes": "Illusion. Casting time: action. Range: Self. Duration: 1 minute. Components: V, S.",
+                "_catalog": "spells/mirror-image"
+              },
+              {
+                "name": "Animate Dead",
+                "level": 3,
+                "ritual": false,
+                "concentration": false,
+                "prepared": true,
+                "notes": "Necromancy. Casting time: 1 minute. Range: 10 feet. Duration: instantaneous. Components: V, S, M.",
+                "_catalog": "spells/animate-dead"
+              },
+              {
+                "name": "Counterspell",
+                "level": 3,
+                "ritual": false,
+                "concentration": false,
+                "prepared": true,
+                "notes": "Abjuration. Casting time: reaction. Range: 60 feet. Duration: instantaneous. Components: S.",
+                "_catalog": "spells/counterspell"
+              },
+              {
+                "name": "Dispel Magic",
+                "level": 3,
+                "ritual": false,
+                "concentration": false,
+                "prepared": true,
+                "notes": "Abjuration. Casting time: action. Range: 120 feet. Duration: instantaneous. Components: V, S.",
+                "_catalog": "spells/dispel-magic"
+              },
+              {
+                "name": "Fireball",
+                "level": 3,
+                "ritual": false,
+                "concentration": false,
+                "prepared": true,
+                "notes": "Evocation. Casting time: action. Range: 150 feet. Duration: instantaneous. Components: V, S, M.",
+                "_catalog": "spells/fireball"
+              },
+              {
+                "name": "Blight",
+                "level": 4,
+                "ritual": false,
+                "concentration": false,
+                "prepared": true,
+                "notes": "Necromancy. Casting time: action. Range: 30 feet. Duration: instantaneous. Components: V, S.",
+                "_catalog": "spells/blight"
+              },
+              {
+                "name": "Dimension Door",
+                "level": 4,
+                "ritual": false,
+                "concentration": false,
+                "prepared": true,
+                "notes": "Conjuration. Casting time: action. Range: 500 feet. Duration: instantaneous. Components: V.",
+                "_catalog": "spells/dimension-door"
+              },
+              {
+                "name": "Cloudkill",
+                "level": 5,
+                "ritual": false,
+                "concentration": true,
+                "prepared": true,
+                "notes": "Conjuration. Casting time: action. Range: 120 feet. Duration: 10 minutes. Components: V, S.",
+                "_catalog": "spells/cloudkill"
+              },
+              {
+                "name": "Scrying",
+                "level": 5,
+                "ritual": false,
+                "concentration": true,
+                "prepared": true,
+                "notes": "Divination. Casting time: 10 minutes. Range: Self. Duration: 10 minutes. Components: V, S, M.",
+                "_catalog": "spells/scrying"
+              },
+              {
+                "name": "Disintegrate",
+                "level": 6,
+                "ritual": false,
+                "concentration": false,
+                "prepared": true,
+                "notes": "Transmutation. Casting time: action. Range: 60 feet. Duration: instantaneous. Components: V, S, M.",
+                "_catalog": "spells/disintegrate"
+              },
+              {
+                "name": "Globe of Invulnerability",
+                "level": 6,
+                "ritual": false,
+                "concentration": true,
+                "prepared": true,
+                "notes": "Abjuration. Casting time: action. Range: Self. Duration: 1 minute. Components: V, S, M.",
+                "_catalog": "spells/globe-of-invulnerability"
+              },
+              {
+                "name": "Finger of Death",
+                "level": 7,
+                "ritual": false,
+                "concentration": false,
+                "prepared": true,
+                "notes": "Necromancy. Casting time: action. Range: 60 feet. Duration: instantaneous. Components: V, S.",
+                "_catalog": "spells/finger-of-death"
+              },
+              {
+                "name": "Plane Shift",
+                "level": 7,
+                "ritual": false,
+                "concentration": false,
+                "prepared": true,
+                "notes": "Conjuration. Casting time: action. Range: Touch. Duration: instantaneous. Components: V, S, M.",
+                "_catalog": "spells/plane-shift"
+              },
+              {
+                "name": "Dominate Monster",
+                "level": 8,
+                "ritual": false,
+                "concentration": true,
+                "prepared": true,
+                "notes": "Enchantment. Casting time: action. Range: 60 feet. Duration: 1 hour. Components: V, S.",
+                "_catalog": "spells/dominate-monster"
+              },
+              {
+                "name": "Power Word Stun",
+                "level": 8,
+                "ritual": false,
+                "concentration": false,
+                "prepared": true,
+                "notes": "Enchantment. Casting time: action. Range: 60 feet. Duration: instantaneous. Components: V.",
+                "_catalog": "spells/power-word-stun"
+              },
+              {
+                "name": "Power Word Kill",
+                "level": 9,
+                "ritual": false,
+                "concentration": false,
+                "prepared": true,
+                "notes": "Enchantment. Casting time: action. Range: 60 feet. Duration: instantaneous. Components: V.",
+                "_catalog": "spells/power-word-kill"
+              }
+            ]
+          }
+        },
         "resist": ["cold", "lightning", "necrotic"],
         "immune": ["bludgeoning", "piercing", "poison", "slashing"],
         "conditionImmunities": ["charmed", "frightened", "paralyzed", "poisoned"],
@@ -10753,12 +12007,175 @@
         ]
       },
       "creature": {
-        "health": { "dice": "9d8" },
-        "defense": 12,
-        "speed": 30,
-        "initiativeModifier": 2,
-        "abilities": { "str": 9, "dex": 14, "con": 11, "int": 17, "wis": 12, "cha": 11 },
-        "saves": { "int_save": 6, "wis_save": 4 },
+        "sheet": {
+          "abilities": { "str": 9, "dex": 14, "con": 11, "int": 17, "wis": 12, "cha": 11 },
+          "skills": { "arcana": "proficient", "history": "proficient" },
+          "saves": { "int_save": "proficient", "wis_save": "proficient" },
+          "bonuses": { "int_save": -1, "wis_save": -1, "arcana": -1, "history": -1 },
+          "fields": {
+            "level": 9,
+            "class": "Wizard",
+            "ac": 12,
+            "speed": 30,
+            "hp_max": 40,
+            "spellcasting_ability": "int",
+            "slots_max_1": 4,
+            "slots_max_2": 3,
+            "slots_max_3": 3,
+            "slots_max_4": 3,
+            "slots_max_5": 1,
+            "spell_attack_extra": -1,
+            "spell_dc_extra": -1
+          },
+          "lists": {
+            "spells": [
+              {
+                "name": "Fire Bolt",
+                "level": 0,
+                "ritual": false,
+                "concentration": false,
+                "prepared": true,
+                "notes": "Evocation. Casting time: action. Range: 120 feet. Duration: instantaneous. Components: V, S.",
+                "_catalog": "spells/fire-bolt"
+              },
+              {
+                "name": "Light",
+                "level": 0,
+                "ritual": false,
+                "concentration": false,
+                "prepared": true,
+                "notes": "Evocation. Casting time: action. Range: Touch. Duration: 1 hour. Components: V, M.",
+                "_catalog": "spells/light"
+              },
+              {
+                "name": "Mage Hand",
+                "level": 0,
+                "ritual": false,
+                "concentration": false,
+                "prepared": true,
+                "notes": "Conjuration. Casting time: action. Range: 30 feet. Duration: 1 minute. Components: V, S.",
+                "_catalog": "spells/mage-hand"
+              },
+              {
+                "name": "Prestidigitation",
+                "level": 0,
+                "ritual": false,
+                "concentration": false,
+                "prepared": true,
+                "notes": "Transmutation. Casting time: action. Range: 10 feet. Duration: 1 hour. Components: V, S.",
+                "_catalog": "spells/prestidigitation"
+              },
+              {
+                "name": "Detect Magic",
+                "level": 1,
+                "ritual": true,
+                "concentration": true,
+                "prepared": true,
+                "notes": "Divination. Casting time: action. Range: Self. Duration: 10 minutes. Components: V, S.",
+                "_catalog": "spells/detect-magic"
+              },
+              {
+                "name": "Mage Armor",
+                "level": 1,
+                "ritual": false,
+                "concentration": false,
+                "prepared": true,
+                "notes": "Abjuration. Casting time: action. Range: Touch. Duration: 8 hours. Components: V, S, M.",
+                "_catalog": "spells/mage-armor"
+              },
+              {
+                "name": "Magic Missile",
+                "level": 1,
+                "ritual": false,
+                "concentration": false,
+                "prepared": true,
+                "notes": "Evocation. Casting time: action. Range: 120 feet. Duration: instantaneous. Components: V, S.",
+                "_catalog": "spells/magic-missile"
+              },
+              {
+                "name": "Shield",
+                "level": 1,
+                "ritual": false,
+                "concentration": false,
+                "prepared": true,
+                "notes": "Abjuration. Casting time: reaction. Range: Self. Duration: 1 round. Components: V, S.",
+                "_catalog": "spells/shield"
+              },
+              {
+                "name": "Misty Step",
+                "level": 2,
+                "ritual": false,
+                "concentration": false,
+                "prepared": true,
+                "notes": "Conjuration. Casting time: bonus action. Range: Self. Duration: instantaneous. Components: V.",
+                "_catalog": "spells/misty-step"
+              },
+              {
+                "name": "Suggestion",
+                "level": 2,
+                "ritual": false,
+                "concentration": true,
+                "prepared": true,
+                "notes": "Enchantment. Casting time: action. Range: 30 feet. Duration: 8 hours. Components: V, M.",
+                "_catalog": "spells/suggestion"
+              },
+              {
+                "name": "Counterspell",
+                "level": 3,
+                "ritual": false,
+                "concentration": false,
+                "prepared": true,
+                "notes": "Abjuration. Casting time: reaction. Range: 60 feet. Duration: instantaneous. Components: S.",
+                "_catalog": "spells/counterspell"
+              },
+              {
+                "name": "Fireball",
+                "level": 3,
+                "ritual": false,
+                "concentration": false,
+                "prepared": true,
+                "notes": "Evocation. Casting time: action. Range: 150 feet. Duration: instantaneous. Components: V, S, M.",
+                "_catalog": "spells/fireball"
+              },
+              {
+                "name": "Fly",
+                "level": 3,
+                "ritual": false,
+                "concentration": true,
+                "prepared": true,
+                "notes": "Transmutation. Casting time: action. Range: Touch. Duration: 10 minutes. Components: V, S, M.",
+                "_catalog": "spells/fly"
+              },
+              {
+                "name": "Greater Invisibility",
+                "level": 4,
+                "ritual": false,
+                "concentration": true,
+                "prepared": true,
+                "notes": "Illusion. Casting time: action. Range: Touch. Duration: 1 minute. Components: V, S.",
+                "_catalog": "spells/greater-invisibility"
+              },
+              {
+                "name": "Ice Storm",
+                "level": 4,
+                "ritual": false,
+                "concentration": false,
+                "prepared": true,
+                "notes": "Evocation. Casting time: action. Range: 300 feet. Duration: instantaneous. Components: V, S, M.",
+                "_catalog": "spells/ice-storm"
+              },
+              {
+                "name": "Cone of Cold",
+                "level": 5,
+                "ritual": false,
+                "concentration": false,
+                "prepared": true,
+                "notes": "Evocation. Casting time: action. Range: Self. Duration: instantaneous. Components: V, S, M.",
+                "_catalog": "spells/cone-of-cold"
+              }
+            ]
+          }
+        },
         "tier": "cr_6",
         "traits": [
           {
@@ -11537,12 +12954,172 @@
         "environment": ["Desert", "Ruins", "Shadowfell", "Temple", "Tomb"]
       },
       "creature": {
-        "health": { "dice": "13d8+39" },
-        "defense": 17,
-        "speed": 20,
-        "initiativeModifier": 0,
-        "abilities": { "str": 18, "dex": 10, "con": 17, "int": 11, "wis": 18, "cha": 16 },
-        "saves": { "con_save": 8, "int_save": 5, "wis_save": 9, "cha_save": 8 },
+        "sheet": {
+          "abilities": { "str": 18, "dex": 10, "con": 17, "int": 11, "wis": 18, "cha": 16 },
+          "skills": { "history": "proficient", "religion": "proficient" },
+          "saves": {
+            "con_save": "proficient",
+            "int_save": "proficient",
+            "wis_save": "proficient",
+            "cha_save": "proficient"
+          },
+          "bonuses": { "con_save": 1, "int_save": 1, "wis_save": 1, "cha_save": 1, "history": 1, "religion": 1 },
+          "fields": {
+            "level": 10,
+            "class": "Cleric",
+            "ac": 17,
+            "speed": 20,
+            "hp_max": 97,
+            "spellcasting_ability": "wis",
+            "slots_max_1": 4,
+            "slots_max_2": 3,
+            "slots_max_3": 3,
+            "slots_max_4": 3,
+            "slots_max_5": 2,
+            "slots_max_6": 1,
+            "spell_attack_extra": 1,
+            "spell_dc_extra": 1
+          },
+          "lists": {
+            "spells": [
+              {
+                "name": "Sacred Flame",
+                "level": 0,
+                "ritual": false,
+                "concentration": false,
+                "prepared": true,
+                "notes": "Evocation. Casting time: action. Range: 60 feet. Duration: instantaneous. Components: V, S.",
+                "_catalog": "spells/sacred-flame"
+              },
+              {
+                "name": "Thaumaturgy",
+                "level": 0,
+                "ritual": false,
+                "concentration": false,
+                "prepared": true,
+                "notes": "Transmutation. Casting time: action. Range: 30 feet. Duration: 1 minute. Components: V.",
+                "_catalog": "spells/thaumaturgy"
+              },
+              {
+                "name": "Command",
+                "level": 1,
+                "ritual": false,
+                "concentration": false,
+                "prepared": true,
+                "notes": "Enchantment. Casting time: action. Range: 60 feet. Duration: 1 round. Components: V.",
+                "_catalog": "spells/command"
+              },
+              {
+                "name": "Guiding Bolt",
+                "level": 1,
+                "ritual": false,
+                "concentration": false,
+                "prepared": true,
+                "notes": "Evocation. Casting time: action. Range: 120 feet. Duration: 1 round. Components: V, S.",
+                "_catalog": "spells/guiding-bolt"
+              },
+              {
+                "name": "Shield of Faith",
+                "level": 1,
+                "ritual": false,
+                "concentration": true,
+                "prepared": true,
+                "notes": "Abjuration. Casting time: bonus action. Range: 60 feet. Duration: 10 minutes. Components: V, S, M.",
+                "_catalog": "spells/shield-of-faith"
+              },
+              {
+                "name": "Hold Person",
+                "level": 2,
+                "ritual": false,
+                "concentration": true,
+                "prepared": true,
+                "notes": "Enchantment. Casting time: action. Range: 60 feet. Duration: 1 minute. Components: V, S, M.",
+                "_catalog": "spells/hold-person"
+              },
+              {
+                "name": "Silence",
+                "level": 2,
+                "ritual": true,
+                "concentration": true,
+                "prepared": true,
+                "notes": "Illusion. Casting time: action. Range: 120 feet. Duration: 10 minutes. Components: V, S.",
+                "_catalog": "spells/silence"
+              },
+              {
+                "name": "Spiritual Weapon",
+                "level": 2,
+                "ritual": false,
+                "concentration": false,
+                "prepared": true,
+                "notes": "Evocation. Casting time: bonus action. Range: 60 feet. Duration: 1 minute. Components: V, S.",
+                "_catalog": "spells/spiritual-weapon"
+              },
+              {
+                "name": "Animate Dead",
+                "level": 3,
+                "ritual": false,
+                "concentration": false,
+                "prepared": true,
+                "notes": "Necromancy. Casting time: 1 minute. Range: 10 feet. Duration: instantaneous. Components: V, S, M.",
+                "_catalog": "spells/animate-dead"
+              },
+              {
+                "name": "Dispel Magic",
+                "level": 3,
+                "ritual": false,
+                "concentration": false,
+                "prepared": true,
+                "notes": "Abjuration. Casting time: action. Range: 120 feet. Duration: instantaneous. Components: V, S.",
+                "_catalog": "spells/dispel-magic"
+              },
+              {
+                "name": "Divination",
+                "level": 4,
+                "ritual": true,
+                "concentration": false,
+                "prepared": true,
+                "notes": "Divination. Casting time: action. Range: Self. Duration: instantaneous. Components: V, S, M.",
+                "_catalog": "spells/divination"
+              },
+              {
+                "name": "Guardian of Faith",
+                "level": 4,
+                "ritual": false,
+                "concentration": false,
+                "prepared": true,
+                "notes": "Conjuration. Casting time: action. Range: 30 feet. Duration: 8 hours. Components: V.",
+                "_catalog": "spells/guardian-of-faith"
+              },
+              {
+                "name": "Contagion",
+                "level": 5,
+                "ritual": false,
+                "concentration": false,
+                "prepared": true,
+                "notes": "Necromancy. Casting time: action. Range: Touch. Duration: 7 days. Components: V, S.",
+                "_catalog": "spells/contagion"
+              },
+              {
+                "name": "Insect Plague",
+                "level": 5,
+                "ritual": false,
+                "concentration": true,
+                "prepared": true,
+                "notes": "Conjuration. Casting time: action. Range: 300 feet. Duration: 10 minutes. Components: V, S, M.",
+                "_catalog": "spells/insect-plague"
+              },
+              {
+                "name": "Harm",
+                "level": 6,
+                "ritual": false,
+                "concentration": false,
+                "prepared": true,
+                "notes": "Necromancy. Casting time: action. Range: 60 feet. Duration: instantaneous. Components: V, S.",
+                "_catalog": "spells/harm"
+              }
+            ]
+          }
+        },
         "vulnerable": ["bludgeoning"],
         "immune": ["bludgeoning", "necrotic", "piercing", "poison", "slashing"],
         "conditionImmunities": ["charmed", "frightened", "paralyzed", "poisoned"],
@@ -12753,11 +14330,119 @@
         "environment": ["Desert", "Hills", "Temple", "Urban"]
       },
       "creature": {
-        "health": { "dice": "5d8+5" },
-        "defense": 13,
-        "speed": 25,
-        "initiativeModifier": 0,
-        "abilities": { "str": 10, "dex": 10, "con": 12, "int": 13, "wis": 16, "cha": 13 },
+        "sheet": {
+          "abilities": { "str": 10, "dex": 10, "con": 12, "int": 13, "wis": 16, "cha": 13 },
+          "skills": { "medicine": "proficient", "persuasion": "proficient", "religion": "proficient" },
+          "saves": {},
+          "bonuses": { "medicine": 1, "persuasion": -1, "religion": 1 },
+          "fields": {
+            "level": 5,
+            "class": "Cleric",
+            "ac": 13,
+            "speed": 25,
+            "hp_max": 27,
+            "spellcasting_ability": "wis",
+            "slots_max_1": 4,
+            "slots_max_2": 3,
+            "slots_max_3": 2,
+            "spell_attack_extra": -1,
+            "spell_dc_extra": -1
+          },
+          "lists": {
+            "spells": [
+              {
+                "name": "Light",
+                "level": 0,
+                "ritual": false,
+                "concentration": false,
+                "prepared": true,
+                "notes": "Evocation. Casting time: action. Range: Touch. Duration: 1 hour. Components: V, M.",
+                "_catalog": "spells/light"
+              },
+              {
+                "name": "Sacred Flame",
+                "level": 0,
+                "ritual": false,
+                "concentration": false,
+                "prepared": true,
+                "notes": "Evocation. Casting time: action. Range: 60 feet. Duration: instantaneous. Components: V, S.",
+                "_catalog": "spells/sacred-flame"
+              },
+              {
+                "name": "Thaumaturgy",
+                "level": 0,
+                "ritual": false,
+                "concentration": false,
+                "prepared": true,
+                "notes": "Transmutation. Casting time: action. Range: 30 feet. Duration: 1 minute. Components: V.",
+                "_catalog": "spells/thaumaturgy"
+              },
+              {
+                "name": "Cure Wounds",
+                "level": 1,
+                "ritual": false,
+                "concentration": false,
+                "prepared": true,
+                "notes": "Evocation. Casting time: action. Range: Touch. Duration: instantaneous. Components: V, S.",
+                "_catalog": "spells/cure-wounds"
+              },
+              {
+                "name": "Guiding Bolt",
+                "level": 1,
+                "ritual": false,
+                "concentration": false,
+                "prepared": true,
+                "notes": "Evocation. Casting time: action. Range: 120 feet. Duration: 1 round. Components: V, S.",
+                "_catalog": "spells/guiding-bolt"
+              },
+              {
+                "name": "Sanctuary",
+                "level": 1,
+                "ritual": false,
+                "concentration": false,
+                "prepared": true,
+                "notes": "Abjuration. Casting time: bonus action. Range: 30 feet. Duration: 1 minute. Components: V, S, M.",
+                "_catalog": "spells/sanctuary"
+              },
+              {
+                "name": "Lesser Restoration",
+                "level": 2,
+                "ritual": false,
+                "concentration": false,
+                "prepared": true,
+                "notes": "Abjuration. Casting time: action. Range: Touch. Duration: instantaneous. Components: V, S.",
+                "_catalog": "spells/lesser-restoration"
+              },
+              {
+                "name": "Spiritual Weapon",
+                "level": 2,
+                "ritual": false,
+                "concentration": false,
+                "prepared": true,
+                "notes": "Evocation. Casting time: bonus action. Range: 60 feet. Duration: 1 minute. Components: V, S.",
+                "_catalog": "spells/spiritual-weapon"
+              },
+              {
+                "name": "Dispel Magic",
+                "level": 3,
+                "ritual": false,
+                "concentration": false,
+                "prepared": true,
+                "notes": "Abjuration. Casting time: action. Range: 120 feet. Duration: instantaneous. Components: V, S.",
+                "_catalog": "spells/dispel-magic"
+              },
+              {
+                "name": "Spirit Guardians",
+                "level": 3,
+                "ritual": false,
+                "concentration": true,
+                "prepared": true,
+                "notes": "Conjuration. Casting time: action. Range: Self. Duration: 10 minutes. Components: V, S, M.",
+                "_catalog": "spells/spirit-guardians"
+              }
+            ]
+          }
+        },
         "tier": "cr_2",
         "traits": [
           {
@@ -14372,12 +16057,153 @@
         "environment": ["Astral Plane", "Caves", "Desert", "Forest", "Mountain", "Ruins", "Temple", "Underworld"]
       },
       "creature": {
-        "health": { "dice": "10d10+20" },
-        "defense": 15,
-        "speed": 40,
-        "initiativeModifier": 3,
-        "abilities": { "str": 18, "dex": 17, "con": 14, "int": 16, "wis": 15, "cha": 16 },
-        "saves": { "dex_save": 6, "con_save": 5, "wis_save": 5, "cha_save": 6 },
+        "sheet": {
+          "abilities": { "str": 18, "dex": 17, "con": 14, "int": 16, "wis": 15, "cha": 16 },
+          "skills": {},
+          "saves": {
+            "dex_save": "proficient",
+            "con_save": "proficient",
+            "wis_save": "proficient",
+            "cha_save": "proficient"
+          },
+          "bonuses": { "dex_save": -1, "con_save": -1, "wis_save": -1, "cha_save": -1 },
+          "fields": {
+            "level": 10,
+            "class": "Wizard",
+            "ac": 15,
+            "speed": 40,
+            "hp_max": 75,
+            "spellcasting_ability": "int",
+            "slots_max_1": 4,
+            "slots_max_2": 3,
+            "slots_max_3": 3,
+            "slots_max_4": 3,
+            "slots_max_5": 2,
+            "spell_attack_extra": -1,
+            "spell_dc_extra": -1
+          },
+          "lists": {
+            "spells": [
+              {
+                "name": "Mage Hand",
+                "level": 0,
+                "ritual": false,
+                "concentration": false,
+                "prepared": true,
+                "notes": "Conjuration. Casting time: action. Range: 30 feet. Duration: 1 minute. Components: V, S.",
+                "_catalog": "spells/mage-hand"
+              },
+              {
+                "name": "Minor Illusion",
+                "level": 0,
+                "ritual": false,
+                "concentration": false,
+                "prepared": true,
+                "notes": "Illusion. Casting time: action. Range: 30 feet. Duration: 1 minute. Components: S, M.",
+                "_catalog": "spells/minor-illusion"
+              },
+              {
+                "name": "Ray of Frost",
+                "level": 0,
+                "ritual": false,
+                "concentration": false,
+                "prepared": true,
+                "notes": "Evocation. Casting time: action. Range: 60 feet. Duration: instantaneous. Components: V, S.",
+                "_catalog": "spells/ray-of-frost"
+              },
+              {
+                "name": "Charm Person",
+                "level": 1,
+                "ritual": false,
+                "concentration": false,
+                "prepared": true,
+                "notes": "Enchantment. Casting time: action. Range: 30 feet. Duration: 1 hour. Components: V, S.",
+                "_catalog": "spells/charm-person"
+              },
+              {
+                "name": "Detect Magic",
+                "level": 1,
+                "ritual": true,
+                "concentration": true,
+                "prepared": true,
+                "notes": "Divination. Casting time: action. Range: Self. Duration: 10 minutes. Components: V, S.",
+                "_catalog": "spells/detect-magic"
+              },
+              {
+                "name": "Sleep",
+                "level": 1,
+                "ritual": false,
+                "concentration": false,
+                "prepared": true,
+                "notes": "Enchantment. Casting time: action. Range: 90 feet. Duration: 1 minute. Components: V, S, M.",
+                "_catalog": "spells/sleep"
+              },
+              {
+                "name": "Detect Thoughts",
+                "level": 2,
+                "ritual": false,
+                "concentration": true,
+                "prepared": true,
+                "notes": "Divination. Casting time: action. Range: Self. Duration: 1 minute. Components: V, S, M.",
+                "_catalog": "spells/detect-thoughts"
+              },
+              {
+                "name": "Hold Person",
+                "level": 2,
+                "ritual": false,
+                "concentration": true,
+                "prepared": true,
+                "notes": "Enchantment. Casting time: action. Range: 60 feet. Duration: 1 minute. Components: V, S, M.",
+                "_catalog": "spells/hold-person"
+              },
+              {
+                "name": "Lightning Bolt",
+                "level": 3,
+                "ritual": false,
+                "concentration": false,
+                "prepared": true,
+                "notes": "Evocation. Casting time: action. Range: Self. Duration: instantaneous. Components: V, S, M.",
+                "_catalog": "spells/lightning-bolt"
+              },
+              {
+                "name": "Water Breathing",
+                "level": 3,
+                "ritual": true,
+                "concentration": false,
+                "prepared": true,
+                "notes": "Transmutation. Casting time: action. Range: 30 feet. Duration: 24 hours. Components: V, S, M.",
+                "_catalog": "spells/water-breathing"
+              },
+              {
+                "name": "Blight",
+                "level": 4,
+                "ritual": false,
+                "concentration": false,
+                "prepared": true,
+                "notes": "Necromancy. Casting time: action. Range: 30 feet. Duration: instantaneous. Components: V, S.",
+                "_catalog": "spells/blight"
+              },
+              {
+                "name": "Dimension Door",
+                "level": 4,
+                "ritual": false,
+                "concentration": false,
+                "prepared": true,
+                "notes": "Conjuration. Casting time: action. Range: 500 feet. Duration: instantaneous. Components: V.",
+                "_catalog": "spells/dimension-door"
+              },
+              {
+                "name": "Dominate Person",
+                "level": 5,
+                "ritual": false,
+                "concentration": true,
+                "prepared": true,
+                "notes": "Enchantment. Casting time: action. Range: 60 feet. Duration: 1 minute. Components: V, S.",
+                "_catalog": "spells/dominate-person"
+              }
+            ]
+          }
+        },
         "immune": ["poison"],
         "conditionImmunities": ["charmed", "poisoned"],
         "tier": "cr_8",
