@@ -18,7 +18,11 @@ import {
   useUploadCreatorAvatar,
   useUseCreatorSourceAvatar,
 } from "../features/creators/slp-creator-profile-hooks";
-import { useCreatorAccounts, useCreatorEligibleAccounts } from "../features/creators/slp-creators-hooks";
+import {
+  useCreatorAccounts,
+  useCreatorEligibleAccounts,
+  useSlpViewerPersonaId,
+} from "../features/creators/slp-creators-hooks";
 import { useCreatorViewerWallets } from "../features/economy/slp-economy-hooks";
 import {
   useConfirmCreatorImagePrompts,
@@ -95,11 +99,7 @@ export function useSlurpHomeBaseState({ navigation, onNavigate, onLeave }: Slurp
   const storedPersonaId = useSlurpUIStore((state) => state.viewerPersonaId);
   const setStoredPersonaId = useSlurpUIStore((state) => state.setViewerPersonaId);
   const personas = personasQuery.data ?? [];
-  const viewerPersonaId =
-    (storedPersonaId && personas.some((persona) => persona.id === storedPersonaId) ? storedPersonaId : null) ??
-    activePersonaQuery.data?.id ??
-    personas[0]?.id ??
-    null;
+  const viewerPersonaId = useSlpViewerPersonaId();
   const activeWalletCoins = viewerWalletsQuery.data?.[viewerPersonaId ?? ""]?.coins ?? SLURP_PLACEHOLDER_BALANCE;
   const viewerAccounts = personas.map(
     (persona) =>

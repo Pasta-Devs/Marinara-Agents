@@ -1,3 +1,10 @@
+## 1.8.7 — 2026-09-25
+- Fixed: world creation lists your whole character card library. It stopped at 100 cards, so a library larger than that died around the letter M and the cards past it showed in your cast as “No longer in your library”.
+- Fixed: loading a preset no longer leaves out cards it could not see — it reads the whole library before deciding what the Engine still has.
+
+## 1.8.6 — 2026-09-23
+- Fixed: on a phone held upright, the Landscape only notice no longer covers the rest of Marinara. Characters, lorebooks and anything else you open over the game are reachable again.
+
 ## 1.8.5 — 2026-09-21
 - The opening story is optional. Forge this world asks if you are sure, then whether to write it now or later; later, the world opens as soon as its cast is ready, with Summon unlocked, and Modes > Story writes it when you ask. If it fails while the world is being created, Skip the story for now keeps the world.
 - World creation keeps what you write and brings it back on any device, and has presets: save, load, rename, replace or delete a whole setup, from the wizard or from a world you already created.

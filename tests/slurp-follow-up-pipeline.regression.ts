@@ -6,13 +6,18 @@ const scheduler = read(
   "packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-follow-up-scheduler.service.ts",
 );
 
-// 2.3 — a follow-up obeys cool-off, night quiet and the offline schedule instead of sending.
+// 2.3 — a follow-up obeys cool-off, night quiet and known offline schedule delays.
 assert.match(scheduler, /const coolingOff = Boolean\(thread\.coolUntil/u);
 assert.match(scheduler, /resolveSlurpCreatorAvailability\(/u);
 assert.match(
   scheduler,
-  /if \(coolingOff \|\| quiet \|\| !availability\.online\) \{[\s\S]{0,900}?postponeScheduledFollowUp\([\s\S]{0,600}?continue;/u,
+  /if \(coolingOff \|\| quiet \|\| \(!availability\.online && availability\.minutesUntilOnline !== null\)\) \{[\s\S]{0,900}?postponeScheduledFollowUp\([\s\S]{0,600}?continue;/u,
   "a silenced follow-up must be postponed, not sent",
+);
+assert.match(
+  scheduler,
+  /!availability\.online && availability\.minutesUntilOnline !== null/u,
+  "unknown return time must not livelock a follow-up",
 );
 assert.doesNotMatch(scheduler, /coolingOff: false/u, "the follow-up must pass the real cool-off state");
 

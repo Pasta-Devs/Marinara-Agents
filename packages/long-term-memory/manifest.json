@@ -10,7 +10,7 @@
   },
   "id": "long-term-memory",
   "name": "Long-Term Memory",
-  "version": "1.3.17",
+  "version": "1.3.20",
   "description": "Extracts durable memories from chat summaries, character records, and lorebooks, then recalls relevant context from a package-owned vault. Enable it per chat from Chat Settings → Agents → Long-Term Memory. In Roleplay and Game, you can also add it from Chat Settings → Agents → Misc Agents.",
   "engine": {
     "min": "2.4.1",
@@ -42,13 +42,13 @@
     },
     {
       "path": "server.mjs",
-      "sha256": "4b0a54c9fc3e0baa0c4587300b9a2f9b2c4b4d2100413c97d642d08f484c3a9e",
-      "bytes": 426982
+      "sha256": "0dad9915c1b46184c9acdadb4f8e45044686a4da01845a22307ae999a9845c49",
+      "bytes": 435311
     },
     {
       "path": "client.js",
-      "sha256": "b61f1b652501e1a02b6c15485d88e4225b3d9d5e247545b337d54213eae27430",
-      "bytes": 913855
+      "sha256": "d14b1f61f5f522a1a6fd4eda50323a4978df6b1a3a9ed900394c69aed1a6c454",
+      "bytes": 918496
     }
   ],
   "permissions": [

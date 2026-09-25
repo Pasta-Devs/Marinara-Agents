@@ -6,9 +6,10 @@ slots, hit dice, class resources, conditions, rests, a full character sheet, and
 a battle in a game on this ruleset is fought by these rules, on screen, against the SRD's own
 monsters.
 
-Requires **Marinara Engine 2.4.6+ with Capability API 1.32** (the ruleset seam, catalogs, the
+Requires **Marinara Engine 2.4.6+ with Capability API 1.34** (the ruleset seam, catalogs, the
 battle block, scaled catalog columns, the combat block, bestiaries, a fight with positions, what
-one TURN of that fight can do, and a weapon that caps its own strikes:
+one TURN of that fight can do, a weapon that caps its own strikes, the moment a reaction waits for,
+and creatures written as sheets:
 hash-pinned `ruleset.json` and `catalogs/<id>.json` assets the Engine reads by reserved filename,
 exactly like `gm-verbs.json`). Today that means the Engine `staging` branch; older hosts reject the manifest and
 cannot install this package. This package ships no server entrypoint, no client entrypoint, and no
@@ -160,6 +161,9 @@ What the block says:
   and the damage type are all read off the row.
 - Your prepared spells, your cantrips and the class features you picked are the things you do with
   an action, rolling the sheet's Spell attack bonus and asking for its Spell save DC.
+- A reaction spell that names its moment is offered at that moment and no other: when something
+  damages you, the fight stops and asks whether you cast **Hellish Rebuke**, and the flames go back
+  at whoever hurt you.
 - **A turn does what a tabletop turn does.** One Attack action buys as many strikes as your Attacks
   per Attack action field says, the first spending the action and the rest offered free, so you may
   change weapon, change target and walk between them. Sneak Attack adds itself to the first
@@ -177,8 +181,8 @@ What the block says:
 
 **About the scale.** Health, armour class and the attack bonus are measured from every SRD creature
 of the rating. The damage band is measured only from the ones whose fighting is really in their
-actions: a spellcaster's printed attack is a dagger and its fireballs are a trait, so counting it
-would say a rating 12 monster deals nine damage a round. 36 casters and 4 creatures whose damage
+actions: a spellcaster's printed attack is a dagger and its fireballs come off a spell list this
+measurement does not read, so counting it would say a rating 12 monster deals nine damage a round. 36 casters and 4 creatures whose damage
 this format had to leave in a trait are out of that one measurement, and in every other.
 
 The caps and the floors are then made **monotone** along the rating order, and that is the one place
@@ -204,7 +208,7 @@ What the block says, with the SRD sentence each number came from:
 | A long shot | Disadvantage | Range: "Your attack has disadvantage when your target is beyond normal range." |
 | A shot with a foe next to you | Disadvantage | Ranged Attacks in Close Combat: "You have disadvantage on a ranged attack roll if you are within 5 feet of a hostile creature." |
 | Cover | +2 to Armor Class | Cover: "A target with half cover has a +2 bonus to AC and Dexterity saving throws." |
-| Walking out of a reach | Costs the enemy its **reaction** | Opportunity Attacks: "To make the opportunity attack, you use your reaction." |
+| Walking out of a reach | The enemy may strike, spending its **reaction** | Opportunity Attacks: "To make the opportunity attack, you use your reaction." |
 
 **Speed is a plain sheet field defaulting to 30**, because this sheet has no notion of a race and so
 cannot read a race's speed off one. A Wood Elf's 35 or a Dwarf's 25 is a number you type into the
@@ -290,6 +294,12 @@ data, both now fixed:
 spell attack" and the machine-readable source says it makes none. The build stops if the source ever
 fixes that itself.
 
+**Five spells print damage the machine-readable source leaves out.** It carries only the larger rolls
+Sacred Flame, Acid Splash, Poison Spray and Vicious Mockery reach at 5th level and up, and none at all
+for Spiritual Weapon, so all five used to ship as utility spells a fight never offered. Each now
+carries the base damage roll its own text prints, and the four cantrips still grow with your level off
+the source's own table. The build stops if the source ever gives one of them a roll of its own.
+
 **A creature carries how far its actions reach.** The bestiary's 828 actions divide up exactly, each
 one into a single row:
 
@@ -332,11 +342,35 @@ within its own length, because there the aimed square only picks the direction.
 hit dice a fight rolls, armour class, speed, ability scores, saving throw bonuses, resistances,
 vulnerabilities, immunities, condition immunities, the challenge rating it sits at, its attacks and
 saving-throw actions, its multiattack as one action that strikes several times, breath weapons that
-recharge, and legendary actions bought from a pool of three points.
+recharge, and legendary actions bought from a pool of three points, offered at the end of each other
+creature's turn and back to full at the start of its own.
 
 Every number is read off the **printed stat block**, never off the machine-readable attack rows
 beside it, because those say the damage type is thunder on 514 of the SRD's attacks and leave the
 flat bonus out of 475 of them.
+
+**Twelve spellcasters are sheets.** A stat block with a Spellcasting trait (the Acolyte, Priest,
+Cult Fanatic, Druid, Mage, Archmage, Lich, Mummy Lord, Guardian Naga, Spirit Naga, Androsphinx and
+Gynosphinx) is written as a character sheet in this ruleset's own terms: its ability scores, Armor
+Class, hit points, Speed, caster level, spellcasting ability, spell slots and prepared spells, each
+spell a row of this package's own spell catalog. A fight builds it the way it builds your character,
+so the Mage casts Fireball out of its own three 3rd-level slots against its printed save DC. Its
+printed attacks, such as the Mage's dagger, stay beside the sheet as actions, and the trait stays
+for the Game Master to read.
+
+A monster's proficiency bonus follows its challenge rating and a sheet's follows its level, so the
+Archmage (18th level, challenge 12) would otherwise throw its spells two points too hard. The
+difference goes into the sheet's own **Spell attack: other bonus** and **Spell save DC: other
+bonus** fields, and into a bonus on each printed save and skill, never into an ability score. The
+build computes every one of those numbers the way the Engine does, and stops if any of them differs
+from the stat block. Its hit points are the printed number rather than rolled hit dice, because a
+sheet holds a maximum and not dice. The Gynosphinx prepares nothing a fight can resolve (Suggestion,
+Banishment, Legend Lore and the like), so it still fights with its claws.
+
+**Innate Spellcasting stays a trait.** "At will" and "3/day each" spend no slot, and a slot is what a
+sheet's spells are paid with, so the Drow, the Djinni and every other innate caster keep their spell
+list as the prose the SRD prints. So does a hag coven's Shared Spellcasting, which only works while
+all three hags stand together.
 
 That also means the SRD's own oddities ship as printed. The **Ancient Green Dragon** claws for
 22 (4d6 + 8) where every other ancient dragon claws for 2d6 + 8, because that is what SRD 5.1 prints
@@ -383,15 +417,14 @@ A fight plays, so this is the honest list of what it still does not do:
   worth +2 and never the +5 of three-quarters cover, there is no total cover, no elevation and no
   flying height, and the bonus is read when the attack roll is made and never when a saving throw
   is: SRD half cover also adds +2 to a Dexterity save, which nothing here can say.
-- **A strike at somebody walking away is automatic**, for you as well as for the monsters, because
-  choosing whether to take one is a reaction window and there are no reactions yet.
 - **No grapple, no shove**, and nothing pushes anybody anywhere.
 - **One speed per creature.** A creature that walks, swims and flies carries the fastest of them as
   its number and the rest as a trait, because the format has one speed.
-- **No reactions**, so a reaction spell such as Shield is left off the menu and a creature's printed
-  reactions are traits.
-- **Legendary actions are carried, priced and resolved, but nothing opens the window they are spent
-  in**, which arrives with reactions. A creature's three points and its options are all here.
+- **Three reaction spells stay off the menu.** Counterspell answers a spell being cast, but the
+  moment a fight opens for being aimed at opens for a sword swing as much as a spell, so calling it
+  off there would parry weapons too. Shield raises Armor Class by 5, and a fight's conditions are
+  names rather than numbers. Feather Fall has nothing to catch, because nobody in a fight falls. A
+  creature's printed reactions, such as a Parry, are traits for the same reason as Shield.
 - **Deafened** has no effect the Engine's closed list can express, so it stays a plain record on the
   sheet. So does exhaustion, which this sheet counts on a track rather than as a condition, so a
   creature immune to it says so in a trait.
@@ -400,8 +433,11 @@ A fight plays, so this is the honest list of what it still does not do:
   a choice a fight has no way to make. A second HELPING of a different type ("plus 7 (2d6) fire
   damage") is no longer among them: Capability API 1.29 lets one blow carry up to three damage
   clauses, each rolled and resisted on its own, and all 65 of them are now real damage.
-- **Spellcasting monsters** are traits. A stat block's spell list is not something a creature action
-  can hold.
+- **Innate spellcasting and hag covens** are traits. See Creatures above.
+- **Spiritual Weapon strikes once**, as it is cast. The weapon that stays to strike again on later
+  turns is nothing a fight can hold, so casting it again costs another slot.
+- **Vicious Mockery** deals its damage, but the disadvantage it hands the target's next attack is not
+  a condition this sheet has, so it is not carried.
 - **A creature cannot heal.** An action such as the deva's Healing Touch is a trait.
 - **No qualifiers.** "Bludgeoning, piercing and slashing from nonmagical attacks" is carried as
   plain resistance to those three types with a trait saying so, because a fight cannot ask whether a
@@ -428,14 +464,14 @@ A fight plays, so this is the honest list of what it still does not do:
 
 Available to Engine `staging` users only. The package is listed in `STAGING_ONLY_PACKAGE_IDS`, so
 it is published to the preview overlay under `catalog/preview/` that staging Engines read, and is
-hidden from stable `main` users. It stays there until the Capability API 1.32 ruleset, catalog,
-battle, scaled-column, combat, bestiary, positions, turn-economy and strike-cap seam reaches a
-stable Engine release.
+hidden from stable `main` users. It stays there until the Capability API 1.34 ruleset, catalog,
+battle, scaled-column, combat, bestiary, positions, turn-economy, strike-cap, reaction-moment and
+creature-sheet seam reaches a stable Engine release.
 
 ## Installing
 
 Install it from **Agents** and **Download Agents** in a Marinara Engine build that supports
-Capability API 1.32. After installing, choose it under Rules in the Game Mode setup wizard when you
+Capability API 1.34. After installing, choose it under Rules in the Game Mode setup wizard when you
 create a new game. Choose the **Tactical** combat style in the same wizard if you want the fight
 played on a board; **Classic** plays the same fight without positions.
 

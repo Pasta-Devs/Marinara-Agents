@@ -56,6 +56,18 @@
     "gacha-forge": {
       "versions": [
         {
+          "version": "1.8.7",
+          "date": "2026-09-25",
+          "notes": "- Fixed: world creation lists your whole character card library. It stopped at 100 cards, so a library larger than that died around the letter M and the cards past it showed in your cast as “No longer in your library”.\n- Fixed: loading a preset no longer leaves out cards it could not see — it reads the whole library before deciding what the Engine still has.",
+          "highlight": false
+        },
+        {
+          "version": "1.8.6",
+          "date": "2026-09-23",
+          "notes": "- Fixed: on a phone held upright, the Landscape only notice no longer covers the rest of Marinara. Characters, lorebooks and anything else you open over the game are reachable again.",
+          "highlight": false
+        },
+        {
           "version": "1.8.5",
           "date": "2026-09-21",
           "notes": "- The opening story is optional. Forge this world asks if you are sure, then whether to write it now or later; later, the world opens as soon as its cast is ready, with Summon unlocked, and Modes > Story writes it when you ask. If it fails while the world is being created, Skip the story for now keeps the world.\n- World creation keeps what you write and brings it back on any device, and has presets: save, load, rename, replace or delete a whole setup, from the wizard or from a world you already created.\n- Models that think a lot before answering (GLM, DeepSeek) no longer lose the first try of nearly every call to the output limit.\n- Fixed: a card, lorebook, connection or persona you create or change in Marinara shows up in the game as soon as you come back to it.\n- Fixed: a character made from a card or a Cast lorebook entry reads the World lorebook entries that name them.",
@@ -115,6 +127,24 @@
     },
     "long-term-memory": {
       "versions": [
+        {
+          "version": "1.3.20",
+          "date": "2026-09-25",
+          "notes": "- Show spinning import progress only on source rows included in the running task; keep other import icons visible and disabled until it finishes.",
+          "highlight": false
+        },
+        {
+          "version": "1.3.19",
+          "date": "2026-09-24",
+          "notes": "- Keep distinct trusted characters and relationship pairs on separate memory targets, preserve resolved target identities through normalization, and bound provider-generated event IDs after server naming.",
+          "highlight": false
+        },
+        {
+          "version": "1.3.18",
+          "date": "2026-09-24",
+          "notes": "- Surface conflicting legacy ID/title and duplicate subject notes during extraction instead of selecting one automatically; leave identity merges to the existing explicit preview and confirmation flow. Block ambiguous link application until the draft's link is explicitly edited to a scoped candidate.",
+          "highlight": false
+        },
         {
           "version": "1.3.17",
           "date": "2026-09-24",
@@ -216,24 +246,6 @@
           "date": "2026-09-17",
           "notes": "- Fixed duplicate and conflicting source ID handling during source import.\n- Fixed updateNote call signature in source extraction.\n- Removed undeclared and unused batch extraction scope argument in import interop.",
           "highlight": false
-        },
-        {
-          "version": "1.3.0",
-          "date": "2026-09-13",
-          "notes": "- Load additional pages of chat summaries, characters, and lorebook sources without losing filters, selections, or import status.\n- Keep retention cleanup recoverable when activity-index pruning fails.",
-          "highlight": true
-        },
-        {
-          "version": "1.2.27",
-          "date": "2026-09-12",
-          "notes": "- Displayed and searched renamed chat branches consistently in Sources and imported summary evidence.",
-          "highlight": false
-        },
-        {
-          "version": "1.2.26",
-          "date": "2026-09-10",
-          "notes": "- Added persistent chat-mode availability selection to Sources for memory imports.",
-          "highlight": false
         }
       ]
     },
@@ -261,6 +273,12 @@
     },
     "noodle": {
       "versions": [
+        {
+          "version": "1.2.25",
+          "date": "2026-09-24",
+          "notes": "- Widgets on Homescreen now available.",
+          "highlight": false
+        },
         {
           "version": "1.2.24",
           "date": "2026-09-15",
@@ -341,6 +359,30 @@
     },
     "slurp2": {
       "versions": [
+        {
+          "version": "0.2.40",
+          "date": "2026-09-25",
+          "notes": "- Retained Moments use bounded Story reads and follow feed search and pagination rules.",
+          "highlight": false
+        },
+        {
+          "version": "0.2.39",
+          "date": "2026-09-25",
+          "notes": "- Moments now remain available for the configured retention period even when newer feed posts fill the first page.\n- Follow-ups no longer retry forever when a Creator has no known return time.",
+          "highlight": false
+        },
+        {
+          "version": "0.2.38",
+          "date": "2026-09-24",
+          "notes": "- Generated audience names now draw from one merged, much larger word bank (184,512 combinations, up from ~18,800) instead of a single fixed set of moody handles.\n- Generated names are CamelCase with no digits, spaces, or underscores (for example `MothHour` instead of `moth_hour_77`), so they read as a single word and two people never blur together in a dense list.",
+          "highlight": false
+        },
+        {
+          "version": "0.2.37",
+          "date": "2026-09-24",
+          "notes": "- NanoGPT, xAI, and connections recognised only by their base URL now receive avatar reference images again.\n- Persona Creators can set Messages & Pricing again; the tab now uses the same viewer persona as the rest of Slurp.\n- Post cards, the picture viewer, and the redraw box show the exact prompt the picture was drawn from. A prompt you edit or keep in the redraw box is sent as written, not rewritten again.\n- Multi-picture posts plan every picture as its own complete scene, so a photo dump, a shoot, or a day out each gets pictures that make sense on their own.",
+          "highlight": false
+        },
         {
           "version": "0.2.36",
           "date": "2026-09-24",
@@ -435,30 +477,6 @@
           "version": "0.2.17",
           "date": "2026-09-22",
           "notes": "- The opened post viewer now shows every picture of a multi-image post, with arrows, a counter, and mini previews. It used to show the first one only.\n- Feed cards mark multi-image posts with position dots beside the existing arrows.\n- Prompt Studio: every block can be switched off, not only the ones marked optional.\n- Prompt Studio: required blocks can be rewritten. The override starts from the text the preview Creator actually gets, and says plainly that a fixed text replaces what Slurp would have composed per Creator. Context blocks stay read-only because their text is the runtime data itself.\n- The prompt preview no longer discards a finished result when the settings query refetches in the background, and a run it cannot perform now says why instead of doing nothing.\n- Prompt Studio on a phone: the preview panel is reachable without scrolling past every recipe, recipe rows no longer wrap four lines of block chips, and the preset picker fits the width.",
-          "highlight": false
-        },
-        {
-          "version": "0.2.16",
-          "date": "2026-09-21",
-          "notes": "- Restoring a deleted post no longer waits on a full feed refetch, so the card comes back at once instead of sitting on its countdown.\n- The server now keeps a deleted post for twice the undo window it offers, so a Restore near the end of the countdown no longer fails.\n- The share card is drawn in the browser instead of on the server. The server render needed fonts installed on the host, which most installs do not have, so cards came out as the bare post image with no name, title, or caption.\n- Share post no longer does nothing when no viewer persona is active: it falls back to downloading the share card.\n- The post viewer's side card no longer draws the picture the viewer already shows.",
-          "highlight": false
-        },
-        {
-          "version": "0.2.15",
-          "date": "2026-09-21",
-          "notes": "- Exposed restore pending state through the Home screen model so restore feedback renders immediately.",
-          "highlight": false
-        },
-        {
-          "version": "0.2.14",
-          "date": "2026-09-21",
-          "notes": "- Restored posts now return to the visible feed as soon as the restore response succeeds.",
-          "highlight": false
-        },
-        {
-          "version": "0.2.13",
-          "date": "2026-09-21",
-          "notes": "- Restore now gives immediate progress feedback.\n- The restore countdown pauses while the server restores the post.",
           "highlight": false
         }
       ]

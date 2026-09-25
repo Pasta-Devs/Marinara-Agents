@@ -41,12 +41,14 @@ import { fileURLToPath } from "node:url";
 import prettier from "prettier";
 import {
   RULESET_CATALOG_DICE_PATTERN,
+  RULESET_CATALOG_ROW_KEY,
   RULESET_CREATURE_MAX_ACTIONS,
   RULESET_CREATURE_MAX_TRAITS,
   assertRulesetBattle,
   assertRulesetCatalogs,
   assertRulesetCombat,
   assertRulesetCreatures,
+  assertRulesetReactions,
   assertRulesetScaled,
 } from "./ruleset-package-checks.mjs";
 
@@ -65,6 +67,7 @@ const FEATURE_LIST = "features";
 const COUNTER_LIST = "counters";
 const ATTACK_LIST = "attacks";
 const CREATURE_CATALOG = "creatures";
+const SPELL_CATALOG = "spells";
 const DISTANCE_UNITS = { distance: { label: "ft", perCell: 5 } };
 
 // The three distance columns of the attacks list, wired through combat.attacks
@@ -296,7 +299,7 @@ const RANGED_WEAPONS = new Set([
 // The ruleset version this converter writes. Raise it when the generated
 // content changes what an installed ruleset means; a rebuild refuses to lower
 // a version that is already higher.
-const RULESET_VERSION = 7;
+const RULESET_VERSION = 8;
 
 // The SRD's healing spells. The fixture has no healing field at all: a spell
 // carries a damage roll or nothing, so a heal arrives here looking exactly like
@@ -337,6 +340,33 @@ const HEALING_SPELLS = new Map([
   // restored limbs are not a number a catalog entry can carry, and the SRD states no higher-level
   // effect, so neither is here.
   ["srd_regenerate", { amount: { dice: "4d8+15" } }],
+]);
+
+// The moment each reaction spell waits for, keyed by fixture pk. The source states the trigger as a
+// sentence (`reaction_condition`), which is copied here so a fixture that changed it stops the run.
+// A spell with a moment is offered in a fight at exactly that moment; `true` is a reaction the
+// Engine keeps off every menu, which is what each of the others has to stay until a fight can say
+// its trigger. assertReactionMoments fails the run when a reaction spell is in neither table.
+const REACTION_MOMENTS = new Map([
+  // Capability API 1.33: "harmed" is the holder taking damage, and "source" points the spell back at
+  // whoever dealt it, which is the whole of this trigger.
+  [
+    "srd_hellish-rebuke",
+    {
+      trigger: "which you take in response to being damaged by a creature within 60 feet of you that you can see",
+      moment: { on: "harmed", at: "source" },
+    },
+  ],
+]);
+const REACTIONS_WITHOUT_MOMENT = new Map([
+  // "aimed" opens for any action aimed at the holder, a sword swing as much as a spell, so calling
+  // it off there would parry weapons too. It waits for a moment that can tell a spell apart.
+  ["srd_counterspell", "which you take when you see a creature within 60 feet of you casting a spell"],
+  // It raises Armor Class by 5, and a fight's conditions are names rather than modifiers, so there
+  // is nothing it could do when it fires.
+  ["srd_shield", "which you take when you are hit by an attack or targeted by the magic missile spell"],
+  // Nothing in a fight falls.
+  ["srd_feather-fall", "which you take when you or a creature within 60 feet of you falls"],
 ]);
 
 // A round is six seconds, which is what turns an SRD duration into a number of
@@ -475,6 +505,26 @@ const SPELL_RIDERS = new Map([
   ],
   // "you gain 1d4 + 4 temporary hit points for the duration."
   ["srd_false-life", { kind: "buff", targets: "self", temporary: { dice: "1d4+4" } }],
+  // Four damage cantrips the fixture gives no damage roll for, although it carries the larger rolls
+  // they reach at 5th level and up, so without these rows they were utility spells a fight never
+  // offered. Each states the base damage roll its own text prints; the growth still comes from the
+  // fixture's per-level options.
+  // "The target must succeed on a dexterity saving throw or take 1d8 radiant damage."
+  ["srd_sacred-flame", { kind: "attack", amount: { dice: "1d8" }, damageType: "radiant" }],
+  // "A target must succeed on a dexterity saving throw or take 1d6 acid damage." The second target
+  // it may take has to stand within 5 feet of the first, which a count cannot say, so it takes one.
+  ["srd_acid-splash", { kind: "attack", amount: { dice: "1d6" }, damageType: "acid" }],
+  // "The creature must succeed on a Constitution saving throw or take 1d12 poison damage."
+  ["srd_poison-spray", { kind: "attack", amount: { dice: "1d12" }, damageType: "poison" }],
+  // "it must succeed on a Wisdom saving throw or take 1d4 psychic damage and have disadvantage on the
+  // next attack roll it makes before the end of its next turn." The disadvantage is no condition this
+  // sheet has, so only the damage is carried.
+  ["srd_vicious-mockery", { kind: "attack", amount: { dice: "1d4" }, damageType: "psychic" }],
+  // "you can make a melee spell attack against a creature within 5 feet of the weapon. On a hit, the
+  // target takes force damage equal to 1d8 + your spellcasting ability modifier." The strike made as
+  // it is cast; the weapon that stays to strike again on later turns is nothing a fight can hold, and
+  // an amount grows in dice rather than by a modifier, as the healing spells' do.
+  ["srd_spiritual-weapon", { kind: "attack", amount: { dice: "1d8" }, damageType: "force" }],
 ]);
 
 // The fixture's property assignments disagree with the SRD 5.1 weapons table
@@ -502,6 +552,14 @@ const WEAPON_PROPERTY_CORRECTIONS = new Map([
 // restrained condition, which a sheet attack row cannot hold. Skipped on
 // purpose rather than shipped as an attack for 0 damage.
 const SKIPPED_WEAPONS = new Set(["srd_net"]);
+
+// Numbers where the fixture disagrees with the stat block SRD 5.1 prints, keyed by creature pk and
+// fixture field. Each row states both, so a fixture that is later fixed stops the build instead of
+// being corrected twice.
+const CREATURE_FIELD_CORRECTIONS = new Map([
+  // SRD 5.1, Priest: "Skills Medicine +7, Persuasion +3, Religion +4". The fixture gives Religion +5.
+  ["srd_priest", { skill_bonus_religion: { printed: 4, fixture: 5 } }],
+]);
 
 // The sheet has one Level field, because a ruleset sheet has no notion of a class
 // and cannot have one per class. A resource that follows a class table therefore
@@ -906,6 +964,25 @@ function spellPerCostStep(fields, options) {
   return step === undefined ? undefined : { dice: `${step}d${die}` };
 }
 
+/** Every reaction spell in the source has a row in one of the two tables above, and every row still
+ *  names a reaction spell printing the same trigger, so a spell the fixture adds or rewords is looked
+ *  at by hand rather than shipped as whatever `true` happens to mean. */
+function assertReactionMoments(spells) {
+  const reactions = spells.filter((spell) => spell.fields.casting_time === "reaction");
+  for (const { pk, fields } of reactions) {
+    const trigger = REACTION_MOMENTS.get(pk)?.trigger ?? REACTIONS_WITHOUT_MOMENT.get(pk);
+    if (trigger === undefined)
+      fail(`${pk} is a reaction spell in neither REACTION_MOMENTS nor REACTIONS_WITHOUT_MOMENT`);
+    if (oneLine(fields.reaction_condition) !== trigger) {
+      fail(`${pk} now states its trigger as "${oneLine(fields.reaction_condition)}", so its row is stale`);
+    }
+  }
+  for (const pk of [...REACTION_MOMENTS.keys(), ...REACTIONS_WITHOUT_MOMENT.keys()]) {
+    if (!reactions.some((spell) => spell.pk === pk))
+      fail(`${pk} is written as a reaction spell but the source has none`);
+  }
+}
+
 /** Every healing spell named above is still in the source, and still a plain heal. A pk that
  *  vanished would take its healing with it silently; one that grew a damage roll would be two
  *  readings at once, so both stop the run instead of one quietly winning. */
@@ -952,12 +1029,13 @@ function spellBudget(fields) {
 }
 
 /** A cantrip's damage read off the source's own per-character-level options: the EXTRA dice it
- *  throws at each level its count goes up, which is exactly what `scales.table` holds. Eldritch
+ *  throws at each level its count goes up, which is exactly what `scales.table` holds. `stated` is
+ *  the base damage roll a SPELL_RIDERS row gives for a cantrip the fixture carries none for. Eldritch
  *  Blast has no such options in the source, because it adds beams rather than dice, so it correctly
  *  gets none. A table that raised a different die, or lowered a count, is left out rather than
  *  approximated. */
-function spellScales(fields, options) {
-  const base = DICE_PATTERN.exec(fields.damage_roll ?? "");
+function spellScales(fields, options, stated) {
+  const base = DICE_PATTERN.exec(fields.damage_roll || stated || "");
   if (fields.level !== 0 || !base) return undefined;
   const die = base[2];
   const first = Number(base[1]);
@@ -1019,13 +1097,13 @@ function spellMechanics(pk, fields, options, healing, rider) {
     // SRD gives a number above one. A count a higher slot would raise is not carried: `perCostStep`
     // is an amount, and one more dart is not an amount.
     targetCount: rider?.targetCount ?? (fields.target_count > 1 ? fields.target_count : undefined),
-    scales: spellScales(fields, options),
+    scales: spellScales(fields, options, rider?.amount?.dice),
     cost: fields.level >= 1 ? [{ pool: `slots_${fields.level}`, amount: 1 }] : undefined,
     // A healing step comes from the table, which read it out of the spell's own
     // "At Higher Levels" paragraph; the source's slot options only carry damage.
     perCostStep: healing ? healing.perCostStep : spellPerCostStep(fields, options),
     concentration: fields.concentration ? true : undefined,
-    reaction: fields.casting_time === "reaction" ? true : undefined,
+    reaction: fields.casting_time === "reaction" ? (REACTION_MOMENTS.get(pk)?.moment ?? true) : undefined,
     budget: spellBudget(fields),
   });
 }
@@ -1109,6 +1187,7 @@ function assertSpellAreas(spells) {
 
 function buildSpellEntries(spells, castingOptions, classNames, report) {
   assertHealingSpells(spells);
+  assertReactionMoments(spells);
   assertSpellRiders(spells);
   assertSpellAreas(spells);
   return spells
@@ -2439,6 +2518,274 @@ function multiattackSequences(text, attacks, headCounts) {
   return { sequences: kept, opening: !!opening };
 }
 
+// ── Spellcasters as sheets ──
+//
+// A "Spellcasting" trait describes a caster in the sheet's own terms: a class level, an ability, slots
+// per spell level and the spells it has prepared. Such a creature is written as a sheet (Capability
+// API 1.34), so a fight offers those spells off this package's own catalog and spends its own slots.
+// Innate Spellcasting ("3/day each") has no slot to spend, and a hag coven's Shared Spellcasting only
+// works while all three hags are together, so both stay the traits they are.
+const SLOT_CASTING = /^spellcasting$/iu;
+// The fixture names a saving throw by the ability's full name.
+const ABILITY_NAMES = new Map([
+  ["str", "strength"],
+  ["dex", "dexterity"],
+  ["con", "constitution"],
+  ["int", "intelligence"],
+  ["wis", "wisdom"],
+  ["cha", "charisma"],
+]);
+const CASTING_ABILITIES = new Map([
+  ["intelligence", "int"],
+  ["wisdom", "wis"],
+  ["charisma", "cha"],
+]);
+// One line of the printed spell list: "* 3rd level (3 slots): counterspell, fireball, fly".
+const CASTING_LINE = /^\s*\*?\s*(?:Cantrips \(at will\)|(\d)(?:st|nd|rd|th) level \((\d) slots?\)):\s*(.+?)\s*$/u;
+
+/** The sheet's numbers as the Engine computes them, restated for the formula pieces the 5e sheet
+ *  uses, so a caster can be checked against its printed stat block here rather than only in a fight.
+ *  A piece this does not know stops the build, because a number it cannot compute is one nothing
+ *  checked. */
+function evaluateSheet(definition, build) {
+  const { sheet, resolution } = definition;
+  if (resolution.abilityModifier?.op !== "floorHalfMinusTen") {
+    fail(`the converter cannot compute the ability modifier "${resolution.abilityModifier?.op}"`);
+  }
+  const abilityMod = (id) => Math.floor(((build.abilities[id] ?? 10) - 10) / 2);
+  const numbers = new Map(
+    sheet.fields
+      .filter((field) => field.type === "number")
+      .map((field) => [
+        field.id,
+        build.fields[field.id] ?? field.default ?? Math.min(Math.max(0, field.min), field.max),
+      ]),
+  );
+  const derived = new Map();
+  const tiers = new Map(resolution.proficiencyTiers.map((tier) => [tier.id, tier]));
+  const trained = (entry, chosen) => {
+    const tier = tiers.get(chosen[entry.id]) ?? resolution.proficiencyTiers[0];
+    if (!Number.isInteger(tier.multiplier) || (tier.flat ?? 0) !== 0) {
+      fail(`the converter cannot compute the proficiency tier "${tier.id}"`);
+    }
+    return (
+      abilityMod(entry.ability) + tier.multiplier * value(resolution.proficiency.bonus) + (build.bonuses[entry.id] ?? 0)
+    );
+  };
+  function value(ref) {
+    if (ref.const !== undefined) return ref.const;
+    if (ref.field !== undefined) return numbers.get(ref.field) ?? 0;
+    if (ref.derived !== undefined) return derived.get(ref.derived) ?? 0;
+    if (ref.abilityMod !== undefined) return abilityMod(ref.abilityMod);
+    if (ref.abilityModFromField !== undefined) {
+      const chosen = build.fields[ref.abilityModFromField];
+      return sheet.abilities.some((ability) => ability.id === chosen) ? abilityMod(chosen) : 0;
+    }
+    if (ref.skillMod !== undefined)
+      return trained(
+        sheet.skills.find((skill) => skill.id === ref.skillMod),
+        build.skills,
+      );
+    fail(`the converter cannot compute the sheet value ${JSON.stringify(ref)}`);
+  }
+  for (const entry of sheet.derived) {
+    if (entry.op === "sum")
+      derived.set(
+        entry.id,
+        entry.of.reduce((total, ref) => total + value(ref), 0),
+      );
+    else if (entry.op === "stepTable") {
+      const at = value(entry.from);
+      let stepped = entry.table[0][1];
+      for (const [threshold, step] of entry.table) if (at >= threshold) stepped = step;
+      derived.set(entry.id, stepped);
+    } else if (entry.op === "scale") {
+      const scaled = value(entry.of) * entry.multiplier;
+      derived.set(
+        entry.id,
+        entry.round === "up" ? Math.ceil(scaled) : entry.round === "nearest" ? Math.round(scaled) : Math.floor(scaled),
+      );
+    } else if (entry.op === "max") derived.set(entry.id, Math.max(...entry.of.map(value)));
+    else if (entry.op === "min") derived.set(entry.id, Math.min(...entry.of.map(value)));
+    else fail(`the converter cannot compute the derived value "${entry.op}"`);
+  }
+  return {
+    derived: (id) => derived.get(id) ?? fail(`the sheet has no derived value "${id}"`),
+    save: (id) =>
+      trained(
+        sheet.saves.find((save) => save.id === id),
+        build.saves,
+      ),
+    skill: (id) =>
+      trained(
+        sheet.skills.find((skill) => skill.id === id),
+        build.skills,
+      ),
+  };
+}
+
+/** A caster's printed Spellcasting trait as a sheet: its abilities, Armor Class, hit points, speed,
+ *  caster level, spellcasting ability, slots and prepared spells, with the corrections that make every
+ *  number a fight reads the one the stat block prints. A monster's proficiency follows its challenge
+ *  rating and a sheet's follows its level, so a caster's spell attack, spell save DC, saves and skills
+ *  can each be a point or two off; the difference goes into the sheet's own "other bonus" field or a
+ *  bonus, never into a changed ability score, and the build stops if one is out of the sheet's range. */
+function casterSheet(pk, fields, casting, speed, sources, report) {
+  const { definition, spellsByName } = sources;
+  const text = casting.fields.desc;
+  const read = (pattern, what) => pattern.exec(text) ?? fail(`${pk}'s Spellcasting trait no longer states its ${what}`);
+  const level = Number(read(/\b(\d{1,2})(?:st|nd|rd|th)-level spellcaster\b/u, "caster level")[1]);
+  const ability =
+    CASTING_ABILITIES.get(read(/spell ?casting ability is (\w+)/iu, "spellcasting ability")[1].toLowerCase()) ??
+    fail(`${pk} casts with an ability the sheet's spellcasting field does not offer`);
+  const difficulty = Number(read(/spell save DC (\d+)/u, "spell save DC")[1]);
+  const toHit = Number(read(/\+(\d+) to hit with spell attacks/u, "spell attack")[1]);
+  const className = capitalize(read(/following (\w+) spells prepared/u, "class")[1]);
+
+  const slots = {};
+  const rows = [];
+  const lines = text.split("\n").filter((line) => /\((?:at will|\d slots?)\):/u.test(line));
+  for (const line of lines) {
+    const parsed = CASTING_LINE.exec(line) ?? fail(`${pk} prints a spell line this build cannot read: ${line}`);
+    const spellLevel = parsed[1] ? Number(parsed[1]) : 0;
+    if (parsed[1]) slots[`slots_max_${spellLevel}`] = Number(parsed[2]);
+    for (const printed of parsed[3].split(",")) {
+      // An asterisk marks a spell the caster casts on itself before a fight, which the trait keeps saying.
+      const name = printed.replace(/\*/gu, "").replace(/’/gu, "'").trim().toLowerCase();
+      const entry = spellsByName.get(name) ?? fail(`${pk} prepares "${printed.trim()}", which the spell catalog lacks`);
+      if (entry.filters.level !== spellLevel) {
+        fail(
+          `${pk} prints ${entry.label} among its level ${spellLevel} spells, but the catalog has it at ${entry.filters.level}`,
+        );
+      }
+      const row =
+        entry.rows.find((candidate) => candidate.list === SPELL_LIST) ?? fail(`${entry.id} writes no spell row`);
+      rows.push({ ...row.values, prepared: true, [RULESET_CATALOG_ROW_KEY]: `${SPELL_CATALOG}/${entry.id}` });
+    }
+  }
+  if (rows.length === 0) fail(`${pk}'s Spellcasting trait lists no spells`);
+
+  const build = {
+    abilities: {
+      str: fields.ability_score_strength,
+      dex: fields.ability_score_dexterity,
+      con: fields.ability_score_constitution,
+      int: fields.ability_score_intelligence,
+      wis: fields.ability_score_wisdom,
+      cha: fields.ability_score_charisma,
+    },
+    skills: {},
+    saves: {},
+    bonuses: {},
+    fields: {
+      level,
+      class: className,
+      ac: fields.armor_class,
+      speed,
+      hp_max: fields.hit_points,
+      spellcasting_ability: ability,
+      ...slots,
+    },
+    lists: { [SPELL_LIST]: rows },
+  };
+  const { sheet } = definition;
+  for (const field of Object.keys(build.fields)) {
+    if (!sheet.fields.some((entry) => entry.id === field))
+      fail(`${pk} fills "${field}", which the sheet has no field for`);
+  }
+
+  // A printed save or skill is proficient, with a bonus for whatever the level's proficiency leaves;
+  // one the block does not print is the plain ability modifier, exactly as an untrained one reads.
+  const proficient =
+    definition.resolution.proficiencyTiers.find((tier) => tier.multiplier === 1 && (tier.flat ?? 0) === 0)?.id ??
+    fail("the ruleset has no plain proficient tier");
+  const printedSaves = new Map(
+    sheet.saves.map((save) => {
+      const key = `saving_throw_${ABILITY_NAMES.get(save.ability) ?? fail(`the save ${save.id} reads no ability`)}`;
+      if (!(key in fields)) fail(`the source has no ${key} for ${pk}`);
+      return [save.id, printedField(pk, fields, key)];
+    }),
+  );
+  const printedSkills = new Map(
+    sheet.skills.map((skill) => {
+      const key = `skill_bonus_${skill.id}`;
+      if (!(key in fields)) fail(`the source has no ${key} for ${pk}`);
+      return [skill.id, printedField(pk, fields, key)];
+    }),
+  );
+  for (const [id, printed] of printedSaves) if (printed !== null) build.saves[id] = proficient;
+  for (const [id, printed] of printedSkills) if (printed !== null) build.skills[id] = proficient;
+  const plain = evaluateSheet(definition, build);
+  for (const [id, printed] of [...printedSaves, ...printedSkills]) {
+    if (printed === null) continue;
+    const off = printed - (printedSaves.has(id) ? plain.save(id) : plain.skill(id));
+    if (off !== 0) build.bonuses[id] = off;
+  }
+  for (const [field, derivedId, printed] of [
+    ["spell_attack_extra", "spell_attack", toHit],
+    ["spell_dc_extra", "spell_save_dc", difficulty],
+  ]) {
+    const off = printed - plain.derived(derivedId);
+    const declared = sheet.fields.find((entry) => entry.id === field) ?? fail(`the sheet has no "${field}" field`);
+    if (off < declared.min || off > declared.max) {
+      fail(`${pk} needs ${off} in "${field}", outside its ${declared.min} to ${declared.max}`);
+    }
+    if (off !== 0) build.fields[field] = off;
+  }
+
+  // Every number a fight reads is the printed one, computed the way the Engine will compute it. A save
+  // or skill the block does not print is the plain modifier of its ability score.
+  const checked = evaluateSheet(definition, build);
+  const unprinted = (ability) => Math.floor((build.abilities[ability] - 10) / 2);
+  const abilityOf = new Map([...sheet.saves, ...sheet.skills].map((entry) => [entry.id, entry.ability]));
+  const mismatches = [
+    ["spell attack", checked.derived("spell_attack"), toHit],
+    ["spell save DC", checked.derived("spell_save_dc"), difficulty],
+    ...[...printedSaves].map(([id, printed]) => [id, checked.save(id), printed ?? unprinted(abilityOf.get(id))]),
+    ...[...printedSkills].map(([id, printed]) => [id, checked.skill(id), printed ?? unprinted(abilityOf.get(id))]),
+  ].filter(([, computed, printed]) => computed !== printed);
+  if (mismatches.length > 0) {
+    fail(
+      `${pk}'s sheet disagrees with its stat block: ${mismatches.map(([id, c, p]) => `${id} ${c} for ${p}`).join(", ")}`,
+    );
+  }
+  const { min: bonusMin, max: bonusMax } = sheet.bonusRange ?? { min: -20, max: 40 };
+  for (const [id, bonus] of Object.entries(build.bonuses)) {
+    if (bonus < bonusMin || bonus > bonusMax)
+      fail(`${pk} needs a bonus of ${bonus} on ${id}, outside the sheet's range`);
+  }
+
+  report.casterSheets.push(
+    `${pk}: level ${level} ${className}, ${rows.length} spells, spell attack ${signed(build.fields.spell_attack_extra ?? 0)}, ` +
+      `DC ${signed(build.fields.spell_dc_extra ?? 0)}, ${Object.keys(build.bonuses).length} save/skill bonus(es)`,
+  );
+  return build;
+}
+
+/** One number of a stat block as SRD 5.1 prints it: the fixture's, unless a correction above says the
+ *  fixture has it wrong. */
+function printedField(pk, fields, key) {
+  const correction = CREATURE_FIELD_CORRECTIONS.get(pk)?.[key];
+  if (!correction) return fields[key];
+  if (fields[key] !== correction.fixture) {
+    fail(`${pk} now gives ${key} as ${fields[key]}, so its correction to ${correction.printed} is stale`);
+  }
+  return correction.printed;
+}
+
+/** Every correction names a creature the source still has and a field it still carries, so a row can
+ *  never sit in the table doing nothing. */
+function assertCreatureFieldCorrections(records) {
+  for (const [pk, corrections] of CREATURE_FIELD_CORRECTIONS) {
+    const record = records.find((entry) => entry.pk === pk) ?? fail(`${pk} is corrected but is not in the source`);
+    for (const key of Object.keys(corrections)) printedField(pk, record.fields, key);
+  }
+}
+
+function signed(number) {
+  return number > 0 ? `+${number}` : `${number}`;
+}
+
 // ── One creature ──
 
 // A stat block whose fighting is written in prose. Its printed attack is a dagger and the rest of
@@ -2696,13 +3043,21 @@ function creatureEntry(record, sources, report) {
   }
 
   const challenge = Number(fields.challenge_rating);
+  const casting = (sources.traits.get(pk) ?? []).find((source) => SLOT_CASTING.test(source.fields.name));
+  const sheet = casting ? casterSheet(pk, fields, casting, speed.speed, sources, report) : undefined;
   const creature = compact({
-    health,
-    defense: fields.armor_class,
-    speed: speed.speed,
-    initiativeModifier: Math.floor((fields.ability_score_dexterity - 10) / 2),
-    abilities,
-    saves: Object.keys(saves).length > 0 ? saves : undefined,
+    // A sheet carries its own health, defense, speed, initiative, abilities and saves, so a creature
+    // with one carries none of them twice.
+    ...(sheet
+      ? { sheet }
+      : {
+          health,
+          defense: fields.armor_class,
+          speed: speed.speed,
+          initiativeModifier: Math.floor((fields.ability_score_dexterity - 10) / 2),
+          abilities,
+          saves: Object.keys(saves).length > 0 ? saves : undefined,
+        }),
     resist: fields.damage_resistances.length > 0 ? [...fields.damage_resistances] : undefined,
     vulnerable: fields.damage_vulnerabilities.length > 0 ? [...fields.damage_vulnerabilities] : undefined,
     immune: fields.damage_immunities.length > 0 ? [...fields.damage_immunities] : undefined,
@@ -2722,6 +3077,9 @@ function creatureEntry(record, sources, report) {
 
   return {
     damageMeasurable: !casts && !hiddenDamage,
+    // What the threat scale measures, read off the printed block whichever shape the creature took.
+    measuredHealth: averageHealth({ health }),
+    measuredDefense: fields.armor_class,
     id: entryId(pk),
     label: fields.name,
     summary: trimToSentence(
@@ -2871,7 +3229,7 @@ function threatTiers(entries, report) {
       hitters: hitters.length,
     };
     if (creatures.length === 0) return base;
-    const healths = creatures.map(averageHealth);
+    const healths = group.map((entry) => entry.measuredHealth);
     const toHits = creatures.flatMap((creature) => {
       const best = creature.actions.flatMap((action) => (action.toHit === undefined ? [] : [action.toHit]));
       return best.length > 0 ? [Math.max(...best)] : [];
@@ -2883,7 +3241,7 @@ function threatTiers(entries, report) {
     return {
       ...base,
       health: [Math.max(1, Math.min(...healths)), Math.max(...healths)],
-      defense: Math.round(median(creatures.map((creature) => creature.defense))),
+      defense: Math.round(median(group.map((entry) => entry.measuredDefense))),
       toHit: toHits.length > 0 ? Math.round(median(toHits)) : undefined,
       damagePerRound: rounds.length > 0 ? [Math.floor(Math.min(...rounds)), Math.ceil(Math.max(...rounds))] : undefined,
       saveDifficulty: difficulties.length > 0 ? Math.round(median(difficulties)) : undefined,
@@ -3018,7 +3376,7 @@ function combatBlock(tiers) {
     },
     opportunity: {
       $comment:
-        'SRD 5.1, Opportunity Attacks: "You can make an opportunity attack when a hostile creature that you can see moves out of your reach. To make the opportunity attack, you use your reaction." Taking it is automatic in this Engine, because nothing opens a reaction window yet.',
+        'SRD 5.1, Opportunity Attacks: "You can make an opportunity attack when a hostile creature that you can see moves out of your reach. To make the opportunity attack, you use your reaction." The fight stops and asks whoever may take it, and letting it go by costs nothing.',
       budget: BUDGET_REACTION,
     },
     attacks: [
@@ -3312,6 +3670,7 @@ const report = {
   aliasShapedPairs: [],
   damageMeasurementSkippedCasters: 0,
   damageMeasurementSkippedHiddenDamage: 0,
+  casterSheets: [],
 };
 
 const classes = new Map(srdOnly(await fixture("CharacterClass.json"), "class").map(({ pk, fields }) => [pk, fields]));
@@ -3385,13 +3744,24 @@ for (const source of await fixture("CreatureTrait.json")) {
 const environments = new Map(
   srdOnly(await fixture("Environment.json"), "environment").map(({ pk, fields }) => [pk, fields.name]),
 );
+// The hand-written sheet a caster's numbers are computed against, as it stands before this run
+// rewrites the generated half of the file.
+const handwritten = JSON.parse(await readFile(join(packageRoot, "ruleset.json"), "utf8"));
 const creatureSources = {
   actions: creatureActions,
   attacks: creatureAttackRows,
   traits: creatureTraits,
   environments,
+  definition: handwritten,
+  spellsByName: new Map(),
 };
+for (const entry of spells) {
+  const name = entry.label.replace(/\u2019/gu, "'").toLowerCase();
+  if (creatureSources.spellsByName.has(name)) fail(`Two spells are called "${entry.label}"`);
+  creatureSources.spellsByName.set(name, entry);
+}
 assertCreatureAliases(creatureRecords, creatureActions);
+assertCreatureFieldCorrections(creatureRecords);
 report.aliasShapedPairs.push(...aliasShapedPairs(creatureRecords, creatureActions));
 
 const parsedCreatures = creatureRecords
@@ -3408,9 +3778,9 @@ const parsedCreatures = creatureRecords
   .filter(Boolean)
   .sort(byId);
 const { measured: measuredTiers, tiers } = threatTiers(parsedCreatures, report);
-// `damageMeasurable` is the threat scale's business and nothing the Engine reads, so it comes off
+// `damageMeasurable` and the two measured numbers are the threat scale's business and nothing the Engine reads, so it comes off
 // before the entries are written.
-const creatures = parsedCreatures.map(({ damageMeasurable, ...entry }) => entry);
+const creatures = parsedCreatures.map(({ damageMeasurable, measuredHealth, measuredDefense, ...entry }) => entry);
 const combat = combatBlock(tiers);
 
 // Two catalogs are long enough to need a file of their own; the weapon list is
@@ -3418,7 +3788,7 @@ const combat = combatBlock(tiers);
 const catalogs = [
   {
     $comment: `Ready-made SRD 5.1 spells. A picked row is a copy the player can edit. ${provenance}`,
-    id: "spells",
+    id: SPELL_CATALOG,
     label: "Spells",
     feeds: [SPELL_LIST],
     filters: [
@@ -3499,6 +3869,7 @@ const summaries = assertRulesetCatalogs(manifest, document, sources);
 assertRulesetBattle(manifest, document);
 assertRulesetCombat(manifest, document);
 assertRulesetCreatures(manifest, document, sources);
+assertRulesetReactions(manifest, document, sources);
 const scaledRows = assertRulesetScaled(manifest, document, sources);
 // A kept maximum is fitted to its column when the sheet is edited, so the column has to have room
 // for the most the rules can give (Lay on Hands is 100 at level 20).
@@ -3688,6 +4059,11 @@ console.log(
   `  ${report.creatureActionsFromWithin} creature action(s) print no range of their own and take their distance from ` +
     'the sentence that says who must save ("within 120 feet of the dragon")',
 );
+
+console.log(
+  `  ${report.casterSheets.length} spellcaster(s) written as a sheet, their numbers checked against the printed block:`,
+);
+for (const entry of report.casterSheets) console.log(`    ${entry}`);
 
 console.log("");
 console.log(

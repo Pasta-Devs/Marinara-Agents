@@ -144,10 +144,22 @@ export async function slpFeedViewerRoutes(app: FastifyInstance, deps: SlpRouteDe
           : null,
       limit: parsed.data.limit,
     });
-    const projected = await projectViewerPosts(context, page.items);
+    const storyItems = parsed.data.cursorAt
+      ? []
+      : await noodle.listNoodlerStories({
+          accountIds: accounts.map((account) => account.id),
+          creatorSearchAccountIds,
+          search: parsed.data.search,
+          since: new Date(Date.now() - (await noodle.getSettings()).storyLifetimeHours * 60 * 60 * 1000).toISOString(),
+        });
+    const feedItems = [
+      ...page.items,
+      ...storyItems.filter((story) => !page.items.some((post) => post.id === story.id)),
+    ];
+    const projected = await projectViewerPosts(context, feedItems);
     return {
       ...buildViewerShell(context),
-      items: page.items.flatMap((post) => {
+      items: feedItems.flatMap((post) => {
         const view = projected.get(post.id);
         return view ? [{ creatorAccountId: post.authorAccountId, post: view }] : [];
       }),

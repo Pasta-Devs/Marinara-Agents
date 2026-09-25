@@ -2,11 +2,13 @@ import {
   hasLtmSourceSummarySceneTag,
   isLtmSourceLikeNote,
   ltmDraftMutationSchema,
+  type LtmDraftLinkChoice,
   type LtmDraftMutation,
   type LtmDraftPreflightResponse,
   type LtmExtractionDraft,
   type LtmNote,
 } from "../../../../shared/src/features/agents/long-term-memory/schema.js";
+import { ltmScopesOverlap } from "../../../../shared/src/features/agents/long-term-memory/scope.js";
 import { recordLtmDebugEvent, withLtmDebugOperation } from "./debug-log.js";
 import {
   groupLtmDraftMutationsByNote,
@@ -31,6 +33,7 @@ export interface ApplyLtmDraftOptions {
   autoApplyLowRiskOnly?: boolean;
   mutationIds?: string[];
   editedMutations?: Array<{ id: string } & Record<string, unknown>>;
+  linkChoices?: LtmDraftLinkChoice[];
   operationId?: string;
 }
 export interface ApplyLtmDraftResult {
@@ -82,8 +85,129 @@ function applyEdits(mutations: LtmDraftMutation[], edits: NonNullable<ApplyLtmDr
   return mutations.map((mutation) => edited.get(mutation.id) ?? mutation);
 }
 
+export function ambiguousLtmDraftLinkChoiceError(
+  draft: Pick<LtmExtractionDraft, "diagnostics">,
+  original: LtmDraftMutation,
+  edited: LtmDraftMutation,
+  linkChoices: ReadonlyMap<string, LtmDraftLinkChoice> = new Map(),
+) {
+  const noteId = mutationTargetId(original);
+  for (const diagnostic of draft.diagnostics ?? []) {
+    if (diagnostic.code !== "ambiguous_subject_link_target" || diagnostic.noteId !== noteId) continue;
+    const details = diagnostic.details as
+      { linkTarget?: string; linkRelation?: string; candidateTargetNoteIds?: string[] } | undefined;
+    if (!details?.linkTarget || !details.linkRelation || !details.candidateTargetNoteIds?.length) continue;
+    const links = (mutation: LtmDraftMutation) =>
+      mutation.kind === "create_note" ? mutation.note.links : mutation.kind === "add_link" ? [mutation.link] : [];
+    if (!links(original).some((link) => link.target === details.linkTarget && link.relation === details.linkRelation))
+      continue;
+    const choice = linkChoices.get(linkChoiceKey(original.id, details.linkTarget, details.linkRelation));
+    const chosen = links(edited).filter(
+      (link) => link.relation === details.linkRelation && link.target === choice?.selectedTarget,
+    );
+    const candidates = links(edited).filter(
+      (link) =>
+        link.relation === details.linkRelation &&
+        (link.target === details.linkTarget || details.candidateTargetNoteIds!.includes(link.target)),
+    );
+    if (
+      !choice ||
+      choice.linkTarget !== details.linkTarget ||
+      choice.linkRelation !== details.linkRelation ||
+      !details.candidateTargetNoteIds.includes(choice.selectedTarget) ||
+      chosen.length !== 1 ||
+      (edited.kind === "create_note" && candidates.length !== 1)
+    )
+      return new LtmDraftApplyError(
+        `Choose a scoped target for ${details.linkTarget} from ${details.candidateTargetNoteIds.join(", ")} before accepting mutation ${original.id}.`,
+        409,
+        "ltm_draft_ambiguous_link",
+      );
+  }
+  return null;
+}
+
 function mutationTargetId(mutation: LtmDraftMutation) {
   return mutation.kind === "create_note" ? mutation.note.id : mutation.noteId;
+}
+
+function linkChoiceKey(mutationId: string, linkTarget: string, linkRelation: string) {
+  return `${mutationId}\u0000${linkRelation}\u0000${linkTarget}`;
+}
+
+function mutationLinks(mutation: LtmDraftMutation) {
+  return mutation.kind === "create_note" ? mutation.note.links : mutation.kind === "add_link" ? [mutation.link] : [];
+}
+
+function assertCurrentAmbiguousLinkTargets(
+  draft: LtmExtractionDraft,
+  mutations: readonly LtmDraftMutation[],
+  originals: readonly LtmDraftMutation[],
+  existing: ReadonlyMap<string, LtmNote>,
+  createIds: ReadonlySet<string>,
+) {
+  for (const mutation of mutations) {
+    const links = mutationLinks(mutation);
+    const original = originals.find((item) => item.id === mutation.id)!;
+    for (const diagnostic of draft.diagnostics ?? []) {
+      if (diagnostic.code !== "ambiguous_subject_link_target" || diagnostic.noteId !== mutationTargetId(mutation))
+        continue;
+      const details = diagnostic.details as
+        { linkTarget?: string; linkRelation?: string; candidateTargetNoteIds?: string[] } | undefined;
+      if (
+        !details?.linkTarget ||
+        !details.linkRelation ||
+        !details.candidateTargetNoteIds?.length ||
+        !mutationLinks(original).some(
+          (link) => link.target === details.linkTarget && link.relation === details.linkRelation,
+        )
+      )
+        continue;
+      const chosen = links.filter(
+        (link) => details.candidateTargetNoteIds!.includes(link.target) && link.relation === details.linkRelation,
+      );
+      if (chosen.length !== 1) continue;
+      if (createIds.has(chosen[0]!.target)) {
+        const create = mutations.find(
+          (item): item is Extract<LtmDraftMutation, { kind: "create_note" }> =>
+            item.kind === "create_note" && item.note.id === chosen[0]!.target,
+        )!;
+        const status =
+          mutations
+            .filter(
+              (item): item is Extract<LtmDraftMutation, { kind: "set_status" }> =>
+                item.kind === "set_status" && item.noteId === create.note.id,
+            )
+            .at(-1)?.status ?? (existing.get(create.note.id)?.status === "archived" ? "archived" : create.note.status);
+        if (status === "archived")
+          throw new LtmDraftApplyError(
+            `The selected link target ${create.note.id} is archived. Choose another target.`,
+            409,
+            "ltm_draft_ambiguous_link_stale",
+          );
+        continue;
+      }
+      const target = existing.get(chosen[0]!.target);
+      if (!target)
+        throw new LtmDraftApplyError(
+          `The selected link target ${chosen[0]!.target} is no longer available. Choose another target.`,
+          409,
+          "ltm_draft_ambiguous_link_stale",
+        );
+      if (target.status === "archived")
+        throw new LtmDraftApplyError(
+          `The selected link target ${target.id} is archived. Choose another target.`,
+          409,
+          "ltm_draft_ambiguous_link_stale",
+        );
+      if (!ltmScopesOverlap(target.scope, draft.scope, { includeGlobal: false }))
+        throw new LtmDraftApplyError(
+          `The selected link target ${target.id} is outside the draft scope. Choose another target.`,
+          409,
+          "ltm_draft_ambiguous_link_scope",
+        );
+    }
+  }
 }
 
 function fallbackDisposition(mutation: LtmDraftMutation, existing: ReadonlyMap<string, LtmNote>) {
@@ -124,7 +248,12 @@ async function assertFresh(storage: LongTermMemoryStorage, draft: LtmExtractionD
     );
 }
 
-async function preflight(storage: LongTermMemoryStorage, draft: LtmExtractionDraft, mutations: LtmDraftMutation[]) {
+async function preflight(
+  storage: LongTermMemoryStorage,
+  draft: LtmExtractionDraft,
+  mutations: LtmDraftMutation[],
+  originals: readonly LtmDraftMutation[] = draft.mutations,
+) {
   const createIds = new Set<string>();
   const required = new Set<string>();
   const links = new Set<string>();
@@ -153,6 +282,7 @@ async function preflight(storage: LongTermMemoryStorage, draft: LtmExtractionDra
   if (storedLinkTargets.length) {
     existing = new Map([...existing, ...(await storage.getNotesByIds(storedLinkTargets))]);
   }
+  assertCurrentAmbiguousLinkTargets(draft, mutations, originals, existing, createIds);
   for (const id of links)
     if (!createIds.has(id) && !existing.has(id)) throw new Error(`Long-term memory draft link target not found: ${id}`);
   for (const id of required)
@@ -236,6 +366,7 @@ export async function preflightLongTermMemoryDraft(
     root?: string;
     mutationIds: string[];
     editedMutations?: Array<{ id: string } & Record<string, unknown>>;
+    linkChoices?: LtmDraftLinkChoice[];
     bulk?: boolean;
   },
 ): Promise<LtmDraftPreflightResponse> {
@@ -295,6 +426,18 @@ export async function preflightLongTermMemoryDraft(
       blockers.set(mutationId, [...(blockers.get(mutationId) ?? []), { code, message }]);
   };
 
+  const linkChoices = new Map(
+    (options.linkChoices ?? []).map((choice) => [
+      linkChoiceKey(choice.mutationId, choice.linkTarget, choice.linkRelation),
+      choice,
+    ]),
+  );
+  for (const mutation of mutations) {
+    const original = draft.mutations.find((item) => item.id === mutation.id)!;
+    const error = ambiguousLtmDraftLinkChoiceError(draft, original, mutation, linkChoices);
+    if (error) addBlocker([mutation.id], error);
+  }
+
   const selected = [...mutations];
   let existing = await storage.getNotesByIds([
     ...new Set(
@@ -349,6 +492,11 @@ export async function preflightLongTermMemoryDraft(
       preflightMutations = [...dependencies, ...preflightMutations];
       expanded = true;
     }
+  }
+  for (const mutation of preflightMutations.filter((item) => !selectedIds.has(item.id))) {
+    const original = draft.mutations.find((item) => item.id === mutation.id)!;
+    const error = ambiguousLtmDraftLinkChoiceError(draft, original, mutation, linkChoices);
+    if (error) addBlocker([mutation.id], error);
   }
   const autoIncludedIds = preflightMutations
     .filter((mutation) => !selectedIds.has(mutation.id))
@@ -533,6 +681,7 @@ async function applyInner(
     );
     if (unknown?.length) throw new Error(`Long-term memory draft mutation not found: ${unknown.join(", ")}`);
     const previouslyApplied = new Set(draft.appliedMutationIds ?? []);
+    const originalDraftMutations = draft.mutations;
     if (options.editedMutations?.length) {
       for (const edit of options.editedMutations) {
         if (previouslyApplied.has(edit.id))
@@ -547,7 +696,7 @@ async function applyInner(
       (mutation) =>
         (!selectedIds || selectedIds.has(mutation.id)) && (!options.autoApplyLowRiskOnly || lowRisk(mutation)),
     );
-    if (options.autoApplyLowRiskOnly) selected = await filterAutoApplyDependencies(storage, selected);
+    const autoApplyEligibleIds = options.autoApplyLowRiskOnly ? new Set(selected.map((mutation) => mutation.id)) : null;
     const autoIncludedMutationIds: string[] = [];
     if (selectedIds && !options.autoApplyLowRiskOnly) {
       const targets = new Set(
@@ -642,10 +791,30 @@ async function applyInner(
         }
       }
     }
+    const linkChoices = new Map(
+      (options.linkChoices ?? []).map((choice) => [
+        linkChoiceKey(choice.mutationId, choice.linkTarget, choice.linkRelation),
+        choice,
+      ]),
+    );
+    const excludedAmbiguousCreateIds = new Set<string>();
+    selected = selected.filter((mutation) => {
+      const original = originalDraftMutations.find((item) => item.id === mutation.id)!;
+      const error = ambiguousLtmDraftLinkChoiceError(draft, original, mutation, linkChoices);
+      if (error && !options.autoApplyLowRiskOnly) throw error;
+      if (error && mutation.kind === "create_note") excludedAmbiguousCreateIds.add(mutation.note.id);
+      return !error;
+    });
+    if (options.autoApplyLowRiskOnly) {
+      selected = selected.filter(
+        (mutation) => mutation.kind === "create_note" || !excludedAmbiguousCreateIds.has(mutation.noteId),
+      );
+      selected = await filterAutoApplyDependencies(storage, selected);
+    }
     if (options.editedMutations?.length) {
       const includedIds = new Set(selected.map((mutation) => mutation.id));
       for (const edit of options.editedMutations) {
-        if (!includedIds.has(edit.id))
+        if (!includedIds.has(edit.id) && !autoApplyEligibleIds?.has(edit.id))
           throw new LtmDraftApplyError(
             `Edited mutation ${edit.id} is not selected and cannot be auto-included. Select it or discard its edit before accepting this batch.`,
             409,
@@ -683,7 +852,7 @@ async function applyInner(
         "ltm_draft_no_pending_mutations",
       );
     }
-    const projection = await preflight(storage, draft, selected);
+    const projection = await preflight(storage, draft, selected, originalDraftMutations);
     const userSelectedCount = selectedIds
       ? selected.filter((mutation) => selectedIds.has(mutation.id)).length
       : selected.length;

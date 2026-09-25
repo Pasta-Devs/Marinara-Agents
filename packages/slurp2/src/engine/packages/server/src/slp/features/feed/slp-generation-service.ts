@@ -32,7 +32,7 @@ import { createConnectionsStorage } from "../../../services/storage/connections.
 import { createSlurpStorage } from "../../data/slp-storage.js";
 import { type SlurpAccount } from "../../modules/records/slp-storage-model.js";
 import { createPromptOverridesStorage } from "../../../services/storage/prompt-overrides.storage.js";
-import { generateCreatorPostImage } from "../media/slp-media-contract.js";
+import { generateCreatorPostImage, SLURP_SECONDARY_IMAGE_COUNT } from "../media/slp-media-contract.js";
 import { persistSlurpGeneratedImageSet } from "./slp-post-media-operation.js";
 import { slpCreatorUnlockPriceMetadata } from "../../modules/economy/slp-prices.js";
 import { persistCreatorPostWithUploadedMedia, type SlpCreatorPostMediaUpload } from "../../base/media/slp-media.js";
@@ -292,6 +292,8 @@ export async function generateCreatorPost(
   const briefedImage = Boolean(postImages && cameraInstruction && variation);
   const askModelForImagePrompt = postImages && !briefedImage;
   const askModelForScene = briefedImage;
+  // A set plans each extra picture as its own scene, the way Storyboard plans keyframes.
+  const sceneShots = askModelForScene && axes?.delivery === "multi_image_set" ? SLURP_SECONDARY_IMAGE_COUNT : 0;
   // The Creator's own state reached her direct messages and stopped there, so the feed was
   // written by somebody with no mood, no energy and no memory of last night. A failure here must
   // never cost a post: an unremarkable day is the same as no block at all.
@@ -330,6 +332,7 @@ export async function generateCreatorPost(
     project: project ? { project, posts: projectPosts } : undefined,
     allowImagePrompt: askModelForImagePrompt,
     allowScenePlan: askModelForScene,
+    sceneShots,
     wardrobePrompt: askModelForScene
       ? slurpWardrobePrompt(wardrobeLooks, input.request.access, recentWardrobeIds)
       : null,
@@ -372,6 +375,7 @@ export async function generateCreatorPost(
       allowImagePrompt: askModelForImagePrompt,
       allowScenePlan: askModelForScene,
       contentMaxLength: settings.postMaxLength,
+      sceneShots,
     }),
   } as const;
 
@@ -379,7 +383,7 @@ export async function generateCreatorPost(
     provider,
     messages,
     completionOptions,
-    { askModelForImagePrompt, askModelForScene, debugMode },
+    { askModelForImagePrompt, askModelForScene, sceneShots, debugMode },
   );
   compiledPrompt = sentMessages.map((message) => `# ${message.role}\n${message.content}`).join("\n\n");
 
@@ -413,7 +417,7 @@ export async function generateCreatorPost(
 
   // What the picture is, and what it may show. Assembled in one place so the two briefs cannot
   // disagree about the level, the shoot, or the effort.
-  const { draftImagePrompt, visualBrief, negativePrompt } = slurpPostPictureBriefs({
+  const { draftImagePrompt, visualBrief, negativePrompt, shotBriefs } = slurpPostPictureBriefs({
     project,
     variation,
     camera,
@@ -431,6 +435,7 @@ export async function generateCreatorPost(
     selectedWardrobe: wardrobeSelection.look,
     disclosureMode,
     publicIdentity,
+    shots: generated.shots.slice(0, sceneShots),
   });
 
   // Shoot bookkeeping, once the post definitely has text and its picture brief. A set drop opens a
@@ -779,20 +784,9 @@ export async function generateCreatorPost(
     primary: { ...image, metadata: { ...image.metadata, ...(storyVariation ? { noodlerPostType: "story" } : {}) } },
     imageInput,
     multi: axes?.delivery === "multi_image_set",
+    shots: shotBriefs,
     shootId,
     persist,
   });
   return { post, imagePromptReview: null };
-}
-
-/**
- * Access for an automatic post: locked, except on this Creator's teaser slots, which go out free
- * to fish for subscribers. A player-chosen access never passes through here.
- */
-export async function resolveSlurpAutomaticPostAccess(
-  noodle: Pick<ReturnType<typeof createSlurpStorage>, "countNoodlerPostsByAccount" | "getSettings">,
-  accountId: string,
-): Promise<"public" | "locked"> {
-  const [sequence, settings] = await Promise.all([noodle.countNoodlerPostsByAccount(accountId), noodle.getSettings()]);
-  return slurpTeaserPost(accountId, sequence, settings.teaserRate) ? "public" : "locked";
 }

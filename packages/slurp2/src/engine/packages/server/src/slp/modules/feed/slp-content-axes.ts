@@ -63,7 +63,7 @@ const DELIVERY_NOTES: Partial<Record<SlurpContentDelivery, string>> = {
   text_only: "There is no picture with this one. Do not describe one, promise one, or apologise for not having one.",
   story: "This goes up as a Story: throwaway, one line at most, gone tomorrow.",
   existing_media: "The picture is one you took earlier. Do not pretend it was taken just now.",
-  multi_image_set: "Several pictures from one shoot go up together. Introduce them once, not one by one.",
+  multi_image_set: "Several pictures go up together. Introduce them once, not one by one.",
   cropped_preview: "The picture is cropped on purpose. The full one is for subscribers.",
 };
 

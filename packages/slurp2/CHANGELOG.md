@@ -1,5 +1,26 @@
 # Slurp Remastered release notes
 
+## 0.2.40 — 2026-09-25
+
+- Retained Moments use bounded Story reads and follow feed search and pagination rules.
+
+## 0.2.39 — 2026-09-25
+
+- Moments now remain available for the configured retention period even when newer feed posts fill the first page.
+- Follow-ups no longer retry forever when a Creator has no known return time.
+
+## 0.2.38 — 2026-09-24
+
+- Generated audience names now draw from one merged, much larger word bank (184,512 combinations, up from ~18,800) instead of a single fixed set of moody handles.
+- Generated names are CamelCase with no digits, spaces, or underscores (for example `MothHour` instead of `moth_hour_77`), so they read as a single word and two people never blur together in a dense list.
+
+## 0.2.37 — 2026-09-24
+
+- NanoGPT, xAI, and connections recognised only by their base URL now receive avatar reference images again.
+- Persona Creators can set Messages & Pricing again; the tab now uses the same viewer persona as the rest of Slurp.
+- Post cards, the picture viewer, and the redraw box show the exact prompt the picture was drawn from. A prompt you edit or keep in the redraw box is sent as written, not rewritten again.
+- Multi-picture posts plan every picture as its own complete scene, so a photo dump, a shoot, or a day out each gets pictures that make sense on their own.
+
 ## 0.2.36 — 2026-09-24
 
 - Deep details opens as a flowchart of the whole generation: each step shows what happens, why, which connection and model ran it, and the exact text that went in and came out. A Canvas view shows the same diagram to drag and zoom in every direction.

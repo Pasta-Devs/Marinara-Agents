@@ -154,7 +154,15 @@ export function mapPost(row: PostRow): SlpPost {
     : [];
   const images = row.imageUrl
     ? [
-        { id: `${row.id}:primary`, position: 0, imageUrl: row.imageUrl, imagePrompt: row.imagePrompt ?? null },
+        {
+          id: `${row.id}:primary`,
+          position: 0,
+          imageUrl: row.imageUrl,
+          // The prompt this picture was drawn from; `row.imagePrompt` stays the post's draft.
+          imagePrompt:
+            (typeof metadata.imageProviderPrompt === "string" && metadata.imageProviderPrompt) ||
+            (row.imagePrompt ?? null),
+        },
         ...secondary,
       ]
     : secondary;

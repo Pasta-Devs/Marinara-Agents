@@ -1,5 +1,13 @@
 # 5e (SRD 5.1)
 
+## 0.8.0 - 2026-09-25
+- Eleven SRD spellcasters now cast in a fight, off their own sheet and spell slots, at the numbers their stat block prints: the Acolyte, Priest, Cult Fanatic, Druid, Mage, Archmage, Lich, Mummy Lord, both nagas and the Androsphinx. The Gynosphinx prepares nothing a fight can use, so it still fights with its claws.
+- Hellish Rebuke works: when something damages you, the fight asks whether you cast it back at them.
+- Sacred Flame, Acid Splash, Poison Spray, Vicious Mockery and Spiritual Weapon now deal damage. Before, a fight never offered them.
+- Two new sheet fields, Spell attack: other bonus and Spell save DC: other bonus.
+- Counterspell, Shield and Feather Fall still stay off the menu, and the README says why.
+- Needs an Engine with Capability API 1.34.
+
 ## 0.7.0 - 2026-09-20
 - Extra Attack works. Set Attacks per Attack action on your sheet and one Attack buys that many strikes: the first spends the action and the rest are free. A crossbow still fires once, because it loads.
 - Sneak Attack is a rider your rogue simply has: hit with a finesse or ranged weapon while you have advantage, or while another enemy stands beside your target. It grows with the Rogue table, 1d6 to 10d6.

@@ -2,7 +2,7 @@
   "$comment": "First-party 5e ruleset on SRD 5.1. Every id here is this file's own choice: the Engine never looks for 'level', 'dex' or 'slots'. A $comment key is allowed on any object and ignored.",
   "schemaVersion": 1,
   "id": "5e-2014",
-  "version": 7,
+  "version": 8,
   "name": "5e (SRD 5.1)",
   "edition": "System Reference Document 5.1, 2014 rules",
   "license": {
@@ -89,7 +89,7 @@
     ]
   },
   "sheet": {
-    "version": 2,
+    "version": 3,
     "sections": [
       {
         "id": "identity",
@@ -403,6 +403,34 @@
         "section": "spellcasting"
       },
       {
+        "$comment": "SRD 5.1, Spellcasting: \"Spell attack modifier = your proficiency bonus + your spellcasting ability modifier\". Anything else that adds to it goes here: a magic item that improves spell attacks, or a monster whose printed spell attack follows its challenge rating rather than its caster level.",
+        "id": "spell_attack_extra",
+        "label": "Spell attack: other bonus",
+        "type": "number",
+        "min": -5,
+        "max": 5,
+        "default": 0,
+        "section": "spellcasting",
+        "hideWhen": {
+          "field": "spellcasting_ability",
+          "equals": "none"
+        }
+      },
+      {
+        "$comment": "SRD 5.1, Spellcasting: \"Spell save DC = 8 + your proficiency bonus + your spellcasting ability modifier\". Anything else that adds to it goes here, for the same reasons as the spell attack's.",
+        "id": "spell_dc_extra",
+        "label": "Spell save DC: other bonus",
+        "type": "number",
+        "min": -5,
+        "max": 5,
+        "default": 0,
+        "section": "spellcasting",
+        "hideWhen": {
+          "field": "spellcasting_ability",
+          "equals": "none"
+        }
+      },
+      {
         "id": "slots_max_1",
         "label": "1st-level slots",
         "type": "number",
@@ -604,6 +632,9 @@
           },
           {
             "abilityModFromField": "spellcasting_ability"
+          },
+          {
+            "field": "spell_dc_extra"
           }
         ],
         "section": "spellcasting",
@@ -622,6 +653,9 @@
           },
           {
             "abilityModFromField": "spellcasting_ability"
+          },
+          {
+            "field": "spell_attack_extra"
           }
         ],
         "section": "spellcasting",
@@ -2410,7 +2444,7 @@
       "bonus": 2
     },
     "opportunity": {
-      "$comment": "SRD 5.1, Opportunity Attacks: \"You can make an opportunity attack when a hostile creature that you can see moves out of your reach. To make the opportunity attack, you use your reaction.\" Taking it is automatic in this Engine, because nothing opens a reaction window yet.",
+      "$comment": "SRD 5.1, Opportunity Attacks: \"You can make an opportunity attack when a hostile creature that you can see moves out of your reach. To make the opportunity attack, you use your reaction.\" The fight stops and asks whoever may take it, and letting it go by costs nothing.",
       "budget": "reaction"
     },
     "attacks": [

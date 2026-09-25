@@ -1,5 +1,5 @@
 // The splash screen needs the shipped version and its public notes inside the client bundle.
-export const SLURP2_VERSION = "0.2.36";
+export const SLURP2_VERSION = "0.2.40";
 
 export interface Slurp2ReleaseEntry {
   version: string;
@@ -9,6 +9,37 @@ export interface Slurp2ReleaseEntry {
 
 /** The public release history shown in the Engine splash screen. */
 export const SLURP2_RELEASES: Slurp2ReleaseEntry[] = [
+  {
+    version: "0.2.40",
+    date: "2026-09-25",
+    notes: ["Retained Moments use bounded Story reads and follow feed search and pagination rules."],
+  },
+  {
+    version: "0.2.39",
+    date: "2026-09-25",
+    notes: [
+      "Moments now remain available for the configured retention period even when newer feed posts fill the first page.",
+      "Follow-ups no longer retry forever when a Creator has no known return time.",
+    ],
+  },
+  {
+    version: "0.2.38",
+    date: "2026-09-24",
+    notes: [
+      "Generated audience names now draw from one merged, much larger word bank (184,512 combinations, up from ~18,800) instead of a single fixed set of moody handles.",
+      "Generated names are CamelCase with no digits, spaces, or underscores (for example `MothHour` instead of `moth_hour_77`), so they read as a single word and two people never blur together in a dense list.",
+    ],
+  },
+  {
+    version: "0.2.37",
+    date: "2026-09-24",
+    notes: [
+      "NanoGPT, xAI, and connections recognised only by their base URL now receive avatar reference images again.",
+      "Persona Creators can set Messages & Pricing again; the tab now uses the same viewer persona as the rest of Slurp.",
+      "Post cards, the picture viewer, and the redraw box show the exact prompt the picture was drawn from. A prompt you edit or keep in the redraw box is sent as written, not rewritten again.",
+      "Multi-picture posts plan every picture as its own complete scene, so a photo dump, a shoot, or a day out each gets pictures that make sense on their own.",
+    ],
+  },
   {
     version: "0.2.36",
     date: "2026-09-24",
