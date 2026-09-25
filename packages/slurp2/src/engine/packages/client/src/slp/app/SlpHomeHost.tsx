@@ -161,7 +161,7 @@ export function SlurpHome({ navigation, onNavigate, onLeave }: SlurpHomeProps) {
     onOpenWallet: goToWallet,
     onOpenStudio: goToStudio,
     onGeneratePosts: () => {
-      onNavigate({ mode: "creator-settings", section: "automation", target: "automation", openRefresh: true });
+      onNavigate({ mode: "creator-settings", section: "overview", target: "overview", openRefresh: true });
     },
     onRunAudience: () => {
       refreshAudienceNow.mutate();

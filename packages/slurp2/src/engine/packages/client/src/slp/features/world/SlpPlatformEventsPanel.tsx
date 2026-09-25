@@ -26,11 +26,14 @@ const dateValue = (item: SlurpPlatformEvent) =>
   item.activation.kind === "annual" ? `2000-${pad(item.activation.month)}-${pad(item.activation.day)}` : "2000-01-01";
 const eventOrder = (item: SlurpPlatformEvent) =>
   item.activation.kind === "annual" ? item.activation.month * 100 + item.activation.day : 20_000;
-const eventWhen = (item: SlurpPlatformEvent) => {
+/** "Jan 1 · 1 day" in the reader's language. The year is a placeholder: annual events recur. */
+const days = (count: number) => `${count} ${count === 1 ? "day" : "days"}`;
+const eventWhen = (item: SlurpPlatformEvent, language?: string) => {
   const rule = item.activation;
-  if (rule.kind === "annual") return `${pad(rule.month)}/${pad(rule.day)} · ${rule.durationDays} days`;
+  if (rule.kind === "annual")
+    return `${new Intl.DateTimeFormat(language, { month: "short", day: "numeric", timeZone: "UTC" }).format(Date.UTC(2000, rule.month - 1, rule.day))} · ${days(rule.durationDays)}`;
   if (rule.kind === "window") return `${rule.startsAt.slice(0, 10)} – ${rule.endsAt.slice(0, 10)}`;
-  if (rule.kind === "manual") return `Manual · ${rule.durationDays} days`;
+  if (rule.kind === "manual") return `Manual · ${days(rule.durationDays)}`;
   if (rule.kind === "creator-milestone") return `${rule.metric} reaches ${rule.threshold.toLocaleString()}`;
   if (rule.kind === "notable-post") return `A post reaches ${rule.reach.toLocaleString()}`;
   if (rule.kind === "arc-lifecycle") return `Tagged arc ${rule.phase}`;
@@ -48,7 +51,7 @@ export function SlurpPlatformEventsSettings({
   onSave: (events: SlurpPlatformEvent[]) => Promise<boolean>;
 }) {
   const startEvent = useStartStoryEvent();
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [draft, setDraft] = useState<SlurpPlatformEvent | null>(null);
   const activeIds = new Set(slurpActivePlatformEvents(events, new Date()).map((item) => item.id));
@@ -316,12 +319,12 @@ export function SlurpPlatformEventsSettings({
           {t("ui.slurp.settings.events.empty", { defaultValue: "No events. Add one or restore the defaults." })}
         </p>
       ) : (
-        <ul className="space-y-2">
+        <ul className="divide-y divide-[var(--slurp-outline)] overflow-hidden rounded-xl bg-[var(--slurp-surface-raised)] ring-1 ring-inset ring-[var(--slurp-outline)]">
           {sorted.map((item) => {
             const expanded = selectedId === item.id;
             return (
-              <li key={item.id} className="space-y-2">
-                <div className="flex items-center gap-2 rounded-xl bg-[var(--slurp-surface-raised)] px-3 py-2 ring-1 ring-inset ring-[var(--slurp-outline)]">
+              <li key={item.id} className="space-y-2 px-3 py-1.5 sm:px-4">
+                <div className="flex items-center gap-2">
                   <input
                     type="checkbox"
                     checked={item.enabled}
@@ -349,7 +352,9 @@ export function SlurpPlatformEventsSettings({
                         {t("ui.slurp.settings.events.active", { defaultValue: "Running now" })}
                       </span>
                     )}
-                    <span className="shrink-0 text-xs tabular-nums text-[var(--slurp-muted)]">{eventWhen(item)}</span>
+                    <span className="shrink-0 text-xs tabular-nums text-[var(--slurp-muted)]">
+                      {eventWhen(item, i18n.language)}
+                    </span>
                   </button>
                   {item.activation.kind === "manual" && item.enabled && (
                     <button

@@ -195,10 +195,7 @@ export async function slpAdsRoutes(app: FastifyInstance, deps: SlpRouteDeps) {
     const ad = (await ads.pool.listAll(SLURP_GARNISH_PLATFORM)).find((row) => row.id === id);
     if (!ad) return reply.code(404).send({ error: "Not Found" });
     const settings = await noodle.getSettings();
-    const outcome = await generateGarnishAdImage(app.db, ads.pool, ad, [
-      settings.inlineAdsImageConnectionId,
-      settings.imageGenerationConnectionId,
-    ]);
+    const outcome = await generateGarnishAdImage(app.db, ads.pool, ad, [settings.inlineAdsImageConnectionId]);
     if (outcome === "unavailable") {
       return reply.code(400).send({ error: "Select an image generation connection first." });
     }
@@ -268,10 +265,7 @@ export async function slpAdsRoutes(app: FastifyInstance, deps: SlpRouteDeps) {
       if (settings.inlineAdsImagesEnabled) {
         for (const ad of items) {
           if (
-            (await generateGarnishAdImage(app.db, ads.pool, ad, [
-              settings.inlineAdsImageConnectionId,
-              settings.imageGenerationConnectionId,
-            ])) === "generated"
+            (await generateGarnishAdImage(app.db, ads.pool, ad, [settings.inlineAdsImageConnectionId])) === "generated"
           )
             images += 1;
         }

@@ -111,8 +111,11 @@ assert.equal((panels.messaging.match(/<RangePairField/gu) ?? []).length, 4, "eig
 for (const key of ["arcCooldownWeeks", "arcMaxConcurrentAuto"]) {
   assert.match(storylines, new RegExp(`<RangeSetting[^>]*?value=\\{settings\\.${key}\\}`, "su"));
 }
-for (const key of ["postsPerDay", "carryoverHours", "carryoverMaxItems"]) {
-  assert.match(panels.publishing, new RegExp(`<NumberSetting\\s+stepper[^>]*?value=\\{settings\\.${key}\\}`, "su"));
+assert.match(panels.publishing, /<NumberSetting\s+stepper[^>]*?value=\{settings\.postsPerDay\}/su);
+// Carryover is about Engine chats, so it lives on Connections, not Publishing.
+const connectionsPanel = slurp2Source(`${root}features/settings/SlpConnectionsPanel.tsx`);
+for (const key of ["carryoverHours", "carryoverMaxItems"]) {
+  assert.match(connectionsPanel, new RegExp(`<NumberSetting\\s+stepper[^>]*?value=\\{settings\\.${key}\\}`, "su"));
 }
 
 // Each main page shows its current settings as chips; a chip jumps to its control.

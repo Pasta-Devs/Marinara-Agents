@@ -17,9 +17,11 @@ export function SlpCreatorSettingsTab({
   const { t } = useTranslation();
   const visible = section.blocks.filter((block) => !block.available || block.available(props.creator));
   const headed = visible.length > 1;
+  // Two blocks fit on one screen; a jump row there only looks like a second set of tabs.
+  const jumpRow = visible.length > 2;
   return (
     <div className="space-y-8">
-      {headed && (
+      {jumpRow && headed && (
         <StatusStrip
           label={t("ui.slurp.settings.strip.jump")}
           items={visible.map((block) => ({

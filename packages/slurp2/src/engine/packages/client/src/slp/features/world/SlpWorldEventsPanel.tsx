@@ -1,6 +1,7 @@
 import { useTranslation } from "react-i18next";
 
 import { SlurpPlatformEventsSettings } from "./SlpPlatformEventsPanel";
+import { SlpWorldTimeline } from "./SlpWorldTimeline";
 
 import { SettingAnchor } from "../../modules/settings/SlpSettingsKit";
 
@@ -12,7 +13,7 @@ export function SlpWorldEventsPanel(page: SlpBackstagePageProps) {
   const { t } = useTranslation();
 
   return (
-    <div className="space-y-10">
+    <div className="space-y-8">
       <p className="text-xs leading-5 text-[var(--muted-foreground)]">{t("ui.slurp.settings.events.startMovedNote")}</p>
       <SettingAnchor settingKey="platformEvents">
         <SlurpPlatformEventsSettings
@@ -21,6 +22,7 @@ export function SlpWorldEventsPanel(page: SlpBackstagePageProps) {
           onSave={(events) => update("platformEvents", events)}
         />
       </SettingAnchor>
+      <SlpWorldTimeline />
     </div>
   );
 }

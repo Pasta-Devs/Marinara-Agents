@@ -1,17 +1,13 @@
 import type { SlpBackstagePanelEntry } from "../../features/backstage/slp-backstage-contract";
 import { SlpAdsPanel } from "../../features/ads/SlpAdsPanel";
 import { SlpAudiencePanel } from "../../features/audience/SlpAudiencePanel";
-import { SlpBackstageAutomationPanel } from "../../features/backstage/SlpBackstageAutomationPanel";
 import { SlpBackstageOverviewPanel } from "../../features/backstage/SlpBackstageOverviewPanel";
-import { SlpBackstageWorldPanel } from "../../features/backstage/SlpBackstageWorldPanel";
-import { SlpBackstageContentPanel } from "../../features/backstage/SlpBackstageContentPanel";
 import { SlpCreatorImprovePanel } from "../../features/creators/SlpCreatorImprovePanel";
 import { SlpCreatorsPanel } from "../../features/creators/SlpCreatorsPanel";
 import { SlpDiscoveryPanel } from "../../features/discovery/SlpDiscoveryPanel";
 import { SlpWalletPanel } from "../../features/economy/SlpWalletPanel";
 import { SlpPublishingPanel } from "../../features/feed/SlpPublishingPanel";
 import { SlpAutopurgePanel } from "../../features/maintenance/SlpAutopurgePanel";
-import { SlpBackupPanel } from "../../features/maintenance/SlpBackupPanel";
 import { SlpImagesPanel } from "../../features/media/SlpImagesPanel";
 import { SlpConnectionsPanel } from "../../features/settings/SlpConnectionsPanel";
 import { SlpMessagingPanel } from "../../features/messages/SlpMessagingPanel";
@@ -35,8 +31,6 @@ export const SLP_BACKSTAGE_PANELS: readonly SlpBackstagePanelEntry[] = [
   { target: "overview", Component: SlpBackstageOverviewPanel },
   { target: "creators", Component: SlpCreatorsPanel },
   { target: "improve", Component: SlpCreatorImprovePanel },
-  { target: "world", Component: SlpBackstageWorldPanel },
-  { target: "content", Component: SlpBackstageContentPanel },
   { target: "tags", Component: SlpDiscoveryPanel },
   { target: "events", Component: SlpWorldEventsPanel },
   { target: "storylines", Component: SlpStorylinesPanel },
@@ -47,13 +41,11 @@ export const SLP_BACKSTAGE_PANELS: readonly SlpBackstagePanelEntry[] = [
   { target: "audience", Component: SlpAudiencePanel },
   { target: "ads", Component: SlpAdsPanel },
   { target: "wallet", Component: SlpWalletPanel },
-  { target: "automation", Component: SlpBackstageAutomationPanel },
   { target: "general", Component: SlpPublishingPanel },
   { target: "images", Component: SlpImagesPanel },
   { target: "connections", Component: SlpConnectionsPanel },
   { target: "prompts", Component: SlpPromptsPanel },
   { target: "autopurge", Component: SlpAutopurgePanel },
-  { target: "advanced", Component: SlpBackupPanel },
 ];
 
 const byTarget = new Map(SLP_BACKSTAGE_PANELS.map((entry) => [entry.target, entry]));

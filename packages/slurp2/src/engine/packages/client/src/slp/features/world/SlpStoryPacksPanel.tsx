@@ -12,8 +12,6 @@ import {
   usePreviewBundledStoryPack,
   usePreviewStoryPack,
   useSlpBundledStoryPacks,
-  useSlpStoryTimeline,
-  useSetStoryOccurrenceStatus,
   type SlpPackPreview,
 } from "./slp-story-hooks.js";
 
@@ -22,11 +20,9 @@ const button =
 
 export function SlpStoryPacksPanel({ arcs, events }: { arcs: SlurpArcType[]; events: SlurpPlatformEvent[] }) {
   const packs = useSlpBundledStoryPacks();
-  const timeline = useSlpStoryTimeline();
   const bundledPreview = usePreviewBundledStoryPack();
   const uploadPreview = usePreviewStoryPack();
   const apply = useApplyStoryPack();
-  const setStatus = useSetStoryOccurrenceStatus();
   const uploadRef = useRef<HTMLInputElement>(null);
   const [preview, setPreview] = useState<SlpPackPreview | null>(null);
   const [actions, setActions] = useState<Record<string, "copy" | "replace" | "skip">>({});
@@ -371,67 +367,6 @@ export function SlpStoryPacksPanel({ arcs, events }: { arcs: SlurpArcType[]; eve
           </div>
         </section>
       )}
-
-      <section aria-labelledby="slurp-world-timeline-heading" className="space-y-3">
-        <div>
-          <h2 id="slurp-world-timeline-heading" className="text-base font-black">
-            World timeline
-          </h2>
-          <p className="mt-1 text-sm text-[var(--slurp-muted)]">
-            Suggestions, active events, and recent history keep their original participants and rules.
-          </p>
-        </div>
-        {(timeline.data?.occurrences ?? []).length === 0 ? (
-          <p className="text-sm text-[var(--slurp-muted)]">
-            No event occurrences yet. Start a manual event or wait for a scheduled date.
-          </p>
-        ) : (
-          <ul className="space-y-3">
-            {timeline.data?.occurrences.map((occurrence) => (
-              <li
-                key={occurrence.id}
-                className="rounded-xl bg-[var(--slurp-surface-raised)] p-4 ring-1 ring-inset ring-[var(--slurp-outline)]"
-              >
-                <div className="flex flex-wrap items-start justify-between gap-3">
-                  <div>
-                    <h3 className="font-bold">{occurrence.blueprint.name}</h3>
-                    <p className="mt-1 text-xs text-[var(--slurp-muted)]">
-                      {occurrence.status} · {occurrence.participantIds.length} Creators · {occurrence.triggerEvidence}
-                    </p>
-                  </div>
-                  {occurrence.status === "suggested" && (
-                    <div className="flex gap-2">
-                      <button
-                        className={button}
-                        type="button"
-                        onClick={() => setStatus.mutate({ id: occurrence.id, status: "dismissed" })}
-                      >
-                        Dismiss
-                      </button>
-                      <button
-                        className={button}
-                        type="button"
-                        onClick={() => setStatus.mutate({ id: occurrence.id, status: "active" })}
-                      >
-                        Start event
-                      </button>
-                    </div>
-                  )}
-                  {occurrence.status === "active" && (
-                    <button
-                      className={button}
-                      type="button"
-                      onClick={() => setStatus.mutate({ id: occurrence.id, status: "completed" })}
-                    >
-                      End event
-                    </button>
-                  )}
-                </div>
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
     </div>
   );
 }

@@ -6,7 +6,7 @@ import { useReplaceSlurpDiscoveryTag, useSlurpDiscoveryTagUsage } from "./slp-di
 import { showConfirmDialog } from "../../../lib/app-dialogs";
 import { groupSlurpDiscoveryTags, normalizeSlurpDiscoveryTag, SLURP_DISCOVERY_TAG_MAX_LENGTH } from "./slp-discovery";
 import { cn } from "../../../lib/utils";
-import { SectionTitle } from "../../modules/settings/SlpSettingsControls";
+import { BackstagePageHeader } from "../../modules/settings/SlpSettingsKit";
 
 type DiscoveryTag = { tag: string; group: string };
 
@@ -154,7 +154,7 @@ export function SlurpTagsSettings({
 
   return (
     <div className="space-y-5">
-      <SectionTitle title={t("ui.slurp.settings.tags.title")} detail={t("ui.slurp.settings.tags.detail")} />
+      <BackstagePageHeader detail={t("ui.slurp.settings.tags.detail")} />
       <label className="relative flex min-h-11 items-center gap-2 rounded-lg border border-[var(--slurp-outline)] bg-[var(--slurp-canvas)] px-3 focus-within:ring-2 focus-within:ring-[var(--slurp-focus)]">
         <Search size={15} aria-hidden="true" className="text-[var(--slurp-muted)]" />
         <span className="sr-only">{t("ui.slurp.settings.tags.filter")}</span>

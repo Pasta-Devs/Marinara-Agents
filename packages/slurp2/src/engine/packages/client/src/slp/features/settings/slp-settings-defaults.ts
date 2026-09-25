@@ -8,15 +8,23 @@ import type { SlurpSettings } from "./slp-settings-contract";
  * either here or in `SLURP_SETTINGS_NOT_RESET`, so a new setting cannot silently escape.
  */
 export type SlurpResettableSection =
-  "general" | "images" | "prompts" | "audience" | "arcs" | "messaging" | "wallet" | "ads" | "autopurge";
+  | "general"
+  | "connections"
+  | "images"
+  | "prompts"
+  | "audience"
+  | "storylines"
+  | "messaging"
+  | "wallet"
+  | "ads"
+  | "autopurge";
 
 export const SLURP_SETTINGS_SECTION_KEYS: Record<SlurpResettableSection, readonly (keyof SlurpSettings)[]> = {
   general: [
     "storyRate",
     "professorMariCreatorSource",
-    "carryoverModes",
-    "carryoverHours",
-    "carryoverMaxItems",
+    "storyImagesEnabled",
+    "storyLifetimeHours",
     "postMaxLength",
     "postShowMoreLength",
     "postsPerDay",
@@ -26,11 +34,11 @@ export const SLURP_SETTINGS_SECTION_KEYS: Record<SlurpResettableSection, readonl
     "postPlanner",
     "teaserRate",
   ],
+  // Carryover is about Engine chats, so it resets with the Connections page it lives on.
+  connections: ["carryoverModes", "carryoverHours", "carryoverMaxItems"],
   images: [
     "imageWidth",
     "imageHeight",
-    "storyImagesEnabled",
-    "storyLifetimeHours",
     "storyImageWidth",
     "storyImageHeight",
     "imageContextMode",
@@ -65,7 +73,7 @@ export const SLURP_SETTINGS_SECTION_KEYS: Record<SlurpResettableSection, readonl
     "simulationTuning",
     "modelBudget",
   ],
-  arcs: [
+  storylines: [
     "sharedPreseed",
     "sharedWorldEvents",
     "projectRate",

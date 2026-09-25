@@ -58,44 +58,47 @@ export function SlpCreatorPublishingSection({ creator, active, mode = "automatio
               }
             />
           )}
-        </SettingsGroup>
-      )}
-
-      {mode === "automation" && (
-        <SettingsGroup title={t("ui.slurp.settings.creators.postingSchedule")}>
-          <p className={noteClass}>{t("ui.slurp.settings.creators.scheduleDetail")}</p>
-          {reserveStatusQuery.isLoading ? (
-            <div
-              className="flex items-center justify-center gap-2 py-6 text-sm text-[var(--slurp-muted)]"
-              role="status"
-            >
-              <Loader2 size={18} className="animate-spin motion-reduce:animate-none" aria-hidden="true" />
-              {t("ui.noodle.noodlerschedulemanagermodal.loadingStatus")}
-            </div>
-          ) : reserveStatusQuery.isError ? (
-            <div className="rounded-lg p-4 text-sm ring-1 ring-inset ring-[var(--slurp-danger)]/30">
-              <p>{t("ui.noodle.noodlerschedulemanagermodal.couldNotLoadStatus")}</p>
-              <button type="button" onClick={() => void reserveStatusQuery.refetch()} className={`mt-3 ${quietButton}`}>
-                <RefreshCw size={14} aria-hidden="true" />
-                {t("capabilities.actions.tryAgain")}
-              </button>
-            </div>
-          ) : slots.length > 0 ? (
-            <ScheduleAgenda
-              slots={slots}
-              pending={updateScheduleSlot.isPending}
-              onMove={async (slot, publishAt) => {
-                try {
-                  await updateScheduleSlot.mutateAsync({ slotId: slot.id, publishAt });
-                  toast.success(t("ui.slurp.settings.creators.scheduleSaved"));
-                } catch (error) {
-                  toast.error(errorMessage(error));
-                }
-              }}
-            />
-          ) : (
-            <p className={noteClass}>{t("ui.slurp.settings.creators.scheduleEmpty")}</p>
-          )}
+          {/* The switch and what it will post next, in one card. */}
+          <div className="space-y-2">
+            <h4 className="text-sm font-semibold">{t("ui.slurp.settings.creators.postingSchedule")}</h4>
+            <p className={noteClass}>{t("ui.slurp.settings.creators.scheduleDetail")}</p>
+            {reserveStatusQuery.isLoading ? (
+              <div
+                className="flex items-center justify-center gap-2 py-6 text-sm text-[var(--slurp-muted)]"
+                role="status"
+              >
+                <Loader2 size={18} className="animate-spin motion-reduce:animate-none" aria-hidden="true" />
+                {t("ui.noodle.noodlerschedulemanagermodal.loadingStatus")}
+              </div>
+            ) : reserveStatusQuery.isError ? (
+              <div className="rounded-lg p-4 text-sm ring-1 ring-inset ring-[var(--slurp-danger)]/30">
+                <p>{t("ui.noodle.noodlerschedulemanagermodal.couldNotLoadStatus")}</p>
+                <button
+                  type="button"
+                  onClick={() => void reserveStatusQuery.refetch()}
+                  className={`mt-3 ${quietButton}`}
+                >
+                  <RefreshCw size={14} aria-hidden="true" />
+                  {t("capabilities.actions.tryAgain")}
+                </button>
+              </div>
+            ) : slots.length > 0 ? (
+              <ScheduleAgenda
+                slots={slots}
+                pending={updateScheduleSlot.isPending}
+                onMove={async (slot, publishAt) => {
+                  try {
+                    await updateScheduleSlot.mutateAsync({ slotId: slot.id, publishAt });
+                    toast.success(t("ui.slurp.settings.creators.scheduleSaved"));
+                  } catch (error) {
+                    toast.error(errorMessage(error));
+                  }
+                }}
+              />
+            ) : (
+              <p className={noteClass}>{t("ui.slurp.settings.creators.scheduleEmpty")}</p>
+            )}
+          </div>
         </SettingsGroup>
       )}
 

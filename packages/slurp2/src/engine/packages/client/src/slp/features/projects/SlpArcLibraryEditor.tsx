@@ -1,5 +1,5 @@
 import { useResetSlurpArcType } from "../settings/slp-settings-contract";
-import { CircleHelp, Plus } from "lucide-react";
+import { Download, Pencil, Plus, Sparkles, Trash2, Upload } from "lucide-react";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { SlurpArcType } from "./slp-projects-contract";
@@ -122,136 +122,23 @@ export function ArcLibraryEditor({
     );
   }
 
+  const iconButton =
+    "inline-flex size-11 shrink-0 items-center justify-center rounded-lg text-[var(--slurp-muted)] hover:bg-[var(--slurp-surface-raised)] hover:text-[var(--slurp-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] disabled:opacity-50";
+  const visible = library.filter((type) => !type.hidden || type.builtin);
   return (
-    <div className="space-y-2">
-      <ul className="space-y-2">
-        {library
-          .filter((type) => !type.hidden || type.builtin)
-          .map((type) => (
-            <li
-              key={type.id}
-              className="rounded-xl border border-[var(--slurp-outline)] bg-[var(--slurp-canvas)] p-3 text-sm shadow-sm sm:p-4"
-            >
-              <div className="flex flex-wrap items-start gap-3">
-                <div className="min-w-0 flex-1">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className={`font-bold ${type.hidden ? "text-[var(--slurp-muted)] line-through" : ""}`}>
-                      {type.name}
-                    </span>
-                    {type.builtin && (
-                      <span className="rounded-full bg-[var(--noodle-accent)]/10 px-2 py-0.5 text-[0.65rem] font-bold text-[var(--noodle-accent)]">
-                        {t("ui.slurp.settings.arcLibrary.builtIn", { defaultValue: "Built in" })}
-                      </span>
-                    )}
-                    {type.hidden && (
-                      <span className="rounded-full bg-[var(--muted-foreground)]/10 px-2 py-0.5 text-[0.65rem] font-bold text-[var(--muted-foreground)]">
-                        {t("ui.slurp.settings.arcLibrary.hidden")}
-                      </span>
-                    )}
-                  </div>
-                  <p className="mt-1 line-clamp-2 text-xs leading-5 text-[var(--muted-foreground)]">
-                    {type.description ||
-                      t("ui.slurp.settings.arcLibrary.noDescription", { defaultValue: "No direction added." })}
-                  </p>
-                  <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-[0.68rem] text-[var(--muted-foreground)]">
-                    <span>
-                      {t("ui.slurp.settings.arcLibrary.chapterCount", {
-                        defaultValue: "{{count}} chapters",
-                        count: type.chapters.length,
-                      })}
-                    </span>
-                    {type.tone && <span>{type.tone}</span>}
-                    {type.tags.length > 0 && <span>{type.tags.join(", ")}</span>}
-                  </div>
-                </div>
-                {!type.hidden && (
-                  <label className="inline-flex min-h-10 shrink-0 items-center gap-2 text-xs font-semibold">
-                    <input
-                      type="checkbox"
-                      checked={type.enabled}
-                      disabled={busy}
-                      onChange={(event) => replace({ ...type, enabled: event.target.checked })}
-                    />
-                    {t("ui.slurp.settings.arcLibrary.enabled")}
-                  </label>
-                )}
-              </div>
-              {!type.hidden && (
-                <div className="mt-3 flex flex-wrap items-center justify-end gap-2 border-t border-[var(--slurp-outline)] pt-3">
-                  <button
-                    type="button"
-                    className={button}
-                    disabled={busy}
-                    onClick={() => {
-                      setReviewingGeneratedDraft(false);
-                      setDraft(structuredClone(type));
-                    }}
-                  >
-                    {t("ui.slurp.settings.arcLibrary.edit")}
-                  </button>
-                  <button type="button" className={button} disabled={busy} onClick={() => exportArc(type)}>
-                    {t("ui.slurp.settings.arcLibrary.export", { defaultValue: "Export" })}
-                  </button>
-                  <button
-                    type="button"
-                    className={`${button} text-red-600`}
-                    disabled={busy}
-                    onClick={() => {
-                      if (!window.confirm(t("ui.slurp.settings.arcLibrary.deleteConfirm", { name: type.name }))) return;
-                      onChange(
-                        type.builtin
-                          ? library.map((entry) =>
-                              entry.id === type.id ? { ...entry, enabled: false, hidden: true } : entry,
-                            )
-                          : library.filter((entry) => entry.id !== type.id),
-                      );
-                    }}
-                  >
-                    {t("ui.slurp.settings.arcLibrary.delete")}
-                  </button>
-                </div>
-              )}
-              {type.hidden && type.builtin && (
-                <button
-                  type="button"
-                  className={button}
-                  disabled={busy || reset.isPending}
-                  onClick={() => reset.mutate(type.id)}
-                >
-                  {t("ui.slurp.settings.arcLibrary.reset")}
-                </button>
-              )}
-            </li>
-          ))}
-      </ul>
-      <div className="flex flex-wrap items-center justify-end gap-2">
-        <input
-          id={importInputId}
-          type="file"
-          accept="application/json,.json"
-          className="sr-only"
-          onChange={(event) => {
-            const file = event.target.files?.[0];
-            event.target.value = "";
-            if (file) void importArc(file);
-          }}
-        />
-        <label htmlFor={importInputId} className={`${button} cursor-pointer border border-[var(--slurp-outline)]`}>
-          {t("ui.slurp.settings.arcLibrary.import", { defaultValue: "Import Arc" })}
-        </label>
-      </div>
-      <div className="grid gap-3 sm:grid-cols-[1fr_auto]">
+    <div className="space-y-4">
+      {/* Make a new type: describe it to AI, start blank, or import a shared file. One toolbar,
+          above the list, so the ways to add are not scattered under it. */}
+      <section className="space-y-3 rounded-xl bg-[color-mix(in_srgb,var(--noodle-accent)_7%,var(--slurp-surface-raised))] p-4 ring-1 ring-inset ring-[var(--noodle-accent)]/25">
         <label className="block space-y-2 text-sm font-semibold">
           <span className="flex items-center gap-1.5">
+            <Sparkles size={15} className="text-[var(--noodle-accent)]" aria-hidden="true" />
             {t("ui.slurp.settings.arcLibrary.aiBrief", { defaultValue: "Describe the arc to AI" })}
-            <span
-              title={t("ui.slurp.settings.arcLibrary.aiBriefDetail", {
-                defaultValue: "AI creates an editable arc draft. Nothing is saved until you save it.",
-              })}
-              className="text-[var(--muted-foreground)]"
-            >
-              <CircleHelp size={14} aria-hidden="true" />
-            </span>
+          </span>
+          <span className="block text-xs font-normal text-[var(--slurp-muted)]">
+            {t("ui.slurp.settings.arcLibrary.aiBriefDetail", {
+              defaultValue: "AI creates an editable arc draft. Nothing is saved until you save it.",
+            })}
           </span>
           <textarea
             value={brief}
@@ -261,48 +148,179 @@ export function ArcLibraryEditor({
             placeholder={t("ui.slurp.settings.arcLibrary.aiBriefPlaceholder", {
               defaultValue: "For example: a summer road trip that starts badly and ends with a surprise collaboration.",
             })}
-            className={`${input} py-2`}
+            className={`${input} py-2 font-normal`}
           />
         </label>
-        <button
-          type="button"
-          className="min-h-11 self-end rounded-lg border border-[var(--noodle-accent)] px-4 text-sm font-bold text-[var(--noodle-accent)] hover:bg-[var(--noodle-accent)]/10 disabled:opacity-50"
-          disabled={busy || generate.isPending || !brief.trim() || !creatorAccountId || !personaId}
-          onClick={() => void generateDraft()}
-        >
-          {generate.isPending
-            ? t("ui.slurp.settings.arcLibrary.generating", { defaultValue: "Building draft..." })
-            : t("ui.slurp.settings.arcLibrary.buildWithAi", { defaultValue: "Build with AI" })}
-        </button>
-      </div>
-      {generate.error && (
-        <p role="alert" className="text-xs text-[var(--destructive)]">
-          {generate.error.message}
-        </p>
-      )}
-      <button
-        type="button"
-        className={button}
-        disabled={busy}
-        onClick={() => {
-          setReviewingGeneratedDraft(false);
-          setDraft({
-            id: `custom-${Date.now().toString(36)}`,
-            name: "",
-            description: "",
-            chapters: [],
-            tags: [],
-            tone: "",
-            durationDays: 14,
-            enabled: true,
-            builtin: false,
-            hidden: false,
-          });
-        }}
-      >
-        <Plus size={15} aria-hidden="true" />
-        {t("ui.slurp.settings.arcLibrary.add")}
-      </button>
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            className="inline-flex min-h-11 items-center gap-2 rounded-lg bg-[var(--noodle-accent)] px-4 text-sm font-bold text-zinc-950 [&_svg]:!text-zinc-950 hover:opacity-90 disabled:opacity-50"
+            disabled={busy || generate.isPending || !brief.trim() || !creatorAccountId || !personaId}
+            onClick={() => void generateDraft()}
+          >
+            <Sparkles size={15} aria-hidden="true" />
+            {generate.isPending
+              ? t("ui.slurp.settings.arcLibrary.generating", { defaultValue: "Building draft..." })
+              : t("ui.slurp.settings.arcLibrary.buildWithAi", { defaultValue: "Build with AI" })}
+          </button>
+          <button
+            type="button"
+            className={`${button} inline-flex items-center gap-1.5 ring-1 ring-inset ring-[var(--slurp-outline)]`}
+            disabled={busy}
+            onClick={() => {
+              setReviewingGeneratedDraft(false);
+              setDraft({
+                id: `custom-${Date.now().toString(36)}`,
+                name: "",
+                description: "",
+                chapters: [],
+                tags: [],
+                tone: "",
+                durationDays: 14,
+                enabled: true,
+                builtin: false,
+                hidden: false,
+              });
+            }}
+          >
+            <Plus size={15} aria-hidden="true" />
+            {t("ui.slurp.settings.arcLibrary.add")}
+          </button>
+          <input
+            id={importInputId}
+            type="file"
+            accept="application/json,.json"
+            className="sr-only"
+            onChange={(event) => {
+              const file = event.target.files?.[0];
+              event.target.value = "";
+              if (file) void importArc(file);
+            }}
+          />
+          <label
+            htmlFor={importInputId}
+            className={`${button} inline-flex cursor-pointer items-center gap-1.5 ring-1 ring-inset ring-[var(--slurp-outline)]`}
+          >
+            <Upload size={15} aria-hidden="true" />
+            {t("ui.slurp.settings.arcLibrary.import", { defaultValue: "Import Arc" })}
+          </label>
+        </div>
+        {generate.error && (
+          <p role="alert" className="text-xs text-[var(--destructive)]">
+            {generate.error.message}
+          </p>
+        )}
+      </section>
+      <ul className="divide-y divide-[var(--slurp-outline)] overflow-hidden rounded-xl bg-[var(--slurp-canvas)] ring-1 ring-inset ring-[var(--slurp-outline)]">
+        {visible.map((type) => (
+          <li key={type.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 px-3 py-2.5 text-sm sm:px-4">
+            <div className="min-w-0 flex-1 basis-56">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className={`font-bold ${type.hidden ? "text-[var(--slurp-muted)] line-through" : ""}`}>
+                  {type.name}
+                </span>
+                {type.builtin && (
+                  <span className="rounded-full bg-[var(--noodle-accent)]/10 px-2 py-0.5 text-[0.65rem] font-bold text-[var(--noodle-accent)]">
+                    {t("ui.slurp.settings.arcLibrary.builtIn", { defaultValue: "Built in" })}
+                  </span>
+                )}
+                {type.hidden && (
+                  <span className="rounded-full bg-[var(--muted-foreground)]/10 px-2 py-0.5 text-[0.65rem] font-bold text-[var(--muted-foreground)]">
+                    {t("ui.slurp.settings.arcLibrary.hidden")}
+                  </span>
+                )}
+              </div>
+              <p className="mt-0.5 line-clamp-1 text-xs leading-5 text-[var(--muted-foreground)]">
+                {[
+                  t("ui.slurp.settings.arcLibrary.chapterCount", {
+                    defaultValue: "{{count}} chapters",
+                    count: type.chapters.length,
+                  }),
+                  type.tone,
+                  type.description ||
+                    t("ui.slurp.settings.arcLibrary.noDescription", { defaultValue: "No direction added." }),
+                ]
+                  .filter(Boolean)
+                  .join(" · ")}
+              </p>
+            </div>
+            {type.hidden ? (
+              type.builtin && (
+                <button
+                  type="button"
+                  className={button}
+                  disabled={busy || reset.isPending}
+                  onClick={() => reset.mutate(type.id)}
+                >
+                  {t("ui.slurp.settings.arcLibrary.reset")}
+                </button>
+              )
+            ) : (
+              <div className="flex items-center gap-0.5">
+                <button
+                  type="button"
+                  className={iconButton}
+                  disabled={busy}
+                  aria-label={`${t("ui.slurp.settings.arcLibrary.edit")}: ${type.name}`}
+                  title={t("ui.slurp.settings.arcLibrary.edit")}
+                  onClick={() => {
+                    setReviewingGeneratedDraft(false);
+                    setDraft(structuredClone(type));
+                  }}
+                >
+                  <Pencil size={16} aria-hidden="true" />
+                </button>
+                <button
+                  type="button"
+                  className={iconButton}
+                  disabled={busy}
+                  aria-label={`${t("ui.slurp.settings.arcLibrary.export", { defaultValue: "Export" })}: ${type.name}`}
+                  title={t("ui.slurp.settings.arcLibrary.export", { defaultValue: "Export" })}
+                  onClick={() => exportArc(type)}
+                >
+                  <Download size={16} aria-hidden="true" />
+                </button>
+                <button
+                  type="button"
+                  className={`${iconButton} hover:text-red-400`}
+                  disabled={busy}
+                  aria-label={`${t("ui.slurp.settings.arcLibrary.delete")}: ${type.name}`}
+                  title={t("ui.slurp.settings.arcLibrary.delete")}
+                  onClick={() => {
+                    if (!window.confirm(t("ui.slurp.settings.arcLibrary.deleteConfirm", { name: type.name }))) return;
+                    onChange(
+                      type.builtin
+                        ? library.map((entry) =>
+                            entry.id === type.id ? { ...entry, enabled: false, hidden: true } : entry,
+                          )
+                        : library.filter((entry) => entry.id !== type.id),
+                    );
+                  }}
+                >
+                  <Trash2 size={16} aria-hidden="true" />
+                </button>
+                <label className="ms-1 inline-flex min-h-11 cursor-pointer items-center">
+                  <span className="sr-only">
+                    {t("ui.slurp.settings.arcLibrary.enabled")}: {type.name}
+                  </span>
+                  <input
+                    type="checkbox"
+                    role="switch"
+                    checked={type.enabled}
+                    disabled={busy}
+                    onChange={(event) => replace({ ...type, enabled: event.target.checked })}
+                    className="peer sr-only"
+                  />
+                  <span
+                    aria-hidden="true"
+                    className="relative h-6 w-10 shrink-0 rounded-full bg-[var(--muted-foreground)]/25 transition-colors after:absolute after:left-1 after:top-1 after:h-4 after:w-4 after:rounded-full after:bg-white after:transition-transform peer-checked:bg-[var(--noodle-accent)] peer-checked:after:translate-x-4 peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-[var(--noodle-accent)] motion-reduce:transition-none motion-reduce:after:transition-none"
+                  />
+                </label>
+              </div>
+            )}
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }

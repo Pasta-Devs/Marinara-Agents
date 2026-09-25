@@ -1,6 +1,14 @@
 import { BackstagePageHeader } from "../../modules/settings/SlpSettingsKit";
 
-import { AdvancedGroup, Field, NumberSetting, Toggle, RangeSetting } from "../../modules/settings/SlpSettingsControls";
+import {
+  AdvancedGroup,
+  Field,
+  HowItWorks,
+  NumberSetting,
+  RangeSetting,
+  SettingsGroup,
+  Toggle,
+} from "../../modules/settings/SlpSettingsControls";
 
 import type { SlpBackstagePageProps } from "../backstage/slp-backstage-contract";
 
@@ -11,96 +19,101 @@ export function SlpWalletPanel(page: SlpBackstagePageProps) {
   return (
     <div className="space-y-5">
       <BackstagePageHeader
-        title={t("ui.slurp.settings.wallet.title", { defaultValue: "SlurpCoins" })}
         detail={t("ui.slurp.settings.wallet.detail", {
           defaultValue: "Prices, earning, and the daily stipend.",
         })}
       />
-      <div className="rounded-xl bg-[var(--slurp-surface-raised)] p-4 text-xs leading-5 text-[var(--slurp-muted)] ring-1 ring-inset ring-[var(--slurp-outline)]">
+      <HowItWorks label={t("ui.slurp.settings.howItWorks")}>
         <p>
           {t("ui.slurp.settings.wallet.explainer", {
             defaultValue:
               "With SlurpCoins off, prices are decoration and nothing is ever charged. With them on, unlocking a post and subscribing to a creator both cost SlurpCoins, and running out has consequences: a subscription you cannot pay for lapses.",
           })}
         </p>
-        <p className="mt-2">
+        <p>
           {t("ui.slurp.settings.wallet.explainerEarning", {
             defaultValue:
               "The daily stipend tops your balance up to a floor rather than adding to it, so a spender is never stranded and a hoarder is never paid to hoard. Ad and posting rewards are capped per day, so nothing here can be farmed.",
           })}
         </p>
-      </div>
-      <Toggle
-        settingKey="walletEnabled"
-        label={t("ui.slurp.settings.wallet.enabled", {
-          defaultValue: "SlurpCoins actually cost something",
-        })}
-        detail={t("ui.slurp.settings.wallet.enabledDetail", {
-          defaultValue: "Off keeps prices as decoration, which is how Slurp has always behaved.",
-        })}
-        value={settings.walletEnabled}
-        onChange={(value) => update("walletEnabled", value)}
-      />
-      <Field
-        settingKey="walletUnlockCost"
-        label={t("ui.slurp.settings.wallet.unlockCost", { defaultValue: "Unlock a post" })}
-        detail={t("ui.slurp.settings.wallet.unlockCostDetail", {
-          defaultValue: "Default price for a locked post. A post keeps the price it was created with.",
-        })}
-      >
-        <NumberSetting
-          value={settings.walletUnlockCost}
-          min={0}
-          max={9999}
-          onSave={(value) => update("walletUnlockCost", value)}
-        />
-      </Field>
-      <Field
-        settingKey="walletSubscriptionCost"
-        label={t("ui.slurp.settings.wallet.subscriptionCost", { defaultValue: "Subscribe, per week" })}
-        detail={t("ui.slurp.settings.wallet.subscriptionCostDetail", {
-          defaultValue:
-            "Default weekly price. A creator with its own price uses that instead. Subscriptions renew every seven days.",
-        })}
-      >
-        <NumberSetting
-          value={settings.walletSubscriptionCost}
-          min={0}
-          max={9999}
-          onSave={(value) => update("walletSubscriptionCost", value)}
-        />
-      </Field>
-      <Toggle
-        settingKey="pricingDynamicCharacters"
-        label={t("ui.slurp.settings.wallet.pricingDynamicCharacters", {
-          defaultValue: "Character Creators set their own prices",
-        })}
-        detail={t("ui.slurp.settings.wallet.pricingDynamicCharactersDetail", {
-          defaultValue:
-            "Once a week, each character Creator moves its subscription, locked post, and commission prices with its popularity. Current subscribers keep their price.",
-        })}
-        value={settings.pricingDynamicCharacters}
-        onChange={(value) => update("pricingDynamicCharacters", value)}
-      />
-      {settings.pricingDynamicCharacters && (
-        <Field
-          settingKey="pricingMaxWeeklyChangePercent"
-          label={t("ui.slurp.settings.wallet.pricingMaxWeeklyChange", {
-            defaultValue: "Largest weekly price change, %",
+      </HowItWorks>
+      <SettingsGroup title={t("ui.slurp.settings.wallet.pricesGroup")}>
+        <Toggle
+          settingKey="walletEnabled"
+          label={t("ui.slurp.settings.wallet.enabled", {
+            defaultValue: "SlurpCoins actually cost something",
           })}
-          detail={t("ui.slurp.settings.wallet.pricingMaxWeeklyChangeDetail", {
-            defaultValue: "How far one weekly adjustment may move a price. Zero freezes prices.",
+          detail={t("ui.slurp.settings.wallet.enabledDetail", {
+            defaultValue: "Off keeps prices as decoration, which is how Slurp has always behaved.",
+          })}
+          value={settings.walletEnabled}
+          onChange={(value) => update("walletEnabled", value)}
+        />
+        <Field
+          settingKey="walletUnlockCost"
+          label={t("ui.slurp.settings.wallet.unlockCost", { defaultValue: "Unlock a post" })}
+          detail={t("ui.slurp.settings.wallet.unlockCostDetail", {
+            defaultValue: "Default price for a locked post. A post keeps the price it was created with.",
           })}
         >
-          <RangeSetting
-            value={settings.pricingMaxWeeklyChangePercent}
+          <NumberSetting
+            stepper
+            value={settings.walletUnlockCost}
             min={0}
-            max={100}
-            onSave={(value) => update("pricingMaxWeeklyChangePercent", value)}
-            format={(percent) => `${percent} %`}
+            max={9999}
+            onSave={(value) => update("walletUnlockCost", value)}
           />
         </Field>
-      )}
+        <Field
+          settingKey="walletSubscriptionCost"
+          label={t("ui.slurp.settings.wallet.subscriptionCost", { defaultValue: "Subscribe, per week" })}
+          detail={t("ui.slurp.settings.wallet.subscriptionCostDetail", {
+            defaultValue:
+              "Default weekly price. A creator with its own price uses that instead. Subscriptions renew every seven days.",
+          })}
+        >
+          <NumberSetting
+            stepper
+            value={settings.walletSubscriptionCost}
+            min={0}
+            max={9999}
+            onSave={(value) => update("walletSubscriptionCost", value)}
+          />
+        </Field>
+      </SettingsGroup>
+      <SettingsGroup title={t("ui.slurp.settings.wallet.creatorPricesGroup")}>
+        <Toggle
+          settingKey="pricingDynamicCharacters"
+          label={t("ui.slurp.settings.wallet.pricingDynamicCharacters", {
+            defaultValue: "Character Creators set their own prices",
+          })}
+          detail={t("ui.slurp.settings.wallet.pricingDynamicCharactersDetail", {
+            defaultValue:
+              "Once a week, each character Creator moves its subscription, locked post, and commission prices with its popularity. Current subscribers keep their price.",
+          })}
+          value={settings.pricingDynamicCharacters}
+          onChange={(value) => update("pricingDynamicCharacters", value)}
+        />
+        {settings.pricingDynamicCharacters && (
+          <Field
+            settingKey="pricingMaxWeeklyChangePercent"
+            label={t("ui.slurp.settings.wallet.pricingMaxWeeklyChange", {
+              defaultValue: "Largest weekly price change, %",
+            })}
+            detail={t("ui.slurp.settings.wallet.pricingMaxWeeklyChangeDetail", {
+              defaultValue: "How far one weekly adjustment may move a price. Zero freezes prices.",
+            })}
+          >
+            <RangeSetting
+              value={settings.pricingMaxWeeklyChangePercent}
+              min={0}
+              max={100}
+              onSave={(value) => update("pricingMaxWeeklyChangePercent", value)}
+              format={(percent) => `${percent} %`}
+            />
+          </Field>
+        )}
+      </SettingsGroup>
       <AdvancedGroup
         title={t("ui.slurp.settings.backstage.landing.earningFineTune", {
           defaultValue: "Earning, stipend, and revenue share",

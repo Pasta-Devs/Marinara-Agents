@@ -45,10 +45,7 @@ export function SlpAudiencePanel(page: SlpBackstagePageProps) {
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
-        <BackstagePageHeader
-          title={t("ui.slurp.settings.audience.title")}
-          detail={t("ui.slurp.settings.audience.detail")}
-        />
+        <BackstagePageHeader detail={t("ui.slurp.settings.audience.detail")} />
         <StatusStrip
           label={t("ui.slurp.settings.strip.label")}
           items={[
@@ -243,6 +240,7 @@ export function SlpAudiencePanel(page: SlpBackstagePageProps) {
             })}
           >
             <NumberSetting
+              stepper
               value={settings.audienceCharacterLimit}
               min={0}
               max={10}
@@ -261,6 +259,7 @@ export function SlpAudiencePanel(page: SlpBackstagePageProps) {
           ) : (
             <>
               <Field
+                group
                 settingKey="audienceCharacterGroupIds"
                 label={t("ui.slurp.settings.audience.characterGroups", { defaultValue: "Invite character groups" })}
                 detail={t("ui.slurp.settings.audience.characterGroupsDetail", {

@@ -377,9 +377,11 @@ export function PromptCard({
   disabled?: boolean;
 }) {
   const { t } = useTranslation();
+  // A prompt is read in full only when someone wants to; four lines tell which one it is.
+  const [expanded, setExpanded] = useState(false);
   return (
-    <div className="space-y-3">
-      <div className="flex items-start gap-3">
+    <div className="space-y-2">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
         <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[var(--noodle-accent)]/10 text-[var(--noodle-accent)]">
           <FileText size={16} />
         </span>
@@ -391,29 +393,43 @@ export function PromptCard({
             </span>
           </div>
         </div>
+        {!isDefault && (
+          <button
+            type="button"
+            onClick={onRestore}
+            disabled={disabled}
+            className="inline-flex min-h-11 items-center gap-1.5 rounded-lg px-3 text-xs font-semibold text-[var(--noodle-accent)] hover:bg-[var(--noodle-accent)]/10 disabled:opacity-45"
+          >
+            <RotateCcw size={13} />
+            {restoreLabel ?? t("ui.slurp.settings.prompts.restoreDefault")}
+          </button>
+        )}
         <button
           type="button"
           onClick={onEdit}
           disabled={disabled}
-          className="inline-flex min-h-10 shrink-0 items-center gap-2 rounded-lg border border-[var(--border)] px-3 text-xs font-semibold hover:bg-[var(--accent)] disabled:opacity-45"
+          className="inline-flex min-h-11 shrink-0 items-center gap-2 rounded-lg border border-[var(--border)] px-3 text-xs font-semibold hover:bg-[var(--accent)] disabled:opacity-45"
         >
           <Pencil size={14} className="text-[var(--noodle-accent)]" />
           {t("ui.slurp.settings.prompts.edit")}
         </button>
       </div>
       <div className="rounded-lg bg-[var(--slurp-canvas)] p-3 ring-1 ring-inset ring-[var(--slurp-outline)] sm:p-4">
-        <p className="whitespace-pre-wrap break-words text-sm leading-6 text-[var(--slurp-muted)]">{value}</p>
-      </div>
-      <div className="flex flex-wrap justify-end gap-2">
-        <button
-          type="button"
-          onClick={onRestore}
-          disabled={disabled || isDefault}
-          className="inline-flex min-h-10 items-center gap-1.5 rounded-lg px-3 text-xs font-semibold text-[var(--noodle-accent)] hover:bg-[var(--noodle-accent)]/10 disabled:opacity-45"
+        <p
+          className={`whitespace-pre-wrap break-words text-sm leading-6 text-[var(--slurp-muted)] ${expanded ? "" : "line-clamp-4"}`}
         >
-          <RotateCcw size={13} />
-          {restoreLabel ?? t("ui.slurp.settings.prompts.restoreDefault")}
-        </button>
+          {value}
+        </p>
+        {(value.length > 320 || value.split("\n").length > 4) && (
+          <button
+            type="button"
+            aria-expanded={expanded}
+            onClick={() => setExpanded((open) => !open)}
+            className="mt-1 min-h-11 text-xs font-semibold text-[var(--noodle-accent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)]"
+          >
+            {expanded ? t("ui.slurp.settings.prompts.showLess") : t("ui.slurp.settings.prompts.showAll")}
+          </button>
+        )}
       </div>
     </div>
   );

@@ -4,9 +4,9 @@
  * The Backstage host composes panels rather than drawing controls itself, so these live here as a
  * reusable module: every feature panel and the simulation panel draw the same control set.
  */
-import { ChevronRight, CircleHelp } from "lucide-react";
+import { ChevronRight } from "lucide-react";
 import type { ReactNode } from "react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { SettingAnchor, type SlpSettingKey } from "./SlpSettingsKit";
 
 /**
@@ -85,7 +85,7 @@ export function NumberSetting({
       }}
       onBlur={() => void commit()}
       onKeyDown={(event) => event.key === "Enter" && event.currentTarget.blur()}
-      className="h-11 w-full min-w-0 rounded-lg border border-[var(--border)] bg-[var(--slurp-canvas,var(--background))] px-3 text-base tabular-nums outline-none transition-colors focus:border-[var(--noodle-accent)] focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)]/30 disabled:opacity-50 sm:text-sm"
+      className={`h-11 min-w-0 rounded-lg border border-[var(--border)] bg-[var(--slurp-canvas,var(--background))] px-3 text-base tabular-nums outline-none transition-colors focus:border-[var(--noodle-accent)] focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)]/30 disabled:opacity-50 sm:text-sm ${stepper ? "w-20 text-center" : "w-full max-w-40"}`}
     />
   );
   if (!stepper) return input;
@@ -96,17 +96,19 @@ export function NumberSetting({
     void commit(String(next));
   };
   return (
-    <span className="flex items-center gap-2">
+    // The input comes first in the DOM: a click on a surrounding <label> activates its first
+    // control, which must be the number, not the "−" button. `order` puts "−" back on the left.
+    <span className="flex items-center gap-2 @xl:w-auto!">
+      {input}
       <button
         type="button"
         aria-label="−1"
         disabled={disabled || current <= min}
         onClick={() => nudge(-1)}
-        className={stepButton}
+        className={`${stepButton} order-first`}
       >
         −
       </button>
-      {input}
       <button
         type="button"
         aria-label="+1"
@@ -227,15 +229,22 @@ export function SectionTitle({ title, detail }: { title: string; detail: string 
     </div>
   );
 }
-/** A labelled group of related settings. Used by every section that has more than a handful. */
+/**
+ * A labelled group of related settings: one card, one hairline between its rows. Rows carry no
+ * box of their own, so a page reads as a few groups instead of a stack of boxes.
+ */
 export function SettingsGroup({ title, children }: { title: string; children: ReactNode }) {
   return (
     <section
-      className="space-y-4 rounded-xl bg-[var(--slurp-surface-raised,var(--background))] p-4 shadow-[var(--slurp-shadow-raised)] sm:p-5"
+      className="rounded-xl bg-[var(--slurp-surface-raised,var(--background))] px-4 py-3 shadow-[var(--slurp-shadow-raised)] sm:px-5"
       aria-label={title}
     >
-      <h3 className="text-xs font-bold uppercase tracking-[0.14em] text-[var(--noodle-accent-foreground)]">{title}</h3>
-      {children}
+      <h3 className="pb-1 pt-1 text-xs font-bold uppercase tracking-[0.14em] text-[var(--noodle-accent-foreground)]">
+        {title}
+      </h3>
+      <div className="divide-y divide-[var(--slurp-outline,var(--border))] [&>*]:py-3.5 [&>*:last-child]:pb-1.5">
+        {children}
+      </div>
     </section>
   );
 }
@@ -248,11 +257,20 @@ export function GuidanceBox({ title, detail }: { title: string; detail: string }
     </div>
   );
 }
+/**
+ * The shared frame of one setting: what it is on the left, the control on the right. A narrow
+ * container (phone, a half-width column) stacks them. The frame queries its own width, not the
+ * viewport, so the same control is a row in a wide page and a stack in the Creator modal column.
+ */
+export const settingRowGrid = "grid gap-2 @xl:grid-cols-[minmax(0,1fr)_minmax(0,20rem)] @xl:items-center @xl:gap-x-8";
+
 export function Field({
   label,
   detail,
   settingKey,
   disabledReason,
+  wide = false,
+  group = false,
   children,
 }: {
   label: string;
@@ -264,26 +282,38 @@ export function Field({
    * sees it exists; the caller disables its own input.
    */
   disabledReason?: string | null;
+  /** Text areas and lists need the whole width; they always sit under the label. */
+  wide?: boolean;
+  /**
+   * Several controls (a checkbox list, a button row). A <label> around them would send a click on
+   * the text to the first one, so the frame becomes a named group instead.
+   */
+  group?: boolean;
   children: ReactNode;
 }) {
+  const labelId = useId();
+  const Root = group ? "div" : "label";
   const field = (
-    <label className="block space-y-2 text-sm font-semibold">
-      <span className="flex items-center gap-1.5">
-        <span>{label}</span>
-        {detail && (
-          <span title={detail} aria-label={detail} className="inline-flex text-[var(--muted-foreground)]">
-            <CircleHelp size={14} strokeWidth={2} aria-hidden="true" />
+    <Root className="@container block text-sm" {...(group ? { role: "group", "aria-labelledby": labelId } : {})}>
+      <span className={wide ? "grid gap-2" : `${settingRowGrid} @xl:has-[textarea]:grid-cols-1`}>
+        <span className="block min-w-0">
+          <span id={labelId} className="block font-semibold">
+            {label}
           </span>
-        )}
-      </span>
-      {detail && <span className="block text-xs font-normal leading-5 text-[var(--muted-foreground)]">{detail}</span>}
-      {disabledReason && (
-        <span className="block text-xs font-semibold leading-5 text-[var(--slurp-muted,var(--muted-foreground))]">
-          {disabledReason}
+          {detail && (
+            <span className="mt-0.5 block max-w-prose text-xs leading-5 text-[var(--muted-foreground)] text-pretty">
+              {detail}
+            </span>
+          )}
+          {disabledReason && (
+            <span className="mt-0.5 block text-xs font-semibold leading-5 text-[var(--slurp-muted,var(--muted-foreground))]">
+              {disabledReason}
+            </span>
+          )}
         </span>
-      )}
-      {children}
-    </label>
+        <span className="flex min-w-0 flex-col @xl:items-end @xl:[&>*]:w-full">{children}</span>
+      </span>
+    </Root>
   );
   return settingKey ? <SettingAnchor settingKey={settingKey}>{field}</SettingAnchor> : field;
 }
@@ -310,12 +340,14 @@ export function Toggle({
   const toggle = (
     <label
       data-slurp-setting-toggle
-      className={`group relative flex ${compact ? "min-h-11" : "min-h-16"} ${disabled ? "cursor-not-allowed opacity-60" : "cursor-pointer"} items-center justify-between gap-4 rounded-lg bg-[var(--slurp-surface-raised,var(--background))] px-3 py-2 text-sm shadow-[var(--slurp-shadow-raised)] ring-1 ring-inset ring-transparent transition-[background-color,box-shadow] hover:bg-[var(--accent)]/40 hover:ring-[var(--border)] focus-within:ring-2 focus-within:ring-[var(--noodle-accent)] motion-reduce:transition-none`}
+      className={`group relative flex ${compact ? "min-h-11" : "min-h-12"} ${disabled ? "cursor-not-allowed opacity-60" : "cursor-pointer"} items-center justify-between gap-4 rounded-lg text-sm focus-within:ring-2 focus-within:ring-[var(--noodle-accent)] focus-within:ring-offset-4 focus-within:ring-offset-[var(--slurp-surface)]`}
     >
       <span className="min-w-0">
         <span className="block font-semibold">{label}</span>
         {detail && (
-          <span className="mt-1 block text-xs font-normal leading-5 text-[var(--muted-foreground)]">{detail}</span>
+          <span className="mt-0.5 block max-w-prose text-xs font-normal leading-5 text-[var(--muted-foreground)] text-pretty">
+            {detail}
+          </span>
         )}
         {disabledReason && <span className="mt-1 block text-xs font-semibold leading-5">{disabledReason}</span>}
       </span>
@@ -334,6 +366,26 @@ export function Toggle({
     </label>
   );
   return settingKey ? <SettingAnchor settingKey={settingKey}>{toggle}</SettingAnchor> : toggle;
+}
+
+/**
+ * The long "how this works" text of a page, folded under its lead. It is read once, so it must not
+ * push the controls below the fold on every visit.
+ */
+export function HowItWorks({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <details className="group text-xs leading-5 text-[var(--slurp-muted,var(--muted-foreground))]">
+      <summary className="inline-flex min-h-11 cursor-pointer list-none items-center gap-1 rounded-lg font-semibold text-[var(--noodle-accent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] [&::-webkit-details-marker]:hidden">
+        {label}
+        <ChevronRight
+          size={15}
+          className="transition-transform group-open:rotate-90 rtl:rotate-180 motion-reduce:transition-none"
+          aria-hidden="true"
+        />
+      </summary>
+      <div className="max-w-prose space-y-2 pb-2 text-pretty">{children}</div>
+    </details>
+  );
 }
 
 /**

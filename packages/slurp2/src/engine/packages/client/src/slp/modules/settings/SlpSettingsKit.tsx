@@ -12,27 +12,30 @@ export type SlpSettingScope = "all-slurp" | "this-viewer" | "new-creators" | "cr
 
 import { focusRing } from "../../base/chrome/slp-focus";
 
+/**
+ * The lead of a page: what it is for, plus page actions. The page title itself is the frame's
+ * `h1`, so the panel does not repeat it. A scope badge shows only when the page is not Slurp-wide.
+ */
 export function BackstagePageHeader({
-  title,
   detail,
   scope,
   actions,
 }: {
-  title: string;
   detail: string;
-  scope?: SlpSettingScope;
+  scope?: Exclude<SlpSettingScope, "all-slurp">;
   actions?: ReactNode;
 }) {
   return (
     <header className="flex flex-wrap items-start justify-between gap-3">
-      <div className="min-w-0">
-        <h1 className="text-2xl font-black tracking-tight text-balance">{title}</h1>
-        <p className="mt-1 max-w-2xl text-sm leading-6 text-[var(--slurp-muted)] text-pretty">{detail}</p>
-      </div>
-      <div className="flex flex-wrap items-start gap-2">
-        {scope && <SlpSettingScopeBadge scope={scope} />}
-        {actions}
-      </div>
+      <p className="min-w-0 max-w-2xl flex-1 basis-64 text-sm leading-6 text-[var(--slurp-muted)] text-pretty">
+        {detail}
+      </p>
+      {(scope || actions) && (
+        <div className="flex flex-wrap items-start gap-2">
+          {scope && <SlpSettingScopeBadge scope={scope} />}
+          {actions}
+        </div>
+      )}
     </header>
   );
 }

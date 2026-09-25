@@ -164,9 +164,17 @@ test.describe("standalone Slurp package", () => {
       }
       await page.screenshot({ path: testInfo.outputPath("slurp2-image-context-settings.png") });
       if (testInfo.project.name.includes("mobile")) {
-        await page.getByRole("combobox", { name: "Destination" }).selectOption("automation:general");
+        // Phones go back to the settings list and open Posting from it.
+        await page.getByRole("button", { name: "Settings", exact: true }).first().click();
+        await page
+          .getByRole("navigation", { name: "Settings", exact: true })
+          .getByRole("button", { name: /^Posting/u })
+          .click();
       } else {
-        await page.getByRole("button", { name: "Publishing", exact: true }).click();
+        await page
+          .getByRole("navigation", { name: "Creator settings sections" })
+          .getByRole("button", { name: "Posting", exact: true })
+          .click();
       }
       await page.getByRole("button", { name: "Generate posts", exact: true }).click();
       const dialog = page.getByRole("dialog", { name: "Generate posts", exact: true });
@@ -252,7 +260,8 @@ test.describe("standalone Slurp package", () => {
       for (const label of ["Slurp", "Profile", "Inbox", "Discover", "More"]) {
         await expect(mobileNavigation.getByRole("button", { name: label, exact: true })).toBeVisible();
       }
-      await expect(slurp.getByRole("combobox", { name: "Destination" })).toHaveValue("overview:overview");
+      // A saved section opens its page; the Settings link above the title returns to the list.
+      await expect(slurp.getByRole("button", { name: "Settings", exact: true }).first()).toBeVisible();
     } else {
       const sectionNavigation = slurp.getByRole("navigation", { name: "Creator settings sections" });
       await expect(sectionNavigation).toBeVisible();

@@ -55,67 +55,92 @@ export function ChoiceSetting<T extends string>({
   const off = disabled || Boolean(disabledReason);
   const oneRow =
     options.length <= SEGMENT_MAX_OPTIONS && options.every((option) => option.label.length <= SEGMENT_MAX_LABEL);
-  const group = (
-    <fieldset disabled={off} className="min-w-0 space-y-2">
-      <legend className={labelHidden ? "sr-only" : "float-left w-full text-sm font-semibold"}>{label}</legend>
-      {detail && <p className="clear-left text-xs leading-5 text-[var(--muted-foreground)]">{detail}</p>}
+  // A short segmented control sits beside its label on a wide page, like every other row; cards
+  // and long labels need the width and sit under it.
+  const row = variant === "segmented" && oneRow && !labelHidden;
+  const text = (
+    <>
+      {detail && <p className="max-w-prose text-xs leading-5 text-[var(--muted-foreground)] text-pretty">{detail}</p>}
       {disabledReason && (
-        <p className="clear-left text-xs font-semibold leading-5 text-[var(--slurp-muted,var(--muted-foreground))]">
+        <p className="text-xs font-semibold leading-5 text-[var(--slurp-muted,var(--muted-foreground))]">
           {disabledReason}
         </p>
       )}
-      <div
-        className={
-          variant === "cards"
-            ? "clear-left grid gap-2 sm:grid-cols-2 lg:grid-cols-3"
-            : `clear-left gap-1 rounded-lg bg-[var(--slurp-canvas,var(--background))] p-1 ring-1 ring-inset ring-[var(--slurp-outline,var(--border))] ${oneRow ? "grid auto-cols-fr grid-flow-col" : "flex flex-wrap"} ${off ? "opacity-50" : ""}`
-        }
-      >
-        {options.map((option) => {
-          const checked = value === option.value;
-          const Icon = option.icon;
-          const input = (
-            <input
-              type="radio"
-              name={name}
-              value={option.value}
-              checked={checked}
-              onChange={() => onChange(option.value)}
-              className="sr-only"
-            />
-          );
-          return variant === "cards" ? (
-            <label
-              key={option.value}
-              className={`flex min-h-16 items-start gap-3 rounded-xl p-3 text-start ring-1 ring-inset transition-colors focus-within:ring-2 focus-within:ring-[var(--slurp-focus,var(--noodle-accent))] motion-reduce:transition-none ${off ? "cursor-not-allowed opacity-50" : "cursor-pointer"} ${checked ? "bg-[var(--slurp-nav-active)] ring-[var(--noodle-accent)]/45" : "bg-[var(--slurp-canvas,var(--background))] ring-[var(--slurp-outline,var(--border))] hover:bg-[var(--accent)]/40"}`}
-            >
-              {input}
-              {Icon && (
-                <Icon
-                  size={18}
-                  aria-hidden="true"
-                  className={`mt-0.5 shrink-0 ${checked ? "text-[var(--noodle-accent)]" : "text-[var(--slurp-muted,var(--muted-foreground))]"}`}
-                />
-              )}
-              <span className="min-w-0">
-                <span className="block text-sm font-semibold">{option.label}</span>
-                {option.detail && (
-                  <span className="mt-0.5 block text-xs leading-5 text-[var(--muted-foreground)] text-pretty">
-                    {option.detail}
-                  </span>
-                )}
-              </span>
-            </label>
+    </>
+  );
+  const group = (
+    <fieldset disabled={off} className="min-w-0">
+      <legend className={labelHidden || row ? "sr-only" : "float-left mb-2 w-full text-sm font-semibold"}>
+        {label}
+      </legend>
+      <div className="@container clear-left">
+        <div
+          className={row ? "grid gap-2 @xl:grid-cols-[minmax(0,1fr)_auto] @xl:items-center @xl:gap-x-8" : "space-y-2"}
+        >
+          {row ? (
+            <div className="min-w-0">
+              <p aria-hidden="true" className="text-sm font-semibold">
+                {label}
+              </p>
+              {text}
+            </div>
           ) : (
-            <label
-              key={option.value}
-              className={`flex min-h-10 min-w-0 items-center justify-center rounded-md px-3 text-center text-sm font-semibold transition-colors focus-within:ring-2 focus-within:ring-[var(--slurp-focus,var(--noodle-accent))] motion-reduce:transition-none ${oneRow ? "" : "flex-auto"} ${off ? "cursor-not-allowed" : "cursor-pointer"} ${checked ? "bg-[var(--slurp-nav-active)] text-[var(--slurp-text,var(--foreground))] shadow-sm ring-1 ring-inset ring-[var(--noodle-accent)]/45" : "text-[var(--slurp-muted,var(--muted-foreground))] hover:text-[var(--slurp-text,var(--foreground))]"}`}
-            >
-              {input}
-              <span className="truncate">{option.label}</span>
-            </label>
-          );
-        })}
+            text
+          )}
+          <div
+            className={
+              variant === "cards"
+                ? `grid gap-2 ${options.length === 3 ? "@lg:grid-cols-3" : "@lg:grid-cols-2 @3xl:grid-cols-3"}`
+                : `gap-1 rounded-lg bg-[var(--slurp-canvas,var(--background))] p-1 ring-1 ring-inset ring-[var(--slurp-outline,var(--border))] ${oneRow ? "grid auto-cols-fr grid-flow-col @xl:min-w-80" : "flex flex-wrap"} ${off ? "opacity-50" : ""}`
+            }
+          >
+            {options.map((option) => {
+              const checked = value === option.value;
+              const Icon = option.icon;
+              const input = (
+                <input
+                  type="radio"
+                  name={name}
+                  value={option.value}
+                  checked={checked}
+                  onChange={() => onChange(option.value)}
+                  className="sr-only"
+                />
+              );
+              return variant === "cards" ? (
+                <label
+                  key={option.value}
+                  className={`flex min-h-16 items-start gap-3 rounded-xl p-3 text-start ring-1 ring-inset transition-colors focus-within:ring-2 focus-within:ring-[var(--slurp-focus,var(--noodle-accent))] motion-reduce:transition-none ${off ? "cursor-not-allowed opacity-50" : "cursor-pointer"} ${checked ? "bg-[var(--slurp-nav-active)] ring-[var(--noodle-accent)]/45" : "bg-[var(--slurp-canvas,var(--background))] ring-[var(--slurp-outline,var(--border))] hover:bg-[var(--accent)]/40"}`}
+                >
+                  {input}
+                  {Icon && (
+                    <Icon
+                      size={18}
+                      aria-hidden="true"
+                      className={`mt-0.5 shrink-0 ${checked ? "text-[var(--noodle-accent)]" : "text-[var(--slurp-muted,var(--muted-foreground))]"}`}
+                    />
+                  )}
+                  <span className="min-w-0">
+                    <span className="block text-sm font-semibold">{option.label}</span>
+                    {option.detail && (
+                      <span className="mt-0.5 block text-xs leading-5 text-[var(--muted-foreground)] text-pretty">
+                        {option.detail}
+                      </span>
+                    )}
+                  </span>
+                </label>
+              ) : (
+                <label
+                  key={option.value}
+                  className={`flex min-h-10 min-w-0 items-center justify-center rounded-md px-3 text-center text-sm font-semibold transition-colors focus-within:ring-2 focus-within:ring-[var(--slurp-focus,var(--noodle-accent))] motion-reduce:transition-none ${oneRow ? "" : "flex-auto"} ${off ? "cursor-not-allowed" : "cursor-pointer"} ${checked ? "bg-[var(--slurp-nav-active)] text-[var(--slurp-text,var(--foreground))] shadow-sm ring-1 ring-inset ring-[var(--noodle-accent)]/45" : "text-[var(--slurp-muted,var(--muted-foreground))] hover:text-[var(--slurp-text,var(--foreground))]"}`}
+                >
+                  {input}
+                  <span className="truncate">{option.label}</span>
+                </label>
+              );
+            })}
+          </div>
+        </div>
       </div>
     </fieldset>
   );
@@ -271,7 +296,10 @@ export type StatusStripItem = { label: string; value?: string; settingKey?: SlpS
  */
 export function StatusStrip({ label, items }: { label: string; items: readonly StatusStripItem[] }) {
   return (
-    <ul aria-label={label} className="flex flex-wrap gap-2">
+    <ul
+      aria-label={label}
+      className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1 [scrollbar-width:none] md:flex-wrap md:overflow-visible md:pb-0 [&>li]:shrink-0"
+    >
       {items.map((item) => {
         const content = (
           <>

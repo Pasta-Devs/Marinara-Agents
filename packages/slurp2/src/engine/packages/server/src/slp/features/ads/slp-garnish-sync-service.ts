@@ -42,10 +42,7 @@ export async function syncGarnishAdsWithLorebook(
     });
     if (settings.inlineAdsImagesEnabled) {
       for (const ad of items) {
-        await generateGarnishAdImage(db, pool, ad, [
-          settings.inlineAdsImageConnectionId,
-          settings.imageGenerationConnectionId,
-        ]);
+        await generateGarnishAdImage(db, pool, ad, [settings.inlineAdsImageConnectionId]);
       }
     }
     // Recorded only after the ads land, so a failed run retries on the next poll.

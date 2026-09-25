@@ -1,4 +1,4 @@
-import { Check, ChevronDown, Loader2, RefreshCw, X } from "lucide-react";
+import { ArrowUpRight, Check, ChevronDown, Loader2, RefreshCw, X } from "lucide-react";
 import { useCallback, useEffect, useRef, useState, type CSSProperties, type KeyboardEvent } from "react";
 import { useTranslation } from "react-i18next";
 import { showConfirmDialog } from "../../../../lib/app-dialogs";
@@ -212,23 +212,33 @@ export function SlpCreatorSettingsModal({
       ) : (
         <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-hidden sm:flex-row">
           <div className="flex min-w-0 shrink-0 flex-col gap-3 sm:min-h-0 sm:w-52 sm:overflow-y-auto sm:overscroll-contain sm:pe-2">
-            <div className="flex min-w-0 items-center gap-3">
-              <Avatar account={creator} size="sm" />
-              <div className="min-w-0 flex-1">
-                <p className="truncate text-sm font-bold">{creator.displayName}</p>
-                <p className="truncate text-xs text-[var(--slurp-muted)]">@{creator.handle}</p>
-              </div>
-            </div>
-            {onViewProfile && (
+            {/* Who this is and the way to their profile, as one row: the name is the link. */}
+            {onViewProfile ? (
               <button
                 type="button"
                 onClick={() => {
                   void requestNavigation(() => onViewProfile(creator));
                 }}
-                className={quietButton}
+                aria-label={`${t("ui.slurp.settings.creators.viewProfile")}: ${creator.displayName}`}
+                className={`group flex min-h-14 min-w-0 items-center gap-3 rounded-lg p-2 text-start hover:bg-[var(--slurp-canvas)] ${focusRing}`}
               >
-                {t("ui.slurp.settings.creators.viewProfile")}
+                <Avatar account={creator} size="sm" />
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-sm font-bold">{creator.displayName}</span>
+                  <span className="block truncate text-xs text-[var(--slurp-muted)]">
+                    {t("ui.slurp.settings.creators.viewProfile")}
+                  </span>
+                </span>
+                <ArrowUpRight size={16} className="shrink-0 text-[var(--slurp-muted)]" aria-hidden="true" />
               </button>
+            ) : (
+              <div className="flex min-w-0 items-center gap-3 p-2">
+                <Avatar account={creator} size="sm" />
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-bold">{creator.displayName}</p>
+                  <p className="truncate text-xs text-[var(--slurp-muted)]">@{creator.handle}</p>
+                </div>
+              </div>
             )}
             <button
               ref={sectionPickerTriggerRef}

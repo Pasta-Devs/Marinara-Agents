@@ -81,7 +81,6 @@ export const SLURP2_SOURCE_MODULES: Record<string, readonly string[]> = {
     "packages/client/src/slp/features/creators/settings/slp-creator-settings-store.ts",
   ],
   "packages/client/src/components/slurp/SlurpBackstageWorld.tsx": [
-    "packages/client/src/slp/features/backstage/SlpBackstageWorldPanel.tsx",
     "packages/client/src/slp/features/discovery/SlpDiscoveryPanel.tsx",
     "packages/client/src/slp/features/world/SlpWorldEventsPanel.tsx",
     "packages/client/src/slp/features/projects/SlpProjectsPanel.tsx",
@@ -91,7 +90,6 @@ export const SLURP2_SOURCE_MODULES: Record<string, readonly string[]> = {
     "packages/client/src/slp/features/audience/SlpAudiencePanel.tsx",
   ],
   "packages/client/src/components/slurp/SlurpBackstageAutomation.tsx": [
-    "packages/client/src/slp/features/backstage/SlpBackstageAutomationPanel.tsx",
     "packages/client/src/slp/features/feed/SlpPublishingPanel.tsx",
     "packages/client/src/slp/features/media/SlpImagesPanel.tsx",
   ],

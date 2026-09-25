@@ -13,6 +13,7 @@ import { createConnectionsStorage } from "../../../services/storage/connections.
 import { createSlurpStorage } from "../../data/slp-storage.js";
 import type { GarnishAd } from "../../../services/garnish-ads/garnish-ads.types.js";
 import type { GarnishAdsStorage } from "../../../services/garnish-ads/garnish-ads.storage.js";
+import { getCreatorImageConnections } from "../../base/media/slp-image-connections.js";
 import { generateSlpImageWithRetry } from "../../base/media/slp-image-retry.js";
 import { rewriteSlpImagePrompt } from "../../base/media/slp-image-prompt-rewrite.js";
 import { selectSlpImageProviderPrompt } from "../../base/media/slp-image-prompt.js";
@@ -45,14 +46,16 @@ export async function generateGarnishAdImage(
   db: DB,
   pool: GarnishAdsStorage,
   ad: GarnishAd,
-  /** Preferred connections in order (ad connection, then the Slurp image connection). */
+  /** Preferred connections in order (the ad connection); the Creator picture default follows. */
   connectionIds: ReadonlyArray<string | null | undefined> = [],
 ): Promise<GarnishAdImageOutcome> {
   const connections = createConnectionsStorage(db);
   // A stored id can be blank, deleted, or point at a text connection. Skip those and fall through to
-  // the next choice, not straight to the Engine default.
+  // the next choice, not straight to the Engine default. "Same as post images" means the connection
+  // Creator pictures use, so that one is the last choice before the Engine default.
+  const creatorDefault = (await getCreatorImageConnections(db)).defaultConnectionId;
   let connection: Awaited<ReturnType<typeof connections.getWithKey>> = null;
-  for (const id of connectionIds) {
+  for (const id of [...connectionIds, creatorDefault]) {
     const candidate = id?.trim() ? await connections.getWithKey(id.trim()) : null;
     if (candidate?.provider === "image_generation") {
       connection = candidate;

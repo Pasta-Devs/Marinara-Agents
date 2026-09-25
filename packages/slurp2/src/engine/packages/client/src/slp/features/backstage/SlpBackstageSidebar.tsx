@@ -1,18 +1,43 @@
-import { ArrowLeft } from "lucide-react";
-
+import {
+  ArrowLeft,
+  BookOpen,
+  CalendarClock,
+  ChevronRight,
+  Coins,
+  Globe2,
+  LayoutDashboard,
+  PenLine,
+  Plug,
+  UsersRound,
+  Wrench,
+  type LucideIcon,
+} from "lucide-react";
+import type { ReactNode } from "react";
 import { useTranslation } from "react-i18next";
+
+import { cn } from "../../../lib/utils";
 
 import { type SlurpNavigationState } from "../../base/navigation/slp-navigation.types";
 
 import {
   SLP_BACKSTAGE_DEFAULT_TARGET,
   SLP_BACKSTAGE_SECTION_LABELS,
-  SLP_BACKSTAGE_TARGET_LABELS,
-  SLP_BACKSTAGE_TARGETS_BY_SECTION,
-  type SlpBackstageTarget,
+  type SlpBackstageSection,
 } from "../../base/navigation/slp-backstage-target";
 
 import { settingsSections, sectionTabClass } from "../../modules/settings/slp-backstage-format";
+
+export const SLP_BACKSTAGE_SECTION_ICONS: Record<SlpBackstageSection, LucideIcon> = {
+  overview: LayoutDashboard,
+  models: Plug,
+  creators: UsersRound,
+  automation: CalendarClock,
+  content: BookOpen,
+  world: Globe2,
+  fans: Coins,
+  prompts: PenLine,
+  maintenance: Wrench,
+};
 
 export function SlpBackstageSidebar({
   navigation,
@@ -41,69 +66,93 @@ export function SlpBackstageSidebar({
         {t("ui.slurp.settings.title")}
       </p>
       <nav className="flex flex-col" aria-label={t("ui.slurp.settings.sectionsLabel")}>
-        {settingsSections.map((item) => (
-          <button
-            key={item}
-            type="button"
-            aria-current={section === item ? "page" : undefined}
-            onClick={() => onNavigate({ ...navigation, section: item, target: SLP_BACKSTAGE_DEFAULT_TARGET[item] })}
-            className={sectionTabClass(section === item)}
-          >
-            {t(`ui.slurp.settings.backstage.sections.${item}`, {
-              defaultValue: SLP_BACKSTAGE_SECTION_LABELS[item],
-            })}
-          </button>
-        ))}
+        {settingsSections.map((item) => {
+          const Icon = SLP_BACKSTAGE_SECTION_ICONS[item];
+          return (
+            <button
+              key={item}
+              type="button"
+              aria-current={section === item ? "page" : undefined}
+              onClick={() => onNavigate({ ...navigation, section: item, target: SLP_BACKSTAGE_DEFAULT_TARGET[item] })}
+              className={sectionTabClass(section === item)}
+            >
+              <Icon
+                size={17}
+                className={section === item ? "text-[var(--noodle-accent)]" : "text-[var(--slurp-muted)]"}
+                aria-hidden="true"
+              />
+              {t(`ui.slurp.settings.backstage.sections.${item}`, {
+                defaultValue: SLP_BACKSTAGE_SECTION_LABELS[item],
+              })}
+            </button>
+          );
+        })}
       </nav>
     </>
   );
 }
 
 /**
- * Mobile section row. It keeps the active section in view and fades whichever edge still has
- * sections behind it, so a row that scrolls does not look like a row that ends.
+ * Phone settings home: every section as one row with an icon and what it holds, search on top.
+ * A row opens the section; the page header then shows a way back here. Replaces the old
+ * "Destination" dropdown, which hid 21 pages behind one native select.
  */
-export function SlpBackstageSectionRow({
+export function SlpBackstageHome({
   navigation,
   onNavigate,
+  search,
+  className,
 }: {
   navigation: Extract<SlurpNavigationState, { mode: "creator-settings" }>;
   onNavigate: (navigation: SlurpNavigationState) => void;
+  search: ReactNode;
+  className?: string;
 }) {
   const { t } = useTranslation();
-  const section = navigation.section ?? "overview";
   return (
-    <label className="sticky top-0 z-20 -mb-4 flex min-h-14 items-center gap-3 rounded-t-xl bg-[var(--slurp-surface)] px-3 py-2 ring-1 ring-inset ring-[var(--slurp-outline)] md:hidden">
-      <span className="text-xs font-bold uppercase tracking-[0.12em] text-[var(--slurp-muted)]">
-        {t("ui.slurp.settings.backstage.destination", { defaultValue: "Destination" })}
-      </span>
-      {/* Grouped so the picker reaches a page directly, instead of only its section. */}
-      <select
-        value={`${section}:${navigation.target ?? SLP_BACKSTAGE_DEFAULT_TARGET[section]}`}
-        onChange={(event) => {
-          const [next, nextTarget] = event.target.value.split(":") as [
-            (typeof settingsSections)[number],
-            SlpBackstageTarget,
-          ];
-          onNavigate({ ...navigation, section: next, target: nextTarget });
-        }}
-        className="ms-auto min-h-11 min-w-0 flex-1 rounded-lg bg-[var(--slurp-surface-raised)] px-3 text-base font-semibold text-[var(--slurp-text)] ring-1 ring-inset ring-[var(--slurp-outline)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)]"
-      >
-        {settingsSections.map((item) => (
-          <optgroup
-            key={item}
-            label={t(`ui.slurp.settings.backstage.sections.${item}`, {
-              defaultValue: SLP_BACKSTAGE_SECTION_LABELS[item],
-            })}
-          >
-            {SLP_BACKSTAGE_TARGETS_BY_SECTION[item].map((entry) => (
-              <option key={entry} value={`${item}:${entry}`}>
-                {SLP_BACKSTAGE_TARGET_LABELS[entry]}
-              </option>
-            ))}
-          </optgroup>
-        ))}
-      </select>
-    </label>
+    <div className={cn("space-y-4 px-1", className)}>
+      <h1 className="pt-1 text-3xl font-black tracking-tight">{t("ui.slurp.settings.title")}</h1>
+      {search}
+      <nav aria-label={t("ui.slurp.settings.title")}>
+        <ul className="divide-y divide-[var(--slurp-outline)] overflow-hidden rounded-xl bg-[var(--slurp-surface)] ring-1 ring-inset ring-[var(--slurp-outline)]">
+          {settingsSections.map((item) => {
+            const Icon = SLP_BACKSTAGE_SECTION_ICONS[item];
+            return (
+              <li key={item}>
+                <button
+                  type="button"
+                  onClick={() =>
+                    onNavigate({ ...navigation, section: item, target: SLP_BACKSTAGE_DEFAULT_TARGET[item] })
+                  }
+                  className="flex min-h-16 w-full items-center gap-3 px-4 py-2.5 text-start transition-colors hover:bg-[var(--slurp-surface-raised)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--slurp-focus)] motion-reduce:transition-none"
+                >
+                  <span
+                    className="grid size-9 shrink-0 place-items-center rounded-lg bg-[color-mix(in_srgb,var(--noodle-accent)_16%,var(--slurp-surface-raised))] text-[var(--noodle-accent)]"
+                    aria-hidden="true"
+                  >
+                    <Icon size={18} />
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block text-sm font-semibold">
+                      {t(`ui.slurp.settings.backstage.sections.${item}`, {
+                        defaultValue: SLP_BACKSTAGE_SECTION_LABELS[item],
+                      })}
+                    </span>
+                    <span className="block truncate text-xs text-[var(--slurp-muted)]">
+                      {t(`ui.slurp.settings.backstage.sectionHints.${item}`)}
+                    </span>
+                  </span>
+                  <ChevronRight
+                    size={18}
+                    className="shrink-0 text-[var(--slurp-muted)] rtl:rotate-180"
+                    aria-hidden="true"
+                  />
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+      </nav>
+    </div>
   );
 }

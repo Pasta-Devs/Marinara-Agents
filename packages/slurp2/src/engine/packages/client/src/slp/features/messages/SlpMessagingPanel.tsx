@@ -34,10 +34,7 @@ export function SlpMessagingPanel(page: SlpBackstagePageProps) {
   return (
     <div className="space-y-5">
       <div className="flex flex-wrap items-start justify-between gap-3">
-        <BackstagePageHeader
-          title={t("ui.slurp.settings.messaging.title")}
-          detail={t("ui.slurp.settings.messaging.detail")}
-        />
+        <BackstagePageHeader detail={t("ui.slurp.settings.messaging.detail")} />
         <StatusStrip
           label={t("ui.slurp.settings.strip.label")}
           items={[
@@ -163,6 +160,7 @@ export function SlpMessagingPanel(page: SlpBackstagePageProps) {
           detail={t("ui.slurp.settings.messaging.bubbleLimitDetail")}
         >
           <NumberSetting
+            stepper
             value={settings.messagesReplyBubbleLimit}
             min={1}
             max={4}
@@ -308,6 +306,7 @@ export function SlpMessagingPanel(page: SlpBackstagePageProps) {
             detail={t("ui.slurp.settings.messaging.requestFeeDetail")}
           >
             <NumberSetting
+              stepper
               value={settings.messagesDefaultRequestFee}
               min={0}
               max={9999}

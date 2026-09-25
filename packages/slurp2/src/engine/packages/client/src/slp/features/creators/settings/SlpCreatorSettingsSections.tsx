@@ -565,7 +565,7 @@ export function SlpCreatorImproveSection({ creator }: SlpCreatorSettingsSectionP
   const settingsQuery = useSlurpSettings();
   if (!settingsQuery.data)
     return <p className={noteClass}>{t("ui.slurp.settings.loading", { defaultValue: "Loading…" })}</p>;
-  return <SlurpCreatorImprover creators={[creator]} settings={settingsQuery.data} />;
+  return <SlurpCreatorImprover scoped creators={[creator]} settings={settingsQuery.data} />;
 }
 
 /** Removing the Creator. Alone in its own tab so it is never a mis-click away from a setting. */

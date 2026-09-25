@@ -9,7 +9,6 @@ export function SlpProjectsPanel(page: SlpBackstagePageProps) {
   return (
     <div className="space-y-6">
       <BackstagePageHeader
-        title={t("ui.slurp.settings.planTemplates.title", { defaultValue: "Storyline types" })}
         detail={t("ui.slurp.settings.planTemplates.detail", {
           defaultValue: "Reusable story structures. Each new Plan gets its own copy of a template.",
         })}

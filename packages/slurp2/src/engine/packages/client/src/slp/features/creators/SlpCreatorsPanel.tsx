@@ -103,10 +103,7 @@ export function SlpCreatorsPanel(page: SlpBackstagePageProps) {
   return (
     <div className="space-y-5">
       <div className="flex flex-wrap items-start justify-between gap-3">
-        <BackstagePageHeader
-          title={t("ui.slurp.settings.creators.title")}
-          detail={t("ui.slurp.settings.creators.detail")}
-        />
+        <BackstagePageHeader detail={t("ui.slurp.settings.creators.detail")} />
         <div className="flex flex-wrap gap-2">
           <button
             type="button"

@@ -1,5 +1,14 @@
 # Slurp Remastered release notes
 
+## 0.2.74 — 2026-09-26
+
+- Settings are rows: what a setting does on the left, its control on the right. Each page says its name once; Reset is at the bottom and resets only that page.
+- Overview is the only summary page, with fan and schedule buttons and more tiles. New names: Connections, Storylines (a Story is the short image post) and Writing. Maintenance is one page.
+- On a phone, settings open on a list of sections.
+- Connections has one row per job and the chat carryover. Creator pictures now sets the connection Creator pictures really use.
+- Images uses picture shapes instead of number fields. Story images moved to Publishing. Storyline types, ads and events are compact lists; long explanations fold under How this works.
+- Writing starts with Spice level and How far pictures go.
+
 ## 0.2.73 — 2026-09-26
 
 - Your own messages no longer use the AI budget: a Creator answers a message you send or a tip you give at once, even when the hourly or daily limit is reached. Only answers that arrive while you are away count against it. The mode and the DM replies switch still apply.

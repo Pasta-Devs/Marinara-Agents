@@ -4,7 +4,6 @@ import { useTranslation } from "react-i18next";
 import {
   AdvancedGroup,
   Field,
-  GuidanceBox,
   NumberSetting,
   SettingsGroup,
   Toggle,
@@ -36,11 +35,7 @@ export function SlpStorylinesPanel(page: SlpBackstagePageProps) {
   const cap = (value: string) => value.charAt(0).toUpperCase() + value.slice(1);
   return (
     <div className="space-y-5">
-      <BackstagePageHeader
-        title={t("ui.slurp.settings.planAutomation.title", { defaultValue: "Storylines" })}
-        detail={t("ui.slurp.settings.planAutomation.detail")}
-        scope="all-slurp"
-      />
+      <BackstagePageHeader detail={t("ui.slurp.settings.planAutomation.detail")} />
       <StatusStrip
         label={t("ui.slurp.settings.strip.label")}
         items={[
@@ -71,7 +66,6 @@ export function SlpStorylinesPanel(page: SlpBackstagePageProps) {
           },
         ]}
       />
-      <GuidanceBox title={t("ui.slurp.settings.arcs.guideTitle")} detail={t("ui.slurp.settings.arcs.guideDetail")} />
       <ChoiceSetting
         variant="cards"
         label={t("ui.slurp.settings.storyActivity.title")}

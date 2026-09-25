@@ -10,6 +10,7 @@ import { now, newId } from "../../../../utils/id-generator.js";
 import { logger } from "../../../../lib/logger.js";
 import { eq, inArray } from "../../../../db/file-query.js";
 import { trySlurpWrite } from "../../../base/locking/slp-operation-lock.js";
+import { getCreatorImageConnections } from "../../../base/media/slp-image-connections.js";
 import type { FastifyInstance } from "fastify";
 import type { SlpRouteDeps } from "../../viewer/slp-viewer-contract.js";
 import { createSlpImprovementJobs } from "./slp-improvement-jobs.js";
@@ -28,14 +29,19 @@ export async function slpImprovementRoutes(app: FastifyInstance, deps: SlpRouteD
   } = createSlpImprovementJobs(app, deps);
   // Deterministic checkup: reads stored profiles and settings only, never a model.
   app.get("/backstage/readiness", async () => {
-    const [profiles, settings] = await Promise.all([noodle.listNoodlerStageProfiles(), noodle.getSlurpSettings()]);
+    const [profiles, settings, imageConnections] = await Promise.all([
+      noodle.listNoodlerStageProfiles(),
+      noodle.getSlurpSettings(),
+      getCreatorImageConnections(app.db),
+    ]);
     return {
       modelCalls: 0,
       availableModules: SLURP_AVAILABLE_IMPROVEMENT_MODULES,
       creators: profiles.map((profile) => ({ accountId: profile.id, issues: slurpCreatorReadiness(profile) })),
       global: {
         generationConnection: Boolean(settings.generationConnectionId),
-        imageConnection: Boolean(settings.imageGenerationConnectionId),
+        // Creator pictures use the image settings' default, not the older hidden Slurp setting.
+        imageConnection: Boolean(imageConnections.defaultConnectionId),
         discoveryTags: settings.discoveryTags.length,
         fanTypes: settings.fanTypes.length,
         arcs: settings.arcLibrary.length,

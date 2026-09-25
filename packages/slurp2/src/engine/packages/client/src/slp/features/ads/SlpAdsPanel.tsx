@@ -1,7 +1,7 @@
 import { Image, Pencil, Plus, RotateCcw, Trash2 } from "lucide-react";
 import { BackstagePageHeader } from "../../modules/settings/SlpSettingsKit";
 
-import { Field, SettingsGroup, Toggle } from "../../modules/settings/SlpSettingsControls";
+import { Field, HowItWorks, SettingsGroup, Toggle } from "../../modules/settings/SlpSettingsControls";
 import { ChoiceSetting } from "../../modules/settings/SlpSettingsInputs";
 
 import { api } from "../../../lib/api-client";
@@ -51,12 +51,12 @@ export function SlpAdsPanel(page: SlpBackstagePageProps) {
 
   return (
     <div className="space-y-5">
-      <BackstagePageHeader title={t("ui.slurp.settings.ads.title")} detail={t("ui.slurp.settings.ads.detail")} />
-      <div className="rounded-xl bg-[var(--slurp-surface-raised)] p-4 text-xs leading-5 text-[var(--slurp-muted)] ring-1 ring-inset ring-[var(--slurp-outline)]">
+      <BackstagePageHeader detail={t("ui.slurp.settings.ads.detail")} />
+      <HowItWorks label={t("ui.slurp.settings.howItWorks")}>
         <p>{t("ui.slurp.settings.ads.explainer")}</p>
-        <p className="mt-2">{t("ui.slurp.settings.ads.explainerPool")}</p>
+        <p>{t("ui.slurp.settings.ads.explainerPool")}</p>
         {settings.walletEnabled && settings.walletAdReward > 0 && (
-          <p className="mt-2">
+          <p>
             {t("ui.slurp.settings.ads.explainerEarning", {
               defaultValue:
                 "Acting on an ad pays {{reward}} SlurpCoins, up to {{cap}} a day. Change either in SlurpCoins.",
@@ -65,7 +65,7 @@ export function SlpAdsPanel(page: SlpBackstagePageProps) {
             })}
           </p>
         )}
-      </div>
+      </HowItWorks>
       <SettingsGroup title={t("ui.slurp.settings.ads.feedGroup", { defaultValue: "In your feed" })}>
         <Toggle
           settingKey="inlineAdsEnabled"
@@ -376,32 +376,27 @@ export function SlpAdsPanel(page: SlpBackstagePageProps) {
         )}
         {/* The pool used to be a bare count, so a bad generated ad could only be
                         removed by resetting everything. */}
-        <ul className="mt-4 space-y-2">
+        <ul className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
           {(adPool.data?.items ?? []).map((ad) => {
             const builtin = ad.origin === "builtin";
             return (
               <li
                 key={ad.id}
-                className="flex items-start gap-3 rounded-lg bg-[var(--slurp-surface-raised)] p-3 ring-1 ring-inset ring-[var(--slurp-outline)]"
+                className="flex flex-col overflow-hidden rounded-xl bg-[var(--slurp-surface-raised)] ring-1 ring-inset ring-[var(--slurp-outline)]"
               >
                 {ad.imageUrl ? (
-                  <SlurpMediaImg
-                    src={ad.imageUrl}
-                    alt=""
-                    loading="lazy"
-                    className="h-14 w-20 shrink-0 rounded-lg object-cover"
-                  />
+                  <SlurpMediaImg src={ad.imageUrl} alt="" loading="lazy" className="aspect-video w-full object-cover" />
                 ) : (
                   <span
                     aria-hidden="true"
-                    className="flex h-14 w-20 shrink-0 items-center justify-center rounded-lg bg-[var(--slurp-canvas)] text-[var(--slurp-muted)]"
+                    className="flex h-16 w-full items-center gap-3 bg-[linear-gradient(120deg,color-mix(in_srgb,var(--noodle-accent)_22%,var(--slurp-canvas)),color-mix(in_srgb,var(--slurp-violet)_18%,var(--slurp-canvas)))] px-3 text-lg font-black text-[var(--slurp-text)]"
                   >
-                    <Image size={16} />
+                    {ad.brand.charAt(0).toUpperCase()}
                   </span>
                 )}
                 {editingAd?.id === ad.id ? (
                   <form
-                    className="min-w-0 flex-1 space-y-2"
+                    className="min-w-0 flex-1 space-y-2 p-3"
                     onSubmit={(event) => {
                       event.preventDefault();
                       updateAd.mutate(editingAd, {
@@ -476,7 +471,7 @@ export function SlpAdsPanel(page: SlpBackstagePageProps) {
                     </div>
                   </form>
                 ) : (
-                  <div className="min-w-0 flex-1">
+                  <div className="min-w-0 flex-1 p-3">
                     <p className="truncate text-sm font-bold">{ad.brand}</p>
                     <p className="truncate text-xs font-semibold text-[var(--slurp-muted)]">{ad.product}</p>
                     <p className="mt-1 line-clamp-2 text-xs leading-5 text-[var(--slurp-muted)]">{ad.copy}</p>
@@ -488,7 +483,7 @@ export function SlpAdsPanel(page: SlpBackstagePageProps) {
                     </p>
                   </div>
                 )}
-                <div className="flex shrink-0 flex-col gap-1">
+                <div className="flex justify-end gap-0.5 border-t border-[var(--slurp-outline)] px-1.5 py-1">
                   <button
                     type="button"
                     onClick={() =>
@@ -502,7 +497,7 @@ export function SlpAdsPanel(page: SlpBackstagePageProps) {
                     }
                     aria-label={t("ui.slurp.settings.ads.editAd", { brand: ad.brand })}
                     title={t("ui.slurp.settings.ads.editAd", { brand: ad.brand })}
-                    className="flex h-9 w-9 items-center justify-center rounded-lg text-[var(--slurp-muted)] hover:bg-[var(--accent)] hover:text-[var(--slurp-text)]"
+                    className="flex h-11 w-11 items-center justify-center rounded-lg text-[var(--slurp-muted)] hover:bg-[var(--accent)] hover:text-[var(--slurp-text)]"
                   >
                     <Pencil size={15} aria-hidden="true" />
                   </button>
@@ -517,7 +512,7 @@ export function SlpAdsPanel(page: SlpBackstagePageProps) {
                     }
                     aria-label={t("ui.slurp.settings.ads.regenerateImage", { brand: ad.brand })}
                     title={t("ui.slurp.settings.ads.regenerateImage", { brand: ad.brand })}
-                    className="flex h-9 w-9 items-center justify-center rounded-lg text-[var(--slurp-muted)] hover:bg-[var(--accent)] hover:text-[var(--slurp-text)] disabled:opacity-50"
+                    className="flex h-11 w-11 items-center justify-center rounded-lg text-[var(--slurp-muted)] hover:bg-[var(--accent)] hover:text-[var(--slurp-text)] disabled:opacity-50"
                   >
                     <Image size={15} aria-hidden="true" />
                   </button>
@@ -536,7 +531,7 @@ export function SlpAdsPanel(page: SlpBackstagePageProps) {
                       }
                       aria-label={t("ui.slurp.settings.ads.restoreAd", { brand: ad.brand })}
                       title={t("ui.slurp.settings.ads.restoreAd", { brand: ad.brand })}
-                      className="flex h-9 w-9 items-center justify-center rounded-lg text-[var(--slurp-muted)] hover:bg-[var(--accent)] hover:text-[var(--slurp-text)] disabled:opacity-50"
+                      className="flex h-11 w-11 items-center justify-center rounded-lg text-[var(--slurp-muted)] hover:bg-[var(--accent)] hover:text-[var(--slurp-text)] disabled:opacity-50"
                     >
                       <RotateCcw size={15} aria-hidden="true" />
                     </button>
@@ -562,7 +557,7 @@ export function SlpAdsPanel(page: SlpBackstagePageProps) {
                       title={t(`ui.slurp.settings.ads.${builtin ? "hideAd" : "deleteAd"}`, {
                         brand: ad.brand,
                       })}
-                      className="flex h-9 w-9 items-center justify-center rounded-lg text-[var(--slurp-muted)] hover:bg-[var(--accent)] hover:text-red-300 disabled:opacity-50"
+                      className="flex h-11 w-11 items-center justify-center rounded-lg text-[var(--slurp-muted)] hover:bg-[var(--accent)] hover:text-red-300 disabled:opacity-50"
                     >
                       <Trash2 size={15} aria-hidden="true" />
                     </button>

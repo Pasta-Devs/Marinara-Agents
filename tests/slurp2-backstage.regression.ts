@@ -2,10 +2,12 @@ import assert from "node:assert/strict";
 import {
   SLP_BACKSTAGE_SECTIONS,
   SLP_LEGACY_SETTINGS_DESTINATION,
+  isSlpBackstageTarget,
   slpBackstageSectionFor,
   targetBelongsToSection,
 } from "../packages/slurp2/src/engine/packages/client/src/slp/base/navigation/slp-backstage-target";
 import { SLP_BACKSTAGE_SETTING_PLACEMENT } from "../packages/slurp2/src/engine/packages/client/src/slp/features/backstage/slp-backstage-placement";
+import { SLURP_SETTINGS_SECTION_KEYS } from "../packages/slurp2/src/engine/packages/client/src/slp/features/settings/slp-settings-defaults";
 import { slurp2BackstageSource } from "./slurp2-backstage-source";
 import { slurp2Source } from "./slurp2-source";
 
@@ -34,9 +36,11 @@ assert.equal(slpBackstageSectionFor("automation", "connections"), "models");
 assert.equal(slpBackstageSectionFor("automation", "images"), "models");
 assert.equal(slpBackstageSectionFor("world", "audience"), "fans");
 assert.equal(slpBackstageSectionFor("content", "events"), "world");
-assert.equal(slpBackstageSectionFor("content", "content"), "content", "a section's own overview page stays");
 assert.equal(slpBackstageSectionFor("content", "storylines"), "content");
-assert.ok(targetBelongsToSection("content", "content"));
+// Overview is the only hub: the Posting, Stories and World landing pages and the Backup page are gone.
+for (const removed of ["automation", "content", "world", "advanced"])
+  assert.equal(isSlpBackstageTarget(removed), false);
+assert.equal(SLP_LEGACY_SETTINGS_DESTINATION.advanced.target, "autopurge", "old Backup links land on Maintenance");
 for (const [setting, placement] of Object.entries(SLP_BACKSTAGE_SETTING_PLACEMENT)) {
   assert.ok(
     targetBelongsToSection(placement.section, placement.target),
@@ -44,6 +48,12 @@ for (const [setting, placement] of Object.entries(SLP_BACKSTAGE_SETTING_PLACEMEN
   );
 }
 assert.equal(SLP_BACKSTAGE_SETTING_PLACEMENT.inlineAdsEnabled.section, "fans");
+// "Reset page" only resets the settings that page shows.
+for (const [page, keys] of Object.entries(SLURP_SETTINGS_SECTION_KEYS)) {
+  for (const key of keys) {
+    assert.equal(SLP_BACKSTAGE_SETTING_PLACEMENT[key].target, page, `${key} resets with the page it is on`);
+  }
+}
 assert.equal(SLP_BACKSTAGE_SETTING_PLACEMENT.imageWidth.section, "models");
 const packageStore = read("packages/slurp2/src/engine/packages/client/src/slp/base/state/slp-package-store.ts");
 assert.match(

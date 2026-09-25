@@ -1,7 +1,7 @@
 import { AlertTriangle, Download, Loader2, RefreshCw, Trash2, Upload } from "lucide-react";
 
 import { toast } from "sonner";
-import { BackstagePageHeader } from "../../modules/settings/SlpSettingsKit";
+import { SectionTitle } from "../../modules/settings/SlpSettingsControls";
 import {
   applySlurpRestoreInspection,
   discardSlurpRestoreInspection,
@@ -11,7 +11,6 @@ import {
 } from "./slp-backup";
 
 import { showConfirmDialog, showPromptDialog } from "../../../lib/app-dialogs";
-import { SlurpMaintenanceHealth } from "./SlpMaintenanceHealth";
 import { MaintenanceTask, focusRing, quietButton } from "./SlpMaintenanceTask";
 import type { SlpBackstagePageProps } from "../backstage/slp-backstage-contract";
 import { errorMessage, formatBytes } from "../../modules/settings/slp-backstage-format";
@@ -21,9 +20,7 @@ export function SlpBackupPanel(page: SlpBackstagePageProps) {
   const {
     onRestartOnboarding,
     t,
-    section,
     maintenanceSummary,
-    autopurgePreview,
     deleteAllData,
     deleteUnusedData,
     backupJob,
@@ -46,22 +43,10 @@ export function SlpBackupPanel(page: SlpBackstagePageProps) {
     : null;
   return (
     <>
-      {section === "maintenance" && (
-        <div className="mb-5">
-          <SlurpMaintenanceHealth
-            summary={maintenanceSummary.data}
-            loading={maintenanceSummary.isLoading}
-            error={maintenanceSummary.isError}
-            preview={autopurgePreview.data}
-          />
-        </div>
-      )}
-
       <div className="space-y-4">
-        <BackstagePageHeader
-          title={t("ui.slurp.settings.advanced.title")}
+        <SectionTitle
+          title={t("ui.slurp.settings.advanced.pageTitle")}
           detail={t("ui.slurp.settings.advanced.detail")}
-          scope="all-slurp"
         />
 
         <MaintenanceTask

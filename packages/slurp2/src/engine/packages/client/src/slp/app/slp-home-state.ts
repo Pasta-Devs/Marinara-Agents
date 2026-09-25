@@ -236,7 +236,7 @@ export function useSlurpHomeBaseState({ navigation, onNavigate, onLeave }: Slurp
     onNavigate({
       mode: "creator-settings",
       tab: "creator",
-      section: "overview",
+      // No section: phones open on the settings home list; wide screens show Overview.
       returnTo: { mode: "creator", view: "hub" },
     });
     setMobileDrawerOpen(false);

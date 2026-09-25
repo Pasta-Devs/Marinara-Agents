@@ -1,5 +1,5 @@
 import { ArrowRight, Search } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import type { SlurpSettings } from "../settings/slp-settings-contract";
@@ -39,7 +39,11 @@ export function SlurpBackstageSubnav({
   return (
     <nav
       aria-label={`${SLP_BACKSTAGE_SECTION_LABELS[section]} areas`}
-      className={cn("flex flex-wrap gap-2", className)}
+      // A phone keeps the pages in one row that scrolls sideways, not two rows of big pills.
+      className={cn(
+        "-mx-1 flex gap-2 overflow-x-auto px-1 pb-1 [scrollbar-width:none] md:flex-wrap md:overflow-visible md:pb-0",
+        className,
+      )}
     >
       {targets.map((item) => (
         <button
@@ -48,7 +52,7 @@ export function SlurpBackstageSubnav({
           aria-current={item === target ? "page" : undefined}
           onClick={() => onSelect(item)}
           className={cn(
-            "min-h-11 rounded-full px-4 text-sm font-semibold transition-[background-color,color,transform] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] active:scale-[0.97] motion-reduce:transition-none motion-reduce:active:scale-100",
+            "min-h-11 shrink-0 rounded-full px-4 text-sm font-semibold transition-[background-color,color,transform] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] active:scale-[0.97] motion-reduce:transition-none motion-reduce:active:scale-100",
             item === target
               ? "bg-[var(--slurp-text)] text-[var(--slurp-canvas)] shadow-sm"
               : "bg-[var(--slurp-surface-raised)] text-[var(--slurp-muted)] ring-1 ring-inset ring-[var(--slurp-outline)] hover:text-[var(--slurp-text)]",
@@ -72,14 +76,17 @@ export function SlurpBackstageSearch({
   const [query, setQuery] = useState("");
   const [active, setActive] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
+  // The phone settings home and the page header can both hold a search box.
+  const inputId = useId();
   /** The setting's own translated label where one exists; otherwise the key made readable. */
   const labelFor = (key: keyof SlurpSettings) =>
     i18n.exists(`ui.slurp.settings.${key}`) ? t(`ui.slurp.settings.${key}`) : humanize(key);
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
+        if (!inputRef.current?.offsetParent) return;
         event.preventDefault();
-        inputRef.current?.focus();
+        inputRef.current.focus();
       }
     };
     window.addEventListener("keydown", handleKeyDown);
@@ -115,7 +122,7 @@ export function SlurpBackstageSearch({
   const open = query.trim().length > 0;
   return (
     <div className={cn("relative z-20 w-full max-w-xl", className)}>
-      <label className="sr-only" htmlFor="slurp-backstage-search">
+      <label className="sr-only" htmlFor={inputId}>
         {t("ui.slurp.settings.backstage.findSetting", { defaultValue: "Find a setting" })}
       </label>
       <Search
@@ -125,7 +132,7 @@ export function SlurpBackstageSearch({
       />
       <input
         ref={inputRef}
-        id="slurp-backstage-search"
+        id={inputId}
         value={query}
         onChange={(event) => setQuery(event.target.value)}
         onKeyDown={(event) => {
@@ -148,10 +155,8 @@ export function SlurpBackstageSearch({
         autoComplete="off"
         aria-autocomplete="list"
         aria-expanded={open && results.length > 0}
-        aria-controls="slurp-backstage-search-results"
-        aria-activedescendant={
-          open && results[active] ? `slurp-backstage-search-option-${results[active][0]}` : undefined
-        }
+        aria-controls={`${inputId}-results`}
+        aria-activedescendant={open && results[active] ? `${inputId}-option-${results[active][0]}` : undefined}
       />
       <kbd className="pointer-events-none absolute end-3 top-1/2 hidden -translate-y-1/2 rounded-md bg-[var(--slurp-canvas)] px-2 py-1 text-[0.68rem] font-semibold text-[var(--slurp-muted)] ring-1 ring-inset ring-[var(--slurp-outline)] sm:block">
         Ctrl K
@@ -160,7 +165,7 @@ export function SlurpBackstageSearch({
         <div className="absolute inset-x-0 top-[calc(100%+0.5rem)] overflow-hidden rounded-xl bg-[var(--slurp-surface-raised)] shadow-[var(--slurp-shadow-floating)] ring-1 ring-inset ring-[var(--slurp-outline)]">
           {results.length ? (
             <ul
-              id="slurp-backstage-search-results"
+              id={`${inputId}-results`}
               role="listbox"
               aria-label={t("ui.slurp.settings.backstage.findSetting", { defaultValue: "Find a setting" })}
               className="max-h-80 overflow-y-auto p-1.5"
@@ -168,7 +173,7 @@ export function SlurpBackstageSearch({
               {results.map(([key, placement], index) => (
                 <li
                   key={key}
-                  id={`slurp-backstage-search-option-${key}`}
+                  id={`${inputId}-option-${key}`}
                   role="option"
                   aria-selected={index === active}
                   // Keep focus in the input so typing and arrow keys keep working.

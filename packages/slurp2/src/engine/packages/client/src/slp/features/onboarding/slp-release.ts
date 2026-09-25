@@ -1,5 +1,5 @@
 // The splash screen needs the shipped version and its public notes inside the client bundle.
-export const SLURP2_VERSION = "0.2.73";
+export const SLURP2_VERSION = "0.2.74";
 
 export interface Slurp2ReleaseEntry {
   version: string;
@@ -9,6 +9,18 @@ export interface Slurp2ReleaseEntry {
 
 /** The public release history shown in the Engine splash screen. */
 export const SLURP2_RELEASES: Slurp2ReleaseEntry[] = [
+  {
+    version: "0.2.74",
+    date: "2026-09-26",
+    notes: [
+      "Settings are rows: what a setting does on the left, its control on the right. Each page says its name once; Reset is at the bottom and resets only that page.",
+      "Overview is the only summary page, with fan and schedule buttons and more tiles. New names: Connections, Storylines (a Story is the short image post) and Writing. Maintenance is one page.",
+      "On a phone, settings open on a list of sections.",
+      "Connections has one row per job and the chat carryover. Creator pictures now sets the connection Creator pictures really use.",
+      "Images uses picture shapes instead of number fields. Story images moved to Publishing. Storyline types, ads and events are compact lists; long explanations fold under How this works.",
+      "Writing starts with Spice level and How far pictures go.",
+    ],
+  },
   {
     version: "0.2.73",
     date: "2026-09-26",
