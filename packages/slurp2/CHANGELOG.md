@@ -1,5 +1,9 @@
 # Slurp Remastered release notes
 
+## 0.2.53 — 2026-09-25
+
+- Each Creator's Continuity tab now lists their recent signals: everything around them in the last two weeks from every source (posts, notes, messages, promises, their schedule, platform events, and other Creators' posts) in one place. Private messages show only what kind of thing happened.
+
 ## 0.2.52 — 2026-09-25
 
 - Posts prepared ahead of time are written again when the Creator's character card, Conversation Schedule, disclosure, or stage voice changes before they go out, instead of publishing what was true when they were prepared.

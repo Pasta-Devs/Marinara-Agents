@@ -12,6 +12,7 @@ import {
   SLURP_PROMOTION_TARGETS,
 } from "../../data/continuity/slp-continuity-storage.js";
 import { listSlurpOpportunities } from "../../data/feed/slp-opportunity-storage.js";
+import { listSlurpSignals } from "./slp-signals-service.js";
 import { createSlurpStorage } from "../../data/slp-storage.js";
 import {
   slurpChatMomentKey,
@@ -168,6 +169,14 @@ export async function slpContinuityRoutes(app: FastifyInstance) {
       if (fact) saved.push({ creatorAccountId: account.id, fact, created: !existing });
     }
     return { saved };
+  });
+
+  /** A Creator's recent signals, newest first, for the Backstage view. Owner-only like the editor. */
+  app.get("/continuity/:creatorAccountId/signals", async (req, reply) => {
+    const { creatorAccountId } = req.params as { creatorAccountId: string };
+    const signals = await listSlurpSignals(app.db, creatorAccountId);
+    if (!signals) return reply.code(404).send({ error: "Creator account not found" });
+    return { signals };
   });
 
   app.patch("/continuity/facts/:id", async (req, reply) => {

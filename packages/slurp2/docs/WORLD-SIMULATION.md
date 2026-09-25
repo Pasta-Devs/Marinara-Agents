@@ -353,21 +353,29 @@ Each slice is a part of the final design, not a temporary patch, and ships on it
 of 2026-09-25 (branch `laser-guided-slurp`):
 
 1. **Done (0.2.41).** Known faults above.
-2. **Partly done (0.2.41, 0.2.43).** Editorial memory per Creator and across Creators (subjects,
-   not captions); beat posts become continuity facts after publication. Open: the signal adapter.
+2. **Done (0.2.41, 0.2.43, 0.2.53).** Editorial memory per Creator and across Creators (subjects,
+   not captions); beat posts become continuity facts after publication; signals
+   (`modules/continuity/slp-signals.ts`) wrap posts, facts, events, promises, schedule, platform
+   events and other Creators' subjects, shown per Creator under Continuity → Recent signals.
 3. **Done (0.2.41, 0.2.42).** Post brief in the user message; raw captions replaced; shot framing
    as composition tags. Open: matched image tests per image model; a tags-only or prose-only
    renderer only if those tests need one.
-4. **Done (0.2.42–0.2.44), behind the Beats setting.** Canon anchors, beat types with decks, claim
-   checks, day plan from schedule or card routine. Open: heat range use, anchor editor UI.
-5. **Done (0.2.42).** Beat-first selection with per-Creator freshness and a cross-Creator theme cap.
-   Open: callback references beyond arcs.
+4. **Done (0.2.42–0.2.44, 0.2.48, 0.2.49, 0.2.51), behind the Beats setting.** Canon anchors, beat
+   types with decks, claim checks, day plan from the live schedule or the card routine (the schedule
+   decides where the Creator is; sleep and driving step back), planned heat per post up to the dial,
+   and an anchor editor in each Creator's Continuity tab.
+5. **Done (0.2.42, 0.2.50).** Beat-first selection with per-Creator freshness and a cross-Creator
+   theme cap; about one beat in three refers back to a real earlier post, set, saved chat moment or
+   delivered request, as a fact.
 6. **Level 1 done (0.2.45)**, off by default: world tick, niche patterns, optional Slurp-wide
    events. Level 2 not started; start it only if level 0 and 1 fall short.
 7. **Slurp side done (0.2.47).** `POST /continuity/from-chat`. Open: the Engine action, Noodle and
    other agents.
 8. **Done (0.2.46).** Arc chapters are the beat of arc posts; once-only life events (moving, new
    job, breakup) never restart automatically.
+
+Also fixed on the way (0.2.52): prepared posts stored a policy fingerprint that was never compared,
+so pre_generate posts published with an old card or schedule. They are now written again.
 
 ## Evaluation
 

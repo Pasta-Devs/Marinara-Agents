@@ -27,6 +27,7 @@ import { CreatorCollabsEditor } from "../SlpCreatorMetrics";
 import { useCreatorAccounts } from "../slp-creators-hooks";
 import { SlpWardrobeManager } from "../SlpWardrobeManager";
 import { SlpCanonAnchorsEditor } from "../SlpCanonAnchorsEditor";
+import { SlpCreatorSignalsList } from "../SlpCreatorSignalsList";
 import { SlpCreatorPublishingSection } from "./SlpCreatorPublishingSection";
 import { SettingAnchor } from "../../../modules/settings/SlpSettingsKit";
 import {
@@ -717,6 +718,7 @@ export function SlpCreatorContinuitySection({ creator }: SlpCreatorSettingsSecti
     <div className="space-y-6">
       <SlurpContinuityPanel creatorAccountId={creator.id} />
       <SlpCanonAnchorsEditor creatorId={creator.id} />
+      <SlpCreatorSignalsList creatorId={creator.id} />
     </div>
   );
 }

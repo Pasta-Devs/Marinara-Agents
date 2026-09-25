@@ -360,6 +360,12 @@
     "slurp2": {
       "versions": [
         {
+          "version": "0.2.53",
+          "date": "2026-09-25",
+          "notes": "- Each Creator's Continuity tab now lists their recent signals: everything around them in the last two weeks from every source (posts, notes, messages, promises, their schedule, platform events, and other Creators' posts) in one place. Private messages show only what kind of thing happened.",
+          "highlight": false
+        },
+        {
           "version": "0.2.52",
           "date": "2026-09-25",
           "notes": "- Posts prepared ahead of time are written again when the Creator's character card, Conversation Schedule, disclosure, or stage voice changes before they go out, instead of publishing what was true when they were prepared.",
@@ -471,12 +477,6 @@
           "version": "0.2.34",
           "date": "2026-09-23",
           "notes": "- Manage text and image connections in one place. Missing saved connections stay visible until you choose a replacement, and connection load errors can be retried.\n- Image briefs now follow the Creator's production style, and future automatic posts survive Engine restarts and source snapshot changes.\n- Prompt Studio describes its output clearly, image appearance settings apply consistently, and valid model responses can include extra fields.",
-          "highlight": false
-        },
-        {
-          "version": "0.2.29",
-          "date": "2026-09-23",
-          "notes": "- Scheduled timeline refresh uses the saved daily setting again.\n- Delayed chat replies finish during a cool-off, and strict model output supports comment threads and invited posts.\n- Pulse shows failed first posts and audience failure details. Arc edits keep imported story fields.",
           "highlight": false
         }
       ]
