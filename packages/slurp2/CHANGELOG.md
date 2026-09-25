@@ -1,5 +1,9 @@
 # Slurp Remastered release notes
 
+## 0.2.61 — 2026-09-25
+
+- The Creator settings window no longer shows "{{name}}'s settings" while it loads.
+
 ## 0.2.60 — 2026-09-25
 
 - The Storylines card in Posting and the storyline button in the Calendar now open the new Storylines page, and the Advanced block shows an arrow.

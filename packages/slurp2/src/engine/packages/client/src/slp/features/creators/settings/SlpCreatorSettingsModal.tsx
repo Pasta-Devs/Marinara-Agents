@@ -136,7 +136,7 @@ export function SlpCreatorSettingsModal({
         defaultValue: "{{name}}'s settings",
         name: creator.displayName,
       })
-    : t("ui.slurp.settings.creators.settingsTitle", { defaultValue: "Creator settings" });
+    : t("ui.slurp.settings.creators.tabsLabel", { defaultValue: "Creator settings" });
   const requestClose = async () => {
     if (
       dirtyRef.current &&

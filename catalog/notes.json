@@ -360,6 +360,12 @@
     "slurp2": {
       "versions": [
         {
+          "version": "0.2.61",
+          "date": "2026-09-25",
+          "notes": "- The Creator settings window no longer shows \"{{name}}'s settings\" while it loads.",
+          "highlight": false
+        },
+        {
           "version": "0.2.60",
           "date": "2026-09-25",
           "notes": "- The Storylines card in Posting and the storyline button in the Calendar now open the new Storylines page, and the Advanced block shows an arrow.",
@@ -471,12 +477,6 @@
           "version": "0.2.42",
           "date": "2026-09-25",
           "notes": "- New experimental post planner in Prompts: Beats. It picks what an ordinary post is about from the Creator's own card (a person, a place, their work, a running joke) instead of letting every Creator drift to the same subjects. Classic stays the default.\n- With Beats on, Slurp reads each Creator's card once in the background and reads it again only after the card changes. Until then, and whenever something goes wrong, posts use the classic planner.\n- Beats vary the kind of moment (a win, a showcase, a moment with someone, an opinion, a small mishap, and more) per Creator and across the whole feed, so no single kind takes over.\n- Beats tell the writer who is there, where, and when, and that it must not invent other people, past events, or life changes. If a post does anyway, it gets one rewrite; Deep details show the result.\n- Deep details now show the planner, the beat with its anchor and cast, the claim check, the picture's shot, and the subject a kept promise delivers.",
-          "highlight": false
-        },
-        {
-          "version": "0.2.41",
-          "date": "2026-09-25",
-          "notes": "- Casual posts are no longer told to be dull; they share one thing from the Creator's day in their own way.\n- Camera choices describe framing instead of equipment, so pictures stop showing a phone unless it is a mirror shot.\n- The label you type on a fulfilled, teased, or delayed request now tells the promised post what to deliver.\n- Posts no longer see their own older captions word for word: only the last post is quoted, older ones appear as subjects, and other Creators' recent subjects are listed so the feed stops repeating one topic.\n- Pictures now vary their angle and crop with composition tags image models know (upper body, cowboy shot, from side, and more), chosen to fit who could have taken the shot.\n- The post prompt's timing, repetition, and scene rules are shorter, and the last texts that put a phone into scenes are gone.",
           "highlight": false
         }
       ]
