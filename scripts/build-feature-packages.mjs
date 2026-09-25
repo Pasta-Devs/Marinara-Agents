@@ -124,7 +124,6 @@ const noodleOwnedSourcePaths = [
   "packages/server/src/services/noodle/noodle-image-retry.ts",
   "packages/server/src/services/noodle/noodle-interaction-policy.ts",
   "packages/server/src/services/noodle/noodle-model-capabilities.ts",
-  "packages/server/src/services/noodle/noodle-operation-lock.ts",
   "packages/server/src/services/noodle/noodle-participant-selection.ts",
   "packages/server/src/services/noodle/noodle-post-target.ts",
   "packages/server/src/services/noodle/noodle-profile-avatar.ts",
@@ -278,10 +277,8 @@ async function removeOwnedSourceSnapshots(excludedPaths) {
 const features = [
   {
     id: "noodle",
-    version: "1.2.25",
-    minEngineVersion: "2.4.6",
-    capabilityApi: { major: 1, minor: 35 },
-    builtAgainst: { engineVersion: "2.4.6", engineCommit: "2f5c8e314f8583cc274b488cfd309a2bc2a214d3" },
+    version: "1.2.24",
+    minEngineVersion: "2.4.4",
     maxEngineExclusive: MAX_ENGINE_EXCLUSIVE,
     name: "Noodle",
     description: "Explore the Noodle public timeline as an optional local social world.",
@@ -326,34 +323,12 @@ const features = [
     libraryHidden: true,
     assetPaths: ["noodle-klusek.png"],
     contributions: {
-      slots: ["home-browser-tab", "home-widget"],
+      slots: ["home-browser-tab"],
       homeBrowserTab: {
         label: "Noodle",
         ariaLabel: "Open Noodle",
         iconPaths: ["noodle-klusek.png"],
       },
-      homeWidgets: [
-        {
-          id: "latest-posts",
-          label: "Latest Posts",
-          description: "The newest twenty posts on Noodle",
-          size: "large",
-          icon: "sparkles",
-          accent: "cyan",
-          surface: "soft",
-          header: "banner",
-        },
-        {
-          id: "latest-posts-compact",
-          label: "Noodle Snapshot",
-          description: "A compact view of recent Noodle posts",
-          size: "compact",
-          icon: "message",
-          accent: "cyan",
-          surface: "soft",
-          header: "compact",
-        },
-      ],
     },
   },
   {
@@ -415,7 +390,7 @@ const features = [
   },
   {
     id: "slurp2",
-    version: "0.2.38",
+    version: "0.2.34",
     minEngineVersion: "2.4.6",
     maxEngineExclusive: MAX_ENGINE_EXCLUSIVE,
     name: "Slurp Remastered",
@@ -480,7 +455,7 @@ const features = [
   },
   {
     id: "long-term-memory",
-    version: "1.3.18",
+    version: "1.3.19",
     minEngineVersion: "2.4.1",
     maxEngineExclusive: MAX_ENGINE_EXCLUSIVE,
     name: "Long-Term Memory",
