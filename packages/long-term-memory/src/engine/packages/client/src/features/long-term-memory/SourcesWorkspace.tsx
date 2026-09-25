@@ -1532,6 +1532,9 @@ export default function SourcesWorkspace({
   const importing =
     sourceTask.active?.status === "running" &&
     (sourceTask.active.kind === "import" || sourceTask.active.kind === "refresh");
+  const importingSourceIds = new Set(
+    importing && sourceTask.active?.contract.source === source ? sourceTask.active.contract.sourceIds : [],
+  );
   const extractingId =
     sourceTask.active?.status === "running" && sourceTask.active.kind === "re-extract"
       ? (sourceTask.active.contract.sourceIds[0] ?? null)
@@ -2560,14 +2563,14 @@ export default function SourcesWorkspace({
         </span>
         {ready ? (
           <IconButton
-            icon={importing ? Loader2 : FileInput}
+            icon={importingSourceIds.has(row.sourceId) ? Loader2 : FileInput}
             label={localizeUi("ui.longTermMemory.sourcesworkspace.importValue1", { value1: row.title })}
             disabled={importDisabled}
             onClick={(event) => {
               stopRowAction(event);
               void runImport([row.sourceId]);
             }}
-            className={importing ? "[&>svg]:animate-spin" : ""}
+            iconClassName={importingSourceIds.has(row.sourceId) ? "animate-spin motion-reduce:animate-none" : undefined}
             data-ltm-source-action="import"
             data-ltm-source-id={row.sourceId}
           />
@@ -3218,7 +3221,7 @@ export default function SourcesWorkspace({
                                       <div className="flex items-start gap-2">
                                         {candidate.status === "pending" ? (
                                           <IconButton
-                                            icon={importing ? Loader2 : FileInput}
+                                            icon={importingSourceIds.has(candidate.sourceId) ? Loader2 : FileInput}
                                             label={localizeUi("ui.longTermMemory.sourcesworkspace.importValue1", {
                                               value1: candidate.title,
                                             })}
@@ -3227,7 +3230,11 @@ export default function SourcesWorkspace({
                                               stopRowAction(event);
                                               void runImport([candidate.sourceId]);
                                             }}
-                                            className={importing ? "[&>svg]:animate-spin" : ""}
+                                            iconClassName={
+                                              importingSourceIds.has(candidate.sourceId)
+                                                ? "animate-spin motion-reduce:animate-none"
+                                                : undefined
+                                            }
                                             data-ltm-source-action="import"
                                             data-ltm-source-id={candidate.sourceId}
                                           />

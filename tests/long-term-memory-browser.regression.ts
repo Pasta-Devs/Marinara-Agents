@@ -3658,6 +3658,60 @@ async function main() {
           path: join(visualOutputDir, "long-term-memory-source-pagination-desktop.png"),
           fullPage: true,
         });
+      // Keep the import pending so row feedback can be checked independently of response timing.
+      const importRoute = "**/api/long-term-memory/import/source-notes";
+      let releaseImport!: () => void;
+      const importPending = new Promise<void>((resolve) => {
+        releaseImport = resolve;
+      });
+      await page.route(importRoute, async (route) => {
+        await importPending;
+        await route.continue();
+      });
+      const importingButton = page.locator(
+        '[data-ltm-source-action="import"][data-ltm-source-id="character-outside-current-chat"]',
+      );
+      const idleButton = page.locator('[data-ltm-source-action="import"][data-ltm-source-id="character-next-page"]');
+      const idleIcon = await idleButton.locator("svg").getAttribute("class");
+      await importingButton.click();
+      try {
+        await page.locator('[data-ltm-import-status="pending"]').waitFor();
+        assert.equal(await importingButton.isDisabled(), true);
+        assert.equal(await idleButton.isDisabled(), true);
+        assert.equal(
+          await idleButton.locator("svg").getAttribute("class"),
+          idleIcon,
+          "unrelated sources retain their import icon",
+        );
+        await page.waitForFunction(() => {
+          const button = document.querySelector(
+            '[data-ltm-source-action="import"][data-ltm-source-id="character-next-page"]',
+          );
+          return button && Number(getComputedStyle(button).opacity) < 1;
+        });
+        await page.waitForFunction(() => {
+          const icon = document.querySelector(
+            '[data-ltm-source-action="import"][data-ltm-source-id="character-outside-current-chat"] svg',
+          );
+          return icon?.getAnimations().some((animation) => animation.playState === "running");
+        });
+        const firstTransform = await importingButton
+          .locator("svg")
+          .evaluate((icon) => getComputedStyle(icon).transform);
+        await page.waitForFunction((before) => {
+          const icon = document.querySelector(
+            '[data-ltm-source-action="import"][data-ltm-source-id="character-outside-current-chat"] svg',
+          );
+          return icon && getComputedStyle(icon).transform !== before;
+        }, firstTransform);
+      } finally {
+        releaseImport();
+      }
+      await page.locator('[data-ltm-import-status="idle"]').waitFor();
+      await page.unroute(importRoute);
+      assert.equal(await importingButton.isEnabled(), true);
+      assert.equal(await importingButton.locator("svg").getAttribute("class"), idleIcon);
+      await selectedCharacter.check();
       const searchRestart = page.waitForRequest(
         (request) =>
           request.method() === "POST" &&
