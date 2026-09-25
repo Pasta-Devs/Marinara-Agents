@@ -20,6 +20,7 @@ import { slpCreatorPostPageCondition } from "../host/slp-storage-queries.js";
 import type {
   SlpCreatorPostPageOptions,
   SlpCreatorPostPersistenceInput,
+  SlpCreatorStoryQueryOptions,
 } from "../../modules/records/slp-storage-model.js";
 import { snapshotForAccount, mapPost, mapManagedPost, imageClaimIsAvailable } from "../host/slp-storage-mappers.js";
 import type { SlurpStorageContext } from "../host/slp-storage-context.js";
@@ -181,6 +182,51 @@ export function createFeedPostStorage1(context: SlurpStorageContext) {
         }
       }
       return result;
+    },
+    async listNoodlerStories(options: SlpCreatorStoryQueryOptions): Promise<SlpCreatorManagedPost[]> {
+      if (options.accountIds.length === 0) return [];
+      const search = options.search?.trim().toLowerCase() ?? "";
+      const creatorMatches = new Set(options.creatorSearchAccountIds ?? []);
+      const stories: SlpCreatorManagedPost[] = [];
+      const batchSize = 200;
+      let cursor: { createdAt: string; id: string } | null = null;
+      while (true) {
+        const rows = await db
+          .select()
+          .from(slpPosts)
+          .where(
+            and(
+              inArray(slpPosts.authorAccountId, options.accountIds),
+              gt(slpPosts.createdAt, options.since),
+              ne(slpPosts.access, "draft"),
+              cursor
+                ? or(
+                    lt(slpPosts.createdAt, cursor.createdAt),
+                    and(eq(slpPosts.createdAt, cursor.createdAt), lt(slpPosts.id, cursor.id)),
+                  )
+                : undefined,
+            ),
+          )
+          .orderBy(desc(slpPosts.createdAt), desc(slpPosts.id))
+          .limit(batchSize);
+        const posts = rows.map(mapManagedPost);
+        stories.push(
+          ...posts
+            .filter((post) => post.metadata.noodlerPostType === "story")
+            .filter((post) => {
+              if (!search) return true;
+              return (
+                creatorMatches.has(post.authorAccountId) ||
+                (post.title ?? "").toLowerCase().includes(search) ||
+                post.content.toLowerCase().includes(search)
+              );
+            }),
+        );
+        const last = rows.at(-1);
+        if (!last || rows.length < batchSize) break;
+        cursor = { createdAt: last.createdAt, id: last.id };
+      }
+      return stories;
     },
     async listNoodlerPostPage(options: SlpCreatorPostPageOptions) {
       const limit = Math.max(1, Math.min(20, Math.floor(options.limit)));

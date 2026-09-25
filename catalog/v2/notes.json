@@ -360,6 +360,18 @@
     "slurp2": {
       "versions": [
         {
+          "version": "0.2.40",
+          "date": "2026-09-25",
+          "notes": "- Retained Moments use bounded Story reads and follow feed search and pagination rules.",
+          "highlight": false
+        },
+        {
+          "version": "0.2.39",
+          "date": "2026-09-25",
+          "notes": "- Moments now remain available for the configured retention period even when newer feed posts fill the first page.\n- Follow-ups no longer retry forever when a Creator has no known return time.",
+          "highlight": false
+        },
+        {
           "version": "0.2.38",
           "date": "2026-09-24",
           "notes": "- Generated audience names now draw from one merged, much larger word bank (184,512 combinations, up from ~18,800) instead of a single fixed set of moody handles.\n- Generated names are CamelCase with no digits, spaces, or underscores (for example `MothHour` instead of `moth_hour_77`), so they read as a single word and two people never blur together in a dense list.",
@@ -465,18 +477,6 @@
           "version": "0.2.17",
           "date": "2026-09-22",
           "notes": "- The opened post viewer now shows every picture of a multi-image post, with arrows, a counter, and mini previews. It used to show the first one only.\n- Feed cards mark multi-image posts with position dots beside the existing arrows.\n- Prompt Studio: every block can be switched off, not only the ones marked optional.\n- Prompt Studio: required blocks can be rewritten. The override starts from the text the preview Creator actually gets, and says plainly that a fixed text replaces what Slurp would have composed per Creator. Context blocks stay read-only because their text is the runtime data itself.\n- The prompt preview no longer discards a finished result when the settings query refetches in the background, and a run it cannot perform now says why instead of doing nothing.\n- Prompt Studio on a phone: the preview panel is reachable without scrolling past every recipe, recipe rows no longer wrap four lines of block chips, and the preset picker fits the width.",
-          "highlight": false
-        },
-        {
-          "version": "0.2.16",
-          "date": "2026-09-21",
-          "notes": "- Restoring a deleted post no longer waits on a full feed refetch, so the card comes back at once instead of sitting on its countdown.\n- The server now keeps a deleted post for twice the undo window it offers, so a Restore near the end of the countdown no longer fails.\n- The share card is drawn in the browser instead of on the server. The server render needed fonts installed on the host, which most installs do not have, so cards came out as the bare post image with no name, title, or caption.\n- Share post no longer does nothing when no viewer persona is active: it falls back to downloading the share card.\n- The post viewer's side card no longer draws the picture the viewer already shows.",
-          "highlight": false
-        },
-        {
-          "version": "0.2.15",
-          "date": "2026-09-21",
-          "notes": "- Exposed restore pending state through the Home screen model so restore feedback renders immediately.",
           "highlight": false
         }
       ]
