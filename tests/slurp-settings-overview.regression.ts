@@ -46,7 +46,7 @@ async function main() {
   assert.match(settings, /<OverviewActivity/u);
   assert.match(settings, /section === "overview" \|\| target === "audience"/u);
   assert.match(english, /"ui\.slurp\.settings\.overview\.activity\.title": "Activity"/u);
-  assert.match(settings, /<ChoiceRow/u);
+  assert.match(settings, /<ChoiceSetting/u);
   assert.match(shell, /"--slurp-hero"/u);
   assert.match(shell, /"--slurp-nav-active"/u);
   assert.match(english, /"ui\.slurp\.settings\.tabs\.overview": "Overview"/u);

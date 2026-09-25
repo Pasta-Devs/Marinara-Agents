@@ -1,5 +1,10 @@
 # Slurp Remastered release notes
 
+## 0.2.63 — 2026-09-25
+
+- Storylines settings show every choice at once: story activity presets are cards with a short description, and the start, pace and source settings are button rows instead of dropdowns.
+- Audience presets, scale, tone and world activity use the same button rows.
+
 ## 0.2.62 — 2026-09-25
 
 - The Identity tab in Creator settings uses the full width again; the Save bar sits at the bottom of the tab.

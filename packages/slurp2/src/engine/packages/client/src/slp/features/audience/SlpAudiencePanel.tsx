@@ -14,7 +14,7 @@ import type { SlurpSettings } from "../settings/slp-settings-contract";
 
 import { SLURP_AUDIENCE_PRESETS, slurpAudiencePresetPatch } from "../../../../../shared/src/slp/slp-tuning.js";
 import type { SlpBackstagePageProps } from "../backstage/slp-backstage-contract";
-import { ChoiceRow } from "../../modules/settings/SlpBackstageKit";
+import { ChoiceSetting } from "../../modules/settings/SlpSettingsInputs";
 import { AmbientProfilesPanel } from "./SlpAmbientProfilesPanel";
 
 /** Audience: crowd scale, tone, fan types, the reaction bank and simulation tuning. */
@@ -125,8 +125,8 @@ export function SlpAudiencePanel(page: SlpBackstagePageProps) {
                   }),
                   content: (
                     <div className="space-y-3">
-                      <ChoiceRow
-                        title={t("ui.slurp.settings.audience.scaleTitle")}
+                      <ChoiceSetting
+                        label={t("ui.slurp.settings.audience.scaleTitle")}
                         detail={t("ui.slurp.settings.audience.scaleDetail")}
                         options={(["intimate", "normal", "large"] as const).map((value) => ({
                           value,
@@ -135,8 +135,8 @@ export function SlpAudiencePanel(page: SlpBackstagePageProps) {
                         value={audienceDraft.platformScale}
                         onChange={(platformScale) => setAudienceDraft({ ...audienceDraft, platformScale })}
                       />
-                      <ChoiceRow
-                        title={t("ui.slurp.settings.audience.toneTitle")}
+                      <ChoiceSetting
+                        label={t("ui.slurp.settings.audience.toneTitle")}
                         detail={t("ui.slurp.settings.audience.toneDetail")}
                         options={(["warm", "mixed", "unfiltered"] as const).map((value) => ({
                           value,
@@ -162,8 +162,8 @@ export function SlpAudiencePanel(page: SlpBackstagePageProps) {
               })
             : t("ui.slurp.settings.audience.statusLoading")}
       </p>
-      <ChoiceRow
-        title={t("ui.slurp.settings.audience.presetTitle")}
+      <ChoiceSetting
+        label={t("ui.slurp.settings.audience.presetTitle")}
         detail={
           audiencePreset === "custom"
             ? t("ui.slurp.settings.audience.presetCustom")
@@ -173,19 +173,12 @@ export function SlpAudiencePanel(page: SlpBackstagePageProps) {
           value: preset,
           label: t(`ui.slurp.settings.simulation.presets.${preset}`),
         }))}
-        value={audiencePreset}
+        value={audiencePreset === "custom" ? null : audiencePreset}
         onChange={(preset) => void updatePatch(slurpAudiencePresetPatch(preset, settings))}
-        extra={
-          audiencePreset === "custom" ? (
-            <span className="min-h-10 inline-flex items-center rounded-lg border border-[var(--noodle-accent)] bg-[var(--noodle-accent)]/10 px-3 text-xs font-semibold text-[var(--noodle-accent)]">
-              {t("ui.slurp.settings.simulation.presets.custom")}
-            </span>
-          ) : null
-        }
       />
       <SettingAnchor settingKey="platformScale">
-        <ChoiceRow
-          title={t("ui.slurp.settings.audience.scaleTitle")}
+        <ChoiceSetting
+          label={t("ui.slurp.settings.audience.scaleTitle")}
           detail={t("ui.slurp.settings.audience.scaleDetail")}
           options={(["intimate", "normal", "large"] as const).map((level) => ({
             value: level,
@@ -196,8 +189,8 @@ export function SlpAudiencePanel(page: SlpBackstagePageProps) {
         />
       </SettingAnchor>
       <SettingAnchor settingKey="audienceTone">
-        <ChoiceRow
-          title={t("ui.slurp.settings.audience.toneTitle")}
+        <ChoiceSetting
+          label={t("ui.slurp.settings.audience.toneTitle")}
           detail={t("ui.slurp.settings.audience.toneDetail")}
           options={(["warm", "mixed", "unfiltered"] as const).map((tone) => ({
             value: tone,
@@ -515,8 +508,8 @@ export function SlpAudiencePanel(page: SlpBackstagePageProps) {
             </Field>
           </div>
           <SettingAnchor settingKey="worldActivity">
-            <ChoiceRow
-              title={t("ui.slurp.settings.audience.activityTitle")}
+            <ChoiceSetting
+              label={t("ui.slurp.settings.audience.activityTitle")}
               detail={t("ui.slurp.settings.audience.activityDetail")}
               options={(["off", "quiet", "normal", "busy"] as const).map((level) => ({
                 value: level,

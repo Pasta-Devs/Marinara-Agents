@@ -1,3 +1,4 @@
+import { Moon, Sparkles, Zap } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
 import {
@@ -9,6 +10,7 @@ import {
   Toggle,
 } from "../../modules/settings/SlpSettingsControls";
 import { BackstagePageHeader } from "../../modules/settings/SlpSettingsKit";
+import { ChoiceSetting } from "../../modules/settings/SlpSettingsInputs";
 import type { SlurpSettings } from "../settings/slp-settings-contract";
 import {
   SLURP_STORY_ACTIVITY_PRESET_ORDER,
@@ -17,8 +19,7 @@ import {
 } from "../../modules/creator/slp-story-activity-presets";
 import type { SlpBackstagePageProps } from "../backstage/slp-backstage-contract";
 
-const selectClass =
-  "min-h-11 w-full rounded-lg border border-[var(--slurp-outline)] bg-[var(--slurp-canvas)] px-3 text-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] disabled:opacity-50 sm:text-sm";
+const PRESET_ICONS = { calm: Moon, lively: Sparkles, handsOff: Zap } as const;
 
 /**
  * Everything that makes stories happen, in one place: whether events and storylines start by
@@ -38,113 +39,93 @@ export function SlpStorylinesPanel(page: SlpBackstagePageProps) {
         scope="all-slurp"
       />
       <GuidanceBox title={t("ui.slurp.settings.arcs.guideTitle")} detail={t("ui.slurp.settings.arcs.guideDetail")} />
-      <section className="space-y-2" aria-labelledby="slurp-story-activity">
-        <h3 id="slurp-story-activity" className="text-sm font-semibold">
-          {t("ui.slurp.settings.storyActivity.title")}
-        </h3>
-        <p className="text-xs leading-5 text-[var(--muted-foreground)]">
-          {activity
-            ? t(`ui.slurp.settings.storyActivity.${activity}Detail`)
-            : t("ui.slurp.settings.storyActivity.custom")}
-        </p>
-        <div role="group" aria-labelledby="slurp-story-activity" className="flex flex-wrap gap-2">
-          {SLURP_STORY_ACTIVITY_PRESET_ORDER.map((preset) => (
-            <button
-              key={preset}
-              type="button"
-              aria-pressed={activity === preset}
-              disabled={updateSettings.isPending}
-              onClick={() => void updatePatch(SLURP_STORY_ACTIVITY_PRESETS[preset])}
-              className={`min-h-11 rounded-full px-4 text-sm font-semibold ring-1 ring-inset focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] disabled:opacity-50 ${activity === preset ? "bg-[var(--slurp-nav-active)] text-[var(--slurp-text)] ring-[var(--noodle-accent)]/45" : "bg-[var(--slurp-canvas)] text-[var(--slurp-muted)] ring-[var(--slurp-outline)] hover:text-[var(--slurp-text)]"}`}
-            >
-              {t(`ui.slurp.settings.storyActivity.${preset}`)}
-            </button>
-          ))}
-        </div>
-      </section>
-      <SettingsGroup title={t("ui.slurp.settings.startByThemselves.title")}>
-        <Field
-          settingKey="storyAutomation"
-          label={t("ui.slurp.settings.events.automationLabel")}
-          detail={t("ui.slurp.settings.events.automationDetail")}
-        >
-          <select
-            className={selectClass}
-            disabled={updateSettings.isPending}
+      <ChoiceSetting
+        variant="cards"
+        label={t("ui.slurp.settings.storyActivity.title")}
+        detail={activity ? undefined : t("ui.slurp.settings.storyActivity.custom")}
+        options={SLURP_STORY_ACTIVITY_PRESET_ORDER.map((preset) => ({
+          value: preset,
+          label: t(`ui.slurp.settings.storyActivity.${preset}`),
+          detail: t(`ui.slurp.settings.storyActivity.${preset}Detail`),
+          icon: PRESET_ICONS[preset],
+        }))}
+        value={activity}
+        disabled={updateSettings.isPending}
+        onChange={(preset) => void updatePatch(SLURP_STORY_ACTIVITY_PRESETS[preset])}
+      />
+      <div className="grid items-start gap-5 lg:grid-cols-2">
+        <SettingsGroup title={t("ui.slurp.settings.startByThemselves.title")}>
+          <ChoiceSetting
+            settingKey="storyAutomation"
+            label={t("ui.slurp.settings.events.automationLabel")}
+            detail={t("ui.slurp.settings.events.automationDetail")}
+            options={[
+              { value: "manual", label: t("ui.slurp.settings.events.automationManual") },
+              { value: "suggest", label: t("ui.slurp.settings.events.automationSuggest") },
+              { value: "auto", label: t("ui.slurp.settings.events.automationAuto") },
+            ]}
             value={settings.storyAutomation}
-            onChange={(event) => void update("storyAutomation", event.target.value as SlurpSettings["storyAutomation"])}
-          >
-            <option value="manual">{t("ui.slurp.settings.events.automationManual")}</option>
-            <option value="suggest">{t("ui.slurp.settings.events.automationSuggest")}</option>
-            <option value="auto">{t("ui.slurp.settings.events.automationAuto")}</option>
-          </select>
-        </Field>
-        <Field
-          settingKey="arcAutoMode"
-          label={t("ui.slurp.settings.arcAutoMode")}
-          detail={t("ui.slurp.settings.arcAutoModeDetail")}
-        >
-          <select
+            disabled={updateSettings.isPending}
+            onChange={(value: SlurpSettings["storyAutomation"]) => void update("storyAutomation", value)}
+          />
+          <ChoiceSetting
+            settingKey="arcAutoMode"
+            label={t("ui.slurp.settings.arcAutoMode")}
+            detail={t("ui.slurp.settings.arcAutoModeDetail")}
+            options={[
+              { value: "off", label: t("ui.slurp.settings.arcAutoModeOff") },
+              { value: "suggest", label: t("ui.slurp.settings.arcAutoModeSuggest") },
+              { value: "auto", label: t("ui.slurp.settings.arcAutoModeAuto") },
+            ]}
             value={settings.arcAutoMode}
             disabled={updateSettings.isPending}
-            onChange={(event) => void update("arcAutoMode", event.target.value as SlurpSettings["arcAutoMode"])}
-            className="min-h-11 w-full rounded-lg border border-[var(--slurp-outline)] bg-[var(--slurp-canvas)] px-3 text-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] disabled:opacity-50 sm:text-sm"
-          >
-            <option value="off">{t("ui.slurp.settings.arcAutoModeOff")}</option>
-            <option value="suggest">{t("ui.slurp.settings.arcAutoModeSuggest")}</option>
-            <option value="auto">{t("ui.slurp.settings.arcAutoModeAuto")}</option>
-          </select>
-        </Field>
-      </SettingsGroup>
-      <SettingsGroup title={t("ui.slurp.settings.arcs.behaviorGroup")}>
-        <Field
-          settingKey="projectRate"
-          label={t("ui.slurp.settings.projectRate")}
-          detail={t("ui.slurp.settings.projectRateDetail")}
-        >
-          <select
+            onChange={(value: SlurpSettings["arcAutoMode"]) => void update("arcAutoMode", value)}
+          />
+        </SettingsGroup>
+        <SettingsGroup title={t("ui.slurp.settings.arcs.behaviorGroup")}>
+          <ChoiceSetting
+            settingKey="projectRate"
+            label={t("ui.slurp.settings.projectRate")}
+            detail={t("ui.slurp.settings.projectRateDetail")}
+            options={[
+              { value: "off", label: t("ui.slurp.settings.projectRateOff") },
+              { value: "rare", label: t("ui.slurp.settings.projectRateRare") },
+              { value: "regular", label: t("ui.slurp.settings.projectRateRegular") },
+              { value: "often", label: t("ui.slurp.settings.projectRateOften") },
+            ]}
             value={settings.projectRate}
             disabled={updateSettings.isPending}
-            onChange={(event) => void update("projectRate", event.target.value as SlurpSettings["projectRate"])}
-            className="min-h-11 w-full rounded-lg border border-[var(--slurp-outline)] bg-[var(--slurp-canvas)] px-3 text-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] disabled:opacity-50 sm:text-sm"
-          >
-            <option value="off">{t("ui.slurp.settings.projectRateOff")}</option>
-            <option value="rare">{t("ui.slurp.settings.projectRateRare")}</option>
-            <option value="regular">{t("ui.slurp.settings.projectRateRegular")}</option>
-            <option value="often">{t("ui.slurp.settings.projectRateOften")}</option>
-          </select>
-        </Field>
-        <Field
-          settingKey="arcPace"
-          label={t("ui.slurp.settings.arcPace")}
-          detail={t("ui.slurp.settings.arcPaceDetail")}
-        >
-          <select
+            onChange={(value: SlurpSettings["projectRate"]) => void update("projectRate", value)}
+          />
+          <ChoiceSetting
+            settingKey="arcPace"
+            label={t("ui.slurp.settings.arcPace")}
+            detail={t("ui.slurp.settings.arcPaceDetail")}
+            options={[
+              { value: "slow", label: t("ui.slurp.settings.arcPaceSlow") },
+              { value: "normal", label: t("ui.slurp.settings.arcPaceNormal") },
+              { value: "fast", label: t("ui.slurp.settings.arcPaceFast") },
+            ]}
             value={settings.arcPace}
             disabled={updateSettings.isPending}
-            onChange={(event) => void update("arcPace", event.target.value as SlurpSettings["arcPace"])}
-            className="min-h-11 w-full rounded-lg border border-[var(--slurp-outline)] bg-[var(--slurp-canvas)] px-3 text-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] disabled:opacity-50 sm:text-sm"
-          >
-            <option value="slow">{t("ui.slurp.settings.arcPaceSlow")}</option>
-            <option value="normal">{t("ui.slurp.settings.arcPaceNormal")}</option>
-            <option value="fast">{t("ui.slurp.settings.arcPaceFast")}</option>
-          </select>
-        </Field>
-        <Toggle
-          settingKey="arcAffectsMood"
-          label={t("ui.slurp.settings.arcAffectsMood")}
-          detail={t("ui.slurp.settings.arcAffectsMoodDetail")}
-          value={settings.arcAffectsMood}
-          onChange={(value) => update("arcAffectsMood", value)}
-        />
-        <Toggle
-          settingKey="arcFanReactions"
-          label={t("ui.slurp.settings.arcFanReactions")}
-          detail={t("ui.slurp.settings.arcFanReactionsDetail")}
-          value={settings.arcFanReactions}
-          onChange={(value) => update("arcFanReactions", value)}
-        />
-      </SettingsGroup>
+            onChange={(value: SlurpSettings["arcPace"]) => void update("arcPace", value)}
+          />
+          <Toggle
+            settingKey="arcAffectsMood"
+            label={t("ui.slurp.settings.arcAffectsMood")}
+            detail={t("ui.slurp.settings.arcAffectsMoodDetail")}
+            value={settings.arcAffectsMood}
+            onChange={(value) => update("arcAffectsMood", value)}
+          />
+          <Toggle
+            settingKey="arcFanReactions"
+            label={t("ui.slurp.settings.arcFanReactions")}
+            detail={t("ui.slurp.settings.arcFanReactionsDetail")}
+            value={settings.arcFanReactions}
+            onChange={(value) => update("arcFanReactions", value)}
+          />
+        </SettingsGroup>
+      </div>
       <SettingsGroup title={t("ui.slurp.settings.prompts.sharedPreseed")}>
         <Toggle
           settingKey="sharedPreseed"
@@ -170,23 +151,20 @@ export function SlpStorylinesPanel(page: SlpBackstagePageProps) {
         />
       </SettingsGroup>
       <AdvancedGroup title={t("ui.slurp.settings.advanced.group")}>
-        <Field
-          disabledReason={settings.arcAutoMode === "off" ? t("ui.slurp.settings.hints.needsStorylineStart") : null}
+        <ChoiceSetting
           settingKey="arcSource"
           label={t("ui.slurp.settings.arcSource")}
           detail={t("ui.slurp.settings.arcSourceDetail")}
-        >
-          <select
-            value={settings.arcSource}
-            disabled={updateSettings.isPending || settings.arcAutoMode === "off"}
-            onChange={(event) => void update("arcSource", event.target.value as SlurpSettings["arcSource"])}
-            className="min-h-11 w-full rounded-lg border border-[var(--slurp-outline)] bg-[var(--slurp-canvas)] px-3 text-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] disabled:opacity-50 sm:text-sm"
-          >
-            <option value="library">{t("ui.slurp.projects.config.sourceLibrary")}</option>
-            <option value="generated">{t("ui.slurp.projects.config.sourceGenerated")}</option>
-            <option value="mixed">{t("ui.slurp.projects.config.sourceMixed")}</option>
-          </select>
-        </Field>
+          disabledReason={settings.arcAutoMode === "off" ? t("ui.slurp.settings.hints.needsStorylineStart") : null}
+          options={[
+            { value: "library", label: t("ui.slurp.projects.config.sourceLibrary") },
+            { value: "generated", label: t("ui.slurp.projects.config.sourceGenerated") },
+            { value: "mixed", label: t("ui.slurp.projects.config.sourceMixed") },
+          ]}
+          value={settings.arcSource}
+          disabled={updateSettings.isPending}
+          onChange={(value: SlurpSettings["arcSource"]) => void update("arcSource", value)}
+        />
         <Field
           disabledReason={settings.arcAutoMode === "off" ? t("ui.slurp.settings.hints.needsStorylineStart") : null}
           settingKey="arcCooldownWeeks"
@@ -241,22 +219,19 @@ export function SlpStorylinesPanel(page: SlpBackstagePageProps) {
             onSave={(value) => update("arcPollHours", value)}
           />
         </Field>
-        <Field
+        <ChoiceSetting
           settingKey="arcStatEffects"
           label={t("ui.slurp.settings.arcStatEffects")}
           detail={t("ui.slurp.settings.arcStatEffectsDetail")}
-        >
-          <select
-            value={settings.arcStatEffects}
-            disabled={updateSettings.isPending}
-            onChange={(event) => void update("arcStatEffects", event.target.value as SlurpSettings["arcStatEffects"])}
-            className="min-h-11 w-full rounded-lg border border-[var(--slurp-outline)] bg-[var(--slurp-canvas)] px-3 text-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] disabled:opacity-50 sm:text-sm"
-          >
-            <option value="off">{t("ui.slurp.settings.arcStatEffectsOff")}</option>
-            <option value="small">{t("ui.slurp.settings.arcStatEffectsSmall")}</option>
-            <option value="big">{t("ui.slurp.settings.arcStatEffectsBig")}</option>
-          </select>
-        </Field>
+          options={[
+            { value: "off", label: t("ui.slurp.settings.arcStatEffectsOff") },
+            { value: "small", label: t("ui.slurp.settings.arcStatEffectsSmall") },
+            { value: "big", label: t("ui.slurp.settings.arcStatEffectsBig") },
+          ]}
+          value={settings.arcStatEffects}
+          disabled={updateSettings.isPending}
+          onChange={(value: SlurpSettings["arcStatEffects"]) => void update("arcStatEffects", value)}
+        />
       </AdvancedGroup>
     </div>
   );

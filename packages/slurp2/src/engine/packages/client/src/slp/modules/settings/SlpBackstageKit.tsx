@@ -3,7 +3,6 @@
 // import no feature, so they are a reusable module rather than feature-owned.
 
 import { Modal } from "../../../components/ui/Modal";
-import { cn } from "../../../lib/utils";
 import { Avatar } from "../../base/chrome/SlpChrome";
 import type { SlurpReserveStatus, SlurpScheduleSlot } from "../../base/state/slp-state-types";
 import { formatClockTime, formatDateTime } from "../../base/ui/slp-date-time";
@@ -27,48 +26,6 @@ import { useState } from "react";
 import type { ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { localDateTimeValue } from "./slp-backstage-format";
-
-export function ChoiceRow<T extends string>({
-  title,
-  detail,
-  options,
-  value,
-  onChange,
-  extra,
-}: {
-  title: string;
-  detail: string;
-  options: ReadonlyArray<{ value: T; label: string }>;
-  value: string;
-  onChange: (value: T) => void;
-  extra?: ReactNode;
-}) {
-  return (
-    <fieldset className="space-y-3 pt-2">
-      <legend className="text-sm font-bold">{title}</legend>
-      <p className="text-xs leading-5 text-[var(--slurp-muted)]">{detail}</p>
-      <div className="flex flex-wrap gap-2">
-        {options.map((option) => (
-          <button
-            key={option.value}
-            type="button"
-            onClick={() => onChange(option.value)}
-            aria-pressed={value === option.value}
-            className={cn(
-              "min-h-10 rounded-lg border px-3 text-xs font-semibold transition-colors",
-              value === option.value
-                ? "border-[var(--noodle-accent)] bg-[var(--noodle-accent)]/10 text-[var(--noodle-accent)]"
-                : "border-[var(--border)] hover:bg-[var(--accent)]",
-            )}
-          >
-            {option.label}
-          </button>
-        ))}
-        {extra}
-      </div>
-    </fieldset>
-  );
-}
 
 export function ScheduleSlotEditor({
   slot,
