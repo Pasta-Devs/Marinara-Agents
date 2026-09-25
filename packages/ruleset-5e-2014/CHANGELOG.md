@@ -1,11 +1,11 @@
 # 5e (SRD 5.1)
 
 ## 0.8.0 - 2026-09-25
-- Twelve SRD spellcasters now cast their spells in a fight: the Acolyte, Priest, Cult Fanatic, Druid, Mage, Archmage, Lich, Mummy Lord, both nagas and both sphinxes. Each fights off its own sheet, spending its own spell slots, at the spell attack, save DC, saves and skills its stat block prints. Its printed attacks stay.
-- Hellish Rebuke works. When something damages you, the fight asks whether you cast it, and the flames go back at whoever hurt you.
-- Sacred Flame, Acid Splash, Poison Spray and Vicious Mockery deal their damage, which grows with your level, and Spiritual Weapon strikes once as you cast it. Before, a fight never offered them.
-- Two new spellcasting fields on your sheet, Spell attack: other bonus and Spell save DC: other bonus, for a magic item or anything else that adds to them.
-- Counterspell, Shield and Feather Fall still stay off the menu, and the README says why. Innate spellcasting and hag covens stay as traits.
+- Eleven SRD spellcasters now cast in a fight, off their own sheet and spell slots, at the numbers their stat block prints: the Acolyte, Priest, Cult Fanatic, Druid, Mage, Archmage, Lich, Mummy Lord, both nagas and the Androsphinx. The Gynosphinx prepares nothing a fight can use, so it still fights with its claws.
+- Hellish Rebuke works: when something damages you, the fight asks whether you cast it back at them.
+- Sacred Flame, Acid Splash, Poison Spray, Vicious Mockery and Spiritual Weapon now deal damage. Before, a fight never offered them.
+- Two new sheet fields, Spell attack: other bonus and Spell save DC: other bonus.
+- Counterspell, Shield and Feather Fall still stay off the menu, and the README says why.
 - Needs an Engine with Capability API 1.34.
 
 ## 0.7.0 - 2026-09-20
