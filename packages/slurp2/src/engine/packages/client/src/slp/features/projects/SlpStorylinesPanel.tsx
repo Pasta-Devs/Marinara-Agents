@@ -10,6 +10,11 @@ import {
 } from "../../modules/settings/SlpSettingsControls";
 import { BackstagePageHeader } from "../../modules/settings/SlpSettingsKit";
 import type { SlurpSettings } from "../settings/slp-settings-contract";
+import {
+  SLURP_STORY_ACTIVITY_PRESET_ORDER,
+  SLURP_STORY_ACTIVITY_PRESETS,
+  slurpStoryActivityPresetFor,
+} from "../../modules/creator/slp-story-activity-presets";
 import type { SlpBackstagePageProps } from "../backstage/slp-backstage-contract";
 
 const selectClass =
@@ -21,9 +26,10 @@ const selectClass =
  * sit in three panels (Publishing, Events, Prompts) with two differently worded start controls.
  */
 export function SlpStorylinesPanel(page: SlpBackstagePageProps) {
-  const { updateSettings, settings, update } = page;
+  const { updateSettings, settings, update, updatePatch } = page;
   const { t } = useTranslation();
   const beats = settings.postPlanner === "beats";
+  const activity = slurpStoryActivityPresetFor(settings);
   return (
     <div className="space-y-5">
       <BackstagePageHeader
@@ -32,6 +38,30 @@ export function SlpStorylinesPanel(page: SlpBackstagePageProps) {
         scope="all-slurp"
       />
       <GuidanceBox title={t("ui.slurp.settings.arcs.guideTitle")} detail={t("ui.slurp.settings.arcs.guideDetail")} />
+      <section className="space-y-2" aria-labelledby="slurp-story-activity">
+        <h3 id="slurp-story-activity" className="text-sm font-semibold">
+          {t("ui.slurp.settings.storyActivity.title")}
+        </h3>
+        <p className="text-xs leading-5 text-[var(--muted-foreground)]">
+          {activity
+            ? t(`ui.slurp.settings.storyActivity.${activity}Detail`)
+            : t("ui.slurp.settings.storyActivity.custom")}
+        </p>
+        <div role="group" aria-labelledby="slurp-story-activity" className="flex flex-wrap gap-2">
+          {SLURP_STORY_ACTIVITY_PRESET_ORDER.map((preset) => (
+            <button
+              key={preset}
+              type="button"
+              aria-pressed={activity === preset}
+              disabled={updateSettings.isPending}
+              onClick={() => void updatePatch(SLURP_STORY_ACTIVITY_PRESETS[preset])}
+              className={`min-h-11 rounded-full px-4 text-sm font-semibold ring-1 ring-inset focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] disabled:opacity-50 ${activity === preset ? "bg-[var(--slurp-nav-active)] text-[var(--slurp-text)] ring-[var(--noodle-accent)]/45" : "bg-[var(--slurp-canvas)] text-[var(--slurp-muted)] ring-[var(--slurp-outline)] hover:text-[var(--slurp-text)]"}`}
+            >
+              {t(`ui.slurp.settings.storyActivity.${preset}`)}
+            </button>
+          ))}
+        </div>
+      </section>
       <SettingsGroup title={t("ui.slurp.settings.startByThemselves.title")}>
         <Field
           settingKey="storyAutomation"

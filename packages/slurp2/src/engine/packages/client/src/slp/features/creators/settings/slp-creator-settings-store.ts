@@ -18,6 +18,7 @@ export type SlpCreatorSettingsTab =
   | "production"
   | "collaborations"
   | "messages"
+  | "storylines"
   | "continuity"
   | "improve"
   | "danger";

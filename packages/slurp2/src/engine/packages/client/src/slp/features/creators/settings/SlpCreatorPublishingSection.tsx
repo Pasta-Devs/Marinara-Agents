@@ -215,6 +215,7 @@ export function SlpCreatorPublishingSection({ creator, active, mode = "automatio
             </span>{" "}
             {t(`ui.slurp.settings.creators.schedule.${creator.scheduleStatus.state}`)}
           </p>
+          <p className="text-xs leading-5">{t("ui.slurp.settings.creators.conversationScheduleDetail")}</p>
           {(creator.scheduleStatus.state === "stale" || creator.scheduleStatus.state === "missing") && (
             <button
               type="button"

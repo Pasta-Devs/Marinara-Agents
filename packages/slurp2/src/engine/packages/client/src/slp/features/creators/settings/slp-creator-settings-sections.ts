@@ -11,6 +11,7 @@ import {
   TriangleAlert,
   UserRound,
   UsersRound,
+  Workflow,
   type LucideIcon,
 } from "lucide-react";
 import type { ComponentType } from "react";
@@ -30,6 +31,7 @@ import {
   SlpCreatorProductionSection,
   SlpCreatorWardrobeSection,
 } from "./SlpCreatorSettingsSections";
+import { SlpCreatorStorylinesSection } from "./SlpCreatorStorylinesSection";
 import type { SlpCreatorSettingsCreator, SlpCreatorSettingsSectionProps } from "./slp-creator-settings-contract";
 import type { SlpCreatorSettingsTab } from "./slp-creator-settings-store";
 
@@ -131,6 +133,14 @@ export const SLP_CREATOR_SETTINGS_SECTIONS: readonly SlpCreatorSettingsSection[]
     labelKey: "ui.slurp.settings.creators.tabs.messages",
     defaultLabel: "Messages",
     Component: SlpCreatorMessagesSection,
+  },
+  {
+    id: "storylines",
+    group: "memory",
+    icon: Workflow,
+    labelKey: "ui.slurp.settings.creators.tabs.storylines",
+    defaultLabel: "Storylines",
+    Component: SlpCreatorStorylinesSection,
   },
   {
     id: "continuity",

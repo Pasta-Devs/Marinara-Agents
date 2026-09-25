@@ -499,68 +499,72 @@ export function SlpCreatorAudienceSection({ creator }: SlpCreatorSettingsSection
           <option value="off">{t("ui.noodle.noodlerfanactivity.off")}</option>
         </select>
       </Field>
-      {fanActivity && globalSettings && (
-        <div className="grid grid-cols-2 gap-3">
-          {FAN_ARCHETYPES.map((archetype) => {
-            const override = fanActivity.archetypeWeights?.[archetype];
-            const current = override ?? globalSettings.fanArchetypeWeights[archetype];
-            return (
-              <label key={archetype} className="space-y-1 text-xs font-semibold">
-                <span className="block text-[var(--slurp-muted)]">
-                  {t(`ui.noodle.noodlerfanactivity.archetype.${archetype}`)}
-                  {/* Without this an inherited value and a deliberate override that happens to
+      {/* The mix Fan Types replaced: shown only while it still differs from the defaults. */}
+      {fanActivity &&
+        globalSettings &&
+        (Object.keys(fanActivity.archetypeWeights ?? {}).length > 0 ||
+          Object.values(globalSettings.fanArchetypeWeights).some((weight) => weight !== 1)) && (
+          <div className="grid grid-cols-2 gap-3">
+            {FAN_ARCHETYPES.map((archetype) => {
+              const override = fanActivity.archetypeWeights?.[archetype];
+              const current = override ?? globalSettings.fanArchetypeWeights[archetype];
+              return (
+                <label key={archetype} className="space-y-1 text-xs font-semibold">
+                  <span className="block text-[var(--slurp-muted)]">
+                    {t(`ui.noodle.noodlerfanactivity.archetype.${archetype}`)}
+                    {/* Without this an inherited value and a deliberate override that happens to
                       match look identical. */}
-                  {override === undefined && (
-                    <span className="ms-1 font-normal opacity-70">
-                      {t("ui.noodle.noodlerfanactivity.inheritedValue")}
-                    </span>
-                  )}
-                </span>
-                <input
-                  key={`${creator.id}-${archetype}-${current}`}
-                  type="number"
-                  min={0}
-                  max={100}
-                  defaultValue={current}
-                  onBlur={(event) => {
-                    const value = Number(event.target.value);
-                    if (!Number.isInteger(value) || value < 0 || value > 100) {
-                      event.target.value = String(current);
-                      return;
-                    }
-                    const resolved = {
-                      ...globalSettings.fanArchetypeWeights,
-                      ...fanActivity.archetypeWeights,
-                      [archetype]: value,
-                    };
-                    if (!Object.values(resolved).some((weight) => weight > 0)) {
-                      toast.error(t("ui.noodle.noodlerfanactivity.allWeightsZero"));
-                      event.target.value = String(current);
-                      return;
-                    }
-                    updateFanActivity.mutate(
-                      {
-                        accountId: creator.id,
-                        fanActivity: {
-                          ...fanActivity,
-                          archetypeWeights: { ...fanActivity.archetypeWeights, [archetype]: value },
+                    {override === undefined && (
+                      <span className="ms-1 font-normal opacity-70">
+                        {t("ui.noodle.noodlerfanactivity.inheritedValue")}
+                      </span>
+                    )}
+                  </span>
+                  <input
+                    key={`${creator.id}-${archetype}-${current}`}
+                    type="number"
+                    min={0}
+                    max={100}
+                    defaultValue={current}
+                    onBlur={(event) => {
+                      const value = Number(event.target.value);
+                      if (!Number.isInteger(value) || value < 0 || value > 100) {
+                        event.target.value = String(current);
+                        return;
+                      }
+                      const resolved = {
+                        ...globalSettings.fanArchetypeWeights,
+                        ...fanActivity.archetypeWeights,
+                        [archetype]: value,
+                      };
+                      if (!Object.values(resolved).some((weight) => weight > 0)) {
+                        toast.error(t("ui.noodle.noodlerfanactivity.allWeightsZero"));
+                        event.target.value = String(current);
+                        return;
+                      }
+                      updateFanActivity.mutate(
+                        {
+                          accountId: creator.id,
+                          fanActivity: {
+                            ...fanActivity,
+                            archetypeWeights: { ...fanActivity.archetypeWeights, [archetype]: value },
+                          },
                         },
-                      },
-                      {
-                        onError: (error) => {
-                          toast.error(errorMessage(error));
-                          event.target.value = String(current);
+                        {
+                          onError: (error) => {
+                            toast.error(errorMessage(error));
+                            event.target.value = String(current);
+                          },
                         },
-                      },
-                    );
-                  }}
-                  className={`min-h-11 w-full rounded-lg bg-[var(--slurp-canvas)] px-3 text-base ring-1 ring-inset ring-[var(--slurp-outline)] sm:text-sm ${focusRing}`}
-                />
-              </label>
-            );
-          })}
-        </div>
-      )}
+                      );
+                    }}
+                    className={`min-h-11 w-full rounded-lg bg-[var(--slurp-canvas)] px-3 text-base ring-1 ring-inset ring-[var(--slurp-outline)] sm:text-sm ${focusRing}`}
+                  />
+                </label>
+              );
+            })}
+          </div>
+        )}
     </SettingsGroup>
   );
 }
@@ -714,10 +718,17 @@ export function SlpCreatorMessagesSection({ creator, onClose }: SlpCreatorSettin
 
 /** What this Creator's world remembers about them. */
 export function SlpCreatorContinuitySection({ creator }: SlpCreatorSettingsSectionProps) {
+  const { t } = useTranslation();
+  // Life details only feed "Post ideas: The Creator's life"; with Model's choice they do nothing.
+  const lifeIdeas = useSlurpSettings().data?.postPlanner !== "classic";
   return (
     <div className="space-y-6">
       <SlurpContinuityPanel creatorAccountId={creator.id} />
-      <SlpCanonAnchorsEditor creatorId={creator.id} />
+      {lifeIdeas ? (
+        <SlpCanonAnchorsEditor creatorId={creator.id} />
+      ) : (
+        <p className={noteClass}>{t("ui.slurp.canonAnchors.classicNote")}</p>
+      )}
       <SlpCreatorSignalsList creatorId={creator.id} />
     </div>
   );
