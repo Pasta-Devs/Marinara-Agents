@@ -14,6 +14,7 @@ import {
   normalizeSlurpCanonAnchors,
   parseSlurpBeatClaims,
   slurpPostBriefSection,
+  slurpBeatFactFromPost,
 } from "../packages/slurp2/src/engine/packages/server/src/slp/modules/feed/slp-post-brief.ts";
 import {
   slurpPostVariation,
@@ -184,6 +185,21 @@ assert.match(
   assert.deepEqual(withCompany.problems, ["person not in the cast: Marco"]);
   const alone = checkSlurpBeatClaims(mixed, { ...personBeat, cast: [] }, ["Tamsin"], false);
   assert.equal(alone.problems.length, 2, "alone: an unnamed stranger is also an addition");
+}
+
+// A published beat post establishes its beat for a week; a post without one establishes nothing.
+{
+  const post = {
+    id: "post-1",
+    access: "locked",
+    createdAt: "2026-09-25T10:00:00.000Z",
+    metadata: { slurpBeat: { type: "showcase", line: "You show the finished cape", anchor: "cape" } },
+  };
+  const fact = slurpBeatFactFromPost(post);
+  assert.equal(fact?.text, "Posted about: You show the finished cape");
+  assert.equal(fact?.audienceScope, "creator_private", "a locked post's moment stays with the Creator");
+  assert.equal(fact?.expiresAt.toISOString(), "2026-10-02T10:00:00.000Z");
+  assert.equal(slurpBeatFactFromPost({ ...post, metadata: {} }), null);
 }
 
 console.log("slurp2 post beats regression checks passed");

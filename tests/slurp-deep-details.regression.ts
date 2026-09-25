@@ -75,7 +75,7 @@ assert.match(generation, /\.\.\.\(deepDetailsId \? \{ deepDetailsId \} : \{\}\)/
 assert.match(generation, /input\.previewOnly \? null : newId\(\)/u);
 assert.match(
   generation,
-  /slurpDeepDetailsImageRunRecorder\(db, deepDetailsId, "generation"\)/u,
+  /slurpDeepDetailsImageRunRecorder\(input\.db, input\.deepDetailsId, "generation"\)/u,
   "successful generation records the exact provider prompt privately",
 );
 const detailsStorage = slurp2Source(

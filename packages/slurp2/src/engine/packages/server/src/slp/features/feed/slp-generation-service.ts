@@ -1,8 +1,6 @@
 import { saveSlurpPostDeepDetails } from "../../data/feed/slp-post-deep-details-storage.js";
-import { slpIsAdmissionFailure } from "../../base/host/slp-admission.js";
 import { buildSlurpDeepDetailsRecord } from "./slp-deep-details-record.js";
 import { prepareSlurpCreatorPost } from "./slp-prepared-post.js";
-import { slurpDeepDetailsImageRunRecorder } from "../../data/feed/slp-post-deep-details-storage.js";
 import { type APIProvider } from "@marinara-engine/shared";
 import { createSlpPoll } from "../../../../../shared/src/slp/slp-polls.js";
 import { SLP_CREATOR_POST_TITLE_MAX_LENGTH } from "../../../../../shared/src/slp/slp-social.schema.js";
@@ -34,10 +32,10 @@ import { listSlurpOtherCreatorSubjects } from "../../data/feed/slp-feed-subjects
 import { type SlurpAccount } from "../../modules/records/slp-storage-model.js";
 import { createPromptOverridesStorage } from "../../../services/storage/prompt-overrides.storage.js";
 import { generateCreatorPostImage, SLURP_SECONDARY_IMAGE_COUNT } from "../media/slp-media-contract.js";
-import { persistSlurpGeneratedImageSet } from "./slp-post-media-operation.js";
+import { finishSlurpPostImage } from "./slp-post-media-operation.js";
+import { recordSlurpBeatFacts } from "./slp-post-beat-service.js";
 import { slpCreatorUnlockPriceMetadata } from "../../modules/economy/slp-prices.js";
 import { persistCreatorPostWithUploadedMedia, type SlpCreatorPostMediaUpload } from "../../base/media/slp-media.js";
-import { getErrorMessage } from "../../modules/creators/slp-public-support.js";
 import { slpResponseFormat } from "../../base/prompting/slp-response-format.js";
 import {
   SLURP_TEASER_INSTRUCTION,
@@ -213,6 +211,9 @@ export async function generateCreatorPost(
   // Same slot the scheduler used to choose free access, so only its teasers read as one.
   const isTeaser =
     input.request.access === "public" && !directed && slurpTeaserPost(account.id, sequence, settings.teaserRate);
+  // Beats mode keeps the last posts as facts, not quotes, so they are written before planning.
+  if (settings.postPlanner === "beats" && !input.previewOnly)
+    await recordSlurpBeatFacts(db, account, recentPosts, input.generatedAt ?? new Date());
   // What this post is for, as opposed to what it is about, and how it goes out. Story and teaser
   // are passed in rather than chosen again, so the decisions cannot contradict each other.
   const { axes, shoot, reusedMedia, reusedSource, opportunity, demandTopic, continuityInstruction, campaignId, beat } =
@@ -551,6 +552,8 @@ export async function generateCreatorPost(
       // Persisted so later planning, the scheduled publisher, and the feed read the same decision.
       ...(axes ? { contentIntent: axes.intent, contentDelivery: axes.delivery } : {}),
       ...(shootId ? { shootId } : {}),
+      // The planned beat, so later planning can record what this post established once it publishes.
+      ...(beat ? { slurpBeat: { type: beat.type, line: beat.line, anchor: beat.anchor } } : {}),
       ...(wardrobeSelection.look ? { wardrobeLookId: wardrobeSelection.look.id } : {}),
       ...(wardrobeSelection.fallback
         ? {
@@ -698,102 +701,18 @@ export async function generateCreatorPost(
     return attachment ?? {};
   };
 
-  if (!draftImagePrompt) return { post: await persist(await galleryFallback()), imagePromptReview: null };
-
-  const imageInput = await resolveImageInput(draftImagePrompt);
-  if (!imageInput) {
-    // A gallery image is a finished picture, so the post is not marked for the retry pass.
-    const fallback = await galleryFallback();
-    if (fallback.imageUrl) return { post: await persist(fallback), imagePromptReview: null };
-    // Keep the prompt: the post publishes without its picture, and the retry pass (or the
-    // user) draws it once a connection exists.
-    const post = await persist({
-      imagePrompt: draftImagePrompt,
-      metadata: {
-        imageGenerationFailed: true,
-        imageGenerationError: "No image generation connection is configured.",
-      },
-    });
-    return { post, imagePromptReview: null };
-  }
-
-  // Manual Guide review path: persist a pending prompt and hand back a preview for the
-  // reviewed-image confirmation route to claim and finalize later.
-  if (input.request.reviewImagePromptsBeforeSend === true) {
-    let preview: Awaited<ReturnType<typeof generateCreatorPostImage>>;
-    try {
-      preview = await generateCreatorPostImage({
-        ...imageInput,
-        previewOnly: true,
-        onImageRun: slurpDeepDetailsImageRunRecorder(db, deepDetailsId, "review"),
-      });
-    } catch (err) {
-      if (slpIsAdmissionFailure(err)) throw err;
-      logger.warn(err, "[slurp] Failed to prepare image prompt review for %s", account.displayName);
-      const fallback = await galleryFallback();
-      if (fallback.imageUrl) return { post: await persist(fallback), imagePromptReview: null };
-      return {
-        post: await persist({
-          imagePrompt: draftImagePrompt,
-          metadata: {
-            imageGenerationFailed: true,
-            imageRetryAttempts: 1,
-            imageGenerationError: getErrorMessage(err).slice(0, 500),
-          },
-        }),
-        imagePromptReview: null,
-      };
-    }
-    const post = await persist({
-      imagePrompt: draftImagePrompt,
-      metadata: { imagePendingReview: true },
-    });
-    return {
-      post,
-      imagePromptReview: preview.preview ? { id: post.id, ...preview.preview } : null,
-    };
-  }
-
-  // Immediate generation: only a provider failure falls back to a text-only post. Persistence
-  // failures propagate so a single run can never both persist an image post and a text fallback.
-  let image: Awaited<ReturnType<typeof generateCreatorPostImage>>;
-  try {
-    image = await generateCreatorPostImage({
-      ...imageInput,
-      previewOnly: false,
-      onImageRun: slurpDeepDetailsImageRunRecorder(db, deepDetailsId, "generation"),
-    });
-  } catch (err) {
-    // Same rule as the text leg: a busy connection is a deferral, so let it propagate to the
-    // scheduler instead of persisting a post permanently marked as image-failed.
-    if (slpIsAdmissionFailure(err)) throw err;
-    logger.warn(err, "[slurp] Failed to generate image for %s", account.displayName);
-    const fallback = await galleryFallback();
-    if (fallback.imageUrl) return { post: await persist(fallback), imagePromptReview: null };
-    return {
-      post: await persist({
-        imagePrompt: draftImagePrompt,
-        metadata: {
-          imageGenerationFailed: true,
-          imageRetryAttempts: 1,
-          imageGenerationError: getErrorMessage(err).slice(0, 500),
-        },
-      }),
-      imagePromptReview: null,
-    };
-  }
-
-  const postId = newId();
-  const post = await persistSlurpGeneratedImageSet({
+  return finishSlurpPostImage({
     db,
-    postId,
-    imagePrompt: draftImagePrompt,
-    primary: { ...image, metadata: { ...image.metadata, ...(storyVariation ? { noodlerPostType: "story" } : {}) } },
-    imageInput,
+    accountName: account.displayName,
+    draftImagePrompt,
+    resolveImageInput,
+    galleryFallback,
+    persist,
+    review: input.request.reviewImagePromptsBeforeSend === true,
+    deepDetailsId,
+    story: storyVariation,
     multi: axes?.delivery === "multi_image_set",
     shots: shotBriefs,
     shootId,
-    persist,
   });
-  return { post, imagePromptReview: null };
 }

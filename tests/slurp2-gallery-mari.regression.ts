@@ -17,7 +17,7 @@ assert.match(
   generation,
   /if \(textOnly \|\| !settings\.allowGalleryImageAttachments \|\| linkedPublicAccount\?\.kind !== "character"\)\s*return \{\};/u,
 );
-assert.match(generation, /if \(!draftImagePrompt\) return \{ post: await persist\(await galleryFallback\(\)\)/u);
+assert.match(generation, /if \(!prompt\) return \{ post: await persist\(await galleryFallback\(\)\)/u);
 // Every no-picture outcome tries the gallery first: no connection, review failure, generation failure.
 assert.equal(
   generation.match(

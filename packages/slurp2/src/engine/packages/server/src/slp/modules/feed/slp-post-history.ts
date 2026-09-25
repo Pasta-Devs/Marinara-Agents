@@ -16,13 +16,15 @@ const SLURP_HISTORY_SUBJECT_LENGTH = 80;
  * a repeat and carries no voice to copy. Other Creators' recent public titles are listed so the
  * whole feed stops posting about the same thing on the same day.
  *
- * ponytail: the last caption is the only carrier of post-to-post facts ("more tomorrow"), because
- * published posts do not write continuity facts yet. Drop it once they do.
+ * In classic mode the last caption is the only carrier of post-to-post facts ("more tomorrow"). In
+ * beats mode a published post's beat becomes a continuity fact, so no caption is quoted at all.
  */
 export function formatSlurpPostHistory(
   posts: SlpCreatorManagedPost[],
   protect: (value: string) => string,
   otherSubjects: readonly string[] = [],
+  /** False in beats mode: the last post is a continuity fact there, not a quote. */
+  quoteLast = true,
 ): string {
   const showed = (post: SlpCreatorManagedPost, length: number) =>
     post.imagePrompt && !slurpIsLegacyImageBrief(post.imagePrompt)
@@ -30,14 +32,19 @@ export function formatSlurpPostHistory(
       : "";
   const withShowed = (line: string, post: SlpCreatorManagedPost, length = SLURP_HISTORY_IMAGE_LENGTH) =>
     showed(post, length) ? `${line}\n  (showed: ${protect(showed(post, length))})` : line;
-  const [latest, ...older] = posts;
+  const [latest, ...rest] = posts;
+  const older = quoteLast ? rest : posts;
   const lines = latest
     ? [
-        "Your last post, quoted for continuity only. Do not reuse its wording:",
-        withShowed(
-          `- ${latest.createdAt}: ${latest.title ? `${protect(latest.title)} — ` : ""}${protect(latest.content)}`,
-          latest,
-        ),
+        ...(quoteLast
+          ? [
+              "Your last post, quoted for continuity only. Do not reuse its wording:",
+              withShowed(
+                `- ${latest.createdAt}: ${latest.title ? `${protect(latest.title)} — ` : ""}${protect(latest.content)}`,
+                latest,
+              ),
+            ]
+          : []),
         ...(older.length
           ? [
               "Earlier subjects on this page. Pick a different subject, place, and activity:",

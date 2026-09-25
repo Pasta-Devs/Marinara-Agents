@@ -297,7 +297,7 @@ export function buildNoodlerPostMessages(input: SlurpPostPromptInput): ChatMessa
     buildSlurpPostTimingContext(input.generatedAt ?? new Date(), input.publicationTime),
     "",
     "# Recent Slurp posts",
-    formatSlurpPostHistory(input.recentPosts, protect, input.otherCreatorSubjects),
+    formatSlurpPostHistory(input.recentPosts, protect, input.otherCreatorSubjects, !input.beat),
     ...(input.variationInstruction ? ["", input.variationInstruction] : []),
     // Generated anchor text in the brief is data from the card, protected like the card.
     ...(input.beat

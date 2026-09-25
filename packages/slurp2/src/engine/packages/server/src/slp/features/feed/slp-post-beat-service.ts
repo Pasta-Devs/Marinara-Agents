@@ -12,7 +12,14 @@ import { slpSamplingOptions } from "../../base/prompting/slp-sampling-options.js
 import { readSlurpBeatHistory } from "../../data/feed/slp-opportunity-storage.js";
 import type { SlurpContentIntent } from "../../../../../shared/src/slp/slp-content-axes.js";
 import { selectSlurpBeat, type SlurpBeat, type SlurpCanonAnchors } from "../../modules/feed/slp-post-beat.js";
-import { normalizeSlurpCanonAnchors, slurpCanonAnchorsPrompt } from "../../modules/feed/slp-post-brief.js";
+import {
+  normalizeSlurpCanonAnchors,
+  slurpBeatFactFromPost,
+  slurpCanonAnchorsPrompt,
+} from "../../modules/feed/slp-post-brief.js";
+import { createSlurpContinuityFact, hasSlurpContinuityFact } from "../../data/continuity/slp-continuity-storage.js";
+import { slurpContinuityIdentityOf } from "../../modules/continuity/slp-continuity-rules.js";
+import type { SlpCreatorManagedPost } from "../../../../../shared/src/slp/slp-social.types.js";
 
 type SlurpBeatConnection = Parameters<typeof createSlurpPostProvider>[0]["connection"] & { model: string };
 
@@ -144,5 +151,45 @@ export async function planSlurpBeat(
   } catch (error) {
     logger.warn(error, "[slurp] Beat planning failed; this post uses the classic planner");
     return null;
+  }
+}
+
+/**
+ * Write a fact for each recent published beat post that has none yet. Run before planning, so the
+ * next post knows what the last ones were about without quoting them. Published posts are the only
+ * rows in the post table, so this can never record a post that did not go out. Best effort.
+ */
+export async function recordSlurpBeatFacts(
+  db: DB,
+  account: Parameters<typeof slurpContinuityIdentityOf>[0],
+  posts: readonly SlpCreatorManagedPost[],
+  at: Date,
+): Promise<void> {
+  const identity = slurpContinuityIdentityOf(account);
+  if (!identity) return;
+  try {
+    for (const post of posts) {
+      const fact = slurpBeatFactFromPost(post);
+      if (!fact || fact.expiresAt.getTime() <= at.getTime()) continue;
+      if (await hasSlurpContinuityFact(db, account.id, { factType: "circumstance", text: fact.text })) continue;
+      await createSlurpContinuityFact(
+        db,
+        {
+          ...identity,
+          factType: "circumstance",
+          subject: fact.subject,
+          text: fact.text,
+          audienceScope: fact.audienceScope,
+          realityScope: "slurp",
+          source: "slurp_post",
+          sourceHash: fact.key,
+          contribution: "system",
+          expiresAt: fact.expiresAt,
+        },
+        at,
+      );
+    }
+  } catch (error) {
+    logger.warn(error, "[slurp] Could not record facts from published beat posts");
   }
 }

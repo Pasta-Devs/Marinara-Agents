@@ -1,5 +1,10 @@
 # Slurp Remastered release notes
 
+## 0.2.43 — 2026-09-25
+
+- With Beats on, what a published post was about becomes a note Slurp remembers for a week, so the next post can follow on from it without copying its caption.
+- With Beats on, no earlier caption is quoted to the writer any more; recent posts appear only as subjects.
+
 ## 0.2.42 — 2026-09-25
 
 - New experimental post planner in Prompts: Beats. It picks what an ordinary post is about from the Creator's own card (a person, a place, their work, a running joke) instead of letting every Creator drift to the same subjects. Classic stays the default.

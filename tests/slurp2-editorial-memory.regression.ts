@@ -32,4 +32,9 @@ assert.match(user, /Other Creators posted about these recently[^\n]*\n- Laundry 
 assert.match(user, /older scene x+/u);
 assert.doesNotMatch(user, /OLDER_SCENE_TAIL/u);
 
+// Beats mode quotes no caption: the last post is a continuity fact there.
+const beats = formatSlurpPostHistory(recentPosts, (value) => value, [], false);
+assert.doesNotMatch(beats, /LATEST_BODY|OLDER_BODY_ONE|Your last post/u);
+assert.match(beats, /Bar closed early/u, "the last post still appears as a subject");
+
 console.log("slurp2 editorial memory regression checks passed");

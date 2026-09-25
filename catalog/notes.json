@@ -360,6 +360,12 @@
     "slurp2": {
       "versions": [
         {
+          "version": "0.2.43",
+          "date": "2026-09-25",
+          "notes": "- With Beats on, what a published post was about becomes a note Slurp remembers for a week, so the next post can follow on from it without copying its caption.\n- With Beats on, no earlier caption is quoted to the writer any more; recent posts appear only as subjects.",
+          "highlight": false
+        },
+        {
           "version": "0.2.42",
           "date": "2026-09-25",
           "notes": "- New experimental post planner in Prompts: Beats. It picks what an ordinary post is about from the Creator's own card (a person, a place, their work, a running joke) instead of letting every Creator drift to the same subjects. Classic stays the default.\n- With Beats on, Slurp reads each Creator's card once in the background and reads it again only after the card changes. Until then, and whenever something goes wrong, posts use the classic planner.\n- Beats vary the kind of moment (a win, a showcase, a moment with someone, an opinion, a small mishap, and more) per Creator and across the whole feed, so no single kind takes over.\n- Beats tell the writer who is there, where, and when, and that it must not invent other people, past events, or life changes. If a post does anyway, it gets one rewrite; Deep details show the result.\n- Deep details now show the planner, the beat with its anchor and cast, the claim check, the picture's shot, and the subject a kept promise delivers.",
@@ -471,12 +477,6 @@
           "version": "0.2.20",
           "date": "2026-09-22",
           "notes": "- Creators now own up to 64 complete wardrobe looks with model summaries, exact image descriptions, tags, public/locked suitability, provenance, and timestamps.\n- AI imports from the linked character, selected lorebooks, pasted text, or the legacy wardrobe note stay in an editable evidence-backed review until confirmed.\n- Automatic image posts return a scene plan with wardrobe ID, setting, action, expression, and visual direction. Slurp validates the choice, falls back to the least-recent compatible look, and then expands its exact clothing.\n- Prompt Studio and Deep Details show the scene, fallback, typed visual brief, and assembled image brief. Expert overrides can rewrite or disable every prompt block.\n- Random variations no longer invent loneliness, interruption, sleeplessness, or a low-income mood. Real events and character traits still affect tone.",
-          "highlight": false
-        },
-        {
-          "version": "0.2.19",
-          "date": "2026-09-22",
-          "notes": "- A Creator has her own appearance, usual wardrobe, and regular places, edited on her profile.\n- The appearance is sent with every picture. It used to be borrowed from the linked character card, which needed the Creator to be linked, the card to have an Appearance field, and \"include descriptions\" to be on. With any of those missing the image model got a scene with nobody in it and invented somebody new each post.\n- An appearance left blank is seeded from the linked card when the Creator is created.\n- Wardrobe and places reach both the caption and the picture, so clothes are hers and \"somewhere other than where she usually posts\" has something to be other than.",
           "highlight": false
         }
       ]

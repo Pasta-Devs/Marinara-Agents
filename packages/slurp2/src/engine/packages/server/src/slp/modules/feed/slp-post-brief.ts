@@ -195,3 +195,34 @@ export function slurpBeatCorrection(problems: readonly string[]): string {
     "Rewrite the post without them. Keep the same JSON shape, including claims. Return JSON only.",
   ].join("\n");
 }
+
+const SLURP_BEAT_FACT_DAYS = 7;
+
+/**
+ * What a published beat post establishes: that this happened, for a week. Only the beat Slurp
+ * planned, never the caption's wording, and only once the post exists — a prepared post that never
+ * publishes leaves nothing behind. A locked post's moment stays with the Creator.
+ */
+export function slurpBeatFactFromPost(post: {
+  id: string;
+  access: string;
+  createdAt: string;
+  metadata: Record<string, unknown>;
+}): {
+  key: string;
+  subject: string;
+  text: string;
+  audienceScope: "creator_public" | "creator_private";
+  expiresAt: Date;
+} | null {
+  const beat = post.metadata.slurpBeat as { line?: unknown; anchor?: unknown } | undefined;
+  const line = typeof beat?.line === "string" ? beat.line.trim() : "";
+  if (!line) return null;
+  return {
+    key: `beat:${post.id}`,
+    subject: typeof beat?.anchor === "string" ? beat.anchor : "",
+    text: `Posted about: ${line}`,
+    audienceScope: post.access === "locked" ? "creator_private" : "creator_public",
+    expiresAt: new Date(Date.parse(post.createdAt) + SLURP_BEAT_FACT_DAYS * 24 * 60 * 60 * 1000),
+  };
+}
