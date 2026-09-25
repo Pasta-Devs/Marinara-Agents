@@ -115,43 +115,6 @@ export function SummaryRow({
   );
 }
 
-export function FineTune({
-  summary,
-  count,
-  icon,
-  children,
-}: {
-  summary: string;
-  count?: number;
-  icon?: ReactNode;
-  children: ReactNode;
-}) {
-  return (
-    <details className="group rounded-xl bg-[var(--slurp-surface-raised)] ring-1 ring-inset ring-[var(--slurp-outline)]">
-      <summary
-        className={cn(
-          "flex min-h-11 cursor-pointer list-none items-center gap-3 px-4 py-2 text-sm font-bold focus-visible:ring-inset [&::-webkit-details-marker]:hidden",
-          focusRing,
-        )}
-      >
-        {icon}
-        <span className="min-w-0 flex-1">{summary}</span>
-        {count !== undefined && (
-          <span className="rounded-full bg-[var(--slurp-canvas)] px-2 text-xs font-semibold text-[var(--slurp-muted)] tabular-nums">
-            {count}
-          </span>
-        )}
-        <ChevronRight
-          size={17}
-          className="transition-transform group-open:rotate-90 rtl:rotate-180 motion-reduce:transition-none"
-          aria-hidden="true"
-        />
-      </summary>
-      <div className="space-y-5 border-t border-[var(--slurp-outline)] p-4 sm:p-5">{children}</div>
-    </details>
-  );
-}
-
 /** Marks where a setting renders, so Backstage search can scroll to it and focus it. */
 export function SettingAnchor({ settingKey, children }: { settingKey: SlpSettingKey; children: ReactNode }) {
   return (

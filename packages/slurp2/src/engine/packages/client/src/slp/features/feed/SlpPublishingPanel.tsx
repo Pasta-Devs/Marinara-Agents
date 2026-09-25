@@ -1,6 +1,7 @@
-import { ChevronRight, FileText, Sparkles } from "lucide-react";
+import { FileText, Sparkles } from "lucide-react";
 
 import {
+  AdvancedGroup,
   Field,
   GuidanceBox,
   NumberSetting,
@@ -8,8 +9,9 @@ import {
   SettingsGroup,
   Toggle,
 } from "../../modules/settings/SlpSettingsControls";
+import { ChoiceSetting } from "../../modules/settings/SlpSettingsInputs";
 
-import { BackstagePageHeader, BackstageWizard, SettingAnchor } from "../../modules/settings/SlpSettingsKit";
+import { BackstagePageHeader, SettingAnchor } from "../../modules/settings/SlpSettingsKit";
 
 import type { SlurpSettings } from "../settings/slp-settings-contract";
 import {
@@ -33,19 +35,7 @@ export function SlpPublishingPanel(page: SlpBackstagePageProps) {
     connectionsQuery,
     activityPreset,
     openRefresh,
-    paceWizardOpen,
-    setPaceWizardOpen,
-    paceDraft,
-    setPaceDraft,
   } = page;
-  // One patch, written only on Apply, so a half-finished wizard never leaves mixed settings behind.
-  const pacePatch: Partial<SlurpSettings> = paceDraft
-    ? {
-        ...(paceDraft.preset ? slurpActivityPresetPatch(paceDraft.preset) : { postsPerDay: paceDraft.postsPerDay }),
-        nightQuiet: paceDraft.nightQuiet,
-        storyRate: paceDraft.storyRate,
-      }
-    : {};
   return (
     <div className="space-y-4">
       <BackstagePageHeader
@@ -75,107 +65,7 @@ export function SlpPublishingPanel(page: SlpBackstagePageProps) {
             {t("ui.slurp.settings.publishing.howDetail")}
           </p>
         </div>
-        <button
-          type="button"
-          aria-expanded={paceWizardOpen}
-          onClick={() => {
-            setPaceDraft({
-              preset: activityPreset,
-              postsPerDay: settings.postsPerDay,
-              nightQuiet: settings.nightQuiet,
-              storyRate: settings.storyRate,
-            });
-            setPaceWizardOpen((open) => !open);
-          }}
-          className="inline-flex min-h-11 items-center gap-2 rounded-lg px-3 text-xs font-semibold ring-1 ring-inset ring-[var(--slurp-outline)] hover:bg-[var(--slurp-canvas)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)]"
-        >
-          <Sparkles size={14} className="text-[var(--noodle-accent)]" aria-hidden="true" />
-          {t("ui.slurp.settings.backstage.wizard.paceTitle", { defaultValue: "Set Slurp’s pace" })}
-        </button>
       </div>
-      {paceWizardOpen && paceDraft && (
-        <BackstageWizard
-          title={t("ui.slurp.settings.backstage.wizard.paceTitle", { defaultValue: "Set Slurp’s pace" })}
-          preset={paceDraft.preset}
-          presetLabel={(preset) => t(`ui.slurp.settings.presets.${preset}`)}
-          current={settings}
-          proposed={{ ...settings, ...pacePatch }}
-          patch={pacePatch}
-          pending={updateSettings.isPending}
-          onCancel={() => setPaceWizardOpen(false)}
-          onApply={(patch) => {
-            void updatePatch(patch);
-            setPaceWizardOpen(false);
-          }}
-          steps={[
-            {
-              id: "pace",
-              title: t("ui.slurp.settings.backstage.wizard.paceStep", {
-                defaultValue: "How often does Slurp post?",
-              }),
-              content: (
-                <div className="grid gap-2 sm:grid-cols-2">
-                  {SLURP_ACTIVITY_PRESETS.map((preset) => (
-                    <button
-                      key={preset}
-                      type="button"
-                      aria-pressed={paceDraft.preset === preset}
-                      onClick={() =>
-                        setPaceDraft({
-                          ...paceDraft,
-                          preset,
-                          postsPerDay: slurpPostsPerDayForPreset(preset) || paceDraft.postsPerDay,
-                        })
-                      }
-                      className={`min-h-16 rounded-lg p-3 text-start text-sm ring-1 ring-inset focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] ${paceDraft.preset === preset ? "bg-[var(--slurp-nav-active)] ring-[var(--noodle-accent)]/45" : "bg-[var(--slurp-surface-raised)] ring-[var(--slurp-outline)]"}`}
-                    >
-                      <span className="block font-semibold">{t(`ui.slurp.settings.presets.${preset}`)}</span>
-                      <span className="mt-0.5 block text-xs text-[var(--slurp-muted)]">
-                        {preset === "manual"
-                          ? t("ui.slurp.settings.presets.manualDetail")
-                          : t("ui.slurp.settings.presets.postsDetail", {
-                              count: slurpPostsPerDayForPreset(preset),
-                            })}
-                      </span>
-                    </button>
-                  ))}
-                </div>
-              ),
-            },
-            {
-              id: "quiet",
-              title: t("ui.slurp.settings.backstage.wizard.quietStep", { defaultValue: "Quiet hours and Stories" }),
-              content: (
-                <div className="space-y-3">
-                  <Toggle
-                    label={t("ui.slurp.settings.quietHours")}
-                    detail={t("ui.slurp.settings.quietHoursDetail")}
-                    value={paceDraft.nightQuiet}
-                    onChange={(value) => setPaceDraft({ ...paceDraft, nightQuiet: value })}
-                  />
-                  <Field label={t("ui.slurp.settings.storyRate")} detail={t("ui.slurp.settings.storyRateDetail")}>
-                    <select
-                      value={paceDraft.storyRate}
-                      onChange={(event) =>
-                        setPaceDraft({
-                          ...paceDraft,
-                          storyRate: event.target.value as SlurpSettings["storyRate"],
-                        })
-                      }
-                      className="min-h-11 w-full rounded-lg bg-[var(--slurp-canvas)] px-3 text-base ring-1 ring-inset ring-[var(--slurp-outline)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] sm:text-sm"
-                    >
-                      <option value="off">{t("ui.slurp.settings.storyRateOff")}</option>
-                      <option value="rare">{t("ui.slurp.settings.storyRateRare")}</option>
-                      <option value="regular">{t("ui.slurp.settings.storyRateRegular")}</option>
-                      <option value="often">{t("ui.slurp.settings.storyRateOften")}</option>
-                    </select>
-                  </Field>
-                </div>
-              ),
-            },
-          ]}
-        />
-      )}
       <SettingAnchor settingKey="autoPostingScheduleEnabled">
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
           {SLURP_ACTIVITY_PRESETS.map((preset) => (
@@ -229,7 +119,7 @@ export function SlpPublishingPanel(page: SlpBackstagePageProps) {
         </Field>
       )}
       {/* Shown even when it has no effect, with the reason, so the setting is never a surprise. */}
-      <Field
+      <ChoiceSetting
         settingKey="storyRate"
         label={t("ui.slurp.settings.storyRate")}
         detail={t("ui.slurp.settings.storyRateDetail")}
@@ -240,21 +130,18 @@ export function SlpPublishingPanel(page: SlpBackstagePageProps) {
               ? t("ui.slurp.settings.hints.needsImages")
               : null
         }
-      >
-        <select
-          value={settings.storyRate}
-          disabled={
-            updateSettings.isPending || !settings.autoPostingScheduleEnabled || !settings.autoPostingImagesEnabled
-          }
-          onChange={(event) => void update("storyRate", event.target.value as SlurpSettings["storyRate"])}
-          className="min-h-11 w-full rounded-lg border border-[var(--slurp-outline)] bg-[var(--slurp-canvas)] px-3 text-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] disabled:opacity-50 sm:text-sm"
-        >
-          <option value="off">{t("ui.slurp.settings.storyRateOff")}</option>
-          <option value="rare">{t("ui.slurp.settings.storyRateRare")}</option>
-          <option value="regular">{t("ui.slurp.settings.storyRateRegular")}</option>
-          <option value="often">{t("ui.slurp.settings.storyRateOften")}</option>
-        </select>
-      </Field>
+        options={[
+          { value: "off", label: t("ui.slurp.settings.storyRateOff") },
+          { value: "rare", label: t("ui.slurp.settings.storyRateRare") },
+          { value: "regular", label: t("ui.slurp.settings.storyRateRegular") },
+          { value: "often", label: t("ui.slurp.settings.storyRateOften") },
+        ]}
+        value={settings.storyRate}
+        disabled={
+          updateSettings.isPending || !settings.autoPostingScheduleEnabled || !settings.autoPostingImagesEnabled
+        }
+        onChange={(value: SlurpSettings["storyRate"]) => void update("storyRate", value)}
+      />
       {!settings.autoPostingScheduleEnabled && (
         <GuidanceBox
           title={t("ui.slurp.settings.publishing.manualTitle")}
@@ -345,100 +232,81 @@ export function SlpPublishingPanel(page: SlpBackstagePageProps) {
       </div>
       {/* What each automatic post is: where its idea comes from and whether it goes out free. */}
       <SettingsGroup title={t("ui.slurp.settings.publishing.whatGetsPosted")}>
-        <Field
+        <ChoiceSetting
           settingKey="postPlanner"
           label={t("ui.slurp.settings.prompts.postPlanner")}
           detail={t("ui.slurp.settings.prompts.postPlannerDetail")}
-        >
-          <select
-            value={settings.postPlanner}
-            disabled={updateSettings.isPending}
-            onChange={(event) => void update("postPlanner", event.target.value as SlurpSettings["postPlanner"])}
-            className="min-h-11 w-full rounded-lg border border-[var(--slurp-outline)] bg-[var(--slurp-canvas)] px-3 text-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] disabled:opacity-50 sm:text-sm"
-          >
-            <option value="beats">{t("ui.slurp.settings.prompts.postPlannerBeats")}</option>
-            <option value="classic">{t("ui.slurp.settings.prompts.postPlannerClassic")}</option>
-          </select>
-        </Field>
-        <Field
+          options={[
+            { value: "beats", label: t("ui.slurp.settings.prompts.postPlannerBeats") },
+            { value: "classic", label: t("ui.slurp.settings.prompts.postPlannerClassic") },
+          ]}
+          value={settings.postPlanner}
+          disabled={updateSettings.isPending}
+          onChange={(value: SlurpSettings["postPlanner"]) => void update("postPlanner", value)}
+        />
+        <ChoiceSetting
           settingKey="teaserRate"
           label={t("ui.slurp.settings.wallet.teaserRate", { defaultValue: "Free teaser posts" })}
           detail={t("ui.slurp.settings.wallet.teaserRateDetail", {
             defaultValue:
               "How often an automatic post goes out free. Creators for whom it fits use it to win subscribers; the rest just post something free.",
           })}
+          options={[
+            { value: "off", label: t("ui.slurp.settings.storyRateOff") },
+            { value: "rare", label: t("ui.slurp.settings.storyRateRare") },
+            { value: "regular", label: t("ui.slurp.settings.storyRateRegular") },
+            { value: "often", label: t("ui.slurp.settings.storyRateOften") },
+          ]}
+          value={settings.teaserRate}
+          onChange={(value: SlurpSettings["teaserRate"]) => void update("teaserRate", value)}
+        />
+      </SettingsGroup>
+      <AdvancedGroup
+        icon={<FileText size={17} className="text-[var(--slurp-violet)]" aria-hidden="true" />}
+        title={t("ui.slurp.settings.publishing.generationDetails")}
+      >
+        <ChoiceSetting
+          settingKey="autoPostGenerationMode"
+          label={t("ui.slurp.settings.generationMode")}
+          detail={t("ui.slurp.settings.generationModeDetail")}
+          disabledReason={settings.autoPostingScheduleEnabled ? null : t("ui.slurp.settings.hints.autoPostingOnly")}
+          options={[
+            { value: "pre_generate", label: t("ui.slurp.settings.generationModePreGenerate") },
+            { value: "on_demand", label: t("ui.slurp.settings.generationModeOnDemand") },
+          ]}
+          value={settings.autoPostGenerationMode}
+          disabled={updateSettings.isPending || !settings.autoPostingScheduleEnabled}
+          onChange={(value: SlurpSettings["autoPostGenerationMode"]) => void update("autoPostGenerationMode", value)}
+        />
+        <Field
+          settingKey="generationConnectionId"
+          label={t("ui.slurp.settings.connections.creatorText")}
+          detail={t("ui.slurp.settings.connections.creatorTextDetail")}
         >
           <select
-            value={settings.teaserRate}
-            onChange={(event) => void update("teaserRate", event.target.value as SlurpSettings["teaserRate"])}
-            className="min-h-11 w-full rounded-lg bg-[var(--slurp-canvas)] px-3 text-base ring-1 ring-inset ring-[var(--slurp-outline)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] sm:text-sm"
+            value={settings.generationConnectionId ?? ""}
+            disabled={connectionsQuery.isLoading || connectionsQuery.isError || updateSettings.isPending}
+            onChange={(event) => void update("generationConnectionId", event.target.value || null)}
+            className="min-h-11 w-full rounded-lg border border-[var(--slurp-outline)] bg-[var(--slurp-canvas)] px-3 text-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] disabled:opacity-50 sm:text-sm"
           >
-            <option value="off">{t("ui.slurp.settings.storyRateOff")}</option>
-            <option value="rare">{t("ui.slurp.settings.storyRateRare")}</option>
-            <option value="regular">{t("ui.slurp.settings.storyRateRegular")}</option>
-            <option value="often">{t("ui.slurp.settings.storyRateOften")}</option>
+            <option value="">{t("ui.slurp.settings.connections.engineDefault")}</option>
+            {(connectionsQuery.data ?? [])
+              .filter((connection) => connection.provider !== "image_generation")
+              .map((connection) => (
+                <option key={connection.id} value={connection.id}>
+                  {connection.name ?? connection.model ?? connection.id}
+                </option>
+              ))}
           </select>
         </Field>
-      </SettingsGroup>
-      <details className="group rounded-xl bg-[var(--slurp-surface-raised)] ring-1 ring-inset ring-[var(--slurp-outline)]">
-        <summary className="flex min-h-14 cursor-pointer list-none items-center gap-3 px-4 text-sm font-bold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--slurp-focus)] [&::-webkit-details-marker]:hidden">
-          <FileText size={17} className="text-[var(--slurp-violet)]" aria-hidden="true" />
-          <span className="flex-1">{t("ui.slurp.settings.publishing.generationDetails")}</span>
-          <ChevronRight
-            size={17}
-            className="transition-transform group-open:rotate-90 rtl:rotate-180"
-            aria-hidden="true"
-          />
-        </summary>
-        <div className="space-y-5 border-t border-[var(--slurp-outline)] p-4 sm:p-5">
-          <Field
-            settingKey="autoPostGenerationMode"
-            label={t("ui.slurp.settings.generationMode")}
-            detail={t("ui.slurp.settings.generationModeDetail")}
-            disabledReason={settings.autoPostingScheduleEnabled ? null : t("ui.slurp.settings.hints.autoPostingOnly")}
-          >
-            <select
-              value={settings.autoPostGenerationMode}
-              disabled={updateSettings.isPending || !settings.autoPostingScheduleEnabled}
-              onChange={(event) =>
-                void update("autoPostGenerationMode", event.target.value as SlurpSettings["autoPostGenerationMode"])
-              }
-              className="min-h-11 w-full rounded-lg border border-[var(--slurp-outline)] bg-[var(--slurp-canvas)] px-3 text-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] disabled:opacity-50 sm:text-sm"
-            >
-              <option value="pre_generate">{t("ui.slurp.settings.generationModePreGenerate")}</option>
-              <option value="on_demand">{t("ui.slurp.settings.generationModeOnDemand")}</option>
-            </select>
-          </Field>
-          <Field
-            settingKey="generationConnectionId"
-            label={t("ui.slurp.settings.connections.creatorText")}
-            detail={t("ui.slurp.settings.connections.creatorTextDetail")}
-          >
-            <select
-              value={settings.generationConnectionId ?? ""}
-              disabled={connectionsQuery.isLoading || connectionsQuery.isError || updateSettings.isPending}
-              onChange={(event) => void update("generationConnectionId", event.target.value || null)}
-              className="min-h-11 w-full rounded-lg border border-[var(--slurp-outline)] bg-[var(--slurp-canvas)] px-3 text-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] disabled:opacity-50 sm:text-sm"
-            >
-              <option value="">{t("ui.slurp.settings.connections.engineDefault")}</option>
-              {(connectionsQuery.data ?? [])
-                .filter((connection) => connection.provider !== "image_generation")
-                .map((connection) => (
-                  <option key={connection.id} value={connection.id}>
-                    {connection.name ?? connection.model ?? connection.id}
-                  </option>
-                ))}
-            </select>
-          </Field>
-          <Toggle
-            settingKey="professorMariCreatorSource"
-            label={t("ui.slurp.settings.prompts.professorMari")}
-            detail={t("ui.slurp.settings.prompts.professorMariDetail")}
-            value={settings.professorMariCreatorSource}
-            onChange={(value) => update("professorMariCreatorSource", value)}
-          />
-        </div>
-      </details>
+        <Toggle
+          settingKey="professorMariCreatorSource"
+          label={t("ui.slurp.settings.prompts.professorMari")}
+          detail={t("ui.slurp.settings.prompts.professorMariDetail")}
+          value={settings.professorMariCreatorSource}
+          onChange={(value) => update("professorMariCreatorSource", value)}
+        />
+      </AdvancedGroup>
     </div>
   );
 }

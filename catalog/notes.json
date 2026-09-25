@@ -360,6 +360,12 @@
     "slurp2": {
       "versions": [
         {
+          "version": "0.2.66",
+          "date": "2026-09-25",
+          "notes": "- Publishing, Images, Ads and Messaging show fixed choices as button rows instead of dropdowns: story rate, post ideas, free teasers, generation mode, image context, appearance updates, ad frequency, steering, content ceiling, era, tone and the default DM policy.\n- Every folded block in settings looks and works the same, and shows how many settings it holds.\n- The \"Set Slurp's pace\" wizard is gone from Publishing; the preset cards on the same page do the same job.",
+          "highlight": false
+        },
+        {
           "version": "0.2.65",
           "date": "2026-09-25",
           "notes": "- Life details sit right after \"Waiting for you\" in a Creator's Memory tab. People, places, work, things, habits and running jokes are chips: type and press Enter to add, tap the cross to remove.\n- The heat range of a card is picked with button rows, and the note filters fold away behind the search box, with the number of active filters shown.",
@@ -471,12 +477,6 @@
           "version": "0.2.47",
           "date": "2026-09-25",
           "notes": "- Slurp can now take a moment saved from an Engine chat and keep it as a private note for that character's Creator pages. The button in chats comes with a later Engine update.",
-          "highlight": false
-        },
-        {
-          "version": "0.2.46",
-          "date": "2026-09-25",
-          "notes": "- Life-event arcs such as moving house, a new job, or a breakup now happen at most once per Creator when Slurp starts arcs by itself.\n- With Beats on, a post that continues an arc is about the arc's current chapter, instead of an unrelated moment beside it.",
           "highlight": false
         }
       ]

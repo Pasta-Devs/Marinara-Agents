@@ -192,18 +192,35 @@ export function Toggle({
  * Rarely needed settings, one level deep. More than two disclosure levels hurt usability
  * (NN/g, progressive disclosure), so an Advanced block never nests another.
  */
-export function AdvancedGroup({ title, children }: { title: string; children: ReactNode }) {
+export function AdvancedGroup({
+  title,
+  icon,
+  count,
+  children,
+}: {
+  title: string;
+  icon?: ReactNode;
+  /** How many settings are inside, shown on the closed fold. */
+  count?: number;
+  children: ReactNode;
+}) {
   return (
-    <details className="group rounded-xl ring-1 ring-inset ring-[var(--slurp-outline)]">
-      <summary className="flex min-h-11 cursor-pointer list-none items-center gap-3 px-4 text-sm font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] [&::-webkit-details-marker]:hidden">
-        <span className="flex-1">{title}</span>
+    <details className="group rounded-xl bg-[var(--slurp-surface-raised,var(--background))] ring-1 ring-inset ring-[var(--slurp-outline)]">
+      <summary className="flex min-h-11 cursor-pointer list-none items-center gap-3 px-4 py-2 text-sm font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--slurp-focus)] [&::-webkit-details-marker]:hidden">
+        {icon}
+        <span className="min-w-0 flex-1">{title}</span>
+        {count !== undefined && (
+          <span className="rounded-full bg-[var(--slurp-canvas)] px-2 text-xs font-semibold text-[var(--slurp-muted)] tabular-nums">
+            {count}
+          </span>
+        )}
         <ChevronRight
           size={17}
-          className="transition-transform group-open:rotate-90 rtl:rotate-180"
+          className="transition-transform group-open:rotate-90 rtl:rotate-180 motion-reduce:transition-none"
           aria-hidden="true"
         />
       </summary>
-      <div className="space-y-4 px-4 pb-4">{children}</div>
+      <div className="space-y-4 border-t border-[var(--slurp-outline)] p-4 sm:p-5">{children}</div>
     </details>
   );
 }

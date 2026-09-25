@@ -1,6 +1,7 @@
-import { AlertTriangle, CheckCircle2, ChevronRight, Image, Sparkles } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Image, Sparkles } from "lucide-react";
 
-import { Field, NumberSetting, SettingsGroup, Toggle } from "../../modules/settings/SlpSettingsControls";
+import { AdvancedGroup, Field, NumberSetting, SettingsGroup, Toggle } from "../../modules/settings/SlpSettingsControls";
+import { ChoiceSetting } from "../../modules/settings/SlpSettingsInputs";
 import { toast } from "sonner";
 import { BackstagePageHeader, BackstageWizard } from "../../modules/settings/SlpSettingsKit";
 
@@ -148,22 +149,19 @@ export function SlpImagesPanel(page: SlpBackstagePageProps) {
           ]}
         />
       )}
-      <Field
+      <ChoiceSetting
         settingKey="imageContextMode"
         label={t("ui.slurp.settings.images.contextMode")}
         detail={t("ui.slurp.settings.images.contextModeDetail")}
-      >
-        <select
-          value={settings.imageContextMode}
-          disabled={updateSettings.isPending}
-          onChange={(event) => void update("imageContextMode", event.target.value as SlurpSettings["imageContextMode"])}
-          className="min-h-11 w-full rounded-lg border border-[var(--slurp-outline)] bg-[var(--slurp-canvas)] px-3 text-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] disabled:opacity-50 sm:text-sm"
-        >
-          <option value="auto">{t("ui.slurp.settings.images.contextAuto")}</option>
-          <option value="imagePrompt">{t("ui.slurp.settings.images.contextPrompt")}</option>
-          <option value="vision">{t("ui.slurp.settings.images.contextVision")}</option>
-        </select>
-      </Field>
+        options={[
+          { value: "auto", label: t("ui.slurp.settings.images.contextAuto") },
+          { value: "imagePrompt", label: t("ui.slurp.settings.images.contextPrompt") },
+          { value: "vision", label: t("ui.slurp.settings.images.contextVision") },
+        ]}
+        value={settings.imageContextMode}
+        disabled={updateSettings.isPending}
+        onChange={(value: SlurpSettings["imageContextMode"]) => void update("imageContextMode", value)}
+      />
       {settings.imageContextMode !== "imagePrompt" && (
         <Field
           settingKey="imageContextConnectionId"
@@ -351,52 +349,39 @@ export function SlpImagesPanel(page: SlpBackstagePageProps) {
           </Field>
         </div>
       </SettingsGroup>
-      <details className="group rounded-xl bg-[var(--slurp-surface-raised)] ring-1 ring-inset ring-[var(--slurp-outline)]">
-        <summary className="flex min-h-14 cursor-pointer list-none items-center gap-3 px-4 text-sm font-bold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--slurp-focus)] [&::-webkit-details-marker]:hidden">
-          <Image size={17} className="text-[var(--slurp-violet)]" aria-hidden="true" />
-          <span className="flex-1">{t("ui.slurp.settings.images.detailsTitle")}</span>
-          <ChevronRight
-            size={17}
-            className="transition-transform group-open:rotate-90 rtl:rotate-180"
-            aria-hidden="true"
+      <AdvancedGroup
+        icon={<Image size={17} className="text-[var(--slurp-violet)]" aria-hidden="true" />}
+        title={t("ui.slurp.settings.images.detailsTitle")}
+      >
+        <ChoiceSetting
+          settingKey="appearanceProfileMode"
+          label={t("ui.slurp.appearance.mode")}
+          detail={t("ui.slurp.appearance.modeDetail")}
+          options={[
+            { value: "ask", label: t("ui.slurp.appearance.mode.ask") },
+            { value: "high_confidence", label: t("ui.slurp.appearance.mode.highConfidence") },
+            { value: "always", label: t("ui.slurp.appearance.mode.always") },
+          ]}
+          value={settings.appearanceProfileMode}
+          onChange={(value: SlurpSettings["appearanceProfileMode"]) => void update("appearanceProfileMode", value)}
+        />
+        <div className="grid gap-3 sm:grid-cols-2">
+          <Toggle
+            settingKey="imageGenerationUseAvatarReferences"
+            label={t("ui.slurp.settings.images.useAvatarReferences")}
+            detail={t("ui.slurp.settings.images.useAvatarReferencesDetail")}
+            value={settings.imageGenerationUseAvatarReferences}
+            onChange={(value) => update("imageGenerationUseAvatarReferences", value)}
           />
-        </summary>
-        <div className="space-y-5 border-t border-[var(--slurp-outline)] p-4 sm:p-5">
-          <Field
-            settingKey="appearanceProfileMode"
-            label={t("ui.slurp.appearance.mode")}
-            detail={t("ui.slurp.appearance.modeDetail")}
-          >
-            <select
-              value={settings.appearanceProfileMode}
-              onChange={(event) =>
-                void update("appearanceProfileMode", event.target.value as SlurpSettings["appearanceProfileMode"])
-              }
-              className="min-h-11 w-full rounded-lg bg-[var(--slurp-canvas)] px-3 text-sm ring-1 ring-inset ring-[var(--slurp-outline)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)]"
-            >
-              <option value="ask">{t("ui.slurp.appearance.mode.ask")}</option>
-              <option value="high_confidence">{t("ui.slurp.appearance.mode.highConfidence")}</option>
-              <option value="always">{t("ui.slurp.appearance.mode.always")}</option>
-            </select>
-          </Field>
-          <div className="grid gap-3 sm:grid-cols-2">
-            <Toggle
-              settingKey="imageGenerationUseAvatarReferences"
-              label={t("ui.slurp.settings.images.useAvatarReferences")}
-              detail={t("ui.slurp.settings.images.useAvatarReferencesDetail")}
-              value={settings.imageGenerationUseAvatarReferences}
-              onChange={(value) => update("imageGenerationUseAvatarReferences", value)}
-            />
-            <Toggle
-              settingKey="imageGenerationIncludeDescriptions"
-              label={t("ui.slurp.settings.images.includeDescriptions")}
-              detail={t("ui.slurp.settings.images.includeDescriptionsDetail")}
-              value={settings.imageGenerationIncludeDescriptions}
-              onChange={(value) => update("imageGenerationIncludeDescriptions", value)}
-            />
-          </div>
+          <Toggle
+            settingKey="imageGenerationIncludeDescriptions"
+            label={t("ui.slurp.settings.images.includeDescriptions")}
+            detail={t("ui.slurp.settings.images.includeDescriptionsDetail")}
+            value={settings.imageGenerationIncludeDescriptions}
+            onChange={(value) => update("imageGenerationIncludeDescriptions", value)}
+          />
         </div>
-      </details>
+      </AdvancedGroup>
     </div>
   );
 }

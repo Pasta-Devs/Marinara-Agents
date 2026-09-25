@@ -1,7 +1,8 @@
 import { MessageCircle } from "lucide-react";
-import { BackstagePageHeader, BackstageWizard, FineTune } from "../../modules/settings/SlpSettingsKit";
+import { BackstagePageHeader, BackstageWizard } from "../../modules/settings/SlpSettingsKit";
 
-import { Field, NumberSetting, SettingsGroup, Toggle } from "../../modules/settings/SlpSettingsControls";
+import { AdvancedGroup, Field, NumberSetting, SettingsGroup, Toggle } from "../../modules/settings/SlpSettingsControls";
+import { ChoiceSetting } from "../../modules/settings/SlpSettingsInputs";
 
 import type { SlurpSettings } from "../settings/slp-settings-contract";
 
@@ -156,8 +157,8 @@ export function SlpMessagingPanel(page: SlpBackstagePageProps) {
           value={settings.messagesUnscheduledAlwaysReachable}
           onChange={(value) => update("messagesUnscheduledAlwaysReachable", value)}
         />
-        <FineTune
-          summary={t("ui.slurp.settings.backstage.landing.delayFineTune", { defaultValue: "Exact reply delays" })}
+        <AdvancedGroup
+          title={t("ui.slurp.settings.backstage.landing.delayFineTune", { defaultValue: "Exact reply delays" })}
           count={10}
         >
           <div className="grid gap-4 sm:grid-cols-2">
@@ -282,31 +283,26 @@ export function SlpMessagingPanel(page: SlpBackstagePageProps) {
               />
             </Field>
           </div>
-        </FineTune>
+        </AdvancedGroup>
       </SettingsGroup>
       <SettingsGroup title={t("ui.slurp.settings.messaging.defaultsTitle")}>
         <p className="text-xs leading-5 text-[var(--muted-foreground)]">
           {t("ui.slurp.settings.messaging.defaultsDetail")}
         </p>
-        <Field
+        <ChoiceSetting
           settingKey="messagesDefaultDmPolicy"
           label={t("ui.slurp.settings.messaging.dmPolicy")}
           detail={t("ui.slurp.settings.messaging.dmPolicyDetail")}
-        >
-          <select
-            value={settings.messagesDefaultDmPolicy}
-            disabled={updateSettings.isPending}
-            onChange={(event) =>
-              void update("messagesDefaultDmPolicy", event.target.value as SlurpSettings["messagesDefaultDmPolicy"])
-            }
-            className="min-h-11 w-full rounded-lg border border-[var(--slurp-outline)] bg-[var(--slurp-canvas)] px-3 text-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] disabled:opacity-50 sm:text-sm"
-          >
-            <option value="open">{t("ui.slurp.settings.messaging.dmPolicyOpen")}</option>
-            <option value="subscribers">{t("ui.slurp.settings.messaging.dmPolicySubscribers")}</option>
-            <option value="paid">{t("ui.slurp.settings.messaging.dmPolicyPaid")}</option>
-            <option value="closed">{t("ui.slurp.settings.messaging.dmPolicyClosed")}</option>
-          </select>
-        </Field>
+          options={[
+            { value: "open", label: t("ui.slurp.settings.messaging.dmPolicyOpen") },
+            { value: "subscribers", label: t("ui.slurp.settings.messaging.dmPolicySubscribers") },
+            { value: "paid", label: t("ui.slurp.settings.messaging.dmPolicyPaid") },
+            { value: "closed", label: t("ui.slurp.settings.messaging.dmPolicyClosed") },
+          ]}
+          value={settings.messagesDefaultDmPolicy}
+          disabled={updateSettings.isPending}
+          onChange={(value: SlurpSettings["messagesDefaultDmPolicy"]) => void update("messagesDefaultDmPolicy", value)}
+        />
         <div className="grid gap-4 sm:grid-cols-2">
           <Field
             settingKey="messagesDefaultRequestFee"

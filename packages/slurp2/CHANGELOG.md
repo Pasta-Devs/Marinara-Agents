@@ -1,5 +1,11 @@
 # Slurp Remastered release notes
 
+## 0.2.66 — 2026-09-25
+
+- Publishing, Images, Ads and Messaging show fixed choices as button rows instead of dropdowns: story rate, post ideas, free teasers, generation mode, image context, appearance updates, ad frequency, steering, content ceiling, era, tone and the default DM policy.
+- Every folded block in settings looks and works the same, and shows how many settings it holds.
+- The "Set Slurp's pace" wizard is gone from Publishing; the preset cards on the same page do the same job.
+
 ## 0.2.65 — 2026-09-25
 
 - Life details sit right after "Waiting for you" in a Creator's Memory tab. People, places, work, things, habits and running jokes are chips: type and press Enter to add, tap the cross to remove.

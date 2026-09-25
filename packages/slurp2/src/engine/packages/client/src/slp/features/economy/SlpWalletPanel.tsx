@@ -1,6 +1,6 @@
-import { BackstagePageHeader, FineTune } from "../../modules/settings/SlpSettingsKit";
+import { BackstagePageHeader } from "../../modules/settings/SlpSettingsKit";
 
-import { Field, NumberSetting, Toggle } from "../../modules/settings/SlpSettingsControls";
+import { AdvancedGroup, Field, NumberSetting, Toggle } from "../../modules/settings/SlpSettingsControls";
 
 import type { SlpBackstagePageProps } from "../backstage/slp-backstage-contract";
 
@@ -100,8 +100,8 @@ export function SlpWalletPanel(page: SlpBackstagePageProps) {
           />
         </Field>
       )}
-      <FineTune
-        summary={t("ui.slurp.settings.backstage.landing.earningFineTune", {
+      <AdvancedGroup
+        title={t("ui.slurp.settings.backstage.landing.earningFineTune", {
           defaultValue: "Earning, stipend, and revenue share",
         })}
         count={7}
@@ -209,7 +209,7 @@ export function SlpWalletPanel(page: SlpBackstagePageProps) {
             onSave={(value) => update("walletCreatorRevenueSharePercent", value)}
           />
         </Field>
-      </FineTune>
+      </AdvancedGroup>
     </div>
   );
 }

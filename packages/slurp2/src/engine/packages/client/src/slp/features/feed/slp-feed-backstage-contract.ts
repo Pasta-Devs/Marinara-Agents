@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { SlpCreatorManagedStageProfile } from "../../../../../shared/src/slp/slp-social.types.js";
-import { SLURP_ACTIVITY_PRESETS, slurpActivityPresetForSettings } from "../../modules/creator/slp-activity-presets";
+import { slurpActivityPresetForSettings } from "../../modules/creator/slp-activity-presets";
 import type { SlpBackstageSection } from "../../base/navigation/slp-backstage-target";
 import type { SlurpSettings } from "../settings/slp-settings-contract";
 import {
@@ -27,14 +27,7 @@ export function useSlpFeedBackstageState({
   const updateAuto = useUpdateCreatorAutoPosting();
   const updateScheduleSlot = useUpdateCreatorScheduleSlot();
   const [customPaceOpen, setCustomPaceOpen] = useState(false);
-  const [paceWizardOpen, setPaceWizardOpen] = useState(false);
   const [schedulesRefreshing, setSchedulesRefreshing] = useState(false);
-  const [paceDraft, setPaceDraft] = useState<{
-    preset: (typeof SLURP_ACTIVITY_PRESETS)[number] | null;
-    postsPerDay: number;
-    nightQuiet: boolean;
-    storyRate: SlurpSettings["storyRate"];
-  } | null>(null);
 
   const scheduleSlots =
     reserveStatusQuery.data?.creators.find((creator) => creator.accountId === scheduleCreatorId)?.slots ?? [];
@@ -51,12 +44,8 @@ export function useSlpFeedBackstageState({
     updateScheduleSlot,
     customPaceOpen,
     setCustomPaceOpen,
-    paceWizardOpen,
-    setPaceWizardOpen,
     schedulesRefreshing,
     setSchedulesRefreshing,
-    paceDraft,
-    setPaceDraft,
     scheduleSlots,
     autoPostingCreators,
     automaticPublishingActive,

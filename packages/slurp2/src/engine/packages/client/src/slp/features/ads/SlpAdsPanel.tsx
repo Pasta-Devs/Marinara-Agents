@@ -2,6 +2,7 @@ import { Image, Pencil, Plus, RotateCcw, Trash2 } from "lucide-react";
 import { BackstagePageHeader } from "../../modules/settings/SlpSettingsKit";
 
 import { Field, SettingsGroup, Toggle } from "../../modules/settings/SlpSettingsControls";
+import { ChoiceSetting } from "../../modules/settings/SlpSettingsInputs";
 
 import { api } from "../../../lib/api-client";
 import { toast } from "sonner";
@@ -73,97 +74,76 @@ export function SlpAdsPanel(page: SlpBackstagePageProps) {
           value={settings.inlineAdsEnabled}
           onChange={(value) => update("inlineAdsEnabled", value)}
         />
-        <Field
+        <ChoiceSetting
           settingKey="inlineAdsFrequency"
           label={t("ui.slurp.settings.ads.frequency")}
           detail={t("ui.slurp.settings.ads.frequencyDetail")}
-        >
-          <select
-            value={settings.inlineAdsFrequency}
-            disabled={updateSettings.isPending}
-            onChange={(event) =>
-              void update("inlineAdsFrequency", event.target.value as SlurpSettings["inlineAdsFrequency"])
-            }
-            className="min-h-11 w-full rounded-lg border border-[var(--slurp-outline)] bg-[var(--slurp-canvas)] px-3 text-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] disabled:opacity-50 sm:text-sm"
-          >
-            <option value="light">{t("ui.slurp.settings.ads.frequencyLight")}</option>
-            <option value="standard">{t("ui.slurp.settings.ads.frequencyStandard")}</option>
-            <option value="frequent">{t("ui.slurp.settings.ads.frequencyFrequent")}</option>
-          </select>
-        </Field>
-        <Field
+          options={[
+            { value: "light", label: t("ui.slurp.settings.ads.frequencyLight") },
+            { value: "standard", label: t("ui.slurp.settings.ads.frequencyStandard") },
+            { value: "frequent", label: t("ui.slurp.settings.ads.frequencyFrequent") },
+          ]}
+          value={settings.inlineAdsFrequency}
+          disabled={updateSettings.isPending}
+          onChange={(value: SlurpSettings["inlineAdsFrequency"]) => void update("inlineAdsFrequency", value)}
+        />
+        <ChoiceSetting
           settingKey="inlineAdsSteering"
           label={t("ui.slurp.settings.ads.steering")}
           detail={t("ui.slurp.settings.ads.steeringDetail")}
-        >
-          <select
-            value={settings.inlineAdsSteering}
-            disabled={updateSettings.isPending}
-            onChange={(event) =>
-              void update("inlineAdsSteering", event.target.value as SlurpSettings["inlineAdsSteering"])
-            }
-            className="min-h-11 w-full rounded-lg border border-[var(--slurp-outline)] bg-[var(--slurp-canvas)] px-3 text-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] disabled:opacity-50 sm:text-sm"
-          >
-            <option value="personalized">{t("ui.slurp.settings.ads.steeringPersonalized")}</option>
-            <option value="balanced">{t("ui.slurp.settings.ads.steeringBalanced")}</option>
-            <option value="random">{t("ui.slurp.settings.ads.steeringRandom")}</option>
-          </select>
-        </Field>
-        <Field
+          options={[
+            { value: "personalized", label: t("ui.slurp.settings.ads.steeringPersonalized") },
+            { value: "balanced", label: t("ui.slurp.settings.ads.steeringBalanced") },
+            { value: "random", label: t("ui.slurp.settings.ads.steeringRandom") },
+          ]}
+          value={settings.inlineAdsSteering}
+          disabled={updateSettings.isPending}
+          onChange={(value: SlurpSettings["inlineAdsSteering"]) => void update("inlineAdsSteering", value)}
+        />
+        <ChoiceSetting
           settingKey="inlineAdsContentCeiling"
           label={t("ui.slurp.settings.ads.ceiling")}
           detail={t("ui.slurp.settings.ads.ceilingDetail")}
-        >
-          <select
-            value={settings.inlineAdsContentCeiling}
-            disabled={updateSettings.isPending}
-            onChange={(event) =>
-              void update("inlineAdsContentCeiling", event.target.value as SlurpSettings["inlineAdsContentCeiling"])
-            }
-            className="min-h-11 w-full rounded-lg border border-[var(--slurp-outline)] bg-[var(--slurp-canvas)] px-3 text-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] disabled:opacity-50 sm:text-sm"
-          >
-            <option value="tame">{t("ui.slurp.settings.ads.ceilingTame")}</option>
-            <option value="suggestive">{t("ui.slurp.settings.ads.ceilingSuggestive")}</option>
-            <option value="explicit">{t("ui.slurp.settings.ads.ceilingExplicit")}</option>
-          </select>
-        </Field>
+          options={[
+            { value: "tame", label: t("ui.slurp.settings.ads.ceilingTame") },
+            { value: "suggestive", label: t("ui.slurp.settings.ads.ceilingSuggestive") },
+            { value: "explicit", label: t("ui.slurp.settings.ads.ceilingExplicit") },
+          ]}
+          value={settings.inlineAdsContentCeiling}
+          disabled={updateSettings.isPending}
+          onChange={(value: SlurpSettings["inlineAdsContentCeiling"]) => void update("inlineAdsContentCeiling", value)}
+        />
       </SettingsGroup>
       <SettingsGroup title={t("ui.slurp.settings.ads.voiceGroup", { defaultValue: "How ads read" })}>
-        <Field
+        <ChoiceSetting
           settingKey="inlineAdsTone"
           label={t("ui.slurp.settings.ads.tone")}
           detail={t("ui.slurp.settings.ads.toneDetail")}
-        >
-          <select
-            value={settings.inlineAdsTone}
-            disabled={updateSettings.isPending}
-            onChange={(event) => void update("inlineAdsTone", event.target.value as SlurpSettings["inlineAdsTone"])}
-            className="min-h-11 w-full rounded-lg border border-[var(--slurp-outline)] bg-[var(--slurp-canvas)] px-3 text-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] disabled:opacity-50 sm:text-sm"
-          >
-            <option value="corporate">{t("ui.slurp.settings.ads.toneCorporate")}</option>
-            <option value="scammy">{t("ui.slurp.settings.ads.toneScammy")}</option>
-            <option value="local">{t("ui.slurp.settings.ads.toneLocal")}</option>
-            <option value="luxury">{t("ui.slurp.settings.ads.toneLuxury")}</option>
-            <option value="unhinged">{t("ui.slurp.settings.ads.toneUnhinged")}</option>
-          </select>
-        </Field>
-        <Field
+          options={[
+            { value: "corporate", label: t("ui.slurp.settings.ads.toneCorporate") },
+            { value: "scammy", label: t("ui.slurp.settings.ads.toneScammy") },
+            { value: "local", label: t("ui.slurp.settings.ads.toneLocal") },
+            { value: "luxury", label: t("ui.slurp.settings.ads.toneLuxury") },
+            { value: "unhinged", label: t("ui.slurp.settings.ads.toneUnhinged") },
+          ]}
+          value={settings.inlineAdsTone}
+          disabled={updateSettings.isPending}
+          onChange={(value: SlurpSettings["inlineAdsTone"]) => void update("inlineAdsTone", value)}
+        />
+        <ChoiceSetting
           settingKey="inlineAdsEra"
           label={t("ui.slurp.settings.ads.era")}
           detail={t("ui.slurp.settings.ads.eraDetail")}
-        >
-          <select
-            value={settings.inlineAdsEra}
-            disabled={updateSettings.isPending}
-            onChange={(event) => void update("inlineAdsEra", event.target.value as SlurpSettings["inlineAdsEra"])}
-            className="min-h-11 w-full rounded-lg border border-[var(--slurp-outline)] bg-[var(--slurp-canvas)] px-3 text-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] disabled:opacity-50 sm:text-sm"
-          >
-            <option value="present">{t("ui.slurp.settings.ads.eraPresent")}</option>
-            <option value="nineties">{t("ui.slurp.settings.ads.eraNineties")}</option>
-            <option value="cyberpunk">{t("ui.slurp.settings.ads.eraCyberpunk")}</option>
-            <option value="retrofuture">{t("ui.slurp.settings.ads.eraRetrofuture")}</option>
-          </select>
-        </Field>
+          options={[
+            { value: "present", label: t("ui.slurp.settings.ads.eraPresent") },
+            { value: "nineties", label: t("ui.slurp.settings.ads.eraNineties") },
+            { value: "cyberpunk", label: t("ui.slurp.settings.ads.eraCyberpunk") },
+            { value: "retrofuture", label: t("ui.slurp.settings.ads.eraRetrofuture") },
+          ]}
+          value={settings.inlineAdsEra}
+          disabled={updateSettings.isPending}
+          onChange={(value: SlurpSettings["inlineAdsEra"]) => void update("inlineAdsEra", value)}
+        />
         <Field
           settingKey="inlineAdsWorldContext"
           label={t("ui.slurp.settings.ads.world")}

@@ -61,4 +61,33 @@ assert.match(
 );
 assert.match(continuity, /\{lifeDetails\}\s*<SettingsGroup title=\{t\("ui\.slurp\.continuity\.factsGroup"/u);
 
+// Fixed-choice settings on the other pages are button rows, not dropdowns.
+const panels = {
+  publishing: slurp2Source(`${root}features/feed/SlpPublishingPanel.tsx`),
+  images: slurp2Source(`${root}features/media/SlpImagesPanel.tsx`),
+  ads: slurp2Source(`${root}features/ads/SlpAdsPanel.tsx`),
+  messaging: slurp2Source(`${root}features/messages/SlpMessagingPanel.tsx`),
+};
+for (const [panel, keys] of [
+  ["publishing", ["storyRate", "postPlanner", "teaserRate", "autoPostGenerationMode"]],
+  ["images", ["imageContextMode", "appearanceProfileMode"]],
+  ["ads", ["inlineAdsFrequency", "inlineAdsSteering", "inlineAdsContentCeiling", "inlineAdsEra"]],
+  ["messaging", ["messagesDefaultDmPolicy"]],
+] as const) {
+  for (const key of keys) {
+    assert.match(
+      panels[panel],
+      new RegExp(`<ChoiceSetting\\s+settingKey="${key}"`, "u"),
+      `${panel}: ${key} is a ChoiceSetting`,
+    );
+  }
+}
+
+// One fold control; the Publishing pace wizard repeated the preset cards and is gone.
+const settingsKit = slurp2Source(`${root}modules/settings/SlpSettingsKit.tsx`);
+assert.doesNotMatch(settingsKit, /export function FineTune/u);
+for (const source of Object.values(panels)) assert.doesNotMatch(source, /<details|<FineTune/u);
+assert.doesNotMatch(panels.publishing, /BackstageWizard|paceWizardOpen/u);
+assert.doesNotMatch(slurp2Source(`${root}features/feed/slp-feed-backstage-contract.ts`), /paceWizardOpen|paceDraft/u);
+
 console.log("slurp2 settings inputs ok");
