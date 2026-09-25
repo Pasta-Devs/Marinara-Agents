@@ -1,5 +1,9 @@
 # Slurp Remastered release notes
 
+## 0.2.51 — 2026-09-25
+
+- Each Creator's Continuity tab now shows what the Beats planner read from their card: people, places, work, things, habits, running jokes, their typical day, and their heat range. You can correct it, and your version is used until the card changes; Read card again starts over.
+
 ## 0.2.50 — 2026-09-25
 
 - With Beats on, about one post in three may refer back to something real: an earlier post, an earlier set, a moment saved from a chat, or a request the Creator delivered. Slurp passes the fact itself, never an old caption, and Deep details show it.

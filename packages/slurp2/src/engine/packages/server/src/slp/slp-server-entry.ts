@@ -1,4 +1,5 @@
 import { slpDeepDetailsRoutes } from "./features/feed/slp-deep-details-routes.js";
+import { slpCanonAnchorRoutes } from "./features/feed/slp-canon-anchor-routes.js";
 import type { FastifyInstance, FastifyPluginAsync, InjectOptions } from "fastify";
 import { createSlpRouteHost } from "./features/viewer/slp-route-host.js";
 import { createSlpViewerContext } from "./features/viewer/slp-viewer-context.js";
@@ -72,6 +73,7 @@ export async function mountSlpRoutes(app: FastifyInstance) {
   await slpAdsRoutes(app, deps);
   await slpFeedPostRoutes(app, deps);
   await slpDeepDetailsRoutes(app, deps);
+  await slpCanonAnchorRoutes(app, deps);
   await slpOnboardingRoutes(app, deps);
   await slpFeedPublishingRoutes(app, deps);
   await slpMessagesRoutes(app, noodle, messages);

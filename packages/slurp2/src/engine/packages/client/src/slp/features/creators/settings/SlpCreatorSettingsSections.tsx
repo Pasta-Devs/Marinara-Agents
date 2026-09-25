@@ -26,6 +26,7 @@ import { SlurpCreatorStrategyGroup } from "../SlpCreatorStrategyGroup";
 import { CreatorCollabsEditor } from "../SlpCreatorMetrics";
 import { useCreatorAccounts } from "../slp-creators-hooks";
 import { SlpWardrobeManager } from "../SlpWardrobeManager";
+import { SlpCanonAnchorsEditor } from "../SlpCanonAnchorsEditor";
 import { SlpCreatorPublishingSection } from "./SlpCreatorPublishingSection";
 import { SettingAnchor } from "../../../modules/settings/SlpSettingsKit";
 import {
@@ -712,7 +713,12 @@ export function SlpCreatorMessagesSection({ creator, onClose }: SlpCreatorSettin
 
 /** What this Creator's world remembers about them. */
 export function SlpCreatorContinuitySection({ creator }: SlpCreatorSettingsSectionProps) {
-  return <SlurpContinuityPanel creatorAccountId={creator.id} />;
+  return (
+    <div className="space-y-6">
+      <SlurpContinuityPanel creatorAccountId={creator.id} />
+      <SlpCanonAnchorsEditor creatorId={creator.id} />
+    </div>
+  );
 }
 
 /** The AI checkup, scoped to this one Creator rather than the whole roster. */

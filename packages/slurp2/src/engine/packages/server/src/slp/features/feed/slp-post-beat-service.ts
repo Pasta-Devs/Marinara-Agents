@@ -59,7 +59,7 @@ const anchorKey = (canonText: string) => createHash("sha256").update(`${ANCHORS_
 const FAILED_WAIT_MS = 30 * 60_000;
 
 /** Keyed by a hash of the card text the post prompt sees, so a card edit re-extracts. */
-type AnchorCache = Record<string, { key: string; anchors: SlurpCanonAnchors | null }>;
+type AnchorCache = Record<string, { key: string; anchors: SlurpCanonAnchors | null; edited?: boolean }>;
 
 // ponytail: one JSON blob in app settings, rewritten per extraction, and in-memory in-flight and
 // failure maps that reset on restart. A table per Creator if installs grow past a few hundred.
@@ -77,11 +77,13 @@ async function readAnchorCache(db: DB): Promise<AnchorCache> {
   }
 }
 
-function writeAnchors(db: DB, accountId: string, entry: AnchorCache[string]): Promise<unknown> {
+/** `null` removes the entry, so the next Beats post reads the card again. */
+function writeAnchors(db: DB, accountId: string, entry: AnchorCache[string] | null): Promise<unknown> {
   writeQueue = writeQueue
     .then(async () => {
       const cache = await readAnchorCache(db);
-      cache[accountId] = entry;
+      if (entry) cache[accountId] = entry;
+      else delete cache[accountId];
       await createAppSettingsStorage(db).set(ANCHORS_KEY, JSON.stringify(cache));
     })
     .catch((error: unknown) => logger.warn(error, "[slurp] Could not store canon anchors"));
@@ -301,4 +303,39 @@ async function readReferenceCandidates(db: DB, accountId: string, at: Date) {
     logger.warn(error, "[slurp] Could not read callback references");
     return [];
   }
+}
+
+/**
+ * The anchors a Creator's editor shows: what is stored, whether the player edited it, and whether
+ * it still belongs to the current card. A card edit makes an entry stale; the next Beats post then
+ * reads the card again and replaces it, edits included.
+ */
+export async function readSlurpCanonAnchorState(
+  db: DB,
+  accountId: string,
+  canonText: string,
+): Promise<{ anchors: SlurpCanonAnchors | null; edited: boolean; current: boolean; read: boolean }> {
+  const cached = (await readAnchorCache(db))[accountId];
+  return {
+    anchors: cached?.anchors ?? null,
+    edited: cached?.edited === true,
+    current: Boolean(cached) && cached!.key === anchorKey(canonText),
+    read: Boolean(cached),
+  };
+}
+
+/** Store the player's own anchors for the current card. They win until the card changes. */
+export async function saveSlurpCanonAnchors(
+  db: DB,
+  accountId: string,
+  canonText: string,
+  anchors: SlurpCanonAnchors | null,
+): Promise<void> {
+  await writeAnchors(db, accountId, { key: anchorKey(canonText), anchors, edited: true });
+}
+
+/** Forget the anchors, so the next Beats post reads the card again. */
+export async function clearSlurpCanonAnchors(db: DB, accountId: string): Promise<void> {
+  failedUntil.delete(accountId);
+  await writeAnchors(db, accountId, null);
 }
