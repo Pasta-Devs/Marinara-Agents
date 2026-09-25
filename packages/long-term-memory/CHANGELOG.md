@@ -1,5 +1,9 @@
 # Long-Term Memory changelog
 
+## 1.3.20 — 2026-09-25
+
+- Show spinning import progress only on source rows included in the running task; keep other import icons visible and disabled until it finishes.
+
 ## 1.3.19 — 2026-09-24
 
 - Keep distinct trusted characters and relationship pairs on separate memory targets, preserve resolved target identities through normalization, and bound provider-generated event IDs after server naming.
