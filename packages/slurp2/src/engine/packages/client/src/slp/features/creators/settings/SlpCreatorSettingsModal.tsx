@@ -10,6 +10,7 @@ import { profileAccent } from "../SlpStageProfileForm";
 import { useCreatorAccounts } from "../slp-creators-hooks";
 import { focusRing, quietButton } from "../slp-creator-classes";
 import { SLP_CREATOR_SETTINGS_SECTIONS } from "./slp-creator-settings-sections";
+import { SlpCreatorSettingsTab } from "./SlpCreatorSettingsTab";
 import type { SlpCreatorSettingsCreator } from "./slp-creator-settings-contract";
 import { useSlpCreatorSettingsStore } from "./slp-creator-settings-store";
 
@@ -59,9 +60,7 @@ export function SlpCreatorSettingsModal({
     [],
   );
 
-  const sections = SLP_CREATOR_SETTINGS_SECTIONS.filter(
-    (section) => !section.available || !creator || section.available(creator),
-  );
+  const sections = SLP_CREATOR_SETTINGS_SECTIONS;
   const activeSection = sections.find((section) => section.id === tab) ?? sections[0];
 
   const moveTab = (event: KeyboardEvent<HTMLButtonElement>, index: number) => {
@@ -105,7 +104,7 @@ export function SlpCreatorSettingsModal({
   }, [tab]);
 
   useEffect(() => {
-    if (tab !== "identity") setProfileSaveState(null);
+    if (tab !== "profile") setProfileSaveState(null);
   }, [tab]);
 
   useEffect(() => {
@@ -254,23 +253,8 @@ export function SlpCreatorSettingsModal({
               {sections.map((section, index) => {
                 const Icon = section.icon;
                 const selected = section.id === activeSection?.id;
-                const previous = sections[index - 1];
                 return (
-                  <div key={section.id} className={previous?.group === section.group ? undefined : "pt-2 first:pt-0"}>
-                    {previous?.group !== section.group && (
-                      <p className="px-3 pb-1 text-[0.65rem] font-bold uppercase text-[var(--slurp-muted)]">
-                        {t(`ui.slurp.settings.creators.groups.${section.group}`, {
-                          defaultValue: {
-                            creator: "Creator",
-                            publishing: "Publishing",
-                            interaction: "Interaction",
-                            memory: "Memory",
-                            tools: "Tools",
-                            danger: "Danger zone",
-                          }[section.group],
-                        })}
-                      </p>
-                    )}
+                  <div key={section.id}>
                     <button
                       id={`slp-creator-settings-tab-${section.id}`}
                       type="button"
@@ -327,26 +311,11 @@ export function SlpCreatorSettingsModal({
                     <X size={18} aria-hidden="true" />
                   </button>
                 </div>
-                {sections.map((section, index) => {
-                  const previous = sections[index - 1];
+                {sections.map((section) => {
                   const selected = section.id === activeSection?.id;
                   const Icon = section.icon;
                   return (
-                    <div key={section.id} className={previous?.group === section.group ? undefined : "pt-4"}>
-                      {previous?.group !== section.group && (
-                        <p className="px-2 pb-1 text-xs font-bold uppercase text-[var(--slurp-muted)]">
-                          {t(`ui.slurp.settings.creators.groups.${section.group}`, {
-                            defaultValue: {
-                              creator: "Creator",
-                              publishing: "Publishing",
-                              interaction: "Interaction",
-                              memory: "Memory",
-                              tools: "Tools",
-                              danger: "Danger zone",
-                            }[section.group],
-                          })}
-                        </p>
-                      )}
+                    <div key={section.id}>
                       <button
                         type="button"
                         data-section
@@ -383,24 +352,24 @@ export function SlpCreatorSettingsModal({
             className="min-h-0 min-w-0 flex-1 overflow-y-auto overscroll-contain sm:border-s sm:border-[var(--slurp-outline)] sm:ps-4"
           >
             {sections.map((section) => {
-              if (section.id !== "identity" && section.id !== activeSection?.id) return null;
-              const SectionComponent = section.Component;
+              if (section.id !== "profile" && section.id !== activeSection?.id) return null;
               return (
                 <div key={`${creator.id}:${section.id}`} hidden={section.id !== activeSection?.id}>
-                  <SectionComponent
+                  <SlpCreatorSettingsTab
                     key={`${creator.id}:${section.id}`}
+                    section={section}
                     creator={creator}
                     active={section.id === activeSection?.id}
                     onClose={requestClose}
                     onDirtyChange={
-                      section.id === "identity"
+                      section.id === "profile"
                         ? (dirty) => {
                             dirtyRef.current = dirty;
                             setProfileDirty(dirty);
                           }
                         : undefined
                     }
-                    onSaveStateChange={section.id === "identity" ? reportProfileSaveState : undefined}
+                    onSaveStateChange={section.id === "profile" ? reportProfileSaveState : undefined}
                     onRedraft={
                       onRedraft
                         ? (entry) => {
@@ -414,7 +383,7 @@ export function SlpCreatorSettingsModal({
               );
             })}
             {/* Inside the panel, so the bar never takes width from the tab content. */}
-            {tab === "identity" && profileSaveState && (
+            {tab === "profile" && profileSaveState && (
               <div className="sticky bottom-0 z-10 mt-4 flex items-center justify-end gap-2 border-t border-[var(--slurp-outline)] bg-[var(--slurp-surface)] pb-[calc(0.75rem+env(safe-area-inset-bottom))] pt-3">
                 <button
                   type="button"

@@ -3356,12 +3356,6 @@
   "ui.slurp.settings.creators.tabs.contentRules": "Content rules",
   "ui.slurp.settings.creators.tabs.production": "Production",
   "ui.slurp.settings.creators.tabs.collaborations": "Collaborations",
-  "ui.slurp.settings.creators.groups.creator": "Creator",
-  "ui.slurp.settings.creators.groups.publishing": "Publishing",
-  "ui.slurp.settings.creators.groups.interaction": "Interaction",
-  "ui.slurp.settings.creators.groups.memory": "Memory",
-  "ui.slurp.settings.creators.groups.tools": "Tools",
-  "ui.slurp.settings.creators.groups.danger": "Danger zone",
   "ui.slurp.settings.creators.guidanceGroup": "Post direction",
   "ui.slurp.settings.creators.guidanceDetail": "Give this creator their own reasons to post. Empty fields use the Slurp-wide direction.",
   "ui.slurp.settings.creators.guidanceInherits": "Empty uses the Slurp-wide direction.",
@@ -3975,5 +3969,9 @@
   "ui.slurp.settings.override.slurpValue": "Slurp setting: {{value}}",
   "ui.slurp.settings.chips.remove": "Remove {{value}}",
   "ui.slurp.continuity.filters": "Filters",
-  "ui.slurp.continuity.filtersActive": "Filters ({{count}} on)"
+  "ui.slurp.continuity.filtersActive": "Filters ({{count}} on)",
+  "ui.slurp.settings.creators.tabs.posting": "Posting",
+  "ui.slurp.settings.creators.tabs.fans": "Fans & messages",
+  "ui.slurp.settings.creators.tabs.memory": "Memory",
+  "ui.slurp.settings.creators.tabs.tools": "Tools"
 }

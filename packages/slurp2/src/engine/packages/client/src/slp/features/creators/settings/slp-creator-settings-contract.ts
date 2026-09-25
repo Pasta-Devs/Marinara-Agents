@@ -32,7 +32,7 @@ export type SlpCreatorSettingsSectionProps = {
 };
 
 /** Which tab owns a setting, so Backstage search can open the modal on the right section. */
-export const SLP_CREATOR_SETTING_TAB: Record<string, import("./slp-creator-settings-store").SlpCreatorSettingsTab> = {
+export const SLP_CREATOR_SETTING_TAB: Record<string, import("./slp-creator-settings-store").SlpCreatorSettingsBlock> = {
   creatorCollabs: "collaborations",
   characterImageInstructions: "production",
 };

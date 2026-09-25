@@ -27,7 +27,7 @@ assert.match(modal, /accountsQuery\.refetch\(\)/u, "Creator load failures must o
 assert.match(modal, /sections\.map\(\(section\) =>/u, "all sections stay mounted across tab changes");
 assert.match(modal, /hidden=\{section\.id !== activeSection\?\.id\}/u, "inactive sections stay out of view");
 assert.match(modal, /dirtyRef\.current &&[\s\S]*showConfirmDialog/u, "modal exit confirms dirty profile edits");
-assert.match(modal, /onSaveStateChange=\{section\.id === "identity" \? reportProfileSaveState : undefined\}/u);
+assert.match(modal, /onSaveStateChange=\{section\.id === "profile" \? reportProfileSaveState : undefined\}/u);
 assert.match(modal, /dirtyRef\.current = state\.dirty/u, "Identity reports dirty and save state to the modal");
 assert.match(modal, /aria-haspopup="dialog"/u, "mobile section picker has an announced trigger");
 assert.match(modal, /role="dialog"[\s\S]*aria-modal="true"/u, "mobile section picker is a modal dialog");
@@ -54,13 +54,13 @@ assert.match(editor, /useGenerateCreatorArtwork\(\)/u);
 assert.match(editor, /onSaveStateChange\?\.\(/u, "profile editor reports save state to the modal");
 assert.match(editor, /onDirtyChange\?\.\(JSON\.stringify\(draft\) !== JSON\.stringify\(initialDraft\)\)/u);
 assert.match(editor, /onDirtyChange\?\.\(false\)/u, "save and discard clear the dirty state");
-assert.match(sections, /group: "creator" \| "publishing" \| "interaction" \| "memory" \| "tools" \| "danger"/u);
 assert.match(sections, /id: "overview"[\s\S]*Component: SlpCreatorOverviewSection/u);
+assert.doesNotMatch(sections, /group:/u, "seven tabs need no group headings");
 assert.match(modalSections, /export function SlpCreatorOverviewSection/u);
 assert.match(modalSections, /overviewNeedsReview/u);
 assert.match(modalSections, /useSlpCreatorSettingsStore\.getState\(\)\.setTab\(section\)/u);
 assert.match(sections, /defaultLabel: "Audience activity"/u);
-assert.match(sections, /id: "content-rules"[\s\S]*group: "publishing"/u);
+assert.match(sections, /id: "content-rules",[\s\S]*blocks: blocks\("content-rules"\)/u);
 assert.match(publishingSections, /mode === "content-rules"/u);
 assert.match(modalSections, /SettingAnchor settingKey="creatorCollabs"/u);
 assert.match(contract, /creatorCollabs: "collaborations"/u);
@@ -74,5 +74,38 @@ assert.match(bulkEdit, /changeSummary/u);
 assert.match(bulkEdit, /pendingChanges/u);
 assert.match(bulkEdit, /Object\.keys\(patch\)\.length === 0/u, "empty bulk patches stay disabled");
 assert.match(metrics, /compact\.format\(metrics\.posts\)/u, "directory rows use compact metrics");
+
+// Seven tabs; every older section id still opens the tab that holds it.
+const store = slurp2Source(`${root}settings/slp-creator-settings-store.ts`);
+const tabBlocks = slurp2Source(`${root}settings/SlpCreatorSettingsTab.tsx`);
+assert.equal((sections.match(/^  \{\n    id: "/gmu) ?? []).length, 14 + 7, "14 blocks, 7 tabs");
+for (const [block, tab] of [
+  ["identity", "profile"],
+  ["appearance", "profile"],
+  ["wardrobe", "profile"],
+  ["automation", "posting"],
+  ["production", "posting"],
+  ["storylines", "posting"],
+  ["collaborations", "posting"],
+  ["audience", "fans"],
+  ["messages", "fans"],
+  ["continuity", "memory"],
+  ["improve", "tools"],
+  ["danger", "tools"],
+]) {
+  assert.match(store, new RegExp(`\\n  "?${block}"?: "${tab}",`, "u"), `${block} opens ${tab}`);
+}
+assert.match(store, /tab: slpCreatorSettingsTabFor\(options\?\.tab \?\? "profile"\)/u);
+assert.match(
+  store,
+  /setTab: \(tab\) => set\(\{ tab: slpCreatorSettingsTabFor\(tab\), settingKey: slpCreatorBlockAnchor\(tab\) \}\)/u,
+);
+assert.match(
+  tabBlocks,
+  /onDirtyChange=\{block\.id === "identity" \? props\.onDirtyChange : undefined\}/u,
+  "only Identity guards unsaved edits",
+);
+assert.match(tabBlocks, /settingKey=\{`block:\$\{block\.id\}`\}/u, "older ids scroll to their block");
+assert.match(modal, /\{tab === "profile" && profileSaveState && \(/u);
 
 console.log("slurp2 Creator settings safety regression passed");

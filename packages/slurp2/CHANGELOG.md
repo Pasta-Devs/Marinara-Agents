@@ -1,5 +1,10 @@
 # Slurp Remastered release notes
 
+## 0.2.67 — 2026-09-25
+
+- Creator settings have 7 tabs instead of 14: Overview, Profile (identity, appearance, wardrobe), Posting (automation, production, storylines, collaborations), Content rules, Fans & messages, Memory and Tools. Each merged tab shows its parts under their own headings.
+- Links and search results that named an old tab open the new tab and scroll to the right part.
+
 ## 0.2.66 — 2026-09-25
 
 - Publishing, Images, Ads and Messaging show fixed choices as button rows instead of dropdowns: story rate, post ideas, free teasers, generation mode, image context, appearance updates, ad frequency, steering, content ceiling, era, tone and the default DM policy.

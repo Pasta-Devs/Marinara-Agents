@@ -360,6 +360,12 @@
     "slurp2": {
       "versions": [
         {
+          "version": "0.2.67",
+          "date": "2026-09-25",
+          "notes": "- Creator settings have 7 tabs instead of 14: Overview, Profile (identity, appearance, wardrobe), Posting (automation, production, storylines, collaborations), Content rules, Fans & messages, Memory and Tools. Each merged tab shows its parts under their own headings.\n- Links and search results that named an old tab open the new tab and scroll to the right part.",
+          "highlight": false
+        },
+        {
           "version": "0.2.66",
           "date": "2026-09-25",
           "notes": "- Publishing, Images, Ads and Messaging show fixed choices as button rows instead of dropdowns: story rate, post ideas, free teasers, generation mode, image context, appearance updates, ad frequency, steering, content ceiling, era, tone and the default DM policy.\n- Every folded block in settings looks and works the same, and shows how many settings it holds.\n- The \"Set Slurp's pace\" wizard is gone from Publishing; the preset cards on the same page do the same job.",
@@ -471,12 +477,6 @@
           "version": "0.2.48",
           "date": "2026-09-25",
           "notes": "- With Beats on, a Creator's schedule decides where they are: moments at the place or work they are at right now come first, and a moment about somewhere else is posted as a plan, a memory, or a wish.\n- A post due while the Creator sleeps or drives is written as if posted just before, and never mentions being awake or on the road. Gym, set, class, and similar blocks stay good post material.\n- On an arc's big day, such as moving day, the arc chapter decides what the Creator does, not the usual weekly schedule.",
-          "highlight": false
-        },
-        {
-          "version": "0.2.47",
-          "date": "2026-09-25",
-          "notes": "- Slurp can now take a moment saved from an Engine chat and keep it as a private note for that character's Creator pages. The button in chats comes with a later Engine update.",
           "highlight": false
         }
       ]
