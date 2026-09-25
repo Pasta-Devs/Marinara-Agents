@@ -107,9 +107,9 @@ const RULESET_REACTION_AT = Object.freeze(["source", "chosen"]);
 
 // A bestiary creature may carry a sheet in the ruleset's own terms, built the way
 // a party member is. Its health, defense, initiative, speed, abilities and saves
-// then come from the sheet and are not also given beside it, and it may have no
-// actions of its own. A new key in a strict catalog, so an older Engine refuses
-// the whole file.
+// then come from the sheet and are not also given beside it. It needs no actions
+// of its own, and may still carry printed ones up to the usual limit. A new key
+// in a strict catalog, so an older Engine refuses the whole file.
 export const RULESET_CREATURE_SHEET_MIN_CAPABILITY_API = Object.freeze({ major: 1, minor: 34 });
 const RULESET_CREATURE_SHEET_REPLACES = Object.freeze([
   "health",
