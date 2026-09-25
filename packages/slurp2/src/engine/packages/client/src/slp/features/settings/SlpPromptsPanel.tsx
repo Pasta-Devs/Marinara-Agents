@@ -56,7 +56,7 @@ export function SlpPromptsPanel(page: SlpBackstagePageProps) {
             defaultValue: "Tone, language, maturity, and context shared across Creator writing.",
           })}
           customized={
-            !generationGuidanceIsDefault || settings.enableLorebookContext || settings.postPlanner !== "classic"
+            !generationGuidanceIsDefault || settings.enableLorebookContext || settings.postPlanner !== "beats"
           }
         >
           <PromptCard

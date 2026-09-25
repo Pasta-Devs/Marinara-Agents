@@ -1,5 +1,9 @@
 # Slurp Remastered release notes
 
+## 0.2.55 — 2026-09-25
+
+- Beats is now the default post planner. Ordinary posts are built from each Creator's own card, day, and history instead of letting the model choose the subject. Classic stays available under Prompts.
+
 ## 0.2.54 — 2026-09-25
 
 - Hinted and Secret Creators without an avatar or banner get their artwork drawn again. The automatic backfill failed for them every minute with a "creatorDetails" error in the log.

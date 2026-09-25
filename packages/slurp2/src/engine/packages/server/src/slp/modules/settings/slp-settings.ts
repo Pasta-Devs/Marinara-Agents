@@ -510,7 +510,8 @@ export const DEFAULT_SLURP_SETTINGS: SlurpSettings = {
   enableEnhancedTimelineWriting: false,
   includeCharacterSchedules: false,
   enableLorebookContext: false,
-  postPlanner: "classic",
+  // Beats by default since 0.2.55: the fixes for same-y, canon-less, tame posts live there.
+  postPlanner: "beats",
   sharedPreseed: false,
   sharedWorldEvents: false,
   enableImagePrompts: false,

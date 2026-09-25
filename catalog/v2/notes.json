@@ -360,6 +360,12 @@
     "slurp2": {
       "versions": [
         {
+          "version": "0.2.55",
+          "date": "2026-09-25",
+          "notes": "- Beats is now the default post planner. Ordinary posts are built from each Creator's own card, day, and history instead of letting the model choose the subject. Classic stays available under Prompts.",
+          "highlight": false
+        },
+        {
           "version": "0.2.54",
           "date": "2026-09-25",
           "notes": "- Hinted and Secret Creators without an avatar or banner get their artwork drawn again. The automatic backfill failed for them every minute with a \"creatorDetails\" error in the log.",
@@ -471,12 +477,6 @@
           "version": "0.2.36",
           "date": "2026-09-24",
           "notes": "- Deep details opens as a flowchart of the whole generation: each step shows what happens, why, which connection and model ran it, and the exact text that went in and came out. A Canvas view shows the same diagram to drag and zoom in every direction.\n- Image runs now also record the prompt-rewrite model and its full chat, the fallback image connection, and which connection actually drew the picture.",
-          "highlight": false
-        },
-        {
-          "version": "0.2.35",
-          "date": "2026-09-24",
-          "notes": "- Deep details shows each post as numbered steps. Every image run records its settings, style profile, prompt rewrite, final prompt, and provider attempts in order.\n- The Connections panel includes the AI writing connection used for replies, messages, and audience activity.",
           "highlight": false
         }
       ]
