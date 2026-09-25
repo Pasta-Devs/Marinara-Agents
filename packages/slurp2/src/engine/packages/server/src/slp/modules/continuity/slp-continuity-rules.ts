@@ -137,3 +137,8 @@ export function slurpContinuityIdentityOf(account: {
   if (!sourceKind || !sourceEntityId) return null;
   return { sourceKind, sourceEntityId, creatorAccountId: account.id };
 }
+
+/** One saved chat moment per message, so saving the same message twice stores it once. */
+export function slurpChatMomentKey(chatId: string, messageId?: string | null): string {
+  return `chat:${chatId.trim()}:${messageId?.trim() ?? ""}`;
+}

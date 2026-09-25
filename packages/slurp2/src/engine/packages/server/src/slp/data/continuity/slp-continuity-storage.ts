@@ -628,3 +628,18 @@ export async function reviewSlurpContinuityProposal(
     (await createSlurpContinuityFact(db, { ...candidate, status: "active", contribution: "manual" }, at)) ?? "not_found"
   );
 }
+
+/** The fact a source already produced for this Creator, by its source hash, or null. */
+export async function findSlurpContinuityFactBySourceHash(
+  db: DB,
+  creatorAccountId: string,
+  sourceHash: string,
+): Promise<SlurpContinuityFact | null> {
+  if (!sourceHash) return null;
+  const rows = await db
+    .select()
+    .from(slurpContinuityFacts)
+    .where(eq(slurpContinuityFacts.creatorAccountId, creatorAccountId));
+  const row = rows.find((entry) => entry.sourceHash === sourceHash);
+  return row ? mapFact(row) : null;
+}

@@ -1,5 +1,9 @@
 # Slurp Remastered release notes
 
+## 0.2.47 — 2026-09-25
+
+- Slurp can now take a moment saved from an Engine chat and keep it as a private note for that character's Creator pages. The button in chats comes with a later Engine update.
+
 ## 0.2.46 — 2026-09-25
 
 - Life-event arcs such as moving house, a new job, or a breakup now happen at most once per Creator when Slurp starts arcs by itself.

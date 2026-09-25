@@ -87,9 +87,11 @@ Sources:
 - World: `shared/src/slp/slp-platform-events.ts`, `shared/src/slp/slp-story-engine.ts`,
   `modules/world/events/slp-story-runtime.ts`, `modules/world/events/slp-story-packs.ts`.
 - Other Creators: their published posts and collaborations.
-- **Engine chats (gap).** `features/creators/slp-chat-context.ts` only *sends* Slurp activity into
-  Engine chats. Nothing flows from a roleplay back into Slurp. Needs an opt-in, privacy-scoped
-  inbound path.
+- **Engine chats.** `features/creators/slp-chat-context.ts` *sends* Slurp activity into Engine
+  chats. The inbound side exists in Slurp since 0.2.47 as `POST /continuity/from-chat`
+  (`characterId`, `chatId`, optional `messageId`, `text`, optional `factType`/`subject`): it stores
+  the moment as an active, `creator_private` fact with source `chat` on every page the character
+  runs, once per message. Still missing: the Engine-side "Save to Slurp" action that calls it.
 - Noodle and other agents (gap, same shape).
 - User actions: directed posts, card edits, settings.
 
@@ -340,27 +342,32 @@ but there is no camera-tag mapper or per-model recipe selection.
 
 ## Known faults to fix independently
 
-- Promised posts get the `request` intent without the promised subject; needs a privacy-safe
-  approved summary.
-- Autopost frequency far below setting (2–3/day at 20) reported; not yet investigated.
-- Casual intent says "let it be dull"; camera rules name devices.
+All fixed or closed in 0.2.41: promised posts carry the Creator's typed label; "let it be dull" and
+device wording are gone; the reported slow autopost did not reproduce on production (22 posts on a
+day set to 25). The follow-up livelock was fixed in 0.2.39. A child-venue filter was decided
+against: the models already refuse, and Slurp does not add a content filter.
 
 ## Releases
 
-Each slice is a part of the final design, not a temporary patch, and ships on its own:
+Each slice is a part of the final design, not a temporary patch, and ships on its own. Status as
+of 2026-09-25 (branch `laser-guided-slurp`):
 
-1. Known faults above.
-2. Signals and fact status on the continuity ledger; editorial memory (per Creator and global).
-3. Post brief in the user message; replace raw recent posts with retrieved facts and subject keys;
-   remove "let it be dull"; separate capture feasibility from semantic framing and test a first
-   tag/prose image renderer on actual configured image models.
-4. Day plan and happenings at level 0 (code + decks), card canon first, with typed candidate and
-   writer-claim checks. Keep it inactive as a quality feature until selection is ready.
-5. Selector with source-backed references and semantic cross-Creator variety caps; activate the
-   level-0 day simulation together with these checks.
-6. Level 1 (world tick, niche patterns), then level 2 (happenings, extraction, critic).
-7. Inbound Engine-chat and agent memory.
-8. Arcs on the same rails: knockout flags, weights, opt-in.
+1. **Done (0.2.41).** Known faults above.
+2. **Partly done (0.2.41, 0.2.43).** Editorial memory per Creator and across Creators (subjects,
+   not captions); beat posts become continuity facts after publication. Open: the signal adapter.
+3. **Done (0.2.41, 0.2.42).** Post brief in the user message; raw captions replaced; shot framing
+   as composition tags. Open: matched image tests per image model; a tags-only or prose-only
+   renderer only if those tests need one.
+4. **Done (0.2.42–0.2.44), behind the Beats setting.** Canon anchors, beat types with decks, claim
+   checks, day plan from schedule or card routine. Open: heat range use, anchor editor UI.
+5. **Done (0.2.42).** Beat-first selection with per-Creator freshness and a cross-Creator theme cap.
+   Open: callback references beyond arcs.
+6. **Level 1 done (0.2.45)**, off by default: world tick, niche patterns, optional Slurp-wide
+   events. Level 2 not started; start it only if level 0 and 1 fall short.
+7. **Slurp side done (0.2.47).** `POST /continuity/from-chat`. Open: the Engine action, Noodle and
+   other agents.
+8. **Done (0.2.46).** Arc chapters are the beat of arc posts; once-only life events (moving, new
+   job, breakup) never restart automatically.
 
 ## Evaluation
 
