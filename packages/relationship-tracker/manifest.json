@@ -53,8 +53,8 @@
     },
     {
       "path": "tracking.mjs",
-      "sha256": "cef2ecc09fe4952ea7d722bc461d49fd22728c816b28ac63bb0d55d1f1989a52",
-      "bytes": 37084
+      "sha256": "aa9ade1bbf72fce3a912bfbbebfa3d99ebae8386d3642a66d12ae3d620fbfbc6",
+      "bytes": 38035
     },
     {
       "path": "activity.mjs",

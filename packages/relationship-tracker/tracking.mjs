@@ -40,7 +40,9 @@ const PERSONA_PREPARED_CONTEXT_KEYS = [
   "existingPersonaPerceptions",
   "personaStateRevision",
 ];
-const TRACKING_INSTRUCTIONS = `${PERSONA_TRACKING_INSTRUCTIONS} Return only compact per-edge relationship updates directly supported by the newly completed turn in the host-provided <assistant_response>. Output exactly {\"u\":[]} when nothing changed. Each u item is exactly [aliasA,aliasB,state,label,perspectiveA,perspectiveB,colorCategory]. Copy aliases only from allowedCharacters.alias; never output character IDs or characterRef values. existingRelationships is the compact baseline; each item is [aliasA,aliasB,state,label,description,colorCategory,locked]. state is defined or undefined. For defined updates, label is at most 48 characters, each perspective is at most 80 characters, and colorCategory is positive, neutral, negative, or complicated. perspectiveA must name B's natural name and perspectiveB must name A's natural name. State a participant's own stance only when evidence establishes it; otherwise describe only the evidenced situation, such as is openly distrusted by Cora, without inventing reciprocal feelings. For undefined updates use empty label and perspectives and null colorCategory. The bounded recent chat history is context for continuity only and must never recreate or revise an edge by itself. Omit every unchanged pair and every pair whose baseline locked value is true. Labels and perspectives must use natural names and contain no aliases, character IDs, reasoning, or extra fields. Scene presence is separate and must not gate relationship tracking.`;
+const SHARED_TRACKING_RULES = `Each u item is exactly [aliasA,aliasB,state,label,perspectiveA,perspectiveB,colorCategory]. Copy aliases only from allowedCharacters.alias; never output character IDs or characterRef values. existingRelationships is the compact baseline; each item is [aliasA,aliasB,state,label,description,colorCategory,locked]. state is defined or undefined. For defined updates, label is at most 48 characters, each perspective is at most 80 characters, and colorCategory is positive, neutral, negative, or complicated. perspectiveA must name B's natural name and perspectiveB must name A's natural name. State a participant's own stance only when evidence establishes it; otherwise describe only the evidenced situation, such as is openly distrusted by Cora, without inventing reciprocal feelings. For undefined updates use empty label and perspectives and null colorCategory. The bounded recent chat history is context for continuity only and must never recreate or revise an edge by itself. Omit every unchanged pair and every pair whose baseline locked value is true. Labels and perspectives must use natural names and contain no aliases, character IDs, reasoning, or extra fields. Scene presence is separate and must not gate relationship tracking.`;
+const TRACKING_INSTRUCTIONS = `Return only compact per-edge relationship updates directly supported by the newly completed turn in the host-provided <assistant_response>. Output exactly {\"u\":[]} when nothing changed. ${SHARED_TRACKING_RULES}`;
+const PERSONA_AWARE_TRACKING_INSTRUCTIONS = `${PERSONA_TRACKING_INSTRUCTIONS} Return only compact per-edge relationship updates directly supported by the newly completed turn in the host-provided <assistant_response>. Output exactly {\"u\":[],\"p\":[]} when nothing changed. ${SHARED_TRACKING_RULES}`;
 const COLOR_CATEGORIES = new Set(["positive", "neutral", "negative", "complicated"]);
 const compareIds = (left, right) => (left < right ? -1 : left > right ? 1 : 0);
 const isRecord = (value) => value !== null && typeof value === "object" && !Array.isArray(value);
@@ -527,7 +529,7 @@ export function buildPreparedTrackingContext(snapshot, personaSnapshot = null) {
     schemaVersion: 1,
     chatId: snapshot.chatId,
     trackingEnabled: snapshot.state !== null,
-    trackingInstructions: TRACKING_INSTRUCTIONS,
+    trackingInstructions: personaSnapshot?.persona ? PERSONA_AWARE_TRACKING_INSTRUCTIONS : TRACKING_INSTRUCTIONS,
     allowedCharacters: characters,
     existingRelationships: snapshot.state ? modelRelationshipSnapshot(snapshot.state.relationships, characters) : [],
     stateRevision: snapshot.stateRevision ?? null,
@@ -551,7 +553,8 @@ function normalizePreparedTrackingContext(input, expectedChatId) {
   } else if (prepared.stateRevision !== null) {
     fail("Disabled tracking context must use a null stateRevision.");
   }
-  if (prepared.trackingInstructions !== TRACKING_INSTRUCTIONS) fail("Prepared tracking instructions are incompatible.");
+  const expectedInstructions = hasPersonaContext ? PERSONA_AWARE_TRACKING_INSTRUCTIONS : TRACKING_INSTRUCTIONS;
+  if (prepared.trackingInstructions !== expectedInstructions) fail("Prepared tracking instructions are incompatible.");
   if (!Array.isArray(prepared.allowedCharacters)) fail("allowedCharacters must be an array.");
   if (!Array.isArray(prepared.existingRelationships)) fail("existingRelationships must be an array.");
   if (hasPersonaContext && (prepared.activePersona?.alias !== "p0" || typeof prepared.activePersona?.id !== "string" || !prepared.activePersona.id || typeof prepared.activePersona?.name !== "string" || !prepared.activePersona.name)) fail("activePersona is invalid.");
@@ -760,11 +763,20 @@ export function createAutomaticTrackingRuntime(repository, activity, {
         });
         let personaUpdates = 0;
         if (personaRepository && prepared.activePersona) {
+          const aliasToCharacterId = new Map(prepared.allowedCharacters.map((entry) => [entry.alias, entry.characterId]));
+          const baselinePerceptions = prepared.existingPersonaPerceptions.map(([alias, state, label, description, colorCategory, manuallyLocked]) => ({
+            characterId: aliasToCharacterId.get(alias),
+            state,
+            label,
+            description,
+            colorCategory,
+            manuallyLocked,
+          }));
           const personaApplied = await applyPersonaDelta(personaRepository, context.chatId, combined.p, {
             allowedCharacters: prepared.allowedCharacters,
             personaSnapshot: {
               persona: { id: prepared.activePersona.id, name: prepared.activePersona.name },
-              perceptions: prepared.existingPersonaPerceptions,
+              perceptions: baselinePerceptions,
             },
             personaStateRevision: prepared.personaStateRevision ?? null,
             evidenceText,
