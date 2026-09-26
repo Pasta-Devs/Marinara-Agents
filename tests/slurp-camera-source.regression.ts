@@ -120,14 +120,29 @@ for (const source of SLURP_CAMERA_SOURCES) {
 }
 
 // The feed used to be two posts in three of the same arm's-length phone picture. Hand-held
-// self-shots stay the largest share without being the whole page.
+// self-shots stay a common case without being the whole page.
 const draws = Array.from({ length: 4000 }, (_, index) =>
   slurpPostCameraSource(`creator-${index % 40}`, Math.floor(index / 40), { companyCanHoldCamera: true }),
 );
 const share = (source: string) => draws.filter((value) => value === source).length / draws.length;
 const handHeld = share("selfie") + share("mirror");
-assert.ok(handHeld > 0.3, `hand-held self-shots must stay the common case, got ${handHeld.toFixed(2)}`);
-assert.ok(handHeld < 0.55, `hand-held self-shots must not dominate the feed, got ${handHeld.toFixed(2)}`);
+assert.ok(handHeld > 0.2, `hand-held self-shots must stay a common case, got ${handHeld.toFixed(2)}`);
+assert.ok(handHeld < 0.4, `hand-held self-shots must not dominate the feed, got ${handHeld.toFixed(2)}`);
+// The case that went wrong on prod (0.2.74): a "homemade" Creator's ordinary low-effort post, alone.
+const homemade = Array.from({ length: 4000 }, (_, index) =>
+  slurpPostCameraSource(`creator-${index % 40}`, Math.floor(index / 40), {
+    companyCanHoldCamera: false,
+    prefers: ["selfie", "screenshot", "tripod"],
+    intent: "casual",
+    effort: "low",
+  }),
+);
+const homemadeHandHeld = homemade.filter((value) => value === "selfie" || value === "mirror").length / homemade.length;
+assert.ok(homemadeHandHeld < 0.45, `a homemade day must not be mostly selfies, got ${homemadeHandHeld.toFixed(2)}`);
+assert.ok(
+  homemade.filter((value) => value === "mirror").length / homemade.length < 0.08,
+  "mirror shots stay occasional",
+);
 // Every other source has to be a real part of the mix rather than a rounding error.
 for (const source of ["tripod", "screenshot", "archive", "partner"] as const) {
   assert.ok(share(source) > 0.05, `${source} must be visible in the mix, got ${share(source).toFixed(3)}`);

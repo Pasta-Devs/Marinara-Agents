@@ -1,5 +1,12 @@
 # Slurp Remastered release notes
 
+## 0.2.75 — 2026-09-26
+
+- Fewer selfies and mirror shots: posts now use a propped-up phone, video stills or a friend with the camera more often. Mirror shots are rare, because the image model drew the Creator twice.
+- Pictures no longer show the phone: phone and selfie words are removed from every picture prompt, and the negative prompt names phones and doubled people.
+- Creators copy each other less: a post sees what the other Creators' pictures showed (clothes, room), and its own history lists subjects instead of camera words.
+- More variety: more places, moments, company and post ideas to draw from.
+
 ## 0.2.74 — 2026-09-26
 
 - Settings are rows: what a setting does on the left, its control on the right. Each page says its name once; Reset is at the bottom and resets only that page.

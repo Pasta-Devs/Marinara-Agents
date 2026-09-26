@@ -38,7 +38,10 @@ const LEVEL_NEGATIVE: Record<SlurpExplicitLevel, string> = {
 };
 
 /** Always true for a Creator's own photo: one person, no stray body parts. */
-const SHARED_NEGATIVE = "second person, extra people, extra limbs, disembodied hands, text, watermark";
+// The phone and a doubled Creator are what the prompt side kept producing (0.2.74 on prod: a phone
+// in 37 of 46 pictures, a second copy of the Creator beside every few mirrors).
+const SHARED_NEGATIVE =
+  "second person, extra people, duplicate person, twins, extra limbs, disembodied hands, smartphone, holding phone, selfie stick, text, watermark";
 
 export function slurpImageNegativePrompt(level: SlurpExplicitLevel): string {
   return [LEVEL_NEGATIVE[level], SHARED_NEGATIVE].filter(Boolean).join(", ");

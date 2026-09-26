@@ -88,6 +88,35 @@ export function ensureSlpImageAppearance(prompt: string, appearance: string): st
 }
 
 /** Old post drafts were rule prose for a language model. They describe no picture and must not be reused. */
+/**
+ * The device and the arm that holds it, as words. The post writer kept putting "phone held at
+ * arm's length" into the scene even when the camera was a tripod, and the image model drew a phone
+ * in 37 of 46 pictures on prod (0.2.74). The camera choice already decides how the picture was
+ * taken; the picture itself must not show the device. `headphones` and `microphone` do not match.
+ */
+const CAMERA_DEVICE_WORDS =
+  /\b(?:smart|cell ?|i)?phones?\b|\bselfies?\b|\bselfie[- ]stick\b|\barm'?s[- ]length\b|\b(?:outstretched|extended|raised) arm\b|\barm (?:outstretched|extended|held out)\b/iu;
+
+/**
+ * A picture prompt without the camera device: every comma, semicolon, or sentence part that names
+ * a phone or a selfie is removed, and the rest is kept as it was. A line that was only about the
+ * device disappears.
+ */
+export function slurpWithoutCameraDevice(prompt: string): string {
+  return prompt
+    .split("\n")
+    .map((line) =>
+      line
+        .split(/(?<=[,;.])\s+/u)
+        .filter((part) => !CAMERA_DEVICE_WORDS.test(part))
+        .join(" ")
+        .replace(/[,;]\s*$/u, ".")
+        .trim(),
+    )
+    .filter(Boolean)
+    .join("\n");
+}
+
 export function slurpIsLegacyImageBrief(value: string | null | undefined): boolean {
   return /^One photograph this person took/u.test(value?.trim() ?? "");
 }

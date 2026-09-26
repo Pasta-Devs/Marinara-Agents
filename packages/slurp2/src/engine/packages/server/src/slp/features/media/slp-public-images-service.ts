@@ -32,6 +32,7 @@ import { resolveImageAppearance } from "./slp-appearance-service.js";
 import {
   ensureSlpImageAppearance,
   selectSlpImageProviderPrompt,
+  slurpWithoutCameraDevice,
   stripAppearanceLabel,
 } from "../../base/media/slp-image-prompt.js";
 import {
@@ -366,7 +367,12 @@ export async function generateSlpPostImage(input: {
     privateContext: [characterPersonality],
     guidanceContext: [configuredImageInstructions, connectionImageInstructions],
   });
-  const finalPrompt = ensureSlpImageAppearance(finalPromptBase, stageAppearance);
+  // The rewrite reads the caption, which may say "I held my phone up", so the device is removed
+  // once more from what actually reaches the provider.
+  const finalPrompt = ensureSlpImageAppearance(
+    slurpWithoutCameraDevice(finalPromptBase) || finalPromptBase,
+    stageAppearance,
+  );
   // A reviewer who cleared the negative prompt still gets the style profile's own negatives back,
   // for the same reason the positive prompt is recompiled above.
   const finalNegativePrompt = input.promptOverride

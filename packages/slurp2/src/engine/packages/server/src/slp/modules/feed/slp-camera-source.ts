@@ -49,11 +49,11 @@ type CameraSourceRule = {
 const RULES: Record<SlurpCameraSource, CameraSourceRule> = {
   selfie: {
     instruction:
-      "Camera: they took it themselves at arm's length. The camera can be no further away than their arm reaches, so the framing is close, from about eye level or a little above. No angle they could not reach.",
+      "Camera: they took it themselves, close and at about eye level. The picture shows their face and shoulders; their arm and the device stay out of the frame. No angle they could not reach.",
   },
   mirror: {
     instruction:
-      "Camera: a shot of their reflection in a mirror, so the phone in their hand shows in the reflection and partly covers them. The framing is whatever the mirror allows, not whatever flatters them.",
+      "Camera: a shot of their reflection in a mirror. Only the reflection is in the picture, so there is one of them, never a second copy beside the mirror. The framing is whatever the mirror allows, not whatever flatters them.",
   },
   tripod: {
     instruction:
@@ -91,8 +91,8 @@ export const SLURP_CAMERA_SOURCE_RULE =
  * "no floor-level shot" as "floor-level shot".
  */
 const PHOTO: Record<SlurpCameraSource, string> = {
-  selfie: "close framing from arm's length, slightly above eye level, looking at viewer",
-  mirror: "mirror selfie, the phone visible in the reflection",
+  selfie: "close personal photo at eye level, looking at viewer",
+  mirror: "reflection in a mirror filling the frame, single person",
   tripod: "self-timer photo from a nearby surface at chest height, hands free, fixed slightly wide framing",
   partner: "candid photo taken from a few steps away",
   screenshot: "still frame from a video, slight motion blur, soft focus",
@@ -114,18 +114,35 @@ export function slurpCameraSourcePhoto(source: SlurpCameraSource): string {
  * left out on purpose: it adds a first-person body, which the source rule forbids.
  */
 const FRAMINGS: Record<SlurpCameraSource, readonly string[]> = {
-  selfie: ["close-up, from above", "upper body, from above", "portrait, upper body"],
-  mirror: ["full body", "cowboy shot", "upper body"],
-  tripod: ["full body, from front", "cowboy shot, from side", "full body, from side", "wide shot"],
+  selfie: [
+    "close-up, from above",
+    "upper body, from above",
+    "portrait, upper body",
+    "close-up, from side",
+    "portrait, head tilt",
+    "upper body, looking back",
+  ],
+  mirror: ["full body", "cowboy shot", "upper body", "cowboy shot, from side"],
+  tripod: [
+    "full body, from front",
+    "cowboy shot, from side",
+    "full body, from side",
+    "wide shot",
+    "sitting, full body",
+    "upper body, from front",
+    "full body, looking away",
+  ],
   partner: [
     "upper body, from side",
     "cowboy shot",
     "full body, from behind, looking back",
     "full body, from below",
     "wide shot",
+    "upper body, candid, looking away",
+    "full body, walking",
   ],
-  screenshot: ["upper body", "cowboy shot, dutch angle"],
-  archive: ["upper body", "full body", "cowboy shot"],
+  screenshot: ["upper body", "cowboy shot, dutch angle", "close-up, from side", "full body, mid-motion"],
+  archive: ["upper body", "full body", "cowboy shot", "portrait", "upper body, from side"],
 };
 
 /**
@@ -169,13 +186,16 @@ export function slurpPermittedCameraSources(options: { companyCanHoldCamera: boo
  * the permitted-sources filter already removes it when she is alone, so its weight should reflect
  * how often it happens *given* company.
  */
+// 0.2.75: on prod, 27 of 40 pictures were selfie or mirror (68 %) once "homemade" preferences,
+// casual intent and low effort stacked on 28 + 17. Mirror shots also drew the Creator twice
+// (image models paint the reflection as a second person), so mirror is now occasional.
 const WEIGHTS: Record<SlurpCameraSource, number> = {
-  selfie: 28,
-  mirror: 17,
-  tripod: 22,
-  screenshot: 15,
-  archive: 9,
-  partner: 9,
+  selfie: 22,
+  mirror: 7,
+  tripod: 25,
+  screenshot: 16,
+  archive: 10,
+  partner: 12,
 };
 
 /**
@@ -184,7 +204,7 @@ const WEIGHTS: Record<SlurpCameraSource, number> = {
  * Lowered with the weights below. At 2.5 against the old selfie weight, a Creator who prefers
  * selfies drew one about three posts in four, which is the monoculture again for that Creator.
  */
-const PREFERENCE_MULTIPLIER = 2;
+const PREFERENCE_MULTIPLIER = 1.4;
 
 /**
  * What the post is for bends the odds too.
@@ -199,12 +219,12 @@ const INTENT_BIAS: Record<string, Partial<Record<SlurpCameraSource, number>>> = 
   callback: { tripod: 1.3, selfie: 0.9 },
   behind_the_scenes: { tripod: 1.5, screenshot: 1.6, selfie: 0.9 },
   business: { selfie: 1.3, tripod: 0.6, partner: 0.5 },
-  casual: { selfie: 1.2, screenshot: 1.2, tripod: 0.7 },
-  appreciation: { selfie: 1.2, tripod: 0.8 },
+  casual: { screenshot: 1.2, tripod: 0.9 },
+  appreciation: { selfie: 1.1, tripod: 0.9 },
 };
 
 const EFFORT_BIAS: Record<string, Partial<Record<SlurpCameraSource, number>>> = {
-  low: { selfie: 1.25, screenshot: 1.5, tripod: 0.4, partner: 0.6 },
+  low: { screenshot: 1.5, tripod: 0.7, partner: 0.8 },
   medium: {},
   high: { selfie: 0.5, tripod: 2, partner: 1.6, screenshot: 0.7 },
 };

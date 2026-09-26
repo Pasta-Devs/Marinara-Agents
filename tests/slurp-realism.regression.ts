@@ -26,8 +26,9 @@ assert.ok(setSelfies < 0.2, `a planned shoot is a selfie ${Math.round(setSelfies
 assert.ok(casualSelfies > setSelfies * 2, "an ordinary day should still be mostly a phone in her hand");
 const setTripods = share({ companyCanHoldCamera: true, intent: "set", effort: "high" }, "tripod");
 assert.ok(setTripods > 0.3, `a planned shoot uses a tripod only ${Math.round(setTripods * 100)}% of the time`);
-// Nothing is ruled out: the draw stays a draw.
-assert.ok(share({ companyCanHoldCamera: true, intent: "set", effort: "high" }, "mirror") > 0.05);
+// Nothing is ruled out: the draw stays a draw. Mirror shots are rare on purpose since 0.2.75 (image
+// models drew the Creator twice), but a planned shoot can still use one.
+assert.ok(share({ companyCanHoldCamera: true, intent: "set", effort: "high" }, "mirror") > 0.01);
 
 // Two Creators who shoot the same way no longer share one effort sequence.
 const profile = slurpProductionProfile("creator-one", "polished");

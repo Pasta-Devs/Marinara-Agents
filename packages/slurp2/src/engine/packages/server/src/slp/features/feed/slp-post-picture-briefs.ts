@@ -3,7 +3,7 @@ import type { SlurpPostVariation } from "../../modules/feed/slp-post-variation.j
 import type { SlurpVisualBrief } from "../../base/media/slp-visual-brief.js";
 import type { SlurpExplicitLevel, SlurpPostAccess } from "../../modules/feed/slp-post-guidance.js";
 import type { SlpIdentityDisclosure } from "../../../../../shared/src/slp/slp-social.types.js";
-import { normalizeSlpImagePrompt } from "../../base/media/slp-image-prompt.js";
+import { normalizeSlpImagePrompt, slurpWithoutCameraDevice } from "../../base/media/slp-image-prompt.js";
 import { slurpImageBrief, slurpImageNegativePrompt } from "../../modules/feed/slp-image-brief.js";
 import { slurpCameraSourceShot, type SlurpCameraSource } from "../../modules/feed/slp-camera-source.js";
 import { slurpVisualBriefFromSituation } from "../../modules/feed/slp-visual-brief.js";
@@ -73,7 +73,7 @@ export function slurpPostPictureBriefs(input: {
   const cameraShot = camera
     ? slurpCameraSourceShot(camera, [input.scene?.action, variation?.place, variation?.moment].join("|"))
     : "";
-  const imageDraft =
+  const rawImageDraft =
     // A post direction can ask the model for its own imagePrompt; a returned one is honoured.
     normalizeSlpImagePrompt(input.modelImagePrompt) ??
     (camera && variation
@@ -89,6 +89,9 @@ export function slurpPostPictureBriefs(input: {
           selectedWardrobe: input.selectedWardrobe,
         })
       : null);
+  // How the picture was taken is the camera's job; the scene the writer planned must not show the
+  // phone or the arm that holds it, or every picture becomes a selfie.
+  const imageDraft = rawImageDraft ? slurpWithoutCameraDevice(rawImageDraft) || rawImageDraft : null;
   return {
     draftImagePrompt: input.postImages
       ? protectCreatorGeneratedIdentity(

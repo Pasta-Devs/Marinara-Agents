@@ -1,5 +1,5 @@
 // The splash screen needs the shipped version and its public notes inside the client bundle.
-export const SLURP2_VERSION = "0.2.74";
+export const SLURP2_VERSION = "0.2.75";
 
 export interface Slurp2ReleaseEntry {
   version: string;
@@ -9,6 +9,16 @@ export interface Slurp2ReleaseEntry {
 
 /** The public release history shown in the Engine splash screen. */
 export const SLURP2_RELEASES: Slurp2ReleaseEntry[] = [
+  {
+    version: "0.2.75",
+    date: "2026-09-26",
+    notes: [
+      "Fewer selfies and mirror shots: posts now use a propped-up phone, video stills or a friend with the camera more often. Mirror shots are rare, because the image model drew the Creator twice.",
+      "Pictures no longer show the phone: phone and selfie words are removed from every picture prompt, and the negative prompt names phones and doubled people.",
+      "Creators copy each other less: a post sees what the other Creators' pictures showed (clothes, room), and its own history lists subjects instead of camera words.",
+      "More variety: more places, moments, company and post ideas to draw from.",
+    ],
+  },
   {
     version: "0.2.74",
     date: "2026-09-26",

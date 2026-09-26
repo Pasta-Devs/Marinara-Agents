@@ -44,9 +44,12 @@ import { slurpWeightedPick } from "./slp-weighted.js";
  * they usually are, doing something unremarkable, by themselves and fine about it.
 
  */
-const PLACE_WEIGHTS = [30, 5, 12, 9, 26, 18] as const;
-const MOMENT_WEIGHTS = [24, 20, 15, 8, 14, 12, 7] as const;
-const COMPANY_WEIGHTS = [34, 10, 20, 16, 20] as const;
+// 0.2.75: the pools grew. With six places at these weights, seven Creators posting in one evening
+// shared "somewhere other than where this creator usually posts from" in 7 of 14 posts, so the
+// most common entries lost weight to the new ones.
+const PLACE_WEIGHTS = [16, 5, 12, 9, 18, 12, 8, 5, 5, 4, 6, 4, 7, 5] as const;
+const MOMENT_WEIGHTS = [18, 14, 12, 8, 12, 10, 7, 7, 7, 6, 6, 5, 5, 6] as const;
+const COMPANY_WEIGHTS = [26, 10, 18, 12, 16, 8, 5, 4] as const;
 
 /** Where the post is coming from, relative to the Creator's habits. */
 const PLACES = [
@@ -59,6 +62,14 @@ const PLACES = [
   // in six posts, the model read it as moving house, and post-history continuity kept the move
   // going forever. Life events belong to arcs (`slurp-project.ts`), never to an angle.
   "in their usual place, with something small out of order",
+  "near a window, working with whatever daylight there is",
+  "somewhere with a view they like",
+  "in a corner of their home they rarely show",
+  "at a friend's place",
+  "outside, somewhere green",
+  "somewhere they go to be alone for a while",
+  "at the place where they work or practise",
+  "in transit, between two places",
 ] as const;
 
 /** What they are doing. Deliberately about state rather than subject matter. */
@@ -70,6 +81,13 @@ const MOMENTS = [
   "getting ready rather than ready",
   "taking a short break before carrying on",
   "on the way somewhere, caught between two steps",
+  "just awake, before the day has started",
+  "winding down at the end of the day",
+  "waiting for something and a little bored",
+  "in a good mood for no clear reason",
+  "right after a small win",
+  "halfway through a chore",
+  "glancing away mid-conversation",
 ] as const;
 
 /**
@@ -87,6 +105,9 @@ const COMPANY = [
   { text: "a trusted person is nearby but out of frame", helper: true },
   { text: "in a public place among strangers", helper: false },
   { text: "talking to somebody off-camera", helper: false },
+  { text: "with a friend who is in on the joke", helper: true },
+  { text: "near other people who are busy with their own things", helper: false },
+  { text: "somebody just left the room", helper: false },
 ] as const;
 
 /**

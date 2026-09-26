@@ -4,6 +4,7 @@ import {
   slurpImageNegativePrompt,
   slurpShootContinuity,
 } from "../packages/slurp2/src/engine/packages/server/src/slp/modules/feed/slp-image-brief.ts";
+import { slurpWithoutCameraDevice } from "../packages/slurp2/src/engine/packages/server/src/slp/base/media/slp-image-prompt.ts";
 import { slurpCameraSourcePhoto } from "../packages/slurp2/src/engine/packages/server/src/slp/modules/feed/slp-camera-source.ts";
 import { slurpPostVariation } from "../packages/slurp2/src/engine/packages/server/src/slp/modules/feed/slp-post-variation.ts";
 import {
@@ -105,5 +106,26 @@ const briefs = slurp2Source(
   "packages/slurp2/src/engine/packages/server/src/slp/features/feed/slp-post-picture-briefs.ts",
 );
 assert.match(briefs, /normalizeSlpImagePrompt\(input\.modelImagePrompt\) \?\?/u);
+
+// The picture never shows the device (0.2.75: a phone was in 37 of 46 prod pictures). Only the
+// parts that name it go; the rest of the scene stays word for word.
+assert.equal(
+  slurpWithoutCameraDevice(
+    "sitting sideways at desk, phone held at arm's length, headphones on.\nHolding her phone up toward the mirror for a selfie.\nwarm light, smartphone in hand; cozy room.",
+  ),
+  "sitting sideways at desk, headphones on.\nwarm light, cozy room.",
+);
+assert.equal(
+  slurpWithoutCameraDevice("a microphone on a stand, iPhone case on the table."),
+  "a microphone on a stand.",
+);
+assert.match(briefs, /slurpWithoutCameraDevice\(rawImageDraft\)/u, "the post draft drops the device");
+assert.match(
+  slurp2Source("packages/slurp2/src/engine/packages/server/src/slp/features/media/slp-public-images-service.ts"),
+  /slurpWithoutCameraDevice\(finalPromptBase\)/u,
+  "the rewritten prompt drops the device too",
+);
+assert.match(slurpImageNegativePrompt("none"), /smartphone/u, "the negative prompt names the phone");
+assert.match(slurpImageNegativePrompt("explicit"), /duplicate person/u, "and a doubled Creator");
 
 console.log("slurp image brief regression checks passed");

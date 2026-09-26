@@ -51,7 +51,7 @@ export type SlurpProductionProfile = {
 
 const PROFILES: Record<SlurpProductionStyle, Omit<SlurpProductionProfile, "style">> = {
   homemade: {
-    prefers: ["selfie", "mirror", "screenshot"],
+    prefers: ["selfie", "screenshot", "tripod"],
     effortWeights: [
       { value: "low", weight: 70 },
       { value: "medium", weight: 25 },
@@ -61,7 +61,7 @@ const PROFILES: Record<SlurpProductionStyle, Omit<SlurpProductionProfile, "style
       "You do not think of this as production. You take a picture, you post it, and you would not call any of it work.",
   },
   polished: {
-    prefers: ["tripod", "mirror", "selfie"],
+    prefers: ["tripod", "partner", "selfie"],
     effortWeights: [
       { value: "low", weight: 10 },
       { value: "medium", weight: 50 },
@@ -81,7 +81,7 @@ const PROFILES: Record<SlurpProductionStyle, Omit<SlurpProductionProfile, "style
       "You post what the day actually looked like, including the parts that did not come out well. A bad picture that is true beats a good one that is not.",
   },
   theatrical: {
-    prefers: ["tripod", "partner", "mirror"],
+    prefers: ["tripod", "partner", "screenshot"],
     effortWeights: [
       { value: "low", weight: 5 },
       { value: "medium", weight: 35 },

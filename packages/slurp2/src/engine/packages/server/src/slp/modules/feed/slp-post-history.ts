@@ -1,4 +1,4 @@
-import { slurpIsLegacyImageBrief } from "../../base/media/slp-image-prompt.js";
+import { slurpIsLegacyImageBrief, slurpWithoutCameraDevice } from "../../base/media/slp-image-prompt.js";
 import type { SlpCreatorManagedPost } from "../../../../../shared/src/slp/slp-social.types.js";
 
 const SLURP_HISTORY_IMAGE_LENGTH = 240;
@@ -28,7 +28,9 @@ export function formatSlurpPostHistory(
 ): string {
   const showed = (post: SlpCreatorManagedPost, length: number) =>
     post.imagePrompt && !slurpIsLegacyImageBrief(post.imagePrompt)
-      ? post.imagePrompt.replace(/\s+/gu, " ").trim().slice(0, length)
+      ? // What the picture was of, not how it was taken: a history full of "phone raised for a
+        // mirror selfie" taught the next post to take the same picture again.
+        slurpWithoutCameraDevice(post.imagePrompt).replace(/\s+/gu, " ").trim().slice(0, length)
       : "";
   const withShowed = (line: string, post: SlpCreatorManagedPost, length = SLURP_HISTORY_IMAGE_LENGTH) =>
     showed(post, length) ? `${line}\n  (showed: ${protect(showed(post, length))})` : line;
@@ -61,7 +63,7 @@ export function formatSlurpPostHistory(
     : ["No previous posts on this Slurp page."];
   if (otherSubjects.length) {
     lines.push(
-      "Other Creators posted about these recently. Choose something different:",
+      "Other Creators posted about these recently. Choose a different subject, outfit, and place:",
       ...otherSubjects.map((subject) => `- ${protect(subject)}`),
     );
   }

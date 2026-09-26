@@ -115,6 +115,9 @@ const DECKS: Record<SlurpBeatType, SlurpBeatDeck> = {
       ["work", "You finish a piece of {a} you are proud of."],
       ["objects", "You finish making or fixing {a}, and it came out well."],
       ["habits", "You keep up {a} longer than ever before."],
+      ["work", "Someone notices your {a} and says something nice about it."],
+      ["habits", "You finally stop putting off {a}, and it feels good."],
+      ["places", "You get {a} exactly the way you wanted it."],
     ],
   },
   showcase: {
@@ -123,6 +126,9 @@ const DECKS: Record<SlurpBeatType, SlurpBeatDeck> = {
       ["work", "You show off one detail of {a} that most people never notice."],
       ["objects", "You show {a} up close and say why it matters to you."],
       ["places", "You show a corner of {a} the way you like it best."],
+      ["objects", "You show {a} and the little story behind it."],
+      ["work", "You show a before-and-after of {a}."],
+      ["habits", "You show how you do {a}, step by step."],
     ],
   },
   social_moment: {
@@ -130,6 +136,9 @@ const DECKS: Record<SlurpBeatType, SlurpBeatDeck> = {
     lines: [
       ["people", "You and {a} share a small, funny moment in the middle of an ordinary task."],
       ["people", "{a} says something that makes you laugh out loud."],
+      ["people", "{a} drags you into a plan you did not ask for, and it turns out fun."],
+      ["people", "You run into {a} somewhere you did not expect."],
+      ["people", "You and {a} try something new together."],
     ],
   },
   relationship_moment: {
@@ -138,6 +147,9 @@ const DECKS: Record<SlurpBeatType, SlurpBeatDeck> = {
       ["people", "{a} does something small that shows how well they know you."],
       ["people", "You do something kind for {a} without making a big deal of it."],
       ["people", "You and {a} disagree about something trivial, and neither of you gives in."],
+      ["people", "{a} remembers something you said weeks ago."],
+      ["people", "You miss {a} today and say so."],
+      ["people", "{a} gives you advice, and you are not sure you will take it."],
     ],
   },
   tease_flirt: {
@@ -146,6 +158,9 @@ const DECKS: Record<SlurpBeatType, SlurpBeatDeck> = {
       ["objects", "You tease your followers with {a} and do not explain everything."],
       ["places", "You are at {a}, dressed or posed to be noticed, and you know it."],
       ["habits", "You turn {a} into a little show for whoever is watching."],
+      ["objects", "You wear or hold {a} and let your followers guess the rest."],
+      ["people", "You hint that {a} would like this picture, and you do not say more."],
+      ["work", "You make {a} look a lot more flirty than it is."],
     ],
   },
   opinion: {
@@ -154,6 +169,9 @@ const DECKS: Record<SlurpBeatType, SlurpBeatDeck> = {
       ["work", "You have a strong opinion about how {a} should be done, and you share it."],
       ["objects", "You judge {a}, and you are not neutral about it."],
       ["places", "You say what you really think about {a}."],
+      ["habits", "You defend {a} against everyone who thinks it is strange."],
+      ["people", "You and {a} have opposite opinions, and you give yours."],
+      ["work", "You list the one thing everybody gets wrong about {a}."],
     ],
   },
   anticipation: {
@@ -162,6 +180,9 @@ const DECKS: Record<SlurpBeatType, SlurpBeatDeck> = {
       ["work", "Something new with {a} is coming soon, and you can barely wait."],
       ["places", "You are about to go to {a}, and you look forward to it."],
       ["people", "You are waiting for {a} to arrive."],
+      ["objects", "{a} is on its way to you, and you check for it every hour."],
+      ["habits", "You are counting down to {a} this week."],
+      ["places", "You plan a small trip to {a} and share the first idea."],
     ],
   },
   sensory_mood: {
@@ -170,6 +191,9 @@ const DECKS: Record<SlurpBeatType, SlurpBeatDeck> = {
       ["places", "{a} has a mood right now that you want to keep."],
       ["objects", "The feel, smell, or sound of {a} puts you in a certain mood."],
       ["habits", "{a} gives you a quiet, good moment."],
+      ["places", "The light at {a} is exactly right for a few minutes."],
+      ["objects", "{a} brings back a memory you did not expect."],
+      ["work", "After {a}, you feel tired in a good way."],
     ],
   },
   audience_game: {
@@ -178,6 +202,9 @@ const DECKS: Record<SlurpBeatType, SlurpBeatDeck> = {
       ["work", "You let your followers pick or guess something about {a}."],
       ["objects", "You ask your followers a playful question about {a}."],
       ["habits", "You dare your followers to try {a} with you."],
+      ["places", "You ask your followers where they would go instead of {a}."],
+      ["people", "You let your followers vote on something for you and {a}."],
+      ["objects", "You hide {a} in the picture and ask who finds it."],
     ],
   },
   routine_twist: {
@@ -186,6 +213,9 @@ const DECKS: Record<SlurpBeatType, SlurpBeatDeck> = {
       ["habits", "Your usual {a} goes a little differently today, and you like the change."],
       ["places", "Something at {a} is different from usual today."],
       ["work", "You try a new way of doing {a}."],
+      ["people", "{a} changes your plan for the day, and you go with it."],
+      ["objects", "You use {a} for something it was not made for."],
+      ["habits", "You skip {a} today and do something else instead."],
     ],
   },
   mishap: {
@@ -194,6 +224,8 @@ const DECKS: Record<SlurpBeatType, SlurpBeatDeck> = {
       ["objects", "{a} does not cooperate today."],
       ["work", "A small thing goes wrong during {a}, and you laugh it off."],
       ["places", "Something small goes wrong at {a}."],
+      ["habits", "You forget one step of {a} and only notice later."],
+      ["people", "{a} catches you at a bad moment and will not let it go."],
     ],
   },
   callback: {
@@ -202,6 +234,8 @@ const DECKS: Record<SlurpBeatType, SlurpBeatDeck> = {
       ["runningJokes", "The running joke about {a} comes up again."],
       ["runningJokes", "Something reminds you of {a}."],
       ["habits", "You are back at {a}, as your regulars knew you would be."],
+      ["runningJokes", "Your followers bring up {a} before you can."],
+      ["objects", "{a} is back, and your regulars know what that means."],
     ],
   },
 };
