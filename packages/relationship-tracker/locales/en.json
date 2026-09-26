@@ -1,0 +1,17 @@
+{
+  "$schema": "../../../schemas/package-localization.schema.json",
+  "_meta": {
+    "locale": "en",
+    "direction": "ltr"
+  },
+  "package": {
+    "name": "Relationship Tracker",
+    "description": "Tracks relationship dynamics between characters and personas in the current RP mode. Add the Agent in Chat Settings → Agents → Tracker Agents for Roleplay mode."
+  },
+  "agents": {
+    "relationship-tracker": {
+      "name": "Relationship Tracker",
+      "description": "Tracks relationship dynamics between characters and personas in the current RP mode."
+    }
+  }
+}

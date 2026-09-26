@@ -234,6 +234,12 @@
       "name": "World State",
       "concept": "Mari carefully holds a glowing miniature world showing tiny mountains and ocean, with day and night, sun, moon, rain cloud, snowflake, and temperature symbols orbiting it.",
       "palette": "planet blue, leaf green, sunlight gold, night violet"
+    },
+    {
+      "id": "relationship-tracker",
+      "name": "Relationship Tracker",
+      "concept": "Chibi Professor Mari and a friendly red orc sit across one plate of spaghetti, affectionately connected mouth-to-mouth by a single noodle in a Lady and the Tramp parody.",
+      "palette": "warm red, golden pasta, navy, candlelight gold"
     }
   ]
 }
