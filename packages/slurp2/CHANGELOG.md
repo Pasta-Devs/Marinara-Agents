@@ -1,5 +1,9 @@
 # Slurp Remastered release notes
 
+## 0.2.41 — 2026-09-26
+
+- The world tick no longer freezes the whole Engine for several seconds every few minutes; Slurp settings are validated once per change instead of on every read.
+
 ## 0.2.40 — 2026-09-25
 
 - Retained Moments use bounded Story reads and follow feed search and pagination rules.

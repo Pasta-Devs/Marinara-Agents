@@ -415,7 +415,7 @@ const features = [
   },
   {
     id: "slurp2",
-    version: "0.2.40",
+    version: "0.2.41",
     minEngineVersion: "2.4.6",
     maxEngineExclusive: MAX_ENGINE_EXCLUSIVE,
     name: "Slurp Remastered",
