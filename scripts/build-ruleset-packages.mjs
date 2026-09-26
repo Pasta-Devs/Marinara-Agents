@@ -24,6 +24,7 @@ import { writeEnglishPackageLocale } from "./package-locales.mjs";
 import {
   RULESET_ASSET_PATH,
   assertRulesetBattle,
+  assertRulesetApplies,
   assertRulesetCatalogs,
   assertRulesetCombat,
   assertRulesetCreatures,
@@ -96,6 +97,8 @@ for (const id of packageIds) {
   assertRulesetCreatures(manifest, rulesetDocument, catalogSources);
   // And a reaction that names the moment it waits for, which has its own version too.
   assertRulesetReactions(manifest, rulesetDocument, catalogSources);
+  // And how the conditions an entry applies come off, which has its own version too.
+  assertRulesetApplies(manifest, rulesetDocument, catalogSources);
 
   // Written back only when something actually changed, so a no-op rebuild leaves
   // the tree byte-identical and does not show up as a spurious diff in a PR.
