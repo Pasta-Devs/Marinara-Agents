@@ -296,15 +296,15 @@ Object.assign(QM.dock, {
 
       this._imageGenLoadingLabel = "Saving…";
       this._renderImageGenContent();
-      if (isOutfit) {
-        await QM.state.uploadOutfitPortrait(subjectId, result.imageDataUrl);
-      } else {
-        await QM.state.uploadItemImage(subjectId, result.imageDataUrl);
-      }
-      if (QM.state.error) throw new Error(QM.state.error);
+      const outcome = isOutfit
+        ? await QM.state.uploadOutfitPortrait(subjectId, result.imageDataUrl)
+        : await QM.state.uploadItemImage(subjectId, result.imageDataUrl);
+      if (token !== this._imageGenSessionToken || chatId !== QM.state.chatId) return;
+      if (!outcome) return;
+      if (!outcome.ok) throw new Error(outcome.error);
       this._closeImageGenModal();
     } catch (error) {
-      if (token !== this._imageGenSessionToken) return;
+      if (token !== this._imageGenSessionToken || chatId !== QM.state.chatId) return;
       const code = error && error.message;
       this._imageGenError =
         (code && QM_IMAGE_GEN_ERROR_MESSAGES[code]) ||

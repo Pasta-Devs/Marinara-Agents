@@ -4,6 +4,12 @@
     "quartermaster": {
       "versions": [
         {
+          "version": "0.1.22",
+          "date": "2026-09-27",
+          "notes": "- Image uploads and outfit saves report their own result when other edits finish at the same time.\n- A completed upload cannot close a newer dialog or show its error in another chat.\n- Late inventory refreshes no longer undo a completed edit or replace a newer refresh.",
+          "highlight": false
+        },
+        {
           "version": "0.1.21",
           "date": "2026-09-26",
           "notes": "- Detached tracker elements wait until mounted before starting subscriptions or changing the active chat.\n- Late image-connection checks and failed mutations no longer overwrite another dialog or chat's state.\n- Failed image deletions preserve the image even when another request finishes at the same time.\n- Closing the active chat clears its old error from the tracker panel.",
@@ -115,12 +121,6 @@
           "version": "0.1.3",
           "date": "2026-09-07",
           "notes": "- Fixed inventory silently wiping every turn due to a misconfigured result type.\n- Outfits now stay equipped when extra items are added alongside them.\n- Added a \"Restore Inventory\" safety net and a \"Refresh Images\" button.\n- Fixed a rendering bug hiding an equip slot's labels behind its fallback icon.",
-          "highlight": true
-        },
-        {
-          "version": "0.1.2",
-          "date": "2026-09-05",
-          "notes": "- Added a decorated portrait frame and bundled artwork for every equip slot.\n- Redesigned item/outfit cards to size themselves to their own content.\n- Outfits got a reworked save/edit flow.\n- Columns can collapse to narrow the dock.\n- Added delete confirmations and Escape-to-close.",
           "highlight": true
         }
       ]

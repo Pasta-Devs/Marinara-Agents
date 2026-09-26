@@ -4098,16 +4098,17 @@ QM.dock = {
       saveButton.disabled = true;
       const chatId = QM.state.chatId;
       const existingIds = new Set((QM.state.outfits ?? []).map((outfit) => outfit.id));
-      await QM.state.createOutfit({ name, description: descriptionInput.value });
-      if (QM.state.error || chatId !== QM.state.chatId || this.saveOutfitBackdrop !== backdrop) {
+      const outcome = await QM.state.createOutfit({ name, description: descriptionInput.value });
+      if (!outcome?.ok || chatId !== QM.state.chatId || this.saveOutfitBackdrop !== backdrop) {
         saveButton.disabled = false;
         return;
       }
-      const created = (QM.state.outfits ?? []).find((outfit) => !existingIds.has(outfit.id));
+      const created = (outcome.result.outfits ?? []).find((outfit) => !existingIds.has(outfit.id));
       if (stagedImageDataUrl && created) {
         await QM.state.uploadOutfitPortrait(created.id, stagedImageDataUrl);
       }
       saveButton.disabled = false;
+      if (chatId !== QM.state.chatId || this.saveOutfitBackdrop !== backdrop) return;
       this._closeSaveOutfitModal();
     });
 

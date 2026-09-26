@@ -1,4 +1,4 @@
-// Quartermaster 0.1.21 — Marinara Engine roleplay-tracker capability (single-file client bundle)
+// Quartermaster 0.1.22 — Marinara Engine roleplay-tracker capability (single-file client bundle)
 // Built from packages/quartermaster/src (10 modules) by scripts/build-quartermaster-package.mjs. Do not edit; edit src/ and rebuild.
 (() => {
 "use strict";
@@ -744,6 +744,8 @@ QM.state = {
   itemImagePromptTemplate: "",
   outfitPortraitPromptTemplate: "",
   error: null,
+  _chatToken: 0,
+  _reloadToken: 0,
   _listeners: new Set(),
 
   subscribe(fn) {
@@ -757,6 +759,8 @@ QM.state = {
 
   setChat(chatId) {
     if (this.chatId === chatId) return;
+    this._chatToken++;
+    this._reloadToken++;
     this.chatId = chatId;
     this.items = null;
     this.outfits = null;
@@ -812,9 +816,10 @@ QM.state = {
   async _reload() {
     const chatId = this.chatId;
     if (!chatId) return;
+    const token = ++this._reloadToken;
     try {
       const result = await QM.listItems(chatId, QM_OWNER_ID);
-      if (this.chatId !== chatId) return; // chat changed while this was in flight
+      if (this.chatId !== chatId || token !== this._reloadToken) return;
       const next = {
         items: result.items,
         outfits: result.outfits,
@@ -878,6 +883,7 @@ QM.state = {
       this.error = null;
       if (!changed) return;
     } catch (error) {
+      if (this.chatId !== chatId || token !== this._reloadToken) return;
       this.error = error && error.message ? error.message : String(error);
     }
     this._notify();
@@ -886,9 +892,11 @@ QM.state = {
   async _mutate(request) {
     const chatId = this.chatId;
     if (!chatId) return;
+    const chatToken = this._chatToken;
+    let outcome;
     try {
       const result = await request;
-      if (this.chatId !== chatId) return;
+      if (this.chatId !== chatId || chatToken !== this._chatToken) return;
       if (result.items !== undefined) this.items = result.items;
       if (result.outfits !== undefined) this.outfits = result.outfits;
       if (result.appearanceFeedMode !== undefined) this.appearanceFeedMode = result.appearanceFeedMode;
@@ -904,11 +912,16 @@ QM.state = {
       if (result.outfitPortraitPromptTemplate !== undefined)
         this.outfitPortraitPromptTemplate = result.outfitPortraitPromptTemplate;
       this.error = null;
+      outcome = { ok: true, result };
     } catch (error) {
-      if (this.chatId !== chatId) return;
+      if (this.chatId !== chatId || chatToken !== this._chatToken) return;
       this.error = error && error.message ? error.message : String(error);
+      outcome = { ok: false, error: this.error };
     }
+    // A read already in flight must not undo this completed edit or its error.
+    this._reloadToken++;
     this._notify();
+    return outcome;
   },
 
   addItem(item) {
@@ -5378,16 +5391,17 @@ QM.dock = {
       saveButton.disabled = true;
       const chatId = QM.state.chatId;
       const existingIds = new Set((QM.state.outfits ?? []).map((outfit) => outfit.id));
-      await QM.state.createOutfit({ name, description: descriptionInput.value });
-      if (QM.state.error || chatId !== QM.state.chatId || this.saveOutfitBackdrop !== backdrop) {
+      const outcome = await QM.state.createOutfit({ name, description: descriptionInput.value });
+      if (!outcome?.ok || chatId !== QM.state.chatId || this.saveOutfitBackdrop !== backdrop) {
         saveButton.disabled = false;
         return;
       }
-      const created = (QM.state.outfits ?? []).find((outfit) => !existingIds.has(outfit.id));
+      const created = (outcome.result.outfits ?? []).find((outfit) => !existingIds.has(outfit.id));
       if (stagedImageDataUrl && created) {
         await QM.state.uploadOutfitPortrait(created.id, stagedImageDataUrl);
       }
       saveButton.disabled = false;
+      if (chatId !== QM.state.chatId || this.saveOutfitBackdrop !== backdrop) return;
       this._closeSaveOutfitModal();
     });
 
@@ -6118,15 +6132,15 @@ Object.assign(QM.dock, {
 
       this._imageGenLoadingLabel = "Saving…";
       this._renderImageGenContent();
-      if (isOutfit) {
-        await QM.state.uploadOutfitPortrait(subjectId, result.imageDataUrl);
-      } else {
-        await QM.state.uploadItemImage(subjectId, result.imageDataUrl);
-      }
-      if (QM.state.error) throw new Error(QM.state.error);
+      const outcome = isOutfit
+        ? await QM.state.uploadOutfitPortrait(subjectId, result.imageDataUrl)
+        : await QM.state.uploadItemImage(subjectId, result.imageDataUrl);
+      if (token !== this._imageGenSessionToken || chatId !== QM.state.chatId) return;
+      if (!outcome) return;
+      if (!outcome.ok) throw new Error(outcome.error);
       this._closeImageGenModal();
     } catch (error) {
-      if (token !== this._imageGenSessionToken) return;
+      if (token !== this._imageGenSessionToken || chatId !== QM.state.chatId) return;
       const code = error && error.message;
       this._imageGenError =
         (code && QM_IMAGE_GEN_ERROR_MESSAGES[code]) ||

@@ -210,6 +210,11 @@ alone does not make it visible to stable users.
 
 ## Changelog
 
+### 0.1.22
+- Image uploads and outfit saves use their own result during overlapping edits.
+- Late uploads cannot close a newer dialog or show their error in another chat.
+- Late inventory refreshes cannot undo a completed edit or replace a newer refresh.
+
 ### 0.1.21
 
 - Detached tracker elements wait until mounted before starting subscriptions or changing the active chat.

@@ -82,7 +82,7 @@
         },
         "id": "quartermaster",
         "name": "Quartermaster",
-        "version": "0.1.21",
+        "version": "0.1.22",
         "description": "A per-chat RPG character sheet and inventory manager for Roleplay mode: equip slots arranged around your persona's portrait, a full inventory with saved outfits, AI-generated item and outfit art, and a tracker agent that keeps everything in sync with the story on its own. Add the Agent in Chat Settings → Agents → Tracker Agents for Roleplay mode.",
         "engine": {
           "min": "2.4.6",
@@ -110,8 +110,8 @@
           },
           {
             "path": "client.js",
-            "sha256": "44fb09784a6611f978e735890902b92eaadaf26a01ca4aa3cfd95279f23b10bb",
-            "bytes": 288626
+            "sha256": "38ec60bef3f44efebd139ef646118103f9fa25759390512730461e86bab16dc5",
+            "bytes": 289382
           },
           {
             "path": "server.mjs",
@@ -210,9 +210,9 @@
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/quartermaster.png",
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents/blob/staging/packages/quartermaster/README.md",
       "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/quartermaster-0.1.21.zip",
-        "sha256": "0ea752e895e3c481064b3d3798b7d3e3e3b2631cc574bd7c934bbc2538e0d40a",
-        "bytes": 450478
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/quartermaster-0.1.22.zip",
+        "sha256": "974f0dfe66cc737fc73fb00978c27cb47746c5f35724300ada4b42130b3758a9",
+        "bytes": 451234
       }
     },
     {

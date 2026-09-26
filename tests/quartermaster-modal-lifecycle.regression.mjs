@@ -177,6 +177,9 @@ for (const outcome of ["failure", "success", "chat-change"]) {
     if (outcome === "failure") QM.state.error = "Save unavailable";
     else QM.state.outfits = [{ id: "new" }, { id: "existing" }];
     if (outcome === "chat-change") QM.state.chatId = "chat-b";
+    return outcome === "failure"
+      ? { ok: false, error: "Save unavailable" }
+      : { ok: true, result: { outfits: QM.state.outfits } };
   };
   QM.state.uploadOutfitPortrait = async (id) => uploads.push(id);
   dock.body = element();
@@ -221,6 +224,123 @@ await test("image connection checks cannot overwrite a later dialog", async () =
 });
 
 const stateSource = await readFile(new URL("../packages/quartermaster/src/05-state.js", import.meta.url), "utf8");
+await test("generated images use their own upload result and cannot close a later dialog", async () => {
+  const stateContext = vm.createContext({ QM });
+  vm.runInContext(stateSource, stateContext);
+  QM._missingItemImageIds = new Set();
+  for (const kind of ["item", "outfit"]) {
+    for (const succeeds of [false, true]) {
+      for (const change of ["none", "reopen", "chat"]) {
+        QM.state.chatId = "chat-a";
+        QM.state.error = null;
+        dock._imageGenKind = kind;
+        dock._imageGenSubjectId = "subject-a";
+        dock._imageGenError = null;
+        let settleUpload;
+        let startedUpload;
+        const uploadStarted = new Promise((resolve) => {
+          startedUpload = resolve;
+        });
+        const upload = () => {
+          startedUpload();
+          return new Promise((resolve, reject) => {
+            settleUpload = () => (succeeds ? resolve({}) : reject(new Error("Upload failed")));
+          });
+        };
+        QM.generateItemImage = QM.generateOutfitPortrait = async () => ({
+          imageDataUrl: "data:image/png;base64,fixture",
+        });
+        QM.uploadItemImage = QM.uploadOutfitPortrait = upload;
+        const pending = dock._submitImageGenGenerate();
+        await uploadStarted;
+        if (change === "reopen") dock._closeImageGenModal();
+        if (change === "chat") QM.state.chatId = "chat-b";
+        const token = dock._imageGenSessionToken;
+        if (change !== "none") dock._imageGenViewState = "choice";
+        // Settle the opposite result in the same turn, before the modal's continuation.
+        settleUpload();
+        await QM.state._mutate(succeeds ? Promise.reject(new Error("Unrelated failure")) : Promise.resolve({}));
+        await pending;
+        assert.equal(
+          dock._imageGenSessionToken,
+          token + (succeeds && change === "none" ? 1 : 0),
+          `${kind}/${succeeds}/${change}: closes only its successful upload`,
+        );
+        assert.equal(dock._imageGenError, !succeeds && change === "none" ? "Upload failed" : null);
+        if (change !== "none") assert.equal(dock._imageGenViewState, "choice");
+      }
+    }
+  }
+});
+
+await test("late inventory reloads cannot replace a mutation, newer reload, or another chat's error", async () => {
+  for (const change of ["mutation", "reload", "chat"]) {
+    for (const fails of [false, true]) {
+      const api = {};
+      vm.runInContext(stateSource, vm.createContext({ QM: api }));
+      api.state.chatId = "chat-a";
+      let settle;
+      api.listItems = () =>
+        new Promise((resolve, reject) => {
+          settle = () =>
+            fails ? reject(new Error("Old reload failed")) : resolve({ items: [{ id: "old" }], outfits: [] });
+        });
+      const pending = api.state._reload();
+      if (change === "mutation") await api.state._mutate(Promise.resolve({ items: [{ id: "current" }], outfits: [] }));
+      if (change === "reload") {
+        api.listItems = async () => ({ items: [{ id: "current" }], outfits: [] });
+        await api.state._reload();
+      }
+      if (change === "chat") {
+        api.state.chatId = "chat-b";
+        api.state.items = [{ id: "current" }];
+      }
+      api.state.error = "Current error";
+      settle();
+      await pending;
+      assert.equal(api.state.items[0].id, "current", `${change}/${fails}: keeps current inventory`);
+      assert.equal(api.state.error, "Current error", `${change}/${fails}: keeps current error`);
+    }
+  }
+});
+
+await test("outfit saves use their own result while another mutation changes shared state", async () => {
+  for (const succeeds of [false, true]) {
+    const uploads = [];
+    QM.state.chatId = "chat-a";
+    QM.state.outfits = [{ id: "existing" }];
+    let settle;
+    QM.createOutfit = () =>
+      new Promise((resolve, reject) => {
+        settle = () =>
+          succeeds ? resolve({ outfits: [{ id: "new" }, { id: "existing" }] }) : reject(new Error("Save failed"));
+      });
+    QM.uploadOutfitPortrait = async (_chatId, _ownerId, id) => {
+      uploads.push(id);
+      return {};
+    };
+    const start = elements.length;
+    dock.body = element();
+    dock._openSaveOutfitModal();
+    const controls = elements.slice(start);
+    controls.find((node) => node.placeholder === "Outfit name").value = "Armor";
+    const upload = controls.find((node) => node.type === "file");
+    upload.files = [{}];
+    await upload.listeners.change();
+    const save = controls.find((node) => node.textContent === "Save");
+    const pending = save.listeners.click();
+    settle();
+    await QM.state._mutate(
+      succeeds ? Promise.reject(new Error("Unrelated failure")) : Promise.resolve({ outfits: [{ id: "unrelated" }] }),
+    );
+    await pending;
+    assert.deepEqual(uploads, succeeds ? ["new"] : []);
+    assert.equal(save.disabled, false);
+    assert.equal(dock.saveOutfitBackdrop === null, succeeds);
+    dock._closeSaveOutfitModal();
+  }
+});
+
 await test("image deletion uses its own result during concurrent mutations", async () => {
   for (const succeeds of [false, true]) {
     const api = { _missingItemImageIds: new Set() };
@@ -249,6 +369,34 @@ await test("a failed mutation cannot overwrite another chat's error", async () =
   fail(new Error("Old chat error"));
   await pending;
   assert.equal(api.state.error, "Current chat error");
+});
+
+await test("returning to a chat does not accept a mutation from its previous visit", async () => {
+  for (const fails of [false, true]) {
+    const api = {};
+    vm.runInContext(stateSource, vm.createContext({ QM: api }));
+    const reads = [];
+    api.listItems = () => new Promise((resolve) => reads.push(resolve));
+    api.state.setChat("chat-a");
+    let settle;
+    const pending = api.state._mutate(
+      new Promise((resolve, reject) => {
+        settle = () => (fails ? reject(new Error("Previous visit")) : resolve({ items: [{ id: "old" }] }));
+      }),
+    );
+    api.state.setChat("chat-b");
+    api.state.setChat("chat-a");
+    const currentRead = api.state._reload();
+    const currentReload = api.state._reloadToken;
+    settle();
+    assert.equal(await pending, undefined);
+    assert.equal(api.state.items, null);
+    assert.equal(api.state.error, null);
+    assert.equal(api.state._reloadToken, currentReload, "keeps the current visit's reload valid");
+    reads.at(-1)({ items: [{ id: "current" }], outfits: [] });
+    await currentRead;
+    assert.equal(api.state.items[0].id, "current");
+  }
 });
 
 await test("closing the active chat clears the panel's old error", async () => {

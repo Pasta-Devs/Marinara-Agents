@@ -1,5 +1,10 @@
 # Quartermaster changelog
 
+## 0.1.22 — 2026-09-27
+- Image uploads and outfit saves report their own result when other edits finish at the same time.
+- A completed upload cannot close a newer dialog or show its error in another chat.
+- Late inventory refreshes no longer undo a completed edit or replace a newer refresh.
+
 ## 0.1.21 — 2026-09-26
 - Detached tracker elements wait until mounted before starting subscriptions or changing the active chat.
 - Late image-connection checks and failed mutations no longer overwrite another dialog or chat's state.
