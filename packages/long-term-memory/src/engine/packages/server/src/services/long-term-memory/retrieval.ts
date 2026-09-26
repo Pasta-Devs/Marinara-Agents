@@ -183,5 +183,10 @@ export async function retrieveLongTermMemory(input: RetrieveLongTermMemoryInput)
     rejectedLimit: input.rejectedLimit,
     dedupeExactText: input.dedupeExactText ?? true,
   });
-  return { ...budgeted, embeddingsAvailable, warnings: [] as string[] };
+  return {
+    ...budgeted,
+    embeddingsAvailable,
+    truncated: ranked.length > budgeted.chunks.length,
+    warnings: [] as string[],
+  };
 }

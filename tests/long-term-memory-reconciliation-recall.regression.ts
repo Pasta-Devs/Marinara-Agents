@@ -195,7 +195,9 @@ async function main() {
           mode: "roleplay",
           storage,
           index,
-          maxCandidatesPerUnit: 8,
+          // The cap must cover the whole ranked note set: a smaller window is correctly treated
+          // as an incomplete candidate set and left for review instead of being remapped.
+          maxCandidatesPerUnit: 32,
         });
         return { target, result };
       }),

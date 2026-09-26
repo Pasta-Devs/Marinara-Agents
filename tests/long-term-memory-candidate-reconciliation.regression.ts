@@ -553,6 +553,95 @@ async function main() {
       );
     }
 
+    // The bounded window counts candidate notes, not chunks: several sections of one note
+    // must not consume the slate and hide the note that actually matches.
+    {
+      const noteText =
+        "A survey of the cobalt archive found the vault key, the buried observatory entrance, and the floorboards beneath the northern hall.";
+      const multiSection = (id: string, title: string) => ({
+        ...note({ id, type: "world", title, text: noteText }),
+        sections: {
+          facts: { text: noteText, updatedAt: timestamp },
+          notes: { text: noteText, updatedAt: timestamp },
+          history: { text: noteText, updatedAt: timestamp },
+        },
+      });
+      const corpus = [
+        multiSection("world_aaa_archive", "AAA Archive"),
+        note({ id: "world_cobalt_archive", type: "world", title: "Cobalt Archive", text: noteText }),
+      ];
+      const corpusById = new Map(corpus.map((item) => [item.id, item]));
+      const result = await reconcile(
+        [
+          unit({
+            bucket: "world_fact",
+            subjectId: "cobalt_vault",
+            sectionKey: "facts",
+            title: "Cobalt Archive",
+            text: "The cobalt archive vault key is buried below the observatory floorboards.",
+          }),
+        ],
+        {
+          maxCandidatesPerUnit: 2,
+          index: buildIndex(corpus),
+          storage: {
+            getNotesByIds: async (ids: string[]) =>
+              new Map(ids.filter((id) => corpusById.has(id)).map((id) => [id, corpusById.get(id)!])),
+          },
+        },
+      );
+      assert.equal(
+        result.remaps.get("world_cobalt_vault"),
+        "world_cobalt_archive",
+        "a note with several sections must not crowd the compatible target out of the window",
+      );
+    }
+
+    // A singleton decision is only safe when the candidate set is complete; a window that
+    // dropped ranked notes must leave the candidate unattached for review.
+    {
+      const corpus = [
+        note({
+          id: "world_cobalt_archive",
+          type: "world",
+          title: "Cobalt Archive",
+          text: "The cobalt archive vault key is buried below the observatory floorboards.",
+        }),
+        note({
+          id: "world_cobalt_ledger",
+          type: "world",
+          title: "Cobalt Ledger",
+          text: "The cobalt archive ledger mentions a vault key kept elsewhere.",
+        }),
+      ];
+      const corpusById = new Map(corpus.map((item) => [item.id, item]));
+      const result = await reconcile(
+        [
+          unit({
+            bucket: "world_fact",
+            subjectId: "cobalt_vault",
+            sectionKey: "facts",
+            title: "Cobalt Archive",
+            text: "The cobalt archive vault key is buried below the observatory floorboards.",
+          }),
+        ],
+        {
+          maxCandidatesPerUnit: 1,
+          index: buildIndex(corpus),
+          storage: {
+            getNotesByIds: async (ids: string[]) =>
+              new Map(ids.filter((id) => corpusById.has(id)).map((id) => [id, corpusById.get(id)!])),
+          },
+        },
+      );
+      assert.equal(result.remaps.size, 0, "an incomplete candidate set must not auto-remap");
+      assert.equal(result.matches.length, 0, "an incomplete candidate set must not record a match");
+      const diagnostic = result.diagnostics.find(
+        (candidate) => candidate.code === "candidate_reconciliation_incomplete",
+      );
+      assert.ok(diagnostic, "an incomplete candidate set must warn for review");
+    }
+
     process.stdout.write(
       "Long-Term Memory candidate reconciliation regression: bounded reuse, create, ambiguity, scope, link closure, mutation kinds ok\n",
     );

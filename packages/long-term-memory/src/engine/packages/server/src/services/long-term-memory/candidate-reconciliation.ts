@@ -22,6 +22,9 @@ import {
 // 3-10 candidate notes. Zero means a likely create; dozens means the matcher is too loose.
 const DEFAULT_MAX_CANDIDATES_PER_UNIT = 8;
 const DEFAULT_MAX_CANDIDATE_TOKENS = 2_048;
+// Chunk headroom per candidate note: the retrieval budget must be larger than the note cap so
+// several sections of one note cannot fill the window and hide another note.
+const CANDIDATE_CHUNK_HEADROOM = 4;
 const CONTENT_MATCH_THRESHOLD = 0.85;
 
 type ReconciliationStorage = {
@@ -91,15 +94,21 @@ export async function reconcileEvidenceUnitCandidates(options: {
       scope: options.scope,
       mode: options.mode,
       noteTypes: [noteType],
-      maxChunks: maxCandidates,
+      // Deliberately larger than the note cap so one note's sections cannot fill the window;
+      // the cap below bounds candidate note IDs, not chunks.
+      maxChunks: maxCandidates * CANDIDATE_CHUNK_HEADROOM,
       maxTokens: maxCandidateTokens,
       semanticWeight: 0,
       // Two same-text notes are a genuine ambiguity, so keep both chunks instead of collapsing them.
       dedupeExactText: false,
     });
-    const candidateNoteIds = uniqueStrings(retrieval.chunks.map((chunk) => chunk.chunk.noteId)).filter(
+    const rankedNoteIds = uniqueStrings(retrieval.chunks.map((chunk) => chunk.chunk.noteId)).filter(
       (noteId) => noteId !== derivedNoteId,
     );
+    const candidateNoteIds = rankedNoteIds.slice(0, maxCandidates);
+    // A singleton is only safe to reuse when the window kept every ranked candidate and every
+    // ranked note; otherwise a compatible note can sit past the budget.
+    const complete = !retrieval.truncated && rankedNoteIds.length <= maxCandidates;
     if (candidateNoteIds.length === 0) continue;
     const notesById = await options.storage.getNotesByIds(candidateNoteIds);
     const candidates = candidateNoteIds
@@ -115,9 +124,24 @@ export async function reconcileEvidenceUnitCandidates(options: {
       : candidates.filter((note) => contentMatchesGroup(groupUnits, note));
 
     if (plausible.length === 1) {
-      const resolvedNoteId = plausible[0]!.id;
-      remaps.set(derivedNoteId, resolvedNoteId);
-      matches.push({ derivedNoteId, noteId: resolvedNoteId });
+      if (complete) {
+        const resolvedNoteId = plausible[0]!.id;
+        remaps.set(derivedNoteId, resolvedNoteId);
+        matches.push({ derivedNoteId, noteId: resolvedNoteId });
+        continue;
+      }
+      diagnostics.push({
+        severity: "warning",
+        code: "candidate_reconciliation_incomplete",
+        candidateIndex,
+        mutationId: groupUnits[0]!.id,
+        noteId: derivedNoteId,
+        message: `Candidate target ${derivedNoteId} matched ${plausible[0]!.id}, but the bounded candidate window may be incomplete; leaving it unattached for review.`,
+        details: {
+          matchKind: identityMatches.length ? "identity" : "content",
+          candidateTargetNoteIds: plausible.map((note) => note.id),
+        },
+      });
       continue;
     }
     if (plausible.length > 1) {

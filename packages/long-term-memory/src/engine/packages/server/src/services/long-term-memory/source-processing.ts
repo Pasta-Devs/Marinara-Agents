@@ -247,8 +247,13 @@ export async function prepareLongTermMemorySource(options: PrepareOptions): Prom
     reviewRequired:
       options.sourceNote.provenance?.kind === "character" ||
       options.sourceNote.provenance?.kind === "lorebook" ||
-      // An ambiguous reconciliation must never auto-apply a likely duplicate; a human picks the target.
-      result.diagnostics.some((diagnostic) => diagnostic.code === "candidate_reconciliation_ambiguous"),
+      // An ambiguous or possibly-incomplete reconciliation must never auto-apply a likely
+      // duplicate; a human picks the target.
+      result.diagnostics.some(
+        (diagnostic) =>
+          diagnostic.code === "candidate_reconciliation_ambiguous" ||
+          diagnostic.code === "candidate_reconciliation_incomplete",
+      ),
   };
 }
 
