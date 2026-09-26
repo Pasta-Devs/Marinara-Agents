@@ -68,6 +68,125 @@
         "bytes": 1364188
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Engine/blob/staging/docs/game/getting-started.md#choosing-rules"
+    },
+    {
+      "manifest": {
+        "schemaVersion": 2,
+        "capabilityApi": {
+          "major": 1,
+          "minor": 14
+        },
+        "builtAgainst": {
+          "engineVersion": "2.4.4",
+          "engineCommit": "7f3286e36196ea3ce591b2b494cdef190a8f740c"
+        },
+        "id": "relationship-tracker",
+        "name": "Relationship Tracker",
+        "version": "0.6.0",
+        "description": "Tracks relationship dynamics between characters and personas in the current RP mode. Add the Agent in Chat Settings → Agents → Tracker Agents for Roleplay mode.",
+        "engine": {
+          "min": "2.4.4",
+          "maxExclusive": "4.0.0"
+        },
+        "kind": [
+          "agent"
+        ],
+        "entrypoints": {
+          "agents": "agents.json",
+          "server": "server.mjs",
+          "client": "client.js"
+        },
+        "contributions": {
+          "slots": [
+            "roleplay-tracker",
+            "tracker-panel"
+          ]
+        },
+        "files": [
+          {
+            "path": "agents.json",
+            "sha256": "a811578c788c472ff27fb2db53b3154e89666a64f38a9ef7e8f3d74ec23329fb",
+            "bytes": 3791
+          },
+          {
+            "path": "server.mjs",
+            "sha256": "e07255108c01ccf783d64ed6b2967281d3b4591ffa25f4bc40b3b23c0f6d353d",
+            "bytes": 12043
+          },
+          {
+            "path": "state.mjs",
+            "sha256": "597023170e26cdeb1e27ab1d5021c5f7d69d5610d42ff38691ce965ad5f21c1f",
+            "bytes": 27236
+          },
+          {
+            "path": "prompt.mjs",
+            "sha256": "41650a28aa09310fd423811d2052c99a34a5ed0d72a4ba170b9bbd863433dab1",
+            "bytes": 6984
+          },
+          {
+            "path": "tracking.mjs",
+            "sha256": "cef2ecc09fe4952ea7d722bc461d49fd22728c816b28ac63bb0d55d1f1989a52",
+            "bytes": 37084
+          },
+          {
+            "path": "activity.mjs",
+            "sha256": "a3917dedc30d510c602f86fc54f957e2fa8cf4c76e0e5458bca488d10d02122d",
+            "bytes": 3916
+          },
+          {
+            "path": "history.mjs",
+            "sha256": "78eeed5546ea116ad1a3a18ce3ff95330bfb212a4fcfdd12c59923d055936ff9",
+            "bytes": 13696
+          },
+          {
+            "path": "persona-state.mjs",
+            "sha256": "c4d60bed0ac51d3f06363ab38561762dd083dd2a6da04e52dacb1bf586b93887",
+            "bytes": 14119
+          },
+          {
+            "path": "persona-tracking.mjs",
+            "sha256": "eb26e9495a282e34af77369175e2f1fa2a405f2c8ad078d2b1d35b74f6230ebe",
+            "bytes": 5375
+          },
+          {
+            "path": "client.js",
+            "sha256": "3ce86e885048bf0c1e0c87e74ae247c0eb9b87e8e9cbd6797608c35a4b37f0a0",
+            "bytes": 56292
+          },
+          {
+            "path": "contracts/relationship-state-v1.schema.json",
+            "sha256": "e6f4a17df057fc87f7c6e4cdedf6773ba02c1a7530fb926fae32013c6414935c",
+            "bytes": 2914
+          },
+          {
+            "path": "contracts/read-api-v1.schema.json",
+            "sha256": "5c66036eb8f1bedf7417bb25a60c367551f63b69d533b63b5aa6098dc4ae72d9",
+            "bytes": 1493
+          },
+          {
+            "path": "contracts/persona-state-v1.schema.json",
+            "sha256": "c40118e7c79f8dcd7129c982f7efae65e4b1d15b352539ecf144138d4a9ed29d",
+            "bytes": 1263
+          }
+        ],
+        "permissions": [
+          "agent-runtime",
+          "chat-read",
+          "prompt-context",
+          "routes",
+          "storage",
+          "ui"
+        ],
+        "restartRequired": true
+      },
+      "category": "tracker",
+      "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/relationship-tracker.png",
+      "artifact": {
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/relationship-tracker-0.6.0.zip",
+        "sha256": "999777982b3fa4059a804677bb11177cec18c4feb09e01e2e4bd11c504499326",
+        "bytes": 190722
+      },
+      "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents/blob/main/packages/relationship-tracker/README.md"
     }
   ]
 }
