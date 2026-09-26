@@ -27,6 +27,8 @@ import type { LtmExtractionDiagnostic } from "../../../../shared/src/features/ag
 import { LongTermMemoryDraftStore } from "./draft-store.js";
 import { uniqueStrings } from "./ltm-utils.js";
 import { retrieveLongTermMemory } from "./retrieval.js";
+import { loadOrRebuildLongTermMemoryIndexes, type LtmRecallIndex } from "./rebuild.js";
+import { reconcileEvidenceUnitCandidates } from "./candidate-reconciliation.js";
 import { canUpdateLtmScopedTarget, resolveScopedEvidenceUnitTargets, scopedVariantNoteId } from "./scoped-targets.js";
 import { LongTermMemoryStorage } from "./storage.js";
 import { normalizeStructuredSummaryEvidenceUnits } from "./structured-summary-normalizer.js";
@@ -285,6 +287,7 @@ async function getExistingTypedNotes(options: {
   maxChunks: number;
   maxTokens: number;
   trustedSubjectCatalog?: TrustedLtmSubjectCatalog;
+  index?: LtmRecallIndex;
 }) {
   const retrieval = await retrieveLongTermMemory({
     root: options.root,
@@ -294,6 +297,7 @@ async function getExistingTypedNotes(options: {
     characterIds: options.scope.characterIds,
     maxChunks: options.maxChunks,
     maxTokens: options.maxTokens,
+    index: options.index,
   });
   const identityNotes = options.trustedSubjectCatalog
     ? trustedLtmIdentityNotesForSource({
@@ -457,6 +461,7 @@ async function extractLongTermMemoryFromSourceNoteInner(
       },
     },
   });
+  const recallIndex = await loadOrRebuildLongTermMemoryIndexes(options.root);
   const existingNotes = await getExistingTypedNotes({
     storage,
     root: options.root,
@@ -467,6 +472,7 @@ async function extractLongTermMemoryFromSourceNoteInner(
     maxChunks: extractionConfig.existingNoteMaxChunks,
     maxTokens: extractionConfig.existingNoteMaxTokens,
     trustedSubjectCatalog: options.trustedSubjectCatalog,
+    index: recallIndex,
   });
   await recordLtmDebugEvent({
     operationId: options.operationId,
@@ -548,10 +554,38 @@ async function extractLongTermMemoryFromSourceNoteInner(
     existingNotes,
     enforceTrustedSubjects: Boolean(options.trustedSubjectCatalog),
   });
+  // The recall index is the extraction snapshot. Re-scanning the vault here would break the
+  // preparation-snapshot contract (one listNotes snapshot plus the deferred rebuild).
+  const reconciliation = await reconcileEvidenceUnitCandidates({
+    units: identityResolution.units,
+    root: options.root,
+    scope,
+    mode: resolvedMode,
+    storage,
+    index: recallIndex,
+  });
+  if (reconciliation.remaps.size > 0 || reconciliation.diagnostics.length > 0) {
+    await recordLtmDebugEvent({
+      operationId: options.operationId,
+      root: options.root,
+      phase: "retrieval",
+      action: "candidate_reconciliation",
+      status: reconciliation.diagnostics.length > 0 ? "warning" : "ok",
+      sourceNoteId: sourceNote.id,
+      counts: {
+        reconciledNotes: reconciliation.remaps.size,
+        ambiguousCandidates: reconciliation.diagnostics.length,
+      },
+      details: {
+        matches: reconciliation.matches,
+        remaps: Object.fromEntries(reconciliation.remaps),
+      },
+    });
+  }
   const targetResolution = await resolveScopedEvidenceUnitTargets({
     storage,
     existingNotes: identityResolution.existingNotes,
-    units: identityResolution.units,
+    units: reconciliation.units,
     scope,
   });
   const compilerExistingNotes = targetResolution.existingNotes;
@@ -598,7 +632,11 @@ async function extractLongTermMemoryFromSourceNoteInner(
       : undefined,
     skipStructuredBackfill: true,
   });
-  compiled.diagnostics.push(...identityResolution.diagnostics, ...targetResolution.diagnostics);
+  compiled.diagnostics.push(
+    ...identityResolution.diagnostics,
+    ...reconciliation.diagnostics,
+    ...targetResolution.diagnostics,
+  );
   const compiledSummary = summarizeCompiledEvidenceUnitExtraction(compiled);
   await recordLtmDebugEvent({
     operationId: options.operationId,

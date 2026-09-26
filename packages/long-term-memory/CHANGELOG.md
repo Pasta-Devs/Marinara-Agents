@@ -1,5 +1,10 @@
 # Long-Term Memory changelog
 
+## 1.3.22 — 2026-09-26
+
+- Reuse an existing memory when an extracted candidate names the same subject as a note already in the vault, instead of creating a second note under a different ID.
+- Leave a candidate unattached and require review when it plausibly matches more than one existing note, so an ambiguous duplicate is never created or applied automatically.
+
 ## 1.3.21 — 2026-09-26
 
 - Filter more common filler, modal, and discourse words from keyword extraction and recall matching, and normalize curly apostrophes so contractions such as `I’m` are recognized as stop words.
