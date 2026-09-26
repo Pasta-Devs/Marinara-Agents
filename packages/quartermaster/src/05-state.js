@@ -557,6 +557,7 @@ QM.state = {
         this.outfitPortraitPromptTemplate = result.outfitPortraitPromptTemplate;
       this.error = null;
     } catch (error) {
+      if (this.chatId !== chatId) return;
       this.error = error && error.message ? error.message : String(error);
     }
     this._notify();
@@ -575,13 +576,14 @@ QM.state = {
     QM._missingItemImageIds.delete(itemId);
     return this._mutate(QM.uploadItemImage(this.chatId, QM_OWNER_ID, itemId, imageDataUrl));
   },
-  async deleteItemImage(itemId) {
-    await this._mutate(QM.deleteItemImage(this.chatId, QM_OWNER_ID, itemId));
-    // Only suppress future image lookups for this item once the delete has
-    // actually happened server-side -- marking it missing first (like
-    // uploadItemImage's own delete-from-cache does on success) would leave a
-    // failed delete permanently hiding an image that's still there.
-    if (!this.error) QM._missingItemImageIds.add(itemId);
+  deleteItemImage(itemId) {
+    return this._mutate(
+      QM.deleteItemImage(this.chatId, QM_OWNER_ID, itemId).then((result) => {
+        // Suppress image lookups only after this delete succeeds.
+        QM._missingItemImageIds.add(itemId);
+        return result;
+      }),
+    );
   },
   unequipAll() {
     return this._mutate(QM.unequipAll(this.chatId, QM_OWNER_ID));

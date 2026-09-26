@@ -1,4 +1,4 @@
-// Quartermaster 0.1.20 — Marinara Engine roleplay-tracker capability (single-file client bundle)
+// Quartermaster 0.1.21 — Marinara Engine roleplay-tracker capability (single-file client bundle)
 // Built from packages/quartermaster/src (10 modules) by scripts/build-quartermaster-package.mjs. Do not edit; edit src/ and rebuild.
 (() => {
 "use strict";
@@ -905,6 +905,7 @@ QM.state = {
         this.outfitPortraitPromptTemplate = result.outfitPortraitPromptTemplate;
       this.error = null;
     } catch (error) {
+      if (this.chatId !== chatId) return;
       this.error = error && error.message ? error.message : String(error);
     }
     this._notify();
@@ -923,13 +924,14 @@ QM.state = {
     QM._missingItemImageIds.delete(itemId);
     return this._mutate(QM.uploadItemImage(this.chatId, QM_OWNER_ID, itemId, imageDataUrl));
   },
-  async deleteItemImage(itemId) {
-    await this._mutate(QM.deleteItemImage(this.chatId, QM_OWNER_ID, itemId));
-    // Only suppress future image lookups for this item once the delete has
-    // actually happened server-side -- marking it missing first (like
-    // uploadItemImage's own delete-from-cache does on success) would leave a
-    // failed delete permanently hiding an image that's still there.
-    if (!this.error) QM._missingItemImageIds.add(itemId);
+  deleteItemImage(itemId) {
+    return this._mutate(
+      QM.deleteItemImage(this.chatId, QM_OWNER_ID, itemId).then((result) => {
+        // Suppress image lookups only after this delete succeeds.
+        QM._missingItemImageIds.add(itemId);
+        return result;
+      }),
+    );
   },
   unequipAll() {
     return this._mutate(QM.unequipAll(this.chatId, QM_OWNER_ID));
@@ -5935,13 +5937,16 @@ Object.assign(QM.dock, {
   },
 
   async _checkImageGenConnections() {
+    const token = this._imageGenSessionToken;
     this._imageGenHasConnections = null;
     this._imageGenConnectionsError = false;
     this._renderImageGenContent();
     try {
       const connections = await QM.listImageConnections();
+      if (token !== this._imageGenSessionToken) return;
       this._imageGenHasConnections = connections.length > 0;
     } catch {
+      if (token !== this._imageGenSessionToken) return;
       this._imageGenHasConnections = false;
       this._imageGenConnectionsError = true;
     }
@@ -6380,6 +6385,7 @@ QM.panel = {
 
   _updateContent() {
     if (!QM.state.chatId) {
+      this.errorNode.style.display = "none";
       this.equippedContent.replaceChildren(this._empty("No active chat."));
       this.outfitsContent.replaceChildren(this._empty("No active chat."));
       this.inventoryContent.replaceChildren(this._empty("No active chat."));
@@ -6577,6 +6583,7 @@ class QuartermasterElement extends HTMLElement {
   }
 
   _render() {
+    if (!this.isConnected) return;
     QM.state.setChat(this._chatId);
 
     const view = this.getAttribute("view");

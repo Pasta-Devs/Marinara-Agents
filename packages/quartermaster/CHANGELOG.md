@@ -1,5 +1,11 @@
 # Quartermaster changelog
 
+## 0.1.21 — 2026-09-26
+- Detached tracker elements wait until mounted before starting subscriptions or changing the active chat.
+- Late image-connection checks and failed mutations no longer overwrite another dialog or chat's state.
+- Failed image deletions preserve the image even when another request finishes at the same time.
+- Closing the active chat clears its old error from the tracker panel.
+
 ## 0.1.20 — 2026-09-26
 - Rebuilding the dock now closes its dialogs and clears their pending sessions.
 - A late wardrobe confirmation cannot replace a newly opened dialog or another chat's view.

@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
+import test from "node:test";
 import vm from "node:vm";
 
 const elements = [];
@@ -196,3 +197,123 @@ for (const outcome of ["failure", "success", "chat-change"]) {
   dock._closeSaveOutfitModal();
 }
 console.log("Quartermaster modal lifecycle and export regressions passed.");
+
+await test("image connection checks cannot overwrite a later dialog", async () => {
+  for (const stale of [false, true]) {
+    for (const reject of [false, true]) {
+      let settle;
+      QM.listImageConnections = () =>
+        new Promise((resolve, fail) => {
+          settle = () => (reject ? fail(new Error("Connection check failed")) : resolve([{}]));
+        });
+      const pending = dock._checkImageGenConnections();
+      if (stale) {
+        dock._closeImageGenModal();
+        dock._imageGenHasConnections = "new session";
+        dock._imageGenConnectionsError = false;
+      }
+      settle();
+      await pending;
+      assert.equal(dock._imageGenHasConnections, stale ? "new session" : !reject);
+      assert.equal(dock._imageGenConnectionsError, !stale && reject);
+    }
+  }
+});
+
+const stateSource = await readFile(new URL("../packages/quartermaster/src/05-state.js", import.meta.url), "utf8");
+await test("image deletion uses its own result during concurrent mutations", async () => {
+  for (const succeeds of [false, true]) {
+    const api = { _missingItemImageIds: new Set() };
+    vm.runInContext(stateSource, vm.createContext({ QM: api }));
+    api.state.chatId = "chat-a";
+    api.deleteItemImage = () => (succeeds ? Promise.resolve({}) : Promise.reject(new Error("Delete failed")));
+    await Promise.all([
+      api.state.deleteItemImage("item-a"),
+      api.state._mutate(succeeds ? Promise.reject(new Error("Other request failed")) : Promise.resolve({})),
+    ]);
+    assert.equal(api._missingItemImageIds.has("item-a"), succeeds);
+  }
+});
+
+await test("a failed mutation cannot overwrite another chat's error", async () => {
+  const api = {};
+  vm.runInContext(stateSource, vm.createContext({ QM: api }));
+  api.state.chatId = "chat-a";
+  let fail;
+  const request = new Promise((_resolve, reject) => {
+    fail = reject;
+  });
+  const pending = api.state._mutate(request);
+  api.state.chatId = "chat-b";
+  api.state.error = "Current chat error";
+  fail(new Error("Old chat error"));
+  await pending;
+  assert.equal(api.state.error, "Current chat error");
+});
+
+await test("closing the active chat clears the panel's old error", async () => {
+  const api = { state: { chatId: null } };
+  vm.runInContext(
+    await readFile(new URL("../packages/quartermaster/src/15-panel.js", import.meta.url), "utf8"),
+    vm.createContext({ QM: api, document: { createElement: element } }),
+  );
+  for (const key of ["equippedContent", "outfitsContent", "inventoryContent", "errorNode"]) api.panel[key] = element();
+  api.panel.errorNode.style.display = "";
+  api.panel._updateContent();
+  assert.equal(api.panel.errorNode.style.display, "none");
+});
+
+await test("detached elements wait for connection before changing shared state or mounting", async () => {
+  const chats = [];
+  const registry = new Map();
+  let mounts = 0;
+  let unmounts = 0;
+  const api = {
+    state: { setChat: (chatId) => chats.push(chatId) },
+    panel: {
+      mount(container) {
+        this.container = container;
+        mounts++;
+      },
+      unmount() {
+        this.container = null;
+        unmounts++;
+      },
+    },
+  };
+  class HostElement {
+    isConnected = false;
+    getAttribute() {
+      return "tracker";
+    }
+    addEventListener() {}
+    removeEventListener() {}
+  }
+  vm.runInContext(
+    await readFile(new URL("../packages/quartermaster/src/90-element.js", import.meta.url), "utf8"),
+    vm.createContext({
+      QM: api,
+      HTMLElement: HostElement,
+      customElements: {
+        get: (name) => registry.get(name),
+        define: (name, value) => registry.set(name, value),
+      },
+    }),
+  );
+  const Component = registry.get("marinara-capability-quartermaster");
+  const component = new Component();
+  component.capabilityProps = { chatId: "stale-chat" };
+  component.attributeChangedCallback("view", null, "tracker");
+  component.capabilityProps = { chatId: "chat-a" };
+  assert.deepEqual(chats, []);
+  assert.equal(mounts, 0);
+  component.isConnected = true;
+  component.connectedCallback();
+  assert.deepEqual(chats, ["chat-a"]);
+  assert.equal(mounts, 1);
+  component.isConnected = false;
+  component.disconnectedCallback();
+  component.capabilityProps = { chatId: "chat-b" };
+  assert.deepEqual(chats, ["chat-a"]);
+  assert.equal(unmounts, 1);
+});

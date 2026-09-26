@@ -115,13 +115,16 @@ Object.assign(QM.dock, {
   },
 
   async _checkImageGenConnections() {
+    const token = this._imageGenSessionToken;
     this._imageGenHasConnections = null;
     this._imageGenConnectionsError = false;
     this._renderImageGenContent();
     try {
       const connections = await QM.listImageConnections();
+      if (token !== this._imageGenSessionToken) return;
       this._imageGenHasConnections = connections.length > 0;
     } catch {
+      if (token !== this._imageGenSessionToken) return;
       this._imageGenHasConnections = false;
       this._imageGenConnectionsError = true;
     }

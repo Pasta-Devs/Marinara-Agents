@@ -64,6 +64,7 @@ class QuartermasterElement extends HTMLElement {
   }
 
   _render() {
+    if (!this.isConnected) return;
     QM.state.setChat(this._chatId);
 
     const view = this.getAttribute("view");

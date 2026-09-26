@@ -210,6 +210,12 @@ alone does not make it visible to stable users.
 
 ## Changelog
 
+### 0.1.21
+
+- Detached tracker elements wait until mounted before starting subscriptions or changing the active chat.
+- Late connection checks and failed mutations cannot overwrite a later dialog or another chat's error.
+- Image deletion uses its own request result; closing the active chat clears its old panel error.
+
 ### 0.1.20
 
 - Rebuilding the dock closes its dialogs and clears their pending sessions.

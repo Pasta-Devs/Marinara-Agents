@@ -223,6 +223,7 @@ QM.panel = {
 
   _updateContent() {
     if (!QM.state.chatId) {
+      this.errorNode.style.display = "none";
       this.equippedContent.replaceChildren(this._empty("No active chat."));
       this.outfitsContent.replaceChildren(this._empty("No active chat."));
       this.inventoryContent.replaceChildren(this._empty("No active chat."));
