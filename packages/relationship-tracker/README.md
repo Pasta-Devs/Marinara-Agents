@@ -2,7 +2,7 @@
 
 Relationship Tracker is a standalone Roleplay tracker by Crimson Orc. It tracks brief relationships between the character cards assigned to a group chat, plus each character's one-way perception of the active persona, and draws them as an editable relationship web inside the Tracker Panel. It does not modify Marinara Engine or another agent.
 
-The package is **staging only** for its first release: Engine `staging` users can install it from **Agents → Download Agents** while it is exercised, and it is hidden from stable users until it graduates.
+The package is **staging only** for its first release: Engine `staging` users can install it from **Agents → Download Agents** now. Stable publication is planned with the next Marinara Engine main release. Requires Engine **2.4.4+** with the staging preview catalog.
 
 ## Install and enable
 
@@ -28,3 +28,10 @@ GET /api/relationship-tracker/v1/chats/:chatId/relationships
 ```
 
 Persona perceptions remain private package state. An absent or unavailable route must be treated by consumers as no relationship context.
+
+## Stable release preparation
+
+For the next Engine main release, remove `relationship-tracker` from `STAGING_ONLY_PACKAGE_IDS`
+in `scripts/catalog-incomplete.mjs`, rebuild with `node scripts/build-relationship-tracker-package.mjs`,
+and update the published package count and README table before promoting Marinara Agents to `main`.
+Copying the preview catalog alone does not make it visible to stable users.

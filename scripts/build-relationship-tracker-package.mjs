@@ -64,7 +64,8 @@ catalog.packages.push({
     sha256: sha256(archive),
     bytes: archive.byteLength,
   },
-  documentationUrl: "https://github.com/Pasta-Devs/Marinara-Agents/blob/main/packages/relationship-tracker/README.md",
+  documentationUrl:
+    "https://github.com/Pasta-Devs/Marinara-Agents/blob/staging/packages/relationship-tracker/README.md",
 });
 catalog.packages.sort((left, right) => left.manifest.name.localeCompare(right.manifest.name));
 // generatedAt is resolved centrally in writeCatalogFamily (preserved by

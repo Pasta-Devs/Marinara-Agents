@@ -40,6 +40,7 @@
 // override. Never commit a catalog generated that way — validation rejects it.
 export const INCOMPLETE_PACKAGE_IDS = new Set(["pixelforge"]);
 
+// Relationship Tracker graduates with the next Marinara Engine main release.
 export const STAGING_ONLY_PACKAGE_IDS = new Set(["ruleset-5e-2014", "relationship-tracker"]);
 
 // A package is in exactly one state. Both sets hiding the same id would make
