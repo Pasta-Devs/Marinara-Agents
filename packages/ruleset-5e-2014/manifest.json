@@ -2,16 +2,16 @@
   "schemaVersion": 2,
   "capabilityApi": {
     "major": 1,
-    "minor": 34
+    "minor": 46
   },
   "builtAgainst": {
     "engineVersion": "2.4.6",
-    "engineCommit": "e15c9e558d5043ded89dbedf86f1bf3d130f2fa5"
+    "engineCommit": "bd6464e61f03ad7d7743f2986f1371d0280c7c85"
   },
   "id": "ruleset-5e-2014",
   "name": "5e (SRD 5.1)",
-  "version": "0.8.0",
-  "description": "Provides 5e SRD 5.1 rules for Game Mode ability checks, skill checks, saving throws, and the full character sheet, plus pickable SRD spells, class features and weapons so you do not type them row by row, and class resources the sheet keeps current as you level up. It also brings 5e combat itself: a battle in a new game on this ruleset is fought by these rules on screen, with attack rolls against Armor Class, advantage and disadvantage, criticals, saving throws, conditions, concentration, death saves and spell slots spent off your sheet, against a bestiary of 319 SRD monsters the Game Master can name or a new opponent built on the measured challenge scale. Its spellcasters cast from their own spell slots, and Hellish Rebuke answers whoever hurts you. With the Tactical combat style the fight is played on a board measured in feet: Speed becomes squares you walk, weapons reach 5 or 10 feet, bows carry to their long range at disadvantage, half cover adds 2 to Armor Class, spells land as cones, lines and bursts, and walking out of a reach lets an enemy strike at you. The Classic style plays the same fight without positions. Not yet: Counterspell, Shield, three-quarters cover and elevation. After installing, choose it under Rules in the Game Mode setup wizard when you create a new game.",
+  "version": "0.9.0",
+  "description": "Provides 5e SRD 5.1 rules for Game Mode ability checks, skill checks, saving throws, and the full character sheet, plus pickable SRD spells, class features and weapons so you do not type them row by row, and class resources the sheet keeps current as you level up. It also brings 5e combat itself: a battle in a new game on this ruleset is fought by these rules on screen, with attack rolls against Armor Class, advantage and disadvantage, criticals, saving throws, conditions, concentration, death saves and spell slots spent off your sheet, against a bestiary of 319 SRD monsters the Game Master can name or a new opponent built on the measured challenge scale. Its spellcasters cast from their own spell slots. Reactions come at their moment: Shield and Uncanny Dodge when a blow hits you, Counterspell when somebody casts, Hellish Rebuke when something hurts you, and six SRD monsters Parry. You can grapple and shove. Bless, Bane, Haste, Slow and other spells change attack rolls, saves, Armor Class and Speed as printed, and exhaustion counts. With the Tactical combat style the fight is played on a board measured in feet: Speed becomes squares you walk, weapons reach 5 or 10 feet, bows carry to their long range at disadvantage, half cover adds 2 to Armor Class, spells land as cones, lines and bursts, and walking out of a reach lets an enemy strike at you. The Classic style plays the same fight without positions. Not yet: three-quarters cover and elevation. After installing, choose it under Rules in the Game Mode setup wizard when you create a new game.",
   "engine": {
     "min": "2.4.6",
     "maxExclusive": "4.0.0"
@@ -33,23 +33,23 @@
   "files": [
     {
       "path": "ruleset.json",
-      "sha256": "813a4826e611ea9a733875fb8682745391f2a007e9cf712f74084ab1c2c4dc15",
-      "bytes": 86734
+      "sha256": "154fbae80ed86286a29ac1629f550dd052baf0f33ed0012d4a406a4ecf1202c0",
+      "bytes": 93257
     },
     {
       "path": "catalogs/spells.json",
-      "sha256": "e07388f62c282487996ad37a83eadb2cbf8a9d087119332e3d71c482e7631e62",
-      "bytes": 313495
+      "sha256": "5073dbe894c942d752bb29df18440d47d4e4366f2aba12915905f86405018284",
+      "bytes": 314974
     },
     {
       "path": "catalogs/features.json",
-      "sha256": "e87b3f7541c39155efbc5348cc436855d5b4ba5f12159ed74194d296cd846a25",
-      "bytes": 199122
+      "sha256": "3970e951d5c1a477334f225b1831b8ea2f7b9ce02e7488aa011a8e14edd537e9",
+      "bytes": 199372
     },
     {
       "path": "catalogs/creatures.json",
-      "sha256": "b37b84d2eacbe0af3c84f28cba63a9ccd2d07464ba5d4017e51b54e0e4c0b828",
-      "bytes": 761652
+      "sha256": "621feee41734fc0441c0edd6ddd01b47d3d79ea517a3a35c0aaae47076285246",
+      "bytes": 779881
     }
   ],
   "permissions": [],

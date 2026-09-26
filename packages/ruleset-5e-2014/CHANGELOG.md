@@ -1,5 +1,13 @@
 # 5e (SRD 5.1)
 
+## 0.9.0 - 2026-09-26
+- Shield, Uncanny Dodge and Counterspell work. When a blow hits you, the fight asks whether you cast Shield (the same roll is checked again against your new Armor Class) or take Uncanny Dodge (its damage is halved). When somebody casts a spell, it asks whether you counter it.
+- Six SRD monsters Parry, and spellcasting monsters such as the Mage can cast Shield and Counterspell back.
+- You can grapple and shove, and break free of a grapple.
+- Bless, Bane, Shield of Faith, Haste, Slow, Blur, Faerie Fire, Guiding Bolt, Vicious Mockery, Longstrider and Ray of Frost change the numbers they print.
+- Exhaustion levels 1, 2, 3 and 5 count in a fight. A poisoned fighter, or a frightened one while it can see what frightens it, rolls its side of a grapple or shove at disadvantage.
+- Needs an Engine with Capability API 1.46.
+
 ## 0.8.0 - 2026-09-25
 - Eleven SRD spellcasters now cast in a fight, off their own sheet and spell slots, at the numbers their stat block prints: the Acolyte, Priest, Cult Fanatic, Druid, Mage, Archmage, Lich, Mummy Lord, both nagas and the Androsphinx. The Gynosphinx prepares nothing a fight can use, so it still fights with its claws.
 - Hellish Rebuke works: when something damages you, the fight asks whether you cast it back at them.
