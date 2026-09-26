@@ -4,11 +4,13 @@ import { applyLtmBudget } from "./budget.js";
 import { searchLtmBm25 } from "./bm25.js";
 import { embedLongTermMemoryTexts, type MemoryRecallEmbeddingOptions } from "./embedding-adapter.js";
 import { expandLtmGraph } from "./graph.js";
+import { buildStopWordSet } from "./keyword-extract.js";
 import { searchLtmKeywordIndex } from "./keyword-index.js";
 import { getLtmMetadataMatches } from "./metadata-index.js";
 import { resolvePackageEmbeddingAdapter } from "./package-runtime.js";
 import { loadOrRebuildLongTermMemoryIndexes } from "./rebuild.js";
 import { reciprocalRankFuse, type LtmRankLane } from "./ranking.js";
+import { getLtmGlobalSettings, ltmGeneratedStopWords } from "./settings.js";
 
 export type RetrieveLongTermMemoryInput = MemoryRecallEmbeddingOptions & {
   root: string;
@@ -65,7 +67,9 @@ function pickGraphSeedNotes(
 
 export async function retrieveLongTermMemory(input: RetrieveLongTermMemoryInput) {
   const embeddingAdapter = await resolvePackageEmbeddingAdapter(input.embeddingAdapter);
-  const index = await loadOrRebuildLongTermMemoryIndexes(input.root, embeddingAdapter);
+  const settings = await getLtmGlobalSettings(input.root);
+  const triggerStopWords = settings.longTermMemoryStopWords;
+  const index = await loadOrRebuildLongTermMemoryIndexes(input.root, embeddingAdapter, ltmGeneratedStopWords(settings));
   const query = input.queryText?.trim() ?? "";
   const characterIds = Array.from(new Set([...(input.scope?.characterIds ?? []), ...(input.characterIds ?? [])]));
   const allowed = new Set(
@@ -109,7 +113,10 @@ export async function retrieveLongTermMemory(input: RetrieveLongTermMemoryInput)
       items: lexical.map((hit) => ({ chunkId: hit.chunkId, rawScore: hit.score, reason: "bm25" })),
     });
   }
-  const keywords = searchLtmKeywordIndex(index.keywords, query, { allowedChunks: allowed });
+  const keywords = searchLtmKeywordIndex(index.keywords, query, {
+    allowedChunks: allowed,
+    stopWords: buildStopWordSet(triggerStopWords),
+  });
   if ((input.keywordWeight ?? 1) > 0 && keywords.length) {
     const max = keywords[0]?.score ?? 1;
     lanes.push({

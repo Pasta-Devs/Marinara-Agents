@@ -9,9 +9,14 @@ const SENTENCE_SPLIT_PATTERN = /[.!?\n\r]+/;
 const STOP_WORDS = new Set([
   "a",
   "about",
+  "above",
   "after",
+  "again",
+  "against",
+  "ago",
   "all",
   "also",
+  "although",
   "an",
   "and",
   "any",
@@ -23,12 +28,14 @@ const STOP_WORDS = new Set([
   "been",
   "before",
   "being",
+  "below",
   "between",
   "both",
   "but",
   "by",
   "can",
   "could",
+  "despite",
   "did",
   "do",
   "does",
@@ -36,15 +43,23 @@ const STOP_WORDS = new Set([
   "down",
   "during",
   "each",
+  "either",
+  "even",
+  "ever",
+  "every",
   "few",
+  "fine",
   "for",
   "from",
   "further",
+  "got",
+  "going",
   "had",
   "has",
   "have",
   "having",
   "he",
+  "hence",
   "her",
   "here",
   "hers",
@@ -53,43 +68,66 @@ const STOP_WORDS = new Set([
   "himself",
   "his",
   "how",
+  "however",
   "i",
+  "i'd",
+  "i'll",
+  "i'm",
+  "i've",
   "if",
   "in",
+  "instead",
   "into",
   "is",
   "it",
   "its",
   "itself",
   "just",
+  "later",
+  "may",
   "me",
+  "might",
   "more",
   "most",
+  "must",
   "my",
   "myself",
+  "need",
+  "neither",
   "no",
   "nor",
   "not",
   "now",
   "of",
   "off",
+  "often",
+  "okay",
   "on",
   "once",
   "only",
   "or",
   "other",
+  "otherwise",
   "our",
   "ours",
   "ourselves",
   "out",
   "over",
   "own",
+  "rather",
+  "really",
+  "recently",
+  "said",
   "same",
+  "shall",
   "she",
   "should",
   "so",
   "some",
+  "sometimes",
+  "soon",
   "such",
+  "sure",
   "than",
   "that",
   "the",
@@ -104,11 +142,14 @@ const STOP_WORDS = new Set([
   "this",
   "those",
   "through",
+  "thus",
   "to",
   "too",
   "under",
+  "unless",
   "until",
   "up",
+  "usually",
   "very",
   "was",
   "we",
@@ -116,6 +157,8 @@ const STOP_WORDS = new Set([
   "what",
   "when",
   "where",
+  "whereas",
+  "whether",
   "which",
   "while",
   "who",
@@ -123,7 +166,10 @@ const STOP_WORDS = new Set([
   "why",
   "will",
   "with",
+  "yes",
   "you",
+  "you're",
+  "you've",
   "your",
   "yours",
   "yourself",
@@ -132,38 +178,69 @@ const STOP_WORDS = new Set([
 
 const MAX_NOTE_KEYWORDS = 30;
 
-export function normalizeKeywordToken(token: string) {
-  const normalized = token
+/** Lowercase and strip edge punctuation, plus normalize curly apostrophes so
+ * `don’t` and `don't` collapse to the same keyword. */
+function normalizeStopWordCandidate(token: string) {
+  return token
     .toLocaleLowerCase()
+    .replace(/\u2019/g, "'")
     .replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, "")
     .replace(/[_\-]+/g, " ")
     .replace(/\s+/g, " ")
     .trim();
+}
+
+/**
+ * Builds the user-configured stop-word set used to block recall triggering.
+ * Each entry contributes its normalized whole phrase (so a hyphenated entry
+ * such as `cobalt-moon` blocks the collapsed token `cobalt moon`) plus every
+ * component token (so a multi-word or hyphenated entry cannot silently become
+ * dead configuration).
+ */
+export function buildStopWordSet(extra?: readonly string[]): ReadonlySet<string> {
+  const set = new Set<string>();
+  for (const word of extra ?? []) {
+    const normalized = normalizeStopWordCandidate(word);
+    if (!normalized) continue;
+    set.add(normalized);
+    for (const token of normalized.split(" ")) {
+      if (token) set.add(token);
+    }
+  }
+  return set;
+}
+
+function isStopWord(token: string, extraStopWords?: ReadonlySet<string>) {
+  return STOP_WORDS.has(token) || (extraStopWords?.has(token) ?? false);
+}
+
+export function normalizeKeywordToken(token: string, extraStopWords?: ReadonlySet<string>) {
+  const normalized = normalizeStopWordCandidate(token);
   if (normalized.length < 3) return null;
   if (/^\d+$/.test(normalized)) return null;
-  if (STOP_WORDS.has(normalized)) return null;
+  if (isStopWord(normalized, extraStopWords)) return null;
   return normalized;
 }
 
-function tokenizeKeywordText(text: string) {
-  return Array.from(text.matchAll(TOKEN_PATTERN), (match) => normalizeKeywordToken(match[0]!)).filter(
+function tokenizeKeywordText(text: string, extraStopWords?: ReadonlySet<string>) {
+  return Array.from(text.matchAll(TOKEN_PATTERN), (match) => normalizeKeywordToken(match[0]!, extraStopWords)).filter(
     (token): token is string => Boolean(token),
   );
 }
 
-function normalizePhrase(value: string) {
-  const tokens = tokenizeKeywordText(value);
+function normalizePhrase(value: string, extraStopWords?: ReadonlySet<string>) {
+  const tokens = tokenizeKeywordText(value, extraStopWords);
   if (tokens.length === 0) return null;
   return tokens.join(" ");
 }
 
-function collectPhrases(tokens: string[]) {
+function collectPhrases(tokens: string[], extraStopWords?: ReadonlySet<string>) {
   const phrases: string[] = [];
   for (let size = 1; size <= 3; size += 1) {
     for (let index = 0; index <= tokens.length - size; index += 1) {
       const slice = tokens.slice(index, index + size);
       if (slice.length !== size) continue;
-      if (slice.every((token) => STOP_WORDS.has(token))) continue;
+      if (slice.every((token) => isStopWord(token, extraStopWords))) continue;
       const phrase = slice.join(" ");
       if (phrase.length < 3 || /^\d+$/.test(phrase.replace(/\s+/g, ""))) continue;
       phrases.push(phrase);
@@ -172,18 +249,23 @@ function collectPhrases(tokens: string[]) {
   return phrases;
 }
 
-export function normalizeKeywordTerms(text: string) {
+export function normalizeKeywordTerms(text: string, extraStopWords?: ReadonlySet<string>) {
   const normalized = new Set<string>();
-  for (const token of tokenizeKeywordText(text)) normalized.add(token);
+  for (const token of tokenizeKeywordText(text, extraStopWords)) normalized.add(token);
   return [...normalized];
 }
 
-export function mergeKeywords(primary: string[], secondary: string[], maxTotal: number) {
+export function mergeKeywords(
+  primary: string[],
+  secondary: string[],
+  maxTotal: number,
+  extraStopWords?: ReadonlySet<string>,
+) {
   const merged: string[] = [];
   const seen = new Set<string>();
 
   for (const keyword of [...primary, ...secondary]) {
-    const normalized = normalizePhrase(keyword);
+    const normalized = normalizePhrase(keyword, extraStopWords);
     if (!normalized || seen.has(normalized)) continue;
     seen.add(normalized);
     merged.push(normalized);
@@ -193,10 +275,10 @@ export function mergeKeywords(primary: string[], secondary: string[], maxTotal: 
   return merged;
 }
 
-export function extractKeywordsTfIdf(text: string, maxKeywords: number) {
+export function extractKeywordsTfIdf(text: string, maxKeywords: number, extraStopWords?: ReadonlySet<string>) {
   const sentences = text
     .split(SENTENCE_SPLIT_PATTERN)
-    .map((part) => tokenizeKeywordText(part))
+    .map((part) => tokenizeKeywordText(part, extraStopWords))
     .filter((tokens) => tokens.length > 0);
   if (sentences.length === 0) return [];
 
@@ -206,7 +288,7 @@ export function extractKeywordsTfIdf(text: string, maxKeywords: number) {
 
   sentences.forEach((tokens, sentenceIndex) => {
     const seenInSentence = new Set<string>();
-    for (const phrase of collectPhrases(tokens)) {
+    for (const phrase of collectPhrases(tokens, extraStopWords)) {
       termFrequency.set(phrase, (termFrequency.get(phrase) ?? 0) + 1);
       if (!firstSeenOrder.has(phrase)) firstSeenOrder.set(phrase, sentenceIndex);
       if (seenInSentence.has(phrase)) continue;
@@ -242,17 +324,32 @@ function noteTextForKeywordExtraction(note: LtmNote) {
     .join("\n\n");
 }
 
-export function extractNoteKeywords(note: LtmNote) {
+/**
+ * Combines stored and text-derived keywords for one note.
+ *
+ * `extraStopWords` (the user's custom list) filters only the generated side —
+ * the note's stored generated keywords and the text-derived TF-IDF keywords.
+ * Manual keywords are merged without that filter so a configured stop word
+ * never removes a user-owned keyword. Built-in stop words still apply to every
+ * side, as they always have.
+ */
+export function extractNoteKeywords(note: LtmNote, extraStopWords?: ReadonlySet<string>) {
   const noteText = noteTextForKeywordExtraction(note);
-  const tfIdfKeywords = noteText ? extractKeywordsTfIdf(noteText, MAX_NOTE_KEYWORDS) : [];
-  const suppressed = new Set(
-    getLtmKeywordIntent(note)
-      .suppressed.map(normalizePhrase)
-      .filter((keyword): keyword is string => Boolean(keyword)),
+  const tfIdfKeywords = noteText ? extractKeywordsTfIdf(noteText, MAX_NOTE_KEYWORDS, extraStopWords) : [];
+  const { generated, manual, suppressed } = getLtmKeywordIntent(note);
+  const suppressedKeys = new Set(
+    suppressed.map((keyword) => normalizePhrase(keyword)).filter((keyword): keyword is string => Boolean(keyword)),
   );
-  return mergeKeywords(
-    getLtmActiveKeywords(note),
-    tfIdfKeywords.filter((keyword) => !suppressed.has(normalizePhrase(keyword))),
+  const keep = (keyword: string) => {
+    const normalized = normalizePhrase(keyword);
+    return normalized !== null && !suppressedKeys.has(normalized);
+  };
+  const generatedKeywords = mergeKeywords(
+    generated.filter(keep),
+    tfIdfKeywords.filter(keep),
     MAX_NOTE_KEYWORDS,
+    extraStopWords,
   );
+  const manualKeywords = mergeKeywords(manual.filter(keep), [], MAX_NOTE_KEYWORDS);
+  return mergeKeywords(generatedKeywords, manualKeywords, MAX_NOTE_KEYWORDS);
 }

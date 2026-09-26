@@ -47,6 +47,7 @@ function assertOwnKeys(record: object, message: string) {
 async function main() {
   const { buildLtmBm25Index, searchLtmBm25 } = await import(`${source}/bm25.ts`);
   const { buildLtmKeywordIndex, searchLtmKeywordIndex } = await import(`${source}/keyword-index.ts`);
+  const { buildStopWordSet } = await import(`${source}/keyword-extract.ts`);
   const { buildLtmMetadataIndex, getLtmMetadataMatches } = await import(`${source}/metadata-index.ts`);
   const { parseLtmRecallIndex } = await import(`${source}/rebuild.ts`);
   const { readLongTermMemoryUsage, recordLongTermMemoryInjection } = await import(`${source}/usage.ts`);
@@ -121,6 +122,48 @@ async function main() {
     }),
     [],
     "keyword search must not read inherited constructor entries",
+  );
+
+  const stopWordChunk = { ...chunk("stopword-chunk", "stopword-note"), keywords: ["cobalt", "cobalt archive"] };
+  const stopWordIndex = buildLtmKeywordIndex([stopWordChunk]);
+  assert.equal(
+    Object.hasOwn(stopWordIndex.byKeyword, "cobalt"),
+    true,
+    "custom stop words must never remove a stored keyword from the keyword index",
+  );
+  assert.ok(
+    searchLtmKeywordIndex(stopWordIndex, "cobalt", { topK: 10 }).some(
+      ({ chunkId }: { chunkId: string }) => chunkId === "stopword-chunk",
+    ),
+    "a stored keyword must trigger recall when no custom stop word applies",
+  );
+  const stopWords = buildStopWordSet(["cobalt"]);
+  assert.deepEqual(
+    searchLtmKeywordIndex(stopWordIndex, "cobalt", { topK: 10, stopWords }),
+    [],
+    "a custom stop word must block its stored keyword from triggering recall",
+  );
+  assert.equal(
+    Object.hasOwn(stopWordIndex.byKeyword, "cobalt"),
+    true,
+    "blocking a keyword at recall time must leave the stored keyword index untouched",
+  );
+
+  const hyphenChunk = { ...chunk("hyphen-chunk", "hyphen-note"), keywords: ["Cobalt-Moon"] };
+  const hyphenIndex = buildLtmKeywordIndex([hyphenChunk]);
+  assert.ok(
+    searchLtmKeywordIndex(hyphenIndex, "Cobalt-Moon", { topK: 10 }).some(
+      ({ chunkId }: { chunkId: string }) => chunkId === "hyphen-chunk",
+    ),
+    "a hyphenated stored keyword must trigger recall when no custom stop word applies",
+  );
+  assert.deepEqual(
+    searchLtmKeywordIndex(hyphenIndex, "Cobalt-Moon", {
+      topK: 10,
+      stopWords: buildStopWordSet(["cobalt-moon"]),
+    }),
+    [],
+    "a hyphenated custom stop word must block its own trigger even while its parts may still match",
   );
 
   assertOwnKeys(parsedRecall.metadata.chunks, "metadata index must retain reserved chunk IDs");

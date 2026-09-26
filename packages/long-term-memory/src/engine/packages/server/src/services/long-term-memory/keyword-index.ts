@@ -51,9 +51,10 @@ export function searchLtmKeywordIndex(
     maxKeywordCatalogEntries?: number;
     maxCandidates?: number;
     allowedChunks?: Set<string>;
+    stopWords?: ReadonlySet<string>;
   } = {},
 ) {
-  const normalizedTerms = normalizeKeywordTerms(queryText);
+  const normalizedTerms = normalizeKeywordTerms(queryText, options.stopWords);
   const normalizedQuery = normalizedTerms.join(" ");
   if (normalizedTerms.length === 0 || normalizedQuery.length === 0) return [];
   const maxCandidatesPerKeyword = Math.max(1, options.maxCandidatesPerKeyword ?? 128);
