@@ -165,6 +165,24 @@ async function main() {
     [],
     "a hyphenated custom stop word must block its own trigger even while its parts may still match",
   );
+  assert.deepEqual(
+    searchLtmKeywordIndex(hyphenIndex, "Cobalt-Moon", {
+      topK: 10,
+      stopWords: buildStopWordSet(["cobalt"]),
+    }),
+    [],
+    "a single-token custom stop word must reject a hyphenated query token that contains it",
+  );
+  const builtinHyphenChunk = {
+    ...chunk("builtin-hyphen-chunk", "builtin-hyphen-note"),
+    keywords: ["state-of-the-art"],
+  };
+  const builtinHyphenIndex = buildLtmKeywordIndex([builtinHyphenChunk]);
+  assert.deepEqual(
+    searchLtmKeywordIndex(builtinHyphenIndex, "state-of-the-art", { topK: 10, stopWords: buildStopWordSet([]) }),
+    [],
+    "a hyphenated query token containing a built-in stop-word component must be rejected",
+  );
 
   assertOwnKeys(parsedRecall.metadata.chunks, "metadata index must retain reserved chunk IDs");
   assertOwnKeys(parsedRecall.metadata.byTag, "metadata index must retain reserved tags");

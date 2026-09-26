@@ -358,7 +358,7 @@
   "ui.longTermMemory.memorysettings.weightGivenToMatchingStoredKeywords": "Weight given to matching stored keywords.",
   "ui.longTermMemory.memorysettings.weightGivenToMatchingWordsAndPhrases": "Weight given to matching words and phrases.",
   "ui.longTermMemory.memorysettings.weightGivenToRelationshipsBetweenLinkedMemories": "Weight given to relationships between linked memories.",
-  "ui.longTermMemory.memorysettings.preventsListedWordsFromBecomingGeneratedKeywordsWhileStill": "Prevents the words above from being generated as note keywords. They still cannot trigger recall, and user-entered keywords are never changed.",
+  "ui.longTermMemory.memorysettings.preventsListedWordsFromBecomingGeneratedKeywordsWhileStill": "Prevents the words above from being generated as note keywords and excludes them from keyword matching. User-entered keywords are never changed.",
   "ui.longTermMemory.memorysettings.weightGivenToSemanticSimilarityBetweenTheCurrentChat": "Weight given to semantic similarity between the current chat and a saved memory.",
   "ui.longTermMemory.memorysettings.wordsIgnoredDuringKeywordMatchingOnePerLine": "Additional words ignored during keyword extraction and matching, one per line.",
   "ui.longTermMemory.memoryvault.addAnotherCharacter": "Add another character",

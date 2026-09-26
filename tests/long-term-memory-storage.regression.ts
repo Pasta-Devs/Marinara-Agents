@@ -870,6 +870,36 @@ async function main() {
       for (const word of ["indeed", "namely"]) {
         assert.ok(defaultHyphenKeywords.includes(word), `discourse word ${word} must not be on the built-in stop list`);
       }
+      const singlePartStopWords = buildStopWordSet(["cobalt"]);
+      assert.equal(
+        extractNoteKeywords(hyphenStopWordNote, singlePartStopWords).some((keyword) => keyword.includes("cobalt")),
+        false,
+        "a single-token custom stop word must reject a hyphenated token that contains it",
+      );
+      const punctuatedStopWords = buildStopWordSet(["cobalt/harbor"]);
+      assert.ok(
+        punctuatedStopWords.has("cobalt") && punctuatedStopWords.has("harbor"),
+        "a punctuated custom stop-word entry must contribute each token boundary",
+      );
+      const manyGeneratedNote = await storage.createNote({
+        ...noteInput,
+        id: "world_keyword_manual_retained",
+        title: "Manual retention proof",
+        keywords: [],
+        manualKeywords: ["manualkeep"],
+        sections: {
+          facts: {
+            text: Array.from({ length: 31 }, (_, index) => `proofword${index + 1}`).join(" "),
+            updatedAt: timestamp,
+          },
+        },
+      });
+      const manyGeneratedKeywords = extractNoteKeywords(manyGeneratedNote);
+      assert.ok(
+        manyGeneratedKeywords.includes("manualkeep"),
+        "a manual keyword must survive the note keyword cap even when generated keywords fill it",
+      );
+      assert.equal(manyGeneratedKeywords.length, 30, "the note keyword cap must still bound the merged keyword list");
       const restoredKeyword = await storage.updateNote(keywordIntent.id, {
         manualKeywords: ["Manual", "Cobalt"],
         suppressedKeywords: [],

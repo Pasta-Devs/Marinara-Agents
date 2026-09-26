@@ -1,8 +1,5 @@
 import type { LtmNote } from "../../../../shared/src/features/agents/long-term-memory/schema.js";
-import {
-  getLtmActiveKeywords,
-  getLtmKeywordIntent,
-} from "../../../../shared/src/features/agents/long-term-memory/keywords.js";
+import { getLtmKeywordIntent } from "../../../../shared/src/features/agents/long-term-memory/keywords.js";
 
 const TOKEN_PATTERN = /[\p{L}\p{N}]+(?:['’\-][\p{L}\p{N}]+)*/gu;
 const SENTENCE_SPLIT_PATTERN = /[.!?\n\r]+/;
@@ -194,8 +191,8 @@ function normalizeStopWordCandidate(token: string) {
  * Builds the user-configured stop-word set used to block recall triggering.
  * Each entry contributes its normalized whole phrase (so a hyphenated entry
  * such as `cobalt-moon` blocks the collapsed token `cobalt moon`) plus every
- * component token (so a multi-word or hyphenated entry cannot silently become
- * dead configuration).
+ * token found on `TOKEN_PATTERN` boundaries (so multi-word, hyphenated or
+ * punctuated entries cannot silently become dead configuration).
  */
 export function buildStopWordSet(extra?: readonly string[]): ReadonlySet<string> {
   const set = new Set<string>();
@@ -203,7 +200,8 @@ export function buildStopWordSet(extra?: readonly string[]): ReadonlySet<string>
     const normalized = normalizeStopWordCandidate(word);
     if (!normalized) continue;
     set.add(normalized);
-    for (const token of normalized.split(" ")) {
+    for (const match of normalized.matchAll(TOKEN_PATTERN)) {
+      const token = normalizeStopWordCandidate(match[0]!);
       if (token) set.add(token);
     }
   }
@@ -219,6 +217,7 @@ export function normalizeKeywordToken(token: string, extraStopWords?: ReadonlySe
   if (normalized.length < 3) return null;
   if (/^\d+$/.test(normalized)) return null;
   if (isStopWord(normalized, extraStopWords)) return null;
+  if (normalized.split(" ").some((part) => isStopWord(part, extraStopWords))) return null;
   return normalized;
 }
 
@@ -351,5 +350,5 @@ export function extractNoteKeywords(note: LtmNote, extraStopWords?: ReadonlySet<
     extraStopWords,
   );
   const manualKeywords = mergeKeywords(manual.filter(keep), [], MAX_NOTE_KEYWORDS);
-  return mergeKeywords(generatedKeywords, manualKeywords, MAX_NOTE_KEYWORDS);
+  return mergeKeywords(manualKeywords, generatedKeywords, MAX_NOTE_KEYWORDS);
 }
