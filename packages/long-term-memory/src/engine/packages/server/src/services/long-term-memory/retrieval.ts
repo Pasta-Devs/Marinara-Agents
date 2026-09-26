@@ -1,5 +1,5 @@
 import { matchesLtmScope, isGlobalLtmScope } from "../../../../shared/src/features/agents/long-term-memory/scope.js";
-import type { LtmMode, LtmScope } from "../../../../shared/src/features/agents/long-term-memory/schema.js";
+import type { LtmMode, LtmNote, LtmScope } from "../../../../shared/src/features/agents/long-term-memory/schema.js";
 import { applyLtmBudget } from "./budget.js";
 import { searchLtmBm25 } from "./bm25.js";
 import { embedLongTermMemoryTexts, type MemoryRecallEmbeddingOptions } from "./embedding-adapter.js";
@@ -8,7 +8,7 @@ import { buildStopWordSet } from "./keyword-extract.js";
 import { searchLtmKeywordIndex } from "./keyword-index.js";
 import { getLtmMetadataMatches } from "./metadata-index.js";
 import { resolvePackageEmbeddingAdapter } from "./package-runtime.js";
-import { loadOrRebuildLongTermMemoryIndexes } from "./rebuild.js";
+import { loadOrRebuildLongTermMemoryIndexes, type LtmRecallIndex } from "./rebuild.js";
 import { reciprocalRankFuse, type LtmRankLane } from "./ranking.js";
 import { getLtmGlobalSettings, ltmGeneratedStopWords } from "./settings.js";
 
@@ -28,6 +28,12 @@ export type RetrieveLongTermMemoryInput = MemoryRecallEmbeddingOptions & {
   keywordWeight?: number;
   explain?: boolean;
   rejectedLimit?: number;
+  /** Restrict ranking to these note types before budgeting, so bounded callers do not lose targets to unrelated chunks. */
+  noteTypes?: readonly LtmNote["type"][];
+  /** Reconciliation needs every matching chunk, even when two notes share identical text. */
+  dedupeExactText?: boolean;
+  /** Preloaded recall index so callers can run several bounded queries without reloading the vault. */
+  index?: LtmRecallIndex;
 };
 
 function cosine(a: number[], b: number[]) {
@@ -69,7 +75,9 @@ export async function retrieveLongTermMemory(input: RetrieveLongTermMemoryInput)
   const embeddingAdapter = await resolvePackageEmbeddingAdapter(input.embeddingAdapter);
   const settings = await getLtmGlobalSettings(input.root);
   const triggerStopWords = settings.longTermMemoryStopWords;
-  const index = await loadOrRebuildLongTermMemoryIndexes(input.root, embeddingAdapter, ltmGeneratedStopWords(settings));
+  const index =
+    input.index ??
+    (await loadOrRebuildLongTermMemoryIndexes(input.root, embeddingAdapter, ltmGeneratedStopWords(settings)));
   const query = input.queryText?.trim() ?? "";
   const characterIds = Array.from(new Set([...(input.scope?.characterIds ?? []), ...(input.characterIds ?? [])]));
   const allowed = new Set(
@@ -77,6 +85,7 @@ export async function retrieveLongTermMemory(input: RetrieveLongTermMemoryInput)
       .filter((chunk) => chunk.status !== "archived")
       .filter((chunk) => input.includeResolved || chunk.status !== "resolved")
       .filter((chunk) => !input.mode || chunk.modes?.includes(input.mode))
+      .filter((chunk) => !input.noteTypes || input.noteTypes.includes(chunk.noteType))
       .filter((chunk) => {
         const hasScope = !isGlobalLtmScope(input.scope) || characterIds.length > 0;
         return matchesLtmScope(
@@ -172,7 +181,7 @@ export async function retrieveLongTermMemory(input: RetrieveLongTermMemoryInput)
     relevanceScoreThreshold: input.minScore,
     explain: input.explain,
     rejectedLimit: input.rejectedLimit,
-    dedupeExactText: true,
+    dedupeExactText: input.dedupeExactText ?? true,
   });
   return { ...budgeted, embeddingsAvailable, warnings: [] as string[] };
 }

@@ -187,7 +187,7 @@ async function getNoteById(storage: ScopedTargetStorage, id: string) {
   return (await storage.getNotesByIds([id])).get(id) ?? null;
 }
 
-function remapEvidenceUnitTargets(units: LtmEvidenceUnit[], remaps: Map<string, string>) {
+export function remapEvidenceUnitTargets(units: LtmEvidenceUnit[], remaps: Map<string, string>) {
   if (remaps.size === 0) return units;
   return units.map((unit) => {
     const currentNoteId = noteIdForEvidenceUnit(unit);
@@ -209,6 +209,16 @@ function subjectIdForResolvedNoteId(unit: LtmEvidenceUnit, noteId: string) {
   const prefix = `${noteIdPrefixForUnit(unit)}_`;
   if (unit.subjectId.startsWith(prefix)) return noteId;
   return noteId.startsWith(prefix) ? noteId.slice(prefix.length) : noteId;
+}
+
+/**
+ * True only when `noteId` is reachable through the unit's own target derivation. World notes may
+ * legally store `faction_`/`location_`/`rule_` ids, but `noteIdForEvidenceUnit` only emits a
+ * canonical `world_` target, so remapping to such a legacy id would compile against a new note.
+ */
+export function isRemappableEvidenceUnitTarget(unit: LtmEvidenceUnit, noteId: string) {
+  if (!ltmNoteIdSchema.safeParse(noteId).success) return false;
+  return noteIdForEvidenceUnit({ ...unit, subjectId: subjectIdForResolvedNoteId(unit, noteId) }) === noteId;
 }
 
 function noteIdPrefixForUnit(unit: LtmEvidenceUnit) {

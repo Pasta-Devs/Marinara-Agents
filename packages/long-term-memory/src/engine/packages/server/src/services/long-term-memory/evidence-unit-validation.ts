@@ -732,7 +732,7 @@ function isValidNoteId(noteId: string) {
   return ltmNoteIdSchema.safeParse(noteId).success;
 }
 
-function targetNoteTypeForUnit(unit: LtmEvidenceUnit): LtmNote["type"] {
+export function targetNoteTypeForUnit(unit: LtmEvidenceUnit): LtmNote["type"] {
   if (unit.bucket.startsWith("relationship_")) return "relationship";
   if (unit.bucket === "timeline_event") return "timeline_event";
   if (unit.bucket === "thread") return "thread";
