@@ -158,6 +158,11 @@ This is fail-hidden, never fail-leak: an Engine that predates preview-overlay su
 
 When a package is ready to ship to everyone: delete its id from both sets, rebuild its package (which re-adds the catalog entry to the published lanes and removes the overlay), update the package-count assertion in `validate-catalog.mjs` and the README catalog tables, and land all of it in one PR.
 
+Quartermaster and Relationship Tracker are scheduled to graduate with the **next Marinara Engine
+main release after v2.4.6**, not an earlier standalone Agent promotion. Follow the
+[coordinated release checklist](https://github.com/Pasta-Devs/Marinara-Agents/issues/1091) when preparing
+that release; merging this repository's preview catalog into `main` does not itself publish them.
+
 `validate-catalog.mjs` enforces that each tier lands in exactly one place: an incomplete id in no catalog at all, a staging-only id in the overlay and never in the published lanes, no orphaned overlay entry or empty overlay directory. Activation guidance and README coverage may exist ahead of a listing.
 
 For local testing against a development Engine, build with `MARINARA_CATALOG_INCLUDE_INCOMPLETE=1` to publish every held-back package into the normal lanes, and point the Engine's `MARINARA_AGENT_CATALOG_URL` override at it. Never commit a catalog generated that way — validation rejects it.

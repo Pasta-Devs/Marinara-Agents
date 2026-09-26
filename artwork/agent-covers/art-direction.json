@@ -236,6 +236,12 @@
       "palette": "planet blue, leaf green, sunlight gold, night violet"
     },
     {
+      "id": "quartermaster",
+      "name": "Quartermaster",
+      "concept": "Chibi Professor Mari wears medieval steel armor over navy cloth and confidently holds an upright sword, her blonde curls and glasses visible against a castle armory.",
+      "palette": "steel silver, navy, warm gold, sky blue"
+    },
+    {
       "id": "relationship-tracker",
       "name": "Relationship Tracker",
       "concept": "Chibi Professor Mari and a friendly red orc sit across one plate of spaghetti, affectionately connected mouth-to-mouth by a single noodle in a Lady and the Tramp parody.",

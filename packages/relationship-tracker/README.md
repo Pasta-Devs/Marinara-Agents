@@ -6,7 +6,7 @@ The package is **staging only** for its first release: Engine `staging` users ca
 
 ## Install and enable
 
-Use **Agents → Download Agents** and restart when prompted. Installing the package does not enable it globally: for each Roleplay chat, open **Chat Settings → Agents**, enable agents, add Relationship Tracker under Tracker Agents, and choose a model connection for it. The tracker works with the **Local Sidecar** or any configured API provider.
+Use **Agents → Download Agents** and restart when prompted. Installing the package does not enable it globally: for each Roleplay chat, open **Chat Settings → Agents**, enable agents, add Relationship Tracker under Tracker Agents, and choose a model connection for it. The tracker works with the **Local Sidecar** or any configured API provider. In the Tracker Panel, select **All relationships** or **Scene-only relationships** once to initialize this chat before editing or updating relationships.
 
 ## Use
 

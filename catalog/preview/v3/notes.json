@@ -1,6 +1,130 @@
 {
   "schemaVersion": 1,
   "packages": {
+    "quartermaster": {
+      "versions": [
+        {
+          "version": "0.1.22",
+          "date": "2026-09-27",
+          "notes": "- Image uploads and outfit saves report their own result when other edits finish at the same time.\n- A completed upload cannot close a newer dialog or show its error in another chat.\n- Late inventory refreshes no longer undo a completed edit or replace a newer refresh.",
+          "highlight": false
+        },
+        {
+          "version": "0.1.21",
+          "date": "2026-09-26",
+          "notes": "- Detached tracker elements wait until mounted before starting subscriptions or changing the active chat.\n- Late image-connection checks and failed mutations no longer overwrite another dialog or chat's state.\n- Failed image deletions preserve the image even when another request finishes at the same time.\n- Closing the active chat clears its old error from the tracker panel.",
+          "highlight": false
+        },
+        {
+          "version": "0.1.20",
+          "date": "2026-09-26",
+          "notes": "- Rebuilding the dock now closes its dialogs and clears their pending sessions.\n- A late wardrobe confirmation cannot replace a newly opened dialog or another chat's view.",
+          "highlight": false
+        },
+        {
+          "version": "0.1.19",
+          "date": "2026-09-26",
+          "notes": "- Available from the official staging Download Agents catalog with Professor Mari's armored\n  Quartermaster cover and installation guidance.\n- Closing the dock also closes its dialogs; an old image-prompt preview cannot replace a later\n  dialog or another chat's preview. Failed inventory exports now report their error.\n- A failed outfit save cannot overwrite an existing outfit's portrait.",
+          "highlight": false
+        },
+        {
+          "version": "0.1.18",
+          "date": "2026-09-19",
+          "notes": "- Fixed the Settings avatar-swap toggle showing a stale value from the previous chat after a\n  failed reload.\n- Fixed a failed image delete permanently hiding an item's picture instead of just the delete.\n- Fixed the Build Wardrobe and Generate Image modals letting a stale, still-running generation\n  overwrite what a later session in the same modal was showing.\n- Fixed the tracker panel briefly reappearing over the toolbar button in a rare mount-reuse case.\n- Corrected the README's stated minimum Engine version to 2.4.6, matching the manifest.",
+          "highlight": false
+        },
+        {
+          "version": "0.1.17",
+          "date": "2026-09-18",
+          "notes": "- Raised the minimum required Engine version to 2.4.6, matching what this has actually been\n  tested against recently.",
+          "highlight": false
+        },
+        {
+          "version": "0.1.16",
+          "date": "2026-09-16",
+          "notes": "- Brief toast notifications now appear when the tracker agent adds, updates, equips, or removes\n  an item -- visible even with the dock closed.\n- Items can now be favorited with a star, which sorts them to the top of the Bag.",
+          "highlight": false
+        },
+        {
+          "version": "0.1.15",
+          "date": "2026-09-15",
+          "notes": "- Fixed the Recent Agent Update box leak for real this time — 0.1.13 and 0.1.14 were both\n  attempted fixes that didn't fully resolve it.\n- Widened the info tooltip box so long macro tokens read on one line.",
+          "highlight": false
+        },
+        {
+          "version": "0.1.14",
+          "date": "2026-09-15",
+          "notes": "- Attempted fix for the Recent Agent Update collapsed-box leak (0.1.13's attempt didn't fully\n  resolve it either).\n- Fixed tooltip text overflowing outside its own box.",
+          "highlight": false
+        },
+        {
+          "version": "0.1.13",
+          "date": "2026-09-14",
+          "notes": "- Attempted fix for Recent Agent Update's collapsed box showing a sliver of Restore Inventory\n  underneath.\n- Info tooltips and card overflow menus no longer clip against the dock's edge.\n- Shrank the item card's quantity field to match the \"⋯\" button beside it.\n- \"+ Add Item\" is now green, matching Save Current Outfit.",
+          "highlight": false
+        },
+        {
+          "version": "0.1.12",
+          "date": "2026-09-14",
+          "notes": "- Settings moved to its own tab instead of an accordion pushing inventory below the fold.\n- Settings regrouped into Appearance/Display/Image Generation/Data, with hover-and-tap tooltips\n  replacing permanent explanation text.\n- Recent Automatic Update (renamed Recent Agent Update) moved next to Restore Inventory, with a\n  colored +N/↑N/−N count summary and visible reasoning even on quiet turns.\n- Item and outfit cards collapse Edit/Update/Delete into a \"⋯\" menu, giving descriptions more\n  room.\n- Delete confirmations now also cover the item-image and outfit-portrait remove buttons.\n- Add Item is now a modal instead of an always-open form.",
+          "highlight": true
+        },
+        {
+          "version": "0.1.11",
+          "date": "2026-09-13",
+          "notes": "- The tracking agent now targets specific changes instead of re-listing the whole inventory every\n  turn, so nothing gets dropped or cut off.\n- Added a \"Recent Automatic Update\" view showing what the last turn changed, with a per-item\n  Revert button.",
+          "highlight": true
+        },
+        {
+          "version": "0.1.10",
+          "date": "2026-09-13",
+          "notes": "- Rewrote the README's Features section for readability and documented several\n  previously-undocumented features.\n- Updated the in-app description to mention saved outfits, AI-generated art, and the tracker\n  agent.",
+          "highlight": false
+        },
+        {
+          "version": "0.1.9",
+          "date": "2026-09-11",
+          "notes": "- Fixed equip-slot quick-fill only searching the Wearables tab, missing stashed wearable items.",
+          "highlight": false
+        },
+        {
+          "version": "0.1.8",
+          "date": "2026-09-11",
+          "notes": "- Confirmed fix: Generate Image no longer shows a person in item images.\n- Bag column now splits into Items, Wearables, and Stored tabs.",
+          "highlight": false
+        },
+        {
+          "version": "0.1.7",
+          "date": "2026-09-09",
+          "notes": "- Attempted fix for Generate Image sending the persona's appearance into item/outfit image\n  requests instead of a clean product shot.\n- Build script now refuses to silently overwrite an already-released version's artifact.",
+          "highlight": false
+        },
+        {
+          "version": "0.1.6",
+          "date": "2026-09-08",
+          "notes": "- Added Generate Image: an AI-generated alternative to uploading, for both item images and\n  outfit portraits.\n- New Settings section to pick the image connection and edit the two prompt templates.\n- Fixed the portrait prompt leaking a raw appearance-macro token into the image request.\n- Export/import now carry the two prompt templates.",
+          "highlight": true
+        },
+        {
+          "version": "0.1.5",
+          "date": "2026-09-08",
+          "notes": "- Fixed Build Wardrobe producing no debug-log output.\n- Replaced the dock's 5-second inventory poll with an event-driven refresh.",
+          "highlight": false
+        },
+        {
+          "version": "0.1.4",
+          "date": "2026-09-08",
+          "notes": "- Added Build Wardrobe: describe a style and get a proposed set of items and outfits to review\n  before adding.\n- Outfits it builds can reuse existing wearable items instead of always creating new ones.\n- Fixed non-wearable items sometimes turning up in a generated outfit.",
+          "highlight": true
+        },
+        {
+          "version": "0.1.3",
+          "date": "2026-09-07",
+          "notes": "- Fixed inventory silently wiping every turn due to a misconfigured result type.\n- Outfits now stay equipped when extra items are added alongside them.\n- Added a \"Restore Inventory\" safety net and a \"Refresh Images\" button.\n- Fixed a rendering bug hiding an equip slot's labels behind its fallback icon.",
+          "highlight": true
+        }
+      ]
+    },
     "relationship-tracker": {
       "versions": [
         {
