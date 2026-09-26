@@ -28,6 +28,8 @@ type GlobalForm = {
   longTermMemoryLexicalWeight: number;
   longTermMemoryGraphWeight: number;
   longTermMemoryKeywordWeight: number;
+  longTermMemoryStopWordsText: string;
+  longTermMemoryStopWordsFilterGenerated: boolean;
   longTermMemoryIncludeResolved: boolean;
   longTermMemoryRecallPreamble: string;
   longTermMemoryDebug: boolean;
@@ -127,11 +129,29 @@ function settingsForm(settings: LtmGlobalSettings): GlobalForm {
     longTermMemoryLexicalWeight: settings.longTermMemoryLexicalWeight ?? presetWeights.lexicalWeight,
     longTermMemoryGraphWeight: settings.longTermMemoryGraphWeight ?? presetWeights.graphWeight,
     longTermMemoryKeywordWeight: settings.longTermMemoryKeywordWeight ?? presetWeights.keywordWeight,
+    longTermMemoryStopWordsText: (settings.longTermMemoryStopWords ?? []).join("\n"),
+    longTermMemoryStopWordsFilterGenerated: settings.longTermMemoryStopWordsFilterGenerated ?? true,
     longTermMemoryIncludeResolved: settings.longTermMemoryIncludeResolved ?? false,
     longTermMemoryRecallPreamble: settings.longTermMemoryRecallPreamble ?? "",
     longTermMemoryDebug: settings.longTermMemoryDebug ?? false,
     ...(settings.sourcesAvailabilityModes ? { sourcesAvailabilityModes: settings.sourcesAvailabilityModes } : {}),
   };
+}
+
+function stopWordsFromText(text: string) {
+  return Array.from(
+    new Set(
+      text
+        .split(/[\n,]+/)
+        .map((word) => word.trim().toLowerCase())
+        .filter(Boolean),
+    ),
+  );
+}
+
+function globalPayload(form: GlobalForm) {
+  const { longTermMemoryStopWordsText, ...settings } = form;
+  return { ...settings, longTermMemoryStopWords: stopWordsFromText(longTermMemoryStopWordsText) };
 }
 
 function applyRecallStyle(form: GlobalForm, recallStyle: GlobalForm["longTermMemoryRecallStyle"]): GlobalForm {
@@ -237,6 +257,7 @@ export default function MemorySettings({
   const memorySettingsTitleId = useId();
   const recallStyleLabelId = useId();
   const recallPreambleLabelId = useId();
+  const memoryStopWordsLabelId = useId();
   const reasoningEffortLabelId = useId();
   const verbosityLabelId = useId();
   const extractionConnectionLabelId = useId();
@@ -319,7 +340,7 @@ export default function MemorySettings({
     setMessage("");
     try {
       if (globalDirty && globalForm) {
-        const saved = settingsForm(await request<LtmGlobalSettings>("/settings", "PUT", globalForm));
+        const saved = settingsForm(await request<LtmGlobalSettings>("/settings", "PUT", globalPayload(globalForm)));
         setGlobalForm(saved);
         setSavedGlobal(saved);
         await invalidateLtmQueries(queryClient, [queryKeys.settings, queryKeys.chatDefaults]);
@@ -1063,6 +1084,40 @@ export default function MemorySettings({
             }
           />
         </div>
+        <div className="space-y-1 text-xs font-medium text-[var(--muted-foreground)]">
+          <span id={memoryStopWordsLabelId} className="flex items-center gap-1">
+            {localizeUi("ui.longTermMemory.memorysettings.memoryStopWords")}
+            <InfoPopover
+              label={localizeUi("ui.longTermMemory.memorysettings.memoryStopWords")}
+              content={localizeUi("ui.longTermMemory.memorysettings.wordsIgnoredDuringKeywordMatchingOnePerLine")}
+            />
+          </span>
+          <textarea
+            aria-labelledby={memoryStopWordsLabelId}
+            className={`${inputClass} min-h-20 py-2`}
+            spellCheck={false}
+            value={globalForm.longTermMemoryStopWordsText}
+            onChange={(event) =>
+              setGlobalForm({
+                ...globalForm,
+                longTermMemoryStopWordsText: event.target.value,
+              })
+            }
+          />
+        </div>
+        <Toggle
+          label={localizeUi("ui.longTermMemory.memorysettings.blockStopWordsInGeneratedKeywords")}
+          help={localizeUi(
+            "ui.longTermMemory.memorysettings.preventsListedWordsFromBecomingGeneratedKeywordsWhileStill",
+          )}
+          checked={globalForm.longTermMemoryStopWordsFilterGenerated}
+          onChange={(value) =>
+            setGlobalForm({
+              ...globalForm,
+              longTermMemoryStopWordsFilterGenerated: value,
+            })
+          }
+        />
       </section>
 
       <section

@@ -11,13 +11,20 @@ import {
   type LtmRelationshipDimensions,
   type LtmMemoryChunk,
 } from "../../../../shared/src/features/agents/long-term-memory/schema.js";
-import { extractNoteKeywords } from "./keyword-extract.js";
+import { buildStopWordSet, extractNoteKeywords } from "./keyword-extract.js";
 
 export const CURRENT_LTM_CHUNK_FORMAT_VERSION = 4;
 
 export interface ChunkLtmNotesOptions {
   includeSourceNotes?: boolean;
   sourceNotesOnly?: boolean;
+  /**
+   * Effective stop words that filter generated keywords. The caller passes the
+   * custom list only while the "filter generated" setting is enabled; the
+   * built-in list is always applied inside extraction. Manual keywords are
+   * never filtered by the custom list.
+   */
+  stopWords?: readonly string[];
 }
 
 const LEGACY_LABEL_SUFFIX_PATTERN = /\n{2,}\[note:[^\n]*\]\s*$/;
@@ -48,8 +55,8 @@ export function isLtmSourceSummaryNote(note: Pick<LtmNote, "type" | "tags">) {
   return isLtmSourceLikeNote(note);
 }
 
-export function chunkNoteSections(note: LtmNote): LtmMemoryChunk[] {
-  const keywords = extractNoteKeywords(note);
+export function chunkNoteSections(note: LtmNote, extraStopWords?: ReadonlySet<string>): LtmMemoryChunk[] {
+  const keywords = extractNoteKeywords(note, extraStopWords);
   if (note.type === "tone") {
     const profileText = note.sections.profile?.text ? cleanLongTermMemoryChunkText(note.sections.profile.text) : "";
     const obsText = note.sections.observations?.text
@@ -132,6 +139,7 @@ export function chunkNoteSections(note: LtmNote): LtmMemoryChunk[] {
 }
 
 export function chunkNotes(notes: LtmNote[], options: ChunkLtmNotesOptions = {}) {
+  const extraStopWords = buildStopWordSet(options.stopWords);
   return notes
     .slice()
     .filter((note) => {
@@ -140,5 +148,5 @@ export function chunkNotes(notes: LtmNote[], options: ChunkLtmNotesOptions = {})
       return options.includeSourceNotes === true || !isSource;
     })
     .sort((a, b) => a.id.localeCompare(b.id))
-    .flatMap((note) => chunkNoteSections(note));
+    .flatMap((note) => chunkNoteSections(note, extraStopWords));
 }

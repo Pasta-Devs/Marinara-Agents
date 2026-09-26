@@ -85,6 +85,8 @@ const ltmGlobalSettingsShape = z
     longTermMemoryLexicalWeight: z.number().finite().min(0).max(1).nullable().optional(),
     longTermMemoryGraphWeight: z.number().finite().min(0).max(1).nullable().optional(),
     longTermMemoryKeywordWeight: z.number().finite().min(0).max(1).nullable().optional(),
+    longTermMemoryStopWords: z.array(z.string().trim().min(1).max(80)).max(200).optional(),
+    longTermMemoryStopWordsFilterGenerated: z.boolean().optional(),
     longTermMemoryIncludeResolved: z.boolean().optional(),
     longTermMemoryRecallPreamble: z.string().max(500).optional(),
     longTermMemoryDebug: z.boolean().optional(),
@@ -129,6 +131,8 @@ export const ltmResolvedGlobalSettingsSchema = z
     longTermMemoryLexicalWeight: z.number().finite().min(0).max(1),
     longTermMemoryGraphWeight: z.number().finite().min(0).max(1),
     longTermMemoryKeywordWeight: z.number().finite().min(0).max(1),
+    longTermMemoryStopWords: z.array(z.string().trim().min(1).max(80)).max(200),
+    longTermMemoryStopWordsFilterGenerated: z.boolean(),
     longTermMemoryIncludeResolved: z.boolean(),
     longTermMemoryRecallPreamble: z.string().max(500),
     longTermMemoryDebug: z.boolean(),
@@ -148,6 +152,8 @@ export const DEFAULT_LTM_GLOBAL_SETTINGS = ltmResolvedGlobalSettingsSchema.parse
   longTermMemoryLexicalWeight: DEFAULT_LTM_RECALL_STYLE_WEIGHTS.lexicalWeight,
   longTermMemoryGraphWeight: DEFAULT_LTM_RECALL_STYLE_WEIGHTS.graphWeight,
   longTermMemoryKeywordWeight: DEFAULT_LTM_RECALL_STYLE_WEIGHTS.keywordWeight,
+  longTermMemoryStopWords: [],
+  longTermMemoryStopWordsFilterGenerated: true,
   longTermMemoryIncludeResolved: false,
   longTermMemoryRecallPreamble: DEFAULT_LTM_RECALL_PREAMBLE,
   longTermMemoryDebug: false,
@@ -3102,7 +3108,7 @@ export type LtmPendingDraftsCountResponse = z.infer<typeof ltmPendingDraftsCount
  * them so existing rows load without a destructive migration.
  */
 const LTM_AGENT_LEGACY_RECALL_KEYS =
-  /^(longTermMemoryBudgetTokens|longTermMemoryMaxChunks|longTermMemoryScoreThreshold|longTermMemoryRecallContextMessages|longTermMemoryRecallStyle|longTermMemorySemanticWeight|longTermMemoryLexicalWeight|longTermMemoryGraphWeight|longTermMemoryKeywordWeight|longTermMemoryIncludeResolved|longTermMemoryRecallPreamble|longTermMemoryDebug)$/;
+  /^(longTermMemoryBudgetTokens|longTermMemoryMaxChunks|longTermMemoryScoreThreshold|longTermMemoryRecallContextMessages|longTermMemoryRecallStyle|longTermMemorySemanticWeight|longTermMemoryLexicalWeight|longTermMemoryGraphWeight|longTermMemoryKeywordWeight|longTermMemoryStopWords|longTermMemoryStopWordsFilterGenerated|longTermMemoryIncludeResolved|longTermMemoryRecallPreamble|longTermMemoryDebug)$/;
 
 const ltmAgentSettingsShape = z
   .object({

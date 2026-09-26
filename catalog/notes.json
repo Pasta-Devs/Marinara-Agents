@@ -128,6 +128,12 @@
     "long-term-memory": {
       "versions": [
         {
+          "version": "1.3.21",
+          "date": "2026-09-26",
+          "notes": "- Filter more common filler, modal, and discourse words from keyword extraction and recall matching, and normalize curly apostrophes so contractions such as `I’m` are recognized as stop words.\n- Add a Memory Settings stop-word list and a default-on toggle that keeps listed words out of generated keywords; listed words also cannot trigger recall, and stored or manual keywords are never rewritten or removed.",
+          "highlight": false
+        },
+        {
           "version": "1.3.20",
           "date": "2026-09-25",
           "notes": "- Show spinning import progress only on source rows included in the running task; keep other import icons visible and disabled until it finishes.",
@@ -239,12 +245,6 @@
           "version": "1.3.2",
           "date": "2026-09-18",
           "notes": "- Preserved all structured relationship participants and reused local identities when names arrive in short-name-first order.",
-          "highlight": false
-        },
-        {
-          "version": "1.3.1",
-          "date": "2026-09-17",
-          "notes": "- Fixed duplicate and conflicting source ID handling during source import.\n- Fixed updateNote call signature in source extraction.\n- Removed undeclared and unused batch extraction scope argument in import interop.",
           "highlight": false
         }
       ]
