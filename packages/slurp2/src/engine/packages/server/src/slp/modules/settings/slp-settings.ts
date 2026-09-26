@@ -568,7 +568,23 @@ export function isSlurpViewerActorAccount(account: Pick<SlurpAccount, "invited" 
   return account.invited === true && account.kind === "persona";
 }
 
+// The world tick reads settings many times per pass; a full zod parse each time held the Engine's
+// event loop for seconds. Stored settings arrive as a JSON string (null before the first save), so
+// the last one is the cache key.
+// Callers get a clone because some of them build on the returned object.
+let cachedSettingsRaw: string | null = null;
+let cachedSettings: SlurpSettings | null = null;
+
 export function normalizeSlurpSettings(raw: unknown): SlurpSettings {
+  if (typeof raw !== "string" && raw !== null) return normalizeSlurpSettingsUncached(raw);
+  if (raw !== cachedSettingsRaw || !cachedSettings) {
+    cachedSettings = normalizeSlurpSettingsUncached(raw);
+    cachedSettingsRaw = raw;
+  }
+  return structuredClone(cachedSettings);
+}
+
+function normalizeSlurpSettingsUncached(raw: unknown): SlurpSettings {
   const rawRecord = parseRecord(raw);
   const candidate = Object.fromEntries(
     Object.entries(DEFAULT_SLURP_SETTINGS).map(([key, value]) => [key, rawRecord[key] ?? value]),
