@@ -2,7 +2,7 @@
   "$comment": "First-party 5e ruleset on SRD 5.1. Every id here is this file's own choice: the Engine never looks for 'level', 'dex' or 'slots'. A $comment key is allowed on any object and ignored.",
   "schemaVersion": 1,
   "id": "5e-2014",
-  "version": 8,
+  "version": 9,
   "name": "5e (SRD 5.1)",
   "edition": "System Reference Document 5.1, 2014 rules",
   "license": {
@@ -16,7 +16,7 @@
     "resources": true,
     "rests": true,
     "combat": true,
-    "summary": "Ability checks, skill checks, saving throws, the full character sheet, spell slots, hit dice, class resources, conditions, rests, and 5e combat: attack rolls against Armor Class with advantage and criticals, saves, concentration, death saves, the SRD monsters, and a fight on a board in feet with movement, reach, range, cover and areas. Not yet: chosen reactions, elevation, grapple and shove."
+    "summary": "Ability checks, skill checks, saving throws, the full character sheet, spell slots, hit dice, class resources, conditions, rests, and 5e combat against the SRD monsters: attacks against Armor Class, saves, concentration, death saves, grapples and shoves, Shield, Counterspell and Parry, spells that change the numbers, exhaustion, and a board in feet. Not yet: elevation and three-quarters cover."
   },
   "resolution": {
     "kind": "dice-sum",
@@ -1123,6 +1123,75 @@
         {
           "id": "unconscious",
           "label": "Unconscious"
+        },
+        {
+          "$comment": "The rest are not SRD conditions: each is the state one spell, class feature or creature's reaction leaves its target in, with the numbers that rule gives. The combat block says what each does.",
+          "id": "blessed",
+          "label": "Blessed"
+        },
+        {
+          "id": "baned",
+          "label": "Baned"
+        },
+        {
+          "id": "shielded",
+          "label": "Shielded"
+        },
+        {
+          "id": "shield_of_faith",
+          "label": "Shield of Faith"
+        },
+        {
+          "id": "hasted",
+          "label": "Hasted"
+        },
+        {
+          "id": "slowed",
+          "label": "Slowed"
+        },
+        {
+          "id": "blurred",
+          "label": "Blurred"
+        },
+        {
+          "id": "outlined",
+          "label": "Outlined"
+        },
+        {
+          "id": "guided",
+          "label": "Guided"
+        },
+        {
+          "id": "mocked",
+          "label": "Mocked"
+        },
+        {
+          "id": "longstriding",
+          "label": "Longstrider"
+        },
+        {
+          "id": "chilled",
+          "label": "Chilled"
+        },
+        {
+          "id": "dodging",
+          "label": "Uncanny Dodge"
+        },
+        {
+          "id": "parrying_2",
+          "label": "Parrying (+2)"
+        },
+        {
+          "id": "parrying_3",
+          "label": "Parrying (+3)"
+        },
+        {
+          "id": "parrying_4",
+          "label": "Parrying (+4)"
+        },
+        {
+          "id": "parrying_5",
+          "label": "Parrying (+5)"
         }
       ]
     }
@@ -2495,10 +2564,10 @@
       { "condition": "charmed", "effects": ["cannot-target-source"], "endsWhenSourceDown": true },
       {
         "condition": "frightened",
-        "effects": ["own-attacks-disadvantage", "cannot-approach-source"],
-        "whileSourceInSight": ["own-attacks-disadvantage"]
+        "effects": ["own-attacks-disadvantage", "own-checks-disadvantage", "cannot-approach-source"],
+        "whileSourceInSight": ["own-attacks-disadvantage", "own-checks-disadvantage"]
       },
-      { "condition": "grappled", "effects": ["speed-zero"] },
+      { "condition": "grappled", "effects": ["speed-zero"], "endsWhenSourceDown": true },
       { "condition": "incapacitated", "effects": ["cannot-act", "cannot-react"] },
       { "condition": "invisible", "effects": ["own-attacks-advantage", "attacks-against-disadvantage"] },
       {
@@ -2511,7 +2580,7 @@
         "effects": ["cannot-act", "cannot-react", "speed-zero", "attacks-against-advantage", "resist-all"],
         "failsSaves": ["str_save", "dex_save"]
       },
-      { "condition": "poisoned", "effects": ["own-attacks-disadvantage"] },
+      { "condition": "poisoned", "effects": ["own-attacks-disadvantage", "own-checks-disadvantage"] },
       {
         "condition": "prone",
         "effects": [
@@ -2541,6 +2610,113 @@
           "attacks-from-adjacent-critical"
         ],
         "failsSaves": ["str_save", "dex_save"]
+      },
+      {
+        "condition": "blessed",
+        "modifiers": [
+          { "to": "attacks", "dice": "1d4" },
+          { "to": "saves", "dice": "1d4" }
+        ]
+      },
+      {
+        "condition": "baned",
+        "modifiers": [
+          { "to": "attacks", "dice": "1d4", "minus": true },
+          { "to": "saves", "dice": "1d4", "minus": true }
+        ]
+      },
+      { "condition": "shielded", "modifiers": [{ "to": "defense", "flat": 5 }] },
+      { "condition": "shield_of_faith", "modifiers": [{ "to": "defense", "flat": 2 }] },
+      {
+        "condition": "hasted",
+        "effects": ["own-saves-advantage"],
+        "saves": ["dex_save"],
+        "modifiers": [
+          { "to": "defense", "flat": 2 },
+          { "to": "speed", "times": 2 }
+        ]
+      },
+      {
+        "condition": "slowed",
+        "effects": ["cannot-react"],
+        "saves": ["dex_save"],
+        "modifiers": [
+          { "to": "defense", "flat": -2 },
+          { "to": "saves", "flat": -2 },
+          { "to": "speed", "times": 0.5 }
+        ]
+      },
+      { "condition": "blurred", "effects": ["attacks-against-disadvantage"] },
+      { "condition": "outlined", "effects": ["attacks-against-advantage"] },
+      { "condition": "guided", "effects": ["attacks-against-advantage"] },
+      { "condition": "mocked", "effects": ["own-attacks-disadvantage"] },
+      { "condition": "longstriding", "modifiers": [{ "to": "speed", "flat": 10 }] },
+      { "condition": "chilled", "modifiers": [{ "to": "speed", "flat": -10 }] },
+      { "condition": "dodging", "effects": ["resist-all"] },
+      { "condition": "parrying_2", "modifiers": [{ "to": "defense", "flat": 2 }] },
+      { "condition": "parrying_3", "modifiers": [{ "to": "defense", "flat": 3 }] },
+      { "condition": "parrying_4", "modifiers": [{ "to": "defense", "flat": 4 }] },
+      { "condition": "parrying_5", "modifiers": [{ "to": "defense", "flat": 5 }] }
+    ],
+    "levels": [
+      {
+        "$comment": "SRD 5.1, Exhaustion, counted on the sheet track of that name. Every level the track has reached counts, so each adds to the ones below it. Level 4 halves the hit point maximum and level 6 is death, and neither is something a level can say yet, so those two stay plain records.",
+        "track": "exhaustion",
+        "at": 1,
+        "effects": ["own-checks-disadvantage"]
+      },
+      { "track": "exhaustion", "at": 2, "modifiers": [{ "to": "speed", "times": 0.5 }] },
+      { "track": "exhaustion", "at": 3, "effects": ["own-attacks-disadvantage", "own-saves-disadvantage"] },
+      { "track": "exhaustion", "at": 5, "effects": ["speed-zero"] }
+    ],
+    "checks": [
+      {
+        "$comment": "The numbers a contest reads, off the sheet. SRD 5.1 grapples and shoves with Athletics and resists them with Athletics or Acrobatics. A creature without a sheet gives its own, from its printed skills or its ability modifiers.",
+        "id": "might",
+        "label": "Athletics",
+        "value": { "skillMod": "athletics" }
+      },
+      { "id": "agility", "label": "Acrobatics", "value": { "skillMod": "acrobatics" } }
+    ],
+    "contests": [
+      {
+        "$comment": "SRD 5.1, Grappling: replaces one attack of the Attack action, Athletics against the target's Athletics or Acrobatics, and on a win the target is grappled by the grappler. The size limit is not something the Engine can check yet.",
+        "id": "grapple",
+        "label": "Grapple",
+        "budget": "action",
+        "strike": true,
+        "attacker": { "checks": ["might"] },
+        "defender": { "checks": ["might", "agility"] },
+        "onWin": { "applies": [{ "condition": "grappled" }] }
+      },
+      {
+        "$comment": "SRD 5.1, Shoving a Creature: the same contest, and the target is knocked prone or pushed 5 feet away.",
+        "id": "shove_prone",
+        "label": "Shove prone",
+        "budget": "action",
+        "strike": true,
+        "attacker": { "checks": ["might"] },
+        "defender": { "checks": ["might", "agility"] },
+        "onWin": { "applies": [{ "condition": "prone" }] }
+      },
+      {
+        "id": "shove_away",
+        "label": "Shove away",
+        "budget": "action",
+        "strike": true,
+        "attacker": { "checks": ["might"] },
+        "defender": { "checks": ["might", "agility"] },
+        "onWin": { "push": 5 }
+      },
+      {
+        "$comment": "SRD 5.1, Escaping a Grapple: an action, the escaper's Athletics or Acrobatics against the grappler's Athletics, aimed only at whoever holds on.",
+        "id": "escape",
+        "label": "Escape a grapple",
+        "budget": "action",
+        "attacker": { "checks": ["might", "agility"] },
+        "defender": { "checks": ["might"] },
+        "from": { "holding": "grappled" },
+        "onWin": { "ends": [{ "condition": "grappled", "on": "actor" }] }
       }
     ],
     "concentration": { "text": "concentration", "save": "con_save", "floor": 10, "fromDamage": 0.5 },

@@ -87,6 +87,12 @@ function slurpDeterministicUnit(value: string): number {
   return (out >>> 0) / 0x100000000;
 }
 
+/**
+ * Give the Engine's event loop a turn. The tick's storage calls resolve without real I/O, so a
+ * large world ran as one uninterrupted block and froze every other route and package for seconds.
+ */
+const yieldToEngine = () => new Promise<void>((resolve) => setImmediate(resolve));
+
 /** Posts older than this are no longer worth asking about. */
 const RECENT_POST_DAYS = 7;
 
@@ -261,6 +267,7 @@ export async function advanceSlurpWorld(db: DB, until = new Date()): Promise<Slu
       const maintenanceSince = maintenanceMark ?? since;
       const maintenanceDue = (until.getTime() - maintenanceSince.getTime()) / 86_400_000 >= CHURN_MIN_ELAPSED_DAYS;
       for (const account of maintenanceDue ? accounts : []) {
+        await yieldToEngine();
         for (const tie of tiesByCreator.get(account.id) ?? []) {
           if (tie.stage === "lapsed" || tie.stage === "stranger" || tie.stage === "subscriber") continue;
           if (tie.lastSeenAt >= staleBefore) continue;
@@ -304,6 +311,7 @@ export async function advanceSlurpWorld(db: DB, until = new Date()): Promise<Slu
       // Creator arcs. A chapter with a day range moves on once its time runs out, posted or not, so a
       // move does not stall forever on a Creator who stopped posting.
       for (const account of maintenanceDue ? accounts : []) {
+        await yieldToEngine();
         await noodle.tickProjects(account.id, until).catch(() => []);
         // After the tick, so an arc that just finished leaves room for the next one.
         // Generated arcs are the one model call here; a failed call starts nothing this tick.
@@ -318,6 +326,7 @@ export async function advanceSlurpWorld(db: DB, until = new Date()): Promise<Slu
       // cadence as churn because it reads the same silence, and because recomputing a three-week
       // trajectory on every page load would be a full scan for nothing.
       for (const account of maintenanceDue ? accounts : []) {
+        await yieldToEngine();
         for (const tie of tiesByCreator.get(account.id) ?? []) {
           if (tie.stage === "stranger") continue;
           const next = slurpNextAudienceArc({
@@ -397,6 +406,7 @@ export async function advanceSlurpWorld(db: DB, until = new Date()): Promise<Slu
       /** Resolved once per distinct member per tick: the Fan Type is what decides money now. */
       const fanTypeFor = new Map<string, SlurpFanType | null>();
       for (const account of accounts) {
+        await yieldToEngine();
         const price = await noodle.getCreatorSubscriptionPrice(account.id).catch(() => 0);
         for (const tie of await population.listTiesForCreator(account.id)) {
           // Mirrors the `none` branches of `slurpAudienceSubscriptionDecision` that ignore spend tier.
@@ -466,6 +476,7 @@ export async function advanceSlurpWorld(db: DB, until = new Date()): Promise<Slu
       // The quote reads the brief: a quick sketch costs less than a detailed scene with two people.
       const automatedCreatorIds = new Set<string>();
       for (const commission of await messages.listAutomatedBriefCommissions()) {
+        await yieldToEngine();
         automatedCreatorIds.add(commission.creatorAccountId);
         const pricing = await messages.getCreatorMessaging(commission.creatorAccountId);
         await messages
@@ -474,6 +485,7 @@ export async function advanceSlurpWorld(db: DB, until = new Date()): Promise<Slu
       }
       // A persona Creator can let its own pricing answer the audience instead of quoting each brief.
       for (const commission of await messages.listAudienceBriefCommissions()) {
+        await yieldToEngine();
         const pricing = await messages.getCreatorMessaging(commission.creatorAccountId);
         if (!pricing.autoQuote) continue;
         await messages
@@ -488,6 +500,7 @@ export async function advanceSlurpWorld(db: DB, until = new Date()): Promise<Slu
       // Deterministic per commission, so the same quote does not flip its answer between two ticks,
       // and gated on a day's thinking time so a price is never answered the instant it is named.
       for (const commission of await messages.listQuotedCommissions()) {
+        await yieldToEngine();
         const quotedFor = (until.getTime() - Date.parse(commission.updatedAt)) / 86_400_000;
         if (!Number.isFinite(quotedFor) || quotedFor < 1) continue;
         const member = await population.get(commission.viewerAccountId).catch(() => null);
@@ -594,6 +607,7 @@ export async function advanceSlurpWorld(db: DB, until = new Date()): Promise<Slu
       // A follow is the rare one that actually moves the funnel, so it is worth more than a like.
       const landedBy = new Map<string, number>();
       for (const action of pulse) {
+        await yieldToEngine();
         try {
           if (
             await applyPulse(db, action, settings.audienceReactionBank, settings.fanTypes, characterFanPinnedTypeIds)
@@ -634,6 +648,7 @@ export async function advanceSlurpWorld(db: DB, until = new Date()): Promise<Slu
       // that makes them comment again.
       let replied = 0;
       for (const account of automaticCreators) {
+        await yieldToEngine();
         if (replied >= SLURP_MAX_CREATOR_REPLIES_PER_TICK) break;
         const recent = (postsByAccount.get(account.id) ?? []).filter((post) => post.access !== "draft").slice(0, 4);
         if (recent.length === 0) continue;
@@ -678,6 +693,7 @@ export async function advanceSlurpWorld(db: DB, until = new Date()): Promise<Slu
       // the creator's recent posts. A cheap invitation to a real conversation.
       let opened = 0;
       for (const account of automaticCreators) {
+        await yieldToEngine();
         if (opened >= SLURP_MAX_CREATOR_OPENERS_PER_TICK) break;
         const messaging = await messages.getCreatorMessaging(account.id);
         if (!messaging.proactiveMessages) continue;
@@ -723,6 +739,7 @@ export async function advanceSlurpWorld(db: DB, until = new Date()): Promise<Slu
       );
       let applied = 0;
       for (const action of plan) {
+        await yieldToEngine();
         try {
           if (await applyAction(db, action, until, noodle, settings.fanTypes, characterFanPinnedTypeIds)) applied += 1;
         } catch (error) {

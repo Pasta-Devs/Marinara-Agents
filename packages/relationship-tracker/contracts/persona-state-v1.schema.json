@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://marinara.engine/contracts/relationship-tracker/persona-state-v1.schema.json",
+  "title": "Relationship Tracker Persona State v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "chatId", "showPersona", "perceptions"],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "chatId": { "type": "string", "minLength": 1 },
+    "showPersona": { "type": "boolean" },
+    "perceptions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["characterId", "personaId", "state", "label", "description", "colorCategory", "manuallyLocked"],
+        "properties": {
+          "characterId": { "type": "string", "minLength": 1 },
+          "personaId": { "type": "string", "minLength": 1 },
+          "state": { "enum": ["defined", "undefined"] },
+          "label": { "type": "string", "maxLength": 80 },
+          "description": { "type": "string", "maxLength": 240 },
+          "colorCategory": { "type": ["string", "null"], "enum": ["positive", "neutral", "negative", "complicated", null] },
+          "manuallyLocked": { "type": "boolean" }
+        }
+      }
+    }
+  }
+}

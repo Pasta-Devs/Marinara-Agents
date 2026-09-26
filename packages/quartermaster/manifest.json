@@ -1,0 +1,136 @@
+{
+  "schemaVersion": 2,
+  "capabilityApi": {
+    "major": 1,
+    "minor": 14
+  },
+  "builtAgainst": {
+    "engineVersion": "2.4.6",
+    "engineCommit": "f66abf7eddb7db6312ff5ba8a080145644191775"
+  },
+  "id": "quartermaster",
+  "name": "Quartermaster",
+  "version": "0.1.22",
+  "description": "A per-chat RPG character sheet and inventory manager for Roleplay mode: equip slots arranged around your persona's portrait, a full inventory with saved outfits, AI-generated item and outfit art, and a tracker agent that keeps everything in sync with the story on its own. Add the Agent in Chat Settings → Agents → Tracker Agents for Roleplay mode.",
+  "engine": {
+    "min": "2.4.6",
+    "maxExclusive": "4.0.0"
+  },
+  "kind": [
+    "agent"
+  ],
+  "entrypoints": {
+    "agents": "agents.json",
+    "client": "client.js",
+    "server": "server.mjs"
+  },
+  "contributions": {
+    "slots": [
+      "roleplay-tracker",
+      "tracker-panel"
+    ]
+  },
+  "files": [
+    {
+      "path": "agents.json",
+      "sha256": "63c7caac0b38c228b2f29f0286b9c13cf1cdf95473a95614c87cde6143466e07",
+      "bytes": 5289
+    },
+    {
+      "path": "client.js",
+      "sha256": "38ec60bef3f44efebd139ef646118103f9fa25759390512730461e86bab16dc5",
+      "bytes": 289382
+    },
+    {
+      "path": "server.mjs",
+      "sha256": "a11b890e47422ff5ba7f4b6d10a0a18d1f7695b52b0dbaebda95d4717eb2f8e5",
+      "bytes": 129363
+    },
+    {
+      "path": "icons/armor_legs.webp",
+      "sha256": "93bcd46c97c7557b518c0a4e2f574820e13f0ae1c052cabe2a1f0e26d48cf8cd",
+      "bytes": 1396
+    },
+    {
+      "path": "icons/armor_torso.webp",
+      "sha256": "df2ecd89f7a4f93940d55e265e438ed6453a83f4ee1626d3fd8e66cc1dda0b82",
+      "bytes": 2108
+    },
+    {
+      "path": "icons/back.webp",
+      "sha256": "9d0336282b868b2c00435d86e517b92adc2bb4c88c27a967caf6a6543ba73802",
+      "bytes": 1314
+    },
+    {
+      "path": "icons/belt.webp",
+      "sha256": "614309426a9b4ae210460e56b35f3b5ff393292b916b18014ceebb5b4b7e7e36",
+      "bytes": 1590
+    },
+    {
+      "path": "icons/clothing_legs.webp",
+      "sha256": "ebad0f719c4d0ed7efdf0b69b01076eed74c4561c64d2e94683b3d5892e326c8",
+      "bytes": 1246
+    },
+    {
+      "path": "icons/clothing_torso.webp",
+      "sha256": "aff20911dcb06507c87a9f6e5387d72b6e5aa67a27e8c3397da152dea1cea799",
+      "bytes": 1542
+    },
+    {
+      "path": "icons/ears.webp",
+      "sha256": "071253ea4c8f8a0b6e6e412ca3276a41d9ddd7a39fc02402d09c51493a952c30",
+      "bytes": 1314
+    },
+    {
+      "path": "icons/eyes.webp",
+      "sha256": "091f7b9035b50be57b7c1ede9aaa8a522f1eed19473bb4f66489e2c2ac176577",
+      "bytes": 1374
+    },
+    {
+      "path": "icons/feet.webp",
+      "sha256": "529689447f6adfa1a03da10ff9931b0ba79897116643fc100d2afcd877941760",
+      "bytes": 2158
+    },
+    {
+      "path": "icons/hands.webp",
+      "sha256": "84f7cfe409139938464feb8df4aa5bc087e4d8a8d51c881af29f11151a2f7df3",
+      "bytes": 1864
+    },
+    {
+      "path": "icons/head.webp",
+      "sha256": "31e98b550dd50e2f348cc908170832761826ce32218b64cacb48c97628adbf81",
+      "bytes": 822
+    },
+    {
+      "path": "icons/neck.webp",
+      "sha256": "bfbc19de3fb432c6b6eb045309daf8fcc42a5fc741aa77b189f5a93dcc600853",
+      "bytes": 1592
+    },
+    {
+      "path": "icons/underwear_bottom.webp",
+      "sha256": "5be7078bf7dfff069e2ff16f6ceae2a7e16867b3b911751ca9fefa13724a9fed",
+      "bytes": 1450
+    },
+    {
+      "path": "icons/underwear_top.webp",
+      "sha256": "6e91581008c22eb2e1c7e583a1c294a375d0d4a03a3715e27d0f73045266b3ea",
+      "bytes": 916
+    },
+    {
+      "path": "icons/weapon_left_hand.webp",
+      "sha256": "9a9e629dd0b3d9e4005259f7aa6117d29158527ee3189d3926b3833ec879932f",
+      "bytes": 482
+    }
+  ],
+  "permissions": [
+    "agent-runtime",
+    "chat-read",
+    "chat-write",
+    "network",
+    "prompt-context",
+    "routes",
+    "storage",
+    "ui"
+  ],
+  "restartRequired": true
+}

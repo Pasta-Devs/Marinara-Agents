@@ -8,6 +8,7 @@ import { createDeterministicZip } from "../deterministic-zip.mjs";
 import {
   RULESET_ASSET_PATH,
   RULESET_CATALOG_MAX_BYTES,
+  assertRulesetApplies,
   assertRulesetAssetDocument,
   assertRulesetBattle,
   assertRulesetCatalogs,
@@ -2021,8 +2022,8 @@ const momentDocument = (reaction) => {
 };
 assert.equal(
   assertRulesetReactions(shippedManifest, parsedAsset, shippedCatalogSources),
-  1,
-  "the shipped package names one moment, Hellish Rebuke's",
+  4,
+  "the shipped package names four moments: Hellish Rebuke's, Counterspell's, Shield's and Uncanny Dodge's",
 );
 assert.equal(assertRulesetReactions(rulesetManifest(), momentDocument(true)), 0, "true needs no 1.33");
 assert.throws(
@@ -2046,11 +2047,14 @@ for (const [reaction, message] of [
   ["soon", /has a reaction of "soon", not true or a moment/u],
   [[], /has a reaction of \[\], not true or a moment/u],
   [{ on: "harmed", why: "spite" }, /reaction has an unknown key "why"/u],
-  [{ on: "fallen" }, /waits for "fallen", not one of aimed, harmed/u],
-  [{ at: "source" }, /waits for undefined, not one of aimed, harmed/u],
+  [{ on: "fallen" }, /waits for "fallen", not one of aimed, hit, harmed, used/u],
+  [{ at: "source" }, /waits for undefined, not one of aimed, hit, harmed, used/u],
   [{ on: "harmed", at: "everyone" }, /is pointed at "everyone", not one of source, chosen/u],
   [{ on: "aimed", cancels: false }, /reaction cancels must be true when it is given/u],
-  [{ on: "harmed", cancels: true }, /cancels a moment that has already happened: only an "aimed" reaction cancels/u],
+  [
+    { on: "harmed", cancels: true },
+    /cancels a moment that has already happened: only an "aimed" or "used" reaction cancels/u,
+  ],
 ]) {
   assert.throws(
     () => assertRulesetReactions(momentManifest, momentDocument(reaction)),
@@ -2323,6 +2327,339 @@ assert.throws(
     ),
   /action "bite" has a long range below its ordinary one/u,
 );
+
+// ── Contests (1.43), counters (1.44), condition numbers (1.45) and the moment after a hit (1.46) ──
+//
+// Each key is gated at the Engine that reads it and checked the way that Engine checks it, so a
+// package carrying one is refused here rather than at install, where the whole strict file goes.
+
+const apiManifest = (minor) => rulesetManifest({ capabilityApi: { major: 1, minor } });
+const combatAt = (minor, edit) => () => assertRulesetCombat(apiManifest(minor), combatWith(edit));
+
+// Contests and the checks they read.
+const withContests = (combat) => {
+  combat.checks = [{ id: "might", label: "Athletics", value: { abilityMod: "str" } }];
+  combat.contests = [
+    {
+      id: "grab",
+      label: "Grab",
+      budget: "action",
+      strike: true,
+      attacker: { checks: ["might"] },
+      defender: { checks: ["might"] },
+      onWin: { applies: [{ condition: "prone" }] },
+    },
+    {
+      id: "slip",
+      label: "Slip free",
+      budget: "action",
+      attacker: { checks: ["might"] },
+      defender: { checks: ["might"] },
+      from: { holding: "stunned" },
+      onWin: { ends: [{ condition: "stunned", on: "actor" }] },
+    },
+  ];
+};
+assert.doesNotThrow(combatAt(43, withContests));
+assert.throws(combatAt(42, withContests), /has contests in its fights and must declare capability API 1\.43 or newer/u);
+for (const [edit, message] of [
+  [
+    (combat) => (combat.checks[0].value = { skillMod: "stealth" }),
+    /check "might" value names unknown skill "stealth"/u,
+  ],
+  [(combat) => combat.checks.push({ ...combat.checks[0] }), /repeats the check "might"/u],
+  [(combat) => (combat.contests[0].budget = "reaction"), /contest "grab" budget names unknown budget "reaction"/u],
+  [(combat) => (combat.contests[0].attacker.checks = ["agility"]), /"grab" attacker names unknown check "agility"/u],
+  [(combat) => (combat.contests[0].defender.checks = ["might", "might"]), /"grab" defender repeats the check "might"/u],
+  [(combat) => (combat.contests[0].onWin = {}), /"grab" onWin applies, ends or pushes something/u],
+  [
+    (combat) => (combat.contests[0].onWin.applies = [{ condition: "dazed" }]),
+    /onWin applies names unknown condition "dazed"/u,
+  ],
+  [
+    (combat) => (combat.contests[1].onWin.applies = [{ condition: "stunned" }]),
+    /"slip" breaks free of "stunned", so it cannot also apply it/u,
+  ],
+  [
+    (combat) => (combat.contests[1].onWin.ends[0].on = "everyone"),
+    /ends "stunned" on "everyone", not the actor or the target/u,
+  ],
+  [
+    (combat) => (combat.contests[0].onWin.push = 5),
+    /"grab" push is measured in cells, so the block declares "distance" too/u,
+  ],
+  [
+    (combat) => (combat.contests[0].reach = 10),
+    /"grab" reach is measured in cells, so the block declares "distance" too/u,
+  ],
+  [(combat) => (combat.contests[0].ties = "nobody"), /"grab" gives a tie to "nobody"/u],
+]) {
+  assert.throws(
+    combatAt(43, (combat) => {
+      withContests(combat);
+      edit(combat);
+    }),
+    message,
+    String(message),
+  );
+}
+
+// Numbers a condition changes, levels of a track, and the effects on a holder's own checks.
+const numbersDocument = (edit) => {
+  const document = combatWith((combat) => {
+    combat.conditions.push({
+      condition: "stunned",
+      effects: ["own-checks-disadvantage"],
+      modifiers: [
+        { to: "defense", flat: -2 },
+        { to: "attacks", dice: "1d4", minus: true },
+        { to: "speed", times: 0.5 },
+      ],
+    });
+    combat.levels = [
+      { track: "fatigue", at: 1, effects: ["own-attacks-disadvantage"] },
+      { track: "fatigue", at: 2, modifiers: [{ to: "speed", times: 0.5 }] },
+    ];
+    edit(combat);
+  });
+  document.sheet = structuredClone(combatSheet);
+  document.sheet.live.tracks.push({ id: "fatigue", max: 6 }, { id: "harm", boxes: true });
+  return document;
+};
+const numbersAt =
+  (minor, edit = () => {}) =>
+  () =>
+    assertRulesetCombat(apiManifest(minor), numbersDocument(edit));
+const numbersMessage = /conditions that change numbers or count levels and must declare capability API 1\.45 or newer/u;
+assert.doesNotThrow(numbersAt(45));
+assert.throws(numbersAt(44), numbersMessage);
+// Any one of them asks for 1.45 on its own.
+assert.throws(
+  combatAt(44, (combat) => (combat.conditions[0].effects = ["own-checks-advantage"])),
+  numbersMessage,
+);
+assert.throws(
+  combatAt(44, (combat) => (combat.conditions[0].modifiers = [{ to: "defense", flat: 1 }])),
+  numbersMessage,
+);
+assert.throws(
+  () =>
+    assertRulesetCombat(
+      apiManifest(44),
+      numbersDocument((combat) => combat.conditions.pop()),
+    ),
+  numbersMessage,
+);
+const stunned = (combat) => combat.conditions.at(-1);
+for (const [edit, message] of [
+  [
+    (combat) => (stunned(combat).modifiers[0].to = "luck"),
+    /changes "luck", not one of defense, attacks, saves, checks, speed/u,
+  ],
+  [(combat) => (stunned(combat).modifiers[0] = { to: "defense" }), /changes defense by nothing/u],
+  [(combat) => (stunned(combat).modifiers[0].flat = 0), /changes defense by a flat 0, which changes nothing/u],
+  [
+    (combat) => (stunned(combat).modifiers[0].flat = 1.5),
+    /changes defense by 1\.5, not a whole number from -100 to 100/u,
+  ],
+  [
+    (combat) => (stunned(combat).modifiers[0] = { to: "defense", dice: "1d4" }),
+    /rolls dice onto defense, and dice change only attacks, saves, checks/u,
+  ],
+  [(combat) => (stunned(combat).modifiers[1].dice = "0d6"), /rolls "0d6", which is not dice a table has/u],
+  [
+    (combat) => (stunned(combat).modifiers[1] = { to: "attacks", flat: -1, minus: true }),
+    /takes dice off attacks with "minus" but has no dice/u,
+  ],
+  [(combat) => (stunned(combat).modifiers[2].to = "attacks"), /multiplies attacks, and "times" changes speed only/u],
+  [(combat) => (stunned(combat).modifiers[2].times = 3), /multiplies speed by 3, not 0\.5 or 2/u],
+  [(combat) => (stunned(combat).modifiers[2].why = "cold"), /a modifier has the unknown key "why"/u],
+  [(combat) => (stunned(combat).modifiers = []), /changes 1 to 6 numbers/u],
+  [(combat) => (stunned(combat).saves = ["str_save"]), /narrows saves with nothing to narrow/u],
+  [(combat) => (combat.levels[0].track = "grit"), /level names unknown track "grit"/u],
+  [(combat) => (combat.levels[0].track = "harm"), /reads a wound track, and a level reads a plain track's number/u],
+  [(combat) => (combat.levels[0].at = 7), /is never reached: the track goes up to 6/u],
+  [(combat) => (combat.levels[1].at = 1), /level 1 of "fatigue" is given twice/u],
+  [(combat) => (combat.levels[0].effects = ["ends-on-damage"]), /cannot have "ends-on-damage": nobody put it on/u],
+  [(combat) => (combat.levels[0].effects = ["glowing"]), /has the unknown effect "glowing"/u],
+  [(combat) => (combat.levels[0].effects = []), /does nothing: a level has effects, modifiers or saves it fails/u],
+  [(combat) => (combat.levels[0].failsSaves = ["luck_save"]), /names unknown save "luck_save"/u],
+]) {
+  assert.throws(numbersAt(45, edit), message, String(message));
+}
+// A modifier to saves is something `saves` narrows, exactly as a save effect is.
+assert.doesNotThrow(
+  numbersAt(45, (combat) => {
+    stunned(combat).modifiers[0] = { to: "saves", flat: -2 };
+    stunned(combat).saves = ["str_save"];
+  }),
+);
+
+// A reaction that answers something being used, or only some catalogs' entries (1.44), and one
+// that answers being hit (1.46).
+for (const [minor, reaction] of [
+  [44, { on: "used", cancels: true }],
+  [44, { on: "aimed", against: { catalogs: ["tricks"] } }],
+  [46, { on: "hit" }],
+  [46, { on: "hit", against: { catalogs: ["tricks", "beasts"] } }],
+]) {
+  assert.equal(assertRulesetReactions(apiManifest(minor), momentDocument(reaction)), 1, JSON.stringify(reaction));
+  assert.throws(
+    () => assertRulesetReactions(apiManifest(minor - 1), momentDocument(reaction)),
+    new RegExp(
+      `waits for a moment an older Engine does not open and must declare capability API 1\\.${minor} or newer`,
+      "u",
+    ),
+    JSON.stringify(reaction),
+  );
+}
+for (const [reaction, message] of [
+  [{ on: "hit", cancels: true }, /only an "aimed" or "used" reaction cancels/u],
+  [{ on: "used", against: { catalogs: ["hexes"] } }, /answers unknown catalog "hexes"/u],
+  [{ on: "used", against: { catalogs: [] } }, /not \{ catalogs \} naming 1 to 12 catalogs/u],
+  [{ on: "used", against: ["tricks"] }, /not \{ catalogs \} naming 1 to 12 catalogs/u],
+  [{ on: "used", against: { catalogs: ["tricks"], also: 1 } }, /not \{ catalogs \} naming 1 to 12 catalogs/u],
+]) {
+  assert.throws(
+    () => assertRulesetReactions(apiManifest(46), momentDocument(reaction)),
+    message,
+    JSON.stringify(reaction),
+  );
+}
+
+// The conditions a catalog entry applies: the sheet's own, and ending after one use or as a turn
+// begins only on an Engine that reads it.
+assert.ok(assertRulesetApplies(shippedManifest, parsedAsset, shippedCatalogSources) > 20);
+const appliesDocument = (applies) => {
+  const document = momentDocument(true);
+  document.catalogs.at(-1).entries[0].mechanics = { kind: "debuff", applies };
+  return document;
+};
+assert.equal(
+  assertRulesetApplies(apiManifest(27), appliesDocument([{ condition: "prone", duration: { rounds: 2 } }])),
+  1,
+);
+assert.equal(
+  assertRulesetApplies(apiManifest(27), bestiaryDocument()),
+  0,
+  "a creature's own actions are not read here",
+);
+for (const applies of [
+  { condition: "prone", duration: { rounds: 1, at: "turn-start" } },
+  { condition: "prone", duration: { rounds: 1 }, endsAfter: "own-attack" },
+]) {
+  assert.equal(assertRulesetApplies(apiManifest(45), appliesDocument([applies])), 1);
+  assert.throws(
+    () => assertRulesetApplies(apiManifest(44), appliesDocument([applies])),
+    /ends "prone" after one use or as a turn begins and must declare capability API 1\.45 or newer/u,
+  );
+}
+for (const [applies, message] of [
+  [{ condition: "dazed", duration: "instant" }, /applies unknown condition "dazed"/u],
+  [{ condition: "prone", duration: "until-save" }, /applies "prone" until a save it does not name/u],
+  [
+    { condition: "prone", duration: "until-save", saveEnds: { save: "luck_save", at: "turn-end" } },
+    /ends "prone" on unknown save "luck_save"/u,
+  ],
+  [
+    { condition: "prone", duration: { rounds: 1 }, endsAfter: "own-turn" },
+    /after "own-turn", not one of own-attack, attacked, own-save/u,
+  ],
+  [
+    { condition: "prone", duration: { rounds: 1, at: "turn-end" } },
+    /counts "prone" down at "turn-end", not "turn-start"/u,
+  ],
+]) {
+  assert.throws(() => assertRulesetApplies(apiManifest(46), appliesDocument([applies])), message, String(message));
+}
+
+// A creature's own contest checks (1.43), and its own reaction on itself (1.46).
+const contestBestiary = (edit) => {
+  const document = bestiaryDocument(edit);
+  document.combat = structuredClone(combatBlock);
+  withContests(document.combat);
+  return document;
+};
+const creaturesAt = (minor, edit) => () => assertRulesetCreatures(apiManifest(minor), contestBestiary(edit));
+const withChecks = (block) => (block.checks = { might: 3 });
+assert.equal(creaturesAt(43, withChecks)(), 1);
+assert.throws(
+  creaturesAt(42, withChecks),
+  /gives its own contest checks and must declare capability API 1\.43 or newer/u,
+);
+assert.throws(
+  creaturesAt(43, (block) => (block.checks = { agility: 3 })),
+  /names unknown contest check "agility"/u,
+);
+assert.throws(
+  creaturesAt(43, (block) => (block.checks = { might: 3.5 })),
+  /check "might" is 3\.5, not a whole number from -100 to 100/u,
+);
+const parryAction = () => ({
+  id: "parry",
+  name: "Parry",
+  budget: "bonus",
+  self: true,
+  reaction: { on: "hit" },
+  applies: [{ condition: "prone", duration: { rounds: 1 }, endsAfter: "attacked" }],
+});
+const withParry =
+  (edit = () => {}) =>
+  (block) => {
+    const parry = parryAction();
+    block.actions.push(parry);
+    edit(parry, block);
+  };
+assert.equal(creaturesAt(46, withParry())(), 1);
+assert.throws(
+  creaturesAt(45, withParry()),
+  /reacts or acts on the creature itself and must declare capability API 1\.46 or newer/u,
+);
+assert.throws(
+  creaturesAt(
+    45,
+    withParry((parry) => delete parry.reaction),
+  ),
+  /reacts or acts on the creature itself and must declare capability API 1\.46 or newer/u,
+  "self alone asks for 1.46",
+);
+assert.throws(
+  creaturesAt(
+    44,
+    withParry((parry) => delete parry.reaction),
+  ),
+  /ends "prone" after one use or as a turn begins and must declare capability API 1\.45 or newer/u,
+);
+for (const [edit, message] of [
+  [(parry) => (parry.targetCount = 2), /lands on the creature itself, so it takes no targetCount/u],
+  [(parry) => (parry.area = { shape: "burst", size: 5 }), /lands on the creature itself, so it takes no area/u],
+  [(parry) => (parry.self = false), /self must be true when it is given/u],
+  [
+    (parry, block) => {
+      parry.signature = { cost: 1 };
+      block.signaturePoints = 3;
+    },
+    /is a reaction, so it is not bought with points as well/u,
+  ],
+  [(parry) => (parry.reaction = { on: "hit", cancels: true }), /only an "aimed" or "used" reaction cancels/u],
+  [(parry) => (parry.reaction = { on: "hit", against: { catalogs: ["hexes"] } }), /answers unknown catalog "hexes"/u],
+  [(parry) => (parry.reaction = "soon"), /has a reaction of "soon", not a moment/u],
+  [
+    (parry) => (parry.applies[0].endsAfter = "own-turn"),
+    /after "own-turn", not one of own-attack, attacked, own-save/u,
+  ],
+  [
+    (parry, block) =>
+      block.actions.push({ id: "flurry", name: "Flurry", budget: "action", sequence: [{ action: "parry" }] }),
+    /names "parry", which is a reaction, so no sequence can make it/u,
+  ],
+  [
+    (parry, block) => (block.actions.find((action) => action.id === "both").self = true),
+    /is a sequence, so it carries no self of its own/u,
+  ],
+]) {
+  assert.throws(creaturesAt(46, withParry(edit)), message, String(message));
+}
 
 // The published artifact must be reproducible: the same manifest and asset bytes
 // have to produce the same zip, or every rebuild would churn the catalog's sha256
