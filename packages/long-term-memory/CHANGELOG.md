@@ -1,5 +1,10 @@
 # Long-Term Memory changelog
 
+## 1.3.21 — 2026-09-26
+
+- Filter more common filler, modal, and discourse words from keyword extraction and recall matching, and normalize curly apostrophes so contractions such as `I’m` are recognized as stop words.
+- Add a Memory Settings stop-word list and a default-on toggle that keeps listed words out of generated keywords; listed words also cannot trigger recall, and stored or manual keywords are never rewritten or removed.
+
 ## 1.3.20 — 2026-09-25
 
 - Show spinning import progress only on source rows included in the running task; keep other import icons visible and disabled until it finishes.

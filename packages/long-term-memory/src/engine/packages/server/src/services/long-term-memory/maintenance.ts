@@ -26,6 +26,7 @@ import {
   vaultFolderForNoteType,
 } from "./paths.js";
 import { longTermMemoryRecallIndexPath, parseLtmRecallIndex, rebuildLongTermMemoryIndexes } from "./rebuild.js";
+import { getLtmGlobalSettings, ltmGeneratedStopWords } from "./settings.js";
 import { LongTermMemoryStorage } from "./storage.js";
 import { parseStoredLtmNote } from "./stored-note.js";
 import { withLtmVaultLock } from "./vault-lock.js";
@@ -125,7 +126,8 @@ async function checkRecallIndex(root: string, notes: LtmNote[], issues: LtmInteg
   }
 
   let health: LtmIndexHealth = "healthy";
-  const sourceHash = stableJsonHash(chunkNotes(notes, { includeSourceNotes: false }));
+  const stopWords = ltmGeneratedStopWords(await getLtmGlobalSettings(root));
+  const sourceHash = stableJsonHash(chunkNotes(notes, { includeSourceNotes: false, stopWords }));
   if (index.sourceHash !== sourceHash) {
     health = "stale";
     issues.push({

@@ -3,6 +3,7 @@ import {
   ltmGlobalSettingsSchema,
   ltmResolvedGlobalSettingsSchema,
   type LtmGlobalSettings,
+  type LtmResolvedGlobalSettings,
 } from "../../../../shared/src/features/agents/long-term-memory/schema.js";
 import { readJsonFile, writeJsonAtomic } from "./atomic-json.js";
 import { getLongTermMemoryDirectories, getLongTermMemoryRoot, safeJoin } from "./paths.js";
@@ -12,6 +13,13 @@ export const ltmSettingsPath = (root = getLongTermMemoryRoot()) =>
 export async function getLtmGlobalSettings(root = getLongTermMemoryRoot()) {
   const value = ltmGlobalSettingsSchema.parse(await readJsonFile<unknown>(ltmSettingsPath(root), { version: 1 }));
   return ltmResolvedGlobalSettingsSchema.parse({ ...DEFAULT_LTM_GLOBAL_SETTINGS, ...value, version: 1 });
+}
+/**
+ * Custom stop words that may filter generated keywords. Returns none while the
+ * "filter generated" setting is off, so the list then only blocks triggering.
+ */
+export function ltmGeneratedStopWords(settings: LtmResolvedGlobalSettings) {
+  return settings.longTermMemoryStopWordsFilterGenerated ? settings.longTermMemoryStopWords : [];
 }
 export async function updateLtmGlobalSettings(input: unknown, root = getLongTermMemoryRoot()) {
   return withLtmVaultLock(root, async () => {

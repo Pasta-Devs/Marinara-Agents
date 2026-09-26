@@ -87,13 +87,13 @@ async function main() {
     await import(`${source}/source-hash.ts`);
   const { projectLongTermMemoryDraftReview } = await import(`${source}/draft-review.ts`);
   const { activateLongTermMemoryStorage } = await import(`${source}/runtime.ts`);
-  const { ltmSettingsPath } = await import(`${source}/settings.ts`);
+  const { getLtmGlobalSettings, ltmSettingsPath, updateLtmGlobalSettings } = await import(`${source}/settings.ts`);
   const { ltmMutationTransactionSchema, recoverLtmMutations } = await import(`${source}/mutation-transaction.ts`);
   const { readLtmNoteSummary, writeLtmNoteSummary } = await import(`${source}/index-state.ts`);
   const { runLongTermMemoryRetention } = await import(`${source}/retention.ts`);
   const { rebuildLtmActivityIndex, readLtmActivityEvents } = await import(`${source}/activity-index.ts`);
   const { renderSectionContributions } = await import(`${source}/section-contributions.ts`);
-  const { extractNoteKeywords } = await import(`${source}/keyword-extract.ts`);
+  const { buildStopWordSet, extractNoteKeywords } = await import(`${source}/keyword-extract.ts`);
   const { mergeKeywords } = await import(`${source}/keyword-extract.ts`);
   const { getLtmActiveKeywords, ltmKeywordKey, normalizeLtmKeywordIntent } =
     await import("../packages/long-term-memory/src/engine/packages/shared/src/features/agents/long-term-memory/keywords.ts");
@@ -287,6 +287,34 @@ async function main() {
         "self-check must reject malformed settings",
       );
       await writeFile(ltmSettingsPath(root), '{"version":1}\n');
+      const stopWordSettings = await updateLtmGlobalSettings({ longTermMemoryStopWords: ["Cobalt-Moon"] }, root);
+      assert.deepEqual(
+        stopWordSettings.longTermMemoryStopWords,
+        ["Cobalt-Moon"],
+        "global settings must persist a custom stop-word list",
+      );
+      assert.deepEqual(
+        (await getLtmGlobalSettings(root)).longTermMemoryStopWords,
+        ["Cobalt-Moon"],
+        "a persisted custom stop-word list must be readable",
+      );
+      assert.deepEqual(
+        (await updateLtmGlobalSettings({ longTermMemoryStopWords: [] }, root)).longTermMemoryStopWords,
+        [],
+        "a custom stop-word list must be clearable",
+      );
+      assert.equal(
+        (await getLtmGlobalSettings(root)).longTermMemoryStopWordsFilterGenerated,
+        true,
+        "filtering custom stop words from generated keywords must default on",
+      );
+      assert.equal(
+        (await updateLtmGlobalSettings({ longTermMemoryStopWordsFilterGenerated: false }, root))
+          .longTermMemoryStopWordsFilterGenerated,
+        false,
+        "the generated-keyword filter toggle must persist",
+      );
+      await updateLtmGlobalSettings({ longTermMemoryStopWordsFilterGenerated: true }, root);
 
       const quarantine = join(root, "quarantine", "expired");
       await mkdir(quarantine, { recursive: true });
@@ -763,6 +791,115 @@ async function main() {
         false,
         "suppressed generated and text-derived keywords must stay out of recall indexing",
       );
+      const stopWordNote = await storage.createNote({
+        ...noteInput,
+        id: "world_keyword_stop_words",
+        title: "Stop word proof",
+        keywords: [],
+        sections: {
+          facts: {
+            text: "I’m sure they really went above and below, against the wall. Cobalt archive holds Harrowmark.",
+            updatedAt: timestamp,
+          },
+        },
+      });
+      const stopWordKeywords = extractNoteKeywords(stopWordNote);
+      for (const word of ["i'm", "really", "above", "below", "against", "sure"]) {
+        assert.equal(
+          stopWordKeywords.includes(word),
+          false,
+          `built-in stop word ${word} must not become a standalone keyword`,
+        );
+      }
+      assert.ok(
+        stopWordKeywords.some((keyword) => keyword.includes("cobalt")),
+        "meaningful words must survive built-in stop-word filtering",
+      );
+      assert.ok(stopWordKeywords.some((keyword) => keyword.includes("harrowmark")));
+      const customGenerated = extractNoteKeywords(stopWordNote, buildStopWordSet(["cobalt"]));
+      assert.equal(
+        customGenerated.some((keyword) => keyword.includes("cobalt")),
+        false,
+        "the custom stop list must filter generated keywords when filtering is enabled",
+      );
+      assert.ok(
+        customGenerated.some((keyword) => keyword.includes("harrowmark")),
+        "the custom stop list must not filter unrelated generated keywords",
+      );
+      const manualStopWordNote = await storage.createNote({
+        ...noteInput,
+        id: "world_keyword_manual_stop_word",
+        title: "Manual stop word proof",
+        keywords: [],
+        manualKeywords: ["Cobalt"],
+        sections: {
+          facts: { text: "Harrowmark holds.", updatedAt: timestamp },
+        },
+      });
+      const manualStopWordKeywords = extractNoteKeywords(manualStopWordNote, buildStopWordSet(["cobalt"]));
+      assert.ok(
+        manualStopWordKeywords.some((keyword) => keyword.toLowerCase() === "cobalt"),
+        "a manual keyword must survive the custom stop list even while it blocks generated keywords",
+      );
+      const hyphenStopWords = buildStopWordSet(["Cobalt-Moon"]);
+      assert.equal(
+        hyphenStopWords.has("cobalt moon"),
+        true,
+        "a hyphenated custom stop word must be stored as its normalized whole phrase",
+      );
+      const hyphenStopWordNote = await storage.createNote({
+        ...noteInput,
+        id: "world_keyword_hyphen_stop_word",
+        title: "Hyphen stop word proof",
+        keywords: [],
+        sections: {
+          facts: { text: "Indeed, namely Cobalt-Moon holds Harrowmark.", updatedAt: timestamp },
+        },
+      });
+      const hyphenStopWordKeywords = extractNoteKeywords(hyphenStopWordNote, hyphenStopWords);
+      assert.equal(
+        hyphenStopWordKeywords.some((keyword) => keyword.includes("cobalt") || keyword.includes("moon")),
+        false,
+        "a hyphenated custom stop word must be filtered from generated keywords as a whole",
+      );
+      assert.ok(
+        hyphenStopWordKeywords.some((keyword) => keyword.includes("harrowmark")),
+        "a hyphenated custom stop word must not filter unrelated generated keywords",
+      );
+      const defaultHyphenKeywords = extractNoteKeywords(hyphenStopWordNote);
+      for (const word of ["indeed", "namely"]) {
+        assert.ok(defaultHyphenKeywords.includes(word), `discourse word ${word} must not be on the built-in stop list`);
+      }
+      const singlePartStopWords = buildStopWordSet(["cobalt"]);
+      assert.equal(
+        extractNoteKeywords(hyphenStopWordNote, singlePartStopWords).some((keyword) => keyword.includes("cobalt")),
+        false,
+        "a single-token custom stop word must reject a hyphenated token that contains it",
+      );
+      const punctuatedStopWords = buildStopWordSet(["cobalt/harbor"]);
+      assert.ok(
+        punctuatedStopWords.has("cobalt") && punctuatedStopWords.has("harbor"),
+        "a punctuated custom stop-word entry must contribute each token boundary",
+      );
+      const manyGeneratedNote = await storage.createNote({
+        ...noteInput,
+        id: "world_keyword_manual_retained",
+        title: "Manual retention proof",
+        keywords: [],
+        manualKeywords: ["manualkeep"],
+        sections: {
+          facts: {
+            text: Array.from({ length: 31 }, (_, index) => `proofword${index + 1}`).join(" "),
+            updatedAt: timestamp,
+          },
+        },
+      });
+      const manyGeneratedKeywords = extractNoteKeywords(manyGeneratedNote);
+      assert.ok(
+        manyGeneratedKeywords.includes("manualkeep"),
+        "a manual keyword must survive the note keyword cap even when generated keywords fill it",
+      );
+      assert.equal(manyGeneratedKeywords.length, 30, "the note keyword cap must still bound the merged keyword list");
       const restoredKeyword = await storage.updateNote(keywordIntent.id, {
         manualKeywords: ["Manual", "Cobalt"],
         suppressedKeywords: [],

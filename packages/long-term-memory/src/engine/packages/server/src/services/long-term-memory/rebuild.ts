@@ -15,6 +15,7 @@ import { quarantineLtmIndexArtifact } from "./index-quarantine.js";
 import { buildLtmKeywordIndex } from "./keyword-index.js";
 import { buildLtmMetadataIndex } from "./metadata-index.js";
 import { getLongTermMemoryDirectories, getLongTermMemoryRoot, safeJoin } from "./paths.js";
+import { getLtmGlobalSettings, ltmGeneratedStopWords } from "./settings.js";
 import { LongTermMemoryStorage } from "./storage.js";
 import { resolvePackageEmbeddingAdapter, type PackageEmbeddingAdapter } from "./package-runtime.js";
 import {
@@ -50,12 +51,17 @@ function clearAutoUpgradeFailure(root: string, adapter: EmbeddingAdapter | null)
   if (adapter) autoUpgradeFailures.delete(autoUpgradeFailureKey(root, adapter.spaceId));
 }
 
-async function tryUpgradeSemanticIndex(root: string, index: LtmRecallIndex, adapter: EmbeddingAdapter | null) {
+async function tryUpgradeSemanticIndex(
+  root: string,
+  index: LtmRecallIndex,
+  adapter: EmbeddingAdapter | null,
+  stopWords: readonly string[],
+) {
   if (!adapter) return index;
   const failureKey = autoUpgradeFailureKey(root, adapter.spaceId);
   if (autoUpgradeFailures.has(failureKey)) return index;
   try {
-    const rebuilt = await rebuildLongTermMemoryIndexes({ root, embeddingAdapter: adapter });
+    const rebuilt = await rebuildLongTermMemoryIndexes({ root, embeddingAdapter: adapter, stopWords });
     if (rebuilt.embeddingsAvailable) {
       autoUpgradeFailures.delete(failureKey);
       return parseLtmRecallIndex(JSON.parse(await readFile(longTermMemoryRecallIndexPath(root), "utf8")));
@@ -103,17 +109,18 @@ export function parseLtmRecallIndex(value: unknown): LtmRecallIndex {
 }
 
 export async function rebuildLongTermMemoryIndexes(
-  options: MemoryRecallEmbeddingOptions & { root?: string; generatedAt?: string } = {},
+  options: MemoryRecallEmbeddingOptions & { root?: string; generatedAt?: string; stopWords?: readonly string[] } = {},
 ) {
   const root = options.root ?? getLongTermMemoryRoot();
   const embeddingAdapter = await resolvePackageEmbeddingAdapter(options.embeddingAdapter);
+  const stopWords = options.stopWords ?? ltmGeneratedStopWords(await getLtmGlobalSettings(root));
   return withLtmVaultLock(root, async () => {
     await markLtmIndexesBuilding(root);
     try {
       clearAutoUpgradeFailure(root, embeddingAdapter ?? null);
       const notes = await new LongTermMemoryStorage(root).listNotes();
       await writeLtmNoteSummary(root, notes);
-      const chunks = chunkNotes(notes, { includeSourceNotes: false });
+      const chunks = chunkNotes(notes, { includeSourceNotes: false, stopWords });
       const vectors = await embedLongTermMemoryTexts(
         chunks.map((chunk) => chunk.text),
         {
@@ -171,22 +178,27 @@ export async function rebuildLongTermMemoryIndexes(
 export async function loadOrRebuildLongTermMemoryIndexes(
   root = getLongTermMemoryRoot(),
   resolvedEmbeddingAdapter?: EmbeddingAdapter | null,
+  stopWords?: readonly string[],
 ) {
   const embeddingAdapter =
     resolvedEmbeddingAdapter !== undefined ? resolvedEmbeddingAdapter : await resolvePackageEmbeddingAdapter();
+  const resolvedStopWords = stopWords ?? ltmGeneratedStopWords(await getLtmGlobalSettings(root));
   const path = longTermMemoryRecallIndexPath(root);
   try {
     const index = parseLtmRecallIndex(JSON.parse(await readFile(path, "utf8")));
     const notes = await new LongTermMemoryStorage(root).listNotes();
-    if (index.sourceHash !== stableJsonHash(chunkNotes(notes, { includeSourceNotes: false }))) {
+    if (
+      index.sourceHash !==
+      stableJsonHash(chunkNotes(notes, { includeSourceNotes: false, stopWords: resolvedStopWords }))
+    ) {
       throw new Error("Stale long-term memory recall index.");
     }
     const usableEmbeddings = getUsableEmbeddingState(index, embeddingAdapter);
     if (usableEmbeddings) return index;
-    return await tryUpgradeSemanticIndex(root, index, embeddingAdapter);
+    return await tryUpgradeSemanticIndex(root, index, embeddingAdapter, resolvedStopWords);
   } catch (error) {
     await quarantineLtmIndexArtifact(root, path).catch(() => {});
-    await rebuildLongTermMemoryIndexes({ root, embeddingAdapter });
+    await rebuildLongTermMemoryIndexes({ root, embeddingAdapter, stopWords: resolvedStopWords });
     return parseLtmRecallIndex(JSON.parse(await readFile(path, "utf8")));
   }
 }
