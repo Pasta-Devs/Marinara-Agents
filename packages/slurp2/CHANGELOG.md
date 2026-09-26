@@ -2,7 +2,7 @@
 
 ## 0.2.41 — 2026-09-26
 
-- The world tick no longer freezes the whole Engine for several seconds every few minutes: Slurp settings are validated once per change instead of on every read, and the tick now pauses between steps so other pages and packages keep responding.
+- The world tick blocks the Engine much less: Slurp settings are validated once per change instead of on every read, and the tick now pauses between Creators, commissions, and actions so other pages and packages can respond.
 
 ## 0.2.40 — 2026-09-25
 
