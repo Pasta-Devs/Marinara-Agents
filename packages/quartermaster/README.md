@@ -5,7 +5,15 @@ portrait, a full inventory with item locations, saved outfits, and AI-generated 
 draggable floating dock, plus a native Tracker Panel view.
 
 **Requires Marinara Engine 2.4.6+.** Roleplay only (no Game Mode yet), persona only (no party/NPC
-support yet). Actively evolving — not yet an official catalog package.
+support yet). Available in the official **staging** catalog now; stable publication is planned
+with the next Marinara Engine main release.
+
+## Install and enable
+
+On Engine **staging**, open **Agents → Download Agents**, install **Quartermaster**, and restart
+when prompted. In each Roleplay chat, open **Chat Settings → Agents**, enable agents, add
+Quartermaster under **Tracker Agents**, and select its model connection. Installing the package
+does not enable it in every chat. Open its dock from the launcher above the Tracker Panel.
 
 ## The main feature: an LLM tracker that runs on its own
 
@@ -195,10 +203,19 @@ node scripts/build-quartermaster-package.mjs
 This regenerates `client.js`/`manifest.json`/`locales/en.json`, hashes `server.mjs`/`agents.json`
 and every bundled icon, and writes `artifacts/quartermaster-<version>.zip` — refusing to silently
 overwrite an already-released version's artifact file if you forget to bump `VERSION` first.
-`INCOMPLETE_PACKAGE_IDS` (`scripts/catalog-incomplete.mjs`) keeps this package out of every
-published catalog until it's ready for testers.
+`STAGING_ONLY_PACKAGE_IDS` (`scripts/catalog-incomplete.mjs`) publishes this package through the
+preview catalog for Engine staging users. For the next Engine main release, remove its ID from
+that set and rebuild it before promoting Marinara Agents to `main`; copying the preview catalog
+alone does not make it visible to stable users.
 
 ## Changelog
+
+### 0.1.19
+
+- Added the official staging catalogue listing and armored Professor Mari cover.
+- Prevented stale image-prompt previews from overwriting a later dialog or another chat.
+- Closing the dock closes its child dialogs. Failed inventory exports show their error.
+- A failed outfit save cannot overwrite an existing outfit's portrait.
 
 ### 0.1.18
 

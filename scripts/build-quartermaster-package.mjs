@@ -1,8 +1,8 @@
 // Build the Quartermaster package: concatenate its plain-JS client modules
 // into a single self-contained client.js, hash the hand-authored server.mjs
 // and agents.json as-is, stamp the manifest, write a reproducible artifact
-// zip, and update the catalog family (INCOMPLETE_PACKAGE_IDS keeps it out of
-// every published catalog until it's ready).
+// zip, and update the catalog family. Shared catalog routing determines
+// whether the package is hidden, staging-only, or published.
 //
 // Quartermaster is an agent package that also ships a client and a server, so
 // build-agent-catalog.mjs skips it (client-bearing) and build-feature-packages.mjs
@@ -21,7 +21,6 @@ import { readCatalogFamily, writeCatalogFamily } from "./catalog-lanes.mjs";
 import { withPackageActivationGuidance } from "./catalog-package-guidance.mjs";
 import { writeEnglishPackageLocale } from "./package-locales.mjs";
 import { createDeterministicZip } from "./deterministic-zip.mjs";
-import { INCOMPLETE_PACKAGE_IDS } from "./catalog-incomplete.mjs";
 import { catalogArtworkUrl } from "./catalog-artwork.mjs";
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -41,7 +40,7 @@ const PACKAGE_ID = "quartermaster";
 // release (0.1.0-dev.2 < 0.1.0), so once a plain 0.1.0 is installed, no
 // prerelease build can ever look newer to Download Agents. Never reset the
 // version back down afterward, even across a long dev-iteration stretch.
-const VERSION = "0.1.18";
+const VERSION = "0.1.19";
 // Declared against the exact staging Engine this scaffold was built and tested
 // against. Do not lower this to reach stable users — see CONTRIBUTING.md.
 const ENGINE_MIN = "2.4.6";
@@ -61,10 +60,6 @@ const BASE_DESCRIPTION =
 const ARTIFACT_BASE_URL =
   process.env.QUARTERMASTER_DEV_ARTIFACT_BASE_URL ||
   "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts";
-
-if (!INCOMPLETE_PACKAGE_IDS.has(PACKAGE_ID)) {
-  throw new Error(`${PACKAGE_ID} must stay in INCOMPLETE_PACKAGE_IDS until it is ready for testers`);
-}
 
 const sha256 = (value) => createHash("sha256").update(value).digest("hex");
 
@@ -286,24 +281,14 @@ assertArtifactNotOverwritingReleasedContent(artifactPath, archive);
 await writeFile(artifactPath, archive);
 
 // ── Catalog family ───────────────────────────────────────────────────────────
-// Still written even though INCOMPLETE_PACKAGE_IDS hides it from every
-// published lane — writeCatalogFamily is the single chokepoint that enforces
-// that, so this keeps the same shape every other package's build produces.
+// writeCatalogFamily applies the shared publication tier and Engine lanes.
 const { catalog } = await readCatalogFamily(repoRoot);
 catalog.packages = catalog.packages.filter((entry) => entry.manifest.id !== PACKAGE_ID);
 catalog.packages.push({
   manifest,
   category: "tracker",
-  // validate-catalog.mjs hard-rejects a missing documentationUrl and any
-  // iconUrl that doesn't exactly equal catalogArtworkUrl(id) for every entry
-  // it can see — confirmed by reading the validator. Both are
-  // no-ops for now (INCOMPLETE_PACKAGE_IDS keeps this entry out of every
-  // catalog the validator actually reads), but wiring them now means there's
-  // nothing left to remember at the moment this graduates out of that set.
-  // iconUrl points at real cover art that doesn't exist on disk yet — see
-  // artwork/agent-covers/ — that 404 is fine until this is actually listed.
   iconUrl: catalogArtworkUrl(PACKAGE_ID),
-  documentationUrl: "https://github.com/Pasta-Devs/Marinara-Agents/blob/main/packages/quartermaster/README.md",
+  documentationUrl: "https://github.com/Pasta-Devs/Marinara-Agents/blob/staging/packages/quartermaster/README.md",
   artifact: {
     url: `${ARTIFACT_BASE_URL}/${basename(artifactPath)}`,
     sha256: sha256(archive),

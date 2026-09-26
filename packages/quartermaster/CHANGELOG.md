@@ -1,5 +1,12 @@
 # Quartermaster changelog
 
+## 0.1.19 — 2026-09-26
+- Available from the official staging Download Agents catalog with Professor Mari's armored
+  Quartermaster cover and installation guidance.
+- Closing the dock also closes its dialogs; an old image-prompt preview cannot replace a later
+  dialog or another chat's preview. Failed inventory exports now report their error.
+- A failed outfit save cannot overwrite an existing outfit's portrait.
+
 ## 0.1.18 — 2026-09-19
 - Fixed the Settings avatar-swap toggle showing a stale value from the previous chat after a
   failed reload.

@@ -1,4 +1,4 @@
-// Quartermaster 0.1.18 — Marinara Engine roleplay-tracker capability (single-file client bundle)
+// Quartermaster 0.1.19 — Marinara Engine roleplay-tracker capability (single-file client bundle)
 // Built from packages/quartermaster/src (10 modules) by scripts/build-quartermaster-package.mjs. Do not edit; edit src/ and rebuild.
 (() => {
 "use strict";
@@ -1961,6 +1961,9 @@ QM.dock = {
     this._closeItemEditor();
     this._closeOutfitEditor();
     this._closeSaveOutfitModal();
+    this._closeAddItemModal();
+    this._closeWardrobeBuilder();
+    this._closeImageGenModal();
     if (this.root) this.root.classList.add("qm-dock-collapsed");
     if (this.unsubscribe) {
       this.unsubscribe();
@@ -3010,7 +3013,10 @@ QM.dock = {
         const datePart = new Date().toISOString().slice(0, 10);
         link.download = `quartermaster-inventory-${personaSlug ? `${personaSlug}-` : ""}${datePart}.json`;
         link.click();
-        URL.revokeObjectURL(url);
+        setTimeout(() => URL.revokeObjectURL(url), 0);
+      } catch (error) {
+        QM.state.error = error instanceof Error ? error.message : String(error);
+        QM.state._notify();
       } finally {
         exportButton.disabled = false;
       }
@@ -5266,11 +5272,9 @@ QM.dock = {
   // this doesn't have yet): picking a file just compresses it and holds the
   // resulting data URL in `stagedImageDataUrl` until Save actually creates
   // the outfit and learns its id. QM.state.createOutfit's own response
-  // updates QM.state.outfits in place (05-state.js's _mutate), and the
-  // server always appends new outfits to the end of that array, so the
-  // freshly created one is reliably the last element right after the
-  // create call resolves — no separate "give me the new id back" plumbing
-  // needed for that part.
+  // updates QM.state.outfits in place (05-state.js's _mutate). Compare IDs
+  // only after a successful create, so a failed save cannot replace an
+  // existing outfit's portrait.
   _openSaveOutfitModal() {
     this._closeSaveOutfitModal();
     const backdrop = document.createElement("div");
@@ -5387,8 +5391,14 @@ QM.dock = {
       const name = nameInput.value.trim();
       if (!name) return;
       saveButton.disabled = true;
+      const chatId = QM.state.chatId;
+      const existingIds = new Set((QM.state.outfits ?? []).map((outfit) => outfit.id));
       await QM.state.createOutfit({ name, description: descriptionInput.value });
-      const created = QM.state.outfits[QM.state.outfits.length - 1];
+      if (QM.state.error || chatId !== QM.state.chatId || this.saveOutfitBackdrop !== backdrop) {
+        saveButton.disabled = false;
+        return;
+      }
+      const created = (QM.state.outfits ?? []).find((outfit) => !existingIds.has(outfit.id));
       if (stagedImageDataUrl && created) {
         await QM.state.uploadOutfitPortrait(created.id, stagedImageDataUrl);
       }
@@ -6023,17 +6033,23 @@ Object.assign(QM.dock, {
   },
 
   async _submitImageGenPromptPreview() {
+    const token = this._imageGenSessionToken;
+    const chatId = QM.state.chatId;
+    const kind = this._imageGenKind;
+    const subjectId = this._imageGenSubjectId;
     this._imageGenViewState = "loading";
     this._imageGenLoadingLabel = "Building prompt…";
     this._renderImageGenContent();
     try {
       const result =
-        this._imageGenKind === "outfit"
-          ? await QM.outfitPortraitPromptPreview(QM.state.chatId, QM_OWNER_ID, this._imageGenSubjectId)
-          : await QM.itemImagePromptPreview(QM.state.chatId, QM_OWNER_ID, this._imageGenSubjectId);
+        kind === "outfit"
+          ? await QM.outfitPortraitPromptPreview(chatId, QM_OWNER_ID, subjectId)
+          : await QM.itemImagePromptPreview(chatId, QM_OWNER_ID, subjectId);
+      if (token !== this._imageGenSessionToken || chatId !== QM.state.chatId) return;
       this._imageGenPrompt = result.prompt;
       this._imageGenViewState = "prompt";
     } catch (error) {
+      if (token !== this._imageGenSessionToken || chatId !== QM.state.chatId) return;
       const code = error && error.message;
       this._imageGenError = (code && QM_IMAGE_GEN_ERROR_MESSAGES[code]) || code || "Could not build a prompt.";
       this._imageGenViewState = "error";

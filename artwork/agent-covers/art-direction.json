@@ -234,6 +234,12 @@
       "name": "World State",
       "concept": "Mari carefully holds a glowing miniature world showing tiny mountains and ocean, with day and night, sun, moon, rain cloud, snowflake, and temperature symbols orbiting it.",
       "palette": "planet blue, leaf green, sunlight gold, night violet"
+    },
+    {
+      "id": "quartermaster",
+      "name": "Quartermaster",
+      "concept": "Chibi Professor Mari wears medieval steel armor over navy cloth and confidently holds an upright sword, her blonde curls and glasses visible against a castle armory.",
+      "palette": "steel silver, navy, warm gold, sky blue"
     }
   ]
 }

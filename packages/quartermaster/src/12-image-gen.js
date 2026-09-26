@@ -200,17 +200,23 @@ Object.assign(QM.dock, {
   },
 
   async _submitImageGenPromptPreview() {
+    const token = this._imageGenSessionToken;
+    const chatId = QM.state.chatId;
+    const kind = this._imageGenKind;
+    const subjectId = this._imageGenSubjectId;
     this._imageGenViewState = "loading";
     this._imageGenLoadingLabel = "Building prompt…";
     this._renderImageGenContent();
     try {
       const result =
-        this._imageGenKind === "outfit"
-          ? await QM.outfitPortraitPromptPreview(QM.state.chatId, QM_OWNER_ID, this._imageGenSubjectId)
-          : await QM.itemImagePromptPreview(QM.state.chatId, QM_OWNER_ID, this._imageGenSubjectId);
+        kind === "outfit"
+          ? await QM.outfitPortraitPromptPreview(chatId, QM_OWNER_ID, subjectId)
+          : await QM.itemImagePromptPreview(chatId, QM_OWNER_ID, subjectId);
+      if (token !== this._imageGenSessionToken || chatId !== QM.state.chatId) return;
       this._imageGenPrompt = result.prompt;
       this._imageGenViewState = "prompt";
     } catch (error) {
+      if (token !== this._imageGenSessionToken || chatId !== QM.state.chatId) return;
       const code = error && error.message;
       this._imageGenError = (code && QM_IMAGE_GEN_ERROR_MESSAGES[code]) || code || "Could not build a prompt.";
       this._imageGenViewState = "error";

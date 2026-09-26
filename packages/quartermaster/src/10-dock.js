@@ -683,6 +683,9 @@ QM.dock = {
     this._closeItemEditor();
     this._closeOutfitEditor();
     this._closeSaveOutfitModal();
+    this._closeAddItemModal();
+    this._closeWardrobeBuilder();
+    this._closeImageGenModal();
     if (this.root) this.root.classList.add("qm-dock-collapsed");
     if (this.unsubscribe) {
       this.unsubscribe();
@@ -1732,7 +1735,10 @@ QM.dock = {
         const datePart = new Date().toISOString().slice(0, 10);
         link.download = `quartermaster-inventory-${personaSlug ? `${personaSlug}-` : ""}${datePart}.json`;
         link.click();
-        URL.revokeObjectURL(url);
+        setTimeout(() => URL.revokeObjectURL(url), 0);
+      } catch (error) {
+        QM.state.error = error instanceof Error ? error.message : String(error);
+        QM.state._notify();
       } finally {
         exportButton.disabled = false;
       }
@@ -3988,11 +3994,9 @@ QM.dock = {
   // this doesn't have yet): picking a file just compresses it and holds the
   // resulting data URL in `stagedImageDataUrl` until Save actually creates
   // the outfit and learns its id. QM.state.createOutfit's own response
-  // updates QM.state.outfits in place (05-state.js's _mutate), and the
-  // server always appends new outfits to the end of that array, so the
-  // freshly created one is reliably the last element right after the
-  // create call resolves — no separate "give me the new id back" plumbing
-  // needed for that part.
+  // updates QM.state.outfits in place (05-state.js's _mutate). Compare IDs
+  // only after a successful create, so a failed save cannot replace an
+  // existing outfit's portrait.
   _openSaveOutfitModal() {
     this._closeSaveOutfitModal();
     const backdrop = document.createElement("div");
@@ -4109,8 +4113,14 @@ QM.dock = {
       const name = nameInput.value.trim();
       if (!name) return;
       saveButton.disabled = true;
+      const chatId = QM.state.chatId;
+      const existingIds = new Set((QM.state.outfits ?? []).map((outfit) => outfit.id));
       await QM.state.createOutfit({ name, description: descriptionInput.value });
-      const created = QM.state.outfits[QM.state.outfits.length - 1];
+      if (QM.state.error || chatId !== QM.state.chatId || this.saveOutfitBackdrop !== backdrop) {
+        saveButton.disabled = false;
+        return;
+      }
+      const created = (QM.state.outfits ?? []).find((outfit) => !existingIds.has(outfit.id));
       if (stagedImageDataUrl && created) {
         await QM.state.uploadOutfitPortrait(created.id, stagedImageDataUrl);
       }
