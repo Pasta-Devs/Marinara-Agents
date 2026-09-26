@@ -44,6 +44,7 @@ import {
   RULESET_CATALOG_ROW_KEY,
   RULESET_CREATURE_MAX_ACTIONS,
   RULESET_CREATURE_MAX_TRAITS,
+  assertRulesetApplies,
   assertRulesetBattle,
   assertRulesetCatalogs,
   assertRulesetCombat,
@@ -68,6 +69,9 @@ const COUNTER_LIST = "counters";
 const ATTACK_LIST = "attacks";
 const CREATURE_CATALOG = "creatures";
 const SPELL_CATALOG = "spells";
+// The two numbers a contest reads, by the ids the combat block gives them.
+const CHECK_MIGHT = "might";
+const CHECK_AGILITY = "agility";
 const DISTANCE_UNITS = { distance: { label: "ft", perCell: 5 } };
 
 // The three distance columns of the attacks list, wired through combat.attacks
@@ -125,6 +129,102 @@ const CONDITIONS = Object.freeze([
   "unconscious",
 ]);
 const CONDITION_SET = new Set(CONDITIONS);
+
+// The conditions this package adds for the state a spell, a class feature or a creature's reaction
+// leaves its target in. None is an SRD condition: each is the one rule it comes from, with the
+// numbers that rule gives, and its `combat` is what a fight reads (Capability API 1.45). Each row
+// quotes its sentence. ruleset.json declares every one on the sheet, which assertEffectConditions
+// checks, so the hand-written list and this one cannot drift apart.
+const PARRY_BONUSES = Object.freeze([2, 3, 4, 5]);
+const EFFECT_CONDITIONS = Object.freeze([
+  // Bless: "Whenever a target makes an attack roll or a saving throw before the spell ends, the
+  // target can roll a d4 and add the number rolled to the attack roll or saving throw."
+  {
+    id: "blessed",
+    label: "Blessed",
+    combat: {
+      modifiers: [
+        { to: "attacks", dice: "1d4" },
+        { to: "saves", dice: "1d4" },
+      ],
+    },
+  },
+  // Bane: "Whenever a target that fails this saving throw makes an attack roll or a saving throw
+  // before the spell ends, the target must roll a d4 and subtract the number rolled".
+  {
+    id: "baned",
+    label: "Baned",
+    combat: {
+      modifiers: [
+        { to: "attacks", dice: "1d4", minus: true },
+        { to: "saves", dice: "1d4", minus: true },
+      ],
+    },
+  },
+  // Shield: "Until the start of your next turn, you have a +5 bonus to AC, including against the
+  // triggering attack".
+  { id: "shielded", label: "Shielded", combat: { modifiers: [{ to: "defense", flat: 5 }] } },
+  // Shield of Faith: "the target a +2 bonus to AC for the duration".
+  { id: "shield_of_faith", label: "Shield of Faith", combat: { modifiers: [{ to: "defense", flat: 2 }] } },
+  // Haste: "the target's speed is doubled, it gains a +2 bonus to AC, it has advantage on Dexterity
+  // saving throws". The extra action it grants each turn is not something a condition can give.
+  {
+    id: "hasted",
+    label: "Hasted",
+    combat: {
+      effects: ["own-saves-advantage"],
+      saves: ["dex_save"],
+      modifiers: [
+        { to: "defense", flat: 2 },
+        { to: "speed", times: 2 },
+      ],
+    },
+  },
+  // Slow: "The target's speed is halved, it takes a -2 penalty to AC and Dexterity saving throws, and
+  // it can't use reactions." Its one-attack limit and the spell delay are not conditions a fight has.
+  {
+    id: "slowed",
+    label: "Slowed",
+    combat: {
+      effects: ["cannot-react"],
+      saves: ["dex_save"],
+      modifiers: [
+        { to: "defense", flat: -2 },
+        { to: "saves", flat: -2 },
+        { to: "speed", times: 0.5 },
+      ],
+    },
+  },
+  // Blur: "For the duration, any creature has disadvantage on attack rolls against you."
+  { id: "blurred", label: "Blurred", combat: { effects: ["attacks-against-disadvantage"] } },
+  // Faerie Fire: "Any attack roll against an affected creature or object has advantage if the
+  // attacker can see it".
+  { id: "outlined", label: "Outlined", combat: { effects: ["attacks-against-advantage"] } },
+  // Guiding Bolt: "the next attack roll made against this target before the end of your next turn
+  // has advantage". One attack, which the spell's `endsAfter` says.
+  { id: "guided", label: "Guided", combat: { effects: ["attacks-against-advantage"] } },
+  // Vicious Mockery: "have disadvantage on the next attack roll it makes before the end of its next
+  // turn". One attack, which the spell's `endsAfter` says.
+  { id: "mocked", label: "Mocked", combat: { effects: ["own-attacks-disadvantage"] } },
+  // Longstrider: "The target's speed increases by 10 feet until the spell ends."
+  { id: "longstriding", label: "Longstrider", combat: { modifiers: [{ to: "speed", flat: 10 }] } },
+  // Ray of Frost: "its speed is reduced by 10 feet until the start of your next turn".
+  { id: "chilled", label: "Chilled", combat: { modifiers: [{ to: "speed", flat: -10 }] } },
+  // Uncanny Dodge: "you can use your reaction to halve the attack's damage against you". One attack,
+  // which the feature's `endsAfter` says; `resist-all` halves on top of the rogue's own resistances,
+  // as the SRD's halvings do.
+  { id: "dodging", label: "Uncanny Dodge", combat: { effects: ["resist-all"] } },
+  // Parry: "The knight adds 2 to its AC against one melee attack that would hit it." One condition
+  // for each bonus a printed Parry gives, so every creature keeps its own number.
+  ...PARRY_BONUSES.map((bonus) => ({
+    id: `parrying_${bonus}`,
+    label: `Parrying (+${bonus})`,
+    combat: { modifiers: [{ to: "defense", flat: bonus }] },
+  })),
+]);
+const EFFECT_CONDITION_SET = new Set(EFFECT_CONDITIONS.map((entry) => entry.id));
+// Everything a spell, a feature or a creature's action may put on a target.
+const APPLIED_CONDITION_SET = new Set([...CONDITIONS, ...EFFECT_CONDITION_SET]);
 
 // Sheet column ceilings, mirrored here so the converter trims to fit instead of
 // emitting a row the sheet would refuse. assertRulesetCatalogs is the check;
@@ -299,7 +399,7 @@ const RANGED_WEAPONS = new Set([
 // The ruleset version this converter writes. Raise it when the generated
 // content changes what an installed ruleset means; a rebuild refuses to lower
 // a version that is already higher.
-const RULESET_VERSION = 8;
+const RULESET_VERSION = 9;
 
 // The SRD's healing spells. The fixture has no healing field at all: a spell
 // carries a damage roll or nothing, so a heal arrives here looking exactly like
@@ -357,14 +457,29 @@ const REACTION_MOMENTS = new Map([
       moment: { on: "harmed", at: "source" },
     },
   ],
+  // Capability API 1.44: "used" is somebody on the other side about to use something, answered from
+  // within the spell's own 60 feet, and `against` keeps it to spells, so a sword swing opens nothing
+  // for it. "If the creature is casting a spell of 3rd level or lower, its spell fails": this calls
+  // it off outright, whatever its level, because a fight has no ability check to stop a higher one.
+  [
+    "srd_counterspell",
+    {
+      trigger: "which you take when you see a creature within 60 feet of you casting a spell",
+      moment: { on: "used", against: { catalogs: [SPELL_CATALOG] }, cancels: true },
+    },
+  ],
+  // Capability API 1.46: "hit" is an attack roll that has just hit the holder, before its damage.
+  // The +5 it puts on counts for that attack, whose roll is checked again. Being targeted by magic
+  // missile is not an attack roll, so that half of the trigger opens nothing.
+  [
+    "srd_shield",
+    {
+      trigger: "which you take when you are hit by an attack or targeted by the magic missile spell",
+      moment: { on: "hit" },
+    },
+  ],
 ]);
 const REACTIONS_WITHOUT_MOMENT = new Map([
-  // "aimed" opens for any action aimed at the holder, a sword swing as much as a spell, so calling
-  // it off there would parry weapons too. It waits for a moment that can tell a spell apart.
-  ["srd_counterspell", "which you take when you see a creature within 60 feet of you casting a spell"],
-  // It raises Armor Class by 5, and a fight's conditions are names rather than modifiers, so there
-  // is nothing it could do when it fires.
-  ["srd_shield", "which you take when you are hit by an attack or targeted by the magic missile spell"],
   // Nothing in a fight falls.
   ["srd_feather-fall", "which you take when you or a creature within 60 feet of you falls"],
 ]);
@@ -517,14 +632,111 @@ const SPELL_RIDERS = new Map([
   // "The creature must succeed on a Constitution saving throw or take 1d12 poison damage."
   ["srd_poison-spray", { kind: "attack", amount: { dice: "1d12" }, damageType: "poison" }],
   // "it must succeed on a Wisdom saving throw or take 1d4 psychic damage and have disadvantage on the
-  // next attack roll it makes before the end of its next turn." The disadvantage is no condition this
-  // sheet has, so only the damage is carried.
-  ["srd_vicious-mockery", { kind: "attack", amount: { dice: "1d4" }, damageType: "psychic" }],
+  // next attack roll it makes before the end of its next turn." Both on the failed save: the damage,
+  // and Mocked until the end of the target's next turn or its next attack roll, whichever is first.
+  [
+    "srd_vicious-mockery",
+    {
+      kind: "attack",
+      amount: { dice: "1d4" },
+      damageType: "psychic",
+      applies: [{ condition: "mocked", duration: { rounds: 1 }, endsAfter: "own-attack" }],
+    },
+  ],
   // "you can make a melee spell attack against a creature within 5 feet of the weapon. On a hit, the
   // target takes force damage equal to 1d8 + your spellcasting ability modifier." The strike made as
   // it is cast; the weapon that stays to strike again on later turns is nothing a fight can hold, and
   // an amount grows in dice rather than by a modifier, as the healing spells' do.
   ["srd_spiritual-weapon", { kind: "attack", amount: { dice: "1d8" }, damageType: "force" }],
+  // Capability API 1.45: conditions that change numbers, read by the fight (EFFECT_CONDITIONS says
+  // what each does). A buff aimed at the caster's own side needs no save; everything else is gated by
+  // the save or the attack roll it already carries.
+  // Bless: "You bless up to three creatures of your choice within range." 1 minute, concentration.
+  [
+    "srd_bless",
+    { kind: "buff", targets: "ally", applies: [{ condition: "blessed", duration: { rounds: ROUNDS_PER_MINUTE } }] },
+  ],
+  // Bane: "Up to three creatures of your choice that you can see within range must make Charisma
+  // saving throws." The fixture's save wording fits neither reading the converter makes of it.
+  [
+    "srd_bane",
+    {
+      save: { save: "cha_save", onSuccess: "negates" },
+      applies: [{ condition: "baned", duration: { rounds: ROUNDS_PER_MINUTE } }],
+    },
+  ],
+  // Guiding Bolt: "the next attack roll made against this target before the end of your next turn
+  // has advantage". It lands with the hit, and counts the target's turns rather than the caster's.
+  ["srd_guiding-bolt", { applies: [{ condition: "guided", duration: { rounds: 1 }, endsAfter: "attacked" }] }],
+  // Faerie Fire: "Each object in a 20-foot cube within range is outlined ... Any creature in the area
+  // when the spell is cast is also outlined in light if it fails a Dexterity saving throw." 1 minute.
+  [
+    "srd_faerie-fire",
+    {
+      save: { save: "dex_save", onSuccess: "negates" },
+      applies: [{ condition: "outlined", duration: { rounds: ROUNDS_PER_MINUTE } }],
+    },
+  ],
+  // Shield of Faith: "A shimmering field appears and surrounds a creature of your choice within
+  // range, granting it a +2 bonus to AC for the duration." 10 minutes.
+  [
+    "srd_shield-of-faith",
+    {
+      kind: "buff",
+      targets: "ally",
+      applies: [{ condition: "shield_of_faith", duration: { rounds: 10 * ROUNDS_PER_MINUTE } }],
+    },
+  ],
+  // Haste: "Choose a willing creature that you can see within range." 1 minute. The fixture names a
+  // Dexterity save only because the text mentions Dexterity saves; the spell asks for none.
+  [
+    "srd_haste",
+    { kind: "buff", targets: "ally", applies: [{ condition: "hasted", duration: { rounds: ROUNDS_PER_MINUTE } }] },
+  ],
+  // Slow: "Each target must succeed on a Wisdom saving throw or be affected by this spell for the
+  // duration. ... At the end of each of its turns, the target can make another Wisdom saving throw."
+  [
+    "srd_slow",
+    {
+      applies: [
+        {
+          condition: "slowed",
+          duration: { rounds: ROUNDS_PER_MINUTE },
+          saveEnds: { save: "wis_save", at: "turn-end" },
+        },
+      ],
+    },
+  ],
+  // Blur: "Your body becomes blurred ... For the duration, any creature has disadvantage on attack
+  // rolls against you." 1 minute.
+  [
+    "srd_blur",
+    { kind: "buff", targets: "self", applies: [{ condition: "blurred", duration: { rounds: ROUNDS_PER_MINUTE } }] },
+  ],
+  // Longstrider: "You touch a creature. The target's speed increases by 10 feet until the spell
+  // ends." 1 hour.
+  [
+    "srd_longstrider",
+    {
+      kind: "buff",
+      targets: "ally",
+      applies: [{ condition: "longstriding", duration: { rounds: ROUNDS_PER_HOUR } }],
+    },
+  ],
+  // Ray of Frost: "On a hit, it takes 1d8 cold damage, and its speed is reduced by 10 feet until the
+  // start of your next turn." Carried through the target's own next turn, which is the one turn
+  // that reduction ever touches.
+  ["srd_ray-of-frost", { applies: [{ condition: "chilled", duration: { rounds: 1 } }] }],
+  // Shield: "Until the start of your next turn, you have a +5 bonus to AC, including against the
+  // triggering attack". Taken at the moment REACTION_MOMENTS gives it.
+  [
+    "srd_shield",
+    {
+      kind: "buff",
+      targets: "self",
+      applies: [{ condition: "shielded", duration: { rounds: 1, at: "turn-start" } }],
+    },
+  ],
 ]);
 
 // The fixture's property assignments disagree with the SRD 5.1 weapons table
@@ -1006,16 +1218,20 @@ function assertSpellRiders(spells) {
       fail(`${pk} now carries a damage roll of its own, so its hand-written amount is a second opinion`);
     }
     for (const applies of rider.applies ?? []) {
-      if (!CONDITION_SET.has(applies.condition)) fail(`${pk} applies "${applies.condition}", which the sheet has not`);
+      if (!APPLIED_CONDITION_SET.has(applies.condition))
+        fail(`${pk} applies "${applies.condition}", which the sheet has not`);
     }
     if (rider.damageType && !DAMAGE_TYPE_SET.has(rider.damageType)) {
       fail(`${pk} deals "${rider.damageType}", which is not one of the ruleset's damage types`);
     }
-    // `applies` lands on anything the save did not turn aside, so a row that puts a condition on a
-    // target without a save to resist it would be harsher than the SRD. Checked against the save the
-    // entry will really carry, so a fixture that stopped stating one stops the build.
-    if (rider.applies && !(rider.save ?? spellSave(pk, spell.fields))) {
-      fail(`${pk} applies a condition with no saving throw to resist it`);
+    // `applies` lands on anything the save did not turn aside and anything the attack roll hit, so a
+    // row that puts a condition on a target with neither would be harsher than the SRD. Checked
+    // against what the entry will really carry, so a fixture that stopped stating one stops the build.
+    // A buff aimed at the caster's own side is what its target wants, and needs neither.
+    const kindly = rider.kind === "buff" && (rider.targets === "self" || rider.targets === "ally");
+    const rolled = spell.fields.attack_roll || SPELL_ATTACK_ROLL_CORRECTIONS.has(pk);
+    if (rider.applies && !kindly && !rolled && !(rider.save ?? spellSave(pk, spell.fields))) {
+      fail(`${pk} applies a condition with no saving throw or attack roll to resist it`);
     }
   }
 }
@@ -1348,6 +1564,20 @@ function stepTableFromColumn(counter, levels) {
 // puts no such number on. Every row quotes the sentence it encodes, and a feature named in both
 // tables stops the build rather than letting one silently win.
 const FEATURE_MECHANICS = [
+  {
+    feature: "srd_rogue_uncanny-dodge",
+    name: "Uncanny Dodge",
+    // "when an attacker that you can see hits you with an attack, you can use your reaction to halve
+    // the attack's damage against you." Capability API 1.46: taken at the moment an attack roll has
+    // hit, and Dodging lasts that one attack, its damage included.
+    mechanics: {
+      kind: "buff",
+      targets: "self",
+      budget: BUDGET_REACTION,
+      reaction: { on: "hit" },
+      applies: [{ condition: "dodging", duration: { rounds: 1 }, endsAfter: "attacked" }],
+    },
+  },
   {
     feature: "srd_rogue_cunning-action",
     name: "Cunning Action",
@@ -2870,6 +3100,7 @@ function speedOf(fields) {
 function creatureEntry(record, sources, report) {
   const { pk, fields } = record;
   const actions = (sources.actions.get(pk) ?? []).filter((action) => action.fields.action_type !== "REACTION");
+  const reactions = (sources.actions.get(pk) ?? []).filter((action) => action.fields.action_type === "REACTION");
   if (actions.length === 0) {
     report.skipped.push({ id: pk, reason: "the source gives it no action at all, and a block needs one" });
     return null;
@@ -2962,6 +3193,40 @@ function creatureEntry(record, sources, report) {
     report.skipped.push({ id: pk, reason: "none of its actions is something a fight could resolve" });
     return null;
   }
+
+  // A printed reaction. A Parry is the creature's own action at the moment an attack has hit it
+  // (Capability API 1.46), adding the bonus it prints for that one attack; any other printed reaction
+  // is a trait. "must see the attacker and be wielding a melee weapon" is not something a reaction
+  // can check, so a Parry here answers any attack roll. A Parry worded any other way, or one with no
+  // room left beside the creature's other actions, stops the build rather than quietly becoming a
+  // trait.
+  const reactionTraits = [];
+  for (const reaction of reactions) {
+    const text = plainText(reaction.fields.desc);
+    if (/^parry$/iu.test(reaction.fields.name)) {
+      const parry = /\badds (\d+) to its AC against one melee attack that would hit it\b/iu.exec(text);
+      if (!parry) fail(`${pk} prints a Parry this build cannot read: ${text}`);
+      if (built.length >= CREATURE_MAX_ACTIONS) {
+        fail(
+          `${pk} has no room for its Parry beside ${built.length} actions, the ${CREATURE_MAX_ACTIONS} the Engine allows`,
+        );
+      }
+      const bonus = Number(parry[1]);
+      if (!PARRY_BONUSES.includes(bonus)) fail(`${pk} parries for ${bonus}, which no Parrying condition gives`);
+      built.push({
+        id: actionId(reaction.pk, pk),
+        name: plainText(reaction.fields.name),
+        budget: BUDGET_REACTION,
+        self: true,
+        reaction: { on: "hit" },
+        applies: [{ condition: `parrying_${bonus}`, duration: { rounds: 1 }, endsAfter: "attacked" }],
+      });
+      report.parries.push(`${pk} (+${bonus})`);
+      continue;
+    }
+    reactionTraits.push(trait("a reaction the stat block prints", reaction.fields.name, reaction.fields.desc));
+    report.reactionTraits += 1;
+  }
   if (built.length > CREATURE_MAX_ACTIONS) {
     fail(`${pk} has ${built.length} actions, over the ${CREATURE_MAX_ACTIONS} the Engine allows`);
   }
@@ -3004,6 +3269,7 @@ function creatureEntry(record, sources, report) {
   for (const source of sources.traits.get(pk) ?? []) {
     notes.push(trait("a trait the stat block prints", source.fields.name, source.fields.desc));
   }
+  notes.push(...reactionTraits);
 
   const kept = notes.filter(Boolean).slice(0, CREATURE_MAX_TRAITS);
   report.traitsShipped += kept.length;
@@ -3057,6 +3323,12 @@ function creatureEntry(record, sources, report) {
           initiativeModifier: Math.floor((fields.ability_score_dexterity - 10) / 2),
           abilities,
           saves: Object.keys(saves).length > 0 ? saves : undefined,
+          // What it grapples, shoves and escapes with: its printed Athletics and Acrobatics, or its
+          // Strength and Dexterity modifiers where it prints neither.
+          checks: {
+            [CHECK_MIGHT]: fields.skill_bonus_athletics ?? Math.floor((fields.ability_score_strength - 10) / 2),
+            [CHECK_AGILITY]: fields.skill_bonus_acrobatics ?? Math.floor((fields.ability_score_dexterity - 10) / 2),
+          },
         }),
     resist: fields.damage_resistances.length > 0 ? [...fields.damage_resistances] : undefined,
     vulnerable: fields.damage_vulnerabilities.length > 0 ? [...fields.damage_vulnerabilities] : undefined,
@@ -3457,10 +3729,16 @@ function combatBlock(tiers) {
         // moving own-attacks-disadvantage out of `effects` makes the file fail to import. Checked
         // against the real parser; please do not "simplify" it that way.
         condition: "frightened",
-        effects: ["own-attacks-disadvantage", "cannot-approach-source"],
-        whileSourceInSight: ["own-attacks-disadvantage"],
+        effects: ["own-attacks-disadvantage", "own-checks-disadvantage", "cannot-approach-source"],
+        whileSourceInSight: ["own-attacks-disadvantage", "own-checks-disadvantage"],
       },
-      { condition: "grappled", effects: ["speed-zero"] },
+      {
+        // "The condition ends if the grappler is incapacitated", which is what a hold needs from a
+        // fight: the Engine notices the grappler going down, and every way down runs through it.
+        condition: "grappled",
+        effects: ["speed-zero"],
+        endsWhenSourceDown: true,
+      },
       { condition: "incapacitated", effects: ["cannot-act", "cannot-react"] },
       { condition: "invisible", effects: ["own-attacks-advantage", "attacks-against-disadvantage"] },
       {
@@ -3475,7 +3753,12 @@ function combatBlock(tiers) {
         effects: ["cannot-act", "cannot-react", "speed-zero", "attacks-against-advantage", "resist-all"],
         failsSaves: ["str_save", "dex_save"],
       },
-      { condition: "poisoned", effects: ["own-attacks-disadvantage"] },
+      {
+        // "A poisoned creature has disadvantage on attack rolls and ability checks." A fight makes its
+        // ability checks in contests, which is where the second half is read.
+        condition: "poisoned",
+        effects: ["own-attacks-disadvantage", "own-checks-disadvantage"],
+      },
       {
         condition: "prone",
         effects: [
@@ -3507,6 +3790,75 @@ function combatBlock(tiers) {
           "attacks-from-adjacent-critical",
         ],
         failsSaves: ["str_save", "dex_save"],
+      },
+      // What spells, class features and creatures' reactions leave on their targets. Each row's
+      // sentence is beside it in EFFECT_CONDITIONS.
+      ...EFFECT_CONDITIONS.map((entry) => ({ condition: entry.id, ...entry.combat })),
+    ],
+    levels: [
+      {
+        $comment:
+          "SRD 5.1, Exhaustion, counted on the sheet track of that name. Every level the track has reached counts, so each adds to the ones below it. Level 4 halves the hit point maximum and level 6 is death, and neither is something a level can say yet, so those two stay plain records.",
+        track: "exhaustion",
+        at: 1,
+        effects: ["own-checks-disadvantage"],
+      },
+      { track: "exhaustion", at: 2, modifiers: [{ to: "speed", times: 0.5 }] },
+      { track: "exhaustion", at: 3, effects: ["own-attacks-disadvantage", "own-saves-disadvantage"] },
+      { track: "exhaustion", at: 5, effects: ["speed-zero"] },
+    ],
+    checks: [
+      {
+        $comment:
+          "The numbers a contest reads, off the sheet. SRD 5.1 grapples and shoves with Athletics and resists them with Athletics or Acrobatics. A creature without a sheet gives its own, from its printed skills or its ability modifiers.",
+        id: CHECK_MIGHT,
+        label: "Athletics",
+        value: { skillMod: "athletics" },
+      },
+      { id: CHECK_AGILITY, label: "Acrobatics", value: { skillMod: "acrobatics" } },
+    ],
+    contests: [
+      {
+        $comment:
+          "SRD 5.1, Grappling: replaces one attack of the Attack action, Athletics against the target's Athletics or Acrobatics, and on a win the target is grappled by the grappler. The size limit is not something the Engine can check yet.",
+        id: "grapple",
+        label: "Grapple",
+        budget: BUDGET_ACTION,
+        strike: true,
+        attacker: { checks: [CHECK_MIGHT] },
+        defender: { checks: [CHECK_MIGHT, CHECK_AGILITY] },
+        onWin: { applies: [{ condition: "grappled" }] },
+      },
+      {
+        $comment:
+          "SRD 5.1, Shoving a Creature: the same contest, and the target is knocked prone or pushed 5 feet away.",
+        id: "shove_prone",
+        label: "Shove prone",
+        budget: BUDGET_ACTION,
+        strike: true,
+        attacker: { checks: [CHECK_MIGHT] },
+        defender: { checks: [CHECK_MIGHT, CHECK_AGILITY] },
+        onWin: { applies: [{ condition: "prone" }] },
+      },
+      {
+        id: "shove_away",
+        label: "Shove away",
+        budget: BUDGET_ACTION,
+        strike: true,
+        attacker: { checks: [CHECK_MIGHT] },
+        defender: { checks: [CHECK_MIGHT, CHECK_AGILITY] },
+        onWin: { push: 5 },
+      },
+      {
+        $comment:
+          "SRD 5.1, Escaping a Grapple: an action, the escaper's Athletics or Acrobatics against the grappler's Athletics, aimed only at whoever holds on.",
+        id: "escape",
+        label: "Escape a grapple",
+        budget: BUDGET_ACTION,
+        attacker: { checks: [CHECK_MIGHT, CHECK_AGILITY] },
+        defender: { checks: [CHECK_MIGHT] },
+        from: { holding: "grappled" },
+        onWin: { ends: [{ condition: "grappled", on: "actor" }] },
       },
     ],
     concentration: { text: "concentration", save: "con_save", floor: 10, fromDamage: 0.5 },
@@ -3551,6 +3903,23 @@ async function writeJson(path, value) {
   return Buffer.byteLength(formatted);
 }
 
+/** The sheet's hand-written condition list is exactly the SRD's fourteen and the effect conditions
+ *  above, in that order, so a condition this script applies can never be missing from the sheet and
+ *  the sheet never offers one nothing puts on. */
+function assertEffectConditions(document) {
+  const declared = (document.sheet?.live?.conditions ?? []).map((condition) => condition.id);
+  const expected = [...CONDITIONS, ...EFFECT_CONDITIONS.map((entry) => entry.id)];
+  if (JSON.stringify(declared) !== JSON.stringify(expected)) {
+    fail(
+      `ruleset.json declares the conditions ${JSON.stringify(declared)}, and this script expects ${JSON.stringify(expected)}`,
+    );
+  }
+  for (const entry of EFFECT_CONDITIONS) {
+    const label = document.sheet.live.conditions.find((condition) => condition.id === entry.id).label;
+    if (label !== entry.label) fail(`ruleset.json labels ${entry.id} "${label}", and this script "${entry.label}"`);
+  }
+}
+
 /** Splice the catalog headers into the committed `ruleset.json` as TEXT rather
  *  than re-serializing the parsed document, so every line the catalogs do not
  *  touch keeps the bytes it already had. The file already carries a root
@@ -3582,6 +3951,7 @@ async function writeRuleset(path, catalogs, combat) {
   if (combatAt >= 0 && catalogsAt >= 0 && combatAt < catalogsAt) {
     fail('ruleset.json has a hand-written "combat" above "catalogs"; this script generates that block');
   }
+  assertEffectConditions(JSON.parse(raw));
   const closing = raw.lastIndexOf("\n}");
   if (closing < 0 || raw.slice(closing) !== "\n}\n") fail("ruleset.json does not end with a closing brace");
   const body = raw
@@ -3648,6 +4018,8 @@ const report = {
   attacksThatOnlyApplyAConditionCount: 0,
   optionBlocksSplit: 0,
   legendaryReusingAnAttack: 0,
+  parries: [],
+  reactionTraits: 0,
   attacksWithoutPrintedToHit: [],
   attacksWithNothingToResolve: [],
   savesWithNothingToResolve: [],
@@ -3870,6 +4242,7 @@ assertRulesetBattle(manifest, document);
 assertRulesetCombat(manifest, document);
 assertRulesetCreatures(manifest, document, sources);
 assertRulesetReactions(manifest, document, sources);
+assertRulesetApplies(manifest, document, sources);
 const scaledRows = assertRulesetScaled(manifest, document, sources);
 // A kept maximum is fitted to its column when the sheet is edited, so the column has to have room
 // for the most the rules can give (Lay on Hands is 100 at level 20).
@@ -3926,6 +4299,10 @@ if (report.multiattackAlternativesDropped.length > 0) {
   );
 }
 console.log(`  ${report.legendaryReusingAnAttack} legendary action(s) reuse an attack the block already prints`);
+console.log(
+  `  ${report.parries.length} printed Parry reaction(s) carried as the creature's own: ${report.parries.join(", ")}`,
+);
+console.log(`  ${report.reactionTraits} other printed reaction(s) kept as traits`);
 console.log(
   `  ${report.optionBlocksSplit} printed action(s) hold several options; the first is the action, the rest are traits`,
 );

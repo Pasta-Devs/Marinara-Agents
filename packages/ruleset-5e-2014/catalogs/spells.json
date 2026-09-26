@@ -521,8 +521,10 @@
         }
       ],
       "mechanics": {
-        "kind": "utility",
+        "kind": "debuff",
         "range": 30,
+        "save": { "save": "cha_save", "onSuccess": "negates" },
+        "applies": [{ "condition": "baned", "duration": { "rounds": 10 } }],
         "targetCount": 3,
         "cost": [{ "pool": "slots_1", "amount": 1 }],
         "concentration": true
@@ -706,8 +708,10 @@
         }
       ],
       "mechanics": {
-        "kind": "utility",
+        "kind": "buff",
         "range": 30,
+        "targets": "ally",
+        "applies": [{ "condition": "blessed", "duration": { "rounds": 10 } }],
         "targetCount": 3,
         "cost": [{ "pool": "slots_1", "amount": 1 }],
         "concentration": true
@@ -800,8 +804,10 @@
         }
       ],
       "mechanics": {
-        "kind": "utility",
+        "kind": "buff",
         "range": 0,
+        "targets": "self",
+        "applies": [{ "condition": "blurred", "duration": { "rounds": 10 } }],
         "cost": [{ "pool": "slots_2", "amount": 1 }],
         "concentration": true
       }
@@ -1600,7 +1606,7 @@
         "kind": "utility",
         "range": 60,
         "cost": [{ "pool": "slots_3", "amount": 1 }],
-        "reaction": true,
+        "reaction": { "on": "used", "against": { "catalogs": ["spells"] }, "cancels": true },
         "budget": "reaction"
       }
     },
@@ -2574,9 +2580,11 @@
         }
       ],
       "mechanics": {
-        "kind": "utility",
+        "kind": "debuff",
         "range": 60,
         "area": { "shape": "burst", "size": 7.5 },
+        "save": { "save": "dex_save", "onSuccess": "negates" },
+        "applies": [{ "condition": "outlined", "duration": { "rounds": 10 } }],
         "cost": [{ "pool": "slots_1", "amount": 1 }],
         "concentration": true
       }
@@ -3613,6 +3621,7 @@
         "amount": { "dice": "4d6" },
         "damageType": "radiant",
         "attackRoll": true,
+        "applies": [{ "condition": "guided", "duration": { "rounds": 1 }, "endsAfter": "attacked" }],
         "cost": [{ "pool": "slots_1", "amount": 1 }],
         "perCostStep": { "dice": "1d6" }
       }
@@ -3734,8 +3743,10 @@
         }
       ],
       "mechanics": {
-        "kind": "utility",
+        "kind": "buff",
         "range": 30,
+        "targets": "ally",
+        "applies": [{ "condition": "hasted", "duration": { "rounds": 10 } }],
         "cost": [{ "pool": "slots_3", "amount": 1 }],
         "concentration": true
       }
@@ -4574,7 +4585,13 @@
           }
         }
       ],
-      "mechanics": { "kind": "utility", "range": 0, "cost": [{ "pool": "slots_1", "amount": 1 }] }
+      "mechanics": {
+        "kind": "buff",
+        "range": 0,
+        "targets": "ally",
+        "applies": [{ "condition": "longstriding", "duration": { "rounds": 600 } }],
+        "cost": [{ "pool": "slots_1", "amount": 1 }]
+      }
     },
     {
       "id": "mage-armor",
@@ -5857,6 +5874,7 @@
         "amount": { "dice": "1d8" },
         "damageType": "cold",
         "attackRoll": true,
+        "applies": [{ "condition": "chilled", "duration": { "rounds": 1 } }],
         "scales": {
           "from": { "field": "level" },
           "table": [
@@ -6345,10 +6363,12 @@
         }
       ],
       "mechanics": {
-        "kind": "utility",
+        "kind": "buff",
         "range": 0,
+        "targets": "self",
+        "applies": [{ "condition": "shielded", "duration": { "rounds": 1, "at": "turn-start" } }],
         "cost": [{ "pool": "slots_1", "amount": 1 }],
-        "reaction": true,
+        "reaction": { "on": "hit" },
         "budget": "reaction"
       }
     },
@@ -6371,8 +6391,10 @@
         }
       ],
       "mechanics": {
-        "kind": "utility",
+        "kind": "buff",
         "range": 60,
+        "targets": "ally",
+        "applies": [{ "condition": "shield_of_faith", "duration": { "rounds": 100 } }],
         "cost": [{ "pool": "slots_1", "amount": 1 }],
         "concentration": true,
         "budget": "bonus"
@@ -6570,10 +6592,13 @@
         }
       ],
       "mechanics": {
-        "kind": "utility",
+        "kind": "debuff",
         "range": 120,
         "area": { "shape": "burst", "size": 17.5 },
         "save": { "save": "wis_save", "onSuccess": "negates" },
+        "applies": [
+          { "condition": "slowed", "duration": { "rounds": 10 }, "saveEnds": { "save": "wis_save", "at": "turn-end" } }
+        ],
         "targetCount": 6,
         "cost": [{ "pool": "slots_3", "amount": 1 }],
         "concentration": true
@@ -7382,6 +7407,7 @@
         "amount": { "dice": "1d4" },
         "damageType": "psychic",
         "save": { "save": "wis_save", "onSuccess": "negates" },
+        "applies": [{ "condition": "mocked", "duration": { "rounds": 1 }, "endsAfter": "own-attack" }],
         "scales": {
           "from": { "field": "level" },
           "table": [

@@ -6,10 +6,11 @@ slots, hit dice, class resources, conditions, rests, a full character sheet, and
 a battle in a game on this ruleset is fought by these rules, on screen, against the SRD's own
 monsters.
 
-Requires **Marinara Engine 2.4.6+ with Capability API 1.34** (the ruleset seam, catalogs, the
+Requires **Marinara Engine 2.4.6+ with Capability API 1.46** (the ruleset seam, catalogs, the
 battle block, scaled catalog columns, the combat block, bestiaries, a fight with positions, what
 one TURN of that fight can do, a weapon that caps its own strikes, the moment a reaction waits for,
-and creatures written as sheets:
+creatures written as sheets, contests, a reaction to something being used, conditions that change
+numbers and count levels, and a reaction to being hit:
 hash-pinned `ruleset.json` and `catalogs/<id>.json` assets the Engine reads by reserved filename,
 exactly like `gm-verbs.json`). Today that means the Engine `staging` branch; older hosts reject the manifest and
 cannot install this package. This package ships no server entrypoint, no client entrypoint, and no
@@ -161,9 +162,32 @@ What the block says:
   and the damage type are all read off the row.
 - Your prepared spells, your cantrips and the class features you picked are the things you do with
   an action, rolling the sheet's Spell attack bonus and asking for its Spell save DC.
-- A reaction spell that names its moment is offered at that moment and no other: when something
-  damages you, the fight stops and asks whether you cast **Hellish Rebuke**, and the flames go back
-  at whoever hurt you.
+- A reaction that names its moment is offered at that moment and no other. When something damages
+  you, the fight stops and asks whether you cast **Hellish Rebuke**, and the flames go back at
+  whoever hurt you. When an attack hits you, it asks whether you cast **Shield** (+5 to Armor Class
+  until the start of your next turn, and the attack is checked again against it) or, for a rogue,
+  take **Uncanny Dodge** (that attack's damage is halved). When somebody casts a spell, it asks
+  whether you cast **Counterspell**, and the spell never happens. A bandit captain, an erinyes, a
+  gladiator, a knight, a marilith and a noble **Parry** the same way, adding their printed 2 to 5 to
+  their Armor Class against the blow that would have hit.
+- **Grapple and shove.** Either takes the place of one strike of your Attack action: your Athletics
+  against the target's Athletics or Acrobatics, whichever is better, with a tie to the target. A
+  grapple leaves the target grappled by you until you go down or it escapes, which is its own action
+  with the sides reversed. A shove knocks the target prone or, on a board, pushes it 5 feet away. A
+  monster uses its printed Athletics or Acrobatics, or its Strength or Dexterity modifier when it
+  prints none.
+- **Spells that change the numbers.** Bless adds 1d4 to attack rolls and saves and Bane takes 1d4
+  off them, rolled every time. Shield of Faith adds 2 to Armor Class. Haste adds 2 to Armor Class,
+  doubles Speed and gives advantage on Dexterity saves; Slow takes 2 off Armor Class and Dexterity
+  saves, halves Speed and takes the reaction away, until a Wisdom save at the end of a turn ends it.
+  Blur makes attacks against you roll with disadvantage, Faerie Fire makes attacks against whoever it
+  outlines roll with advantage, Guiding Bolt gives the next attack against its target advantage,
+  Vicious Mockery gives its target's next attack disadvantage, Longstrider adds 10 feet and Ray of
+  Frost takes 10 feet off.
+- **Exhaustion counts.** Each level the Exhaustion track has reached adds to the ones below it:
+  disadvantage on the contests above at 1, half Speed at 2, disadvantage on attacks and saves at 3,
+  and no movement at all at 5. A poisoned creature now also rolls its contests with disadvantage,
+  and a frightened one does while it can see what frightens it.
 - **A turn does what a tabletop turn does.** One Attack action buys as many strikes as your Attacks
   per Attack action field says, the first spending the action and the rest offered free, so you may
   change weapon, change target and walk between them. Sneak Attack adds itself to the first
@@ -182,7 +206,7 @@ What the block says:
 **About the scale.** Health, armour class and the attack bonus are measured from every SRD creature
 of the rating. The damage band is measured only from the ones whose fighting is really in their
 actions: a spellcaster's printed attack is a dagger and its fireballs come off a spell list this
-measurement does not read, so counting it would say a rating 12 monster deals nine damage a round. 36 casters and 4 creatures whose damage
+measurement does not read, so counting it would say a rating 12 monster deals nine damage a round. 37 casters and 4 creatures whose damage
 this format had to leave in a trait are out of that one measurement, and in every other.
 
 The caps and the floors are then made **monotone** along the rating order, and that is the one place
@@ -234,10 +258,10 @@ number alone, since a number is where your own edits live. Delete each weapon ro
 the catalog again, or type the three numbers into the row yourself. A character built from here on
 gets them with the row.
 
-**Spells land as the shape the SRD prints.** Of the 80 spells a fight can resolve, 71 carry a range
+**Spells land as the shape the SRD prints.** Of the 93 spells a fight can resolve, 84 carry a range
 in feet, 7 draw a shape from the caster and so name no distance at all, and the last 2 are Dream
-("Special") and Meteor Swarm ("1 mile"), neither of which is a number of feet. 27 carry an area: 12
-spheres, 4 cylinders, 4 cones, 2 lines and 5 cubes or squares.
+("Special") and Meteor Swarm ("1 mile"), neither of which is a number of feet. 29 carry an area: 12
+spheres, 4 cylinders, 4 cones, 2 lines and 7 cubes or squares.
 
 A range of **Touch** is written as 0, which the Engine reads as a reach of one square rather than a
 shot, so touching somebody standing beside an enemy costs nothing. A spell whose range is **Self**
@@ -300,7 +324,7 @@ for Spiritual Weapon, so all five used to ship as utility spells a fight never o
 carries the base damage roll its own text prints, and the four cantrips still grow with your level off
 the source's own table. The build stops if the source ever gives one of them a roll of its own.
 
-**A creature carries how far its actions reach.** The bestiary's 828 actions divide up exactly, each
+**A creature carries how far its actions reach.** The bestiary's 834 actions divide up exactly, each
 one into a single row:
 
 | What it carries | How many | What they are |
@@ -310,7 +334,7 @@ one into a single row:
 | A range only | 109 | bows, bolts and everything that only carries |
 | A shape only | 57 | breath weapons, sprays and clouds |
 | A shape and a range | 1 | the Djinni's whirlwind, formed on a point within 120 feet |
-| Nothing at all | 156 | 150 multiattack sequences, whose parts carry their own, and 6 things done to somebody already grappled or standing in the creature's own square |
+| Nothing at all | 162 | 150 multiattack sequences, whose parts carry their own, 6 things done to somebody already grappled or standing in the creature's own square, and the 6 Parries, which the creature does to itself |
 
 So 505 actions reach, 128 carry (56 of those with a long range beyond the ordinary one) and 58 land
 in a shape; the only overlaps are the 18 that both reach and carry and the 1 that both shapes and
@@ -417,17 +441,31 @@ A fight plays, so this is the honest list of what it still does not do:
   worth +2 and never the +5 of three-quarters cover, there is no total cover, no elevation and no
   flying height, and the bonus is read when the attack roll is made and never when a saving throw
   is: SRD half cover also adds +2 to a Dexterity save, which nothing here can say.
-- **No grapple, no shove**, and nothing pushes anybody anywhere.
+- **Grapples ignore size.** The SRD lets you grapple or shove a creature no more than one size
+  larger than you, and nothing in a fight knows how big anybody is, so a halfling can grapple a
+  dragon. Escaping a monster's printed grab ("escape DC 13") is the same contest against its
+  Athletics rather than that printed number, and the printed sentence rides along as a trait.
 - **One speed per creature.** A creature that walks, swims and flies carries the fastest of them as
   its number and the rest as a trait, because the format has one speed.
-- **Three reaction spells stay off the menu.** Counterspell answers a spell being cast, but the
-  moment a fight opens for being aimed at opens for a sword swing as much as a spell, so calling it
-  off there would parry weapons too. Shield raises Armor Class by 5, and a fight's conditions are
-  names rather than numbers. Feather Fall has nothing to catch, because nobody in a fight falls. A
-  creature's printed reactions, such as a Parry, are traits for the same reason as Shield.
+- **Counterspell always works.** It stops a spell of 3rd level or lower outright, and the SRD asks
+  for a spellcasting check against a higher one, which nothing here rolls, so it stops that too. A
+  higher slot adds nothing to it.
+- **Shield answers attacks only.** The SRD also casts it against Magic Missile, which rolls no
+  attack and so opens no moment. Magic Missile still hits.
+- **A Parry answers any blow.** The SRD's Parry is against a melee attack the creature can see, and
+  a fight does not tell a swing from a shot here, so an arrow is parried too.
+- **Haste and Slow leave the action economy alone.** Haste's extra action, and the lethargy when it
+  ends, are not carried, and neither is Slow's limit of one action or bonus action and one attack.
+- **Guiding Bolt's advantage lasts through its target's next turn** rather than to the end of the
+  caster's, because a condition counts down on its holder's own turns.
+- **Exhaustion levels 4 and 6** are records only: nothing in a fight halves a hit point maximum,
+  and a sixth level does not kill. A creature has no Exhaustion track, so a creature immune to it
+  says so in a trait.
+- **Feather Fall stays off the menu.** It has nothing to catch, because nobody in a fight falls.
+  The other printed reactions (the puddings' Split, the Chain Devil's Unnerving Mask, the Shield
+  Guardian's Shield and the Stone Giant's Rock Catching) are traits for the Game Master to read.
 - **Deafened** has no effect the Engine's closed list can express, so it stays a plain record on the
-  sheet. So does exhaustion, which this sheet counts on a track rather than as a condition, so a
-  creature immune to it says so in a trait.
+  sheet.
 - **An attack that prints an ALTERNATIVE** ("or 8 (1d10 + 3) if used with two hands", "or 5 (2d4) if
   the swarm has half its hit points") keeps the first and says the rest in a trait: 61 of them. It is
   a choice a fight has no way to make. A second HELPING of a different type ("plus 7 (2d6) fire
@@ -436,8 +474,6 @@ A fight plays, so this is the honest list of what it still does not do:
 - **Innate spellcasting and hag covens** are traits. See Creatures above.
 - **Spiritual Weapon strikes once**, as it is cast. The weapon that stays to strike again on later
   turns is nothing a fight can hold, so casting it again costs another slot.
-- **Vicious Mockery** deals its damage, but the disadvantage it hands the target's next attack is not
-  a condition this sheet has, so it is not carried.
 - **A creature cannot heal.** An action such as the deva's Healing Touch is a trait.
 - **No qualifiers.** "Bludgeoning, piercing and slashing from nonmagical attacks" is carried as
   plain resistance to those three types with a trait saying so, because a fight cannot ask whether a
@@ -464,14 +500,15 @@ A fight plays, so this is the honest list of what it still does not do:
 
 Available to Engine `staging` users only. The package is listed in `STAGING_ONLY_PACKAGE_IDS`, so
 it is published to the preview overlay under `catalog/preview/` that staging Engines read, and is
-hidden from stable `main` users. It stays there until the Capability API 1.34 ruleset, catalog,
-battle, scaled-column, combat, bestiary, positions, turn-economy, strike-cap, reaction-moment and
-creature-sheet seam reaches a stable Engine release.
+hidden from stable `main` users. It stays there until the Capability API 1.46 ruleset, catalog,
+battle, scaled-column, combat, bestiary, positions, turn-economy, strike-cap, reaction-moment,
+creature-sheet, contest, used-moment, condition-number and hit-moment seam reaches a stable Engine
+release.
 
 ## Installing
 
 Install it from **Agents** and **Download Agents** in a Marinara Engine build that supports
-Capability API 1.34. After installing, choose it under Rules in the Game Mode setup wizard when you
+Capability API 1.46. After installing, choose it under Rules in the Game Mode setup wizard when you
 create a new game. Choose the **Tactical** combat style in the same wizard if you want the fight
 played on a board; **Classic** plays the same fight without positions.
 

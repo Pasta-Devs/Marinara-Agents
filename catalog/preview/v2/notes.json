@@ -138,6 +138,12 @@
     "ruleset-5e-2014": {
       "versions": [
         {
+          "version": "0.9.0",
+          "date": "2026-09-26",
+          "notes": "- Shield, Uncanny Dodge and Counterspell work. When a blow hits you, the fight asks whether you cast Shield (the same roll is checked again against your new Armor Class) or take Uncanny Dodge (its damage is halved). When somebody casts a spell, it asks whether you counter it.\n- Six SRD monsters Parry, and spellcasting monsters such as the Mage can cast Shield and Counterspell back.\n- You can grapple and shove, and break free of a grapple.\n- Bless, Bane, Shield of Faith, Haste, Slow, Blur, Faerie Fire, Guiding Bolt, Vicious Mockery, Longstrider and Ray of Frost change the numbers they print.\n- Exhaustion levels 1, 2, 3 and 5 count in a fight. A poisoned fighter, or a frightened one while it can see what frightens it, rolls its side of a grapple or shove at disadvantage.\n- Needs an Engine with Capability API 1.46.",
+          "highlight": true
+        },
+        {
           "version": "0.8.0",
           "date": "2026-09-25",
           "notes": "- Eleven SRD spellcasters now cast in a fight, off their own sheet and spell slots, at the numbers their stat block prints: the Acolyte, Priest, Cult Fanatic, Druid, Mage, Archmage, Lich, Mummy Lord, both nagas and the Androsphinx. The Gynosphinx prepares nothing a fight can use, so it still fights with its claws.\n- Hellish Rebuke works: when something damages you, the fight asks whether you cast it back at them.\n- Sacred Flame, Acid Splash, Poison Spray, Vicious Mockery and Spiritual Weapon now deal damage. Before, a fight never offered them.\n- Two new sheet fields, Spell attack: other bonus and Spell save DC: other bonus.\n- Counterspell, Shield and Feather Fall still stay off the menu, and the README says why.\n- Needs an Engine with Capability API 1.34.",
