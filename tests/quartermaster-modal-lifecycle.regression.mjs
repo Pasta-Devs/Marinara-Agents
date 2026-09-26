@@ -95,6 +95,61 @@ dock.close();
 assert.equal(removed.length, 3, "closing the dock removes all child dialogs");
 assert.ok(dock._imageGenSessionToken > token, "closing the dock invalidates pending previews");
 
+for (const change of ["none", "reopen", "chat", "reset"]) {
+  for (const reject of [false, true]) {
+    let settle;
+    let renders = 0;
+    QM.state.chatId = "chat-a";
+    QM.state.confirmWardrobe = () =>
+      new Promise((resolve, fail) => {
+        settle = () => (reject ? fail(new Error("Confirmation failed")) : resolve({ summary: "saved" }));
+      });
+    dock._renderWardrobeBuilderContent = () => renders++;
+    dock._wardrobeSummary = null;
+    dock._wardrobeError = null;
+    dock._wardrobeViewState = "preview";
+    const button = element();
+    const pending = dock._submitWardrobeConfirm(button);
+    if (change === "reopen") dock._closeWardrobeBuilder();
+    if (change === "chat") QM.state.chatId = "chat-b";
+    if (change === "reset") dock._resetCachedNodes();
+    settle();
+    await pending;
+    const current = change === "none";
+    assert.equal(dock._wardrobeSummary, current && !reject ? "saved" : null, `${change}: confirmation summary`);
+    assert.equal(
+      dock._wardrobeError,
+      current && reject ? "Confirmation failed" : null,
+      `${change}: confirmation error`,
+    );
+    assert.equal(dock._wardrobeViewState, current && reject ? "error" : "preview");
+    assert.equal(button.disabled, !(current && reject));
+    assert.equal(renders, current ? 1 : 0);
+  }
+}
+
+const resetRemoved = [];
+for (const key of [
+  "itemEditorBackdrop",
+  "outfitEditorBackdrop",
+  "saveOutfitBackdrop",
+  "addItemBackdrop",
+  "wardrobeBuilderBackdrop",
+  "imageGenBackdrop",
+]) {
+  dock[key] = { remove: () => resetRemoved.push(key) };
+}
+dock._wardrobeContentContainer = element();
+dock._imageGenContentContainer = element();
+const wardrobeToken = dock._wardrobeSessionToken;
+const imageToken = dock._imageGenSessionToken;
+dock._resetCachedNodes();
+assert.equal(resetRemoved.length, 6, "rebuilding the dock removes all dialogs");
+assert.equal(dock._wardrobeContentContainer, null);
+assert.equal(dock._imageGenContentContainer, null);
+assert.ok(dock._wardrobeSessionToken > wardrobeToken);
+assert.ok(dock._imageGenSessionToken > imageToken);
+
 QM.state.exportInventory = async () => {
   throw new Error("Export unavailable");
 };

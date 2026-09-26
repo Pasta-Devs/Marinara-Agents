@@ -4,6 +4,12 @@
     "quartermaster": {
       "versions": [
         {
+          "version": "0.1.20",
+          "date": "2026-09-26",
+          "notes": "- Rebuilding the dock now closes its dialogs and clears their pending sessions.\n- A late wardrobe confirmation cannot replace a newly opened dialog or another chat's view.",
+          "highlight": false
+        },
+        {
           "version": "0.1.19",
           "date": "2026-09-26",
           "notes": "- Available from the official staging Download Agents catalog with Professor Mari's armored\n  Quartermaster cover and installation guidance.\n- Closing the dock also closes its dialogs; an old image-prompt preview cannot replace a later\n  dialog or another chat's preview. Failed inventory exports now report their error.\n- A failed outfit save cannot overwrite an existing outfit's portrait.",
@@ -116,12 +122,6 @@
           "date": "2026-08-30",
           "notes": "- Theme-aware dropdowns and real button hover/press states.\n- Fixed a portrait-ring shift with the underwear toggle.\n- Added an animated Settings section and click-outside-to-close.",
           "highlight": false
-        },
-        {
-          "version": "0.1.0",
-          "date": "2026-08-28",
-          "notes": "- Equip slots around a portrait, item locations, and saved outfits.\n- Export/import, the appearance macro, and the narrator context feed.\n- An agent that keeps inventory in sync automatically from the story.",
-          "highlight": true
         }
       ]
     },

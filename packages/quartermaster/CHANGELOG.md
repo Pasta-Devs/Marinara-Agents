@@ -1,5 +1,9 @@
 # Quartermaster changelog
 
+## 0.1.20 — 2026-09-26
+- Rebuilding the dock now closes its dialogs and clears their pending sessions.
+- A late wardrobe confirmation cannot replace a newly opened dialog or another chat's view.
+
 ## 0.1.19 — 2026-09-26
 - Available from the official staging Download Agents catalog with Professor Mari's armored
   Quartermaster cover and installation guidance.

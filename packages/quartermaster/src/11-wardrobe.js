@@ -305,12 +305,16 @@ Object.assign(QM.dock, {
   },
 
   async _submitWardrobeConfirm(confirmButton) {
+    const token = this._wardrobeSessionToken;
+    const chatId = QM.state.chatId;
     confirmButton.disabled = true;
     try {
       const result = await QM.state.confirmWardrobe(this._wardrobeProposal);
+      if (token !== this._wardrobeSessionToken || chatId !== QM.state.chatId) return;
       this._wardrobeSummary = result.summary;
       this._renderWardrobeBuilderContent();
     } catch (error) {
+      if (token !== this._wardrobeSessionToken || chatId !== QM.state.chatId) return;
       confirmButton.disabled = false;
       this._wardrobeError = (error && error.message) || "The wardrobe could not be added.";
       this._wardrobeViewState = "error";

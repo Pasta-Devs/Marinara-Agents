@@ -210,6 +210,11 @@ alone does not make it visible to stable users.
 
 ## Changelog
 
+### 0.1.20
+
+- Rebuilding the dock closes its dialogs and clears their pending sessions.
+- Late wardrobe confirmations cannot overwrite a newly opened dialog or another chat's view.
+
 ### 0.1.19
 
 - Added the official staging catalogue listing and armored Professor Mari cover.

@@ -588,23 +588,12 @@ QM.dock = {
   // is rebuilt or there's no chat to show, since a stale reference into a
   // detached tree is worse than none.
   _resetCachedNodes() {
-    // Nulling the backdrop refs below detaches them from `this` but doesn't
-    // remove their document-level Escape listener (that lives outside the
-    // DOM subtree being torn down) — unbind explicitly so a stray Escape
-    // press after a chat switch/root rebuild can't fire a closure over a
-    // now-orphaned modal.
-    this._unbindEscapeClose(this._itemEditorEscapeHandler);
-    this._unbindEscapeClose(this._outfitEditorEscapeHandler);
-    this._unbindEscapeClose(this._saveOutfitEscapeHandler);
-    this._unbindEscapeClose(this._wardrobeEscapeHandler);
-    this._unbindEscapeClose(this._imageGenEscapeHandler);
-    this._unbindEscapeClose(this._addItemEscapeHandler);
-    this._itemEditorEscapeHandler = null;
-    this._outfitEditorEscapeHandler = null;
-    this._saveOutfitEscapeHandler = null;
-    this._wardrobeEscapeHandler = null;
-    this._imageGenEscapeHandler = null;
-    this._addItemEscapeHandler = null;
+    this._closeItemEditor();
+    this._closeOutfitEditor();
+    this._closeSaveOutfitModal();
+    this._closeAddItemModal();
+    this._closeWardrobeBuilder();
+    this._closeImageGenModal();
     this.columns = null;
     this.zoomWrapper = null;
     this.uiSizeButtons = null;
@@ -634,18 +623,12 @@ QM.dock = {
     this.portraitFrame = null;
     this.connectorSvg = null;
     this.equippedSlotBoxRefs = null;
-    this.itemEditorBackdrop = null;
     this.bagSearchInput = null;
     this.bagSearchModeButtons = null;
     this.bagTabButtons = null;
     this.outfitSearchInput = null;
     this.sectionHeaders = null;
     this.sectionBodies = null;
-    this.outfitEditorBackdrop = null;
-    this.saveOutfitBackdrop = null;
-    this.wardrobeBuilderBackdrop = null;
-    this.imageGenBackdrop = null;
-    this.addItemBackdrop = null;
     this.recentUpdateContainer = null;
     this.recentUpdateChevron = null;
     this.recentUpdateCountBadge = null;
