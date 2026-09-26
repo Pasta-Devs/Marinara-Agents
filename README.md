@@ -33,6 +33,7 @@ Across its Engine compatibility lanes, the catalog currently contains **37 first
 | World Maps | [`hierarchical-maps`](packages/hierarchical-maps/manifest.json) | Adds persistent nested locations, durable shared worlds, reusable artwork, customizable Direct Link lines, map authoring, and movement. Child-location maps use a square 100×100 grid; square background images align in both the editor and runtime. |
 | Persona Stats | [`persona-stats`](packages/persona-stats/manifest.json) | Tracks the player persona's status bars and custom stats from narrative events. |
 | Quest Tracker | [`quest`](packages/quest/manifest.json) | Manages quest objectives, completion states, and rewards. |
+| Relationship Tracker **(staging only)** | [`relationship-tracker`](packages/relationship-tracker/manifest.json) | Tracks character relationships and perceptions of the active persona in an editable Roleplay relationship web. Requires Engine 2.4.4+; planned for the next Engine main release. |
 | World State | [`world-state`](packages/world-state/manifest.json) | Tracks date, time, weather, location, temperature, and custom world details. |
 
 ### Misc Agents
