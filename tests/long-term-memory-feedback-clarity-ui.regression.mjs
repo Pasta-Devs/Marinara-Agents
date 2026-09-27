@@ -154,11 +154,22 @@ assert.match(vault, /lastPlaceRequired/u);
 assert.match(vault, /lastModeRequired/u);
 assert.match(vault, /function BulkAvailabilityWorkbench/u);
 assert.match(vault, /data-ltm-bulk-availability/u);
+assert.match(vault, /data-ltm-bulk-availability-action/u);
 assert.match(vault, /onActionChange=/u);
 assert.match(vault, /data-ltm-availability-picker/u);
 assert.match(vault, /data-ltm-availability-chevron/u);
 assert.match(vault, /details\[open\] > summary \[data-ltm-availability-chevron\]/u);
 assert.match(vault, /memoryvault\.addMemoryTo/u);
+assert.match(vault, /memoryvault\.bulkAddMemoriesTo/u);
+assert.match(vault, /memoryvault\.bulkRemoveMemoriesFrom/u);
+assert.match(vault, /memoryvault\.modesEligibilityHelp/u);
+assert.match(vault, /memoryvault\.availabilityScopeHelp/u);
+assert.match(vault, /memoryvault\.bulkImplicitAllPlaces/u);
+assert.match(vault, /memoryvault\.availableIn/u);
+assert.match(
+  vault,
+  /function BulkAvailabilityWorkbench[\s\S]*?<details\s+data-ltm-availability-picker\s+className="group"/u,
+);
 assert.match(vault, /<details\s+data-ltm-availability-picker\s+className="group"/u);
 assert.match(vault, /<summary className="mari-editor-action inline-flex/u);
 assert.match(vault, /data-ltm-availability-pills[\s\S]*?data-ltm-availability-picker/u);
@@ -168,6 +179,16 @@ assert.match(targetPicker, /groupLabels\?/u);
 assert.equal(locale["ui.longTermMemory.memoryvault.chooseWhereUsed"], "Choose where used");
 assert.equal(locale["ui.longTermMemory.memoryvault.saveAvailability"], "Save availability");
 assert.equal(locale["ui.longTermMemory.memoryvault.addMemoryTo"], "Add this memory to:");
+assert.equal(locale["ui.longTermMemory.memoryvault.availableIn"], "Available in");
+assert.equal(
+  locale["ui.longTermMemory.memoryvault.modesEligibilityHelp"],
+  "Select which chat modes may recall these memories. This does not make a memory available in every chat for that mode; places below control scope.",
+);
+assert.equal(locale["ui.longTermMemory.memoryvault.bulkAddMemoriesTo"], "Add selected memories to:");
+assert.match(locale["ui.longTermMemory.memoryvault.bulkAvailabilityHelp"], /existing chat and branch scope/u);
+assert.doesNotMatch(locale["ui.longTermMemory.memoryvault.bulkAvailabilityHelp"], /All chats or All branches/u);
+assert.match(locale["ui.longTermMemory.memoryvault.bulkImplicitAllPlaces"], /scope unchanged/u);
+assert.doesNotMatch(locale["ui.longTermMemory.memoryvault.bulkImplicitAllPlaces"], /keeps All chats/u);
 assert.match(vault, /data-ltm-select-mode/u);
 assert.match(
   vault,
@@ -271,7 +292,7 @@ assert.match(vault, /branchScopeTargets/u);
 assert.match(vault, /data-ltm-vault-scope-tab/u);
 assert.match(vault, /data-selected=/u);
 assert.match(vault, /bulkAvailabilityScope/u);
-assert.match(vault, /chooseAvailabilityPlaces/u);
+assert.match(vault, /bulkAvailabilitySelected/u);
 assert.match(vault, /chat:all/u);
 assert.match(vault, /branch:all/u);
 assert.doesNotMatch(vault, /chooseOneAvailabilityPlace/u);

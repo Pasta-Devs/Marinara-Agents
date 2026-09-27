@@ -967,7 +967,7 @@ function MemoryAvailabilityWorkbench({
       <fieldset className="space-y-2 border-b border-[var(--border)] pb-4">
         <legend className="text-sm font-semibold">{localizeUi("ui.longTermMemory.memoryvault.chatModes")}</legend>
         <p className="text-xs text-[var(--muted-foreground)]">
-          {localizeUi("ui.longTermMemory.memoryvault.modesHelp")}
+          {localizeUi("ui.longTermMemory.memoryvault.modesEligibilityHelp")}
         </p>
         <div className="flex flex-wrap gap-3">
           {modes.map((mode) => (
@@ -984,7 +984,7 @@ function MemoryAvailabilityWorkbench({
           <p className="text-xs text-[var(--muted-foreground)]">
             {isNew
               ? localizeUi("ui.longTermMemory.memoryvault.newMemoryAvailabilityHelp")
-              : localizeUi("ui.longTermMemory.memoryvault.availabilityHelp")}
+              : localizeUi("ui.longTermMemory.memoryvault.availabilityScopeHelp")}
           </p>
         </div>
         {!entries.length ? (
@@ -1202,9 +1202,9 @@ function BulkAvailabilityWorkbench({
             {localizeUi("ui.longTermMemory.memoryvault.bulkMemoryAvailability")}
           </h2>
           <p className="mt-1 text-xs text-[var(--muted-foreground)]">
-            {action === "add"
-              ? localizeUi("ui.longTermMemory.memoryvault.addAvailability")
-              : localizeUi("ui.longTermMemory.memoryvault.removeAvailability")}
+            {localizeUi("ui.longTermMemory.memoryvault.bulkAvailabilitySelected", {
+              count: notes.length,
+            })}
           </p>
         </div>
         <div className="flex gap-2">
@@ -1222,6 +1222,7 @@ function BulkAvailabilityWorkbench({
           className="flex flex-wrap gap-2"
           role="group"
           aria-label={localizeUi("ui.longTermMemory.memoryvault.availabilityChange")}
+          data-ltm-bulk-availability-action
         >
           <Button
             aria-pressed={action === "add"}
@@ -1242,7 +1243,7 @@ function BulkAvailabilityWorkbench({
       <fieldset className="space-y-2 border-b border-[var(--border)] pb-4">
         <legend className="text-sm font-semibold">{localizeUi("ui.longTermMemory.memoryvault.chatModes")}</legend>
         <p className="text-xs text-[var(--muted-foreground)]">
-          {localizeUi("ui.longTermMemory.memoryvault.modesHelp")}
+          {localizeUi("ui.longTermMemory.memoryvault.modesEligibilityHelp")}
         </p>
         <div className="flex flex-wrap gap-3">
           {modes.map((mode) => (
@@ -1265,9 +1266,7 @@ function BulkAvailabilityWorkbench({
       </fieldset>
       <section className="space-y-3">
         <div>
-          <h3 className="text-sm font-semibold">
-            {localizeUi("ui.longTermMemory.memoryvault.chooseAvailabilityPlaces")}
-          </h3>
+          <h3 className="text-sm font-semibold">{localizeUi("ui.longTermMemory.memoryvault.availableIn")}</h3>
           <p className="text-xs text-[var(--muted-foreground)]">
             {localizeUi("ui.longTermMemory.memoryvault.bulkAvailabilityHelp")}
           </p>
@@ -1284,62 +1283,89 @@ function BulkAvailabilityWorkbench({
               </Pill>
             ))}
           </div>
-        ) : null}
-        <AvailabilityTabRail
-          characters={availabilityTargets.characters}
-          personas={availabilityTargets.personas}
-          chats={availabilityTargets.chats}
-          branches={availabilityTargets.branches}
-          selectedIds={selectedIds}
-          tablistLabel={localizeUi("ui.longTermMemory.memoryvault.bulkMemoryAvailability")}
-          sectionCopy={{
-            character: {
-              label: localizeUi("ui.longTermMemory.memoryvault.character"),
-              allLabel: localizeUi("ui.longTermMemory.memoryvault.allCharacters"),
-              searchPlaceholder: localizeUi("ui.longTermMemory.memoryvault.searchCharacters"),
-              emptyLabel: localizeUi("ui.longTermMemory.memoryvault.noMatchingCharacters"),
-              accessibleLabel: (count) =>
-                localizeUi("ui.longTermMemory.memoryvault.availabilitySectionSelected", {
+        ) : (
+          <StatusSurface>
+            {localizeUi(
+              action === "add"
+                ? "ui.longTermMemory.memoryvault.bulkImplicitAllPlaces"
+                : "ui.longTermMemory.memoryvault.bulkNoPlacesSelected",
+            )}
+          </StatusSurface>
+        )}
+        <details data-ltm-availability-picker className="group">
+          <summary className="mari-editor-action inline-flex min-h-11 cursor-pointer list-none items-center gap-2 px-3 py-2 text-left text-sm font-semibold text-[var(--marinara-editor-text)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--ring)] [&::-webkit-details-marker]:hidden">
+            <span className="min-w-0 flex-1">
+              {localizeUi(
+                action === "add"
+                  ? "ui.longTermMemory.memoryvault.bulkAddMemoriesTo"
+                  : "ui.longTermMemory.memoryvault.bulkRemoveMemoriesFrom",
+              )}
+            </span>
+            <ChevronRight
+              aria-hidden="true"
+              size="0.875rem"
+              data-ltm-availability-chevron
+              className="shrink-0 transition-transform"
+            />
+          </summary>
+          <div className="border-t border-[var(--border)] p-3">
+            <AvailabilityTabRail
+              characters={availabilityTargets.characters}
+              personas={availabilityTargets.personas}
+              chats={availabilityTargets.chats}
+              branches={availabilityTargets.branches}
+              selectedIds={selectedIds}
+              tablistLabel={localizeUi("ui.longTermMemory.memoryvault.bulkMemoryAvailability")}
+              sectionCopy={{
+                character: {
                   label: localizeUi("ui.longTermMemory.memoryvault.character"),
-                  count,
-                }),
-            },
-            persona: {
-              label: localizeUi("ui.longTermMemory.memoryvault.persona"),
-              allLabel: localizeUi("ui.longTermMemory.memoryvault.allPersonas"),
-              searchPlaceholder: localizeUi("ui.longTermMemory.memoryvault.searchPersonas"),
-              emptyLabel: localizeUi("ui.longTermMemory.memoryvault.noMatchingPersonas"),
-              accessibleLabel: (count) =>
-                localizeUi("ui.longTermMemory.memoryvault.availabilitySectionSelected", {
+                  allLabel: localizeUi("ui.longTermMemory.memoryvault.allCharacters"),
+                  searchPlaceholder: localizeUi("ui.longTermMemory.memoryvault.searchCharacters"),
+                  emptyLabel: localizeUi("ui.longTermMemory.memoryvault.noMatchingCharacters"),
+                  accessibleLabel: (count) =>
+                    localizeUi("ui.longTermMemory.memoryvault.availabilitySectionSelected", {
+                      label: localizeUi("ui.longTermMemory.memoryvault.character"),
+                      count,
+                    }),
+                },
+                persona: {
                   label: localizeUi("ui.longTermMemory.memoryvault.persona"),
-                  count,
-                }),
-            },
-            chat: {
-              label: localizeUi("ui.longTermMemory.memoryvault.chat"),
-              allLabel: localizeUi("ui.longTermMemory.memoryvault.allChats"),
-              searchPlaceholder: localizeUi("ui.longTermMemory.memoryvault.searchChats"),
-              emptyLabel: localizeUi("ui.longTermMemory.memoryvault.noMatchingChats"),
-              accessibleLabel: (count) =>
-                localizeUi("ui.longTermMemory.memoryvault.availabilitySectionSelected", {
+                  allLabel: localizeUi("ui.longTermMemory.memoryvault.allPersonas"),
+                  searchPlaceholder: localizeUi("ui.longTermMemory.memoryvault.searchPersonas"),
+                  emptyLabel: localizeUi("ui.longTermMemory.memoryvault.noMatchingPersonas"),
+                  accessibleLabel: (count) =>
+                    localizeUi("ui.longTermMemory.memoryvault.availabilitySectionSelected", {
+                      label: localizeUi("ui.longTermMemory.memoryvault.persona"),
+                      count,
+                    }),
+                },
+                chat: {
                   label: localizeUi("ui.longTermMemory.memoryvault.chat"),
-                  count,
-                }),
-            },
-            branch: {
-              label: localizeUi("ui.longTermMemory.memoryvault.branch"),
-              allLabel: localizeUi("ui.longTermMemory.memoryvault.allBranches"),
-              searchPlaceholder: localizeUi("ui.longTermMemory.memoryvault.searchBranches"),
-              emptyLabel: localizeUi("ui.longTermMemory.memoryvault.noMatchingBranches"),
-              accessibleLabel: (count) =>
-                localizeUi("ui.longTermMemory.memoryvault.availabilitySectionSelected", {
+                  allLabel: localizeUi("ui.longTermMemory.memoryvault.allChats"),
+                  searchPlaceholder: localizeUi("ui.longTermMemory.memoryvault.searchChats"),
+                  emptyLabel: localizeUi("ui.longTermMemory.memoryvault.noMatchingChats"),
+                  accessibleLabel: (count) =>
+                    localizeUi("ui.longTermMemory.memoryvault.availabilitySectionSelected", {
+                      label: localizeUi("ui.longTermMemory.memoryvault.chat"),
+                      count,
+                    }),
+                },
+                branch: {
                   label: localizeUi("ui.longTermMemory.memoryvault.branch"),
-                  count,
-                }),
-            },
-          }}
-          onToggle={selectTarget}
-        />
+                  allLabel: localizeUi("ui.longTermMemory.memoryvault.allBranches"),
+                  searchPlaceholder: localizeUi("ui.longTermMemory.memoryvault.searchBranches"),
+                  emptyLabel: localizeUi("ui.longTermMemory.memoryvault.noMatchingBranches"),
+                  accessibleLabel: (count) =>
+                    localizeUi("ui.longTermMemory.memoryvault.availabilitySectionSelected", {
+                      label: localizeUi("ui.longTermMemory.memoryvault.branch"),
+                      count,
+                    }),
+                },
+              }}
+              onToggle={selectTarget}
+            />
+          </div>
+        </details>
       </section>
       <div className="divide-y divide-[var(--border)] border-y border-[var(--border)]">
         {outcomes.map(({ note, state }) => (
@@ -1359,9 +1385,6 @@ function BulkAvailabilityWorkbench({
           </div>
         ))}
       </div>
-      {selectedModes.length ? (
-        <p className="text-xs text-[var(--muted-foreground)]">{selectedModes.map(modeLabel).join(", ")}</p>
-      ) : null}
     </section>
   );
 }

@@ -3125,6 +3125,12 @@ async function main() {
       await page.locator("[data-ltm-bulk-availability]").click();
       const bulkAvailability = page.locator("[data-ltm-bulk-availability-workbench]");
       await bulkAvailability.waitFor();
+      assert.equal(await bulkAvailability.locator("h3").filter({ hasText: "Available in" }).count(), 1);
+      assert.equal(
+        await bulkAvailability.getByText("Chat mode eligibility is set separately", { exact: false }).count(),
+        1,
+      );
+      await bulkAvailability.locator("[data-ltm-availability-picker] > summary").click();
       const bulkRail = bulkAvailability.locator("[data-ltm-availability-tabs]");
       await bulkRail.waitFor();
       assert.deepEqual(
