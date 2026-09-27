@@ -20,6 +20,7 @@
         "initiativeModifier": -1,
         "abilities": { "str": 21, "dex": 9, "con": 15, "int": 18, "wis": 15, "cha": 18 },
         "saves": { "con_save": 6, "int_save": 8, "wis_save": 6 },
+        "checks": { "might": 5, "agility": -1 },
         "tier": "cr_10",
         "traits": [
           {
@@ -202,6 +203,7 @@
         "initiativeModifier": 2,
         "abilities": { "str": 23, "dex": 14, "con": 21, "int": 14, "wis": 13, "cha": 17 },
         "saves": { "dex_save": 7, "con_save": 10, "wis_save": 6, "cha_save": 8 },
+        "checks": { "might": 6, "agility": 2 },
         "immune": ["acid"],
         "tier": "cr_14",
         "traits": [
@@ -312,6 +314,7 @@
         "initiativeModifier": 0,
         "abilities": { "str": 25, "dex": 10, "con": 23, "int": 16, "wis": 15, "cha": 19 },
         "saves": { "dex_save": 5, "con_save": 11, "wis_save": 7, "cha_save": 9 },
+        "checks": { "might": 7, "agility": 0 },
         "immune": ["lightning"],
         "tier": "cr_16",
         "traits": [
@@ -426,6 +429,7 @@
         "initiativeModifier": 0,
         "abilities": { "str": 23, "dex": 10, "con": 21, "int": 14, "wis": 13, "cha": 17 },
         "saves": { "dex_save": 5, "con_save": 10, "wis_save": 6, "cha_save": 8 },
+        "checks": { "might": 6, "agility": 0 },
         "immune": ["fire"],
         "tier": "cr_13",
         "traits": [
@@ -539,6 +543,7 @@
         "initiativeModifier": 0,
         "abilities": { "str": 25, "dex": 10, "con": 23, "int": 16, "wis": 15, "cha": 19 },
         "saves": { "dex_save": 5, "con_save": 11, "wis_save": 7, "cha_save": 9 },
+        "checks": { "might": 7, "agility": 0 },
         "immune": ["lightning"],
         "tier": "cr_15",
         "traits": [
@@ -657,6 +662,7 @@
         "initiativeModifier": 1,
         "abilities": { "str": 23, "dex": 12, "con": 21, "int": 18, "wis": 15, "cha": 17 },
         "saves": { "dex_save": 6, "con_save": 10, "wis_save": 7, "cha_save": 8 },
+        "checks": { "might": 6, "agility": 1 },
         "immune": ["acid"],
         "tier": "cr_14",
         "traits": [
@@ -775,6 +781,7 @@
         "initiativeModifier": 2,
         "abilities": { "str": 27, "dex": 14, "con": 25, "int": 16, "wis": 15, "cha": 24 },
         "saves": { "dex_save": 8, "con_save": 13, "wis_save": 8, "cha_save": 13 },
+        "checks": { "might": 8, "agility": 2 },
         "immune": ["fire"],
         "tier": "cr_17",
         "traits": [
@@ -893,6 +900,7 @@
         "initiativeModifier": 1,
         "abilities": { "str": 23, "dex": 12, "con": 21, "int": 18, "wis": 15, "cha": 17 },
         "saves": { "dex_save": 6, "con_save": 10, "wis_save": 7, "cha_save": 8 },
+        "checks": { "might": 6, "agility": 1 },
         "immune": ["poison"],
         "conditionImmunities": ["poisoned"],
         "tier": "cr_15",
@@ -1004,6 +1012,7 @@
         "initiativeModifier": 0,
         "abilities": { "str": 27, "dex": 10, "con": 25, "int": 16, "wis": 13, "cha": 21 },
         "saves": { "dex_save": 6, "con_save": 13, "wis_save": 7, "cha_save": 11 },
+        "checks": { "might": 8, "agility": 0 },
         "immune": ["fire"],
         "tier": "cr_17",
         "traits": [
@@ -1113,6 +1122,7 @@
         "initiativeModifier": 0,
         "abilities": { "str": 27, "dex": 10, "con": 25, "int": 16, "wis": 13, "cha": 21 },
         "saves": { "dex_save": 5, "con_save": 12, "wis_save": 6, "cha_save": 10 },
+        "checks": { "might": 8, "agility": 0 },
         "immune": ["cold"],
         "tier": "cr_16",
         "traits": [
@@ -1230,6 +1240,7 @@
         "initiativeModifier": 0,
         "abilities": { "str": 22, "dex": 10, "con": 22, "int": 8, "wis": 12, "cha": 12 },
         "saves": { "dex_save": 5, "con_save": 11, "wis_save": 6, "cha_save": 6 },
+        "checks": { "might": 6, "agility": 0 },
         "immune": ["cold"],
         "tier": "cr_13",
         "traits": [
@@ -1347,6 +1358,7 @@
         "speed": 90,
         "initiativeModifier": 5,
         "abilities": { "str": 14, "dex": 20, "con": 14, "int": 6, "wis": 10, "cha": 6 },
+        "checks": { "might": 2, "agility": 5 },
         "resist": ["bludgeoning", "lightning", "piercing", "slashing", "thunder"],
         "immune": ["poison"],
         "conditionImmunities": ["grappled", "paralyzed", "petrified", "poisoned", "prone", "restrained", "unconscious"],
@@ -1408,6 +1420,7 @@
         "initiativeModifier": 2,
         "abilities": { "str": 27, "dex": 14, "con": 25, "int": 16, "wis": 15, "cha": 19 },
         "saves": { "dex_save": 9, "con_save": 14, "wis_save": 9, "cha_save": 11 },
+        "checks": { "might": 8, "agility": 2 },
         "immune": ["acid"],
         "tier": "cr_21",
         "traits": [
@@ -1518,6 +1531,7 @@
         "initiativeModifier": 0,
         "abilities": { "str": 29, "dex": 10, "con": 27, "int": 18, "wis": 17, "cha": 21 },
         "saves": { "dex_save": 7, "con_save": 15, "wis_save": 10, "cha_save": 12 },
+        "checks": { "might": 9, "agility": 0 },
         "immune": ["lightning"],
         "tier": "cr_23",
         "traits": [
@@ -1632,6 +1646,7 @@
         "initiativeModifier": 0,
         "abilities": { "str": 27, "dex": 10, "con": 25, "int": 16, "wis": 15, "cha": 19 },
         "saves": { "dex_save": 6, "con_save": 13, "wis_save": 8, "cha_save": 10 },
+        "checks": { "might": 8, "agility": 0 },
         "immune": ["fire"],
         "tier": "cr_20",
         "traits": [
@@ -1754,6 +1769,7 @@
         "initiativeModifier": 0,
         "abilities": { "str": 29, "dex": 10, "con": 27, "int": 18, "wis": 17, "cha": 21 },
         "saves": { "dex_save": 7, "con_save": 15, "wis_save": 10, "cha_save": 12 },
+        "checks": { "might": 9, "agility": 0 },
         "immune": ["lightning"],
         "tier": "cr_22",
         "traits": [
@@ -1872,6 +1888,7 @@
         "initiativeModifier": 1,
         "abilities": { "str": 27, "dex": 12, "con": 25, "int": 20, "wis": 17, "cha": 19 },
         "saves": { "dex_save": 8, "con_save": 14, "wis_save": 10, "cha_save": 11 },
+        "checks": { "might": 8, "agility": 1 },
         "immune": ["acid"],
         "tier": "cr_21",
         "traits": [
@@ -1994,6 +2011,7 @@
         "initiativeModifier": 2,
         "abilities": { "str": 30, "dex": 14, "con": 29, "int": 18, "wis": 17, "cha": 28 },
         "saves": { "dex_save": 9, "con_save": 16, "wis_save": 10, "cha_save": 16 },
+        "checks": { "might": 10, "agility": 2 },
         "immune": ["fire"],
         "tier": "cr_24",
         "traits": [
@@ -2112,6 +2130,7 @@
         "initiativeModifier": 1,
         "abilities": { "str": 27, "dex": 12, "con": 25, "int": 20, "wis": 17, "cha": 19 },
         "saves": { "dex_save": 8, "con_save": 14, "wis_save": 10, "cha_save": 11 },
+        "checks": { "might": 8, "agility": 1 },
         "immune": ["poison"],
         "conditionImmunities": ["poisoned"],
         "tier": "cr_22",
@@ -2223,6 +2242,7 @@
         "initiativeModifier": 0,
         "abilities": { "str": 30, "dex": 10, "con": 29, "int": 18, "wis": 15, "cha": 23 },
         "saves": { "dex_save": 7, "con_save": 16, "wis_save": 9, "cha_save": 13 },
+        "checks": { "might": 10, "agility": 0 },
         "immune": ["fire"],
         "tier": "cr_24",
         "traits": [
@@ -2337,6 +2357,7 @@
         "initiativeModifier": 0,
         "abilities": { "str": 30, "dex": 10, "con": 29, "int": 18, "wis": 15, "cha": 23 },
         "saves": { "dex_save": 7, "con_save": 16, "wis_save": 9, "cha_save": 13 },
+        "checks": { "might": 10, "agility": 0 },
         "immune": ["cold"],
         "tier": "cr_23",
         "traits": [
@@ -2454,6 +2475,7 @@
         "initiativeModifier": 0,
         "abilities": { "str": 26, "dex": 10, "con": 26, "int": 10, "wis": 13, "cha": 14 },
         "saves": { "dex_save": 6, "con_save": 14, "wis_save": 7, "cha_save": 8 },
+        "checks": { "might": 8, "agility": 0 },
         "immune": ["cold"],
         "tier": "cr_20",
         "traits": [
@@ -2810,6 +2832,7 @@
         "speed": 25,
         "initiativeModifier": 0,
         "abilities": { "str": 14, "dex": 11, "con": 13, "int": 1, "wis": 3, "cha": 1 },
+        "checks": { "might": 2, "agility": 0 },
         "immune": ["poison", "psychic"],
         "conditionImmunities": ["blinded", "charmed", "deafened", "frightened", "paralyzed", "petrified", "poisoned"],
         "tier": "cr_1",
@@ -2861,6 +2884,7 @@
         "speed": 30,
         "initiativeModifier": 0,
         "abilities": { "str": 17, "dex": 11, "con": 13, "int": 1, "wis": 13, "cha": 6 },
+        "checks": { "might": 3, "agility": 0 },
         "tier": "cr_2",
         "traits": [{ "name": "Speed", "text": "30 ft., burrow 10 ft." }],
         "actions": [
@@ -2895,6 +2919,7 @@
         "speed": 30,
         "initiativeModifier": 2,
         "abilities": { "str": 16, "dex": 14, "con": 14, "int": 6, "wis": 12, "cha": 7 },
+        "checks": { "might": 5, "agility": 2 },
         "tier": "cr_1_2",
         "traits": [{ "name": "Speed", "text": "30 ft., climb 30 ft." }],
         "actions": [
@@ -3230,6 +3255,7 @@
         "initiativeModifier": 3,
         "abilities": { "str": 11, "dex": 16, "con": 14, "int": 13, "wis": 11, "cha": 10 },
         "saves": { "dex_save": 6, "int_save": 4 },
+        "checks": { "might": 0, "agility": 6 },
         "resist": ["poison"],
         "tier": "cr_8",
         "traits": [
@@ -3291,6 +3317,7 @@
         "speed": 20,
         "initiativeModifier": -1,
         "abilities": { "str": 3, "dex": 8, "con": 11, "int": 10, "wis": 10, "cha": 6 },
+        "checks": { "might": -4, "agility": -1 },
         "resist": ["piercing"],
         "vulnerable": ["fire"],
         "tier": "cr_0",
@@ -3323,6 +3350,7 @@
         "speed": 20,
         "initiativeModifier": -2,
         "abilities": { "str": 19, "dex": 6, "con": 15, "int": 10, "wis": 10, "cha": 7 },
+        "checks": { "might": 4, "agility": -2 },
         "resist": ["bludgeoning", "piercing"],
         "vulnerable": ["fire"],
         "tier": "cr_2",
@@ -3360,6 +3388,7 @@
         "speed": 50,
         "initiativeModifier": 1,
         "abilities": { "str": 14, "dex": 12, "con": 12, "int": 2, "wis": 10, "cha": 5 },
+        "checks": { "might": 2, "agility": 1 },
         "tier": "cr_1_4",
         "actions": [
           {
@@ -3385,6 +3414,7 @@
         "initiativeModifier": 1,
         "abilities": { "str": 17, "dex": 12, "con": 15, "int": 12, "wis": 13, "cha": 10 },
         "saves": { "con_save": 4 },
+        "checks": { "might": 3, "agility": 1 },
         "immune": ["fire", "poison"],
         "conditionImmunities": ["poisoned"],
         "tier": "cr_2",
@@ -3429,6 +3459,7 @@
         "speed": 30,
         "initiativeModifier": 2,
         "abilities": { "str": 8, "dex": 14, "con": 11, "int": 4, "wis": 12, "cha": 6 },
+        "checks": { "might": -1, "agility": 2 },
         "tier": "cr_0",
         "traits": [
           { "name": "Speed", "text": "30 ft., climb 30 ft." },
@@ -3460,6 +3491,7 @@
         "speed": 20,
         "initiativeModifier": 0,
         "abilities": { "str": 4, "dex": 11, "con": 12, "int": 2, "wis": 12, "cha": 5 },
+        "checks": { "might": -3, "agility": 0 },
         "tier": "cr_0",
         "traits": [
           { "name": "Speed", "text": "20 ft., burrow 5 ft." },
@@ -3489,6 +3521,7 @@
         "initiativeModifier": 2,
         "abilities": { "str": 26, "dex": 15, "con": 22, "int": 20, "wis": 16, "cha": 22 },
         "saves": { "str_save": 14, "con_save": 12, "wis_save": 9, "cha_save": 12 },
+        "checks": { "might": 8, "agility": 2 },
         "resist": ["bludgeoning", "cold", "lightning", "piercing", "slashing"],
         "immune": ["fire", "poison"],
         "conditionImmunities": ["poisoned"],
@@ -3588,6 +3621,7 @@
         "speed": 30,
         "initiativeModifier": 1,
         "abilities": { "str": 11, "dex": 12, "con": 12, "int": 10, "wis": 10, "cha": 10 },
+        "checks": { "might": 0, "agility": 1 },
         "tier": "cr_1_8",
         "actions": [
           {
@@ -3640,6 +3674,7 @@
         "initiativeModifier": 3,
         "abilities": { "str": 15, "dex": 16, "con": 14, "int": 14, "wis": 11, "cha": 14 },
         "saves": { "str_save": 4, "dex_save": 5, "wis_save": 2 },
+        "checks": { "might": 4, "agility": 3 },
         "tier": "cr_2",
         "traits": [
           {
@@ -3673,6 +3708,14 @@
             "damage": { "dice": "1d4", "flat": 3, "type": "piercing" },
             "reach": 5,
             "range": { "normal": 20, "long": 60 }
+          },
+          {
+            "id": "parry",
+            "name": "Parry",
+            "budget": "reaction",
+            "self": true,
+            "reaction": { "on": "hit" },
+            "applies": [{ "condition": "parrying_2", "duration": { "rounds": 1 }, "endsAfter": "attacked" }]
           }
         ]
       }
@@ -3689,6 +3732,7 @@
         "initiativeModifier": 3,
         "abilities": { "str": 16, "dex": 17, "con": 18, "int": 12, "wis": 14, "cha": 14 },
         "saves": { "str_save": 6, "con_save": 7, "wis_save": 5, "cha_save": 5 },
+        "checks": { "might": 3, "agility": 3 },
         "resist": ["bludgeoning", "cold", "piercing", "slashing"],
         "immune": ["fire", "poison"],
         "conditionImmunities": ["poisoned"],
@@ -3765,6 +3809,7 @@
         "speed": 20,
         "initiativeModifier": -1,
         "abilities": { "str": 16, "dex": 8, "con": 15, "int": 2, "wis": 8, "cha": 7 },
+        "checks": { "might": 3, "agility": -1 },
         "tier": "cr_3",
         "traits": [
           {
@@ -3795,6 +3840,7 @@
         "speed": 5,
         "initiativeModifier": 2,
         "abilities": { "str": 2, "dex": 15, "con": 8, "int": 2, "wis": 12, "cha": 4 },
+        "checks": { "might": -4, "agility": 2 },
         "tier": "cr_0",
         "traits": [
           { "name": "Speed", "text": "5 ft., fly 30 ft." },
@@ -3828,6 +3874,7 @@
         "initiativeModifier": 2,
         "abilities": { "str": 16, "dex": 15, "con": 15, "int": 9, "wis": 11, "cha": 11 },
         "saves": { "str_save": 5, "con_save": 4, "wis_save": 2 },
+        "checks": { "might": 3, "agility": 2 },
         "resist": ["bludgeoning", "cold", "piercing", "slashing"],
         "immune": ["fire", "poison"],
         "conditionImmunities": ["poisoned"],
@@ -3904,6 +3951,7 @@
         "speed": 50,
         "initiativeModifier": 3,
         "abilities": { "str": 23, "dex": 16, "con": 18, "int": 7, "wis": 14, "cha": 12 },
+        "checks": { "might": 6, "agility": 3 },
         "immune": ["lightning"],
         "tier": "cr_11",
         "traits": [{ "name": "Speed", "text": "50 ft., climb 40 ft." }],
@@ -3975,6 +4023,7 @@
         "speed": 30,
         "initiativeModifier": 1,
         "abilities": { "str": 16, "dex": 12, "con": 17, "int": 9, "wis": 11, "cha": 9 },
+        "checks": { "might": 3, "agility": 1 },
         "tier": "cr_2",
         "traits": [
           {
@@ -4005,6 +4054,7 @@
         "speed": 40,
         "initiativeModifier": 0,
         "abilities": { "str": 15, "dex": 10, "con": 14, "int": 2, "wis": 12, "cha": 7 },
+        "checks": { "might": 2, "agility": 0 },
         "tier": "cr_1_2",
         "traits": [
           { "name": "Speed", "text": "40 ft., climb 30 ft." },
@@ -4051,6 +4101,7 @@
         "initiativeModifier": 2,
         "abilities": { "str": 15, "dex": 14, "con": 13, "int": 10, "wis": 11, "cha": 13 },
         "saves": { "dex_save": 4, "con_save": 3, "wis_save": 2, "cha_save": 3 },
+        "checks": { "might": 2, "agility": 2 },
         "immune": ["acid"],
         "tier": "cr_2",
         "traits": [
@@ -4095,6 +4146,7 @@
         "speed": 20,
         "initiativeModifier": -3,
         "abilities": { "str": 16, "dex": 5, "con": 16, "int": 1, "wis": 6, "cha": 1 },
+        "checks": { "might": 3, "agility": -3 },
         "immune": ["acid", "cold", "lightning", "slashing"],
         "conditionImmunities": ["blinded", "charmed", "deafened", "frightened", "prone"],
         "tier": "cr_4",
@@ -4115,6 +4167,10 @@
           {
             "name": "Spider Climb",
             "text": "The pudding can climb difficult surfaces, including upside down on ceilings, without needing to make an ability check."
+          },
+          {
+            "name": "Split",
+            "text": "When a pudding that is Medium or larger is subjected to lightning or slashing damage, it splits into two new puddings if it has at least 10 hit points. Each new pudding has hit points equal to half the original pudding's, rounded down. New puddings are one size smaller than the original pudding."
           }
         ],
         "actions": [
@@ -4145,6 +4201,7 @@
         "speed": 40,
         "initiativeModifier": 3,
         "abilities": { "str": 12, "dex": 17, "con": 12, "int": 10, "wis": 13, "cha": 11 },
+        "checks": { "might": 1, "agility": 3 },
         "tier": "cr_1_4",
         "traits": [
           {
@@ -4184,6 +4241,7 @@
         "speed": 10,
         "initiativeModifier": 2,
         "abilities": { "str": 6, "dex": 14, "con": 10, "int": 3, "wis": 14, "cha": 5 },
+        "checks": { "might": -2, "agility": 2 },
         "tier": "cr_1_8",
         "traits": [
           { "name": "Speed", "text": "10 ft., fly 60 ft." },
@@ -4217,6 +4275,7 @@
         "initiativeModifier": 0,
         "abilities": { "str": 17, "dex": 10, "con": 15, "int": 12, "wis": 11, "cha": 15 },
         "saves": { "dex_save": 2, "con_save": 4, "wis_save": 2, "cha_save": 4 },
+        "checks": { "might": 3, "agility": 0 },
         "immune": ["lightning"],
         "tier": "cr_3",
         "traits": [{ "name": "Speed", "text": "30 ft., burrow 15 ft., fly 60 ft." }],
@@ -4263,6 +4322,7 @@
         "speed": 40,
         "initiativeModifier": 0,
         "abilities": { "str": 13, "dex": 11, "con": 12, "int": 2, "wis": 9, "cha": 5 },
+        "checks": { "might": 1, "agility": 0 },
         "tier": "cr_1_4",
         "traits": [
           {
@@ -4298,6 +4358,7 @@
         "initiativeModifier": 3,
         "abilities": { "str": 18, "dex": 16, "con": 18, "int": 13, "wis": 14, "cha": 16 },
         "saves": { "int_save": 5, "wis_save": 6, "cha_save": 7 },
+        "checks": { "might": 4, "agility": 3 },
         "resist": ["bludgeoning", "cold", "piercing", "slashing"],
         "immune": ["fire", "poison"],
         "conditionImmunities": ["poisoned"],
@@ -4363,6 +4424,7 @@
         "initiativeModifier": 0,
         "abilities": { "str": 15, "dex": 10, "con": 13, "int": 10, "wis": 11, "cha": 13 },
         "saves": { "dex_save": 2, "con_save": 3, "wis_save": 2, "cha_save": 3 },
+        "checks": { "might": 2, "agility": 0 },
         "immune": ["fire"],
         "tier": "cr_1",
         "traits": [
@@ -4406,6 +4468,7 @@
         "initiativeModifier": 0,
         "abilities": { "str": 17, "dex": 10, "con": 15, "int": 12, "wis": 11, "cha": 15 },
         "saves": { "dex_save": 2, "con_save": 4, "wis_save": 2, "cha_save": 4 },
+        "checks": { "might": 3, "agility": 0 },
         "immune": ["lightning"],
         "tier": "cr_2",
         "traits": [
@@ -4454,6 +4517,7 @@
         "speed": 40,
         "initiativeModifier": 0,
         "abilities": { "str": 19, "dex": 10, "con": 16, "int": 2, "wis": 13, "cha": 7 },
+        "checks": { "might": 4, "agility": 0 },
         "tier": "cr_1",
         "traits": [
           { "name": "Speed", "text": "40 ft., climb 30 ft." },
@@ -4504,6 +4568,7 @@
         "speed": 30,
         "initiativeModifier": 2,
         "abilities": { "str": 15, "dex": 14, "con": 13, "int": 8, "wis": 11, "cha": 9 },
+        "checks": { "might": 2, "agility": 2 },
         "tier": "cr_1",
         "traits": [
           {
@@ -4556,6 +4621,7 @@
         "speed": 40,
         "initiativeModifier": 0,
         "abilities": { "str": 19, "dex": 11, "con": 21, "int": 2, "wis": 10, "cha": 5 },
+        "checks": { "might": 4, "agility": 0 },
         "tier": "cr_5",
         "traits": [
           {
@@ -4592,6 +4658,7 @@
         "initiativeModifier": -1,
         "abilities": { "str": 16, "dex": 8, "con": 14, "int": 2, "wis": 8, "cha": 5 },
         "saves": { "str_save": 0, "dex_save": 0, "con_save": 0, "int_save": 0, "wis_save": 0, "cha_save": 0 },
+        "checks": { "might": 0, "agility": 0 },
         "tier": "cr_1_8",
         "actions": [
           {
@@ -4616,6 +4683,7 @@
         "speed": 40,
         "initiativeModifier": 2,
         "abilities": { "str": 3, "dex": 15, "con": 10, "int": 3, "wis": 12, "cha": 7 },
+        "checks": { "might": -4, "agility": 2 },
         "tier": "cr_0",
         "traits": [
           { "name": "Speed", "text": "40 ft., climb 30 ft." },
@@ -4649,6 +4717,7 @@
         "speed": 50,
         "initiativeModifier": 2,
         "abilities": { "str": 18, "dex": 14, "con": 14, "int": 9, "wis": 13, "cha": 11 },
+        "checks": { "might": 6, "agility": 2 },
         "tier": "cr_2",
         "traits": [
           {
@@ -4715,6 +4784,7 @@
         "initiativeModifier": 2,
         "abilities": { "str": 18, "dex": 15, "con": 18, "int": 11, "wis": 12, "cha": 14 },
         "saves": { "con_save": 7, "wis_save": 4, "cha_save": 5 },
+        "checks": { "might": 4, "agility": 2 },
         "resist": ["bludgeoning", "cold", "piercing", "slashing"],
         "immune": ["fire", "poison"],
         "conditionImmunities": ["poisoned"],
@@ -4736,6 +4806,10 @@
           {
             "name": "Magic Resistance",
             "text": "The devil has advantage on saving throws against spells and other magical effects."
+          },
+          {
+            "name": "Unnerving Mask",
+            "text": "When a creature the devil can see starts its turn within 30 feet of the devil, the devil can create the illusion that it looks like one of the creature's departed loved ones or bitter enemies. If the creature can see the devil, it must succeed on a DC 14 Wisdom saving throw or be frightened until the end of its turn."
           }
         ],
         "actions": [
@@ -4784,6 +4858,7 @@
         "speed": 30,
         "initiativeModifier": 0,
         "abilities": { "str": 19, "dex": 11, "con": 19, "int": 3, "wis": 14, "cha": 10 },
+        "checks": { "might": 4, "agility": 0 },
         "tier": "cr_6",
         "traits": [
           {
@@ -4856,6 +4931,7 @@
         "speed": 30,
         "initiativeModifier": 0,
         "abilities": { "str": 19, "dex": 10, "con": 16, "int": 5, "wis": 11, "cha": 5 },
+        "checks": { "might": 4, "agility": 0 },
         "immune": ["poison"],
         "conditionImmunities": ["poisoned"],
         "tier": "cr_4",
@@ -4943,6 +5019,7 @@
         "speed": 20,
         "initiativeModifier": -1,
         "abilities": { "str": 20, "dex": 9, "con": 18, "int": 3, "wis": 8, "cha": 1 },
+        "checks": { "might": 5, "agility": -1 },
         "immune": ["acid", "bludgeoning", "piercing", "poison", "psychic", "slashing"],
         "conditionImmunities": ["charmed", "frightened", "paralyzed", "petrified", "poisoned"],
         "tier": "cr_9",
@@ -5011,6 +5088,7 @@
         "speed": 10,
         "initiativeModifier": 2,
         "abilities": { "str": 17, "dex": 15, "con": 12, "int": 13, "wis": 12, "cha": 14 },
+        "checks": { "might": 3, "agility": 2 },
         "tier": "cr_8",
         "traits": [
           {
@@ -5081,6 +5159,7 @@
         "initiativeModifier": 0,
         "abilities": { "str": 27, "dex": 10, "con": 22, "int": 12, "wis": 16, "cha": 16 },
         "saves": { "con_save": 10, "wis_save": 7, "cha_save": 7 },
+        "checks": { "might": 8, "agility": 0 },
         "tier": "cr_9",
         "traits": [
           {
@@ -5131,6 +5210,7 @@
         "speed": 20,
         "initiativeModifier": 1,
         "abilities": { "str": 6, "dex": 12, "con": 12, "int": 2, "wis": 13, "cha": 5 },
+        "checks": { "might": -2, "agility": 1 },
         "tier": "cr_1_2",
         "traits": [{ "name": "Speed", "text": "20 ft., fly 40 ft." }],
         "actions": [
@@ -5169,6 +5249,7 @@
         "speed": 30,
         "initiativeModifier": 0,
         "abilities": { "str": 10, "dex": 10, "con": 10, "int": 10, "wis": 10, "cha": 10 },
+        "checks": { "might": 0, "agility": 0 },
         "tier": "cr_0",
         "actions": [
           {
@@ -5193,6 +5274,7 @@
         "speed": 30,
         "initiativeModifier": 2,
         "abilities": { "str": 15, "dex": 14, "con": 12, "int": 1, "wis": 10, "cha": 3 },
+        "checks": { "might": 2, "agility": 2 },
         "tier": "cr_1_4",
         "traits": [{ "name": "Speed", "text": "30 ft., swim 30 ft." }],
         "actions": [
@@ -5227,6 +5309,7 @@
         "initiativeModifier": 1,
         "abilities": { "str": 15, "dex": 12, "con": 13, "int": 14, "wis": 11, "cha": 13 },
         "saves": { "dex_save": 3, "con_save": 3, "wis_save": 2, "cha_save": 3 },
+        "checks": { "might": 2, "agility": 1 },
         "immune": ["acid"],
         "tier": "cr_1",
         "traits": [
@@ -5275,6 +5358,7 @@
         "initiativeModifier": 5,
         "abilities": { "str": 16, "dex": 20, "con": 17, "int": 18, "wis": 20, "cha": 18 },
         "saves": { "con_save": 5, "wis_save": 7, "cha_save": 6 },
+        "checks": { "might": 3, "agility": 5 },
         "resist": ["radiant"],
         "immune": ["bludgeoning", "piercing", "psychic", "slashing"],
         "tier": "cr_4",
@@ -5331,6 +5415,7 @@
         "speed": 20,
         "initiativeModifier": 0,
         "abilities": { "str": 2, "dex": 11, "con": 10, "int": 1, "wis": 8, "cha": 2 },
+        "checks": { "might": -4, "agility": 0 },
         "tier": "cr_0",
         "traits": [
           { "name": "Speed", "text": "20 ft., swim 20 ft." },
@@ -5359,6 +5444,7 @@
         "speed": 20,
         "initiativeModifier": 0,
         "abilities": { "str": 15, "dex": 10, "con": 13, "int": 2, "wis": 10, "cha": 5 },
+        "checks": { "might": 2, "agility": 0 },
         "tier": "cr_1_2",
         "traits": [
           { "name": "Speed", "text": "20 ft., swim 20 ft." },
@@ -5525,6 +5611,7 @@
         "speed": 30,
         "initiativeModifier": 1,
         "abilities": { "str": 11, "dex": 12, "con": 10, "int": 10, "wis": 11, "cha": 10 },
+        "checks": { "might": 0, "agility": 1 },
         "tier": "cr_1_8",
         "traits": [
           {
@@ -5560,6 +5647,7 @@
         "speed": 10,
         "initiativeModifier": 1,
         "abilities": { "str": 16, "dex": 12, "con": 13, "int": 2, "wis": 10, "cha": 5 },
+        "checks": { "might": 3, "agility": 1 },
         "tier": "cr_1_2",
         "traits": [
           {
@@ -5601,6 +5689,7 @@
         "speed": 40,
         "initiativeModifier": 2,
         "abilities": { "str": 15, "dex": 14, "con": 14, "int": 3, "wis": 13, "cha": 6 },
+        "checks": { "might": 2, "agility": 2 },
         "tier": "cr_1",
         "traits": [
           {
@@ -5639,6 +5728,7 @@
         "speed": 20,
         "initiativeModifier": 2,
         "abilities": { "str": 15, "dex": 14, "con": 14, "int": 12, "wis": 10, "cha": 9 },
+        "checks": { "might": 2, "agility": 2 },
         "tier": "cr_1_2",
         "traits": [
           {
@@ -5698,6 +5788,7 @@
         "speed": 50,
         "initiativeModifier": 3,
         "abilities": { "str": 11, "dex": 16, "con": 11, "int": 2, "wis": 14, "cha": 5 },
+        "checks": { "might": 0, "agility": 3 },
         "tier": "cr_0",
         "actions": [
           {
@@ -5723,6 +5814,7 @@
         "initiativeModifier": 4,
         "abilities": { "str": 18, "dex": 18, "con": 18, "int": 17, "wis": 20, "cha": 20 },
         "saves": { "wis_save": 9, "cha_save": 9 },
+        "checks": { "might": 4, "agility": 4 },
         "resist": ["bludgeoning", "piercing", "radiant", "slashing"],
         "conditionImmunities": ["charmed", "frightened"],
         "tier": "cr_10",
@@ -5796,6 +5888,7 @@
         "speed": 50,
         "initiativeModifier": 2,
         "abilities": { "str": 17, "dex": 15, "con": 15, "int": 3, "wis": 12, "cha": 7 },
+        "checks": { "might": 3, "agility": 2 },
         "tier": "cr_1",
         "traits": [
           {
@@ -5838,6 +5931,7 @@
         "initiativeModifier": 2,
         "abilities": { "str": 21, "dex": 15, "con": 22, "int": 15, "wis": 16, "cha": 20 },
         "saves": { "dex_save": 6, "wis_save": 7, "cha_save": 9 },
+        "checks": { "might": 5, "agility": 2 },
         "immune": ["lightning", "thunder"],
         "tier": "cr_11",
         "traits": [
@@ -5910,6 +6004,7 @@
         "speed": 30,
         "initiativeModifier": 4,
         "abilities": { "str": 11, "dex": 18, "con": 14, "int": 11, "wis": 12, "cha": 14 },
+        "checks": { "might": 0, "agility": 4 },
         "conditionImmunities": ["charmed"],
         "tier": "cr_3",
         "traits": [
@@ -5960,6 +6055,7 @@
         "initiativeModifier": 0,
         "abilities": { "str": 18, "dex": 10, "con": 12, "int": 2, "wis": 11, "cha": 7 },
         "saves": { "str_save": 0, "dex_save": 0, "con_save": 0, "int_save": 0, "wis_save": 0, "cha_save": 0 },
+        "checks": { "might": 0, "agility": 0 },
         "tier": "cr_1_4",
         "actions": [
           {
@@ -5990,6 +6086,7 @@
         "initiativeModifier": 0,
         "abilities": { "str": 25, "dex": 10, "con": 20, "int": 10, "wis": 12, "cha": 12 },
         "saves": { "dex_save": 6, "con_save": 11, "wis_save": 7 },
+        "checks": { "might": 7, "agility": 0 },
         "resist": ["fire"],
         "tier": "cr_17",
         "traits": [
@@ -6061,6 +6158,7 @@
         "speed": 20,
         "initiativeModifier": 0,
         "abilities": { "str": 11, "dex": 11, "con": 12, "int": 5, "wis": 8, "cha": 3 },
+        "checks": { "might": 0, "agility": 0 },
         "resist": ["cold", "fire", "lightning"],
         "immune": ["poison"],
         "conditionImmunities": ["poisoned"],
@@ -6120,6 +6218,7 @@
         "speed": 30,
         "initiativeModifier": 3,
         "abilities": { "str": 16, "dex": 16, "con": 18, "int": 13, "wis": 14, "cha": 12 },
+        "checks": { "might": 3, "agility": 3 },
         "tier": "cr_6",
         "traits": [
           {
@@ -6200,6 +6299,7 @@
         "speed": 30,
         "initiativeModifier": 2,
         "abilities": { "str": 10, "dex": 14, "con": 10, "int": 11, "wis": 11, "cha": 12 },
+        "checks": { "might": 0, "agility": 2 },
         "tier": "cr_1_4",
         "traits": [
           {
@@ -6383,6 +6483,7 @@
         "speed": 30,
         "initiativeModifier": 1,
         "abilities": { "str": 10, "dex": 12, "con": 11, "int": 14, "wis": 15, "cha": 18 },
+        "checks": { "might": 0, "agility": 1 },
         "tier": "cr_1",
         "traits": [
           {
@@ -6437,6 +6538,7 @@
         "speed": 25,
         "initiativeModifier": 0,
         "abilities": { "str": 14, "dex": 11, "con": 14, "int": 11, "wis": 10, "cha": 9 },
+        "checks": { "might": 2, "agility": 0 },
         "resist": ["poison"],
         "tier": "cr_1",
         "traits": [
@@ -6502,6 +6604,7 @@
         "speed": 30,
         "initiativeModifier": 2,
         "abilities": { "str": 5, "dex": 14, "con": 10, "int": 9, "wis": 11, "cha": 10 },
+        "checks": { "might": -3, "agility": 2 },
         "vulnerable": ["fire"],
         "immune": ["poison"],
         "conditionImmunities": ["poisoned"],
@@ -6560,6 +6663,7 @@
         "speed": 10,
         "initiativeModifier": 2,
         "abilities": { "str": 6, "dex": 15, "con": 10, "int": 2, "wis": 14, "cha": 7 },
+        "checks": { "might": -2, "agility": 2 },
         "tier": "cr_0",
         "traits": [
           { "name": "Speed", "text": "10 ft., fly 60 ft." },
@@ -6593,6 +6697,7 @@
         "speed": 30,
         "initiativeModifier": -1,
         "abilities": { "str": 20, "dex": 8, "con": 20, "int": 5, "wis": 10, "cha": 5 },
+        "checks": { "might": 5, "agility": -1 },
         "resist": ["bludgeoning", "piercing", "slashing"],
         "vulnerable": ["thunder"],
         "immune": ["poison"],
@@ -6649,6 +6754,7 @@
         "initiativeModifier": 1,
         "abilities": { "str": 22, "dex": 12, "con": 24, "int": 16, "wis": 15, "cha": 16 },
         "saves": { "int_save": 7, "wis_save": 6, "cha_save": 7 },
+        "checks": { "might": 6, "agility": 1 },
         "immune": ["fire"],
         "tier": "cr_11",
         "traits": [
@@ -6705,6 +6811,7 @@
         "initiativeModifier": -1,
         "abilities": { "str": 22, "dex": 9, "con": 17, "int": 3, "wis": 11, "cha": 6 },
         "saves": { "str_save": 0, "dex_save": 0, "con_save": 0, "int_save": 0, "wis_save": 0, "cha_save": 0 },
+        "checks": { "might": 0, "agility": 0 },
         "tier": "cr_4",
         "traits": [
           {
@@ -6748,6 +6855,7 @@
         "speed": 50,
         "initiativeModifier": 0,
         "abilities": { "str": 16, "dex": 10, "con": 12, "int": 2, "wis": 10, "cha": 6 },
+        "checks": { "might": 3, "agility": 0 },
         "tier": "cr_1_4",
         "traits": [
           {
@@ -6787,6 +6895,7 @@
         "initiativeModifier": 3,
         "abilities": { "str": 18, "dex": 16, "con": 18, "int": 14, "wis": 14, "cha": 18 },
         "saves": { "dex_save": 7, "con_save": 8, "wis_save": 6, "cha_save": 8 },
+        "checks": { "might": 4, "agility": 3 },
         "resist": ["bludgeoning", "cold", "piercing", "slashing"],
         "immune": ["fire", "poison"],
         "conditionImmunities": ["poisoned"],
@@ -6844,6 +6953,14 @@
             "save": { "save": "con_save", "difficulty": 14, "onSuccess": "none" },
             "applies": [{ "condition": "poisoned", "duration": "instant" }],
             "range": { "normal": 150, "long": 600 }
+          },
+          {
+            "id": "parry",
+            "name": "Parry",
+            "budget": "reaction",
+            "self": true,
+            "reaction": { "on": "hit" },
+            "applies": [{ "condition": "parrying_4", "duration": { "rounds": 1 }, "endsAfter": "attacked" }]
           }
         ]
       }
@@ -6859,6 +6976,7 @@
         "speed": 30,
         "initiativeModifier": 2,
         "abilities": { "str": 14, "dex": 15, "con": 13, "int": 7, "wis": 12, "cha": 8 },
+        "checks": { "might": 2, "agility": 2 },
         "tier": "cr_2",
         "traits": [
           {
@@ -6945,6 +7063,7 @@
         "speed": 40,
         "initiativeModifier": -1,
         "abilities": { "str": 21, "dex": 8, "con": 17, "int": 6, "wis": 10, "cha": 8 },
+        "checks": { "might": 5, "agility": -1 },
         "tier": "cr_4",
         "traits": [
           {
@@ -6998,6 +7117,7 @@
         "speed": 50,
         "initiativeModifier": 3,
         "abilities": { "str": 10, "dex": 17, "con": 16, "int": 6, "wis": 10, "cha": 7 },
+        "checks": { "might": 0, "agility": 3 },
         "resist": ["bludgeoning", "piercing", "slashing"],
         "immune": ["fire", "poison"],
         "conditionImmunities": ["grappled", "paralyzed", "petrified", "poisoned", "prone", "restrained", "unconscious"],
@@ -7063,6 +7183,7 @@
         "initiativeModifier": -1,
         "abilities": { "str": 25, "dex": 9, "con": 23, "int": 10, "wis": 14, "cha": 13 },
         "saves": { "dex_save": 3, "con_save": 10, "cha_save": 5 },
+        "checks": { "might": 11, "agility": -1 },
         "immune": ["fire"],
         "tier": "cr_9",
         "actions": [
@@ -7132,6 +7253,7 @@
         "speed": 30,
         "initiativeModifier": -1,
         "abilities": { "str": 19, "dex": 9, "con": 18, "int": 6, "wis": 10, "cha": 5 },
+        "checks": { "might": 4, "agility": -1 },
         "immune": ["bludgeoning", "lightning", "piercing", "poison", "slashing"],
         "conditionImmunities": ["charmed", "frightened", "paralyzed", "petrified", "poisoned"],
         "tier": "cr_5",
@@ -7197,6 +7319,7 @@
         "speed": 30,
         "initiativeModifier": 4,
         "abilities": { "str": 4, "dex": 18, "con": 11, "int": 2, "wis": 12, "cha": 5 },
+        "checks": { "might": -3, "agility": 4 },
         "tier": "cr_1_8",
         "traits": [
           { "name": "Speed", "text": "30 ft., fly 60 ft., swim 30 ft." },
@@ -7229,6 +7352,7 @@
         "initiativeModifier": 2,
         "abilities": { "str": 12, "dex": 15, "con": 11, "int": 1, "wis": 5, "cha": 1 },
         "saves": { "dex_save": 4 },
+        "checks": { "might": 1, "agility": 2 },
         "immune": ["poison", "psychic"],
         "conditionImmunities": ["blinded", "charmed", "deafened", "frightened", "paralyzed", "petrified", "poisoned"],
         "tier": "cr_1_4",
@@ -7272,6 +7396,7 @@
         "initiativeModifier": -1,
         "abilities": { "str": 23, "dex": 9, "con": 21, "int": 9, "wis": 10, "cha": 12 },
         "saves": { "con_save": 8, "wis_save": 3, "cha_save": 4 },
+        "checks": { "might": 9, "agility": -1 },
         "immune": ["cold"],
         "tier": "cr_8",
         "actions": [
@@ -7326,6 +7451,7 @@
         "speed": 30,
         "initiativeModifier": 0,
         "abilities": { "str": 15, "dex": 11, "con": 16, "int": 6, "wis": 11, "cha": 7 },
+        "checks": { "might": 2, "agility": 0 },
         "resist": ["bludgeoning", "piercing", "slashing"],
         "immune": ["poison"],
         "conditionImmunities": ["petrified", "poisoned"],
@@ -7390,6 +7516,7 @@
         "speed": 15,
         "initiativeModifier": -4,
         "abilities": { "str": 14, "dex": 3, "con": 20, "int": 1, "wis": 6, "cha": 1 },
+        "checks": { "might": 2, "agility": -4 },
         "conditionImmunities": ["blinded", "charmed", "deafened", "frightened", "prone"],
         "tier": "cr_2",
         "traits": [
@@ -7464,6 +7591,7 @@
         "speed": 30,
         "initiativeModifier": 3,
         "abilities": { "str": 16, "dex": 17, "con": 10, "int": 11, "wis": 10, "cha": 8 },
+        "checks": { "might": 3, "agility": 3 },
         "resist": ["necrotic"],
         "immune": ["poison"],
         "conditionImmunities": ["charmed", "poisoned"],
@@ -7542,6 +7670,7 @@
         "speed": 40,
         "initiativeModifier": 1,
         "abilities": { "str": 7, "dex": 13, "con": 10, "int": 10, "wis": 12, "cha": 17 },
+        "checks": { "might": -2, "agility": 1 },
         "resist": ["acid", "bludgeoning", "fire", "lightning", "piercing", "slashing", "thunder"],
         "immune": ["cold", "necrotic", "poison"],
         "conditionImmunities": [
@@ -7645,6 +7774,7 @@
         "speed": 30,
         "initiativeModifier": 2,
         "abilities": { "str": 13, "dex": 15, "con": 10, "int": 7, "wis": 10, "cha": 6 },
+        "checks": { "might": 1, "agility": 2 },
         "immune": ["poison"],
         "conditionImmunities": ["charmed", "poisoned"],
         "tier": "cr_1",
@@ -7693,6 +7823,7 @@
         "speed": 40,
         "initiativeModifier": 2,
         "abilities": { "str": 23, "dex": 14, "con": 18, "int": 7, "wis": 12, "cha": 7 },
+        "checks": { "might": 9, "agility": 2 },
         "tier": "cr_7",
         "traits": [{ "name": "Speed", "text": "40 ft., climb 40 ft." }],
         "actions": [
@@ -7732,6 +7863,7 @@
         "speed": 30,
         "initiativeModifier": 0,
         "abilities": { "str": 13, "dex": 10, "con": 15, "int": 2, "wis": 12, "cha": 5 },
+        "checks": { "might": 1, "agility": 0 },
         "tier": "cr_1_4",
         "traits": [
           { "name": "Speed", "text": "30 ft., burrow 10 ft." },
@@ -7782,6 +7914,7 @@
         "speed": 10,
         "initiativeModifier": 3,
         "abilities": { "str": 15, "dex": 16, "con": 11, "int": 2, "wis": 12, "cha": 6 },
+        "checks": { "might": 2, "agility": 3 },
         "tier": "cr_1_4",
         "traits": [
           { "name": "Speed", "text": "10 ft., fly 60 ft." },
@@ -7819,6 +7952,7 @@
         "speed": 40,
         "initiativeModifier": 0,
         "abilities": { "str": 17, "dex": 10, "con": 16, "int": 2, "wis": 7, "cha": 5 },
+        "checks": { "might": 3, "agility": 0 },
         "tier": "cr_2",
         "traits": [
           {
@@ -7858,6 +7992,7 @@
         "speed": 30,
         "initiativeModifier": 2,
         "abilities": { "str": 5, "dex": 14, "con": 12, "int": 1, "wis": 7, "cha": 3 },
+        "checks": { "might": -3, "agility": 2 },
         "tier": "cr_1_4",
         "traits": [
           {
@@ -7894,6 +8029,7 @@
         "speed": 30,
         "initiativeModifier": 2,
         "abilities": { "str": 19, "dex": 14, "con": 12, "int": 1, "wis": 10, "cha": 3 },
+        "checks": { "might": 4, "agility": 2 },
         "tier": "cr_2",
         "traits": [{ "name": "Speed", "text": "30 ft., swim 30 ft." }],
         "actions": [
@@ -7927,6 +8063,7 @@
         "speed": 30,
         "initiativeModifier": 2,
         "abilities": { "str": 13, "dex": 15, "con": 11, "int": 1, "wis": 9, "cha": 3 },
+        "checks": { "might": 1, "agility": 2 },
         "tier": "cr_1_8",
         "traits": [
           { "name": "Speed", "text": "30 ft., swim 30 ft." },
@@ -7955,6 +8092,7 @@
         "speed": 30,
         "initiativeModifier": -1,
         "abilities": { "str": 21, "dex": 9, "con": 17, "int": 2, "wis": 10, "cha": 7 },
+        "checks": { "might": 5, "agility": -1 },
         "tier": "cr_5",
         "traits": [
           { "name": "Speed", "text": "30 ft., swim 50 ft." },
@@ -8007,6 +8145,7 @@
         "speed": 10,
         "initiativeModifier": 3,
         "abilities": { "str": 16, "dex": 17, "con": 13, "int": 8, "wis": 14, "cha": 10 },
+        "checks": { "might": 3, "agility": 3 },
         "tier": "cr_1",
         "traits": [
           { "name": "Speed", "text": "10 ft., fly 80 ft." },
@@ -8057,6 +8196,7 @@
         "speed": 60,
         "initiativeModifier": 3,
         "abilities": { "str": 19, "dex": 16, "con": 14, "int": 7, "wis": 14, "cha": 10 },
+        "checks": { "might": 4, "agility": 3 },
         "tier": "cr_2",
         "traits": [
           {
@@ -8095,6 +8235,7 @@
         "speed": 30,
         "initiativeModifier": 0,
         "abilities": { "str": 8, "dex": 10, "con": 12, "int": 1, "wis": 7, "cha": 3 },
+        "checks": { "might": -1, "agility": 0 },
         "tier": "cr_0",
         "traits": [
           {
@@ -8125,6 +8266,7 @@
         "speed": 30,
         "initiativeModifier": 1,
         "abilities": { "str": 12, "dex": 13, "con": 11, "int": 2, "wis": 10, "cha": 3 },
+        "checks": { "might": 1, "agility": 1 },
         "tier": "cr_1_4",
         "traits": [
           {
@@ -8166,6 +8308,7 @@
         "speed": 40,
         "initiativeModifier": 0,
         "abilities": { "str": 17, "dex": 11, "con": 12, "int": 3, "wis": 12, "cha": 6 },
+        "checks": { "might": 3, "agility": 0 },
         "tier": "cr_1_2",
         "traits": [
           {
@@ -8205,6 +8348,7 @@
         "speed": 50,
         "initiativeModifier": 2,
         "abilities": { "str": 16, "dex": 14, "con": 14, "int": 2, "wis": 12, "cha": 7 },
+        "checks": { "might": 3, "agility": 2 },
         "tier": "cr_1",
         "traits": [
           {
@@ -8240,6 +8384,7 @@
         "speed": 30,
         "initiativeModifier": 1,
         "abilities": { "str": 15, "dex": 12, "con": 13, "int": 2, "wis": 10, "cha": 5 },
+        "checks": { "might": 2, "agility": 1 },
         "tier": "cr_1_4",
         "traits": [
           { "name": "Speed", "text": "30 ft., climb 30 ft." },
@@ -8275,6 +8420,7 @@
         "speed": 10,
         "initiativeModifier": 1,
         "abilities": { "str": 17, "dex": 13, "con": 13, "int": 4, "wis": 10, "cha": 4 },
+        "checks": { "might": 3, "agility": 1 },
         "tier": "cr_1",
         "traits": [
           {
@@ -8317,6 +8463,7 @@
         "speed": 5,
         "initiativeModifier": 2,
         "abilities": { "str": 13, "dex": 15, "con": 12, "int": 8, "wis": 13, "cha": 10 },
+        "checks": { "might": 1, "agility": 2 },
         "tier": "cr_1_4",
         "traits": [
           { "name": "Speed", "text": "5 ft., fly 60 ft." },
@@ -8371,6 +8518,7 @@
         "speed": 30,
         "initiativeModifier": 4,
         "abilities": { "str": 10, "dex": 18, "con": 13, "int": 2, "wis": 10, "cha": 3 },
+        "checks": { "might": 0, "agility": 4 },
         "tier": "cr_1_4",
         "traits": [
           {
@@ -8407,6 +8555,7 @@
         "speed": 30,
         "initiativeModifier": 2,
         "abilities": { "str": 7, "dex": 15, "con": 11, "int": 2, "wis": 10, "cha": 4 },
+        "checks": { "might": -2, "agility": 2 },
         "tier": "cr_1_8",
         "traits": [
           { "name": "Keen Smell", "text": "The rat has advantage on Wisdom (Perception) checks that rely on smell." },
@@ -8443,6 +8592,7 @@
         "speed": 30,
         "initiativeModifier": 2,
         "abilities": { "str": 7, "dex": 15, "con": 11, "int": 2, "wis": 10, "cha": 4 },
+        "checks": { "might": -2, "agility": 2 },
         "tier": "cr_1_8",
         "traits": [
           {
@@ -8478,6 +8628,7 @@
         "speed": 40,
         "initiativeModifier": 1,
         "abilities": { "str": 15, "dex": 13, "con": 15, "int": 1, "wis": 9, "cha": 3 },
+        "checks": { "might": 2, "agility": 1 },
         "tier": "cr_3",
         "traits": [
           {
@@ -8525,6 +8676,7 @@
         "speed": 40,
         "initiativeModifier": 2,
         "abilities": { "str": 12, "dex": 15, "con": 11, "int": 2, "wis": 12, "cha": 5 },
+        "checks": { "might": 1, "agility": 2 },
         "tier": "cr_1_2",
         "traits": [
           { "name": "Speed", "text": "0 ft., swim 40 ft." },
@@ -8557,6 +8709,7 @@
         "speed": 50,
         "initiativeModifier": 0,
         "abilities": { "str": 23, "dex": 11, "con": 21, "int": 1, "wis": 10, "cha": 5 },
+        "checks": { "might": 6, "agility": 0 },
         "tier": "cr_5",
         "traits": [
           { "name": "Speed", "text": "0 ft., swim 50 ft." },
@@ -8594,6 +8747,7 @@
         "speed": 30,
         "initiativeModifier": 3,
         "abilities": { "str": 14, "dex": 16, "con": 12, "int": 2, "wis": 11, "cha": 4 },
+        "checks": { "might": 2, "agility": 3 },
         "tier": "cr_1",
         "traits": [
           {
@@ -8651,6 +8805,7 @@
         "speed": 20,
         "initiativeModifier": 1,
         "abilities": { "str": 15, "dex": 13, "con": 13, "int": 2, "wis": 10, "cha": 3 },
+        "checks": { "might": 2, "agility": 1 },
         "tier": "cr_1",
         "traits": [
           {
@@ -8687,6 +8842,7 @@
         "speed": 10,
         "initiativeModifier": 0,
         "abilities": { "str": 15, "dex": 10, "con": 15, "int": 6, "wis": 12, "cha": 7 },
+        "checks": { "might": 2, "agility": 0 },
         "tier": "cr_1",
         "traits": [
           { "name": "Speed", "text": "10 ft., fly 60 ft." },
@@ -8744,6 +8900,7 @@
         "speed": 10,
         "initiativeModifier": 2,
         "abilities": { "str": 10, "dex": 14, "con": 10, "int": 1, "wis": 10, "cha": 3 },
+        "checks": { "might": 0, "agility": 2 },
         "tier": "cr_1_2",
         "traits": [
           {
@@ -8780,6 +8937,7 @@
         "speed": 40,
         "initiativeModifier": 3,
         "abilities": { "str": 11, "dex": 16, "con": 10, "int": 4, "wis": 12, "cha": 5 },
+        "checks": { "might": 0, "agility": 3 },
         "tier": "cr_1_8",
         "traits": [
           {
@@ -8815,6 +8973,7 @@
         "speed": 40,
         "initiativeModifier": 3,
         "abilities": { "str": 12, "dex": 16, "con": 13, "int": 3, "wis": 12, "cha": 4 },
+        "checks": { "might": 1, "agility": 3 },
         "tier": "cr_1_4",
         "traits": [
           {
@@ -8860,6 +9019,7 @@
         "speed": 10,
         "initiativeModifier": -1,
         "abilities": { "str": 10, "dex": 8, "con": 16, "int": 3, "wis": 10, "cha": 6 },
+        "checks": { "might": 0, "agility": -1 },
         "conditionImmunities": ["prone"],
         "tier": "cr_2",
         "traits": [
@@ -8912,6 +9072,7 @@
         "initiativeModifier": 2,
         "abilities": { "str": 20, "dex": 15, "con": 21, "int": 19, "wis": 17, "cha": 16 },
         "saves": { "str_save": 9, "con_save": 9, "wis_save": 7, "cha_save": 7 },
+        "checks": { "might": 5, "agility": 2 },
         "resist": ["bludgeoning", "cold", "fire", "lightning", "piercing", "slashing"],
         "immune": ["poison"],
         "conditionImmunities": ["poisoned"],
@@ -8979,6 +9140,7 @@
         "initiativeModifier": 2,
         "abilities": { "str": 18, "dex": 15, "con": 16, "int": 10, "wis": 12, "cha": 15 },
         "saves": { "str_save": 7, "dex_save": 5, "con_save": 6 },
+        "checks": { "might": 10, "agility": 2 },
         "tier": "cr_5",
         "traits": [
           {
@@ -9023,6 +9185,14 @@
             "save": { "save": "str_save", "difficulty": 15, "onSuccess": "none" },
             "applies": [{ "condition": "prone", "duration": "instant" }],
             "reach": 5
+          },
+          {
+            "id": "parry",
+            "name": "Parry",
+            "budget": "reaction",
+            "self": true,
+            "reaction": { "on": "hit" },
+            "applies": [{ "condition": "parrying_3", "duration": { "rounds": 1 }, "endsAfter": "attacked" }]
           }
         ]
       }
@@ -9043,6 +9213,7 @@
         "speed": 30,
         "initiativeModifier": 1,
         "abilities": { "str": 14, "dex": 12, "con": 11, "int": 6, "wis": 10, "cha": 7 },
+        "checks": { "might": 2, "agility": 1 },
         "tier": "cr_1_2",
         "traits": [
           {
@@ -9099,6 +9270,7 @@
         "speed": 40,
         "initiativeModifier": 0,
         "abilities": { "str": 12, "dex": 10, "con": 11, "int": 2, "wis": 10, "cha": 5 },
+        "checks": { "might": 1, "agility": 0 },
         "tier": "cr_0",
         "traits": [
           {
@@ -9152,6 +9324,7 @@
         "speed": 30,
         "initiativeModifier": 2,
         "abilities": { "str": 8, "dex": 14, "con": 10, "int": 10, "wis": 8, "cha": 8 },
+        "checks": { "might": -1, "agility": 2 },
         "tier": "cr_1_4",
         "traits": [
           {
@@ -9196,6 +9369,7 @@
         "initiativeModifier": 2,
         "abilities": { "str": 19, "dex": 14, "con": 17, "int": 14, "wis": 11, "cha": 16 },
         "saves": { "dex_save": 4, "con_save": 5, "wis_save": 2, "cha_save": 5 },
+        "checks": { "might": 4, "agility": 2 },
         "immune": ["fire"],
         "tier": "cr_3",
         "traits": [
@@ -9244,6 +9418,7 @@
         "speed": 40,
         "initiativeModifier": 0,
         "abilities": { "str": 20, "dex": 11, "con": 18, "int": 2, "wis": 12, "cha": 7 },
+        "checks": { "might": 5, "agility": 0 },
         "conditionImmunities": ["petrified"],
         "tier": "cr_5",
         "traits": [
@@ -9303,6 +9478,7 @@
         "speed": 10,
         "initiativeModifier": -2,
         "abilities": { "str": 12, "dex": 6, "con": 16, "int": 1, "wis": 6, "cha": 2 },
+        "checks": { "might": 1, "agility": -2 },
         "resist": ["acid", "cold", "fire"],
         "conditionImmunities": ["blinded", "charmed", "deafened", "frightened", "prone"],
         "tier": "cr_1_2",
@@ -9349,6 +9525,7 @@
         "initiativeModifier": 1,
         "abilities": { "str": 15, "dex": 12, "con": 13, "int": 14, "wis": 11, "cha": 13 },
         "saves": { "dex_save": 3, "con_save": 3, "wis_save": 2, "cha_save": 3 },
+        "checks": { "might": 2, "agility": 1 },
         "immune": ["poison"],
         "conditionImmunities": ["poisoned"],
         "tier": "cr_2",
@@ -9394,6 +9571,7 @@
         "speed": 30,
         "initiativeModifier": 1,
         "abilities": { "str": 18, "dex": 12, "con": 16, "int": 13, "wis": 14, "cha": 14 },
+        "checks": { "might": 4, "agility": 1 },
         "tier": "cr_3",
         "traits": [
           {
@@ -9454,6 +9632,7 @@
         "speed": 30,
         "initiativeModifier": 2,
         "abilities": { "str": 14, "dex": 14, "con": 11, "int": 3, "wis": 14, "cha": 5 },
+        "checks": { "might": 2, "agility": 2 },
         "resist": ["bludgeoning", "piercing", "slashing"],
         "tier": "cr_2",
         "traits": [
@@ -9507,6 +9686,7 @@
         "speed": 30,
         "initiativeModifier": 2,
         "abilities": { "str": 18, "dex": 15, "con": 16, "int": 2, "wis": 13, "cha": 8 },
+        "checks": { "might": 4, "agility": 2 },
         "tier": "cr_2",
         "traits": [
           { "name": "Speed", "text": "30 ft., fly 80 ft." },
@@ -9560,6 +9740,7 @@
         "speed": 30,
         "initiativeModifier": 1,
         "abilities": { "str": 16, "dex": 12, "con": 12, "int": 9, "wis": 8, "cha": 6 },
+        "checks": { "might": 5, "agility": 1 },
         "conditionImmunities": ["blinded"],
         "tier": "cr_1_4",
         "traits": [
@@ -9609,6 +9790,7 @@
         "speed": 30,
         "initiativeModifier": 1,
         "abilities": { "str": 13, "dex": 12, "con": 12, "int": 10, "wis": 11, "cha": 10 },
+        "checks": { "might": 1, "agility": 1 },
         "tier": "cr_1_8",
         "traits": [
           {
@@ -10087,6 +10269,7 @@
         "speed": 30,
         "initiativeModifier": 1,
         "abilities": { "str": 16, "dex": 13, "con": 14, "int": 10, "wis": 11, "cha": 10 },
+        "checks": { "might": 5, "agility": 1 },
         "resist": ["fire"],
         "tier": "cr_5",
         "traits": [
@@ -10159,6 +10342,7 @@
         "speed": 20,
         "initiativeModifier": 1,
         "abilities": { "str": 12, "dex": 13, "con": 12, "int": 7, "wis": 10, "cha": 13 },
+        "checks": { "might": 1, "agility": 1 },
         "tier": "cr_1",
         "traits": [{ "name": "Speed", "text": "20 ft., fly 40 ft." }],
         "actions": [
@@ -10216,6 +10400,7 @@
         "speed": 10,
         "initiativeModifier": 3,
         "abilities": { "str": 5, "dex": 16, "con": 8, "int": 2, "wis": 14, "cha": 6 },
+        "checks": { "might": -3, "agility": 3 },
         "tier": "cr_0",
         "traits": [
           { "name": "Speed", "text": "10 ft., fly 60 ft." },
@@ -10258,6 +10443,7 @@
         "speed": 50,
         "initiativeModifier": 1,
         "abilities": { "str": 17, "dex": 12, "con": 14, "int": 6, "wis": 13, "cha": 6 },
+        "checks": { "might": 3, "agility": 1 },
         "immune": ["fire"],
         "tier": "cr_3",
         "traits": [
@@ -10304,6 +10490,7 @@
         "initiativeModifier": 3,
         "abilities": { "str": 19, "dex": 17, "con": 20, "int": 5, "wis": 12, "cha": 13 },
         "saves": { "str_save": 7, "con_save": 8, "wis_save": 4 },
+        "checks": { "might": 4, "agility": 3 },
         "resist": ["bludgeoning", "cold", "fire", "lightning", "piercing", "slashing"],
         "immune": ["poison"],
         "conditionImmunities": ["poisoned"],
@@ -10371,6 +10558,7 @@
         "speed": 40,
         "initiativeModifier": -1,
         "abilities": { "str": 21, "dex": 8, "con": 19, "int": 5, "wis": 9, "cha": 6 },
+        "checks": { "might": 5, "agility": -1 },
         "tier": "cr_5",
         "actions": [
           {
@@ -10414,6 +10602,7 @@
         "speed": 40,
         "initiativeModifier": 1,
         "abilities": { "str": 17, "dex": 13, "con": 13, "int": 2, "wis": 12, "cha": 8 },
+        "checks": { "might": 3, "agility": 1 },
         "tier": "cr_1",
         "traits": [
           { "name": "Speed", "text": "40 ft., fly 60 ft." },
@@ -10467,6 +10656,7 @@
         "speed": 30,
         "initiativeModifier": 1,
         "abilities": { "str": 13, "dex": 12, "con": 12, "int": 10, "wis": 10, "cha": 9 },
+        "checks": { "might": 1, "agility": 1 },
         "tier": "cr_1_2",
         "traits": [
           {
@@ -10509,6 +10699,7 @@
         "speed": 20,
         "initiativeModifier": 2,
         "abilities": { "str": 4, "dex": 15, "con": 11, "int": 10, "wis": 10, "cha": 7 },
+        "checks": { "might": -3, "agility": 2 },
         "immune": ["poison"],
         "conditionImmunities": ["charmed", "poisoned"],
         "tier": "cr_0",
@@ -10545,6 +10736,7 @@
         "initiativeModifier": 3,
         "abilities": { "str": 22, "dex": 17, "con": 21, "int": 12, "wis": 16, "cha": 17 },
         "saves": { "str_save": 10, "dex_save": 7, "wis_save": 7, "cha_save": 7 },
+        "checks": { "might": 6, "agility": 3 },
         "resist": ["bludgeoning", "cold", "piercing", "slashing"],
         "immune": ["fire", "poison"],
         "conditionImmunities": ["poisoned"],
@@ -10617,6 +10809,7 @@
         "speed": 40,
         "initiativeModifier": 1,
         "abilities": { "str": 18, "dex": 13, "con": 15, "int": 1, "wis": 10, "cha": 4 },
+        "checks": { "might": 4, "agility": 1 },
         "tier": "cr_2",
         "traits": [
           { "name": "Speed", "text": "0 ft., swim 40 ft." },
@@ -10654,6 +10847,7 @@
         "speed": 30,
         "initiativeModifier": 1,
         "abilities": { "str": 20, "dex": 12, "con": 20, "int": 2, "wis": 10, "cha": 7 },
+        "checks": { "might": 5, "agility": 1 },
         "tier": "cr_8",
         "traits": [
           { "name": "Speed", "text": "30 ft., swim 30 ft." },
@@ -10702,6 +10896,7 @@
         "speed": 50,
         "initiativeModifier": 1,
         "abilities": { "str": 11, "dex": 13, "con": 12, "int": 2, "wis": 12, "cha": 5 },
+        "checks": { "might": 0, "agility": 1 },
         "tier": "cr_0",
         "traits": [
           {
@@ -10733,6 +10928,7 @@
         "initiativeModifier": 2,
         "abilities": { "str": 21, "dex": 14, "con": 18, "int": 18, "wis": 15, "cha": 18 },
         "saves": { "dex_save": 7, "con_save": 9, "wis_save": 7, "cha_save": 9 },
+        "checks": { "might": 5, "agility": 2 },
         "resist": ["bludgeoning", "piercing", "slashing"],
         "immune": ["fire", "poison"],
         "conditionImmunities": ["poisoned"],
@@ -10815,6 +11011,7 @@
         "speed": 30,
         "initiativeModifier": 1,
         "abilities": { "str": 7, "dex": 13, "con": 10, "int": 9, "wis": 11, "cha": 12 },
+        "checks": { "might": -2, "agility": 1 },
         "vulnerable": ["bludgeoning", "fire"],
         "immune": ["cold", "poison"],
         "conditionImmunities": ["poisoned"],
@@ -10870,6 +11067,7 @@
         "speed": 20,
         "initiativeModifier": 3,
         "abilities": { "str": 6, "dex": 17, "con": 13, "int": 11, "wis": 12, "cha": 14 },
+        "checks": { "might": -2, "agility": 3 },
         "resist": ["bludgeoning", "cold", "piercing", "slashing"],
         "immune": ["fire", "poison"],
         "conditionImmunities": ["poisoned"],
@@ -10930,6 +11128,7 @@
         "speed": 50,
         "initiativeModifier": 4,
         "abilities": { "str": 16, "dex": 19, "con": 14, "int": 10, "wis": 15, "cha": 11 },
+        "checks": { "might": 3, "agility": 4 },
         "resist": ["bludgeoning", "piercing", "slashing"],
         "immune": ["poison"],
         "conditionImmunities": ["grappled", "paralyzed", "petrified", "poisoned", "prone", "restrained", "unconscious"],
@@ -11009,6 +11208,7 @@
         "speed": 30,
         "initiativeModifier": -1,
         "abilities": { "str": 24, "dex": 9, "con": 20, "int": 3, "wis": 11, "cha": 1 },
+        "checks": { "might": 7, "agility": -1 },
         "immune": ["bludgeoning", "fire", "piercing", "poison", "psychic", "slashing"],
         "conditionImmunities": ["charmed", "frightened", "paralyzed", "petrified", "poisoned"],
         "tier": "cr_16",
@@ -11084,6 +11284,7 @@
         "speed": 40,
         "initiativeModifier": 2,
         "abilities": { "str": 8, "dex": 15, "con": 11, "int": 3, "wis": 12, "cha": 6 },
+        "checks": { "might": -1, "agility": 2 },
         "tier": "cr_0",
         "traits": [
           {
@@ -11118,6 +11319,7 @@
         "speed": 60,
         "initiativeModifier": 0,
         "abilities": { "str": 19, "dex": 10, "con": 13, "int": 3, "wis": 12, "cha": 7 },
+        "checks": { "might": 4, "agility": 0 },
         "tier": "cr_3",
         "traits": [
           { "name": "Speed", "text": "0 ft., swim 60 ft." },
@@ -11157,6 +11359,7 @@
         "initiativeModifier": 0,
         "abilities": { "str": 16, "dex": 11, "con": 14, "int": 11, "wis": 11, "cha": 15 },
         "saves": { "con_save": 4, "wis_save": 2 },
+        "checks": { "might": 3, "agility": 0 },
         "tier": "cr_3",
         "traits": [
           {
@@ -11187,6 +11390,14 @@
             "toHit": 2,
             "damage": { "dice": "1d10", "type": "piercing" },
             "range": { "normal": 100, "long": 400 }
+          },
+          {
+            "id": "parry",
+            "name": "Parry",
+            "budget": "reaction",
+            "self": true,
+            "reaction": { "on": "hit" },
+            "applies": [{ "condition": "parrying_2", "duration": { "rounds": 1 }, "endsAfter": "attacked" }]
           }
         ]
       }
@@ -11221,6 +11432,7 @@
         "speed": 30,
         "initiativeModifier": 2,
         "abilities": { "str": 7, "dex": 15, "con": 9, "int": 8, "wis": 7, "cha": 8 },
+        "checks": { "might": -2, "agility": 2 },
         "tier": "cr_1_8",
         "traits": [
           {
@@ -11269,6 +11481,7 @@
         "initiativeModifier": 0,
         "abilities": { "str": 30, "dex": 11, "con": 25, "int": 22, "wis": 18, "cha": 20 },
         "saves": { "str_save": 17, "dex_save": 7, "con_save": 14, "int_save": 13, "wis_save": 11 },
+        "checks": { "might": 10, "agility": 0 },
         "immune": ["bludgeoning", "lightning", "piercing", "slashing"],
         "conditionImmunities": ["frightened", "paralyzed"],
         "tier": "cr_23",
@@ -11372,6 +11585,7 @@
         "speed": 30,
         "initiativeModifier": 1,
         "abilities": { "str": 16, "dex": 13, "con": 15, "int": 14, "wis": 15, "cha": 16 },
+        "checks": { "might": 3, "agility": 1 },
         "tier": "cr_4",
         "traits": [
           {
@@ -11427,6 +11641,7 @@
         "speed": 15,
         "initiativeModifier": -3,
         "abilities": { "str": 10, "dex": 5, "con": 11, "int": 1, "wis": 11, "cha": 3 },
+        "checks": { "might": 0, "agility": -3 },
         "resist": ["cold"],
         "immune": ["fire", "poison"],
         "conditionImmunities": ["charmed", "frightened", "poisoned"],
@@ -11830,6 +12045,7 @@
         "speed": 50,
         "initiativeModifier": 2,
         "abilities": { "str": 17, "dex": 15, "con": 13, "int": 3, "wis": 12, "cha": 8 },
+        "checks": { "might": 3, "agility": 2 },
         "tier": "cr_1",
         "traits": [
           { "name": "Keen Smell", "text": "The lion has advantage on Wisdom (Perception) checks that rely on smell." },
@@ -11879,6 +12095,7 @@
         "speed": 20,
         "initiativeModifier": 0,
         "abilities": { "str": 2, "dex": 11, "con": 10, "int": 1, "wis": 8, "cha": 3 },
+        "checks": { "might": -4, "agility": 0 },
         "tier": "cr_0",
         "traits": [{ "name": "Speed", "text": "20 ft., climb 20 ft." }],
         "actions": [
@@ -11934,6 +12151,7 @@
         "speed": 30,
         "initiativeModifier": 0,
         "abilities": { "str": 15, "dex": 10, "con": 13, "int": 7, "wis": 12, "cha": 7 },
+        "checks": { "might": 2, "agility": 0 },
         "tier": "cr_1_2",
         "traits": [
           { "name": "Speed", "text": "30 ft., swim 30 ft." },
@@ -12212,6 +12430,7 @@
         "speed": 30,
         "initiativeModifier": 1,
         "abilities": { "str": 8, "dex": 12, "con": 12, "int": 7, "wis": 10, "cha": 10 },
+        "checks": { "might": -1, "agility": 1 },
         "vulnerable": ["cold"],
         "immune": ["fire", "poison"],
         "conditionImmunities": ["poisoned"],
@@ -12273,6 +12492,7 @@
         "speed": 30,
         "initiativeModifier": 2,
         "abilities": { "str": 7, "dex": 15, "con": 12, "int": 8, "wis": 11, "cha": 10 },
+        "checks": { "might": -2, "agility": 2 },
         "resist": ["bludgeoning", "piercing", "slashing"],
         "immune": ["fire"],
         "tier": "cr_1_2",
@@ -12317,6 +12537,7 @@
         "speed": 40,
         "initiativeModifier": -1,
         "abilities": { "str": 24, "dex": 9, "con": 21, "int": 3, "wis": 11, "cha": 6 },
+        "checks": { "might": 7, "agility": -1 },
         "tier": "cr_6",
         "traits": [
           {
@@ -12360,6 +12581,7 @@
         "speed": 30,
         "initiativeModifier": 3,
         "abilities": { "str": 17, "dex": 16, "con": 17, "int": 7, "wis": 12, "cha": 8 },
+        "checks": { "might": 3, "agility": 3 },
         "tier": "cr_3",
         "traits": [
           {
@@ -12427,6 +12649,7 @@
         "initiativeModifier": 5,
         "abilities": { "str": 18, "dex": 20, "con": 20, "int": 18, "wis": 16, "cha": 20 },
         "saves": { "str_save": 9, "con_save": 10, "wis_save": 8, "cha_save": 10 },
+        "checks": { "might": 4, "agility": 5 },
         "resist": ["bludgeoning", "cold", "fire", "lightning", "piercing", "slashing"],
         "immune": ["poison"],
         "conditionImmunities": ["poisoned"],
@@ -12476,6 +12699,14 @@
             "toHit": 9,
             "damage": { "dice": "2d10", "flat": 4, "type": "bludgeoning" },
             "reach": 10
+          },
+          {
+            "id": "parry",
+            "name": "Parry",
+            "budget": "reaction",
+            "self": true,
+            "reaction": { "on": "hit" },
+            "applies": [{ "condition": "parrying_5", "duration": { "rounds": 1 }, "endsAfter": "attacked" }]
           }
         ]
       }
@@ -12491,6 +12722,7 @@
         "speed": 40,
         "initiativeModifier": 2,
         "abilities": { "str": 13, "dex": 14, "con": 12, "int": 3, "wis": 12, "cha": 7 },
+        "checks": { "might": 1, "agility": 2 },
         "tier": "cr_1_8",
         "traits": [
           {
@@ -12528,6 +12760,7 @@
         "speed": 30,
         "initiativeModifier": 2,
         "abilities": { "str": 10, "dex": 15, "con": 16, "int": 12, "wis": 13, "cha": 15 },
+        "checks": { "might": 0, "agility": 2 },
         "tier": "cr_6",
         "traits": [
           {
@@ -12598,6 +12831,7 @@
         "speed": 10,
         "initiativeModifier": 1,
         "abilities": { "str": 10, "dex": 13, "con": 12, "int": 11, "wis": 11, "cha": 12 },
+        "checks": { "might": 0, "agility": 1 },
         "tier": "cr_1_8",
         "traits": [
           {
@@ -12636,6 +12870,7 @@
         "speed": 10,
         "initiativeModifier": 0,
         "abilities": { "str": 18, "dex": 10, "con": 15, "int": 8, "wis": 10, "cha": 9 },
+        "checks": { "might": 4, "agility": 0 },
         "tier": "cr_2",
         "traits": [
           {
@@ -12699,6 +12934,7 @@
         "speed": 15,
         "initiativeModifier": 1,
         "abilities": { "str": 17, "dex": 12, "con": 15, "int": 5, "wis": 13, "cha": 8 },
+        "checks": { "might": 3, "agility": 1 },
         "immune": ["acid"],
         "conditionImmunities": ["prone"],
         "tier": "cr_2",
@@ -12756,6 +12992,7 @@
         "speed": 40,
         "initiativeModifier": 0,
         "abilities": { "str": 18, "dex": 11, "con": 16, "int": 6, "wis": 16, "cha": 9 },
+        "checks": { "might": 4, "agility": 0 },
         "tier": "cr_3",
         "traits": [
           {
@@ -12799,6 +13036,7 @@
         "speed": 40,
         "initiativeModifier": 0,
         "abilities": { "str": 18, "dex": 11, "con": 15, "int": 6, "wis": 8, "cha": 5 },
+        "checks": { "might": 4, "agility": 0 },
         "vulnerable": ["bludgeoning"],
         "immune": ["poison"],
         "conditionImmunities": ["poisoned"],
@@ -12850,6 +13088,7 @@
         "initiativeModifier": 0,
         "abilities": { "str": 14, "dex": 10, "con": 13, "int": 2, "wis": 10, "cha": 5 },
         "saves": { "str_save": 0, "dex_save": 0, "con_save": 0, "int_save": 0, "wis_save": 0, "cha_save": 0 },
+        "checks": { "might": 0, "agility": 0 },
         "tier": "cr_1_8",
         "traits": [
           {
@@ -12890,6 +13129,7 @@
         "initiativeModifier": -1,
         "abilities": { "str": 16, "dex": 8, "con": 15, "int": 6, "wis": 10, "cha": 12 },
         "saves": { "wis_save": 2 },
+        "checks": { "might": 3, "agility": -1 },
         "resist": ["bludgeoning", "piercing", "slashing"],
         "vulnerable": ["fire"],
         "immune": ["bludgeoning", "necrotic", "piercing", "poison", "slashing"],
@@ -13224,6 +13464,7 @@
         "initiativeModifier": 0,
         "abilities": { "str": 21, "dex": 10, "con": 22, "int": 19, "wis": 12, "cha": 15 },
         "saves": { "con_save": 11, "int_save": 9, "wis_save": 6, "cha_save": 7 },
+        "checks": { "might": 5, "agility": 0 },
         "resist": ["bludgeoning", "cold", "fire", "lightning", "piercing", "slashing"],
         "immune": ["poison"],
         "conditionImmunities": ["poisoned"],
@@ -13311,6 +13552,7 @@
         "speed": 30,
         "initiativeModifier": 2,
         "abilities": { "str": 18, "dex": 15, "con": 16, "int": 16, "wis": 14, "cha": 16 },
+        "checks": { "might": 4, "agility": 2 },
         "resist": ["bludgeoning", "cold", "fire", "piercing", "slashing"],
         "conditionImmunities": ["charmed"],
         "tier": "cr_5",
@@ -13376,6 +13618,7 @@
         "speed": 60,
         "initiativeModifier": 2,
         "abilities": { "str": 18, "dex": 15, "con": 16, "int": 10, "wis": 13, "cha": 15 },
+        "checks": { "might": 4, "agility": 2 },
         "immune": ["fire"],
         "tier": "cr_3",
         "traits": [
@@ -13421,6 +13664,7 @@
         "speed": 30,
         "initiativeModifier": 1,
         "abilities": { "str": 11, "dex": 12, "con": 11, "int": 12, "wis": 14, "cha": 16 },
+        "checks": { "might": 0, "agility": 1 },
         "tier": "cr_1_8",
         "actions": [
           {
@@ -13430,6 +13674,14 @@
             "toHit": 3,
             "damage": { "dice": "1d8", "flat": 1, "type": "piercing" },
             "reach": 5
+          },
+          {
+            "id": "parry",
+            "name": "Parry",
+            "budget": "reaction",
+            "self": true,
+            "reaction": { "on": "hit" },
+            "applies": [{ "condition": "parrying_2", "duration": { "rounds": 1 }, "endsAfter": "attacked" }]
           }
         ]
       }
@@ -13450,6 +13702,7 @@
         "speed": 10,
         "initiativeModifier": -2,
         "abilities": { "str": 15, "dex": 6, "con": 14, "int": 2, "wis": 6, "cha": 1 },
+        "checks": { "might": 2, "agility": -2 },
         "resist": ["acid"],
         "immune": ["lightning", "slashing"],
         "conditionImmunities": ["blinded", "charmed", "deafened", "frightened", "prone"],
@@ -13467,6 +13720,10 @@
           {
             "name": "Spider Climb",
             "text": "The jelly can climb difficult surfaces, including upside down on ceilings, without needing to make an ability check."
+          },
+          {
+            "name": "Split",
+            "text": "When a jelly that is Medium or larger is subjected to lightning or slashing damage, it splits into two new jellies if it has at least 10 hit points. Each new jelly has hit points equal to half the original jelly's, rounded down. New jellies are one size smaller than the original jelly."
           }
         ],
         "actions": [
@@ -13492,6 +13749,7 @@
         "speed": 5,
         "initiativeModifier": 2,
         "abilities": { "str": 4, "dex": 15, "con": 11, "int": 3, "wis": 10, "cha": 4 },
+        "checks": { "might": -3, "agility": 2 },
         "tier": "cr_0",
         "traits": [
           {
@@ -13548,6 +13806,7 @@
         "speed": 40,
         "initiativeModifier": -1,
         "abilities": { "str": 19, "dex": 8, "con": 16, "int": 5, "wis": 7, "cha": 7 },
+        "checks": { "might": 4, "agility": -1 },
         "tier": "cr_2",
         "actions": [
           {
@@ -13587,6 +13846,7 @@
         "initiativeModifier": -2,
         "abilities": { "str": 19, "dex": 6, "con": 18, "int": 3, "wis": 6, "cha": 5 },
         "saves": { "wis_save": 0 },
+        "checks": { "might": 4, "agility": -2 },
         "immune": ["poison"],
         "conditionImmunities": ["poisoned"],
         "tier": "cr_2",
@@ -13620,6 +13880,7 @@
         "initiativeModifier": 0,
         "abilities": { "str": 19, "dex": 11, "con": 16, "int": 14, "wis": 12, "cha": 15 },
         "saves": { "dex_save": 3, "con_save": 6, "wis_save": 4, "cha_save": 5 },
+        "checks": { "might": 4, "agility": 0 },
         "tier": "cr_7",
         "traits": [
           {
@@ -13690,6 +13951,7 @@
         "speed": 30,
         "initiativeModifier": 1,
         "abilities": { "str": 16, "dex": 12, "con": 16, "int": 7, "wis": 11, "cha": 10 },
+        "checks": { "might": 3, "agility": 1 },
         "tier": "cr_1_2",
         "traits": [
           {
@@ -13735,6 +13997,7 @@
         "initiativeModifier": 0,
         "abilities": { "str": 16, "dex": 11, "con": 19, "int": 6, "wis": 13, "cha": 6 },
         "saves": { "con_save": 7 },
+        "checks": { "might": 3, "agility": 0 },
         "tier": "cr_5",
         "traits": [
           {
@@ -13798,6 +14061,7 @@
         "speed": 5,
         "initiativeModifier": 1,
         "abilities": { "str": 3, "dex": 13, "con": 8, "int": 2, "wis": 12, "cha": 7 },
+        "checks": { "might": -4, "agility": 1 },
         "tier": "cr_0",
         "traits": [
           { "name": "Speed", "text": "5 ft., fly 60 ft." },
@@ -13838,6 +14102,7 @@
         "speed": 40,
         "initiativeModifier": 1,
         "abilities": { "str": 20, "dex": 12, "con": 17, "int": 3, "wis": 12, "cha": 7 },
+        "checks": { "might": 5, "agility": 1 },
         "tier": "cr_3",
         "traits": [
           {
@@ -13890,6 +14155,7 @@
         "speed": 50,
         "initiativeModifier": 2,
         "abilities": { "str": 14, "dex": 15, "con": 10, "int": 3, "wis": 14, "cha": 7 },
+        "checks": { "might": 2, "agility": 2 },
         "tier": "cr_1_4",
         "traits": [
           { "name": "Speed", "text": "50 ft., climb 40 ft." },
@@ -13939,6 +14205,7 @@
         "initiativeModifier": 2,
         "abilities": { "str": 18, "dex": 15, "con": 16, "int": 10, "wis": 15, "cha": 13 },
         "saves": { "dex_save": 4, "wis_save": 4, "cha_save": 3 },
+        "checks": { "might": 4, "agility": 2 },
         "tier": "cr_2",
         "traits": [{ "name": "Speed", "text": "60 ft., fly 90 ft." }],
         "actions": [
@@ -13982,6 +14249,7 @@
         "speed": 30,
         "initiativeModifier": 2,
         "abilities": { "str": 15, "dex": 15, "con": 12, "int": 6, "wis": 10, "cha": 6 },
+        "checks": { "might": 2, "agility": 2 },
         "tier": "cr_3",
         "traits": [
           {
@@ -14023,6 +14291,7 @@
         "initiativeModifier": 2,
         "abilities": { "str": 26, "dex": 14, "con": 24, "int": 22, "wis": 18, "cha": 24 },
         "saves": { "dex_save": 8, "con_save": 13, "wis_save": 10 },
+        "checks": { "might": 8, "agility": 2 },
         "resist": ["bludgeoning", "cold", "piercing", "slashing"],
         "immune": ["fire", "poison"],
         "conditionImmunities": ["poisoned"],
@@ -14118,6 +14387,7 @@
         "initiativeModifier": 5,
         "abilities": { "str": 24, "dex": 20, "con": 24, "int": 19, "wis": 22, "cha": 25 },
         "saves": { "con_save": 12, "wis_save": 11, "cha_save": 12 },
+        "checks": { "might": 7, "agility": 5 },
         "resist": ["bludgeoning", "piercing", "radiant", "slashing"],
         "conditionImmunities": ["charmed", "frightened"],
         "tier": "cr_16",
@@ -14183,6 +14453,7 @@
         "speed": 20,
         "initiativeModifier": 2,
         "abilities": { "str": 18, "dex": 15, "con": 16, "int": 2, "wis": 12, "cha": 5 },
+        "checks": { "might": 4, "agility": 2 },
         "tier": "cr_2",
         "traits": [
           { "name": "Speed", "text": "20 ft., swim 40 ft." },
@@ -14229,6 +14500,7 @@
         "speed": 30,
         "initiativeModifier": 3,
         "abilities": { "str": 2, "dex": 16, "con": 11, "int": 1, "wis": 10, "cha": 3 },
+        "checks": { "might": -4, "agility": 3 },
         "tier": "cr_1_8",
         "traits": [
           {
@@ -14260,6 +14532,7 @@
         "speed": 40,
         "initiativeModifier": 0,
         "abilities": { "str": 20, "dex": 10, "con": 16, "int": 2, "wis": 13, "cha": 7 },
+        "checks": { "might": 5, "agility": 0 },
         "tier": "cr_2",
         "traits": [
           { "name": "Speed", "text": "40 ft., swim 30 ft." },
@@ -14306,6 +14579,7 @@
         "initiativeModifier": 0,
         "abilities": { "str": 15, "dex": 10, "con": 13, "int": 2, "wis": 11, "cha": 7 },
         "saves": { "str_save": 0, "dex_save": 0, "con_save": 0, "int_save": 0, "wis_save": 0, "cha_save": 0 },
+        "checks": { "might": 0, "agility": 0 },
         "tier": "cr_1_8",
         "actions": [
           {
@@ -14482,6 +14756,7 @@
         "speed": 15,
         "initiativeModifier": 2,
         "abilities": { "str": 6, "dex": 15, "con": 13, "int": 10, "wis": 12, "cha": 10 },
+        "checks": { "might": -2, "agility": 2 },
         "tier": "cr_1_4",
         "traits": [
           { "name": "Speed", "text": "15 ft., fly 60 ft." },
@@ -14541,6 +14816,7 @@
         "initiativeModifier": -2,
         "abilities": { "str": 28, "dex": 7, "con": 22, "int": 1, "wis": 8, "cha": 4 },
         "saves": { "con_save": 11, "wis_save": 4 },
+        "checks": { "might": 9, "agility": -2 },
         "tier": "cr_15",
         "traits": [
           {
@@ -14627,6 +14903,7 @@
         "speed": 40,
         "initiativeModifier": 3,
         "abilities": { "str": 5, "dex": 17, "con": 10, "int": 7, "wis": 10, "cha": 10 },
+        "checks": { "might": -3, "agility": 3 },
         "resist": ["bludgeoning", "cold", "fire", "lightning", "piercing", "slashing"],
         "immune": ["poison"],
         "conditionImmunities": ["poisoned"],
@@ -14704,6 +14981,7 @@
         "speed": 40,
         "initiativeModifier": 3,
         "abilities": { "str": 2, "dex": 16, "con": 9, "int": 1, "wis": 7, "cha": 2 },
+        "checks": { "might": -4, "agility": 3 },
         "tier": "cr_0",
         "traits": [
           { "name": "Speed", "text": "0 ft., swim 40 ft." },
@@ -14741,6 +15019,7 @@
         "speed": 40,
         "initiativeModifier": 3,
         "abilities": { "str": 14, "dex": 17, "con": 18, "int": 13, "wis": 16, "cha": 20 },
+        "checks": { "might": 2, "agility": 3 },
         "vulnerable": ["piercing"],
         "immune": ["bludgeoning", "piercing", "slashing"],
         "tier": "cr_13",
@@ -14792,6 +15071,7 @@
         "speed": 20,
         "initiativeModifier": 0,
         "abilities": { "str": 2, "dex": 11, "con": 9, "int": 2, "wis": 10, "cha": 4 },
+        "checks": { "might": -4, "agility": 0 },
         "tier": "cr_0",
         "traits": [
           { "name": "Keen Smell", "text": "The rat has advantage on Wisdom (Perception) checks that rely on smell." }
@@ -14824,6 +15104,7 @@
         "speed": 10,
         "initiativeModifier": 2,
         "abilities": { "str": 2, "dex": 14, "con": 8, "int": 2, "wis": 12, "cha": 6 },
+        "checks": { "might": -4, "agility": 2 },
         "tier": "cr_0",
         "traits": [
           { "name": "Speed", "text": "10 ft., fly 50 ft." },
@@ -14856,6 +15137,7 @@
         "initiativeModifier": 0,
         "abilities": { "str": 19, "dex": 10, "con": 17, "int": 12, "wis": 11, "cha": 15 },
         "saves": { "dex_save": 2, "con_save": 5, "wis_save": 2, "cha_save": 4 },
+        "checks": { "might": 4, "agility": 0 },
         "immune": ["fire"],
         "tier": "cr_4",
         "traits": [{ "name": "Speed", "text": "30 ft., climb 30 ft., fly 60 ft." }],
@@ -14892,6 +15174,7 @@
         "speed": 40,
         "initiativeModifier": 1,
         "abilities": { "str": 14, "dex": 13, "con": 13, "int": 1, "wis": 10, "cha": 4 },
+        "checks": { "might": 2, "agility": 1 },
         "tier": "cr_1_2",
         "traits": [
           { "name": "Speed", "text": "0 ft., swim 40 ft." },
@@ -14924,6 +15207,7 @@
         "speed": 30,
         "initiativeModifier": 1,
         "abilities": { "str": 24, "dex": 13, "con": 21, "int": 4, "wis": 10, "cha": 5 },
+        "checks": { "might": 7, "agility": 1 },
         "immune": ["cold", "fire"],
         "tier": "cr_11",
         "traits": [
@@ -14964,6 +15248,7 @@
         "speed": 40,
         "initiativeModifier": -1,
         "abilities": { "str": 21, "dex": 8, "con": 15, "int": 2, "wis": 12, "cha": 6 },
+        "checks": { "might": 5, "agility": -1 },
         "tier": "cr_2",
         "traits": [
           {
@@ -14995,6 +15280,7 @@
         "initiativeModifier": 0,
         "abilities": { "str": 16, "dex": 10, "con": 12, "int": 2, "wis": 11, "cha": 7 },
         "saves": { "str_save": 0, "dex_save": 0, "con_save": 0, "int_save": 0, "wis_save": 0, "cha_save": 0 },
+        "checks": { "might": 0, "agility": 0 },
         "tier": "cr_1_4",
         "actions": [
           {
@@ -15025,6 +15311,7 @@
         "initiativeModifier": 0,
         "abilities": { "str": 28, "dex": 10, "con": 20, "int": 3, "wis": 10, "cha": 9 },
         "saves": { "dex_save": 4, "con_save": 9, "wis_save": 4, "cha_save": 3 },
+        "checks": { "might": 9, "agility": 0 },
         "tier": "cr_11",
         "traits": [
           { "name": "Speed", "text": "20 ft., fly 120 ft." },
@@ -15070,6 +15357,7 @@
         "speed": 10,
         "initiativeModifier": -1,
         "abilities": { "str": 18, "dex": 8, "con": 17, "int": 7, "wis": 16, "cha": 6 },
+        "checks": { "might": 4, "agility": -1 },
         "tier": "cr_5",
         "traits": [
           {
@@ -15138,6 +15426,7 @@
         "speed": 10,
         "initiativeModifier": 2,
         "abilities": { "str": 17, "dex": 14, "con": 10, "int": 1, "wis": 3, "cha": 1 },
+        "checks": { "might": 3, "agility": 2 },
         "immune": ["poison", "psychic"],
         "conditionImmunities": ["blinded", "charmed", "deafened", "frightened", "paralyzed", "petrified", "poisoned"],
         "tier": "cr_2",
@@ -15178,6 +15467,7 @@
         "speed": 40,
         "initiativeModifier": 1,
         "abilities": { "str": 13, "dex": 12, "con": 13, "int": 2, "wis": 13, "cha": 6 },
+        "checks": { "might": 1, "agility": 1 },
         "tier": "cr_1_2",
         "traits": [
           {
@@ -15216,6 +15506,7 @@
         "speed": 40,
         "initiativeModifier": 2,
         "abilities": { "str": 18, "dex": 14, "con": 15, "int": 3, "wis": 12, "cha": 8 },
+        "checks": { "might": 4, "agility": 2 },
         "tier": "cr_2",
         "traits": [
           { "name": "Keen Smell", "text": "The tiger has advantage on Wisdom (Perception) checks that rely on smell." },
@@ -15260,6 +15551,7 @@
         "speed": 30,
         "initiativeModifier": 0,
         "abilities": { "str": 13, "dex": 11, "con": 12, "int": 12, "wis": 13, "cha": 9 },
+        "checks": { "might": 1, "agility": 0 },
         "tier": "cr_1_2",
         "traits": [
           {
@@ -15338,6 +15630,7 @@
         "speed": 30,
         "initiativeModifier": 2,
         "abilities": { "str": 18, "dex": 14, "con": 15, "int": 11, "wis": 10, "cha": 12 },
+        "checks": { "might": 4, "agility": 2 },
         "resist": ["bludgeoning", "piercing", "slashing"],
         "vulnerable": ["cold"],
         "immune": ["fire"],
@@ -15401,6 +15694,7 @@
         "speed": 40,
         "initiativeModifier": 3,
         "abilities": { "str": 12, "dex": 16, "con": 11, "int": 12, "wis": 10, "cha": 14 },
+        "checks": { "might": 1, "agility": 3 },
         "tier": "cr_1_2",
         "traits": [
           {
@@ -15451,6 +15745,7 @@
         "speed": 10,
         "initiativeModifier": 0,
         "abilities": { "str": 2, "dex": 11, "con": 8, "int": 1, "wis": 8, "cha": 2 },
+        "checks": { "might": -4, "agility": 0 },
         "tier": "cr_0",
         "traits": [
           {
@@ -15498,6 +15793,7 @@
         "speed": 30,
         "initiativeModifier": 2,
         "abilities": { "str": 11, "dex": 14, "con": 12, "int": 11, "wis": 13, "cha": 11 },
+        "checks": { "might": 0, "agility": 2 },
         "tier": "cr_1_2",
         "traits": [
           { "name": "Multiattack", "text": "The scout makes two melee attacks or two ranged attacks." },
@@ -15554,6 +15850,7 @@
         "speed": 30,
         "initiativeModifier": 1,
         "abilities": { "str": 16, "dex": 13, "con": 16, "int": 12, "wis": 12, "cha": 13 },
+        "checks": { "might": 3, "agility": 1 },
         "tier": "cr_2",
         "traits": [
           {
@@ -15611,6 +15908,7 @@
         "speed": 40,
         "initiativeModifier": 2,
         "abilities": { "str": 6, "dex": 14, "con": 13, "int": 6, "wis": 10, "cha": 8 },
+        "checks": { "might": -2, "agility": 2 },
         "resist": ["acid", "bludgeoning", "cold", "fire", "lightning", "piercing", "slashing", "thunder"],
         "vulnerable": ["radiant"],
         "immune": ["necrotic", "poison"],
@@ -15661,6 +15959,7 @@
         "speed": 20,
         "initiativeModifier": -1,
         "abilities": { "str": 18, "dex": 8, "con": 16, "int": 5, "wis": 10, "cha": 5 },
+        "checks": { "might": 4, "agility": -1 },
         "resist": ["cold", "fire"],
         "immune": ["lightning"],
         "conditionImmunities": ["blinded", "deafened"],
@@ -15721,6 +16020,7 @@
         "speed": 30,
         "initiativeModifier": -1,
         "abilities": { "str": 18, "dex": 8, "con": 18, "int": 7, "wis": 10, "cha": 3 },
+        "checks": { "might": 4, "agility": -1 },
         "immune": ["poison"],
         "conditionImmunities": ["charmed", "frightened", "paralyzed", "poisoned"],
         "tier": "cr_7",
@@ -15740,6 +16040,10 @@
           {
             "name": "Spell Storing",
             "text": "A spellcaster who wears the shield guardian's amulet can cause the guardian to store one spell of 4th level or lower. To do so, the wearer must cast the spell on the guardian. The spell has no effect but is stored within the guardian. See the SRD for the full text."
+          },
+          {
+            "name": "Shield",
+            "text": "When a creature makes an attack against the wearer of the guardian's amulet, the guardian grants a +2 bonus to the wearer's AC if the guardian is within 5 feet of the wearer."
           }
         ],
         "actions": [
@@ -15772,6 +16076,7 @@
         "initiativeModifier": 0,
         "abilities": { "str": 19, "dex": 10, "con": 17, "int": 12, "wis": 11, "cha": 15 },
         "saves": { "dex_save": 2, "con_save": 5, "wis_save": 2, "cha_save": 4 },
+        "checks": { "might": 4, "agility": 0 },
         "immune": ["cold"],
         "tier": "cr_2",
         "traits": [
@@ -15819,6 +16124,7 @@
         "speed": 30,
         "initiativeModifier": 2,
         "abilities": { "str": 10, "dex": 14, "con": 15, "int": 6, "wis": 8, "cha": 5 },
+        "checks": { "might": 0, "agility": 2 },
         "vulnerable": ["bludgeoning"],
         "immune": ["poison"],
         "conditionImmunities": ["poisoned"],
@@ -15861,6 +16167,7 @@
         "initiativeModifier": 6,
         "abilities": { "str": 26, "dex": 22, "con": 26, "int": 25, "wis": 25, "cha": 30 },
         "saves": { "int_save": 14, "wis_save": 14, "cha_save": 17 },
+        "checks": { "might": 8, "agility": 6 },
         "resist": ["bludgeoning", "piercing", "radiant", "slashing"],
         "immune": ["necrotic", "poison"],
         "conditionImmunities": ["charmed", "frightened", "poisoned"],
@@ -15958,6 +16265,7 @@
         "speed": 50,
         "initiativeModifier": 2,
         "abilities": { "str": 1, "dex": 14, "con": 11, "int": 10, "wis": 10, "cha": 11 },
+        "checks": { "might": -5, "agility": 2 },
         "resist": ["acid", "bludgeoning", "cold", "fire", "lightning", "piercing", "slashing", "thunder"],
         "immune": ["necrotic", "poison"],
         "conditionImmunities": [
@@ -16017,6 +16325,7 @@
         "speed": 20,
         "initiativeModifier": 2,
         "abilities": { "str": 2, "dex": 14, "con": 8, "int": 1, "wis": 10, "cha": 2 },
+        "checks": { "might": -4, "agility": 2 },
         "tier": "cr_0",
         "traits": [
           {
@@ -16244,6 +16553,7 @@
         "speed": 10,
         "initiativeModifier": 4,
         "abilities": { "str": 3, "dex": 18, "con": 10, "int": 14, "wis": 13, "cha": 11 },
+        "checks": { "might": -4, "agility": 4 },
         "tier": "cr_1_4",
         "traits": [
           {
@@ -16289,6 +16599,7 @@
         "speed": 30,
         "initiativeModifier": 2,
         "abilities": { "str": 10, "dex": 15, "con": 10, "int": 12, "wis": 14, "cha": 16 },
+        "checks": { "might": 0, "agility": 2 },
         "tier": "cr_1",
         "traits": [
           {
@@ -16342,6 +16653,7 @@
         "speed": 30,
         "initiativeModifier": 0,
         "abilities": { "str": 5, "dex": 11, "con": 10, "int": 11, "wis": 10, "cha": 12 },
+        "checks": { "might": -3, "agility": 0 },
         "immune": ["fire", "poison"],
         "conditionImmunities": ["poisoned"],
         "tier": "cr_1_4",
@@ -16408,6 +16720,7 @@
         "speed": 10,
         "initiativeModifier": 3,
         "abilities": { "str": 4, "dex": 16, "con": 11, "int": 2, "wis": 8, "cha": 6 },
+        "checks": { "might": -3, "agility": 3 },
         "tier": "cr_1_8",
         "traits": [{ "name": "Speed", "text": "10 ft., fly 40 ft." }],
         "actions": [
@@ -16439,11 +16752,16 @@
         "initiativeModifier": 2,
         "abilities": { "str": 23, "dex": 15, "con": 20, "int": 10, "wis": 12, "cha": 9 },
         "saves": { "dex_save": 5, "con_save": 8, "wis_save": 4 },
+        "checks": { "might": 12, "agility": 2 },
         "tier": "cr_7",
         "traits": [
           {
             "name": "Stone Camouflage",
             "text": "The giant has advantage on Dexterity (Stealth) checks made to hide in rocky terrain."
+          },
+          {
+            "name": "Rock Catching",
+            "text": "If a rock or similar object is hurled at the giant, the giant can, with a successful DC 10 Dexterity saving throw, catch the missile and take no bludgeoning damage from it."
           }
         ],
         "actions": [
@@ -16515,6 +16833,7 @@
         "speed": 30,
         "initiativeModifier": -1,
         "abilities": { "str": 22, "dex": 9, "con": 20, "int": 3, "wis": 11, "cha": 1 },
+        "checks": { "might": 6, "agility": -1 },
         "immune": ["bludgeoning", "piercing", "poison", "psychic", "slashing"],
         "conditionImmunities": ["charmed", "frightened", "paralyzed", "petrified", "poisoned"],
         "tier": "cr_10",
@@ -16573,6 +16892,7 @@
         "initiativeModifier": 2,
         "abilities": { "str": 29, "dex": 14, "con": 20, "int": 16, "wis": 18, "cha": 18 },
         "saves": { "str_save": 14, "con_save": 10, "wis_save": 9, "cha_save": 9 },
+        "checks": { "might": 14, "agility": 2 },
         "resist": ["cold"],
         "immune": ["lightning", "thunder"],
         "tier": "cr_13",
@@ -16660,6 +16980,7 @@
         "speed": 30,
         "initiativeModifier": 3,
         "abilities": { "str": 8, "dex": 17, "con": 13, "int": 15, "wis": 12, "cha": 20 },
+        "checks": { "might": -1, "agility": 3 },
         "resist": ["bludgeoning", "cold", "fire", "lightning", "piercing", "poison", "slashing"],
         "tier": "cr_4",
         "traits": [
@@ -16724,6 +17045,7 @@
         "speed": 30,
         "initiativeModifier": 2,
         "abilities": { "str": 5, "dex": 15, "con": 10, "int": 2, "wis": 12, "cha": 4 },
+        "checks": { "might": -3, "agility": 2 },
         "resist": ["bludgeoning", "piercing", "slashing"],
         "conditionImmunities": [
           "charmed",
@@ -16780,6 +17102,7 @@
         "speed": 20,
         "initiativeModifier": 1,
         "abilities": { "str": 3, "dex": 13, "con": 10, "int": 1, "wis": 7, "cha": 1 },
+        "checks": { "might": -4, "agility": 1 },
         "resist": ["bludgeoning", "piercing", "slashing"],
         "conditionImmunities": [
           "charmed",
@@ -16856,6 +17179,7 @@
         "speed": 20,
         "initiativeModifier": 1,
         "abilities": { "str": 3, "dex": 13, "con": 10, "int": 1, "wis": 7, "cha": 1 },
+        "checks": { "might": -4, "agility": 1 },
         "resist": ["bludgeoning", "piercing", "slashing"],
         "conditionImmunities": [
           "charmed",
@@ -16907,6 +17231,7 @@
         "speed": 20,
         "initiativeModifier": 1,
         "abilities": { "str": 3, "dex": 13, "con": 10, "int": 1, "wis": 7, "cha": 1 },
+        "checks": { "might": -4, "agility": 1 },
         "resist": ["bludgeoning", "piercing", "slashing"],
         "conditionImmunities": [
           "charmed",
@@ -16970,6 +17295,7 @@
         "speed": 30,
         "initiativeModifier": 4,
         "abilities": { "str": 8, "dex": 18, "con": 11, "int": 1, "wis": 10, "cha": 3 },
+        "checks": { "might": -1, "agility": 4 },
         "resist": ["bludgeoning", "piercing", "slashing"],
         "conditionImmunities": [
           "charmed",
@@ -17016,6 +17342,7 @@
         "speed": 40,
         "initiativeModifier": 3,
         "abilities": { "str": 13, "dex": 16, "con": 9, "int": 1, "wis": 7, "cha": 2 },
+        "checks": { "might": 1, "agility": 3 },
         "resist": ["bludgeoning", "piercing", "slashing"],
         "conditionImmunities": [
           "charmed",
@@ -17072,6 +17399,7 @@
         "speed": 30,
         "initiativeModifier": 0,
         "abilities": { "str": 9, "dex": 11, "con": 9, "int": 2, "wis": 10, "cha": 3 },
+        "checks": { "might": -1, "agility": 0 },
         "resist": ["bludgeoning", "piercing", "slashing"],
         "conditionImmunities": [
           "charmed",
@@ -17123,6 +17451,7 @@
         "speed": 10,
         "initiativeModifier": 2,
         "abilities": { "str": 6, "dex": 14, "con": 8, "int": 3, "wis": 12, "cha": 6 },
+        "checks": { "might": -2, "agility": 2 },
         "resist": ["bludgeoning", "piercing", "slashing"],
         "conditionImmunities": [
           "charmed",
@@ -17199,6 +17528,7 @@
         "speed": 20,
         "initiativeModifier": 1,
         "abilities": { "str": 3, "dex": 13, "con": 10, "int": 1, "wis": 7, "cha": 1 },
+        "checks": { "might": -4, "agility": 1 },
         "resist": ["bludgeoning", "piercing", "slashing"],
         "conditionImmunities": ["charmed", "frightened", "paralyzed", "petrified", "prone", "restrained", "stunned"],
         "tier": "cr_1_2",
@@ -17275,6 +17605,7 @@
         "speed": 5,
         "initiativeModifier": 1,
         "abilities": { "str": 3, "dex": 13, "con": 10, "int": 1, "wis": 7, "cha": 1 },
+        "checks": { "might": -4, "agility": 1 },
         "resist": ["bludgeoning", "piercing", "slashing"],
         "conditionImmunities": [
           "charmed",
@@ -17322,6 +17653,7 @@
         "initiativeModifier": 0,
         "abilities": { "str": 30, "dex": 11, "con": 30, "int": 3, "wis": 11, "cha": 11 },
         "saves": { "int_save": 5, "wis_save": 9, "cha_save": 9 },
+        "checks": { "might": 10, "agility": 0 },
         "immune": ["bludgeoning", "fire", "piercing", "poison", "slashing"],
         "conditionImmunities": ["charmed", "frightened", "paralyzed", "poisoned"],
         "tier": "cr_30",
@@ -17451,6 +17783,7 @@
         "speed": 30,
         "initiativeModifier": 0,
         "abilities": { "str": 15, "dex": 11, "con": 14, "int": 10, "wis": 10, "cha": 11 },
+        "checks": { "might": 2, "agility": 0 },
         "tier": "cr_1_2",
         "traits": [
           {
@@ -17495,6 +17828,7 @@
         "speed": 40,
         "initiativeModifier": 2,
         "abilities": { "str": 17, "dex": 15, "con": 14, "int": 3, "wis": 12, "cha": 8 },
+        "checks": { "might": 3, "agility": 2 },
         "tier": "cr_1",
         "traits": [
           { "name": "Keen Smell", "text": "The tiger has advantage on Wisdom (Perception) checks that rely on smell." },
@@ -17534,6 +17868,7 @@
         "speed": 30,
         "initiativeModifier": -1,
         "abilities": { "str": 23, "dex": 8, "con": 21, "int": 12, "wis": 16, "cha": 12 },
+        "checks": { "might": 6, "agility": -1 },
         "resist": ["bludgeoning", "piercing"],
         "vulnerable": ["fire"],
         "tier": "cr_9",
@@ -17590,6 +17925,7 @@
         "speed": 30,
         "initiativeModifier": 0,
         "abilities": { "str": 13, "dex": 11, "con": 12, "int": 8, "wis": 11, "cha": 8 },
+        "checks": { "might": 1, "agility": 0 },
         "tier": "cr_1_8",
         "traits": [
           {
@@ -17630,6 +17966,7 @@
         "speed": 50,
         "initiativeModifier": -1,
         "abilities": { "str": 22, "dex": 9, "con": 17, "int": 2, "wis": 11, "cha": 5 },
+        "checks": { "might": 6, "agility": -1 },
         "tier": "cr_5",
         "traits": [
           {
@@ -17684,6 +18021,7 @@
         "speed": 30,
         "initiativeModifier": 1,
         "abilities": { "str": 18, "dex": 13, "con": 20, "int": 7, "wis": 9, "cha": 7 },
+        "checks": { "might": 4, "agility": 1 },
         "tier": "cr_5",
         "traits": [
           { "name": "Keen Smell", "text": "The troll has advantage on Wisdom (Perception) checks that rely on smell." },
@@ -17741,6 +18079,7 @@
         "speed": 50,
         "initiativeModifier": 0,
         "abilities": { "str": 25, "dex": 10, "con": 19, "int": 2, "wis": 12, "cha": 9 },
+        "checks": { "might": 7, "agility": 0 },
         "tier": "cr_8",
         "traits": [
           {
@@ -17788,6 +18127,7 @@
         "speed": 50,
         "initiativeModifier": 2,
         "abilities": { "str": 18, "dex": 14, "con": 15, "int": 11, "wis": 17, "cha": 16 },
+        "checks": { "might": 4, "agility": 2 },
         "immune": ["poison"],
         "conditionImmunities": ["charmed", "paralyzed", "poisoned"],
         "tier": "cr_5",
@@ -17865,6 +18205,7 @@
         "initiativeModifier": 4,
         "abilities": { "str": 18, "dex": 18, "con": 18, "int": 17, "wis": 15, "cha": 18 },
         "saves": { "dex_save": 9, "wis_save": 7, "cha_save": 9 },
+        "checks": { "might": 4, "agility": 4 },
         "resist": ["bludgeoning", "necrotic", "piercing", "slashing"],
         "tier": "cr_13",
         "traits": [
@@ -17956,6 +18297,7 @@
         "initiativeModifier": 3,
         "abilities": { "str": 16, "dex": 16, "con": 16, "int": 11, "wis": 10, "cha": 12 },
         "saves": { "dex_save": 6, "wis_save": 3 },
+        "checks": { "might": 3, "agility": 3 },
         "resist": ["bludgeoning", "necrotic", "piercing", "slashing"],
         "tier": "cr_5",
         "traits": [
@@ -18022,6 +18364,7 @@
         "speed": 30,
         "initiativeModifier": 1,
         "abilities": { "str": 16, "dex": 13, "con": 14, "int": 10, "wis": 11, "cha": 10 },
+        "checks": { "might": 5, "agility": 1 },
         "tier": "cr_3",
         "traits": [
           {
@@ -18083,6 +18426,7 @@
         "speed": 5,
         "initiativeModifier": -5,
         "abilities": { "str": 3, "dex": 1, "con": 10, "int": 1, "wis": 3, "cha": 1 },
+        "checks": { "might": -4, "agility": -5 },
         "conditionImmunities": ["blinded", "deafened", "frightened"],
         "tier": "cr_1_4",
         "traits": [
@@ -18116,6 +18460,7 @@
         "initiativeModifier": 2,
         "abilities": { "str": 17, "dex": 15, "con": 18, "int": 8, "wis": 13, "cha": 8 },
         "saves": { "dex_save": 5, "wis_save": 4, "cha_save": 2 },
+        "checks": { "might": 3, "agility": 2 },
         "resist": ["bludgeoning", "cold", "fire", "lightning", "piercing", "slashing"],
         "immune": ["poison"],
         "conditionImmunities": ["poisoned"],
@@ -18201,6 +18546,7 @@
         "speed": 10,
         "initiativeModifier": 0,
         "abilities": { "str": 7, "dex": 10, "con": 13, "int": 2, "wis": 12, "cha": 4 },
+        "checks": { "might": -2, "agility": 0 },
         "tier": "cr_0",
         "traits": [
           { "name": "Speed", "text": "10 ft., fly 50 ft." },
@@ -18237,6 +18583,7 @@
         "initiativeModifier": 1,
         "abilities": { "str": 18, "dex": 12, "con": 13, "int": 2, "wis": 12, "cha": 7 },
         "saves": { "str_save": 0, "dex_save": 0, "con_save": 0, "int_save": 0, "wis_save": 0, "cha_save": 0 },
+        "checks": { "might": 0, "agility": 0 },
         "tier": "cr_1_2",
         "traits": [
           {
@@ -18297,6 +18644,7 @@
         "speed": 60,
         "initiativeModifier": 1,
         "abilities": { "str": 18, "dex": 12, "con": 15, "int": 2, "wis": 8, "cha": 5 },
+        "checks": { "might": 4, "agility": 1 },
         "vulnerable": ["bludgeoning"],
         "immune": ["poison"],
         "conditionImmunities": ["poisoned"],
@@ -18335,6 +18683,7 @@
         "speed": 30,
         "initiativeModifier": 2,
         "abilities": { "str": 18, "dex": 14, "con": 18, "int": 5, "wis": 10, "cha": 8 },
+        "checks": { "might": 4, "agility": 2 },
         "resist": ["acid", "bludgeoning", "piercing", "slashing"],
         "immune": ["poison"],
         "conditionImmunities": ["grappled", "paralyzed", "petrified", "poisoned", "prone", "restrained", "unconscious"],
@@ -18400,6 +18749,7 @@
         "speed": 30,
         "initiativeModifier": 3,
         "abilities": { "str": 3, "dex": 16, "con": 8, "int": 2, "wis": 12, "cha": 3 },
+        "checks": { "might": -4, "agility": 3 },
         "tier": "cr_0",
         "traits": [
           {
@@ -18435,6 +18785,7 @@
         "speed": 30,
         "initiativeModifier": 0,
         "abilities": { "str": 19, "dex": 10, "con": 17, "int": 11, "wis": 12, "cha": 12 },
+        "checks": { "might": 4, "agility": 0 },
         "immune": ["bludgeoning", "piercing", "slashing"],
         "tier": "cr_5",
         "traits": [
@@ -18509,6 +18860,7 @@
         "speed": 30,
         "initiativeModifier": 0,
         "abilities": { "str": 17, "dex": 10, "con": 15, "int": 10, "wis": 11, "cha": 8 },
+        "checks": { "might": 3, "agility": 0 },
         "immune": ["bludgeoning", "piercing", "slashing"],
         "tier": "cr_4",
         "traits": [
@@ -18579,6 +18931,7 @@
         "speed": 30,
         "initiativeModifier": 2,
         "abilities": { "str": 10, "dex": 15, "con": 12, "int": 11, "wis": 10, "cha": 8 },
+        "checks": { "might": 0, "agility": 2 },
         "immune": ["bludgeoning", "piercing", "slashing"],
         "tier": "cr_2",
         "traits": [
@@ -18648,6 +19001,7 @@
         "speed": 30,
         "initiativeModifier": 2,
         "abilities": { "str": 17, "dex": 15, "con": 16, "int": 10, "wis": 13, "cha": 11 },
+        "checks": { "might": 3, "agility": 2 },
         "immune": ["bludgeoning", "piercing", "slashing"],
         "tier": "cr_4",
         "traits": [
@@ -18735,6 +19089,7 @@
         "speed": 30,
         "initiativeModifier": 1,
         "abilities": { "str": 15, "dex": 13, "con": 14, "int": 10, "wis": 11, "cha": 10 },
+        "checks": { "might": 2, "agility": 1 },
         "immune": ["bludgeoning", "piercing", "slashing"],
         "tier": "cr_3",
         "traits": [
@@ -18819,6 +19174,7 @@
         "initiativeModifier": 0,
         "abilities": { "str": 14, "dex": 10, "con": 14, "int": 5, "wis": 10, "cha": 11 },
         "saves": { "dex_save": 2, "con_save": 4, "wis_save": 2, "cha_save": 2 },
+        "checks": { "might": 2, "agility": 0 },
         "immune": ["cold"],
         "tier": "cr_2",
         "traits": [{ "name": "Speed", "text": "30 ft., burrow 15 ft., fly 60 ft., swim 30 ft." }],
@@ -18860,6 +19216,7 @@
         "speed": 30,
         "initiativeModifier": 2,
         "abilities": { "str": 15, "dex": 14, "con": 16, "int": 10, "wis": 13, "cha": 15 },
+        "checks": { "might": 2, "agility": 2 },
         "immune": ["bludgeoning", "necrotic", "piercing", "slashing"],
         "conditionImmunities": ["poisoned"],
         "tier": "cr_3",
@@ -18936,6 +19293,7 @@
         "speed": 50,
         "initiativeModifier": 9,
         "abilities": { "str": 1, "dex": 28, "con": 10, "int": 13, "wis": 14, "cha": 11 },
+        "checks": { "might": -5, "agility": 9 },
         "resist": ["acid", "bludgeoning", "cold", "fire", "necrotic", "piercing", "slashing", "thunder"],
         "immune": ["lightning", "poison"],
         "conditionImmunities": ["grappled", "paralyzed", "poisoned", "prone", "restrained", "unconscious"],
@@ -18991,6 +19349,7 @@
         "speed": 50,
         "initiativeModifier": 1,
         "abilities": { "str": 18, "dex": 13, "con": 14, "int": 7, "wis": 12, "cha": 8 },
+        "checks": { "might": 4, "agility": 1 },
         "immune": ["cold"],
         "tier": "cr_3",
         "traits": [
@@ -19047,6 +19406,7 @@
         "speed": 40,
         "initiativeModifier": 2,
         "abilities": { "str": 12, "dex": 15, "con": 12, "int": 3, "wis": 12, "cha": 6 },
+        "checks": { "might": 1, "agility": 2 },
         "tier": "cr_1_4",
         "traits": [
           {
@@ -19088,6 +19448,7 @@
         "speed": 50,
         "initiativeModifier": 1,
         "abilities": { "str": 16, "dex": 13, "con": 13, "int": 7, "wis": 11, "cha": 8 },
+        "checks": { "might": 3, "agility": 1 },
         "tier": "cr_1_2",
         "traits": [
           {
@@ -19120,6 +19481,7 @@
         "speed": 60,
         "initiativeModifier": 3,
         "abilities": { "str": 6, "dex": 16, "con": 16, "int": 12, "wis": 14, "cha": 15 },
+        "checks": { "might": -2, "agility": 3 },
         "resist": ["acid", "bludgeoning", "cold", "fire", "lightning", "piercing", "slashing", "thunder"],
         "immune": ["necrotic", "poison"],
         "conditionImmunities": ["charmed", "grappled", "paralyzed", "petrified", "poisoned", "prone", "restrained"],
@@ -19174,6 +19536,7 @@
         "speed": 20,
         "initiativeModifier": 0,
         "abilities": { "str": 19, "dex": 10, "con": 16, "int": 5, "wis": 12, "cha": 6 },
+        "checks": { "might": 4, "agility": 0 },
         "tier": "cr_6",
         "traits": [
           {
@@ -19234,6 +19597,7 @@
         "speed": 20,
         "initiativeModifier": 0,
         "abilities": { "str": 17, "dex": 10, "con": 22, "int": 11, "wis": 10, "cha": 11 },
+        "checks": { "might": 3, "agility": 0 },
         "resist": ["bludgeoning", "piercing", "slashing"],
         "tier": "cr_5",
         "traits": [
@@ -19293,6 +19657,7 @@
         "initiativeModifier": 2,
         "abilities": { "str": 19, "dex": 14, "con": 17, "int": 12, "wis": 11, "cha": 15 },
         "saves": { "dex_save": 5, "con_save": 6, "wis_save": 3, "cha_save": 5 },
+        "checks": { "might": 4, "agility": 2 },
         "immune": ["acid"],
         "tier": "cr_7",
         "traits": [
@@ -19350,6 +19715,7 @@
         "initiativeModifier": 0,
         "abilities": { "str": 21, "dex": 10, "con": 19, "int": 14, "wis": 13, "cha": 17 },
         "saves": { "dex_save": 4, "con_save": 8, "wis_save": 5, "cha_save": 7 },
+        "checks": { "might": 5, "agility": 0 },
         "immune": ["lightning"],
         "tier": "cr_9",
         "traits": [{ "name": "Speed", "text": "40 ft., burrow 40 ft., fly 80 ft." }],
@@ -19439,6 +19805,7 @@
         "initiativeModifier": 0,
         "abilities": { "str": 19, "dex": 10, "con": 17, "int": 12, "wis": 11, "cha": 15 },
         "saves": { "dex_save": 3, "con_save": 6, "wis_save": 3, "cha_save": 5 },
+        "checks": { "might": 4, "agility": 0 },
         "immune": ["fire"],
         "tier": "cr_6",
         "traits": [
@@ -19499,6 +19866,7 @@
         "initiativeModifier": 0,
         "abilities": { "str": 21, "dex": 10, "con": 19, "int": 14, "wis": 13, "cha": 17 },
         "saves": { "dex_save": 3, "con_save": 7, "wis_save": 4, "cha_save": 6 },
+        "checks": { "might": 5, "agility": 0 },
         "immune": ["lightning"],
         "tier": "cr_8",
         "traits": [
@@ -19560,6 +19928,7 @@
         "initiativeModifier": 1,
         "abilities": { "str": 19, "dex": 12, "con": 17, "int": 16, "wis": 13, "cha": 15 },
         "saves": { "dex_save": 4, "con_save": 6, "wis_save": 4, "cha_save": 5 },
+        "checks": { "might": 4, "agility": 1 },
         "immune": ["acid"],
         "tier": "cr_7",
         "traits": [
@@ -19620,6 +19989,7 @@
         "initiativeModifier": 2,
         "abilities": { "str": 23, "dex": 14, "con": 21, "int": 16, "wis": 13, "cha": 20 },
         "saves": { "dex_save": 6, "con_save": 9, "wis_save": 5, "cha_save": 9 },
+        "checks": { "might": 6, "agility": 2 },
         "immune": ["fire"],
         "tier": "cr_10",
         "traits": [
@@ -19681,6 +20051,7 @@
         "initiativeModifier": 1,
         "abilities": { "str": 19, "dex": 12, "con": 17, "int": 16, "wis": 13, "cha": 15 },
         "saves": { "dex_save": 4, "con_save": 6, "wis_save": 4, "cha_save": 5 },
+        "checks": { "might": 4, "agility": 1 },
         "immune": ["poison"],
         "conditionImmunities": ["poisoned"],
         "tier": "cr_8",
@@ -19739,6 +20110,7 @@
         "initiativeModifier": 0,
         "abilities": { "str": 23, "dex": 10, "con": 21, "int": 14, "wis": 11, "cha": 19 },
         "saves": { "dex_save": 4, "con_save": 9, "wis_save": 4, "cha_save": 8 },
+        "checks": { "might": 6, "agility": 0 },
         "immune": ["fire"],
         "tier": "cr_10",
         "traits": [{ "name": "Speed", "text": "40 ft., climb 40 ft., fly 80 ft." }],
@@ -19793,6 +20165,7 @@
         "initiativeModifier": 0,
         "abilities": { "str": 23, "dex": 10, "con": 21, "int": 14, "wis": 11, "cha": 19 },
         "saves": { "dex_save": 4, "con_save": 9, "wis_save": 4, "cha_save": 8 },
+        "checks": { "might": 6, "agility": 0 },
         "immune": ["cold"],
         "tier": "cr_9",
         "traits": [
@@ -19853,6 +20226,7 @@
         "initiativeModifier": 0,
         "abilities": { "str": 18, "dex": 10, "con": 18, "int": 6, "wis": 11, "cha": 12 },
         "saves": { "dex_save": 3, "con_save": 7, "wis_save": 3, "cha_save": 4 },
+        "checks": { "might": 4, "agility": 0 },
         "immune": ["cold"],
         "tier": "cr_6",
         "traits": [
@@ -19913,6 +20287,7 @@
         "initiativeModifier": -2,
         "abilities": { "str": 13, "dex": 6, "con": 16, "int": 3, "wis": 6, "cha": 5 },
         "saves": { "wis_save": 0 },
+        "checks": { "might": 1, "agility": -2 },
         "conditionImmunities": ["poisoned"],
         "tier": "cr_1_4",
         "traits": [

@@ -34,6 +34,7 @@ import {
 } from "./catalog-path-safety.mjs";
 import {
   RULESET_ASSET_PATH,
+  assertRulesetApplies,
   assertRulesetAssetDocument,
   assertRulesetBattle,
   assertRulesetCatalogs,
@@ -716,6 +717,7 @@ for (const entry of catalog.packages) {
     assertRulesetCombat(manifest, document);
     assertRulesetCreatures(manifest, document, catalogSources);
     assertRulesetReactions(manifest, document, catalogSources);
+    assertRulesetApplies(manifest, document, catalogSources);
   } else {
     if (!manifest.entrypoints.agents) throw new Error(`Missing agent definition entrypoint for ${manifest.id}`);
     const agentDefinitions = JSON.parse(

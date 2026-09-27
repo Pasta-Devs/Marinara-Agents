@@ -64,6 +64,9 @@ jobs:
       - name: Test Beholder client bundle contract
         run: npx tsx tests/beholder-client-contract.regression.ts
 
+      - name: Test Quartermaster dialogs and inventory export
+        run: node tests/quartermaster-modal-lifecycle.regression.mjs
+
       # Prints how much of the reference extension's interface this package actually
       # renders. It is here so the number is read from a run rather than asserted from
       # memory — three separate claims of parity were wrong before this test existed.

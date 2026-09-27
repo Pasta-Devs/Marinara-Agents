@@ -102,8 +102,12 @@ export const RULESET_STRIKE_CAP_MIN_CAPABILITY_API = Object.freeze({ major: 1, m
 // key sits in a strict file, so an older Engine refuses the whole catalog rather
 // than reading the object as a boolean.
 export const RULESET_REACTION_MOMENT_MIN_CAPABILITY_API = Object.freeze({ major: 1, minor: 33 });
-const RULESET_REACTION_MOMENTS = Object.freeze(["aimed", "harmed"]);
+const RULESET_REACTION_MOMENTS = Object.freeze(["aimed", "hit", "harmed", "used"]);
 const RULESET_REACTION_AT = Object.freeze(["source", "chosen"]);
+// The moments that are over before anybody could answer, so nothing answering them cancels anything.
+const RULESET_REACTION_DONE_MOMENTS = Object.freeze(["hit", "harmed"]);
+const RULESET_REACTION_KEYS = Object.freeze(["on", "at", "cancels", "against"]);
+const RULESET_REACTION_AGAINST_MAX = 12;
 
 // A bestiary creature may carry a sheet in the ruleset's own terms, built the way
 // a party member is. Its health, defense, initiative, speed, abilities and saves
@@ -120,6 +124,40 @@ const RULESET_CREATURE_SHEET_REPLACES = Object.freeze([
   "saves",
 ]);
 const RULESET_CREATURE_SHEET_KEYS = Object.freeze(["abilities", "skills", "saves", "bonuses", "fields", "lists"]);
+
+// A fight's contests and the checks they read, and a creature in plain numbers giving its own
+// checks. `checks` and `contests` sit in the combat block and `checks` on a strict creature, so an
+// older Engine refuses whichever file holds one.
+export const RULESET_CONTESTS_MIN_CAPABILITY_API = Object.freeze({ major: 1, minor: 43 });
+// A reaction that waits for somebody USING something, or answers only some catalogs' entries: a new
+// value and a new key in the same strict reaction object.
+export const RULESET_USED_MOMENT_MIN_CAPABILITY_API = Object.freeze({ major: 1, minor: 44 });
+// A condition that changes numbers, the levels of a track, the effects on a holder's own checks, and
+// a condition an entry or a creature applies that ends after one use or counts down as turns begin.
+export const RULESET_CONDITION_NUMBERS_MIN_CAPABILITY_API = Object.freeze({ major: 1, minor: 45 });
+// A reaction on being hit, and a creature's own action that is a reaction or lands on the creature
+// itself: a new value in the strict reaction object and new keys on the strict creature action.
+export const RULESET_HIT_MOMENT_MIN_CAPABILITY_API = Object.freeze({ major: 1, minor: 46 });
+
+// The numbers a condition or a level may change, the ones of them that are rolled (so dice may be
+// added), and how a condition that applies to one use says which use.
+const RULESET_COMBAT_MODIFIER_TARGETS = Object.freeze(["defense", "attacks", "saves", "checks", "speed"]);
+const RULESET_ROLLED_MODIFIER_TARGETS = Object.freeze(["attacks", "saves", "checks"]);
+const RULESET_COMBAT_MODIFIERS_MAX = 6;
+const RULESET_SAVE_SCOPED_EFFECTS = Object.freeze(["own-saves-advantage", "own-saves-disadvantage"]);
+// A level is not something anybody put on its holder, and it ends only when the track goes down.
+const RULESET_LEVEL_REFUSED_EFFECTS = Object.freeze([
+  "half-move-to-stand",
+  "ends-on-damage",
+  "cannot-target-source",
+  "cannot-approach-source",
+]);
+const RULESET_COMBAT_MAX_LEVELS = 20;
+const RULESET_COMBAT_MAX_CHECKS = 12;
+const RULESET_COMBAT_MAX_CONTESTS = 12;
+const RULESET_CONTEST_SIDE_MAX_CHECKS = 4;
+const RULESET_CONTEST_MAX_CHANGES = 4;
+const RULESET_APPLIES_ENDS_AFTER = Object.freeze(["own-attack", "attacked", "own-save"]);
 // The mark a picked row carries, naming the catalog entry it came from.
 export const RULESET_CATALOG_ROW_KEY = "_catalog";
 // The Engine's own default for the per-skill and per-save bonus range.
@@ -165,10 +203,15 @@ const RULESET_COMBAT_CONDITION_EFFECTS = Object.freeze([
   // Added by Capability API 1.29, with `saves` narrowing the two that are about saving throws.
   "own-saves-advantage",
   "own-saves-disadvantage",
+  // Added by Capability API 1.45: the holder's own side of a contest.
+  "own-checks-advantage",
+  "own-checks-disadvantage",
   "resist-all",
   "cannot-target-source",
   "cannot-approach-source",
 ]);
+// The effects Capability API 1.45 added, which an Engine before it refuses the whole file for.
+const CHECK_CONDITION_EFFECTS = Object.freeze(["own-checks-advantage", "own-checks-disadvantage"]);
 const RULESET_COMBAT_STANDARD_ACTIONS = Object.freeze(["dash", "disengage", "dodge", "help", "hide", "ready"]);
 
 // A value reference names exactly one of these. The same closed set the Engine has.
@@ -670,6 +713,144 @@ function sheetNames(document) {
   };
 }
 
+/** What is wrong with one number a condition or a level changes, or null. The Engine's own rules: a
+ *  flat change with its own sign, dice rolled each time the number is used (taken away with `minus`)
+ *  on a rolled number only, or, for speed only, `times` a half or a double. */
+function modifierIssue(modifier) {
+  if (!modifier || typeof modifier !== "object" || Array.isArray(modifier)) {
+    return `${JSON.stringify(modifier)} is not a modifier`;
+  }
+  const extra = Object.keys(modifier).find((key) => !["to", "flat", "dice", "minus", "times"].includes(key));
+  if (extra !== undefined) return `a modifier has the unknown key ${JSON.stringify(extra)}`;
+  if (!RULESET_COMBAT_MODIFIER_TARGETS.includes(modifier.to)) {
+    return `changes ${JSON.stringify(modifier.to)}, not one of ${RULESET_COMBAT_MODIFIER_TARGETS.join(", ")}`;
+  }
+  if (modifier.flat === undefined && modifier.dice === undefined && modifier.times === undefined) {
+    return `changes ${modifier.to} by nothing: a modifier needs a flat amount, dice or, for speed, times`;
+  }
+  if (modifier.flat !== undefined) {
+    if (!Number.isInteger(modifier.flat) || modifier.flat < -100 || modifier.flat > 100) {
+      return `changes ${modifier.to} by ${JSON.stringify(modifier.flat)}, not a whole number from -100 to 100`;
+    }
+    if (modifier.flat === 0) return `changes ${modifier.to} by a flat 0, which changes nothing`;
+  }
+  if (modifier.dice !== undefined) {
+    if (typeof modifier.dice !== "string" || !RULESET_CATALOG_DICE_PATTERN.test(modifier.dice)) {
+      return `rolls ${JSON.stringify(modifier.dice)}, which is not dice a table has`;
+    }
+    if (!RULESET_ROLLED_MODIFIER_TARGETS.includes(modifier.to)) {
+      return `rolls dice onto ${modifier.to}, and dice change only ${RULESET_ROLLED_MODIFIER_TARGETS.join(", ")}`;
+    }
+  }
+  if (modifier.minus !== undefined && modifier.minus !== true)
+    return "a modifier's minus must be true when it is given";
+  if (modifier.minus && modifier.dice === undefined)
+    return `takes dice off ${modifier.to} with "minus" but has no dice`;
+  if (modifier.times !== undefined) {
+    if (modifier.times !== 0.5 && modifier.times !== 2) {
+      return `multiplies ${modifier.to} by ${JSON.stringify(modifier.times)}, not 0.5 or 2`;
+    }
+    if (modifier.to !== "speed") return `multiplies ${modifier.to}, and "times" changes speed only`;
+  }
+  return null;
+}
+
+/** The numbers one condition or level changes, and the saves it narrows, checked as the Engine reads
+ *  them: `saves` narrows the save effects and the modifiers to saves, and nothing else reads it. */
+function assertConditionNumbers(entry, where) {
+  if (entry.modifiers !== undefined) {
+    const modifiers = entry.modifiers;
+    if (!Array.isArray(modifiers) || modifiers.length === 0 || modifiers.length > RULESET_COMBAT_MODIFIERS_MAX) {
+      throw new Error(
+        `${where} changes 1 to ${RULESET_COMBAT_MODIFIERS_MAX} numbers, not ${JSON.stringify(modifiers)}`,
+      );
+    }
+    for (const modifier of modifiers) {
+      const issue = modifierIssue(modifier);
+      if (issue) throw new Error(`${where} ${issue}`);
+    }
+  }
+  if (entry.saves === undefined) return;
+  const effect = (entry.effects ?? []).some((one) => RULESET_SAVE_SCOPED_EFFECTS.includes(one));
+  const modifier = (entry.modifiers ?? []).some((one) => one?.to === "saves");
+  if (!effect && !modifier) {
+    throw new Error(
+      `${where} narrows saves with nothing to narrow: "saves" needs ${RULESET_SAVE_SCOPED_EFFECTS.join(" or ")} or a modifier to saves beside it`,
+    );
+  }
+}
+
+/** What is wrong with one reaction moment, or null. A catalog entry and a creature's own action say
+ *  it the same way, so both are held to this one reading: `on` one of the moments the Engine opens,
+ *  `at` source or chosen, `against` the catalogs whose entries open it, and a cancel only on a
+ *  moment before anything has resolved, because what has already happened cannot be called off. */
+function reactionMomentIssue(reaction, catalogIds) {
+  const extra = Object.keys(reaction).find((key) => !RULESET_REACTION_KEYS.includes(key));
+  if (extra !== undefined) return `reaction has an unknown key "${extra}"`;
+  if (!RULESET_REACTION_MOMENTS.includes(reaction.on)) {
+    return `waits for ${JSON.stringify(reaction.on)}, not one of ${RULESET_REACTION_MOMENTS.join(", ")}`;
+  }
+  if (reaction.at !== undefined && !RULESET_REACTION_AT.includes(reaction.at)) {
+    return `is pointed at ${JSON.stringify(reaction.at)}, not one of ${RULESET_REACTION_AT.join(", ")}`;
+  }
+  if (reaction.cancels !== undefined && reaction.cancels !== true) {
+    return "reaction cancels must be true when it is given";
+  }
+  if (reaction.cancels && RULESET_REACTION_DONE_MOMENTS.includes(reaction.on)) {
+    return 'cancels a moment that has already happened: only an "aimed" or "used" reaction cancels';
+  }
+  if (reaction.against !== undefined) {
+    const against = reaction.against;
+    const extraAgainst =
+      against && typeof against === "object" && !Array.isArray(against)
+        ? Object.keys(against).find((key) => key !== "catalogs")
+        : "";
+    const catalogs = against?.catalogs;
+    if (
+      extraAgainst !== undefined ||
+      !Array.isArray(catalogs) ||
+      catalogs.length === 0 ||
+      catalogs.length > RULESET_REACTION_AGAINST_MAX
+    ) {
+      return `answers ${JSON.stringify(against)}, not { catalogs } naming 1 to ${RULESET_REACTION_AGAINST_MAX} catalogs`;
+    }
+    for (const catalog of catalogs) {
+      if (!catalogIds.has(catalog)) return `answers unknown catalog ${JSON.stringify(catalog)}`;
+    }
+  }
+  return null;
+}
+
+/** The Engine a reaction moment needs: being hit is 1.46's, being used or answering only some
+ *  catalogs is 1.44's, and any other moment is 1.33's. */
+function reactionMomentApi(reaction) {
+  if (reaction.on === "hit") return RULESET_HIT_MOMENT_MIN_CAPABILITY_API;
+  if (reaction.on === "used" || reaction.against !== undefined) return RULESET_USED_MOMENT_MIN_CAPABILITY_API;
+  return RULESET_REACTION_MOMENT_MIN_CAPABILITY_API;
+}
+
+/** Whether a condition an entry or a creature applies uses 1.45's endings: after one use, or counted
+ *  down as turns begin. */
+function appliesEndsNewly(applies) {
+  const duration = applies?.duration;
+  return (
+    applies?.endsAfter !== undefined ||
+    (!!duration && typeof duration === "object" && !Array.isArray(duration) && duration.at !== undefined)
+  );
+}
+
+/** What is wrong with how one applied condition comes off, or null. */
+function appliesEndingIssue(applies) {
+  if (applies.endsAfter !== undefined && !RULESET_APPLIES_ENDS_AFTER.includes(applies.endsAfter)) {
+    return `ends "${applies.condition}" after ${JSON.stringify(applies.endsAfter)}, not one of ${RULESET_APPLIES_ENDS_AFTER.join(", ")}`;
+  }
+  const duration = applies.duration;
+  if (duration && typeof duration === "object" && duration.at !== undefined && duration.at !== "turn-start") {
+    return `counts "${applies.condition}" down at ${JSON.stringify(duration.at)}, not "turn-start"`;
+  }
+  return null;
+}
+
 /** Assert a ruleset package's `combat` block, and report whether it has one.
  *
  *  Like the battle block's checks, these look into the sheet, because a combat block is nothing but
@@ -708,6 +889,31 @@ export function assertRulesetCombat(manifest, document) {
     if (!meetsCapabilityApi(manifest, turnApi)) {
       throw new Error(
         `${id} says what one turn of a fight can do and must declare capability API ${turnApi.major}.${turnApi.minor} or newer`,
+      );
+    }
+  }
+  // Contests and the checks they read, which are 1.43's; numbers a condition changes, levels of a
+  // track and the effects on a holder's own checks, which are 1.45's. Read the same way.
+  if (combat.checks !== undefined || combat.contests !== undefined) {
+    const contestApi = RULESET_CONTESTS_MIN_CAPABILITY_API;
+    if (!meetsCapabilityApi(manifest, contestApi)) {
+      throw new Error(
+        `${id} has contests in its fights and must declare capability API ${contestApi.major}.${contestApi.minor} or newer`,
+      );
+    }
+  }
+  const carriesNumbers =
+    combat.levels !== undefined ||
+    (combat.conditions ?? []).some(
+      (entry) =>
+        entry?.modifiers !== undefined ||
+        (entry?.effects ?? []).some((effect) => CHECK_CONDITION_EFFECTS.includes(effect)),
+    );
+  if (carriesNumbers) {
+    const numbersApi = RULESET_CONDITION_NUMBERS_MIN_CAPABILITY_API;
+    if (!meetsCapabilityApi(manifest, numbersApi)) {
+      throw new Error(
+        `${id} has conditions that change numbers or count levels and must declare capability API ${numbersApi.major}.${numbersApi.minor} or newer`,
       );
     }
   }
@@ -980,6 +1186,162 @@ export function assertRulesetCombat(manifest, document) {
         throw new Error(`${id} combat condition "${entry.condition}" fails unknown save ${JSON.stringify(save)}`);
       }
     }
+    assertConditionNumbers(entry, `${id} combat condition "${entry.condition}"`);
+  }
+
+  // A level reads a plain track by its number: while the holder's track is at `at` or more it counts
+  // as one of their conditions. A wound track is marked with kinds rather than counted.
+  if (combat.levels !== undefined) {
+    if (!Array.isArray(combat.levels) || combat.levels.length > RULESET_COMBAT_MAX_LEVELS) {
+      throw new Error(`${id} combat levels are a list of at most ${RULESET_COMBAT_MAX_LEVELS}`);
+    }
+    const tracks = new Map((document.sheet?.live?.tracks ?? []).map((track) => [track?.id, track]));
+    const levelled = new Set();
+    for (const entry of combat.levels) {
+      const track = tracks.get(entry?.track);
+      if (!track) throw new Error(`${id} combat level names unknown track ${JSON.stringify(entry?.track)}`);
+      const where = `${id} combat level ${entry.at} of "${entry.track}"`;
+      if (track.levels !== undefined || track.boxes !== undefined) {
+        throw new Error(`${where} reads a wound track, and a level reads a plain track's number`);
+      }
+      if (!Number.isInteger(entry.at) || entry.at < 1 || entry.at > 1000) {
+        throw new Error(`${where} is not at a whole number from 1 to 1000`);
+      }
+      if (typeof track.max === "number" && entry.at > track.max) {
+        throw new Error(`${where} is never reached: the track goes up to ${track.max}`);
+      }
+      const key = `${entry.track}@${entry.at}`;
+      if (levelled.has(key)) throw new Error(`${where} is given twice`);
+      levelled.add(key);
+      const effects = entry.effects ?? [];
+      for (const effect of effects) {
+        if (!RULESET_COMBAT_CONDITION_EFFECTS.includes(effect)) {
+          throw new Error(`${where} has the unknown effect ${JSON.stringify(effect)}`);
+        }
+        if (RULESET_LEVEL_REFUSED_EFFECTS.includes(effect)) {
+          throw new Error(
+            `${where} cannot have "${effect}": nobody put it on, and it ends only when the track goes down`,
+          );
+        }
+      }
+      if (effects.length === 0 && entry.modifiers === undefined && entry.failsSaves === undefined) {
+        throw new Error(`${where} does nothing: a level has effects, modifiers or saves it fails`);
+      }
+      for (const key of ["failsSaves", "saves"]) {
+        for (const save of entry[key] ?? []) {
+          if (!names.saves.has(save)) throw new Error(`${where} names unknown save ${JSON.stringify(save)}`);
+        }
+      }
+      assertConditionNumbers(entry, where);
+    }
+  }
+
+  // Contests: the checks they read, the budget they spend and the conditions they touch all exist,
+  // and what they measure in distance needs a cell to measure it in.
+  const contestChecks = new Set();
+  if (combat.checks !== undefined) {
+    if (!Array.isArray(combat.checks) || combat.checks.length > RULESET_COMBAT_MAX_CHECKS) {
+      throw new Error(`${id} combat checks are a list of at most ${RULESET_COMBAT_MAX_CHECKS}`);
+    }
+    for (const check of combat.checks) {
+      if (
+        typeof check?.id !== "string" ||
+        check.id.length > RULESET_SHEET_ID_MAX ||
+        !RULESET_SHEET_ID_PATTERN.test(check.id)
+      ) {
+        throw new Error(`${id} combat check id ${JSON.stringify(check?.id)} is not a usable sheet id`);
+      }
+      if (contestChecks.has(check.id)) throw new Error(`${id} combat repeats the check "${check.id}"`);
+      contestChecks.add(check.id);
+      if (typeof check.label !== "string" || check.label.trim() === "") {
+        throw new Error(`${id} combat check "${check.id}" needs a label`);
+      }
+      ref(check.value, `check "${check.id}" value`);
+    }
+  }
+  if (combat.contests !== undefined) {
+    if (!Array.isArray(combat.contests) || combat.contests.length > RULESET_COMBAT_MAX_CONTESTS) {
+      throw new Error(`${id} combat contests are a list of at most ${RULESET_COMBAT_MAX_CONTESTS}`);
+    }
+    const contests = new Set();
+    const condition = (value, where) => {
+      if (!names.conditions.has(value)) throw new Error(`${where} names unknown condition ${JSON.stringify(value)}`);
+    };
+    for (const contest of combat.contests) {
+      if (
+        typeof contest?.id !== "string" ||
+        contest.id.length > RULESET_SHEET_ID_MAX ||
+        !RULESET_SHEET_ID_PATTERN.test(contest.id)
+      ) {
+        throw new Error(`${id} combat contest id ${JSON.stringify(contest?.id)} is not a usable sheet id`);
+      }
+      if (contests.has(contest.id)) throw new Error(`${id} combat repeats the contest "${contest.id}"`);
+      contests.add(contest.id);
+      const where = `${id} combat contest "${contest.id}"`;
+      if (typeof contest.label !== "string" || contest.label.trim() === "") throw new Error(`${where} needs a label`);
+      budget(contest.budget, `contest "${contest.id}" budget`);
+      if (contest.strike !== undefined && contest.strike !== true) {
+        throw new Error(`${where} strike must be true when it is given`);
+      }
+      for (const side of ["attacker", "defender"]) {
+        const checks = contest[side]?.checks;
+        if (!Array.isArray(checks) || checks.length === 0 || checks.length > RULESET_CONTEST_SIDE_MAX_CHECKS) {
+          throw new Error(`${where} ${side} rolls the best of 1 to ${RULESET_CONTEST_SIDE_MAX_CHECKS} checks`);
+        }
+        checks.forEach((check, index) => {
+          if (!contestChecks.has(check))
+            throw new Error(`${where} ${side} names unknown check ${JSON.stringify(check)}`);
+          if (checks.indexOf(check) !== index) throw new Error(`${where} ${side} repeats the check "${check}"`);
+        });
+      }
+      if (contest.ties !== undefined && contest.ties !== "defender" && contest.ties !== "attacker") {
+        throw new Error(`${where} gives a tie to ${JSON.stringify(contest.ties)}, not the defender or the attacker`);
+      }
+      if (contest.from !== undefined) condition(contest.from?.holding, `${where} from`);
+      const onWin = contest.onWin;
+      if (!onWin || (onWin.applies === undefined && onWin.ends === undefined && onWin.push === undefined)) {
+        throw new Error(`${where} onWin applies, ends or pushes something`);
+      }
+      for (const key of ["applies", "ends"]) {
+        const list = onWin[key];
+        if (list === undefined) continue;
+        if (!Array.isArray(list) || list.length === 0 || list.length > RULESET_CONTEST_MAX_CHANGES) {
+          throw new Error(`${where} onWin ${key} 1 to ${RULESET_CONTEST_MAX_CHANGES} conditions`);
+        }
+      }
+      for (const entry of onWin.applies ?? []) {
+        condition(entry?.condition, `${where} onWin applies`);
+        // Breaking free of something and putting it on in the same breath says nothing a fight can do.
+        if (contest.from && entry.condition === contest.from.holding) {
+          throw new Error(`${where} breaks free of "${entry.condition}", so it cannot also apply it`);
+        }
+        if (entry.rounds !== undefined && (!Number.isInteger(entry.rounds) || entry.rounds < 1 || entry.rounds > 100)) {
+          throw new Error(
+            `${where} applies "${entry.condition}" for ${JSON.stringify(entry.rounds)} rounds, not 1 to 100`,
+          );
+        }
+      }
+      for (const entry of onWin.ends ?? []) {
+        condition(entry?.condition, `${where} onWin ends`);
+        if (entry.on !== "actor" && entry.on !== "target") {
+          throw new Error(
+            `${where} ends "${entry.condition}" on ${JSON.stringify(entry.on)}, not the actor or the target`,
+          );
+        }
+      }
+      for (const [key, value] of [
+        ["reach", contest.reach],
+        ["push", onWin.push],
+      ]) {
+        if (value === undefined) continue;
+        if (distance === undefined) {
+          throw new Error(`${where} ${key} is measured in cells, so the block declares "distance" too`);
+        }
+        if (!Number.isFinite(value) || value <= 0 || value > RULESET_DISTANCE_MAX) {
+          throw new Error(`${where} ${key} is a distance above 0, not ${JSON.stringify(value)}`);
+        }
+      }
+    }
   }
 
   if (combat.concentration !== undefined) {
@@ -1059,13 +1421,15 @@ export function assertRulesetCombat(manifest, document) {
  *  this stays a pure function a test can drive with fixtures. */
 /** Assert every catalog entry's reaction, and report how many name a moment.
  *
- *  `true` has been legal since the key existed. An object names WHICH moment the entry waits for:
- *  `on` is aimed or harmed, `at` source or chosen, and only an aimed one may cancel, because what
- *  has already happened cannot be called off. The Engine's own rules, restated at this shape. */
+ *  `true` has been legal since the key existed. An object names WHICH moment the entry waits for,
+ *  read by reactionMomentIssue exactly as a creature's own reaction is, and asks for the Engine
+ *  that opens that moment. The Engine's own rules, restated at this shape. */
 export function assertRulesetReactions(manifest, document, catalogSources = new Map()) {
   const id = manifest?.id ?? "package";
+  const catalogs = Array.isArray(document?.catalogs) ? document.catalogs : [];
+  const catalogIds = new Set(catalogs.map((catalog) => catalog?.id));
   let moments = 0;
-  for (const catalog of Array.isArray(document?.catalogs) ? document.catalogs : []) {
+  for (const catalog of catalogs) {
     if (catalog?.holds === "creatures") continue;
     for (const entry of catalogEntryList(catalog, catalogSources) ?? []) {
       const reaction = entry?.mechanics?.reaction;
@@ -1080,29 +1444,59 @@ export function assertRulesetReactions(manifest, document, catalogSources = new 
       if (!reaction || typeof reaction !== "object" || Array.isArray(reaction)) {
         throw new Error(`${where} has a reaction of ${JSON.stringify(reaction)}, not true or a moment`);
       }
-      for (const key of Object.keys(reaction)) {
-        if (!["on", "at", "cancels"].includes(key)) throw new Error(`${where} reaction has an unknown key "${key}"`);
-      }
-      if (!RULESET_REACTION_MOMENTS.includes(reaction.on)) {
+      const issue = reactionMomentIssue(reaction, catalogIds);
+      if (issue) throw new Error(`${where} ${issue}`);
+      const needs = reactionMomentApi(reaction);
+      if (!meetsCapabilityApi(manifest, needs)) {
         throw new Error(
-          `${where} waits for ${JSON.stringify(reaction.on)}, not one of ${RULESET_REACTION_MOMENTS.join(", ")}`,
+          `${where} waits for a moment an older Engine does not open and must declare capability API ${needs.major}.${needs.minor} or newer`,
         );
-      }
-      if (reaction.at !== undefined && !RULESET_REACTION_AT.includes(reaction.at)) {
-        throw new Error(
-          `${where} is pointed at ${JSON.stringify(reaction.at)}, not one of ${RULESET_REACTION_AT.join(", ")}`,
-        );
-      }
-      if (reaction.cancels !== undefined && reaction.cancels !== true) {
-        throw new Error(`${where} reaction cancels must be true when it is given`);
-      }
-      if (reaction.cancels && reaction.on !== "aimed") {
-        throw new Error(`${where} cancels a moment that has already happened: only an "aimed" reaction cancels`);
       }
       moments += 1;
     }
   }
   return moments;
+}
+
+/** Assert the conditions every catalog entry applies, and report how many it read.
+ *
+ *  Each is one of the sheet's own conditions, lasts until a save only when it names that save, and
+ *  comes off after one use or counts down as turns begin only on an Engine that reads those, which
+ *  is 1.45. A creature's own actions are assertRulesetCreatures' to read. */
+export function assertRulesetApplies(manifest, document, catalogSources = new Map()) {
+  const id = manifest?.id ?? "package";
+  const names = sheetNames(document);
+  let count = 0;
+  for (const catalog of Array.isArray(document?.catalogs) ? document.catalogs : []) {
+    if (catalog?.holds === "creatures") continue;
+    for (const entry of catalogEntryList(catalog, catalogSources) ?? []) {
+      const applies = entry?.mechanics?.applies;
+      if (applies === undefined) continue;
+      const where = `${id} catalog "${catalog.id}" entry "${entry?.id}"`;
+      if (!Array.isArray(applies)) throw new Error(`${where} applies ${JSON.stringify(applies)}, not a list`);
+      for (const one of applies) {
+        if (!names.conditions.has(one?.condition)) {
+          throw new Error(`${where} applies unknown condition ${JSON.stringify(one?.condition)}`);
+        }
+        if (one.duration === "until-save" && !one.saveEnds) {
+          throw new Error(`${where} applies "${one.condition}" until a save it does not name`);
+        }
+        if (one.saveEnds && !names.saves.has(one.saveEnds.save)) {
+          throw new Error(`${where} ends "${one.condition}" on unknown save ${JSON.stringify(one.saveEnds.save)}`);
+        }
+        const issue = appliesEndingIssue(one);
+        if (issue) throw new Error(`${where} ${issue}`);
+        const api = RULESET_CONDITION_NUMBERS_MIN_CAPABILITY_API;
+        if (appliesEndsNewly(one) && !meetsCapabilityApi(manifest, api)) {
+          throw new Error(
+            `${where} ends "${one.condition}" after one use or as a turn begins and must declare capability API ${api.major}.${api.minor} or newer`,
+          );
+        }
+        count += 1;
+      }
+    }
+  }
+  return count;
 }
 
 /** What is wrong with one value for one field or column, or null: a number in its range (whole
@@ -1225,6 +1619,8 @@ export function assertRulesetCreatures(manifest, document, catalogSources = new 
   const combat = document?.combat;
   const budgets = combat ? new Set((combat.economy?.budgets ?? []).map((budget) => budget.id)) : new Set();
   const tiers = combat?.threat?.tiers ? new Set(combat.threat.tiers.map((tier) => tier.id)) : new Set();
+  const contestChecks = new Set((combat?.checks ?? []).map((check) => check?.id));
+  const catalogIds = new Set(catalogs.map((catalog) => catalog?.id));
   // Only checked where the ruleset says what its types are. One that declares none reads a type as
   // free text, exactly as a fight matches it.
   const types = combat?.damageTypes
@@ -1323,6 +1719,27 @@ export function assertRulesetCreatures(manifest, document, catalogSources = new 
       for (const condition of creature.conditionImmunities ?? []) {
         if (!names.conditions.has(condition)) {
           throw new Error(`${where} is immune to unknown condition ${JSON.stringify(condition)}`);
+        }
+      }
+      // Its own side of a contest, one number per check the combat block declares.
+      if (creature.checks !== undefined) {
+        const api = RULESET_CONTESTS_MIN_CAPABILITY_API;
+        if (!meetsCapabilityApi(manifest, api)) {
+          throw new Error(
+            `${where} gives its own contest checks and must declare capability API ${api.major}.${api.minor} or newer`,
+          );
+        }
+        if (!creature.checks || typeof creature.checks !== "object" || Array.isArray(creature.checks)) {
+          throw new Error(`${where} has checks of ${JSON.stringify(creature.checks)}, not a check for each number`);
+        }
+        for (const [check, value] of Object.entries(creature.checks)) {
+          if (!contestChecks.has(check))
+            throw new Error(`${where} names unknown contest check ${JSON.stringify(check)}`);
+          if (!Number.isInteger(value) || value < -100 || value > 100) {
+            throw new Error(
+              `${where} check "${check}" is ${JSON.stringify(value)}, not a whole number from -100 to 100`,
+            );
+          }
         }
       }
       // How far it walks, in the ruleset's own distance unit. Read only by a fight with a board,
@@ -1439,6 +1856,42 @@ export function assertRulesetCreatures(manifest, document, catalogSources = new 
               `${at} ends "${entryApplies.condition}" on unknown save ${JSON.stringify(entryApplies.saveEnds.save)}`,
             );
           }
+          const endingIssue = appliesEndingIssue(entryApplies);
+          if (endingIssue) throw new Error(`${at} ${endingIssue}`);
+          const endsApi = RULESET_CONDITION_NUMBERS_MIN_CAPABILITY_API;
+          if (appliesEndsNewly(entryApplies) && !meetsCapabilityApi(manifest, endsApi)) {
+            throw new Error(
+              `${at} ends "${entryApplies.condition}" after one use or as a turn begins and must declare capability API ${endsApi.major}.${endsApi.minor} or newer`,
+            );
+          }
+        }
+        // Taken at a moment rather than on a turn, exactly as a catalog entry's reaction is, or
+        // landing on the creature itself: both are 1.46's keys on the strict action.
+        if (action.reaction !== undefined || action.self !== undefined) {
+          const api = RULESET_HIT_MOMENT_MIN_CAPABILITY_API;
+          if (!meetsCapabilityApi(manifest, api)) {
+            throw new Error(
+              `${at} reacts or acts on the creature itself and must declare capability API ${api.major}.${api.minor} or newer`,
+            );
+          }
+        }
+        if (action.reaction !== undefined) {
+          const reaction = action.reaction;
+          if (!reaction || typeof reaction !== "object" || Array.isArray(reaction)) {
+            throw new Error(`${at} has a reaction of ${JSON.stringify(reaction)}, not a moment`);
+          }
+          const issue = reactionMomentIssue(reaction, catalogIds);
+          if (issue) throw new Error(`${at} ${issue}`);
+          // A signature action is bought between turns, and a reaction is taken at its moment.
+          if (action.signature) throw new Error(`${at} is a reaction, so it is not bought with points as well`);
+        }
+        if (action.self !== undefined) {
+          if (action.self !== true) throw new Error(`${at} self must be true when it is given`);
+          for (const key of ["targetCount", "area"]) {
+            if (action[key] !== undefined) {
+              throw new Error(`${at} lands on the creature itself, so it takes no ${key}`);
+            }
+          }
         }
         // A save with nothing to be rolled against is a save everybody passes.
         if (
@@ -1451,7 +1904,18 @@ export function assertRulesetCreatures(manifest, document, catalogSources = new 
         if (!action.sequence) continue;
         // A sequence is a container: anything else on it would be a second thing the one budget did,
         // the shape it might land in included. The actions it names carry their own.
-        for (const key of ["toHit", "autoHit", "damage", "save", "saveDifficulty", "applies", "targetCount", "area"]) {
+        for (const key of [
+          "toHit",
+          "autoHit",
+          "damage",
+          "save",
+          "saveDifficulty",
+          "applies",
+          "targetCount",
+          "area",
+          "reaction",
+          "self",
+        ]) {
           if (action[key] !== undefined) throw new Error(`${at} is a sequence, so it carries no ${key} of its own`);
         }
         if (action.sequence.length === 0 || action.sequence.length > RULESET_CREATURE_MAX_SEQUENCE) {
@@ -1462,6 +1926,9 @@ export function assertRulesetCreatures(manifest, document, catalogSources = new 
           if (!named) throw new Error(`${at} names unknown action ${JSON.stringify(step?.action)}`);
           if (named.id === action.id) throw new Error(`${at} names itself`);
           if (named.sequence) throw new Error(`${at} names "${step.action}", and a sequence cannot name another`);
+          // A reaction waits for its moment, so it is never one of the strikes a turn's action makes.
+          if (named.reaction)
+            throw new Error(`${at} names "${step.action}", which is a reaction, so no sequence can make it`);
           // Bought with points while somebody else is acting, so a sequence, which is paid for with a
           // budget on the creature's own turn, cannot hold it. The Engine refuses the same.
           if (named.signature) {
