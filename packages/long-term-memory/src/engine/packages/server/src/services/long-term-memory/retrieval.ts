@@ -183,10 +183,16 @@ export async function retrieveLongTermMemory(input: RetrieveLongTermMemoryInput)
     rejectedLimit: input.rejectedLimit,
     dedupeExactText: input.dedupeExactText ?? true,
   });
+  // Bounded callers reconcile note ids, so "truncated" means a ranked note was dropped from the
+  // budget entirely. Dropping extra chunks of a note that is already in the window hides nothing.
+  const budgetedNoteIds = new Set(budgeted.chunks.map((chunk) => chunk.chunk.noteId));
   return {
     ...budgeted,
     embeddingsAvailable,
-    truncated: ranked.length > budgeted.chunks.length,
+    truncated: ranked.some((hit) => {
+      const noteId = chunksById.get(hit.chunkId)?.noteId;
+      return Boolean(noteId) && !budgetedNoteIds.has(noteId!);
+    }),
     warnings: [] as string[],
   };
 }

@@ -597,6 +597,102 @@ async function main() {
       );
     }
 
+    // Chunk-only truncation hides no note: extra sections of notes already in the window must not
+    // mark the candidate set incomplete and block a unique match at the default cap.
+    {
+      const noteText = "The cobalt archive vault key is buried below the observatory floorboards.";
+      const loiterers = Object.fromEntries(
+        Array.from({ length: 40 }, (_, index) => [
+          `note_${String(index).padStart(2, "0")}`,
+          {
+            text: `A stray cobalt archive footnote ${index} mentions the observatory floorboards in passing.`,
+            updatedAt: timestamp,
+          },
+        ]),
+      );
+      const corpus = [
+        {
+          ...note({
+            id: "world_archive_footnotes",
+            type: "world",
+            title: "Archive Footnotes",
+            text: "The footnotes were gathered from the observatory.",
+          }),
+          sections: loiterers,
+        },
+        note({ id: "world_cobalt_archive", type: "world", title: "Cobalt Archive", text: noteText }),
+      ];
+      const corpusById = new Map(corpus.map((item) => [item.id, item]));
+      const result = await reconcile(
+        [
+          unit({
+            bucket: "world_fact",
+            subjectId: "cobalt_vault",
+            sectionKey: "facts",
+            title: "Cobalt Archive",
+            text: noteText,
+          }),
+        ],
+        {
+          index: buildIndex(corpus),
+          storage: {
+            getNotesByIds: async (ids: string[]) =>
+              new Map(ids.filter((id) => corpusById.has(id)).map((id) => [id, corpusById.get(id)!])),
+          },
+        },
+      );
+      assert.equal(
+        result.remaps.get("world_cobalt_vault"),
+        "world_cobalt_archive",
+        "dropped chunks of an already-visible note must not block the match",
+      );
+    }
+
+    // An incomplete window cannot confirm a create: a bounded search that dropped notes must warn
+    // even when the visible compatible candidates hold no match.
+    {
+      const corpus = [
+        note({
+          id: "world_moonlit_rite",
+          type: "world",
+          title: "Moonlit Rite",
+          text: "The moon ritual at the eastern shrine was abandoned.",
+        }),
+        note({
+          id: "world_garnet_offering",
+          type: "world",
+          title: "Garnet Offering",
+          text: "A garnet ritual offering was left at the eastern shrine.",
+        }),
+      ];
+      const corpusById = new Map(corpus.map((item) => [item.id, item]));
+      const result = await reconcile(
+        [
+          unit({
+            bucket: "world_fact",
+            subjectId: "silver_moon_ritual",
+            sectionKey: "facts",
+            title: "Silver Moon Ritual",
+            text: "The silver moon ritual requires three uncut garnets.",
+          }),
+        ],
+        {
+          maxCandidatesPerUnit: 1,
+          index: buildIndex(corpus),
+          storage: {
+            getNotesByIds: async (ids: string[]) =>
+              new Map(ids.filter((id) => corpusById.has(id)).map((id) => [id, corpusById.get(id)!])),
+          },
+        },
+      );
+      assert.equal(result.remaps.size, 0, "an incomplete window must not confirm a create");
+      const diagnostic = result.diagnostics.find(
+        (candidate) => candidate.code === "candidate_reconciliation_incomplete",
+      );
+      assert.ok(diagnostic, "an incomplete window without a match must warn for review");
+      assert.deepEqual(diagnostic!.details?.candidateTargetNoteIds, []);
+    }
+
     // A singleton decision is only safe when the candidate set is complete; a window that
     // dropped ranked notes must leave the candidate unattached for review.
     {

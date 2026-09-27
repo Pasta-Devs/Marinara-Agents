@@ -106,7 +106,7 @@ export async function reconcileEvidenceUnitCandidates(options: {
       (noteId) => noteId !== derivedNoteId,
     );
     const candidateNoteIds = rankedNoteIds.slice(0, maxCandidates);
-    // A singleton is only safe to reuse when the window kept every ranked candidate and every
+    // A singleton is only safe to reuse when no ranked note was dropped and the note cap kept every
     // ranked note; otherwise a compatible note can sit past the budget.
     const complete = !retrieval.truncated && rankedNoteIds.length <= maxCandidates;
     if (candidateNoteIds.length === 0) continue;
@@ -160,8 +160,25 @@ export async function reconcileEvidenceUnitCandidates(options: {
             .sort((left, right) => left.localeCompare(right)),
         },
       });
+      continue;
     }
-    // Zero plausible targets is a likely create: no remap and no diagnostic.
+    // An incomplete window cannot confirm "no match": a dropped note may hold the target, so a
+    // likely create still warns instead of compiling a new note blind.
+    if (candidates.length > 0 && !complete) {
+      diagnostics.push({
+        severity: "warning",
+        code: "candidate_reconciliation_incomplete",
+        candidateIndex,
+        mutationId: groupUnits[0]!.id,
+        noteId: derivedNoteId,
+        message: `Candidate target ${derivedNoteId} matched no note in a bounded candidate window that may be incomplete; leaving it unattached for review.`,
+        details: {
+          matchKind: "none",
+          candidateTargetNoteIds: [],
+        },
+      });
+    }
+    // Zero plausible targets in a complete window is a likely create: no remap and no diagnostic.
   }
 
   return {
