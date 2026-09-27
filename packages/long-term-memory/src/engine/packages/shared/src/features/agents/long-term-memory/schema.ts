@@ -226,6 +226,9 @@ function normalizeLegacyExtractionSettings(value: unknown) {
   }
   delete normalized.refinePass;
   delete normalized.rejectPlaceholderOutput;
+  // The broad existing-note prompt budget no longer exists (issue #1086); discard
+  // stale persisted values instead of rejecting the whole strict settings object.
+  delete normalized.maxExistingNoteTokens;
   delete normalized.systemPrompt;
   delete normalized.systemPromptsByMode;
   delete normalized.activePromptTemplateId;
@@ -331,7 +334,6 @@ const ltmExtractionSettingsFields = {
   maxOutputTokens: z.number().int().min(512).max(32_768).optional(),
   temperature: z.number().finite().min(0).max(2).optional(),
   maxSourceTokens: z.number().int().min(128).max(65_536).optional(),
-  maxExistingNoteTokens: z.number().int().min(128).max(32_768).optional(),
   existingNoteMaxChunks: z.number().int().min(1).max(100).optional(),
   existingNoteMaxTokens: z.number().int().min(128).max(32_768).optional(),
   promptTemplates: ltmPromptTemplatesSchema,
@@ -377,7 +379,6 @@ export const ltmResolvedExtractionSettingsSchema = z
     maxOutputTokens: z.number().int().min(512).max(32_768),
     temperature: z.number().finite().min(0).max(2),
     maxSourceTokens: z.number().int().min(128).max(65_536),
-    maxExistingNoteTokens: z.number().int().min(128).max(32_768),
     existingNoteMaxChunks: z.number().int().min(1).max(100),
     existingNoteMaxTokens: z.number().int().min(128).max(32_768),
     promptTemplates: z.array(ltmExtractionPromptTemplateSchema).max(50),

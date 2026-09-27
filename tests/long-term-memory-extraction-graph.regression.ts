@@ -641,13 +641,18 @@ async function main() {
   const extractionMessages = evidenceUnitMessages({
     sourceNote: chat,
     sourceText: chat.sections.source.text,
-    existingNotes: [],
     scope: {},
     modes: ["roleplay"],
     sourceHash,
     mode: "roleplay",
   } as any);
-  const unitFields = JSON.parse(String(extractionMessages[1]?.content)).unitFields;
+  const extractionPrompt = JSON.parse(String(extractionMessages[1]?.content));
+  assert.equal(
+    extractionPrompt.existingTypedNotes,
+    undefined,
+    "issue #1086: the prompt must not serialize existingTypedNotes",
+  );
+  const unitFields = extractionPrompt.unitFields;
   assert.match(unitFields.title, /short memory label/i);
   assert.equal(
     evidenceUnitResponseFormat({

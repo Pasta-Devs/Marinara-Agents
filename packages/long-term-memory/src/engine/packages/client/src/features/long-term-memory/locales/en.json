@@ -310,8 +310,6 @@
   "ui.longTermMemory.memorysettings.loadingMemorySettings": "Loading memory settings.",
   "ui.longTermMemory.memorysettings.low": "Low",
   "ui.longTermMemory.memorysettings.matchVia": "match via",
-  "ui.longTermMemory.memorysettings.maximumExistingMemoryContextMadeAvailableWhileTheModel": "Maximum existing-memory context made available while the model prepares an extraction.",
-  "ui.longTermMemory.memorysettings.maximumExistingNoteTokens": "Maximum existing-note tokens",
   "ui.longTermMemory.memorysettings.maximumNumberOfExistingMemoryChunksConsideredWhileChecking": "Maximum number of existing memory chunks considered while checking context and possible overlap.",
   "ui.longTermMemory.memorysettings.maximumNumberOfMemoriesThatMayBeIncludedIn": "Maximum number of memories that may be included in one recall.",
   "ui.longTermMemory.memorysettings.maximumOutputTokens": "Maximum output tokens",

@@ -451,7 +451,6 @@ async function extractLongTermMemoryFromSourceNoteInner(
         temperature: extractionConfig.temperature,
         sourceTextPolicy: "full",
         maxSourceTokens: extractionConfig.maxSourceTokens,
-        maxExistingNoteTokens: extractionConfig.maxExistingNoteTokens,
         existingNoteCandidateChunks: extractionConfig.existingNoteMaxChunks,
         existingNoteMaxTokens: extractionConfig.existingNoteMaxTokens,
         activePromptTemplateId: extractionConfig.activePromptTemplateId,
@@ -502,7 +501,6 @@ async function extractLongTermMemoryFromSourceNoteInner(
   const baseExtractionOptions = {
     sourceNote,
     sourceText: extractionText,
-    existingNotes,
     languageModel: options.languageModel,
     root: options.root,
     scope,
@@ -514,7 +512,6 @@ async function extractLongTermMemoryFromSourceNoteInner(
     verbosity: extractionConfig.verbosity,
     maxOutputTokens: extractionConfig.maxOutputTokens,
     temperature: extractionConfig.temperature,
-    maxExistingNoteTokens: extractionConfig.maxExistingNoteTokens,
     signal: options.signal,
     operationId: options.operationId,
     allowedBuckets,

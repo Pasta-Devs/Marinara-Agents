@@ -1,5 +1,4 @@
 import {
-  DEFAULT_LTM_EXTRACTION_MAX_EXISTING_NOTE_TOKENS,
   DEFAULT_LTM_EXTRACTION_MAX_TOKENS,
   DEFAULT_LTM_EXTRACTION_REASONING_EFFORT,
   DEFAULT_LTM_EXTRACTION_VERBOSITY,
@@ -38,11 +37,7 @@ import { compileLtmEvidenceUnits } from "./evidence-unit-compiler.js";
 import { noteIdForEvidenceUnit, validateLtmEvidenceUnits } from "./evidence-unit-validation.js";
 import { normalizeStructuredSummaryEvidenceUnits } from "./structured-summary-normalizer.js";
 import { isLocalCharacterSubject } from "./chat-scope.js";
-import {
-  filterDominatedLtmSubjectNotesForPrompt,
-  trustedLtmSubjectPromptCatalog,
-  type TrustedLtmSubjectCatalog,
-} from "./subject-identity.js";
+import { trustedLtmSubjectPromptCatalog, type TrustedLtmSubjectCatalog } from "./subject-identity.js";
 
 const LTM_EXTRACTION_BUCKET_SCAN_ORDER = [
   "timeline_event",
@@ -85,7 +80,7 @@ const LTM_EXTRACTION_TIMELINE_LINK_RELATIONS = new Set<string>([
 
 function serverEnforcedLinkRules(allowedBuckets: readonly LtmEvidenceUnit["bucket"][]) {
   return [
-    "Every link target must resolve to sourceNote.id, an exact existingTypedNotes id, or a target note derived from a unit in the same response.",
+    "Every link target must resolve to sourceNote.id or a target note derived from a unit in the same response.",
     'Every non-timeline unit with claimKind "change" must link to a timeline_event associated with this source. Static units do not require timeline links. Every timeline_event must link to sourceNote.id with extracted_from.',
     ...(allowedBuckets.includes("relationship_state")
       ? [
@@ -102,7 +97,6 @@ function serverEnforcedLinkPrompt(rules: readonly string[]) {
 export interface RunLongTermMemoryEvidenceUnitExtractionOptions {
   sourceNote: LtmNote;
   sourceText: string;
-  existingNotes: LtmNote[];
   languageModel: PackageLanguageModel;
   root?: string;
   scope: LtmScope;
@@ -114,7 +108,6 @@ export interface RunLongTermMemoryEvidenceUnitExtractionOptions {
   verbosity?: "none" | "low" | "medium" | "high";
   maxOutputTokens?: number;
   temperature?: number;
-  maxExistingNoteTokens?: number;
   signal?: AbortSignal;
   operationId?: string;
   allowedBuckets?: LtmEvidenceUnit["bucket"][];
@@ -463,7 +456,7 @@ export function evidenceUnitResponseFormat(options: {
                 links: {
                   type: "array",
                   description:
-                    "Every link target must resolve to the source note, an existing note, or a target note derived from a unit in the same response.",
+                    "Every link target must resolve to the source note or a target note derived from a unit in the same response.",
                   maxItems: 50,
                   items: {
                     type: "object",
@@ -474,8 +467,7 @@ export function evidenceUnitResponseFormat(options: {
                         type: "string",
                         pattern: "^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$",
                         maxLength: 120,
-                        description:
-                          "Exact existing note id or target note id derived from a unit in the same response.",
+                        description: "Target note id derived from a unit in the same response, or the source note id.",
                       },
                       relation: { type: "string", enum: LTM_EXTRACTION_LINK_RELATIONS },
                       aspect: { type: "string", maxLength: 50 },
@@ -1033,29 +1025,6 @@ function estimateLtmPromptTokens(text: string) {
   return Math.max(1, Math.ceil(text.length / 4));
 }
 
-function formatExistingNotes(notes: LtmNote[], maxTokens = DEFAULT_LTM_EXTRACTION_MAX_EXISTING_NOTE_TOKENS) {
-  let usedTokens = 0;
-  const blocks: string[] = [];
-  for (const note of notes) {
-    const sections = Object.entries(note.sections)
-      .map(([key, section]) => `${key}: ${section.text}`)
-      .join("\n");
-    const block = [
-      `id: ${note.id}`,
-      `type: ${note.type}`,
-      `status: ${note.status}`,
-      `tags: ${note.tags.join(", ") || "(none)"}`,
-      `subjects: ${note.subjects?.map((subject) => subject.key).join(", ") || "(unbound)"}`,
-      `sections:\n${sections}`,
-    ].join("\n");
-    const blockTokens = estimateLtmPromptTokens(block);
-    if (usedTokens + blockTokens > maxTokens) break;
-    usedTokens += blockTokens;
-    blocks.push(block);
-  }
-  return blocks.length ? blocks.join("\n\n---\n\n") : "(no relevant memory streams)";
-}
-
 async function preflightExtractionPromptContext({
   messages,
   chatOptions,
@@ -1122,7 +1091,6 @@ async function preflightExtractionPromptContext({
       estimatedPromptTokens: fit.estimatedTokensBefore,
       fittedPromptTokens: fit.estimatedTokensAfter,
       sourceChars: extractionOptions.sourceText.length,
-      existingNotes: extractionOptions.existingNotes.length,
     },
     details: {
       reason: fit.trimmed ? "prompt_trim_required" : "output_budget_reduced",
@@ -1221,7 +1189,7 @@ export function evidenceUnitMessages(options: RunLongTermMemoryEvidenceUnitExtra
           salience: "0..1",
           status: "one allowedStatuses value",
           links:
-            "real links only, otherwise []; targets must be derived from units in the same response or copied exactly from sourceNote.id or existingTypedNotes",
+            "real links only, otherwise []; targets must be derived from units in the same response or copied exactly from sourceNote.id",
           dimensions:
             "relationship_state only: optional object with allowedRelationshipDimensions keys and 0..100 integer values",
           dimensionChanges:
@@ -1264,7 +1232,7 @@ export function evidenceUnitMessages(options: RunLongTermMemoryEvidenceUnitExtra
             : "Preserve the character_fact and relationship_state subjectId values from the supplied candidate units.",
           "For other streams, the compiler derives the target note id from bucket + subjectId: timeline_event -> timeline_<subjectId>, world_fact or anchor -> world_<subjectId> unless anchor sectionKey starts with tone, thread -> thread_<subjectId>, tone -> tone_<subjectId>.",
           "For timeline_event, subjectId must name the specific event or beat, not just a person, character, place, or broad entity. Use damo_arrival or lisa_minimizing_damo instead of damo_korvak.",
-          "Do not intentionally target an existing note id unless that exact note appears in existingTypedNotes. If a broad note is not listed, use a source-specific subjectId for a new in-scope note.",
+          "Use a source-specific subjectId derived from the source text; never target or invent an existing note id. The server resolves subject and link hints against the vault after extraction.",
           ...validationRules,
           "relationship_state dimension keys must come only from allowedRelationshipDimensions. Put professional curiosity, reputation, gossip, or attention as text/thread/world/timeline facts, not dimensions.",
           ...(resolveSubjectNames
@@ -1282,13 +1250,6 @@ export function evidenceUnitMessages(options: RunLongTermMemoryEvidenceUnitExtra
                 "For each unit, include 3-5 concise keywords or short phrases in keywords. Prefer concrete recall terms and multi-word entities when relevant.",
             }
           : {}),
-        existingTypedNotes: formatExistingNotes(
-          filterDominatedLtmSubjectNotesForPrompt(
-            options.existingNotes ?? [],
-            promptCatalog ?? { entries: [], notes: [] },
-          ),
-          options.maxExistingNoteTokens,
-        ),
         sourceText: options.sourceText,
       }),
     },
@@ -1336,8 +1297,6 @@ export async function runLongTermMemoryEvidenceUnitExtraction(
       promptChars,
       promptTokens: estimateLtmPromptTokens(messages.map((message) => message.content).join("\n")),
       sourceChars: options.sourceText.length,
-      existingNotes: options.existingNotes.length,
-      maxExistingNoteTokens: options.maxExistingNoteTokens ?? DEFAULT_LTM_EXTRACTION_MAX_EXISTING_NOTE_TOKENS,
     },
     details: {
       reasoningEffort: requestedReasoningEffort,

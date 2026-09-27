@@ -1,5 +1,10 @@
 # Long-Term Memory changelog
 
+## 1.3.23 — 2026-09-27
+
+- Stop sending the whole vault's existing notes to the extraction model: the prompt now carries only the source, and the server matches extracted candidates against existing memories after extraction, so prompt size no longer grows with the vault.
+- Remove the now-unused existing-note prompt-token setting from Memory Settings; stale saved values are discarded on load instead of blocking the settings.
+
 ## 1.3.22 — 2026-09-26
 
 - Reuse an existing memory when an extracted candidate names the same subject as a note already in the vault, instead of creating a second note under a different ID.

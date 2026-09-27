@@ -198,7 +198,6 @@ function extractionForm(settings: LtmExtractionSettingsPatch): ExtractionForm {
     maxOutputTokens: resolved.maxOutputTokens ?? 4096,
     temperature: resolved.temperature ?? 0.2,
     maxSourceTokens: resolved.maxSourceTokens ?? 16000,
-    maxExistingNoteTokens: resolved.maxExistingNoteTokens ?? 8000,
     existingNoteMaxChunks: resolved.existingNoteMaxChunks ?? 20,
     existingNoteMaxTokens: resolved.existingNoteMaxTokens ?? 4000,
     promptTemplates: resolved.promptTemplates ?? [],
@@ -1265,20 +1264,6 @@ export default function MemorySettings({
               setExtractionFormState({
                 ...extractionFormState,
                 maxSourceTokens: value,
-              })
-            }
-          />
-          <NumberField
-            label={localizeUi("ui.longTermMemory.memorysettings.maximumExistingNoteTokens")}
-            help={localizeUi("ui.longTermMemory.memorysettings.maximumExistingMemoryContextMadeAvailableWhileTheModel")}
-            value={extractionFormState.maxExistingNoteTokens}
-            min={128}
-            max={32768}
-            step={128}
-            onChange={(value) =>
-              setExtractionFormState({
-                ...extractionFormState,
-                maxExistingNoteTokens: value,
               })
             }
           />

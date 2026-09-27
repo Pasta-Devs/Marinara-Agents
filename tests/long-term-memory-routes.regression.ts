@@ -3629,7 +3629,19 @@ async function main(routeScenario: RouteScenario) {
       for (const schema of [ltmExtractionSettingsSchema, ltmExtractionSettingsPatchSchema]) {
         assert.throws(() => schema.parse({ unknownExtractionField: true }));
         assert.throws(() => schema.parse({ maxOutputTokens: 511 }));
+        // Issue #1086 removed the broad existing-note prompt budget; a stale value
+        // must be discarded, not rejected, and must never surface again.
+        const migratedExistingNoteBudget = schema.parse({ version: 1, maxExistingNoteTokens: 4096 });
+        assert.equal("maxExistingNoteTokens" in migratedExistingNoteBudget, false);
       }
+      const legacyExistingNoteBudget = await app.inject({
+        method: "PUT",
+        url: "/api/long-term-memory/extraction-settings",
+        headers,
+        payload: { version: 1, maxExistingNoteTokens: 4096 },
+      });
+      assert.equal(legacyExistingNoteBudget.statusCode, 200, legacyExistingNoteBudget.body);
+      assert.equal("maxExistingNoteTokens" in legacyExistingNoteBudget.json(), false);
       const invalidExtractionTemplate = await app.inject({
         method: "PUT",
         url: "/api/long-term-memory/extraction-settings",

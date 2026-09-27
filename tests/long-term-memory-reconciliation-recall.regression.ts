@@ -239,6 +239,7 @@ async function main() {
         },
       ],
     });
+    let capturedMessages: unknown[] = [];
     const languageModel = {
       name: "FixtureModel",
       model: "fixture-model",
@@ -253,7 +254,8 @@ async function main() {
           trimmed: false,
         };
       },
-      async chatComplete() {
+      async chatComplete(messages: unknown[]) {
+        capturedMessages = messages;
         return { content: ambiguousContent, finishReason: "stop" };
       },
     };
@@ -272,6 +274,22 @@ async function main() {
       prepared.diagnostics.some((diagnostic) => diagnostic.code === "candidate_reconciliation_ambiguous"),
       "the ambiguity diagnostic must reach the draft",
     );
+
+    // Issue #1086 proof: the prompt must not serialize the broad existing-note
+    // collection. This vault is larger than the prompt window, so the removed
+    // `existingTypedNotes` block and its note text would otherwise be present.
+    const promptBody = JSON.stringify(capturedMessages);
+    assert.equal(
+      promptBody.includes("existingTypedNotes"),
+      false,
+      "the extraction prompt must not serialize existingTypedNotes",
+    );
+    assert.equal(
+      promptBody.includes("records a routine vault survey"),
+      false,
+      "existing note text must not be serialized into the extraction prompt",
+    );
+    assert.ok(promptBody.includes(sourceText), "the extraction prompt must still carry the source text");
 
     process.stdout.write(
       `Long-Term Memory reconciliation recall regression: ${recalled.length}/${targets.length} beyond the prompt window, bounded, scope-safe, review-gated ok\n`,

@@ -677,22 +677,6 @@ export function buildTrustedLtmSubjectCatalog({
   };
 }
 
-export function filterDominatedLtmSubjectNotesForPrompt(notes: LtmNote[], catalog: TrustedLtmSubjectCatalog) {
-  const visibleSubjectKeys = new Set(catalog.entries.map((entry) => entry.subject.key));
-  const suppressedSubjectKeys = new Set(
-    catalog.notes.flatMap((note) =>
-      (note.subjects ?? []).flatMap((subject) =>
-        !subject.ref && isLocalCharacterSubject(subject) && !visibleSubjectKeys.has(subject.key) ? [subject.key] : [],
-      ),
-    ),
-  );
-  if (suppressedSubjectKeys.size === 0) return notes;
-  return notes.filter((note) => {
-    if (note.type !== "character" && note.type !== "relationship") return true;
-    return !(note.subjects ?? []).some((subject) => suppressedSubjectKeys.has(subject.key));
-  });
-}
-
 export function trustedLtmSubjectPromptCatalog(catalog: TrustedLtmSubjectCatalog) {
   const index = buildCatalogIndex(catalog);
   return index.entries.map((entry) => ({
