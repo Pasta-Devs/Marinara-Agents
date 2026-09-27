@@ -1,6 +1,28 @@
 {
   "schemaVersion": 1,
   "packages": {
+    "modern-life-sim": {
+      "versions": [
+        {
+          "version": "0.2.1",
+          "date": "2026-09-27",
+          "notes": "- Models that think before they answer, like GLM or DeepSeek, no longer get cut off halfway: every call leaves them room to think, and one that still runs out gets a second try with more room.\n- Reasoning has a new option, none, for models that can answer without thinking first.\n- Pictures no longer flicker or load again while others are being painted, in Settings and on every other screen.\n- Text on the phone, in the Guide and in What's New is sharp again.",
+          "highlight": false
+        },
+        {
+          "version": "0.2.0",
+          "date": "2026-09-27",
+          "notes": "- It looks more like a game: a new title screen, a welcome, a first-day card, the GUIDE (a searchable how-it-works app on your phone), a relationship chart in Contacts, and a redone profile.\n- Everyone gets their own personality, read from their card, instead of twelve fixed types.\n- Relationships go all the way: dating, moving in, engagement and weddings (with more than one partner if all agree), jealousy, open relationships and breakups, each in a scene.\n- The town talks: people notice what you do, NEWS every Monday, and friends have opinions.\n- Outings are one long scene; plans go on a calendar; birthdays.\n- You start without a job: find one in JOBS, interview, get promoted.\n- Money: BILLS, debt and eviction; HOMES to move. Five districts, and a motorbike or a car.\n- Pictures of key moments, outfits by season, and manual or automatic pictures per life.\n- Modules: optional extras you switch on for each life.",
+          "highlight": true
+        },
+        {
+          "version": "0.1.0",
+          "date": "2026-09-23",
+          "notes": "- First release, staging only: a modern life sim in its own Home tab.\n- A town on a clock with places, opening hours, day and night, and four seasons of thirty days.\n- A job, rent, needs and skills; a home with furniture, cooking and a closet; shops, a mall and online orders.\n- A cast from your character cards: their weeks, archetypes and gift tastes read by the model, three bonds each, tier events, relationship steps and memories.\n- Scenes told by a visual-novel narrator; sleep, knocking on doors and things to do together.\n- Alpha: a save from before a change it depends on warns when opened.",
+          "highlight": false
+        }
+      ]
+    },
     "quartermaster": {
       "versions": [
         {
