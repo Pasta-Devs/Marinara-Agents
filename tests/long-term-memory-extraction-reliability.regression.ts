@@ -323,6 +323,7 @@ async function main() {
     );
     const { LongTermMemoryStorage } = await import(`${source}/storage.ts`);
     const { LongTermMemoryDraftStore } = await import(`${source}/draft-store.ts`);
+    const { withLtmVaultLock } = await import(`${source}/vault-lock.ts`);
     const commitRoot = await mkdtemp(join(tmpdir(), "marinara-ltm-source-commit-"));
     try {
       const storage = new LongTermMemoryStorage(commitRoot);
@@ -991,6 +992,118 @@ async function main() {
         );
       } finally {
         LongTermMemoryDraftStore.prototype.createDraft = originalCreateDraftForOverlayStatus;
+      }
+
+      // Issue #1087 lock-scope case: the ordered commit loop must hold one vault lock across items
+      // so an independent writer cannot land between commits and make the shared batch overlay
+      // stale. An external task that acquires the vault lock outside the batch's async context
+      // must therefore wait for the whole loop, not for the gap between items.
+      const lockScopeSourceAlpha = await storage.createNote({
+        id: "source_lock_scope_alpha",
+        title: "Lock scope alpha",
+        type: "source",
+        status: "active",
+        modes: ["roleplay"],
+        scope: { chatId: "chat-a", chatIds: ["chat-a"] },
+        tags: ["source_summary"],
+        keywords: [],
+        links: [],
+        provenance: { kind: "chat_summary", sourceId: "chat-a", entryId: "summary-lock-scope-alpha" },
+        sections: {
+          source: { text: "The lock scope alpha ledger records the sealed vault survey.", updatedAt: timestamp },
+        },
+      });
+      const lockScopeSourceBeta = await storage.createNote({
+        id: "source_lock_scope_beta",
+        title: "Lock scope beta",
+        type: "source",
+        status: "active",
+        modes: ["roleplay"],
+        scope: { chatId: "chat-a", chatIds: ["chat-a"] },
+        tags: ["source_summary"],
+        keywords: [],
+        links: [],
+        provenance: { kind: "chat_summary", sourceId: "chat-a", entryId: "summary-lock-scope-beta" },
+        sections: {
+          source: { text: "The lock scope beta ledger records the sealed vault survey.", updatedAt: timestamp },
+        },
+      });
+      const lockScopeAlphaUnit = worldUnitFor(
+        lockScopeSourceAlpha,
+        "lock_scope_alpha",
+        "The lock scope alpha ledger records the sealed vault survey.",
+      );
+      const lockScopeBetaUnit = worldUnitFor(
+        lockScopeSourceBeta,
+        "lock_scope_beta",
+        "The lock scope beta ledger records the sealed vault survey.",
+      );
+      options.languageModel.chatComplete = async (messages: any[], chatOptions: any) => {
+        calls.push(chatOptions);
+        const unit = JSON.stringify(messages).includes("alpha ledger") ? lockScopeAlphaUnit : lockScopeBetaUnit;
+        return { content: JSON.stringify({ summary: "Lock scope fact.", units: [unit] }), finishReason: "stop" };
+      };
+      const lockOrder: string[] = [];
+      let signalExternal!: () => void;
+      const externalGate = new Promise<void>((resolve) => {
+        signalExternal = resolve;
+      });
+      // Started outside the batch's async context, so its continuation keeps an unheld lock scope
+      // and genuinely contends for the vault lock instead of re-entering the batch's held one.
+      const externalLockWriter = (async () => {
+        await externalGate;
+        await withLtmVaultLock(storage.root, async () => {
+          lockOrder.push("external-writer");
+        });
+      })();
+      const originalCreateDraftForLockScope = LongTermMemoryDraftStore.prototype.createDraft;
+      LongTermMemoryDraftStore.prototype.createDraft = async function (input: any) {
+        const draft = await originalCreateDraftForLockScope.call(this, input);
+        if (input.source?.sourceNoteId === lockScopeSourceAlpha.id) {
+          signalExternal();
+          // Let the external task reach the lock while this item's commit still holds it.
+          await new Promise<void>((resolve) => setImmediate(resolve));
+        }
+        if (input.source?.sourceNoteId === lockScopeSourceBeta.id) lockOrder.push("item-two-commit");
+        return draft;
+      };
+      try {
+        const lockScopeBatch = await processLongTermMemorySourceBatch({
+          items: [
+            {
+              sourceId: lockScopeSourceAlpha.id,
+              title: lockScopeSourceAlpha.title!,
+              note: lockScopeSourceAlpha,
+              created: false,
+              extractionMode: "roleplay",
+            },
+            {
+              sourceId: lockScopeSourceBeta.id,
+              title: lockScopeSourceBeta.title!,
+              note: lockScopeSourceBeta,
+              created: false,
+              extractionMode: "roleplay",
+            },
+          ],
+          languageModel: options.languageModel,
+          operationId: randomUUID(),
+          signal: new AbortController().signal,
+          concurrency: 2,
+          root: commitRoot,
+        });
+        await externalLockWriter;
+        assert.deepEqual(
+          lockScopeBatch.map((result: any) => result.extractionStatus),
+          ["succeeded", "succeeded"],
+          JSON.stringify(lockScopeBatch.map((result: any) => result.error)),
+        );
+        assert.deepEqual(
+          lockOrder,
+          ["item-two-commit", "external-writer"],
+          "the ordered commit loop must hold one vault lock across items",
+        );
+      } finally {
+        LongTermMemoryDraftStore.prototype.createDraft = originalCreateDraftForLockScope;
       }
 
       const originalListNotesForFailure = LongTermMemoryStorage.prototype.listNotes;

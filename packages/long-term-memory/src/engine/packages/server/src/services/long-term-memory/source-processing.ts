@@ -502,43 +502,49 @@ export async function processLongTermMemorySourceBatch(options: {
   const overlay = new Map<string, LtmNote>(),
     results: LtmImportedSourceResult[] = [];
   let hasDraftMutations = false;
-  for (const entry of preparedResults) {
-    if (!entry) continue;
-    if (entry.state === "failed") {
-      results.push(entry.result);
-      continue;
+  // Hold one vault lock across the ordered commit loop: the shared overlay carries this batch's
+  // projections, so an independent write landing between items could otherwise make it stale
+  // against the vault at the next item's commit-time reconciliation. The lock is reentrant, so each
+  // commit reuses it; the post-batch index rebuild stays outside and runs after release.
+  await withLtmVaultLock(new LongTermMemoryStorage(options.root).root, async () => {
+    for (const entry of preparedResults) {
+      if (!entry) continue;
+      if (entry.state === "failed") {
+        results.push(entry.result);
+        continue;
+      }
+      const { item, prepared } = entry;
+      try {
+        throwIfAborted(options.signal);
+        const committed = await commitPreparedLongTermMemorySource(prepared, {
+          root: options.root,
+          overlay,
+          applyLowRisk: options.applyLowRisk,
+        });
+        hasDraftMutations ||= committed.draft.mutations.length > 0;
+        results.push({
+          sourceId: item.sourceId,
+          title: item.title,
+          note: committed.note,
+          created: item.created,
+          sourceWriteStatus: item.created ? "created" : "refreshed",
+          extractionStatus: committed.outcome.incomplete === true ? "incomplete" : "succeeded",
+          extractionMethod: prepared.extractionMethod,
+          retryable: committed.outcome.incomplete === true,
+          draft: committed.draft,
+          diagnostics: committed.diagnostics,
+          outcome: committed.outcome,
+          accounting: committed.accounting,
+          appliedMutationIds: committed.applyResult?.appliedMutationIds ?? [],
+          skippedMutationIds: committed.applyResult?.skippedMutationIds ?? [],
+        });
+      } catch (error) {
+        results.push(
+          failed(item, prepared.extractionMethod, "finalize", error, cancelled(error, options.signal), prepared),
+        );
+      }
     }
-    const { item, prepared } = entry;
-    try {
-      throwIfAborted(options.signal);
-      const committed = await commitPreparedLongTermMemorySource(prepared, {
-        root: options.root,
-        overlay,
-        applyLowRisk: options.applyLowRisk,
-      });
-      hasDraftMutations ||= committed.draft.mutations.length > 0;
-      results.push({
-        sourceId: item.sourceId,
-        title: item.title,
-        note: committed.note,
-        created: item.created,
-        sourceWriteStatus: item.created ? "created" : "refreshed",
-        extractionStatus: committed.outcome.incomplete === true ? "incomplete" : "succeeded",
-        extractionMethod: prepared.extractionMethod,
-        retryable: committed.outcome.incomplete === true,
-        draft: committed.draft,
-        diagnostics: committed.diagnostics,
-        outcome: committed.outcome,
-        accounting: committed.accounting,
-        appliedMutationIds: committed.applyResult?.appliedMutationIds ?? [],
-        skippedMutationIds: committed.applyResult?.skippedMutationIds ?? [],
-      });
-    } catch (error) {
-      results.push(
-        failed(item, prepared.extractionMethod, "finalize", error, cancelled(error, options.signal), prepared),
-      );
-    }
-  }
+  });
   if (hasDraftMutations) await rebuildAfterSourceExtraction(options.root);
   return results;
 }
