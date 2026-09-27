@@ -122,6 +122,19 @@ assert.match(navigation, /sourceTaskCancelled/u);
 assert.match(navigation, /selectLtmPluralForm\(locale, failureCount\)/u);
 assert.match(navigation, /sourceTaskFailedCountOne[\s\S]*sourceTaskFailedCountOther/u);
 assert.match(navigation, /className=\{item\.id === "sources" && activeSourceTask \? "animate-spin"/u);
+assert.match(navigation, /const label = localizeUi\(mobile \? item\.shortLabelKey : item\.labelKey\)/u);
+assert.doesNotMatch(navigation, /const label =\s*item\.id === "sources" && sourceTaskLabel\s*\?\s*sourceTaskLabel/u);
+assert.match(navigation, /data-ltm-source-task-status/u);
+assert.match(
+  navigation,
+  /item\.id === "sources" && sourceTaskLabel \? \([\s\S]*data-ltm-source-task-status[\s\S]*role="status"[\s\S]*aria-live="polite"[\s\S]*\{sourceTaskLabel\}/u,
+);
+// Mobile: status is sr-only (not a visible destination replacement). Desktop may keep a visible indicator.
+assert.match(
+  navigation,
+  /className=\{\s*mobile\s*\?\s*"sr-only"\s*:\s*"min-w-0 max-w-\[9rem\] truncate font-medium text-\[var\(--marinara-editor-muted\)\]"\s*\}/u,
+);
+assert.doesNotMatch(navigation, /mobile \? "max-w-full truncate text-\[0\.5625rem\] leading-tight"/u);
 assert.match(workspace, /restoredImportResult\.writeFailures\?\.filter\(\(item\) => item\.retryable\)/u);
 assert.match(workspace, /restoredImportResult\.writeFailures\?\.map\(\(failure\) =>/u);
 assert.match(

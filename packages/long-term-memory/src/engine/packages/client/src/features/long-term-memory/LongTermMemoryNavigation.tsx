@@ -115,10 +115,7 @@ export function LongTermMemoryNavigation({
                         count: latestSourceTask.sourceCount,
                       })
                     : null;
-    const label =
-      item.id === "sources" && sourceTaskLabel
-        ? sourceTaskLabel
-        : localizeUi(mobile ? item.shortLabelKey : item.labelKey);
+    const label = localizeUi(mobile ? item.shortLabelKey : item.labelKey);
     const Icon =
       item.id === "sources" && activeSourceTask
         ? Loader2
@@ -135,6 +132,7 @@ export function LongTermMemoryNavigation({
         data-ltm-control="navigation"
         data-ltm-destination={item.id}
         aria-current={active ? "page" : undefined}
+        title={item.id === "sources" && sourceTaskLabel ? sourceTaskLabel : undefined}
         onClick={() => onDestinationChange(item.id)}
         data-active={active}
         className={`mari-editor-tab relative flex items-center gap-2 rounded-lg text-xs font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--marinara-editor-focus-ring)] ${
@@ -148,7 +146,19 @@ export function LongTermMemoryNavigation({
           size={mobile ? "1.125rem" : "0.875rem"}
           className={item.id === "sources" && activeSourceTask ? "animate-spin" : undefined}
         />
-        <span aria-live={item.id === "sources" ? "polite" : undefined}>{label}</span>
+        <span className="min-w-0 truncate">{label}</span>
+        {item.id === "sources" && sourceTaskLabel ? (
+          <span
+            data-ltm-source-task-status
+            role="status"
+            aria-live="polite"
+            className={
+              mobile ? "sr-only" : "min-w-0 max-w-[9rem] truncate font-medium text-[var(--marinara-editor-muted)]"
+            }
+          >
+            {sourceTaskLabel}
+          </span>
+        ) : null}
         {item.id === "sources" && sourceTaskCount ? (
           <span data-ltm-badge>{sourceTaskCount}</span>
         ) : typeof badge === "number" && badge > 0 ? (

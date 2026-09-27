@@ -1,5 +1,9 @@
 # Long-Term Memory changelog
 
+## 1.3.28 — 2026-09-27
+
+- Keep the Sources navigation tab labeled Sources while a source task runs or reports its result; show import, refresh, re-extract, cancelled, failed, and completed state as a separate status indicator instead of replacing the destination name.
+
 ## 1.3.26 — 2026-09-27
 
 - Render the Memory Vault unsaved-changes and rename-details dialogs as small centred cards again; both used a width class the Engine never emits, so they stretched across the screen.
