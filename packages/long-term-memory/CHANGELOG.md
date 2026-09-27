@@ -1,5 +1,10 @@
 # Long-Term Memory changelog
 
+## 1.3.24 — 2026-09-27
+
+- Reconcile extracted candidates against notes committed after the extraction snapshot, so importing several sources at once (or two imports running at the same time) reuses the first memory instead of creating a duplicate under a second ID.
+- Never revive an archived or resolved memory as a reconciliation target, including when a stale batch projection still shows it active.
+
 ## 1.3.23 — 2026-09-27
 
 - Stop sending the whole vault's existing notes to the extraction model: the prompt now carries only the source, and the server matches extracted candidates against existing memories after extraction, so prompt size no longer grows with the vault.

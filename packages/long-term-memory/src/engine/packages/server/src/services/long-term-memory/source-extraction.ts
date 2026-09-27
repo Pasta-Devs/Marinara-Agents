@@ -58,6 +58,19 @@ export type ExtractLongTermMemoryFromSourceNoteOptions = {
   trustedSubjectCatalog?: TrustedLtmSubjectCatalog;
 };
 
+/**
+ * Re-runs the vault-derived stages (reconciliation, scope target resolution, compilation) against a
+ * caller-supplied candidate set without repeating the provider call. Preparation captures the index
+ * before responding; the commit path calls this so a target created by a sibling batch item or a
+ * concurrent import is still reused.
+ */
+export type LtmSourceExtractionRecompile = (options: { candidateNotes: readonly LtmNote[] }) => Promise<{
+  response: LtmExtractionResponse;
+  diagnostics: LtmExtractionDiagnostic[];
+  outcome: LtmExtractionOutcome;
+  accounting: LtmExtractionAccounting;
+}>;
+
 export type ExtractLongTermMemoryFromSourceNoteResult = {
   operationId: string;
   chatId?: string;
@@ -68,6 +81,7 @@ export type ExtractLongTermMemoryFromSourceNoteResult = {
   diagnostics: LtmExtractionDiagnostic[];
   outcome: LtmExtractionOutcome;
   accounting: LtmExtractionAccounting;
+  recompile: LtmSourceExtractionRecompile;
 };
 
 export function isLtmSourceNote(note: LtmNote) {
@@ -551,16 +565,64 @@ async function extractLongTermMemoryFromSourceNoteInner(
     existingNotes,
     enforceTrustedSubjects: Boolean(options.trustedSubjectCatalog),
   });
-  // The recall index is the extraction snapshot. Re-scanning the vault here would break the
-  // preparation-snapshot contract (one listNotes snapshot plus the deferred rebuild).
-  const reconciliation = await reconcileEvidenceUnitCandidates({
-    units: identityResolution.units,
-    root: options.root,
-    scope,
-    mode: resolvedMode,
-    storage,
-    index: recallIndex,
-  });
+  // Compilation is vault-derived: reconciliation matches against existing notes, scope and identity
+  // targets resolve, and the units compile into draft mutations. It runs at preparation against the
+  // captured recall index and again at commit against the caller's fresh candidate set (see the
+  // `recompile` result below), because a sibling batch item or concurrent import can create a
+  // target in between. The provider call is never repeated.
+  const compileExtraction = async (reconcileOptions: {
+    index?: LtmRecallIndex;
+    candidateNotes?: readonly LtmNote[];
+  }) => {
+    const reconciliation = await reconcileEvidenceUnitCandidates({
+      units: identityResolution.units,
+      root: options.root,
+      scope,
+      mode: resolvedMode,
+      storage,
+      ...reconcileOptions,
+    });
+    const targetResolution = await resolveScopedEvidenceUnitTargets({
+      storage,
+      existingNotes: identityResolution.existingNotes,
+      units: reconciliation.units,
+      scope,
+    });
+    const compiled = compileEvidenceUnitExtraction({
+      unitResponse: {
+        ...unitResponse,
+        units: targetResolution.units,
+      },
+      providerCandidates: extractionPayload.totalCandidates,
+      parserRejectionCount: extractionPayload.parserRejections,
+      normalizedAdditions: normalizedExtraction.addedUnits,
+      parserDroppedCandidates: extractionPayload.droppedCandidates,
+      preValidationDroppedCandidates: identityResolution.droppedCandidates,
+      aliasChoices: identityResolution.aliasChoices,
+      sourceText,
+      sourceNote,
+      existingNotes: targetResolution.existingNotes,
+      scope,
+      modes: requestedModes,
+      mode: resolvedMode,
+      sourceHash,
+      allowedBuckets,
+      eventSubjectIdentityKeys: options.trustedSubjectCatalog
+        ? trustedLtmCharacterAliasIdentifiers(options.trustedSubjectCatalog)
+        : undefined,
+      skipStructuredBackfill: true,
+    });
+    compiled.diagnostics.push(
+      ...identityResolution.diagnostics,
+      ...reconciliation.diagnostics,
+      ...targetResolution.diagnostics,
+    );
+    return { reconciliation, targetResolution, compiled };
+  };
+
+  // The recall index is the preparation snapshot. The commit path recompiles against fresh
+  // candidates rather than re-scanning here.
+  const { reconciliation, targetResolution, compiled } = await compileExtraction({ index: recallIndex });
   if (reconciliation.remaps.size > 0 || reconciliation.diagnostics.length > 0) {
     await recordLtmDebugEvent({
       operationId: options.operationId,
@@ -579,12 +641,6 @@ async function extractLongTermMemoryFromSourceNoteInner(
       },
     });
   }
-  const targetResolution = await resolveScopedEvidenceUnitTargets({
-    storage,
-    existingNotes: identityResolution.existingNotes,
-    units: reconciliation.units,
-    scope,
-  });
   const compilerExistingNotes = targetResolution.existingNotes;
   if (compilerExistingNotes.length !== existingNotes.length || targetResolution.remaps.size > 0) {
     await recordLtmDebugEvent({
@@ -605,35 +661,6 @@ async function extractLongTermMemoryFromSourceNoteInner(
       },
     });
   }
-  const compiled = compileEvidenceUnitExtraction({
-    unitResponse: {
-      ...unitResponse,
-      units: targetResolution.units,
-    },
-    providerCandidates: extractionPayload.totalCandidates,
-    parserRejectionCount: extractionPayload.parserRejections,
-    normalizedAdditions: normalizedExtraction.addedUnits,
-    parserDroppedCandidates: extractionPayload.droppedCandidates,
-    preValidationDroppedCandidates: identityResolution.droppedCandidates,
-    aliasChoices: identityResolution.aliasChoices,
-    sourceText,
-    sourceNote,
-    existingNotes: compilerExistingNotes,
-    scope,
-    modes: requestedModes,
-    mode: resolvedMode,
-    sourceHash,
-    allowedBuckets,
-    eventSubjectIdentityKeys: options.trustedSubjectCatalog
-      ? trustedLtmCharacterAliasIdentifiers(options.trustedSubjectCatalog)
-      : undefined,
-    skipStructuredBackfill: true,
-  });
-  compiled.diagnostics.push(
-    ...identityResolution.diagnostics,
-    ...reconciliation.diagnostics,
-    ...targetResolution.diagnostics,
-  );
   const compiledSummary = summarizeCompiledEvidenceUnitExtraction(compiled);
   await recordLtmDebugEvent({
     operationId: options.operationId,
@@ -680,5 +707,14 @@ async function extractLongTermMemoryFromSourceNoteInner(
     diagnostics: compiled.diagnostics,
     outcome: compiled.outcome,
     accounting: compiled.accounting,
+    recompile: async ({ candidateNotes }) => {
+      const fresh = await compileExtraction({ candidateNotes });
+      return {
+        response: fresh.compiled.compiledResponse,
+        diagnostics: fresh.compiled.diagnostics,
+        outcome: fresh.compiled.outcome,
+        accounting: fresh.compiled.accounting,
+      };
+    },
   };
 }

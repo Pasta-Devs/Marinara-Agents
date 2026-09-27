@@ -14,7 +14,11 @@ import { isLtmSourceLikeNote } from "../../../../shared/src/features/agents/long
 import { logger, type PackageLanguageModel } from "./package-runtime.js";
 import { rebuildLongTermMemoryIndexes } from "./rebuild.js";
 import { applyLongTermMemoryDraft } from "./reconciliation.js";
-import { extractLongTermMemoryFromSourceNote, finalizeLongTermMemoryExtractionDraft } from "./source-extraction.js";
+import {
+  extractLongTermMemoryFromSourceNote,
+  finalizeLongTermMemoryExtractionDraft,
+  type LtmSourceExtractionRecompile,
+} from "./source-extraction.js";
 import { LongTermMemoryStorage } from "./storage.js";
 import { loadTrustedLtmSubjectCatalog } from "./subject-identity.js";
 import { compileEvidenceUnitExtraction, sourceHashForEvidenceUnitExtraction } from "./evidence-unit-extraction.js";
@@ -44,6 +48,8 @@ type PreparedSource = {
   accounting: LtmExtractionAccounting;
   response: LtmExtractionResponse;
   reviewRequired: boolean;
+  /** Present for LLM extractions: recompiles against fresh candidates at commit without a provider call. */
+  recompile?: LtmSourceExtractionRecompile;
 };
 type PrepareOptions = {
   sourceNote: LtmNote;
@@ -108,6 +114,19 @@ function throwIfAborted(signal?: AbortSignal) {
 }
 function cancelled(error: unknown, signal?: AbortSignal) {
   return signal?.aborted || (error instanceof Error && error.name === "AbortError");
+}
+function reviewRequiredForExtraction(sourceNote: LtmNote, diagnostics: readonly LtmExtractionDiagnostic[]) {
+  return (
+    sourceNote.provenance?.kind === "character" ||
+    sourceNote.provenance?.kind === "lorebook" ||
+    // An ambiguous or possibly-incomplete reconciliation must never auto-apply a likely
+    // duplicate; a human picks the target.
+    diagnostics.some(
+      (diagnostic) =>
+        diagnostic.code === "candidate_reconciliation_ambiguous" ||
+        diagnostic.code === "candidate_reconciliation_incomplete",
+    )
+  );
 }
 function canMarkCurrent(prepared: PreparedSource) {
   if (prepared.outcome.incomplete) return false;
@@ -244,17 +263,37 @@ export async function prepareLongTermMemorySource(options: PrepareOptions): Prom
   return {
     ...result,
     extractionMethod: "llm",
-    reviewRequired:
-      options.sourceNote.provenance?.kind === "character" ||
-      options.sourceNote.provenance?.kind === "lorebook" ||
-      // An ambiguous or possibly-incomplete reconciliation must never auto-apply a likely
-      // duplicate; a human picks the target.
-      result.diagnostics.some(
-        (diagnostic) =>
-          diagnostic.code === "candidate_reconciliation_ambiguous" ||
-          diagnostic.code === "candidate_reconciliation_incomplete",
-      ),
+    reviewRequired: reviewRequiredForExtraction(options.sourceNote, result.diagnostics),
   };
+}
+
+async function recompilePreparedWithFreshCandidates(
+  prepared: PreparedSource,
+  storage: LongTermMemoryStorage,
+  overlay?: ReadonlyMap<string, LtmNote>,
+) {
+  if (!prepared.recompile) return null;
+  try {
+    // Merge by id so a note that reached the vault and is still projected in the batch overlay is one
+    // candidate, not two identical ones that read as an ambiguous match. The overlay carries this
+    // batch's newer projected state, so it normally wins — except when the durable note reached a
+    // terminal status after the projection, which the stale active copy must not revive.
+    const candidates = new Map<string, LtmNote>();
+    for (const note of await storage.listNotes()) candidates.set(note.id, note);
+    for (const note of overlay?.values() ?? []) {
+      const durable = candidates.get(note.id);
+      candidates.set(
+        note.id,
+        durable && (durable.status === "archived" || durable.status === "resolved") ? durable : note,
+      );
+    }
+    return await prepared.recompile({ candidateNotes: [...candidates.values()] });
+  } catch (error) {
+    // Freshness is best-effort: a failed scan must not fail a commit that the preparation
+    // snapshot could already finalize.
+    logger.warn(error, "[ltm] Commit-time reconciliation refresh failed; using the preparation snapshot");
+    return null;
+  }
 }
 
 async function commitPreparedLongTermMemorySource(
@@ -264,19 +303,28 @@ async function commitPreparedLongTermMemorySource(
   const storage = new LongTermMemoryStorage(options.root);
   // ponytail: serialize finalization per vault; use narrower locks only if local commit throughput becomes a bottleneck.
   return withLtmVaultLock(storage.root, async () => {
+    // Reconcile against the committed vault plus any sibling projections this batch already
+    // prepared, then finalize. A concurrent import or sibling source may have created the
+    // compatible target after the preparation snapshot that reconciliation originally saw.
+    const fresh = await recompilePreparedWithFreshCandidates(prepared, storage, options.overlay);
+    const response = fresh?.response ?? prepared.response;
+    const diagnostics = fresh?.diagnostics ?? prepared.diagnostics;
+    const outcome = fresh?.outcome ?? prepared.outcome;
+    const accounting = fresh?.accounting ?? prepared.accounting;
+    const reviewRequired = reviewRequiredForExtraction(prepared.sourceNote, diagnostics);
     const draft = await finalizeLongTermMemoryExtractionDraft(
       {
         sourceNote: prepared.sourceNote,
         sourceFingerprintBeforeBinding: prepared.sourceFingerprintBeforeBinding,
-        response: prepared.response,
+        response,
         scope: prepared.sourceNote.destinationScope ?? prepared.sourceNote.scope,
         modes: prepared.sourceNote.modes,
         extractionMode: prepared.extractionMode,
         operationId: prepared.operationId,
-        diagnostics: prepared.diagnostics,
-        outcome: prepared.outcome,
-        accounting: prepared.accounting,
-        reviewRequired: prepared.reviewRequired,
+        diagnostics,
+        outcome,
+        accounting,
+        reviewRequired,
         chatId: prepared.chatId,
         afterWrite: (draft) =>
           draft.extractionOutcome?.droppedCandidates.length
@@ -285,7 +333,7 @@ async function commitPreparedLongTermMemorySource(
       },
       { root: options.root, overlay: options.overlay },
     );
-    const markCurrent = canMarkCurrent(prepared);
+    const markCurrent = canMarkCurrent({ ...prepared, outcome, diagnostics });
     const note =
       markCurrent && draft.source.extractionFingerprint
         ? await storage.updateNote(prepared.sourceNote.id, {
@@ -298,7 +346,7 @@ async function commitPreparedLongTermMemorySource(
         : prepared.sourceNote;
     const fingerprintPersisted = markCurrent && Boolean(note.extractionFingerprint);
     const applyResult =
-      options.applyLowRisk && !prepared.reviewRequired && fingerprintPersisted && draft.mutations.length
+      options.applyLowRisk && !reviewRequired && fingerprintPersisted && draft.mutations.length
         ? await applyLongTermMemoryDraft(draft.id, {
             root: options.root,
             actor: "maintenance_api",
@@ -308,7 +356,7 @@ async function commitPreparedLongTermMemorySource(
           })
         : null;
     const finalDraft = applyResult?.draft ?? draft;
-    return { draft: finalDraft, note, applyResult };
+    return { draft: finalDraft, note, applyResult, response, diagnostics, outcome, accounting, reviewRequired };
   });
 }
 
@@ -322,10 +370,10 @@ export async function processLongTermMemorySource(options: PrepareOptions & { ap
   return {
     operationId: prepared.operationId,
     draft: committed.draft,
-    diagnostics: prepared.diagnostics,
-    outcome: prepared.outcome,
-    accounting: prepared.accounting,
-    response: prepared.response,
+    diagnostics: committed.diagnostics,
+    outcome: committed.outcome,
+    accounting: committed.accounting,
+    response: committed.response,
     appliedMutationIds: committed.applyResult?.appliedMutationIds ?? [],
     skippedMutationIds: committed.applyResult?.skippedMutationIds ?? [],
   };
@@ -475,13 +523,13 @@ export async function processLongTermMemorySourceBatch(options: {
         note: committed.note,
         created: item.created,
         sourceWriteStatus: item.created ? "created" : "refreshed",
-        extractionStatus: prepared.outcome.incomplete === true ? "incomplete" : "succeeded",
+        extractionStatus: committed.outcome.incomplete === true ? "incomplete" : "succeeded",
         extractionMethod: prepared.extractionMethod,
-        retryable: prepared.outcome.incomplete === true,
+        retryable: committed.outcome.incomplete === true,
         draft: committed.draft,
-        diagnostics: prepared.diagnostics,
-        outcome: prepared.outcome,
-        accounting: prepared.accounting,
+        diagnostics: committed.diagnostics,
+        outcome: committed.outcome,
+        accounting: committed.accounting,
         appliedMutationIds: committed.applyResult?.appliedMutationIds ?? [],
         skippedMutationIds: committed.applyResult?.skippedMutationIds ?? [],
       });
