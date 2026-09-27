@@ -1,8 +1,12 @@
 # Long-Term Memory changelog
 
-## 1.3.25 — 2026-09-27
+## 1.3.27 — 2026-09-27
 
 - Use All / Chats / Branches / Characters / Personas tabs in the Sources "Find sources in" picker so it matches Memory Vault and availability scope pickers.
+
+## 1.3.26 — 2026-09-27
+
+- Render the Memory Vault unsaved-changes and rename-details dialogs as small centred cards again; both used a width class the Engine never emits, so they stretched across the screen.
 
 ## 1.3.24 — 2026-09-27
 

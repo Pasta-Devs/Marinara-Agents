@@ -3223,7 +3223,7 @@ export default function MemoryVault({
                   }}
                   className="fixed inset-0 z-50 m-0 grid h-full w-full place-items-center bg-black/50 p-4"
                 >
-                  <section className="mari-editor-panel w-full max-w-72 space-y-3 p-3 shadow-xl">
+                  <section className="mari-editor-panel w-full max-w-md space-y-3 p-3 shadow-xl">
                     <h3 id="ltm-unsaved-title" className="text-base font-semibold">
                       {localizeUi("ui.longTermMemory.memoryvault.unsavedNavigationTitle")}
                     </h3>
@@ -3257,7 +3257,7 @@ export default function MemoryVault({
                   }}
                   className="fixed inset-0 z-50 m-0 grid h-full w-full place-items-center bg-black/50 p-4"
                 >
-                  <section className="mari-editor-panel w-full max-w-72 space-y-3 p-3 shadow-xl">
+                  <section className="mari-editor-panel w-full max-w-md space-y-3 p-3 shadow-xl">
                     <h3 id="ltm-rename-detail-title" className="text-base font-semibold">
                       {localizeUi("ui.longTermMemory.memoryvault.renameDetails")}
                     </h3>
