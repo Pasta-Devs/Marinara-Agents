@@ -1,5 +1,9 @@
 # Long-Term Memory changelog
 
+## 1.3.25 — 2026-09-27
+
+- Use All / Chats / Branches / Characters / Personas tabs in the Sources "Find sources in" picker so it matches Memory Vault and availability scope pickers.
+
 ## 1.3.24 — 2026-09-27
 
 - Reconcile extracted candidates against notes committed after the extraction snapshot, so importing several sources at once (or two imports running at the same time) reuses the first memory instead of creating a duplicate under a second ID.

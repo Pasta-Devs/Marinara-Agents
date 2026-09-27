@@ -133,11 +133,15 @@ function ScopeTargetPicker({
   const { t: localizeUi } = useLtmTranslation();
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
+  const [activeKind, setActiveKind] = useState<ScopeTargetKind>("all");
   const rootRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const searchRef = useRef<HTMLInputElement>(null);
   const listId = useId();
-  const groups: Array<[Exclude<ScopeTargetKind, "all">, string]> = [
+  const panelId = useId();
+  const tablistId = useId();
+  const categories: Array<[ScopeTargetKind, string]> = [
+    ["all", localizeUi("ui.longTermMemory.sourcesworkspace.all")],
     ["chat", localizeUi("ui.longTermMemory.sourcesworkspace.chats")],
     ["branch", localizeUi("ui.longTermMemory.sourcesworkspace.branches")],
     ["character", localizeUi("ui.longTermMemory.sourcesworkspace.characters")],
@@ -149,22 +153,28 @@ function ScopeTargetPicker({
     `${target.label} ${target.comment ?? ""} ${target.destinationLabel ?? ""} ${target.searchText ?? ""}`
       .toLocaleLowerCase()
       .includes(needle);
-  const pinnedTargets = targets.filter((target) => target.pinned);
-  const filteredTargets = targets.filter((target) => matches(target));
-  const regularTargets = filteredTargets.filter((target) => !target.pinned);
-  const selectedRegularTarget =
-    selectedTarget && !selectedTarget.pinned && matches(selectedTarget) ? selectedTarget : null;
-  const optionTargets = [
-    ...pinnedTargets,
-    ...(selectedRegularTarget ? [selectedRegularTarget] : []),
-    ...groups.flatMap(([kind]) => regularTargets.filter((target) => target.kind === kind && target.id !== value)),
-  ];
+  const pinnedTargets = targets.filter((target) => {
+    if (!target.pinned) return false;
+    if (target.pinned === "all") return true;
+    return activeKind === "all" || target.kind === activeKind;
+  });
+  const regularTargets = targets.filter(
+    (target) =>
+      !target.pinned && matches(target) && (activeKind === "all" ? target.kind !== "all" : target.kind === activeKind),
+  );
+  const optionTargets = [...pinnedTargets, ...regularTargets];
   const [highlightedId, setHighlightedId] = useState(value);
   useEffect(() => setHighlightedId(value), [value]);
   const close = () => {
     setOpen(false);
     setQuery("");
+    setActiveKind("all");
     requestAnimationFrame(() => triggerRef.current?.focus({ preventScroll: true }));
+  };
+  const selectKind = (kind: ScopeTargetKind, focusTab = false) => {
+    setActiveKind(kind);
+    setHighlightedId("");
+    if (focusTab) document.getElementById(`${tablistId}-${kind}`)?.focus({ preventScroll: true });
   };
 
   useEffect(() => {
@@ -172,7 +182,7 @@ function ScopeTargetPicker({
     const onPointerDown = (event: PointerEvent) => {
       if (!rootRef.current?.contains(event.target as Node)) close();
     };
-    const onKeyDown = (event: KeyboardEvent) => {
+    const onKeyDown = (event: globalThis.KeyboardEvent) => {
       if (event.key === "Escape") close();
     };
     document.addEventListener("pointerdown", onPointerDown);
@@ -198,6 +208,17 @@ function ScopeTargetPicker({
           : optionTargets.length - 1
         : (currentIndex + direction + optionTargets.length) % optionTargets.length;
     setHighlightedId(optionTargets[nextIndex]!.id);
+  };
+  const handleTabKey = (event: KeyboardEvent<HTMLButtonElement>, index: number) => {
+    if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
+    event.preventDefault();
+    const nextIndex =
+      event.key === "Home"
+        ? 0
+        : event.key === "End"
+          ? categories.length - 1
+          : (index + (event.key === "ArrowRight" ? 1 : -1) + categories.length) % categories.length;
+    selectKind(categories[nextIndex]![0], true);
   };
   const option = (target: ScopeTarget) => (
     <button
@@ -272,6 +293,7 @@ function ScopeTargetPicker({
         <div
           className="absolute left-0 top-full z-30 mt-2 w-full min-w-[min(20rem,calc(100vw-2rem))] overflow-hidden rounded-md border border-[var(--marinara-editor-divider)] bg-[var(--card)] shadow-xl"
           data-ltm-scope-picker-popup
+          style={{ containerType: "inline-size" }}
         >
           <label className="relative block border-b border-[var(--marinara-editor-divider)] p-2">
             <Search
@@ -309,32 +331,64 @@ function ScopeTargetPicker({
               }}
             />
           </label>
-          <div id={listId} role="listbox" aria-label={ariaLabel} className="max-h-72 overflow-y-auto">
-            {pinnedTargets.map(option)}
-            {selectedRegularTarget ? (
-              <div className="border-b border-[var(--marinara-editor-divider)]">
-                <p className="bg-[var(--secondary)] px-3 py-1 text-xs font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">
-                  {localizeUi("ui.longTermMemory.sourcesworkspace.selectedLocation")}
+          <div
+            role="tablist"
+            aria-label={ariaLabel}
+            data-ltm-scope-tablist
+            className="mari-editor-tab-rail grid w-full min-w-0 gap-1 border-b border-[var(--marinara-editor-divider)] p-1"
+          >
+            <style>{`
+              [data-ltm-scope-tablist] {
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+              }
+              [data-ltm-scope-tab]:not([data-active="true"]):not(:hover) {
+                background: var(--marinara-editor-control-bg);
+              }
+              @container (min-width: 16rem) {
+                [data-ltm-scope-tablist] {
+                  grid-template-columns: repeat(5, minmax(0, 1fr));
+                }
+              }
+              @container (max-width: 15rem) {
+                [data-ltm-scope-tablist] {
+                  grid-template-columns: minmax(0, 1fr);
+                }
+              }
+            `}</style>
+            {categories.map(([kind, label], index) => (
+              <button
+                key={kind}
+                type="button"
+                role="tab"
+                id={`${tablistId}-${kind}`}
+                aria-controls={panelId}
+                tabIndex={activeKind === kind ? 0 : -1}
+                aria-selected={activeKind === kind}
+                data-ltm-scope-tab={kind}
+                data-active={activeKind === kind}
+                className="mari-editor-tab min-h-11 min-w-0 rounded-md px-1 text-xs font-semibold focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--marinara-editor-focus-ring)]"
+                onClick={() => selectKind(kind, true)}
+                onKeyDown={(event) => handleTabKey(event, index)}
+              >
+                <span className="block truncate">{label}</span>
+              </button>
+            ))}
+          </div>
+          <div
+            id={panelId}
+            role="tabpanel"
+            aria-labelledby={`${tablistId}-${activeKind}`}
+            data-ltm-scope-tabpanel={activeKind}
+          >
+            <div id={listId} role="listbox" aria-label={ariaLabel} className="max-h-72 overflow-y-auto">
+              {pinnedTargets.map(option)}
+              {regularTargets.map(option)}
+              {!optionTargets.length ? (
+                <p className="px-3 py-4 text-xs text-[var(--muted-foreground)]">
+                  {localizeUi("ui.longTermMemory.sourcesworkspace.noMatchingScopes")}
                 </p>
-                {option(selectedRegularTarget)}
-              </div>
-            ) : null}
-            {groups.map(([kind, label]) => {
-              const options = regularTargets.filter((target) => target.kind === kind && target.id !== value);
-              return options.length ? (
-                <div key={kind}>
-                  <p className="border-b border-[var(--marinara-editor-divider)] bg-[var(--secondary)] px-3 py-1 text-xs font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">
-                    {label}
-                  </p>
-                  {options.map(option)}
-                </div>
-              ) : null;
-            })}
-            {!optionTargets.length ? (
-              <p className="px-3 py-4 text-xs text-[var(--muted-foreground)]">
-                {localizeUi("ui.longTermMemory.sourcesworkspace.noMatchingScopes")}
-              </p>
-            ) : null}
+              ) : null}
+            </div>
           </div>
         </div>
       ) : null}

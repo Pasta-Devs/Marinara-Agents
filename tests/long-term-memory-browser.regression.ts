@@ -3329,6 +3329,10 @@ async function main() {
       assert.match((await sourceScopeTrigger.innerText()).trim(), /All/u);
       await sourceScopeTrigger.click();
       assert.equal(await sourceScopePicker.locator('[role="listbox"] input').count(), 0);
+      for (const kind of ["all", "chat", "branch", "character", "persona"]) {
+        assert.equal(await sourceScopePicker.locator(`[data-ltm-scope-tab="${kind}"]`).count(), 1);
+      }
+      assert.equal(await sourceScopePicker.locator('[data-ltm-scope-tab="all"][data-active="true"]').count(), 1);
       assert.deepEqual(
         await sourceScopePicker.locator('[role="option"]').evaluateAll((options) =>
           options.slice(0, 2).map((option) => {
@@ -3346,9 +3350,45 @@ async function main() {
       );
       assert.equal(await sourceScopePicker.locator('[data-ltm-scope-option="chat:desktop-chat"]').count(), 1);
       assert.equal(await sourceScopePicker.locator('[data-ltm-scope-option="all"]').count(), 1);
+      assert.equal(await sourceScopePicker.locator('[data-ltm-scope-option="group:conversation-a"]').count(), 1);
+      await sourceScopePicker.locator('[data-ltm-scope-tab="chat"]').click();
+      assert.equal(await sourceScopePicker.locator('[data-ltm-scope-tab="chat"][data-active="true"]').count(), 1);
+      assert.equal(await sourceScopePicker.locator('[data-ltm-scope-tabpanel="chat"][role="tabpanel"]').count(), 1);
+      assert.equal(
+        await sourceScopePicker.locator('[role="tabpanel"]').getAttribute("aria-labelledby"),
+        await sourceScopePicker.locator('[data-ltm-scope-tab="chat"]').getAttribute("id"),
+      );
+      assert.equal(
+        await sourceScopePicker.locator('[data-ltm-scope-tab="chat"]').getAttribute("aria-controls"),
+        await sourceScopePicker.locator('[role="tabpanel"]').getAttribute("id"),
+      );
+      assert.equal(await sourceScopePicker.locator('[role="tabpanel"] [role="listbox"]').count(), 1);
+      assert.equal(await sourceScopePicker.locator('[data-ltm-scope-option="chat:desktop-chat"]').count(), 1);
+      assert.equal(await sourceScopePicker.locator('[data-ltm-scope-option="group:conversation-a"]').count(), 0);
+      assert.equal(await sourceScopePicker.locator('[data-ltm-scope-option="all"]').count(), 1);
+      await sourceScopePicker.locator('[data-ltm-scope-tab="branch"]').click();
+      assert.equal(await sourceScopePicker.locator('[data-ltm-scope-option="group:conversation-a"]').count(), 1);
+      assert.equal(await sourceScopePicker.locator('[data-ltm-scope-option="chat:desktop-chat"]').count(), 0);
+      assert.equal(
+        await sourceScopePicker
+          .locator('[data-ltm-scope-tab="branch"]')
+          .evaluate((tab) => document.activeElement === tab),
+        true,
+        "mouse-activated tab receives focus so roving keyboard navigation can continue",
+      );
+      await page.keyboard.press("ArrowRight");
+      assert.equal(await sourceScopePicker.locator('[data-ltm-scope-tab="character"][data-active="true"]').count(), 1);
+      assert.equal(
+        await sourceScopePicker
+          .locator('[data-ltm-scope-tab="character"]')
+          .evaluate((tab) => document.activeElement === tab),
+        true,
+      );
+      await sourceScopePicker.locator('[data-ltm-scope-tab="all"]').click();
       await sourceScopePicker.locator("[data-ltm-scope-picker-popup] input").fill("does-not-match");
       assert.equal(await sourceScopePicker.locator('[data-ltm-scope-option="chat:desktop-chat"]').count(), 1);
       assert.equal(await sourceScopePicker.locator('[data-ltm-scope-option="all"]').count(), 1);
+      assert.equal(await sourceScopePicker.locator('[data-ltm-scope-option="group:conversation-a"]').count(), 0);
       await sourceScopePicker.locator("[data-ltm-scope-picker-popup] input").fill("Member Final Branch");
       assert.equal(
         await sourceScopePicker.locator('[data-ltm-scope-option="group:conversation-a"]').count(),
@@ -3382,6 +3422,7 @@ async function main() {
           body.source === "chats" && JSON.stringify(body.sourceScope) === JSON.stringify(expectedInitialChatSourceScope)
         );
       });
+      await sourceScopePicker.locator('[data-ltm-scope-tab="chat"]').click();
       await sourceScopePicker.locator('[role="option"][data-ltm-scope-option="chat:desktop-chat"]').click();
       const scopedChatPreviewRequest = (await scopedChatPreviewRequestPromise).postDataJSON() as {
         sourceScope?: unknown;
