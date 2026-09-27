@@ -3755,6 +3755,11 @@ async function main() {
           idleIcon,
           "unrelated sources retain their import icon",
         );
+        assert.equal(
+          await importingButton.locator("svg").getAttribute("class"),
+          idleIcon,
+          "the active row keeps its default icon while the task surface owns activity",
+        );
         await page.waitForFunction(() => {
           const button = document.querySelector(
             '[data-ltm-source-action="import"][data-ltm-source-id="character-next-page"]',
@@ -3762,20 +3767,17 @@ async function main() {
           return button && Number(getComputedStyle(button).opacity) < 1;
         });
         await page.waitForFunction(() => {
-          const icon = document.querySelector(
-            '[data-ltm-source-action="import"][data-ltm-source-id="character-outside-current-chat"] svg',
-          );
-          return icon?.getAnimations().some((animation) => animation.playState === "running");
+          const icon = document.querySelector('[data-ltm-surface="sources"] [data-ltm-source-task-count] svg');
+          return Boolean(icon?.getAnimations().some((animation) => animation.playState === "running"));
         });
-        const firstTransform = await importingButton
-          .locator("svg")
-          .evaluate((icon) => getComputedStyle(icon).transform);
-        await page.waitForFunction((before) => {
-          const icon = document.querySelector(
-            '[data-ltm-source-action="import"][data-ltm-source-id="character-outside-current-chat"] svg',
+        const animatedIndicators = await page
+          .locator('[data-ltm-surface="sources"] svg')
+          .evaluateAll(
+            (icons) =>
+              icons.filter((icon) => icon.getAnimations().some((animation) => animation.playState === "running"))
+                .length,
           );
-          return icon && getComputedStyle(icon).transform !== before;
-        }, firstTransform);
+        assert.equal(animatedIndicators, 1, "a running source task animates exactly one indicator");
       } finally {
         releaseImport();
       }
@@ -3843,7 +3845,8 @@ async function main() {
       assert.equal(await desktopReextract.isDisabled(), true);
       await page.locator("[data-ltm-source-task-progress]").waitFor();
       const desktopSourcesNavigation = page.locator('[data-ltm-navigation="desktop"] [data-ltm-destination="sources"]');
-      assert.match(await desktopSourcesNavigation.innerText(), /Re-extracting 1/u);
+      assert.match(await desktopSourcesNavigation.innerText(), /Re-extracting\.\.\./u);
+      assert.match(await page.locator("[data-ltm-source-task-progress]").innerText(), /Re-extracting 1/u);
       await page.locator('[data-ltm-navigation="desktop"] [data-ltm-destination="vault"]').click();
       await reextractionStarted;
       releaseReextraction?.();

@@ -92,15 +92,11 @@ export function LongTermMemoryNavigation({
       item.id !== "sources"
         ? null
         : activeSourceTask?.kind === "import"
-          ? localizeUi("ui.longTermMemory.sourcesworkspace.importingSources", { count: activeSourceTask.sourceCount })
+          ? localizeUi("ui.longTermMemory.sourcesworkspace.sourceTaskImporting")
           : activeSourceTask?.kind === "refresh"
-            ? localizeUi("ui.longTermMemory.sourcesworkspace.refreshingSources", {
-                count: activeSourceTask.sourceCount,
-              })
+            ? localizeUi("ui.longTermMemory.sourcesworkspace.sourceTaskRefreshing")
             : activeSourceTask
-              ? localizeUi("ui.longTermMemory.sourcesworkspace.reExtractingSources", {
-                  count: activeSourceTask.sourceCount,
-                })
+              ? localizeUi("ui.longTermMemory.sourcesworkspace.sourceTaskReExtracting")
               : latestSourceTask?.status === "cancelled" && !latestSourceTask.viewedAt
                 ? localizeUi("ui.longTermMemory.sourcesworkspace.sourceTaskCancelled")
                 : unreadFailure

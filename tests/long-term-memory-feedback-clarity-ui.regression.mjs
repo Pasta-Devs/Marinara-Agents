@@ -122,6 +122,10 @@ assert.match(navigation, /sourceTaskCancelled/u);
 assert.match(navigation, /selectLtmPluralForm\(locale, failureCount\)/u);
 assert.match(navigation, /sourceTaskFailedCountOne[\s\S]*sourceTaskFailedCountOther/u);
 assert.match(navigation, /className=\{item\.id === "sources" && activeSourceTask \? "animate-spin"/u);
+assert.match(navigation, /sourceTaskImporting[\s\S]*sourceTaskRefreshing[\s\S]*sourceTaskReExtracting/u);
+assert.doesNotMatch(navigation, /sourcesworkspace\.importingSources|sourcesworkspace\.refreshingSources/u);
+assert.equal((workspace.match(/importingSourceIds/gu) ?? []).length, 0, "row spinners defer to the task surface");
+assert.doesNotMatch(workspace, /\[&>svg\]:animate-spin/u);
 assert.match(workspace, /restoredImportResult\.writeFailures\?\.filter\(\(item\) => item\.retryable\)/u);
 assert.match(workspace, /restoredImportResult\.writeFailures\?\.map\(\(failure\) =>/u);
 assert.match(

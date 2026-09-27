@@ -1628,9 +1628,6 @@ export default function SourcesWorkspace({
   const importing =
     sourceTask.active?.status === "running" &&
     (sourceTask.active.kind === "import" || sourceTask.active.kind === "refresh");
-  const importingSourceIds = new Set(
-    importing && sourceTask.active?.contract.source === source ? sourceTask.active.contract.sourceIds : [],
-  );
   const extractingId =
     sourceTask.active?.status === "running" && sourceTask.active.kind === "re-extract"
       ? (sourceTask.active.contract.sourceIds[0] ?? null)
@@ -2534,7 +2531,7 @@ export default function SourcesWorkspace({
     <>
       <div className="hidden items-start gap-1 md:flex">
         <IconButton
-          icon={extractingId === noteId ? Loader2 : Sparkles}
+          icon={Sparkles}
           label={localizeUi("ui.longTermMemory.sourcesworkspace.reExtractValue1", { value1: title })}
           disabled={extractingId !== null}
           onClick={(event) => {
@@ -2544,7 +2541,6 @@ export default function SourcesWorkspace({
           }}
           data-ltm-source-action="re-extract"
           data-ltm-source-note-id={noteId}
-          className={extractingId === noteId ? "[&>svg]:animate-spin" : ""}
         />
         <IconButton
           icon={BookOpen}
@@ -2573,7 +2569,7 @@ export default function SourcesWorkspace({
         {openSourceActionId === noteId ? (
           <>
             <IconButton
-              icon={extractingId === noteId ? Loader2 : Sparkles}
+              icon={Sparkles}
               label={localizeUi("ui.longTermMemory.sourcesworkspace.reExtractValue1", { value1: title })}
               disabled={extractingId !== null}
               onClick={(event) => {
@@ -2581,7 +2577,6 @@ export default function SourcesWorkspace({
                 setOpenSourceActionId(null);
                 void reextract(noteId);
               }}
-              className={extractingId === noteId ? "[&>svg]:animate-spin" : ""}
             />
             <IconButton
               icon={BookOpen}
@@ -2659,14 +2654,13 @@ export default function SourcesWorkspace({
         </span>
         {ready ? (
           <IconButton
-            icon={importingSourceIds.has(row.sourceId) ? Loader2 : FileInput}
+            icon={FileInput}
             label={localizeUi("ui.longTermMemory.sourcesworkspace.importValue1", { value1: row.title })}
             disabled={importDisabled}
             onClick={(event) => {
               stopRowAction(event);
               void runImport([row.sourceId]);
             }}
-            iconClassName={importingSourceIds.has(row.sourceId) ? "animate-spin motion-reduce:animate-none" : undefined}
             data-ltm-source-action="import"
             data-ltm-source-id={row.sourceId}
           />
@@ -3308,7 +3302,7 @@ export default function SourcesWorkspace({
                                       <div className="flex items-start gap-2">
                                         {candidate.status === "pending" ? (
                                           <IconButton
-                                            icon={importingSourceIds.has(candidate.sourceId) ? Loader2 : FileInput}
+                                            icon={FileInput}
                                             label={localizeUi("ui.longTermMemory.sourcesworkspace.importValue1", {
                                               value1: candidate.title,
                                             })}
@@ -3317,11 +3311,6 @@ export default function SourcesWorkspace({
                                               stopRowAction(event);
                                               void runImport([candidate.sourceId]);
                                             }}
-                                            iconClassName={
-                                              importingSourceIds.has(candidate.sourceId)
-                                                ? "animate-spin motion-reduce:animate-none"
-                                                : undefined
-                                            }
                                             data-ltm-source-action="import"
                                             data-ltm-source-id={candidate.sourceId}
                                           />
@@ -4022,11 +4011,7 @@ export default function SourcesWorkspace({
                       data-ltm-source-action="re-extract"
                       data-ltm-source-note-id={item.note.id}
                     >
-                      {extractingId === item.note.id ? (
-                        <Loader2 aria-hidden="true" size="0.75rem" className="animate-spin" />
-                      ) : (
-                        <Sparkles aria-hidden="true" size="0.75rem" />
-                      )}
+                      <Sparkles aria-hidden="true" size="0.75rem" />
                       {localizeUi("ui.longTermMemory.sourcesworkspace.reExtract")}
                     </Button>
                     <Button onClick={() => onOpenReview?.(item.note.id)} data-ltm-review-query={item.note.id}>
