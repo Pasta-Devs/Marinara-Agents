@@ -498,6 +498,9 @@ function DestinationScopePanel({
       .includes(needle);
   const filteredTargets = activeTargets.filter(matches);
   const selectedTargets = sortedTargets.filter((target) => selectedIds.includes(target.id));
+  const destinationSummary = selectedTargets.length
+    ? selectedTargets.map((target) => targetDisplayLabel(target, true)).join(", ")
+    : localizeUi("ui.longTermMemory.sourcesworkspace.chooseDestination");
   const currentDestinationScope = mergedDestinationScope(selectedTargets);
   const targetExceedsLimit = (target: ScopeTarget) =>
     !selectedIds.includes(target.id) && !targetFitsDestinationScope(currentDestinationScope, target);
@@ -742,67 +745,106 @@ function DestinationScopePanel({
           </div>
         </div>
       ) : null}
-      <label className="relative block shrink-0">
-        <Search
-          aria-hidden="true"
-          size="0.875rem"
-          className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[var(--muted-foreground)]"
-        />
-        <input
-          className={`${inputClass} pl-9`}
-          value={query}
-          placeholder={localizeUi("ui.longTermMemory.sourcesworkspace.searchScopes")}
-          aria-label={localizeUi("ui.longTermMemory.sourcesworkspace.searchScopes")}
-          aria-controls="ltm-bulk-destination-list"
-          data-ltm-availability-search={activeKind}
-          disabled={disabled}
-          onChange={(event) => setQuery(event.target.value)}
-        />
-      </label>
-      <div
-        role="tablist"
-        aria-label={localizeUi("ui.longTermMemory.sourcesworkspace.makeMemoriesAvailableIn")}
-        className="grid shrink-0 grid-cols-2 gap-1 sm:grid-cols-5"
-      >
-        {categories.map(([kind, label], index) => {
-          const count =
-            kind === "all"
-              ? selectedIds.length
-              : selectedIds.filter((id) => sortedTargets.some((target) => target.id === id && target.kind === kind))
-                  .length;
-          return (
-            <button
-              key={kind}
-              type="button"
-              role="tab"
-              aria-selected={activeKind === kind}
-              aria-controls="ltm-bulk-destination-list"
-              tabIndex={activeKind === kind ? 0 : -1}
-              data-ltm-availability-tab={kind}
-              data-active={activeKind === kind}
-              className="mari-editor-tab min-h-11 min-w-0 rounded-md border px-2 text-xs font-semibold"
-              onClick={() => setActiveKind(kind)}
-              onKeyDown={(event) => handleCategoryKey(event, index)}
+      <style>{`
+        [data-ltm-destination-scope] {
+          display: flex;
+          flex-direction: column;
+          min-height: 0;
+        }
+        [data-ltm-destination-scope][open] {
+          flex: 1 1 auto;
+        }
+        [data-ltm-destination-scope]::details-content {
+          display: flex;
+          flex-direction: column;
+          flex: 1 1 auto;
+          min-height: 0;
+          gap: 0.75rem;
+        }
+        [data-ltm-destination-scope] > summary [data-ltm-destination-scope-chevron] {
+          transition: transform 150ms ease;
+        }
+        [data-ltm-destination-scope][open] > summary [data-ltm-destination-scope-chevron] {
+          transform: rotate(90deg);
+        }
+      `}</style>
+      <details data-ltm-destination-scope className="group flex min-h-0 flex-col gap-3">
+        <summary className="mari-editor-action flex min-h-11 shrink-0 cursor-pointer list-none items-center gap-2 px-3 py-2 text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--ring)] [&::-webkit-details-marker]:hidden">
+          <span className="min-w-0 flex-1">
+            <span className="block text-[0.625rem] font-medium text-[var(--marinara-editor-muted)]">
+              {localizeUi("ui.longTermMemory.memoryvault.availableIn")}
+            </span>
+            <span
+              className="block truncate text-xs font-semibold text-[var(--marinara-editor-text)]"
+              data-ltm-destination-scope-summary
             >
-              <span className="block truncate">{label}</span>
-              <span className="text-xs text-[var(--muted-foreground)]">{count}</span>
-            </button>
-          );
-        })}
-      </div>
-      {blockedTargetCount ? (
-        <p role="note" className="shrink-0 text-xs text-[var(--muted-foreground)]">
-          {localizeUi("ui.longTermMemory.sourcesworkspace.destinationScopeLimitReached")}
-        </p>
-      ) : null}
-      <div
-        id="ltm-bulk-destination-list"
-        role="tabpanel"
-        aria-label={categoryLabels[activeKind]}
-        className="min-h-0 flex-1 overflow-y-auto overscroll-contain"
-      >
-        {destinationPickerList}
-      </div>
+              {destinationSummary}
+            </span>
+          </span>
+          <ChevronRight aria-hidden="true" size="0.875rem" data-ltm-destination-scope-chevron className="shrink-0" />
+        </summary>
+        <label className="relative block shrink-0">
+          <Search
+            aria-hidden="true"
+            size="0.875rem"
+            className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[var(--muted-foreground)]"
+          />
+          <input
+            className={`${inputClass} pl-9`}
+            value={query}
+            placeholder={localizeUi("ui.longTermMemory.sourcesworkspace.searchScopes")}
+            aria-label={localizeUi("ui.longTermMemory.sourcesworkspace.searchScopes")}
+            aria-controls="ltm-bulk-destination-list"
+            data-ltm-availability-search={activeKind}
+            disabled={disabled}
+            onChange={(event) => setQuery(event.target.value)}
+          />
+        </label>
+        <div
+          role="tablist"
+          aria-label={localizeUi("ui.longTermMemory.sourcesworkspace.makeMemoriesAvailableIn")}
+          className="grid shrink-0 grid-cols-2 gap-1 sm:grid-cols-5"
+        >
+          {categories.map(([kind, label], index) => {
+            const count =
+              kind === "all"
+                ? selectedIds.length
+                : selectedIds.filter((id) => sortedTargets.some((target) => target.id === id && target.kind === kind))
+                    .length;
+            return (
+              <button
+                key={kind}
+                type="button"
+                role="tab"
+                aria-selected={activeKind === kind}
+                aria-controls="ltm-bulk-destination-list"
+                tabIndex={activeKind === kind ? 0 : -1}
+                data-ltm-availability-tab={kind}
+                data-active={activeKind === kind}
+                className="mari-editor-tab min-h-11 min-w-0 rounded-md border px-2 text-xs font-semibold"
+                onClick={() => setActiveKind(kind)}
+                onKeyDown={(event) => handleCategoryKey(event, index)}
+              >
+                <span className="block truncate">{label}</span>
+                <span className="text-xs text-[var(--muted-foreground)]">{count}</span>
+              </button>
+            );
+          })}
+        </div>
+        {blockedTargetCount ? (
+          <p role="note" className="shrink-0 text-xs text-[var(--muted-foreground)]">
+            {localizeUi("ui.longTermMemory.sourcesworkspace.destinationScopeLimitReached")}
+          </p>
+        ) : null}
+        <div
+          id="ltm-bulk-destination-list"
+          role="tabpanel"
+          aria-label={categoryLabels[activeKind]}
+          className="min-h-0 flex-1 overflow-y-auto overscroll-contain"
+        >
+          {destinationPickerList}
+        </div>
+      </details>
       {!selectedTargets.length ? (
         <span role="alert" className="block shrink-0 text-xs text-[var(--marinara-editor-warning)]">
           {localizeUi("ui.longTermMemory.sourcesworkspace.chooseDestinationBeforeImport")}
@@ -2908,14 +2950,6 @@ export default function SourcesWorkspace({
           {localizeUi("ui.longTermMemory.sourcesworkspace.refreshExplanation")}
         </p>
       ) : null}
-      {importing ? (
-        <p role="status" className="text-xs text-[var(--muted-foreground)]">
-          {localizeUi("ui.longTermMemory.sourcesworkspace.savingAndExtracting", {
-            count: importResultContract?.sourceIds.length ?? 0,
-          })}
-        </p>
-      ) : null}
-
       {source === "lorebooks" ? (
         <div
           id="ltm-source-preview-lorebooks"
@@ -3118,8 +3152,7 @@ export default function SourcesWorkspace({
                   {restoredImportResultPanel}
                   {activeSourceTask ? (
                     <div className="space-y-3 border-b border-[var(--border)] p-4" data-ltm-source-task-progress>
-                      <StatusSurface busy>
-                        <Loader2 aria-hidden="true" size="0.875rem" className="animate-spin" />
+                      <StatusSurface busy data-ltm-source-task-count>
                         {sourceTaskProgressMessage}
                       </StatusSurface>
                       <Button destructive onClick={cancelLtmSourceTask} data-ltm-source-action="cancel-import">
@@ -3691,15 +3724,9 @@ export default function SourcesWorkspace({
                   ) : null}
                   {activeSourceTask ? (
                     <div className="space-y-3 p-4" data-ltm-source-task-progress>
-                      <StatusSurface busy>
-                        <Loader2 aria-hidden="true" size="0.875rem" className="animate-spin" />
+                      <StatusSurface busy data-ltm-source-task-count>
                         {sourceTaskProgressMessage}
                       </StatusSurface>
-                      <p className="text-xs text-[var(--muted-foreground)]">
-                        {localizeUi("ui.longTermMemory.sourcesworkspace.savingAndExtracting", {
-                          count: activeSourceTask.sourceCount,
-                        })}
-                      </p>
                       <Button destructive onClick={cancelLtmSourceTask} data-ltm-source-action="cancel-import">
                         {localizeUi("ui.longTermMemory.memoryvault.cancel")}
                       </Button>

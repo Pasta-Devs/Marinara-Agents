@@ -127,7 +127,6 @@ export function LongTermMemoryNavigation({
           : item.id === "sources" && recentCompletion
             ? Check
             : item.icon;
-    const sourceTaskCount = activeSourceTask?.sourceCount ?? (unreadFailure ? failureCount : null);
     return (
       <button
         key={item.id}
@@ -149,9 +148,7 @@ export function LongTermMemoryNavigation({
           className={item.id === "sources" && activeSourceTask ? "animate-spin" : undefined}
         />
         <span aria-live={item.id === "sources" ? "polite" : undefined}>{label}</span>
-        {item.id === "sources" && sourceTaskCount ? (
-          <span data-ltm-badge>{sourceTaskCount}</span>
-        ) : typeof badge === "number" && badge > 0 ? (
+        {typeof badge === "number" && badge > 0 ? (
           <span data-ltm-badge className="mari-editor-tab-badge">
             {badge}
           </span>

@@ -3432,6 +3432,23 @@ async function main() {
       // Unified destination panel replaces the split combobox + "Add more locations".
       const destinationPanel = page.locator("#ltm-destination-scope-control");
       await destinationPanel.waitFor();
+      const destinationScope = destinationPanel.locator("[data-ltm-destination-scope]");
+      assert.equal(await destinationScope.getAttribute("open"), null, "destination scope starts collapsed");
+      assert.match(
+        await destinationScope.locator("[data-ltm-destination-scope-summary]").innerText(),
+        /Choose a destination/u,
+      );
+      assert.equal(
+        await destinationScope.locator('[data-ltm-availability-tab="all"]').isVisible(),
+        false,
+        "destination tab rail stays inside the collapsed disclosure",
+      );
+      await destinationScope.locator("summary").click();
+      assert.notEqual(
+        await destinationScope.getAttribute("open"),
+        null,
+        "destination scope expands when the summary is clicked",
+      );
       assert.equal(await page.locator('[data-ltm-scope-picker="destination"]').count(), 0);
       assert.equal(await page.locator("[data-ltm-add-destination]").count(), 0);
       assert.equal(await destinationPanel.getByText("Make memories available in", { exact: true }).count(), 1);
@@ -3545,6 +3562,11 @@ async function main() {
       assert.equal(
         await destinationPanel.locator('button[aria-label^="Remove Persona A (current and future chats)"]').count(),
         1,
+      );
+      // The collapsed summary tracks the current destination selection.
+      assert.doesNotMatch(
+        await destinationScope.locator("[data-ltm-destination-scope-summary]").innerText(),
+        /^Choose a destination$/u,
       );
 
       // Capacity: the per-kind 100-ID limit blocks the 100th additional chat.
@@ -3717,6 +3739,15 @@ async function main() {
       await importingButton.click();
       try {
         await page.locator('[data-ltm-import-status="pending"]').waitFor();
+        const visibleSourceCountOwners = page.locator(
+          '[data-ltm-surface="sources"] [data-ltm-source-task-count]:visible',
+        );
+        assert.equal(
+          await visibleSourceCountOwners.count(),
+          1,
+          "an active source task exposes exactly one visible source count",
+        );
+        assert.match(await visibleSourceCountOwners.innerText(), /Importing 1/u);
         assert.equal(await importingButton.isDisabled(), true);
         assert.equal(await idleButton.isDisabled(), true);
         assert.equal(
@@ -3848,6 +3879,9 @@ async function main() {
         ),
         3,
       );
+      if ((await destinationScope.getAttribute("open")) === null) {
+        await destinationScope.locator("summary").click();
+      }
       await destinationPanel.locator('[data-ltm-availability-tab="branch"]').click();
       await destinationPanel.locator('[data-ltm-availability-target="branch:conversation-a"] input').check();
       await page.locator('[data-ltm-lorebook-id="lorebook_mobile_fixture"]').click();

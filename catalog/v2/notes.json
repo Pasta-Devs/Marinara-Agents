@@ -130,7 +130,7 @@
         {
           "version": "1.3.27",
           "date": "2026-09-27",
-          "notes": "- Use All / Chats / Branches / Characters / Personas tabs in the Sources \"Find sources in\" picker so it matches Memory Vault and availability scope pickers.",
+          "notes": "- Use All / Chats / Branches / Characters / Personas tabs in the Sources \"Find sources in\" picker so it matches Memory Vault and availability scope pickers.\n- Collapse the Sources \"Make memories available in\" destination search, tab rail, and result list under a summary that shows the current destination, matching the Memory Vault picker.\n- Show one spinner and one source count while a source task runs instead of a duplicated loader and a repeated count.",
           "highlight": false
         },
         {

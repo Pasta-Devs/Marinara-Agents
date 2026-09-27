@@ -132,6 +132,22 @@ assert.match(
   workspace,
   /<div\s+id="ltm-bulk-destination-list"[^>]*className="min-h-0 flex-1 overflow-y-auto overscroll-contain"[^>]*>/u,
 );
+assert.match(
+  workspace,
+  /<details\s+data-ltm-destination-scope[^>]*className="group flex min-h-0 flex-col gap-3"[^>]*>/u,
+);
+assert.match(workspace, /data-ltm-destination-scope-summary/u);
+assert.doesNotMatch(
+  workspace,
+  /<StatusSurface busy>\s*<Loader2 aria-hidden="true" size="0\.875rem" className="animate-spin" \/>/u,
+);
+assert.doesNotMatch(navigation, /sourceTaskCount/u);
+assert.doesNotMatch(workspace, /savingAndExtracting/u);
+assert.equal(
+  (workspace.match(/data-ltm-source-task-count/gu) ?? []).length,
+  2,
+  "the two task workbenches own the single source count",
+);
 assert.match(interop, /content: row\.sourceText\.slice\(0, 500_000\)/u);
 assert.match(workspace, /readyForReviewWithRejectedSuggestions/u);
 assert.match(workspace, /extractionDidNotFinish/u);
