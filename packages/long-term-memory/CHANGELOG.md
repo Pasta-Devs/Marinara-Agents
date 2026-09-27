@@ -1,5 +1,9 @@
 # Long-Term Memory changelog
 
+## 1.3.26 — 2026-09-27
+
+- Render the Memory Vault unsaved-changes and rename-details dialogs as small centred cards again; both used a width class the Engine never emits, so they stretched across the screen.
+
 ## 1.3.24 — 2026-09-27
 
 - Reconcile extracted candidates against notes committed after the extraction snapshot, so importing several sources at once (or two imports running at the same time) reuses the first memory instead of creating a duplicate under a second ID.
