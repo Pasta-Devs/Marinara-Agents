@@ -1,3 +1,10 @@
+## 0.2.3 — 2026-09-27
+- People look like themselves in their pictures: their name, and whether they're a woman or a man, now go with every picture of them, so a character from a series looks like the one you know.
+- You can choose how big pictures of one person are drawn, in Settings, right below the size of the other pictures.
+- This season's new clothes are for who you play. A character who got dresses they'd never wear gets the season's clothes picked again.
+- In the shops, only the things for sale move when you scroll. Eating from your backpack shows up on top of it. The clothes store shows the store behind the clothes again.
+- The game finds Marinara however you run it, even from another device or on a secure connection.
+
 ## 0.2.1 — 2026-09-27
 - Models that think before they answer, like GLM or DeepSeek, no longer get cut off halfway: every call leaves them room to think, and one that still runs out gets a second try with more room.
 - Reasoning has a new option, none, for models that can answer without thinking first.
