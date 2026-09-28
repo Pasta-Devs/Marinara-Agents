@@ -92,15 +92,11 @@ export function LongTermMemoryNavigation({
       item.id !== "sources"
         ? null
         : activeSourceTask?.kind === "import"
-          ? localizeUi("ui.longTermMemory.sourcesworkspace.importingSources", { count: activeSourceTask.sourceCount })
+          ? localizeUi("ui.longTermMemory.sourcesworkspace.sourceTaskImporting")
           : activeSourceTask?.kind === "refresh"
-            ? localizeUi("ui.longTermMemory.sourcesworkspace.refreshingSources", {
-                count: activeSourceTask.sourceCount,
-              })
+            ? localizeUi("ui.longTermMemory.sourcesworkspace.sourceTaskRefreshing")
             : activeSourceTask
-              ? localizeUi("ui.longTermMemory.sourcesworkspace.reExtractingSources", {
-                  count: activeSourceTask.sourceCount,
-                })
+              ? localizeUi("ui.longTermMemory.sourcesworkspace.sourceTaskReExtracting")
               : latestSourceTask?.status === "cancelled" && !latestSourceTask.viewedAt
                 ? localizeUi("ui.longTermMemory.sourcesworkspace.sourceTaskCancelled")
                 : unreadFailure
@@ -124,7 +120,6 @@ export function LongTermMemoryNavigation({
           : item.id === "sources" && recentCompletion
             ? Check
             : item.icon;
-    const sourceTaskCount = activeSourceTask?.sourceCount ?? (unreadFailure ? failureCount : null);
     return (
       <button
         key={item.id}
@@ -159,9 +154,7 @@ export function LongTermMemoryNavigation({
             {sourceTaskLabel}
           </span>
         ) : null}
-        {item.id === "sources" && sourceTaskCount ? (
-          <span data-ltm-badge>{sourceTaskCount}</span>
-        ) : typeof badge === "number" && badge > 0 ? (
+        {typeof badge === "number" && badge > 0 ? (
           <span data-ltm-badge className="mari-editor-tab-badge">
             {badge}
           </span>

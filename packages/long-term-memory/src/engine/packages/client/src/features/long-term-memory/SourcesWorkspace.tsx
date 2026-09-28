@@ -133,11 +133,15 @@ function ScopeTargetPicker({
   const { t: localizeUi } = useLtmTranslation();
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
+  const [activeKind, setActiveKind] = useState<ScopeTargetKind>("all");
   const rootRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const searchRef = useRef<HTMLInputElement>(null);
   const listId = useId();
-  const groups: Array<[Exclude<ScopeTargetKind, "all">, string]> = [
+  const panelId = useId();
+  const tablistId = useId();
+  const categories: Array<[ScopeTargetKind, string]> = [
+    ["all", localizeUi("ui.longTermMemory.sourcesworkspace.all")],
     ["chat", localizeUi("ui.longTermMemory.sourcesworkspace.chats")],
     ["branch", localizeUi("ui.longTermMemory.sourcesworkspace.branches")],
     ["character", localizeUi("ui.longTermMemory.sourcesworkspace.characters")],
@@ -149,22 +153,28 @@ function ScopeTargetPicker({
     `${target.label} ${target.comment ?? ""} ${target.destinationLabel ?? ""} ${target.searchText ?? ""}`
       .toLocaleLowerCase()
       .includes(needle);
-  const pinnedTargets = targets.filter((target) => target.pinned);
-  const filteredTargets = targets.filter((target) => matches(target));
-  const regularTargets = filteredTargets.filter((target) => !target.pinned);
-  const selectedRegularTarget =
-    selectedTarget && !selectedTarget.pinned && matches(selectedTarget) ? selectedTarget : null;
-  const optionTargets = [
-    ...pinnedTargets,
-    ...(selectedRegularTarget ? [selectedRegularTarget] : []),
-    ...groups.flatMap(([kind]) => regularTargets.filter((target) => target.kind === kind && target.id !== value)),
-  ];
+  const pinnedTargets = targets.filter((target) => {
+    if (!target.pinned) return false;
+    if (target.pinned === "all") return true;
+    return activeKind === "all" || target.kind === activeKind;
+  });
+  const regularTargets = targets.filter(
+    (target) =>
+      !target.pinned && matches(target) && (activeKind === "all" ? target.kind !== "all" : target.kind === activeKind),
+  );
+  const optionTargets = [...pinnedTargets, ...regularTargets];
   const [highlightedId, setHighlightedId] = useState(value);
   useEffect(() => setHighlightedId(value), [value]);
   const close = () => {
     setOpen(false);
     setQuery("");
+    setActiveKind("all");
     requestAnimationFrame(() => triggerRef.current?.focus({ preventScroll: true }));
+  };
+  const selectKind = (kind: ScopeTargetKind, focusTab = false) => {
+    setActiveKind(kind);
+    setHighlightedId("");
+    if (focusTab) document.getElementById(`${tablistId}-${kind}`)?.focus({ preventScroll: true });
   };
 
   useEffect(() => {
@@ -172,7 +182,7 @@ function ScopeTargetPicker({
     const onPointerDown = (event: PointerEvent) => {
       if (!rootRef.current?.contains(event.target as Node)) close();
     };
-    const onKeyDown = (event: KeyboardEvent) => {
+    const onKeyDown = (event: globalThis.KeyboardEvent) => {
       if (event.key === "Escape") close();
     };
     document.addEventListener("pointerdown", onPointerDown);
@@ -198,6 +208,17 @@ function ScopeTargetPicker({
           : optionTargets.length - 1
         : (currentIndex + direction + optionTargets.length) % optionTargets.length;
     setHighlightedId(optionTargets[nextIndex]!.id);
+  };
+  const handleTabKey = (event: KeyboardEvent<HTMLButtonElement>, index: number) => {
+    if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
+    event.preventDefault();
+    const nextIndex =
+      event.key === "Home"
+        ? 0
+        : event.key === "End"
+          ? categories.length - 1
+          : (index + (event.key === "ArrowRight" ? 1 : -1) + categories.length) % categories.length;
+    selectKind(categories[nextIndex]![0], true);
   };
   const option = (target: ScopeTarget) => (
     <button
@@ -272,6 +293,7 @@ function ScopeTargetPicker({
         <div
           className="absolute left-0 top-full z-30 mt-2 w-full min-w-[min(20rem,calc(100vw-2rem))] overflow-hidden rounded-md border border-[var(--marinara-editor-divider)] bg-[var(--card)] shadow-xl"
           data-ltm-scope-picker-popup
+          style={{ containerType: "inline-size" }}
         >
           <label className="relative block border-b border-[var(--marinara-editor-divider)] p-2">
             <Search
@@ -309,32 +331,64 @@ function ScopeTargetPicker({
               }}
             />
           </label>
-          <div id={listId} role="listbox" aria-label={ariaLabel} className="max-h-72 overflow-y-auto">
-            {pinnedTargets.map(option)}
-            {selectedRegularTarget ? (
-              <div className="border-b border-[var(--marinara-editor-divider)]">
-                <p className="bg-[var(--secondary)] px-3 py-1 text-xs font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">
-                  {localizeUi("ui.longTermMemory.sourcesworkspace.selectedLocation")}
+          <div
+            role="tablist"
+            aria-label={ariaLabel}
+            data-ltm-scope-tablist
+            className="mari-editor-tab-rail grid w-full min-w-0 gap-1 border-b border-[var(--marinara-editor-divider)] p-1"
+          >
+            <style>{`
+              [data-ltm-scope-tablist] {
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+              }
+              [data-ltm-scope-tab]:not([data-active="true"]):not(:hover) {
+                background: var(--marinara-editor-control-bg);
+              }
+              @container (min-width: 16rem) {
+                [data-ltm-scope-tablist] {
+                  grid-template-columns: repeat(5, minmax(0, 1fr));
+                }
+              }
+              @container (max-width: 15rem) {
+                [data-ltm-scope-tablist] {
+                  grid-template-columns: minmax(0, 1fr);
+                }
+              }
+            `}</style>
+            {categories.map(([kind, label], index) => (
+              <button
+                key={kind}
+                type="button"
+                role="tab"
+                id={`${tablistId}-${kind}`}
+                aria-controls={panelId}
+                tabIndex={activeKind === kind ? 0 : -1}
+                aria-selected={activeKind === kind}
+                data-ltm-scope-tab={kind}
+                data-active={activeKind === kind}
+                className="mari-editor-tab min-h-11 min-w-0 rounded-md px-1 text-xs font-semibold focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--marinara-editor-focus-ring)]"
+                onClick={() => selectKind(kind, true)}
+                onKeyDown={(event) => handleTabKey(event, index)}
+              >
+                <span className="block truncate">{label}</span>
+              </button>
+            ))}
+          </div>
+          <div
+            id={panelId}
+            role="tabpanel"
+            aria-labelledby={`${tablistId}-${activeKind}`}
+            data-ltm-scope-tabpanel={activeKind}
+          >
+            <div id={listId} role="listbox" aria-label={ariaLabel} className="max-h-72 overflow-y-auto">
+              {pinnedTargets.map(option)}
+              {regularTargets.map(option)}
+              {!optionTargets.length ? (
+                <p className="px-3 py-4 text-xs text-[var(--muted-foreground)]">
+                  {localizeUi("ui.longTermMemory.sourcesworkspace.noMatchingScopes")}
                 </p>
-                {option(selectedRegularTarget)}
-              </div>
-            ) : null}
-            {groups.map(([kind, label]) => {
-              const options = regularTargets.filter((target) => target.kind === kind && target.id !== value);
-              return options.length ? (
-                <div key={kind}>
-                  <p className="border-b border-[var(--marinara-editor-divider)] bg-[var(--secondary)] px-3 py-1 text-xs font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">
-                    {label}
-                  </p>
-                  {options.map(option)}
-                </div>
-              ) : null;
-            })}
-            {!optionTargets.length ? (
-              <p className="px-3 py-4 text-xs text-[var(--muted-foreground)]">
-                {localizeUi("ui.longTermMemory.sourcesworkspace.noMatchingScopes")}
-              </p>
-            ) : null}
+              ) : null}
+            </div>
           </div>
         </div>
       ) : null}
@@ -444,6 +498,9 @@ function DestinationScopePanel({
       .includes(needle);
   const filteredTargets = activeTargets.filter(matches);
   const selectedTargets = sortedTargets.filter((target) => selectedIds.includes(target.id));
+  const destinationSummary = selectedTargets.length
+    ? selectedTargets.map((target) => targetDisplayLabel(target, true)).join(", ")
+    : localizeUi("ui.longTermMemory.sourcesworkspace.chooseDestination");
   const currentDestinationScope = mergedDestinationScope(selectedTargets);
   const targetExceedsLimit = (target: ScopeTarget) =>
     !selectedIds.includes(target.id) && !targetFitsDestinationScope(currentDestinationScope, target);
@@ -688,67 +745,106 @@ function DestinationScopePanel({
           </div>
         </div>
       ) : null}
-      <label className="relative block shrink-0">
-        <Search
-          aria-hidden="true"
-          size="0.875rem"
-          className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[var(--muted-foreground)]"
-        />
-        <input
-          className={`${inputClass} pl-9`}
-          value={query}
-          placeholder={localizeUi("ui.longTermMemory.sourcesworkspace.searchScopes")}
-          aria-label={localizeUi("ui.longTermMemory.sourcesworkspace.searchScopes")}
-          aria-controls="ltm-bulk-destination-list"
-          data-ltm-availability-search={activeKind}
-          disabled={disabled}
-          onChange={(event) => setQuery(event.target.value)}
-        />
-      </label>
-      <div
-        role="tablist"
-        aria-label={localizeUi("ui.longTermMemory.sourcesworkspace.makeMemoriesAvailableIn")}
-        className="grid shrink-0 grid-cols-2 gap-1 sm:grid-cols-5"
-      >
-        {categories.map(([kind, label], index) => {
-          const count =
-            kind === "all"
-              ? selectedIds.length
-              : selectedIds.filter((id) => sortedTargets.some((target) => target.id === id && target.kind === kind))
-                  .length;
-          return (
-            <button
-              key={kind}
-              type="button"
-              role="tab"
-              aria-selected={activeKind === kind}
-              aria-controls="ltm-bulk-destination-list"
-              tabIndex={activeKind === kind ? 0 : -1}
-              data-ltm-availability-tab={kind}
-              data-active={activeKind === kind}
-              className="mari-editor-tab min-h-11 min-w-0 rounded-md border px-2 text-xs font-semibold"
-              onClick={() => setActiveKind(kind)}
-              onKeyDown={(event) => handleCategoryKey(event, index)}
+      <style>{`
+        [data-ltm-destination-scope] {
+          display: flex;
+          flex-direction: column;
+          min-height: 0;
+        }
+        [data-ltm-destination-scope][open] {
+          flex: 1 1 auto;
+        }
+        [data-ltm-destination-scope]::details-content {
+          display: flex;
+          flex-direction: column;
+          flex: 1 1 auto;
+          min-height: 0;
+          gap: 0.75rem;
+        }
+        [data-ltm-destination-scope] > summary [data-ltm-destination-scope-chevron] {
+          transition: transform 150ms ease;
+        }
+        [data-ltm-destination-scope][open] > summary [data-ltm-destination-scope-chevron] {
+          transform: rotate(90deg);
+        }
+      `}</style>
+      <details data-ltm-destination-scope className="group flex min-h-0 flex-col gap-3">
+        <summary className="mari-editor-action flex min-h-11 shrink-0 cursor-pointer list-none items-center gap-2 px-3 py-2 text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--ring)] [&::-webkit-details-marker]:hidden">
+          <span className="min-w-0 flex-1">
+            <span className="block text-[0.625rem] font-medium text-[var(--marinara-editor-muted)]">
+              {localizeUi("ui.longTermMemory.memoryvault.availableIn")}
+            </span>
+            <span
+              className="block truncate text-xs font-semibold text-[var(--marinara-editor-text)]"
+              data-ltm-destination-scope-summary
             >
-              <span className="block truncate">{label}</span>
-              <span className="text-xs text-[var(--muted-foreground)]">{count}</span>
-            </button>
-          );
-        })}
-      </div>
-      {blockedTargetCount ? (
-        <p role="note" className="shrink-0 text-xs text-[var(--muted-foreground)]">
-          {localizeUi("ui.longTermMemory.sourcesworkspace.destinationScopeLimitReached")}
-        </p>
-      ) : null}
-      <div
-        id="ltm-bulk-destination-list"
-        role="tabpanel"
-        aria-label={categoryLabels[activeKind]}
-        className="min-h-0 flex-1 overflow-y-auto overscroll-contain"
-      >
-        {destinationPickerList}
-      </div>
+              {destinationSummary}
+            </span>
+          </span>
+          <ChevronRight aria-hidden="true" size="0.875rem" data-ltm-destination-scope-chevron className="shrink-0" />
+        </summary>
+        <label className="relative block shrink-0">
+          <Search
+            aria-hidden="true"
+            size="0.875rem"
+            className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[var(--muted-foreground)]"
+          />
+          <input
+            className={`${inputClass} pl-9`}
+            value={query}
+            placeholder={localizeUi("ui.longTermMemory.sourcesworkspace.searchScopes")}
+            aria-label={localizeUi("ui.longTermMemory.sourcesworkspace.searchScopes")}
+            aria-controls="ltm-bulk-destination-list"
+            data-ltm-availability-search={activeKind}
+            disabled={disabled}
+            onChange={(event) => setQuery(event.target.value)}
+          />
+        </label>
+        <div
+          role="tablist"
+          aria-label={localizeUi("ui.longTermMemory.sourcesworkspace.makeMemoriesAvailableIn")}
+          className="grid shrink-0 grid-cols-2 gap-1 sm:grid-cols-5"
+        >
+          {categories.map(([kind, label], index) => {
+            const count =
+              kind === "all"
+                ? selectedIds.length
+                : selectedIds.filter((id) => sortedTargets.some((target) => target.id === id && target.kind === kind))
+                    .length;
+            return (
+              <button
+                key={kind}
+                type="button"
+                role="tab"
+                aria-selected={activeKind === kind}
+                aria-controls="ltm-bulk-destination-list"
+                tabIndex={activeKind === kind ? 0 : -1}
+                data-ltm-availability-tab={kind}
+                data-active={activeKind === kind}
+                className="mari-editor-tab min-h-11 min-w-0 rounded-md border px-2 text-xs font-semibold"
+                onClick={() => setActiveKind(kind)}
+                onKeyDown={(event) => handleCategoryKey(event, index)}
+              >
+                <span className="block truncate">{label}</span>
+                <span className="text-xs text-[var(--muted-foreground)]">{count}</span>
+              </button>
+            );
+          })}
+        </div>
+        {blockedTargetCount ? (
+          <p role="note" className="shrink-0 text-xs text-[var(--muted-foreground)]">
+            {localizeUi("ui.longTermMemory.sourcesworkspace.destinationScopeLimitReached")}
+          </p>
+        ) : null}
+        <div
+          id="ltm-bulk-destination-list"
+          role="tabpanel"
+          aria-label={categoryLabels[activeKind]}
+          className="min-h-0 flex-1 overflow-y-auto overscroll-contain"
+        >
+          {destinationPickerList}
+        </div>
+      </details>
       {!selectedTargets.length ? (
         <span role="alert" className="block shrink-0 text-xs text-[var(--marinara-editor-warning)]">
           {localizeUi("ui.longTermMemory.sourcesworkspace.chooseDestinationBeforeImport")}
@@ -1532,9 +1628,6 @@ export default function SourcesWorkspace({
   const importing =
     sourceTask.active?.status === "running" &&
     (sourceTask.active.kind === "import" || sourceTask.active.kind === "refresh");
-  const importingSourceIds = new Set(
-    importing && sourceTask.active?.contract.source === source ? sourceTask.active.contract.sourceIds : [],
-  );
   const extractingId =
     sourceTask.active?.status === "running" && sourceTask.active.kind === "re-extract"
       ? (sourceTask.active.contract.sourceIds[0] ?? null)
@@ -2438,7 +2531,7 @@ export default function SourcesWorkspace({
     <>
       <div className="hidden items-start gap-1 md:flex">
         <IconButton
-          icon={extractingId === noteId ? Loader2 : Sparkles}
+          icon={Sparkles}
           label={localizeUi("ui.longTermMemory.sourcesworkspace.reExtractValue1", { value1: title })}
           disabled={extractingId !== null}
           onClick={(event) => {
@@ -2448,7 +2541,6 @@ export default function SourcesWorkspace({
           }}
           data-ltm-source-action="re-extract"
           data-ltm-source-note-id={noteId}
-          className={extractingId === noteId ? "[&>svg]:animate-spin" : ""}
         />
         <IconButton
           icon={BookOpen}
@@ -2477,7 +2569,7 @@ export default function SourcesWorkspace({
         {openSourceActionId === noteId ? (
           <>
             <IconButton
-              icon={extractingId === noteId ? Loader2 : Sparkles}
+              icon={Sparkles}
               label={localizeUi("ui.longTermMemory.sourcesworkspace.reExtractValue1", { value1: title })}
               disabled={extractingId !== null}
               onClick={(event) => {
@@ -2485,7 +2577,6 @@ export default function SourcesWorkspace({
                 setOpenSourceActionId(null);
                 void reextract(noteId);
               }}
-              className={extractingId === noteId ? "[&>svg]:animate-spin" : ""}
             />
             <IconButton
               icon={BookOpen}
@@ -2563,14 +2654,13 @@ export default function SourcesWorkspace({
         </span>
         {ready ? (
           <IconButton
-            icon={importingSourceIds.has(row.sourceId) ? Loader2 : FileInput}
+            icon={FileInput}
             label={localizeUi("ui.longTermMemory.sourcesworkspace.importValue1", { value1: row.title })}
             disabled={importDisabled}
             onClick={(event) => {
               stopRowAction(event);
               void runImport([row.sourceId]);
             }}
-            iconClassName={importingSourceIds.has(row.sourceId) ? "animate-spin motion-reduce:animate-none" : undefined}
             data-ltm-source-action="import"
             data-ltm-source-id={row.sourceId}
           />
@@ -2854,14 +2944,6 @@ export default function SourcesWorkspace({
           {localizeUi("ui.longTermMemory.sourcesworkspace.refreshExplanation")}
         </p>
       ) : null}
-      {importing ? (
-        <p role="status" className="text-xs text-[var(--muted-foreground)]">
-          {localizeUi("ui.longTermMemory.sourcesworkspace.savingAndExtracting", {
-            count: importResultContract?.sourceIds.length ?? 0,
-          })}
-        </p>
-      ) : null}
-
       {source === "lorebooks" ? (
         <div
           id="ltm-source-preview-lorebooks"
@@ -3064,8 +3146,7 @@ export default function SourcesWorkspace({
                   {restoredImportResultPanel}
                   {activeSourceTask ? (
                     <div className="space-y-3 border-b border-[var(--border)] p-4" data-ltm-source-task-progress>
-                      <StatusSurface busy>
-                        <Loader2 aria-hidden="true" size="0.875rem" className="animate-spin" />
+                      <StatusSurface busy data-ltm-source-task-count>
                         {sourceTaskProgressMessage}
                       </StatusSurface>
                       <Button destructive onClick={cancelLtmSourceTask} data-ltm-source-action="cancel-import">
@@ -3221,7 +3302,7 @@ export default function SourcesWorkspace({
                                       <div className="flex items-start gap-2">
                                         {candidate.status === "pending" ? (
                                           <IconButton
-                                            icon={importingSourceIds.has(candidate.sourceId) ? Loader2 : FileInput}
+                                            icon={FileInput}
                                             label={localizeUi("ui.longTermMemory.sourcesworkspace.importValue1", {
                                               value1: candidate.title,
                                             })}
@@ -3230,11 +3311,6 @@ export default function SourcesWorkspace({
                                               stopRowAction(event);
                                               void runImport([candidate.sourceId]);
                                             }}
-                                            iconClassName={
-                                              importingSourceIds.has(candidate.sourceId)
-                                                ? "animate-spin motion-reduce:animate-none"
-                                                : undefined
-                                            }
                                             data-ltm-source-action="import"
                                             data-ltm-source-id={candidate.sourceId}
                                           />
@@ -3637,15 +3713,9 @@ export default function SourcesWorkspace({
                   ) : null}
                   {activeSourceTask ? (
                     <div className="space-y-3 p-4" data-ltm-source-task-progress>
-                      <StatusSurface busy>
-                        <Loader2 aria-hidden="true" size="0.875rem" className="animate-spin" />
+                      <StatusSurface busy data-ltm-source-task-count>
                         {sourceTaskProgressMessage}
                       </StatusSurface>
-                      <p className="text-xs text-[var(--muted-foreground)]">
-                        {localizeUi("ui.longTermMemory.sourcesworkspace.savingAndExtracting", {
-                          count: activeSourceTask.sourceCount,
-                        })}
-                      </p>
                       <Button destructive onClick={cancelLtmSourceTask} data-ltm-source-action="cancel-import">
                         {localizeUi("ui.longTermMemory.memoryvault.cancel")}
                       </Button>
@@ -3941,11 +4011,7 @@ export default function SourcesWorkspace({
                       data-ltm-source-action="re-extract"
                       data-ltm-source-note-id={item.note.id}
                     >
-                      {extractingId === item.note.id ? (
-                        <Loader2 aria-hidden="true" size="0.75rem" className="animate-spin" />
-                      ) : (
-                        <Sparkles aria-hidden="true" size="0.75rem" />
-                      )}
+                      <Sparkles aria-hidden="true" size="0.75rem" />
                       {localizeUi("ui.longTermMemory.sourcesworkspace.reExtract")}
                     </Button>
                     <Button onClick={() => onOpenReview?.(item.note.id)} data-ltm-review-query={item.note.id}>

@@ -135,6 +135,10 @@ assert.match(
   /className=\{\s*mobile\s*\?\s*"sr-only"\s*:\s*"min-w-0 max-w-\[9rem\] truncate font-medium text-\[var\(--marinara-editor-muted\)\]"\s*\}/u,
 );
 assert.doesNotMatch(navigation, /mobile \? "max-w-full truncate text-\[0\.5625rem\] leading-tight"/u);
+assert.match(navigation, /sourceTaskImporting[\s\S]*sourceTaskRefreshing[\s\S]*sourceTaskReExtracting/u);
+assert.doesNotMatch(navigation, /sourcesworkspace\.importingSources|sourcesworkspace\.refreshingSources/u);
+assert.equal((workspace.match(/importingSourceIds/gu) ?? []).length, 0, "row spinners defer to the task surface");
+assert.doesNotMatch(workspace, /\[&>svg\]:animate-spin/u);
 assert.match(workspace, /restoredImportResult\.writeFailures\?\.filter\(\(item\) => item\.retryable\)/u);
 assert.match(workspace, /restoredImportResult\.writeFailures\?\.map\(\(failure\) =>/u);
 assert.match(
@@ -144,6 +148,22 @@ assert.match(
 assert.match(
   workspace,
   /<div\s+id="ltm-bulk-destination-list"[^>]*className="min-h-0 flex-1 overflow-y-auto overscroll-contain"[^>]*>/u,
+);
+assert.match(
+  workspace,
+  /<details\s+data-ltm-destination-scope[^>]*className="group flex min-h-0 flex-col gap-3"[^>]*>/u,
+);
+assert.match(workspace, /data-ltm-destination-scope-summary/u);
+assert.doesNotMatch(
+  workspace,
+  /<StatusSurface busy>\s*<Loader2 aria-hidden="true" size="0\.875rem" className="animate-spin" \/>/u,
+);
+assert.doesNotMatch(navigation, /sourceTaskCount/u);
+assert.doesNotMatch(workspace, /savingAndExtracting/u);
+assert.equal(
+  (workspace.match(/data-ltm-source-task-count/gu) ?? []).length,
+  2,
+  "the two task workbenches own the single source count",
 );
 assert.match(interop, /content: row\.sourceText\.slice\(0, 500_000\)/u);
 assert.match(workspace, /readyForReviewWithRejectedSuggestions/u);
@@ -276,6 +296,14 @@ assert.match(workspace, /destinationScopeLimitReached/u);
 assert.match(workspace, /hasDestinationScopeCapacity\(target\.destinationScope\)/u);
 assert.match(workspace, /data-ltm-availability-target/u);
 assert.match(workspace, /data-ltm-scope-picker-popup/u);
+assert.match(workspace, /data-ltm-scope-tablist/u);
+assert.match(workspace, /data-ltm-scope-tab=\{kind\}/u);
+assert.match(workspace, /data-ltm-scope-tabpanel=\{activeKind\}/u);
+assert.match(workspace, /role="tabpanel"/u);
+assert.match(workspace, /aria-controls=\{panelId\}/u);
+assert.match(workspace, /selectKind\(kind, true\)/u);
+assert.match(workspace, /ArrowLeft/u);
+assert.match(workspace, /ArrowRight/u);
 assert.doesNotMatch(vault, /matchesFilters/u);
 assert.match(vault, /data-ltm-vault-scope-target/u);
 assert.match(vault, /characterScopeTargets/u);
