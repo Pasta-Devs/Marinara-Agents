@@ -85,32 +85,30 @@ export function LongTermMemoryNavigation({
     latestSourceTask.finishedAt &&
     now < Date.parse(latestSourceTask.finishedAt) + 5_000,
   );
+  const sourceTaskLabel =
+    activeSourceTask?.kind === "import"
+      ? localizeUi("ui.longTermMemory.sourcesworkspace.sourceTaskImporting")
+      : activeSourceTask?.kind === "refresh"
+        ? localizeUi("ui.longTermMemory.sourcesworkspace.sourceTaskRefreshing")
+        : activeSourceTask
+          ? localizeUi("ui.longTermMemory.sourcesworkspace.sourceTaskReExtracting")
+          : latestSourceTask?.status === "cancelled" && !latestSourceTask.viewedAt
+            ? localizeUi("ui.longTermMemory.sourcesworkspace.sourceTaskCancelled")
+            : unreadFailure
+              ? localizeUi(
+                  selectLtmPluralForm(locale, failureCount) === "one"
+                    ? "ui.longTermMemory.sourcesworkspace.sourceTaskFailedCountOne"
+                    : "ui.longTermMemory.sourcesworkspace.sourceTaskFailedCountOther",
+                  { count: failureCount },
+                )
+              : recentCompletion && latestSourceTask
+                ? localizeUi("ui.longTermMemory.sourcesworkspace.sourceTaskCompleted", {
+                    count: latestSourceTask.sourceCount,
+                  })
+                : null;
   const items = destinations.map((item) => {
     const active = item.id === destination;
     const badge = item.badge ? badges?.[item.badge] : undefined;
-    const sourceTaskLabel =
-      item.id !== "sources"
-        ? null
-        : activeSourceTask?.kind === "import"
-          ? localizeUi("ui.longTermMemory.sourcesworkspace.sourceTaskImporting")
-          : activeSourceTask?.kind === "refresh"
-            ? localizeUi("ui.longTermMemory.sourcesworkspace.sourceTaskRefreshing")
-            : activeSourceTask
-              ? localizeUi("ui.longTermMemory.sourcesworkspace.sourceTaskReExtracting")
-              : latestSourceTask?.status === "cancelled" && !latestSourceTask.viewedAt
-                ? localizeUi("ui.longTermMemory.sourcesworkspace.sourceTaskCancelled")
-                : unreadFailure
-                  ? localizeUi(
-                      selectLtmPluralForm(locale, failureCount) === "one"
-                        ? "ui.longTermMemory.sourcesworkspace.sourceTaskFailedCountOne"
-                        : "ui.longTermMemory.sourcesworkspace.sourceTaskFailedCountOther",
-                      { count: failureCount },
-                    )
-                  : recentCompletion && latestSourceTask
-                    ? localizeUi("ui.longTermMemory.sourcesworkspace.sourceTaskCompleted", {
-                        count: latestSourceTask.sourceCount,
-                      })
-                    : null;
     const label = localizeUi(mobile ? item.shortLabelKey : item.labelKey);
     const Icon =
       item.id === "sources" && activeSourceTask
@@ -127,6 +125,7 @@ export function LongTermMemoryNavigation({
         data-ltm-control="navigation"
         data-ltm-destination={item.id}
         aria-current={active ? "page" : undefined}
+        aria-label={item.id === "sources" ? label : undefined}
         title={item.id === "sources" && sourceTaskLabel ? sourceTaskLabel : undefined}
         onClick={() => onDestinationChange(item.id)}
         data-active={active}
@@ -141,15 +140,14 @@ export function LongTermMemoryNavigation({
           size={mobile ? "1.125rem" : "0.875rem"}
           className={item.id === "sources" && activeSourceTask ? "animate-spin" : undefined}
         />
-        <span className="min-w-0 truncate">{label}</span>
-        {item.id === "sources" && sourceTaskLabel ? (
+        <span className="min-w-0 truncate" aria-hidden={item.id === "sources" ? true : undefined}>
+          {label}
+        </span>
+        {item.id === "sources" && sourceTaskLabel && !mobile ? (
           <span
-            data-ltm-source-task-status
-            role="status"
-            aria-live="polite"
-            className={
-              mobile ? "sr-only" : "min-w-0 max-w-[9rem] truncate font-medium text-[var(--marinara-editor-muted)]"
-            }
+            data-ltm-source-task-status-visual
+            aria-hidden="true"
+            className="min-w-0 max-w-[9rem] truncate font-medium text-[var(--marinara-editor-muted)]"
           >
             {sourceTaskLabel}
           </span>
@@ -181,6 +179,11 @@ export function LongTermMemoryNavigation({
       >
         {items}
       </nav>
+      {sourceTaskLabel ? (
+        <span data-ltm-source-task-status role="status" aria-live="polite" className="sr-only">
+          {sourceTaskLabel}
+        </span>
+      ) : null}
     </div>
   );
 }
