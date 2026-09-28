@@ -1,5 +1,9 @@
 # Long-Term Memory changelog
 
+## 1.3.30 — 2026-09-28
+
+- Add a second optional place selector to the Memory Vault. When two places are selected they combine with AND, so the list and bulk selection show only memories available in both; clearing the second place restores the normal single-place view.
+
 ## 1.3.29 — 2026-09-27
 
 - Align the bulk Change Availability workbench with the single-memory Memory Availability editor: same Available in heading and pills, collapsible place picker, and clearer chat-mode eligibility versus place-scope copy. Add/Remove still drives incremental `enableModes` / `disableModes` and `addScope` / `removeScope`.
