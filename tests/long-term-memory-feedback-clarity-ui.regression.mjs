@@ -458,7 +458,11 @@ assert.match(vault, /onClick=\{clearNavigatorFilters\}/u);
 assert.match(vault, /value1: scopeEntryLabel/u);
 assert.match(
   vault,
-  /scopeEntryLabel = secondaryTarget\s*\?\s*localizeUi\("ui\.longTermMemory\.memoryvault\.combinedScope"[\s\S]*?target\?\.label \?\? localizeUi\("ui\.longTermMemory\.memoryvault\.allMemories"\)/u,
+  /scopeEntryLabel = secondaryTarget\s*\?\s*localizeUi\("ui\.longTermMemory\.memoryvault\.combinedScope"[\s\S]*?first: targetDisplayLabel\(target\) \|\| localizeUi\("ui\.longTermMemory\.memoryvault\.allMemories"\)[\s\S]*?second: targetDisplayLabel\(secondaryTarget\)/u,
+);
+assert.match(
+  vault,
+  /:\s*targetDisplayLabel\(target\) \|\| localizeUi\("ui\.longTermMemory\.memoryvault\.allMemories"\);/u,
 );
 assert.ok(
   vault.indexOf("data-ltm-vault-feedback") < vault.indexOf("<LtmWorkspace\n"),

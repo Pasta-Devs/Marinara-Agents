@@ -1967,10 +1967,10 @@ export default function MemoryVault({
   ].filter(Boolean);
   const scopeEntryLabel = secondaryTarget
     ? localizeUi("ui.longTermMemory.memoryvault.combinedScope", {
-        first: target?.label ?? localizeUi("ui.longTermMemory.memoryvault.allMemories"),
+        first: targetDisplayLabel(target) || localizeUi("ui.longTermMemory.memoryvault.allMemories"),
         second: targetDisplayLabel(secondaryTarget),
       })
-    : (target?.label ?? localizeUi("ui.longTermMemory.memoryvault.allMemories"));
+    : targetDisplayLabel(target) || localizeUi("ui.longTermMemory.memoryvault.allMemories");
   const pickerTargets = useMemo<PickerTarget[]>(() => {
     const localSubjectFamily = draft?.subjects
       ?.find((subject) => subject.ref?.kind === "local_character")
