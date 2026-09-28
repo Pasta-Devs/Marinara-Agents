@@ -810,7 +810,7 @@ async function main() {
               scope: {},
               tags: [],
               keywords: [],
-              links: [],
+              links: [{ target: "world_outside_current_chat", relation: "involves" }],
               sections: {
                 facts: {
                   text: "Second mobile review memory text.",
@@ -942,7 +942,9 @@ async function main() {
               ? notes.filter((note) => note.id === "world_second_mobile")
               : url.searchParams.get("scopeChatIds") === "desktop-chat"
                 ? notes.filter((note) => note.id !== "world_outside_current_chat")
-                : notes,
+                : url.searchParams.get("scopePersonaId") === "persona-b"
+                  ? []
+                  : notes,
           );
         }
         if (request.method === "GET" && url.pathname.endsWith("/notes/world_second_mobile"))
@@ -955,7 +957,7 @@ async function main() {
             scope: {},
             tags: [],
             keywords: [],
-            links: [],
+            links: [{ target: "world_outside_current_chat", relation: "involves" }],
             sections: {
               facts: {
                 text: "Second mobile review memory text.",
@@ -1733,6 +1735,77 @@ async function main() {
       await page.locator('[data-ltm-memory-group="world"] > summary').click();
       await page.getByText("Memory outside current chat").waitFor();
       assert.ok(noteQueries.some((query) => !query.includes("scopeChatIds")));
+      const secondaryScope = page.locator("[data-ltm-memory-scope-secondary]");
+      // Repair proof: a secondary place must stay literal. Inheriting the primary
+      // place's character turns "A AND (B OR A)" back into A, so memories the second
+      // place does not hold would still reach the list and bulk selection.
+      await memoryScope.locator('[data-ltm-vault-scope-tab="character"]').click();
+      await memoryScope.locator('[data-ltm-vault-scope-target="character:character-a"]').click();
+      await memoryScope.locator('[data-ltm-vault-scope-target="character:character-a"][aria-checked="true"]').waitFor();
+      const secondaryPlaceRequestPromise = page.waitForRequest(
+        (request) => request.method() === "GET" && request.url().includes("scopeGroupId=conversation-a"),
+      );
+      await secondaryScope.locator(":scope > summary").click();
+      await secondaryScope.locator('[data-ltm-vault-scope-tab="chat"]').click();
+      await secondaryScope.locator('[data-ltm-vault-scope-target="group:conversation-a"]').click();
+      await secondaryScope
+        .locator('[data-ltm-vault-scope-target="group:conversation-a"][aria-checked="true"]')
+        .waitFor();
+      const secondaryPlaceRequest = await secondaryPlaceRequestPromise;
+      assert.doesNotMatch(
+        secondaryPlaceRequest.url(),
+        /scopeCharacterIds/u,
+        `the second place must not inherit the primary character: ${secondaryPlaceRequest.url()}`,
+      );
+      await secondaryScope.locator('[data-ltm-vault-scope-target="all"]').click();
+      await secondaryScope.locator(":scope > summary").click();
+      await memoryScope.locator('[data-ltm-vault-scope-tab="all"]').click();
+      await memoryScope.locator('[data-ltm-vault-scope-target="all"]').click();
+      const worldGroupSummary = page.locator('[data-ltm-memory-group="world"] > summary');
+      if (!(await page.locator('[data-ltm-memory-group="world"][open]').count())) await worldGroupSummary.click();
+      await page.getByText("Memory outside current chat").waitFor();
+      const secondaryCharacterRequestPromise = page.waitForRequest(
+        (request) => request.method() === "GET" && request.url().includes("scopeCharacterIds=character-a"),
+      );
+      await secondaryScope.locator(":scope > summary").click();
+      await secondaryScope.locator('[data-ltm-vault-scope-tab="character"]').click();
+      await secondaryScope.locator('[data-ltm-vault-scope-target="character:character-a"]').click();
+      await secondaryScope
+        .locator('[data-ltm-vault-scope-target="character:character-a"][aria-checked="true"]')
+        .waitFor();
+      const secondaryCharacterRequest = await secondaryCharacterRequestPromise;
+      assert.match(
+        secondaryCharacterRequest.url(),
+        /scopeCharacterIds=character-a/u,
+        "the second place must issue its own scope query",
+      );
+      if (!(await page.locator('[data-ltm-memory-group="world"][open]').count())) await worldGroupSummary.click();
+      await page.getByText("Second mobile review memory", { exact: true }).waitFor();
+      assert.equal(
+        await page.getByText("Memory outside current chat").count(),
+        0,
+        "AND intersection must drop memories unavailable in the second place",
+      );
+      // Repair proof: the AND view keeps the primary place's notes as link context,
+      // so a memory linked to a note outside the intersection still resolves by its
+      // title instead of dropping out of linked-title search.
+      const secondaryContextSearch = page.getByLabel("Search memories");
+      await secondaryContextSearch.fill("Memory outside current chat");
+      await page.getByText("Second mobile review memory", { exact: true }).waitFor();
+      await secondaryContextSearch.fill("");
+      // Repair proof: an empty AND intersection still names the combined scope
+      // instead of falling back to the generic "no memories" copy.
+      if (!(await page.locator("[data-ltm-memory-scope-secondary][open]").count())) {
+        await secondaryScope.locator(":scope > summary").click();
+      }
+      await secondaryScope.locator('[data-ltm-vault-scope-tab="persona"]').click();
+      await secondaryScope.locator('[data-ltm-vault-scope-presence="no-memories"] > summary').click();
+      await secondaryScope.locator('[data-ltm-vault-scope-target="persona:persona-b"]').click();
+      await secondaryScope.locator('[data-ltm-vault-scope-target="persona:persona-b"][aria-checked="true"]').waitFor();
+      await page.getByText(/No memories are available in .*AND/u).waitFor();
+      await secondaryScope.locator('[data-ltm-vault-scope-target="all"]').click();
+      assert.match((await secondaryScope.locator(":scope > summary").textContent()) ?? "", /No second place/u);
+      await secondaryScope.locator(":scope > summary").click();
       const setupGuide = page.getByRole("button", { name: "Show setup guide" });
       await setupGuide.click();
       const onboardingTitle = page.locator("#ltm-onboarding-title");

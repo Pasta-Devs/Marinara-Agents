@@ -263,6 +263,18 @@ assert.match(
 assert.match(vault, /data-ltm-memory-options/u);
 assert.match(vault, /data-ltm-memory-scope/u);
 assert.match(vault, /currentlyViewingMemoriesIn/u);
+assert.match(vault, /data-ltm-memory-scope-secondary/u);
+assert.match(vault, /memoryvault\.combineWithPlace/u);
+assert.match(vault, /memoryvault\.noSecondPlace/u);
+assert.match(vault, /memoryvault\.combinedScope/u);
+assert.match(vault, /selectSecondaryTarget/u);
+assert.match(vault, /notesRequestPath/u);
+assert.match(vault, /secondaryNotesScope/u);
+assert.match(vault, /const secondaryNotesScope = secondaryTarget\?\.scope;/u);
+assert.match(vault, /chatOnlyLtmScope/u);
+assert.match(vault, /secondaryCurrentConversationScopeTarget/u);
+assert.match(vault, /secondaryCurrentBranchScopeTarget/u);
+assert.match(vault, /noMemoriesInCombinedScope/u);
 assert.match(vault, /data-ltm-vault-scope-control/u);
 assert.match(vault, /text-\[var\(--marinara-editor-muted\)\].*focus-visible:outline/u);
 assert.match(vault, /mari-editor-action flex min-h-11/u);
@@ -377,6 +389,13 @@ assert.equal(locale["ui.longTermMemory.memoryvault.nameThisDetail"], "Name the d
 assert.equal(locale["ui.longTermMemory.memoryvault.createNewMemoryDetail"], "Create new memory detail");
 assert.equal(locale["ui.longTermMemory.memoryvault.memoryTypeValue"], "Memory type: {{type}}");
 assert.equal(locale["ui.longTermMemory.memoryvault.currentlyViewingMemoriesIn"], "Currently viewing memories in:");
+assert.equal(locale["ui.longTermMemory.memoryvault.combineWithPlace"], "Also available in (AND)");
+assert.equal(locale["ui.longTermMemory.memoryvault.noSecondPlace"], "No second place");
+assert.equal(locale["ui.longTermMemory.memoryvault.combinedScope"], "{{first}} AND {{second}}");
+assert.equal(
+  locale["ui.longTermMemory.memoryvault.noMemoriesInCombinedScope"],
+  "No memories are available in {{value1}}. A memory must be available in both places to appear here.",
+);
 assert.equal(locale["ui.longTermMemory.memoryvault.searchCharacters"], "Search characters");
 assert.equal(locale["ui.longTermMemory.memoryvault.searchChats"], "Search chats");
 assert.equal(locale["ui.longTermMemory.memoryvault.searchBranches"], "Search branches");
@@ -436,7 +455,15 @@ assert.match(
 assert.match(vault, /filteredEmptyFilters[\s\S]*activeFilterLabels\.join\(", "\)/u);
 assert.match(vault, /filteredEmptySourcesOnly/u);
 assert.match(vault, /onClick=\{clearNavigatorFilters\}/u);
-assert.match(vault, /value1: target\?\.label \?\? localizeUi\("ui\.longTermMemory\.memoryvault\.allMemories"\)/u);
+assert.match(vault, /value1: scopeEntryLabel/u);
+assert.match(
+  vault,
+  /scopeEntryLabel = secondaryTarget\s*\?\s*localizeUi\("ui\.longTermMemory\.memoryvault\.combinedScope"[\s\S]*?first: targetDisplayLabel\(target\) \|\| localizeUi\("ui\.longTermMemory\.memoryvault\.allMemories"\)[\s\S]*?second: targetDisplayLabel\(secondaryTarget\)/u,
+);
+assert.match(
+  vault,
+  /:\s*targetDisplayLabel\(target\) \|\| localizeUi\("ui\.longTermMemory\.memoryvault\.allMemories"\);/u,
+);
 assert.ok(
   vault.indexOf("data-ltm-vault-feedback") < vault.indexOf("<LtmWorkspace\n"),
   "shared Vault feedback must stay visible above the pane-switching workspace",
