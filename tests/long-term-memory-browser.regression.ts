@@ -3335,6 +3335,10 @@ async function main() {
       assert.match((await sourceScopeTrigger.innerText()).trim(), /All/u);
       await sourceScopeTrigger.click();
       assert.equal(await sourceScopePicker.locator('[role="listbox"] input').count(), 0);
+      for (const kind of ["all", "chat", "branch", "character", "persona"]) {
+        assert.equal(await sourceScopePicker.locator(`[data-ltm-scope-tab="${kind}"]`).count(), 1);
+      }
+      assert.equal(await sourceScopePicker.locator('[data-ltm-scope-tab="all"][data-active="true"]').count(), 1);
       assert.deepEqual(
         await sourceScopePicker.locator('[role="option"]').evaluateAll((options) =>
           options.slice(0, 2).map((option) => {
@@ -3352,9 +3356,45 @@ async function main() {
       );
       assert.equal(await sourceScopePicker.locator('[data-ltm-scope-option="chat:desktop-chat"]').count(), 1);
       assert.equal(await sourceScopePicker.locator('[data-ltm-scope-option="all"]').count(), 1);
+      assert.equal(await sourceScopePicker.locator('[data-ltm-scope-option="group:conversation-a"]').count(), 1);
+      await sourceScopePicker.locator('[data-ltm-scope-tab="chat"]').click();
+      assert.equal(await sourceScopePicker.locator('[data-ltm-scope-tab="chat"][data-active="true"]').count(), 1);
+      assert.equal(await sourceScopePicker.locator('[data-ltm-scope-tabpanel="chat"][role="tabpanel"]').count(), 1);
+      assert.equal(
+        await sourceScopePicker.locator('[role="tabpanel"]').getAttribute("aria-labelledby"),
+        await sourceScopePicker.locator('[data-ltm-scope-tab="chat"]').getAttribute("id"),
+      );
+      assert.equal(
+        await sourceScopePicker.locator('[data-ltm-scope-tab="chat"]').getAttribute("aria-controls"),
+        await sourceScopePicker.locator('[role="tabpanel"]').getAttribute("id"),
+      );
+      assert.equal(await sourceScopePicker.locator('[role="tabpanel"] [role="listbox"]').count(), 1);
+      assert.equal(await sourceScopePicker.locator('[data-ltm-scope-option="chat:desktop-chat"]').count(), 1);
+      assert.equal(await sourceScopePicker.locator('[data-ltm-scope-option="group:conversation-a"]').count(), 0);
+      assert.equal(await sourceScopePicker.locator('[data-ltm-scope-option="all"]').count(), 1);
+      await sourceScopePicker.locator('[data-ltm-scope-tab="branch"]').click();
+      assert.equal(await sourceScopePicker.locator('[data-ltm-scope-option="group:conversation-a"]').count(), 1);
+      assert.equal(await sourceScopePicker.locator('[data-ltm-scope-option="chat:desktop-chat"]').count(), 0);
+      assert.equal(
+        await sourceScopePicker
+          .locator('[data-ltm-scope-tab="branch"]')
+          .evaluate((tab) => document.activeElement === tab),
+        true,
+        "mouse-activated tab receives focus so roving keyboard navigation can continue",
+      );
+      await page.keyboard.press("ArrowRight");
+      assert.equal(await sourceScopePicker.locator('[data-ltm-scope-tab="character"][data-active="true"]').count(), 1);
+      assert.equal(
+        await sourceScopePicker
+          .locator('[data-ltm-scope-tab="character"]')
+          .evaluate((tab) => document.activeElement === tab),
+        true,
+      );
+      await sourceScopePicker.locator('[data-ltm-scope-tab="all"]').click();
       await sourceScopePicker.locator("[data-ltm-scope-picker-popup] input").fill("does-not-match");
       assert.equal(await sourceScopePicker.locator('[data-ltm-scope-option="chat:desktop-chat"]').count(), 1);
       assert.equal(await sourceScopePicker.locator('[data-ltm-scope-option="all"]').count(), 1);
+      assert.equal(await sourceScopePicker.locator('[data-ltm-scope-option="group:conversation-a"]').count(), 0);
       await sourceScopePicker.locator("[data-ltm-scope-picker-popup] input").fill("Member Final Branch");
       assert.equal(
         await sourceScopePicker.locator('[data-ltm-scope-option="group:conversation-a"]').count(),
@@ -3388,6 +3428,7 @@ async function main() {
           body.source === "chats" && JSON.stringify(body.sourceScope) === JSON.stringify(expectedInitialChatSourceScope)
         );
       });
+      await sourceScopePicker.locator('[data-ltm-scope-tab="chat"]').click();
       await sourceScopePicker.locator('[role="option"][data-ltm-scope-option="chat:desktop-chat"]').click();
       const scopedChatPreviewRequest = (await scopedChatPreviewRequestPromise).postDataJSON() as {
         sourceScope?: unknown;
@@ -3397,6 +3438,23 @@ async function main() {
       // Unified destination panel replaces the split combobox + "Add more locations".
       const destinationPanel = page.locator("#ltm-destination-scope-control");
       await destinationPanel.waitFor();
+      const destinationScope = destinationPanel.locator("[data-ltm-destination-scope]");
+      assert.equal(await destinationScope.getAttribute("open"), null, "destination scope starts collapsed");
+      assert.match(
+        await destinationScope.locator("[data-ltm-destination-scope-summary]").innerText(),
+        /Choose a destination/u,
+      );
+      assert.equal(
+        await destinationScope.locator('[data-ltm-availability-tab="all"]').isVisible(),
+        false,
+        "destination tab rail stays inside the collapsed disclosure",
+      );
+      await destinationScope.locator("summary").click();
+      assert.notEqual(
+        await destinationScope.getAttribute("open"),
+        null,
+        "destination scope expands when the summary is clicked",
+      );
       assert.equal(await page.locator('[data-ltm-scope-picker="destination"]').count(), 0);
       assert.equal(await page.locator("[data-ltm-add-destination]").count(), 0);
       assert.equal(await destinationPanel.getByText("Make memories available in", { exact: true }).count(), 1);
@@ -3510,6 +3568,11 @@ async function main() {
       assert.equal(
         await destinationPanel.locator('button[aria-label^="Remove Persona A (current and future chats)"]').count(),
         1,
+      );
+      // The collapsed summary tracks the current destination selection.
+      assert.doesNotMatch(
+        await destinationScope.locator("[data-ltm-destination-scope-summary]").innerText(),
+        /^Choose a destination$/u,
       );
 
       // Capacity: the per-kind 100-ID limit blocks the 100th additional chat.
@@ -3682,12 +3745,26 @@ async function main() {
       await importingButton.click();
       try {
         await page.locator('[data-ltm-import-status="pending"]').waitFor();
+        const visibleSourceCountOwners = page.locator(
+          '[data-ltm-surface="sources"] [data-ltm-source-task-count]:visible',
+        );
+        assert.equal(
+          await visibleSourceCountOwners.count(),
+          1,
+          "an active source task exposes exactly one visible source count",
+        );
+        assert.match(await visibleSourceCountOwners.innerText(), /Importing 1/u);
         assert.equal(await importingButton.isDisabled(), true);
         assert.equal(await idleButton.isDisabled(), true);
         assert.equal(
           await idleButton.locator("svg").getAttribute("class"),
           idleIcon,
           "unrelated sources retain their import icon",
+        );
+        assert.equal(
+          await importingButton.locator("svg").getAttribute("class"),
+          idleIcon,
+          "the active row keeps its default icon while the task surface owns activity",
         );
         await page.waitForFunction(() => {
           const button = document.querySelector(
@@ -3696,20 +3773,17 @@ async function main() {
           return button && Number(getComputedStyle(button).opacity) < 1;
         });
         await page.waitForFunction(() => {
-          const icon = document.querySelector(
-            '[data-ltm-source-action="import"][data-ltm-source-id="character-outside-current-chat"] svg',
-          );
-          return icon?.getAnimations().some((animation) => animation.playState === "running");
+          const icon = document.querySelector('[data-ltm-surface="sources"] [data-ltm-source-task-count] svg');
+          return Boolean(icon?.getAnimations().some((animation) => animation.playState === "running"));
         });
-        const firstTransform = await importingButton
-          .locator("svg")
-          .evaluate((icon) => getComputedStyle(icon).transform);
-        await page.waitForFunction((before) => {
-          const icon = document.querySelector(
-            '[data-ltm-source-action="import"][data-ltm-source-id="character-outside-current-chat"] svg',
+        const animatedIndicators = await page
+          .locator('[data-ltm-surface="sources"] svg')
+          .evaluateAll(
+            (icons) =>
+              icons.filter((icon) => icon.getAnimations().some((animation) => animation.playState === "running"))
+                .length,
           );
-          return icon && getComputedStyle(icon).transform !== before;
-        }, firstTransform);
+        assert.equal(animatedIndicators, 1, "a running source task animates exactly one indicator");
       } finally {
         releaseImport();
       }
@@ -3777,7 +3851,8 @@ async function main() {
       assert.equal(await desktopReextract.isDisabled(), true);
       await page.locator("[data-ltm-source-task-progress]").waitFor();
       const desktopSourcesNavigation = page.locator('[data-ltm-navigation="desktop"] [data-ltm-destination="sources"]');
-      assert.match(await desktopSourcesNavigation.innerText(), /Re-extracting 1/u);
+      assert.match(await desktopSourcesNavigation.innerText(), /Re-extracting\.\.\./u);
+      assert.match(await page.locator("[data-ltm-source-task-progress]").innerText(), /Re-extracting 1/u);
       await page.locator('[data-ltm-navigation="desktop"] [data-ltm-destination="vault"]').click();
       await reextractionStarted;
       releaseReextraction?.();
@@ -3813,6 +3888,9 @@ async function main() {
         ),
         3,
       );
+      if ((await destinationScope.getAttribute("open")) === null) {
+        await destinationScope.locator("summary").click();
+      }
       await destinationPanel.locator('[data-ltm-availability-tab="branch"]').click();
       await destinationPanel.locator('[data-ltm-availability-target="branch:conversation-a"] input').check();
       await page.locator('[data-ltm-lorebook-id="lorebook_mobile_fixture"]').click();

@@ -41,7 +41,12 @@
 export const INCOMPLETE_PACKAGE_IDS = new Set(["pixelforge"]);
 
 // Quartermaster and Relationship Tracker graduate with the next Marinara Engine main release.
-export const STAGING_ONLY_PACKAGE_IDS = new Set(["ruleset-5e-2014", "quartermaster", "relationship-tracker"]);
+export const STAGING_ONLY_PACKAGE_IDS = new Set([
+  "modern-life-sim",
+  "ruleset-5e-2014",
+  "quartermaster",
+  "relationship-tracker",
+]);
 
 // A package is in exactly one state. Both sets hiding the same id would make
 // the published/overlay split order-dependent, so reject it at import time.
