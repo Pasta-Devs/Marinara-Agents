@@ -115,20 +115,23 @@ function throwIfAborted(signal?: AbortSignal) {
 function cancelled(error: unknown, signal?: AbortSignal) {
   return signal?.aborted || (error instanceof Error && error.name === "AbortError");
 }
-function reviewRequiredForExtraction(sourceNote: LtmNote, diagnostics: readonly LtmExtractionDiagnostic[]) {
+function reviewRequiredForExtraction(
+  sourceNote: LtmNote,
+  options: { requiresReview?: boolean; diagnostics?: readonly LtmExtractionDiagnostic[] } = {},
+) {
   return (
     sourceNote.provenance?.kind === "character" ||
     sourceNote.provenance?.kind === "lorebook" ||
-    // An ambiguous or possibly-incomplete reconciliation must never auto-apply a likely
-    // duplicate; a human picks the target.
-    // Event-shaped character wording is kept for review rather than hard-dropped, so it
-    // must also block low-risk auto-apply until a human confirms the durable outcome.
-    diagnostics.some(
+    // Prefer the pre-truncation signal from compile/extract. Fall back to scanning retained
+    // diagnostics only when a path did not carry requiresReview (e.g. deterministic game ingest).
+    options.requiresReview === true ||
+    (options.diagnostics?.some(
       (diagnostic) =>
         diagnostic.code === "candidate_reconciliation_ambiguous" ||
         diagnostic.code === "candidate_reconciliation_incomplete" ||
         diagnostic.code === "event_shaped_character_fact",
-    )
+    ) ??
+      false)
   );
 }
 function canMarkCurrent(prepared: PreparedSource) {
@@ -266,7 +269,10 @@ export async function prepareLongTermMemorySource(options: PrepareOptions): Prom
   return {
     ...result,
     extractionMethod: "llm",
-    reviewRequired: reviewRequiredForExtraction(options.sourceNote, result.diagnostics),
+    reviewRequired: reviewRequiredForExtraction(options.sourceNote, {
+      requiresReview: result.requiresReview,
+      diagnostics: result.diagnostics,
+    }),
   };
 }
 
@@ -314,7 +320,17 @@ async function commitPreparedLongTermMemorySource(
     const diagnostics = fresh?.diagnostics ?? prepared.diagnostics;
     const outcome = fresh?.outcome ?? prepared.outcome;
     const accounting = fresh?.accounting ?? prepared.accounting;
-    const reviewRequired = reviewRequiredForExtraction(prepared.sourceNote, diagnostics);
+    // Prefer preparation's reviewRequired when recompile did not run; otherwise use the
+    // pre-truncation requiresReview from the fresh compile so truncated warnings still gate.
+    const reviewRequired = fresh
+      ? reviewRequiredForExtraction(prepared.sourceNote, {
+          requiresReview: fresh.requiresReview,
+          diagnostics,
+        })
+      : prepared.reviewRequired ||
+        reviewRequiredForExtraction(prepared.sourceNote, {
+          diagnostics,
+        });
     const draft = await finalizeLongTermMemoryExtractionDraft(
       {
         sourceNote: prepared.sourceNote,

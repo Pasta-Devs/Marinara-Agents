@@ -121,8 +121,25 @@ export interface CompileEvidenceUnitExtractionResult {
   unitResponse: LtmEvidenceUnitExtractionResponse;
   compiledResponse: LtmExtractionResponse;
   diagnostics: LtmExtractionDiagnostic[];
+  /** True when full (pre-truncation) diagnostics require human review before auto-apply. */
+  requiresReview: boolean;
   outcome: LtmExtractionOutcome;
   accounting: LtmExtractionAccounting;
+}
+
+/** Diagnostic codes that must block low-risk auto-apply even if later truncated from the retained list. */
+export function diagnosticsRequireExtractionReview(diagnostics: readonly LtmExtractionDiagnostic[]) {
+  return diagnostics.some(
+    (diagnostic) =>
+      diagnostic.code === "candidate_reconciliation_ambiguous" ||
+      diagnostic.code === "candidate_reconciliation_incomplete" ||
+      diagnostic.code === "event_shaped_character_fact",
+  );
+}
+
+export function boundLtmExtractionDiagnostics(diagnostics: readonly LtmExtractionDiagnostic[]) {
+  if (diagnostics.length <= MAX_LTM_EXTRACTION_DIAGNOSTICS) return [...diagnostics];
+  return [...diagnostics.slice(0, MAX_LTM_EXTRACTION_DIAGNOSTICS - 1), diagnostics[diagnostics.length - 1]!];
 }
 
 type ParsedEvidenceUnitPayload = {
@@ -1566,10 +1583,9 @@ export function compileEvidenceUnitExtraction(options: {
       message: "Extraction output was cut off by the model limit; the source remains retryable.",
     });
   }
-  const boundedDiagnostics =
-    diagnostics.length <= MAX_LTM_EXTRACTION_DIAGNOSTICS
-      ? diagnostics
-      : [...diagnostics.slice(0, MAX_LTM_EXTRACTION_DIAGNOSTICS - 1), diagnostics[diagnostics.length - 1]!];
+  // Review gating must see every diagnostic, including ones dropped by the retained-list bound below.
+  const requiresReview = diagnosticsRequireExtractionReview(diagnostics);
+  const boundedDiagnostics = boundLtmExtractionDiagnostics(diagnostics);
   const accounting = ltmExtractionAccountingSchema.parse({
     providerCandidates:
       options.providerCandidates ??
@@ -1600,6 +1616,7 @@ export function compileEvidenceUnitExtraction(options: {
     unitResponse: { ...options.unitResponse, units: normalizedUnits },
     compiledResponse,
     diagnostics: boundedDiagnostics,
+    requiresReview,
     outcome,
     accounting,
   };

@@ -15,7 +15,9 @@ import {
 import { DEFAULT_LTM_IMPORTED_SOURCE_MODE } from "../../../../shared/src/features/agents/long-term-memory/constants.js";
 import { logger, type PackageLanguageModel } from "./package-runtime.js";
 import {
+  boundLtmExtractionDiagnostics,
   compileEvidenceUnitExtraction,
+  diagnosticsRequireExtractionReview,
   runLongTermMemoryEvidenceUnitExtraction,
   sourceHashForEvidenceUnitExtraction,
   summarizeCompiledEvidenceUnitExtraction,
@@ -67,6 +69,7 @@ export type ExtractLongTermMemoryFromSourceNoteOptions = {
 export type LtmSourceExtractionRecompile = (options: { candidateNotes: readonly LtmNote[] }) => Promise<{
   response: LtmExtractionResponse;
   diagnostics: LtmExtractionDiagnostic[];
+  requiresReview: boolean;
   outcome: LtmExtractionOutcome;
   accounting: LtmExtractionAccounting;
 }>;
@@ -79,6 +82,7 @@ export type ExtractLongTermMemoryFromSourceNoteResult = {
   extractionMode: LtmMode;
   response: LtmExtractionResponse;
   diagnostics: LtmExtractionDiagnostic[];
+  requiresReview: boolean;
   outcome: LtmExtractionOutcome;
   accounting: LtmExtractionAccounting;
   recompile: LtmSourceExtractionRecompile;
@@ -612,12 +616,22 @@ async function extractLongTermMemoryFromSourceNoteInner(
         : undefined,
       skipStructuredBackfill: true,
     });
-    compiled.diagnostics.push(
+    // Appended after compile's retained-list bound; fold into the review signal, then re-bound.
+    const appendedDiagnostics = [
       ...identityResolution.diagnostics,
       ...reconciliation.diagnostics,
       ...targetResolution.diagnostics,
-    );
-    return { reconciliation, targetResolution, compiled };
+    ];
+    const requiresReview = compiled.requiresReview || diagnosticsRequireExtractionReview(appendedDiagnostics);
+    compiled.diagnostics = boundLtmExtractionDiagnostics([...compiled.diagnostics, ...appendedDiagnostics]);
+    return {
+      reconciliation,
+      targetResolution,
+      compiled: {
+        ...compiled,
+        requiresReview,
+      },
+    };
   };
 
   // The recall index is the preparation snapshot. The commit path recompiles against fresh
@@ -705,6 +719,7 @@ async function extractLongTermMemoryFromSourceNoteInner(
     extractionMode: resolvedMode,
     response: compiled.compiledResponse,
     diagnostics: compiled.diagnostics,
+    requiresReview: compiled.requiresReview,
     outcome: compiled.outcome,
     accounting: compiled.accounting,
     recompile: async ({ candidateNotes }) => {
@@ -712,6 +727,7 @@ async function extractLongTermMemoryFromSourceNoteInner(
       return {
         response: fresh.compiled.compiledResponse,
         diagnostics: fresh.compiled.diagnostics,
+        requiresReview: fresh.compiled.requiresReview,
         outcome: fresh.compiled.outcome,
         accounting: fresh.compiled.accounting,
       };

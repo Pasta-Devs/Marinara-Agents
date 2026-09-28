@@ -639,6 +639,192 @@ async function main() {
     }
   }
 
+  {
+    // Pad diagnostics past the retained-list bound so the event-shaped warning is truncated
+    // out of the bounded array but still forces requiresReview / blocks auto-apply.
+    const padUnits = Array.from({ length: 520 }, (_, index) =>
+      unit(chat, {
+        bucket: "world_fact",
+        subjectId: `pad_diag_${index}`,
+        sectionKey: "facts",
+        text: `Unrelated token salad ${index} xyzzy quux plugh.`,
+        claimKind: "static",
+      }),
+    );
+    const truncatedEventShaped = unit(chat, {
+      bucket: "character_fact",
+      subjectId: "mara",
+      sectionKey: "facts",
+      text: "Mara learned to read the observatory script.",
+      claimKind: "static",
+      subjectNames: ["Mara"],
+    });
+    const trailingPad = unit(chat, {
+      bucket: "world_fact",
+      subjectId: "trailing_diag",
+      sectionKey: "facts",
+      text: "Trailing unrelated token salad xyzzy quux plugh.",
+      claimKind: "static",
+    });
+    const truncatedCompile = compileEvidenceUnitExtraction({
+      unitResponse: {
+        summary: "Truncated event-shaped review signal",
+        units: [...padUnits, truncatedEventShaped, trailingPad],
+      },
+      providerCandidates: padUnits.length + 2,
+      sourceText: chat.sections.source.text,
+      sourceNote: chat,
+      existingNotes: [],
+      scope: {},
+      modes: ["roleplay"],
+      mode: "roleplay",
+      sourceHash: sourceHashForLtmSourceNote(chat),
+      skipStructuredBackfill: true,
+    });
+    assert.ok(truncatedCompile.diagnostics.length <= 500);
+    assert.equal(
+      truncatedCompile.diagnostics.some((diagnostic) => diagnostic.code === "event_shaped_character_fact"),
+      false,
+      "event-shaped warning must sit outside the retained diagnostic window for this proof",
+    );
+    assert.equal(
+      truncatedCompile.requiresReview,
+      true,
+      "requiresReview must be computed from full diagnostics before truncation",
+    );
+
+    const dataDir = await mkdtemp(join(tmpdir(), "marinara-ltm-event-shaped-truncated-review-"));
+    const releaseHost = configurePackageRuntime({
+      isDebugAgentsEnabled: () => false,
+      logger: { debug() {}, info() {}, warn() {}, error() {} },
+      dataDir,
+      resources: {
+        listCharacters: async () => [{ id: "mara", data: { name: "Mara" }, comment: "" }],
+        listPersonas: async () => [],
+        listLorebooks: async () => [],
+      },
+      persistence: {
+        getChat: async () => null,
+        listChats: async () => [],
+        updateChatMetadata: async () => {},
+      },
+    });
+    const root = join(dataDir, "long-term-memory");
+    const reviewScope = { characterIds: ["mara"] };
+    try {
+      const storage = new LongTermMemoryStorage(root);
+      const durableFact = "The observatory archive keeps a cobalt ledger.";
+      const eventShapedText = "Mara learned to read the observatory script.";
+      const sourceText = `${durableFact} ${eventShapedText}`;
+      await storage.createNote({
+        ...chat,
+        id: "source_event_shaped_truncated_review",
+        title: "Truncated event-shaped review source",
+        scope: reviewScope,
+        sections: { source: { text: sourceText, updatedAt: timestamp } },
+      } as never);
+      const reviewSource = (await storage.getNote("source_event_shaped_truncated_review"))!;
+      const sourceHash = sourceHashForLtmSourceNote(reviewSource);
+      const fixtureUnits = [
+        ...Array.from({ length: 520 }, (_, index) => ({
+          bucket: "world_fact" as const,
+          subjectId: `pad_diag_${index}`,
+          sectionKey: "facts",
+          text: `Unrelated token salad ${index} xyzzy quux plugh.`,
+          claimKind: "static" as const,
+          importance: "minor" as const,
+          evidence: [`source_note:${reviewSource.id}`],
+          confidence: 0.9,
+          salience: 0.5,
+          status: "active" as const,
+          links: [] as [],
+          sourceHash,
+        })),
+        {
+          bucket: "character_fact" as const,
+          subjectId: "mara",
+          sectionKey: "facts",
+          text: eventShapedText,
+          claimKind: "static" as const,
+          importance: "major" as const,
+          evidence: [`source_note:${reviewSource.id}`],
+          confidence: 0.9,
+          salience: 0.8,
+          status: "active" as const,
+          links: [] as [],
+          subjectNames: ["Mara"],
+          sourceHash,
+        },
+        {
+          bucket: "world_fact" as const,
+          subjectId: "cobalt_ledger",
+          sectionKey: "facts",
+          text: durableFact,
+          claimKind: "static" as const,
+          importance: "major" as const,
+          evidence: [`source_note:${reviewSource.id}`],
+          confidence: 0.95,
+          salience: 0.8,
+          status: "active" as const,
+          links: [] as [],
+          sourceHash,
+        },
+      ];
+      const committed = await processLongTermMemorySource({
+        sourceNote: reviewSource as never,
+        languageModel: {
+          name: "FixtureModel",
+          model: "fixture-model",
+          maxContext: null,
+          maxOutputTokens: null,
+          fitContext(messages: unknown[], fitOptions: { maxTokens: number }) {
+            return {
+              messages,
+              maxTokens: fitOptions.maxTokens,
+              estimatedTokensBefore: 20,
+              estimatedTokensAfter: 20,
+              trimmed: false,
+            };
+          },
+          async chatComplete() {
+            return {
+              content: JSON.stringify({
+                summary: "Durable world fact with a truncated event-shaped warning.",
+                units: fixtureUnits,
+              }),
+              finishReason: "stop",
+            };
+          },
+        } as never,
+        scope: reviewScope,
+        modes: ["roleplay"],
+        mode: "roleplay",
+        extractionMode: "roleplay",
+        operationId: randomUUID(),
+        root,
+        applyLowRisk: true,
+      });
+      assert.equal(committed.draft.reviewRequired, true, "truncated event-shaped warnings must still require review");
+      assert.equal(
+        committed.diagnostics.some((diagnostic) => diagnostic.code === "event_shaped_character_fact"),
+        false,
+        "bounded diagnostics must omit the truncated event-shaped warning",
+      );
+      assert.ok(
+        committed.draft.mutations.some((mutation) => mutation.risk === "low"),
+        "fixture must still produce an otherwise low-risk mutation",
+      );
+      assert.equal(
+        committed.appliedMutationIds.length,
+        0,
+        "truncated event-shaped warnings must block low-risk auto-apply",
+      );
+    } finally {
+      releaseHost();
+      await rm(dataDir, { recursive: true, force: true });
+    }
+  }
+
   const invalidEventWithDependent = compile(chat, [
     unit(chat, {
       bucket: "timeline_event",
