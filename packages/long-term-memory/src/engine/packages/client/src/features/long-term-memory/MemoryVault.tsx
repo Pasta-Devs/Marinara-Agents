@@ -22,6 +22,7 @@ import {
   setLtmManualKeywords,
 } from "../../../../shared/src/features/agents/long-term-memory/keywords.js";
 import {
+  chatOnlyLtmScope,
   getLtmScopeChatIds,
   getLtmScopeGroupIds,
   getLtmScopePersonaIds,
@@ -1663,7 +1664,7 @@ export default function MemoryVault({
       ),
   });
   const notesScope = target?.id === `chat:${props.chatId}` ? currentScope : target?.scope;
-  const secondaryNotesScope = secondaryTarget?.id === `chat:${props.chatId}` ? currentScope : secondaryTarget?.scope;
+  const secondaryNotesScope = secondaryTarget?.scope;
   const notes = useQuery({
     queryKey: [...queryKeys.notes, contextKey, target?.id, notesScope, secondaryTarget?.id, secondaryNotesScope],
     enabled: scopeTargetResolved,
@@ -1873,8 +1874,21 @@ export default function MemoryVault({
     ...(currentConversationScopeTarget ? [currentConversationScopeTarget] : []),
     ...conversationScopeTargets,
   ].filter((candidate, index, items) => items.findIndex((item) => item.id === candidate.id) === index);
+  // The secondary place stays literal for the current chat too. Reusing currentScope
+  // here would fold the primary character (and persona) into the second place, so
+  // "A AND (B OR A)" collapses back to A.
+  const secondaryCurrentConversationScopeTarget: Target | null = currentChat
+    ? {
+        id: `chat:${currentChat.id}`,
+        label:
+          currentConversationScopeTarget?.label ??
+          props.chatName ??
+          localizeUi("ui.longTermMemory.memoryvault.currentChat"),
+        scope: chatOnlyLtmScope(currentChat.id),
+      }
+    : null;
   const pickerSecondaryConversationScopeTargets = [
-    ...(currentConversationScopeTarget ? [currentConversationScopeTarget] : []),
+    ...(secondaryCurrentConversationScopeTarget ? [secondaryCurrentConversationScopeTarget] : []),
     ...secondaryConversationScopeTargets,
   ].filter((candidate, index, items) => items.findIndex((item) => item.id === candidate.id) === index);
   const branchScopeTargetsFor = (characterId: string) =>
@@ -1906,8 +1920,20 @@ export default function MemoryVault({
     ...(currentBranchTarget ? [currentBranchTarget] : []),
     ...branchScopeTargets,
   ].filter((candidate, index, items) => items.findIndex((item) => item.id === candidate.id) === index);
+  const secondaryCurrentBranchScopeTarget: Target | null =
+    currentChat?.groupId && currentBranchTarget
+      ? {
+          id: `chat:${currentChat.id}`,
+          label: currentBranchTarget.label,
+          chatName: currentBranchTarget.chatName,
+          scope: {
+            ...chatOnlyLtmScope(currentChat.id),
+            groupId: currentChat.groupId,
+          },
+        }
+      : null;
   const pickerSecondaryBranchScopeTargets = [
-    ...(currentBranchTarget ? [currentBranchTarget] : []),
+    ...(secondaryCurrentBranchScopeTarget ? [secondaryCurrentBranchScopeTarget] : []),
     ...secondaryBranchScopeTargets,
   ].filter((candidate, index, items) => items.findIndex((item) => item.id === candidate.id) === index);
   const statusScopeTargets: Target[] = statuses.map((status) => ({
@@ -3645,6 +3671,12 @@ export default function MemoryVault({
                           {localizeUi("ui.longTermMemory.memoryvault.clearFilters")}
                         </Button>
                       </>
+                    ) : secondaryTarget && !allNotes.length ? (
+                      <p>
+                        {localizeUi("ui.longTermMemory.memoryvault.noMemoriesInCombinedScope", {
+                          value1: scopeEntryLabel,
+                        })}
+                      </p>
                     ) : (
                       <p>{localizeUi("ui.longTermMemory.memoryvault.noMemoriesFound")}</p>
                     )}

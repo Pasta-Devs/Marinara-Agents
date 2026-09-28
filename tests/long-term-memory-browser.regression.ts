@@ -942,7 +942,9 @@ async function main() {
               ? notes.filter((note) => note.id === "world_second_mobile")
               : url.searchParams.get("scopeChatIds") === "desktop-chat"
                 ? notes.filter((note) => note.id !== "world_outside_current_chat")
-                : notes,
+                : url.searchParams.get("scopePersonaId") === "persona-b"
+                  ? []
+                  : notes,
           );
         }
         if (request.method === "GET" && url.pathname.endsWith("/notes/world_second_mobile"))
@@ -1791,6 +1793,16 @@ async function main() {
       await secondaryContextSearch.fill("Memory outside current chat");
       await page.getByText("Second mobile review memory", { exact: true }).waitFor();
       await secondaryContextSearch.fill("");
+      // Repair proof: an empty AND intersection still names the combined scope
+      // instead of falling back to the generic "no memories" copy.
+      if (!(await page.locator("[data-ltm-memory-scope-secondary][open]").count())) {
+        await secondaryScope.locator(":scope > summary").click();
+      }
+      await secondaryScope.locator('[data-ltm-vault-scope-tab="persona"]').click();
+      await secondaryScope.locator('[data-ltm-vault-scope-presence="no-memories"] > summary').click();
+      await secondaryScope.locator('[data-ltm-vault-scope-target="persona:persona-b"]').click();
+      await secondaryScope.locator('[data-ltm-vault-scope-target="persona:persona-b"][aria-checked="true"]').waitFor();
+      await page.getByText(/No memories are available in .*AND/u).waitFor();
       await secondaryScope.locator('[data-ltm-vault-scope-target="all"]').click();
       assert.match((await secondaryScope.locator(":scope > summary").textContent()) ?? "", /No second place/u);
       await secondaryScope.locator(":scope > summary").click();

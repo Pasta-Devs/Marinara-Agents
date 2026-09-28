@@ -270,6 +270,11 @@ assert.match(vault, /memoryvault\.combinedScope/u);
 assert.match(vault, /selectSecondaryTarget/u);
 assert.match(vault, /notesRequestPath/u);
 assert.match(vault, /secondaryNotesScope/u);
+assert.match(vault, /const secondaryNotesScope = secondaryTarget\?\.scope;/u);
+assert.match(vault, /chatOnlyLtmScope/u);
+assert.match(vault, /secondaryCurrentConversationScopeTarget/u);
+assert.match(vault, /secondaryCurrentBranchScopeTarget/u);
+assert.match(vault, /noMemoriesInCombinedScope/u);
 assert.match(vault, /data-ltm-vault-scope-control/u);
 assert.match(vault, /text-\[var\(--marinara-editor-muted\)\].*focus-visible:outline/u);
 assert.match(vault, /mari-editor-action flex min-h-11/u);
@@ -387,6 +392,10 @@ assert.equal(locale["ui.longTermMemory.memoryvault.currentlyViewingMemoriesIn"],
 assert.equal(locale["ui.longTermMemory.memoryvault.combineWithPlace"], "Also available in (AND)");
 assert.equal(locale["ui.longTermMemory.memoryvault.noSecondPlace"], "No second place");
 assert.equal(locale["ui.longTermMemory.memoryvault.combinedScope"], "{{first}} AND {{second}}");
+assert.equal(
+  locale["ui.longTermMemory.memoryvault.noMemoriesInCombinedScope"],
+  "No memories are available in {{value1}}. A memory must be available in both places to appear here.",
+);
 assert.equal(locale["ui.longTermMemory.memoryvault.searchCharacters"], "Search characters");
 assert.equal(locale["ui.longTermMemory.memoryvault.searchChats"], "Search chats");
 assert.equal(locale["ui.longTermMemory.memoryvault.searchBranches"], "Search branches");
