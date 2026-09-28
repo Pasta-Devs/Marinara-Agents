@@ -273,13 +273,16 @@ export function validateLtmEvidenceUnits({
     }
 
     if (isEventShapedCharacterFact(unit)) {
+      // Lexical event shape is ambiguous: durable abilities/roles/possessions are often
+      // phrased with the same verbs. Keep the candidate for review instead of deleting it.
       unitDiagnostics.push({
-        severity: "error",
+        severity: "warning",
         code: "event_shaped_character_fact",
         candidateIndex,
         mutationId: unit.id,
         noteId,
-        message: "Character fact candidates must not capture ordinary scene actions or timeline beats.",
+        message:
+          "Character fact wording looks event-shaped; confirm it is a durable outcome rather than an ordinary scene action.",
       });
     }
 
@@ -782,7 +785,6 @@ function diagnosticToDropReason(code: string): LtmExtractionDropReason | null {
     code === "invalid_relationship_dimension_change" ||
     code === "static_relationship_dimension_change" ||
     code === "unknown_link_target" ||
-    code === "event_shaped_character_fact" ||
     code === "scene_only_tone_or_anchor"
   ) {
     return "unsupported_bucket";

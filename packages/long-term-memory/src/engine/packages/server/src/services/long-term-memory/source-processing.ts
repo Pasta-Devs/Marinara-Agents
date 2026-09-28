@@ -121,10 +121,13 @@ function reviewRequiredForExtraction(sourceNote: LtmNote, diagnostics: readonly 
     sourceNote.provenance?.kind === "lorebook" ||
     // An ambiguous or possibly-incomplete reconciliation must never auto-apply a likely
     // duplicate; a human picks the target.
+    // Event-shaped character wording is kept for review rather than hard-dropped, so it
+    // must also block low-risk auto-apply until a human confirms the durable outcome.
     diagnostics.some(
       (diagnostic) =>
         diagnostic.code === "candidate_reconciliation_ambiguous" ||
-        diagnostic.code === "candidate_reconciliation_incomplete",
+        diagnostic.code === "candidate_reconciliation_incomplete" ||
+        diagnostic.code === "event_shaped_character_fact",
     )
   );
 }

@@ -1,5 +1,10 @@
 # Long-Term Memory changelog
 
+## 1.3.31 — 2026-09-28
+
+- Keep character facts whose wording looks event-shaped for review instead of deleting them, so durable abilities, roles, and possessions phrased in past-tense narrative are not lost before a human decides.
+- Block low-risk auto-apply when that review warning is present.
+
 ## 1.3.29 — 2026-09-27
 
 - Align the bulk Change Availability workbench with the single-memory Memory Availability editor: same Available in heading and pills, collapsible place picker, and clearer chat-mode eligibility versus place-scope copy. Add/Remove still drives incremental `enableModes` / `disableModes` and `addScope` / `removeScope`.

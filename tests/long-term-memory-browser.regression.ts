@@ -1187,9 +1187,9 @@ async function main() {
                   candidate: {
                     index: 1,
                     reason: "unsupported_bucket",
-                    validatorCode: "event_shaped_character_fact",
-                    message: "Character facts cannot capture ordinary scene actions.",
-                    snippet: "Rowan entered the observatory.",
+                    validatorCode: "scene_only_tone_or_anchor",
+                    message: "Tone and anchor candidates must describe durable atmosphere, motifs, or callbacks.",
+                    snippet: "The observatory felt tense tonight.",
                   },
                   createdAt: "2026-07-30T00:00:00.000Z",
                   lastSeenAt: "2026-07-30T00:00:00.000Z",

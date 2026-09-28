@@ -1168,7 +1168,7 @@
   "ui.longTermMemory.reviewqueue.recommendedFixRelationshipDimensionChange": "Describe a valid change to the relationship dimension.",
   "ui.longTermMemory.reviewqueue.recommendedFixStaticRelationshipChange": "Mark relationship dimension changes as change claims.",
   "ui.longTermMemory.reviewqueue.recommendedFixUnknownLinkTarget": "Link to a memory that exists in the current vault or this extraction.",
-  "ui.longTermMemory.reviewqueue.recommendedFixEventShapedCharacterFact": "Move ordinary scene actions into the event section instead of character facts.",
+  "ui.longTermMemory.reviewqueue.recommendedFixEventShapedCharacterFact": "Confirm whether this is a durable character outcome or move an ordinary scene action into the event section.",
   "ui.longTermMemory.reviewqueue.recommendedFixVagueThread": "Describe what condition or future event would resolve this thread.",
   "ui.longTermMemory.reviewqueue.recommendedFixSceneOnlyToneOrAnchor": "Describe durable atmosphere, motif, or callback instead of a single-scene impression.",
   "ui.longTermMemory.reviewqueue.recommendedFixCompositeCharacterSubject": "Choose one character subject for this character fact.",

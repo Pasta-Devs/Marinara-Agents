@@ -1,5 +1,8 @@
 import assert from "node:assert/strict";
 import { createHash, randomUUID } from "node:crypto";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { runRegressionToCompletion } from "./regression-helpers.ts";
 
 async function main() {
@@ -20,6 +23,9 @@ async function main() {
   const { normalizeStructuredSummaryEvidenceUnits } = await import(`${source}/structured-summary-normalizer.ts`);
   const { validateLtmEvidenceUnits } = await import(`${source}/evidence-unit-validation.ts`);
   const { resolveScopedEvidenceUnitTargets, scopedVariantNoteId } = await import(`${source}/scoped-targets.ts`);
+  const { configurePackageRuntime } = await import(`${source}/package-runtime.ts`);
+  const { processLongTermMemorySource } = await import(`${source}/source-processing.ts`);
+  const { LongTermMemoryStorage } = await import(`${source}/storage.ts`);
   const { ltmNoteIdSchema } =
     await import("../packages/long-term-memory/src/engine/packages/shared/src/features/agents/long-term-memory/schema.ts");
 
@@ -495,63 +501,143 @@ async function main() {
     assert.equal(result.accounting.keptUnits, 1, text);
   }
 
-  const transientCharacterAction = compile(chat, [
-    unit(chat, {
-      bucket: "character_fact",
+  const assertEventShapedWarningKept = (
+    text: string,
+    subject: { subjectId: string; subjectNames: string[] } = {
       subjectId: "rowan",
-      sectionKey: "facts",
-      text: "Rowan met Mara at the observatory.",
-      claimKind: "static",
       subjectNames: ["Rowan"],
-    }),
-  ]);
-  assert.equal(transientCharacterAction.accounting.keptUnits, 0);
-  assert.equal(transientCharacterAction.outcome.droppedCandidates[0]?.validatorCode, "event_shaped_character_fact");
+    },
+  ) => {
+    const result = compile(chat, [
+      unit(chat, {
+        bucket: "character_fact",
+        subjectId: subject.subjectId,
+        sectionKey: "facts",
+        text,
+        claimKind: "static",
+        subjectNames: subject.subjectNames,
+      }),
+    ]);
+    assert.equal(result.accounting.keptUnits, 1, text);
+    assert.equal(result.outcome.droppedCandidates.length, 0, text);
+    assert.ok(
+      result.diagnostics.some(
+        (diagnostic) => diagnostic.code === "event_shaped_character_fact" && diagnostic.severity === "warning",
+      ),
+      text,
+    );
+    return result;
+  };
 
-  const transientDurableTokenCharacter = compile(chat, [
-    unit(chat, {
-      bucket: "character_fact",
-      subjectId: "rowan",
-      sectionKey: "facts",
-      text: "Rowan met Mara and is walking away.",
-      claimKind: "static",
-      subjectNames: ["Rowan"],
-    }),
-  ]);
-  assert.equal(transientDurableTokenCharacter.accounting.keptUnits, 0);
-  assert.equal(
-    transientDurableTokenCharacter.outcome.droppedCandidates[0]?.validatorCode,
-    "event_shaped_character_fact",
-  );
+  assertEventShapedWarningKept("Rowan met Mara at the observatory.");
+  assertEventShapedWarningKept("Rowan met Mara and is walking away.");
+  assertEventShapedWarningKept("Rowan met Mara and uses a lantern.");
+  assertEventShapedWarningKept("Rowan met Mara and is walking away, but is her assigned case officer.");
+  const mara = { subjectId: "mara", subjectNames: ["Mara"] };
+  assertEventShapedWarningKept("Mara learned to read the observatory script.", mara);
+  assertEventShapedWarningKept("Mara discovered she could read the observatory script.", mara);
+  assertEventShapedWarningKept("Mara carries the observatory key.", mara);
+  assertEventShapedWarningKept("Mara returned to the observatory.", mara);
 
-  const transientUsesCharacter = compile(chat, [
-    unit(chat, {
-      bucket: "character_fact",
-      subjectId: "rowan",
-      sectionKey: "facts",
-      text: "Rowan met Mara and uses a lantern.",
-      claimKind: "static",
-      subjectNames: ["Rowan"],
-    }),
-  ]);
-  assert.equal(transientUsesCharacter.accounting.keptUnits, 0);
-  assert.equal(transientUsesCharacter.outcome.droppedCandidates[0]?.validatorCode, "event_shaped_character_fact");
-
-  const mixedDurableTransientCharacter = compile(chat, [
-    unit(chat, {
-      bucket: "character_fact",
-      subjectId: "rowan",
-      sectionKey: "facts",
-      text: "Rowan met Mara and is walking away, but is her assigned case officer.",
-      claimKind: "static",
-      subjectNames: ["Rowan"],
-    }),
-  ]);
-  assert.equal(mixedDurableTransientCharacter.accounting.keptUnits, 0);
-  assert.equal(
-    mixedDurableTransientCharacter.outcome.droppedCandidates[0]?.validatorCode,
-    "event_shaped_character_fact",
-  );
+  {
+    const dataDir = await mkdtemp(join(tmpdir(), "marinara-ltm-event-shaped-review-"));
+    const releaseHost = configurePackageRuntime({
+      isDebugAgentsEnabled: () => false,
+      logger: { debug() {}, info() {}, warn() {}, error() {} },
+      dataDir,
+      resources: {
+        listCharacters: async () => [{ id: "mara", data: { name: "Mara" }, comment: "" }],
+        listPersonas: async () => [],
+        listLorebooks: async () => [],
+      },
+      persistence: {
+        getChat: async () => null,
+        listChats: async () => [],
+        updateChatMetadata: async () => {},
+      },
+    });
+    const root = join(dataDir, "long-term-memory");
+    const reviewScope = { characterIds: ["mara"] };
+    try {
+      const storage = new LongTermMemoryStorage(root);
+      const reviewSourceText = "Mara learned to read the observatory script.";
+      await storage.createNote({
+        ...chat,
+        id: "source_event_shaped_review",
+        title: "Event-shaped review source",
+        scope: reviewScope,
+        sections: { source: { text: reviewSourceText, updatedAt: timestamp } },
+      } as never);
+      const reviewSource = (await storage.getNote("source_event_shaped_review"))!;
+      const sourceHash = sourceHashForLtmSourceNote(reviewSource);
+      const committed = await processLongTermMemorySource({
+        sourceNote: reviewSource as never,
+        languageModel: {
+          name: "FixtureModel",
+          model: "fixture-model",
+          maxContext: null,
+          maxOutputTokens: null,
+          fitContext(messages: unknown[], fitOptions: { maxTokens: number }) {
+            return {
+              messages,
+              maxTokens: fitOptions.maxTokens,
+              estimatedTokensBefore: 20,
+              estimatedTokensAfter: 20,
+              trimmed: false,
+            };
+          },
+          async chatComplete() {
+            return {
+              content: JSON.stringify({
+                summary: "One durable outcome.",
+                units: [
+                  {
+                    bucket: "character_fact",
+                    subjectId: "mara",
+                    sectionKey: "facts",
+                    text: reviewSourceText,
+                    claimKind: "static",
+                    importance: "major",
+                    evidence: [`source_note:${reviewSource.id}`],
+                    confidence: 0.9,
+                    salience: 0.8,
+                    status: "active",
+                    links: [],
+                    subjectNames: ["Mara"],
+                    sourceHash,
+                  },
+                ],
+              }),
+              finishReason: "stop",
+            };
+          },
+        } as never,
+        scope: reviewScope,
+        modes: ["roleplay"],
+        mode: "roleplay",
+        extractionMode: "roleplay",
+        operationId: randomUUID(),
+        root,
+        applyLowRisk: true,
+      });
+      assert.equal(committed.draft.reviewRequired, true, "event-shaped character facts must require review");
+      assert.ok(
+        committed.diagnostics.some(
+          (diagnostic) => diagnostic.code === "event_shaped_character_fact" && diagnostic.severity === "warning",
+        ),
+        "event-shaped character facts must warn without hard-dropping",
+      );
+      assert.ok(committed.draft.mutations.length > 0, "event-shaped durable outcomes must remain available for review");
+      assert.equal(
+        committed.appliedMutationIds.length,
+        0,
+        "event-shaped character facts must block low-risk auto-apply",
+      );
+    } finally {
+      releaseHost();
+      await rm(dataDir, { recursive: true, force: true });
+    }
+  }
 
   const invalidEventWithDependent = compile(chat, [
     unit(chat, {
