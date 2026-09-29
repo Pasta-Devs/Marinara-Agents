@@ -238,22 +238,32 @@ async function main() {
   ]);
   assert.equal(sourceHashMismatch.outcome.droppedCandidates[0]?.validatorCode, "source_hash_mismatch");
 
-  const invalidTimelineSection = unit(chat, {
+  // Issue #1137: a flat summary (no recognized headings) must normalize a
+  // timeline_event to the event section instead of dropping it as invalid.
+  const flatSummaryTimeline = unit(chat, {
     bucket: "timeline_event",
     subjectId: "argument_strained_trust",
     sectionKey: "facts",
     text: "Alice and Rowan argued, straining their trust.",
     links: [{ target: chat.id, relation: "extracted_from" }],
   });
-  const invalidTimelineResult = compile(chat, [invalidTimelineSection]);
-  const invalidTimelineDrop = invalidTimelineResult.outcome.droppedCandidates[0];
-  assert.equal(invalidTimelineDrop?.validatorCode, "invalid_timeline_section");
-  assert.equal(invalidTimelineDrop?.recoveryCandidate?.text, invalidTimelineSection.text);
-  assert.equal(invalidTimelineDrop?.recoveryCandidate?.sourceHash, invalidTimelineSection.sourceHash);
-  assert.deepEqual(invalidTimelineDrop?.recoveryCandidate?.evidence, invalidTimelineSection.evidence);
-  const repairedTimelineResult = compile(chat, [{ ...invalidTimelineDrop!.recoveryCandidate!, sectionKey: "event" }]);
-  assert.equal(repairedTimelineResult.outcome.droppedCandidates.length, 0);
-  assert.equal(repairedTimelineResult.accounting.keptUnits, 1);
+  const flatTimelineResult = compile(chat, [flatSummaryTimeline]);
+  assert.equal(flatTimelineResult.accounting.keptUnits, 1);
+  assert.equal(flatTimelineResult.outcome.droppedCandidates.length, 0);
+  assert.equal(flatTimelineResult.unitResponse.units[0]?.sectionKey, "event");
+  // The validator guard and its recovery candidate stay intact for direct callers.
+  const rawInvalidTimeline = validateLtmEvidenceUnits({
+    units: [flatSummaryTimeline],
+    sourceText: chat.sections.source.text,
+    sourceNote: chat,
+    existingNotes: [],
+    expectedSourceHash: sourceHashForLtmSourceNote(chat),
+  });
+  const rawInvalidTimelineDrop = rawInvalidTimeline.droppedCandidates[0];
+  assert.equal(rawInvalidTimelineDrop?.validatorCode, "invalid_timeline_section");
+  assert.equal(rawInvalidTimelineDrop?.recoveryCandidate?.text, flatSummaryTimeline.text);
+  assert.equal(rawInvalidTimelineDrop?.recoveryCandidate?.sourceHash, flatSummaryTimeline.sourceHash);
+  assert.deepEqual(rawInvalidTimelineDrop?.recoveryCandidate?.evidence, flatSummaryTimeline.evidence);
 
   const relationshipWithEvent = compile(chat, [
     unit(chat, {
@@ -333,13 +343,15 @@ async function main() {
   const missingThreadTarget = compile(chat, [resolvedThread]);
   assert.equal(missingThreadTarget.accounting.keptUnits, 0);
   assert.equal(missingThreadTarget.outcome.droppedCandidates[0]?.validatorCode, "unknown_link_target");
-  const removedResolutionEvent = compile(chat, [resolvedThread, { ...resolutionEvent, sectionKey: "facts" }]);
-  assert.equal(removedResolutionEvent.accounting.keptUnits, 0);
+  // Issue #1137: a resolution event from a flat summary is normalized to the
+  // event section, so it still satisfies the resolved thread's fan-out.
+  const repairedResolutionEvent = compile(chat, [resolvedThread, { ...resolutionEvent, sectionKey: "facts" }]);
+  assert.equal(repairedResolutionEvent.accounting.keptUnits, 2);
   assert.equal(
-    removedResolutionEvent.outcome.droppedCandidates.some(
+    repairedResolutionEvent.outcome.droppedCandidates.some(
       (candidate) => candidate.validatorCode === "unknown_link_target",
     ),
-    true,
+    false,
   );
   const missingResolutionEvent = compile(chat, [
     unit(chat, {
@@ -422,6 +434,99 @@ async function main() {
     true,
   );
   assert.equal(structuredCharacterUnits[1]?.text.startsWith("Began processing Damo's state compensation claim"), true);
+
+  // Issue #1137: an unrecognized `##` heading must close the previous section so
+  // its following fields are not misattributed to the last known bucket.
+  const unknownHeadingSource = sourceNote(
+    "source_unknown_heading",
+    { kind: "chat_summary", sourceId: "chat-unknown", entryId: "summary-unknown" },
+    [
+      "## character_fact",
+      "- Mara | section: facts | text: Mara reads old scripts.",
+      "## misc_notes",
+      "- Rowan | section: facts | text: Rowan guards the gate.",
+    ].join("\n"),
+  );
+  const unknownHeadingUnits = normalizeStructuredSummaryEvidenceUnits({
+    units: [],
+    sourceText: unknownHeadingSource.sections.source.text,
+    sourceNote: unknownHeadingSource,
+    sourceHash: sourceHashForLtmSourceNote(unknownHeadingSource),
+    mode: "roleplay",
+    modes: ["roleplay"],
+  }).units.filter((candidate) => candidate.bucket === "character_fact");
+  assert.deepEqual(
+    unknownHeadingUnits.map((candidate) => candidate.subjectId),
+    ["mara"],
+    "fields under an unrecognized heading must not be attributed to the previous section",
+  );
+
+  // Issue #1137: structured backfill must not append a unit that duplicates a
+  // provider candidate already returned for the same source. The shorthand line
+  // folds its leading description into the parsed text, so a provider unit with
+  // only the canonical `text:` value must still count as covered.
+  const structuredCharacterProviderResult = normalizeStructuredSummaryEvidenceUnits({
+    units: [
+      unit(structuredCharacterSource, {
+        bucket: "character_fact",
+        subjectId: "denise",
+        sectionKey: "facts",
+        text: 'Damo\'s reentry case officer at the Marlowe Street reentry office; distinguishes his case as an "exoneree" rather than parolee, entitling him to state compensation.',
+        subjectNames: ["Denise"],
+      }),
+      unit(structuredCharacterSource, {
+        bucket: "character_fact",
+        subjectId: "denise",
+        sectionKey: "facts",
+        text: "Began processing Damo's state compensation claim using his college records as evidence of disrupted earning potential, and referred him to civil rights attorney Mara Castellano for a possible civil suit.",
+        subjectNames: ["Denise"],
+      }),
+    ],
+    sourceText: structuredCharacterSource.sections.source.text,
+    sourceNote: structuredCharacterSource,
+    sourceHash: sourceHashForLtmSourceNote(structuredCharacterSource),
+    mode: "roleplay",
+    modes: ["roleplay"],
+  });
+  assert.equal(
+    structuredCharacterProviderResult.addedUnits,
+    0,
+    "structured backfill must not duplicate provider candidates for the same source",
+  );
+  assert.equal(
+    structuredCharacterProviderResult.units.filter((candidate) => candidate.bucket === "character_fact").length,
+    2,
+  );
+
+  // Issue #1137: the provider-coverage check must not compare two backfill lines
+  // against each other, or a richer structured fact whose text contains a shorter
+  // sibling fact for the same subject and section is dropped.
+  const nestedBackfillSource = sourceNote(
+    "source_nested_backfill",
+    { kind: "chat_summary", sourceId: "chat-nested", entryId: "summary-nested" },
+    [
+      "## character_fact",
+      "- Alice | section: facts | text: Alice has a scar on her left cheek.",
+      "- Alice | section: facts | text: Alice has a scar on her left cheek and speaks French.",
+    ].join("\n"),
+  );
+  const nestedBackfillResult = normalizeStructuredSummaryEvidenceUnits({
+    units: [],
+    sourceText: nestedBackfillSource.sections.source.text,
+    sourceNote: nestedBackfillSource,
+    sourceHash: sourceHashForLtmSourceNote(nestedBackfillSource),
+    mode: "roleplay",
+    modes: ["roleplay"],
+  });
+  const nestedBackfillTexts = nestedBackfillResult.units
+    .filter((candidate) => candidate.bucket === "character_fact")
+    .map((candidate) => candidate.text);
+  assert.equal(nestedBackfillTexts.length, 2, "a richer sibling backfill fact must not be suppressed");
+  assert.equal(
+    nestedBackfillTexts.some((text) => text.includes("speaks French")),
+    true,
+    "the distinct detail from the richer backfill fact must be retained",
+  );
 
   const idiomaticStaticSource = sourceNote(
     "source_static_fact_heuristic",
@@ -826,12 +931,17 @@ async function main() {
   }
 
   const invalidEventWithDependent = compile(chat, [
-    unit(chat, {
-      bucket: "timeline_event",
-      subjectId: "invalid_argument",
-      sectionKey: "history",
-      text: "Alice and Rowan argued.",
-    }),
+    {
+      ...unit(chat, {
+        bucket: "timeline_event",
+        subjectId: "invalid_argument",
+        sectionKey: "event",
+        text: "Alice and Rowan argued.",
+      }),
+      // A stale source hash is the invalidation trigger now that the normalizer
+      // repairs a non-event section instead of dropping the unit.
+      sourceHash: "stale-source-hash",
+    },
     unit(chat, {
       bucket: "world_fact",
       subjectId: "argument_aftermath",
@@ -849,12 +959,15 @@ async function main() {
   );
 
   const invalidEventWithStaticFact = compile(chat, [
-    unit(chat, {
-      bucket: "timeline_event",
-      subjectId: "invalid_static_argument",
-      sectionKey: "history",
-      text: "Alice and Rowan argued.",
-    }),
+    {
+      ...unit(chat, {
+        bucket: "timeline_event",
+        subjectId: "invalid_static_argument",
+        sectionKey: "event",
+        text: "Alice and Rowan argued.",
+      }),
+      sourceHash: "stale-source-hash",
+    },
     unit(chat, {
       bucket: "world_fact",
       subjectId: "observatory",

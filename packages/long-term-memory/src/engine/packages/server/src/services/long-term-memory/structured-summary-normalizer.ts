@@ -317,6 +317,10 @@ function normalizeSourceEventGraph(units: LtmEvidenceUnit[], sourceNote: LtmNote
 }
 
 function normalizeTargetShapeUnit(unit: LtmEvidenceUnit): LtmEvidenceUnit {
+  if (unit.bucket === "timeline_event") {
+    return { ...unit, sectionKey: "event" };
+  }
+
   if (unit.bucket === "character_fact") {
     const normalized = unit.subjects?.length
       ? { subjectId: stripUnitSubjectPrefix(unit.bucket, unit.subjectId), sectionKey: unit.sectionKey }
@@ -393,6 +397,13 @@ function parseStructuredSections(sourceText: string) {
     if (bucket) {
       if (current) sections.push(sectionFromLines(current.bucket, current.lines));
       current = { bucket, lines: [] };
+      continue;
+    }
+    // An unrecognized heading must not leave the previous section open, or its
+    // following fields are misattributed to the last known bucket.
+    if (HEADING_PATTERN.test(line)) {
+      if (current) sections.push(sectionFromLines(current.bucket, current.lines));
+      current = null;
       continue;
     }
     if (current) current.lines.push(line);
@@ -1137,11 +1148,11 @@ function maybeAddStructuredCharacterUnits({
   if (!allowed.has("character_fact") || !sourceNote) return units;
 
   const next = [...units];
-  const seen = new Set(
-    next
-      .filter((unit) => unit.bucket === "character_fact")
-      .map((unit) => characterUnitIdentity(unit, characterIdentityKey)),
-  );
+  // Coverage is compared against the pre-backfill units only: two structured lines
+  // can describe the same subject with one text contained in the other, and a
+  // candidate must not be treated as covered by a sibling backfill unit.
+  const providerCharacters = next.filter((unit) => unit.bucket === "character_fact");
+  const seen = new Set(providerCharacters.map((unit) => characterUnitIdentity(unit, characterIdentityKey)));
 
   for (const section of sections) {
     if (section.bucket !== "character_fact") continue;
@@ -1153,6 +1164,11 @@ function maybeAddStructuredCharacterUnits({
       if (!unit) continue;
       const identity = characterUnitIdentity(unit, characterIdentityKey);
       if (seen.has(identity)) continue;
+      // The provider may already have returned this fact with only its `text:`
+      // field, while the structured shorthand also folds a leading description
+      // into the parsed text. Treat a same-subject, same-section near-match as
+      // already-covered instead of appending a duplicate.
+      if (providerCharacters.some((existing) => characterFactCovers(existing, unit, characterIdentityKey))) continue;
       seen.add(identity);
       next.push(unit);
     }
@@ -1310,10 +1326,33 @@ function parseStructuredCharacterLine(
 }
 
 function characterUnitIdentity(unit: LtmEvidenceUnit, characterIdentityKey?: (unit: LtmEvidenceUnit) => string) {
-  const subjectKey = characterIdentityKey
-    ? characterIdentityKey(unit)
-    : stripUnitSubjectPrefix("character_fact", unit.subjectId);
-  return [subjectKey, normalizeSectionKey(unit.sectionKey, "facts"), normalizeComparableText(unit.text)].join("|");
+  return [
+    characterUnitSubjectKey(unit, characterIdentityKey),
+    normalizeSectionKey(unit.sectionKey, "facts"),
+    normalizeComparableText(unit.text),
+  ].join("|");
+}
+
+function characterUnitSubjectKey(unit: LtmEvidenceUnit, characterIdentityKey?: (unit: LtmEvidenceUnit) => string) {
+  return characterIdentityKey ? characterIdentityKey(unit) : stripUnitSubjectPrefix("character_fact", unit.subjectId);
+}
+
+// The structured shorthand can fold a leading description into the parsed text,
+// so an otherwise-covered fact can differ from the provider's `text:` value.
+function characterFactCovers(
+  existing: LtmEvidenceUnit,
+  candidate: LtmEvidenceUnit,
+  characterIdentityKey?: (unit: LtmEvidenceUnit) => string,
+) {
+  if (
+    characterUnitSubjectKey(existing, characterIdentityKey) !== characterUnitSubjectKey(candidate, characterIdentityKey)
+  ) {
+    return false;
+  }
+  if (normalizeSectionKey(existing.sectionKey, "facts") !== normalizeSectionKey(candidate.sectionKey, "facts")) {
+    return false;
+  }
+  return relationshipTextOverlap(candidate.text, existing.text) >= 0.8;
 }
 
 function normalizeComparableText(text: string) {

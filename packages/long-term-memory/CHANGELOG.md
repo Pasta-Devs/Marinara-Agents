@@ -1,5 +1,10 @@
 # Long-Term Memory changelog
 
+## 1.3.32 — 2026-09-29
+
+- Keep timeline events extracted from flat summaries without recognized headings instead of dropping them as invalid, so a valid event and any memory that links to it survive normalization.
+- Stop the structured backfill from adding character memory units the provider already returned for the same source, and stop text under an unrecognized structured heading from falling into the previous section.
+
 ## 1.3.31 — 2026-09-28
 
 - Keep character facts whose wording looks event-shaped for review instead of deleting them, so durable abilities, roles, and possessions phrased in past-tense narrative are not lost before a human decides.
