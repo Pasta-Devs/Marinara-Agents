@@ -56,6 +56,12 @@
     "gacha-forge": {
       "versions": [
         {
+          "version": "1.8.8",
+          "date": "2026-09-29",
+          "notes": "- Fixed: with a Character Story open, the chapters you already cleared open again — their map, their scenes, and their Hard and Very Hard fights. Only the next chapter of the main story waits for the Character Story to end.",
+          "highlight": false
+        },
+        {
           "version": "1.8.7",
           "date": "2026-09-25",
           "notes": "- Fixed: world creation lists your whole character card library. It stopped at 100 cards, so a library larger than that died around the letter M and the cards past it showed in your cast as “No longer in your library”.\n- Fixed: loading a preset no longer leaves out cards it could not see — it reads the whole library before deciding what the Engine still has.",
@@ -360,6 +366,12 @@
     "slurp2": {
       "versions": [
         {
+          "version": "0.3.2",
+          "date": "2026-09-29",
+          "notes": "- Fix \"Viewer access could not be loaded\" and an empty Home: the viewer feed listed character fan accounts (0.3.0 audience characters) as Creators without a profile, and the client threw on `creator.profile.id`. The feed now lists only accounts with a stage profile.\n- Fix \"Slurp core storage factory is required\" on \"Start over, keep Creators\" and on the Stir routes: both built the messages storage without its core factory.",
+          "highlight": false
+        },
+        {
           "version": "0.3.1",
           "date": "2026-09-29",
           "notes": "- New Backstage action \"Start over, keep Creators\" (`DELETE /api/slurp2/data/activity`): clears posts, post media, comments, messages, fans, world events, queued and stuck work, and the continuity and content plans built on them. It first refunds commissions that were paid and not delivered. Creators, their artwork and projects, follows, the wallet and every Slurp setting stay. For installs that stay empty or stuck after an update.\n- \"Delete all Slurp data\" now also clears post deep details, reports, message follow-ups, world claims and Creator planning rows, which it used to leave behind.\n- The empty Home feed says why: automatic posting is off (with a one-tap \"Turn on automatic posting\"), first posts are still being written, no Creators yet, or no persona yet.",
@@ -471,12 +483,6 @@
           "version": "0.2.62",
           "date": "2026-09-25",
           "notes": "- The Identity tab in Creator settings uses the full width again; the Save bar sits at the bottom of the tab.\n- Memory shows readable names instead of raw ids such as multi_image_set, in Recent plans, filters, proposals and signals.",
-          "highlight": false
-        },
-        {
-          "version": "0.2.61",
-          "date": "2026-09-25",
-          "notes": "- The Creator settings window no longer shows \"{{name}}'s settings\" while it loads.",
           "highlight": false
         }
       ]

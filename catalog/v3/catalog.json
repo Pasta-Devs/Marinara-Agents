@@ -649,7 +649,7 @@
         },
         "id": "gacha-forge",
         "name": "Gacha Forge",
-        "version": "1.8.7",
+        "version": "1.8.8",
         "description": "A complete gacha game mode. Describe a world and Gacha Forge builds the rest: banners to pull on, a cast the model writes and paints for you, story chapters told by a visual-novel narrator, and the battles, gear and events that grow around them. Install it, restart Marinara Engine when prompted, then open Home → Gacha Forge.",
         "engine": {
           "min": "2.4.4",
@@ -938,8 +938,8 @@
           },
           {
             "path": "client.js",
-            "sha256": "a8e7f43b5aff93b749ee065a83f5db31bab2b55e5d632ea3703b79032968d285",
-            "bytes": 1434560
+            "sha256": "23fa8b3d2bb96191091bd6a1281edebb3c8779a03da0298057cd62e888d88b33",
+            "bytes": 1434802
           },
           {
             "path": "farm-asc.webp",
@@ -1413,8 +1413,8 @@
           },
           {
             "path": "server.mjs",
-            "sha256": "5c3cf82cc8c1112c8f7f0d24c4c1c957bd04855b2c67bdbc7850d1c0f4e42ee8",
-            "bytes": 492474
+            "sha256": "3fa895d8e689065354cb460a67975aad639bc91fee5ef598a152cebd75404cfb",
+            "bytes": 492537
           },
           {
             "path": "skill-aoe_damage-dark.webp",
@@ -2171,9 +2171,9 @@
       "category": "misc",
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/gacha-forge.png",
       "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/gacha-forge-1.8.7.zip",
-        "sha256": "4680d426a88b97f2138a7f9458ca958c1e6d94e97e1dfa9bfde4216506f00003",
-        "bytes": 7827191
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/gacha-forge-1.8.8.zip",
+        "sha256": "6ddd933cfb950d6983b4729d2327c1cb44bc26f486b877c500a14ca0c85e6d97",
+        "bytes": 7827496
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents/blob/main/packages/gacha-forge/README.md"
     },
@@ -3206,7 +3206,7 @@
         },
         "id": "slurp2",
         "name": "Slurp Remastered",
-        "version": "0.3.1",
+        "version": "0.3.2",
         "description": "The Slurp remaster. It installs beside Slurp Legacy and keeps its own separate data: create a local Creator profile from an Engine character or persona, publish public or locked posts, and simulate subscriptions and audience activity. Install it, restart Marinara Engine when prompted, then open Home → Slurp Remastered.",
         "localizations": {
           "de": {
@@ -3266,13 +3266,13 @@
           },
           {
             "path": "server.mjs",
-            "sha256": "d755c34aaa7196c9cfdf77d77aa24865e9e1571d2cc5f59d6891165c44c61ffc",
-            "bytes": 3132655
+            "sha256": "6ebb6cbfd52df52ca353bd448486722621fb56aee4c5e4a9108d8b57cb8277b8",
+            "bytes": 3132560
           },
           {
             "path": "client.js",
-            "sha256": "c14c35a1ff8e86b1716aed9fc63c624d71b32fee0a8a008a321e154ddc420f61",
-            "bytes": 4908925
+            "sha256": "12a7c7d8bbdc92c19074a412382e71a60beb9fe612149f3cce6382deb7cd3aa5",
+            "bytes": 4909090
           },
           {
             "path": "slurp2-logo.png",
@@ -3298,9 +3298,9 @@
       "category": "misc",
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/slurp2.png",
       "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/slurp2-0.3.1.zip",
-        "sha256": "15fa5d89018fcb2fd5e4c06b67a52c80cc21259c4784ddb1494ef5bf0d8ddb29",
-        "bytes": 8198326
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/slurp2-0.3.2.zip",
+        "sha256": "5fc68c5d13e5d3438ed8b0b429e2a965ef7f87efe39837e6585d1113dba40ca2",
+        "bytes": 8198396
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents/blob/main/packages/slurp2/README.md"
     },

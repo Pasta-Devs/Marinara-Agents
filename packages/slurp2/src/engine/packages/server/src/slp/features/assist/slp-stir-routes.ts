@@ -11,7 +11,7 @@ import {
   slpStirPlaySchema,
   slpStirStepSchema,
 } from "../../../../../shared/src/slp/slp-stir.js";
-import { createSlurpMessagesStorage } from "../../data/messages/slp-messages-storage.js";
+import { createSlurpMessagesStorage } from "../../data/slp-storage.js";
 import { slpSupportPlayOnce } from "../../modules/assist/slp-stir-play.js";
 
 /**

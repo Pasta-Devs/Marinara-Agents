@@ -517,3 +517,12 @@ assert.deepEqual(
 const entry = readFileSync(join(root, "slp-server-entry.ts"), "utf8");
 assert.match(entry, /mountSlpRoutes\(Object\.assign\(router, \{ db: app\.db, noodle \}\)/u);
 assert.equal(existsSync(join(root, "features/maintenance/slp-backup-routes.ts")), true);
+// A route that builds the messages storage from the facet module gets no core factory and throws
+// "Slurp core storage factory is required" (0.3.1 Start over, 0.3.0 Stir); data/slp-storage.ts wires it.
+for (const route of ["features/maintenance/slp-maintenance-routes.ts", "features/assist/slp-stir-routes.ts"]) {
+  assert.doesNotMatch(
+    readFileSync(join(root, route), "utf8"),
+    /import \{[^}]*\bcreateSlurpMessagesStorage\b[^}]*\} from "\.\.\/\.\.\/data\/messages\/slp-messages-storage\.js"/u,
+    `${route} must build the messages storage through data/slp-storage.ts`,
+  );
+}

@@ -1,3 +1,6 @@
+## 1.8.8 — 2026-09-29
+- Fixed: with a Character Story open, the chapters you already cleared open again — their map, their scenes, and their Hard and Very Hard fights. Only the next chapter of the main story waits for the Character Story to end.
+
 ## 1.8.7 — 2026-09-25
 - Fixed: world creation lists your whole character card library. It stopped at 100 cards, so a library larger than that died around the letter M and the cards past it showed in your cast as “No longer in your library”.
 - Fixed: loading a preset no longer leaves out cards it could not see — it reads the whole library before deciding what the Engine still has.

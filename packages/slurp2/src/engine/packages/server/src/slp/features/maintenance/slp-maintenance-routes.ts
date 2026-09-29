@@ -18,8 +18,7 @@ import {
   slurpThreads,
 } from "../../../db/schema/slurp.js";
 import { readSlurpStirPlays } from "../../data/assist/slp-stir-plays-storage.js";
-import { createSlurpStorage } from "../../data/slp-storage.js";
-import { createSlurpMessagesStorage } from "../../data/messages/slp-messages-storage.js";
+import { createSlurpMessagesStorage, createSlurpStorage } from "../../data/slp-storage.js";
 import { mapThread } from "../../data/messages/slp-messages-storage-helpers.js";
 import { slurpPulseNext, slurpPulsePlayTasks, slurpUpcomingAnnualEvents } from "../../modules/maintenance/slp-pulse.js";
 import { now } from "../../../utils/id-generator.js";

@@ -71,7 +71,12 @@ export function createSlpViewerContext(
     const followedIds = new Set([...(viewer.settings.social.followingAccountIds ?? []), ...subscribedIds]);
     const unlockedIds = new Set(unlocks.map((item) => item.postId));
     const profileById = new Map(profiles.map((profile) => [profile.id, projectCreatorAudienceProfile(profile)]));
-    const visibleAccounts = accounts.filter((account) => !isSlurpViewerActorAccount(account));
+    // Only accounts with a stage profile are Creators. A character fan in the audience (0.3.0) is an
+    // account without one; listed here it reached the client as a Creator with no `profile`, and the
+    // feed query threw on `creator.profile.id` ("Viewer access could not be loaded").
+    const visibleAccounts = accounts.filter(
+      (account) => !isSlurpViewerActorAccount(account) && profileById.has(account.id),
+    );
     // A tip goal exists to give a fan a reason to tip, and it was only ever visible to the Creator
     // who set it. It belongs on the profile the fan is looking at.
     const goalByAccountId = new Map(
