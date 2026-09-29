@@ -1055,6 +1055,12 @@ async function main() {
   );
   const unitFields = extractionPrompt.unitFields;
   assert.match(unitFields.title, /short memory label/i);
+  for (const relation of ["planted_in", "paid_off_in"]) {
+    assert.ok(
+      extractionPrompt.allowedTimelineRelations.includes(relation),
+      `issue #1138: allowedTimelineRelations must advertise ${relation}`,
+    );
+  }
   assert.equal(
     evidenceUnitResponseFormat({
       allowedBuckets: ["timeline_event"],

@@ -1226,6 +1226,8 @@ export function evidenceUnitMessages(options: RunLongTermMemoryEvidenceUnitExtra
           "resolved_in",
           "evidenced_by",
           "caused_by",
+          "planted_in",
+          "paid_off_in",
           "affects_relationship",
           "affects_character",
         ],

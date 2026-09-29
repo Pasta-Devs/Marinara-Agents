@@ -1,5 +1,9 @@
 # Long-Term Memory changelog
 
+## 1.3.33 — 2026-09-29
+
+- Offer the planted_in and paid_off_in timeline link relations during extraction, so foreshadowing and payoff links between events are captured instead of being treated as invalid.
+
 ## 1.3.32 — 2026-09-29
 
 - Keep timeline events extracted from flat summaries without recognized headings instead of dropping them as invalid, so a valid event and any memory that links to it survive normalization.
