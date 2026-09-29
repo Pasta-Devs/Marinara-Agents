@@ -1,4 +1,10 @@
-# Slurp Remastered release notes
+# Slurp release notes
+
+## 0.3.3 — 2026-09-29
+
+- Renamed from Slurp Remastered to Slurp. The Home tab reads "Slurp" without the trailing period.
+- New catalog description; it states that the default guidance is tuned for an adult experience.
+- Slurp Legacy (`slurp`) is retired and no longer in the catalog. Its backups still restore here.
 
 ## 0.3.2 — 2026-09-29
 

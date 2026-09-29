@@ -133,13 +133,9 @@ export const OFFICIAL_PACKAGE_GUIDANCE = Object.freeze({
     modes: ["conversation", "roleplay", "game"],
     activation: "Install it, restart Marinara Engine when prompted, then open Home → Noodle.",
   },
-  slurp: {
-    modes: ["conversation", "roleplay", "game"],
-    activation: "Install it, restart Marinara Engine when prompted, then open Home → Slurp.",
-  },
   slurp2: {
     modes: ["conversation", "roleplay", "game"],
-    activation: "Install it, restart Marinara Engine when prompted, then open Home → Slurp Remastered.",
+    activation: "Install it, restart Marinara Engine when prompted, then open Home → Slurp.",
   },
   "gacha-forge": {
     modes: ["conversation", "roleplay", "game"],

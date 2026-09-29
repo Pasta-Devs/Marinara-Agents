@@ -146,21 +146,7 @@ const noodleOwnedSourcePaths = [
   "packages/server/src/services/storage/noodle-refresh-run-retention.ts",
   "packages/server/src/services/storage/noodle.storage.ts",
 ];
-const slurpSourceRoot = join(packagesDir, "slurp/src/engine");
 const slurp2SourceRoot = join(packagesDir, "slurp2/src/engine");
-const slurpOwnedSourcePaths = [
-  "packages/client/src/components/slurp",
-  "packages/client/src/hooks/use-slurp.ts",
-  "packages/client/src/localization/locales",
-  "packages/client/src/slurp-package-entry.tsx",
-  "packages/client/src/stores/slurp-package.store.ts",
-  "packages/server/src/db/schema/slurp.ts",
-  "packages/server/src/routes/slurp.routes.ts",
-  "packages/server/src/services/slurp",
-  "packages/server/src/services/storage/slurp.storage.ts",
-];
-// Deliberately not spread from slurpOwnedSourcePaths: that list belongs to frozen legacy Slurp, and
-// the remaster's list shrinks toward its slp roots as files move (see SLURP-MODULE-PLAN.md §5).
 const slurp2OwnedSourcePaths = [
   "packages/client/src/slp",
   "packages/server/src/slp",
@@ -193,7 +179,7 @@ function featurePermissions(feature) {
 }
 
 async function prepareFeatureBuildRoot(feature) {
-  if (feature.id === "noodle" || feature.id === "slurp" || feature.id === "slurp2") {
+  if (feature.id === "noodle" || feature.id === "slurp2") {
     if (!existsSync(feature.packageSourceRoot)) {
       throw new Error(`Missing package-owned ${feature.name} source`);
     }
@@ -370,96 +356,39 @@ const features = [
     },
   },
   {
-    id: "slurp",
-    version: "1.51.0",
-    minEngineVersion: "2.4.3",
+    id: "slurp2",
+    version: "0.3.3",
+    minEngineVersion: "2.4.6",
     maxEngineExclusive: MAX_ENGINE_EXCLUSIVE,
-    name: "Slurp Legacy",
+    name: "Slurp",
     description:
-      "Legacy Slurp version. This package is being reworked and is on hold. New development is happening in Slurp Remastered. Bug fixes are not planned for this version.",
+      "A private social app for your characters. Turn characters and personas into Creators, post public or locked photos, and watch a simulated audience follow, subscribe, unlock, comment, and message them. By default, it is tuned for an adult experience.",
     localizations: {
       de: {
-        name: "Slurp Legacy",
+        name: "Slurp",
         description:
-          "Legacy-Version von Slurp. Dieses Paket wird \u00fcberarbeitet und ist pausiert. Die neue Entwicklung erfolgt in Slurp Remastered. Fehlerbehebungen sind f\u00fcr diese Version nicht geplant.",
+          "Eine private Social-App f\u00fcr deine Charaktere. Mache Charaktere und Personas zu Creators, poste \u00f6ffentliche oder gesperrte Fotos und sieh zu, wie ein simuliertes Publikum ihnen folgt, sie abonniert, Inhalte freischaltet, kommentiert und ihnen schreibt. Standardm\u00e4\u00dfig ist sie auf ein Erlebnis f\u00fcr Erwachsene abgestimmt.",
         homeBrowserTab: {
           label: "Slurp",
           ariaLabel: "Slurp \u00f6ffnen",
         },
       },
       ko: {
-        name: "Slurp Legacy",
+        name: "Slurp",
         description:
-          "Slurp \ub808\uac70\uc2dc \ubc84\uc804\uc785\ub2c8\ub2e4. \uc774 \ud328\ud0a4\uc9c0\ub294 \uc7ac\uc791\uc5c5 \uc911\uc774\uba70 \ubcf4\ub958 \uc0c1\ud0dc\uc785\ub2c8\ub2e4. \uc0c8\ub85c\uc6b4 \uac1c\ubc1c\uc740 Slurp Remastered\uc5d0\uc11c \uc9c4\ud589\ub429\ub2c8\ub2e4. \uc774 \ubc84\uc804\uc758 \ubc84\uadf8 \uc218\uc815\uc740 \uacc4\ud68d\ub418\uc5b4 \uc788\uc9c0 \uc54a\uc2b5\ub2c8\ub2e4.",
+          "\uce90\ub9ad\ud130\ub97c \uc704\ud55c \ube44\uacf5\uac1c \uc18c\uc15c \uc571\uc785\ub2c8\ub2e4. \uce90\ub9ad\ud130\uc640 \ud398\ub974\uc18c\ub098\ub97c \ud06c\ub9ac\uc5d0\uc774\ud130\ub85c \ub9cc\ub4e4\uace0, \uacf5\uac1c \ub610\ub294 \uc7a0\uae34 \uc0ac\uc9c4\uc744 \uac8c\uc2dc\ud558\uace0, \uc2dc\ubbac\ub808\uc774\uc158\ub41c \uccad\uc911\uc774 \ud314\ub85c\uc6b0\ud558\uace0 \uad6c\ub3c5\ud558\uace0 \uc7a0\uae08\uc744 \ud574\uc81c\ud558\uace0 \ub313\uae00\uacfc \uba54\uc2dc\uc9c0\ub97c \ub0a8\uae30\ub294 \ubaa8\uc2b5\uc744 \uc9c0\ucf1c\ubcf4\uc138\uc694. \uae30\ubcf8\uc801\uc73c\ub85c \uc131\uc778\uc6a9 \uacbd\ud5d8\uc5d0 \ub9de\ucdb0\uc838 \uc788\uc2b5\ub2c8\ub2e4.",
         homeBrowserTab: {
           label: "Slurp",
           ariaLabel: "Slurp \uc5f4\uae30",
         },
       },
       pl: {
-        name: "Slurp Legacy",
+        name: "Slurp",
         description:
-          "Starsza wersja Slurp. Ten pakiet jest przebudowywany i wstrzymany. Nowy rozw\u00f3j odbywa si\u0119 w Slurp Remastered. Poprawki b\u0142\u0119d\u00f3w dla tej wersji nie s\u0105 planowane.",
+          "Prywatna aplikacja spo\u0142eczno\u015bciowa dla Twoich postaci. Zamieniaj postacie i persony w tw\u00f3rc\u00f3w, publikuj publiczne lub zablokowane zdj\u0119cia i patrz, jak symulowana publiczno\u015b\u0107 je obserwuje, subskrybuje, odblokowuje posty, komentuje i pisze do nich wiadomo\u015bci. Domy\u015blnie jest dostrojona do tre\u015bci dla doros\u0142ych.",
         homeBrowserTab: {
           label: "Slurp",
           ariaLabel: "Otw\u00f3rz Slurp",
-        },
-      },
-    },
-    category: "misc",
-    kind: ["agent"],
-    modes: ["conversation", "roleplay", "game"],
-    permissions: ["chat-read", "network", "routes", "storage", "ui"],
-    serverImport: "packages/server/src/services/slurp/server-entry.ts",
-    serverEntry: true,
-    clientImport: "packages/client/src/slurp-package-entry.tsx",
-    packageSourceRoot: slurpSourceRoot,
-    ownedSourcePaths: slurpOwnedSourcePaths,
-    libraryHidden: true,
-    assetPaths: ["slurp-logo.png", "slurplegacy.png"],
-    contributions: {
-      slots: ["home-browser-tab"],
-      homeBrowserTab: {
-        label: "Slurp",
-        ariaLabel: "Open Slurp",
-        iconPaths: ["slurp-logo.png"],
-      },
-    },
-  },
-  {
-    id: "slurp2",
-    version: "0.3.2",
-    minEngineVersion: "2.4.6",
-    maxEngineExclusive: MAX_ENGINE_EXCLUSIVE,
-    name: "Slurp Remastered",
-    description:
-      "The Slurp remaster. It installs beside Slurp Legacy and keeps its own separate data: create a local Creator profile from an Engine character or persona, publish public or locked posts, and simulate subscriptions and audience activity.",
-    localizations: {
-      de: {
-        name: "Slurp Remastered",
-        description:
-          "Die Neufassung von Slurp. Sie wird neben Slurp Legacy installiert und behaelt eigene, getrennte Daten: Erstelle ein lokales Creator-Profil aus einem Engine-Charakter oder einer Engine-Persona, veroeffentliche oeffentliche oder gesperrte Beitraege und simuliere Abonnements und Publikumsaktivitaet.",
-        homeBrowserTab: {
-          label: "Slurp.",
-          ariaLabel: "Slurp oeffnen",
-        },
-      },
-      ko: {
-        name: "Slurp Remastered",
-        description:
-          "Slurp\uc758 \ub9ac\uba54\uc774\uc2a4\ud130\uc785\ub2c8\ub2e4. Slurp Legacy\uc640 \ud568\uaed8 \uc124\uce58\ub418\uba70 \ub370\uc774\ud130\ub97c \ub530\ub85c \ubcf4\uad00\ud569\ub2c8\ub2e4. Engine \uce90\ub9ad\ud130\ub098 Engine \ud398\ub974\uc18c\ub098\ub85c \ub85c\uceec \ud06c\ub9ac\uc5d0\uc774\ud130 \ud504\ub85c\ud544\uc744 \ub9cc\ub4e4\uace0, \uacf5\uac1c \ub610\ub294 \uc7a0\uae34 \uac8c\uc2dc\ubb3c\uc744 \uac8c\uc2dc\ud558\uba70, \uad6c\ub3c5 \ubc0f \uccad\uc911 \ud65c\ub3d9\uc744 \uc2dc\ubbac\ub808\uc774\uc158\ud569\ub2c8\ub2e4.",
-        homeBrowserTab: {
-          label: "Slurp.",
-          ariaLabel: "Slurp \uc5f4\uae30",
-        },
-      },
-      pl: {
-        name: "Slurp Remastered",
-        description:
-          "Odnowiona wersja Slurp. Instaluje sie obok Slurp Legacy i przechowuje wlasne, oddzielne dane: utworz lokalny profil tworcy z postaci silnika lub persony silnika, publikuj publiczne lub zablokowane posty i symuluj subskrypcje oraz aktywnosc publicznosci.",
-        homeBrowserTab: {
-          label: "Slurp.",
-          ariaLabel: "Otworz Slurp",
         },
       },
     },
@@ -490,8 +419,7 @@ const features = [
     contributions: {
       slots: ["home-browser-tab"],
       homeBrowserTab: {
-        label: "Slurp.",
-        // The visual wordmark keeps its period; the accessible name does not ("Open Slurp full stop").
+        label: "Slurp",
         ariaLabel: "Open Slurp",
         iconPaths: ["slurp2-logo.png"],
       },
@@ -830,9 +758,7 @@ export async function selfCheck() {
         // method", which broke every outbound request the package made. The runtime provisions
         // undici alongside the snapshot, so resolving to the Engine's copy is the fix.
         "--external:undici",
-        ...(feature.id === "long-term-memory" || feature.id === "slurp" || feature.id === "slurp2"
-          ? ["--external:zod"]
-          : []),
+        ...(feature.id === "long-term-memory" || feature.id === "slurp2" ? ["--external:zod"] : []),
         `--alias:@marinara-engine/shared=${sharedBundleEntry}`,
         `--metafile=${metafile}`,
         `--outfile=${output}`,
@@ -848,11 +774,11 @@ export async function selfCheck() {
     }
     if (feature.ownedSourcePaths?.length) {
       await capturePackageSources(metafile, prepared.buildRoot, feature.ownedSourcePaths);
-      if (feature.id === "slurp" || feature.id === "slurp2") {
+      if (feature.id === "slurp2") {
         await removeOwnedSourceSnapshots([
           "packages/client/src/localization/locales",
           // Captured as generic Engine material before Slurp2 claimed it; only Slurp2 imports it.
-          ...(feature.id === "slurp2" ? ["packages/server/src/services/garnish-ads"] : []),
+          "packages/server/src/services/garnish-ads",
         ]);
       }
     } else {
@@ -1675,7 +1601,7 @@ function Root({ element }) {
 class Element extends HTMLElement { connectedCallback() { if (!this.__root) this.__root = createRoot(this); this.__root.render(<QueryClientProvider client={client}><Root element={this} /></QueryClientProvider>); } disconnectedCallback() { queueMicrotask(() => { if (!this.isConnected && this.__root) { this.__root.unmount(); this.__root = null; } }); } }
 if (!customElements.get(${JSON.stringify(tag)})) customElements.define(${JSON.stringify(tag)}, Element);`;
     } else if (feature.clientImport) {
-      if (feature.id === "noodle" || feature.id === "slurp" || feature.id === "slurp2") {
+      if (feature.id === "noodle" || feature.id === "slurp2") {
         const setterName = feature.id === "noodle" ? "setNoodlePackageStyles" : "setSlurpPackageStyles";
         source = `import { ${setterName} } from ${JSON.stringify(resolve(prepared.buildRoot, feature.clientImport))};`;
         const styles = await buildPackageStyles(prepared.buildRoot, temporary, feature.id);
@@ -1928,7 +1854,7 @@ for (const feature of selectedFeatures) {
     catalog.packages.push({
       manifest,
       category: feature.category ?? "misc",
-      iconUrl: feature.id === "slurp" ? catalogArtworkUrl("slurp") : catalogArtworkUrl(feature.id),
+      iconUrl: catalogArtworkUrl(feature.id),
       artifact: {
         url: `https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/${basename(artifactPath)}`,
         sha256: sha256(artifact),
@@ -1939,7 +1865,7 @@ for (const feature of selectedFeatures) {
           ? "https://github.com/Pasta-Devs/Marinara-Engine/blob/main/docs/agents/hierarchical-maps.md"
           : feature.id === "noodle"
             ? "https://github.com/Pasta-Devs/Marinara-Agents/blob/main/packages/noodle/README.md"
-            : feature.id === "slurp" || feature.id === "slurp2"
+            : feature.id === "slurp2"
               ? `https://github.com/Pasta-Devs/Marinara-Agents/blob/main/packages/${feature.id}/README.md`
               : `https://github.com/Pasta-Devs/Marinara-Agents#${feature.id}`,
     });

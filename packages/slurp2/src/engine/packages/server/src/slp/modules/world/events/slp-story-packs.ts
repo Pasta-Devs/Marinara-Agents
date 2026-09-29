@@ -95,7 +95,7 @@ function pack(
     version: "1.0.0",
     name,
     description,
-    author: "Slurp Remastered",
+    author: "Slurp",
     arcs,
     events,
   });
@@ -477,7 +477,7 @@ export function exportSlpStoryPack(input: {
   return pack(
     input.id,
     input.name,
-    input.description ?? "Exported from Slurp Remastered.",
+    input.description ?? "Exported from Slurp.",
     input.arcs.map((entry) => stripLocal(entry) as SlpArcBlueprint),
     input.events.map((entry) => stripLocal(entry) as SlpEventBlueprint),
   );

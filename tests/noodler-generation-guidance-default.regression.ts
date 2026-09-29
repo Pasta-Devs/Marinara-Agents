@@ -12,7 +12,7 @@ import { slurp2Source } from "./slurp2-source";
 const storage = slurp2Source("packages/slurp2/src/engine/packages/server/src/services/storage/slurp.storage.ts");
 const home = slurp2Source("packages/slurp2/src/engine/packages/client/src/components/slurp/SlurpHome.tsx");
 const settings = slurp2BackstageSource();
-const readme = slurp2Source("packages/slurp/README.md");
+const readme = slurp2Source("packages/slurp2/README.md");
 const enLocale = slurp2Source("packages/slurp2/src/engine/packages/client/src/localization/locales/en.json");
 const generation = slurp2Source(
   "packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-generation.service.ts",

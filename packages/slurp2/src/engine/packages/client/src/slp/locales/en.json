@@ -2429,7 +2429,7 @@
   "ui.slurp.settings.tabs.wallet": "SlurpCoins",
   "ui.slurp.settings.autopurge.title": "Autopurge",
   "ui.slurp.settings.autopurge.detail": "Keep Slurp storage under control by clearing old posts or their media after a retention period you choose.",
-  "ui.slurp.settings.autopurge.localOnly": "Only Slurp Remastered data is affected",
+  "ui.slurp.settings.autopurge.localOnly": "Only Slurp data is affected",
   "ui.slurp.settings.autopurge.localOnlyDetail": "Autopurge never touches Engine characters, personas, other social data, generation connections, Creator avatars, or Creator banners.",
   "ui.slurp.settings.autopurge.retentionGroup": "Retention",
   "ui.slurp.settings.autopurge.olderThan": "Purge content older than",

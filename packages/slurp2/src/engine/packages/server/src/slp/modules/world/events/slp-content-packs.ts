@@ -112,7 +112,7 @@ export function slurpContentStoryPack(pack: SlurpContentPack): SlpStoryPack {
     version: "1.0.0",
     name: pack.name,
     description: pack.adds,
-    author: "Slurp Remastered",
+    author: "Slurp",
     arcs: pack.arcs.map((arc) => arcBlueprint(pack, arc)),
     events: pack.events.map((event) => eventBlueprint(pack, event)),
   });

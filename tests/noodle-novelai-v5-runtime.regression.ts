@@ -95,7 +95,7 @@ function bundledFunction(bundle: string, marker: string): { name: string; source
   return { name, source };
 }
 
-for (const packageId of ["noodle", "slurp"]) {
+for (const packageId of ["noodle"]) {
   const bundle = readFileSync(`packages/${packageId}/server.mjs`, "utf8");
   assert.match(bundle, /NovelAI V5 prompts support up to 1471 tokens/);
   const v4 = bundledFunction(bundle, "return/^nai-diffusion-(?:4");

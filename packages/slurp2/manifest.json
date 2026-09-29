@@ -9,32 +9,32 @@
     "engineCommit": "c3ec876434ba25f5288a549afc292f1ca9b0e5c5"
   },
   "id": "slurp2",
-  "name": "Slurp Remastered",
-  "version": "0.3.2",
-  "description": "The Slurp remaster. It installs beside Slurp Legacy and keeps its own separate data: create a local Creator profile from an Engine character or persona, publish public or locked posts, and simulate subscriptions and audience activity. Install it, restart Marinara Engine when prompted, then open Home → Slurp Remastered.",
+  "name": "Slurp",
+  "version": "0.3.3",
+  "description": "A private social app for your characters. Turn characters and personas into Creators, post public or locked photos, and watch a simulated audience follow, subscribe, unlock, comment, and message them. By default, it is tuned for an adult experience. Install it, restart Marinara Engine when prompted, then open Home → Slurp.",
   "localizations": {
     "de": {
-      "name": "Slurp Remastered",
-      "description": "Die Neufassung von Slurp. Sie wird neben Slurp Legacy installiert und behaelt eigene, getrennte Daten: Erstelle ein lokales Creator-Profil aus einem Engine-Charakter oder einer Engine-Persona, veroeffentliche oeffentliche oder gesperrte Beitraege und simuliere Abonnements und Publikumsaktivitaet.",
+      "name": "Slurp",
+      "description": "Eine private Social-App für deine Charaktere. Mache Charaktere und Personas zu Creators, poste öffentliche oder gesperrte Fotos und sieh zu, wie ein simuliertes Publikum ihnen folgt, sie abonniert, Inhalte freischaltet, kommentiert und ihnen schreibt. Standardmäßig ist sie auf ein Erlebnis für Erwachsene abgestimmt.",
       "homeBrowserTab": {
-        "label": "Slurp.",
-        "ariaLabel": "Slurp oeffnen"
+        "label": "Slurp",
+        "ariaLabel": "Slurp öffnen"
       }
     },
     "ko": {
-      "name": "Slurp Remastered",
-      "description": "Slurp의 리메이스터입니다. Slurp Legacy와 함께 설치되며 데이터를 따로 보관합니다. Engine 캐릭터나 Engine 페르소나로 로컬 크리에이터 프로필을 만들고, 공개 또는 잠긴 게시물을 게시하며, 구독 및 청중 활동을 시뮬레이션합니다.",
+      "name": "Slurp",
+      "description": "캐릭터를 위한 비공개 소셜 앱입니다. 캐릭터와 페르소나를 크리에이터로 만들고, 공개 또는 잠긴 사진을 게시하고, 시뮬레이션된 청중이 팔로우하고 구독하고 잠금을 해제하고 댓글과 메시지를 남기는 모습을 지켜보세요. 기본적으로 성인용 경험에 맞춰져 있습니다.",
       "homeBrowserTab": {
-        "label": "Slurp.",
+        "label": "Slurp",
         "ariaLabel": "Slurp 열기"
       }
     },
     "pl": {
-      "name": "Slurp Remastered",
-      "description": "Odnowiona wersja Slurp. Instaluje sie obok Slurp Legacy i przechowuje wlasne, oddzielne dane: utworz lokalny profil tworcy z postaci silnika lub persony silnika, publikuj publiczne lub zablokowane posty i symuluj subskrypcje oraz aktywnosc publicznosci.",
+      "name": "Slurp",
+      "description": "Prywatna aplikacja społecznościowa dla Twoich postaci. Zamieniaj postacie i persony w twórców, publikuj publiczne lub zablokowane zdjęcia i patrz, jak symulowana publiczność je obserwuje, subskrybuje, odblokowuje posty, komentuje i pisze do nich wiadomości. Domyślnie jest dostrojona do treści dla dorosłych.",
       "homeBrowserTab": {
-        "label": "Slurp.",
-        "ariaLabel": "Otworz Slurp"
+        "label": "Slurp",
+        "ariaLabel": "Otwórz Slurp"
       }
     }
   },
@@ -55,7 +55,7 @@
       "home-browser-tab"
     ],
     "homeBrowserTab": {
-      "label": "Slurp.",
+      "label": "Slurp",
       "ariaLabel": "Open Slurp",
       "iconPaths": [
         "slurp2-logo.png"
@@ -65,18 +65,18 @@
   "files": [
     {
       "path": "agents.json",
-      "sha256": "8f6dffb7ebb68257303c3906fd283d4fad8d558c79a272c83eadda0d8328cca3",
-      "bytes": 685
+      "sha256": "a08668dbfcf82409d4fe9bae474c9f54b8fd81091bfae337cd994e686a7e631e",
+      "bytes": 689
     },
     {
       "path": "server.mjs",
-      "sha256": "6ebb6cbfd52df52ca353bd448486722621fb56aee4c5e4a9108d8b57cb8277b8",
-      "bytes": 3132560
+      "sha256": "4a799dd9d5c27d1bd3ee40f4d2f60ea3165e667de1013727a2dd8ee8292a6064",
+      "bytes": 3338999
     },
     {
       "path": "client.js",
-      "sha256": "12a7c7d8bbdc92c19074a412382e71a60beb9fe612149f3cce6382deb7cd3aa5",
-      "bytes": 4909090
+      "sha256": "8bad99b40e1fdcf2b69c3a30b60c697cdbf60ad8d5a523eafa437075c0d000df",
+      "bytes": 4876336
     },
     {
       "path": "slurp2-logo.png",

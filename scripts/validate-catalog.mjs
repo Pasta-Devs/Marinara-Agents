@@ -206,16 +206,6 @@ for (const relativePath of hierarchicalMapsOwnedSourcePaths) {
   }
 }
 
-const slurpOwnedSourcePaths = [
-  "packages/client/src/components/slurp",
-  "packages/client/src/hooks/use-slurp.ts",
-  "packages/client/src/slurp-package-entry.tsx",
-  "packages/client/src/stores/slurp-package.store.ts",
-  "packages/server/src/db/schema/slurp.ts",
-  "packages/server/src/routes/slurp.routes.ts",
-  "packages/server/src/services/slurp",
-  "packages/server/src/services/storage/slurp.storage.ts",
-];
 // Must equal slurp2OwnedSourcePaths in the builder: the three slp roots and three permanent exceptions.
 const slurp2OwnedSourcePaths = [
   "packages/client/src/slp",
@@ -225,15 +215,9 @@ const slurp2OwnedSourcePaths = [
   "packages/server/src/services/garnish-ads",
   "packages/server/src/db/schema/slurp.ts",
 ];
-for (const [packageId, ownedSourcePaths] of [
-  ["slurp", slurpOwnedSourcePaths],
-  ["slurp2", slurp2OwnedSourcePaths],
-]) {
-  for (const relativePath of ownedSourcePaths) {
-    const packageOwnedPath = join(repoRoot, `packages/${packageId}/src/engine`, relativePath);
-    if (!existsSync(packageOwnedPath)) {
-      throw new Error(`${packageId} package source is missing: ${relativePath}`);
-    }
+for (const relativePath of slurp2OwnedSourcePaths) {
+  if (!existsSync(join(repoRoot, "packages/slurp2/src/engine", relativePath))) {
+    throw new Error(`slurp2 package source is missing: ${relativePath}`);
   }
 }
 
@@ -514,7 +498,7 @@ for (const entry of catalog.packages) {
       }
     }
   }
-  if (manifest.id === "slurp" || manifest.id === "slurp2") {
+  if (manifest.id === "slurp2") {
     const expectedLocales = ["de", "ko", "pl"];
     const actualLocales = Object.keys(manifest.localizations ?? {}).sort();
     if (JSON.stringify(actualLocales) !== JSON.stringify(expectedLocales)) {
@@ -929,8 +913,8 @@ const agentOnly = publishedCatalog.packages.filter(
   (entry) => !isRulesetPackage(entry.manifest) && !entry.manifest.entrypoints.server,
 ).length;
 const features = publishedCatalog.packages.length - agentOnly - rulesets;
-if (publishedCatalog.packages.length !== 38 || agentOnly !== 24 || features !== 14 || rulesets !== 0) {
-  throw new Error(`Expected 24 agents, 14 features, and 0 rulesets, found ${agentOnly}, ${features}, and ${rulesets}`);
+if (publishedCatalog.packages.length !== 37 || agentOnly !== 24 || features !== 13 || rulesets !== 0) {
+  throw new Error(`Expected 24 agents, 13 features, and 0 rulesets, found ${agentOnly}, ${features}, and ${rulesets}`);
 }
 console.log(
   `Catalog valid: ${publishedCatalog.packages.length} packages (${agentOnly} agents, ${features} features, ${rulesets} rulesets).`,

@@ -329,42 +329,14 @@
         }
       ]
     },
-    "slurp": {
-      "versions": [
-        {
-          "version": "1.51.0",
-          "date": "2026-09-13",
-          "notes": "- Completion and error notifications now appear inside the standalone package.\n- Fan reactions and creator replies can use stored image prompts or vision descriptions. Auto prefers the stored prompt, with vision as a fallback for uploaded images. Public fans never receive locked images, and descriptions follow the creator's identity protection.\n- The targeted creator refresh shows the remaining count as each generation finishes, including failed or skipped jobs.",
-          "highlight": true
-        },
-        {
-          "version": "1.50.1",
-          "date": "2026-09-13",
-          "notes": "- Maintenance: remove unused legacy code and an unnecessary settings read when checking the posting schedule.",
-          "highlight": false
-        },
-        {
-          "version": "1.50.0",
-          "date": "2026-09-11",
-          "notes": "- Mark Slurp as the legacy version while it is being reworked.\n- Add a full ZIP backup export containing Slurp data and media for migration.\n- New development is moving to Slurp Remastered. Bug fixes are not planned for this version.",
-          "highlight": true
-        },
-        {
-          "version": "1.0.31",
-          "date": "2026-09-09",
-          "notes": "- Include image generation guidance in the main Slurp post-generation prompt so image interpretation receives the generated image prompt and configured instructions.",
-          "highlight": false
-        },
-        {
-          "version": "1.0.30",
-          "date": "2026-09-08",
-          "notes": "- Preserve the selected image style profile after image prompt interpretation.",
-          "highlight": false
-        }
-      ]
-    },
     "slurp2": {
       "versions": [
+        {
+          "version": "0.3.3",
+          "date": "2026-09-29",
+          "notes": "- Renamed from Slurp Remastered to Slurp. The Home tab reads \"Slurp\" without the trailing period.\n- New catalog description; it states that the default guidance is tuned for an adult experience.\n- Slurp Legacy (`slurp`) is retired and no longer in the catalog. Its backups still restore here.",
+          "highlight": false
+        },
         {
           "version": "0.3.2",
           "date": "2026-09-29",
@@ -477,12 +449,6 @@
           "version": "0.2.63",
           "date": "2026-09-25",
           "notes": "- Storylines settings show every choice at once: story activity presets are cards with a short description, and the start, pace and source settings are button rows instead of dropdowns.\n- Audience presets, scale, tone and world activity use the same button rows.",
-          "highlight": false
-        },
-        {
-          "version": "0.2.62",
-          "date": "2026-09-25",
-          "notes": "- The Identity tab in Creator settings uses the full width again; the Save bar sits at the bottom of the tab.\n- Memory shows readable names instead of raw ids such as multi_image_set, in Recent plans, filters, proposals and signals.",
           "highlight": false
         }
       ]

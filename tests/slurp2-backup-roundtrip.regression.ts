@@ -108,14 +108,22 @@ assert.equal(exported.length, declared.length, "the backup registry and the sche
 // ── 4. The legacy migration actually lands ────────────────────────────────────
 // A Slurp Legacy export names these entities. Each one must resolve to a table here, or a user
 // migrating off legacy silently loses that part of their data with no error to tell them.
-const legacyStorage = read("packages/slurp/src/engine/packages/server/src/services/storage/slurp.storage.ts");
-const legacyExport = legacyStorage.slice(
-  legacyStorage.indexOf("async exportSlurpBackup()"),
-  legacyStorage.indexOf("async updateSlurpSettings("),
-);
-const legacyTableBlock = legacyExport.slice(legacyExport.indexOf("tables: {"), legacyExport.lastIndexOf("},"));
-const legacyNames = [...legacyTableBlock.matchAll(/^\s+(\w+),$/gmu)].map(([, name]) => name);
-assert.ok(legacyNames.length >= 12, `expected the legacy table set, saw ${legacyNames.length}`);
+// Frozen from legacy `exportSlurpBackup()` when the Slurp Legacy source was removed; its backups
+// still exist in the wild, so the list must not change.
+const legacyNames = [
+  "accounts",
+  "posts",
+  "subscriptions",
+  "unlocks",
+  "interactions",
+  "replyClaims",
+  "preparedPosts",
+  "attempts",
+  "reserveState",
+  "fanState",
+  "digests",
+  "refreshRuns",
+];
 for (const name of legacyNames) {
   assert.match(
     registry,
