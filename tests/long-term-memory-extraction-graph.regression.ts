@@ -498,9 +498,12 @@ async function main() {
     2,
   );
 
-  // Issue #1137: the provider-coverage check must not compare two backfill lines
-  // against each other, or a richer structured fact whose text contains a shorter
-  // sibling fact for the same subject and section is dropped.
+  // Issue #1137: provider coverage must be symmetric and must not compare two
+  // backfill lines against each other, or a richer structured fact whose text
+  // contains a shorter sibling/provider fact for the same subject and section is
+  // dropped. The provider already holding the short fact must not hide the
+  // richer structured sibling, while an exact provider duplicate is still
+  // suppressed rather than re-added.
   const nestedBackfillSource = sourceNote(
     "source_nested_backfill",
     { kind: "chat_summary", sourceId: "chat-nested", entryId: "summary-nested" },
@@ -511,7 +514,15 @@ async function main() {
     ].join("\n"),
   );
   const nestedBackfillResult = normalizeStructuredSummaryEvidenceUnits({
-    units: [],
+    units: [
+      unit(nestedBackfillSource, {
+        bucket: "character_fact",
+        subjectId: "alice",
+        sectionKey: "facts",
+        text: "Alice has a scar on her left cheek.",
+        subjectNames: ["Alice"],
+      }),
+    ],
     sourceText: nestedBackfillSource.sections.source.text,
     sourceNote: nestedBackfillSource,
     sourceHash: sourceHashForLtmSourceNote(nestedBackfillSource),
@@ -526,6 +537,11 @@ async function main() {
     nestedBackfillTexts.some((text) => text.includes("speaks French")),
     true,
     "the distinct detail from the richer backfill fact must be retained",
+  );
+  assert.equal(
+    nestedBackfillTexts.filter((text) => text === "Alice has a scar on her left cheek.").length,
+    1,
+    "a provider fact already covering the structured line must not be re-added",
   );
 
   const idiomaticStaticSource = sourceNote(

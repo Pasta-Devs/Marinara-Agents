@@ -1352,7 +1352,13 @@ function characterFactCovers(
   if (normalizeSectionKey(existing.sectionKey, "facts") !== normalizeSectionKey(candidate.sectionKey, "facts")) {
     return false;
   }
-  return relationshipTextOverlap(candidate.text, existing.text) >= 0.8;
+  // Coverage must hold in both directions: requiring only that the candidate
+  // covers the existing text would treat any richer candidate as already
+  // covered and drop the extra detail the provider does not hold.
+  return (
+    relationshipTextOverlap(candidate.text, existing.text) >= 0.8 &&
+    relationshipTextOverlap(existing.text, candidate.text) >= 0.8
+  );
 }
 
 function normalizeComparableText(text: string) {
