@@ -1,4 +1,5 @@
 import { readdir, readFile } from "node:fs/promises";
+import { z } from "zod";
 import {
   ltmIndexStateSchema,
   type LtmIndexState,
@@ -73,9 +74,19 @@ export async function rebuildLtmNoteSummary(root: string) {
   for (const folder of LTM_VAULT_FOLDERS) {
     for (const entry of await readdir(safeJoin(dirs.vault, folder), { withFileTypes: true })) {
       if (!entry.isFile() || !entry.name.endsWith(".json")) continue;
-      const note = parseStoredLtmNote(
-        JSON.parse(await readFile(safeJoin(dirs.vault, `${folder}/${entry.name}`), "utf8")),
-      );
+      // Operational read failures stay terminal; only a note that is present
+      // but malformed is skipped, so the summary never silently undercounts.
+      const raw = await readFile(safeJoin(dirs.vault, `${folder}/${entry.name}`), "utf8");
+      let note: LtmNote;
+      try {
+        note = parseStoredLtmNote(JSON.parse(raw));
+      } catch (error) {
+        if (!(error instanceof SyntaxError || error instanceof z.ZodError)) throw error;
+        // A malformed note must not abort storage initialization: typed reads
+        // still surface it and quarantine_malformed_notes can clear it.
+        logger.warn(error, "[ltm] Skipping malformed vault note %s while rebuilding the note summary", entry.name);
+        continue;
+      }
       addNote(summary, note, 1);
     }
   }

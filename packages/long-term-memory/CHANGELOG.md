@@ -1,5 +1,9 @@
 # Long-Term Memory changelog
 
+## 1.3.34 — 2026-09-30 [highlight]
+
+- Stop Long-Term Memory from failing to activate when the vault contains a note that no longer passes validation. The invalid note is skipped by the note index and still surfaces as a vault read error, so the package no longer rolls back to an old version.
+
 ## 1.3.33 — 2026-09-29
 
 - Offer the planted_in and paid_off_in timeline link relations during extraction, so foreshadowing and payoff links between events are captured instead of being treated as invalid.

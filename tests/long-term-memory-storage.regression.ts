@@ -89,7 +89,7 @@ async function main() {
   const { activateLongTermMemoryStorage } = await import(`${source}/runtime.ts`);
   const { getLtmGlobalSettings, ltmSettingsPath, updateLtmGlobalSettings } = await import(`${source}/settings.ts`);
   const { ltmMutationTransactionSchema, recoverLtmMutations } = await import(`${source}/mutation-transaction.ts`);
-  const { readLtmNoteSummary, writeLtmNoteSummary } = await import(`${source}/index-state.ts`);
+  const { readLtmNoteSummary, writeLtmNoteSummary, rebuildLtmNoteSummary } = await import(`${source}/index-state.ts`);
   const { runLongTermMemoryRetention } = await import(`${source}/retention.ts`);
   const { rebuildLtmActivityIndex, readLtmActivityEvents } = await import(`${source}/activity-index.ts`);
   const { renderSectionContributions } = await import(`${source}/section-contributions.ts`);
@@ -3088,6 +3088,73 @@ async function main() {
         "a full read must still fail on misplaced notes",
       );
       await misplacedStorage.cleanup();
+
+      const summaryRoot = join(dataDir, "vault-summary-tolerance");
+      const summaryDirs = getLongTermMemoryDirectories(summaryRoot);
+      await mkdir(join(summaryDirs.vault, "sources"), { recursive: true });
+      await writeFile(
+        join(summaryDirs.vault, "sources", "source_summary_ok.json"),
+        `${JSON.stringify({
+          id: "source_summary_ok",
+          title: "Healthy source",
+          type: "source",
+          status: "active",
+          modes: ["roleplay"],
+          scope: {},
+          tags: [],
+          keywords: [],
+          links: [],
+          provenance: { kind: "chat_summary", sourceId: "chat-a", entryId: "summary-tolerance" },
+          sections: { source: { text: "Healthy source.", updatedAt: timestamp } },
+          createdAt: timestamp,
+          updatedAt: timestamp,
+          version: 1,
+        })}\n`,
+      );
+      await writeFile(
+        join(summaryDirs.vault, "sources", "source_summary_legacy.json"),
+        `${JSON.stringify({
+          id: "source_summary_legacy",
+          title: "Legacy source without provenance",
+          type: "source",
+          status: "active",
+          modes: ["roleplay"],
+          scope: {},
+          tags: [],
+          keywords: [],
+          links: [],
+          sections: { source: { text: "Legacy source.", updatedAt: timestamp } },
+          createdAt: timestamp,
+          updatedAt: timestamp,
+          version: 1,
+        })}\n`,
+      );
+      const summaryRuntime = await activateLongTermMemoryStorage(summaryRoot);
+      assert.equal(
+        (await readLtmNoteSummary(summaryRoot)).total,
+        1,
+        "a malformed vault note must be skipped instead of aborting the note-summary rebuild and activation",
+      );
+      await assert.rejects(
+        summaryRuntime.storage.listNotes({ type: "source" }),
+        /Source notes must store import provenance/u,
+        "typed reads must still surface the malformed note the summary skipped",
+      );
+      const summaryPath = join(summaryDirs.indexes, "note-summary.json");
+      const unreadableSource = join(summaryDirs.vault, "sources", "source_summary_ok.json");
+      await rm(summaryPath, { force: true });
+      await chmod(unreadableSource, 0o000);
+      try {
+        await assert.rejects(
+          () => rebuildLtmNoteSummary(summaryRoot),
+          /EACCES|permission/i,
+          "an unreadable vault note must reject the summary rebuild instead of caching an undercount",
+        );
+      } finally {
+        await chmod(unreadableSource, 0o600);
+      }
+      await assert.rejects(stat(summaryPath), { code: "ENOENT" }, "a failed rebuild must not cache a partial summary");
+      await summaryRuntime.cleanup();
 
       const raceRoot = join(dataDir, "vault-snapshot-race");
       {
