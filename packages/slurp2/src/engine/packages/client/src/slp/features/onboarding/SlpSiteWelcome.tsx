@@ -11,7 +11,7 @@ import { SlpSparkleGlyph } from "../../base/chrome/SlpGlyphs";
 import type { SlurpActivityPreset } from "../../modules/creator/slp-activity-presets";
 import { SlpButton, SlpChip, SlpPrimaryButton } from "../../modules/chrome/SlpButton";
 import { SlpWizardFooter, SlpWizardProgress } from "../../modules/chrome/SlpWizardChrome";
-import { slurpBubbleSurface } from "../messages/slp-messages-contract";
+import { slurpBubbleSurface } from "../../modules/chrome/SlpChatShell";
 import {
   SLP_SITE_WELCOME_OPTIONS,
   SLP_SITE_WELCOME_QUESTIONS,

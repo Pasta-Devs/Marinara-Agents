@@ -8,7 +8,7 @@ import { Avatar, SLP_IMG_FRAME_CLASS, SLP_TYPE, SlurpMediaImg } from "../../base
 import { SlpSparkleGlyph } from "../../base/chrome/SlpGlyphs";
 import { SlpButton } from "../../modules/chrome/SlpButton";
 import { playSlpBurst } from "../../modules/sparkle/SlpSparkle";
-import { slurpBubbleSurface } from "../messages/slp-messages-contract";
+import { slurpBubbleSurface } from "../../modules/chrome/SlpChatShell";
 import { slpScenePatchHeadline, type SlpSceneChip, type SlpSceneItem } from "./slp-scene-draft";
 import type { SlpSceneModel } from "./slp-scene-model";
 

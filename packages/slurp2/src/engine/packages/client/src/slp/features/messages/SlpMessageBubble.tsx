@@ -19,6 +19,7 @@ import type { SlurpAwayKind } from "./slp-away-kind";
 import { slpErrorText } from "../../base/ui/slp-error-text";
 import { useReactToSlurpMessage, useUnlockSlurpMessage } from "../../features/messages/slp-message-action-hooks";
 import { SlpSharedPostCard } from "./SlpSharedPostCard";
+import { slurpBubbleSurface } from "../../modules/chrome/SlpChatShell";
 
 // One message in a thread, the away animation and the platform action card.
 
@@ -57,16 +58,6 @@ export function SlurpBubbleStyles() {
       }
     `}</style>
   );
-}
-
-/**
- * A plain bubble surface, shared by messages, the pending echo and the typing indicator: solid
- * Slurp pink with plum text for your own, raised glass for theirs.
- */
-export function slurpBubbleSurface(mine: boolean): string {
-  return mine
-    ? "bg-[var(--noodle-accent)] text-[var(--slurp-on-accent)] [&_svg]:!text-[var(--slurp-on-accent)] shadow-[var(--slurp-highlight),0_6px_16px_-10px_color-mix(in_srgb,var(--noodle-accent)_70%,transparent)]"
-    : "bg-[color-mix(in_srgb,var(--slurp-surface-raised)_86%,transparent)] text-[var(--slurp-text)] shadow-[var(--slurp-highlight),var(--slurp-shadow-raised)] backdrop-blur-md";
 }
 
 /** Per kind: the badge glyph, its motion, and what drifts off it. "away" is the original card. */

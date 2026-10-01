@@ -32,11 +32,11 @@ import { SlpThreadDrawer } from "./SlpThreadDrawer";
 import {
   MessageBubble,
   SlurpAwayAnimation,
-  slurpBubbleSurface,
   SlurpBubbleStyles,
   SlurpPlatformActionCard,
 } from "./SlpMessageBubble";
 import { slurpBubbleGroup } from "./slp-bubble-group";
+import { slurpBubbleSurface } from "../../modules/chrome/SlpChatShell";
 import { readSlpStirProposal, SlpStirSupportCards } from "../stir/slp-stir-contract";
 import { readSlpDeskOffer, SlpDeskOfferCard } from "./SlpDeskRows";
 import { readSlpDramaChoice, SlpDramaChoiceCard } from "./SlpDramaChoiceCard";
