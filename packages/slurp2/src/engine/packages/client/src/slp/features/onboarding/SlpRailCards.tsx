@@ -246,7 +246,7 @@ export function SlpRailStampCard() {
   return (
     <div
       ref={ref}
-      className="my-2 -rotate-6 rounded-xl px-4 py-1.5 text-lg font-black uppercase tracking-[0.18em] text-[var(--noodle-accent-foreground)] ring-[3px] ring-inset ring-[var(--noodle-accent)] motion-reduce:rotate-0"
+      className="my-2 -rotate-6 rounded-xl px-4 py-1.5 text-lg font-black uppercase tracking-[0.18em] text-[var(--noodle-accent-foreground)] ring-[3px] ring-inset ring-[var(--noodle-accent)]"
     >
       {t("ui.slurp.site.stamped")}
     </div>
