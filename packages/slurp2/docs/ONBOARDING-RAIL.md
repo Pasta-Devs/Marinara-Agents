@@ -1,5 +1,8 @@
 # First-run onboarding as a Support ticket (concept)
 
+> Superseded in presentation by `OPENING-DAY.md` (2026-10-01): the script, the questions and the
+> single write stay; the ticket, the member file and the stamp go.
+
 Status: concept, 2026-10-01. Nothing built.
 
 The very first time a player opens Slurp, Slurp Support opens a ticket for them: "New member".
