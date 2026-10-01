@@ -56,6 +56,12 @@
     "gacha-forge": {
       "versions": [
         {
+          "version": "1.8.11",
+          "date": "2026-10-01",
+          "notes": "- Fixed: a Tower boss that heals no longer gets back a quarter of its health with every Ultimate — it heals about as much as one of its escorts would, and the floor 40 boss is fitted to its floor again. In Water months, bosses no longer heal 8% of their health per Ultimate.\n- Fixed: on a slow image connection, art is painted once: a chapter's backgrounds and enemies, banner art, portraits, key images, Bond backgrounds and outfits.\n- Fixed: an outfit rotation keeps every outfit it already painted, even if the rest fails, and a Bond outfit you already have but that never counted as claimed is handed over instead of painted again.",
+          "highlight": false
+        },
+        {
           "version": "1.8.9",
           "date": "2026-09-30",
           "notes": "- Fixed: the story now calls each character the man or woman they are. With a vague description it could narrate someone drawn as a woman as “he”, or the other way around.\n- Every character has a sex whether the world has art or not: new ones are created with it, and the ones you already have are filled in once, the first time the story is told.",
