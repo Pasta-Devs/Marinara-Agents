@@ -59,3 +59,6 @@ export { useSlpViewerPersonaId, useUpdateCreatorStrategy } from "./slp-creators-
 // W: the steering card lives in the Stir ✦ sheet now.
 export { SlpCreatorSteeringCard } from "./SlpCreatorSteeringCard";
 export { openSlpCreatorSettings } from "./settings/slp-creator-settings-store";
+
+// The first-run Support ticket sets the Slurp-wide spice limit at "Stamp it" and shows it in "Your file".
+export { useSlurpSpice, useSlurpSpiceMutations } from "./slp-spice-hooks.js";

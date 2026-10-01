@@ -369,21 +369,22 @@ test.describe("standalone Slurp package", () => {
     expect(errors).toEqual([]);
   });
 
-  test("the first-run introduction displays translated copy", async ({ page }, testInfo) => {
+  test("the first-run Support ticket displays translated copy", async ({ page }, testInfo) => {
     const errors = collectUnexpectedErrors(page);
     await getSlurpSettings(page);
     expect((await page.request.patch("/api/slurp2/settings", { data: { onboarding: "not_started" } })).ok()).toBe(true);
     await page.addInitScript(() => {
       localStorage.setItem("marinara:slurp2:package-ui", JSON.stringify({ onboardingState: "not_started" }));
+      localStorage.removeItem("slurp2:support-rail");
     });
     await page.goto("/");
     await openSlurp(page);
-    const introduction = page.getByRole("dialog", { name: "Slurp", exact: true });
-    await expect(introduction.getByRole("heading", { name: "So, what is Slurp?" })).toBeVisible();
-    await expect(
-      introduction.getByText("Slurp is a local roleplay space for creators, fans, posts, and conversations."),
-    ).toBeVisible();
-    await expect(introduction).not.toContainText("ui.noodle.");
+    const introduction = page.getByRole("dialog", { name: "Slurp Support", exact: true });
+    await expect(introduction.getByText("Ticket #000001 · Open")).toBeVisible();
+    // Support types its lines one by one; the "Hi!" chip shows after the last one.
+    await expect(introduction.getByRole("button", { name: "Hi!", exact: true })).toBeVisible({ timeout: 10_000 });
+    await expect(introduction.getByText("Welcome to Slurp! I'm Slurp Support. Yes, all of us.")).toBeVisible();
+    await expect(introduction).not.toContainText("ui.slurp.");
     await introduction.screenshot({ path: testInfo.outputPath("slurp2-first-run-introduction.png") });
     expect(errors).toEqual([]);
   });

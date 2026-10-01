@@ -187,6 +187,9 @@ export const SLURP2_SOURCE_MODULES: Record<string, readonly string[]> = {
     "packages/client/src/slp/features/onboarding/SlpOnboardingPanel.tsx",
     "packages/client/src/slp/features/onboarding/slp-onboarding-wizard-model.ts",
     "packages/client/src/slp/features/onboarding/SlpOnboardingSteps.tsx",
+    // The tour and the locked-post demo moved into the Support ticket (docs/ONBOARDING-RAIL.md).
+    "packages/client/src/slp/features/onboarding/SlpSiteWelcome.tsx",
+    "packages/client/src/slp/features/onboarding/SlpRailCards.tsx",
   ],
   "packages/client/src/components/slurp/SlurpStageProfileForm.tsx": [
     "packages/client/src/slp/features/creators/SlpStageProfileForm.tsx",

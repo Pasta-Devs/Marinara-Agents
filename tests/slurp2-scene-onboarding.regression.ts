@@ -31,12 +31,6 @@ import {
 } from "../packages/slurp2/src/engine/packages/server/src/slp/modules/onboarding/slp-scene-prompt.ts";
 import { slpSceneThreadMessages } from "../packages/slurp2/src/engine/packages/server/src/slp/modules/onboarding/slp-scene-thread.ts";
 import {
-  SLP_SITE_WELCOME_OPTIONS,
-  slpSiteWelcomeLead,
-  slpSiteWelcomeNext,
-  slpSiteWelcomeSetting,
-} from "../packages/slurp2/src/engine/packages/client/src/slp/features/onboarding/slp-site-welcome.ts";
-import {
   SLP_SCENE_ACTIONS,
   SLP_SCENE_MOMENTS,
   slpSceneKeepRequestSchema,
@@ -379,21 +373,7 @@ assert.ok(
   "nothing to keep, nothing sent",
 );
 
-// 14. Slice 5: the player's own join (roles swapped). Support asks in order; answers map to settings.
-assert.equal(slpSiteWelcomeNext({}), "who");
-assert.equal(slpSiteWelcomeNext({ who: "watch", pace: "lively" }), "pictures");
-assert.equal(slpSiteWelcomeNext({ who: "run", pace: "manual", pictures: "no", nights: "yes", names: "open" }), null);
-assert.equal(slpSiteWelcomeLead({ who: "watch" }), "feed", "a watcher goes to the feed");
-assert.equal(slpSiteWelcomeLead({ who: "both" }), "signup");
-assert.equal(slpSiteWelcomeLead({}), "signup", "nothing answered: sign someone up (the old tour's end)");
-assert.deepEqual(slpSiteWelcomeSetting("pace", "veryActive"), { kind: "pace", value: "veryActive" });
-assert.deepEqual(slpSiteWelcomeSetting("pictures", "yes"), { kind: "pictures", value: true });
-assert.deepEqual(slpSiteWelcomeSetting("nights", "no"), { kind: "nights", value: false });
-assert.deepEqual(slpSiteWelcomeSetting("names", "open"), { kind: "names", value: "open" });
-assert.equal(slpSiteWelcomeSetting("who", "watch"), null);
-for (const [question, options] of Object.entries(SLP_SITE_WELCOME_OPTIONS)) {
-  assert.ok(options.length >= 2, `${question} offers a real choice`);
-}
+// 14. Slice 5's five-question join became the Support ticket: tests/slurp2-onboarding-rail.regression.ts.
 
 // 15. Review fixes.
 // Undo never removes a newer patch, even one that set the same value again.

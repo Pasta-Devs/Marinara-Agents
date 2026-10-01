@@ -39,7 +39,6 @@ export function SlpOnboardingSteps({ model }: { model: SlurpOnboardingWizardMode
     hasNextPage,
     imageConnectionId,
     imagesEnabled,
-    intro,
     nightQuiet,
     onComplete,
     outcomes,
@@ -116,7 +115,7 @@ export function SlpOnboardingSteps({ model }: { model: SlurpOnboardingWizardMode
 
   return (
     <>
-      {intro === null && setupLane !== null && step === 1 && (
+      {setupLane !== null && step === 1 && (
         <div className="space-y-4">
           <div className="flex items-start justify-between gap-3">
             <StepHeading
@@ -240,7 +239,7 @@ export function SlpOnboardingSteps({ model }: { model: SlurpOnboardingWizardMode
         </div>
       )}
 
-      {intro === null && setupLane !== null && step === 2 && (
+      {setupLane !== null && step === 2 && (
         <div className="space-y-4">
           <StepHeading
             title={t("ui.noodle.noodlerwizard.disclosure.question")}
@@ -277,7 +276,7 @@ export function SlpOnboardingSteps({ model }: { model: SlurpOnboardingWizardMode
         </div>
       )}
 
-      {intro === null && setupLane !== null && step === 3 && (
+      {setupLane !== null && step === 3 && (
         <div className="space-y-4">
           <StepHeading title={t("ui.noodle.noodlerwizard.activity")} help={t("ui.noodle.noodlerwizard.activityHelp")} />
           <p className={cn(SLP_TYPE.meta, "text-pretty text-[var(--slurp-muted)]")}>
@@ -312,7 +311,7 @@ export function SlpOnboardingSteps({ model }: { model: SlurpOnboardingWizardMode
         </div>
       )}
 
-      {intro === null && setupLane !== null && step === 4 && (
+      {setupLane !== null && step === 4 && (
         <div className="space-y-4">
           <StepHeading
             title={
@@ -513,7 +512,7 @@ export function SlpOnboardingSteps({ model }: { model: SlurpOnboardingWizardMode
               disabled={pending}
               onClick={() => {
                 void (async () => {
-                  if (!(await saveSettings(createdIds.length === 0 ? "zero" : "completed"))) return;
+                  if (!(await saveSettings())) return;
                   setSettingsFailed(false);
                   onComplete?.();
                   setCompletion(

@@ -52,8 +52,11 @@ assert.match(src("features/creators/SlpProfileSurface.tsx"), /line-clamp-4 group
 // B15: the age gate X and Escape mean Leave; the modal is no longer closeDisabled while Leave exists.
 // (Step 8 moved the handler into one helper shared with the first-run splash.)
 assert.match(src("features/onboarding/SlpSplash.tsx"), /closest\("button"\)\)\) return;\s+onLeave\?\.\(\)/u);
-assert.match(src("app/SlpHomeHost.tsx"), /onClose=\{\(\) => leaveUnlessBackdrop\(onLeave\)\}/u);
-assert.match(src("app/SlpHomeHost.tsx"), /closeDisabled=\{!onLeave\}/u);
+// The age check is a card in the Support ticket now (docs/ONBOARDING-RAIL.md); its modal keeps the rule.
+const ticket = src("features/onboarding/SlpSiteWelcome.tsx");
+assert.match(ticket, /const close = \(\) => \(confirmed \? onClose\(\) : leaveUnlessBackdrop\(onLeave\)\);/u);
+assert.match(ticket, /onClose=\{close\}/u);
+assert.match(ticket, /closeDisabled=\{!confirmed && !onLeave\}/u);
 
 // B16: the unlock sheet uses the same masked title as the card.
 assert.doesNotMatch(src("modules/post/SlpLockedPostCard.tsx"), /\{post\.title && <span/u);

@@ -41,6 +41,7 @@ export function SlpSceneOnboarding({
   accounts,
   connectionId,
   defaultDisclosure = "hinted",
+  defaultPreset,
   onBack,
   onQuickSetup,
   onFinished,
@@ -50,6 +51,8 @@ export function SlpSceneOnboarding({
   connectionId?: string;
   /** The page-name choice from the welcome, as the first pick. */
   defaultDisclosure?: SlpIdentityDisclosure;
+  /** The part picked first (the Support ticket hands over to Support's own part). */
+  defaultPreset?: SlpScenePreset;
   onBack: () => void;
   onQuickSetup: () => void;
   onFinished: () => void;
@@ -62,6 +65,7 @@ export function SlpSceneOnboarding({
       <SceneSetup
         accounts={accounts}
         defaultDisclosure={defaultDisclosure}
+        defaultPreset={defaultPreset}
         onBack={onBack}
         onQuickSetup={onQuickSetup}
         onStart={(next) => {
@@ -140,12 +144,14 @@ function CastArt({
 function SceneSetup({
   accounts,
   defaultDisclosure,
+  defaultPreset,
   onBack,
   onQuickSetup,
   onStart,
 }: {
   accounts: readonly SlpAccount[];
   defaultDisclosure: SlpIdentityDisclosure;
+  defaultPreset?: SlpScenePreset;
   onBack: () => void;
   onQuickSetup: () => void;
   onStart: (setup: Omit<SlpSceneSetup, "connectionId">) => void;
@@ -153,7 +159,7 @@ function SceneSetup({
   const { t } = useUiTranslation();
   // The first character is cast already, so every card can name who it is about.
   const [sourceId, setSourceId] = useState<string | null>(accounts[0]?.id ?? null);
-  const [preset, setPreset] = useState<SlpScenePreset>(SLP_SCENE_OFFERED[0]);
+  const [preset, setPreset] = useState<SlpScenePreset>(defaultPreset ?? SLP_SCENE_OFFERED[0]);
   const [disclosure, setDisclosure] = useState<SlpIdentityDisclosure>(defaultDisclosure);
   const [helperId, setHelperId] = useState<string | null>(null);
   // The creator seat needs somebody already on Slurp to do the helping.

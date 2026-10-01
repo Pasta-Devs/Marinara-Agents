@@ -6,21 +6,14 @@ import { errorMessage, SlpCreatorFrame } from "./screens/SlpHomeHelpers";
 import { ImagePromptReviewModal } from "../../components/ui/ImagePromptReviewModal";
 import { ChatImageLightbox } from "../../components/chat/ChatImageLightbox";
 import { SlurpOnboardingWizard } from "../features/onboarding/SlpOnboardingPanel";
-import { SlurpAgeGate, SlurpConfetti } from "../features/onboarding/SlpAgeGate";
-import { leaveUnlessBackdrop, SlurpSplash } from "../features/onboarding/SlpSplash";
-import {
-  getSlpAccentStyle,
-  SLP_PAGE_SCROLL_CLASS,
-  SLP_PERSONA_SWITCHER_PAGE_SIZE,
-  SLP_PINK,
-} from "../base/chrome/SlpChrome";
+import { SlurpSplash } from "../features/onboarding/SlpSplash";
+import { SLP_PAGE_SCROLL_CLASS, SLP_PERSONA_SWITCHER_PAGE_SIZE, SLP_PINK } from "../base/chrome/SlpChrome";
 import { cn } from "../../lib/utils";
 import { SlpShell, SlpWordmark } from "../modules/chrome/SlpShell";
 import { SlpSharePostModal } from "../features/messages/SlpSharePostModal";
 import { SlpCreatorSettingsModal } from "../features/creators/settings/SlpCreatorSettingsModal";
 import { SlpBackstageShell } from "../app/backstage/SlpBackstageShell";
 import { SlpBackstageSidebar } from "../features/backstage/SlpBackstageSidebar";
-import { Modal } from "../../components/ui/Modal";
 import { useSlurpHomeState } from "./slp-home-actions";
 import type { SlurpHomeProps } from "./slp-home.types";
 import { renderSlurpHomeCreatorFlow } from "./screens/SlpHomeCreatorFlow";
@@ -75,11 +68,8 @@ export function SlurpHome({ navigation, onNavigate, onLeave }: SlurpHomeProps) {
     setFeedTab,
     onboardingMode,
     setOnboardingMode,
-    gateOpen,
     splashOpen,
     setSplashOpen,
-    gateCelebrating,
-    setGateCelebrating,
     onboardingPresentedRef,
     viewerQuery,
     noodlerUnseenCount,
@@ -100,7 +90,6 @@ export function SlurpHome({ navigation, onNavigate, onLeave }: SlurpHomeProps) {
     closeNoodlerSearch,
     postCardController,
     postCardCtx,
-    enterFromGate,
     closeOnboarding,
     redraftFromSource,
     confirmReviewedImagePrompts,
@@ -291,9 +280,9 @@ export function SlurpHome({ navigation, onNavigate, onLeave }: SlurpHomeProps) {
     // settings search result, so it cannot belong to any one of those screens.
     overlays: (
       <>
-        {/* The image prompt review, the share picker, the age gate and "What's new" belong to no one
-            screen: mounted here, "Send in a chat" works on a profile and the gate and the release
-            sheet show wherever Slurp opens (R1-028, R1-135). */}
+        {/* The image prompt review, the share picker and G's thread belong to no one screen: mounted
+            here, "Send in a chat" works on a profile and the thread shows wherever Slurp opens
+            (R1-028, R1-135). */}
         <ImagePromptReviewModal
           open={Boolean(imagePromptReview)}
           items={imagePromptReview?.items ?? []}
@@ -301,24 +290,6 @@ export function SlurpHome({ navigation, onNavigate, onLeave }: SlurpHomeProps) {
           onCancel={cancelReviewedImagePrompts}
           onConfirm={confirmReviewedImagePrompts}
         />
-        <Modal
-          open={gateOpen && !splashOpen}
-          // The X and Escape mean Leave Slurp: the gate has no other way out, and the X used to do nothing.
-          onClose={() => leaveUnlessBackdrop(onLeave)}
-          title={localizeUi("ui.noodle.noodlemodetoggle.noodler")}
-          width="max-w-md"
-          panelClassName="noodle-icon-scope"
-          panelStyle={getSlpAccentStyle(SLP_PINK)}
-          closeDisabled={!onLeave}
-        >
-          <SlurpAgeGate
-            personaName={shellPersonaAccount?.displayName ?? ""}
-            onComplete={enterFromGate}
-            onCelebrate={() => setGateCelebrating(true)}
-            onLeave={onLeave}
-            isPending={false}
-          />
-        </Modal>
         <SlpSharePostModal
           post={model.sharingPost}
           personaId={viewerPersonaId}
@@ -326,7 +297,6 @@ export function SlurpHome({ navigation, onNavigate, onLeave }: SlurpHomeProps) {
           onClose={() => model.setSharingPost(null)}
         />
         <SlurpSplash open={splashOpen} onDismiss={() => setSplashOpen(false)} onLeave={onLeave} />
-        {gateCelebrating && <SlurpConfetti fixed />}
         {postCardController.imageLightbox && (
           <ChatImageLightbox
             image={postCardController.imageLightbox}
@@ -380,14 +350,15 @@ export function SlurpHome({ navigation, onNavigate, onLeave }: SlurpHomeProps) {
           personaSourceIds={new Set(personas.map((persona) => persona.id))}
           onRestartOnboarding={() => {
             onboardingPresentedRef.current = true;
-            setOnboardingState("entered");
-            setOnboardingMode("first-run");
+            setOnboardingMode("again");
           }}
           viewerPersonaId={viewerPersonaId}
         />
         <SlurpOnboardingWizard
           open={onboardingMode !== null}
           selectionOnly={onboardingMode === "add-creators"}
+          opening={onboardingMode === "again" ? "again" : "first"}
+          personaName={shellPersonaAccount?.displayName ?? ""}
           onClose={closeOnboarding}
           onComplete={() => {
             if (onboardingMode === "first-run") {
@@ -517,7 +488,12 @@ export function SlurpHome({ navigation, onNavigate, onLeave }: SlurpHomeProps) {
         storyLifetimeHours={slurpSettingsQuery.data?.storyLifetimeHours ?? 72}
       />
       <SlurpOnboardingWizard
-        open={onboardingMode !== null}
+        // G's thread comes first; the Support ticket waits for it.
+        open={onboardingMode !== null && !splashOpen}
+        selectionOnly={onboardingMode === "add-creators"}
+        opening={onboardingMode === "again" ? "again" : "first"}
+        personaName={shellPersonaAccount?.displayName ?? ""}
+        onLeave={onLeave}
         onClose={closeOnboarding}
         onComplete={() => {
           setOnboardingState("completed");

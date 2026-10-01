@@ -65,10 +65,11 @@ assert.match(
   /\? \("populated" as const\)\s*: \("spanning" as const\)/u,
   "routes without content must not reserve a blank rail",
 );
-assert.match(ageGate, /ui\.slurp\.ageGate\.leave/u, "the age gate must offer a direct exit");
+// The age check is a card in the Support ticket (docs/ONBOARDING-RAIL.md); the ticket stays open, so
+// the card's own confetti plays out in place.
+assert.match(ageGate, /ui\.slurp\.site\.tap\.leave/u, "the age check must offer a direct exit");
 assert.match(ageGate, /setConfetti\(true\)/u, "the age-gate confetti payoff must remain");
-assert.match(ageGate, /onCelebrate\(\);\s*onComplete\(\);/u, "entry must begin while confetti continues");
-assert.match(home, /gateCelebrating && <SlurpConfetti fixed/u, "confetti must survive the age gate closing");
+assert.match(ageGate, /setConfetti\(true\);\s*onComplete\(\);/u, "entry must begin while confetti continues");
 
 // Only observed live balances animate. Static prices and history keep using the same quiet component.
 assert.match(coin, /watchAmount\?: number/u, "coin amounts must accept an observed live balance");

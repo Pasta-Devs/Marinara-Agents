@@ -246,10 +246,9 @@ export function useSlurpHomeBaseState({ navigation, onNavigate: navigateRaw, onL
   const [discoverRank, setDiscoverRank] = useState<"likes" | "subscribers">("likes");
   const discoveryInputRef = useRef<HTMLInputElement | null>(null);
   const [feedTab, setFeedTab] = useState<"following" | "all">("all");
-  const [onboardingMode, setOnboardingMode] = useState<"first-run" | "add-creators" | null>(null);
-  const [gateOpen, setGateOpen] = useState(false);
+  // "first-run": the Support ticket, then the sign-up. "again": Backstage's "Run setup again".
+  const [onboardingMode, setOnboardingMode] = useState<"first-run" | "again" | "add-creators" | null>(null);
   const [splashOpen, setSplashOpen] = useState(slurp2SplashPending);
-  const [gateCelebrating, setGateCelebrating] = useState(false);
   const gatePresentedRef = useRef(false);
   const onboardingPresentedRef = useRef(false);
   const noodlerUnseenCount = useCreatorUnseenCount(viewerPersonaId);
@@ -573,7 +572,8 @@ export function useSlurpHomeBaseState({ navigation, onNavigate: navigateRaw, onL
       !gatePresentedRef.current
     ) {
       gatePresentedRef.current = true;
-      setGateOpen(true);
+      // The age check is inside the Support ticket now; nothing runs before it.
+      setOnboardingMode("first-run");
     }
   }, [
     navigation.mode,
@@ -586,21 +586,6 @@ export function useSlurpHomeBaseState({ navigation, onNavigate: navigateRaw, onL
     if (navigation.mode !== "creator" || navigation.view !== "hub") return;
     onboardingPresentedRef.current = false;
   }, [navigation.mode, navigation.view, onboardingState]);
-  const enterFromGate = async () => {
-    setGateOpen(false);
-    setOnboardingState("completed");
-    try {
-      await updateSlurpSettings.mutateAsync({ onboarding: "completed" });
-    } catch (error) {
-      toast.error(errorMessage(error, localizeUi("ui.slurp.onboarding.saveError")));
-    }
-    onNavigate({ mode: "creator", view: "hub" });
-  };
-  useEffect(() => {
-    if (!gateCelebrating) return;
-    const timer = window.setTimeout(() => setGateCelebrating(false), 1_400);
-    return () => window.clearTimeout(timer);
-  }, [gateCelebrating]);
   const closeOnboarding = () => {
     setOnboardingMode(null);
   };
@@ -657,12 +642,8 @@ export function useSlurpHomeBaseState({ navigation, onNavigate: navigateRaw, onL
     setFeedTab,
     onboardingMode,
     setOnboardingMode,
-    gateOpen,
-    setGateOpen,
     splashOpen,
     setSplashOpen,
-    gateCelebrating,
-    setGateCelebrating,
     gatePresentedRef,
     onboardingPresentedRef,
     viewerQuery,
@@ -775,7 +756,6 @@ export function useSlurpHomeBaseState({ navigation, onNavigate: navigateRaw, onL
     sourcePickerLoading,
     handleSourceSearch,
     handleSourceKind,
-    enterFromGate,
     closeOnboarding,
   };
 }

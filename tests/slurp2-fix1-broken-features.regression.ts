@@ -65,10 +65,11 @@ for (const file of [
   assert.doesNotMatch(source, /interaction\.actorAccountId === (ctx\.)?personaAccount!?\.id/u, file);
 }
 
-// ── R1-028 / R1-135: share picker, age gate and "What's new" mount once, for every screen ──
+// ── R1-028 / R1-135: share picker and G's thread mount once, for every screen (the age check is a
+// card in the Support ticket now) ──
 const host = read("client/src/slp/app/SlpHomeHost.tsx");
 const overlays = host.slice(host.indexOf("    overlays: ("), host.indexOf("  } as const;"));
-for (const piece of ["<SlpSharePostModal", "<SlurpSplash", "<SlurpAgeGate", "<ImagePromptReviewModal"])
+for (const piece of ["<SlpSharePostModal", "<SlurpSplash", "<ImagePromptReviewModal"])
   assert.ok(overlays.includes(piece), piece);
 assert.equal(host.split("<SlpSharePostModal").length, 2, "mounted once");
 assert.equal(host.split("<SlurpSplash").length, 2, "mounted once");

@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type {
   SlpCreatorRefreshNowOutcome,
-  SlpCreatorStageProfile,
   SlpIdentityDisclosure,
 } from "../../../../../shared/src/slp/slp-social.types.js";
 import { resolveCreatorOnboardingCompletion } from "../../../../../shared/src/slp/slp-creator-onboarding.js";
@@ -27,10 +26,8 @@ import {
   type SlurpActivityPreset,
 } from "../../modules/creator/slp-activity-presets";
 import {
-  DEMO_PROFILE,
   DEFAULT_POSTS_PER_DAY,
   type CompletionKind,
-  type Intro,
   type SetupLane,
   type Step,
   type WizardProps,
@@ -56,9 +53,9 @@ export function useSlurpOnboardingWizardModel(props: WizardProps) {
   const settingsQuery = useSlurpSettings();
   const accounts = useMemo(() => eligible.data?.pages.flatMap((page) => page.items) ?? [], [eligible.data?.pages]);
   const [step, setStep] = useState<Step>(1);
-  const [intro, setIntro] = useState<Intro>(selectionOnly ? null : 0);
-  const [setupLane, setSetupLane] = useState<SetupLane>(null);
-  const [postExplored, setPostExplored] = useState(false);
+  // The Support ticket runs first; adding Creators later opens straight on the role-play sign-up.
+  const [rail, setRail] = useState(!selectionOnly);
+  const [setupLane, setSetupLane] = useState<SetupLane>(selectionOnly ? "scene" : null);
   const [activityChoice, setActivityChoice] = useState<SlurpActivityPreset | null>(SLURP_DEFAULT_ACTIVITY_PRESET);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [selectionInitialized, setSelectionInitialized] = useState(false);
@@ -92,20 +89,6 @@ export function useSlurpOnboardingWizardModel(props: WizardProps) {
   const completionHeadingRef = useRef<HTMLHeadingElement>(null);
   // A retry polls the same run again; status data older than its enqueue must not end the wait.
   const firstPostsQueuedAtRef = useRef(0);
-  const demoProfile: SlpCreatorStageProfile = {
-    ...DEMO_PROFILE,
-    displayName:
-      disclosure === "open"
-        ? t("ui.noodle.noodlerwizard.identityPreview.openName")
-        : t("ui.noodle.noodlerwizard.identityPreview.hintedName"),
-    handle:
-      disclosure === "open"
-        ? t("ui.noodle.noodlerwizard.identityPreview.openHandle")
-        : t("ui.noodle.noodlerwizard.identityPreview.hintedHandle"),
-    avatarUrl: "/sprites/mari/chibi-professor-mari.png",
-    disclosureMode: disclosure,
-  };
-
   useEffect(() => {
     if (completion) completionHeadingRef.current?.focus();
   }, [completion]);
@@ -113,10 +96,8 @@ export function useSlurpOnboardingWizardModel(props: WizardProps) {
   useEffect(() => {
     if (!open) return;
     setStep(1);
-    setIntro(selectionOnly ? null : 0);
-    // Adding creators later starts at the lane choice too, so the role-play sign-up is reachable.
-    setSetupLane(null);
-    setPostExplored(false);
+    setRail(!selectionOnly);
+    setSetupLane(selectionOnly ? "scene" : null);
     setActivityChoice(SLURP_DEFAULT_ACTIVITY_PRESET);
     setSelected(new Set());
     setSelectionInitialized(false);
@@ -255,7 +236,7 @@ export function useSlurpOnboardingWizardModel(props: WizardProps) {
       finalizeOutcomes([...kept, ...ids.map((accountId) => ({ accountId, status: "error" as const }))], createFailures);
     }
   };
-  const saveSettings = async (state: "zero" | "completed") => {
+  const saveSettings = async () => {
     try {
       await updateSlurpSettings.mutateAsync({
         postsPerDay,
@@ -266,11 +247,9 @@ export function useSlurpOnboardingWizardModel(props: WizardProps) {
         autoPostingScheduleEnabled: autoPostingEnabled,
         autoPostingImagesEnabled: imagesEnabled,
         nightQuiet,
-        ...(selectionOnly
-          ? {}
-          : {
-              onboarding: state === "completed" ? "completed" : "not_started",
-            }),
+        // The Support ticket completed onboarding at its stamp; skipping the sign-up after it must
+        // not send the player through the ticket again.
+        ...(selectionOnly ? {} : { onboarding: "completed" as const }),
       });
       return true;
     } catch {
@@ -279,7 +258,7 @@ export function useSlurpOnboardingWizardModel(props: WizardProps) {
     }
   };
   const skip = async () => {
-    if (await saveSettings("zero")) {
+    if (await saveSettings()) {
       onSkipped?.();
       onClose();
     }
@@ -349,15 +328,9 @@ export function useSlurpOnboardingWizardModel(props: WizardProps) {
     }
     setCreationFailed(false);
     setCreationError(null);
-    // A failed settings write keeps onboarding incomplete, but the profiles already exist:
-    // still write their first posts so the run is not stranded halfway.
-    // Nothing was created, so onboarding is not complete: writing "completed" here would
-    // close the wizard for good on a run that produced no creator at all.
-    // A retry keeps the settings the first pass saved; saving "zero" again would undo a finished onboarding.
-    const settingsSaved =
-      retryIds && !settingsFailed
-        ? true
-        : await saveSettings(selected.size === 0 || newIds.length === 0 ? "zero" : "completed");
+    // A failed settings write still lets the profiles that exist write their first posts, so the
+    // run is not stranded halfway. A retry keeps the settings the first pass saved.
+    const settingsSaved = retryIds && !settingsFailed ? true : await saveSettings();
     setSettingsFailed(!settingsSaved);
     // A retry that created nobody new while the first posts are still being written keeps that wait.
     if (retryIds && newIds.length === 0 && firstPostsQueued) return;
@@ -456,12 +429,10 @@ export function useSlurpOnboardingWizardModel(props: WizardProps) {
     accounts,
     step,
     setStep,
-    intro,
-    setIntro,
+    rail,
+    setRail,
     setupLane,
     setSetupLane,
-    postExplored,
-    setPostExplored,
     activityChoice,
     setActivityChoice,
     selected,
@@ -514,7 +485,6 @@ export function useSlurpOnboardingWizardModel(props: WizardProps) {
     providerConfirmationOpen,
     setProviderConfirmationOpen,
     completionHeadingRef,
-    demoProfile,
     firstPostStatus,
     fetchNextPage,
     hasNextPage,
