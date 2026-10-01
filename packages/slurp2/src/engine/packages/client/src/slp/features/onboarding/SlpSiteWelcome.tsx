@@ -43,6 +43,7 @@ import {
   type SlpRailStamp,
   type SlpRailState,
   type SlpRailStep,
+  slpRailCleanAnswers,
 } from "./slp-site-welcome";
 
 // Per browser, like the splash: the ticket is a walk-through, not a setting, until it is stamped.
@@ -57,7 +58,12 @@ function readSaved(): SlpRailState | null {
   try {
     const raw = JSON.parse(window.localStorage.getItem(STORE_KEY) ?? "null") as Partial<SlpRailState> | null;
     if (!raw || typeof raw.answers !== "object" || !Array.isArray(raw.events) || !Array.isArray(raw.seen)) return null;
-    return { answers: raw.answers ?? {}, events: raw.events, seen: raw.seen, skipIntro: raw.skipIntro === true };
+    return {
+      answers: slpRailCleanAnswers(raw.answers),
+      events: raw.events,
+      seen: raw.seen,
+      skipIntro: raw.skipIntro === true,
+    };
   } catch {
     return null;
   }

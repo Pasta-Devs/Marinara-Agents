@@ -2,6 +2,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import {
+  slpRailCleanAnswers,
   SLP_RAIL_OPTIONS,
   slpRailAnswerPatch,
   slpRailCanSkipIntro,
@@ -413,3 +414,10 @@ for (const locale of ["en", "de", "ko", "pl"]) {
 }
 
 console.log("slurp2 onboarding rail regression passed");
+
+// Saved answers this version does not offer are dropped, so the rail asks them again.
+assert.deepEqual(
+  slpRailCleanAnswers({ spice: "x", pace: "lively", who: 3, connection: "c1", imageConnection: "i1", bogus: "yes" }),
+  { pace: "lively", connection: "c1", imageConnection: "i1" },
+);
+assert.deepEqual(slpRailCleanAnswers(null), {});

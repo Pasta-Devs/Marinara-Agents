@@ -41,7 +41,7 @@ export function useSlpRailContext(opening: SlpRailContext["opening"], enabled = 
   };
 }
 
-/** "Stamp it": the settings patch with the guidance preset, then the spice limit and the image default. */
+/** "Stamp it": the spice limit, then the settings patch with the guidance preset, then the image default. */
 export function useSlpRailWrite() {
   const update = useUpdateSlurpSettings();
   const spice = useSlurpSpiceMutations();
@@ -49,12 +49,14 @@ export function useSlpRailWrite() {
   return {
     pending: update.isPending || spice.patch.isPending || images.isPending,
     write: async (stamp: SlpRailStamp, imageConnectionAnswered: boolean) => {
+      // Spice first and "completed" last: a failed write leaves the ticket open, never a stamped
+      // ticket whose spice limit is still the old one.
+      if (stamp.spice) await spice.patch.mutateAsync({ max: stamp.spice.max });
       await update.mutateAsync({
         ...stamp.settings,
         ...(stamp.spice ? { generationGuidance: SLURP_GUIDANCE_PRESETS[stamp.spice.guidance] } : {}),
         onboarding: "completed",
       });
-      if (stamp.spice) await spice.patch.mutateAsync({ max: stamp.spice.max });
       // The pictures of every Creator signed up next, whichever way they sign up.
       if (imageConnectionAnswered && stamp.signUp.imageConnectionId) {
         await images.mutateAsync({ defaultConnectionId: stamp.signUp.imageConnectionId });

@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ChevronRight, Loader2 } from "lucide-react";
 import type { SlpCreatorOnboardingCompletion } from "../../../../../shared/src/slp/slp-creator-onboarding.js";
 import type { SlpIdentityDisclosure } from "../../../../../shared/src/slp/slp-social.types.js";
@@ -159,6 +159,10 @@ export function SlurpOnboardingWizard(props: WizardProps) {
       ? t("ui.slurp.wizard.pickOne", { defaultValue: "Pick at least one creator to continue." })
       : "";
   // After the stamp the sign-up starts from Slurp's own settings, so a later save repeats them.
+  const [railOpenings, setRailOpenings] = useState(0);
+  useEffect(() => {
+    if (open) setRailOpenings((count) => count + 1);
+  }, [open]);
   const leaveRail = (lane: Exclude<SetupLane, null>) => {
     setRail(false);
     setSetupLane(lane);
@@ -168,6 +172,8 @@ export function SlurpOnboardingWizard(props: WizardProps) {
     <>
       {rail && (
         <SlpSiteWelcome
+          // A fresh ticket per opening: a second "Run setup again" must not show the stamped one.
+          key={railOpenings}
           open={open}
           opening={props.opening ?? "first"}
           personaName={props.personaName ?? ""}

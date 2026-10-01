@@ -60,6 +60,20 @@ export const SLP_RAIL_OPTIONS = {
 type Fixed = typeof SLP_RAIL_OPTIONS;
 export type SlpRailQuestion = keyof Fixed | "connection" | "imageConnection";
 
+/** Saved answers from localStorage, minus any value this version does not offer (a renamed option,
+ *  a hand-edited key): a dropped answer is simply asked again. */
+export function slpRailCleanAnswers(answers: unknown): SlpRailAnswers {
+  if (!answers || typeof answers !== "object") return {};
+  const clean: Record<string, string> = {};
+  for (const [question, value] of Object.entries(answers)) {
+    if (typeof value !== "string") continue;
+    const options = (SLP_RAIL_OPTIONS as Record<string, readonly string[]>)[question];
+    if (options ? options.includes(value) : question === "connection" || question === "imageConnection")
+      clean[question] = value;
+  }
+  return clean as SlpRailAnswers;
+}
+
 export type SlpRailAnswers = Partial<
   { [K in keyof Fixed]: Fixed[K][number] } & {
     connection: string;
