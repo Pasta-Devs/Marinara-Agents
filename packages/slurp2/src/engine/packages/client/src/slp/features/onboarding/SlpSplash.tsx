@@ -4,7 +4,7 @@
 // notes the player has not seen yet. Settings › Overview opens it again from the version pill.
 import { ExternalLink, X } from "lucide-react";
 import { Modal } from "../../../components/ui/Modal";
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import { cn } from "../../../lib/utils";
 import { GUNTERLIE_AVATAR_SRC } from "../../base/chrome/slp-gunterlie-avatar";
 import { getSlpAccentStyle, SLP_DISCORD_BUG_URL, SLP_PINK, SLP_TYPE } from "../../base/chrome/SlpChrome";
@@ -15,6 +15,8 @@ import { SLURP2_VERSION, slurp2SplashKind, type Slurp2ReleaseEntry } from "./slp
 // Per browser, not per Engine: the splash is a notice, not a setting, and a localStorage key keeps
 // it off the server and off the migration path.
 const SEEN_KEY = "slurp2:splash-seen-version";
+/** Fired in this tab when the version is marked seen, so the version pill drops its dot at once. */
+const SEEN_EVENT = "slurp2:splash-seen";
 
 // Only English copy: this is the author speaking, and the notes mirror CHANGELOG.md, which is
 // English only too.
@@ -57,6 +59,16 @@ function markSeen() {
   } catch {
     // Nothing to do. The splash simply returns next time.
   }
+  window.dispatchEvent(new Event(SEEN_EVENT));
+}
+
+function subscribeSeen(onChange: () => void) {
+  window.addEventListener(SEEN_EVENT, onChange);
+  window.addEventListener("storage", onChange);
+  return () => {
+    window.removeEventListener(SEEN_EVENT, onChange);
+    window.removeEventListener("storage", onChange);
+  };
 }
 
 /**
@@ -102,7 +114,7 @@ export function SlpVersionPill({
   label: (version: string) => string;
   unseenLabel: string;
 }) {
-  const [seen, setSeen] = useState(readSeenVersion);
+  const seen = useSyncExternalStore(subscribeSeen, readSeenVersion);
   const [open, setOpen] = useState(false);
   const unseen = seen !== SLURP2_VERSION;
   return (
@@ -122,17 +134,7 @@ export function SlpVersionPill({
           )}
         </span>
       </button>
-      {open && (
-        <SlpGThread
-          open
-          mode="pill"
-          seen={seen}
-          onDismiss={() => {
-            setSeen(SLURP2_VERSION);
-            setOpen(false);
-          }}
-        />
-      )}
+      {open && <SlpGThread open mode="pill" seen={seen} onDismiss={() => setOpen(false)} />}
     </>
   );
 }
