@@ -2833,7 +2833,7 @@ export default function MemoryVault({
         await deleteSelected(ids);
         return;
       } finally {
-        if (session === editorSession.current) setBusy("");
+        setBusy((current) => (current === "delete" ? "" : current));
       }
     }
     setArchiveUndo(null);

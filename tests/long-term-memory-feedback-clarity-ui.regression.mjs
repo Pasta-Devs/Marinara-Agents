@@ -442,6 +442,11 @@ assert.equal(
   2,
   "delete target resolution and confirmation must both re-check selection/scope changes",
 );
+assert.match(
+  vault,
+  /setBusy\(\(current\) => \(current === "delete" \? "" : current\)\)/u,
+  "the delete flow must clear only its own busy token, even after the editor session changes",
+);
 assert.doesNotMatch(vault, /permanentlyDeleteSelectedMemories/u);
 assert.equal(locale["ui.longTermMemory.memoryvault.permanentlyDeleteOne"], "Permanently delete 1 memory?");
 assert.equal(locale["ui.longTermMemory.memoryvault.permanentlyDeleteOther"], "Permanently delete {{count}} memories?");
