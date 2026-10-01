@@ -1,4 +1,4 @@
-/** The first-run Support ticket rail (docs/ONBOARDING-RAIL.md): order, the age check, branching, and the stamp. */
+/** Opening day (docs/OPENING-DAY.md): order, the license (18+), branching, and the one write at "Open the doors". */
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import {
@@ -84,9 +84,9 @@ function play(ctx: SlpRailContext, picks: SlpRailAnswers, from: SlpRailState = e
 
 // Order: a full first run, Run Creators, the fun part, pictures with an image connection.
 const intro = ["hello1", "hello2", "start", "id1", "pastapay", "ageConfirmed", "id2"];
-const explainer = ["what1", "sampleCreator", "what2", "what3", "cost", "locked1", "lockedDemo", "revealed", "coins"];
-const handOff = ["review1", "memberFile", "stamped", "stamp", "rating"];
-const full = play(context(), { who: "run", pictures: "yes", fun: "sure", ads: "lots", rating: "5" });
+const explainer = ["phone", "what0", "what1", "moveIn", "what2", "what3", "cost", "locked1", "revealed", "coins"];
+const handOff = ["ready", "later", "doors", "opened"];
+const full = play(context(), { who: "run", pictures: "yes", fun: "sure", ads: "lots" });
 assert.deepEqual(full.ids, [
   ...intro,
   ...explainer,
@@ -107,22 +107,21 @@ assert.deepEqual(full.ids, [
   "adTone",
   "pullStrings",
   ...handOff,
-  "rated5",
   "leadSignup",
 ]);
-assert.equal(slpRailNext(full.state, context()), null, "the ticket ends");
+assert.equal(slpRailNext(full.state, context()), null, "opening day ends");
 assert.deepEqual(
   slpRailTranscript(full.state, context()).map((step) => step.id),
   full.ids,
   "the transcript is what played",
 );
-assert.equal(slpRailStop(null), "done");
+assert.equal(slpRailStop(null), "doors");
 
 // The age check cannot be skipped: "Skip to the questions" is ignored until the card is confirmed.
 const atAge = play(context(), {}, { ...empty(), skipIntro: true }, "ageConfirmed");
 assert.deepEqual(atAge.ids, intro.slice(0, 5));
 assert.equal(atAge.step?.id, "ageConfirmed");
-assert.equal(slpRailStop(atAge.step), "hello");
+assert.equal(slpRailStop(atAge.step), "license");
 assert.equal(slpRailCanSkipIntro(atAge.state, context()), false, "no skip on the age check");
 const confirmed = { ...atAge.state, events: [...atAge.state.events, "ageConfirmed" as const] };
 assert.equal(slpRailNext(confirmed, context())?.id, "id2", "the approval line still plays");
@@ -166,7 +165,7 @@ assert.equal(forced.settings.autoPostingScheduleEnabled, false, "an earlier pace
 
 // Fast lane: one tap after "who" jumps to the member file with every default.
 const lane = play(context(), { lane: "recommended" });
-assert.deepEqual(lane.ids, [...intro, ...explainer, "setup1", "who", ...handOff, "ratedLess", "leadSignup"]);
+assert.deepEqual(lane.ids, [...intro, ...explainer, "setup1", "who", ...handOff, "leadSignup"]);
 assert.deepEqual(slpRailStamp(lane.state, context()), {
   settings: { generationConnectionId: "t2", autoPostingScheduleEnabled: true, postsPerDay: 4 },
   spice: null,
@@ -186,7 +185,17 @@ const started = slpRailSettle({ ...empty(), seen: ["hello1", "hello2"], events: 
 assert.deepEqual(started.seen, ["hello1", "hello2", "id1", "pastapay"], "stops at the age check");
 assert.equal(slpRailNext(started, context())?.id, "ageConfirmed");
 const confirmedSettled = slpRailSettle({ ...started, events: ["start", "ageConfirmed"] }, context());
-assert.equal(slpRailNext(confirmedSettled, context())?.id, "sampleCreator", "the sample card waits for Go on");
+assert.equal(slpRailNext(confirmedSettled, context())?.id, "what0", "the empty Slurp waits for Go on");
+assert.ok(confirmedSettled.seen.includes("phone"), "the phone appears by itself");
+
+// Mari's Unlock works before Support asks for it: the "try it" line gives way to "found it already".
+const early = play(context(), {}, empty(), "what3");
+const earlyRest = play(context(), {}, { ...early.state, events: [...early.state.events, "revealed"] });
+assert.ok(earlyRest.ids.includes("lockedEarly") && !earlyRest.ids.includes("locked1"));
+assert.ok(!full.ids.includes("lockedEarly"), "the usual path asks first");
+// A rerun ends on "Save changes" with its own lines.
+const rerun = play(context({ opening: "again" }), {});
+assert.deepEqual(rerun.ids.slice(-5), ["againReady", "later", "doors", "opened", "saved"]);
 const settledState = slpRailSettle(empty(), context());
 assert.equal(slpRailSettle(settledState, context()), settledState, "nothing to play: the same state");
 
@@ -227,7 +236,7 @@ assert.deepEqual(
 // Skip the fun part: those questions are not asked and their settings stay untouched.
 const skipFun = play(context(), { fun: "skip", who: "run" });
 assert.ok(!["fans", "size", "drama", "ads", "adTone", "pullStrings"].some((id) => skipFun.ids.includes(id)));
-assert.equal(skipFun.ids[skipFun.ids.indexOf("fun") + 1], "review1");
+assert.equal(skipFun.ids[skipFun.ids.indexOf("fun") + 1], "ready");
 const fanThenSkip = { ...skipFun.state, answers: { ...skipFun.state.answers, fans: "unfiltered" as const } };
 assert.equal(
   slpRailStamp(fanThenSkip, context()).settings.audienceTone,
@@ -329,7 +338,7 @@ assert.deepEqual(patch("pullStrings", "fair"), {
 assert.deepEqual(patch("pullStrings", "platform"), {
   supportDesk: { ...settings.supportDesk, shadyMoves: true, refusals: true },
 });
-for (const question of ["who", "spice", "names", "imageConnection", "fun", "coins", "rating"] as const) {
+for (const question of ["who", "spice", "names", "imageConnection", "fun", "coins"] as const) {
   assert.deepEqual(patch(question, "x"), {}, `${question} is no Slurp setting`);
 }
 // Every ask names exactly what its answers touch.
@@ -378,39 +387,30 @@ assert.deepEqual(slpRailStamp(full.state, context()), {
   lead: "signup",
 });
 
-// Every line, chip, question, answer and label the rail names exists in every locale.
+// Every line, card, question, answer and stop the script names exists in English. (S6 of
+// docs/OPENING-DAY.md adds de/ko/pl; this list then checks every locale.)
 const localeDir = "packages/slurp2/src/engine/packages/client/src/slp/locales";
-const keys: string[] = [
-  "ui.slurp.site.a.rating",
-  "ui.slurp.site.a.connection.default",
-  "ui.slurp.site.tap.recommended",
-];
-for (const key of ["ticket", "status.open", "status.resolved", "memberFile", "stamped", "card.sample"])
-  keys.push(`ui.slurp.site.${key}`);
-for (const key of ["value.none", "label.fun", "close", "reply", "log", "typing", "previewEmpty", "yourFile", "again"])
-  keys.push(`ui.slurp.site.${key}`);
-keys.push(
-  "ui.slurp.site.tap.skipIntro",
-  "ui.slurp.site.tap.connections",
-  "ui.slurp.site.tap.stamp",
-  "ui.slurp.site.tap.pickList",
-);
-for (const stop of ["hello", "slurp", "locked", "setup", "done"]) keys.push(`ui.slurp.site.stop.${stop}`);
-for (const step of slpRailSteps(context())) {
-  if (step.kind === "say") keys.push(step.key);
-  if (step.kind !== "ask" && step.tap) keys.push(step.tap);
-  if (step.kind !== "ask") continue;
-  keys.push(`ui.slurp.site.q.${step.id}`);
-  if (!["coins", "fun", "rating"].includes(step.id)) keys.push(`ui.slurp.site.label.${step.id}`);
-  const fixed = (SLP_RAIL_OPTIONS as Record<string, readonly string[]>)[step.id];
-  if (fixed && step.id !== "pace" && step.id !== "rating") {
-    for (const value of fixed) keys.push(`ui.slurp.site.a.${step.id}.${value}`);
+const O = "ui.slurp.opening.";
+const keys: string[] = [`${O}a.connection.default`, `${O}tap.recommended`, `${O}tap.skipIntro`, `${O}tap.adult`];
+for (const key of ["open", "save", "change", "feed", "signUp", "pickList", "done"]) keys.push(`${O}tap.${key}`);
+for (const key of ["callout.moveIn", "callout.unlocked", "fansIn", "host", "typing", "reply", "change"])
+  keys.push(O + key);
+for (const stop of ["opening", "license", "slurp", "setup", "doors"]) keys.push(`${O}stop.${stop}`);
+for (const opening of ["first", "again"] as const)
+  for (const step of slpRailSteps(context({ opening }))) {
+    if (step.kind === "say") keys.push(step.key);
+    if (step.kind !== "ask" && step.tap) keys.push(step.tap);
+    if (step.kind !== "ask") continue;
+    keys.push(`${O}q.${step.id}`);
+    const fixed = (SLP_RAIL_OPTIONS as Record<string, readonly string[]>)[step.id];
+    for (const value of fixed ?? []) keys.push(`${O}a.${step.id}.${value}`);
   }
-}
-for (const locale of ["en", "de", "ko", "pl"]) {
+for (const value of ["manual", "occasional", "lively", "veryActive"]) keys.push(`${O}hint.pace.${value}`);
+for (const value of ["flirty", "suggestive", "explicit"]) keys.push(`${O}hint.spice.${value}`);
+for (const locale of ["en"]) {
   const strings = JSON.parse(readFileSync(`${localeDir}/${locale}.json`, "utf8")) as Record<string, string>;
   const missing = [...new Set(keys)].filter((key) => !strings[key]);
-  assert.deepEqual(missing, [], `${locale} is missing rail copy`);
+  assert.deepEqual(missing, [], `${locale} is missing opening day copy`);
 }
 
 console.log("slurp2 onboarding rail regression passed");

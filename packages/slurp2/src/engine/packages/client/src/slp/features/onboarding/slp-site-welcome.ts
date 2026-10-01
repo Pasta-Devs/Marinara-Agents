@@ -1,10 +1,10 @@
 /**
- * The player's own join as one Slurp Support ticket (docs/ONBOARDING-RAIL.md): hello, the age
- * check, what Slurp is, the locked-post demo, the core questions, the optional fun part, the member
- * file, and the hand-off. One ordered script on a rail; the player answers with taps.
+ * Opening day (docs/OPENING-DAY.md): the owner's first run as one script on a rail. Support (the
+ * owner's staff) greets them, takes the platform license (18+), shows their empty Slurp, moves Mari
+ * in, asks how the place should run, and opens the doors. The player answers with taps.
  *
- * Scripted, not generated: the player has not picked an AI connection yet, and a join should
- * cost nothing. Nothing is written before "Stamp it": `slpRailStamp` returns the one patch.
+ * Scripted, not generated: the player has not picked an AI connection yet, and opening costs
+ * nothing. Nothing is written before "Open the doors": `slpRailStamp` returns the one patch.
  * Pure, so the order, the branching and the mapping run in tests.
  */
 import {
@@ -22,22 +22,24 @@ import type { SlurpSettings, SlurpSettingsUpdate } from "../settings/slp-setting
 export const SLP_RAIL_CHAPTERS = ["hello", "id", "what", "locked", "setup", "fun", "review", "done"] as const;
 export type SlpRailChapter = (typeof SLP_RAIL_CHAPTERS)[number];
 
-/** The progress bar shows these stops, not every chapter or bubble. */
-export const SLP_RAIL_STOPS = ["hello", "slurp", "locked", "setup", "done"] as const;
+/** The header shows these stops (one per scene), not every chapter or line. */
+export const SLP_RAIL_STOPS = ["opening", "license", "slurp", "setup", "doors"] as const;
 export type SlpRailStop = (typeof SLP_RAIL_STOPS)[number];
 const STOP: Record<SlpRailChapter, SlpRailStop> = {
-  hello: "hello",
-  id: "hello",
+  hello: "opening",
+  id: "license",
   what: "slurp",
-  locked: "locked",
+  locked: "slurp",
   setup: "setup",
   fun: "setup",
-  review: "setup",
-  done: "done",
+  review: "doors",
+  done: "doors",
 };
 
-export type SlpRailEvent = "start" | "ageConfirmed" | "revealed" | "stamped";
-export type SlpRailCard = "pastapay" | "sampleCreator" | "lockedDemo" | "memberFile" | "stamp";
+/** `opened` is "Open the doors" (or "Save changes" on a rerun): the one write. */
+export type SlpRailEvent = "start" | "ageConfirmed" | "revealed" | "opened";
+/** Stage beats: the license card, the owner's phone, Mari moving in, the doors closing. */
+export type SlpRailCard = "pastapay" | "phone" | "moveIn" | "doors";
 
 /** Questions with fixed options. `connection` and `imageConnection` offer the player's own. */
 export const SLP_RAIL_OPTIONS = {
@@ -55,7 +57,6 @@ export const SLP_RAIL_OPTIONS = {
   ads: ["none", "few", "lots"],
   adTone: ["normal", "unhinged"],
   pullStrings: ["fair", "platform"],
-  rating: ["1", "2", "3", "4", "5"],
 } as const;
 type Fixed = typeof SLP_RAIL_OPTIONS;
 export type SlpRailQuestion = keyof Fixed | "connection" | "imageConnection";
@@ -126,9 +127,22 @@ export type SlpRailState = {
 };
 
 type When = (answers: SlpRailAnswers, context: SlpRailContext) => boolean;
-/** `tap`: the chip (i18n key) the player taps before the rail goes on. */
+/**
+ * `tap`: the card (i18n key) the player taps before the rail goes on. `skipIf` / `onlyIf`: a line
+ * that depends on an event that can come early (Mari's Unlock works before Support asks for it).
+ */
 export type SlpRailStep =
-  | { kind: "say"; id: string; chapter: SlpRailChapter; key: string; tap?: string; when?: When }
+  | {
+      kind: "say";
+      id: string;
+      chapter: SlpRailChapter;
+      key: string;
+      tap?: string;
+      when?: When;
+      small?: boolean;
+      skipIf?: SlpRailEvent;
+      onlyIf?: { event: SlpRailEvent; unseen: string };
+    }
   | { kind: "card"; id: SlpRailCard; chapter: SlpRailChapter; tap?: string }
   | { kind: "wait"; id: SlpRailEvent; chapter: SlpRailChapter; tap?: string }
   | {
@@ -142,14 +156,20 @@ export type SlpRailStep =
       shortcut?: "recommended";
     };
 
-const say = (chapter: SlpRailChapter, id: string, extra: { tap?: string; when?: When } = {}): SlpRailStep => ({
-  kind: "say",
-  id,
-  chapter,
-  key: `ui.slurp.site.say.${id}`,
-  ...(extra.tap ? { tap: `ui.slurp.site.tap.${extra.tap}` } : {}),
-  ...(extra.when ? { when: extra.when } : {}),
-});
+type SayExtra = Partial<Pick<Extract<SlpRailStep, { kind: "say" }>, "when" | "small" | "skipIf" | "onlyIf">> & {
+  tap?: string;
+};
+const say = (chapter: SlpRailChapter, id: string, extra: SayExtra = {}): SlpRailStep => {
+  const { tap, ...rest } = extra;
+  return {
+    kind: "say",
+    id,
+    chapter,
+    key: `ui.slurp.opening.say.${id}`,
+    ...(tap ? { tap: `ui.slurp.opening.tap.${tap}` } : {}),
+    ...rest,
+  };
+};
 const ask = (
   chapter: SlpRailChapter,
   id: SlpRailQuestion,
@@ -166,22 +186,24 @@ const runs = (who: SlpRailAnswers["who"]) => who === "run" || who === "both";
 export function slpRailSteps(context: SlpRailContext): SlpRailStep[] {
   return [
     say("hello", "hello1"),
-    say("hello", "hello2"),
-    { kind: "wait", id: "start", chapter: "hello", tap: "ui.slurp.site.tap.start" },
+    say("hello", "hello2", { small: true }),
+    { kind: "wait", id: "start", chapter: "hello", tap: "ui.slurp.opening.tap.start" },
     say("id", "id1"),
     { kind: "card", id: "pastapay", chapter: "id" },
     { kind: "wait", id: "ageConfirmed", chapter: "id" },
-    say("id", "id2"),
+    say("id", "id2", { small: true }),
+    { kind: "card", id: "phone", chapter: "what" },
+    say("what", "what0", { tap: "goOn" }),
     say("what", "what1"),
-    { kind: "card", id: "sampleCreator", chapter: "what", tap: "ui.slurp.site.tap.goOn" },
-    say("what", "what2", { tap: "goOn" }),
-    say("what", "what3", { tap: "goOn" }),
-    say("what", "cost", { tap: "gotIt" }),
-    say("locked", "locked1"),
-    { kind: "card", id: "lockedDemo", chapter: "locked" },
+    { kind: "card", id: "moveIn", chapter: "what", tap: "ui.slurp.opening.tap.goOn" },
+    say("what", "what2", { tap: "andMe" }),
+    say("what", "what3"),
+    say("what", "cost", { small: true, tap: "gotIt" }),
+    say("locked", "locked1", { skipIf: "revealed" }),
+    say("locked", "lockedEarly", { onlyIf: { event: "revealed", unseen: "locked1" } }),
     { kind: "wait", id: "revealed", chapter: "locked" },
     ask("locked", "coins", SLP_RAIL_OPTIONS.coins, []),
-    say("locked", "coinsWhat", { tap: "backToIt", when: (answers) => answers.coins === "what" }),
+    say("locked", "coinsWhat", { small: true, tap: "backToIt", when: (answers) => answers.coins === "what" }),
     say("setup", "setup1"),
     { ...ask("setup", "who", SLP_RAIL_OPTIONS.who, []), shortcut: "recommended" },
     ask(
@@ -217,15 +239,12 @@ export function slpRailSteps(context: SlpRailContext): SlpRailStep[] {
     ask("fun", "ads", SLP_RAIL_OPTIONS.ads, ["inlineAdsEnabled", "inlineAdsFrequency"], fun),
     ask("fun", "adTone", SLP_RAIL_OPTIONS.adTone, ["inlineAdsTone"], (a) => fun(a, context) && a.ads !== "none"),
     ask("fun", "pullStrings", SLP_RAIL_OPTIONS.pullStrings, ["supportDesk"], (a) => fun(a, context) && runs(a.who)),
-    say("review", "review1"),
-    { kind: "card", id: "memberFile", chapter: "review" },
-    { kind: "wait", id: "stamped", chapter: "review" },
-    { kind: "card", id: "stamp", chapter: "done" },
-    ask("done", "rating", SLP_RAIL_OPTIONS.rating, []),
-    say("done", "rated5", { when: (answers) => answers.rating === "5" }),
-    say("done", "ratedLess", { when: (answers) => answers.rating !== undefined && answers.rating !== "5" }),
-    say("done", "leadFeed", { when: (answers) => answers.who === "watch" }),
-    say("done", "leadSignup", { when: (answers) => answers.who !== "watch" }),
+    say("review", context.opening === "again" ? "againReady" : "ready"),
+    say("review", "later", { small: true }),
+    { kind: "card", id: "doors", chapter: "review" },
+    { kind: "wait", id: "opened", chapter: "review" },
+    say("done", context.opening === "again" ? "saved" : "leadFeed", { when: (answers) => answers.who === "watch" }),
+    say("done", context.opening === "again" ? "saved" : "leadSignup", { when: (answers) => answers.who !== "watch" }),
   ];
 }
 
@@ -246,6 +265,11 @@ function slpRailSkipped(step: SlpRailStep, state: SlpRailState, context: SlpRail
   // still play, and a fun part switched on later through Change asks its questions.
   const laneCovers = step.kind === "ask" && ((step.chapter === "setup" && step.id !== "who") || step.id === "fun");
   if (laneCovers && state.answers.lane === "recommended") return true;
+  if (step.kind === "say" && !state.seen.includes(step.id)) {
+    if (step.skipIf && state.events.includes(step.skipIf)) return true;
+    if (step.onlyIf && (!state.events.includes(step.onlyIf.event) || state.seen.includes(step.onlyIf.unseen)))
+      return true;
+  }
   if (step.kind === "say" || step.kind === "ask")
     return step.when ? !step.when(slpRailAnswers(state, context), context) : false;
   return false;
@@ -257,7 +281,7 @@ function slpRailPassed(step: SlpRailStep, state: SlpRailState): boolean {
   return state.seen.includes(step.id);
 }
 
-/** The step the rail is on, or null when the ticket is done. */
+/** The step the rail is on, or null when opening day is over. */
 export function slpRailNext(state: SlpRailState, context: SlpRailContext): SlpRailStep | null {
   return (
     slpRailSteps(context).find((step) => !slpRailSkipped(step, state, context) && !slpRailPassed(step, state)) ?? null
@@ -283,7 +307,7 @@ export function slpRailTranscript(state: SlpRailState, context: SlpRailContext):
 }
 
 export function slpRailStop(step: SlpRailStep | null): SlpRailStop {
-  return step ? STOP[step.chapter] : "done";
+  return step ? STOP[step.chapter] : "doors";
 }
 
 /** "Skip to the questions" shows only while the rail is in the explainer chapters. */
@@ -429,7 +453,7 @@ export type SlpRailStamp = {
 };
 
 /**
- * What "Stamp it" writes. Only questions the player answered, plus the connection and the pace
+ * What "Open the doors" (or "Save changes") writes. Only questions the player answered, plus the connection and the pace
  * (a first run's recommendation), and only while their `when` holds, so a skipped fun part or a
  * changed "who" leaves those settings alone.
  */
