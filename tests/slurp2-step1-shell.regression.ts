@@ -87,7 +87,8 @@ assert.doesNotMatch(
 // Report bug: a small sheet with Discord (the splash's link) and the prefilled GitHub issue.
 const splash = src("features/onboarding/SlpSplash.tsx");
 const discord = chrome.match(/SLP_DISCORD_BUG_URL = "([^"]+)"/u)?.[1];
-assert.ok(discord && splash.includes(`href="${discord}"`), "the same Discord link as the release splash");
+// The splash links through the same constant, so the two can never drift apart.
+assert.ok(discord && splash.includes("href={SLP_DISCORD_BUG_URL}"), "the same Discord link as the release splash");
 assert.match(kit, /<SlpSheet[\s\S]*?SLP_DISCORD_BUG_URL[\s\S]*?bugReportHref\(cause\)/u);
 
 // Engine entry: the accessible name has no trailing period.

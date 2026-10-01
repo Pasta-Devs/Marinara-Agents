@@ -8,7 +8,7 @@ export interface Slurp2ReleaseEntry {
 }
 
 /**
- * The public release history shown in the "What's new" sheet. Newest first; at most 3 player-facing,
+ * The public release history shown in G's thread (SlpSplash.tsx). Newest first; at most 3 player-facing,
  * in-universe bullets per release (technical detail lives in CHANGELOG.md).
  */
 export const SLURP2_RELEASES: Slurp2ReleaseEntry[] = [
@@ -657,9 +657,12 @@ export const SLURP2_RELEASES: Slurp2ReleaseEntry[] = [
 ];
 
 /** Everything newer than the acknowledged version. */
-export function getSlurp2UnseenReleases(seenVersion: string | null): Slurp2ReleaseEntry[] {
-  const seenIndex = seenVersion === null ? -1 : SLURP2_RELEASES.findIndex((release) => release.version === seenVersion);
-  return seenIndex === -1 ? SLURP2_RELEASES : SLURP2_RELEASES.slice(0, seenIndex);
+export function getSlurp2UnseenReleases(
+  seenVersion: string | null,
+  releases: readonly Slurp2ReleaseEntry[] = SLURP2_RELEASES,
+): Slurp2ReleaseEntry[] {
+  const seenIndex = seenVersion === null ? -1 : releases.findIndex((release) => release.version === seenVersion);
+  return seenIndex === -1 ? releases.slice() : releases.slice(0, seenIndex);
 }
 
 /** Which splash is due: consent on a fresh install, "What's new" after an update, none when up to date. */

@@ -873,7 +873,11 @@ export const SLURP2_SOURCE_MODULES: Record<string, readonly string[]> = {
   "packages/client/src/components/slurp/SlurpAgeGate.tsx": [
     "packages/client/src/slp/features/onboarding/SlpAgeGate.tsx",
   ],
-  "packages/client/src/components/slurp/SlurpSplash.tsx": ["packages/client/src/slp/features/onboarding/SlpSplash.tsx"],
+  // G's thread: the splash renders in the shared chat shell.
+  "packages/client/src/components/slurp/SlurpSplash.tsx": [
+    "packages/client/src/slp/features/onboarding/SlpSplash.tsx",
+    "packages/client/src/slp/modules/chrome/SlpChatShell.tsx",
+  ],
   "packages/client/src/components/slurp/SlurpCreatorBulkEdit.tsx": [
     "packages/client/src/slp/features/creators/SlpCreatorBulkEdit.tsx",
   ],

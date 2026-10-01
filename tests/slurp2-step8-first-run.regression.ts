@@ -26,29 +26,30 @@ assert.equal(slurp2SplashKind(SLURP2_VERSION), null);
 assert.equal(getSlurp2UnseenReleases("0.2.72").length, 3);
 
 const splash = src("features/onboarding/SlpSplash.tsx");
-const welcome = splash.slice(splash.indexOf("function SlurpWelcome("), splash.indexOf("function ReleaseNotes("));
-const whatsNew = splash.slice(splash.indexOf("function SlurpWhatsNew("));
+// G's thread replaced the welcome modal and the "What's new" sheet: one chat, replies as chips.
+const chips = splash.slice(splash.indexOf("const chips: SlpChatChip[]"), splash.indexOf("<Modal"));
 assert.match(
-  welcome,
-  /type="checkbox"[\s\S]*?I understand this is alpha software/u,
-  "the welcome keeps its one consent tick",
+  chips,
+  /consenting\s*\?[\s\S]*?label: "I get it: alpha, my own risk"/u,
+  "the welcome keeps its one consent reply",
 );
-assert.match(welcome, /Tick the box above to get in\./u, "the disabled Let me in says why");
+assert.match(chips, /\{ id: "leave", label: "Leave Slurp", onSelect: onLeave \}/u, "first-run consent has a real exit");
 assert.match(
-  welcome,
-  /<SlpButton variant="tertiary" onClick=\{onLeave\}[\s\S]*?Leave Slurp/u,
-  "first-run consent has a real exit",
+  src("modules/chrome/SlpChatShell.tsx"),
+  /tabIndex=\{-1\} data-autofocus/u,
+  "initial focus lands on the chat header, not the Discord link (B39)",
 );
 assert.match(
-  welcome,
-  /tabIndex=\{-1\}\s*data-autofocus/u,
-  "initial focus lands on the heading, not the Discord link (B39)",
+  src("features/onboarding/slp-g-thread.ts"),
+  /if \(mode === "welcome"\) return \{ messages, scrollTo: null \};/u,
+  "a fresh install does not list every release",
 );
-assert.doesNotMatch(welcome, /What changed|getSlurp2UnseenReleases/u, "a fresh install does not list every release");
-assert.doesNotMatch(whatsNew, /type="checkbox"|approved/u, "updates never ask for consent again");
-assert.match(whatsNew, /<SlpSheet[\s\S]*?onClose=\{onDismiss\}[\s\S]*?Got it/u, "What's new is a dismissible sheet");
-assert.match(whatsNew, /data-autofocus/u);
-assert.match(whatsNew, /sticky top-0/u, "older releases keep their version heading while scrolled");
+assert.doesNotMatch(splash, /type="checkbox"|approved/u, "updates never ask for consent again");
+assert.match(
+  chips,
+  /: \[\{ id: "got-it", label: "Got it", primary: true, onSelect: finish \}\]/u,
+  "after an update, Got it closes the thread",
+);
 assert.doesNotMatch(splash, /max-h-64/u, "one scroll container, no nested notes box");
 assert.match(
   src("app/SlpHomeHost.tsx"),
