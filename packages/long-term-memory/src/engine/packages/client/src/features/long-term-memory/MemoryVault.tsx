@@ -2760,80 +2760,81 @@ export default function MemoryVault({
     const session = editorSession.current;
     if (action === "delete") {
       const deleteRevision = deleteTargetRevision.current;
-      let deleteTargets: LtmNote[];
+      setBusy("delete");
       try {
-        deleteTargets = await requestNotesByIds<LtmNote>(ids);
-      } catch (cause) {
-        if (session === editorSession.current)
-          setError(
-            cause instanceof Error
-              ? cause.message
-              : localizeUi("ui.longTermMemory.memoryvault.deleteTargetsCouldNotLoad"),
-          );
-        return;
-      }
-      if (session !== editorSession.current || deleteRevision !== deleteTargetRevision.current) return;
-      const targetsById = new Map(deleteTargets.map((note) => [note.id, note]));
-      if (targetsById.size !== ids.length || ids.some((id) => !targetsById.has(id))) {
-        setError(localizeUi("ui.longTermMemory.memoryvault.deleteTargetsCouldNotLoad"));
-        return;
-      }
-      const confirmedTargets = ids.map((id) => targetsById.get(id)!);
-      if (confirmedTargets.some((note) => note.type === "source")) {
-        setError(localizeUi("ui.longTermMemory.memoryvault.manageSourceDeletionInSources"));
-        onOpenSources?.();
-        return;
-      }
-      const countForm = selectLtmPluralForm(locale, confirmedTargets.length);
-      const confirmationTitle = localizeUi(
-        countForm === "one"
-          ? "ui.longTermMemory.memoryvault.permanentlyDeleteOne"
-          : "ui.longTermMemory.memoryvault.permanentlyDeleteOther",
-        { count: confirmedTargets.length },
-      );
-      const confirmationLabel = localizeUi(
-        countForm === "one"
-          ? "ui.longTermMemory.memoryvault.deletePermanentlyOne"
-          : "ui.longTermMemory.memoryvault.deletePermanentlyOther",
-        { count: confirmedTargets.length },
-      );
-      const hiddenTargetCount = ids.filter((id) => !visible.some((note) => note.id === id)).length;
-      const confirmationMessage = [
-        localizeUi("ui.longTermMemory.memoryvault.thisCannotBeUndone"),
-        hiddenTargetCount
-          ? localizeUi(
-              hiddenTargetCount === 1
-                ? "ui.longTermMemory.memoryvault.deleteConfirmationHiddenOne"
-                : "ui.longTermMemory.memoryvault.deleteConfirmationHiddenOther",
-              { count: hiddenTargetCount },
-            )
-          : "",
-        "",
-        ...confirmedTargets.flatMap((note, index) => [
-          `${localizeUi("ui.longTermMemory.memoryvault.deleteConfirmationTarget", { value1: index + 1 })}: ${memoryLabel(note)}`,
-          `  ${localizeUi("ui.longTermMemory.memoryvault.deleteConfirmationExcerpt")}: ${deleteConfirmationExcerpt(
-            note,
-            localizeUi("ui.longTermMemory.memoryvault.deleteConfirmationNoExcerpt"),
-          )}`,
-          `  ${localizeUi("ui.longTermMemory.memoryvault.deleteConfirmationScope")}: ${confirmationScopeLabel(note)}`,
-          `  ${localizeUi("ui.longTermMemory.memoryvault.created")}: ${new Date(note.createdAt).toLocaleString(locale)}`,
-          `  ${localizeUi("ui.longTermMemory.memoryvault.deleteConfirmationMemoryId")}: ${note.id}`,
+        let deleteTargets: LtmNote[];
+        try {
+          deleteTargets = await requestNotesByIds<LtmNote>(ids);
+        } catch {
+          if (session === editorSession.current)
+            setError(localizeUi("ui.longTermMemory.memoryvault.deleteTargetsCouldNotLoad"));
+          return;
+        }
+        if (session !== editorSession.current || deleteRevision !== deleteTargetRevision.current) return;
+        const targetsById = new Map(deleteTargets.map((note) => [note.id, note]));
+        if (targetsById.size !== ids.length || ids.some((id) => !targetsById.has(id))) {
+          setError(localizeUi("ui.longTermMemory.memoryvault.deleteTargetsCouldNotLoad"));
+          return;
+        }
+        const confirmedTargets = ids.map((id) => targetsById.get(id)!);
+        if (confirmedTargets.some((note) => note.type === "source")) {
+          setError(localizeUi("ui.longTermMemory.memoryvault.manageSourceDeletionInSources"));
+          onOpenSources?.();
+          return;
+        }
+        const countForm = selectLtmPluralForm(locale, confirmedTargets.length);
+        const confirmationTitle = localizeUi(
+          countForm === "one"
+            ? "ui.longTermMemory.memoryvault.permanentlyDeleteOne"
+            : "ui.longTermMemory.memoryvault.permanentlyDeleteOther",
+          { count: confirmedTargets.length },
+        );
+        const confirmationLabel = localizeUi(
+          countForm === "one"
+            ? "ui.longTermMemory.memoryvault.deletePermanentlyOne"
+            : "ui.longTermMemory.memoryvault.deletePermanentlyOther",
+          { count: confirmedTargets.length },
+        );
+        const hiddenTargetCount = ids.filter((id) => !visible.some((note) => note.id === id)).length;
+        const confirmationMessage = [
+          localizeUi("ui.longTermMemory.memoryvault.thisCannotBeUndone"),
+          hiddenTargetCount
+            ? localizeUi(
+                hiddenTargetCount === 1
+                  ? "ui.longTermMemory.memoryvault.deleteConfirmationHiddenOne"
+                  : "ui.longTermMemory.memoryvault.deleteConfirmationHiddenOther",
+                { count: hiddenTargetCount },
+              )
+            : "",
           "",
-        ]),
-      ].join("\n");
-      const confirmed = props.confirmAction
-        ? await props.confirmAction({
-            title: confirmationTitle,
-            message: confirmationMessage,
-            confirmLabel: confirmationLabel,
-            tone: "destructive",
-          })
-        : window.confirm(`${confirmationTitle}\n\n${confirmationMessage}`);
-      if (!confirmed) return;
-      if (session !== editorSession.current || deleteRevision !== deleteTargetRevision.current) return;
-      setArchiveUndo(null);
-      await deleteSelected(ids);
-      return;
+          ...confirmedTargets.flatMap((note, index) => [
+            `${localizeUi("ui.longTermMemory.memoryvault.deleteConfirmationTarget", { value1: index + 1 })}: ${memoryLabel(note)}`,
+            `  ${localizeUi("ui.longTermMemory.memoryvault.deleteConfirmationExcerpt")}: ${deleteConfirmationExcerpt(
+              note,
+              localizeUi("ui.longTermMemory.memoryvault.deleteConfirmationNoExcerpt"),
+            )}`,
+            `  ${localizeUi("ui.longTermMemory.memoryvault.deleteConfirmationScope")}: ${confirmationScopeLabel(note)}`,
+            `  ${localizeUi("ui.longTermMemory.memoryvault.created")}: ${new Date(note.createdAt).toLocaleString(locale)}`,
+            `  ${localizeUi("ui.longTermMemory.memoryvault.deleteConfirmationMemoryId")}: ${note.id}`,
+            "",
+          ]),
+        ].join("\n");
+        const confirmed = props.confirmAction
+          ? await props.confirmAction({
+              title: confirmationTitle,
+              message: confirmationMessage,
+              confirmLabel: confirmationLabel,
+              tone: "destructive",
+            })
+          : window.confirm(`${confirmationTitle}\n\n${confirmationMessage}`);
+        if (!confirmed) return;
+        if (session !== editorSession.current || deleteRevision !== deleteTargetRevision.current) return;
+        setArchiveUndo(null);
+        await deleteSelected(ids);
+        return;
+      } finally {
+        if (session === editorSession.current) setBusy("");
+      }
     }
     setArchiveUndo(null);
     const previousArchiveStatuses = new Map(

@@ -3439,9 +3439,17 @@ async function main() {
           response.url().includes("/api/long-term-memory/notes?ids=") &&
           response.url().includes("world_second_mobile"),
       );
+      // Keep an earlier assertion failure from being masked by this pending wait rejecting during cleanup.
+      staleLookupResponse.catch(() => {});
       await page.locator("[data-ltm-bulk-actions]").getByRole("button", { name: "Delete" }).click();
       for (let attempt = 0; attempt < 200 && !releaseDeleteTargetLookup; attempt += 1) await page.waitForTimeout(5);
       assert.ok(releaseDeleteTargetLookup, "delete target lookup must still be pending");
+      const bulkDeleteButton = page.locator("[data-ltm-bulk-actions]").getByRole("button", { name: "Delete" });
+      assert.equal(
+        await bulkDeleteButton.isDisabled(),
+        true,
+        "bulk delete controls must be disabled while targets resolve",
+      );
       await deleteTargetCards[1].locator('input[type="checkbox"]').uncheck();
       const releaseStaleLookup = releaseDeleteTargetLookup;
       releaseDeleteTargetLookup = null;
@@ -3458,6 +3466,23 @@ async function main() {
         beforeStaleDeleteCalls,
         "A stale permanent delete must not reach the server",
       );
+      for (let attempt = 0; attempt < 100 && (await bulkDeleteButton.isDisabled()); attempt += 1)
+        await page.waitForTimeout(5);
+      assert.equal(
+        await bulkDeleteButton.isDisabled(),
+        false,
+        "bulk delete controls must be re-enabled after the stale delete cancels",
+      );
+
+      // A failed target lookup must surface the localized no-op message, not raw server text.
+      failReviewContext = true;
+      await bulkDeleteButton.click();
+      await page
+        .locator("[data-ltm-vault-feedback]")
+        .getByText("The selected memories could not be loaded for confirmation. No memories were deleted.")
+        .waitFor();
+      assert.doesNotMatch(await page.locator("[data-ltm-vault-feedback]").innerText(), /temporarily unavailable/u);
+      failReviewContext = false;
 
       await page.locator('[data-ltm-control="navigation"][data-ltm-destination="review"]').first().click();
       const clearSource = page.locator('[data-ltm-review-source-select="source_mobile_single"]');
