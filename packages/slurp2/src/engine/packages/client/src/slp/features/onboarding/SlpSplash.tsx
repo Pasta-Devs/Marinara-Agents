@@ -162,6 +162,15 @@ function SlpGThread({
   };
   const close = () => (consenting ? leaveUnlessBackdrop(onLeave) : finish());
 
+  // The Modal's focus scope can lose the race with the tab that opened Slurp, so focus moves to G's
+  // name in the header by hand: off the Discord link, and with no scroll in the list.
+  const titleRef = useRef<HTMLHeadingElement | null>(null);
+  useEffect(() => {
+    if (!open) return;
+    const frame = window.requestAnimationFrame(() => titleRef.current?.focus({ preventScroll: true }));
+    return () => window.cancelAnimationFrame(frame);
+  }, [open]);
+
   // The host passes a fresh onDismiss on every render; a re-render must not restart the hand-off.
   const dismissRef = useRef(onDismiss);
   dismissRef.current = onDismiss;
@@ -224,6 +233,7 @@ function SlpGThread({
       <div data-component="SlurpSplash" className="flex min-h-0 flex-1 flex-col">
         <SlpChatShell
           host={G_HOST}
+          titleRef={titleRef}
           status={`Slurp ${SLURP2_VERSION}`}
           headerEnd={
             consenting && !onLeave ? null : (
