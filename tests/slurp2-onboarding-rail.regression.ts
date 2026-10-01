@@ -384,7 +384,7 @@ const keys: string[] = [
   "ui.slurp.site.a.connection.default",
   "ui.slurp.site.tap.recommended",
 ];
-for (const key of ["ticket", "status.open", "status.resolved", "tap.leave", "memberFile", "stamped", "card.sample"])
+for (const key of ["ticket", "status.open", "status.resolved", "memberFile", "stamped", "card.sample"])
   keys.push(`ui.slurp.site.${key}`);
 for (const key of ["value.none", "label.fun", "close", "reply", "log", "typing", "previewEmpty", "yourFile", "again"])
   keys.push(`ui.slurp.site.${key}`);

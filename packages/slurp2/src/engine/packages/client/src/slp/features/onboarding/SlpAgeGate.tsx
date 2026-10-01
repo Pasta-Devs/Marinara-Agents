@@ -164,7 +164,7 @@ export function SlurpAgeGate({ personaName, onComplete, onLeave, done = false }:
           </SlpPrimaryButton>
           {onLeave && (
             <SlpButton variant="tertiary" onClick={onLeave} className="self-center text-[var(--muted-foreground)]">
-              {t("ui.slurp.site.tap.leave")}
+              {tt("notNow", "Not now, take me back")}
             </SlpButton>
           )}
         </div>

@@ -67,7 +67,7 @@ assert.match(
 );
 // The age check is a card in the Support ticket (docs/ONBOARDING-RAIL.md); the ticket stays open, so
 // the card's own confetti plays out in place.
-assert.match(ageGate, /ui\.slurp\.site\.tap\.leave/u, "the age check must offer a direct exit");
+assert.match(ageGate, /tt\("notNow"/u, "the age check must offer a direct exit");
 assert.match(ageGate, /setConfetti\(true\)/u, "the age-gate confetti payoff must remain");
 assert.match(ageGate, /setConfetti\(true\);\s*onComplete\(\);/u, "entry must begin while confetti continues");
 

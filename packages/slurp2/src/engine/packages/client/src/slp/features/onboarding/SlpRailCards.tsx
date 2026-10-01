@@ -49,11 +49,17 @@ const DEMO_POST: Pick<SlpCreatorPostView, "id" | "access" | "createdAt" | "title
 const RAISED =
   "rounded-2xl bg-[var(--slurp-surface-raised)] shadow-[var(--slurp-shadow-raised),var(--slurp-highlight)]";
 
-/** What one answer reads as: a chip, the player's bubble, a file row. */
-export function slpRailAnswerLabel(t: T, id: SlpRailQuestion, value: string | undefined, context: SlpRailContext) {
+/** What one answer reads as: a chip or the player's bubble ("answer"), or a file row ("row"). */
+export function slpRailAnswerLabel(
+  t: T,
+  id: SlpRailQuestion,
+  value: string | undefined,
+  context: SlpRailContext,
+  as: "answer" | "row" = "answer",
+) {
   if (value === undefined) return t(id === "connection" ? "ui.slurp.site.value.none" : "ui.slurp.scene.page.empty");
   if (id === "pace") return t(`ui.noodle.noodlerwizard.activityChoice.${value}.title`);
-  if (id === "who") return t(`ui.slurp.site.value.who.${value}`);
+  if (id === "who" && as === "row") return t(`ui.slurp.site.value.who.${value}`);
   if (id === "rating") return "★".repeat(Number(value));
   if (id === "connection" || id === "imageConnection") {
     const list = id === "connection" ? context.textConnections : context.imageConnections;
@@ -81,7 +87,8 @@ export function SlpRailSampleCreator() {
 export function SlpRailLockedDemo({ onReveal }: { onReveal: () => void }) {
   const { t } = useUiTranslation();
   return (
-    <div className="max-w-[20rem] overflow-hidden rounded-2xl shadow-[var(--slurp-shadow-raised),var(--slurp-highlight)]">
+    // Spans the chat (a centred card): in the host's column the post header squeezed Mari's name away.
+    <div className="w-[min(22rem,calc(100vw-1.5rem))] overflow-hidden rounded-2xl shadow-[var(--slurp-shadow-raised),var(--slurp-highlight)]">
       <LockedSlurpPostCard
         post={{ ...DEMO_POST, title: t("ui.noodle.noodlerwizard.demoPost.walkthrough.title") }}
         profile={DEMO_PROFILE}
@@ -162,7 +169,7 @@ export function SlpRailFileRows({
           <div className="min-w-0 flex-1">
             <p className={cn(SLP_TYPE.meta, "text-[var(--slurp-muted)]")}>{t(`ui.slurp.site.label.${id}`)}</p>
             <p className={cn(SLP_TYPE.body, "break-words")}>
-              {slpRailAnswerLabel(t, id, id === "fun" ? (answers.fun ?? "skip") : answers[id], context)}
+              {slpRailAnswerLabel(t, id, id === "fun" ? (answers.fun ?? "skip") : answers[id], context, "row")}
             </p>
           </div>
           {onChange && (

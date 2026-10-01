@@ -1305,7 +1305,6 @@
   "ui.slurp.site.ticket": "Ticket #000001 · {{status}}",
   "ui.slurp.site.status.open": "Offen",
   "ui.slurp.site.status.resolved": "Erledigt",
-  "ui.slurp.site.tap.leave": "Jetzt nicht, bring mich zurück",
   "ui.slurp.site.memberFile": "Mitgliederakte",
   "ui.slurp.site.stamped": "Genehmigt",
   "ui.slurp.site.card.sample": "Tagsüber Unterricht, nachts Beiträge. Manches davon ist gesperrt.",

@@ -4817,7 +4817,6 @@
   "ui.slurp.site.ticket": "Ticket #000001 · {{status}}",
   "ui.slurp.site.status.open": "Open",
   "ui.slurp.site.status.resolved": "Resolved",
-  "ui.slurp.site.tap.leave": "Not now, take me back",
   "ui.slurp.site.memberFile": "Member file",
   "ui.slurp.site.stamped": "Approved",
   "ui.slurp.site.card.sample": "Teaches by day, posts by night. Some of it is locked.",

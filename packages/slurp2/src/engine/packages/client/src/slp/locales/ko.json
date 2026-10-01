@@ -2143,7 +2143,6 @@
   "ui.slurp.site.ticket": "티켓 #000001 · {{status}}",
   "ui.slurp.site.status.open": "진행 중",
   "ui.slurp.site.status.resolved": "해결됨",
-  "ui.slurp.site.tap.leave": "지금은 아니요, 돌아갈래요",
   "ui.slurp.site.memberFile": "회원 파일",
   "ui.slurp.site.stamped": "승인됨",
   "ui.slurp.site.card.sample": "낮에는 가르치고, 밤에는 게시해요. 일부는 잠겨 있어요.",

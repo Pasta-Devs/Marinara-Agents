@@ -1321,7 +1321,6 @@
   "ui.slurp.site.ticket": "Zgłoszenie #000001 · {{status}}",
   "ui.slurp.site.status.open": "Otwarte",
   "ui.slurp.site.status.resolved": "Rozwiązane",
-  "ui.slurp.site.tap.leave": "Nie teraz, zabierz mnie z powrotem",
   "ui.slurp.site.memberFile": "Teczka członkowska",
   "ui.slurp.site.stamped": "Zatwierdzono",
   "ui.slurp.site.card.sample": "W dzień uczy, w nocy publikuje. Część jest zablokowana.",

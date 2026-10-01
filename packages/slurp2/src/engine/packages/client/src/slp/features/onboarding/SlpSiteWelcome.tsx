@@ -218,7 +218,12 @@ export function SlpSiteWelcome({
     const render = (step: SlpRailStep, passed: boolean) => {
       if (step.kind === "say") items.push({ kind: "bubble", id: step.id, text: t(step.key) });
       if (step.kind === "card")
-        items.push({ kind: "card", id: step.id, align: step.id === "stamp" ? "center" : "host", content: card(step) });
+        items.push({
+          kind: "card",
+          id: step.id,
+          align: step.id === "stamp" || step.id === "lockedDemo" ? "center" : "host",
+          content: card(step),
+        });
       if (step.kind === "ask") {
         items.push({ kind: "bubble", id: `q-${step.id}`, text: t(`ui.slurp.site.q.${step.id}`) });
         if (passed) {
@@ -299,7 +304,28 @@ export function SlpSiteWelcome({
               status: t(stamped ? "ui.slurp.site.status.resolved" : "ui.slurp.site.status.open"),
             })}
             headerEnd={
-              <>
+              (confirmed || onLeave) && (
+                <button
+                  type="button"
+                  onClick={close}
+                  aria-label={confirmed ? t("ui.slurp.site.close") : t("ui.slurp.ageGate.leave")}
+                  className={headerButton}
+                >
+                  <X size={20} aria-hidden="true" />
+                </button>
+              )
+            }
+            // The ticket's own actions sit beside the progress, so the header keeps its name and status.
+            subheader={
+              <div className="flex shrink-0 items-center gap-2 px-3">
+                <div className="min-w-0 flex-1 pt-3">
+                  <SlpWizardProgress
+                    current={stopIndex + 1}
+                    total={SLP_RAIL_STOPS.length}
+                    stepOf={t("ui.slurp.wizard.stepOf", { current: stopIndex + 1, total: SLP_RAIL_STOPS.length })}
+                    label={t(`ui.slurp.site.stop.${stop}`)}
+                  />
+                </div>
                 {context && slpRailCanSkipIntro(state, context) && (
                   <SlpChip className="min-h-11 shrink-0 px-3" onClick={() => update({ ...state, skipIntro: true })}>
                     {t("ui.slurp.site.tap.skipIntro")}
@@ -310,26 +336,6 @@ export function SlpSiteWelcome({
                     {t("ui.slurp.site.preview")}
                   </SlpChip>
                 )}
-                {(confirmed || onLeave) && (
-                  <button
-                    type="button"
-                    onClick={close}
-                    aria-label={confirmed ? t("ui.slurp.site.close") : t("ui.slurp.ageGate.leave")}
-                    className={headerButton}
-                  >
-                    <X size={20} aria-hidden="true" />
-                  </button>
-                )}
-              </>
-            }
-            subheader={
-              <div className="shrink-0 px-3 pt-2">
-                <SlpWizardProgress
-                  current={stopIndex + 1}
-                  total={SLP_RAIL_STOPS.length}
-                  stepOf={t("ui.slurp.wizard.stepOf", { current: stopIndex + 1, total: SLP_RAIL_STOPS.length })}
-                  label={t(`ui.slurp.site.stop.${stop}`)}
-                />
               </div>
             }
             items={items}
