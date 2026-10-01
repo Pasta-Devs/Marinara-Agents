@@ -350,6 +350,12 @@
     "slurp2": {
       "versions": [
         {
+          "version": "0.3.13",
+          "date": "2026-10-01",
+          "notes": "First run as two chats. Design: `docs/ONBOARDING-RAIL.md`.\n\n- G's thread replaces the welcome splash and the What's new sheet: the welcome and consent as a chat, then every release as a message, with a disabled composer that points to Slurp General. Settings › Overview has a version pill that opens it.\n- The Support ticket replaces the age gate, the five-screen tour and the setup choice: hello, the 18+ card, what Slurp is, Mari's locked post, core questions (who, AI connection, pace, pictures, spice, names, nights), an optional fun part (fans, size, drama, ads, pulling strings), a member file to review and one \"Stamp it\" that writes the settings.\n- Your file in Stir › Support desk and \"Run setup again\" in Backstage reopen the ticket at the questions.",
+          "highlight": false
+        },
+        {
           "version": "0.3.12",
           "date": "2026-10-01",
           "notes": "- Fix: the follow-up scheduler no longer logs \"No text connection configured\" on every poll. It checks for due follow-ups first, and warns once per outage only when work is waiting.",
@@ -461,12 +467,6 @@
           "version": "0.2.72",
           "date": "2026-09-26",
           "notes": "- Storylines, Publishing, Images, Audience, Messaging and Prompts show their current settings as a row of chips under the page title. Tap a chip to jump to that setting, even inside a folded block.\n- Creator settings tabs with several parts start with a \"Jump to\" row.",
-          "highlight": false
-        },
-        {
-          "version": "0.2.71",
-          "date": "2026-09-25",
-          "notes": "- Bounded numbers are sliders with a value chip: weeks between storylines, storylines at once, wallet day start, weekly price change and creator revenue share. A slider saves when you let go.\n- Posts per day, storyline check interval and carryover limits have − and + buttons.\n- Messaging reply and away delays are four min–max rows instead of eight separate fields; the lower value can never pass the upper one.",
           "highlight": false
         }
       ]

@@ -29,12 +29,7 @@ import { SlpErrorState, SlpSkeleton } from "../../modules/chrome/SlpStateKit";
 import { SlpThreadHeader } from "./SlpThreadHeader";
 import { SlpThreadComposer } from "./SlpThreadComposer";
 import { SlpThreadDrawer } from "./SlpThreadDrawer";
-import {
-  MessageBubble,
-  SlurpAwayAnimation,
-  SlurpBubbleStyles,
-  SlurpPlatformActionCard,
-} from "./SlpMessageBubble";
+import { MessageBubble, SlurpAwayAnimation, SlurpBubbleStyles, SlurpPlatformActionCard } from "./SlpMessageBubble";
 import { slurpBubbleGroup } from "./slp-bubble-group";
 import { slurpBubbleSurface } from "../../modules/chrome/SlpChatShell";
 import { readSlpStirProposal, SlpStirSupportCards } from "../stir/slp-stir-contract";

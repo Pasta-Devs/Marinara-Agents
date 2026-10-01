@@ -681,3 +681,23 @@ modules, rejected alternative, and migration consequence.
   same couple); a DB column for fan-note replies (a migration for one small, capped list).
 - **Migration consequence:** none; `secret`, `personaId` on plays, `requestedLead` on the drama state
   and `paused` are optional with safe defaults. Old fan threads to the player's page stay as they are.
+
+## 0.3.13 First run as two chats: G's thread and the Support ticket (2026-10-01)
+
+- **Problem:** a first run passed four surfaces with four looks (splash, age-gate modal with its
+  explainer, the Support welcome or the old five-screen tour, the lane choice); the Mari unlock demo
+  sat behind "Show me around", and "What's new" was a separate sheet.
+- **Decision:**
+  - One presentational chat shell, `modules/chrome/SlpChatShell.tsx` (props in, no feature hooks),
+    shared by G's thread and the Support ticket. `slurpBubbleSurface` moved there from Messages so a
+    module can use it; Messages imports it from the module.
+  - G's thread (`features/onboarding/SlpSplash.tsx`, messages from `slp-g-thread.ts`) is the
+    first-run welcome and consent, then the changelog with a disabled composer. Backstage opens it
+    from a version pill through the new `features/onboarding/slp-onboarding-contract.ts`.
+  - The Support ticket (`slp-site-welcome.ts` script, `SlpSiteWelcome.tsx` renderer) replaces the
+    age-gate modal, the tour and the lane choice. "Stamp it" is its only write. Stir's Support desk
+    shows it as "Your file" and reopens it ("Run setup again") through the onboarding contract.
+- **Rejected alternatives:** a generated (AI) welcome (costs before a connection is chosen); a
+  server-stored ticket (everything it shows is current settings).
+- **Migration consequence:** none; rail progress lives in localStorage, settings are existing fields.
+  Design: `docs/ONBOARDING-RAIL.md`.

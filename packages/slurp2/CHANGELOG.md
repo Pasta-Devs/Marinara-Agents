@@ -1,5 +1,13 @@
 # Slurp release notes
 
+## 0.3.13 — 2026-10-01
+
+First run as two chats. Design: `docs/ONBOARDING-RAIL.md`.
+
+- G's thread replaces the welcome splash and the What's new sheet: the welcome and consent as a chat, then every release as a message, with a disabled composer that points to Slurp General. Settings › Overview has a version pill that opens it.
+- The Support ticket replaces the age gate, the five-screen tour and the setup choice: hello, the 18+ card, what Slurp is, Mari's locked post, core questions (who, AI connection, pace, pictures, spice, names, nights), an optional fun part (fans, size, drama, ads, pulling strings), a member file to review and one "Stamp it" that writes the settings.
+- Your file in Stir › Support desk and "Run setup again" in Backstage reopen the ticket at the questions.
+
 ## 0.3.12 — 2026-10-01
 
 - Fix: the follow-up scheduler no longer logs "No text connection configured" on every poll. It checks for due follow-ups first, and warns once per outage only when work is waiting.

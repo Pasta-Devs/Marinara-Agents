@@ -130,8 +130,9 @@ export function SlpChatShell({
         ref={listRef}
         role="log"
         aria-live="polite"
+        tabIndex={-1}
         aria-label={labels.log}
-        className="relative flex min-h-0 flex-1 flex-col gap-1.5 overflow-y-auto overscroll-contain px-3 py-3"
+        className="relative flex min-h-0 flex-1 flex-col gap-1.5 overflow-y-auto overscroll-contain px-3 py-3 outline-none"
       >
         {shownItems.map((item, index) => {
           if (item.kind === "divider")
@@ -139,7 +140,6 @@ export function SlpChatShell({
               <div
                 key={item.id}
                 data-chat-item={item.id}
-                role="separator"
                 className="my-2 flex shrink-0 items-center gap-2 text-xs font-bold text-[var(--noodle-accent-foreground)]"
               >
                 <span aria-hidden="true" className="h-px flex-1 bg-[var(--noodle-accent)]/45" />
@@ -199,7 +199,9 @@ export function SlpChatShell({
           );
         })}
         {paced && typing && (
+          // Hidden from the log: a screen reader would read "typing" ahead of every line.
           <p
+            aria-hidden="true"
             className={cn(
               SLP_TYPE.meta,
               "mt-1 flex shrink-0 items-center gap-2 self-start px-2 text-[var(--slurp-muted)]",
@@ -228,7 +230,13 @@ export function SlpChatShell({
               aria-label={chip.ariaLabel}
               selected={chip.primary}
               className="min-h-11 px-4"
-              onClick={chip.onSelect}
+              onClick={() => {
+                chip.onSelect();
+                // The chip row unmounts once a chip is chosen; keep focus in the chat, not on <body>.
+                window.requestAnimationFrame(() => {
+                  if (document.activeElement === document.body) listRef.current?.focus({ preventScroll: true });
+                });
+              }}
             >
               {chip.label}
             </SlpChip>
@@ -238,10 +246,7 @@ export function SlpChatShell({
 
       {composer && (
         <div className="shrink-0 px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-2">
-          <div
-            aria-disabled="true"
-            className="flex min-h-11 items-center gap-1 rounded-[1.4rem] bg-[var(--slurp-surface)] p-1 ps-3.5 shadow-sm ring-1 ring-inset ring-[var(--noodle-divider)]"
-          >
+          <div className="flex min-h-11 items-center gap-1 rounded-[1.4rem] bg-[var(--slurp-surface)] p-1 ps-3.5 shadow-sm ring-1 ring-inset ring-[var(--noodle-divider)]">
             <p className={cn(SLP_TYPE.body, "min-w-0 flex-1 py-1.5 text-pretty text-[var(--muted-foreground)]")}>
               {composer.placeholder}
             </p>
