@@ -2246,6 +2246,8 @@
   "ui.slurp.settings.overview.autoPostingCreators_one": "{{count}} creator auto-posting",
   "ui.slurp.settings.overview.autoPostingCreators_other": "{{count}} creators auto-posting",
   "ui.slurp.settings.overview.eyebrow": "Automation overview",
+  "ui.slurp.settings.overview.version": "Slurp {{version}}",
+  "ui.slurp.settings.overview.versionUnseen": "New release, not seen yet",
   "ui.slurp.settings.overview.generation": "Generation & prompts",
   "ui.slurp.settings.overview.generationDetail": "Language connection, generation timing, and writing guidance",
   "ui.slurp.settings.overview.imageCreators_one": "Images enabled for {{count}} creator",

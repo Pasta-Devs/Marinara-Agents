@@ -374,6 +374,8 @@
   "ui.slurp.settings.backstage.kit.fineTune": "Dostrój",
   "ui.slurp.settings.backstage.kit.back": "Wstecz",
   "ui.slurp.settings.backstage.kit.next": "Dalej",
+  "ui.slurp.settings.overview.version": "Slurp {{version}}",
+  "ui.slurp.settings.overview.versionUnseen": "Nowa wersja, jeszcze nieprzeczytana",
   "ui.slurp.settings.overview.attention.noText": "Brak połączenia tekstowego",
   "ui.slurp.settings.overview.attention.noImages_one": "Obrazy są włączone dla {{count}} twórcy, ale brak połączenia obrazów",
   "ui.slurp.settings.overview.attention.noImages_few": "Obrazy są włączone dla {{count}} twórców, ale brak połączenia obrazów",

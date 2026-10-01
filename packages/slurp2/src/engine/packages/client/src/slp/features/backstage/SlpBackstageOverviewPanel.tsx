@@ -22,6 +22,7 @@ import type { SlpBackstageSection, SlpBackstageTarget } from "../../base/navigat
 import { formatDateTime } from "../../base/ui/slp-date-time";
 import { formatBytes } from "../../modules/settings/slp-backstage-format";
 import { OverviewCard, OverviewActivity } from "../../modules/settings/SlpBackstageKit";
+import { SlpVersionPill } from "../onboarding/slp-onboarding-contract";
 
 type AttentionItem = { id: string; label: string; section: SlpBackstageSection; target: SlpBackstageTarget };
 
@@ -144,9 +145,15 @@ export function SlpBackstageOverviewPanel(page: SlpBackstagePageProps) {
         />
         <div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
           <div className="min-w-0">
-            <p className="text-xs font-bold uppercase tracking-[0.12em] text-white/75">
-              {t("ui.slurp.settings.overview.eyebrow")}
-            </p>
+            <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
+              <p className="text-xs font-bold uppercase tracking-[0.12em] text-white/75">
+                {t("ui.slurp.settings.overview.eyebrow")}
+              </p>
+              <SlpVersionPill
+                label={(version) => t("ui.slurp.settings.overview.version", { version })}
+                unseenLabel={t("ui.slurp.settings.overview.versionUnseen")}
+              />
+            </div>
             <h1 className="mt-1 text-xl font-black tracking-tight text-balance sm:text-2xl">
               {settings.paused
                 ? t("ui.slurp.settings.overview.pause.title", { defaultValue: "Slurp is paused" })

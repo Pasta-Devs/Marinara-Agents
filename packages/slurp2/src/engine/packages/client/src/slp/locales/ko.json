@@ -1220,6 +1220,8 @@
   "ui.slurp.settings.backstage.kit.fineTune": "세부 조정",
   "ui.slurp.settings.backstage.kit.back": "뒤로",
   "ui.slurp.settings.backstage.kit.next": "다음",
+  "ui.slurp.settings.overview.version": "Slurp {{version}}",
+  "ui.slurp.settings.overview.versionUnseen": "아직 확인하지 않은 새 버전",
   "ui.slurp.settings.overview.attention.noText": "텍스트 연결이 설정되지 않았습니다",
   "ui.slurp.settings.overview.attention.noImages_other": "크리에이터 {{count}}명에게 이미지가 켜져 있지만 이미지 연결이 없습니다",
   "ui.slurp.settings.overview.nextUp": "다음 게시물: {{time}}",

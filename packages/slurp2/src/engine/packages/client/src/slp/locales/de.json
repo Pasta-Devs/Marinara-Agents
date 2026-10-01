@@ -374,6 +374,8 @@
   "ui.slurp.settings.backstage.kit.fineTune": "Feinabstimmung",
   "ui.slurp.settings.backstage.kit.back": "Zurück",
   "ui.slurp.settings.backstage.kit.next": "Weiter",
+  "ui.slurp.settings.overview.version": "Slurp {{version}}",
+  "ui.slurp.settings.overview.versionUnseen": "Neue Version, noch nicht gesehen",
   "ui.slurp.settings.overview.attention.noText": "Keine Textverbindung eingerichtet",
   "ui.slurp.settings.overview.attention.noImages_one": "Bilder sind für {{count}} Creator an, aber es gibt keine Bildverbindung",
   "ui.slurp.settings.overview.attention.noImages_other": "Bilder sind für {{count}} Creator an, aber es gibt keine Bildverbindung",
