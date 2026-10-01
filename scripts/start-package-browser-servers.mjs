@@ -67,7 +67,8 @@ function stopChildren(signal = "SIGTERM") {
 
 function runPnpm(args) {
   return new Promise((resolvePromise, reject) => {
-    const child = spawnChild("pnpm", args);
+    const cli = process.env.MARINARA_PNPM_CLI;
+    const child = cli ? spawnChild(process.execPath, [cli, ...args]) : spawnChild("pnpm", args);
     child.once("error", reject);
     child.once("exit", (code, signal) => {
       if (code === 0) resolvePromise();

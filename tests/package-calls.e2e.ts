@@ -60,8 +60,12 @@ test("installed Calls package stays responsive when browser blocks voice playbac
   };
   let ended = false;
   let sent = false;
+  const hapticCommands: unknown[] = [];
+  let hapticStops = 0;
   try {
-    await request.patch(`/api/chats/${chat.id}/metadata`, { data: { conversationCallsEnabled: true } });
+    await request.patch(`/api/chats/${chat.id}/metadata`, {
+      data: { conversationCallsEnabled: true, conversationCallHapticsEnabled: true, enableHapticFeedback: false },
+    });
     await page.route("**/api/conversation-calls/chat/*/status", (route) =>
       route.fulfill({ json: { activeCall: ended ? null : session, ringingCall: null } }),
     );
@@ -74,6 +78,13 @@ test("installed Calls package stays responsive when browser blocks voice playbac
             userMessage,
             assistantMessages: [assistantMessage],
             turns: [
+              {
+                id: "haptic-turn",
+                speakerName: "Alice",
+                characterId: character.id,
+                mode: "command",
+                content: '[haptic: action="vibrate", intensity=0.2, duration=4, pattern="ramp"]',
+              },
               {
                 id: "voice-turn",
                 speakerName: "Alice",
@@ -90,6 +101,15 @@ test("installed Calls package stays responsive when browser blocks voice playbac
     await page.route(`**/api/conversation-calls/${session.id}/end`, (route) => {
       ended = true;
       return route.fulfill({ json: { ...session, status: "ended", endedAt: now } });
+    });
+    await page.route("**/api/haptic/command", (route) => {
+      hapticCommands.push(route.request().postDataJSON());
+      return route.fulfill({ json: { ok: true } });
+    });
+    await page.route("**/api/haptic/status", (route) => route.fulfill({ json: { connected: true } }));
+    await page.route("**/api/haptic/stop-all", (route) => {
+      hapticStops += 1;
+      return route.fulfill({ json: { ok: true } });
     });
     await page.route("**/api/tts/config", (route) =>
       route.fulfill({
@@ -148,6 +168,9 @@ test("installed Calls package stays responsive when browser blocks voice playbac
     const readProof = () =>
       page.evaluate(() => (window as unknown as { __callProof: { plays: number; ticks: number } }).__callProof);
     await expect.poll(async () => (await readProof()).plays).toBeGreaterThan(0);
+    expect(hapticCommands).toEqual([
+      { deviceIndex: "all", action: "vibrate", intensity: 0.2, duration: 4, pattern: "ramp" },
+    ]);
     const before = await readProof();
     await expect.poll(async () => (await readProof()).ticks).toBeGreaterThan(before.ticks + 10);
     expect((await readProof()).plays).toBe(before.plays);
@@ -155,6 +178,7 @@ test("installed Calls package stays responsive when browser blocks voice playbac
     if (isMobile) await page.getByRole("button", { name: "Close call chat", exact: true }).click();
     await page.getByRole("button", { name: "End call", exact: true }).click();
     await expect.poll(() => ended).toBe(true);
+    await expect.poll(() => hapticStops).toBeGreaterThan(0);
     await expect(input).toHaveCount(0);
   } finally {
     await page.close();

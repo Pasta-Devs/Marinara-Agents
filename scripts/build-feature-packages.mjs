@@ -87,6 +87,10 @@ const hierarchicalMapsOwnedSourcePaths = [
   "packages/client/src/components/game/GameWorldMap.tsx",
   "packages/maps-shared",
 ];
+const conversationCallsOwnedSourcePaths = [
+  "packages/client/src/components/chat/ConversationCallSurface.tsx",
+  "packages/server/src/routes/conversation-calls.routes.ts",
+];
 const longTermMemoryOwnedSourcePaths = [
   "packages/shared/src/features/agents/long-term-memory",
   "packages/server/src/services/long-term-memory",
@@ -182,6 +186,12 @@ function featurePermissions(feature) {
 }
 
 async function prepareFeatureBuildRoot(feature) {
+  if (feature.id === "conversation-calls") {
+    const buildRoot = await mkdtemp(join(tmpdir(), "marinara-conversation-calls-source-"));
+    await cp(sourceRoot, buildRoot, { recursive: true, force: true });
+    await cp(join(packagesDir, "conversation-calls/src/engine"), buildRoot, { recursive: true, force: true });
+    return { buildRoot, cleanup: () => rm(buildRoot, { recursive: true, force: true }) };
+  }
   if (feature.id === "noodle" || feature.id === "slurp2") {
     if (!existsSync(feature.packageSourceRoot)) {
       throw new Error(`Missing package-owned ${feature.name} source`);
@@ -530,7 +540,7 @@ const features = [
   {
     id: "conversation-calls",
     name: "Calls",
-    version: "1.0.17",
+    version: "1.0.18",
     minEngineVersion: "2.4.1",
     description: "Adds live audio and video calls with Conversation characters.",
     kind: ["agent", "conversation-calls"],
@@ -791,7 +801,11 @@ export async function selfCheck() {
       await captureEngineSources(
         metafile,
         prepared.buildRoot,
-        feature.id === "hierarchical-maps" ? hierarchicalMapsOwnedSourcePaths : [],
+        feature.id === "hierarchical-maps"
+          ? hierarchicalMapsOwnedSourcePaths
+          : feature.id === "conversation-calls"
+            ? conversationCallsOwnedSourcePaths
+            : [],
       );
     }
   } finally {
@@ -1510,6 +1524,9 @@ function Settings({ props }) {
     updateConfig.mutate({ ...value, callSttConnectionId: "", callSttModel: "", ...next });
   };
   const callsEnabled = metadata.conversationCallsEnabled === true;
+  const callHapticsEnabled = typeof metadata.conversationCallHapticsEnabled === "boolean"
+    ? metadata.conversationCallHapticsEnabled
+    : metadata.enableHapticFeedback === true && metadata.conversationCommandToggles?.haptic !== false;
   const connectionsKnown = Array.isArray(props.connections);
   const connections = connectionsKnown ? props.connections.filter((connection) => connection && typeof connection.id === "string") : [];
   const summaryConnectionId = typeof metadata.conversationCallSummaryConnectionId === "string" ? metadata.conversationCallSummaryConnectionId : "";
@@ -1538,6 +1555,7 @@ function Settings({ props }) {
     {callsEnabled ? <>
       <div className="space-y-1.5 border-t border-[var(--border)]/60 pt-3">
         <Toggle label="Generate voice cues in [tags]" description="Ask call models for cues like [whispering], [laughing], and [sighs] for TTS/video timing." enabled={metadata.conversationCallVoiceCues !== false} onClick={() => updateMetadata({ conversationCallVoiceCues: metadata.conversationCallVoiceCues === false })} />
+        <Toggle label="Haptics during calls" description="Play finite haptic cues when call playback reaches them. This is separate from haptic commands in text chat." enabled={callHapticsEnabled} onClick={() => updateMetadata({ conversationCallHapticsEnabled: !callHapticsEnabled })} />
         <label className="flex flex-col gap-1.5 rounded-lg bg-[var(--background)]/35 px-2.5 py-2">
           <span className="text-[0.6875rem] font-medium text-[var(--foreground)]">Call summary connection</span>
           <select value={summaryConnectionId} onChange={(event) => updateMetadata({ conversationCallSummaryConnectionId: event.target.value || null })} className="w-full rounded-lg border border-[var(--border)] bg-[var(--background)] px-2.5 py-2 text-xs text-[var(--foreground)] outline-none transition-colors focus:border-[var(--primary)]/50">
@@ -1600,7 +1618,7 @@ function Root({ element }) {
       }
     }}>{start.isPending ? <Loader2 size="0.875rem" className="animate-spin" /> : active ? <PhoneIncoming size="0.875rem" /> : <Phone size="0.875rem" />}</button>;
   }
-  if (expanded && active) return <div className="absolute inset-0 z-40 flex min-h-0 bg-[var(--background)]"><ConversationCallSurface chatId={chatId} session={active} characterMap={props.characterMap || new Map()} chatCharIds={props.chatCharIds || []} personaInfo={props.personaInfo} onEnded={() => setExpanded(null)} embedded /><Toaster richColors /></div>;
+  if (expanded && active) return <div className="absolute inset-0 z-40 flex min-h-0 bg-[var(--background)]"><ConversationCallSurface chatId={chatId} session={active} hapticIntifaceUrl={props.metadata?.hapticIntifaceUrl} characterMap={props.characterMap || new Map()} chatCharIds={props.chatCharIds || []} personaInfo={props.personaInfo} onEnded={() => setExpanded(null)} embedded /><Toaster richColors /></div>;
   if (ringing && !active) return <div className="px-3 pb-2"><div className="flex w-full items-center gap-3 rounded-lg border border-[var(--border)] bg-[var(--popover)] p-3 shadow-xl"><div className="flex h-9 w-9 items-center justify-center rounded-full bg-emerald-500/15 text-emerald-400"><PhoneIncoming size="1rem" /></div><div className="min-w-0 flex-1 text-sm font-semibold">Incoming call</div><button type="button" className="mari-chrome-control h-9 w-9 p-0 text-[var(--destructive)]" onClick={() => void decline.mutateAsync(ringing.id)}><PhoneOff size="0.875rem" /></button><button type="button" className="mari-chrome-control h-9 w-9 p-0 text-emerald-400" onClick={async () => { await accept.mutateAsync(ringing.id); setExpanded(chatId); }}><Phone size="0.875rem" /></button></div><Toaster richColors /></div>;
   return null;
 }
@@ -1649,7 +1667,11 @@ if (!customElements.get(${JSON.stringify(tag)})) customElements.define(${JSON.st
       await captureEngineSources(
         metafile,
         prepared.buildRoot,
-        feature.id === "hierarchical-maps" ? hierarchicalMapsOwnedSourcePaths : [],
+        feature.id === "hierarchical-maps"
+          ? hierarchicalMapsOwnedSourcePaths
+          : feature.id === "conversation-calls"
+            ? conversationCallsOwnedSourcePaths
+            : [],
       );
     }
   } finally {
@@ -1692,7 +1714,11 @@ for (const feature of selectedFeatures) {
   const agentsBuffer = Buffer.from(`${JSON.stringify([agentDefinition], null, 2)}\n`);
   const serverPath = join(sourceDir, "server.mjs");
   const serverSourceRoot =
-    feature.id === "hierarchical-maps" ? hierarchicalMapsSourceRoot : (feature.packageSourceRoot ?? sourceRoot);
+    feature.id === "hierarchical-maps"
+      ? hierarchicalMapsSourceRoot
+      : feature.id === "conversation-calls"
+        ? join(packagesDir, "conversation-calls/src/engine")
+        : (feature.packageSourceRoot ?? sourceRoot);
   const serverSource = resolve(serverSourceRoot, feature.serverImport || feature.engineImport);
   if (!reuseExistingRuntime && existsSync(serverSource)) {
     await bundleServer(feature, serverPath);

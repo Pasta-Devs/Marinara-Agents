@@ -40,6 +40,7 @@ import type {
   ConversationCallSession,
   ConversationCallSound,
   ConversationCallTurn,
+  HapticDeviceCommand,
   MessageAttachment,
   MessageReaction,
 } from "@marinara-engine/shared";
@@ -92,6 +93,7 @@ import { api } from "../../lib/api-client";
 interface ConversationCallSurfaceProps {
   chatId: string;
   session: ConversationCallSession;
+  hapticIntifaceUrl?: string;
   characterMap: CharacterMap;
   chatCharIds: string[];
   personaInfo?: PersonaInfo;
@@ -485,6 +487,26 @@ function getCommandStringParam(value: string | null | undefined, name: string) {
   if (singleQuoted?.[1]) return singleQuoted[1].trim();
   const bare = new RegExp(`${escapedName}\\s*=\\s*([^\\]\\s,]+)`, "i").exec(trimmed);
   return bare?.[1]?.trim() ?? "";
+}
+
+function parseCallHapticCommand(value: string): HapticDeviceCommand | null {
+  if (getBracketCommandName(value) !== "haptic") return null;
+  const action = getCommandStringParam(value, "action").toLowerCase();
+  if (action === "stop") return { deviceIndex: "all", action: "stop" };
+  if (!(["vibrate", "oscillate", "rotate", "position"] as string[]).includes(action)) return null;
+  const intensityText = getCommandStringParam(value, "intensity");
+  const intensityValue = Number(intensityText);
+  const durationValue = Number(getCommandStringParam(value, "duration"));
+  const pattern = getCommandStringParam(value, "pattern").toLowerCase();
+  return {
+    deviceIndex: "all",
+    action: action as HapticDeviceCommand["action"],
+    intensity: intensityText && Number.isFinite(intensityValue) ? Math.max(0, Math.min(1, intensityValue)) : 0.2,
+    duration: Number.isFinite(durationValue) && durationValue > 0 ? Math.min(8, durationValue) : 4,
+    ...(["steady", "tap", "pulse", "wave", "ramp", "impact"].includes(pattern)
+      ? { pattern: pattern as HapticDeviceCommand["pattern"] }
+      : {}),
+  };
 }
 
 function getCommandRootStringValue(value: string | null | undefined) {
@@ -1144,6 +1166,7 @@ function ParticipantTile({
 export function ConversationCallSurface({
   chatId,
   session,
+  hapticIntifaceUrl,
   characterMap,
   chatCharIds,
   personaInfo,
@@ -1213,6 +1236,7 @@ export function ConversationCallSurface({
   const voicePlaybackInterruptedRef = useRef(false);
   const callCancelledRef = useRef(session.status !== "active");
   const callPlaybackAbortRef = useRef<AbortController | null>(null);
+  const callHapticActiveRef = useRef(false);
   const participantIdsRef = useRef<Set<string>>(new Set());
   const playedStartSoundForRef = useRef<string | null>(null);
   const playedEndSoundForRef = useRef<string | null>(null);
@@ -1447,7 +1471,16 @@ export function ConversationCallSurface({
     setRecording(false);
   }, [setUserSpeakingState, stopStream]);
 
+  const stopCallHaptic = useCallback(() => {
+    if (!callHapticActiveRef.current) return;
+    callHapticActiveRef.current = false;
+    void api.post("/haptic/stop-all", {}).catch((error) => {
+      console.warn("[conversation-call] Could not stop call haptics", error);
+    });
+  }, []);
+
   const cleanupLiveCallMedia = useCallback(() => {
+    stopCallHaptic();
     activeCallVoiceRef.current = null;
     callSpeechSubmissionPendingRef.current = false;
     userInterruptionVoicedMsRef.current = 0;
@@ -1456,7 +1489,7 @@ export function ConversationCallSurface({
     stopLiveMicCapture();
     stopStream(cameraStream);
     stopStream(screenStream);
-  }, [cameraStream, screenStream, stopLiveMicCapture, stopStream]);
+  }, [cameraStream, screenStream, stopCallHaptic, stopLiveMicCapture, stopStream]);
 
   useEffect(() => {
     callCancelledRef.current = session.status !== "active";
@@ -1464,14 +1497,16 @@ export function ConversationCallSurface({
     callPlaybackAbortRef.current = session.status === "active" ? new AbortController() : null;
     if (session.status !== "active") {
       ttsService.stop();
+      stopCallHaptic();
     }
     return () => {
       callCancelledRef.current = true;
       callPlaybackAbortRef.current?.abort();
       ttsService.stop();
+      stopCallHaptic();
       callPlaybackAbortRef.current = null;
     };
-  }, [session.id, session.status]);
+  }, [session.id, session.status, stopCallHaptic]);
 
   const playEndSoundOnce = useCallback(() => {
     if (playedEndSoundForRef.current === session.id) return;
@@ -1819,6 +1854,7 @@ export function ConversationCallSurface({
     interruptedVoiceKeyRef.current = activeVoice.key;
     voicePlaybackInterruptedRef.current = true;
     ttsService.stop();
+    stopCallHaptic();
     recordInterruption.mutate(
       {
         characterId: activeVoice.characterId,
@@ -1831,7 +1867,7 @@ export function ConversationCallSurface({
         },
       },
     );
-  }, [recordInterruption]);
+  }, [recordInterruption, stopCallHaptic]);
 
   const updateVoiceInterruptionDetector = useCallback(
     (speechConfirmed: boolean) => {
@@ -1871,7 +1907,38 @@ export function ConversationCallSurface({
           let pauseSourceTurn = turn;
           if (turn.mode === "command") {
             const commandName = getBracketCommandName(turn.content);
-            if (commandName === "soundboard") {
+            if (commandName === "haptic") {
+              const command = parseCallHapticCommand(turn.content);
+              if (command) {
+                try {
+                  if (command.action === "stop") {
+                    await api.post("/haptic/stop-all", {});
+                    callHapticActiveRef.current = false;
+                  } else {
+                    callHapticActiveRef.current = true;
+                    const status = await api.get<{ connected: boolean }>("/haptic/status");
+                    if (!status.connected) {
+                      await api.post("/haptic/connect", { url: hapticIntifaceUrl });
+                    }
+                    if (callCancelledRef.current || playbackSignal?.aborted) {
+                      stopCallHaptic();
+                      break;
+                    }
+                    await api.post("/haptic/command", command, { signal: playbackSignal });
+                    if (callCancelledRef.current || playbackSignal?.aborted) {
+                      callHapticActiveRef.current = true;
+                      stopCallHaptic();
+                    }
+                  }
+                } catch (error) {
+                  if (!playbackSignal?.aborted) console.warn("[conversation-call] Haptic playback failed", error);
+                  if (callCancelledRef.current || playbackSignal?.aborted) {
+                    callHapticActiveRef.current = true;
+                    stopCallHaptic();
+                  }
+                }
+              }
+            } else if (commandName === "soundboard") {
               await playSoundByName(getSoundboardCommandName(turn.content));
             } else if (commandName === "play_clip") {
               await playCustomClipByName(turn);
@@ -2043,6 +2110,7 @@ export function ConversationCallSurface({
       characterVoicesMuted,
       clearParticipantVideoTalking,
       handleCallEndedByCharacter,
+      hapticIntifaceUrl,
       handleCharacterLeftCall,
       participants,
       playCustomClipByName,
@@ -2051,6 +2119,7 @@ export function ConversationCallSurface({
       session.id,
       setParticipantVideoTalking,
       setYoutubePlay,
+      stopCallHaptic,
       ttsConfig,
     ],
   );

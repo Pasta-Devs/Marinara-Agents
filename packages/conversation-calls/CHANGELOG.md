@@ -1,5 +1,10 @@
 # Calls release notes
 
+## 1.0.18 — 2026-09-30
+
+- Call haptic commands now play in order with spoken turns instead of firing while the reply is being saved. Stopping or interrupting the call stops active feedback.
+- Add a per-chat Haptics during calls switch so call cues can be enabled without also enabling inline haptic commands in text chat.
+
 ## 1.0.17 — 2026-09-19
 
 - Keep calls responsive when Safari blocks voice playback: wait for a new touch or key press, and let stopping a call cancel pending playback.

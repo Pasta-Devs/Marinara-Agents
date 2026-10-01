@@ -19,8 +19,7 @@ for (const required of [
   if (!existsSync(required)) throw new Error(`Required package-browser input is missing: ${required}`);
 }
 
-const executable = process.platform === "win32" ? "playwright.cmd" : "playwright";
-const playwrightCommand = resolve(agentsRoot, "node_modules", ".bin", executable);
+const playwrightCommand = resolve(agentsRoot, "node_modules", "@playwright", "test", "cli.js");
 if (!existsSync(playwrightCommand)) throw new Error("Run npm ci before package browser tests");
 
 const environment = {
@@ -95,8 +94,8 @@ try {
   await waitForUrl(process.env.PLAYWRIGHT_BASE_URL ?? "http://127.0.0.1:5188");
 
   const testProcess = spawn(
-    playwrightCommand,
-    ["test", testFile, "-c", "tests/playwright.package.config.ts", ...playwrightArgs],
+    process.execPath,
+    [playwrightCommand, "test", testFile, "-c", "tests/playwright.package.config.ts", ...playwrightArgs],
     {
       cwd: agentsRoot,
       env: { ...environment, PLAYWRIGHT_SKIP_WEBSERVER: "true" },

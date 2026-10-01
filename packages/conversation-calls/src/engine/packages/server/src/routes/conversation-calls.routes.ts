@@ -53,7 +53,6 @@ import {
   parseDuration,
   type CharacterCommand,
   type CrossPostCommand,
-  type HapticCommand,
   type InfluenceCommand,
   type MemoryCommand,
   type NoteCommand,
@@ -543,6 +542,11 @@ function isCallConversationCommandEnabled(metadata: Record<string, unknown>, key
   return toggles[key] !== false;
 }
 
+function isCallHapticEnabled(metadata: Record<string, unknown>) {
+  if (typeof metadata.conversationCallHapticsEnabled === "boolean") return metadata.conversationCallHapticsEnabled;
+  return metadata.enableHapticFeedback === true && isCallConversationCommandEnabled(metadata, "haptic");
+}
+
 function addCallMessageReactor(
   reactions: unknown,
   emoji: string,
@@ -758,8 +762,9 @@ function formatCallCommandPromptLines(
       ];
     case "haptic":
       return [
-        `- [haptic: action="vibrate|oscillate|rotate|position|stop", intensity=0.0-1.0, duration=seconds (0 = loop until next command)] or [haptic: action="stop"] - control or stop the user's connected intimate device(s) (${hapticDevices}). Use this during physical/intimate/sensual moments to provide haptic feedback that matches the scene. Vary intensity based on the moment.`,
-        "   You can include multiple [haptic] commands in one response for patterns, but each command turn must contain exactly one command.",
+        `- [haptic: action="vibrate|oscillate|rotate|position|stop", intensity=0.0-1.0, duration=seconds (1-8), pattern="steady|ramp|pulse|wave|tap|impact"] or [haptic: action="stop"] - control or stop the user's connected device(s) (${hapticDevices}). Use this only for a current physical action, and stop promptly when asked.`,
+        "   Put each [haptic] command immediately before the spoken turn it should accompany. Use one command per command turn and a finite duration; never request an indefinite loop.",
+        "   Read recent call haptic commands as pacing context: build only when the current exchange supports it, hold a steady level through ordinary dialogue, lower it as soon as requested, and stop on a pause, discomfort, or ending. Never increase merely because another turn passed.",
       ];
     case "influence":
       return [
@@ -1096,7 +1101,7 @@ async function buildCallPrompt(input: {
     }
     const agentsStore = createAgentsStorage(input.app.db);
     let hapticAvailable = false;
-    if (commandToggles.haptic !== false && metadata.enableHapticFeedback === true) {
+    if (isCallHapticEnabled(metadata)) {
       try {
         const { hapticService } = await import("../services/haptic/buttplug-service.js");
         if (!hapticService.connected) await hapticService.connect(getChatHapticIntifaceUrl(metadata)).catch(() => {});
@@ -1595,32 +1600,6 @@ async function applyCallMusicCommand(input: {
   }
 }
 
-async function applyCallHapticCommand(input: { metadata: Record<string, unknown>; command: HapticCommand }) {
-  if (input.metadata.enableHapticFeedback !== true) return;
-  try {
-    const { hapticService } = await import("../services/haptic/buttplug-service.js");
-    if (!hapticService.connected) await hapticService.connect(getChatHapticIntifaceUrl(input.metadata)).catch(() => {});
-    if (!hapticService.connected || hapticService.devices.length === 0) {
-      logger.debug("[conversation-call] Haptic command skipped because no device is connected");
-      return;
-    }
-    await hapticService.executeCommand({
-      deviceIndex: "all",
-      action: input.command.action,
-      intensity: input.command.intensity,
-      duration: input.command.duration,
-    });
-    logger.info(
-      "[conversation-call] Haptic command executed: %s intensity=%s duration=%s",
-      input.command.action,
-      input.command.intensity ?? "default",
-      input.command.duration ?? "indefinite",
-    );
-  } catch (error) {
-    logger.warn(error, "[conversation-call] Haptic command failed");
-  }
-}
-
 async function buildCallSelfiePrompt(input: {
   app: FastifyInstance;
   chat: NonNullable<ChatRow>;
@@ -1976,7 +1955,8 @@ async function executeCallConversationCommand(input: {
   const createdMessages: ConversationCallMessage[] = [];
   for (const command of parsed.commands) {
     const key = getCallConversationCommandKey(command);
-    if (key && !isCallConversationCommandEnabled(metadata, key)) continue;
+    if (key && !(key === "haptic" ? isCallHapticEnabled(metadata) : isCallConversationCommandEnabled(metadata, key)))
+      continue;
 
     if (command.type === "schedule_update") {
       await applyCallScheduleUpdate({
@@ -2024,7 +2004,7 @@ async function executeCallConversationCommand(input: {
         command: command as SpotifyCommand | YouTubeCommand,
       });
     } else if (command.type === "haptic") {
-      await applyCallHapticCommand({ metadata, command: command as HapticCommand });
+      // The client dispatches this command when playback reaches its turn.
     } else if (command.type === "influence") {
       const connectedId = freshChat.connectedChatId;
       const content = stripConversationPromptTimestamps((command as InfluenceCommand).content);
@@ -2059,7 +2039,7 @@ async function persistCallAssistantTurns(input: {
 }> {
   const assistantMessages: ConversationCallMessage[] = [];
   const resolvedTurns: ConversationCallTurn[] = [];
-  let responseSession: ConversationCallSession = input.session;
+  const responseSession: ConversationCallSession = input.session;
   const metadata = parseJsonRecord(input.chat.metadata);
   const allCharacterIds = readCharacterIds(input.chat.characterIds);
   const availableCharacterIds = getAvailableCallCharacterIds(metadata, allCharacterIds);
@@ -2074,6 +2054,13 @@ async function persistCallAssistantTurns(input: {
     const character = characters.find((candidate) => candidate.id === characterId);
     const effectiveMode =
       turn.mode === "voice" && character && !characterCanSpeak(ttsSettings, character) ? "text" : turn.mode;
+    if (
+      effectiveMode === "command" &&
+      getBracketCommandName(turn.content) === "haptic" &&
+      (metadata.characterCommands === false || !isCallHapticEnabled(metadata))
+    ) {
+      continue;
+    }
     const turnWithResolvedCharacter = { ...turn, mode: effectiveMode, characterId };
     resolvedTurns.push(turnWithResolvedCharacter);
     if (effectiveMode === "command") {
