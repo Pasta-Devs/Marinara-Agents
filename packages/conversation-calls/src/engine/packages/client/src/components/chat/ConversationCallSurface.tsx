@@ -45,6 +45,7 @@ import type {
   MessageReaction,
 } from "@marinara-engine/shared";
 import { cn, generateClientId, getAvatarCropStyle, type AvatarCropValue } from "../../lib/utils";
+import { prioritizeFirstCallHaptic } from "./call-haptic-playback";
 import type { CharacterMap, PersonaInfo } from "./chat-area.types";
 import {
   conversationCallKeys,
@@ -1896,6 +1897,7 @@ export function ConversationCallSurface({
   const playTurns = useCallback(
     async (turns: ConversationCallTurn[]) => {
       if (callCancelledRef.current) return;
+      turns = prioritizeFirstCallHaptic(turns);
       const playbackSignal = callPlaybackAbortRef.current?.signal;
       playingTurnsRef.current = true;
       voicePlaybackInterruptedRef.current = false;

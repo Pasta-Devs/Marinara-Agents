@@ -204,13 +204,13 @@
           },
           {
             "path": "server.mjs",
-            "sha256": "a2678e4b6f5b86362a708e7a693f3bf183efef8d7555583abcfa199b9d92165c",
-            "bytes": 2462244
+            "sha256": "103a75077f985234abd4b42876ad1bad05b50a372112b9ef1d76e0b65d929561",
+            "bytes": 2462616
           },
           {
             "path": "client.js",
-            "sha256": "64966682c573849896c68f9ced412d4859e105fcd68a008daba88996b911ee07",
-            "bytes": 853812
+            "sha256": "7088d0836e841196be7a690201cf7591a090256a1d79fb29c1bdd0892e82e6a2",
+            "bytes": 854126
           }
         ],
         "permissions": [
@@ -228,8 +228,8 @@
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/conversation-calls.png",
       "artifact": {
         "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/conversation-calls-1.0.18.zip",
-        "sha256": "1f47fe7dd8b137094c905f15e3e9b57aa333aa793e0a58423b2caede342d1845",
-        "bytes": 3318180
+        "sha256": "046e5301a7b091ac9c7afa6d7240392ab7a222e7c429ba6212043a7629030803",
+        "bytes": 3318866
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents#conversation-calls"
     },

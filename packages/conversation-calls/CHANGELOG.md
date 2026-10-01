@@ -2,6 +2,7 @@
 
 ## 1.0.18 — 2026-09-30
 
+- Send the first device cue in a call reply before speech, and require a real cue when a character says they changed or retried the device.
 - Call cues now list only actions supported by connected devices, so vibration-only devices receive usable pacing commands.
 - Call haptic commands now play in order with spoken turns instead of firing while the reply is being saved. Stopping or interrupting the call stops active feedback.
 - Add a per-chat Haptics during calls switch so call cues can be enabled without also enabling inline haptic commands in text chat.
