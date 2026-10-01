@@ -722,6 +722,7 @@ function formatCallCommandPromptLines(
     crossPostTargetNames: string[];
     memoryTargetNames: string[];
     hapticDeviceNames: string[];
+    hapticActions: string[];
     soundNames: string[];
     customClipTargets: string[];
   },
@@ -762,7 +763,7 @@ function formatCallCommandPromptLines(
       ];
     case "haptic":
       return [
-        `- [haptic: action="vibrate|oscillate|rotate|position|stop", intensity=0.0-1.0, duration=seconds (1-8), pattern="steady|ramp|pulse|wave|tap|impact"] or [haptic: action="stop"] - control or stop the user's connected device(s) (${hapticDevices}). Use this only for a current physical action, and stop promptly when asked.`,
+        `- [haptic: action="${context.hapticActions.join("|")}|stop", intensity=0.0-1.0, duration=seconds (1-8), pattern="steady|ramp|pulse|wave|tap|impact"] or [haptic: action="stop"] - control or stop the user's connected device(s) (${hapticDevices}). Use only the listed actions. For vibration-only devices, vary intensity and pattern to change pace. Stop promptly when asked.`,
         "   Put each [haptic] command immediately before the spoken turn it should accompany. Use one command per command turn and a finite duration; never request an indefinite loop.",
         "   Read recent call haptic commands as pacing context: build only when the current exchange supports it, hold a steady level through ordinary dialogue, lower it as soon as requested, and stop on a pause, discomfort, or ending. Never increase merely because another turn passed.",
       ];
@@ -1046,6 +1047,7 @@ async function buildCallPrompt(input: {
   const crossPostTargetNames: string[] = [];
   const memoryTargetNames = new Set(characters.map((character) => character.name));
   const hapticDeviceNames: string[] = [];
+  const hapticActions = new Set<string>();
   const playableCustomClipTargets: string[] = [];
   const customVideoClipConnection =
     characterVideoPresenceEnabled && ttsSettings.callCustomVideoClipsEnabled === true
@@ -1107,7 +1109,13 @@ async function buildCallPrompt(input: {
         if (!hapticService.connected) await hapticService.connect(getChatHapticIntifaceUrl(metadata)).catch(() => {});
         hapticAvailable = hapticService.connected && hapticService.devices.length > 0;
         if (hapticAvailable) {
-          hapticDeviceNames.push(...hapticService.devices.map((device) => device.name).filter(Boolean));
+          for (const device of hapticService.devices) {
+            hapticDeviceNames.push(`${device.name} (${device.capabilities.join(", ")})`);
+            for (const capability of device.capabilities) {
+              if (["vibrate", "oscillate", "rotate", "position"].includes(capability)) hapticActions.add(capability);
+            }
+          }
+          hapticAvailable = hapticActions.size > 0;
         }
       } catch (error) {
         logger.debug(error, "[conversation-call] Haptic command unavailable while building call prompt");
@@ -1156,6 +1164,7 @@ async function buildCallPrompt(input: {
       crossPostTargetNames,
       memoryTargetNames: [...memoryTargetNames],
       hapticDeviceNames,
+      hapticActions: [...hapticActions],
       soundNames,
       customClipTargets: playableCustomClipTargets,
     }),

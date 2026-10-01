@@ -457,5 +457,7 @@ class ButtplugService {
   }
 }
 
-/** Singleton instance — shared across the server lifetime. */
-export const hapticService = new ButtplugService();
+/** Share one connection with the Engine host despite separate package bundles. */
+const hapticServiceKey = Symbol.for("@marinara-engine/haptic-service");
+const sharedHapticServices = globalThis as typeof globalThis & Record<symbol, ButtplugService | undefined>;
+export const hapticService = (sharedHapticServices[hapticServiceKey] ??= new ButtplugService());
