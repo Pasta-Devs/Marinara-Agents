@@ -10,6 +10,7 @@ import { SlpButton, SlpChip, slpTagClass } from "../../modules/chrome/SlpButton"
 import { SlpEmptyState, SlpErrorState, SlpSkeleton } from "../../modules/chrome/SlpStateKit";
 import { SlpDeskCaseFile, SlpDeskTrustChip } from "../../modules/desk/SlpDeskCaseFile";
 import { useSlurpSettings } from "../settings/slp-settings-contract";
+import { SlpYourFile } from "../onboarding/slp-onboarding-contract";
 import type { SlpActionName } from "../../../../../shared/src/slp/slp-actions.js";
 import type { SlpSupportDesk } from "../../../../../shared/src/slp/slp-support-desk.js";
 
@@ -38,8 +39,11 @@ export function SlpStirDesk({
   personaId,
   onOpenThread,
   onPlay,
+  onRunSetupAgain,
 }: {
   personaId: string | null;
+  /** "Your file" reopens the welcome ticket at the questions. */
+  onRunSetupAgain?: () => void;
   /** Their Slurp Support chat. */
   onOpenThread?: (creatorId: string) => void;
   onPlay: (action: SlpActionName, who?: string[]) => void;
@@ -92,6 +96,7 @@ export function SlpStirDesk({
           "You are Slurp's staff. Every Creator has a case file: how much they trust Slurp, how suspicious they are, and what you have running with them.",
         )}
       </p>
+      <SlpYourFile onRunSetupAgain={onRunSetupAgain} />
       {query.isPending ? (
         <SlpSkeleton count={3} label={t("ui.slurp.state.loading")} />
       ) : query.isError && !query.data ? (
