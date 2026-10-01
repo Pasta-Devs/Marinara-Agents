@@ -24,18 +24,27 @@ export type SlpChatItem =
   /** A labelled rule across the list ("New"). */
   | { kind: "divider"; id: string; label: string };
 
-export type SlpChatChip = { id: string; label: string; onSelect: () => void; primary?: boolean };
+export type SlpChatChip = {
+  id: string;
+  label: string;
+  onSelect: () => void;
+  primary?: boolean;
+  /** When the label alone does not say it (★★★ reads as "3 of 5 stars"). */
+  ariaLabel?: string;
+};
 
 export function SlpChatShell({
   host,
   status,
   headerEnd,
+  subheader,
   titleRef,
   items,
   chips = [],
   chipsLabel,
   composer,
   pace = 0,
+  history = 0,
   scrollTo = null,
   labels,
 }: {
@@ -44,6 +53,8 @@ export function SlpChatShell({
   status?: ReactNode;
   /** The end of the header (a close button). */
   headerEnd?: ReactNode;
+  /** A row under the header (the Support rail's progress). */
+  subheader?: ReactNode;
   /** The host name; it takes `data-autofocus`, so a dialog's first focus lands here. */
   titleRef?: Ref<HTMLHeadingElement>;
   items: readonly SlpChatItem[];
@@ -57,14 +68,17 @@ export function SlpChatShell({
    * own bubbles appear at once. 0, or reduced motion, shows everything at once.
    */
   pace?: number;
+  /** The first items arrive at once even when paced (a thread resumed after a reload). */
+  history?: number;
   /** The item to bring into view on open (the "New" divider); otherwise the list follows the bottom. */
   scrollTo?: string | null;
   labels: { log: string; typing: string };
 }) {
   const paced = pace > 0 && !slpPrefersReducedMotion();
-  const [shown, setShown] = useState(() => (paced ? 0 : items.length));
+  const [shown, setShown] = useState(() => (paced ? history : items.length));
   // A thread that rewinds (a "Change" in the Support rail) must not skip the pause on its new lines.
   if (paced && shown > items.length) setShown(items.length);
+  else if (paced && shown < Math.min(history, items.length)) setShown(Math.min(history, items.length));
   const visible = paced ? Math.min(shown, items.length) : items.length;
   const pending = items[visible];
   const typing = pending !== undefined && !(pending.kind === "bubble" && pending.mine);
@@ -110,6 +124,7 @@ export function SlpChatShell({
         </div>
         {headerEnd}
       </header>
+      {subheader}
 
       <div
         ref={listRef}
@@ -171,7 +186,7 @@ export function SlpChatShell({
                 ) : (
                   <p
                     className={cn(
-                      "w-fit whitespace-pre-wrap break-words rounded-[1.25rem] px-3.5 py-2 text-[0.95rem] leading-snug text-pretty sm:text-sm sm:leading-relaxed",
+                      "w-fit whitespace-pre-wrap break-words rounded-[1.25rem] px-3.5 py-2 text-[15px] leading-snug text-pretty sm:text-sm sm:leading-relaxed",
                       mine && "ms-auto",
                       slurpBubbleSurface(mine),
                     )}
@@ -210,6 +225,7 @@ export function SlpChatShell({
             <SlpChip
               key={chip.id}
               aria-pressed={undefined}
+              aria-label={chip.ariaLabel}
               selected={chip.primary}
               className="min-h-11 px-4"
               onClick={chip.onSelect}

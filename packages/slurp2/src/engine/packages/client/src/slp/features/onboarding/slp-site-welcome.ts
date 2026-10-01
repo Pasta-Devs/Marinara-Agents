@@ -228,8 +228,9 @@ function slpRailSkipped(step: SlpRailStep, state: SlpRailState, context: SlpRail
   ) {
     return true;
   }
-  // The fast lane answers every question after "who" with its default. Lines still play.
-  const laneCovers = step.kind === "ask" && (step.chapter === "setup" || step.chapter === "fun") && step.id !== "who";
+  // The fast lane answers the core questions after "who" and the fun-part offer with defaults. Lines
+  // still play, and a fun part switched on later through Change asks its questions.
+  const laneCovers = step.kind === "ask" && ((step.chapter === "setup" && step.id !== "who") || step.id === "fun");
   if (laneCovers && state.answers.lane === "recommended") return true;
   if (step.kind === "say" || step.kind === "ask")
     return step.when ? !step.when(slpRailAnswers(state, context), context) : false;
@@ -249,6 +250,17 @@ export function slpRailNext(state: SlpRailState, context: SlpRailContext): SlpRa
   );
 }
 
+/** Plays every line and card that waits for nothing, up to the next step that needs the player. */
+export function slpRailSettle(state: SlpRailState, context: SlpRailContext): SlpRailState {
+  const seen = [...state.seen];
+  for (;;) {
+    const step = slpRailNext({ ...state, seen }, context);
+    if (!step || (step.kind !== "say" && step.kind !== "card") || step.tap) break;
+    seen.push(step.id);
+  }
+  return seen.length === state.seen.length ? state : { ...state, seen };
+}
+
 /** Everything played so far, in order: what the chat shows above the current step. */
 export function slpRailTranscript(state: SlpRailState, context: SlpRailContext): SlpRailStep[] {
   const steps = slpRailSteps(context).filter((step) => !slpRailSkipped(step, state, context));
@@ -264,6 +276,36 @@ export function slpRailStop(step: SlpRailStep | null): SlpRailStop {
 export function slpRailCanSkipIntro(state: SlpRailState, context: SlpRailContext): boolean {
   const step = slpRailNext(state, context);
   return !!step && (step.chapter === "what" || step.chapter === "locked") && state.events.includes("ageConfirmed");
+}
+
+const FILE_CORE: readonly SlpRailQuestion[] = [
+  "who",
+  "connection",
+  "pace",
+  "pictures",
+  "imageConnection",
+  "spice",
+  "names",
+  "nights",
+];
+const FILE_FUN: readonly SlpRailQuestion[] = ["fans", "size", "drama", "ads", "adTone", "pullStrings"];
+
+/**
+ * The rows of the member file (and of "Your Slurp"): every core question that applies, then the fun
+ * part's questions when it is on, else one "fun part" row. Connection and pace always show, so a
+ * player without a text connection sees why nothing will run.
+ */
+export function slpRailFileRows(state: SlpRailState, context: SlpRailContext): SlpRailQuestion[] {
+  const answers = slpRailAnswers(state, context);
+  const asks = new Map(
+    slpRailSteps(context).flatMap((step) => (step.kind === "ask" ? [[step.id, step] as const] : [])),
+  );
+  const applies = (id: SlpRailQuestion) => {
+    const step = asks.get(id);
+    return !step?.when || step.when(answers, context);
+  };
+  const core = FILE_CORE.filter((id) => id === "connection" || id === "pace" || applies(id));
+  return answers.fun === "sure" ? [...core, ...FILE_FUN.filter(applies)] : [...core, "fun"];
 }
 
 const pick = (connections: readonly SlpRailConnection[], current: string | null) =>
@@ -397,51 +439,4 @@ export function slpRailStamp(state: SlpRailState, context: SlpRailContext): SlpR
     },
     lead: answers.who === "watch" ? "feed" : "signup",
   };
-}
-
-// The five-question welcome that `SlpSiteWelcome.tsx` still renders. Phase 2b renders the rail
-// above instead and removes these.
-
-export const SLP_SITE_WELCOME_QUESTIONS = ["who", "pace", "pictures", "nights", "names"] as const;
-export type SlpSiteWelcomeQuestion = (typeof SLP_SITE_WELCOME_QUESTIONS)[number];
-
-export const SLP_SITE_WELCOME_OPTIONS = {
-  who: ["watch", "run", "both"],
-  pace: SLURP_ACTIVITY_PRESETS,
-  pictures: ["yes", "no"],
-  nights: ["yes", "no"],
-  names: ["hinted", "open"],
-} as const satisfies Record<SlpSiteWelcomeQuestion, readonly string[]>;
-
-export type SlpSiteWelcomeAnswers = Partial<{
-  who: "watch" | "run" | "both";
-  pace: SlurpActivityPreset;
-  pictures: "yes" | "no";
-  nights: "yes" | "no";
-  names: "hinted" | "open";
-}>;
-
-/** The first question still open, or null when the form is done. */
-export function slpSiteWelcomeNext(answers: SlpSiteWelcomeAnswers): SlpSiteWelcomeQuestion | null {
-  return SLP_SITE_WELCOME_QUESTIONS.find((question) => answers[question] === undefined) ?? null;
-}
-
-/** Where the join leads: a watcher goes to the feed first, everyone else signs someone up. */
-export function slpSiteWelcomeLead(answers: SlpSiteWelcomeAnswers): "feed" | "signup" {
-  return answers.who === "watch" ? "feed" : "signup";
-}
-
-/** The wizard settings one answer changes. "who" only decides where the join leads. */
-export function slpSiteWelcomeSetting(
-  question: SlpSiteWelcomeQuestion,
-  value: string,
-):
-  | { kind: "pace"; value: SlurpActivityPreset }
-  | { kind: "pictures" | "nights"; value: boolean }
-  | { kind: "names"; value: "hinted" | "open" }
-  | null {
-  if (question === "pace") return { kind: "pace", value: value as SlurpActivityPreset };
-  if (question === "pictures" || question === "nights") return { kind: question, value: value === "yes" };
-  if (question === "names") return { kind: "names", value: value === "open" ? "open" : "hinted" };
-  return null;
 }

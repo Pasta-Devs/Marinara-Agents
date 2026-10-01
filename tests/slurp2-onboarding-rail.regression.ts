@@ -6,7 +6,9 @@ import {
   slpRailAnswerPatch,
   slpRailCanSkipIntro,
   slpRailDefaults,
+  slpRailFileRows,
   slpRailNext,
+  slpRailSettle,
   slpRailStamp,
   slpRailSteps,
   slpRailStop,
@@ -173,6 +175,54 @@ assert.deepEqual(slpRailStamp(lane.state, context()), {
 const laneOffline = play(offline, { lane: "recommended" }, empty());
 assert.ok(laneOffline.ids.includes("noConnection"), "the no-connection line still plays on the fast lane");
 
+// A fun part switched on later through Change still asks its questions on the fast lane.
+const laneFun = { ...lane.state, answers: { ...lane.state.answers, fun: "sure" as const } };
+assert.equal(slpRailNext(laneFun, context())?.id, "fans");
+
+// Settle plays every line and card that waits for nothing, and stops at the next tap or question.
+assert.deepEqual(slpRailSettle(empty(), context()).seen, ["hello1", "hello2"], "stops at the Hi! chip");
+const started = slpRailSettle({ ...empty(), seen: ["hello1", "hello2"], events: ["start"] }, context());
+assert.deepEqual(started.seen, ["hello1", "hello2", "id1", "pastapay"], "stops at the age check");
+assert.equal(slpRailNext(started, context())?.id, "ageConfirmed");
+const confirmedSettled = slpRailSettle({ ...started, events: ["start", "ageConfirmed"] }, context());
+assert.equal(slpRailNext(confirmedSettled, context())?.id, "sampleCreator", "the sample card waits for Go on");
+const settledState = slpRailSettle(empty(), context());
+assert.equal(slpRailSettle(settledState, context()), settledState, "nothing to play: the same state");
+
+// The member file: core rows that apply, then the fun part's rows or one "fun part" row.
+assert.deepEqual(slpRailFileRows(lane.state, context()), [
+  "who",
+  "connection",
+  "pace",
+  "pictures",
+  "spice",
+  "names",
+  "nights",
+  "fun",
+]);
+assert.deepEqual(slpRailFileRows(full.state, context()), [
+  "who",
+  "connection",
+  "pace",
+  "pictures",
+  "imageConnection",
+  "spice",
+  "names",
+  "nights",
+  "fans",
+  "size",
+  "drama",
+  "ads",
+  "adTone",
+  "pullStrings",
+]);
+assert.ok(!slpRailFileRows(watcher.state, context()).includes("pullStrings"), "a watcher has no strings to pull");
+assert.deepEqual(
+  slpRailFileRows(noConnection.state, offline).slice(1, 3),
+  ["connection", "pace"],
+  "shown without a connection",
+);
+
 // Skip the fun part: those questions are not asked and their settings stay untouched.
 const skipFun = play(context(), { fun: "skip", who: "run" });
 assert.ok(!["fans", "size", "drama", "ads", "adTone", "pullStrings"].some((id) => skipFun.ids.includes(id)));
@@ -334,6 +384,10 @@ const keys: string[] = [
   "ui.slurp.site.a.connection.default",
   "ui.slurp.site.tap.recommended",
 ];
+for (const key of ["ticket", "status.open", "status.resolved", "tap.leave", "memberFile", "stamped", "card.sample"])
+  keys.push(`ui.slurp.site.${key}`);
+for (const key of ["value.none", "label.fun", "close", "reply", "log", "typing", "previewEmpty", "yourFile", "again"])
+  keys.push(`ui.slurp.site.${key}`);
 keys.push(
   "ui.slurp.site.tap.skipIntro",
   "ui.slurp.site.tap.connections",
