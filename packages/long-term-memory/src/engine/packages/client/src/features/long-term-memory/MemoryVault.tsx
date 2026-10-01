@@ -29,7 +29,14 @@ import {
   ltmScopesOverlap,
   normalizeLtmScope,
 } from "../../../../shared/src/features/agents/long-term-memory/scope.js";
-import { invalidateLtmQueries, ltmScopeTargetsKey, queryKeys, request, requestAllNotes } from "./api";
+import {
+  invalidateLtmQueries,
+  ltmScopeTargetsKey,
+  queryKeys,
+  request,
+  requestAllNotes,
+  requestNotesByIds,
+} from "./api";
 import { Button, ClickSurface, IconButton, InfoPopover, inputClass, StatusSurface } from "./shared-controls";
 import type { LongTermMemoryDestinationProps } from "./types";
 import {
@@ -665,6 +672,16 @@ function preview(
     label: formatNoteTypeLabel(key, localizeUi),
     text: `${start ? "..." : ""}${text.slice(start, start + 180)}${start + 180 < text.length ? "..." : ""}`,
   };
+}
+
+function deleteConfirmationExcerpt(note: LtmNote, emptyLabel: string) {
+  const text = Object.values(note.sections)
+    .map((section) => section.text.trim())
+    .filter(Boolean)
+    .join(" ")
+    .replace(/\s+/gu, " ");
+  if (!text) return emptyLabel;
+  return text.length > 180 ? `${text.slice(0, 180).trimEnd()}...` : text;
 }
 
 function suggestedDetailKey(type: LtmNoteType) {
@@ -1505,7 +1522,16 @@ export default function MemoryVault({
   const navigatorContextRef = useRef<string | null>(null);
   const editorSession = useRef(0);
   const noteLoadSession = useRef(0);
+  // A permanent-delete confirmation must not act on targets the user has since
+  // deselected or re-scoped while its target lookup was still resolving. The
+  // revision changes on every selection or secondary-scope change; the delete
+  // path captures it before awaiting and re-checks it before confirming and
+  // before submitting.
+  const deleteTargetRevision = useRef(0);
 
+  useEffect(() => {
+    deleteTargetRevision.current += 1;
+  }, [checked, secondaryTarget]);
   useEffect(() => {
     if (navigatorContextRef.current !== contextKey) return;
     navigatorStates.set(contextKey, {
@@ -1732,6 +1758,26 @@ export default function MemoryVault({
     setFilterModes([...modes]);
   };
   const hiddenChecked = [...checked].filter((id) => !visible.some((note) => note.id === id)).length;
+  const confirmationScopeTargets = {
+    chats: scopeTargets.data?.chats ?? [],
+    groups: scopeTargets.data?.groups ?? [],
+    characters: scopeTargets.data?.characters ?? [],
+    personas: scopeTargets.data?.personas ?? [],
+  };
+  const confirmationScopeLabel = (note: LtmNote) => {
+    const targetLabel = (targets: ReadonlyArray<{ id: string; label: string }>, id: string) =>
+      targets.find((target) => target.id === id)?.label ?? id;
+    const labels = [
+      ...getLtmScopeChatIds(note.scope).map((id) => {
+        const target = confirmationScopeTargets.chats.find((candidate) => candidate.id === id);
+        return target?.chatName?.trim() || targetLabel(confirmationScopeTargets.chats, id);
+      }),
+      ...getLtmScopeGroupIds(note.scope).map((id) => targetLabel(confirmationScopeTargets.groups, id)),
+      ...(note.scope.characterIds ?? []).map((id) => targetLabel(confirmationScopeTargets.characters, id)),
+      ...getLtmScopePersonaIds(note.scope).map((id) => targetLabel(confirmationScopeTargets.personas, id)),
+    ];
+    return labels.length ? labels.join(", ") : localizeUi("ui.longTermMemory.memoryvault.allMemories");
+  };
   const toggleVisibleSelection = (selected: boolean) =>
     setChecked((current) => {
       const visibleIds = visible.filter((note) => note.type !== "source").map((note) => note.id);
@@ -2712,25 +2758,79 @@ export default function MemoryVault({
   ) {
     if (!ids.length) return;
     const session = editorSession.current;
-    const includesSource = ids.some((id) => allNotes.find((note) => note.id === id)?.type === "source");
-    if (action === "delete" && includesSource) {
-      setError(localizeUi("ui.longTermMemory.memoryvault.manageSourceDeletionInSources"));
-      onOpenSources?.();
-      return;
-    }
-    if (
-      action === "delete" &&
-      !(props.confirmAction
+    if (action === "delete") {
+      const deleteRevision = deleteTargetRevision.current;
+      let deleteTargets: LtmNote[];
+      try {
+        deleteTargets = await requestNotesByIds<LtmNote>(ids);
+      } catch (cause) {
+        if (session === editorSession.current)
+          setError(
+            cause instanceof Error
+              ? cause.message
+              : localizeUi("ui.longTermMemory.memoryvault.deleteTargetsCouldNotLoad"),
+          );
+        return;
+      }
+      if (session !== editorSession.current || deleteRevision !== deleteTargetRevision.current) return;
+      const targetsById = new Map(deleteTargets.map((note) => [note.id, note]));
+      if (targetsById.size !== ids.length || ids.some((id) => !targetsById.has(id))) {
+        setError(localizeUi("ui.longTermMemory.memoryvault.deleteTargetsCouldNotLoad"));
+        return;
+      }
+      const confirmedTargets = ids.map((id) => targetsById.get(id)!);
+      if (confirmedTargets.some((note) => note.type === "source")) {
+        setError(localizeUi("ui.longTermMemory.memoryvault.manageSourceDeletionInSources"));
+        onOpenSources?.();
+        return;
+      }
+      const countForm = selectLtmPluralForm(locale, confirmedTargets.length);
+      const confirmationTitle = localizeUi(
+        countForm === "one"
+          ? "ui.longTermMemory.memoryvault.permanentlyDeleteOne"
+          : "ui.longTermMemory.memoryvault.permanentlyDeleteOther",
+        { count: confirmedTargets.length },
+      );
+      const confirmationLabel = localizeUi(
+        countForm === "one"
+          ? "ui.longTermMemory.memoryvault.deletePermanentlyOne"
+          : "ui.longTermMemory.memoryvault.deletePermanentlyOther",
+        { count: confirmedTargets.length },
+      );
+      const hiddenTargetCount = ids.filter((id) => !visible.some((note) => note.id === id)).length;
+      const confirmationMessage = [
+        localizeUi("ui.longTermMemory.memoryvault.thisCannotBeUndone"),
+        hiddenTargetCount
+          ? localizeUi(
+              hiddenTargetCount === 1
+                ? "ui.longTermMemory.memoryvault.deleteConfirmationHiddenOne"
+                : "ui.longTermMemory.memoryvault.deleteConfirmationHiddenOther",
+              { count: hiddenTargetCount },
+            )
+          : "",
+        "",
+        ...confirmedTargets.flatMap((note, index) => [
+          `${localizeUi("ui.longTermMemory.memoryvault.deleteConfirmationTarget", { value1: index + 1 })}: ${memoryLabel(note)}`,
+          `  ${localizeUi("ui.longTermMemory.memoryvault.deleteConfirmationExcerpt")}: ${deleteConfirmationExcerpt(
+            note,
+            localizeUi("ui.longTermMemory.memoryvault.deleteConfirmationNoExcerpt"),
+          )}`,
+          `  ${localizeUi("ui.longTermMemory.memoryvault.deleteConfirmationScope")}: ${confirmationScopeLabel(note)}`,
+          `  ${localizeUi("ui.longTermMemory.memoryvault.created")}: ${new Date(note.createdAt).toLocaleString(locale)}`,
+          `  ${localizeUi("ui.longTermMemory.memoryvault.deleteConfirmationMemoryId")}: ${note.id}`,
+          "",
+        ]),
+      ].join("\n");
+      const confirmed = props.confirmAction
         ? await props.confirmAction({
-            title: localizeUi("ui.longTermMemory.memoryvault.permanentlyDeleteSelectedMemories"),
-            message: localizeUi("ui.longTermMemory.memoryvault.thisCannotBeUndone"),
-            confirmLabel: localizeUi("ui.longTermMemory.memoryvault.deletePermanently"),
+            title: confirmationTitle,
+            message: confirmationMessage,
+            confirmLabel: confirmationLabel,
             tone: "destructive",
           })
-        : window.confirm(localizeUi("ui.longTermMemory.memoryvault.permanentlyDeleteSelectedMemories")))
-    )
-      return;
-    if (action === "delete") {
+        : window.confirm(`${confirmationTitle}\n\n${confirmationMessage}`);
+      if (!confirmed) return;
+      if (session !== editorSession.current || deleteRevision !== deleteTargetRevision.current) return;
       setArchiveUndo(null);
       await deleteSelected(ids);
       return;

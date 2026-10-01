@@ -547,6 +547,11 @@ async function main() {
       let reviewPreflightBlocked = false;
       let confirmReviewDiscard = false;
       let lastReviewDiscardMessage = "";
+      let confirmDelete = false;
+      let lastDeleteConfirmation: { title: string; message: string; confirmLabel?: string } | null = null;
+      const permanentDeleteCalls: string[][] = [];
+      let holdDeleteTargetLookup = false;
+      let releaseDeleteTargetLookup: (() => void) | null = null;
       let reviewQueueEmpty = false;
       let reviewFingerprintRevision = 0;
       let lastInjectionRequests = 0;
@@ -930,6 +935,12 @@ async function main() {
           if (url.searchParams.has("ids")) {
             reviewContextQueries.push(url.search);
             if (failReviewContext) return send(503, { error: "review context temporarily unavailable" });
+            if (holdDeleteTargetLookup) {
+              holdDeleteTargetLookup = false;
+              await new Promise<void>((resolveHold) => {
+                releaseDeleteTargetLookup = resolveHold;
+              });
+            }
             const requestedIds = new Set(url.searchParams.get("ids")?.split(",") ?? []);
             return send(
               200,
@@ -1232,6 +1243,14 @@ async function main() {
             },
           });
         }
+        if (request.method === "POST" && url.pathname.endsWith("/notes/permanent-delete")) {
+          const chunks: Buffer[] = [];
+          for await (const chunk of request) chunks.push(Buffer.from(chunk));
+          const body = JSON.parse(Buffer.concat(chunks).toString("utf8") || "{}") as { ids?: string[] };
+          const ids = body.ids ?? [];
+          permanentDeleteCalls.push(ids);
+          return send(200, { deletedIds: ids });
+        }
         if (request.method === "POST" && url.pathname.endsWith("/import/source-notes")) {
           const chunks: Buffer[] = [];
           for await (const chunk of request) chunks.push(Buffer.from(chunk));
@@ -1519,6 +1538,13 @@ async function main() {
         lastReviewDiscardMessage = options.message ?? "";
         return confirmReviewDiscard;
       });
+      await page.exposeFunction(
+        "captureDeleteConfirmation",
+        (options: { title: string; message: string; confirmLabel?: string }) => {
+          lastDeleteConfirmation = options;
+          return confirmDelete;
+        },
+      );
       await page.addInitScript(() => {
         Object.defineProperty(Crypto.prototype, "randomUUID", {
           configurable: true,
@@ -1538,6 +1564,15 @@ async function main() {
           chatName: "desktop chat",
           chatMode: "conversation",
           enabledForChat: true,
+          confirmAction: (
+            window as Window & {
+              captureDeleteConfirmation: (options: {
+                title: string;
+                message: string;
+                confirmLabel?: string;
+              }) => boolean;
+            }
+          ).captureDeleteConfirmation,
           onEnabledForChatChange: (
             window as Window & {
               onDesktopActivationChange: () => void;
@@ -3328,6 +3363,100 @@ async function main() {
         resolvedRestoreCall.noteIds,
         ["world_mobile_recovery"],
         "Resolved restore batch must target the resolved note",
+      );
+
+      const deleteTargetIds = ["world_second_mobile", "world_mobile_recovery"];
+      const deleteTargetCards = [
+        page.locator('[data-ltm-note-type="world"]').filter({ hasText: "Second mobile review memory" }),
+        page.locator('[data-ltm-note-type="world"]').filter({ hasText: "Mobile recovery memory" }),
+      ];
+      for (const card of deleteTargetCards) await card.locator('input[type="checkbox"]').check();
+      const deleteMemorySearch = page.getByLabel("Search memories", { exact: true });
+      await deleteMemorySearch.fill("no-delete-target-match");
+      assert.match(await page.locator("[data-ltm-selection-count]").innerText(), /2 selected, 2 hidden by filters/u);
+      confirmDelete = false;
+      lastDeleteConfirmation = null;
+      await page.evaluate(() => {
+        const element = document.querySelector("marinara-capability-long-term-memory") as HTMLElement & {
+          capabilityProps?: Record<string, unknown>;
+        };
+        element.capabilityProps = {
+          ...element.capabilityProps,
+          confirmAction: (
+            window as Window & {
+              captureDeleteConfirmation: (options: {
+                title: string;
+                message: string;
+                confirmLabel?: string;
+              }) => boolean;
+            }
+          ).captureDeleteConfirmation,
+        };
+        element.dispatchEvent(new CustomEvent("marinara-capability-props"));
+      });
+      const beforeDeleteCalls = permanentDeleteCalls.length;
+      const cancelledTargetResolution = page.waitForResponse(
+        (response) =>
+          response.request().method() === "GET" &&
+          response.url().includes("/api/long-term-memory/notes?ids=world_second_mobile%2Cworld_mobile_recovery"),
+      );
+      await page.locator("[data-ltm-bulk-actions]").getByRole("button", { name: "Delete" }).click();
+      await cancelledTargetResolution;
+      await page.waitForTimeout(0);
+      assert.equal(permanentDeleteCalls.length, beforeDeleteCalls, "Cancel must not send a deletion request");
+      assert.ok(lastDeleteConfirmation);
+      assert.equal(lastDeleteConfirmation?.title, "Permanently delete 2 memories?");
+      assert.equal(lastDeleteConfirmation?.confirmLabel, "Delete 2 memories permanently");
+      assert.match(lastDeleteConfirmation?.message ?? "", /This cannot be undone\./u);
+      assert.match(lastDeleteConfirmation?.message ?? "", /2 selected memories are hidden by your filters\./u);
+      for (const id of deleteTargetIds) assert.match(lastDeleteConfirmation?.message ?? "", new RegExp(id, "u"));
+      assert.match(lastDeleteConfirmation?.message ?? "", /Second mobile review memory/u);
+      assert.match(lastDeleteConfirmation?.message ?? "", /Mobile recovery memory/u);
+      assert.match(lastDeleteConfirmation?.message ?? "", /Excerpt: .*memory text/u);
+      assert.match(lastDeleteConfirmation?.message ?? "", /Available in: All memories/u);
+      confirmDelete = true;
+      const deleteRequest = page.waitForRequest(
+        (request) =>
+          request.method() === "POST" && request.url().endsWith("/api/long-term-memory/notes/permanent-delete"),
+      );
+      await page.locator("[data-ltm-bulk-actions]").getByRole("button", { name: "Delete" }).click();
+      await deleteRequest;
+      assert.deepEqual(permanentDeleteCalls.at(-1), deleteTargetIds);
+
+      // A selection change while the delete-target lookup is still resolving must
+      // cancel the pending permanent delete instead of acting on the stale IDs.
+      await deleteMemorySearch.fill("");
+      const worldNoteGroup = page.locator('[data-ltm-memory-group="world"]');
+      if (!(await worldNoteGroup.evaluate((element) => (element as HTMLDetailsElement).open)))
+        await worldNoteGroup.locator("summary").click();
+      for (const card of deleteTargetCards) await card.locator('input[type="checkbox"]').check();
+      lastDeleteConfirmation = null;
+      const beforeStaleDeleteCalls = permanentDeleteCalls.length;
+      holdDeleteTargetLookup = true;
+      const staleLookupResponse = page.waitForResponse(
+        (response) =>
+          response.request().method() === "GET" &&
+          response.url().includes("/api/long-term-memory/notes?ids=") &&
+          response.url().includes("world_second_mobile"),
+      );
+      await page.locator("[data-ltm-bulk-actions]").getByRole("button", { name: "Delete" }).click();
+      for (let attempt = 0; attempt < 200 && !releaseDeleteTargetLookup; attempt += 1) await page.waitForTimeout(5);
+      assert.ok(releaseDeleteTargetLookup, "delete target lookup must still be pending");
+      await deleteTargetCards[1].locator('input[type="checkbox"]').uncheck();
+      const releaseStaleLookup = releaseDeleteTargetLookup;
+      releaseDeleteTargetLookup = null;
+      releaseStaleLookup();
+      await staleLookupResponse;
+      await page.waitForTimeout(50);
+      assert.equal(
+        lastDeleteConfirmation,
+        null,
+        "A selection change during target resolution must not open a delete confirmation",
+      );
+      assert.equal(
+        permanentDeleteCalls.length,
+        beforeStaleDeleteCalls,
+        "A stale permanent delete must not reach the server",
       );
 
       await page.locator('[data-ltm-control="navigation"][data-ltm-destination="review"]').first().click();

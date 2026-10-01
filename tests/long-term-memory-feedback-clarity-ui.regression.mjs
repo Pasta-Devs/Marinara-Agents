@@ -425,6 +425,30 @@ assert.match(vault, /extractionImportance/u);
 assert.match(vault, /extractionConfidence/u);
 assert.match(vault, /data-ltm-validation-summary/u);
 assert.match(vault, /data-ltm-vault-feedback/u);
+assert.match(vault, /requestNotesByIds<LtmNote>\(ids\)/u);
+assert.match(vault, /deleteConfirmationTarget/u);
+assert.match(vault, /deleteConfirmationExcerpt/u);
+assert.match(vault, /deleteConfirmationScope/u);
+assert.match(vault, /deleteConfirmationMemoryId/u);
+assert.match(vault, /deleteConfirmationHidden/u);
+assert.match(vault, /targetsById\.size !== ids\.length/u);
+assert.match(vault, /ids\.some\(\(id\) => !targetsById\.has\(id\)\)/u);
+assert.match(vault, /const confirmationTitle = localizeUi\(/u);
+assert.match(vault, /confirmLabel: confirmationLabel/u);
+assert.match(vault, /deleteSelected\(ids\)/u);
+assert.match(vault, /deleteTargetRevision/u);
+assert.equal(
+  (vault.match(/deleteRevision !== deleteTargetRevision\.current/gu) ?? []).length,
+  2,
+  "delete target resolution and confirmation must both re-check selection/scope changes",
+);
+assert.doesNotMatch(vault, /permanentlyDeleteSelectedMemories/u);
+assert.equal(locale["ui.longTermMemory.memoryvault.permanentlyDeleteOne"], "Permanently delete 1 memory?");
+assert.equal(locale["ui.longTermMemory.memoryvault.permanentlyDeleteOther"], "Permanently delete {{count}} memories?");
+assert.equal(locale["ui.longTermMemory.memoryvault.deletePermanentlyOne"], "Delete 1 memory permanently");
+assert.equal(locale["ui.longTermMemory.memoryvault.deletePermanentlyOther"], "Delete {{count}} memories permanently");
+assert.equal(locale["ui.longTermMemory.memoryvault.deleteConfirmationExcerpt"], "Excerpt");
+assert.equal(locale["ui.longTermMemory.memoryvault.deleteConfirmationMemoryId"], "Memory ID");
 assert.match(vault, /data-ltm-note-actions-desktop[\s\S]*md:flex/u);
 assert.doesNotMatch(vault, /data-ltm-note-actions-desktop[\s\S]*opacity-0/u);
 assert.doesNotMatch(vault, /data-ltm-note-actions-desktop[\s\S]*pointer-events-none/u);
