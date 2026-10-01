@@ -1,7 +1,7 @@
 // The cards inside the Support ticket (docs/ONBOARDING-RAIL.md): Mari's Creator header, her locked
 // post, the "X set · Change" pill, the member file with "Stamp it", and the approval stamp.
 import { useEffect, useRef } from "react";
-import { Loader2 } from "lucide-react";
+import { Loader2, Star } from "lucide-react";
 import { useTranslation as useUiTranslation } from "react-i18next";
 import type { SlpCreatorPostView, SlpCreatorStageProfile } from "../../../../../shared/src/slp/slp-social.types.js";
 import { cn } from "../../../lib/utils";
@@ -60,12 +60,22 @@ export function slpRailAnswerLabel(
   if (value === undefined) return t(id === "connection" ? "ui.slurp.site.value.none" : "ui.slurp.scene.page.empty");
   if (id === "pace") return t(`ui.noodle.noodlerwizard.activityChoice.${value}.title`);
   if (id === "who" && as === "row") return t(`ui.slurp.site.value.who.${value}`);
-  if (id === "rating") return "★".repeat(Number(value));
   if (id === "connection" || id === "imageConnection") {
     const list = id === "connection" ? context.textConnections : context.imageConnections;
     return list.find((connection) => connection.id === value)?.name ?? value;
   }
   return t(`ui.slurp.site.a.${id}.${value}`);
+}
+
+/** The rating gag's stars as icons: a "★" character is missing from some system fonts. */
+export function SlpRailStars({ count, label }: { count: number; label?: string }) {
+  return (
+    <span className="inline-flex items-center gap-0.5" role={label ? "img" : undefined} aria-label={label}>
+      {Array.from({ length: count }, (_, index) => (
+        <Star key={index} size={14} aria-hidden="true" className="fill-current !text-current" />
+      ))}
+    </span>
+  );
 }
 
 /** Chapter 3: what a Creator looks like (Mari, as in the old tour). */

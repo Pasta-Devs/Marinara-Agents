@@ -1,7 +1,7 @@
 // The player's join as one Slurp Support ticket (docs/ONBOARDING-RAIL.md), drawn on the shared chat
 // shell from the pure script in slp-site-welcome.ts. Chips are the only input and nothing is written
 // before "Stamp it". The first run keeps its place per browser, so a reload resumes the ticket.
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { X } from "lucide-react";
 import { toast } from "sonner";
 import { useTranslation as useUiTranslation } from "react-i18next";
@@ -22,6 +22,7 @@ import {
   SlpRailLockedDemo,
   SlpRailMemberFile,
   SlpRailSampleCreator,
+  SlpRailStars,
   SlpRailStampCard,
 } from "./SlpRailCards";
 import {
@@ -101,7 +102,8 @@ export function SlpSiteWelcome({
   const [raw, setRaw] = useState<SlpRailState>(() => (opening === "first" ? readSaved() : null) ?? EMPTY);
   // A Change asks again at the bottom of the chat; the answer then shows there too.
   const [editing, setEditing] = useState<SlpRailQuestion | null>(null);
-  const [edits, setEdits] = useState<{ id: SlpRailQuestion; key: number }[]>([]);
+  // Each edit shows after the step that was last in the chat when it was made.
+  const [edits, setEdits] = useState<{ id: SlpRailQuestion; key: number; after: string }[]>([]);
   const [recent, setRecent] = useState<SlpRailQuestion | null>(null);
   const [fileOpen, setFileOpen] = useState(false);
   // A resumed ticket shows what was already said at once; only new lines get typing dots.
@@ -130,6 +132,8 @@ export function SlpSiteWelcome({
 
   if (context) {
     next = slpRailNext(state, context);
+    const transcript = slpRailTranscript(state, context);
+    const lastId = transcript.at(-1)?.id ?? "";
     rows = slpRailFileRows(state, context);
     const answers = slpRailAnswers(state, context);
     const defaults = slpRailDefaults(context);
@@ -144,16 +148,21 @@ export function SlpSiteWelcome({
           : false;
         return {
           id: value,
-          label: marked
-            ? t("ui.slurp.site.a.connection.default", { name: label(step.id, value) })
-            : label(step.id, value),
+          label:
+            step.id === "rating" ? (
+              <SlpRailStars count={Number(value)} />
+            ) : marked ? (
+              t("ui.slurp.site.a.connection.default", { name: label(step.id, value) })
+            ) : (
+              label(step.id, value)
+            ),
           ariaLabel: step.id === "rating" ? t("ui.slurp.site.a.rating", { count: Number(value) }) : undefined,
           primary: (state.answers[step.id] ?? defaults[step.id]) === value,
           onSelect: () => answer(step.id, value),
         };
       });
     const answer = (id: SlpRailQuestion, value: string) => {
-      if (editing) setEdits((list) => [...list, { id, key: Date.now() }]);
+      if (editing) setEdits((list) => [...list, { id, key: Date.now(), after: lastId }]);
       setEditing(null);
       setRecent(id);
       update({ ...state, answers: { ...state.answers, [id]: value } });
@@ -177,7 +186,7 @@ export function SlpSiteWelcome({
         ),
       });
     };
-    const mine = (id: string, text: string) => items.push({ kind: "bubble", id, text, mine: true });
+    const mine = (id: string, text: ReactNode) => items.push({ kind: "bubble", id, text, mine: true });
     const card = (step: Extract<SlpRailStep, { kind: "card" }>) => {
       if (step.id === "pastapay")
         return (
@@ -228,18 +237,36 @@ export function SlpSiteWelcome({
         items.push({ kind: "bubble", id: `q-${step.id}`, text: t(`ui.slurp.site.q.${step.id}`) });
         if (passed) {
           const lane = step.id === "who" && state.answers.lane && state.answers.who === undefined;
-          mine(`a-${step.id}`, lane ? t("ui.slurp.site.tap.recommended") : label(step.id, answers[step.id]));
+          const value = answers[step.id];
+          mine(
+            `a-${step.id}`,
+            lane ? (
+              t("ui.slurp.site.tap.recommended")
+            ) : step.id === "rating" ? (
+              <SlpRailStars count={Number(value)} label={t("ui.slurp.site.a.rating", { count: Number(value) })} />
+            ) : (
+              label(step.id, value)
+            ),
+          );
           if (!lane) pill(step.id, step.id);
         }
       }
       if (passed && step.kind !== "ask" && step.tap) mine(`tap-${step.id}`, t(step.tap));
     };
-    for (const step of slpRailTranscript(state, context)) render(step, true);
-    for (const edit of edits) {
-      items.push({ kind: "bubble", id: `q-${edit.key}`, text: t(`ui.slurp.site.q.${edit.id}`) });
-      mine(`a-${edit.key}`, label(edit.id, answers[edit.id]));
-      pill(edit.id, String(edit.key));
+    const renderEdits = (after: string) => {
+      for (const edit of edits.filter((entry) => entry.after === after)) {
+        items.push({ kind: "bubble", id: `q-${edit.key}`, text: t(`ui.slurp.site.q.${edit.id}`) });
+        mine(`a-${edit.key}`, label(edit.id, answers[edit.id]));
+        pill(edit.id, String(edit.key));
+      }
+    };
+    for (const step of transcript) {
+      render(step, true);
+      renderEdits(step.id);
     }
+    // An edit whose step has left the chat (a rewind) stays at the bottom.
+    for (const after of new Set(edits.map((edit) => edit.after)))
+      if (!transcript.some((step) => step.id === after)) renderEdits(after);
     if (history === null) setHistory(resumed ? items.length : 0);
     if (next && next.kind !== "wait") render(next, false);
 
@@ -317,7 +344,7 @@ export function SlpSiteWelcome({
             }
             // The ticket's own actions sit beside the progress, so the header keeps its name and status.
             subheader={
-              <div className="flex shrink-0 items-center gap-2 px-3">
+              <div className="flex shrink-0 items-center gap-2 px-3 py-1">
                 <div className="min-w-0 flex-1 pt-3">
                   <SlpWizardProgress
                     current={stopIndex + 1}

@@ -26,10 +26,10 @@ export type SlpChatItem =
 
 export type SlpChatChip = {
   id: string;
-  label: string;
+  label: ReactNode;
   onSelect: () => void;
   primary?: boolean;
-  /** When the label alone does not say it (★★★ reads as "3 of 5 stars"). */
+  /** When the label alone does not say it (three star icons read as "3 of 5 stars"). */
   ariaLabel?: string;
 };
 
