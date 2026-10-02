@@ -47,6 +47,7 @@ type LanguageConnection = {
 };
 type RepairAction = "rebuild_indexes" | "quarantine_malformed_notes" | "backfill_imported_source_titles";
 type SettingsTab = "recall" | "extraction" | "maintenance" | "debug";
+type SettingsRebuildOutcome = { status: "complete" | "deferred"; error?: string };
 
 const settingsTabs: Array<{ id: SettingsTab; labelKey: string }> = [
   {
@@ -337,26 +338,46 @@ export default function MemorySettings({
     if (!globalDirty && !extractionDirty) return;
     setPending("global");
     setMessage("");
+    let rebuild: SettingsRebuildOutcome | null = null;
     try {
       if (globalDirty && globalForm) {
-        const saved = settingsForm(await request<LtmGlobalSettings>("/settings", "PUT", globalPayload(globalForm)));
-        setGlobalForm(saved);
+        const submitted = globalForm;
+        const response = await request<LtmGlobalSettings & { rebuild?: SettingsRebuildOutcome | null }>(
+          "/settings",
+          "PUT",
+          globalPayload(submitted),
+        );
+        const saved = settingsForm(response);
         setSavedGlobal(saved);
-        await invalidateLtmQueries(queryClient, [queryKeys.settings, queryKeys.chatDefaults]);
+        // Saving now awaits an index rebuild, so only clear the form when no newer edit
+        // arrived while it was in flight; otherwise those edits stay dirty.
+        setGlobalForm((current) => (current && same(current, submitted) ? saved : current));
+        await invalidateLtmQueries(queryClient, [queryKeys.settings, queryKeys.chatDefaults, queryKeys.status]);
+        rebuild = response.rebuild ?? null;
       }
       if (extractionDirty && extractionFormState) {
+        const submitted = extractionFormState;
         const saved = extractionForm(
-          await request<LtmExtractionSettingsPatch>(
-            "/extraction-settings",
-            "PUT",
-            extractionPayload(extractionFormState),
-          ),
+          await request<LtmExtractionSettingsPatch>("/extraction-settings", "PUT", extractionPayload(submitted)),
         );
-        setExtractionFormState(saved);
         setSavedExtraction(saved);
+        // The global save can await a long index rebuild, so keep newer extraction edits
+        // that arrived while this request was in flight instead of overwriting them.
+        setExtractionFormState((current) => (current && same(current, submitted) ? saved : current));
         await invalidateLtmQueries(queryClient, [queryKeys.extractionSettings]);
       }
-      setMessage(localizeUi("ui.longTermMemory.memorysettings.memorySettingsSaved"));
+      if (rebuild?.status === "deferred") {
+        setMessage(
+          localizeUi("ui.longTermMemory.memorysettings.memorySettingsSavedIndexRebuildFailed", {
+            error: rebuild.error ?? "",
+          }),
+          "danger",
+        );
+      } else if (rebuild?.status === "complete") {
+        setMessage(localizeUi("ui.longTermMemory.memorysettings.memorySettingsSavedIndexRebuilt"));
+      } else {
+        setMessage(localizeUi("ui.longTermMemory.memorysettings.memorySettingsSaved"));
+      }
     } catch (error) {
       setMessage(
         errorMessage(error, localizeUi("ui.longTermMemory.memorysettings.couldNotSaveMemorySettings")),
@@ -730,7 +751,7 @@ export default function MemorySettings({
     setPending("settings-reset");
     setMessage("");
     try {
-      await request("/settings/reset", "POST");
+      const response = await request<{ rebuild?: SettingsRebuildOutcome | null }>("/settings/reset", "POST");
       setGlobalForm(null);
       setSavedGlobal(null);
       setExtractionFormState(null);
@@ -739,9 +760,19 @@ export default function MemorySettings({
         queryKeys.settings,
         queryKeys.extractionSettings,
         queryKeys.chatDefaults,
+        queryKeys.status,
       ]);
       await Promise.all([global.refetch(), extraction.refetch()]);
-      setMessage(localizeUi("ui.longTermMemory.memorysettings.memorySettingsResetToDefaults"));
+      if (response.rebuild?.status === "deferred") {
+        setMessage(
+          localizeUi("ui.longTermMemory.memorysettings.memorySettingsResetIndexRebuildFailed", {
+            error: response.rebuild.error ?? "",
+          }),
+          "danger",
+        );
+      } else {
+        setMessage(localizeUi("ui.longTermMemory.memorysettings.memorySettingsResetToDefaults"));
+      }
     } catch (error) {
       setMessage(
         errorMessage(error, localizeUi("ui.longTermMemory.memorysettings.couldNotResetMemorySettings")),

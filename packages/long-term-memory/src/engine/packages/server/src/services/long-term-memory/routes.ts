@@ -51,6 +51,7 @@ import {
   ltmWriteScopeSchema,
   ltmScopeSchema,
   type LtmScope,
+  type LtmResolvedGlobalSettings,
   ltmSectionKeySchema,
   ltmSectionSchema,
   ltmStatusSchema,
@@ -77,7 +78,9 @@ import { CURRENT_LTM_CHUNK_FORMAT_VERSION } from "./chunking.js";
 import { retrieveLongTermMemory } from "./retrieval.js";
 import { applyLongTermMemoryDraft, preflightLongTermMemoryDraft } from "./reconciliation.js";
 import { applyLtmScopeLinksToDerivedNotes } from "./scope-links.js";
-import { getLtmGlobalSettings, updateLtmGlobalSettings } from "./settings.js";
+import { getLtmGlobalSettings, ltmGeneratedStopWords, updateLtmGlobalSettings } from "./settings.js";
+import { buildStopWordSet } from "./keyword-extract.js";
+import { withLtmVaultLock } from "./vault-lock.js";
 import type { LongTermMemoryDraftStore } from "./draft-store.js";
 import type { LongTermMemoryStorage } from "./storage.js";
 import { readLongTermMemoryInjectionReceipt } from "./usage.js";
@@ -475,6 +478,11 @@ export function createLongTermMemoryRoutes(runtime: {
         };
       }
     };
+    // The recall index fingerprints the effective generated stop-word set, so only a
+    // change to that normalized set (or the filter flag that gates it) needs a rebuild.
+    // Comparing the normalized set keeps equivalent spellings from rebuilding needlessly.
+    const effectiveIndexStopWords = (settings: LtmResolvedGlobalSettings) =>
+      JSON.stringify([...buildStopWordSet(ltmGeneratedStopWords(settings))].sort());
     app.get("/status", async () => {
       await storage.initializeLtmStore();
       const dirs = getLongTermMemoryDirectories(root);
@@ -622,9 +630,25 @@ export function createLongTermMemoryRoutes(runtime: {
       }
     });
     app.delete("/data", async () => deleteAllLongTermMemoryData(root));
-    app.post("/settings/reset", async () => resetLongTermMemorySettings(root));
+    // Settings that change the recall index persist first, then rebuild under the
+    // reentrant vault lock so a concurrent recall never sees the new settings beside a
+    // stale index. A failed rebuild is reported as deferred without rolling the save back.
+    app.post("/settings/reset", async () =>
+      withLtmVaultLock(root, async () => {
+        const before = effectiveIndexStopWords(await getLtmGlobalSettings(root));
+        const result = await resetLongTermMemorySettings(root);
+        const after = effectiveIndexStopWords(await getLtmGlobalSettings(root));
+        return { ...result, rebuild: before === after ? null : await rebuildAfterMutation() };
+      }),
+    );
     app.put<{ Body: unknown }>("/settings", { bodyLimit: MAINTENANCE_BODY_LIMIT_BYTES }, async (request) =>
-      updateLtmGlobalSettings(ltmGlobalSettingsSchema.parse(request.body ?? {}), root),
+      withLtmVaultLock(root, async () => {
+        const parsed = ltmGlobalSettingsSchema.parse(request.body ?? {});
+        const before = effectiveIndexStopWords(await getLtmGlobalSettings(root));
+        const saved = await updateLtmGlobalSettings(parsed, root);
+        const after = effectiveIndexStopWords(saved);
+        return { ...saved, rebuild: before === after ? null : await rebuildAfterMutation() };
+      }),
     );
     app.get("/extraction-settings", async () => getLtmExtractionConfig(root));
     app.put<{ Body: unknown }>(

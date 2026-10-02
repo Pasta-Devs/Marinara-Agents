@@ -175,6 +175,28 @@ assert.match(workspace, /extractionDidNotFinish/u);
 assert.match(activity, /completionReasoningTokens/u);
 assert.match(activity, /data-ltm-activity-warnings/u);
 assert.match(settings, /reasoningEffort: resolved\.reasoningEffort \?\? "low"/u);
+assert.match(settings, /memorySettingsSavedIndexRebuilt/u);
+assert.match(settings, /memorySettingsSavedIndexRebuildFailed/u);
+assert.match(settings, /memorySettingsResetIndexRebuildFailed/u);
+assert.match(settings, /rebuild\?\.status === "deferred"/u);
+// #1193 repair: extraction edits made while the awaited global rebuild is in flight must
+// survive, mirroring the submitted-snapshot guard used for global settings.
+assert.match(
+  settings,
+  /setExtractionFormState\(\(current\) => \(current && same\(current, submitted\) \? saved : current\)\)/u,
+);
+assert.equal(
+  locale["ui.longTermMemory.memorysettings.memorySettingsSavedIndexRebuilt"],
+  "Memory settings saved and the recall index was rebuilt.",
+);
+assert.equal(
+  locale["ui.longTermMemory.memorysettings.memorySettingsSavedIndexRebuildFailed"],
+  "Memory settings saved, but the recall index rebuild failed: {{error}}",
+);
+assert.equal(
+  locale["ui.longTermMemory.memorysettings.memorySettingsResetIndexRebuildFailed"],
+  "Memory settings reset to defaults, but the recall index rebuild failed: {{error}}",
+);
 assert.equal(locale["ui.longTermMemory.sourcesworkspace.syncSelected_8c57bdb"], undefined);
 assert.equal(locale["ui.longTermMemory.sourcesworkspace.refreshSelectedSources"], "Refresh selected sources");
 assert.equal(locale["ui.longTermMemory.activityview.totalTokens"], "Total: {{count}} tokens");

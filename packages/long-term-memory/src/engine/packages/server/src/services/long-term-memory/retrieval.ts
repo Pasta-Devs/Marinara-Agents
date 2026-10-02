@@ -11,6 +11,7 @@ import { resolvePackageEmbeddingAdapter } from "./package-runtime.js";
 import { loadOrRebuildLongTermMemoryIndexes, type LtmRecallIndex } from "./rebuild.js";
 import { reciprocalRankFuse, type LtmRankLane } from "./ranking.js";
 import { getLtmGlobalSettings, ltmGeneratedStopWords } from "./settings.js";
+import { withLtmVaultLock } from "./vault-lock.js";
 
 export type RetrieveLongTermMemoryInput = MemoryRecallEmbeddingOptions & {
   root: string;
@@ -73,16 +74,23 @@ function pickGraphSeedNotes(
 
 export async function retrieveLongTermMemory(input: RetrieveLongTermMemoryInput) {
   const embeddingAdapter = await resolvePackageEmbeddingAdapter(input.embeddingAdapter);
-  const settings = await getLtmGlobalSettings(input.root);
-  const triggerStopWords = settings.longTermMemoryStopWords;
-  const index =
-    input.index ??
-    (await loadOrRebuildLongTermMemoryIndexes(
-      input.root,
-      embeddingAdapter,
-      ltmGeneratedStopWords(settings),
-      input.signal,
-    ));
+  // Read settings and load the index under one vault-lock scope so a recall that queues
+  // behind a settings save judges freshness against the settings that save persisted. The
+  // loader's own lock is reentrant, so nesting it here cannot deadlock.
+  const { triggerStopWords, index } = await withLtmVaultLock(input.root, async () => {
+    const settings = await getLtmGlobalSettings(input.root);
+    return {
+      triggerStopWords: settings.longTermMemoryStopWords,
+      index:
+        input.index ??
+        (await loadOrRebuildLongTermMemoryIndexes(
+          input.root,
+          embeddingAdapter,
+          ltmGeneratedStopWords(settings),
+          input.signal,
+        )),
+    };
+  });
   // A caller-supplied index skips the signal-aware loader, so cancellation must be
   // rechecked here before ranking and returning a recall the caller already abandoned.
   input.signal?.throwIfAborted();

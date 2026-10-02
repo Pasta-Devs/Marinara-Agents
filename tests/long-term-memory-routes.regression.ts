@@ -861,6 +861,117 @@ async function main(routeScenario: RouteScenario) {
         headers,
       });
       assert.equal(rebuiltAfterFailure.statusCode, 200, rebuiltAfterFailure.body);
+      // #1193: a stop-word/filter save must persist first and then await a recall-index
+      // rebuild, returning its outcome; recall-only and equivalent spelling saves must not.
+      const indexBeforeSettings = JSON.parse(await readFile(rebuildPath, "utf8"));
+      const indexedSettingsSave = await app.inject({
+        method: "PUT",
+        url: "/api/long-term-memory/settings",
+        headers,
+        payload: { longTermMemoryStopWords: ["cobalt"] },
+      });
+      assert.equal(indexedSettingsSave.statusCode, 200, indexedSettingsSave.body);
+      assert.equal(indexedSettingsSave.json().rebuild?.status, "complete");
+      assert.deepEqual(indexedSettingsSave.json().longTermMemoryStopWords, ["cobalt"]);
+      const indexAfterSettings = JSON.parse(await readFile(rebuildPath, "utf8"));
+      assert.notEqual(
+        indexAfterSettings.sourceHash,
+        indexBeforeSettings.sourceHash,
+        "a stop-word change must have rebuilt the recall index before responding",
+      );
+      const equivalentSettingsSave = await app.inject({
+        method: "PUT",
+        url: "/api/long-term-memory/settings",
+        headers,
+        payload: { longTermMemoryStopWords: ["Cobalt"] },
+      });
+      assert.equal(equivalentSettingsSave.statusCode, 200, equivalentSettingsSave.body);
+      assert.equal(equivalentSettingsSave.json().rebuild, null);
+      const recallOnlySettingsSave = await app.inject({
+        method: "PUT",
+        url: "/api/long-term-memory/settings",
+        headers,
+        payload: { longTermMemoryBudgetTokens: 2048 },
+      });
+      assert.equal(recallOnlySettingsSave.statusCode, 200, recallOnlySettingsSave.body);
+      assert.equal(recallOnlySettingsSave.json().rebuild, null);
+      assert.equal(
+        JSON.parse(await readFile(rebuildPath, "utf8")).sourceHash,
+        indexAfterSettings.sourceHash,
+        "recall-only settings must not rebuild the recall index",
+      );
+      const filterOffSettingsSave = await app.inject({
+        method: "PUT",
+        url: "/api/long-term-memory/settings",
+        headers,
+        payload: { longTermMemoryStopWordsFilterGenerated: false, longTermMemoryStopWords: ["observatory"] },
+      });
+      assert.equal(filterOffSettingsSave.statusCode, 200, filterOffSettingsSave.body);
+      assert.equal(filterOffSettingsSave.json().rebuild?.status, "complete");
+      const filterOffStopWordsSave = await app.inject({
+        method: "PUT",
+        url: "/api/long-term-memory/settings",
+        headers,
+        payload: { longTermMemoryStopWords: ["settings", "route"] },
+      });
+      assert.equal(filterOffStopWordsSave.statusCode, 200, filterOffStopWordsSave.body);
+      assert.equal(
+        filterOffStopWordsSave.json().rebuild,
+        null,
+        "stop words are irrelevant to chunking while filter-generated is off",
+      );
+      const filterOnSettingsSave = await app.inject({
+        method: "PUT",
+        url: "/api/long-term-memory/settings",
+        headers,
+        payload: { longTermMemoryStopWordsFilterGenerated: true, longTermMemoryStopWords: ["observatory"] },
+      });
+      assert.equal(filterOnSettingsSave.statusCode, 200, filterOnSettingsSave.body);
+      assert.equal(filterOnSettingsSave.json().rebuild?.status, "complete");
+      await rm(rebuildPath, { force: true });
+      await mkdir(rebuildPath);
+      const settingsSaveWithFailedRebuild = await app.inject({
+        method: "PUT",
+        url: "/api/long-term-memory/settings",
+        headers,
+        payload: { longTermMemoryStopWords: ["cobalt"] },
+      });
+      assert.equal(settingsSaveWithFailedRebuild.statusCode, 200, settingsSaveWithFailedRebuild.body);
+      assert.equal(settingsSaveWithFailedRebuild.json().rebuild?.status, "deferred");
+      assert.deepEqual(
+        (
+          await app.inject({
+            method: "GET",
+            url: "/api/long-term-memory/settings",
+            headers,
+          })
+        ).json().longTermMemoryStopWords,
+        ["cobalt"],
+        "a failed rebuild must not roll settings back or re-report them as unsaved",
+      );
+      await rm(rebuildPath, { recursive: true, force: true });
+      const failedSettingsStatus = await app.inject({
+        method: "GET",
+        url: "/api/long-term-memory/status",
+        headers,
+      });
+      assert.equal(failedSettingsStatus.json().indexes.rebuildState, "failed");
+      assert.deepEqual(failedSettingsStatus.json().indexes.errors, [{ index: "recall", code: "index_rebuild_failed" }]);
+      // Restore defaults through the settings route so a later rebuild succeeds without
+      // resetting extraction settings mid-scenario (reset rewrites legacy prompt state).
+      const restoredSettings = await app.inject({
+        method: "PUT",
+        url: "/api/long-term-memory/settings",
+        headers,
+        payload: {
+          longTermMemoryStopWords: [],
+          longTermMemoryStopWordsFilterGenerated: true,
+          longTermMemoryBudgetTokens: 4096,
+        },
+      });
+      assert.equal(restoredSettings.statusCode, 200, restoredSettings.body);
+      assert.equal(restoredSettings.json().rebuild?.status, "complete");
+      assert.equal((await readFile(rebuildPath, "utf8")).length > 0, true);
       const renameSectionCollision = await app.inject({
         method: "POST",
         url: "/api/long-term-memory/notes/world_route_fixture/sections/rename",
@@ -4537,12 +4648,39 @@ async function main(routeScenario: RouteScenario) {
         ).json().total,
         expectedRejectedCount,
       );
+      if (routeScenario === "backup") {
+        const stopWordsBeforeReset = await app.inject({
+          method: "PUT",
+          url: "/api/long-term-memory/settings",
+          headers,
+          payload: { longTermMemoryStopWords: ["cobalt"] },
+        });
+        assert.equal(stopWordsBeforeReset.statusCode, 200, stopWordsBeforeReset.body);
+        assert.equal(stopWordsBeforeReset.json().rebuild?.status, "complete");
+      }
       const resetSettings = await app.inject({
         method: "POST",
         url: "/api/long-term-memory/settings/reset",
         headers,
       });
       assert.equal(resetSettings.statusCode, 200, resetSettings.body);
+      if (routeScenario === "backup") {
+        assert.equal(
+          resetSettings.json().rebuild?.status,
+          "complete",
+          "resetting index-affecting settings must rebuild the recall index before responding",
+        );
+        assert.deepEqual(
+          (
+            await app.inject({
+              method: "GET",
+              url: "/api/long-term-memory/settings",
+              headers,
+            })
+          ).json().longTermMemoryStopWords,
+          [],
+        );
+      }
       assert.equal(
         (
           await app.inject({

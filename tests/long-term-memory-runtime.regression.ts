@@ -1448,6 +1448,75 @@ async function main() {
         assert.equal(batchCalls, 1, "only the in-flight batch may run after cancellation");
       }
 
+      // #1193 repair: a recall queued behind a settings save must resolve settings and load
+      // the index under the same vault lock, so it cannot republish an index built with the
+      // stop words it read before the save.
+      {
+        const vaultRoot = storage.root;
+        const recallIndexPath = longTermMemoryRecallIndexPath(vaultRoot);
+        const { getLtmGlobalSettings, updateLtmGlobalSettings } = await import(`${source}/settings.ts`);
+        const { chunkNotes, stableJsonHash } = await import(`${source}/chunking.ts`);
+        const deferred = () => {
+          let resolve!: () => void;
+          const promise = new Promise<void>((next) => (resolve = next));
+          return { promise, resolve };
+        };
+        const indexHashFor = async (stopWords: readonly string[]) =>
+          stableJsonHash(chunkNotes(await storage.listNotes(), { includeSourceNotes: false, stopWords }));
+        const originalSettings = await getLtmGlobalSettings(vaultRoot);
+        try {
+          await updateLtmGlobalSettings(
+            { longTermMemoryStopWords: ["cobalt"], longTermMemoryStopWordsFilterGenerated: true },
+            vaultRoot,
+          );
+          await rebuildLongTermMemoryIndexes({ root: vaultRoot, embeddingAdapter: null, stopWords: ["cobalt"] });
+          assert.equal(
+            parseLtmRecallIndex(JSON.parse(await readFile(recallIndexPath, "utf8"))).sourceHash,
+            await indexHashFor(["cobalt"]),
+            "the recall index must start matching the persisted stop words",
+          );
+
+          // Hold the vault, queue the settings save first, then a recall. The recall reads
+          // S0 before the save writes S1; a loader that resolves stop words outside the lock
+          // republishes S0 and fails the final assertion.
+          const gate = deferred();
+          const holder = withLtmVaultLock(vaultRoot, () => gate.promise);
+          await new Promise((next) => setImmediate(next));
+          const saveAndRebuild = withLtmVaultLock(vaultRoot, async () => {
+            await updateLtmGlobalSettings(
+              { longTermMemoryStopWords: ["observatory"], longTermMemoryStopWordsFilterGenerated: true },
+              vaultRoot,
+            );
+            await rebuildLongTermMemoryIndexes({ root: vaultRoot, embeddingAdapter: null });
+          });
+          const recall = retrieveLongTermMemory({
+            root: vaultRoot,
+            embeddingAdapter: null,
+            queryText: "cobalt archive",
+            scope: { chatId: "chat-a", chatIds: ["chat-a"] },
+            mode: "roleplay",
+            semanticWeight: 0,
+          });
+          for (let turn = 0; turn < 100; turn += 1) await new Promise((next) => setImmediate(next));
+          gate.resolve();
+          await Promise.all([holder, saveAndRebuild, recall]);
+          assert.equal(
+            parseLtmRecallIndex(JSON.parse(await readFile(recallIndexPath, "utf8"))).sourceHash,
+            await indexHashFor(["observatory"]),
+            "a recall queued behind a settings save must not republish an index built with the old stop words",
+          );
+        } finally {
+          await updateLtmGlobalSettings(
+            {
+              longTermMemoryStopWords: originalSettings.longTermMemoryStopWords,
+              longTermMemoryStopWordsFilterGenerated: originalSettings.longTermMemoryStopWordsFilterGenerated,
+            },
+            vaultRoot,
+          );
+          await rebuildLongTermMemoryIndexes({ root: vaultRoot, embeddingAdapter: null });
+        }
+      }
+
       // #1179: the private vault-mutation boundary serializes host publication/rollback
       // and resets the package-owned caches so reads never see a partially published vault.
       {

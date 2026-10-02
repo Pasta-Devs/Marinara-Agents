@@ -120,8 +120,10 @@ export async function rebuildLongTermMemoryIndexes(
 ) {
   const root = options.root ?? getLongTermMemoryRoot();
   const embeddingAdapter = await resolvePackageEmbeddingAdapter(options.embeddingAdapter);
-  const stopWords = options.stopWords ?? ltmGeneratedStopWords(await getLtmGlobalSettings(root));
   return withLtmVaultLock(root, async () => {
+    // Resolve the effective stop words inside the lock so a rebuild always fingerprints
+    // the settings the vault lock currently protects, even when queued behind a save.
+    const stopWords = options.stopWords ?? ltmGeneratedStopWords(await getLtmGlobalSettings(root));
     options.signal?.throwIfAborted();
     await markLtmIndexesBuilding(root);
     try {
@@ -192,12 +194,14 @@ export async function loadOrRebuildLongTermMemoryIndexes(
 ) {
   const embeddingAdapter =
     resolvedEmbeddingAdapter !== undefined ? resolvedEmbeddingAdapter : await resolvePackageEmbeddingAdapter();
-  const resolvedStopWords = stopWords ?? ltmGeneratedStopWords(await getLtmGlobalSettings(root));
   const path = longTermMemoryRecallIndexPath(root);
   // Read, freshness-check, quarantine, and rebuild as one serialized vault lifecycle so a
   // queued caller rechecks the index the previous caller just published. The vault lock is
   // reentrant, so the nested upgrade/rebuild calls below do not deadlock.
   return withLtmVaultLock(root, async () => {
+    // Resolve the effective stop words inside the lock: a recall queued behind a settings
+    // save must judge freshness against the settings that save just persisted.
+    const resolvedStopWords = stopWords ?? ltmGeneratedStopWords(await getLtmGlobalSettings(root));
     signal?.throwIfAborted();
     try {
       const index = parseLtmRecallIndex(JSON.parse(await readFile(path, "utf8")));
