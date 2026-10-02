@@ -25,9 +25,14 @@ async function main() {
   Module._initPaths();
   const source = "../packages/long-term-memory/src/engine/packages/server/src/services/long-term-memory";
   const { activate } = await import(`${source}/server-entry.ts`);
-  const { longTermMemoryRecallIndexPath, parseLtmRecallIndex, rebuildLongTermMemoryIndexes } = await import(
-    `${source}/rebuild.ts`
-  );
+  const {
+    longTermMemoryRecallIndexPath,
+    parseLtmRecallIndex,
+    rebuildLongTermMemoryIndexes,
+    loadOrRebuildLongTermMemoryIndexes,
+  } = await import(`${source}/rebuild.ts`);
+  const { withLtmVaultLock } = await import(`${source}/vault-lock.ts`);
+  const { LongTermMemoryStorage } = await import(`${source}/storage.ts`);
   const { ltmIndexStatePath, readLtmIndexState } = await import(`${source}/index-state.ts`);
   const { retrieveLongTermMemory } = await import(`${source}/retrieval.ts`);
   const { applyLtmBudget } = await import(`${source}/budget.ts`);
@@ -1264,6 +1269,183 @@ async function main() {
         preferencesBeforeUninstall,
         "uninstall and reinstall must preserve exact agent preference bytes",
       );
+
+      // #1178: reconcile index freshness under the vault lock and honor recall cancellation.
+      {
+        const vaultRoot = storage.root;
+        const recallIndexPath = longTermMemoryRecallIndexPath(vaultRoot);
+        const deferred = () => {
+          let resolve!: () => void;
+          const promise = new Promise<void>((next) => (resolve = next));
+          return { promise, resolve };
+        };
+
+        // Concurrent stale loaders: while the vault lock is held, only a buggy loader's
+        // pre-lock freshness read can run; a fixed loader queues before reading. Releasing
+        // the lock must produce exactly one rebuild.
+        await storage.createNote(note("world_1178_lock", "chat-a", "A cobalt archive lock-coordination entry."));
+        const concurrentEmbeds: string[][] = [];
+        const concurrentAdapter = {
+          spaceId: "test-space",
+          label: "concurrent test embeddings",
+          async embed(texts: string[]) {
+            concurrentEmbeds.push(texts);
+            return texts.map(() => [1, 0]);
+          },
+        };
+        const originalListNotes = LongTermMemoryStorage.prototype.listNotes;
+        let preLockReads = 0;
+        LongTermMemoryStorage.prototype.listNotes = async function (this: { root: string }, ...args: unknown[]) {
+          const notes = await originalListNotes.apply(this, args);
+          if (this.root === vaultRoot) preLockReads += 1;
+          return notes;
+        };
+        const lockHold = deferred();
+        const holder = withLtmVaultLock(vaultRoot, () => lockHold.promise);
+        let firstLoad: Promise<unknown> | undefined;
+        let secondLoad: Promise<unknown> | undefined;
+        try {
+          firstLoad = loadOrRebuildLongTermMemoryIndexes(vaultRoot, concurrentAdapter, []);
+          secondLoad = loadOrRebuildLongTermMemoryIndexes(vaultRoot, concurrentAdapter, []);
+          for (let turn = 0; turn < 100 && preLockReads < 2; turn += 1) {
+            await new Promise((next) => setImmediate(next));
+          }
+        } finally {
+          LongTermMemoryStorage.prototype.listNotes = originalListNotes;
+          lockHold.resolve();
+        }
+        await Promise.all([holder, firstLoad, secondLoad]);
+        assert.equal(
+          concurrentEmbeds.length,
+          1,
+          "concurrent stale loaders must recheck freshness under the lock and rebuild once",
+        );
+
+        // Recall cancellation must reach rebuild embedding work, avoid publishing after
+        // abort, and release the vault lock so a queued reader proceeds.
+        await storage.createNote(note("world_1178_abort", "chat-a", "A cobalt archive cancellation entry."));
+        const embeddingEntered = deferred();
+        const releaseEmbedding = deferred();
+        let rebuildSignal: AbortSignal | undefined;
+        const originalConcurrentEmbed = concurrentAdapter.embed;
+        concurrentAdapter.embed = async (texts: string[], signal?: AbortSignal) => {
+          if (texts.length > 1) {
+            rebuildSignal = signal;
+            embeddingEntered.resolve();
+            await releaseEmbedding.promise;
+          }
+          return originalConcurrentEmbed(texts);
+        };
+        const abortController = new AbortController();
+        let waiterDone = false;
+        let recallOutcome: { error?: Error } | undefined;
+        try {
+          const pendingRecall = retrieveLongTermMemory({
+            root: vaultRoot,
+            embeddingAdapter: concurrentAdapter,
+            signal: abortController.signal,
+            queryText: "cobalt archive",
+            scope: { chatId: "chat-a", chatIds: ["chat-a"] },
+            mode: "roleplay",
+            semanticWeight: 0,
+          }).then(
+            () => ({}),
+            (error: Error) => ({ error }),
+          );
+          await embeddingEntered.promise;
+          assert.equal(rebuildSignal, abortController.signal, "recall cancellation must reach rebuild embedding work");
+          const waiter = storage.listNotes().then(() => {
+            waiterDone = true;
+          });
+          abortController.abort();
+          releaseEmbedding.resolve();
+          recallOutcome = await pendingRecall;
+          await waiter;
+        } finally {
+          concurrentAdapter.embed = originalConcurrentEmbed;
+          releaseEmbedding.resolve();
+        }
+        assert.equal(waiterDone, true, "cancelled rebuild must release the vault lock for waiters");
+        assert.equal(recallOutcome?.error?.name, "AbortError", "cancelled recall must not resolve after abort");
+
+        // Cancellation during a semantic upgrade must not quarantine the valid lexical
+        // index or suppress a later upgrade retry.
+        await rebuildLongTermMemoryIndexes({ root: vaultRoot, embeddingAdapter: null, stopWords: [] });
+        const lexicalIndexBytes = await readFile(recallIndexPath, "utf8");
+        const upgradeController = new AbortController();
+        const abortingAdapter = {
+          spaceId: "test-space",
+          label: "aborting test embeddings",
+          async embed() {
+            upgradeController.abort();
+            throw new DOMException("cancelled", "AbortError");
+          },
+        };
+        await assert.rejects(
+          () => loadOrRebuildLongTermMemoryIndexes(vaultRoot, abortingAdapter, [], upgradeController.signal),
+          { name: "AbortError" },
+          "a cancelled semantic upgrade must surface cancellation",
+        );
+        assert.equal(
+          await readFile(recallIndexPath, "utf8"),
+          lexicalIndexBytes,
+          "cancellation must not quarantine or rewrite the valid lexical index",
+        );
+        const upgraded = await loadOrRebuildLongTermMemoryIndexes(vaultRoot, {
+          spaceId: "test-space",
+          label: "retry test embeddings",
+          async embed(texts: string[]) {
+            return texts.map(() => [1, 0]);
+          },
+        });
+        assert.ok(upgraded.embeddings.embeddedChunkCount > 0, "a later semantic upgrade must still be attempted");
+
+        // A cancelled recall that is handed an already-current index must reject before
+        // ranking, not return a result the generation path could still publish.
+        const preloadedController = new AbortController();
+        preloadedController.abort();
+        const preloadedIndex = parseLtmRecallIndex(JSON.parse(await readFile(recallIndexPath, "utf8")));
+        await assert.rejects(
+          () =>
+            retrieveLongTermMemory({
+              root: vaultRoot,
+              embeddingAdapter: null,
+              signal: preloadedController.signal,
+              index: preloadedIndex,
+              queryText: "cobalt archive",
+              scope: { chatId: "chat-a", chatIds: ["chat-a"] },
+              mode: "roleplay",
+              semanticWeight: 0,
+            }),
+          { name: "AbortError" },
+          "a cancelled recall with a preloaded index must not return results",
+        );
+
+        // Cancellation stopped in flight must not issue another embedding batch.
+        const batchController = new AbortController();
+        let batchCalls = 0;
+        await assert.rejects(
+          () =>
+            embedLongTermMemoryTexts(
+              Array.from({ length: 129 }, (_, index) => `chunk-${index}`),
+              {
+                signal: batchController.signal,
+                embeddingAdapter: {
+                  spaceId: "test-space",
+                  label: "batch test embeddings",
+                  async embed(texts: string[]) {
+                    batchCalls += 1;
+                    batchController.abort();
+                    return texts.map(() => [1]);
+                  },
+                },
+              },
+            ),
+          { name: "AbortError" },
+          "cancellation must stop further embedding batches",
+        );
+        assert.equal(batchCalls, 1, "only the in-flight batch may run after cancellation");
+      }
     },
     [
       () => cleanup?.(),

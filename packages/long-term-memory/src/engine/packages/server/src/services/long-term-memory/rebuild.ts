@@ -51,22 +51,29 @@ function clearAutoUpgradeFailure(root: string, adapter: EmbeddingAdapter | null)
   if (adapter) autoUpgradeFailures.delete(autoUpgradeFailureKey(root, adapter.spaceId));
 }
 
+function isCancellation(error: unknown, signal?: AbortSignal) {
+  return Boolean(signal?.aborted) || (error instanceof Error && error.name === "AbortError");
+}
+
 async function tryUpgradeSemanticIndex(
   root: string,
   index: LtmRecallIndex,
   adapter: EmbeddingAdapter | null,
   stopWords: readonly string[],
+  signal?: AbortSignal,
 ) {
   if (!adapter) return index;
   const failureKey = autoUpgradeFailureKey(root, adapter.spaceId);
   if (autoUpgradeFailures.has(failureKey)) return index;
   try {
-    const rebuilt = await rebuildLongTermMemoryIndexes({ root, embeddingAdapter: adapter, stopWords });
+    const rebuilt = await rebuildLongTermMemoryIndexes({ root, embeddingAdapter: adapter, stopWords, signal });
     if (rebuilt.embeddingsAvailable) {
       autoUpgradeFailures.delete(failureKey);
       return parseLtmRecallIndex(JSON.parse(await readFile(longTermMemoryRecallIndexPath(root), "utf8")));
     }
-  } catch {
+  } catch (error) {
+    // A cancelled upgrade must not disable the retry guard for later callers.
+    if (isCancellation(error, signal)) throw error;
     // ponytail: keep lexical recall; one process-local guard stops rebuild spam until manual rebuild or restart.
   }
   autoUpgradeFailures.add(failureKey);
@@ -115,6 +122,7 @@ export async function rebuildLongTermMemoryIndexes(
   const embeddingAdapter = await resolvePackageEmbeddingAdapter(options.embeddingAdapter);
   const stopWords = options.stopWords ?? ltmGeneratedStopWords(await getLtmGlobalSettings(root));
   return withLtmVaultLock(root, async () => {
+    options.signal?.throwIfAborted();
     await markLtmIndexesBuilding(root);
     try {
       clearAutoUpgradeFailure(root, embeddingAdapter ?? null);
@@ -158,6 +166,7 @@ export async function rebuildLongTermMemoryIndexes(
         keywords: buildLtmKeywordIndex(chunks),
         embeddings,
       };
+      options.signal?.throwIfAborted();
       await writeJsonAtomic(longTermMemoryRecallIndexPath(root), index);
       await markLtmIndexesClean(root);
       return {
@@ -179,26 +188,35 @@ export async function loadOrRebuildLongTermMemoryIndexes(
   root = getLongTermMemoryRoot(),
   resolvedEmbeddingAdapter?: EmbeddingAdapter | null,
   stopWords?: readonly string[],
+  signal?: AbortSignal,
 ) {
   const embeddingAdapter =
     resolvedEmbeddingAdapter !== undefined ? resolvedEmbeddingAdapter : await resolvePackageEmbeddingAdapter();
   const resolvedStopWords = stopWords ?? ltmGeneratedStopWords(await getLtmGlobalSettings(root));
   const path = longTermMemoryRecallIndexPath(root);
-  try {
-    const index = parseLtmRecallIndex(JSON.parse(await readFile(path, "utf8")));
-    const notes = await new LongTermMemoryStorage(root).listNotes();
-    if (
-      index.sourceHash !==
-      stableJsonHash(chunkNotes(notes, { includeSourceNotes: false, stopWords: resolvedStopWords }))
-    ) {
-      throw new Error("Stale long-term memory recall index.");
+  // Read, freshness-check, quarantine, and rebuild as one serialized vault lifecycle so a
+  // queued caller rechecks the index the previous caller just published. The vault lock is
+  // reentrant, so the nested upgrade/rebuild calls below do not deadlock.
+  return withLtmVaultLock(root, async () => {
+    signal?.throwIfAborted();
+    try {
+      const index = parseLtmRecallIndex(JSON.parse(await readFile(path, "utf8")));
+      const notes = await new LongTermMemoryStorage(root).listNotes();
+      if (
+        index.sourceHash !==
+        stableJsonHash(chunkNotes(notes, { includeSourceNotes: false, stopWords: resolvedStopWords }))
+      ) {
+        throw new Error("Stale long-term memory recall index.");
+      }
+      const usableEmbeddings = getUsableEmbeddingState(index, embeddingAdapter);
+      if (usableEmbeddings) return index;
+      return await tryUpgradeSemanticIndex(root, index, embeddingAdapter, resolvedStopWords, signal);
+    } catch (error) {
+      // Cancellation is not corruption: never quarantine a valid index or rebuild on abort.
+      if (isCancellation(error, signal)) throw error;
+      await quarantineLtmIndexArtifact(root, path).catch(() => {});
+      await rebuildLongTermMemoryIndexes({ root, embeddingAdapter, stopWords: resolvedStopWords, signal });
+      return parseLtmRecallIndex(JSON.parse(await readFile(path, "utf8")));
     }
-    const usableEmbeddings = getUsableEmbeddingState(index, embeddingAdapter);
-    if (usableEmbeddings) return index;
-    return await tryUpgradeSemanticIndex(root, index, embeddingAdapter, resolvedStopWords);
-  } catch (error) {
-    await quarantineLtmIndexArtifact(root, path).catch(() => {});
-    await rebuildLongTermMemoryIndexes({ root, embeddingAdapter, stopWords: resolvedStopWords });
-    return parseLtmRecallIndex(JSON.parse(await readFile(path, "utf8")));
-  }
+  });
 }

@@ -137,6 +137,7 @@ export async function prepareGenerationLongTermMemory(input: {
       },
     });
   }
+  input.signal?.throwIfAborted();
   const receipt: LongTermMemoryRecallReceipt = { version: 1, id: randomUUID(), chatId: input.chatId, artifact };
   await writeJsonAtomic(pendingPath(input.root, input.chatId), receipt);
   return { text: artifact.content, receipt };

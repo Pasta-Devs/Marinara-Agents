@@ -77,7 +77,15 @@ export async function retrieveLongTermMemory(input: RetrieveLongTermMemoryInput)
   const triggerStopWords = settings.longTermMemoryStopWords;
   const index =
     input.index ??
-    (await loadOrRebuildLongTermMemoryIndexes(input.root, embeddingAdapter, ltmGeneratedStopWords(settings)));
+    (await loadOrRebuildLongTermMemoryIndexes(
+      input.root,
+      embeddingAdapter,
+      ltmGeneratedStopWords(settings),
+      input.signal,
+    ));
+  // A caller-supplied index skips the signal-aware loader, so cancellation must be
+  // rechecked here before ranking and returning a recall the caller already abandoned.
+  input.signal?.throwIfAborted();
   const query = input.queryText?.trim() ?? "";
   const characterIds = Array.from(new Set([...(input.scope?.characterIds ?? []), ...(input.characterIds ?? [])]));
   const allowed = new Set(

@@ -306,6 +306,7 @@ async function getExistingTypedNotes(options: {
   maxTokens: number;
   trustedSubjectCatalog?: TrustedLtmSubjectCatalog;
   index?: LtmRecallIndex;
+  signal?: AbortSignal;
 }) {
   const retrieval = await retrieveLongTermMemory({
     root: options.root,
@@ -316,6 +317,7 @@ async function getExistingTypedNotes(options: {
     maxChunks: options.maxChunks,
     maxTokens: options.maxTokens,
     index: options.index,
+    signal: options.signal,
   });
   const identityNotes = options.trustedSubjectCatalog
     ? trustedLtmIdentityNotesForSource({
@@ -478,7 +480,7 @@ async function extractLongTermMemoryFromSourceNoteInner(
       },
     },
   });
-  const recallIndex = await loadOrRebuildLongTermMemoryIndexes(options.root);
+  const recallIndex = await loadOrRebuildLongTermMemoryIndexes(options.root, undefined, undefined, options.signal);
   const existingNotes = await getExistingTypedNotes({
     storage,
     root: options.root,
@@ -490,6 +492,7 @@ async function extractLongTermMemoryFromSourceNoteInner(
     maxTokens: extractionConfig.existingNoteMaxTokens,
     trustedSubjectCatalog: options.trustedSubjectCatalog,
     index: recallIndex,
+    signal: options.signal,
   });
   await recordLtmDebugEvent({
     operationId: options.operationId,
