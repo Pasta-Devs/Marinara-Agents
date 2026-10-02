@@ -1145,6 +1145,14 @@ async function main() {
         assert.equal(chatWide.includes("world_target_persona"), false, "persona-only notes stay out of group recall");
         assert.equal((await recallNotes([])).includes("world_target_a"), true);
         assert.equal((await recallNotes(["character-c"])).includes("world_target_a"), true);
+        // #1194: strict-subset detection reads the chat's current character list, so growing the
+        // group after the index rebuild must switch the original two-id recall to targeted filtering.
+        targetedChat.characterIds = ["character-a", "character-b", "character-c"];
+        const grownTargeted = await recallNotes(["character-a", "character-b"]);
+        assert.deepEqual(grownTargeted, ["world_target_a", "world_target_b", "world_target_mixed"]);
+        for (const id of ["world_target_global", "world_target_chat", "world_target_persona", "world_target_foreign"]) {
+          assert.equal(grownTargeted.includes(id), false, `${id} must stay out of a targeted group recall`);
+        }
       } finally {
         chats.pop();
       }
