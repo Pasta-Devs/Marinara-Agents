@@ -439,7 +439,7 @@ async function getOrCreateHierarchicalMapsAgentConfig(
       type: "hierarchical-maps",
       name: "World Maps",
       description:
-        "Adds persistent hierarchical locations, durable shared worlds, reusable artwork, customizable Direct Link lines, and movement to Roleplay and Game. Add the Agent in Chat Settings → Agents → Tracker Agents for Roleplay and Game modes.",
+        "Adds world maps to Roleplay and Game, from whole regions down to single rooms, with art and travel between places. Add the Agent in Chat Settings → Agents → Tracker Agents for Roleplay and Game modes.",
       phase: "pre_generation",
       connectionId: null,
       imagePath: null,

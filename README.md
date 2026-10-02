@@ -12,29 +12,29 @@ Across its Engine compatibility lanes, the stable catalog currently contains **3
 
 | Agent | Package | What it does |
 | --- | --- | --- |
-| Card Evolution Auditor | [`card-evolution-auditor`](packages/card-evolution-auditor/manifest.json) | Audits durable roleplay changes and proposes precise character-card edits for approval. |
-| Continuity Checker | [`continuity`](packages/continuity/manifest.json) | Fixes concrete spatial, timeline, and physical logic errors without changing the story. |
-| Knowledge Retrieval | [`knowledge-retrieval`](packages/knowledge-retrieval/manifest.json) | Finds relevant lorebook information, summarizes it, and injects it into the prompt. |
-| Knowledge Router | [`knowledge-router`](packages/knowledge-router/manifest.json) | Selects relevant lorebook entries from a lightweight catalog and injects them verbatim. |
-| Narrative Director | [`director`](packages/director/manifest.json) | Creates one-shot story directions when the user chooses to push the next response forward. |
-| Prose Guardian | [`prose-guardian`](packages/prose-guardian/manifest.json) | Removes banned words, repetition, and unwanted prose habits without changing meaning. |
+| Card Evolution Auditor | [`card-evolution-auditor`](packages/card-evolution-auditor/manifest.json) | Suggests character card updates when the story changes a character, for you to approve. |
+| Continuity Checker | [`continuity`](packages/continuity/manifest.json) | Fixes mistakes about places, time, and physical details in AI messages without changing the story. |
+| Knowledge Retrieval | [`knowledge-retrieval`](packages/knowledge-retrieval/manifest.json) | Finds what matters for the current scene in your lorebooks and gives the AI a short summary of it. |
+| Knowledge Router | [`knowledge-router`](packages/knowledge-router/manifest.json) | A cheaper Knowledge Retrieval: picks the lorebook entries that fit the scene and gives them to the AI as they are. Works best with big lorebooks whose entries have short descriptions. |
+| Narrative Director | [`director`](packages/director/manifest.json) | Gives the story a push in a new direction when you ask for it. |
+| Prose Guardian | [`prose-guardian`](packages/prose-guardian/manifest.json) | Removes banned words, repetition, and unwanted writing habits from AI messages without changing what they say. |
 
 ### Tracker Agents
 
 | Agent | Package | What it does |
 | --- | --- | --- |
 | Background | [`background`](packages/background/manifest.json) | Selects the best existing scene background from your library. |
-| Beholder | [`beholder`](packages/beholder/manifest.json) | Tracks clothing by body slot, held items, wounds, missing parts, bare slots, and species. Slot editing supports Tab, Enter, and Space, with Escape returning focus. Recommended for OpenAI GPT-5.5+, Claude Opus 4.8+, or Kimi K3+. |
-| Character Tracker | [`character-tracker`](packages/character-tracker/manifest.json) | Tracks present characters, moods, actions, appearance, thoughts, and character stats. |
-| Custom Tracker | [`custom-tracker`](packages/custom-tracker/manifest.json) | Tracks user-defined currencies, counters, flags, and other custom fields. |
-| Expression Engine | [`expression`](packages/expression/manifest.json) | Detects character emotions and selects matching Visual Novel sprites or expressions. |
-| Inventory Tracker | [`inventory-tracker`](packages/inventory-tracker/manifest.json) | Tracks currencies, equipped gear, and carried items as separate structured lists. |
-| Memory Nag | [`memory-nag`](packages/memory-nag/manifest.json) | Keeps a short per-chat vault of roleplay memories and recalls only unresolved details that matter to the current turn. |
-| World Maps | [`hierarchical-maps`](packages/hierarchical-maps/manifest.json) | Adds persistent nested locations, durable shared worlds, reusable artwork, customizable Direct Link lines, map authoring, and movement. Child-location maps use a square 100×100 grid; square background images align in both the editor and runtime. |
-| Persona Stats | [`persona-stats`](packages/persona-stats/manifest.json) | Tracks the player persona's status bars and custom stats from narrative events. |
-| Quest Tracker | [`quest`](packages/quest/manifest.json) | Manages quest objectives, completion states, and rewards. |
-| Quartermaster **(staging only)** | [`quartermaster`](packages/quartermaster/manifest.json) | Keeps a per-chat Roleplay inventory, equipment, saved outfits, and item artwork in sync with the story. Requires Engine 2.4.6+; planned for the next Engine main release. |
-| Relationship Tracker **(staging only)** | [`relationship-tracker`](packages/relationship-tracker/manifest.json) | Tracks character relationships and perceptions of the active persona in an editable Roleplay relationship web. Requires Engine 2.4.4+; planned for the next Engine main release. |
+| Beholder | [`beholder`](packages/beholder/manifest.json) | Keeps track of what each character is wearing and holding, plus any injuries, so the story stays consistent. You can check it on a paper doll from the roleplay toolbar. Works with big online models, or with the free Beholder model that runs privately on your computer. |
+| Character Tracker | [`character-tracker`](packages/character-tracker/manifest.json) | Tracks who is in the scene and how each character looks, feels, and acts, plus stats like HP. |
+| Custom Tracker | [`custom-tracker`](packages/custom-tracker/manifest.json) | Tracks anything you want during the roleplay, like money, counters, or flags. |
+| Expression Engine | [`expression`](packages/expression/manifest.json) | Changes character sprites to match how they feel. |
+| Inventory Tracker | [`inventory-tracker`](packages/inventory-tracker/manifest.json) | Keeps track of your money, gear, and what you're carrying. |
+| Memory Nag | [`memory-nag`](packages/memory-nag/manifest.json) | Remembers loose ends from your roleplay, like promises and open questions, and reminds the AI when they matter. |
+| World Maps | [`hierarchical-maps`](packages/hierarchical-maps/manifest.json) | Adds world maps to Roleplay and Game, from whole regions down to single rooms, with art and travel between places. |
+| Persona Stats | [`persona-stats`](packages/persona-stats/manifest.json) | Tracks your persona's needs, like hunger, energy, and hygiene, as the story goes on. |
+| Quest Tracker | [`quest`](packages/quest/manifest.json) | Keeps track of your quests, their goals, and their rewards. |
+| Quartermaster **(staging only)** | [`quartermaster`](packages/quartermaster/manifest.json) | An RPG character sheet and inventory for Roleplay: equip gear around your persona's portrait, save outfits, get AI art for items, and let it keep everything in step with the story. Requires Engine 2.4.6+; planned for the next Engine main release. |
+| Relationship Tracker **(staging only)** | [`relationship-tracker`](packages/relationship-tracker/manifest.json) | Tracks how the characters and your persona feel about each other. Requires Engine 2.4.4+; planned for the next Engine main release. |
 | World State | [`world-state`](packages/world-state/manifest.json) | Tracks date, time, weather, location, temperature, and custom world details. |
 
 ### Misc Agents
@@ -45,20 +45,20 @@ Across its Engine compatibility lanes, the stable catalog currently contains **3
 | Chess | [`chess`](packages/chess/manifest.json) | Adds a Conversation-mode chess board and `/chess` command. |
 | Combat | [`combat`](packages/combat/manifest.json) | Manages combat encounters, initiative, HP tracking, and turn-based actions. |
 | Calls | [`conversation-calls`](packages/conversation-calls/manifest.json) | Adds live audio/video calls, microphone transcription, and character video presence. |
-| CYOA Choices | [`cyoa`](packages/cyoa/manifest.json) | Generates clickable Choose Your Own Adventure choices after Roleplay responses. |
+| CYOA Choices | [`cyoa`](packages/cyoa/manifest.json) | Offers a few choices after each AI message, like a Choose Your Own Adventure book. Click one to send it as your reply. |
 | Echo Chamber | [`echo-chamber`](packages/echo-chamber/manifest.json) | Simulates a streaming-style audience chat reacting to Roleplay in real time. |
 | Gacha Forge | [`gacha-forge`](packages/gacha-forge/manifest.json) | A complete gacha game mode: describe a world and it builds the rest — banners to pull on, a generated cast, story chapters told by a visual-novel narrator, and the battles, gear, bonds and events that grow around them, all from **Home → Gacha Forge**. |
-| Haptic Feedback | [`haptic`](packages/haptic/manifest.json) | Controls every supported action and pattern on connected Intiface devices. |
+| Haptic Feedback | [`haptic`](packages/haptic/manifest.json) | Controls connected intimate toys to match what happens in the story. Needs Intiface Central running on your computer, with your toy connected there first. |
 | Illustrator | [`illustrator`](packages/illustrator/manifest.json) | Creates images and videos, with optional automatic Roleplay backgrounds for new scene locations. |
-| Immersive HTML | [`html`](packages/html/manifest.json) | Adds diegetic HTML/CSS/JS visual artifacts without changing story meaning. |
-| Lorebook Keeper | [`lorebook-keeper`](packages/lorebook-keeper/manifest.json) | Creates and updates durable lorebook entries from important story facts. |
-| Long-Term Memory | [`long-term-memory`](packages/long-term-memory/manifest.json) | Extracts durable memories from chat summaries, character records, and lorebooks, with scoped vault browsing, review, paginated source browsing, recall controls, and preset-marker placement for Roleplay. |
-| Music DJ | [`spotify`](packages/spotify/manifest.json) | Plays scene-matched music through Spotify, YouTube, or local Game Assets. |
-| Noodle | [`noodle`](packages/noodle/manifest.json) | Explore the public Noodle social timeline as an optional local social world, available after installation from **Home → Noodle**. |
+| Immersive HTML | [`html`](packages/html/manifest.json) | Adds HTML/CSS/JS visual effects to AI messages. |
+| Lorebook Keeper | [`lorebook-keeper`](packages/lorebook-keeper/manifest.json) | Saves important story facts, characters, places, and world changes to the chat's lorebook as you play. |
+| Long-Term Memory | [`long-term-memory`](packages/long-term-memory/manifest.json) | Remembers important things from your chat summaries, characters, and lorebooks, and brings them back when they matter. |
+| Music DJ | [`spotify`](packages/spotify/manifest.json) | Plays music that fits the mood of the story, from Spotify, YouTube, or your own Game Assets music. |
+| Noodle | [`noodle`](packages/noodle/manifest.json) | A pretend social network where your characters post, share photos, and talk about your chats, available after installation from **Home → Noodle**. |
 | Slurp | [`slurp2`](packages/slurp2/manifest.json) | A private social app for your characters: turn characters and personas into Creators, post public or locked photos, and watch a simulated audience follow, subscribe, unlock, comment, and message them, from **Home → Slurp**. Tuned for an adult experience by default. |
 | Poker | [`poker`](packages/poker/manifest.json) | Adds No-Limit Texas Hold'em for Conversation chats and the `/poker` command. |
 | Rock-Paper-Scissors | [`rock-paper-scissors`](packages/rock-paper-scissors/manifest.json) | Adds best-of-three, five, or seven Conversation matches and the `/rps` command. |
-| Storyboard | [`storyboard`](packages/storyboard/manifest.json) | Plans and generates still or animated Game and Roleplay storyboards with provider-tuned prompt chains. |
+| Storyboard | [`storyboard`](packages/storyboard/manifest.json) | Turns Game and Roleplay scenes into storyboards of still images or short animations. |
 | Tic-Tac-Toe | [`tic-tac-toe`](packages/tic-tac-toe/manifest.json) | Adds one-on-one Conversation matches and the `/tictactoe` command. |
 | UNO | [`uno`](packages/uno/manifest.json) | Adds a complete Conversation-mode UNO table and `/uno` command. |
 
@@ -75,10 +75,10 @@ These packages are being built in this repository but are not ready for the stab
 | Package | ID | Availability | Status |
 | --- | --- | --- | --- |
 | Modern Life Sim | [`modern-life-sim`](packages/modern-life-sim/manifest.json) | Staging only | A modern life sim in its own Home tab: a town on a clock, a job, rent and needs, and a cast drawn from your character cards whose relationships grow scene by scene, with a visual-novel narrator for the scenes that matter. Alpha; offered to Engine `staging` testers from **Home → Life Sim**. |
-| Quartermaster | [`quartermaster`](packages/quartermaster/manifest.json) | Staging only | Roleplay inventory, equipment, saved outfits, and optional item/outfit artwork. Install from **Agents → Download Agents**, restart, then add it under **Chat Settings → Agents → Tracker Agents**. Requires Engine 2.4.6+. Planned for the next Engine main release; see the [package guide](packages/quartermaster/README.md). |
-| Pixelforge | [`pixelforge`](packages/pixelforge/manifest.json) | In development | A walkable pixel-art RPG Experience for Game Mode: generated settlements, NPCs, and story-driven exploration. Under active development; not yet listed for users. |
-| Relationship Tracker | [`relationship-tracker`](packages/relationship-tracker/manifest.json) | Staging only | Tracks character relationships and perceptions of the active persona in an editable Roleplay relationship web. Install from **Agents → Download Agents**, restart, then add it under **Chat Settings → Agents → Tracker Agents**. Requires Engine 2.4.4+ and Capability API 1.14. Planned for the next Engine main release; see the [package guide](packages/relationship-tracker/README.md). |
-| 5e (SRD 5.1) | [`ruleset-5e-2014`](packages/ruleset-5e-2014/manifest.json) | Staging only | A Game Mode ruleset: 5e SRD 5.1 ability checks, skill checks, saving throws, and the full character sheet, plus pickable SRD spells, class features and weapons. Picked class resources such as Rage, Ki and Lay on Hands keep their own maximum from your level or your Charisma. It also brings 5e combat itself: a battle in a game on this ruleset is fought by these rules on screen, with attack rolls against Armor Class, saves, conditions, concentration and death saves, against a bestiary of 319 SRD monsters whose spellcasters cast from their own spell slots. Reactions come at their moment: Shield, Uncanny Dodge, Counterspell, Hellish Rebuke and a monster's Parry. You can grapple and shove, exhaustion counts, and spells such as Bless, Haste and Slow change the numbers they print. With the game's combat style set to Tactical that fight is played on a board in feet: movement off your Speed, weapon reach and range with long range, half cover, spell areas as cones, lines and bursts, and the chance to strike at somebody walking out of your reach. Classic plays the same fight without positions. Ships only data, no Agent and no code. Needs an Engine with Capability API 1.46, which today means the Engine `staging` branch. |
+| Quartermaster | [`quartermaster`](packages/quartermaster/manifest.json) | Staging only | An RPG character sheet and inventory for Roleplay: equip gear around your persona's portrait, save outfits, get AI art for items, and let it keep everything in step with the story. Install from **Agents → Download Agents**, restart, then add it under **Chat Settings → Agents → Tracker Agents**. Requires Engine 2.4.6+. Planned for the next Engine main release; see the [package guide](packages/quartermaster/README.md). |
+| Pixelforge | [`pixelforge`](packages/pixelforge/manifest.json) | In development | A pixel-art RPG world for Game Mode that you walk around in. Pick a setting, like a cozy village or a sci-fi colony, then explore, talk to NPCs, and let the Game Master narrate. Under active development; not yet listed for users. |
+| Relationship Tracker | [`relationship-tracker`](packages/relationship-tracker/manifest.json) | Staging only | Tracks how the characters and your persona feel about each other. Install from **Agents → Download Agents**, restart, then add it under **Chat Settings → Agents → Tracker Agents**. Requires Engine 2.4.4+ and Capability API 1.14. Planned for the next Engine main release; see the [package guide](packages/relationship-tracker/README.md). |
+| 5e (SRD 5.1) | [`ruleset-5e-2014`](packages/ruleset-5e-2014/manifest.json) | Staging only | Play Game Mode by the 5e rules (SRD 5.1): ability checks, saving throws, a full character sheet with spells and class features, and 5e combat against 319 monsters, on a battle board or without positions. Ships only data, no Agent and no code. Needs an Engine with Capability API 1.46, which today means the Engine `staging` branch. |
 
 ### Localization sources
 

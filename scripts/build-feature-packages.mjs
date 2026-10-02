@@ -280,13 +280,13 @@ async function removeOwnedSourceSnapshots(excludedPaths) {
 const features = [
   {
     id: "noodle",
-    version: "1.3.1",
+    version: "1.4.0",
     minEngineVersion: "2.4.6",
     capabilityApi: { major: 1, minor: 35 },
     builtAgainst: { engineVersion: "2.4.6", engineCommit: "2f5c8e314f8583cc274b488cfd309a2bc2a214d3" },
     maxEngineExclusive: MAX_ENGINE_EXCLUSIVE,
     name: "Noodle",
-    description: "Explore the Noodle public timeline as an optional local social world.",
+    description: "A pretend social network where your characters post, share photos, and talk about your chats.",
     localizations: {
       de: {
         name: "Noodle",
@@ -433,12 +433,12 @@ const features = [
   },
   {
     id: "long-term-memory",
-    version: "1.3.37",
+    version: "1.3.38",
     minEngineVersion: "2.4.1",
     maxEngineExclusive: MAX_ENGINE_EXCLUSIVE,
     name: "Long-Term Memory",
     description:
-      "Extracts durable memories from chat summaries, character records, and lorebooks, then recalls relevant context from a package-owned vault.",
+      "Remembers important things from your chat summaries, characters, and lorebooks, and brings them back when they matter.",
     category: "misc",
     kind: ["agent"],
     modes: ["conversation", "roleplay", "game"],
@@ -458,12 +458,12 @@ const features = [
   },
   {
     id: "memory-nag",
-    version: "1.1.2",
+    version: "1.1.3",
     minEngineVersion: "2.4.4",
     maxEngineExclusive: MAX_ENGINE_EXCLUSIVE,
     name: "Memory Nag",
     description:
-      "Keeps a short per-chat vault of roleplay memories and recalls only the unresolved details that matter to the current turn.",
+      "Remembers loose ends from your roleplay, like promises and open questions, and reminds the AI when they matter.",
     category: "tracker",
     kind: ["agent"],
     modes: ["roleplay"],
@@ -478,7 +478,7 @@ const features = [
     capabilityApi: { major: 1, minor: 14 },
     agent: {
       description:
-        "Keeps a short per-chat vault of roleplay memories and recalls only the unresolved details that matter to the current turn.",
+        "Remembers loose ends from your roleplay, like promises and open questions, and reminds the AI when they matter.",
       phase: "post_processing",
       runtimeDisabled: false,
       execution: "pipeline",
@@ -513,12 +513,12 @@ const features = [
   },
   {
     id: "hierarchical-maps",
-    version: "1.5.0",
+    version: "1.5.1",
     minEngineVersion: "2.4.2",
     maxEngineExclusive: MAX_ENGINE_EXCLUSIVE,
     name: "World Maps",
     description:
-      "Adds persistent hierarchical locations, durable shared worlds, reusable artwork, customizable Direct Link lines, and movement to Roleplay and Game.",
+      "Adds world maps to Roleplay and Game, from whole regions down to single rooms, with art and travel between places.",
     category: "tracker",
     kind: ["agent", "maps"],
     modes: ["roleplay", "game"],

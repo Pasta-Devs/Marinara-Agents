@@ -6,12 +6,12 @@
   },
   "package": {
     "name": "Prose Guardian",
-    "description": "Post-processes the latest assistant message to remove banned words, repetition, and unwanted prose habits without changing the meaning. Add the Agent in Chat Settings → Agents → Writer Agents for Roleplay mode."
+    "description": "Removes banned words, repetition, and unwanted writing habits from AI messages without changing what they say. Add the Agent in Chat Settings → Agents → Writer Agents for Roleplay mode."
   },
   "agents": {
     "prose-guardian": {
       "name": "Prose Guardian",
-      "description": "Post-processes the latest assistant message to remove banned words, repetition, and unwanted prose habits without changing the meaning."
+      "description": "Removes banned words, repetition, and unwanted writing habits from AI messages without changing what they say."
     }
   }
 }

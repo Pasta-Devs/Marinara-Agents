@@ -6,12 +6,12 @@
   },
   "package": {
     "name": "Lorebook Keeper",
-    "description": "Creates and updates durable chat lorebook entries from important story facts, characters, places, and world changes. Add the Agent in Chat Settings → Agents → Misc Agents/Lorebook Keeper for Roleplay and Game modes."
+    "description": "Saves important story facts, characters, places, and world changes to the chat's lorebook as you play. Add the Agent in Chat Settings → Agents → Misc Agents/Lorebook Keeper for Roleplay and Game modes."
   },
   "agents": {
     "lorebook-keeper": {
       "name": "Lorebook Keeper",
-      "description": "Creates and updates durable chat lorebook entries from important story facts, characters, places, and world changes."
+      "description": "Saves important story facts, characters, places, and world changes to the chat's lorebook as you play."
     }
   }
 }

@@ -156,7 +156,7 @@ import type {
 } from "./noodle-navigation.types";
 import { NoodleProfileSurface } from "./NoodleProfileSurface";
 import { formatTime } from "./NoodleDateTime";
-import { NoodleImageComposer } from "./NoodleImageComposer";
+import { NOODLE_IMAGE_ACCEPT, NoodleImageComposer } from "./NoodleImageComposer";
 import { NoodlePollComposer } from "./NoodlePollComposer";
 import {
   insertAtSelection,
@@ -4819,11 +4819,17 @@ export function NoodleHome({ navigation, onNavigate, focusPostId, onFocusPostHan
       rightRail={rightRail}
       overlays={
         <>
-          <input ref={imageFileRef} type="file" accept="image/*" className="hidden" onChange={handleImageFile} />
+          <input
+            ref={imageFileRef}
+            type="file"
+            accept={NOODLE_IMAGE_ACCEPT}
+            className="hidden"
+            onChange={handleImageFile}
+          />
           <input
             ref={replyImageFileRef}
             type="file"
-            accept="image/*"
+            accept={NOODLE_IMAGE_ACCEPT}
             className="hidden"
             onChange={handleReplyImageFile}
           />

@@ -1,5 +1,8 @@
 # Inventory Tracker
 
+## 1.2.1 — 2026-10-01
+- The description now says what it does in plain words.
+
 ## 1.2.0 — 2026-09-14
 - Track established item descriptions and storage locations on compatible Engines, preserving unchanged details and locked values.
 

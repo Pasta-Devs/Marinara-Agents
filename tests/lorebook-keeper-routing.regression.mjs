@@ -6,7 +6,7 @@ const manifest = JSON.parse(await readFile(new URL("manifest.json", packageRoot)
 const agents = JSON.parse(await readFile(new URL("agents.json", packageRoot), "utf8"));
 const keeper = agents.find((agent) => agent.id === "lorebook-keeper");
 
-assert.equal(manifest.version, "1.0.5");
+assert.equal(manifest.version, "1.0.6");
 assert.ok(keeper, "Lorebook Keeper definition must exist");
 assert.match(keeper.defaultPromptTemplate, /Classify every durable fact before writing it/u);
 for (const category of ["npc", "world", "scene", "player"]) {

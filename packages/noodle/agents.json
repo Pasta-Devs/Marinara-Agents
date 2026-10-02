@@ -2,7 +2,7 @@
   {
     "id": "noodle",
     "name": "Noodle",
-    "description": "Explore the Noodle public timeline as an optional local social world.",
+    "description": "A pretend social network where your characters post, share photos, and talk about your chats.",
     "author": "Pasta Devs",
     "phase": "pre_generation",
     "enabledByDefault": false,

@@ -2,7 +2,7 @@
   {
     "id": "html",
     "name": "Immersive HTML",
-    "description": "Post-processes the latest Roleplay response with diegetic HTML/CSS/JS visual artifacts without changing the story meaning.",
+    "description": "Adds HTML/CSS/JS visual effects to AI messages.",
     "phase": "post_processing",
     "enabledByDefault": false,
     "category": "misc",

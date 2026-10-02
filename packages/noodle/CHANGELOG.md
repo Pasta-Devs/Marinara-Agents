@@ -1,5 +1,11 @@
 # Noodle release notes
 
+## 1.4.0 — 2026-10-01
+
+- You can now translate posts and comments, your own included. Pick Translate in a post's menu or under a comment, and use the same button to hide it again. Noodle uses the translator defaults you saved in a chat's Translation settings, or Google Translate into English if you have not saved any.
+- In Chrome on Android, adding a picture to a post or comment now offers the camera as well as your files. The Marinara Android app doesn't offer the camera yet.
+- Noodle's description now says what it is in plain words.
+
 ## 1.3.1 — 2026-09-30
 
 - When Noodle cannot load, it now says so instead of showing an empty timeline. If Marinara Engine blocked it because this device has no Admin Secret, it explains how to set one.

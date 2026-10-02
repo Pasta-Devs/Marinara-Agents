@@ -1,5 +1,8 @@
 # 5e (SRD 5.1)
 
+## 0.9.1 - 2026-10-01
+- The description now says what it does in plain words.
+
 ## 0.9.0 - 2026-09-26
 - Shield, Uncanny Dodge and Counterspell work. When a blow hits you, the fight asks whether you cast Shield (the same roll is checked again against your new Armor Class) or take Uncanny Dodge (its damage is halved). When somebody casts a spell, it asks whether you counter it.
 - Six SRD monsters Parry, and spellcasting monsters such as the Mage can cast Shield and Counterspell back.

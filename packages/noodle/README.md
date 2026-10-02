@@ -6,6 +6,8 @@ Find the package in **Agents → Download Agents**. Once installed and Marinara 
 
 Noodle also offers **Latest Posts** in Home's **Widget Manager → Agents → Noodle**. Add it to show the newest five public posts in a scrollable large widget. Selecting a post opens that post in Noodle. The widget only reads existing posts; visiting Home never starts a Noodle generation run. Hide it in the Widget Manager to remove it from Home while keeping it available to add again.
 
+To translate a post, pick **Translate** in its menu; comments have a Translate button of their own. The translation appears under the original, and the same button hides it. Noodle sends the text to the Engine's translator with the translator defaults saved from a chat's **Translation** settings (**Save translator defaults**). Without saved defaults it uses the Engine's default for a new chat: Google Translate into English. Translations are not stored.
+
 The Engine continues to own package loading, local storage, provider routing, backup coordination, and upgrade migration. This package owns the Noodle UI, routes, timeline generation, prompt context, media behavior, the public refresh scheduler, localized UI catalogs, and catalog artwork.
 
 Existing Engine profiles receive this package once during the built-in-to-package migration. The migration preserves existing local data and imports the last selected persona and public view into package-local browser state. The completion marker is written after a successful install, so a later explicit uninstall remains respected. Fresh profiles do not install Noodle automatically.

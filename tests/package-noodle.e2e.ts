@@ -1,4 +1,4 @@
-import { expect, test, type Locator, type Page } from "@playwright/test";
+import { expect, test, type Locator, type Page, type Route } from "@playwright/test";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
@@ -339,6 +339,168 @@ test.describe("package-owned Noodle interface", () => {
       await expect(search.locator("svg:visible").first()).toHaveCSS("color", NOODLE_BLUE_RGB);
       await page.screenshot({ path: testInfo.outputPath("noodle-search-colors.png") });
       expect(errors).toEqual([]);
+    } finally {
+      await page.request.delete(`/api/noodle/posts/${post.id}`, { timeout: 5_000 }).catch(() => undefined);
+    }
+  });
+
+  test("post image pickers let a phone take a photo as well as choose a file", async ({ page }) => {
+    // Chrome on Android 13+ answers an image-only accept list with a photo picker that has no camera (#6939).
+    await page.request.get("/api/noodle");
+    const postResponse = await page.request.post("/api/noodle/posts", {
+      data: {
+        authorKind: "character",
+        authorEntityId: "__professor_mari__",
+        content: `Camera picker regression ${Date.now()}`,
+      },
+    });
+    expect(postResponse.ok()).toBe(true);
+    const post = (await postResponse.json()) as { id: string };
+    try {
+      await page.goto("/");
+      await openNoodle(page);
+      const noodle = page.locator('[data-component="NoodleView"]');
+      const imagePickers = noodle.locator('input[type="file"][accept*="image/"]');
+      // The post composer and the comment composer.
+      await expect(imagePickers).toHaveCount(2);
+      const article = noodle.locator(`[data-noodle-post-id="${post.id}"]`);
+      await article.getByRole("button", { name: "Post actions", exact: true }).click();
+      await article.getByRole("button", { name: "Edit", exact: true }).click();
+      // Plus the picker that replaces an edited post's image.
+      await expect(imagePickers).toHaveCount(3);
+      expect(await imagePickers.evaluateAll((inputs) => inputs.map((input) => input.getAttribute("accept")))).toEqual(
+        Array(3).fill("image/*,android/allowCamera"),
+      );
+    } finally {
+      await page.request.delete(`/api/noodle/posts/${post.id}`, { timeout: 5_000 }).catch(() => undefined);
+    }
+  });
+
+  test("posts and comments translate with the saved translator defaults", async ({ page }) => {
+    const errors = collectUnexpectedErrors(page);
+    const translateBodies: Array<Record<string, unknown>> = [];
+    await page.route("**/api/translate", async (route) => {
+      const body = route.request().postDataJSON() as Record<string, unknown>;
+      translateBodies.push(body);
+      await route.fulfill({ json: { translatedText: `Przetłumaczone: ${String(body.text)}` } });
+    });
+    const savedDefaults = await page.request.put("/api/app-settings/translator-defaults", {
+      data: {
+        value: JSON.stringify({
+          translationProvider: "deepl",
+          translationOutputTargetLang: "PL",
+          translationDeeplApiKey: "test-key",
+        }),
+      },
+    });
+    expect(savedDefaults.ok()).toBe(true);
+    await page.request.get("/api/noodle");
+    const postResponse = await page.request.post("/api/noodle/posts", {
+      data: {
+        authorKind: "character",
+        authorEntityId: "__professor_mari__",
+        content: `Translation regression ${Date.now()}`,
+      },
+    });
+    expect(postResponse.ok()).toBe(true);
+    const post = (await postResponse.json()) as { id: string; content: string };
+    try {
+      const commentResponse = await page.request.post(`/api/noodle/posts/${post.id}/interactions`, {
+        data: {
+          actorKind: "character",
+          actorEntityId: "__professor_mari__",
+          type: "reply",
+          content: "A comment worth translating.",
+        },
+      });
+      expect(commentResponse.ok()).toBe(true);
+      const comment = (await commentResponse.json()) as { id: string };
+
+      await page.goto("/");
+      await openNoodle(page);
+      const article = page.locator(`[data-noodle-post-id="${post.id}"]`);
+      const commentRow = article.locator(`[data-noodle-interaction-id="${comment.id}"]`);
+      const translations = article.locator("[data-noodle-translation]");
+      await expect(article).toContainText(post.content);
+
+      await article.getByRole("button", { name: "Post actions", exact: true }).click();
+      await article.getByRole("button", { name: "Translate", exact: true }).click();
+      await expect(translations).toHaveCount(1);
+      await expect(translations).toContainText(`Przetłumaczone: ${post.content}`);
+      // The original stays above its translation.
+      await expect(article.getByText(post.content, { exact: true })).toBeVisible();
+      expect(translateBodies).toEqual([
+        { text: post.content, provider: "deepl", targetLanguage: "PL", deeplApiKey: "test-key" },
+      ]);
+      await article.getByRole("button", { name: "Post actions", exact: true }).click();
+      await article.getByRole("button", { name: "Hide translation", exact: true }).click();
+      await expect(translations).toHaveCount(0);
+
+      await commentRow.getByRole("button", { name: "Translate comment" }).click();
+      await expect(commentRow.locator("[data-noodle-translation]")).toContainText(
+        "Przetłumaczone: A comment worth translating.",
+      );
+      await commentRow.getByRole("button", { name: "Hide translation" }).click();
+      await expect(translations).toHaveCount(0);
+      expect(errors).toEqual([]);
+
+      // A provider error reaches the reader instead of an empty translation.
+      await page.unroute("**/api/translate");
+      await page.route("**/api/translate", (route) =>
+        route.fulfill({ status: 400, json: { error: "Connection ID is required for AI translation" } }),
+      );
+      await commentRow.getByRole("button", { name: "Translate comment" }).click();
+      await expect(page.getByText("Connection ID is required for AI translation")).toBeVisible();
+      await expect(translations).toHaveCount(0);
+    } finally {
+      await page.request.delete(`/api/noodle/posts/${post.id}`, { timeout: 5_000 }).catch(() => undefined);
+      await page.request
+        .put("/api/app-settings/translator-defaults", { data: { value: "" }, timeout: 5_000 })
+        .catch(() => undefined);
+    }
+  });
+
+  test("a translation hidden while loading cannot cancel the next one", async ({ page }) => {
+    // Translate, hide, and translate again while the first request is still out; its late error must not count.
+    const held: Route[] = [];
+    await page.route("**/api/translate", (route) => {
+      held.push(route);
+    });
+    await page.request.get("/api/noodle");
+    const postResponse = await page.request.post("/api/noodle/posts", {
+      data: {
+        authorKind: "character",
+        authorEntityId: "__professor_mari__",
+        content: `Stale translation regression ${Date.now()}`,
+      },
+    });
+    expect(postResponse.ok()).toBe(true);
+    const post = (await postResponse.json()) as { id: string };
+    try {
+      await page.goto("/");
+      await openNoodle(page);
+      const article = page.locator(`[data-noodle-post-id="${post.id}"]`);
+      const translation = article.locator("[data-noodle-translation]");
+      const choose = async (action: "Translate" | "Hide translation") => {
+        await article.getByRole("button", { name: "Post actions", exact: true }).click();
+        await article.getByRole("button", { name: action, exact: true }).click();
+      };
+      await choose("Translate");
+      await expect.poll(() => held.length).toBe(1);
+      await choose("Hide translation");
+      await expect(translation).toHaveCount(0);
+      await choose("Translate");
+      await expect.poll(() => held.length).toBe(2);
+      await expect(translation).toContainText("Translating…");
+
+      const staleFailure = page.waitForResponse(
+        (response) => new URL(response.url()).pathname === "/api/translate" && response.status() === 500,
+      );
+      await held[0].fulfill({ status: 500, json: { error: "Stale translation failed" } });
+      await staleFailure;
+      await held[1].fulfill({ json: { translatedText: "Fresh translation" } });
+      await expect(translation).toContainText("Fresh translation");
+      await expect(page.getByText("Stale translation failed")).toHaveCount(0);
     } finally {
       await page.request.delete(`/api/noodle/posts/${post.id}`, { timeout: 5_000 }).catch(() => undefined);
     }
@@ -1337,7 +1499,7 @@ test.describe("package-owned Noodle interface", () => {
       await expect(characterComment.getByRole("button", { name: "Delete comment" })).toBeVisible();
       await expect(ownComment.locator("[data-noodle-avatar-fallback]")).toHaveCSS("color", NOODLE_BLUE_RGB);
       await expect(ownComment.locator("[data-noodle-comment-metadata]")).toHaveCSS("color", NOODLE_BLUE_RGB);
-      for (const name of ["Like comment", "Edit comment", "Delete comment"]) {
+      for (const name of ["Like comment", "Translate comment", "Edit comment", "Delete comment"]) {
         await expect(ownComment.getByRole("button", { name })).toHaveCSS("color", NOODLE_BLUE_RGB);
       }
 
@@ -1348,7 +1510,7 @@ test.describe("package-owned Noodle interface", () => {
       await expect(ownComment).toBeVisible();
       await expectSurfaceAccent(ownComment.locator("[data-noodle-avatar-fallback]"), "#7EA7FF");
       await expectSurfaceAccent(ownComment.locator("[data-noodle-comment-metadata]"), "#7EA7FF");
-      for (const name of ["Like comment", "Edit comment", "Delete comment"]) {
+      for (const name of ["Like comment", "Translate comment", "Edit comment", "Delete comment"]) {
         await expectSurfaceAccent(ownComment.getByRole("button", { name }), "#7EA7FF");
       }
 

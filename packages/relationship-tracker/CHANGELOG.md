@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.6.1 — 2026-10-01
+
+- The description now says what it does in plain words.
+
 ## 0.6.0 — 2026-09-26
 
 - First staging release, with Professor Mari and Crimson Orc sharing pasta as its catalogue cover. Tracks character-card relationships and each character's one-way perception of the active persona in Roleplay group chats, drawn as a fixed-circle relationship web in the Tracker Panel.

@@ -15,8 +15,8 @@
         },
         "id": "ruleset-5e-2014",
         "name": "5e (SRD 5.1)",
-        "version": "0.9.0",
-        "description": "Provides 5e SRD 5.1 rules for Game Mode ability checks, skill checks, saving throws, and the full character sheet, plus pickable SRD spells, class features and weapons so you do not type them row by row, and class resources the sheet keeps current as you level up. It also brings 5e combat itself: a battle in a new game on this ruleset is fought by these rules on screen, with attack rolls against Armor Class, advantage and disadvantage, criticals, saving throws, conditions, concentration, death saves and spell slots spent off your sheet, against a bestiary of 319 SRD monsters the Game Master can name or a new opponent built on the measured challenge scale. Its spellcasters cast from their own spell slots. Reactions come at their moment: Shield and Uncanny Dodge when a blow hits you, Counterspell when somebody casts, Hellish Rebuke when something hurts you, and six SRD monsters Parry. You can grapple and shove. Bless, Bane, Haste, Slow and other spells change attack rolls, saves, Armor Class and Speed as printed, and exhaustion counts. With the Tactical combat style the fight is played on a board measured in feet: Speed becomes squares you walk, weapons reach 5 or 10 feet, bows carry to their long range at disadvantage, half cover adds 2 to Armor Class, spells land as cones, lines and bursts, and walking out of a reach lets an enemy strike at you. The Classic style plays the same fight without positions. Not yet: three-quarters cover and elevation. After installing, choose it under Rules in the Game Mode setup wizard when you create a new game.",
+        "version": "0.9.1",
+        "description": "Play Game Mode by the 5e rules (SRD 5.1): ability checks, saving throws, a full character sheet with spells and class features, and 5e combat against 319 monsters, on a battle board or without positions. After installing, choose it under Rules in the Game Mode setup wizard when you create a new game.",
         "engine": {
           "min": "2.4.6",
           "maxExclusive": "4.0.0"
@@ -63,9 +63,9 @@
       "category": "misc",
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/ruleset-5e-2014.png",
       "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/ruleset-5e-2014-0.9.0.zip",
-        "sha256": "16b3ece0c82cd8ed900bdc0b9a810a84dd4efa8041d1a0b5d2d832001b1c6210",
-        "bytes": 1390937
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/ruleset-5e-2014-0.9.1.zip",
+        "sha256": "c9b45dc9087608aebca420d65966ffbcfa7557cdf6ae382eb8da4aa91eed9365",
+        "bytes": 1389670
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Engine/blob/staging/docs/game/getting-started.md#choosing-rules"
     },
@@ -160,8 +160,8 @@
         },
         "id": "quartermaster",
         "name": "Quartermaster",
-        "version": "0.1.22",
-        "description": "A per-chat RPG character sheet and inventory manager for Roleplay mode: equip slots arranged around your persona's portrait, a full inventory with saved outfits, AI-generated item and outfit art, and a tracker agent that keeps everything in sync with the story on its own. Add the Agent in Chat Settings → Agents → Tracker Agents for Roleplay mode.",
+        "version": "0.1.23",
+        "description": "An RPG character sheet and inventory for Roleplay: equip gear around your persona's portrait, save outfits, get AI art for items, and let it keep everything in step with the story. Add the Agent in Chat Settings → Agents → Tracker Agents for Roleplay mode.",
         "engine": {
           "min": "2.4.6",
           "maxExclusive": "4.0.0"
@@ -183,12 +183,12 @@
         "files": [
           {
             "path": "agents.json",
-            "sha256": "63c7caac0b38c228b2f29f0286b9c13cf1cdf95473a95614c87cde6143466e07",
-            "bytes": 5289
+            "sha256": "fcd8b64b649650c5635ff28ab6071647a67695bb6ff4a2cbbe65bfd465b7ae93",
+            "bytes": 5197
           },
           {
             "path": "client.js",
-            "sha256": "38ec60bef3f44efebd139ef646118103f9fa25759390512730461e86bab16dc5",
+            "sha256": "051624c751f6354ecc30bd89b21d01d1d05a24b392ac60e2ef04eeb860fe27ed",
             "bytes": 289382
           },
           {
@@ -288,9 +288,9 @@
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/quartermaster.png",
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents/blob/staging/packages/quartermaster/README.md",
       "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/quartermaster-0.1.22.zip",
-        "sha256": "974f0dfe66cc737fc73fb00978c27cb47746c5f35724300ada4b42130b3758a9",
-        "bytes": 451234
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/quartermaster-0.1.23.zip",
+        "sha256": "b69cc02ec41e303b7c236645ed9fefcdfeab3091bcafbdf6386ec80b3570f0c6",
+        "bytes": 451050
       }
     },
     {
@@ -306,8 +306,8 @@
         },
         "id": "relationship-tracker",
         "name": "Relationship Tracker",
-        "version": "0.6.0",
-        "description": "Tracks relationship dynamics between characters and personas in the current RP mode. Add the Agent in Chat Settings → Agents → Tracker Agents for Roleplay mode.",
+        "version": "0.6.1",
+        "description": "Tracks how the characters and your persona feel about each other. Add the Agent in Chat Settings → Agents → Tracker Agents for Roleplay mode.",
         "engine": {
           "min": "2.4.4",
           "maxExclusive": "4.0.0"
@@ -329,8 +329,8 @@
         "files": [
           {
             "path": "agents.json",
-            "sha256": "a811578c788c472ff27fb2db53b3154e89666a64f38a9ef7e8f3d74ec23329fb",
-            "bytes": 3791
+            "sha256": "3ff6d68d5177e15645a3e147a34efd8085299ec659031876c2f8f23be6ad9594",
+            "bytes": 3772
           },
           {
             "path": "server.mjs",
@@ -406,9 +406,9 @@
       "category": "tracker",
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/relationship-tracker.png",
       "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/relationship-tracker-0.6.0.zip",
-        "sha256": "87d5239fdd6caab24e70b930548a71ae391c9b4f3a8437f04e4a683363188b80",
-        "bytes": 191673
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/relationship-tracker-0.6.1.zip",
+        "sha256": "3b78c392aeaf52c701816d022535853b643a4c263574c1df2f1ca0d0ebf8d510",
+        "bytes": 191635
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents/blob/staging/packages/relationship-tracker/README.md"
     }

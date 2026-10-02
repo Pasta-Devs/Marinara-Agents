@@ -56,6 +56,12 @@
     "quartermaster": {
       "versions": [
         {
+          "version": "0.1.23",
+          "date": "2026-10-01",
+          "notes": "- The description now says what it does in plain words.",
+          "highlight": false
+        },
+        {
           "version": "0.1.22",
           "date": "2026-09-27",
           "notes": "- Image uploads and outfit saves report their own result when other edits finish at the same time.\n- A completed upload cannot close a newer dialog or show its error in another chat.\n- Late inventory refreshes no longer undo a completed edit or replace a newer refresh.",
@@ -168,17 +174,17 @@
           "date": "2026-09-08",
           "notes": "- Added Build Wardrobe: describe a style and get a proposed set of items and outfits to review\n  before adding.\n- Outfits it builds can reuse existing wearable items instead of always creating new ones.\n- Fixed non-wearable items sometimes turning up in a generated outfit.",
           "highlight": true
-        },
-        {
-          "version": "0.1.3",
-          "date": "2026-09-07",
-          "notes": "- Fixed inventory silently wiping every turn due to a misconfigured result type.\n- Outfits now stay equipped when extra items are added alongside them.\n- Added a \"Restore Inventory\" safety net and a \"Refresh Images\" button.\n- Fixed a rendering bug hiding an equip slot's labels behind its fallback icon.",
-          "highlight": true
         }
       ]
     },
     "relationship-tracker": {
       "versions": [
+        {
+          "version": "0.6.1",
+          "date": "2026-10-01",
+          "notes": "- The description now says what it does in plain words.",
+          "highlight": false
+        },
         {
           "version": "0.6.0",
           "date": "2026-09-26",
@@ -189,6 +195,12 @@
     },
     "ruleset-5e-2014": {
       "versions": [
+        {
+          "version": "0.9.1",
+          "date": "2026-10-01",
+          "notes": "- The description now says what it does in plain words.",
+          "highlight": false
+        },
         {
           "version": "0.9.0",
           "date": "2026-09-26",

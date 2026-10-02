@@ -2,7 +2,7 @@
   {
     "id": "long-term-memory",
     "name": "Long-Term Memory",
-    "description": "Extracts durable memories from chat summaries, character records, and lorebooks, then recalls relevant context from a package-owned vault.",
+    "description": "Remembers important things from your chat summaries, characters, and lorebooks, and brings them back when they matter.",
     "author": "Pasta Devs",
     "phase": "pre_generation",
     "enabledByDefault": false,

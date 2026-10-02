@@ -210,6 +210,9 @@ alone does not make it visible to stable users.
 
 ## Changelog
 
+### 0.1.23
+- The description now says what it does in plain words.
+
 ### 0.1.22
 - Image uploads and outfit saves use their own result during overlapping edits.
 - Late uploads cannot close a newer dialog or show their error in another chat.

@@ -1,5 +1,8 @@
 # Quartermaster changelog
 
+## 0.1.23 — 2026-10-01
+- The description now says what it does in plain words.
+
 ## 0.1.22 — 2026-09-27
 - Image uploads and outfit saves report their own result when other edits finish at the same time.
 - A completed upload cannot close a newer dialog or show its error in another chat.

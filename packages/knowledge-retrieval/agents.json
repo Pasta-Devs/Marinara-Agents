@@ -2,7 +2,7 @@
   {
     "id": "knowledge-retrieval",
     "name": "Knowledge Retrieval",
-    "description": "Scans specified lorebooks for information relevant to the current conversation, summarizes the key data, and injects it into the prompt — a lightweight RAG pipeline without vector databases.",
+    "description": "Finds what matters for the current scene in your lorebooks and gives the AI a short summary of it.",
     "phase": "pre_generation",
     "enabledByDefault": false,
     "category": "writer",

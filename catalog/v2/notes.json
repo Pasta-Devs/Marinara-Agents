@@ -4,6 +4,12 @@
     "beholder": {
       "versions": [
         {
+          "version": "1.3.12",
+          "date": "2026-10-01",
+          "notes": "- The description now says what it does in plain words.",
+          "highlight": false
+        },
+        {
           "version": "1.3.11",
           "date": "2026-09-13",
           "notes": "- Paper-doll slots can be reached by keyboard and opened with Enter or Space. Their focus outline stays visible, and closing the editor returns focus to its slot.",
@@ -13,6 +19,12 @@
     },
     "character-tracker": {
       "versions": [
+        {
+          "version": "1.1.1",
+          "date": "2026-10-01",
+          "notes": "- The description now says what it does in plain words.",
+          "highlight": false
+        },
         {
           "version": "1.1.0",
           "date": "2026-09-14",
@@ -45,6 +57,12 @@
     },
     "custom-tracker": {
       "versions": [
+        {
+          "version": "1.1.1",
+          "date": "2026-10-01",
+          "notes": "- The description now says what it does in plain words.",
+          "highlight": false
+        },
         {
           "version": "1.1.0",
           "date": "2026-09-14",
@@ -120,6 +138,12 @@
     "hierarchical-maps": {
       "versions": [
         {
+          "version": "1.5.1",
+          "date": "2026-10-01",
+          "notes": "- The description now says what it does in plain words.",
+          "highlight": false
+        },
+        {
           "version": "1.5.0",
           "date": "2026-09-30",
           "notes": "- Maps can now hold up to 5,000 locations instead of 500, so a whole world fits with its buildings, floors and rooms. Game Mode uses these larger maps on Marinara Engine versions that include the matching update; older versions skip a map over 500 locations when a game starts.",
@@ -135,6 +159,12 @@
     },
     "inventory-tracker": {
       "versions": [
+        {
+          "version": "1.2.1",
+          "date": "2026-10-01",
+          "notes": "- The description now says what it does in plain words.",
+          "highlight": false
+        },
         {
           "version": "1.2.0",
           "date": "2026-09-14",
@@ -152,9 +182,15 @@
     "long-term-memory": {
       "versions": [
         {
+          "version": "1.3.38",
+          "date": "2026-10-02",
+          "notes": "- Rebuild the recall index during a settings save when a stop-word or \"filter generated\" change alters what it contains, and report the save as saved-but-index-failed instead of a plain success when that rebuild fails. A recall queued behind that save no longer republishes an index built with the old stop words, and extraction edits made while the rebuild is in flight stay unsaved instead of being discarded.",
+          "highlight": false
+        },
+        {
           "version": "1.3.37",
           "date": "2026-10-02",
-          "notes": "- Rebuild the recall index during a settings save when a stop-word or \"filter generated\" change alters what it contains, and report the save as saved-but-index-failed instead of a plain success when that rebuild fails.",
+          "notes": "- The description now says what it does in plain words.",
           "highlight": false
         },
         {
@@ -264,17 +300,17 @@
           "date": "2026-09-24",
           "notes": "- Surface conflicting legacy ID/title and duplicate subject notes during extraction instead of selecting one automatically; leave identity merges to the existing explicit preview and confirmation flow. Block ambiguous link application until the draft's link is explicitly edited to a scoped candidate.",
           "highlight": false
-        },
-        {
-          "version": "1.3.17",
-          "date": "2026-09-24",
-          "notes": "- Record bounded diagnostics for invalid recovery candidate subject IDs when draft validation fails, without logging candidate memory text.",
-          "highlight": false
         }
       ]
     },
     "memory-nag": {
       "versions": [
+        {
+          "version": "1.1.3",
+          "date": "2026-10-01",
+          "notes": "The description now says what it does in plain words.",
+          "highlight": false
+        },
         {
           "version": "1.1.2",
           "date": "2026-09-13",
@@ -297,6 +333,12 @@
     },
     "noodle": {
       "versions": [
+        {
+          "version": "1.4.0",
+          "date": "2026-10-01",
+          "notes": "- You can now translate posts and comments, your own included. Pick Translate in a post's menu or under a comment, and use the same button to hide it again. Noodle uses the translator defaults you saved in a chat's Translation settings, or Google Translate into English if you have not saved any.\n- In Chrome on Android, adding a picture to a post or comment now offers the camera as well as your files. The Marinara Android app doesn't offer the camera yet.\n- Noodle's description now says what it is in plain words.",
+          "highlight": true
+        },
         {
           "version": "1.3.1",
           "date": "2026-09-30",

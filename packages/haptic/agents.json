@@ -2,7 +2,7 @@
   {
     "id": "haptic",
     "name": "Haptic Feedback",
-    "description": "Analyzes narrative content and controls every supported action and pattern on connected intimate toys in real time. Requires Intiface Central running locally; connect your toy there first.",
+    "description": "Controls connected intimate toys to match what happens in the story. Needs Intiface Central running on your computer, with your toy connected there first.",
     "phase": "post_processing",
     "enabledByDefault": false,
     "category": "misc",

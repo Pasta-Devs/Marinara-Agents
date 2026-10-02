@@ -1,5 +1,9 @@
 # Pixelforge release notes
 
+## 0.16.9 — 2026-10-01
+
+- The description now says what it does in plain words.
+
 ## 0.16.8 — 2026-09-14
 
 - Use the Engine setup wizard for party, world, goals, and lore choices, with the world seed beside the Experience toggle.

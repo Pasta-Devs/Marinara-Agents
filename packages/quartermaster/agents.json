@@ -2,7 +2,7 @@
   {
     "id": "quartermaster",
     "name": "Quartermaster",
-    "description": "A per-chat RPG character sheet and inventory manager for Roleplay mode: equip slots arranged around your persona's portrait, a full inventory with saved outfits, AI-generated item and outfit art, and a tracker agent that keeps everything in sync with the story on its own.",
+    "description": "An RPG character sheet and inventory for Roleplay: equip gear around your persona's portrait, save outfits, get AI art for items, and let it keep everything in step with the story.",
     "author": "ThatOneCan",
     "phase": "post_processing",
     "enabledByDefault": false,

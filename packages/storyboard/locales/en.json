@@ -6,12 +6,12 @@
   },
   "package": {
     "name": "Storyboard",
-    "description": "Plans still or animated Game and Roleplay storyboards with separate planning prompts and shared provider formatters. Add the Agent in Chat Settings → Agents → Misc Agents/Storyboard for Roleplay and Game modes."
+    "description": "Turns Game and Roleplay scenes into storyboards of still images or short animations. Add the Agent in Chat Settings → Agents → Misc Agents/Storyboard for Roleplay and Game modes."
   },
   "agents": {
     "storyboard": {
       "name": "Storyboard",
-      "description": "Plans still or animated Game and Roleplay storyboards with separate planning prompts and shared provider formatters.",
+      "description": "Turns Game and Roleplay scenes into storyboards of still images or short animations.",
       "promptTemplates": {
         "still-keyframes": {
           "name": "Still Keyframes",
