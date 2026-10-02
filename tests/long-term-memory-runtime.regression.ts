@@ -34,6 +34,7 @@ async function main() {
   const { withLtmVaultLock } = await import(`${source}/vault-lock.ts`);
   const { LongTermMemoryStorage } = await import(`${source}/storage.ts`);
   const { ltmIndexStatePath, readLtmIndexState } = await import(`${source}/index-state.ts`);
+  const { repairLongTermMemory } = await import(`${source}/maintenance.ts`);
   const { retrieveLongTermMemory } = await import(`${source}/retrieval.ts`);
   const { applyLtmBudget } = await import(`${source}/budget.ts`);
   const { serializeLongTermMemoryPrompt } = await import(`${source}/prompt.ts`);
@@ -1445,6 +1446,118 @@ async function main() {
           "cancellation must stop further embedding batches",
         );
         assert.equal(batchCalls, 1, "only the in-flight batch may run after cancellation");
+      }
+
+      // #1179: the private vault-mutation boundary serializes host publication/rollback
+      // and resets the package-owned caches so reads never see a partially published vault.
+      {
+        const vaultRoot = storage.root;
+        const liveRuntime = services.get("long-term-memory:runtime");
+        assert.equal(
+          typeof liveRuntime.withVaultMutation,
+          "function",
+          "the runtime service must expose a private vault-mutation hook",
+        );
+        assert.equal(typeof liveRuntime.recall, "function", "recall must remain registered");
+        assert.equal(
+          typeof liveRuntime.recordPromptAccepted,
+          "function",
+          "recordPromptAccepted must remain registered",
+        );
+
+        const mutationPath = join(vaultRoot, "vault", "world", "world_1179_mutation.json");
+        await storage.createNote(note("world_1179_mutation", "chat-a", "Original observatory text."));
+        await rebuildLongTermMemoryIndexes({ root: vaultRoot, embeddingAdapter: null, stopWords: [] });
+        const currentMutationText = async () =>
+          (await storage.listNotes()).find((entry) => entry.id === "world_1179_mutation")?.sections.facts.text;
+        assert.equal(await currentMutationText(), "Original observatory text.", "the snapshot must warm first");
+
+        const published = note("world_1179_mutation", "chat-a", "Replacement from a trusted host.");
+        assert.equal(
+          await liveRuntime.withVaultMutation(async () => {
+            await writeFile(mutationPath, `${JSON.stringify(published)}\n`);
+            return "published";
+          }),
+          "published",
+          "the boundary must preserve the operation return value",
+        );
+        assert.equal(
+          await currentMutationText(),
+          "Replacement from a trusted host.",
+          "publication must reset the cached snapshot before the next read",
+        );
+
+        const deferred = () => {
+          let resolve!: () => void;
+          const promise = new Promise<void>((next) => (resolve = next));
+          return { promise, resolve };
+        };
+        const mutationEntered = deferred();
+        const mutationGate = deferred();
+        const mutation = liveRuntime.withVaultMutation(async () => {
+          await writeFile(mutationPath, "{\n");
+          mutationEntered.resolve();
+          await mutationGate.promise;
+          await writeFile(mutationPath, `${JSON.stringify(published)}\n`);
+          return "published";
+        });
+        await mutationEntered.promise;
+        const queuedRead = storage.listNotes();
+        mutationGate.resolve();
+        const [mutationResult, queuedNotes] = await Promise.all([mutation, queuedRead]);
+        assert.equal(mutationResult, "published", "the serialized mutation must still complete");
+        assert.equal(
+          queuedNotes.find((entry) => entry.id === "world_1179_mutation")?.sections.facts.text,
+          "Replacement from a trusted host.",
+          "a read queued behind the mutation must not observe partially published bytes",
+        );
+
+        await assert.rejects(
+          liveRuntime.withVaultMutation(async () => {
+            await writeFile(mutationPath, "{\n");
+            await writeFile(mutationPath, `${JSON.stringify(published)}\n`);
+            throw new Error("host publication failed");
+          }),
+          /host publication failed/u,
+          "the boundary must propagate the operation error",
+        );
+        assert.equal(
+          await currentMutationText(),
+          "Replacement from a trusted host.",
+          "rollback must leave the next read on the restored disk bytes",
+        );
+        assert.equal(
+          (await storage.listNotes()).some((entry) => entry.id === "world_1179_mutation"),
+          true,
+          "a failed mutation must release the vault lock for later reads",
+        );
+
+        // Official maintenance quarantine must also drop the note from live recall.
+        await storage.createNote(note("world_1179_quarantine", "chat-a", "Quarantined recall text."));
+        await rebuildLongTermMemoryIndexes({ root: vaultRoot, embeddingAdapter: null, stopWords: [] });
+        await writeFile(join(vaultRoot, "vault", "world", "world_1179_quarantine.json"), "{");
+        const quarantineRepair = await repairLongTermMemory(["quarantine_malformed_notes"], vaultRoot);
+        assert.equal(
+          quarantineRepair.actions[0]?.count,
+          1,
+          "official maintenance must quarantine the malformed recall note",
+        );
+        const quarantinedRecall = await retrieveLongTermMemory({
+          root: vaultRoot,
+          embeddingAdapter: null,
+          queryText: "Quarantined recall text.",
+          scope: { chatId: "chat-a", chatIds: ["chat-a"] },
+          mode: "roleplay",
+          semanticWeight: 0,
+        });
+        assert.equal(
+          quarantinedRecall.chunks.some(
+            (hit) =>
+              hit.chunk.noteId === "world_1179_quarantine" || hit.chunk.text.includes("Quarantined recall text."),
+          ),
+          false,
+          "recall must not serve a note quarantined by official maintenance",
+        );
       }
     },
     [

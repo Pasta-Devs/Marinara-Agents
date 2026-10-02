@@ -30,6 +30,7 @@ import { getLtmGlobalSettings, ltmGeneratedStopWords } from "./settings.js";
 import { LongTermMemoryStorage } from "./storage.js";
 import { parseStoredLtmNote } from "./stored-note.js";
 import { withLtmVaultLock } from "./vault-lock.js";
+import { invalidateLtmVaultSnapshot } from "./vault-snapshot.js";
 import { equivalentLtmForkAvailability } from "./scoped-targets.js";
 
 type VaultFile = {
@@ -358,6 +359,9 @@ async function quarantineMalformedNotes(root: string) {
       const target = safeJoin(quarantineRoot, `${file.folder}/${basename(file.path)}`);
       await mkdir(dirname(target), { recursive: true });
       await rename(file.path, target);
+      // Drop the parsed snapshot as each note leaves the vault so the next read and the
+      // rebuild below see the quarantine even when a healthy snapshot was already warm.
+      invalidateLtmVaultSnapshot(root);
       moved += 1;
     }
   }
