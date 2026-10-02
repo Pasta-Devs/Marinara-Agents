@@ -108,16 +108,20 @@ export async function prepareGenerationLongTermMemory(input: {
   });
   if (recall.debugEnabled) {
     const selected = artifact?.chunks ?? [];
+    const promptBudgetRejected = retrieval.chunks
+      .filter((candidate) => !selected.includes(candidate))
+      .map((candidate) => ({
+        ...candidate,
+        noteId: candidate.chunk.noteId,
+        sectionKey: candidate.chunk.sectionKey,
+        rejectionReason: "prompt_budget",
+      }));
+    // A full retrieval rejection list must not hide that the prompt budget,
+    // rather than ranking, dropped chunks, so keep one bounded slot for it.
+    const reservedPromptBudgetSlot = promptBudgetRejected.length > 0 ? 1 : 0;
     const rejected = [
-      ...retrieval.rejected,
-      ...retrieval.chunks
-        .filter((candidate) => !selected.includes(candidate))
-        .map((candidate) => ({
-          ...candidate,
-          noteId: candidate.chunk.noteId,
-          sectionKey: candidate.chunk.sectionKey,
-          rejectionReason: "prompt_budget",
-        })),
+      ...retrieval.rejected.slice(0, Math.max(0, rejectedLimit - reservedPromptBudgetSlot)),
+      ...promptBudgetRejected,
     ].slice(0, rejectedLimit);
     const scoreThreshold = recall.scoreThreshold ?? 0;
     await recordLtmDebugEvent({

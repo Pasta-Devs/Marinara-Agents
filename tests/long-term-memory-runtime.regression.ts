@@ -1321,12 +1321,22 @@ async function main() {
           assert.equal(explanation.counts.rejected, explanation.details.rejected.length);
           assert.equal(explanation.details.rejected.length, 20, "combined rejection diagnostics stay bounded");
           assert.match(explanation.uiSummary, /^0 memories selected; 20 candidates rejected\.$/);
+          assert.equal(
+            explanation.details.rejected.some((candidate: any) => candidate.rejectionReason === "prompt_budget"),
+            true,
+            "a full retrieval rejection list must still surface a prompt-budget omission",
+          );
           assert.deepEqual(
             explanation.details.rejected.map((candidate: any) => [candidate.noteId, candidate.rejectionReason]),
             candidates.rejected.length
-              ? candidates.rejected.map((candidate: any) => [candidate.noteId, candidate.rejectionReason])
+              ? [
+                  ...candidates.rejected
+                    .slice(0, 19)
+                    .map((candidate: any) => [candidate.noteId, candidate.rejectionReason]),
+                  [candidates.chunks[0].chunk.noteId, "prompt_budget"],
+                ]
               : candidates.chunks.slice(0, 20).map((candidate: any) => [candidate.chunk.noteId, "prompt_budget"]),
-            "retain retrieval rejections first, then bounded prompt-budget omissions",
+            "reserve a bounded slot for a prompt-budget omission while retaining retrieval rejections",
           );
         }
       } finally {
