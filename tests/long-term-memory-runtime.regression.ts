@@ -883,7 +883,7 @@ async function main() {
       assert.deepEqual(
         thresholded.chunks.map((chunk: any) => chunk.chunk.noteId),
         ["world_visible", "world_visible_second"],
-        "minimum score must apply to fused relevance, not a candidate's strongest lane",
+        "minimum score must apply to the strongest weighted lane, not fused rank or relative top-result normalization",
       );
       const resolvedExcluded = await retrieveLongTermMemory({
         root: storage.root,
@@ -1168,6 +1168,171 @@ async function main() {
       assert.equal(recallExplanation?.details?.selected?.[0]?.noteId, "world_visible");
       assert.equal(JSON.stringify(recallExplanation).includes(input.messages[0].content), false);
       assert.equal(JSON.stringify(recallExplanation).includes("beneath the observatory"), false);
+
+      const originalRecallMetadata = chats[0].metadata;
+      try {
+        chats[0].metadata = {
+          ...originalRecallMetadata,
+          longTermMemoryBudgetTokens: 128,
+          longTermMemoryRecallPreamble: "p".repeat(300),
+          longTermMemorySemanticWeight: 0,
+          longTermMemoryLexicalWeight: 0,
+          longTermMemoryKeywordWeight: 0,
+          longTermMemoryGraphWeight: 0,
+        };
+        const tightInput = {
+          ...input,
+          messages: [{ role: "user", content: "world_visible world_visible_second" }],
+          debugMode: true,
+        };
+        const beforeSerialization = await retrieveLongTermMemory({
+          root: storage.root,
+          queryText: tightInput.messages[0].content,
+          scope: { chatId: "chat-a", chatIds: ["chat-a"] },
+          mode: "roleplay",
+          maxTokens: 128,
+          semanticWeight: 0,
+          lexicalWeight: 0,
+          keywordWeight: 0,
+          graphWeight: 0,
+        });
+        assert.equal(beforeSerialization.chunks.length, 2);
+        const tightRecall = await runtime.recall(tightInput);
+        assert.equal(tightRecall.receipt.artifact.chunks.length, 1, "framing and preamble drop the second chunk");
+        const tightExplanation = (await readLtmDebugLog({ phase: "retrieval" }, storage.root)).at(-1)!;
+        assert.deepEqual(
+          tightExplanation.details.selected.map((candidate: any) => candidate.noteId),
+          tightRecall.receipt.artifact.chunks.map((candidate: any) => candidate.chunk.noteId),
+          "debug selection must describe the serialized artifact, not pre-serialization recall",
+        );
+        assert.equal(tightExplanation.counts.selected, 1);
+        assert.equal(tightExplanation.counts.usedTokens, tightRecall.receipt.artifact.estimatedTokens);
+        assert.equal(tightExplanation.counts.rejected, 1);
+        assert.equal(tightExplanation.details.rejected[0].rejectionReason, "prompt_budget");
+        assert.equal(tightExplanation.details.rejected[0].thresholdPassed, true);
+        assert.match(tightExplanation.uiSummary, /^1 memories selected; 1 candidates rejected\.$/);
+        assert.equal(JSON.stringify(tightExplanation).includes("p".repeat(300)), false);
+
+        chats[0].metadata.longTermMemoryRecallPreamble = "p".repeat(500);
+        assert.equal(await runtime.recall(tightInput), null, "a preamble can leave no room for any chunk");
+        const emptyExplanation = (await readLtmDebugLog({ phase: "retrieval" }, storage.root)).at(-1)!;
+        assert.deepEqual(emptyExplanation.counts, { selected: 0, rejected: 2, usedTokens: 0 });
+        assert.deepEqual(emptyExplanation.details.selected, []);
+
+        for (const threshold of [0, 0.5, 0.6, 0.61]) {
+          chats[0].metadata = {
+            ...originalRecallMetadata,
+            longTermMemoryRecallStyle: "balanced",
+            longTermMemoryScoreThreshold: threshold,
+          };
+          const thresholdRecall = await runtime.recall({
+            ...input,
+            messages: [{ role: "user", content: "observatory cobalt archive" }],
+            debugMode: true,
+          });
+          const explanation = (await readLtmDebugLog({ phase: "retrieval" }, storage.root)).at(-1)!;
+          assert.equal(explanation.details.scoreThreshold, threshold, "even an all-rejected recall must be explained");
+          assert.equal(explanation.counts.selected, thresholdRecall?.receipt.artifact.chunks.length ?? 0);
+          for (const candidate of thresholdRecall?.receipt.artifact.chunks ?? []) {
+            const detail = explanation.details.selected.find((item: any) => item.noteId === candidate.chunk.noteId);
+            assert.equal(detail.fusedScore, candidate.score);
+            assert.equal(detail.relevanceScore, candidate.relevanceScore);
+            assert.equal(detail.score, detail.relevanceScore, "keep the legacy UI relevance field compatible");
+            assert.notEqual(detail.fusedScore, detail.relevanceScore);
+            assert.equal(detail.thresholdPassed, true);
+          }
+          for (const candidate of explanation.details.rejected) {
+            assert.equal(typeof candidate.fusedScore, "number");
+            assert.equal(candidate.thresholdPassed, candidate.relevanceScore >= threshold);
+          }
+          if (threshold === 0.6) {
+            assert.equal(
+              thresholdRecall.receipt.artifact.chunks[0].relevanceScore,
+              0.6,
+              "equality passes the threshold",
+            );
+          }
+          if (threshold === 0.61) {
+            assert.equal(thresholdRecall, null, "scores remain capped by the balanced lane weights");
+            assert.ok(explanation.details.rejected.length > 0);
+            assert.ok(explanation.details.rejected.every((candidate: any) => candidate.thresholdPassed === false));
+          }
+        }
+      } finally {
+        chats[0].metadata = originalRecallMetadata;
+      }
+
+      const boundedChat = {
+        ...chats[0],
+        id: "chat-bounded-explanation",
+        groupId: null,
+        metadata: {
+          longTermMemoryMaxChunks: 100,
+          longTermMemoryBudgetTokens: 128,
+          longTermMemoryRecallPreamble: "p".repeat(500),
+          longTermMemorySemanticWeight: 0,
+          longTermMemoryLexicalWeight: 0,
+          longTermMemoryKeywordWeight: 0,
+          longTermMemoryGraphWeight: 0,
+        },
+      };
+      const noteIds = Array.from({ length: 120 }, (_, index) => `world_bounded_${index}`);
+      chats.push(boundedChat);
+      try {
+        for (const [index, id] of noteIds.entries()) {
+          await storage.createNote(note(id, boundedChat.id, String(index)));
+        }
+        await rebuildLongTermMemoryIndexes({ root: storage.root });
+        for (const candidateCount of [120, 25]) {
+          const queryText = noteIds.slice(0, candidateCount).join(" ");
+          const candidates = await retrieveLongTermMemory({
+            root: storage.root,
+            queryText,
+            scope: { chatId: boundedChat.id, chatIds: [boundedChat.id] },
+            mode: "roleplay",
+            maxChunks: 100,
+            maxTokens: 128,
+            semanticWeight: 0,
+            lexicalWeight: 0,
+            keywordWeight: 0,
+            graphWeight: 0,
+            explain: true,
+            rejectedLimit: 20,
+          });
+          assert.equal(candidates.chunks.length, Math.min(100, candidateCount));
+          assert.equal(candidates.rejected.length, candidateCount === 120 ? 20 : 0);
+          assert.equal(
+            candidates.chunks.some((candidate: any) =>
+              candidates.rejected.some((rejected: any) => rejected.chunkId === candidate.chunk.id),
+            ),
+            false,
+            "retrieval selection and rejection are disjoint",
+          );
+          assert.equal(
+            await runtime.recall({
+              ...input,
+              chatId: boundedChat.id,
+              messages: [{ role: "user", content: queryText }],
+              debugMode: true,
+            }),
+            null,
+          );
+          const explanation = (await readLtmDebugLog({ phase: "retrieval" }, storage.root)).at(-1)!;
+          assert.equal(explanation.counts.rejected, explanation.details.rejected.length);
+          assert.equal(explanation.details.rejected.length, 20, "combined rejection diagnostics stay bounded");
+          assert.match(explanation.uiSummary, /^0 memories selected; 20 candidates rejected\.$/);
+          assert.deepEqual(
+            explanation.details.rejected.map((candidate: any) => [candidate.noteId, candidate.rejectionReason]),
+            candidates.rejected.length
+              ? candidates.rejected.map((candidate: any) => [candidate.noteId, candidate.rejectionReason])
+              : candidates.chunks.slice(0, 20).map((candidate: any) => [candidate.chunk.noteId, "prompt_budget"]),
+            "retain retrieval rejections first, then bounded prompt-budget omissions",
+          );
+        }
+      } finally {
+        chats.pop();
+        await storage.deleteNotesPermanently(noteIds);
+      }
 
       chats[0].metadata = {
         ...chats[0].metadata,

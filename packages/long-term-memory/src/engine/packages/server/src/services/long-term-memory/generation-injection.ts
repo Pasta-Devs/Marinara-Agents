@@ -82,6 +82,7 @@ export async function prepareGenerationLongTermMemory(input: {
     targetCharacterIds.every((id) => chatCharacterIds.includes(id))
       ? targetCharacterIds
       : undefined;
+  const rejectedLimit = 20;
   const retrieval = await retrieveLongTermMemory({
     root: input.root,
     mode: ltmModeForChatMode(chat.mode) as LtmMode,
@@ -98,51 +99,63 @@ export async function prepareGenerationLongTermMemory(input: {
     graphWeight: recall.weights.graphWeight,
     keywordWeight: recall.weights.keywordWeight,
     explain: recall.debugEnabled,
-    rejectedLimit: 20,
+    rejectedLimit,
     signal: input.signal,
   });
-  if (retrieval.chunks.length === 0) {
-    await recordLongTermMemoryZeroMatch(input.chatId, input.root).catch((error) =>
-      logger.warn(error, "[ltm] Failed to record zero-match recall for chat %s", input.chatId),
-    );
-    return null;
-  }
   const artifact = serializeLongTermMemoryPrompt(retrieval.chunks, {
     preamble: recall.recallPreamble,
     maxTokens: retrieval.maxTokens,
   });
-  if (!artifact) return null;
   if (recall.debugEnabled) {
+    const selected = artifact?.chunks ?? [];
+    const rejected = [
+      ...retrieval.rejected,
+      ...retrieval.chunks
+        .filter((candidate) => !selected.includes(candidate))
+        .map((candidate) => ({
+          ...candidate,
+          noteId: candidate.chunk.noteId,
+          sectionKey: candidate.chunk.sectionKey,
+          rejectionReason: "prompt_budget",
+        })),
+    ].slice(0, rejectedLimit);
+    const scoreThreshold = recall.scoreThreshold ?? 0;
     await recordLtmDebugEvent({
       root: input.root,
       phase: "retrieval",
       action: "recall_explanation",
       status: "ok",
-      uiSummary: `${retrieval.chunks.length} memories selected; ${retrieval.rejected.length} candidates rejected.`,
+      uiSummary: `${selected.length} memories selected; ${rejected.length} candidates rejected.`,
       counts: {
-        selected: retrieval.chunks.length,
-        rejected: retrieval.rejected.length,
-        usedTokens: retrieval.usedTokens,
+        selected: selected.length,
+        rejected: rejected.length,
+        usedTokens: artifact?.estimatedTokens ?? 0,
       },
       details: {
         chatId: input.chatId,
         embeddingsAvailable: retrieval.embeddingsAvailable,
         maxChunks: recall.maxChunks,
         maxTokens: recall.budgetTokens,
-        scoreThreshold: recall.scoreThreshold,
+        scoreThreshold,
         weights: recall.weights,
-        selected: retrieval.chunks.map((candidate) => ({
+        selected: selected.map((candidate) => ({
           noteId: candidate.chunk.noteId,
           sectionKey: candidate.chunk.sectionKey,
           score: candidate.relevanceScore,
+          fusedScore: candidate.score,
+          relevanceScore: candidate.relevanceScore,
+          thresholdPassed: candidate.relevanceScore >= scoreThreshold,
           lanes: candidate.lanes,
           reasons: candidate.reasons,
           estimatedTokens: candidate.estimatedTokens,
         })),
-        rejected: retrieval.rejected.map((candidate) => ({
+        rejected: rejected.map((candidate) => ({
           noteId: candidate.noteId,
           sectionKey: candidate.sectionKey,
           score: candidate.relevanceScore,
+          fusedScore: candidate.score,
+          relevanceScore: candidate.relevanceScore,
+          thresholdPassed: candidate.relevanceScore >= scoreThreshold,
           lanes: candidate.lanes,
           reasons: candidate.reasons,
           rejectionReason: candidate.rejectionReason,
@@ -150,6 +163,13 @@ export async function prepareGenerationLongTermMemory(input: {
       },
     });
   }
+  if (retrieval.chunks.length === 0) {
+    await recordLongTermMemoryZeroMatch(input.chatId, input.root).catch((error) =>
+      logger.warn(error, "[ltm] Failed to record zero-match recall for chat %s", input.chatId),
+    );
+    return null;
+  }
+  if (!artifact) return null;
   input.signal?.throwIfAborted();
   const receipt: LongTermMemoryRecallReceipt = { version: 1, id: randomUUID(), chatId: input.chatId, artifact };
   await writeJsonAtomic(pendingPath(input.root, input.chatId), receipt);
