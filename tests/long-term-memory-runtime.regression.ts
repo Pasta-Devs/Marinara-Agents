@@ -1494,28 +1494,42 @@ async function main() {
         };
         const mutationEntered = deferred();
         const mutationGate = deferred();
+        const serialized = note("world_1179_mutation", "chat-a", "Serialized replacement text.");
         const mutation = liveRuntime.withVaultMutation(async () => {
           await writeFile(mutationPath, "{\n");
           mutationEntered.resolve();
           await mutationGate.promise;
-          await writeFile(mutationPath, `${JSON.stringify(published)}\n`);
+          await writeFile(mutationPath, `${JSON.stringify(serialized)}\n`);
           return "published";
         });
         await mutationEntered.promise;
-        const queuedRead = storage.listNotes();
+        let queuedReadSettled = false;
+        const queuedRead = storage.listNotes().finally(() => {
+          queuedReadSettled = true;
+        });
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        assert.equal(
+          queuedReadSettled,
+          false,
+          "a read queued behind the mutation must stay pending while the mutation holds the vault",
+        );
         mutationGate.resolve();
         const [mutationResult, queuedNotes] = await Promise.all([mutation, queuedRead]);
         assert.equal(mutationResult, "published", "the serialized mutation must still complete");
         assert.equal(
           queuedNotes.find((entry) => entry.id === "world_1179_mutation")?.sections.facts.text,
-          "Replacement from a trusted host.",
-          "a read queued behind the mutation must not observe partially published bytes",
+          "Serialized replacement text.",
+          "a read queued behind the mutation must rebuild from the published bytes, not the warm snapshot",
         );
 
+        const intermediate = note("world_1179_mutation", "chat-a", "Intermediate publication text.");
+        const restored = note("world_1179_mutation", "chat-a", "Restored after a failed publication.");
         await assert.rejects(
           liveRuntime.withVaultMutation(async () => {
-            await writeFile(mutationPath, "{\n");
-            await writeFile(mutationPath, `${JSON.stringify(published)}\n`);
+            await writeFile(mutationPath, `${JSON.stringify(intermediate)}\n`);
+            // A host read during publication warms the package snapshot with the intermediate bytes.
+            await storage.listNotes();
+            await writeFile(mutationPath, `${JSON.stringify(restored)}\n`);
             throw new Error("host publication failed");
           }),
           /host publication failed/u,
@@ -1523,8 +1537,8 @@ async function main() {
         );
         assert.equal(
           await currentMutationText(),
-          "Replacement from a trusted host.",
-          "rollback must leave the next read on the restored disk bytes",
+          "Restored after a failed publication.",
+          "rollback must reset the cache so the next read sees the restored disk bytes, not the intermediate snapshot",
         );
         assert.equal(
           (await storage.listNotes()).some((entry) => entry.id === "world_1179_mutation"),
