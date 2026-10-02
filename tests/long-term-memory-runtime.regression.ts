@@ -33,6 +33,8 @@ async function main() {
   } = await import(`${source}/rebuild.ts`);
   const { withLtmVaultLock } = await import(`${source}/vault-lock.ts`);
   const { LongTermMemoryStorage } = await import(`${source}/storage.ts`);
+  const { notePathForId } = await import(`${source}/paths.ts`);
+  const { invalidateLtmVaultSnapshot } = await import(`${source}/vault-snapshot.ts`);
   const { ltmIndexStatePath, readLtmIndexState } = await import(`${source}/index-state.ts`);
   const { repairLongTermMemory } = await import(`${source}/maintenance.ts`);
   const { retrieveLongTermMemory } = await import(`${source}/retrieval.ts`);
@@ -1069,6 +1071,82 @@ async function main() {
         const text = recallResult?.text ?? "";
         for (const pattern of testCase.matches) assert.match(text, pattern);
         for (const pattern of testCase.doesNotMatch) assert.doesNotMatch(text, pattern);
+      }
+
+      // #1194: a targeted responder in a multi-character chat must recall only notes scoped to
+      // its own character, while the Engine's full-set handoff keeps today's chat-wide recall.
+      const targetedChat = {
+        id: "chat-targeted-group",
+        name: "Targeted group chat",
+        mode: "roleplay",
+        characterIds: ["character-a", "character-b"],
+        groupId: null,
+        personaId: null,
+        connectionId: null,
+        metadata: { enableLongTermMemory: true, longTermMemoryBudgetTokens: 4096 },
+        lastMessageAt: null,
+        updatedAt: "2026-07-18T00:00:00.000Z",
+      };
+      chats.push(targetedChat);
+      const targetedText = "targeted group cipher";
+      const targetedNote = (id: string, scope: Record<string, unknown>) =>
+        note(id, targetedChat.id, `The ${targetedText} is recorded for ${id}.`, { scope });
+      try {
+        await storage.createNote(targetedNote("world_target_a", { characterIds: ["character-a"] }));
+        await storage.createNote(targetedNote("world_target_b", { characterIds: ["character-b"] }));
+        await storage.createNote(
+          targetedNote("world_target_chat", { chatId: targetedChat.id, chatIds: [targetedChat.id] }),
+        );
+        await storage.createNote(targetedNote("world_target_persona", { personaIds: ["persona-a"] }));
+        await storage.createNote(targetedNote("world_target_mixed", { characterIds: ["character-a", "character-b"] }));
+        await storage.createNote(
+          targetedNote("world_target_foreign", {
+            characterIds: ["character-c"],
+            chatId: targetedChat.id,
+            chatIds: [targetedChat.id],
+          }),
+        );
+        // The create API refuses unscoped notes, so a legacy/imported global note is written directly.
+        await writeFile(
+          notePathForId("world_target_global", "world", storage.root),
+          JSON.stringify(
+            note("world_target_global", targetedChat.id, `The ${targetedText} is recorded for world_target_global.`, {
+              scope: {},
+            }),
+          ),
+        );
+        invalidateLtmVaultSnapshot(storage.root);
+        await rebuildLongTermMemoryIndexes({ root: storage.root });
+        const recallNotes = async (characterIds: string[]) =>
+          (
+            await runtime.recall({
+              chatId: targetedChat.id,
+              chatMode: "roleplay",
+              characterIds,
+              messages: [{ role: "user", content: targetedText }],
+              debugMode: false,
+            })
+          )?.receipt.artifact.chunks
+            .map((chunk: any) => chunk.chunk.noteId)
+            .sort() ?? [];
+        assert.deepEqual(await recallNotes(["character-a"]), ["world_target_a"]);
+        assert.deepEqual(await recallNotes(["character-b"]), ["world_target_b"]);
+        const chatWide = await recallNotes(["character-a", "character-b"]);
+        for (const id of [
+          "world_target_a",
+          "world_target_b",
+          "world_target_global",
+          "world_target_chat",
+          "world_target_mixed",
+          "world_target_foreign",
+        ]) {
+          assert.equal(chatWide.includes(id), true, `${id} must stay eligible for a non-targeted group recall`);
+        }
+        assert.equal(chatWide.includes("world_target_persona"), false, "persona-only notes stay out of group recall");
+        assert.equal((await recallNotes([])).includes("world_target_a"), true);
+        assert.equal((await recallNotes(["character-c"])).includes("world_target_a"), true);
+      } finally {
+        chats.pop();
       }
       const legacyReadable = await runtime.recall(input);
       assert.match(legacyReadable.text, /beneath the observatory/);

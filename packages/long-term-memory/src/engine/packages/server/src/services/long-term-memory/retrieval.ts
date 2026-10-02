@@ -19,6 +19,11 @@ export type RetrieveLongTermMemoryInput = MemoryRecallEmbeddingOptions & {
   queryText?: string;
   scope?: LtmScope;
   characterIds?: string[];
+  /**
+   * Targeted generation: keep only notes whose entire character scope is inside this set.
+   * Unset keeps the caller's normal chat-wide scope behavior.
+   */
+  exclusiveCharacterIds?: readonly string[];
   includeResolved?: boolean;
   maxChunks?: number;
   maxTokens?: number;
@@ -103,6 +108,11 @@ export async function retrieveLongTermMemory(input: RetrieveLongTermMemoryInput)
       .filter((chunk) => !input.mode || chunk.modes?.includes(input.mode))
       .filter((chunk) => !input.noteTypes || input.noteTypes.includes(chunk.noteType))
       .filter((chunk) => {
+        const exclusiveCharacterIds = input.exclusiveCharacterIds;
+        if (exclusiveCharacterIds !== undefined) {
+          const noteCharacterIds = chunk.scope?.characterIds ?? [];
+          return noteCharacterIds.length > 0 && noteCharacterIds.every((id) => exclusiveCharacterIds.includes(id));
+        }
         const hasScope = !isGlobalLtmScope(input.scope) || characterIds.length > 0;
         return matchesLtmScope(
           { id: chunk.noteId, type: chunk.noteType, scope: chunk.scope },

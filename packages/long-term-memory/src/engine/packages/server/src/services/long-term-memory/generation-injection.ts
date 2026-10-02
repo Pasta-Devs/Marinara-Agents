@@ -11,6 +11,7 @@ import {
 import { getLongTermMemoryDirectories, safeJoin } from "./paths.js";
 import { retrieveLongTermMemory } from "./retrieval.js";
 import { getLtmGlobalSettings } from "./settings.js";
+import { uniqueStrings } from "./ltm-utils.js";
 import { recordLongTermMemoryInjection, recordLongTermMemoryZeroMatch } from "./usage.js";
 import { recordLtmDebugEvent } from "./debug-log.js";
 import { getPackagePersistence, logger, withKeyedLock } from "./package-runtime.js";
@@ -70,12 +71,24 @@ export async function prepareGenerationLongTermMemory(input: {
     .join("\n");
   if (!queryText.trim()) return null;
   const scope = resolveChatLtmScope(chat);
+  // The Engine targets one responder by sending a strict subset of a multi-character chat's ids.
+  // Any other handoff keeps the chat-wide scope, including global and shared notes.
+  const chatCharacterIds = uniqueStrings(scope.characterIds ?? []);
+  const targetCharacterIds = uniqueStrings(input.characterIds);
+  const exclusiveCharacterIds =
+    chatCharacterIds.length > 1 &&
+    targetCharacterIds.length > 0 &&
+    targetCharacterIds.length < chatCharacterIds.length &&
+    targetCharacterIds.every((id) => chatCharacterIds.includes(id))
+      ? targetCharacterIds
+      : undefined;
   const retrieval = await retrieveLongTermMemory({
     root: input.root,
     mode: ltmModeForChatMode(chat.mode) as LtmMode,
     queryText,
     scope,
     characterIds: chat.characterIds,
+    exclusiveCharacterIds,
     includeResolved: recall.includeResolved,
     maxChunks: recall.maxChunks,
     maxTokens: recall.budgetTokens,
