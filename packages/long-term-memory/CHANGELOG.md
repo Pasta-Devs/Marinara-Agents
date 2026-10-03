@@ -4,6 +4,10 @@
 
 - Correlate recall selection with the confirmed injection through one attempt id, and record the outcomes the package actually observes: completed, skipped with a reason, cancelled, or failed. The last-injection panel now distinguishes a cancelled, failed, skipped, or completed-but-unconfirmed recall from one that never ran, instead of collapsing them all into "no recall recorded". Host-side non-invocation stays unknown.
 
+## 1.4.2 — 2026-10-03
+
+- Make the debug activity toggle honest: it now says it records recall explanations, notes that a chat override or host debug mode can also turn them on, states that extraction, draft, and apply activity is always recorded separately, and notes that the setting takes effect after saving settings.
+
 ## 1.3.41 — 2026-10-03
 
 - Make extraction debug reporting trustworthy: show estimated input tokens and provider-reported usage distinctly, surface the failing step and warnings in collapsed activity entries, flag truncated model responses, and keep preflight failures when context metadata is missing.

@@ -207,6 +207,21 @@ assert.equal(
 assert.equal(locale["ui.longTermMemory.sourcesworkspace.syncSelected_8c57bdb"], undefined);
 assert.equal(locale["ui.longTermMemory.sourcesworkspace.refreshSelectedSources"], "Refresh selected sources");
 assert.equal(locale["ui.longTermMemory.activityview.totalTokens"], "Total: {{count}} tokens");
+// #1210: the debug toggle gates recall explanations, not all debug activity; extraction/apply
+// logging is separate and the setting only applies once settings are saved.
+assert.equal(locale["ui.longTermMemory.memorysettings.recordDebugActivity"], "Record recall explanations");
+assert.match(
+  locale["ui.longTermMemory.memorysettings.recordsLongTermMemoryOperationsForTroubleshootingActivityMay"],
+  /A chat override or host debug mode can also turn them on/u,
+);
+assert.match(
+  locale["ui.longTermMemory.memorysettings.recordsLongTermMemoryOperationsForTroubleshootingActivityMay"],
+  /Extraction, draft, and apply activity is always recorded/u,
+);
+assert.match(
+  locale["ui.longTermMemory.memorysettings.recordsLongTermMemoryOperationsForTroubleshootingActivityMay"],
+  /takes effect after you save settings/u,
+);
 assert.equal(
   locale["ui.longTermMemory.longtermmemorydetail.savedButNotSearchable"],
   "Saved with lexical recall only: semantic embeddings are unavailable.",
