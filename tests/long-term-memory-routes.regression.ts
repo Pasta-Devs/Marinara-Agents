@@ -34,7 +34,7 @@ async function main(routeScenario: RouteScenario) {
     await import("../packages/long-term-memory/src/engine/packages/shared/src/features/agents/long-term-memory/schema.ts");
   const { addRejectedSuggestions } =
     await import("../packages/long-term-memory/src/engine/packages/server/src/services/long-term-memory/rejected-suggestions.ts");
-  const { longTermMemoryInjectionReceiptPath, recordLongTermMemoryZeroMatch } =
+  const { longTermMemoryAttemptPath, longTermMemoryInjectionReceiptPath, recordLongTermMemoryZeroMatch } =
     await import("../packages/long-term-memory/src/engine/packages/server/src/services/long-term-memory/usage.ts");
   const { prepareGenerationLongTermMemory } =
     await import("../packages/long-term-memory/src/engine/packages/server/src/services/long-term-memory/generation-injection.ts");
@@ -564,6 +564,7 @@ async function main(routeScenario: RouteScenario) {
         memories: [],
         state: "not_recorded",
         dispatchedAt: null,
+        attempt: null,
       });
       const zeroMatchReceipt = await recordLongTermMemoryZeroMatch("zero-match-chat", storageService.root);
       assert.ok(zeroMatchReceipt);
@@ -604,6 +605,14 @@ async function main(routeScenario: RouteScenario) {
       });
       assert.equal(recalledZeroMatch.json().state, "no_matches");
       assert.equal(recalledZeroMatch.json().memoryCount, 0);
+      assert.equal(recalledZeroMatch.json().attempt?.outcome, "completed");
+      assert.equal(recalledZeroMatch.json().attempt?.reason, "no_matches");
+      assert.equal(recalledZeroMatch.json().attempt?.confirmed, false);
+      assert.equal(
+        zeroMatchInjection.json().attempt,
+        null,
+        "a direct zero-match receipt without a recall attempt must stay unrecorded",
+      );
       const missingDraft = await app.inject({
         method: "POST",
         url: "/api/long-term-memory/drafts/10000000-0000-4000-8000-000000000099/accept",
@@ -4781,11 +4790,27 @@ async function main(routeScenario: RouteScenario) {
         links: [{ relation: "extracted_from", target: "source_route_attribution" }],
         sections: { facts: { text: "The gate is sealed.", updatedAt: "2026-07-17T00:00:00.000Z" } },
       });
+      const attributionAttemptId = "00000000-0000-4000-8000-000000000121";
+      await mkdir(join(dataDir, "long-term-memory", "events", "runtime-receipts"), { recursive: true });
+      await writeFile(
+        longTermMemoryAttemptPath("chat-attribution", join(dataDir, "long-term-memory")),
+        JSON.stringify({
+          version: 1,
+          chatId: "chat-attribution",
+          attemptId: attributionAttemptId,
+          at: "2026-07-17T00:00:00.000Z",
+          outcome: "completed",
+          reason: "ready",
+          debugEnabled: true,
+          receiptId: attributionAttemptId,
+        }),
+      );
       await writeFile(
         longTermMemoryInjectionReceiptPath("chat-attribution", join(dataDir, "long-term-memory")),
         JSON.stringify({
           version: 1,
           chatId: "chat-attribution",
+          attemptId: attributionAttemptId,
           dispatchedAt: "2026-07-17T00:00:00.000Z",
           serializedTokenCount: 12,
           chunks: [
@@ -4816,6 +4841,13 @@ async function main(routeScenario: RouteScenario) {
       ]);
       assert.equal(attributedInjection.json().state, "injected");
       assert.equal(attributedInjection.json().dispatchedAt, "2026-07-17T00:00:00.000Z");
+      assert.equal(attributedInjection.json().attempt?.attemptId, attributionAttemptId);
+      assert.equal(attributedInjection.json().attempt?.outcome, "completed");
+      assert.equal(
+        attributedInjection.json().attempt?.confirmed,
+        true,
+        "a receipt carrying the attempt id must correlate the recall with the confirmed injection",
+      );
       chats.push({
         ...chats[1],
         id: "chat-persona-a-alt",

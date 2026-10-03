@@ -40,7 +40,12 @@ async function main() {
   const { retrieveLongTermMemory } = await import(`${source}/retrieval.ts`);
   const { applyLtmBudget } = await import(`${source}/budget.ts`);
   const { serializeLongTermMemoryPrompt } = await import(`${source}/prompt.ts`);
-  const { readLongTermMemoryUsage } = await import(`${source}/usage.ts`);
+  const {
+    readLongTermMemoryUsage,
+    readLongTermMemoryInjectionReceipt,
+    readLongTermMemoryAttempt,
+    recordLongTermMemoryAttempt,
+  } = await import(`${source}/usage.ts`);
   const { readLtmDebugLog } = await import(`${source}/debug-log.ts`);
   const { resolveLongTermMemoryRecallSettings } =
     await import("../packages/long-term-memory/src/engine/packages/shared/src/features/agents/long-term-memory/runtime-settings.ts");
@@ -1162,9 +1167,19 @@ async function main() {
       assert.match(first.text, /beneath the observatory/);
       assert.doesNotMatch(first.text, /another chat/, "recall must enforce chat scope");
       assert.ok(first.receipt, "non-empty recall must return an opaque receipt");
+      const firstAttempt = await readLongTermMemoryAttempt("chat-a", storage.root);
+      assert.equal(firstAttempt?.attemptId, first.receipt.id, "the recall attempt id must match its receipt id");
+      assert.equal(firstAttempt?.receiptId, first.receipt.id);
+      assert.equal(firstAttempt?.outcome, "completed");
+      assert.equal(firstAttempt?.reason, "ready");
       await runtime.recall({ ...input, debugMode: true });
       const recallExplanation = (await readLtmDebugLog({ phase: "retrieval" }, storage.root)).at(-1);
       assert.equal(recallExplanation?.action, "recall_explanation");
+      assert.equal(
+        recallExplanation?.operationId,
+        (await readLongTermMemoryAttempt("chat-a", storage.root))?.attemptId,
+        "the explanation must carry the shared recall attempt id",
+      );
       assert.equal(recallExplanation?.details?.selected?.[0]?.noteId, "world_visible");
       assert.equal(JSON.stringify(recallExplanation).includes(input.messages[0].content), false);
       assert.equal(JSON.stringify(recallExplanation).includes("beneath the observatory"), false);
@@ -1215,6 +1230,9 @@ async function main() {
 
         chats[0].metadata.longTermMemoryRecallPreamble = "p".repeat(500);
         assert.equal(await runtime.recall(tightInput), null, "a preamble can leave no room for any chunk");
+        const budgetAttempt = await readLongTermMemoryAttempt("chat-a", storage.root);
+        assert.equal(budgetAttempt?.outcome, "skipped");
+        assert.equal(budgetAttempt?.reason, "prompt_budget");
         const emptyExplanation = (await readLtmDebugLog({ phase: "retrieval" }, storage.root)).at(-1)!;
         assert.deepEqual(emptyExplanation.counts, { selected: 0, rejected: 2, usedTokens: 0 });
         assert.deepEqual(emptyExplanation.details.selected, []);
@@ -1373,6 +1391,11 @@ async function main() {
         true,
       );
       assert.equal(
+        (await readLongTermMemoryInjectionReceipt("chat-a", storage.root)).attemptId,
+        first.receipt.id,
+        "the confirmed receipt must carry the recall attempt id",
+      );
+      assert.equal(
         await runtime.recordPromptAccepted({
           chatId: "chat-a",
           receipt: first.receipt,
@@ -1400,15 +1423,128 @@ async function main() {
         }),
         false,
       );
+      assert.equal(
+        (await readLongTermMemoryInjectionReceipt("chat-a", storage.root)).attemptId,
+        regenerated.receipt.id,
+        "a null-receipt regeneration must confirm the pending recall attempt",
+      );
       const usage = await readLongTermMemoryUsage(storage.root);
       assert.equal(usage.chats["chat-a"].chunks["world_visible::facts"].injectionCount, 2);
 
       assert.equal(await runtime.recall({ ...input, messages: [] }), null, "empty prompts must not recall");
+      const emptyQueryAttempt = await readLongTermMemoryAttempt("chat-a", storage.root);
+      assert.equal(emptyQueryAttempt?.outcome, "skipped");
+      assert.equal(emptyQueryAttempt?.reason, "empty_query");
       assert.equal(
         await runtime.recall({ ...input, messages: [{ role: "user", content: "unrelated zephyr" }] }),
         null,
         "empty retrieval must return null",
       );
+      const noMatchAttempt = await readLongTermMemoryAttempt("chat-a", storage.root);
+      assert.equal(noMatchAttempt?.outcome, "completed");
+      assert.equal(noMatchAttempt?.reason, "no_matches");
+      assert.equal(
+        await runtime.recall({
+          ...input,
+          messages: [{ role: "user", content: "beneath the observatory" }],
+          signal: AbortSignal.abort(),
+        }),
+        null,
+        "an already-cancelled recall must not run",
+      );
+      const cancelledAttempt = await readLongTermMemoryAttempt("chat-a", storage.root);
+      assert.equal(cancelledAttempt?.outcome, "cancelled");
+      assert.equal(
+        await runtime.recall({ ...input, chatId: "chat-never-existed" }),
+        null,
+        "an unknown chat must not recall",
+      );
+      const missingChatAttempt = await readLongTermMemoryAttempt("chat-never-existed", storage.root);
+      assert.equal(missingChatAttempt?.outcome, "skipped");
+      assert.equal(missingChatAttempt?.reason, "chat_not_found");
+
+      await recordLongTermMemoryAttempt(
+        {
+          version: 1,
+          chatId: "chat-attempt-order",
+          attemptId: "00000000-0000-4000-8000-000000000201",
+          at: "2030-01-01T00:00:00.000Z",
+          outcome: "completed",
+          debugEnabled: false,
+        },
+        storage.root,
+      );
+      await recordLongTermMemoryAttempt(
+        {
+          version: 1,
+          chatId: "chat-attempt-order",
+          attemptId: "00000000-0000-4000-8000-000000000202",
+          at: "2020-01-01T00:00:00.000Z",
+          outcome: "failed",
+          debugEnabled: false,
+        },
+        storage.root,
+      );
+      assert.equal(
+        (await readLongTermMemoryAttempt("chat-attempt-order", storage.root))?.attemptId,
+        "00000000-0000-4000-8000-000000000201",
+        "a slow older recall must not overwrite a newer observed attempt",
+      );
+
+      // #1212: overlapping recalls must order by invocation start, not completion. Hold the
+      // older recall at its first await so the newer one finishes first, then release it.
+      {
+        const originalGetChat = api.runtime.persistence.getChat;
+        let releaseOlder!: () => void;
+        const gate = new Promise<void>((resolve) => (releaseOlder = resolve));
+        let getChatCalls = 0;
+        api.runtime.persistence.getChat = async (chatId: string) => {
+          getChatCalls += 1;
+          if (getChatCalls === 1) await gate;
+          return originalGetChat(chatId);
+        };
+        try {
+          const olderRecall = runtime.recall(input);
+          const newerRecall = runtime.recall(input);
+          const newerResult = await newerRecall;
+          releaseOlder();
+          const olderResult = await olderRecall;
+          assert.ok(newerResult?.receipt && olderResult?.receipt);
+          assert.equal(
+            (await readLongTermMemoryAttempt("chat-a", storage.root))?.attemptId,
+            newerResult.receipt.id,
+            "a slow older recall must not overwrite the newer attempt when it finishes later",
+          );
+        } finally {
+          api.runtime.persistence.getChat = originalGetChat;
+        }
+      }
+
+      // #1212: a chat lookup failure is an observed recall failure, not host-side non-invocation.
+      {
+        const originalGetChat = api.runtime.persistence.getChat;
+        api.runtime.persistence.getChat = async () => {
+          throw new Error("persistence unavailable");
+        };
+        try {
+          await assert.rejects(runtime.recall(input), /persistence unavailable/);
+        } finally {
+          api.runtime.persistence.getChat = originalGetChat;
+        }
+        assert.equal(
+          (await readLongTermMemoryAttempt("chat-a", storage.root))?.outcome,
+          "failed",
+          "a chat persistence failure must be recorded as a failed recall attempt",
+        );
+      }
+
+      const settingsPath = join(storage.root, "config", "settings.json");
+      const originalSettings = await readFile(settingsPath, "utf8").catch(() => null);
+      await writeFile(settingsPath, "{ not valid settings\n");
+      await assert.rejects(runtime.recall(input));
+      assert.equal((await readLongTermMemoryAttempt("chat-a", storage.root))?.outcome, "failed");
+      if (originalSettings === null) await rm(settingsPath, { force: true });
+      else await writeFile(settingsPath, originalSettings);
 
       await writeFile(longTermMemoryRecallIndexPath(storage.root), "{malformed\n");
       const recovered = await runtime.recall(input);

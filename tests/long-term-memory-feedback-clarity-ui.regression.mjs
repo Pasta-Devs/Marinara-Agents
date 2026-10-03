@@ -38,6 +38,13 @@ const activity = readFileSync(
   ),
   "utf8",
 );
+const lastInjectionSummary = readFileSync(
+  new URL(
+    "../packages/long-term-memory/src/engine/packages/client/src/features/long-term-memory/LastInjectionSummary.tsx",
+    import.meta.url,
+  ),
+  "utf8",
+);
 const settings = readFileSync(
   new URL(
     "../packages/long-term-memory/src/engine/packages/client/src/features/long-term-memory/MemorySettings.tsx",
@@ -705,6 +712,38 @@ assert.equal(locale["ui.longTermMemory.reviewqueue.reviewFailed"], "Review faile
 assert.equal(locale["ui.longTermMemory.reviewqueue.charactersRemainingOne"], "{{count}} character remaining");
 assert.equal(locale["ui.longTermMemory.reviewqueue.charactersRemainingOther"], "{{count}} characters remaining");
 assert.match(locale["ui.longTermMemory.sourceoperation.deleteDetachment"], /detached/u);
+
+// #1212: the last-injection panel surfaces package-observed recall outcomes and
+// the recall workflow marks whether that attempt was confirmed.
+assert.match(lastInjectionSummary, /data\?\.attempt/u);
+assert.match(lastInjectionSummary, /observedAttempt\.outcome === "cancelled"/u);
+assert.match(lastInjectionSummary, /observedAttempt\.outcome === "failed"/u);
+assert.match(lastInjectionSummary, /observedAttempt\.outcome === "skipped"/u);
+assert.match(lastInjectionSummary, /observedAttempt\.reason === "chat_not_found"/u);
+assert.match(lastInjectionSummary, /observedAttempt\.reason === "empty_query"/u);
+assert.match(lastInjectionSummary, /observedAttempt\.reason === "prompt_budget"/u);
+assert.match(lastInjectionSummary, /recallCompletedNotConfirmed/u);
+// A newer unconfirmed/failed/skipped attempt must override an older confirmed
+// receipt rather than presenting the stale injection as the latest result.
+assert.match(lastInjectionSummary, /const attemptOverridesInjection = observedRecallMessage !== null;/u);
+assert.match(lastInjectionSummary, /attemptOverridesInjection\s*\? observedRecallMessage/u);
+assert.match(lastInjectionSummary, /!attemptOverridesInjection && data\?\.memories\.length/u);
+assert.match(lastInjectionSummary, /attemptOverridesInjection \|\| !data\?\.memories\.length/u);
+// With a known attempt id the recall workflow must not fall back to another
+// attempt's explanation; a missing match means no recorded explanation.
+assert.match(activity, /if \(attemptId\) return correlated;/u);
+assert.doesNotMatch(activity, /correlated \?\? candidates\.sort/u);
+assert.match(activity, /data-ltm-recall-confirmation/u);
+assert.match(activity, /recallWorkflowInjectionConfirmed/u);
+assert.match(activity, /recallWorkflowInjectionNotConfirmed/u);
+assert.equal(
+  locale["ui.longTermMemory.lastinjectionsummary.recallCompletedNotConfirmed"],
+  "Recall completed but no saved memory was confirmed in the latest model context.",
+);
+assert.equal(
+  locale["ui.longTermMemory.activityview.recallWorkflowInjectionConfirmed"],
+  "This recall was confirmed in the latest model context.",
+);
 
 process.stdout.write(
   "Long-Term Memory feedback clarity UI regression: labels, outcomes, usage, warnings, and defaults ok\n",

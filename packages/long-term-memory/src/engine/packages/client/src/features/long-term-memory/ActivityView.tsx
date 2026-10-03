@@ -249,15 +249,20 @@ function warningMessages(
     .map((event) => describeEvent(event, debugTextLookup, localizeUi));
 }
 
-function latestRecallEvent(events: LtmDebugEvent[], chatId?: string | null) {
-  return events
-    .filter(
-      (event) =>
-        event.phase === "retrieval" &&
-        event.action === "recall_explanation" &&
-        (!chatId || event.chatId === chatId || event.details?.chatId === chatId),
-    )
-    .sort((left, right) => right.ts.localeCompare(left.ts))[0];
+function latestRecallEvent(events: LtmDebugEvent[], chatId?: string | null, attemptId?: string | null) {
+  const candidates = events.filter(
+    (event) =>
+      event.phase === "retrieval" &&
+      event.action === "recall_explanation" &&
+      (!chatId || event.chatId === chatId || event.details?.chatId === chatId),
+  );
+  // Prefer the explanation carrying the same attempt id as the recorded recall
+  // rather than trusting timestamp order, which can pair the wrong attempts.
+  const correlated = attemptId ? candidates.find((event) => event.operationId === attemptId) : undefined;
+  // With a known attempt, never fall back to another recall's explanation; a missing
+  // match means the current attempt has no recorded workflow.
+  if (attemptId) return correlated;
+  return candidates.sort((left, right) => right.ts.localeCompare(left.ts))[0];
 }
 
 function recallDetails(event: LtmDebugEvent | undefined) {
@@ -332,7 +337,12 @@ export default function ActivityView({ props, onOpenMemory }: LongTermMemoryDest
   const recallEvents = filter === "all" ? (activity.data?.events ?? []) : (recallActivity.data?.events ?? []);
   const recallLoading = filter === "all" ? activity.isLoading : recallActivity.isLoading;
   const recallError = filter === "all" ? activity.isError : recallActivity.isError;
-  const recallEvent = latestRecallEvent(recallEvents, props.chatId);
+  const lastInjection = useQuery({
+    enabled: Boolean(props.chatId),
+    queryKey: queryKeys.lastInjection(props.chatId),
+    queryFn: () => request<LtmLastInjectionResponse>(`/last-injection/${encodeURIComponent(props.chatId!)}`),
+  });
+  const recallEvent = latestRecallEvent(recallEvents, props.chatId, lastInjection.data?.attempt?.attemptId);
   const recallWorkflow = recallDetails(recallEvent) as {
     maxChunks?: number;
     maxTokens?: number;
@@ -341,11 +351,6 @@ export default function ActivityView({ props, onOpenMemory }: LongTermMemoryDest
     selected?: Array<Record<string, unknown>>;
     rejected?: Array<Record<string, unknown>>;
   } | null;
-  const lastInjection = useQuery({
-    enabled: Boolean(props.chatId),
-    queryKey: queryKeys.lastInjection(props.chatId),
-    queryFn: () => request<LtmLastInjectionResponse>(`/last-injection/${encodeURIComponent(props.chatId!)}`),
-  });
 
   const clear = async () => {
     if (
@@ -515,6 +520,16 @@ export default function ActivityView({ props, onOpenMemory }: LongTermMemoryDest
           ) : null}
         </summary>
         <div className="space-y-3 border-t border-[var(--border)] px-3 py-3 text-xs">
+          {lastInjection.data?.attempt && lastInjection.data.attempt.reason !== "no_matches" ? (
+            <p
+              className="text-[var(--muted-foreground)]"
+              data-ltm-recall-confirmation={lastInjection.data.attempt.confirmed ? "confirmed" : "unconfirmed"}
+            >
+              {lastInjection.data.attempt.confirmed
+                ? localizeUi("ui.longTermMemory.activityview.recallWorkflowInjectionConfirmed")
+                : localizeUi("ui.longTermMemory.activityview.recallWorkflowInjectionNotConfirmed")}
+            </p>
+          ) : null}
           {recallLoading ? (
             <StatusSurface busy>{localizeUi("ui.longTermMemory.activityview.loadingRecallWorkflow")}</StatusSurface>
           ) : recallError ? (

@@ -83,7 +83,7 @@ import { buildStopWordSet } from "./keyword-extract.js";
 import { withLtmVaultLock } from "./vault-lock.js";
 import type { LongTermMemoryDraftStore } from "./draft-store.js";
 import type { LongTermMemoryStorage } from "./storage.js";
-import { readLongTermMemoryInjectionReceipt } from "./usage.js";
+import { readLongTermMemoryAttempt, readLongTermMemoryInjectionReceipt } from "./usage.js";
 import {
   ltmModeForChatMode,
   normalizeLtmChatCharacterIds,
@@ -565,9 +565,22 @@ export function createLongTermMemoryRoutes(runtime: {
     );
     app.delete("/debug-log", async () => clearLtmDebugLog(root));
     app.get<{ Params: { chatId: string } }>("/last-injection/:chatId", async (request) => {
-      const receipt = await readLongTermMemoryInjectionReceipt(request.params.chatId, root);
+      const [receipt, observedAttempt] = await Promise.all([
+        readLongTermMemoryInjectionReceipt(request.params.chatId, root),
+        readLongTermMemoryAttempt(request.params.chatId, root),
+      ]);
+      const attempt = observedAttempt
+        ? { ...observedAttempt, confirmed: receipt?.attemptId === observedAttempt.attemptId }
+        : null;
       if (!receipt)
-        return { memoryCount: 0, tokenCount: 0, memories: [], state: "not_recorded" as const, dispatchedAt: null };
+        return {
+          memoryCount: 0,
+          tokenCount: 0,
+          memories: [],
+          state: "not_recorded" as const,
+          dispatchedAt: null,
+          attempt,
+        };
       const notesById = new Map((await storage.listNotes()).map((note) => [note.id, note]));
       const memories = new Map<
         string,
@@ -604,6 +617,7 @@ export function createLongTermMemoryRoutes(runtime: {
         memories: [...memories.values()],
         state: memories.size ? ("injected" as const) : ("no_matches" as const),
         dispatchedAt: receipt.dispatchedAt,
+        attempt,
       };
     });
     app.get("/settings", async () => getLtmGlobalSettings(root));
