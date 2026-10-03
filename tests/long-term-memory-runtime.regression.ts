@@ -1540,11 +1540,14 @@ async function main() {
 
       const settingsPath = join(storage.root, "config", "settings.json");
       const originalSettings = await readFile(settingsPath, "utf8").catch(() => null);
-      await writeFile(settingsPath, "{ not valid settings\n");
-      await assert.rejects(runtime.recall(input));
-      assert.equal((await readLongTermMemoryAttempt("chat-a", storage.root))?.outcome, "failed");
-      if (originalSettings === null) await rm(settingsPath, { force: true });
-      else await writeFile(settingsPath, originalSettings);
+      try {
+        await writeFile(settingsPath, "{ not valid settings\n");
+        await assert.rejects(runtime.recall(input));
+        assert.equal((await readLongTermMemoryAttempt("chat-a", storage.root))?.outcome, "failed");
+      } finally {
+        if (originalSettings === null) await rm(settingsPath, { force: true });
+        else await writeFile(settingsPath, originalSettings);
+      }
 
       await writeFile(longTermMemoryRecallIndexPath(storage.root), "{malformed\n");
       const recovered = await runtime.recall(input);

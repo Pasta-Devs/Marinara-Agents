@@ -79,7 +79,7 @@ const attemptLocks = new Map<string, Promise<void>>();
 export async function recordLongTermMemoryAttempt(attempt: LtmRecallAttempt, root = getLongTermMemoryRoot()) {
   const chatId = attempt.chatId.trim();
   if (!chatId) return null;
-  return withKeyedLock(attemptLocks, chatId, async () => {
+  return withKeyedLock(attemptLocks, longTermMemoryAttemptPath(chatId, root), async () => {
     const existing = await readLongTermMemoryAttempt(chatId, root);
     // A slow older recall must not overwrite a newer attempt's observed outcome.
     if (existing && Date.parse(existing.at) > Date.parse(attempt.at)) return existing;
