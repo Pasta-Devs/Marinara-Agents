@@ -1,5 +1,9 @@
 # Noodle release notes
 
+## 1.4.2 — 2026-10-03
+
+- Shared dialog frames now follow your selected Marinara Engine accent while keeping the app’s own content colors.
+
 ## 1.4.1 — 2026-10-02 [highlight]
 
 - Fixed timeline refreshes on local models that failed after a short, empty-looking answer. When the prompt plus the room Noodle keeps for its answer did not fit the connection's context window, Noodle cut your characters, chats and timeline out of the prompt before sending. It now keeps the whole prompt and lowers the answer limit instead. If too little room is left for an answer, the refresh stops and says what to turn down.

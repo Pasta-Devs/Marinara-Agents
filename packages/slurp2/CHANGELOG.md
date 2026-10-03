@@ -1,5 +1,9 @@
 # Slurp release notes
 
+## 0.3.13 — 2026-10-03
+
+- Shared dialog frames now follow your selected Marinara Engine accent while keeping the app’s own content colors.
+
 ## 0.3.12 — 2026-10-01
 
 - Fix: the follow-up scheduler no longer logs "No text connection configured" on every poll. It checks for due follow-ups first, and warns once per outage only when work is waiting.
