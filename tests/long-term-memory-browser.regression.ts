@@ -2301,6 +2301,119 @@ async function main() {
       );
       assert.deepEqual(desktopExtractionLayout.selectHeights, [44, 44]);
       assert.equal(desktopExtractionLayout.infoSize, 14);
+      const debugEvent = (operationId: string, action: string, status: string, fields = {}) => ({
+        id: `${operationId}-${action}-${status}`,
+        operationId,
+        ts: noteTimestamp,
+        phase: "llm",
+        action,
+        status,
+        sourceNoteId: legacyGlobalNote.id,
+        ...fields,
+      });
+      const debugEvents = [
+        debugEvent("estimated", "extract_source_note", "started"),
+        debugEvent("estimated", "evidence_unit_request", "started", {
+          model: "fixture-model",
+          counts: { estimatedPromptTokens: 123 },
+        }),
+        debugEvent("estimated", "evidence_unit_response", "ok", {
+          durationMs: 450,
+          details: { finishReason: "stop", responseSnippet: "private response snippet" },
+        }),
+        debugEvent("estimated", "extract_source_note", "ok", { durationMs: 500 }),
+        debugEvent("reported", "evidence_unit_request", "started", { counts: { estimatedPromptTokens: 123 } }),
+        debugEvent("reported", "evidence_unit_response", "ok", {
+          counts: { promptTokens: 40, completionTokens: 12, completionReasoningTokens: 8, totalTokens: 60 },
+        }),
+        debugEvent("zero", "evidence_unit_request", "started", { counts: { inputTokens: 123 } }),
+        debugEvent("zero", "evidence_unit_response", "ok", { counts: { promptTokens: 0 } }),
+        debugEvent("truncated", "extract_source_note", "started"),
+        debugEvent("truncated", "evidence_unit_response", "warning", {
+          details: { finishReason: "length", responseSnippet: "private response snippet" },
+        }),
+        debugEvent("truncated", "extract_source_note", "ok"),
+        debugEvent("context", "evidence_unit_request", "started"),
+        debugEvent("context", "evidence_unit_context_preflight", "error", {
+          details: { reason: "prompt_trim_required" },
+        }),
+        debugEvent("budget", "evidence_unit_request", "started"),
+        debugEvent("budget", "evidence_unit_context_preflight", "error", {
+          details: { reason: "output_budget_below_viability_floor" },
+        }),
+        debugEvent("partial", "import_sources", "started"),
+        debugEvent("partial", "extract_source_note", "error", { error: { message: "One source failed." } }),
+        debugEvent("partial", "import_sources", "ok"),
+        debugEvent("noduration", "recall_explanation", "ok"),
+      ];
+      const assertDebugActivity = async (activityPage: typeof page) => {
+        await activityPage.locator("#settings-tab-debug").click();
+        const activity = activityPage.locator('[data-ltm-surface="activity"]');
+        const operation = (id: string) =>
+          activity
+            .locator(":scope > ol > li > details > summary")
+            .nth(
+              ["estimated", "reported", "zero", "truncated", "context", "budget", "partial", "noduration"].indexOf(id),
+            );
+        await operation("estimated").waitFor();
+        const estimated = await operation("estimated").innerText();
+        assert.match(estimated, /AI extraction/u);
+        assert.match(estimated, /fixture-model/u);
+        assert.match(estimated, /500 ms/u);
+        assert.match(estimated, /Estimated input: 123 tokens/u);
+        assert.doesNotMatch(estimated, /Input \(provider-reported\)|Output:|Total:/u);
+        const reported = await operation("reported").innerText();
+        assert.match(reported, /Completed/u, "a standalone request/response pair must not stay Running");
+        assert.match(reported, /Input \(provider-reported\): 40 tokens/u);
+        assert.match(reported, /Reasoning: 8 tokens/u);
+        assert.match(reported, /Output: 12 tokens/u);
+        assert.match(reported, /Total: 60 tokens/u);
+        assert.match(await operation("zero").innerText(), /Estimated input: 123 tokens/u);
+        assert.match(await operation("zero").innerText(), /Input \(provider-reported\): 0 tokens/u);
+        assert.match(await operation("truncated").innerText(), /Completed with warnings/u);
+        assert.match(await operation("truncated").innerText(), /output limit.*length/iu);
+        assert.match(await operation("context").innerText(), /Failed/u);
+        assert.match(await operation("context").innerText(), /too large.*context/iu);
+        assert.match(await operation("budget").innerText(), /Failed/u);
+        assert.match(await operation("budget").innerText(), /too small.*response/iu);
+        assert.match(await operation("partial").innerText(), /Completed with warnings/u);
+        assert.match(await operation("partial").innerText(), /One source failed\./u);
+        assert.doesNotMatch(
+          await operation("noduration").innerText(),
+          / ms/u,
+          "an operation without a recorded duration must not display a fabricated one",
+        );
+        assert.doesNotMatch(await activity.innerText(), /private response snippet/u);
+        assert.equal(
+          await activityPage.evaluate(
+            () => document.documentElement.scrollWidth <= document.documentElement.clientWidth,
+          ),
+          true,
+        );
+      };
+      const openDebugActivity = async (context: typeof browserContext, navigation: "desktop" | "mobile") => {
+        const debugPage = await context.newPage();
+        await debugPage.route("**/api/long-term-memory/debug-log?*", (route) =>
+          route.fulfill({ json: { events: debugEvents } }),
+        );
+        await debugPage.goto(`http://127.0.0.1:${address.port}/`);
+        await debugPage.evaluate(() => customElements.whenDefined("marinara-capability-long-term-memory"));
+        await debugPage.evaluate(() => {
+          const element = document.createElement("marinara-capability-long-term-memory");
+          element.setAttribute("view", "detail");
+          document.body.append(element);
+        });
+        await debugPage.locator(`[data-ltm-navigation="${navigation}"] [data-ltm-destination="settings"]`).click();
+        await assertDebugActivity(debugPage);
+        return debugPage;
+      };
+      const desktopDebugPage = await openDebugActivity(browserContext, "desktop");
+      const estimatedOperation = desktopDebugPage.locator('[data-ltm-surface="activity"] > ol > li > details').first();
+      await estimatedOperation.locator(":scope > summary").click();
+      const responseEvent = estimatedOperation.locator(":scope > ol > li").filter({ hasText: "450 ms" });
+      await responseEvent.getByText("Technical details", { exact: true }).click();
+      assert.match(await responseEvent.locator("pre").innerText(), /private response snippet/u);
+      await desktopDebugPage.close();
       await page.locator('[data-ltm-navigation="desktop"] [data-ltm-destination="vault"]').click();
       await page.evaluate((version) => {
         const element = document.createElement("marinara-capability-long-term-memory") as HTMLElement & {
@@ -4484,6 +4597,8 @@ async function main() {
       assert.equal(mobileExtractionLayout.columns, 1);
       assert.deepEqual(mobileExtractionLayout.labelHeights, [44, 44]);
       assert.deepEqual(mobileExtractionLayout.selectWidths, mobileExtractionLayout.fieldWidths);
+      const mobileDebugPage = await openDebugActivity(mobileContext, "mobile");
+      await mobileDebugPage.close();
       await mobilePage.setViewportSize({ width: 320, height: 720 });
       assert.ok(
         await mobilePage.locator(".mari-editor-header").evaluate((header) => {

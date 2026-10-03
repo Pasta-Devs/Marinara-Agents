@@ -38,6 +38,9 @@ const debugPhases: LtmDebugEvent["phase"][] = [
 ];
 
 const actionLabelKeys: Record<string, string> = {
+  extract_source_note: "ui.longTermMemory.activityview.actionAiExtraction",
+  evidence_unit_request: "ui.longTermMemory.activityview.actionAiExtraction",
+  evidence_unit_context_preflight: "ui.longTermMemory.activityview.actionAiExtraction",
   evidence_unit_response: "ui.longTermMemory.activityview.actionAiExtraction",
   evidence_unit_json_parse: "ui.longTermMemory.activityview.actionReadExtractionResult",
   recall_explanation: "ui.longTermMemory.activityview.actionMemoryRecall",
@@ -57,6 +60,16 @@ function humanizeDebugText(text: string, lookup: DebugTextLookup, internalRecord
 function describeEvent(event: LtmDebugEvent, debugTextLookup: DebugTextLookup, localizeUi: LtmTranslationFunction) {
   const internalRecordLabel = localizeUi("ui.longTermMemory.activityview.anInternalRecord");
   if (event.error) return humanizeDebugText(event.error.message, debugTextLookup, internalRecordLabel);
+  if (isTruncatedResponse(event))
+    return localizeUi("ui.longTermMemory.activityview.outputTruncated", {
+      finishReason: String(event.details?.finishReason),
+    });
+  if (event.action === "evidence_unit_context_preflight") {
+    if (event.details?.reason === "prompt_trim_required")
+      return localizeUi("ui.longTermMemory.activityview.promptTooLarge");
+    if (event.details?.reason === "output_budget_below_viability_floor")
+      return localizeUi("ui.longTermMemory.activityview.outputBudgetTooSmall");
+  }
   if (event.message) return humanizeDebugText(event.message, debugTextLookup, internalRecordLabel);
   if (event.uiSummary) return humanizeDebugText(event.uiSummary, debugTextLookup, internalRecordLabel);
   const summary = event.details?.summary;
@@ -98,15 +111,30 @@ function groupOperations(events: LtmDebugEvent[]): DebugOperation[] {
     .sort((left, right) => right.events.at(-1)!.ts.localeCompare(left.events.at(-1)!.ts));
 }
 
+function isTruncatedResponse(event: LtmDebugEvent) {
+  return (
+    event.action === "evidence_unit_response" &&
+    ["length", "max_tokens", "token_limit"].includes(String(event.details?.finishReason ?? "").toLowerCase())
+  );
+}
+
 function operationStatus(events: LtmDebugEvent[], localizeUi: LtmTranslationFunction) {
   const started = events.find((event) => event.status === "started");
   const terminal = started
     ? events.findLast(
-        (event) => event.phase === started.phase && event.action === started.action && event.status !== "started",
+        (event) =>
+          event.phase === started.phase &&
+          (event.action === started.action ||
+            (started.action === "evidence_unit_request" && event.action === "evidence_unit_response")) &&
+          event.status !== "started",
       )
     : events.at(-1);
-  const status = terminal?.status ?? (started ? "started" : "warning");
-  if (status === "ok" && events.some((event) => event.status === "warning")) {
+  const status =
+    terminal?.status ?? (events.some((event) => event.status === "error") ? "error" : started ? "started" : "warning");
+  if (
+    status === "ok" &&
+    events.some((event) => event.status === "warning" || event.status === "error" || isTruncatedResponse(event))
+  ) {
     return {
       status: "warning",
       label: localizeUi("ui.longTermMemory.activityview.completedWithWarnings"),
@@ -142,10 +170,16 @@ function eventMetadata(event: LtmDebugEvent) {
 
 function summarizeCounts(events: LtmDebugEvent[], localizeUi: LtmTranslationFunction, locale: string) {
   const counts = new Map<string, number>();
-  for (const event of events) for (const [label, count] of Object.entries(event.counts ?? {})) counts.set(label, count);
+  for (const event of events)
+    for (const [label, count] of Object.entries(event.counts ?? {}))
+      counts.set(
+        event.action === "evidence_unit_request" && label === "promptTokens" ? "estimatedPromptTokens" : label,
+        count,
+      );
   if (!counts.size) return "";
   const summary: string[] = [];
-  const inputTokens = counts.get("promptTokens") ?? counts.get("inputTokens");
+  const inputTokens = counts.get("promptTokens");
+  const estimatedInputTokens = counts.get("estimatedPromptTokens") ?? counts.get("inputTokens");
   const reasoningTokens = counts.get("completionReasoningTokens") ?? counts.get("reasoningTokens");
   const outputTokens = counts.get("completionTokens") ?? counts.get("outputTokens") ?? counts.get("responseTokens");
   const totalTokens = counts.get("totalTokens");
@@ -153,6 +187,12 @@ function summarizeCounts(events: LtmDebugEvent[], localizeUi: LtmTranslationFunc
     summary.push(
       localizeUi("ui.longTermMemory.activityview.inputTokens", {
         count: inputTokens.toLocaleString(locale),
+      }),
+    );
+  if (estimatedInputTokens != null)
+    summary.push(
+      localizeUi("ui.longTermMemory.activityview.estimatedInputTokens", {
+        count: estimatedInputTokens.toLocaleString(locale),
       }),
     );
   if (reasoningTokens != null)
@@ -180,6 +220,7 @@ function summarizeCounts(events: LtmDebugEvent[], localizeUi: LtmTranslationFunc
           !/chars$/i.test(label) &&
           label !== "promptTokens" &&
           label !== "inputTokens" &&
+          label !== "estimatedPromptTokens" &&
           label !== "completionReasoningTokens" &&
           label !== "reasoningTokens" &&
           label !== "completionTokens" &&
@@ -204,7 +245,7 @@ function warningMessages(
   localizeUi: LtmTranslationFunction,
 ) {
   return events
-    .filter((event) => event.status === "warning")
+    .filter((event) => event.status === "warning" || isTruncatedResponse(event))
     .map((event) => describeEvent(event, debugTextLookup, localizeUi));
 }
 
@@ -616,8 +657,17 @@ export default function ActivityView({ props, onOpenMemory }: LongTermMemoryDest
             const lastEvent = operation.events.at(-1)!;
             const status = operationStatus(operation.events, localizeUi);
             const sourceNoteId = operation.events.find((event) => event.sourceNoteId)?.sourceNoteId;
+            const principalEvent =
+              operation.events.find((event) => event.status === "error") ??
+              operation.events.find((event) => event.status === "warning" || isTruncatedResponse(event)) ??
+              lastEvent;
+            const summary = compactSummary(describeEvent(principalEvent, debugTextLookup, localizeUi));
+            const model = operation.events.find((event) => event.model)?.model;
+            const durationMs = lastEvent.durationMs;
             const countSummary = summarizeCounts(operation.events, localizeUi, locale);
-            const warnings = warningMessages(operation.events, debugTextLookup, localizeUi);
+            const warnings = warningMessages(operation.events, debugTextLookup, localizeUi).filter(
+              (warning) => compactSummary(warning) !== summary,
+            );
             return (
               <li key={operation.operationId} className="mari-editor-panel mari-editor-panel--soft">
                 <details className="group">
@@ -638,18 +688,20 @@ export default function ActivityView({ props, onOpenMemory }: LongTermMemoryDest
                           {status.label}
                         </span>
                       </span>
-                      <span className="mt-1 block text-xs text-[var(--muted-foreground)]">
-                        {sourceNoteId && noteTitles.has(sourceNoteId)
-                          ? noteTitles.get(sourceNoteId)
-                          : compactSummary(describeEvent(lastEvent, debugTextLookup, localizeUi))}
-                      </span>
+                      {sourceNoteId && noteTitles.has(sourceNoteId) ? (
+                        <span className="mt-1 block text-xs text-[var(--muted-foreground)]">
+                          {noteTitles.get(sourceNoteId)}
+                        </span>
+                      ) : null}
+                      <span className="mt-1 block text-xs text-[var(--muted-foreground)]">{summary}</span>
                       <span className="mt-1 block text-[0.6875rem] text-[var(--muted-foreground)]">
                         {formatTimestamp(lastEvent.ts, locale)}
-                        {lastEvent.durationMs != null
+                        {durationMs != null
                           ? localizeUi("ui.longTermMemory.activityview.value1Ms", {
-                              value1: lastEvent.durationMs.toLocaleString(locale),
+                              value1: durationMs.toLocaleString(locale),
                             })
                           : ""}
+                        {model ? localizeUi("ui.longTermMemory.activityview.value1_9a93137", { value1: model }) : ""}
                         {countSummary
                           ? localizeUi("ui.longTermMemory.activityview.value1_9a93137", { value1: countSummary })
                           : ""}

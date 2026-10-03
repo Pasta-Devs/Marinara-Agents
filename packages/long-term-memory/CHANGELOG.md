@@ -1,5 +1,10 @@
 # Long-Term Memory changelog
 
+## 1.3.41 — 2026-10-03
+
+- Make extraction debug reporting trustworthy: show estimated input tokens and provider-reported usage distinctly, surface the failing step and warnings in collapsed activity entries, flag truncated model responses, and keep preflight failures when context metadata is missing.
+- Stop showing a duration for activity entries that recorded no timing.
+
 ## 1.3.39 — 2026-10-02 [highlight]
 
 - In a group chat, a targeted responder now recalls only memories scoped to that character. Global, chat-only, persona-only, mixed-character, and other characters' shared-chat memories are no longer injected into a single responder's prompt; a non-targeted or single-character recall keeps its existing chat-wide behavior.

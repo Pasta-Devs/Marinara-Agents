@@ -9,6 +9,7 @@ async function main() {
   const source = "../packages/long-term-memory/src/engine/packages/server/src/services/long-term-memory";
   const { configurePackageRuntime } = await import(`${source}/package-runtime.ts`);
   const { runLongTermMemoryEvidenceUnitExtraction } = await import(`${source}/evidence-unit-extraction.ts`);
+  const { readLtmDebugLog } = await import(`${source}/debug-log.ts`);
   const { sourceHashForLtmSourceNote } = await import(`${source}/source-hash.ts`);
   const root = await mkdtemp(join(tmpdir(), "marinara-ltm-extraction-reliability-"));
   const timestamp = "2026-08-09T00:00:00.000Z";
@@ -95,6 +96,25 @@ async function main() {
     },
   };
   try {
+    for (const usage of [
+      undefined,
+      { promptTokens: 40, completionTokens: 12, completionReasoningTokens: 8, totalTokens: 60 },
+      { promptTokens: 40 },
+      { promptTokens: 0, completionTokens: 0 },
+    ]) {
+      calls.length = 0;
+      response = { content: validContent, finishReason: "stop", usage };
+      const operationId = randomUUID();
+      await runLongTermMemoryEvidenceUnitExtraction({ ...options, operationId });
+      assert.equal(calls.length, 1, "debug accounting must not change provider calls");
+      const events = await readLtmDebugLog({ operationId }, root);
+      const request = events.find((event) => event.action === "evidence_unit_request")!;
+      const result = events.find((event) => event.action === "evidence_unit_response")!;
+      assert.ok(request.counts!.estimatedPromptTokens > 0, "request usage must be explicitly estimated");
+      assert.equal(request.counts!.promptTokens, undefined);
+      assert.deepEqual(result.counts, { responseChars: validContent.length, ...usage });
+    }
+
     for (const testCase of [
       {
         response: { content: "  ", finishReason: "stop" },
@@ -157,11 +177,16 @@ async function main() {
         JSON.stringify(validUnit) +
         ',{"bucket":"timeline_event","subjectId":"partial_event","sectionKey":"event","text":"Mara was interrup';
       response = { content: truncatedPayloadContent, finishReason };
-      const recoveredRun = await runLongTermMemoryEvidenceUnitExtraction({ ...options, operationId: randomUUID() });
+      const operationId = randomUUID();
+      const recoveredRun = await runLongTermMemoryEvidenceUnitExtraction({ ...options, operationId });
       assert.equal(calls.length, 1);
       assert.equal(recoveredRun.response.incomplete, true);
       assert.equal(recoveredRun.response.units.length, 1);
       assert.equal(recoveredRun.response.units[0]?.subjectId, "observatory_gate_sealed");
+      const events = await readLtmDebugLog({ operationId }, root);
+      const result = events.find((event) => event.action === "evidence_unit_response")!;
+      assert.equal(result.status, "warning", "recovered truncation must remain visible in debug reporting");
+      assert.equal(result.details!.finishReason, finishReason);
     }
 
     calls.length = 0;
@@ -285,8 +310,9 @@ async function main() {
     calls.length = 0;
     options.languageModel.maxContext = null;
     options.languageModel.maxOutputTokens = 123;
+    const cappedOperationId = randomUUID();
     await assert.rejects(
-      () => runLongTermMemoryEvidenceUnitExtraction({ ...options, operationId: randomUUID() }),
+      () => runLongTermMemoryEvidenceUnitExtraction({ ...options, operationId: cappedOperationId }),
       (error: any) =>
         error.code === "ltm_model_output_budget_unviable" &&
         /requested=200/u.test(error.message) &&
@@ -294,6 +320,11 @@ async function main() {
         /fitted=123/u.test(error.message),
     );
     assert.equal(calls.length, 0, "provider-capped budgets fail without max-context metadata");
+    const cappedEvents = await readLtmDebugLog({ operationId: cappedOperationId }, root);
+    const preflight = cappedEvents.find((event) => event.action === "evidence_unit_context_preflight");
+    assert.ok(preflight, "missing context metadata must not suppress the preflight failure event");
+    assert.equal(preflight.status, "error");
+    assert.equal(preflight.counts!.estimatedPromptTokens, undefined);
 
     calls.length = 0;
     options.maxOutputTokens = null;
