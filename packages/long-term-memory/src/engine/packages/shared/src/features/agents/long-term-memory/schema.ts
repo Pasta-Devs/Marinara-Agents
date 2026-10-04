@@ -2975,6 +2975,16 @@ export const ltmLastInjectionResponseSchema = z.object({
   attempt: ltmLastInjectionAttemptSchema.nullable().default(null),
 });
 
+/**
+ * Why the semantic lane did or did not contribute to one recall. It separates a
+ * lane that is switched off from a provider that is unavailable, an index built
+ * for a different embedding space, and a valid index that simply matched nothing.
+ */
+export type LtmSemanticOutcome = "disabled" | "unavailable" | "incompatible" | "no_matches" | "contributed";
+
+/** How one recall obtained its index, as observed by the loader that produced it. */
+export type LtmIndexLoadOutcome = "loaded" | "upgraded" | "rebuilt" | "preloaded";
+
 export const ltmPendingDraftsCountResponseSchema = z.object({
   count: z.number(),
 });

@@ -1,5 +1,11 @@
 import { matchesLtmScope, isGlobalLtmScope } from "../../../../shared/src/features/agents/long-term-memory/scope.js";
-import type { LtmMode, LtmNote, LtmScope } from "../../../../shared/src/features/agents/long-term-memory/schema.js";
+import type {
+  LtmIndexLoadOutcome,
+  LtmMode,
+  LtmNote,
+  LtmScope,
+  LtmSemanticOutcome,
+} from "../../../../shared/src/features/agents/long-term-memory/schema.js";
 import { applyLtmBudget } from "./budget.js";
 import { searchLtmBm25 } from "./bm25.js";
 import { embedLongTermMemoryTexts, type MemoryRecallEmbeddingOptions } from "./embedding-adapter.js";
@@ -82,6 +88,9 @@ export async function retrieveLongTermMemory(input: RetrieveLongTermMemoryInput)
   // Read settings and load the index under one vault-lock scope so a recall that queues
   // behind a settings save judges freshness against the settings that save persisted. The
   // loader's own lock is reentrant, so nesting it here cannot deadlock.
+  // The loader reports how it obtained the index (loaded, upgraded, rebuilt) so a
+  // recall explanation can say which index served the recall without re-reading it.
+  const indexObservation: { outcome?: LtmIndexLoadOutcome } = {};
   const { triggerStopWords, index } = await withLtmVaultLock(input.root, async () => {
     const settings = await getLtmGlobalSettings(input.root);
     return {
@@ -93,9 +102,11 @@ export async function retrieveLongTermMemory(input: RetrieveLongTermMemoryInput)
           embeddingAdapter,
           ltmGeneratedStopWords(settings),
           input.signal,
+          indexObservation,
         )),
     };
   });
+  const indexLoadOutcome: LtmIndexLoadOutcome = input.index ? "preloaded" : (indexObservation.outcome ?? "loaded");
   // A caller-supplied index skips the signal-aware loader, so cancellation must be
   // rechecked here before ranking and returning a recall the caller already abandoned.
   input.signal?.throwIfAborted();
@@ -179,14 +190,22 @@ export async function retrieveLongTermMemory(input: RetrieveLongTermMemoryInput)
     });
   }
   let embeddingsAvailable = false;
-  if (
-    (input.semanticWeight ?? 0) > 0 &&
-    query &&
-    embeddingAdapter &&
-    hasUsableVectorIndex(index.embeddings, embeddingAdapter.spaceId)
-  ) {
+  let semanticOutcome: LtmSemanticOutcome;
+  if ((input.semanticWeight ?? 0) <= 0) {
+    semanticOutcome = "disabled";
+  } else if (!query) {
+    semanticOutcome = "no_matches";
+  } else if (!embeddingAdapter) {
+    semanticOutcome = "unavailable";
+  } else if (!hasUsableVectorIndex(index.embeddings, embeddingAdapter.spaceId)) {
+    semanticOutcome = "incompatible";
+  } else {
     const queryVector = (await embedLongTermMemoryTexts([query], { ...input, embeddingAdapter }))?.[0];
-    if (queryVector?.length === index.embeddings.dimension) {
+    if (!queryVector) {
+      semanticOutcome = "unavailable";
+    } else if (queryVector.length !== index.embeddings.dimension) {
+      semanticOutcome = "incompatible";
+    } else {
       const vectors = index.embeddings.chunks
         .flatMap((entry) => {
           if (!entry.vector || entry.vector.length !== index.embeddings.dimension || !allowed.has(entry.chunkId))
@@ -197,6 +216,7 @@ export async function retrieveLongTermMemory(input: RetrieveLongTermMemoryInput)
         .sort((left, right) => right.rawScore - left.rawScore);
       embeddingsAvailable = vectors.length > 0;
       if (vectors.length) lanes.push({ name: "vector", weight: input.semanticWeight ?? 0, items: vectors });
+      semanticOutcome = vectors.length > 0 ? "contributed" : "no_matches";
     }
   }
   const chunksById = new Map(Object.values(index.metadata.chunks).map((chunk) => [chunk.id, chunk]));
@@ -215,6 +235,14 @@ export async function retrieveLongTermMemory(input: RetrieveLongTermMemoryInput)
   return {
     ...budgeted,
     embeddingsAvailable,
+    semanticOutcome,
+    indexSnapshot: {
+      loadOutcome: indexLoadOutcome,
+      generatedAt: index.generatedAt,
+      indexedChunks: chunksById.size,
+      eligibleChunks: allowed.size,
+      embeddedChunks: index.embeddings.embeddedChunkCount,
+    },
     truncated: ranked.some((hit) => {
       const noteId = chunksById.get(hit.chunkId)?.noteId;
       return Boolean(noteId) && !budgetedNoteIds.has(noteId!);

@@ -760,6 +760,45 @@ assert.equal(
   "This recall was confirmed in the latest model context.",
 );
 
+// #1211: the recall workflow explains effective parameters, the recall-time
+// index snapshot, and the semantic outcome, and it labels the bounded
+// rejected-candidate list instead of implying it is exhaustive.
+assert.match(activity, /recallWorkflow\.semanticOutcome/u);
+assert.match(activity, /recallWorkflow\.indexedChunks/u);
+assert.match(activity, /recallWorkflow\.eligibleChunks/u);
+assert.match(activity, /recallWorkflow\.rejectedLimit/u);
+assert.match(activity, /recallMode/u);
+assert.match(activity, /recallIndexSummary/u);
+assert.match(activity, /recallSemanticOutcome/u);
+assert.match(activity, /rejectedCandidatesUpTo/u);
+assert.equal(
+  locale["ui.longTermMemory.activityview.rejectedCandidatesUpTo"],
+  "Recorded rejected candidates — up to {{limit}}",
+);
+assert.equal(locale["ui.longTermMemory.activityview.recallSemanticOutcome"], "Semantic matching: {{outcome}}");
+assert.equal(
+  locale["ui.longTermMemory.activityview.recallIndexSummary"],
+  "Recall index: {{indexed}} indexed · {{eligible}} eligible · {{outcome}}",
+);
+// #1211 review repair: the index snapshot must also surface the build time and
+// embedded-chunk count, and eligibility/targeting must render an explicit state
+// for both true and false rather than disappearing when false.
+assert.match(activity, /recallWorkflow\.indexGeneratedAt/u);
+assert.match(activity, /recallWorkflow\.embeddedChunks/u);
+assert.match(activity, /recallIndexBuiltAt/u);
+assert.match(activity, /recallIndexEmbeddedChunks/u);
+assert.match(activity, /typeof recallWorkflow\.includeResolved === "boolean"/u);
+assert.match(activity, /typeof recallWorkflow\.exclusiveCharacterTargeting === "boolean"/u);
+assert.match(activity, /recallResolvedExcluded/u);
+assert.match(activity, /recallChatWideTargeting/u);
+assert.equal(locale["ui.longTermMemory.activityview.recallIndexBuiltAt"], "Index built: {{value}}");
+assert.equal(locale["ui.longTermMemory.activityview.recallIndexEmbeddedChunks"], "Embedded chunks: {{count}}");
+assert.equal(locale["ui.longTermMemory.activityview.recallResolvedExcluded"], "Resolved memories were excluded");
+assert.equal(
+  locale["ui.longTermMemory.activityview.recallChatWideTargeting"],
+  "Not limited to the responding character",
+);
+
 process.stdout.write(
   "Long-Term Memory feedback clarity UI regression: labels, outcomes, usage, warnings, and defaults ok\n",
 );

@@ -350,6 +350,17 @@ export default function ActivityView({ props, onOpenMemory }: LongTermMemoryDest
     weights?: Record<string, number>;
     selected?: Array<Record<string, unknown>>;
     rejected?: Array<Record<string, unknown>>;
+    semanticOutcome?: string;
+    indexLoadOutcome?: string;
+    indexGeneratedAt?: string;
+    indexedChunks?: number;
+    eligibleChunks?: number;
+    embeddedChunks?: number;
+    mode?: string;
+    includeResolved?: boolean;
+    exclusiveCharacterTargeting?: boolean;
+    contextMessagesUsed?: number;
+    rejectedLimit?: number;
   } | null;
 
   const clear = async () => {
@@ -558,6 +569,69 @@ export default function ActivityView({ props, onOpenMemory }: LongTermMemoryDest
                   {(recallEvent.counts?.usedTokens ?? 0).toLocaleString(locale)}{" "}
                   {localizeUi("ui.longTermMemory.activityview.tokens")}
                 </span>
+                {typeof recallWorkflow.mode === "string" ? (
+                  <span>
+                    {localizeUi("ui.longTermMemory.activityview.recallMode", {
+                      mode: humanizeLabel(recallWorkflow.mode),
+                    })}
+                  </span>
+                ) : null}
+                {typeof recallWorkflow.contextMessagesUsed === "number" ? (
+                  <span>
+                    {localizeUi("ui.longTermMemory.activityview.recallContextMessages", {
+                      count: recallWorkflow.contextMessagesUsed,
+                    })}
+                  </span>
+                ) : null}
+                {typeof recallWorkflow.indexedChunks === "number" ||
+                typeof recallWorkflow.eligibleChunks === "number" ? (
+                  <span>
+                    {localizeUi("ui.longTermMemory.activityview.recallIndexSummary", {
+                      indexed: recallWorkflow.indexedChunks ?? 0,
+                      eligible: recallWorkflow.eligibleChunks ?? 0,
+                      outcome: humanizeLabel(String(recallWorkflow.indexLoadOutcome ?? "loaded")),
+                    })}
+                  </span>
+                ) : null}
+                {typeof recallWorkflow.indexGeneratedAt === "string" ? (
+                  <span>
+                    {localizeUi("ui.longTermMemory.activityview.recallIndexBuiltAt", {
+                      value: formatTimestamp(recallWorkflow.indexGeneratedAt, locale),
+                    })}
+                  </span>
+                ) : null}
+                {typeof recallWorkflow.embeddedChunks === "number" ? (
+                  <span>
+                    {localizeUi("ui.longTermMemory.activityview.recallIndexEmbeddedChunks", {
+                      count: recallWorkflow.embeddedChunks,
+                    })}
+                  </span>
+                ) : null}
+                {typeof recallWorkflow.semanticOutcome === "string" ? (
+                  <span>
+                    {localizeUi("ui.longTermMemory.activityview.recallSemanticOutcome", {
+                      outcome: humanizeLabel(recallWorkflow.semanticOutcome),
+                    })}
+                  </span>
+                ) : null}
+                {typeof recallWorkflow.includeResolved === "boolean" ? (
+                  <span>
+                    {localizeUi(
+                      recallWorkflow.includeResolved
+                        ? "ui.longTermMemory.activityview.recallResolvedEligible"
+                        : "ui.longTermMemory.activityview.recallResolvedExcluded",
+                    )}
+                  </span>
+                ) : null}
+                {typeof recallWorkflow.exclusiveCharacterTargeting === "boolean" ? (
+                  <span>
+                    {localizeUi(
+                      recallWorkflow.exclusiveCharacterTargeting
+                        ? "ui.longTermMemory.activityview.recallTargetedCharactersOnly"
+                        : "ui.longTermMemory.activityview.recallChatWideTargeting",
+                    )}
+                  </span>
+                ) : null}
               </div>
               {recallWorkflow.weights ? (
                 <p className="text-[var(--muted-foreground)]">
@@ -606,10 +680,14 @@ export default function ActivityView({ props, onOpenMemory }: LongTermMemoryDest
               {recallWorkflow.rejected?.length ? (
                 <div>
                   <h4 className="mb-1 font-semibold">
-                    {localizeUi("ui.longTermMemory.activityview.rejectedCandidates")}
+                    {localizeUi("ui.longTermMemory.activityview.rejectedCandidatesUpTo", {
+                      limit: recallWorkflow.rejectedLimit ?? 20,
+                    })}
                   </h4>
                   <ul
-                    aria-label={localizeUi("ui.longTermMemory.activityview.rejectedCandidates")}
+                    aria-label={localizeUi("ui.longTermMemory.activityview.rejectedCandidatesUpTo", {
+                      limit: recallWorkflow.rejectedLimit ?? 20,
+                    })}
                     className="space-y-1 text-[var(--muted-foreground)]"
                   >
                     {recallWorkflow.rejected.map((candidate, index) => {

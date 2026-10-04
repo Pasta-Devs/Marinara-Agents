@@ -143,11 +143,12 @@ export async function prepareGenerationLongTermMemory(input: {
       ? targetCharacterIds
       : undefined;
   const rejectedLimit = 20;
+  const mode = ltmModeForChatMode(chat.mode) as LtmMode;
   let retrieval;
   try {
     retrieval = await retrieveLongTermMemory({
       root: input.root,
-      mode: ltmModeForChatMode(chat.mode) as LtmMode,
+      mode,
       queryText,
       scope,
       characterIds: chat.characterIds,
@@ -205,6 +206,21 @@ export async function prepareGenerationLongTermMemory(input: {
       details: {
         chatId: input.chatId,
         embeddingsAvailable: retrieval.embeddingsAvailable,
+        semanticOutcome: retrieval.semanticOutcome,
+        // Effective recall parameters: what the chat/host actually asked for, so a
+        // missing candidate can be explained by scope or mode rather than left invisible.
+        mode,
+        includeResolved: recall.includeResolved,
+        exclusiveCharacterTargeting: Boolean(exclusiveCharacterIds),
+        contextMessages: recall.contextMessages,
+        contextMessagesUsed: recent.length,
+        // The recall-time index snapshot, not a later re-read of the index.
+        indexLoadOutcome: retrieval.indexSnapshot.loadOutcome,
+        indexGeneratedAt: retrieval.indexSnapshot.generatedAt,
+        indexedChunks: retrieval.indexSnapshot.indexedChunks,
+        eligibleChunks: retrieval.indexSnapshot.eligibleChunks,
+        embeddedChunks: retrieval.indexSnapshot.embeddedChunks,
+        rejectedLimit,
         maxChunks: recall.maxChunks,
         maxTokens: recall.budgetTokens,
         scoreThreshold,

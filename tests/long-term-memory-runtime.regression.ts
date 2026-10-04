@@ -853,6 +853,12 @@ async function main() {
       assert.equal(explained.rejected.length, 1);
       assert.equal(explained.rejected[0].rejectionReason, "lower_rank");
       assert.equal(explained.chunks[0].lanes.length > 0, true);
+      assert.equal(explained.semanticOutcome, "disabled", "#1211: an unweighted semantic lane must read as disabled");
+      assert.equal(explained.indexSnapshot.loadOutcome, "loaded");
+      assert.ok(
+        explained.indexSnapshot.indexedChunks >= explained.indexSnapshot.eligibleChunks,
+        "#1211: eligible chunks cannot exceed indexed chunks",
+      );
       assert.equal(
         await readFile(recallIndexPath, "utf8"),
         indexBeforeRecall,
@@ -871,6 +877,12 @@ async function main() {
         maxTokens: 4096,
       });
       assert.equal(lexicalFallback.embeddingsAvailable, false);
+      assert.equal(
+        lexicalFallback.semanticOutcome,
+        "no_matches",
+        "#1211: an unavailable-looking embeddingsAvailable must distinguish a valid index with no matches",
+      );
+      assert.equal(lexicalFallback.indexSnapshot.loadOutcome, "upgraded");
       assert.equal(
         lexicalFallback.chunks.some((chunk: any) => chunk.chunk.noteId === "world_visible"),
         true,
@@ -1183,6 +1195,31 @@ async function main() {
       assert.equal(recallExplanation?.details?.selected?.[0]?.noteId, "world_visible");
       assert.equal(JSON.stringify(recallExplanation).includes(input.messages[0].content), false);
       assert.equal(JSON.stringify(recallExplanation).includes("beneath the observatory"), false);
+
+      // #1211: the explanation must record effective parameters, the recall-time
+      // index snapshot, and a semantic outcome that distinguishes disabled,
+      // unavailable, incompatible, no_matches, and contributed.
+      const explanationDetails = recallExplanation?.details as Record<string, unknown>;
+      assert.ok(
+        ["disabled", "unavailable", "incompatible", "no_matches", "contributed"].includes(
+          String(explanationDetails.semanticOutcome),
+        ),
+        "#1211: the explanation must record the semantic lane outcome",
+      );
+      assert.equal(explanationDetails.indexLoadOutcome, "loaded");
+      assert.equal(explanationDetails.mode, "roleplay");
+      assert.equal(explanationDetails.includeResolved, false);
+      assert.equal(explanationDetails.exclusiveCharacterTargeting, false);
+      assert.equal(typeof explanationDetails.indexGeneratedAt, "string");
+      assert.equal(typeof explanationDetails.indexedChunks, "number");
+      assert.equal(typeof explanationDetails.eligibleChunks, "number");
+      assert.equal(typeof explanationDetails.embeddedChunks, "number");
+      assert.ok(
+        (explanationDetails.indexedChunks as number) >= (explanationDetails.eligibleChunks as number),
+        "#1211: eligible chunks cannot exceed indexed chunks",
+      );
+      assert.equal(explanationDetails.rejectedLimit, 20);
+      assert.equal(typeof explanationDetails.contextMessagesUsed, "number");
 
       const originalRecallMetadata = chats[0].metadata;
       try {

@@ -5,6 +5,7 @@ import {
   ltmGraphIndexSchema,
   ltmKeywordIndexSchema,
   ltmMetadataIndexSchema,
+  type LtmIndexLoadOutcome,
 } from "../../../../shared/src/features/agents/long-term-memory/schema.js";
 import { writeJsonAtomic } from "./atomic-json.js";
 import { buildLtmBm25Index } from "./bm25.js";
@@ -191,6 +192,8 @@ export async function loadOrRebuildLongTermMemoryIndexes(
   resolvedEmbeddingAdapter?: EmbeddingAdapter | null,
   stopWords?: readonly string[],
   signal?: AbortSignal,
+  /** Optional out-parameter; the caller reads how this call obtained its index. */
+  observation?: { outcome?: LtmIndexLoadOutcome },
 ) {
   const embeddingAdapter =
     resolvedEmbeddingAdapter !== undefined ? resolvedEmbeddingAdapter : await resolvePackageEmbeddingAdapter();
@@ -213,13 +216,20 @@ export async function loadOrRebuildLongTermMemoryIndexes(
         throw new Error("Stale long-term memory recall index.");
       }
       const usableEmbeddings = getUsableEmbeddingState(index, embeddingAdapter);
-      if (usableEmbeddings) return index;
-      return await tryUpgradeSemanticIndex(root, index, embeddingAdapter, resolvedStopWords, signal);
+      if (usableEmbeddings) {
+        if (observation) observation.outcome = "loaded";
+        return index;
+      }
+      const upgraded = await tryUpgradeSemanticIndex(root, index, embeddingAdapter, resolvedStopWords, signal);
+      // `tryUpgradeSemanticIndex` returns the same object when it did not rebuild.
+      if (observation) observation.outcome = upgraded === index ? "loaded" : "upgraded";
+      return upgraded;
     } catch (error) {
       // Cancellation is not corruption: never quarantine a valid index or rebuild on abort.
       if (isCancellation(error, signal)) throw error;
       await quarantineLtmIndexArtifact(root, path).catch(() => {});
       await rebuildLongTermMemoryIndexes({ root, embeddingAdapter, stopWords: resolvedStopWords, signal });
+      if (observation) observation.outcome = "rebuilt";
       return parseLtmRecallIndex(JSON.parse(await readFile(path, "utf8")));
     }
   });
