@@ -113,4 +113,10 @@ version bump (0.3.14) in S7.
 | S4 G's thread on the stage | designer subagent | S3 | consent + update + pill modes, regression green |
 | S5 Your Slurp in Settings | worker subagent | S2, S3 | Overview card + Run setup again, desk entry removed |
 | S6 translations | worker subagent | S1, S3 | locales validator green |
-| S7 release | orchestrator + reviewer + verifier | all | reviewer findings fixed, 0.3.14 built, dev-box proof at 390/768/1440 |
+| S4 G's screen | designer subagent | S3 | a redesign, not a port: full screen on the stage, no chat modal; the changelog is a short stack of release cards (no long thread, no switched-off composer). Keep G's portrait, lines, tone and length. |
+| S8 feedback bugs B1-B3 (`FEEDBACK-2026-10.md`) | orchestrator, worker for repro | S0 | each bug reproduced, root-caused, fixed with a regression |
+| S9 feedback requests R1-R10 (`FEEDBACK-2026-10.md`) | orchestrator + worker subagents, one request per slice | S0 | each request built with its regression and copy in en/de/ko/pl |
+| S7 release | orchestrator + reviewer + verifier | all, including S8 and S9 | reviewer findings fixed, 0.3.14 built, dev-box proof at 390/768/1440 |
+
+Decided 2026-10-05: everything (opening day, the new G screen, B1-B3, R1-R10) ships as one update,
+0.3.14.
