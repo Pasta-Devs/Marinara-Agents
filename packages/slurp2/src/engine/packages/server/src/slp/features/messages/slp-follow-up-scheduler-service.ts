@@ -21,6 +21,7 @@ import { isCreatorNightQuietTime } from "../feed/slp-feed-contract.js";
 import { trySlpOperation } from "../../base/locking/slp-operation-lock.js";
 import { tryCreatorAccountOperation } from "../../base/locking/slp-account-operation-lock.js";
 import { incrementFollowUpCount } from "../../modules/messages/slp-thread-notes.js";
+import { slurpCreatorInScene } from "./scenes/slp-roleplay-scene-lock.js";
 
 const INITIAL_DELAY_MS = 60_000; // Start after 1 minute
 const POLL_MS = 120_000; // Check every 2 minutes
@@ -119,6 +120,15 @@ export function startSlurpFollowUpScheduler(app: FastifyInstance, registerStop?:
             // A scheduled follow-up is still the Creator speaking, so it obeys the same silences the
             // reply path obeys: a cool-off she started, night quiet, and her own offline schedule.
             const coolingOff = Boolean(thread.coolUntil && thread.coolUntil > new Date().toISOString());
+            // In a roleplay scene: the follow-up waits a quarter hour at a time until it ends.
+            if (await slurpCreatorInScene(app.db, creator.id)) {
+              await messages.postponeScheduledFollowUp(
+                threadRow.id,
+                followUp.id,
+                new Date(Date.now() + 15 * 60_000).toISOString(),
+              );
+              continue;
+            }
             const source = await slurp.resolveAccountSource(creator);
             const latestPost = await slurp.getNoodlerLatestPublishedPost(creator.id);
             const details = await messages.getDetailsOverrides(thread.id);

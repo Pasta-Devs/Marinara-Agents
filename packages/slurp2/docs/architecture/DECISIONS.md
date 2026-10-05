@@ -701,3 +701,29 @@ modules, rejected alternative, and migration consequence.
   server-stored ticket (everything it shows is current settings).
 - **Migration consequence:** none; rail progress lives in localStorage, settings are existing fields.
   Design: `docs/ONBOARDING-RAIL.md`.
+
+## Roleplay scenes from a DM thread (2026-10-05)
+
+- **Problem:** the player could not take a DM conversation into a real roleplay. Engine scenes branch
+  only from Engine Conversations, and Slurp's threads are not Engine chats.
+- **Decision:**
+  - Engine PR #7119 (Capability API 1.66, `scenes` permission) lets a package thread be a scene
+    origin. Slurp registers one provider in `slp-server-entry.ts`
+    (`features/messages/scenes/slp-roleplay-scene-origin.ts`) once its manifest holds `scenes`; the
+    builder adds it as an optional permission at Capability API 1.66.
+  - Slurp writes the plan itself (`slp-roleplay-scene-planner.ts`, prompt in
+    `modules/messages/slp-roleplay-scene-prompt.ts`) and hands it to the Engine's `startScene`.
+  - Each scene carries its own settings as the Engine's `packageData`: `lock` (thread paused, Creator
+    busy everywhere) and `reach` (`none`, `private`, `hint`, `public`). The planner proposes both; the
+    player changes them before the start and the reach again on the recap.
+  - The lock is the scene chat id on the thread (`scene_chat_id`); one guard
+    (`slp-roleplay-scene-lock.ts`, a preHandler on the messages routes) refuses every thread write
+    while it is set. Replies, follow-ups, due posts and comment replies of a busy Creator wait.
+  - Choosing a reach is the explicit promotion the continuity ledger asks for: the recap fact is
+    `slurp` reality at the reach's audience; the event itself stays `roleplay`.
+  - Creators may pitch a scene through an optional `sceneInvite` field in the DM reply, offered only
+    when no invite is open and the last is three days old.
+- **Rejected alternatives:** putting the DM into the Engine planner's prompt; a hidden Engine
+  Conversation as a fake origin (no lock, no way back); one global lock and reach setting.
+- **Migration consequence:** new nullable thread columns `scene_chat_id`, `scene_started_at`; new
+  continuity event type `scene_played`. Nothing runs until Capability API 1.66.

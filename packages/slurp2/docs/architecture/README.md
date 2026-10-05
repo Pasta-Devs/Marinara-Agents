@@ -94,7 +94,7 @@ Client and server share one feature vocabulary: `creators`, `feed`, `messages`, 
 `audience`, `projects`, `economy`, `notifications`, `world`, `ads`, `onboarding`, `maintenance`,
 `assist`, plus client-only `backstage` and server-only `viewer`, `media`, and `settings`. Submodules that are deliberate expansion seams get a folder:
 `creators/improvement`, `feed/reserve`, `messages/commissions`, `messages/desk` (the Slurp Support desk,
-`docs/SUPPORT-DESK.md`), `world/events`.
+`docs/SUPPORT-DESK.md`), `messages/scenes` (roleplay scenes from a DM thread, `docs/SCENES.md`), `world/events`.
 
 These are not features: Stories (a `modules/story/` presentation composed by Feed), tags
 (Discovery), wallet (Economy), goals and arcs (Projects).

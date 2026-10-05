@@ -7,6 +7,7 @@ import { createMessagesStorageCommissions } from "./slp-messages-storage-commiss
 import { createMessagesStorageActions } from "./slp-messages-storage-actions.js";
 import { createMessagesStorageFollowUps } from "./slp-messages-storage-follow-ups.js";
 import { createMessagesStorageRefunds } from "./slp-messages-storage-refunds.js";
+import { createMessagesStorageScenes } from "./slp-messages-storage-scenes.js";
 export function createSlurpMessagesStorageFacet(db: DB, createCore: SlurpMessagesCoreFactory) {
   const context = createSlurpMessagesContext(db, createCore);
   const storage = Object.assign(
@@ -17,6 +18,7 @@ export function createSlurpMessagesStorageFacet(db: DB, createCore: SlurpMessage
     createMessagesStorageActions(context),
     createMessagesStorageFollowUps(context),
     createMessagesStorageRefunds(context),
+    createMessagesStorageScenes(context),
   );
   context.storage = storage;
   return tolerateMissingTables(storage, {
@@ -36,5 +38,10 @@ export function createSlurpMessagesStorageFacet(db: DB, createCore: SlurpMessage
     claimReply: () => ({ status: "busy" as const }),
     appendReplyBatch: () => null,
     claimScheduledFollowUp: () => false,
+    claimThreadScene: () => false,
+    releaseThreadScene: () => false,
+    setSceneLine: () => undefined,
+    listCreatorSceneThreads: () => [],
+    listSceneThreads: () => [],
   });
 }

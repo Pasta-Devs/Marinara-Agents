@@ -19,8 +19,30 @@ type PersistedSlurpState = {
 
 export type SlurpOnboardingState = "unseen" | "entered" | "completed";
 
+/**
+ * What the Engine's Home browser hands Slurp for roleplay scenes (capability API 1.66,
+ * docs/SCENES.md). Absent on an older Engine: then no scene control shows.
+ */
+export type SlpSceneHost = {
+  startScene: (options: {
+    originId: string;
+    plan: Record<string, unknown>;
+    data: Record<string, unknown>;
+    initiatorCharacterId: string | null;
+    initiatorName: string;
+  }) => Promise<{ chatId: string } | null>;
+  openChat: (chatId: string) => void;
+};
+
 type SlurpPackageState = {
   conversationTimeZone: string;
+  sceneHost: SlpSceneHost | null;
+  /** The thread a scene came back to; Slurp opens it, then tells the host. Never persisted. */
+  sceneFocusThreadId: string | null;
+  sceneFocusHandled: (() => void) | null;
+  /** The start-a-scene sheet, open on this thread (and invite, when she pitched it). Never persisted. */
+  sceneSheet: { threadId: string; inviteMessageId?: string } | null;
+  setSceneSheet: (sheet: { threadId: string; inviteMessageId?: string } | null) => void;
   debugMode: boolean;
   reviewImagePromptsBeforeSend: boolean;
   navigation: SlurpNavigationState;
@@ -153,6 +175,11 @@ const initialState = typeof window === "undefined" ? {} : readInitialState();
 
 export const useSlurpUIStore = create<SlurpPackageState>((set, get) => ({
   conversationTimeZone: "",
+  sceneHost: null,
+  sceneFocusThreadId: null,
+  sceneFocusHandled: null,
+  sceneSheet: null,
+  setSceneSheet: (sceneSheet) => set({ sceneSheet }),
   debugMode: false,
   reviewImagePromptsBeforeSend: false,
   navigation: initialState.navigation ?? { mode: "creator", view: "hub" },
@@ -193,5 +220,15 @@ export function configureSlurpPackageState(props: Record<string, unknown>) {
     conversationTimeZone: typeof props.conversationTimeZone === "string" ? props.conversationTimeZone : "",
     debugMode: props.debugMode === true,
     reviewImagePromptsBeforeSend: props.reviewImagePromptsBeforeSend === true,
+    sceneHost:
+      typeof props.startScene === "function" && typeof props.openChat === "function"
+        ? {
+            startScene: props.startScene as SlpSceneHost["startScene"],
+            openChat: props.openChat as SlpSceneHost["openChat"],
+          }
+        : null,
+    sceneFocusThreadId: typeof props.focusSceneOriginId === "string" ? props.focusSceneOriginId : null,
+    sceneFocusHandled:
+      typeof props.onFocusSceneOriginHandled === "function" ? (props.onFocusSceneOriginHandled as () => void) : null,
   });
 }

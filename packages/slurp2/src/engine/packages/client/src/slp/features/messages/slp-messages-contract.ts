@@ -73,6 +73,8 @@ export type SlurpThread = {
   counterpartName?: string | null;
   counterpartHandle?: string | null;
   subscribed: boolean;
+  /** The Engine scene this thread is in while it runs (docs/SCENES.md): the thread is locked. */
+  sceneChatId?: string | null;
 };
 export type SlurpCommission = {
   id: string;

@@ -10,6 +10,7 @@
  *
  * Pure, so every thread kind is built and read in tests.
  */
+import { slpSceneInviteInstruction } from "./slp-roleplay-scene-rules.js";
 
 /** A name as it appears in the chat. */
 export type SlurpDmParty = {
@@ -67,6 +68,8 @@ export type SlurpDmRoleInput = {
   isRequest?: boolean;
   /** Slurp Support's own thread (`slp-support.ts`): the viewer is Slurp's staff, not a fan. */
   support?: boolean;
+  /** The Creator may pitch a roleplay scene in this reply (docs/SCENES.md). */
+  sceneInvite?: boolean;
 };
 
 const at = (party: SlurpDmParty) => (party.handle ? `${party.name} (@${party.handle})` : party.name);
@@ -164,6 +167,7 @@ export function slurpDmRoleHeader(input: SlurpDmRoleInput & { history: readonly 
       lines.push(
         `Also add "us" to your JSON: {"step": "closer" when this talk really brought you two closer (a confession, asking ${viewer} out or saying yes, agreeing to be a couple), "hurt" when you two really fought or ${viewer} hurt you, "madeUp" when you made up after a fight; "why": a few words about it}. Most messages change nothing between you: then "us" is null.`,
       );
+    if (input.sceneInvite) lines.push(slpSceneInviteInstruction(viewer));
     // Two pages can plan a joint post here; the split is theirs to agree (7b-c).
     if (page && !page.concealed)
       lines.push(

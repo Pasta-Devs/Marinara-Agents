@@ -40,6 +40,7 @@ import {
   planSlurpOpportunity,
   slurpSkippedLastSlot,
 } from "../../../data/feed/slp-opportunity-storage.js";
+import { slpCreatorsInScene } from "../../messages/slp-messages-contract.js";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -421,7 +422,8 @@ export async function runCreatorAutoPostPoll(
     reconcile: async () => {
       await noodle.reconcileNoodlerPreparedPosts(at);
     },
-    publishDue: () => noodle.publishDueNoodlerPreparedPosts(at),
+    // A Creator in a locking roleplay scene posts nothing until it ends (docs/SCENES.md).
+    publishDue: async () => noodle.publishDueNoodlerPreparedPosts(at, await slpCreatorsInScene(db)),
     prepare: () => prepareNextCreatorReservePost(db, at),
     generationMode: async () => (await noodle.getSettings()).autoPostGenerationMode,
   });

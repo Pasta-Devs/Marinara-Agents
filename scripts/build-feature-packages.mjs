@@ -403,7 +403,12 @@ const features = [
     // Engine accepts that permission only with capabilityApi 1.50, and an older Engine refuses a
     // manifest that names it, so it is emitted once `capabilityApi` below reaches 1.50. Until then
     // Slurp loads everywhere and registers only `slurp2:actions` (the server feature-detects it).
-    optionalPermissions: [{ permission: "mari-actions", capabilityApi: { major: 1, minor: 50 } }],
+    // Roleplay scenes from DM threads (packages/slurp2/docs/SCENES.md) need Engine PR #7119, Capability
+    // API 1.66; the server registers its scene origin only when the manifest holds `scenes`.
+    optionalPermissions: [
+      { permission: "mari-actions", capabilityApi: { major: 1, minor: 50 } },
+      { permission: "scenes", capabilityApi: { major: 1, minor: 66 } },
+    ],
     serverImport: "packages/server/src/slp/slp-server-entry.ts",
     serverEntry: true,
     clientImport: "packages/client/src/slp/slp-client-entry.tsx",

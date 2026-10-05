@@ -8,6 +8,8 @@ import { slpMessagesSendRoutes } from "./slp-messages-send-routes.js";
 import { slpMessagesThreadRoutes } from "./slp-messages-thread-routes.js";
 import { slpMessagesRequestRoutes } from "./slp-messages-request-routes.js";
 import { slpDeskRoutes } from "./desk/slp-desk-routes.js";
+import { slpRoleplaySceneRoutes } from "./scenes/slp-roleplay-scene-routes.js";
+import { slpSceneLockHook } from "./scenes/slp-roleplay-scene-lock.js";
 
 /** Mounts every direct-message route against one shared messages context. */
 export async function slpMessagesRoutes(
@@ -16,7 +18,10 @@ export async function slpMessagesRoutes(
   messages: Parameters<typeof createSlpMessagesContext>[2],
 ) {
   const messaging = createSlpMessagesContext(app, dependencies, messages);
+  // Before the routes it guards, so every thread write below is locked during a scene.
+  slpSceneLockHook(app);
   await slpMessagesThreadRoutes(app, messaging);
+  await slpRoleplaySceneRoutes(app, messaging);
   await slpMessageDetailsRoutes(app, messaging);
   await slpMessagesSendRoutes(app, messaging);
   await slpMessagesCreatorRoutes(app, messaging);

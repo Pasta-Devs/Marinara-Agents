@@ -60,6 +60,7 @@ import {
 } from "../../data/continuity/slp-continuity-storage.js";
 import { slurpContinuityIdentityOf } from "../../modules/continuity/slp-continuity-rules.js";
 
+import { slurpCreatorInScene } from "./scenes/slp-roleplay-scene-lock.js";
 export type SlurpReplyOutcome =
   | { status: "replied"; message: SlurpMessage; pacing: SlurpReplyPacing }
   | { status: "queued"; pacing: SlurpReplyPacing }
@@ -67,6 +68,8 @@ export type SlurpReplyOutcome =
   | { status: "budget"; retryAt: string; pacing: SlurpReplyPacing }
   /** The creator has stepped away from this conversation. `until` is when they come back. */
   | { status: "cooling"; until: string }
+  /** The creator is in a roleplay scene (docs/SCENES.md): the obligation stays, the answer waits. */
+  | { status: "in_scene" }
   | { status: "busy" }
   | { status: "ineligible" }
   /** Not answered now, and no away reply will come: the player asks for one. */
@@ -135,6 +138,8 @@ export async function replyToSlurpMessage(
   if (thread.coolUntil && thread.coolUntil > new Date().toISOString()) {
     return { status: "cooling", until: thread.coolUntil };
   }
+  // Busy in a scene, with this fan or another: nothing is answered until it ends.
+  if (await slurpCreatorInScene(db, creator.id)) return { status: "in_scene" };
 
   // The same availability the Prompt details view reads (R1-011).
   const {
@@ -507,6 +512,18 @@ export async function replyToSlurpMessage(
         await agreeSlurpCollabInDm(db, { hostId: thread.creatorAccountId, ...reply.agreedCollab }).catch(
           (error: unknown) => logger.warn(error, "[slurp-message] Could not record the collab agreed in this chat"),
         );
+      // Her pitch for a roleplay scene, as a card under her reply (docs/SCENES.md).
+      if (stored && reply.sceneInvite)
+        await messagesStore
+          .appendMessage(thread.id, {
+            senderAccountId: thread.creatorAccountId,
+            role: "creator",
+            kind: "system",
+            content: reply.sceneInvite,
+            metadata: { scene: { kind: "invite", pitch: reply.sceneInvite, state: "open" } },
+            preserveReplyObligation: true,
+          })
+          .catch((error: unknown) => logger.warn(error, "[slurp-message] Could not store the scene invite"));
       // With the player: the talk moved the two of them (a crush, dating, official, a fight, making up).
       if (stored && reply.us && reply.usPageId)
         await applySlurpPlayerUs(db, {
