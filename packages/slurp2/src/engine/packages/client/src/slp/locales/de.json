@@ -2861,5 +2861,18 @@
   "ui.slurp.rpScene.lockedTitle": "In einer Szene mit {{name}}",
   "ui.slurp.rpScene.lockedHint": "Der Chat pausiert, bis die Szene endet.",
   "ui.slurp.rpScene.goToScene": "Zur Szene",
-  "ui.slurp.messages.replyStatus.in_scene": "{{name}} ist in einer Szene und antwortet, wenn sie endet."
+  "ui.slurp.messages.replyStatus.in_scene": "{{name}} ist in einer Szene und antwortet, wenn sie endet.",
+  "ui.slurp.postGuide.label": "Geführter Post",
+  "ui.slurp.postGuide.question": "Was möchtest du posten?",
+  "ui.slurp.postGuide.storyQuestion": "Was soll die Story zeigen?",
+  "ui.slurp.postGuide.placeholder": "Gym-Selfie nach dem Beintag, Vorgeschmack aufs Wochenende…",
+  "ui.slurp.postGuide.write": "Schreiben",
+  "ui.slurp.postGuide.writing": "Schreibt…",
+  "ui.slurp.postGuide.failed": "Der Post konnte nicht entworfen werden. Versuch es noch einmal.",
+  "ui.slurp.postGuide.noPicture": "Der Text ist da, aber kein Bild: {{reason}}",
+  "ui.slurp.postGuide.forLabel": "Wofür dieser Post ist",
+  "ui.slurp.postGuide.deal": "#ad für {{brand}}",
+  "ui.slurp.postGuide.collab": "Collab mit {{name}}",
+  "ui.slurp.postGuide.draftInComposer": "Im neuen Post entwerfen",
+  "ui.slurp.stir.cant.draftInComposer": "Wird im neuen Post zum Prüfen entworfen."
 }

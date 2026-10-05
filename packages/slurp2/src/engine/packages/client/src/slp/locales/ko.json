@@ -3675,5 +3675,18 @@
   "ui.slurp.rpScene.lockedTitle": "{{name}}님과 장면 진행 중",
   "ui.slurp.rpScene.lockedHint": "장면이 끝날 때까지 대화가 멈춰 있어요.",
   "ui.slurp.rpScene.goToScene": "장면으로 가기",
-  "ui.slurp.messages.replyStatus.in_scene": "{{name}}님은 장면 중이라 끝나면 답해요."
+  "ui.slurp.messages.replyStatus.in_scene": "{{name}}님은 장면 중이라 끝나면 답해요.",
+  "ui.slurp.postGuide.label": "가이드 게시물",
+  "ui.slurp.postGuide.question": "무엇을 올리고 싶나요?",
+  "ui.slurp.postGuide.storyQuestion": "스토리에 무엇을 보여줄까요?",
+  "ui.slurp.postGuide.placeholder": "하체 운동 후 헬스장 셀카, 주말 예고…",
+  "ui.slurp.postGuide.write": "작성",
+  "ui.slurp.postGuide.writing": "작성 중…",
+  "ui.slurp.postGuide.failed": "게시물 초안을 만들지 못했어요. 다시 시도해 주세요.",
+  "ui.slurp.postGuide.noPicture": "글은 작성됐지만 사진은 없어요: {{reason}}",
+  "ui.slurp.postGuide.forLabel": "이 게시물의 목적",
+  "ui.slurp.postGuide.deal": "{{brand}} #광고",
+  "ui.slurp.postGuide.collab": "{{name}}님과 콜라보",
+  "ui.slurp.postGuide.draftInComposer": "새 게시물에서 초안 작성",
+  "ui.slurp.stir.cant.draftInComposer": "새 게시물에서 초안을 만들어 검토해요."
 }

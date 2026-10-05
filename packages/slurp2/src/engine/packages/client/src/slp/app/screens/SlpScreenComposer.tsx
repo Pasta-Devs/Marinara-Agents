@@ -35,7 +35,9 @@ import { SlpButton, SlpChip, SlpPrimaryButton, SlpSegment } from "../../modules/
 import { useRef, useState } from "react";
 import { ChevronDown, Crop, ImagePlus, Link2, ListChecks, Loader2, Pencil, Send, Smile, Trash2 } from "lucide-react";
 import { SlpSparkleGlyph } from "../../base/chrome/SlpGlyphs";
-import { SlpPictureAssist, SlpTextAssist } from "../../features/assist/slp-assist-contract";
+import { SlpPictureAssist, SlpPostGuide, SlpTextAssist } from "../../features/assist/slp-assist-contract";
+import { useSlurpTiesMutations } from "../../features/projects/slp-projects-contract";
+import { useSlurpUIStore } from "../../base/state/slp-package-store";
 import { cn } from "../../../lib/utils";
 import {
   errorMessage,
@@ -89,7 +91,16 @@ export function NoodlerPostComposer({
       : 4 / 5;
   // The Creator's own unlock price, the one the server stamps on a locked post (weekly dynamic
   // pricing moves it); the Slurp-wide price only until it loads (R1-025).
-  const creatorPrices = useSlurpCreatorMessagingSettings(profile.id, useSlpViewerPersonaId()).data;
+  const viewerPersonaId = useSlpViewerPersonaId();
+  const creatorPrices = useSlurpCreatorMessagingSettings(profile.id, viewerPersonaId).data;
+  // The guided post (0.3.14): an idea Stir handed over for this page drafts once when the sheet opens.
+  const handedGuide = useSlurpUIStore((state) =>
+    state.composeGuide?.accountId === profile.id ? state.composeGuide : null,
+  );
+  const setComposeGuide = useSlurpUIStore((state) => state.setComposeGuide);
+  const markDealPosted = useSlurpTiesMutations(viewerPersonaId ?? "").markPosted;
+  // The owed #ad the current draft was written for; posting it settles the reminder.
+  const guideDealId = useRef<string | null>(null);
   const usualUnlockPrice = creatorPrices?.messaging.unlockPrice ?? composerSettings?.walletUnlockCost ?? 25;
   const [postError, setPostError] = useState<string | null>(null);
   const [activeTool, setActiveTool] = useState<SlpCreatorComposerTool | null>(null);
@@ -306,6 +317,8 @@ export function NoodlerPostComposer({
       setSubmitting(true);
       setActiveTool(null);
       await onManualPost(submission());
+      if (guideDealId.current && viewerPersonaId) markDealPosted.mutate(guideDealId.current);
+      guideDealId.current = null;
       onClearDraft();
       resetLocal();
       onClose();
@@ -507,6 +520,22 @@ export function NoodlerPostComposer({
             {localizeUi("ui.noodle.noodlerpostcomposer.postAs")} {profile.displayName}
           </span>
         </p>
+
+        <SlpPostGuide
+          key={handedGuide?.idea ?? "guide"}
+          accountId={profile.id}
+          personaId={viewerPersonaId}
+          story={story}
+          disabled={composerBusy}
+          initialIdea={handedGuide?.idea ?? ""}
+          autoRun={Boolean(handedGuide) && open}
+          onDraft={(guided) => {
+            if (handedGuide) setComposeGuide(null);
+            guideDealId.current = guided.dealId;
+            updateDraft({ body: guided.text });
+            if (guided.image) takeDrawnPicture(guided.image);
+          }}
+        />
 
         {media}
         {activeTool === "draw" && (

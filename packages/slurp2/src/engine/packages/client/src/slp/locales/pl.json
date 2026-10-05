@@ -2897,5 +2897,18 @@
   "ui.slurp.rpScene.lockedTitle": "W scenie z {{name}}",
   "ui.slurp.rpScene.lockedHint": "Czat jest wstrzymany do końca sceny.",
   "ui.slurp.rpScene.goToScene": "Przejdź do sceny",
-  "ui.slurp.messages.replyStatus.in_scene": "{{name}} jest w scenie i odpisze, gdy się skończy."
+  "ui.slurp.messages.replyStatus.in_scene": "{{name}} jest w scenie i odpisze, gdy się skończy.",
+  "ui.slurp.postGuide.label": "Post z podpowiedzią",
+  "ui.slurp.postGuide.question": "Co chcesz opublikować?",
+  "ui.slurp.postGuide.storyQuestion": "Co ma pokazać Story?",
+  "ui.slurp.postGuide.placeholder": "Selfie z siłowni po dniu nóg, zapowiedź weekendu…",
+  "ui.slurp.postGuide.write": "Napisz",
+  "ui.slurp.postGuide.writing": "Pisanie…",
+  "ui.slurp.postGuide.failed": "Nie udało się przygotować posta. Spróbuj ponownie.",
+  "ui.slurp.postGuide.noPicture": "Tekst jest gotowy, ale bez zdjęcia: {{reason}}",
+  "ui.slurp.postGuide.forLabel": "Do czego jest ten post",
+  "ui.slurp.postGuide.deal": "#reklama dla {{brand}}",
+  "ui.slurp.postGuide.collab": "Współpraca z {{name}}",
+  "ui.slurp.postGuide.draftInComposer": "Przygotuj w nowym poście",
+  "ui.slurp.stir.cant.draftInComposer": "Szkic w nowym poście do sprawdzenia."
 }

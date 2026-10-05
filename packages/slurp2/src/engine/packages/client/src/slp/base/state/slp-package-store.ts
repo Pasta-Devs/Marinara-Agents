@@ -43,6 +43,9 @@ type SlurpPackageState = {
   /** The start-a-scene sheet, open on this thread (and invite, when she pitched it). Never persisted. */
   sceneSheet: { threadId: string; inviteMessageId?: string } | null;
   setSceneSheet: (sheet: { threadId: string; inviteMessageId?: string } | null) => void;
+  /** An idea Stir handed to the composer of the player's own page (the guided post). Never persisted. */
+  composeGuide: { accountId: string; idea: string } | null;
+  setComposeGuide: (guide: { accountId: string; idea: string } | null) => void;
   debugMode: boolean;
   reviewImagePromptsBeforeSend: boolean;
   navigation: SlurpNavigationState;
@@ -180,6 +183,8 @@ export const useSlurpUIStore = create<SlurpPackageState>((set, get) => ({
   sceneFocusHandled: null,
   sceneSheet: null,
   setSceneSheet: (sceneSheet) => set({ sceneSheet }),
+  composeGuide: null,
+  setComposeGuide: (composeGuide) => set({ composeGuide }),
   debugMode: false,
   reviewImagePromptsBeforeSend: false,
   navigation: initialState.navigation ?? { mode: "creator", view: "hub" },

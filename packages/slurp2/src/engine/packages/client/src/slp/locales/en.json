@@ -6394,5 +6394,18 @@
   "ui.slurp.rpScene.lockedTitle": "In a scene with {{name}}",
   "ui.slurp.rpScene.lockedHint": "The chat is paused until the scene ends.",
   "ui.slurp.rpScene.goToScene": "Go to scene",
-  "ui.slurp.messages.replyStatus.in_scene": "{{name}} is in a scene and answers when it ends."
+  "ui.slurp.messages.replyStatus.in_scene": "{{name}} is in a scene and answers when it ends.",
+  "ui.slurp.postGuide.label": "Guided post",
+  "ui.slurp.postGuide.question": "What do you want to post?",
+  "ui.slurp.postGuide.storyQuestion": "What should the Story show?",
+  "ui.slurp.postGuide.placeholder": "Gym selfie after leg day, teasing the weekend…",
+  "ui.slurp.postGuide.write": "Write it",
+  "ui.slurp.postGuide.writing": "Writing…",
+  "ui.slurp.postGuide.failed": "The post could not be drafted. Try again.",
+  "ui.slurp.postGuide.noPicture": "The text is in, but no picture: {{reason}}",
+  "ui.slurp.postGuide.forLabel": "What this post is for",
+  "ui.slurp.postGuide.deal": "#ad for {{brand}}",
+  "ui.slurp.postGuide.collab": "Collab with {{name}}",
+  "ui.slurp.postGuide.draftInComposer": "Draft it in New post",
+  "ui.slurp.stir.cant.draftInComposer": "Drafted in New post for you to review."
 }

@@ -34,9 +34,12 @@ import { generateCreatorPostImage } from "../media/slp-media-contract.js";
 import { artworkCompositionGuard, artworkNegativePrompt } from "../creators/slp-creators-contract.js";
 import {
   SLP_ASSIST_FIELDS,
+  SLP_ASSIST_NOTE_MAX,
+  SLP_ASSIST_REQUEST_MAX,
   type SlpActionParsed,
   type SlpActionResult,
 } from "../../../../../shared/src/slp/slp-actions.js";
+import { readSlurpCreatorTiesDocument } from "../../data/projects/slp-creator-ties-storage.js";
 import { slpWithProviderRetry } from "../../base/model/slp-provider-retry.js";
 
 export type SlpAssistFailure = { ok: false; status: 400 | 404 | 409 | 429 | 502; error: string };
@@ -332,4 +335,58 @@ export async function keepSlpAssistPicture(
   });
   if (!locked.acquired) return fail(409, "Another operation for this Creator is already running.");
   return { ok: true, value: locked.value };
+}
+
+/**
+ * One idea in, a post to review out (the player's own page, 0.3.14): the caption in the page's voice
+ * and its picture, nothing posted. An owed brand deal or a collab rides along as context, so the
+ * caption carries the #ad or tags the partner the way the Creators' own posts do.
+ */
+export async function draftSlpPost(
+  db: DB,
+  input: SlpActionParsed<"draft-post">,
+): Promise<SlpAssistOutcome<SlpActionResult["draft-post"]>> {
+  const { deals, ties } = await readSlurpCreatorTiesDocument(db);
+  const lines: string[] = [];
+  if (input.dealId) {
+    const deal = deals.find((entry) => entry.id === input.dealId && entry.creatorId === input.accountId);
+    if (!deal) return fail(404, "That brand deal is not this page's.");
+    lines.push(
+      `This is the paid post for the brand deal with ${deal.brand}: show and name ${deal.product} naturally, and mark it #ad.${deal.copy ? ` The brand's line: ${deal.copy}` : ""}`,
+    );
+  }
+  if (input.collabId) {
+    const collab = ties.collabs.find(
+      (entry) =>
+        entry.id === input.collabId && (entry.hostId === input.accountId || entry.partnerId === input.accountId),
+    );
+    if (!collab) return fail(404, "That collab is not this page's.");
+    const partner = await createSlurpStorage(db).getNoodlerAccountById(
+      collab.hostId === input.accountId ? collab.partnerId : collab.hostId,
+    );
+    lines.push(`This post is about the collab with @${partner?.handle ?? "them"}: ${collab.idea}. Tag them.`);
+  }
+  const text = await runSlpAssistText(db, {
+    field: input.story ? "story" : "caption",
+    accountId: input.accountId,
+    note: [input.idea, ...lines].join(" ").slice(0, SLP_ASSIST_NOTE_MAX),
+    mode: "write",
+  });
+  if (!text.ok) return text;
+  if (!input.picture) return { ok: true, value: { text: text.value.text, image: null, imageError: null } };
+  const picture = await drawSlpAssistPicture(db, {
+    accountId: input.accountId,
+    target: input.story ? "story" : "post",
+    request: input.idea.slice(0, SLP_ASSIST_REQUEST_MAX),
+    context: text.value.text.slice(0, 2000),
+  });
+  // A picture that failed still leaves a caption worth reviewing: the player can draw again or add one.
+  return {
+    ok: true,
+    value: {
+      text: text.value.text,
+      image: picture.ok ? picture.value.image : null,
+      imageError: picture.ok ? null : picture.error,
+    },
+  };
 }

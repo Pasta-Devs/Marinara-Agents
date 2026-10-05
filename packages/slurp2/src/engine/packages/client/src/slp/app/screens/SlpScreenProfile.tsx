@@ -1,4 +1,5 @@
 import { NoodlerPostComposer } from "./SlpScreenComposer";
+import { useSlurpUIStore } from "../../base/state/slp-package-store";
 import { useStageProfileViewModel, type StageProfileViewProps } from "./slp-profile-view-model";
 import { SlpProfileModals } from "./SlpProfileModals";
 import { SlpProfilePostCards } from "./SlpProfilePostCards";
@@ -280,6 +281,12 @@ export function StageProfileView({
   useEffect(() => {
     if (openDashboard && viewingOwnCreator) setDashboardOpen(true);
   }, [openDashboard, viewingOwnCreator]);
+  // The guided post (0.3.14): an idea Stir handed to this page opens its composer, which drafts it.
+  const guideHandedOver = useSlurpUIStore((state) => state.composeGuide?.accountId === profile.id);
+  useEffect(() => {
+    if (guideHandedOver) model.setComposerOpen(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- opens once per handed-over idea
+  }, [guideHandedOver]);
   // Another Creator Slurp posts for can be stirred from here; a couple's page and your own cannot.
   const stirrable = !viewingOwnCreator && !model.personaBackedCreator && !couplePage;
   // No "(0)" while the posts load: a loading page does not claim to be empty.

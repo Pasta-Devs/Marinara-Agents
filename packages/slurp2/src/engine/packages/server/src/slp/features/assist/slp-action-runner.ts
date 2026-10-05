@@ -17,6 +17,7 @@ import {
 } from "../../../../../shared/src/slp/slp-actions.js";
 import {
   drawSlpAssistPicture,
+  draftSlpPost,
   keepSlpAssistPicture,
   runSlpAssistText,
   undoSlpAssistPicture,
@@ -135,6 +136,8 @@ async function dispatch(
       return runSlpAssistText(db, { ...(input as SlpActionParsed<"improve-text">), mode: "improve" });
     case "draw-picture":
       return drawSlpAssistPicture(db, input as SlpActionParsed<"draw-picture">);
+    case "draft-post":
+      return draftSlpPost(db, input as SlpActionParsed<"draft-post">);
     case "use-picture":
       return useSlpAssistPicture(db, input as SlpActionParsed<"use-picture">);
     case "undo-picture":

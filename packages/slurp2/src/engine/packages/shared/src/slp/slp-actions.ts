@@ -217,6 +217,28 @@ export const SLP_ACTIONS = {
     inputs: {},
     schema: z.object({}).strict(),
   },
+  "draft-post": {
+    summary:
+      "Draft a post from one idea: the caption and its picture, returned without posting so the player reviews it. For the player's own page, which nothing posts for unattended.",
+    inputs: {
+      accountId: "The Creator page.",
+      idea: "What the post is about, in the player's words.",
+      story: "True for a Story (optional).",
+      dealId: "A brand deal this post is the #ad for (optional).",
+      collabId: "A collab this post is about (optional).",
+      picture: "False for text only (optional).",
+    },
+    schema: z
+      .object({
+        accountId,
+        idea: z.string().trim().min(1).max(SLP_ASSIST_REQUEST_MAX),
+        story: z.boolean().default(false),
+        dealId: accountId.optional(),
+        collabId: accountId.optional(),
+        picture: z.boolean().default(true),
+      })
+      .strict(),
+  },
   "write-post": {
     summary: "Have a Creator write and post their next post now (it takes their oldest idea, or the one given).",
     inputs: { accountId: "The Creator.", idea: "An idea for this post (optional).", story: "True for a Story." },
@@ -591,6 +613,8 @@ export type SlpActionResult = {
   "add-idea": unknown;
   "list-creators": { creators: { id: string; name: string; handle: string }[] };
   "write-post": unknown;
+  /** `image` is null when the picture could not be drawn; `imageError` says why. */
+  "draft-post": { text: string; image: string | null; imageError: string | null };
   "list-world": SlpStirWorld;
   "suggest-collab": { collabId: string };
   "push-collab": { collabId: string };
@@ -690,6 +714,7 @@ export const SLP_ACTION_META: Record<
   "list-world": { category: "help", targets: "none", reversible: false, ai: false, refusable: false, deck: false },
   "add-idea": { category: "life", targets: "creator", reversible: true, ai: false, refusable: false, deck: true },
   "write-post": { category: "life", targets: "creator", reversible: false, ai: true, refusable: false, deck: true },
+  "draft-post": { category: "help", targets: "creator", reversible: false, ai: true, refusable: false, deck: false },
   "steer-creator": { category: "life", targets: "creator", reversible: true, ai: false, refusable: false, deck: true },
   "set-spice": { category: "life", targets: "creator", reversible: true, ai: false, refusable: false, deck: true },
   "set-up-couple": { category: "love", targets: "pair", reversible: true, ai: false, refusable: false, deck: true },
