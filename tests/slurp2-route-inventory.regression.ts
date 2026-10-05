@@ -6,6 +6,11 @@ import { join } from "node:path";
 // parser. The route list below is the post-rename inventory. BASELINE is derived from it through
 // the explicit mapping table, so a method change or a missing route cannot pass by rebaselining.
 const EXPECTED = [
+  // Roleplay scenes from a DM thread (docs/SCENES.md).
+  "GET /messages/threads/:threadId/scene/origin",
+  "POST /messages/threads/:threadId/scene/invite/:messageId/decline",
+  "POST /messages/threads/:threadId/scene/plan",
+  "POST /messages/threads/:threadId/scene/recap/:messageId/reach",
   // 0.3.5: the Slurp Support desk.
   "GET /slurp/desk",
   "POST /slurp/desk/note",
@@ -115,7 +120,6 @@ const EXPECTED = [
   "GET /messages/creators/:creatorAccountId/settings",
   "GET /messages/threads",
   "GET /messages/threads/:threadId",
-  "GET /messages/threads/:threadId/scene/origin",
   "GET /messages/threads/:threadId/prompt",
   "GET /model-budget/usage",
   "POST /model-budget/rewrite-pending",
@@ -222,9 +226,6 @@ const EXPECTED = [
   "POST /messages/threads/:threadId/request",
   "POST /messages/threads/:threadId/request-reply",
   "POST /messages/threads/:threadId/reset",
-  "POST /messages/threads/:threadId/scene/invite/:messageId/decline",
-  "POST /messages/threads/:threadId/scene/plan",
-  "POST /messages/threads/:threadId/scene/recap/:messageId/reach",
   "POST /messages/threads/:threadId/viewer-image",
   "POST /messages/tip",
   "POST /slurp/accounts/:id/appearance",
@@ -316,6 +317,11 @@ const RETAINED_OLD_PATHS = new Set([
   "GET /noodler/posts/:id/media/:position",
 ]);
 const ADDED_ROUTES = new Set([
+  // Roleplay scenes from a DM thread (docs/SCENES.md).
+  "GET /messages/threads/:threadId/scene/origin",
+  "POST /messages/threads/:threadId/scene/invite/:messageId/decline",
+  "POST /messages/threads/:threadId/scene/plan",
+  "POST /messages/threads/:threadId/scene/recap/:messageId/reach",
   // The recovery reset: clears activity, keeps Creators and settings.
   "DELETE /data/activity",
   "PATCH /messages/threads/:threadId/details",
@@ -488,7 +494,7 @@ const EXPECTED_HANDLER_COUNTS = {
 // W: +5 POST, +1 GET (Stir). R: +3 POST, +1 GET, +1 PATCH, +1 DELETE (brands).
 // 0.3.4: +1 POST, +1 PUT (Creator Pages). 0.3.5: +1 GET, +3 POST (Support desk). 0.3.7: +1 POST (rewrite all).
 // 0.3.8: +1 GET, +5 POST (Drama: bonds, drama view, choice, start, end). 0.3.11: +1 POST (fan notes).
-const EXPECTED_METHOD_COUNTS = { DELETE: 19, GET: 83, PATCH: 20, POST: 153, PUT: 7 } as const;
+const EXPECTED_METHOD_COUNTS = { DELETE: 19, GET: 84, PATCH: 20, POST: 156, PUT: 7 } as const;
 
 const root = join(import.meta.dirname, "../packages/slurp2/src/engine/packages/server/src/slp");
 const registration = /\bapp\.(get|post|put|patch|delete|addContentTypeParser)(?:<[^()]*?>)?\(\s*["'`]([^"'`]+)["'`]/gu;
