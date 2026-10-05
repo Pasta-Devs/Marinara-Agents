@@ -82,7 +82,12 @@ assert.match(
   client("features/messages/slp-thread-view-model.ts"),
   /SLP_THREAD_COLUMN_CLASS = "mx-auto w-full max-w-\[45rem\]"/u,
 );
-assert.match(view, /\{!notLoaded && <SlpThreadComposer model=\{model\} \/>\}/u, "no composer before the chat loads");
+// A thread in a roleplay scene shows its lock bar in the composer's place (docs/SCENES.md).
+assert.match(
+  view,
+  /\{!notLoaded &&\s*\(sceneChatId \? \([\s\S]{0,160}?<SlpSceneLockBar[\s\S]{0,160}?<SlpThreadComposer model=\{model\} \/>/u,
+  "no composer before the chat loads",
+);
 
 // ── Composer: the old pill bar and link picker stay (user); fee on Send; tools in a sheet ──
 const composer = client("features/messages/SlpThreadComposer.tsx");

@@ -4016,6 +4016,7 @@
   "ui.slurp.continuity.eventType.payment": "Payment",
   "ui.slurp.continuity.eventType.commission": "Commission",
   "ui.slurp.continuity.eventType.disclosure": "Told a fan something",
+  "ui.slurp.continuity.eventType.scene_played": "Played a scene",
   "ui.slurp.continuity.eventType.boundary_stated": "Stated a limit",
   "ui.slurp.continuity.eventType.demand_trend": "Demand",
   "ui.slurp.continuity.intent.casual": "Casual",

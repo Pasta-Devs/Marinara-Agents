@@ -4,7 +4,7 @@
  */
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Clapperboard, EyeOff, Lock, Megaphone, PhoneCall, RefreshCw, Sparkles } from "lucide-react";
+import { Clapperboard, Eye, EyeOff, Lock, Megaphone, PhoneCall, RefreshCw } from "lucide-react";
 import { getApiErrorMessage } from "../../../../lib/api-client";
 import { cn } from "../../../../lib/utils";
 import type {
@@ -23,7 +23,7 @@ import { startSlpScene, useSlpScenePlan } from "./slp-roleplay-scene-hooks";
 const REACH_ICONS: Record<SlpSceneReach, typeof Lock> = {
   none: EyeOff,
   private: Lock,
-  hint: Sparkles,
+  hint: Eye,
   public: Megaphone,
 };
 
