@@ -37,8 +37,8 @@ import {
   SLP_ASSIST_NOTE_MAX,
   SLP_ASSIST_REQUEST_MAX,
   type SlpActionParsed,
-  type SlpActionResult,
 } from "../../../../../shared/src/slp/slp-actions.js";
+import type { SlpActionResult } from "../../../../../shared/src/slp/slp-action-results.js";
 import { readSlurpCreatorTiesDocument } from "../../data/projects/slp-creator-ties-storage.js";
 import { slpWithProviderRetry } from "../../base/model/slp-provider-retry.js";
 

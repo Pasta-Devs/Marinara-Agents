@@ -727,3 +727,20 @@ modules, rejected alternative, and migration consequence.
   Conversation as a fake origin (no lock, no way back); one global lock and reach setting.
 - **Migration consequence:** new nullable thread columns `scene_chat_id`, `scene_started_at`; new
   continuity event type `scene_played`. Nothing runs until Capability API 1.66.
+
+## Guided post, review for everyone (2026-10-05)
+
+- **Problem:** Creators got a post from one Stir line, with its picture; the player's own page had only
+  the split-up composer (text help and picture apart) and no way to reach its owed #ad or a collab.
+- **Decision:**
+  - One action, `draft-post` (`features/assist/slp-assist-service.ts`): an idea in, the caption and its
+    picture out, nothing posted. An owed brand deal or a collab of that page rides along as context.
+  - One composer for every page: `SlpPostGuide` (assist feature, through `slp-assist-contract.ts`) sits
+    at the top of New post. Posting a draft written for an owed #ad marks the deal posted.
+  - Review for everyone: Stir's `write-post` preview answers `draftInComposer`, so "Do it" never posts
+    it; the card hands the idea to the page's composer (`composeGuide` in the package store). Professor
+    Mari's `write-post` still posts directly: the player asked Mari for exactly that.
+  - `SlpActionResult` moved to `shared/src/slp/slp-action-results.ts` (size cap of `slp-actions.ts`).
+- **Rejected alternatives:** a second composer for the player's page; letting Stir post for the
+  player's page unattended (it is the player's voice).
+- **Migration consequence:** none.
