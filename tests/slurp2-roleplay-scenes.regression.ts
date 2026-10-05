@@ -16,6 +16,7 @@ import {
 } from "../packages/slurp2/src/engine/packages/server/src/slp/modules/messages/slp-roleplay-scene-rules";
 import { readSlpScenePlan } from "../packages/slurp2/src/engine/packages/server/src/slp/modules/messages/slp-roleplay-scene-prompt";
 import { slurp2Source } from "./slurp2-source";
+import { slurpDmTranscript } from "../packages/slurp2/src/engine/packages/server/src/slp/modules/messages/slp-dm-roles";
 
 // ── What the scene reads: paid content is named, never quoted; scene lines are not conversation ──
 const message = (role: "viewer" | "creator", kind: string, content: string, extra: object = {}) => ({
@@ -44,6 +45,39 @@ assert.deepEqual(transcript, [
   { speaker: "Alex", content: "(tipped 15 coins)" },
   { speaker: "Mina", content: "Come to my shoot?" },
 ]);
+
+// ── What her DM prompt reads: the recap as something they did, the invite as hers, no empty notes ──
+const line = (role: "viewer" | "creator", scene: object, content = "") => ({
+  id: Math.random().toString(36),
+  role,
+  kind: "system",
+  content,
+  price: 0,
+  unlockedAt: null,
+  imageUrl: null,
+  metadata: { scene },
+  createdAt: "2026-10-05T12:00:00Z",
+});
+const dm = slurpDmTranscript(
+  [
+    line("creator", { kind: "invite", pitch: "Come to my shoot?", state: "accepted" }, "Come to my shoot?"),
+    line("creator", {
+      kind: "recap",
+      sceneChatId: "s",
+      title: "Shoot",
+      summary: "They talked all night.",
+      reach: "private",
+    }),
+    line("creator", { kind: "ended", sceneChatId: "s2", outcome: "abandoned" }),
+  ] as never,
+  { writer: "creator", creator: { name: "Mina", handle: "mina" }, viewer: { name: "Alex", handle: "alex" } },
+);
+assert.equal(dm.length, 2, "An ended note is not conversation");
+assert.match(JSON.stringify(dm[0]), /invited Alex into a scene together/u);
+assert.match(
+  JSON.stringify(dm[1]),
+  /You and Alex spent time together in person\. What happened: They talked all night\./u,
+);
 
 // ── Invites stay rare: none while one is open, none within three days of the last ──
 const now = new Date("2026-10-05T12:00:00Z");
