@@ -484,7 +484,7 @@ const EXPECTED_HANDLER_COUNTS = {
   "features/feed": 39,
   "features/maintenance": 15,
   "features/media": 7,
-  "features/messages": 45,
+  "features/messages": 49,
   "features/notifications": 4,
   "features/onboarding": 7,
   "features/projects": 29,
@@ -549,8 +549,8 @@ const methodCounts = Object.fromEntries(
     }, new Map<string, number>()),
 );
 assert.deepEqual(methodCounts, EXPECTED_METHOD_COUNTS, "HTTP method multiset changed from staging");
-// 0.3.5: +4 (the Support desk). 0.3.7: +1 (rewrite all).
-assert.equal(foundRoutes.filter((route) => !route.startsWith("ADDCONTENTTYPEPARSER ")).length, 282);
+// 0.3.5: +4 (the Support desk). 0.3.7: +1 (rewrite all). Roleplay scenes: +4.
+assert.equal(foundRoutes.filter((route) => !route.startsWith("ADDCONTENTTYPEPARSER ")).length, 286);
 assert.deepEqual(handlerCounts, EXPECTED_HANDLER_COUNTS, "handler count changed in a feature");
 assert.ok(foundRoutes.includes("POST /slurp/posts/:id/media"), "the renamed POST media route must remain registered");
 assert.ok(
