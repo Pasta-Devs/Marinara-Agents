@@ -40,7 +40,8 @@ export const SLP_STEERING_NUDGE_MAX = 160;
 export const SLP_STEERING_NUDGES_MAX = 6;
 
 export const SLP_ROMANCE_ONLY_MAX = 100;
-export type SlpCreatorRomance = { off: boolean; only: string[] };
+/** `never`: Creators they are never paired with (R4), and family (R3, filled from family bonds when read). */
+export type SlpCreatorRomance = { off: boolean; only: string[]; never?: string[] };
 
 /** Whether both Creators' romance settings allow the two of them together (0.3.17). */
 export function slpRomanceAllows(
@@ -48,7 +49,9 @@ export function slpRomanceAllows(
   b: { id: string; romance?: SlpCreatorRomance },
 ): boolean {
   const allows = (self: typeof a, other: typeof b) =>
-    !self.romance?.off && (!self.romance?.only.length || self.romance.only.includes(other.id));
+    !self.romance?.off &&
+    !self.romance?.never?.includes(other.id) &&
+    (!self.romance?.only.length || self.romance.only.includes(other.id));
   return allows(a, b) && allows(b, a);
 }
 
@@ -110,7 +113,7 @@ export const SLP_DEFAULT_STEERING: SlpCreatorSteering = {
   lifePhase: "",
   mood: null,
   relationshipStyle: null,
-  romance: { off: false, only: [] },
+  romance: { off: false, only: [], never: [] },
   push: [],
   avoid: [],
   pace: "usual",
@@ -161,8 +164,11 @@ function supportNote(raw: unknown): SlpSteeringSupportNote | null {
 
 function romance(raw: unknown): SlpCreatorRomance {
   const value = raw && typeof raw === "object" && !Array.isArray(raw) ? (raw as Record<string, unknown>) : {};
-  const only = Array.isArray(value.only) ? value.only.map((id) => text(id, 128)).filter(Boolean) : [];
-  return { off: value.off === true, only: [...new Set(only)].slice(0, SLP_ROMANCE_ONLY_MAX) };
+  const ids = (list: unknown) =>
+    Array.isArray(list)
+      ? [...new Set(list.map((id) => text(id, 128)).filter(Boolean))].slice(0, SLP_ROMANCE_ONLY_MAX)
+      : [];
+  return { off: value.off === true, only: ids(value.only), never: ids(value.never) };
 }
 
 export function normalizeSlpCreatorSteering(raw: unknown): SlpCreatorSteering {

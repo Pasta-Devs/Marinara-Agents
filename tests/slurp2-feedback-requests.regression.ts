@@ -4,9 +4,31 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { slurpCommissionBrief } from "../packages/slurp2/src/engine/packages/server/src/slp/modules/world/slp-world-copy.ts";
 import { SLURP_COMMISSION_ASKS } from "../packages/slurp2/src/engine/packages/shared/src/slp/slp-world.ts";
+import {
+  normalizeSlpCreatorSteering,
+  slpRomanceAllows,
+} from "../packages/slurp2/src/engine/packages/shared/src/slp/slp-creator-steering.ts";
 
 const client = join(import.meta.dirname, "..", "packages/slurp2/src/engine/packages/client/src/slp");
 const src = (path: string) => readFileSync(join(client, path), "utf8");
+
+// ── R3 + R4: family and blocked pairs never become a couple ──
+// One rule every romance gate shares (couple fit, drama ties, drama casting): `never` on either side.
+const free = { off: false, only: [], never: [] };
+assert.equal(slpRomanceAllows({ id: "a", romance: free }, { id: "b", romance: free }), true);
+assert.equal(slpRomanceAllows({ id: "a", romance: { ...free, never: ["b"] } }, { id: "b", romance: free }), false);
+assert.equal(slpRomanceAllows({ id: "a", romance: free }, { id: "b", romance: { ...free, never: ["a"] } }), false);
+assert.deepEqual(normalizeSlpCreatorSteering({ romance: { off: false, only: [], never: ["b", "b", ""] } }).romance, {
+  off: false,
+  only: [],
+  never: ["b"],
+});
+assert.deepEqual(normalizeSlpCreatorSteering({}).romance.never, [], "older saves read as nobody blocked");
+// Family bonds and family a card names fill `never` on both sides when the tie rules load the Creators.
+assert.match(
+  readFileSync(join(client, "../../../server/src/slp/features/projects/slp-creator-ties-service.ts"), "utf8"),
+  /bond\.kind === "family" && slurpBondActive\(bond\)[\s\S]*?slurpBondFromRelation\(person\.relation\)\?\.kind === "family"[\s\S]*?never: \[\.\.\.\(creator\.romance\.never \?\? \[\]\), other\]/u,
+);
 
 // ── R7: the player edits what the fan wants in a commission request ──
 assert.ok(

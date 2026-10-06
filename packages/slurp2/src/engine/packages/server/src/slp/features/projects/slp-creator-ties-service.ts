@@ -13,7 +13,13 @@ import { createSlurpStorage } from "../../data/slp-storage.js";
 import { createSlurpPopulationStorage } from "../../data/audience/slp-audience-storage-funnel.js";
 import { readSlurpCardPeople, readSlurpCreatorFitText } from "../../data/creators/slp-flavour-source.js";
 import { SLURP_PARTNER_RELATION } from "../../modules/creators/slp-spice.js";
-import { slurpAdvanceBonds, slurpBondsFor } from "../../modules/projects/slp-creator-bonds.js";
+import {
+  slurpAdvanceBonds,
+  slurpBondActive,
+  slurpBondFromRelation,
+  slurpBondsFor,
+  slurpCreatorNamed,
+} from "../../modules/projects/slp-creator-bonds.js";
 import { mutateSlurpCreatorTies, readSlurpCreatorTiesDocument } from "../../data/projects/slp-creator-ties-storage.js";
 import { slurpCreatorReach } from "../../../../../shared/src/slp/slp-reach.js";
 import { slurpPlatformScaleMultiplier, slurpWorldActivityMultiplier } from "../../../../../shared/src/slp/slp-scale.js";
@@ -90,7 +96,7 @@ export async function loadSlurpTieCreators(db: DB, at = new Date()): Promise<Slu
     accounts.map((account) => account.id),
   );
   const scale = slurpPlatformScaleMultiplier(settings.platformScale);
-  return Promise.all(
+  const creators: SlurpTieCreator[] = await Promise.all(
     accounts.map(async (account: Account) => {
       const text = await readSlurpCreatorFitText(db, { account, source: await storage.resolveAccountSource(account) });
       // Polyamory (0.3.5): the style the player picked, else poly words on their card.
@@ -110,7 +116,7 @@ export async function loadSlurpTieCreators(db: DB, at = new Date()): Promise<Slu
         cardPeople,
         poly: style ? style === "poly" : SLP_POLY_CARD_WORDS.test(text),
         // An unreadable setting is no permission: fail closed (no romance) until it reads again.
-        romance: steering ? steering.romance : { off: true, only: [] },
+        romance: steering ? steering.romance : { off: true, only: [], never: [] },
         followers: slurpCreatorReach(
           { accountId: account.id, createdAt: account.createdAt, realFollowers: followers.get(account.id) ?? 0, scale },
           at,
@@ -119,6 +125,28 @@ export async function loadSlurpTieCreators(db: DB, at = new Date()): Promise<Slu
       };
     }),
   );
+  // Family is never romance (R3): every active family bond, and family a card names, joins both
+  // Creators' `never` list, so every romance rule (couples, drama, Stir) keeps them apart.
+  const family = (await readSlurpCreatorTiesDocument(db)).bonds
+    .filter((bond) => bond.kind === "family" && slurpBondActive(bond))
+    .map((bond) => [bond.aId, bond.bId] as const);
+  for (const creator of creators)
+    for (const person of creator.cardPeople ?? []) {
+      const other =
+        slurpBondFromRelation(person.relation)?.kind === "family" &&
+        slurpCreatorNamed(person.name, creators, creator.id);
+      if (other) family.push([creator.id, other.id]);
+    }
+  const byId = new Map(creators.map((creator) => [creator.id, creator]));
+  for (const [a, b] of family)
+    for (const [self, other] of [
+      [a, b],
+      [b, a],
+    ]) {
+      const creator = byId.get(self);
+      if (creator?.romance) creator.romance = { ...creator.romance, never: [...(creator.romance.never ?? []), other] };
+    }
+  return creators;
 }
 
 /**

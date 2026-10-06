@@ -88,8 +88,8 @@ export type SlurpTiesCouple = {
   secret?: boolean;
 };
 export type SlurpCoupleSteer = "date" | "drama" | "patchUp" | "breakUp" | "reunite" | "official" | "secret" | "public";
-/** Mirrors `SlurpBond` on the server (Drama): friends, roommates, coworkers and exes. */
-export type SlurpTiesBondKind = "friend" | "roommate" | "coworker" | "ex";
+/** Mirrors `SlurpBond` on the server (Drama): friends, roommates, coworkers, exes and family. */
+export type SlurpTiesBondKind = "friend" | "roommate" | "coworker" | "ex" | "family";
 export type SlurpTiesBond = {
   id: string;
   kind: SlurpTiesBondKind;
