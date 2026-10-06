@@ -1,4 +1,5 @@
 import { requestHintGuidance } from "./SlpMessages";
+import { SlpDeskQuickReplies } from "./SlpDeskQuickReplies";
 import { SlpTextAssist } from "../assist/slp-assist-contract";
 import { slurpAssistChatContext } from "./slp-assist-chat-context";
 import { ArrowDown, ChevronLeft, Plus, Send, X } from "lucide-react";
@@ -160,6 +161,7 @@ export function SlpThreadComposer({ model }: { model: SlurpThreadViewModel }) {
           </div>
         )}
         <div className={cn(SLP_THREAD_COLUMN_CLASS, "flex flex-col gap-2")}>
+          {asSupport && <SlpDeskQuickReplies model={model} />}
           {asSupport && <SlpDeskComposerChip model={model} />}
           {asSupport && <SlpPhotoDemandChip model={model} />}
           {composerTipAmount > 0 && !asSupport && (

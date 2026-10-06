@@ -21,6 +21,20 @@ import {
 const client = join(import.meta.dirname, "..", "packages/slurp2/src/engine/packages/client/src/slp");
 const src = (path: string) => readFileSync(join(client, path), "utf8");
 
+// ── R2: quick replies for the Support desk ──
+const quick = readFileSync(join(client, "features/messages/SlpDeskQuickReplies.tsx"), "utf8");
+assert.match(
+  quick,
+  /const replies = saved\.length \? saved : SLP_DESK_QUICK_REPLIES;/u,
+  "built-ins until the player saves",
+);
+assert.match(quick, /setDraft\(reply\);/u, "one tap fills the composer; the player still sends");
+assert.match(quick, /supportDesk: \{ \.\.\.desk, quickReplies \}/u);
+assert.match(
+  src("features/messages/SlpThreadComposer.tsx"),
+  /\{asSupport && <SlpDeskQuickReplies model=\{model\} \/>\}/u,
+);
+
 // ── R3 + R4: family and blocked pairs never become a couple ──
 // One rule every romance gate shares (couple fit, drama ties, drama casting): `never` on either side.
 const free = { off: false, only: [], never: [] };
