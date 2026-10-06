@@ -681,3 +681,46 @@ modules, rejected alternative, and migration consequence.
   same couple); a DB column for fan-note replies (a migration for one small, capped list).
 - **Migration consequence:** none; `secret`, `personaId` on plays, `requestedLead` on the drama state
   and `paused` are optional with safe defaults. Old fan threads to the player's page stay as they are.
+
+## Roleplay scenes from a DM thread (2026-10-05)
+
+- **Problem:** the player could not take a DM conversation into a real roleplay. Engine scenes branch
+  only from Engine Conversations, and Slurp's threads are not Engine chats.
+- **Decision:**
+  - Engine PR #7119 (Capability API 1.66, `scenes` permission) lets a package thread be a scene
+    origin. Slurp registers one provider in `slp-server-entry.ts`
+    (`features/messages/scenes/slp-roleplay-scene-origin.ts`) once its manifest holds `scenes`; the
+    builder adds it as an optional permission at Capability API 1.66.
+  - Slurp writes the plan itself (`slp-roleplay-scene-planner.ts`, prompt in
+    `modules/messages/slp-roleplay-scene-prompt.ts`) and hands it to the Engine's `startScene`.
+  - Each scene carries its own settings as the Engine's `packageData`: `lock` (thread paused, Creator
+    busy everywhere) and `reach` (`none`, `private`, `hint`, `public`). The planner proposes both; the
+    player changes them before the start and the reach again on the recap.
+  - The lock is the scene chat id on the thread (`scene_chat_id`); one guard
+    (`slp-roleplay-scene-lock.ts`, a preHandler on the messages routes) refuses every thread write
+    while it is set. Replies, follow-ups, due posts and comment replies of a busy Creator wait.
+  - Choosing a reach is the explicit promotion the continuity ledger asks for: the recap fact is
+    `slurp` reality at the reach's audience; the event itself stays `roleplay`.
+  - Creators may pitch a scene through an optional `sceneInvite` field in the DM reply, offered only
+    when no invite is open and the last is three days old.
+- **Rejected alternatives:** putting the DM into the Engine planner's prompt; a hidden Engine
+  Conversation as a fake origin (no lock, no way back); one global lock and reach setting.
+- **Migration consequence:** new nullable thread columns `scene_chat_id`, `scene_started_at`; new
+  continuity event type `scene_played`. Nothing runs until Capability API 1.66.
+
+## Guided post, review for everyone (2026-10-05)
+
+- **Problem:** Creators got a post from one Stir line, with its picture; the player's own page had only
+  the split-up composer (text help and picture apart) and no way to reach its owed #ad or a collab.
+- **Decision:**
+  - One action, `draft-post` (`features/assist/slp-assist-service.ts`): an idea in, the caption and its
+    picture out, nothing posted. An owed brand deal or a collab of that page rides along as context.
+  - One composer for every page: `SlpPostGuide` (assist feature, through `slp-assist-contract.ts`) sits
+    at the top of New post. Posting a draft written for an owed #ad marks the deal posted.
+  - Review for everyone: Stir's `write-post` preview answers `draftInComposer`, so "Do it" never posts
+    it; the card hands the idea to the page's composer (`composeGuide` in the package store). Professor
+    Mari's `write-post` still posts directly: the player asked Mari for exactly that.
+  - `SlpActionResult` moved to `shared/src/slp/slp-action-results.ts` (size cap of `slp-actions.ts`).
+- **Rejected alternatives:** a second composer for the player's page; letting Stir post for the
+  player's page unattended (it is the player's voice).
+- **Migration consequence:** none.

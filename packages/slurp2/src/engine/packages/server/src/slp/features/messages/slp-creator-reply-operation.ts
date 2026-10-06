@@ -7,6 +7,7 @@ import { createSlurpStorage } from "../../data/slp-storage.js";
 import { createSlurpMessagesStorage } from "../../data/slp-storage.js";
 import { tryCreatorAccountOperation } from "../../base/locking/slp-account-operation-lock.js";
 import { generateCreatorReply } from "./slp-reply-generation-service.js";
+import { slurpCreatorInScene } from "./scenes/slp-roleplay-scene-lock.js";
 
 export async function generateAndApplyCreatorReply(
   db: DB,
@@ -28,6 +29,8 @@ export async function generateAndApplyCreatorReply(
   };
   const post = await noodle.getNoodlerPostById(input.postId);
   if (!post) return { status: "ineligible" };
+  // In a locking roleplay scene with someone (docs/SCENES.md): she answers comments afterwards.
+  if (await slurpCreatorInScene(db, post.authorAccountId)) return { status: "busy" };
 
   const locked = await tryCreatorAccountOperation(post.authorAccountId, async () => {
     const settings = await noodle.getSettings();

@@ -2,7 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../../../lib/api-client";
 import { slpKeys } from "../../base/state/slp-query-keys";
 import { useSlurpUIStore } from "../../base/state/slp-package-store";
-import type { SlpActionResult } from "../../../../../shared/src/slp/slp-actions.js";
+import type { SlpActionResult } from "../../../../../shared/src/slp/slp-action-results.js";
 import type {
   SlpActionPreview,
   SlpStirOrigin,

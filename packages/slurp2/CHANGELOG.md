@@ -1,5 +1,17 @@
 # Slurp release notes
 
+## 0.3.16 — 2026-10-05
+
+- The shared guide explicitly offers image generation with an on/off toggle and direct image upload; uploading switches generation off so drafting preserves the photo.
+- Stir on your persona page and Write a post in an NPC Creator’s Stir use the same simple one-idea draft, with caption and picture preview together. Edit opens the full composer without losing your draft.
+
+## 0.3.15 — 2026-10-05
+
+- Start real Engine roleplay scenes from character-backed Creator DMs, or accept a Creator invite. Choose availability and how the recap can reach Slurp.
+- Lock the DM and pause the Creator while a locking scene runs; return the recap to the thread on conclude and recover missed releases after discard, convert, delete, or restart.
+- Draft a post from one idea for review in the same composer on every page; Stir hands its draft to the composer.
+- Requires Engine Capability API 1.66 for native scene origins.
+
 ## 0.3.12 — 2026-10-01
 
 - Fix: the follow-up scheduler no longer logs "No text connection configured" on every poll. It checks for due follow-ups first, and warns once per outage only when work is waiting.

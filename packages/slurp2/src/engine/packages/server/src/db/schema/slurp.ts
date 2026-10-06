@@ -370,6 +370,13 @@ export const slurpThreads = fileTable(
     lastStrikeAt: text("last_strike_at"),
     /** Working and long-term facts the creator has learned about this fan. See `slurp-thread-notes.ts`. */
     notes: text("notes").notNull().default("[]"),
+    /**
+     * The Engine roleplay scene this conversation is in while it runs (docs/SCENES.md). Set only by the
+     * Engine's claim and cleared only by the release for the same scene: it locks the thread and keeps
+     * the Creator busy everywhere else.
+     */
+    sceneChatId: text("scene_chat_id"),
+    sceneStartedAt: text("scene_started_at"),
     createdAt: text("created_at").notNull(),
     updatedAt: text("updated_at").notNull(),
   },

@@ -32,10 +32,12 @@ import { Avatar, SLP_TYPE } from "../../base/chrome/SlpChrome";
 import { SlpAutoGrowTextarea } from "../../base/ui/SlpAutoGrowTextarea";
 import { SlpSheet } from "../../modules/chrome/SlpSheet";
 import { SlpButton, SlpChip, SlpPrimaryButton, SlpSegment } from "../../modules/chrome/SlpButton";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ChevronDown, Crop, ImagePlus, Link2, ListChecks, Loader2, Pencil, Send, Smile, Trash2 } from "lucide-react";
 import { SlpSparkleGlyph } from "../../base/chrome/SlpGlyphs";
-import { SlpPictureAssist, SlpTextAssist } from "../../features/assist/slp-assist-contract";
+import { SlpPictureAssist, SlpPostGuide, SlpTextAssist } from "../../features/assist/slp-assist-contract";
+import { useSlurpTiesMutations } from "../../features/projects/slp-projects-contract";
+import { useSlurpUIStore } from "../../base/state/slp-package-store";
 import { cn } from "../../../lib/utils";
 import {
   errorMessage,
@@ -89,7 +91,21 @@ export function NoodlerPostComposer({
       : 4 / 5;
   // The Creator's own unlock price, the one the server stamps on a locked post (weekly dynamic
   // pricing moves it); the Slurp-wide price only until it loads (R1-025).
-  const creatorPrices = useSlurpCreatorMessagingSettings(profile.id, useSlpViewerPersonaId()).data;
+  const viewerPersonaId = useSlpViewerPersonaId();
+  const creatorPrices = useSlurpCreatorMessagingSettings(profile.id, viewerPersonaId).data;
+  // The guided post (0.3.14): an idea Stir handed over for this page drafts once when the sheet opens.
+  const handedGuide = useSlurpUIStore((state) =>
+    state.composeGuide?.accountId === profile.id ? state.composeGuide : null,
+  );
+  const [guided, setGuided] = useState(Boolean(handedGuide));
+  const [drafting, setDrafting] = useState(false);
+  useEffect(() => {
+    if (handedGuide) setGuided(true);
+  }, [handedGuide]);
+  const setComposeGuide = useSlurpUIStore((state) => state.setComposeGuide);
+  const markDealPosted = useSlurpTiesMutations(viewerPersonaId ?? "").markPosted;
+  // The owed #ad the current draft was written for; posting it settles the reminder.
+  const guideDealId = useRef<string | null>(null);
   const usualUnlockPrice = creatorPrices?.messaging.unlockPrice ?? composerSettings?.walletUnlockCost ?? 25;
   const [postError, setPostError] = useState<string | null>(null);
   const [activeTool, setActiveTool] = useState<SlpCreatorComposerTool | null>(null);
@@ -136,7 +152,10 @@ export function NoodlerPostComposer({
   composerBusyRef.current = composerBusy;
   const pollIsValid = poll ? slpPollInputSchema.safeParse(poll).success : false;
   const canPost =
-    !composerBusy && !pendingImage && (story ? Boolean(image) : Boolean(body.trim() || image || pollIsValid));
+    !composerBusy &&
+    !drafting &&
+    !pendingImage &&
+    (story ? Boolean(image) : Boolean(body.trim() || image || pollIsValid));
 
   const updateDraft = (patch: Partial<SlpCreatorPostDraft>) => {
     if (composerBusyRef.current) return false;
@@ -151,15 +170,20 @@ export function NoodlerPostComposer({
     setPollEditorValue(null);
     setActiveTool(null);
     setAdvancedOpen(false);
+    setComposeGuide(null);
+    setGuided(false);
   };
   const close = () => {
-    if (composerBusyRef.current) return;
+    if (composerBusyRef.current || drafting) return;
+    setComposeGuide(null);
+    setGuided(false);
     setActiveTool(null);
     setPendingImage(null);
     onClose();
   };
   const discardDraft = () => {
-    if (composerBusyRef.current) return;
+    if (composerBusyRef.current || drafting) return;
+    guideDealId.current = null;
     onDiscardDraft();
     resetLocal();
     onClose();
@@ -283,7 +307,7 @@ export function NoodlerPostComposer({
   });
 
   const publish = async () => {
-    if (composerBusyRef.current) return;
+    if (composerBusyRef.current || drafting) return;
     setPostError(null);
     if (pendingImage) {
       setPostError("Apply or cancel the image crop before posting.");
@@ -306,6 +330,8 @@ export function NoodlerPostComposer({
       setSubmitting(true);
       setActiveTool(null);
       await onManualPost(submission());
+      if (guideDealId.current && viewerPersonaId) markDealPosted.mutate(guideDealId.current);
+      guideDealId.current = null;
       onClearDraft();
       resetLocal();
       onClose();
@@ -444,20 +470,22 @@ export function NoodlerPostComposer({
     <SlpSheet
       open={open}
       onClose={close}
-      closeDisabled={composerBusy}
+      closeDisabled={composerBusy || drafting}
       size="full"
       width="max-w-xl"
       title={
-        story
-          ? localizeUi("ui.slurp.composer.newStory", { defaultValue: "New Story" })
-          : localizeUi("ui.slurp.composer.newPost", { defaultValue: "New post" })
+        guided
+          ? localizeUi("ui.slurp.stir.stirShort")
+          : story
+            ? localizeUi("ui.slurp.composer.newStory", { defaultValue: "New Story" })
+            : localizeUi("ui.slurp.composer.newPost", { defaultValue: "New post" })
       }
       headerAccessory={
         <SlpSegment
           label={localizeUi("ui.slurp.stories.postType")}
           value={postType}
           onChange={(option) => {
-            if (composerBusyRef.current) return;
+            if (composerBusyRef.current || drafting) return;
             setActiveTool(null);
             updateDraft({
               postType: option,
@@ -480,6 +508,12 @@ export function NoodlerPostComposer({
             </div>
           )}
           <div className="flex items-center gap-2">
+            {guided && (
+              <SlpButton disabled={composerBusy || drafting} onClick={() => setGuided(false)}>
+                <Pencil size={16} aria-hidden="true" />
+                {localizeUi("ui.slurp.postGuide.editDraft")}
+              </SlpButton>
+            )}
             <SlpPrimaryButton onClick={() => void publish()} disabled={!canPost} className="ms-auto px-6">
               {manualPending ? (
                 <Loader2 size={16} className="animate-spin" aria-hidden="true" />
@@ -508,207 +542,242 @@ export function NoodlerPostComposer({
           </span>
         </p>
 
-        {media}
-        {activeTool === "draw" && (
-          <SlpPictureAssist
-            accountId={profile.id}
-            target={story ? "story" : "post"}
-            context={body.trim() || title.trim() || undefined}
-            onUse={takeDrawnPicture}
-            onUndo={() => {
-              onDraftChange({ image: drawnOver.current });
-              setPendingImage(null);
-            }}
-            onDone={() => setActiveTool(null)}
-          />
-        )}
-
-        <div className="space-y-1">
-          {!story && (
-            <label className="block">
-              <span className="sr-only">{localizeUi("ui.noodle.noodlerpostcomposer.postTitleOptional")}</span>
-              <input
-                value={title}
-                onChange={(event) => updateDraft({ title: event.target.value })}
-                maxLength={SLP_CREATOR_POST_TITLE_MAX_LENGTH}
-                disabled={composerBusy}
-                placeholder={localizeUi("ui.slurp.composer.titlePlaceholder", { defaultValue: "Title (optional)" })}
-                className={cn(fieldClass, "h-10 text-[15px] font-bold")}
-              />
-            </label>
-          )}
-          <SlpAutoGrowTextarea
-            value={body}
-            onChange={(event) => updateDraft({ body: event.target.value })}
-            maxLength={SLP_CREATOR_POST_CONTENT_MAX_LENGTH}
-            disabled={composerBusy}
-            aria-label={localizeUi("ui.noodle.noodlerpostcomposer.postBody")}
-            placeholder={localizeUi(
-              story ? "ui.slurp.stories.captionPlaceholder" : "ui.noodle.noodlerpostcomposer.whatSSimmering",
-            )}
-            className={cn(fieldClass, "min-h-20 resize-none py-1 text-base leading-6 sm:text-[15px]")}
-          />
-          <div className="flex flex-wrap items-center gap-2 pt-1">
-            {!story && (
-              <SlpChip
-                selected={activeTool === "poll" || Boolean(poll)}
-                disabled={composerBusy}
-                onClick={() => toggleTool("poll")}
-                className="min-h-9"
-              >
-                <ListChecks size={15} aria-hidden="true" />
-                {localizeUi("ui.slurp.composer.poll", { defaultValue: "Poll" })}
-              </SlpChip>
-            )}
-            <SlpChip
-              ref={mediaToolRef}
-              selected={activeTool === "media"}
-              disabled={composerBusy}
-              onClick={() => toggleTool("media")}
-              className="min-h-9"
-            >
-              <Smile size={15} aria-hidden="true" />
-              {localizeUi("ui.slurp.composer.emoji", { defaultValue: "Emoji" })}
-            </SlpChip>
-            <SlpTextAssist
-              field={story ? "story" : "caption"}
-              value={body}
-              accountId={profile.id}
-              context={assistContext}
-              disabled={composerBusy}
-              onApply={(text) => updateDraft({ body: text })}
-            />
-          </div>
-        </div>
-
-        {activeTool === "poll" && !composerBusy && (
-          <SlpPollComposer
-            value={pollEditorValue}
-            onChange={setPollEditorValue}
-            onClose={() => {
-              setPollEditorValue(null);
-              setActiveTool(null);
-            }}
-            onSubmit={applyPollDraft}
-            submitLabel={
-              poll
-                ? localizeUi("ui.noodle.noodlerpostcomposer.updatePoll")
-                : localizeUi("ui.noodle.noodlerpostcomposer.addPoll")
-            }
-            disabled={composerBusy}
-            modalOwned
-          />
-        )}
-        {poll && activeTool !== "poll" && (
-          <div className="flex items-start justify-between gap-3 rounded-2xl bg-[var(--slurp-surface-raised)] p-3 shadow-[var(--slurp-highlight)]">
-            <div className="min-w-0 flex-1">
-              <p className={cn(SLP_TYPE.body, "font-semibold")}>{poll.question}</p>
-              <p className={cn(SLP_TYPE.meta, "mt-1 truncate text-[var(--slurp-muted)]")}>{poll.options.join(" · ")}</p>
-            </div>
-            <div className="flex shrink-0 items-center gap-1">
-              <button
-                type="button"
-                onClick={() => toggleTool("poll")}
-                disabled={composerBusy}
-                className="grid size-10 place-items-center rounded-full text-[var(--slurp-ink)] hover:bg-[var(--accent)] disabled:opacity-50 [&_svg]:!text-current"
-                aria-label={localizeUi("ui.noodle.noodlehome.editDraftPoll")}
-                title={localizeUi("ui.noodle.noodlehome.editPoll")}
-              >
-                <Pencil size={16} />
-              </button>
-              <button
-                type="button"
-                onClick={() => updateDraft({ poll: null })}
-                disabled={composerBusy}
-                className="grid size-10 place-items-center rounded-full text-[var(--slurp-danger)] hover:bg-[var(--accent)] disabled:opacity-50 [&_svg]:!text-current"
-                aria-label={localizeUi("ui.noodle.noodlehome.removeDraftPoll")}
-                title={localizeUi("ui.noodle.noodlehome.removePoll")}
-              >
-                <Trash2 size={16} />
-              </button>
-            </div>
-          </div>
-        )}
-
-        <SlpComposerAudience
-          access={access}
-          unlockPrice={unlockPrice ?? null}
-          usualUnlockPrice={usualUnlockPrice}
+        <SlpPostGuide
+          key={profile.id}
+          accountId={profile.id}
+          personaId={viewerPersonaId}
+          story={story}
           disabled={composerBusy}
-          onChange={(patch) =>
-            updateDraft({
-              ...patch,
-              // A purpose that no longer fits the new audience goes back to automatic.
-              ...(contentIntent && !slurpIntentFitsAccess(contentIntent, patch.access ?? access)
-                ? { contentIntent: null, contentDelivery: null }
-                : {}),
-            })
-          }
+          onPendingChange={setDrafting}
+          onUpload={() => imageFileRef.current?.click()}
+          initialIdea={handedGuide?.idea ?? ""}
+          autoRun={Boolean(handedGuide) && open}
+          onDraft={(guided) => {
+            if (handedGuide) setComposeGuide(null);
+            guideDealId.current = guided.dealId;
+            updateDraft({ body: guided.text });
+            if (guided.image) takeDrawnPicture(guided.image);
+          }}
         />
 
-        {/* Operator settings stay one tap away, after everything a creator would touch. */}
-        <section className="rounded-2xl bg-[var(--slurp-surface-raised)] shadow-[var(--slurp-highlight)]">
-          <button
-            type="button"
-            onClick={() => setAdvancedOpen((value) => !value)}
-            aria-expanded={advancedOpen}
-            aria-controls="slurp-composer-advanced"
-            className="flex min-h-11 w-full items-center gap-2 rounded-2xl px-4 text-start text-[13px] font-semibold text-[var(--slurp-muted)] hover:text-[var(--slurp-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--slurp-focus)] [&_svg]:!text-current"
-          >
-            <span className="flex-1">{localizeUi("ui.slurp.composer.advanced", { defaultValue: "Advanced" })}</span>
-            <ChevronDown
-              size={16}
-              aria-hidden="true"
-              className={cn("transition-transform motion-reduce:transition-none", advancedOpen && "rotate-180")}
-            />
-          </button>
-          <div id="slurp-composer-advanced" hidden={!advancedOpen} className="space-y-3 px-4 pb-4">
-            {!story && (
-              <div className="grid gap-2 sm:grid-cols-2 [&_label]:w-full [&_select]:h-11 [&_select]:w-full [&_select]:max-w-none [&_select]:rounded-xl [&_select]:font-medium">
-                <SlpComposerPurpose
-                  access={access}
-                  contentIntent={contentIntent}
-                  contentDelivery={contentDelivery}
+        {guided ? (
+          <div data-slp-guided-preview className="space-y-3">
+            {image && <SlpCreatorDraftImageFrame image={image} />}
+            {title && <p className={SLP_TYPE.title}>{title}</p>}
+            {body && <p className="whitespace-pre-wrap break-words text-base leading-6">{body}</p>}
+            {hasDraft && (
+              <SlpButton variant="tertiary" onClick={discardDraft} disabled={composerBusy || drafting}>
+                {localizeUi("ui.slurp.composer.discardDraft")}
+              </SlpButton>
+            )}
+          </div>
+        ) : (
+          <>
+            {media}
+            {activeTool === "draw" && (
+              <SlpPictureAssist
+                accountId={profile.id}
+                target={story ? "story" : "post"}
+                context={body.trim() || title.trim() || undefined}
+                onUse={takeDrawnPicture}
+                onUndo={() => {
+                  onDraftChange({ image: drawnOver.current });
+                  setPendingImage(null);
+                }}
+                onDone={() => setActiveTool(null)}
+              />
+            )}
+
+            <div className="space-y-1">
+              {!story && (
+                <label className="block">
+                  <span className="sr-only">{localizeUi("ui.noodle.noodlerpostcomposer.postTitleOptional")}</span>
+                  <input
+                    value={title}
+                    onChange={(event) => updateDraft({ title: event.target.value })}
+                    maxLength={SLP_CREATOR_POST_TITLE_MAX_LENGTH}
+                    disabled={composerBusy}
+                    placeholder={localizeUi("ui.slurp.composer.titlePlaceholder", { defaultValue: "Title (optional)" })}
+                    className={cn(fieldClass, "h-10 text-[15px] font-bold")}
+                  />
+                </label>
+              )}
+              <SlpAutoGrowTextarea
+                value={body}
+                onChange={(event) => updateDraft({ body: event.target.value })}
+                maxLength={SLP_CREATOR_POST_CONTENT_MAX_LENGTH}
+                disabled={composerBusy}
+                aria-label={localizeUi("ui.noodle.noodlerpostcomposer.postBody")}
+                placeholder={localizeUi(
+                  story ? "ui.slurp.stories.captionPlaceholder" : "ui.noodle.noodlerpostcomposer.whatSSimmering",
+                )}
+                className={cn(fieldClass, "min-h-20 resize-none py-1 text-base leading-6 sm:text-[15px]")}
+              />
+              <div className="flex flex-wrap items-center gap-2 pt-1">
+                {!story && (
+                  <SlpChip
+                    selected={activeTool === "poll" || Boolean(poll)}
+                    disabled={composerBusy}
+                    onClick={() => toggleTool("poll")}
+                    className="min-h-9"
+                  >
+                    <ListChecks size={15} aria-hidden="true" />
+                    {localizeUi("ui.slurp.composer.poll", { defaultValue: "Poll" })}
+                  </SlpChip>
+                )}
+                <SlpChip
+                  ref={mediaToolRef}
+                  selected={activeTool === "media"}
                   disabled={composerBusy}
-                  onChange={updateDraft}
+                  onClick={() => toggleTool("media")}
+                  className="min-h-9"
+                >
+                  <Smile size={15} aria-hidden="true" />
+                  {localizeUi("ui.slurp.composer.emoji", { defaultValue: "Emoji" })}
+                </SlpChip>
+                <SlpTextAssist
+                  field={story ? "story" : "caption"}
+                  value={body}
+                  accountId={profile.id}
+                  context={assistContext}
+                  disabled={composerBusy}
+                  onApply={(text) => updateDraft({ body: text })}
                 />
               </div>
-            )}
-            {story && (
-              <label className="block space-y-1">
-                <span className={cn(SLP_TYPE.meta, "text-[var(--slurp-muted)]")}>
-                  {localizeUi("ui.slurp.stories.linkPost")}
-                </span>
-                <select
-                  value={linkedPostId ?? ""}
-                  onChange={(event) => updateDraft({ linkedPostId: event.target.value || null })}
-                  disabled={composerBusy}
-                  className={selectClass}
-                >
-                  <option value="">{localizeUi("ui.slurp.stories.noLinkedPost")}</option>
-                  {linkablePosts.map((post) => (
-                    <option key={post.id} value={post.id}>
-                      {post.title || post.content.slice(0, 70) || post.id}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            )}
-            <div className="flex flex-wrap items-center gap-2">
-              <SlpOpenContinuityButton
-                creatorAccountId={profile.id}
-                className="inline-flex min-h-10 items-center rounded-full px-4 text-[13px] font-semibold text-[var(--slurp-text)] ring-1 ring-inset ring-[var(--noodle-divider)] hover:bg-[var(--accent)]"
-              />
-              {hasDraft && (
-                <SlpButton variant="tertiary" onClick={discardDraft} disabled={composerBusy} className="min-h-10">
-                  {localizeUi("ui.slurp.composer.discardDraft", { defaultValue: "Discard draft" })}
-                </SlpButton>
-              )}
             </div>
-          </div>
-        </section>
+
+            {activeTool === "poll" && !composerBusy && (
+              <SlpPollComposer
+                value={pollEditorValue}
+                onChange={setPollEditorValue}
+                onClose={() => {
+                  setPollEditorValue(null);
+                  setActiveTool(null);
+                }}
+                onSubmit={applyPollDraft}
+                submitLabel={
+                  poll
+                    ? localizeUi("ui.noodle.noodlerpostcomposer.updatePoll")
+                    : localizeUi("ui.noodle.noodlerpostcomposer.addPoll")
+                }
+                disabled={composerBusy}
+                modalOwned
+              />
+            )}
+            {poll && activeTool !== "poll" && (
+              <div className="flex items-start justify-between gap-3 rounded-2xl bg-[var(--slurp-surface-raised)] p-3 shadow-[var(--slurp-highlight)]">
+                <div className="min-w-0 flex-1">
+                  <p className={cn(SLP_TYPE.body, "font-semibold")}>{poll.question}</p>
+                  <p className={cn(SLP_TYPE.meta, "mt-1 truncate text-[var(--slurp-muted)]")}>
+                    {poll.options.join(" · ")}
+                  </p>
+                </div>
+                <div className="flex shrink-0 items-center gap-1">
+                  <button
+                    type="button"
+                    onClick={() => toggleTool("poll")}
+                    disabled={composerBusy}
+                    className="grid size-10 place-items-center rounded-full text-[var(--slurp-ink)] hover:bg-[var(--accent)] disabled:opacity-50 [&_svg]:!text-current"
+                    aria-label={localizeUi("ui.noodle.noodlehome.editDraftPoll")}
+                    title={localizeUi("ui.noodle.noodlehome.editPoll")}
+                  >
+                    <Pencil size={16} />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => updateDraft({ poll: null })}
+                    disabled={composerBusy}
+                    className="grid size-10 place-items-center rounded-full text-[var(--slurp-danger)] hover:bg-[var(--accent)] disabled:opacity-50 [&_svg]:!text-current"
+                    aria-label={localizeUi("ui.noodle.noodlehome.removeDraftPoll")}
+                    title={localizeUi("ui.noodle.noodlehome.removePoll")}
+                  >
+                    <Trash2 size={16} />
+                  </button>
+                </div>
+              </div>
+            )}
+
+            <SlpComposerAudience
+              access={access}
+              unlockPrice={unlockPrice ?? null}
+              usualUnlockPrice={usualUnlockPrice}
+              disabled={composerBusy}
+              onChange={(patch) =>
+                updateDraft({
+                  ...patch,
+                  // A purpose that no longer fits the new audience goes back to automatic.
+                  ...(contentIntent && !slurpIntentFitsAccess(contentIntent, patch.access ?? access)
+                    ? { contentIntent: null, contentDelivery: null }
+                    : {}),
+                })
+              }
+            />
+
+            {/* Operator settings stay one tap away, after everything a creator would touch. */}
+            <section className="rounded-2xl bg-[var(--slurp-surface-raised)] shadow-[var(--slurp-highlight)]">
+              <button
+                type="button"
+                onClick={() => setAdvancedOpen((value) => !value)}
+                aria-expanded={advancedOpen}
+                aria-controls="slurp-composer-advanced"
+                className="flex min-h-11 w-full items-center gap-2 rounded-2xl px-4 text-start text-[13px] font-semibold text-[var(--slurp-muted)] hover:text-[var(--slurp-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--slurp-focus)] [&_svg]:!text-current"
+              >
+                <span className="flex-1">{localizeUi("ui.slurp.composer.advanced", { defaultValue: "Advanced" })}</span>
+                <ChevronDown
+                  size={16}
+                  aria-hidden="true"
+                  className={cn("transition-transform motion-reduce:transition-none", advancedOpen && "rotate-180")}
+                />
+              </button>
+              <div id="slurp-composer-advanced" hidden={!advancedOpen} className="space-y-3 px-4 pb-4">
+                {!story && (
+                  <div className="grid gap-2 sm:grid-cols-2 [&_label]:w-full [&_select]:h-11 [&_select]:w-full [&_select]:max-w-none [&_select]:rounded-xl [&_select]:font-medium">
+                    <SlpComposerPurpose
+                      access={access}
+                      contentIntent={contentIntent}
+                      contentDelivery={contentDelivery}
+                      disabled={composerBusy}
+                      onChange={updateDraft}
+                    />
+                  </div>
+                )}
+                {story && (
+                  <label className="block space-y-1">
+                    <span className={cn(SLP_TYPE.meta, "text-[var(--slurp-muted)]")}>
+                      {localizeUi("ui.slurp.stories.linkPost")}
+                    </span>
+                    <select
+                      value={linkedPostId ?? ""}
+                      onChange={(event) => updateDraft({ linkedPostId: event.target.value || null })}
+                      disabled={composerBusy}
+                      className={selectClass}
+                    >
+                      <option value="">{localizeUi("ui.slurp.stories.noLinkedPost")}</option>
+                      {linkablePosts.map((post) => (
+                        <option key={post.id} value={post.id}>
+                          {post.title || post.content.slice(0, 70) || post.id}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                )}
+                <div className="flex flex-wrap items-center gap-2">
+                  <SlpOpenContinuityButton
+                    creatorAccountId={profile.id}
+                    className="inline-flex min-h-10 items-center rounded-full px-4 text-[13px] font-semibold text-[var(--slurp-text)] ring-1 ring-inset ring-[var(--noodle-divider)] hover:bg-[var(--accent)]"
+                  />
+                  {hasDraft && (
+                    <SlpButton variant="tertiary" onClick={discardDraft} disabled={composerBusy} className="min-h-10">
+                      {localizeUi("ui.slurp.composer.discardDraft", { defaultValue: "Discard draft" })}
+                    </SlpButton>
+                  )}
+                </div>
+              </div>
+            </section>
+          </>
+        )}
       </div>
-      {activeTool === "media" && !composerBusy && (
+      {!guided && activeTool === "media" && !composerBusy && (
         <SlpAnchoredPopover anchorRef={mediaToolRef} wide modalOwned>
           <ConversationMediaPickerPanel
             tabs={[{ id: "emoji", label: localizeUi("ui.noodle.media.tabs.emoji") }]}

@@ -2982,6 +2982,152 @@
     },
     {
       "manifest": {
+        "schemaVersion": 2,
+        "capabilityApi": {
+          "major": 1,
+          "minor": 14
+        },
+        "builtAgainst": {
+          "engineVersion": "2.4.6",
+          "engineCommit": "f66abf7eddb7db6312ff5ba8a080145644191775"
+        },
+        "id": "quartermaster",
+        "name": "Quartermaster",
+        "version": "0.1.23",
+        "description": "An RPG character sheet and inventory for Roleplay: equip gear around your persona's portrait, save outfits, get AI art for items, and let it keep everything in step with the story. Add the Agent in Chat Settings → Agents → Tracker Agents for Roleplay mode.",
+        "engine": {
+          "min": "2.4.6",
+          "maxExclusive": "4.0.0"
+        },
+        "kind": [
+          "agent"
+        ],
+        "entrypoints": {
+          "agents": "agents.json",
+          "client": "client.js",
+          "server": "server.mjs"
+        },
+        "contributions": {
+          "slots": [
+            "roleplay-tracker",
+            "tracker-panel"
+          ]
+        },
+        "files": [
+          {
+            "path": "agents.json",
+            "sha256": "fcd8b64b649650c5635ff28ab6071647a67695bb6ff4a2cbbe65bfd465b7ae93",
+            "bytes": 5197
+          },
+          {
+            "path": "client.js",
+            "sha256": "051624c751f6354ecc30bd89b21d01d1d05a24b392ac60e2ef04eeb860fe27ed",
+            "bytes": 289382
+          },
+          {
+            "path": "server.mjs",
+            "sha256": "a11b890e47422ff5ba7f4b6d10a0a18d1f7695b52b0dbaebda95d4717eb2f8e5",
+            "bytes": 129363
+          },
+          {
+            "path": "icons/armor_legs.webp",
+            "sha256": "93bcd46c97c7557b518c0a4e2f574820e13f0ae1c052cabe2a1f0e26d48cf8cd",
+            "bytes": 1396
+          },
+          {
+            "path": "icons/armor_torso.webp",
+            "sha256": "df2ecd89f7a4f93940d55e265e438ed6453a83f4ee1626d3fd8e66cc1dda0b82",
+            "bytes": 2108
+          },
+          {
+            "path": "icons/back.webp",
+            "sha256": "9d0336282b868b2c00435d86e517b92adc2bb4c88c27a967caf6a6543ba73802",
+            "bytes": 1314
+          },
+          {
+            "path": "icons/belt.webp",
+            "sha256": "614309426a9b4ae210460e56b35f3b5ff393292b916b18014ceebb5b4b7e7e36",
+            "bytes": 1590
+          },
+          {
+            "path": "icons/clothing_legs.webp",
+            "sha256": "ebad0f719c4d0ed7efdf0b69b01076eed74c4561c64d2e94683b3d5892e326c8",
+            "bytes": 1246
+          },
+          {
+            "path": "icons/clothing_torso.webp",
+            "sha256": "aff20911dcb06507c87a9f6e5387d72b6e5aa67a27e8c3397da152dea1cea799",
+            "bytes": 1542
+          },
+          {
+            "path": "icons/ears.webp",
+            "sha256": "071253ea4c8f8a0b6e6e412ca3276a41d9ddd7a39fc02402d09c51493a952c30",
+            "bytes": 1314
+          },
+          {
+            "path": "icons/eyes.webp",
+            "sha256": "091f7b9035b50be57b7c1ede9aaa8a522f1eed19473bb4f66489e2c2ac176577",
+            "bytes": 1374
+          },
+          {
+            "path": "icons/feet.webp",
+            "sha256": "529689447f6adfa1a03da10ff9931b0ba79897116643fc100d2afcd877941760",
+            "bytes": 2158
+          },
+          {
+            "path": "icons/hands.webp",
+            "sha256": "84f7cfe409139938464feb8df4aa5bc087e4d8a8d51c881af29f11151a2f7df3",
+            "bytes": 1864
+          },
+          {
+            "path": "icons/head.webp",
+            "sha256": "31e98b550dd50e2f348cc908170832761826ce32218b64cacb48c97628adbf81",
+            "bytes": 822
+          },
+          {
+            "path": "icons/neck.webp",
+            "sha256": "bfbc19de3fb432c6b6eb045309daf8fcc42a5fc741aa77b189f5a93dcc600853",
+            "bytes": 1592
+          },
+          {
+            "path": "icons/underwear_bottom.webp",
+            "sha256": "5be7078bf7dfff069e2ff16f6ceae2a7e16867b3b911751ca9fefa13724a9fed",
+            "bytes": 1450
+          },
+          {
+            "path": "icons/underwear_top.webp",
+            "sha256": "6e91581008c22eb2e1c7e583a1c294a375d0d4a03a3715e27d0f73045266b3ea",
+            "bytes": 916
+          },
+          {
+            "path": "icons/weapon_left_hand.webp",
+            "sha256": "9a9e629dd0b3d9e4005259f7aa6117d29158527ee3189d3926b3833ec879932f",
+            "bytes": 482
+          }
+        ],
+        "permissions": [
+          "agent-runtime",
+          "chat-read",
+          "chat-write",
+          "network",
+          "prompt-context",
+          "routes",
+          "storage",
+          "ui"
+        ],
+        "restartRequired": true
+      },
+      "category": "tracker",
+      "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/quartermaster.png",
+      "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents/blob/main/packages/quartermaster/README.md",
+      "artifact": {
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/quartermaster-0.1.23.zip",
+        "sha256": "b69cc02ec41e303b7c236645ed9fefcdfeab3091bcafbdf6386ec80b3570f0c6",
+        "bytes": 451050
+      }
+    },
+    {
+      "manifest": {
         "schemaVersion": 1,
         "id": "quest",
         "name": "Quest Tracker",
@@ -3021,6 +3167,125 @@
         "bytes": 3000
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Engine/blob/staging/docs/agents/built-in-agents.md#quest-tracker"
+    },
+    {
+      "manifest": {
+        "schemaVersion": 2,
+        "capabilityApi": {
+          "major": 1,
+          "minor": 14
+        },
+        "builtAgainst": {
+          "engineVersion": "2.4.4",
+          "engineCommit": "7f3286e36196ea3ce591b2b494cdef190a8f740c"
+        },
+        "id": "relationship-tracker",
+        "name": "Relationship Tracker",
+        "version": "0.6.2",
+        "description": "Tracks how the characters and your persona feel about each other. Add the Agent in Chat Settings → Agents → Tracker Agents for Roleplay mode.",
+        "engine": {
+          "min": "2.4.4",
+          "maxExclusive": "4.0.0"
+        },
+        "kind": [
+          "agent"
+        ],
+        "entrypoints": {
+          "agents": "agents.json",
+          "server": "server.mjs",
+          "client": "client.js"
+        },
+        "contributions": {
+          "slots": [
+            "roleplay-tracker",
+            "tracker-panel"
+          ]
+        },
+        "files": [
+          {
+            "path": "agents.json",
+            "sha256": "3ff6d68d5177e15645a3e147a34efd8085299ec659031876c2f8f23be6ad9594",
+            "bytes": 3772
+          },
+          {
+            "path": "server.mjs",
+            "sha256": "75d852ec5787b87365598fd297debcb924b975685490814e2775cc5aabab7fe5",
+            "bytes": 12187
+          },
+          {
+            "path": "state.mjs",
+            "sha256": "597023170e26cdeb1e27ab1d5021c5f7d69d5610d42ff38691ce965ad5f21c1f",
+            "bytes": 27236
+          },
+          {
+            "path": "prompt.mjs",
+            "sha256": "41650a28aa09310fd423811d2052c99a34a5ed0d72a4ba170b9bbd863433dab1",
+            "bytes": 6984
+          },
+          {
+            "path": "tracking.mjs",
+            "sha256": "ce5249609624ca41edda8fed10e1124adb365bf432d2a0723222ec45f3efa1bd",
+            "bytes": 38234
+          },
+          {
+            "path": "activity.mjs",
+            "sha256": "a3917dedc30d510c602f86fc54f957e2fa8cf4c76e0e5458bca488d10d02122d",
+            "bytes": 3916
+          },
+          {
+            "path": "history.mjs",
+            "sha256": "eff43a4a279f159d36f7a01bdc0f5b6fb53a9db8f45dabc2c0d481f7307c4c0a",
+            "bytes": 14777
+          },
+          {
+            "path": "persona-state.mjs",
+            "sha256": "0f212da4ccef0dcd32a9ca1f79ca0176cc4ae46ff62e80ae3abc0ca95e9da1bb",
+            "bytes": 14886
+          },
+          {
+            "path": "persona-tracking.mjs",
+            "sha256": "cb36514b2de3155a6b7276b038fddd06734be5bddf2eb78be3773b36ea4b6815",
+            "bytes": 6014
+          },
+          {
+            "path": "client.js",
+            "sha256": "c009aef56c8b6ac495005570b38ba1d4047ccea5485cfb04f89ab16132960b31",
+            "bytes": 60590
+          },
+          {
+            "path": "contracts/relationship-state-v1.schema.json",
+            "sha256": "e6f4a17df057fc87f7c6e4cdedf6773ba02c1a7530fb926fae32013c6414935c",
+            "bytes": 2914
+          },
+          {
+            "path": "contracts/read-api-v1.schema.json",
+            "sha256": "5c66036eb8f1bedf7417bb25a60c367551f63b69d533b63b5aa6098dc4ae72d9",
+            "bytes": 1493
+          },
+          {
+            "path": "contracts/persona-state-v1.schema.json",
+            "sha256": "c40118e7c79f8dcd7129c982f7efae65e4b1d15b352539ecf144138d4a9ed29d",
+            "bytes": 1263
+          }
+        ],
+        "permissions": [
+          "agent-runtime",
+          "chat-read",
+          "prompt-context",
+          "routes",
+          "storage",
+          "ui"
+        ],
+        "restartRequired": true
+      },
+      "category": "tracker",
+      "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/relationship-tracker.png",
+      "artifact": {
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/relationship-tracker-0.6.2.zip",
+        "sha256": "40dbf026b4f88fa72a2def0ffa18742c113fb668902c310199b8f83bc4e90bf8",
+        "bytes": 198763
+      },
+      "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents/blob/main/packages/relationship-tracker/README.md"
     },
     {
       "manifest": {
@@ -3096,15 +3361,15 @@
         "schemaVersion": 2,
         "capabilityApi": {
           "major": 1,
-          "minor": 31
+          "minor": 66
         },
         "builtAgainst": {
           "engineVersion": "2.4.6",
-          "engineCommit": "c3ec876434ba25f5288a549afc292f1ca9b0e5c5"
+          "engineCommit": "5a6fafa079c921a3dc1166169f41f318549d595e"
         },
         "id": "slurp2",
         "name": "Slurp",
-        "version": "0.3.12",
+        "version": "0.3.16",
         "description": "A private social app for your characters. Turn characters and personas into Creators, post public or locked photos, and watch a simulated audience follow, subscribe, unlock, comment, and message them. By default, it is tuned for an adult experience. Install it, restart Marinara Engine when prompted, then open Home → Slurp.",
         "localizations": {
           "de": {
@@ -3171,13 +3436,13 @@
           },
           {
             "path": "server.mjs",
-            "sha256": "629cb5310936b85e4649b0413878156eb65af38f71eb5a841ff0592ff059d935",
-            "bytes": 3520087
+            "sha256": "45c9434a60759d994050a43ccb76446e7bdc336923f87acca8fc42c5abe37ea3",
+            "bytes": 3544027
           },
           {
             "path": "client.js",
-            "sha256": "ba67b43ab574afd68df29922b9210c6c797fa35d5a8bf918ef9215a533c4a841",
-            "bytes": 4400253
+            "sha256": "fc2fb0d860e7d6f0ad5fa8698aa4d39d42a2b161f5064150c44f71c93b006ca4",
+            "bytes": 4488378
           },
           {
             "path": "slurp2-logo.png",
@@ -3191,25 +3456,27 @@
           },
           {
             "path": "src/engine/packages/client/src/slp/locales/de.json",
-            "sha256": "caf18e33dc171bf16df70da7ae920aaab636da33e1090ec9fd0446471698806c",
-            "bytes": 204588
+            "sha256": "f20723fb9475074dc573d1c17a41e8803c6c8bc43e9612b737f218fcde0fb2bd",
+            "bytes": 208652
           },
           {
             "path": "src/engine/packages/client/src/slp/locales/ko.json",
-            "sha256": "16c1c349b6a7431a1de5d96157d9214564c24c4f7b8328b4d4f7d8a7d17bff64",
-            "bytes": 300286
+            "sha256": "ee4457d861bf93bf02bc0758f060a17c02029c030706d92c7c39da24908feacb",
+            "bytes": 304555
           },
           {
             "path": "src/engine/packages/client/src/slp/locales/pl.json",
-            "sha256": "4fed10f604f8854cf0d643d87823a1a81f15d6e761b354a312eab57b8c90c85f",
-            "bytes": 206527
+            "sha256": "0d40fb6344411f1e87d13a90df00c6f59765076f15081457f165d5a7e455ecd0",
+            "bytes": 210508
           }
         ],
         "permissions": [
           "chat-read",
+          "mari-actions",
           "network",
           "prompt-context",
           "routes",
+          "scenes",
           "storage",
           "ui"
         ],
@@ -3218,9 +3485,9 @@
       "category": "misc",
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/slurp2.png",
       "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/slurp2-0.3.12.zip",
-        "sha256": "67a8c50ec33de4a449ebb9bbbd4a2972a786dfc279ee331315952f8399e13dd4",
-        "bytes": 8789918
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/slurp2-0.3.16.zip",
+        "sha256": "d151189eee343ff45e30ad1ccc01de497ae79c90a511e021b9437a5ef301e859",
+        "bytes": 8914331
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents/blob/main/packages/slurp2/README.md"
     },

@@ -2,15 +2,15 @@
   "schemaVersion": 2,
   "capabilityApi": {
     "major": 1,
-    "minor": 31
+    "minor": 66
   },
   "builtAgainst": {
     "engineVersion": "2.4.6",
-    "engineCommit": "c3ec876434ba25f5288a549afc292f1ca9b0e5c5"
+    "engineCommit": "5a6fafa079c921a3dc1166169f41f318549d595e"
   },
   "id": "slurp2",
   "name": "Slurp",
-  "version": "0.3.12",
+  "version": "0.3.16",
   "description": "A private social app for your characters. Turn characters and personas into Creators, post public or locked photos, and watch a simulated audience follow, subscribe, unlock, comment, and message them. By default, it is tuned for an adult experience. Install it, restart Marinara Engine when prompted, then open Home → Slurp.",
   "localizations": {
     "de": {
@@ -77,13 +77,13 @@
     },
     {
       "path": "server.mjs",
-      "sha256": "629cb5310936b85e4649b0413878156eb65af38f71eb5a841ff0592ff059d935",
-      "bytes": 3520087
+      "sha256": "45c9434a60759d994050a43ccb76446e7bdc336923f87acca8fc42c5abe37ea3",
+      "bytes": 3544027
     },
     {
       "path": "client.js",
-      "sha256": "ba67b43ab574afd68df29922b9210c6c797fa35d5a8bf918ef9215a533c4a841",
-      "bytes": 4400253
+      "sha256": "fc2fb0d860e7d6f0ad5fa8698aa4d39d42a2b161f5064150c44f71c93b006ca4",
+      "bytes": 4488378
     },
     {
       "path": "slurp2-logo.png",
@@ -97,25 +97,27 @@
     },
     {
       "path": "src/engine/packages/client/src/slp/locales/de.json",
-      "sha256": "caf18e33dc171bf16df70da7ae920aaab636da33e1090ec9fd0446471698806c",
-      "bytes": 204588
+      "sha256": "f20723fb9475074dc573d1c17a41e8803c6c8bc43e9612b737f218fcde0fb2bd",
+      "bytes": 208652
     },
     {
       "path": "src/engine/packages/client/src/slp/locales/ko.json",
-      "sha256": "16c1c349b6a7431a1de5d96157d9214564c24c4f7b8328b4d4f7d8a7d17bff64",
-      "bytes": 300286
+      "sha256": "ee4457d861bf93bf02bc0758f060a17c02029c030706d92c7c39da24908feacb",
+      "bytes": 304555
     },
     {
       "path": "src/engine/packages/client/src/slp/locales/pl.json",
-      "sha256": "4fed10f604f8854cf0d643d87823a1a81f15d6e761b354a312eab57b8c90c85f",
-      "bytes": 206527
+      "sha256": "0d40fb6344411f1e87d13a90df00c6f59765076f15081457f165d5a7e455ecd0",
+      "bytes": 210508
     }
   ],
   "permissions": [
     "chat-read",
+    "mari-actions",
     "network",
     "prompt-context",
     "routes",
+    "scenes",
     "storage",
     "ui"
   ],

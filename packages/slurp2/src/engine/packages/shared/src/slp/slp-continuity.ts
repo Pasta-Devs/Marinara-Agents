@@ -78,6 +78,8 @@ export const SLURP_CONTINUITY_EVENT_TYPES = [
   "payment",
   "commission",
   "disclosure",
+  /** A roleplay scene from a DM thread ended (docs/SCENES.md). */
+  "scene_played",
   "boundary_stated",
   "demand_trend",
   "report_received",

@@ -1,5 +1,5 @@
 // The splash screen needs the shipped version and its public notes inside the client bundle.
-export const SLURP2_VERSION = "0.3.12";
+export const SLURP2_VERSION = "0.3.16";
 
 export interface Slurp2ReleaseEntry {
   version: string;
@@ -12,6 +12,21 @@ export interface Slurp2ReleaseEntry {
  * in-universe bullets per release (technical detail lives in CHANGELOG.md).
  */
 export const SLURP2_RELEASES: Slurp2ReleaseEntry[] = [
+  {
+    version: "0.3.16",
+    date: "2026-10-05",
+    notes: [
+      "Stir on your page, or Draft post for a Creator, uses one idea to draft a post. Review its words and picture together, then Post; Edit opens the full editor.",
+    ],
+  },
+  {
+    version: "0.3.15",
+    date: "2026-10-05",
+    notes: [
+      "Take a Creator chat into a scene. Choose whether she stays reachable, then bring the memory back to your messages when you finish.",
+      "Give New post an idea and review the drafted caption and picture before posting, on your own page or a Creator page.",
+    ],
+  },
   {
     version: "0.3.12",
     date: "2026-10-01",

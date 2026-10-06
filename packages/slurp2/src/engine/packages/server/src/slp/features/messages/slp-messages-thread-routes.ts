@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { logger } from "../../../lib/logger.js";
 import { type SlurpCommissionPricing, slurpCommissionQuote } from "../../modules/economy/slp-creator-pricing.js";
 import { selectSlurpAttentionCommissions } from "./slp-inbox-attention.js";
 import { activeSlurpStrikes, slurpDmPictureVerdict } from "../../modules/world/slp-stance.js";
@@ -21,6 +22,8 @@ import { slurpIsCouplePage } from "../../modules/projects/slp-creator-couples.js
 import { readSlurpPlayerCoupleView } from "../projects/slp-projects-contract.js";
 import type { SlpMessagesContext } from "./slp-messages-context.js";
 import { readSlurpSupportDesk } from "../../data/creators/slp-support-desk-storage.js";
+import { reconcileSlpThreadScene } from "./scenes/slp-roleplay-scene-origin.js";
+import { slpScenesAvailable } from "../../base/host/slp-scene-host.js";
 
 const messagePageSchema = personaQuerySchema.extend({
   cursorAt: z.string().datetime().optional(),
@@ -238,6 +241,11 @@ export async function slpMessagesThreadRoutes(app: FastifyInstance, messaging: S
     // else's inbox, even on a single-user install. Slurp Support's threads are every persona's.
     const side = thread ? await seatIn(viewer.id, thread) : null;
     if (!thread || !side) return reply.code(404).send({ error: "Thread not found" });
+    // A scene that ended while Slurp could not hear it: settle the lock and bring the recap in.
+    if (thread.sceneChatId)
+      await reconcileSlpThreadScene(app.db, thread).catch((error) => {
+        logger.warn({ err: error, threadId: thread.id }, "[slurp-message] Could not reconcile the scene");
+      });
     await messages.markRead(thread.id, side);
     const creator = await slurp.getNoodlerAccountById(thread.creatorAccountId);
     if (!creator) return reply.code(404).send({ error: "Creator not found" });
@@ -272,6 +280,9 @@ export async function slpMessagesThreadRoutes(app: FastifyInstance, messaging: S
         await messages.getCreatorMessaging(thread.creatorAccountId),
       ),
       relationship: await relationshipFor(thread, creator, side, presence.creatorAvailability),
+      // Roleplay scenes (docs/SCENES.md): the player's own thread with an Engine character's page.
+      scenes:
+        slpScenesAvailable() && side === "viewer" && creator.sourceKind === "character" && thread.state === "active",
     };
   });
 
@@ -352,6 +363,8 @@ export async function slpMessagesThreadRoutes(app: FastifyInstance, messaging: S
     const thread = await messages.getThreadById(threadId);
     const side = thread ? await seatIn(viewer.id, thread) : null;
     if (!thread || !side) return reply.code(404).send({ error: "Thread not found" });
+    if (thread.sceneChatId && (await reconcileSlpThreadScene(app.db, thread)))
+      return reply.code(409).send({ error: "You are in a scene together. End it first." });
     await messages.resetThread(thread.id);
     // Empty, but read back through the masking helper all the same: every route that returns a
     // thread's messages goes through one door.
@@ -413,6 +426,10 @@ export async function slpMessagesThreadRoutes(app: FastifyInstance, messaging: S
     if (!creator) return reply.code(404).send({ error: "Creator not found" });
     // Writing as Slurp Support opens Support's one thread with this Creator, from any persona.
     const thread = await messages.getThread(parsed.data.support ? SLURP_SUPPORT_ACCOUNT_ID : viewer.id, creator.id);
+    if (thread?.sceneChatId)
+      await reconcileSlpThreadScene(app.db, thread).catch((error) => {
+        logger.warn({ err: error, threadId: thread.id }, "[slurp-message] Could not reconcile the scene");
+      });
     if (thread) await messages.markRead(thread.id, "viewer");
     const page = thread ? await messages.listMessagePage(thread.id) : { messages: [], nextCursor: null };
     const presence = await creatorPresence(creator, thread?.id);
@@ -430,6 +447,12 @@ export async function slpMessagesThreadRoutes(app: FastifyInstance, messaging: S
       subscribed: (await slurp.listSubscriptionsForViewer(viewer.id)).some(
         (entry) => entry.creatorAccountId === creator.id,
       ),
+      // Roleplay scenes (docs/SCENES.md): only once the thread exists, and never in Support's thread.
+      scenes:
+        slpScenesAvailable() &&
+        !parsed.data.support &&
+        thread?.state === "active" &&
+        creator.sourceKind === "character",
     };
   });
 }

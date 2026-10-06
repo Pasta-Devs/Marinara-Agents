@@ -9,6 +9,7 @@ import type { SlpActionName } from "../../../../../shared/src/slp/slp-actions.js
 import type { SlpStirPlan, SlpStirPlanRequest } from "../../../../../shared/src/slp/slp-stir.js";
 import { SlpErrorState, SlpSkeleton } from "../../modules/chrome/SlpStateKit";
 import { SlpCreatorSteeringCard } from "../creators/slp-creators-contract";
+import { useSlurpUIStore } from "../../base/state/slp-package-store";
 import { openSlpStir, setSlpStirDraft, useSlpStirSheet } from "../../base/state/slp-stir-sheet-store";
 import { useSlurpStir } from "./slp-stir-hooks";
 import { SlpStirBox } from "./SlpStirBox";
@@ -115,12 +116,23 @@ export function SlpStirCreatorSheet({
                     <button
                       key={action}
                       type="button"
-                      onClick={() => setPlaying(action)}
+                      onClick={() => {
+                        if (action === "write-post" && creator) {
+                          close();
+                          const store = useSlurpUIStore.getState();
+                          store.setComposeGuide({ accountId: creator.id, idea: "" });
+                          store.setNavigation({ mode: "creator", view: "profile", accountId: creator.id });
+                        } else setPlaying(action);
+                      }}
                       className="flex min-h-12 items-center gap-2.5 rounded-2xl bg-[var(--slurp-canvas)] px-3 py-2 text-start ring-1 ring-inset ring-[var(--slurp-outline)] transition-colors hover:bg-[var(--accent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] motion-reduce:transition-none [&_svg]:!text-[var(--slurp-ink)]"
                     >
                       <Icon size={18} aria-hidden="true" className="shrink-0" />
                       <span className={cn(SLP_TYPE.body, "min-w-0 flex-1 font-semibold")}>
-                        {t(`ui.slurp.stir.card.${action}.title`)}
+                        {t(
+                          action === "write-post"
+                            ? "ui.slurp.postGuide.draftInComposer"
+                            : `ui.slurp.stir.card.${action}.title`,
+                        )}
                       </span>
                       {SLP_STIR_DECK[action].ai && <SlpUsesAiMark />}
                     </button>

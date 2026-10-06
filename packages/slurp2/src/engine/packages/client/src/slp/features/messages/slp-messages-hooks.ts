@@ -94,6 +94,8 @@ export function useSlurpThread(threadId: string | null, personaId: string | null
         commissions: SlurpCommission[];
         subscribed?: boolean;
         relationship?: SlurpThreadRelationship;
+        /** Whether this thread can start a roleplay scene on this Engine (docs/SCENES.md). */
+        scenes?: boolean;
       }>(`/slurp2/messages/threads/${encodeURIComponent(threadId!)}?personaId=${encodeURIComponent(personaId!)}`),
     enabled: Boolean(threadId && personaId),
     refetchInterval: threadId && personaId ? 30_000 : false,
@@ -211,6 +213,8 @@ export function useSlurpCompose(creatorAccountId: string | null, personaId: stri
         commissions: SlurpCommission[];
         subscribed?: boolean;
         relationship?: SlurpThreadRelationship;
+        /** Whether this thread can start a roleplay scene on this Engine (docs/SCENES.md). */
+        scenes?: boolean;
       }>(
         `/slurp2/messages/compose?personaId=${encodeURIComponent(personaId!)}&creatorAccountId=${encodeURIComponent(creatorAccountId!)}${support ? "&support=1" : ""}`,
       ),

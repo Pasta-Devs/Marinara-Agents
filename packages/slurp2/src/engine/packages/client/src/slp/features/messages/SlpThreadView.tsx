@@ -22,6 +22,9 @@ import {
 import { SlpButton } from "../../modules/chrome/SlpButton";
 import { noteSlpAiUseOnce, SlpUsesAiMark } from "../../modules/chrome/SlpAiMark";
 import { SlpCanvasAmbient } from "../../modules/chrome/SlpCanvasAmbient";
+import { useSlurpUIStore } from "../../base/state/slp-package-store";
+import { isSlpSceneLine, SlpSceneLineRow, SlpSceneLockBar } from "./scenes/SlpSceneLines";
+import { SlpSceneStartSheet } from "./scenes/SlpSceneStartSheet";
 import { getApiErrorMessage } from "../../../lib/api-client";
 import { useSlurpThreadViewModel } from "./slp-thread-actions";
 import { SLP_THREAD_COLUMN_CLASS, type SlurpThreadViewProps } from "./slp-thread-view-model";
@@ -119,6 +122,11 @@ export function SlurpThreadView(props: SlurpThreadViewProps) {
   // Until the conversation has loaded there is nothing to read and no policy to send under, so the
   // composer stays away instead of offering a live input on a blank screen.
   const notLoaded = !threadQuery.data;
+  // Roleplay scenes (docs/SCENES.md): offered when this Engine runs them and the thread is free.
+  const sceneHost = useSlurpUIStore((state) => state.sceneHost);
+  const sceneChatId = thread?.sceneChatId ?? null;
+  const canStartScene = Boolean(sceneHost && threadQuery.data?.scenes && !sceneChatId);
+  const creatorName = creator?.displayName ?? "";
   // "Not now" gets the away card: a reply status that means it, or (after a reload, when only the
   // owed reply is left) a Creator who is not online or is cooling off.
   const away = slurpAwayKind({ status: waitingNote, availability, coolUntil: relationship?.coolUntil });
@@ -251,7 +259,14 @@ export function SlurpThreadView(props: SlurpThreadViewProps) {
                       </div>
                     )}
                     {entry.kind === "message" ? (
-                      standaloneTip?.id === entry.message.id ? (
+                      isSlpSceneLine(entry.message) ? (
+                        <SlpSceneLineRow
+                          message={entry.message}
+                          personaId={personaId}
+                          creatorName={creatorName}
+                          canStart={canStartScene}
+                        />
+                      ) : standaloneTip?.id === entry.message.id ? (
                         <SlurpPlatformActionCard message={entry.message} relationship={relationship} />
                       ) : (
                         <>
@@ -459,7 +474,13 @@ export function SlurpThreadView(props: SlurpThreadViewProps) {
             </p>
           )}
 
-          {!notLoaded && <SlpThreadComposer model={model} />}
+          {!notLoaded &&
+            (sceneChatId ? (
+              <SlpSceneLockBar sceneChatId={sceneChatId} creatorName={creatorName} />
+            ) : (
+              <SlpThreadComposer model={model} />
+            ))}
+          <SlpSceneStartSheet personaId={personaId} creatorName={creatorName} />
         </div>
 
         <SlpThreadDrawer model={model} />

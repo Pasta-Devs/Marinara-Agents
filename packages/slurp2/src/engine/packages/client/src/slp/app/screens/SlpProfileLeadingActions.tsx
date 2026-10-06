@@ -2,6 +2,7 @@ import { ChartNoAxesColumn, Check, ChevronRight, Pencil, Plus, Settings2 } from 
 import { useRef, useState, type ReactNode } from "react";
 import { toast } from "sonner";
 import { cn } from "../../../lib/utils";
+import { SlpStirGlyph } from "../../base/chrome/SlpGlyphs";
 import { SLP_TYPE } from "../../base/chrome/SlpChrome";
 import { formatUpcomingDay } from "../../base/ui/slp-date-time";
 import { SlurpCoin, SlurpCoinAmount, SlurpCoinBurst, SlpCoinText, slpCoinPlainText } from "../../modules/coin/SlpCoin";
@@ -24,10 +25,12 @@ const TIP_AMOUNTS = [5, 10, 25, 50];
 export function SlpProfileLeadingActions({
   model,
   onOpenDashboard,
+  onOpenGuide,
   onOpenSettings,
 }: {
   model: StageProfileViewModel;
   onOpenDashboard?: () => void;
+  onOpenGuide?: () => void;
   onOpenSettings?: () => void;
 }) {
   const {
@@ -54,11 +57,13 @@ export function SlpProfileLeadingActions({
         <div className={cn("grid gap-2", onOpenDashboard ? "grid-cols-3" : "grid-cols-2")}>
           <SlpButton
             variant="quiet"
-            onClick={() => openComposer()}
+            onClick={() => (onOpenGuide ? onOpenGuide() : openComposer())}
             className="min-w-0 gap-1.5 whitespace-nowrap px-2 text-[13px]"
           >
-            <Plus size={16} aria-hidden="true" />
-            {localizeUi("ui.slurp.profile.newPost", { defaultValue: "New post" })}
+            {onOpenGuide ? <SlpStirGlyph size={16} filled aria-hidden="true" /> : <Plus size={16} aria-hidden="true" />}
+            {onOpenGuide
+              ? localizeUi("ui.slurp.stir.stirShort")
+              : localizeUi("ui.slurp.profile.newPost", { defaultValue: "New post" })}
           </SlpButton>
           <SlpButton variant="quiet" onClick={onEdit} className="min-w-0 gap-1.5 whitespace-nowrap px-2 text-[13px]">
             <Pencil size={15} aria-hidden="true" />

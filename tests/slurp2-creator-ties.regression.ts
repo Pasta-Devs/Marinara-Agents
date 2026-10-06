@@ -898,7 +898,7 @@ async function main() {
     const generation = read("server/src/slp/features/messages/slp-message-generation-service.ts");
     assert.match(
       generation,
-      /slpResponseFormat\(input\.connection\.model, "noodler_dm", \{ collab: Boolean\(pageId\)/u,
+      /slpResponseFormat\(input\.connection\.model, "noodler_dm", \{\s*collab: Boolean\(pageId\)/u,
     );
     assert.match(
       generation,

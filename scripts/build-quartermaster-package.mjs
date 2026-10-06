@@ -288,7 +288,7 @@ catalog.packages.push({
   manifest,
   category: "tracker",
   iconUrl: catalogArtworkUrl(PACKAGE_ID),
-  documentationUrl: "https://github.com/Pasta-Devs/Marinara-Agents/blob/staging/packages/quartermaster/README.md",
+  documentationUrl: "https://github.com/Pasta-Devs/Marinara-Agents/blob/main/packages/quartermaster/README.md",
   artifact: {
     url: `${ARTIFACT_BASE_URL}/${basename(artifactPath)}`,
     sha256: sha256(archive),
