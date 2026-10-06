@@ -434,6 +434,11 @@ export function slpSceneUpdateState(
     tags: readonly string[];
   },
   limits: { turnOns: readonly string[]; hardNoes: readonly string[] } | null,
+  /**
+   * Their spice as it is now. It is set (their own or Slurp-wide), so the field is locked and left
+   * empty: saving never writes a level, and a Slurp-wide level stays Slurp-wide.
+   */
+  spice: { level: string | null } | null,
 ): SlpSceneDraftState {
   const draft: SlpSceneDraft = {
     ...SLP_SCENE_EMPTY_DRAFT,
@@ -453,5 +458,5 @@ export function slpSceneUpdateState(
     const value = draft[field];
     return Array.isArray(value) ? value.length > 0 : typeof value === "string" ? Boolean(value.trim()) : value !== null;
   });
-  return slpSceneInitialState(draft, filled);
+  return slpSceneInitialState(draft, spice ? [...filled, "spice"] : filled);
 }

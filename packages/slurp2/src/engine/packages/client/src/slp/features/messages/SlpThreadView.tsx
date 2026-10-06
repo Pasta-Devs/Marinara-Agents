@@ -132,13 +132,16 @@ export function SlurpThreadView(props: SlurpThreadViewProps) {
   const openProfile = useCallback((accountId: string) => openProfileRef.current(accountId), []);
   // "Get reply now" and "Write it again" (R9) both wait for an answer the server writes at once.
   const regenerate = useRegenerateSlurpReply();
+  const answering = useRef(false);
   const answerNow = async (
     run: (input: {
       personaId: string;
       threadId: string;
     }) => Promise<{ replyStatus: string; reply?: { id: string } | null }>,
   ) => {
-    if (!thread || !personaId) return;
+    // One answer at a time: a second tap would delete or ask again while the first is still writing.
+    if (!thread || !personaId || answering.current) return;
+    answering.current = true;
     const forcedPersonaId = personaId;
     const forcedThreadId = thread.id;
     const stillHere = () =>
@@ -157,6 +160,8 @@ export function SlurpThreadView(props: SlurpThreadViewProps) {
       if (!stillHere()) return;
       setTyping(false);
       setError(getApiErrorMessage(cause, "The reply could not be written."));
+    } finally {
+      answering.current = false;
     }
   };
   const lastAnswer = useMemo(

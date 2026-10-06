@@ -34,9 +34,11 @@ type SlpUpdatableCreator = {
 export function SlpSceneUpdate({ creator }: { creator: SlpUpdatableCreator }) {
   const { t } = useUiTranslation();
   const [open, setOpen] = useState(false);
-  const steering = useSlurpCreatorSteering(creator.id).data?.steering ?? null;
+  const steering = useSlurpCreatorSteering(creator.id).data;
   const settings = useSlurpSettings().data;
-  const state = slpSceneUpdateState(creator, steering);
+  // Only from the loaded page and limits: an empty start would let the chat replace saved likes and noes.
+  if (!steering) return null;
+  const state = slpSceneUpdateState(creator, steering.steering, steering.spice);
   const missing = SLP_SCENE_FIELDS.length - state.locked.length;
   // The scene speaks for the Engine card the Creator came from; without it there is nobody to play.
   if (!creator.sourceAccountId || missing === 0) return null;

@@ -12,13 +12,22 @@ import { SlpUsesAiMark } from "../../modules/chrome/SlpAiMark";
 
 type Localize = ReturnType<typeof useUiTranslation>["t"];
 
-/** The whole conversation as text, onto the clipboard. */
+/**
+ * The whole conversation as text, onto the clipboard. Safari counts a write as part of the tap only
+ * when it starts inside the tap, so the text goes in as a promise (ClipboardItem) where it can.
+ */
 export async function copySlpThread(personaId: string, threadId: string, localizeUi: Localize) {
-  try {
-    const { text } = await api.get<{ text: string }>(
+  const text = api
+    .get<{ text: string }>(
       `/slurp2/messages/threads/${encodeURIComponent(threadId)}/export?personaId=${encodeURIComponent(personaId)}`,
-    );
-    await navigator.clipboard.writeText(text);
+    )
+    .then((answer) => answer.text);
+  try {
+    if (typeof ClipboardItem !== "undefined" && navigator.clipboard.write)
+      await navigator.clipboard.write([
+        new ClipboardItem({ "text/plain": text.then((value) => new Blob([value], { type: "text/plain" })) }),
+      ]);
+    else await navigator.clipboard.writeText(await text);
     toast.success(localizeUi("ui.slurp.messages.exportCopied"));
   } catch (cause) {
     toast.error(getApiErrorMessage(cause, localizeUi("ui.slurp.messages.exportFailed")));

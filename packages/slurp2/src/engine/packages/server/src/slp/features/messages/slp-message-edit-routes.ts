@@ -14,6 +14,7 @@ import {
 import {
   deleteSlurpMessages,
   editSlurpMessage,
+  oweSlurpReplyAgain,
   readSlurpThreadMessage,
 } from "../../data/messages/slp-message-edit-storage.js";
 import { createSlurpReplyQueueStorage } from "../../data/messages/slp-reply-queue-storage.js";
@@ -80,6 +81,9 @@ export async function slpMessageEditRoutes(app: FastifyInstance, messaging: SlpM
     const outcome = triggerMessageId
       ? await replyToSlurpMessage(app.db, { threadId, triggerMessageId, force: true })
       : ({ status: "busy" } as const);
+    // Busy, cooling, in a scene elsewhere or a failed call: the old answer is gone, so the new one is
+    // owed and the scheduler writes it when it can (never a thread left without an answer).
+    if (outcome.status !== "replied") await oweSlurpReplyAgain(app.db, threadId);
     return {
       ...(await view(threadId, "viewer")),
       reply: outcome.status === "replied" ? maskForViewer(outcome.message) : null,

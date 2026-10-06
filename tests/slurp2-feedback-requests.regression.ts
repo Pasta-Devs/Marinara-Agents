@@ -85,11 +85,26 @@ for (const path of [...editRoutes.matchAll(/app\.(\w+)\("([^"]+)"/gu)]) {
   assert.equal(path[1], "post", path[2]);
   assert.ok(lock.includes(`"${path[2]}"`), path[2]);
 }
-// Deleting drops queued bubbles and claims and moves the epoch, so an answer in flight does not land.
-assert.match(
-  readFileSync(join(client, "../../../server/src/slp/data/messages/slp-message-edit-storage.ts"), "utf8"),
-  /delete\(slurpReplyBubbles\)[\s\S]*?delete\(slurpMessageClaims\)[\s\S]*?generationEpoch: String\(Number\(thread\?\.generationEpoch \?\? 0\) \+ 1\)/u,
+// Deleting removes only the claims of the deleted messages: another trigger's claim is what stops a
+// second answer to it. Deleting the fan's newest line drops the answer owed to it.
+const editStorage = readFileSync(
+  join(client, "../../../server/src/slp/data/messages/slp-message-edit-storage.ts"),
+  "utf8",
 );
+assert.match(
+  editStorage,
+  /delete\(slurpMessageClaims\)[\s\S]*?or\(inArray\(slurpMessageClaims\.triggerMessageId, gone\), inArray\(slurpMessageClaims\.replyMessageId, gone\)\)/u,
+);
+assert.doesNotMatch(
+  editStorage,
+  /delete\(slurpMessageClaims\)\.where\(eq\(slurpMessageClaims\.threadId, threadId\)\)/u,
+);
+assert.match(
+  editStorage,
+  /if \(owed && gone\.includes\(String\(owed\.id\)\)\)[\s\S]*?delete\(slurpReplyBubbles\)[\s\S]*?generationEpoch/u,
+);
+// "Write it again" that could not write leaves the answer owed, never a thread without one.
+assert.match(editRoutes, /if \(outcome\.status !== "replied"\) await oweSlurpReplyAgain\(app\.db, threadId\);/u);
 
 // ── R10: a DM thread as text, or a summary, to paste into a lorebook ──
 const row = (role: "viewer" | "creator", content: string, extra: Record<string, unknown> = {}) => ({
@@ -153,12 +168,13 @@ assert.match(replies, /relationship: protect\(input\.relationship \?\? "no histo
     gender: "female" as const,
     tags: ["gym", "cats", "cosplay"],
   };
-  const state = slpSceneUpdateState(page, { turnOns: ["lingerie"], hardNoes: [] });
+  const state = slpSceneUpdateState(page, { turnOns: ["lingerie"], hardNoes: [] }, { level: "suggestive" });
   assert.deepEqual(
     [...state.locked].sort(),
-    ["appearance", "bio", "displayName", "gender", "handle", "tags", "turnOns"],
-    "what the page has stays; the scene asks about the rest",
+    ["appearance", "bio", "displayName", "gender", "handle", "spice", "tags", "turnOns"],
+    "what the page has stays (their spice too); the scene asks about the rest",
   );
+  assert.equal(state.draft.spice, null, "saving never writes a level, so a Slurp-wide one stays Slurp-wide");
   assert.equal(state.draft.turnOns, "lingerie");
   const prompt = buildSlpSceneTurnMessages({
     request: {

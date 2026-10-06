@@ -680,7 +680,7 @@ export const MessageBubble = memo(function MessageBubble({
           </SlpSheetItem>
         )}
       </SlpSheet>
-      {personaId && (canEdit || canDelete) && (
+      {personaId && changing && (
         <SlpMessageEditSheet
           message={message}
           personaId={personaId}

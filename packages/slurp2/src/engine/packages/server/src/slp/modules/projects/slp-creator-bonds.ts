@@ -96,9 +96,10 @@ const EX = /\b(ex|ex-\w+|former (partner|girlfriend|boyfriend|wife|husband|lover
 const BEST = /\b(best ?friends?|bff|bestie|beste freundin|bester freund)\b/iu;
 const ROOMMATE = /\b(room ?mates?|flat ?mates?|house ?mates?|lives with|mitbewohner(in)?)\b/iu;
 const COWORKER = /\b(co-?workers?|colleagues?|works? with|boss|employee|kolleg(e|in))\b/iu;
-// Before EX and FRIEND: "ex-wife's daughter" is still a daughter, "family friend" is not family.
+// Before EX and FRIEND: "ex-wife's daughter" is still a daughter. Not family: "family friend",
+// "mom friend", "twin flame", or a possessive ("my sister's ex" is an ex, "her brother's best friend" a friend).
 const FAMILY =
-  /\b(mother|mom|mum|father|dad|daughter|son|sister|brother|sibling|twin|aunt|uncle|niece|nephew|cousin|grand(mother|father|ma|pa|daughter|son)|step-?\w+|parent|child|mutter|vater|tochter|sohn|schwester|bruder)\b(?! ?friend)/iu;
+  /\b(mother|mom|mum|father|dad|daughter|son|sister|brother|sibling|twin|aunt|uncle|niece|nephew|cousin|grand(mother|father|ma|pa|daughter|son)|step-?\w+|parent|child|mutter|vater|tochter|sohn|schwester|bruder)\b(?!['’]s\b| ?friend| ?flame)/iu;
 const FRIEND = /\b(friends?|buddy|pal|kumpel|childhood friend)\b/iu;
 
 /** What a card relation line means as a bond, or null (a partner is a couple, not a bond). */

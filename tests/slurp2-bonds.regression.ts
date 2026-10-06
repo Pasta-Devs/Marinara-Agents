@@ -99,6 +99,9 @@ async function main() {
   assert.equal(slurpBondFromRelation("mom friend")?.kind, "friend");
   assert.equal(slurpBondFromRelation("family friend")?.kind, "friend");
   assert.equal(slurpBondFromRelation("personal trainer"), null, 'not "son"');
+  assert.equal(slurpBondFromRelation("my sister's ex")?.kind, "ex", "a possessive is about someone else");
+  assert.equal(slurpBondFromRelation("her brother's best friend")?.kind, "friend");
+  assert.equal(slurpBondFromRelation("twin flame"), null);
   {
     const couple = newSlurpCouple("c", "mum", "kid", "world", T0.toISOString());
     assert.equal(
