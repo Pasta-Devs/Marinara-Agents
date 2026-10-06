@@ -12,7 +12,7 @@ export type SlpPhonePreviewInput = {
   locked: boolean;
   pace?: "manual" | "occasional" | "lively" | "veryActive" | "grows";
   pictures?: "yes" | "no";
-  spice?: "flirty" | "suggestive" | "explicit";
+  spice?: "clean" | "flirty" | "suggestive" | "explicit";
   /** hinted = stage names. */
   names?: "hinted" | "open";
   nights?: "yes" | "no";
@@ -92,7 +92,7 @@ const POSTS = { manual: 1, occasional: 2, lively: 3, veryActive: 4, grows: 3 } a
 const ADS = { none: 0, few: 1, lots: 2 } as const;
 const FANS = { intimate: 312, normal: 12_400, large: 1_200_000 } as const;
 const LIKES = { intimate: 17, normal: 1_200, large: 48_000 } as const;
-const BLUR = { flirty: "soft", suggestive: "medium", explicit: "strong" } as const;
+const BLUR = { clean: "soft", flirty: "soft", suggestive: "medium", explicit: "strong" } as const;
 
 /** The answer a `changed` key names → the region that glows. */
 export const SLP_PHONE_REGIONS: Record<string, SlpPhoneRegion> = {

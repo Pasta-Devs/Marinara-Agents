@@ -71,6 +71,7 @@ assert.deepEqual(view({ pictures: "no", imageConnectionName: "Flux" }).footer, [
 
 // spice: Mari's caption and the locked blur.
 for (const [spice, blur] of [
+  ["clean", "soft"],
   ["flirty", "soft"],
   ["suggestive", "medium"],
   ["explicit", "strong"],
@@ -143,7 +144,7 @@ const collect = (v: SlpPhonePreviewView) => {
 };
 collect(empty);
 for (const names of ["hinted", "open"] as const)
-  for (const spice of [undefined, "flirty", "suggestive", "explicit"] as const)
+  for (const spice of [undefined, "clean", "flirty", "suggestive", "explicit"] as const)
     for (const fans of ["warm", "mixed", "unfiltered"] as const)
       for (const adTone of ["normal", "unhinged"] as const)
         for (const drama of ["sometimes", "bringIt"] as const)
