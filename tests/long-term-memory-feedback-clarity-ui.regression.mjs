@@ -631,6 +631,17 @@ assert.match(workspace, /className="space-y-2 border-t border-\[var\(--border\)\
 assert.match(workspace, /\[changeSource, onRequestedSourceHandled, requestedSource\]/u);
 assert.match(workspace, /importsAsMode/u);
 assert.equal(locale["ui.longTermMemory.sourcesworkspace.importsAsMode"], "Imports as {{mode}}");
+assert.match(workspace, /data-ltm-import-result-mode=\{item\.extractionMode\}/u);
+assert.match(workspace, /data-ltm-import-result-modes=/u);
+assert.match(workspace, /data-ltm-retry-modes/u);
+assert.match(workspace, /\.\.\.\(contract\.modes\?\.length \? \{ modes: contract\.modes \} : \{\}\)/u);
+assert.equal(locale["ui.longTermMemory.sourcesworkspace.retryUsesModes"], "Retries with {{modes}}");
+assert.match(workspace, /const reextractDisabled = extractingId !== null \|\| !availabilityReady;/u);
+assert.equal(workspace.match(/disabled=\{reextractDisabled\}/gu)?.length, 3);
+assert.equal(
+  workspace.match(/disabled=\{sourceTask\.active\?\.status === "running" \|\| !availabilityReady\}/gu)?.length,
+  2,
+);
 assert.match(
   workspace,
   /const availabilityReady = settingsQuery\.isSuccess && effectiveAvailabilityModes\.length > 0/u,

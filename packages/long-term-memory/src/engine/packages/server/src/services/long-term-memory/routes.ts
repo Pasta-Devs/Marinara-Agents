@@ -940,7 +940,7 @@ export function createLongTermMemoryRoutes(runtime: {
       async (request, reply) => {
         const id = ltmNoteIdSchema.parse(request.params.id);
         const body = ltmExtractSourceNoteRequestSchema.parse(request.body ?? {});
-        const sourceNote = await storage.getNote(id);
+        let sourceNote = await storage.getNote(id);
         if (!sourceNote) return reply.status(404).send({ error: "Long-term memory note not found" });
         if (!isLtmSourceNote(sourceNote))
           return reply.status(400).send({ error: "Long-term memory note is not a source note" });
@@ -973,6 +973,22 @@ export function createLongTermMemoryRoutes(runtime: {
               "ltm_model_configuration",
             );
           }
+          // Re-extract applies the current availability selection, like a fresh import. An explicit mode
+          // must still be enabled; otherwise the previous extraction mode is kept, as import keeps the chat's.
+          if (body.modes && body.mode && !body.modes.includes(body.mode))
+            throw new LtmServiceError(
+              `Long-term memory extraction mode is not enabled for source note: ${body.mode}`,
+              400,
+              "ltm_mode_not_enabled",
+            );
+          const extractionMode =
+            body.modes && !body.mode ? (sourceNote.extractionFingerprint?.extractionMode ?? body.modes[0]) : undefined;
+          const savedModes = sourceNote.modes ?? [];
+          if (
+            body.modes &&
+            (body.modes.length !== savedModes.length || body.modes.some((entry) => !savedModes.includes(entry)))
+          )
+            sourceNote = (await storage.updateNote(id, { modes: body.modes })) ?? sourceNote;
           return ltmExtractSourceNoteResponseSchema.parse(
             await processLongTermMemorySource({
               sourceNote,
@@ -986,6 +1002,7 @@ export function createLongTermMemoryRoutes(runtime: {
                     ? [body.mode]
                     : undefined,
               mode: body.mode,
+              extractionMode,
               instruction: body.instruction,
               operationId,
               applyLowRisk: body.applyLowRisk,

@@ -1074,6 +1074,8 @@
   "ui.longTermMemory.sourcesworkspace.importFailedBeforeSaving": "The source note could not be saved, so extraction did not start.",
   "ui.longTermMemory.sourcesworkspace.importSelectedCount": "Import and extract selected ({{count}})",
   "ui.longTermMemory.sourcesworkspace.retryFailedCount": "Retry failed ({{count}})",
+  "ui.longTermMemory.sourcesworkspace.retryUsesModes": "Retries with {{modes}}",
+  "ui.longTermMemory.sourcesworkspace.availableInModes": "Available in {{modes}}",
   "ui.longTermMemory.sourcesworkspace.refreshSelectedSourcesCount": "Refresh selected sources ({{count}})",
   "ui.longTermMemory.sourcesworkspace.transferSelectedCount": "Transfer selected ({{count}})",
   "ui.longTermMemory.transferworkbench.copyMemoryCount": "Copy {{count}} {{memory}}",

@@ -188,6 +188,12 @@
     "long-term-memory": {
       "versions": [
         {
+          "version": "1.4.7",
+          "date": "2026-10-06",
+          "notes": "- Make Sources re-extract use the availability modes currently selected instead of the ones saved earlier on the source, and save them on the source like a fresh import does. \"Retry failed\" still repeats the original attempt, and now says which modes it will use. Each import result shows the extraction mode it imports as, plus every availability mode, instead of only the first availability mode.",
+          "highlight": false
+        },
+        {
           "version": "1.4.6",
           "date": "2026-10-06",
           "notes": "- Stop a newly met minor character from failing the whole import when Conversation or Game is selected alongside Roleplay. Local character memories are available only in Roleplay, so such a memory is now restricted to Roleplay with a warning; when Roleplay is not selected it is skipped with an explanation. The other memories from the same source are still proposed.",
@@ -299,12 +305,6 @@
           "version": "1.3.28",
           "date": "2026-09-27",
           "notes": "- Keep the Sources navigation tab labeled Sources while a source task runs or reports its result; show import, refresh, re-extract, cancelled, failed, and completed state as a separate status indicator instead of replacing the destination name.",
-          "highlight": false
-        },
-        {
-          "version": "1.3.27",
-          "date": "2026-09-27",
-          "notes": "- Use All / Chats / Branches / Characters / Personas tabs in the Sources \"Find sources in\" picker so it matches Memory Vault and availability scope pickers.\n- Collapse the Sources \"Make memories available in\" destination search, tab rail, and result list under a summary that shows the current destination, matching the Memory Vault picker.\n- Show one spinner and one source count while a source task runs instead of a duplicated loader and a repeated count.",
           "highlight": false
         }
       ]

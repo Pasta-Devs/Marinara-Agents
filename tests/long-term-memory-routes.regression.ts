@@ -2807,6 +2807,54 @@ async function main(routeScenario: RouteScenario) {
       });
       assert.equal(inferredChatExtraction.statusCode, 200, inferredChatExtraction.body);
       assert.equal(modelRequests.at(-1)?.chatConnectionId, "connection-a");
+      assert.deepEqual((await storageService.storage.getNote("source_route_extract")).modes, ["roleplay"]);
+      const modesExtraction = await app.inject({
+        method: "POST",
+        url: "/api/long-term-memory/notes/source_route_extract/extract",
+        headers,
+        payload: { modes: ["conversation", "roleplay"] },
+      });
+      assert.equal(modesExtraction.statusCode, 200, modesExtraction.body);
+      assert.deepEqual((await storageService.storage.getNote("source_route_extract")).modes, [
+        "conversation",
+        "roleplay",
+      ]);
+      const withoutPreviousMode = await app.inject({
+        method: "POST",
+        url: "/api/long-term-memory/notes/source_route_extract/extract",
+        headers,
+        payload: { modes: ["conversation"] },
+      });
+      assert.equal(withoutPreviousMode.statusCode, 200, withoutPreviousMode.body);
+      const conversationOnly = await storageService.storage.getNote("source_route_extract");
+      assert.deepEqual(conversationOnly.modes, ["conversation"]);
+      assert.equal(conversationOnly.extractionFingerprint?.extractionMode, "roleplay");
+      const disabledExplicitMode = await app.inject({
+        method: "POST",
+        url: "/api/long-term-memory/notes/source_route_extract/extract",
+        headers,
+        payload: { modes: ["roleplay"], mode: "conversation" },
+      });
+      assert.equal(disabledExplicitMode.statusCode, 400, disabledExplicitMode.body);
+      assert.match(disabledExplicitMode.json().error, /mode is not enabled/);
+      const missingChatModes = await app.inject({
+        method: "POST",
+        url: "/api/long-term-memory/notes/source_route_extract/extract",
+        headers,
+        payload: { chatId: "chat-missing-1227", modes: ["roleplay"] },
+      });
+      assert.equal(missingChatModes.statusCode, 404, missingChatModes.body);
+      const rejected = await storageService.storage.getNote("source_route_extract");
+      assert.deepEqual(rejected.modes, ["conversation"]);
+      assert.equal(rejected.version, conversationOnly.version);
+      const restoreModes = await app.inject({
+        method: "POST",
+        url: "/api/long-term-memory/notes/source_route_extract/extract",
+        headers,
+        payload: { modes: ["roleplay"] },
+      });
+      assert.equal(restoreModes.statusCode, 200, restoreModes.body);
+      assert.deepEqual((await storageService.storage.getNote("source_route_extract")).modes, ["roleplay"]);
       await storageService.storage.createNote({
         id: "source_route_extract_unknown_chat",
         title: "Unknown source chat fixture",

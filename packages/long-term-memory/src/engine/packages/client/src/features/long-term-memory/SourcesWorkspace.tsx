@@ -937,14 +937,22 @@ function sourceStatusLabel(row: PreviewRow, localizeUi: LtmTranslationFunction) 
   return freshnessLabel(row.freshness, localizeUi);
 }
 
-function sourceModeLabel(mode: LtmMode, localizeUi: LtmTranslationFunction) {
+function modeName(mode: LtmMode, localizeUi: LtmTranslationFunction) {
   const labels: Record<LtmMode, string> = {
     conversation: "ui.longTermMemory.sourcesworkspace.conversation",
     roleplay: "ui.longTermMemory.sourcesworkspace.roleplay",
     game: "ui.longTermMemory.sourcesworkspace.game",
   };
+  return localizeUi(labels[mode]);
+}
+
+function modeList(modes: readonly LtmMode[], localizeUi: LtmTranslationFunction) {
+  return modes.map((mode) => modeName(mode, localizeUi)).join(", ");
+}
+
+function sourceModeLabel(mode: LtmMode, localizeUi: LtmTranslationFunction) {
   return localizeUi("ui.longTermMemory.sourcesworkspace.importsAsMode", {
-    mode: localizeUi(labels[mode]),
+    mode: modeName(mode, localizeUi),
   });
 }
 
@@ -1694,6 +1702,7 @@ export default function SourcesWorkspace({
       : [defaultAvailabilityMode]);
   const availabilityReady = settingsQuery.isSuccess && effectiveAvailabilityModes.length > 0;
   const importDisabled = !availabilityReady || availabilitySaving || sourceTask.active?.status === "running";
+  const reextractDisabled = extractingId !== null || !availabilityReady;
 
   const changeAvailabilityModes = async (nextModes: LtmMode[]) => {
     if (!nextModes.length || !availabilityReady || availabilitySavingRef.current) return;
@@ -2473,6 +2482,7 @@ export default function SourcesWorkspace({
 
   const reextract = async (noteId: string, retryContract?: LtmSourceTaskContract) => {
     if (sourceTask.active?.status === "running") return;
+    if (!retryContract && !availabilityReady) return;
     setImportError("");
     const contract: LtmSourceTaskContract = retryContract ?? {
       source,
@@ -2480,6 +2490,7 @@ export default function SourcesWorkspace({
       action: "re-extract",
       ...(previewScope ? { sourceScope: previewScope } : {}),
       ...(currentDestinationScope ? { destinationScope: currentDestinationScope } : {}),
+      modes: effectiveAvailabilityModes,
       ...(modeFilter !== "all" ? { mode: modeFilter } : {}),
       ...(props.chatId ? { chatId: props.chatId } : {}),
     };
@@ -2496,6 +2507,7 @@ export default function SourcesWorkspace({
             {
               ...(contract.chatId ? { chatId: contract.chatId } : {}),
               ...(contract.mode ? { mode: contract.mode } : {}),
+              ...(contract.modes?.length ? { modes: contract.modes } : {}),
             },
             signal,
           ),
@@ -2533,7 +2545,7 @@ export default function SourcesWorkspace({
         <IconButton
           icon={Sparkles}
           label={localizeUi("ui.longTermMemory.sourcesworkspace.reExtractValue1", { value1: title })}
-          disabled={extractingId !== null}
+          disabled={reextractDisabled}
           onClick={(event) => {
             stopRowAction(event);
             setOpenSourceActionId(null);
@@ -2571,7 +2583,7 @@ export default function SourcesWorkspace({
             <IconButton
               icon={Sparkles}
               label={localizeUi("ui.longTermMemory.sourcesworkspace.reExtractValue1", { value1: title })}
-              disabled={extractingId !== null}
+              disabled={reextractDisabled}
               onClick={(event) => {
                 stopRowAction(event);
                 setOpenSourceActionId(null);
@@ -3385,7 +3397,7 @@ export default function SourcesWorkspace({
                   {focusedImportedSource ? (
                     <ImportedSourceInspector
                       source={focusedImportedSource}
-                      disabled={sourceTask.active?.status === "running"}
+                      disabled={sourceTask.active?.status === "running" || !availabilityReady}
                       bulkActive={bulkSelectionActive}
                       onOpenMemory={onOpenMemory}
                       onOpenReview={onOpenReview}
@@ -3854,7 +3866,7 @@ export default function SourcesWorkspace({
                   {focusedImportedSource ? (
                     <ImportedSourceInspector
                       source={focusedImportedSource}
-                      disabled={sourceTask.active?.status === "running"}
+                      disabled={sourceTask.active?.status === "running" || !availabilityReady}
                       bulkActive={bulkSelectionActive}
                       onOpenMemory={onOpenMemory}
                       onOpenReview={onOpenReview}
@@ -3916,6 +3928,13 @@ export default function SourcesWorkspace({
                     {localizeUi("ui.longTermMemory.sourcesworkspace.retryFailedCount", { count: retryableIds.length })}
                   </Button>
                 ) : null}
+                {retryableIds.length && importResultContract?.modes?.length ? (
+                  <span className="text-xs text-[var(--muted-foreground)]" data-ltm-retry-modes>
+                    {localizeUi("ui.longTermMemory.sourcesworkspace.retryUsesModes", {
+                      modes: modeList(importResultContract.modes, localizeUi),
+                    })}
+                  </span>
+                ) : null}
                 {pendingDraftsProduced ? (
                   <Button onClick={() => onOpenReview?.()} data-ltm-source-action="review-imported-drafts">
                     {localizeUi("ui.longTermMemory.sourcesworkspace.reviewProposedMemories")}
@@ -3941,8 +3960,16 @@ export default function SourcesWorkspace({
                 >
                   <div className="flex flex-wrap items-center gap-2 text-xs">
                     <strong>{item.title}</strong>
-                    <span data-ltm-import-result-mode={item.note.modes[0]} className="text-[var(--muted-foreground)]">
-                      {sourceModeLabel(item.note.modes[0] ?? "roleplay", localizeUi)}
+                    <span data-ltm-import-result-mode={item.extractionMode} className="text-[var(--muted-foreground)]">
+                      {sourceModeLabel(item.extractionMode, localizeUi)}
+                    </span>
+                    <span
+                      data-ltm-import-result-modes={item.note.modes.join(",")}
+                      className="text-[var(--muted-foreground)]"
+                    >
+                      {localizeUi("ui.longTermMemory.sourcesworkspace.availableInModes", {
+                        modes: modeList(item.note.modes, localizeUi),
+                      })}
                     </span>
                     <span
                       data-ltm-source-write-status={item.sourceWriteStatus}
@@ -4006,7 +4033,7 @@ export default function SourcesWorkspace({
                       {localizeUi("ui.longTermMemory.sourcesworkspace.openSourceMemory")}
                     </button>
                     <Button
-                      disabled={extractingId !== null}
+                      disabled={reextractDisabled}
                       onClick={() => void reextract(item.note.id)}
                       data-ltm-source-action="re-extract"
                       data-ltm-source-note-id={item.note.id}

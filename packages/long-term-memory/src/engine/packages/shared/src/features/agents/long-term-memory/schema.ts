@@ -2500,6 +2500,7 @@ export const ltmExtractSourceNoteRequestSchema = z
     instruction: z.string().max(2_000).optional(),
     applyLowRisk: z.boolean().optional(),
     mode: ltmModeSchema.optional(),
+    modes: z.array(ltmModeSchema).min(1).max(8).optional(),
   })
   .strict()
   .default({});
@@ -2810,6 +2811,7 @@ const ltmImportedSourceResultBaseSchema = z.object({
   note: ltmNoteSchema,
   created: z.boolean(),
   sourceWriteStatus: z.enum(["created", "refreshed"]),
+  extractionMode: ltmModeSchema,
   extractionMethod: z.enum(["llm", "deterministic", "none"]),
   outcome: ltmExtractionOutcomeSchema,
   accounting: ltmExtractionAccountingSchema,

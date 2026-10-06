@@ -1038,6 +1038,7 @@ export async function importPackageInterop(
           note: item.note,
           created: item.created,
           sourceWriteStatus: item.created ? ("created" as const) : ("refreshed" as const),
+          extractionMode: item.extractionMode,
           extractionStatus: "not_started" as const,
           extractionMethod: "none" as const,
           retryable: false as const,
