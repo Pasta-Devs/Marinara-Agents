@@ -299,6 +299,9 @@ export function sanitizeSlpScenePatch(
   return patch;
 }
 
+/** Labels that are never the newcomer (a narrator, the player, the model itself). */
+const SLP_SCENE_NOT_NEWCOMER = new Set(["narrator", "system", "player", "user", "you", "assistant"]);
+
 /** Clean one model answer into the lines and patch the client applies. Null when nothing usable came back. */
 export function readSlpSceneTurn(
   raw: unknown,
@@ -308,9 +311,22 @@ export function readSlpSceneTurn(
   const value = raw as Record<string, unknown>;
   const lines: SlpSceneLine[] = [];
   for (const entry of Array.isArray(value.lines) ? value.lines : []) {
-    if (!entry || typeof entry !== "object") continue;
-    const line = entry as Record<string, unknown>;
-    const speaker = line.speaker === "host" ? "host" : line.speaker === "newcomer" ? "newcomer" : null;
+    // A turn that answers the player's own line is the newcomer's alone. Models often label those
+    // lines with the newcomer's name or "Newcomer", or send plain strings; dropping them lost every
+    // typed reply ("The reply got lost", feedback B1).
+    const line: Record<string, unknown> =
+      typeof entry === "string"
+        ? { text: entry }
+        : entry && typeof entry === "object"
+          ? (entry as Record<string, unknown>)
+          : {};
+    const label = typeof line.speaker === "string" ? line.speaker.trim().toLocaleLowerCase() : "";
+    const speaker =
+      label === "host"
+        ? "host"
+        : label === "newcomer" || (!context.writesHost && !SLP_SCENE_NOT_NEWCOMER.has(label))
+          ? "newcomer"
+          : null;
     if (!speaker || (speaker === "host" && !context.writesHost)) continue;
     // Protect first, then cut: the replacement can be longer than the name it replaces, and a
     // line over the limit would fail every later turn that sends it back.

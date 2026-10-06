@@ -98,29 +98,32 @@ export async function generateSlpSceneTurn(
       category: "main",
     }),
   );
-  const response = await provider.chatComplete(messages, {
-    model: input.connection.model,
-    maxTokens: clampGenerationMaxOutputTokens({
-      provider: input.connection.provider as APIProvider,
+  const ask = async () => {
+    const response = await provider.chatComplete(messages, {
       model: input.connection.model,
-      maxTokens: resolveStoredMaxTokens(input.connection.defaultParameters, 900),
-      maxTokensOverride: input.connection.maxTokensOverride,
-    }),
-    ...slpSamplingOptions(
-      resolveStoredChatOptions(input.connection.defaultParameters, input.connection.provider, input.connection.model),
-      { temperature: 0.9, topP: 0.95 },
-    ),
-    stream: false,
-    debugMode,
-  });
-  // ponytail: no retry on an unusable answer; the player just presses again. Add one like the draft service if it fails often.
-  const turn = readSlpSceneTurn(readAnswer(requireModelAnswer(response.content ?? "", "the next line")), {
-    locked: request.locked,
-    allowedTags,
-    disclosureMode,
-    publicIdentity,
-    writesHost: slpSceneWritesHost(request.preset, request.action),
-  });
+      maxTokens: clampGenerationMaxOutputTokens({
+        provider: input.connection.provider as APIProvider,
+        model: input.connection.model,
+        maxTokens: resolveStoredMaxTokens(input.connection.defaultParameters, 900),
+        maxTokensOverride: input.connection.maxTokensOverride,
+      }),
+      ...slpSamplingOptions(
+        resolveStoredChatOptions(input.connection.defaultParameters, input.connection.provider, input.connection.model),
+        { temperature: 0.9, topP: 0.95 },
+      ),
+      stream: false,
+      debugMode,
+    });
+    return readSlpSceneTurn(readAnswer(requireModelAnswer(response.content ?? "", "the next line")), {
+      locked: request.locked,
+      allowedTags,
+      disclosureMode,
+      publicIdentity,
+      writesHost: slpSceneWritesHost(request.preset, request.action),
+    });
+  };
+  // One more try on an unusable answer before the player sees "The reply got lost".
+  const turn = (await ask()) ?? (await ask());
   if (!turn) throw new Error("The reply got lost. Try again.");
   return turn;
 }

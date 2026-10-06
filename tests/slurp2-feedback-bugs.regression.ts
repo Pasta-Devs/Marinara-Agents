@@ -2,6 +2,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { readSlpSceneTurn } from "../packages/slurp2/src/engine/packages/server/src/slp/modules/onboarding/slp-scene-prompt.ts";
 import {
   SLURP_REPLY_BUBBLE_STALE_MS,
   slurpReplyBubbleStale,
@@ -55,5 +56,33 @@ assert.match(
 const maintenance = src("features/maintenance/slp-maintenance-routes.ts");
 assert.match(maintenance, /import \{ slpLatestPostSince \} from "\.\.\/onboarding\/slp-onboarding-contract\.js";/u);
 assert.match(maintenance, /status: madeId \? "generated" : row\.status,[\s\S]*?postId: madeId \?\? row\.postId,/u);
+
+// ── B1: a typed reply in the role-play sign-up was "lost" ──
+// After the player's own line the turn is the newcomer's alone; a model that labels those lines with
+// the newcomer's name, "Newcomer", or sends plain strings still answers.
+const typed = { locked: [], allowedTags: [], disclosureMode: "open" as const, publicIdentity: null, writesHost: false };
+const lines = (raw: unknown) => readSlpSceneTurn(raw, typed)?.lines ?? null;
+assert.deepEqual(lines({ lines: [{ speaker: "Velvet", text: "Velvet it is." }] }), [
+  { speaker: "newcomer", text: "Velvet it is." },
+]);
+assert.deepEqual(lines({ lines: [{ speaker: "Newcomer", text: "Sure!" }] }), [{ speaker: "newcomer", text: "Sure!" }]);
+assert.deepEqual(lines({ lines: ["Okay, okay."] }), [{ speaker: "newcomer", text: "Okay, okay." }]);
+assert.deepEqual(
+  lines({
+    lines: [
+      { speaker: "narrator", text: "x" },
+      { speaker: "host", text: "y" },
+    ],
+  }),
+  null,
+  "not a character",
+);
+// A turn that also writes the host keeps the labels strict.
+assert.equal(readSlpSceneTurn({ lines: [{ speaker: "Velvet", text: "hi" }] }, { ...typed, writesHost: true }), null);
+// One more try on an unusable answer before "The reply got lost".
+assert.match(
+  src("features/onboarding/slp-scene-turn-service.ts"),
+  /const turn = \(await ask\(\)\) \?\? \(await ask\(\)\);\s*if \(!turn\) throw new Error\("The reply got lost\. Try again\."\);/u,
+);
 
 console.log("slurp2 feedback bugs regression passed");
