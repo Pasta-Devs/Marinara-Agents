@@ -4860,6 +4860,8 @@
   "ui.slurp.opening.a.pictures.no": "Text is fine",
   "ui.slurp.opening.q.imageConnection": "Which image AI draws them?",
   "ui.slurp.opening.q.spice": "How spicy is your Slurp?",
+  "ui.slurp.opening.a.spice.clean": "Keep it clean",
+  "ui.slurp.opening.hint.spice.clean": "Nothing naked",
   "ui.slurp.opening.a.spice.flirty": "Flirty",
   "ui.slurp.opening.hint.spice.flirty": "Teasing, never graphic",
   "ui.slurp.opening.a.spice.suggestive": "Suggestive",

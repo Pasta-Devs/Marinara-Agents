@@ -1,9 +1,10 @@
-// The Support rail's data: what it reads to fill its questions, and the one write at "Stamp it".
+// Opening day's data: what it reads to fill its questions, and the one write at "Open the doors".
 import { useSlurpConnections } from "../../base/state/slp-host-connections";
-import { SLURP_GUIDANCE_PRESETS } from "../../modules/settings/slp-backstage-format";
 import { useCreatorAccounts, useSlurpSpice, useSlurpSpiceMutations } from "../creators/slp-creators-contract";
 import { useSlurpImageConnections, useUpdateSlurpImageConnections } from "../media/slp-media-contract";
 import { useSlurpSettings, useUpdateSlurpSettings } from "../settings/slp-settings-contract";
+import { useSlurpPostGuidance, useUpdateSlurpPostGuidance } from "../settings/slp-post-guidance-contract";
+import { slpSpiceStepOf } from "../../../../../shared/src/slp/slp-spice.js";
 import type { SlpRailContext, SlpRailStamp } from "./slp-site-welcome";
 
 const yes = (value: unknown) => value === true || value === "true";
@@ -14,8 +15,9 @@ export function useSlpRailContext(opening: SlpRailContext["opening"], enabled = 
   const connections = useSlurpConnections(enabled);
   const images = useSlurpImageConnections(enabled);
   const spice = useSlurpSpice();
+  const guidance = useSlurpPostGuidance(enabled);
   const creators = useCreatorAccounts();
-  if (!settings.data || !connections.data || images.isPending || spice.isPending) return null;
+  if (!settings.data || !connections.data || images.isPending || spice.isPending || guidance.isPending) return null;
   const all = connections.data;
   const imageDefault = images.data?.defaultConnectionId ?? null;
   return {
@@ -37,26 +39,30 @@ export function useSlpRailContext(opening: SlpRailContext["opening"], enabled = 
       })),
     runsCreators: (creators.data?.length ?? 0) > 0,
     settings: settings.data,
-    spice: spice.data?.spice.max ?? "explicit",
+    // The Slurp-wide default level; unset falls back to the shipped level, then to the limit.
+    spice:
+      slpSpiceStepOf(guidance.data?.defaults.level || guidance.data?.builtInLevel) ??
+      spice.data?.spice.max ??
+      "suggestive",
   };
 }
 
-/** "Stamp it": the spice limit, then the settings patch with the guidance preset, then the image default. */
+/** "Open the doors": the spice (limit, language, default level), then the settings patch, then the image default. */
 export function useSlpRailWrite() {
   const update = useUpdateSlurpSettings();
   const spice = useSlurpSpiceMutations();
+  const guidance = useUpdateSlurpPostGuidance();
   const images = useUpdateSlurpImageConnections();
   return {
-    pending: update.isPending || spice.patch.isPending || images.isPending,
+    pending: update.isPending || spice.patch.isPending || guidance.isPending || images.isPending,
     write: async (stamp: SlpRailStamp, imageConnectionAnswered: boolean) => {
-      // Spice first and "completed" last: a failed write leaves the ticket open, never a stamped
-      // ticket whose spice limit is still the old one.
-      if (stamp.spice) await spice.patch.mutateAsync({ max: stamp.spice.max });
-      await update.mutateAsync({
-        ...stamp.settings,
-        ...(stamp.spice ? { generationGuidance: SLURP_GUIDANCE_PRESETS[stamp.spice.guidance] } : {}),
-        onboarding: "completed",
-      });
+      // Spice first and "completed" last: a failed write leaves the doors shut, never an opened
+      // Slurp whose spice is still the old one.
+      if (stamp.spice) {
+        await spice.patch.mutateAsync({ max: stamp.spice.max, language: stamp.spice.language });
+        await guidance.mutateAsync({ level: stamp.spice.level });
+      }
+      await update.mutateAsync({ ...stamp.settings, onboarding: "completed" });
       // The pictures of every Creator signed up next, whichever way they sign up.
       if (imageConnectionAnswered && stamp.signUp.imageConnectionId) {
         await images.mutateAsync({ defaultConnectionId: stamp.signUp.imageConnectionId });

@@ -353,14 +353,16 @@ for (const step of slpRailSteps(context())) {
 
 // Spice, names and the image connection go through the stamp.
 const spicy = play(context(), { spice: "flirty", names: "hinted", pictures: "yes", imageConnection: "i1" });
-assert.deepEqual(slpRailStamp(spicy.state, context()).spice, { max: "flirty", guidance: "mild" });
+assert.deepEqual(slpRailStamp(spicy.state, context()).spice, { level: "suggestive", max: "flirty", language: "soft" });
 assert.deepEqual(slpRailStamp(spicy.state, context()).signUp, { disclosure: "hinted", imageConnectionId: "i1" });
-for (const [max, guidance] of [
-  ["suggestive", "steamy"],
-  ["explicit", "explicit"],
+// 0.3.17's one spice scale: the answer is the default level; it also sets the limit and the words.
+for (const [step, expected] of [
+  ["clean", { level: "none", max: "flirty", language: "soft" }],
+  ["suggestive", { level: "nudity", max: "suggestive", language: "frank" }],
+  ["explicit", { level: "explicit", max: "explicit", language: "dirty" }],
 ] as const) {
-  const state = { ...spicy.state, answers: { ...spicy.state.answers, spice: max } };
-  assert.deepEqual(slpRailStamp(state, context()).spice, { max, guidance });
+  const state = { ...spicy.state, answers: { ...spicy.state.answers, spice: step } };
+  assert.deepEqual(slpRailStamp(state, context()).spice, expected);
 }
 const textOnly = { ...spicy.state, answers: { ...spicy.state.answers, pictures: "no" as const } };
 assert.equal(slpRailStamp(textOnly, context()).signUp.imageConnectionId, null, "no pictures, no image connection");
@@ -382,7 +384,7 @@ assert.deepEqual(slpRailStamp(full.state, context()), {
     inlineAdsTone: "corporate",
     supportDesk: { ...settings.supportDesk, shadyMoves: false, refusals: false },
   },
-  spice: { max: "flirty", guidance: "mild" },
+  spice: { level: "none", max: "flirty", language: "soft" },
   signUp: { disclosure: "hinted", imageConnectionId: "i1" },
   lead: "signup",
 });
@@ -406,7 +408,7 @@ for (const opening of ["first", "again"] as const)
     for (const value of fixed ?? []) keys.push(`${O}a.${step.id}.${value}`);
   }
 for (const value of ["manual", "occasional", "lively", "veryActive"]) keys.push(`${O}hint.pace.${value}`);
-for (const value of ["flirty", "suggestive", "explicit"]) keys.push(`${O}hint.spice.${value}`);
+for (const value of ["clean", "flirty", "suggestive", "explicit"]) keys.push(`${O}hint.spice.${value}`);
 for (const locale of ["en"]) {
   const strings = JSON.parse(readFileSync(`${localeDir}/${locale}.json`, "utf8")) as Record<string, string>;
   const missing = [...new Set(keys)].filter((key) => !strings[key]);

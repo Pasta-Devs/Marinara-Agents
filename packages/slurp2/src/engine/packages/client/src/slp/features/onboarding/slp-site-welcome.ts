@@ -14,7 +14,14 @@ import {
   slurpActivityPresetPatch,
   type SlurpActivityPreset,
 } from "../../modules/creator/slp-activity-presets";
-import { SLP_SPICE_LEVELS, type SlpSpiceLevel } from "../../../../../shared/src/slp/slp-spice.js";
+import {
+  SLP_SPICE_STEPS,
+  slpExplicitOfStep,
+  type SlpExplicitLevelName,
+  type SlpSpiceLanguage,
+  type SlpSpiceLevel,
+  type SlpSpiceStep,
+} from "../../../../../shared/src/slp/slp-spice.js";
 import { SLURP_AUDIENCE_TONES } from "../../../../../shared/src/slp/slp-tone.js";
 import { SLURP_PLATFORM_SCALE } from "../../../../../shared/src/slp/slp-scale.js";
 import type { SlurpSettings, SlurpSettingsUpdate } from "../settings/slp-settings-contract";
@@ -47,7 +54,7 @@ export const SLP_RAIL_OPTIONS = {
   who: ["watch", "run", "both"],
   pace: SLURP_ACTIVITY_PRESETS,
   pictures: ["yes", "no"],
-  spice: SLP_SPICE_LEVELS,
+  spice: SLP_SPICE_STEPS,
   names: ["hinted", "open"],
   nights: ["yes", "no"],
   fun: ["sure", "skip"],
@@ -114,7 +121,8 @@ export type SlpRailContext = {
   runsCreators: boolean;
   /** Today's values: the defaults every question starts from. */
   settings: SlpRailSettings;
-  spice: SlpSpiceLevel;
+  /** Today's Slurp-wide default level (0.3.17's one spice scale, Clean included). */
+  spice: SlpSpiceStep;
 };
 
 export type SlpRailState = {
@@ -229,7 +237,7 @@ export function slpRailSteps(context: SlpRailContext): SlpRailStep[] {
       ["signUp.imageConnectionId"],
       (answers, ctx) => answers.pictures === "yes" && ctx.imageConnections.length > 0,
     ),
-    ask("setup", "spice", SLP_RAIL_OPTIONS.spice, ["spice.max", "spice.guidance"]),
+    ask("setup", "spice", SLP_RAIL_OPTIONS.spice, ["spice.level", "spice.max", "spice.language"]),
     ask("setup", "names", SLP_RAIL_OPTIONS.names, ["signUp.disclosure"]),
     ask("setup", "nights", SLP_RAIL_OPTIONS.nights, ["nightQuiet"]),
     ask("fun", "fun", SLP_RAIL_OPTIONS.fun, []),
@@ -437,16 +445,24 @@ export function slpRailAnswerPatch(
   }
 }
 
-export const SLP_RAIL_GUIDANCE: Record<SlpSpiceLevel, "mild" | "steamy" | "explicit"> = {
-  flirty: "mild",
-  suggestive: "steamy",
-  explicit: "explicit",
-};
+/**
+ * One spice answer sets the whole spice of a new Slurp (0.3.17): the default level, the limit no
+ * Creator goes past, and the words posts use. Clean keeps the limit at Flirty (the lowest limit).
+ */
+export function slpRailSpice(step: SlpSpiceStep): {
+  level: SlpExplicitLevelName;
+  max: SlpSpiceLevel;
+  language: SlpSpiceLanguage;
+} {
+  const max: SlpSpiceLevel = step === "clean" ? "flirty" : step;
+  const language: SlpSpiceLanguage = step === "explicit" ? "dirty" : step === "suggestive" ? "frank" : "soft";
+  return { level: slpExplicitOfStep(step), max, language };
+}
 
 export type SlpRailStamp = {
   settings: SlurpSettingsUpdate;
-  /** Null: spice was not asked. Otherwise write `max` and `SLURP_GUIDANCE_PRESETS[guidance]`. */
-  spice: { max: SlpSpiceLevel; guidance: "mild" | "steamy" | "explicit" } | null;
+  /** Null: spice was not asked. Otherwise the default level (post guidance), the limit and the language. */
+  spice: ReturnType<typeof slpRailSpice> | null;
   /** For the sign-up that follows, as the Creator wizard takes them. */
   signUp: { disclosure: "hinted" | "open"; imageConnectionId: string | null };
   lead: "feed" | "signup";
@@ -470,7 +486,7 @@ export function slpRailStamp(state: SlpRailState, context: SlpRailContext): SlpR
   const spice = state.answers.spice;
   return {
     settings,
-    spice: spice ? { max: spice, guidance: SLP_RAIL_GUIDANCE[spice] } : null,
+    spice: spice ? slpRailSpice(spice) : null,
     signUp: {
       disclosure: answers.names ?? "open",
       imageConnectionId: answers.pictures === "yes" ? (answers.imageConnection ?? null) : null,
