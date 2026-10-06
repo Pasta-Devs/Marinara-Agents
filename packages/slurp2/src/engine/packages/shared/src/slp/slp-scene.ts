@@ -136,6 +136,8 @@ export const slpSceneTurnRequestSchema = z
     locked: z.array(z.enum(SLP_SCENE_FIELDS)).max(SLP_SCENE_FIELDS.length).default([]),
     /** The player's steer for the whole session ("keep it casual"). Never written into a line. */
     direction: z.string().trim().max(300).default(""),
+    /** R6: the newcomer is a Creator already on Slurp, back to fill in what their page is missing. */
+    updating: z.boolean().default(false),
     connectionId: z.string().min(1).optional(),
   })
   .strict()

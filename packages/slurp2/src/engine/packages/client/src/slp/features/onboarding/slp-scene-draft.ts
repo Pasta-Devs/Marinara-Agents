@@ -416,3 +416,42 @@ export function slpSceneShootGuidance(kind: "avatar" | "banner", outfit: string,
     .filter(Boolean)
     .join(" ");
 }
+
+/**
+ * R6: an existing Creator's page as a scene draft, so the sign-up scene can fill in what it is
+ * missing. Every field the page already has is locked: the scene asks about the empty ones only.
+ */
+export function slpSceneUpdateState(
+  page: {
+    displayName: string;
+    handle: string;
+    bio: string;
+    stagePersonality: string;
+    appearance: string;
+    wardrobe: string;
+    locations: string;
+    gender: SlpSceneDraft["gender"];
+    tags: readonly string[];
+  },
+  limits: { turnOns: readonly string[]; hardNoes: readonly string[] } | null,
+): SlpSceneDraftState {
+  const draft: SlpSceneDraft = {
+    ...SLP_SCENE_EMPTY_DRAFT,
+    displayName: page.displayName,
+    handle: page.handle,
+    bio: page.bio,
+    stagePersonality: page.stagePersonality,
+    appearance: page.appearance,
+    wardrobe: page.wardrobe,
+    locations: page.locations,
+    gender: page.gender,
+    tags: [...page.tags],
+    turnOns: limits?.turnOns.join(", ") ?? "",
+    hardNoes: limits?.hardNoes.join(", ") ?? "",
+  };
+  const filled = SLP_SCENE_FIELDS.filter((field) => {
+    const value = draft[field];
+    return Array.isArray(value) ? value.length > 0 : typeof value === "string" ? Boolean(value.trim()) : value !== null;
+  });
+  return slpSceneInitialState(draft, filled);
+}

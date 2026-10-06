@@ -49,6 +49,11 @@ export type SlpSceneSetup = {
   helper?: Pick<SlpAccount, "id" | "displayName" | "handle" | "avatarUrl"> | null;
   disclosureMode: SlpIdentityDisclosure;
   connectionId?: string;
+  /**
+   * R6: a Creator already on Slurp, back to fill in their page. The draft starts as their page with
+   * every filled field locked; finishing saves the page and the limits, with no first post or chat.
+   */
+  existing?: { accountId: string; state: SlpSceneDraftState };
 };
 
 /**
@@ -59,16 +64,24 @@ export function useSlpSceneModel(setup: SlpSceneSetup, hostLabel: string) {
   const moments = SLP_SCENE_MOMENTS[setup.preset] as readonly SlpSceneMoment[];
   const open = setup.disclosureMode === "open";
   const [items, setItems] = useState<SlpSceneItem[]>([]);
-  const [draftState, setDraftState] = useState<SlpSceneDraftState>(() =>
-    slpSceneInitialState(
-      open ? { displayName: setup.source.displayName, handle: setup.source.handle } : {},
-      // An open page keeps its public name: nothing may patch it.
-      open ? ["displayName", "handle"] : [],
-    ),
+  const [draftState, setDraftState] = useState<SlpSceneDraftState>(
+    () =>
+      setup.existing?.state ??
+      slpSceneInitialState(
+        open ? { displayName: setup.source.displayName, handle: setup.source.handle } : {},
+        // An open page keeps its public name: nothing may patch it.
+        open ? ["displayName", "handle"] : [],
+      ),
   );
   const draftRef = useRef(draftState);
-  const [moment, setMoment] = useState<SlpSceneMoment>(moments[0]);
-  const [doneMoments, setDoneMoments] = useState<SlpSceneMoment[]>([]);
+  // An update starts at the first moment the page still needs, with the filled ones done.
+  const startFilled = setup.existing
+    ? moments.filter((entry) => slpSceneMomentFilled(entry, setup.existing!.state.draft))
+    : [];
+  const [moment, setMoment] = useState<SlpSceneMoment>(
+    () => moments.find((entry) => !startFilled.includes(entry)) ?? moments[0],
+  );
+  const [doneMoments, setDoneMoments] = useState<SlpSceneMoment[]>(startFilled);
   /** Exchanges spent in the current moment; after two, "Next" is offered even if it is not done. */
   const [momentTurns, setMomentTurns] = useState(0);
   const [direction, setDirection] = useState("");
@@ -159,6 +172,7 @@ export function useSlpSceneModel(setup: SlpSceneSetup, hostLabel: string) {
           draft: draftRef.current.draft,
           locked: draftRef.current.locked,
           direction: directionRef.current,
+          updating: Boolean(setup.existing),
           ...(setup.connectionId ? { connectionId: setup.connectionId } : {}),
         });
         const lines: SlpSceneItem[] = result.lines.map((line) => ({
@@ -234,9 +248,9 @@ export function useSlpSceneModel(setup: SlpSceneSetup, hostLabel: string) {
     }
   }, [append, applyPatch, direction, hostLabel, redraft, setup]);
 
-  const [accountId, setAccountId] = useState<string | null>(null);
+  const [accountId, setAccountId] = useState<string | null>(setup.existing?.accountId ?? null);
   const [firstPostRun, setFirstPostRun] = useState<string | null>(null);
-  const accountRef = useRef<string | null>(null);
+  const accountRef = useRef<string | null>(setup.existing?.accountId ?? null);
   /**
    * Save the page as it is now: create it the first time, update it after that (the photo shoot
    * needs a real page to hang the pictures on). A page that still misses its basics gets one
@@ -271,6 +285,8 @@ export function useSlpSceneModel(setup: SlpSceneSetup, hostLabel: string) {
       // the sign-up over.
       if (spice)
         await api.patch(`/slurp2/slurp/accounts/${encodeURIComponent(id)}/steering`, spice).catch(() => undefined);
+      // An update (R6): the page already posts and already has its chats.
+      if (setup.existing) return false;
       // The first post is written in the background, like "first posts now" in Quick setup. The
       // finale follows it by its run id.
       const executionId = generateClientId();
@@ -286,7 +302,7 @@ export function useSlpSceneModel(setup: SlpSceneSetup, hostLabel: string) {
             .catch(() => false)
         : false;
     },
-    [firstPost, hostLabel, keep, setup.preset, viewerPersonaId],
+    [firstPost, hostLabel, keep, setup.existing, setup.preset, viewerPersonaId],
   );
 
   /** "Finish registration": save the page, then its limits line and the first post. */
@@ -306,11 +322,12 @@ export function useSlpSceneModel(setup: SlpSceneSetup, hostLabel: string) {
    */
   const finishOnClose = useCallback(async () => {
     const id = accountRef.current;
-    if (!id) return false;
+    // An update (R6) saves on "Save" only: closing it leaves the page as it was.
+    if (!id || setup.existing) return false;
     const saved = await savePage().catch(() => null);
     await completeSignUp(saved && !("missing" in saved) ? saved.id : id, draftRef.current.draft);
     return true;
-  }, [completeSignUp, savePage]);
+  }, [setup.existing, completeSignUp, savePage]);
 
   /**
    * The first photo shoot: the real image pipeline draws the profile photo, then the cover, from

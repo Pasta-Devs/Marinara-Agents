@@ -4,6 +4,8 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { slurpCommissionBrief } from "../packages/slurp2/src/engine/packages/server/src/slp/modules/world/slp-world-copy.ts";
 import { SLURP_COMMISSION_ASKS } from "../packages/slurp2/src/engine/packages/shared/src/slp/slp-world.ts";
+import { slpSceneUpdateState } from "../packages/slurp2/src/engine/packages/client/src/slp/features/onboarding/slp-scene-draft.ts";
+import { buildSlpSceneTurnMessages } from "../packages/slurp2/src/engine/packages/server/src/slp/modules/onboarding/slp-scene-prompt.ts";
 import {
   slurpThreadSummaryMessages,
   slurpThreadTranscript,
@@ -137,6 +139,49 @@ assert.match(
 assert.match(replies, /Do not quote private DMs in public/u);
 // DM lines can name a protected identity, so the relationship line is redacted like the comment.
 assert.match(replies, /relationship: protect\(input\.relationship \?\? "no history with this creator yet"\)/u);
+
+// ── R6: an old Creator's page filled in through the role-play sign-up ──
+{
+  const page = {
+    displayName: "Riley",
+    handle: "riley",
+    bio: "Gym and cats.",
+    stagePersonality: "",
+    appearance: "Tall, red hair.",
+    wardrobe: "",
+    locations: "",
+    gender: "female" as const,
+    tags: ["gym", "cats", "cosplay"],
+  };
+  const state = slpSceneUpdateState(page, { turnOns: ["lingerie"], hardNoes: [] });
+  assert.deepEqual(
+    [...state.locked].sort(),
+    ["appearance", "bio", "displayName", "gender", "handle", "tags", "turnOns"],
+    "what the page has stays; the scene asks about the rest",
+  );
+  assert.equal(state.draft.turnOns, "lingerie");
+  const prompt = buildSlpSceneTurnMessages({
+    request: {
+      preset: "support",
+      moment: "voice",
+      action: { kind: "continue" },
+      transcript: [],
+      draft: state.draft,
+      locked: state.locked,
+      direction: "",
+      disclosureMode: "hinted",
+      updating: true,
+    },
+    newcomerCanon: "",
+    allowedTags: [],
+  })[0]!.content;
+  assert.match(prompt, /already has a live Creator page/u);
+  assert.doesNotMatch(prompt, /get the newcomer's Creator page live tonight/u);
+  const model = src("features/onboarding/slp-scene-model.ts");
+  // No second first post and no transcript pasted into an old thread; closing early saves nothing.
+  assert.match(model, /if \(setup\.existing\) return false;/u);
+  assert.match(model, /if \(!id \|\| setup\.existing\) return false;/u);
+}
 
 // ── R7: the player edits what the fan wants in a commission request ──
 assert.ok(

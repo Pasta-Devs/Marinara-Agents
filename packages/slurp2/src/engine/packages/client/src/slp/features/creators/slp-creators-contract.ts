@@ -62,3 +62,4 @@ export { openSlpCreatorSettings } from "./settings/slp-creator-settings-store";
 
 // The first-run Support ticket sets the Slurp-wide spice limit at "Stamp it" and shows it in "Your file".
 export { useSlurpSpice, useSlurpSpiceMutations } from "./slp-spice-hooks.js";
+export { useSlurpCreatorSteering } from "./slp-steering-hooks";
