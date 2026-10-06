@@ -1,22 +1,12 @@
-// The 18+ check as a card in the Support ticket (docs/ONBOARDING-RAIL.md, chapter 2): the Pastapay
-// gag, then an explicit adult confirmation. Nothing in the rail runs before it; "Not now" leaves Slurp.
+// The license scene of opening day (docs/OPENING-DAY.md): the Pastapay gag on the stage. The scene's
+// answer cards hold the explicit 18+ confirm and "Not now, take me back" (leaves Slurp).
 import { Check, CreditCard, Loader2 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useTranslation as useUiTranslation } from "react-i18next";
 import { cn } from "../../../lib/utils";
 import { SLP_TYPE } from "../../base/chrome/SlpChrome";
-import { SlpButton, SlpPrimaryButton, SlpSquareCheck } from "../../modules/chrome/SlpButton";
 
-interface Props {
-  personaName: string;
-  onComplete: () => void;
-  onLeave?: () => void;
-  /** Already confirmed: the finished card, read only (the ticket's history after a reload). */
-  done?: boolean;
-}
-
-// Skip the theatrics for reduced-motion users: land the card in its finished state immediately
-// so nobody is trapped waiting on an animation to unlock the button.
+// Skip the theatrics for reduced-motion users: land the card in its finished state immediately.
 function usePrefersReducedMotion(): boolean {
   const [reduced, setReduced] = useState(
     () => typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches,
@@ -32,23 +22,21 @@ function usePrefersReducedMotion(): boolean {
 
 const CARD_NUMBER = "5309 1312 4200 6969";
 
-export function SlurpAgeGate({ personaName, onComplete, onLeave, done = false }: Props) {
+/**
+ * The license scene's stage object: the Pastapay card swings in, types its number and "charges"
+ * $0.00. The explicit 18+ confirm is the scene's answer card ("I'm 18 or older"), not this card.
+ */
+export function SlurpAgeGate({ personaName, done = false }: { personaName: string; done?: boolean }) {
   const { t } = useUiTranslation();
   const tt = (key: string, fallback: string) => t(`ui.noodle.agegate.${key}`, fallback);
   const reducedMotion = usePrefersReducedMotion() || done;
   const displayName = personaName.trim() || tt("anonymousAdult", "A. Nonymous");
-
   const [typed, setTyped] = useState(reducedMotion ? CARD_NUMBER.length : 0);
   const [charged, setCharged] = useState(reducedMotion);
-  const [confirmedAdult, setConfirmedAdult] = useState(done);
   const [chargeAmount, setChargeAmount] = useState("9.99");
-  const [confetti, setConfetti] = useState(false);
   const chargeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
-    // The media query is live, so reduced motion can turn on after mount. Seeding the state was
-    // not enough: returning early here would tear down the interval before it ever set `charged`,
-    // leaving Enter disabled forever. Land the card in its finished state instead.
     if (reducedMotion) {
       setTyped(CARD_NUMBER.length);
       setCharged(true);
@@ -58,12 +46,12 @@ export function SlurpAgeGate({ personaName, onComplete, onLeave, done = false }:
       setTyped((n) => {
         if (n >= CARD_NUMBER.length) {
           clearInterval(interval);
-          chargeTimer.current = setTimeout(() => setCharged(true), 900);
+          chargeTimer.current = setTimeout(() => setCharged(true), 700);
           return n;
         }
         return n + 1;
       });
-    }, 90);
+    }, 70);
     return () => {
       clearInterval(interval);
       if (chargeTimer.current) clearTimeout(chargeTimer.current);
@@ -79,51 +67,36 @@ export function SlurpAgeGate({ personaName, onComplete, onLeave, done = false }:
   }, [charged, reducedMotion]);
 
   const shownNumber = CARD_NUMBER.slice(0, typed).padEnd(CARD_NUMBER.length, "•");
-
-  // Enter is a one-way door: a second click during the confetti beat would complete the check twice.
-  const entered = useRef(false);
-  const enter = () => {
-    if (!confirmedAdult || !charged || entered.current) return;
-    entered.current = true;
-    setConfetti(true);
-    onComplete();
-  };
-
   return (
-    <div className="relative flex w-full max-w-sm flex-col gap-3 overflow-hidden rounded-2xl bg-[var(--slurp-surface-raised)] p-3 text-[var(--slurp-text)] shadow-[var(--slurp-shadow-raised),var(--slurp-highlight)]">
-      {confetti && <SlurpConfetti />}
-      <div className="px-1">
-        <h3 className={cn(SLP_TYPE.title, "text-balance")}>{tt("cardTitle", "Confirm that you are 18 or older")}</h3>
-        <p className={cn(SLP_TYPE.body, "mt-1 text-pretty text-[var(--muted-foreground)]")}>
-          {tt("cardSub", "This confirmation is required to enter Slurp. No payment information is collected.")}
-        </p>
-      </div>
-
-      <div className="relative flex aspect-[1.586/1] w-full flex-col justify-between overflow-hidden rounded-2xl bg-gradient-to-br from-zinc-800 to-zinc-950 p-4 text-zinc-100 shadow-[var(--slurp-shadow-floating),inset_0_1px_0_rgb(255_255_255/0.12)]">
+    <div className="flex w-full flex-col items-center gap-3.5" aria-label={tt("cardTitle", "Confirm that you are 18 or older")}>
+      <div className="slp-pastapay relative flex aspect-[1.586/1] w-[min(80vw,330px)] flex-col justify-between overflow-hidden rounded-[18px] bg-gradient-to-br from-zinc-800 to-zinc-950 p-[18px] text-zinc-100 shadow-[0_30px_60px_rgb(0_0_0/0.6),inset_0_1px_0_rgb(255_255_255/0.12)]">
         <div className="flex items-center justify-between">
-          <CreditCard size={26} className="text-[var(--noodle-accent-foreground)]" />
-          <span className="text-xs font-bold uppercase tracking-widest text-zinc-400">
-            {tt("cardBrand", "Pastapay")}
-          </span>
+          <CreditCard size={26} aria-hidden="true" className="text-[var(--noodle-accent-foreground)]" />
+          <span className="text-xs font-bold tracking-widest text-zinc-400">{tt("cardBrand", "Pastapay")}</span>
         </div>
-        <p className="font-mono text-base tracking-[0.1em] tabular-nums sm:text-lg">{shownNumber}</p>
+        <p className="font-mono text-[19px] tracking-[0.12em] tabular-nums">{shownNumber}</p>
         <div className="flex items-end justify-between text-xs">
           <div>
-            <p className="text-[11px] leading-[14px] uppercase text-zinc-400">{tt("cardHolder", "Card Holder")}</p>
+            <p className="text-[11px] leading-[14px] text-zinc-400">{tt("cardHolder", "Card Holder")}</p>
             <p className="font-semibold uppercase">{displayName}</p>
           </div>
           <div>
-            <p className="text-[11px] leading-[14px] uppercase text-zinc-400">{tt("cardExp", "Expires")}</p>
+            <p className="text-[11px] leading-[14px] text-zinc-400">{tt("cardExp", "Expires")}</p>
             <p className="font-semibold">12 / 34</p>
           </div>
           <div>
-            <p className="text-[11px] leading-[14px] uppercase text-zinc-400">{tt("cardCvv", "CVV")}</p>
+            <p className="text-[11px] leading-[14px] text-zinc-400">{tt("cardCvv", "CVV")}</p>
             <p className="font-semibold">🍆</p>
           </div>
         </div>
       </div>
-
-      <p className={cn(SLP_TYPE.meta, "flex items-center gap-1.5 px-1 text-[var(--muted-foreground)]")}>
+      <p
+        className={cn(
+          SLP_TYPE.meta,
+          "flex items-center gap-1.5 rounded-full px-3 py-1.5",
+          charged ? "bg-[color-mix(in_srgb,var(--slurp-success)_20%,transparent)] text-[var(--slurp-text)]" : "text-[var(--slurp-muted)]",
+        )}
+      >
         {charged ? (
           <>
             <Check size={14} aria-hidden="true" className="text-[var(--slurp-success)]" />
@@ -132,43 +105,15 @@ export function SlurpAgeGate({ personaName, onComplete, onLeave, done = false }:
         ) : (
           <>
             <Loader2 size={14} aria-hidden="true" className="animate-spin motion-reduce:animate-none" />
-            {t("ui.noodle.agegate.cardCharging", {
-              amount: chargeAmount,
-              defaultValue: "Charging ${{amount}}...",
-            })}
+            {t("ui.noodle.agegate.cardCharging", { amount: chargeAmount, defaultValue: "Charging ${{amount}}..." })}
           </>
         )}
       </p>
-
-      <label
-        className={cn(
-          SLP_TYPE.body,
-          "flex min-h-11 cursor-pointer items-center gap-3 rounded-2xl bg-[var(--slurp-tint)] px-4 py-3 has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-[var(--slurp-focus)]",
-        )}
-      >
-        <input
-          type="checkbox"
-          checked={confirmedAdult}
-          disabled={done}
-          onChange={(event) => setConfirmedAdult(event.target.checked)}
-          className="sr-only"
-        />
-        <SlpSquareCheck checked={confirmedAdult} />
-        <span className="text-pretty">{tt("adultConfirmation", "I confirm that I am 18 years of age or older.")}</span>
-      </label>
-
-      {!done && (
-        <div className="flex flex-col items-stretch gap-1">
-          <SlpPrimaryButton onClick={enter} disabled={!charged || !confirmedAdult} className="h-12 text-[15px]">
-            {tt("enter", "Enter Slurp")}
-          </SlpPrimaryButton>
-          {onLeave && (
-            <SlpButton variant="tertiary" onClick={onLeave} className="self-center text-[var(--muted-foreground)]">
-              {tt("notNow", "Not now, take me back")}
-            </SlpButton>
-          )}
-        </div>
-      )}
+      <style>{`
+        @keyframes slp-pastapay-in { from { opacity: 0; transform: rotateX(60deg) rotateZ(-14deg) translateY(60px); } }
+        .slp-pastapay { transform: rotateX(16deg) rotateZ(-5deg); animation: slp-pastapay-in 1s cubic-bezier(.34,1.56,.64,1) both; }
+        @media (prefers-reduced-motion: reduce) { .slp-pastapay { animation: none; } }
+      `}</style>
     </div>
   );
 }
