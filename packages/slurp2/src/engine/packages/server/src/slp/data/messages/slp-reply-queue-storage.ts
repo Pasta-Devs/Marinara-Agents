@@ -4,6 +4,7 @@ import type { DB } from "../../../db/connection.js";
 import { newId } from "../../../utils/id-generator.js";
 import { tolerateMissingTables } from "../../base/host/slp-host-tables.js";
 import { isSlurpFileUniqueConstraintError } from "../../base/host/slp-file-errors.js";
+import { slurpReplyBubbleStale } from "../../modules/messages/slp-messaging.js";
 
 export type SlurpReplyBubble = {
   id: string;
@@ -70,10 +71,16 @@ export function createSlurpReplyQueueStorage(db: DB) {
     async removeForThread(threadId: string): Promise<void> {
       await db.delete(slurpReplyBubbles).where(eq(slurpReplyBubbles.threadId, threadId));
     },
+    /** Bubbles still to arrive. A stuck one (long overdue) is dropped here, so it cannot block replies. */
     async hasPending(threadId: string): Promise<boolean> {
-      return (
-        (await db.select().from(slurpReplyBubbles).where(eq(slurpReplyBubbles.threadId, threadId)).limit(1)).length > 0
-      );
+      const rows = await db.select().from(slurpReplyBubbles).where(eq(slurpReplyBubbles.threadId, threadId));
+      let pending = false;
+      for (const row of rows) {
+        if (slurpReplyBubbleStale(String(row.deliverAt)))
+          await db.delete(slurpReplyBubbles).where(eq(slurpReplyBubbles.id, row.id));
+        else pending = true;
+      }
+      return pending;
     },
   };
   return tolerateMissingTables(storage, {

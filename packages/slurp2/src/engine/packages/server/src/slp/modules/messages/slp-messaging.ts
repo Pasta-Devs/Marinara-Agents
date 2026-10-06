@@ -20,6 +20,17 @@ export type SlurpDmPolicy =
   /** Nobody new may open a thread. Existing active threads keep working. */
   | "closed";
 
+/**
+ * A queued reply bubble due this long ago was never delivered: the delivery tick runs every 15 s, so
+ * it is stuck (its thread or message files were removed under it, or every delivery throws). A stuck
+ * bubble must not hold "already writing back" forever.
+ */
+export const SLURP_REPLY_BUBBLE_STALE_MS = 2 * 60_000;
+export function slurpReplyBubbleStale(deliverAt: string, now = Date.now()): boolean {
+  const due = Date.parse(deliverAt);
+  return !Number.isFinite(due) || due < now - SLURP_REPLY_BUBBLE_STALE_MS;
+}
+
 export const SLURP_DM_POLICIES: readonly SlurpDmPolicy[] = ["open", "subscribers", "paid", "closed"];
 
 export type SlurpCreatorMessaging = {

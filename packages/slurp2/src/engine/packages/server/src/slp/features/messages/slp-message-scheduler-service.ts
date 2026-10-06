@@ -3,6 +3,7 @@ import { logger } from "../../../lib/logger.js";
 import { createSlurpMessagesStorage } from "../../data/slp-storage.js";
 import { createSlurpStorage } from "../../data/slp-storage.js";
 import { createSlurpReplyQueueStorage } from "../../data/messages/slp-reply-queue-storage.js";
+import { slurpReplyBubbleStale } from "../../modules/messages/slp-messaging.js";
 import { deliverDueSlurpCommissions } from "./commissions/slp-commission-delivery-service.js";
 import { replyToSlurpMessage } from "./slp-message-operation.js";
 import { slurpPollBackoffMs } from "../../base/model/slp-poll-backoff.js";
@@ -78,6 +79,8 @@ export function startSlurpMessageScheduler(app: FastifyInstance, registerStop?: 
           if (stored === null) await replyQueue.remove(bubble.id);
         } catch (error) {
           logger.warn(error, "[slurp-message] Failed to deliver bubble %s", bubble.id);
+          // A bubble that keeps failing long past its time would hold its thread busy forever.
+          if (slurpReplyBubbleStale(bubble.deliverAt)) await replyQueue.remove(bubble.id).catch(() => undefined);
         }
       }
     })();
