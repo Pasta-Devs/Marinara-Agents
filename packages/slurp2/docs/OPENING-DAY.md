@@ -1,7 +1,7 @@
 # Opening day: the first run as the owner's launch
 
 Status: building, 2026-10-01. Replaces the presentation of `ONBOARDING-RAIL.md` (the Support
-ticket, the member file, the stamp) and of G's thread. The rail's logic stays: the same pure
+ticket, the member file, the stamp). G's screen stays as on staging. The rail's logic stays: the same pure
 script (`slp-site-welcome.ts`), the same questions, the same single write at the end.
 
 Prototype: `~/.cache/tmp/slurp-intro/index.html` on devbox (served on port 28417). It is the visual
@@ -22,7 +22,7 @@ new member filling in a form. A member does not set the platform's ad rate.
 | Slurp Support | the owner's staff ("Morning, boss"), shown as the Slurp bowl logo, no circle | guides, jokes about paperwork and noodles |
 | The characters | move in as Creators | post, public or locked |
 | The fans | the crowd that comes with the place | like, comment, tip, DM |
-| G | the author, out of universe | the real consent and the real AI cost note, the changelog |
+| G | the author, out of universe | the real consent and the real AI cost note, the changelog (staging's G screen, unchanged) |
 
 ## The flow
 
@@ -78,10 +78,9 @@ Layers follow `docs/architecture/README.md`.
 | Stage shell: header (bowl or G, chapter, progress bars, close), stage slot, talk (lines, steam typing, cards) | `modules/stage/SlpStage.tsx` | S3 |
 | Answer cards: glyph, label, hint, primary/ghost, layouts one/two/three/list; press, chosen, gone | `modules/stage/SlpChoiceCards.tsx` | S3 |
 | Opening day renderer | `features/onboarding/SlpSiteWelcome.tsx` (rewritten) | S3 |
-| G's thread on the stage shell | `features/onboarding/SlpSplash.tsx` | S4 |
 | "Your Slurp" in Settings › Overview (phone preview from today's settings + Run setup again); "Your file" leaves the Support desk | `features/onboarding/SlpYourSlurp.tsx`, Overview panel, Stir desk | S5 |
 | de / ko / pl copy | `locales/*.json` | S6 |
-| Version 0.3.14, changelog, release note, DECISIONS, tests, build | | S7 |
+| Version 0.3.18, changelog, release note, DECISIONS, tests, build | | S7 |
 
 `SlpChatShell` stays for other threads; the stage shell does not replace it.
 
@@ -102,7 +101,7 @@ Layers follow `docs/architecture/README.md`.
 ## Slices and commits
 
 Each slice ends with its checks and a commit of its own paths (`git commit -- <paths>`). One
-version bump (0.3.14) in S7.
+version bump (0.3.18) in S7.
 
 | Slice | Who | Depends on | Done when |
 | --- | --- | --- | --- |
@@ -110,13 +109,12 @@ version bump (0.3.14) in S7.
 | S1 script model + copy (en) | orchestrator | S0 | rail regression rewritten and green |
 | S2 phone preview | designer subagent | S0 | regression for the preview model; component renders from props; screenshots from a harness |
 | S3 stage shell + cards + renderer | orchestrator | S1, S2 | first run end to end on a dev box |
-| S4 G's thread on the stage | designer subagent | S3 | consent + update + pill modes, regression green |
 | S5 Your Slurp in Settings | worker subagent | S2, S3 | Overview card + Run setup again, desk entry removed |
 | S6 translations | worker subagent | S1, S3 | locales validator green |
-| S4 G's screen | designer subagent | S3 | a redesign, not a port: full screen on the stage, no chat modal; the changelog is a short stack of release cards (no long thread, no switched-off composer). Keep G's portrait, lines, tone and length. |
 | S8 feedback bugs B1-B3 (`FEEDBACK-2026-10.md`) | orchestrator, worker for repro | S0 | each bug reproduced, root-caused, fixed with a regression |
 | S9 feedback requests R1-R10 (`FEEDBACK-2026-10.md`) | orchestrator + worker subagents, one request per slice | S0 | each request built with its regression and copy in en/de/ko/pl |
-| S7 release | orchestrator + reviewer + verifier | all, including S8 and S9 | reviewer findings fixed, 0.3.14 built, dev-box proof at 390/768/1440 |
+| S7 release | orchestrator + reviewer + verifier | all, including S8 and S9 | reviewer findings fixed, 0.3.18 built, dev-box proof at 390/768/1440 |
 
-Decided 2026-10-05: everything (opening day, the new G screen, B1-B3, R1-R10) ships as one update,
-0.3.14.
+Decided 2026-10-05: everything (opening day, B1-B3, R1-R11) ships as one update.
+Decided 2026-10-06: staging's G screen stays as it is (no G slice); staging is at 0.3.17, so this
+update is 0.3.18.

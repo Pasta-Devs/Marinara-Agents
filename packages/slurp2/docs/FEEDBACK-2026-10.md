@@ -25,5 +25,6 @@ want, and a first read of where it lives. Not triaged against code yet.
 | R8 | A Creator answering the player persona's comment should know them from DMs, not treat them as a stranger. | The Lord of the Backdoor | Comment-reply prompt: add the persona's DM relationship and recent DM gist when the commenter is the player. |
 | R9 | Edit or delete DM messages and regenerate a Creator's reply. | The Lord of the Backdoor | DM thread actions: edit own, delete, regenerate last Creator reply. |
 | R10 | Export a DM thread, or better a summary, to paste into lorebooks or the Long-Term Memory agent. | Terahurts | Thread menu: copy as text, and a "Summarize" assist action on the AI budget. |
+| R11 | Tapping an ad shows nothing: there is no ad page or sheet behind it. | gunterlie, 2026-10-06 | Find what the inline ad card does on tap; give it a destination (an ad sheet with the brand, the product, the offer). |
 
 Positive note: Minimax M3 (via Nano) gives Creators distinct voices in chat (Terahurts).
