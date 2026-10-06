@@ -1,3 +1,5 @@
+import { randomUUID } from "node:crypto";
+
 import {
   ltmExtractionDraftSchema,
   ltmResolveSubjectIdentityRequestSchema,
@@ -180,15 +182,13 @@ export async function resolveLtmSubjectIdentityReview(
           "ltm_identity_recovery_invalid",
         );
       if (compiled.compiledResponse.mutations.length) {
-        if (await draftStore.getDraft(id))
-          throw new LtmServiceError(
-            "A recovery draft with this ID already exists.",
-            409,
-            "ltm_identity_draft_conflict",
-          );
+        // The draft gets its own id. Reusing the rejected-suggestion id collides with a recovery
+        // draft that a newer extraction superseded, or that was already accepted, and permanently
+        // blocked re-resolving the same re-extracted candidate.
+        const draftId = randomUUID();
         draft = ltmExtractionDraftSchema.parse({
-          id,
-          operationId: id,
+          id: draftId,
+          operationId: draftId,
           createdAt: timestamp,
           updatedAt: timestamp,
           reviewRequired: true,

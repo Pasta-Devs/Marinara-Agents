@@ -1927,6 +1927,55 @@ async function main(routeScenario: RouteScenario) {
           headers,
         });
         assert.deepEqual(repeatDelete.json(), { deleted: false, id: skipSuggestion.id });
+        // A recovery draft that a newer extraction superseded, or that was already accepted, stays
+        // on disk when its saved choice is deleted. Re-resolving the same re-extracted candidate
+        // must not be blocked by that leftover draft, so the draft needs its own id.
+        const beaconUnit = makeIdentityUnit("character_fact", ["Alex"], "Alex rebuilds the beacon.");
+        const beaconSuggestion = await addIdentitySuggestion(shortNameSource, identityScope, deriveDropped(beaconUnit));
+        const beaconBind = await app.inject({
+          method: "POST",
+          url: `/api/long-term-memory/rejected-suggestions/${beaconSuggestion.id}/resolve-identity`,
+          headers,
+          payload: { choices: [{ name: "Alex", action: "bind", subjectKey: alexKey }] },
+        });
+        assert.equal(beaconBind.statusCode, 200, beaconBind.body);
+        const beaconDraftId = beaconBind.json().draft.id;
+        await storageService.drafts.createDraft({
+          source: { sourceNoteId: shortNameSource.id, chatId: identityScope.chatId },
+          scope: identityScope,
+          modes: ["roleplay"],
+          response: { summary: "A newer extraction", mutations: [] },
+        });
+        assert.equal((await storageService.drafts.getDraft(beaconDraftId)).status, "superseded");
+        const deletedBeaconChoice = await app.inject({
+          method: "DELETE",
+          url: `/api/long-term-memory/rejected-suggestions/${beaconSuggestion.id}`,
+          headers,
+        });
+        assert.deepEqual(deletedBeaconChoice.json(), { deleted: true, id: beaconSuggestion.id });
+        assert.equal(
+          (await storageService.drafts.getDraft(beaconDraftId)).status,
+          "superseded",
+          "a non-pending recovery draft is history and must survive",
+        );
+        const reExtractedBeacon = await addIdentitySuggestion(
+          shortNameSource,
+          identityScope,
+          deriveDropped(beaconUnit),
+        );
+        assert.equal(reExtractedBeacon.id, beaconSuggestion.id, "the same candidate keeps its suggestion id");
+        const reResolvedBeacon = await app.inject({
+          method: "POST",
+          url: `/api/long-term-memory/rejected-suggestions/${reExtractedBeacon.id}/resolve-identity`,
+          headers,
+          payload: { choices: [{ name: "Alex", action: "bind", subjectKey: alexKey }] },
+        });
+        assert.equal(reResolvedBeacon.statusCode, 200, reResolvedBeacon.body);
+        assert.notEqual(
+          reResolvedBeacon.json().draft.id,
+          reExtractedBeacon.id,
+          "a recovery draft must not reuse the rejected-suggestion id",
+        );
         await storageService.storage.deleteNotesPermanently([
           "char_short_name_alex_memory",
           "char_short_name_sam_memory",
