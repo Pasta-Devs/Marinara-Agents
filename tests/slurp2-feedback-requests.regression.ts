@@ -5,6 +5,11 @@ import { join } from "node:path";
 import { slurpCommissionBrief } from "../packages/slurp2/src/engine/packages/server/src/slp/modules/world/slp-world-copy.ts";
 import { SLURP_COMMISSION_ASKS } from "../packages/slurp2/src/engine/packages/shared/src/slp/slp-world.ts";
 import {
+  slurpLastAnswer,
+  slurpMessageEditable,
+  slurpMessageRemovable,
+} from "../packages/slurp2/src/engine/packages/shared/src/slp/slp-message-edit.ts";
+import {
   normalizeSlpCreatorSteering,
   slpRomanceAllows,
 } from "../packages/slurp2/src/engine/packages/shared/src/slp/slp-creator-steering.ts";
@@ -28,6 +33,42 @@ assert.deepEqual(normalizeSlpCreatorSteering({}).romance.never, [], "older saves
 assert.match(
   readFileSync(join(client, "../../../server/src/slp/features/projects/slp-creator-ties-service.ts"), "utf8"),
   /bond\.kind === "family" && slurpBondActive\(bond\)[\s\S]*?slurpBondFromRelation\(person\.relation\)\?\.kind === "family"[\s\S]*?never: \[\.\.\.\(creator\.romance\.never \?\? \[\]\), other\]/u,
+);
+
+// ── R9: edit and delete DMs, and have the Creator write the last answer again ──
+const msg = (id: string, role: "viewer" | "creator", kind = "text", price = 0) => ({ id, role, kind, price });
+assert.equal(slurpMessageEditable(msg("a", "viewer"), "viewer"), true);
+assert.equal(slurpMessageEditable(msg("a", "creator"), "viewer"), false, "only your own words");
+assert.equal(slurpMessageEditable(msg("a", "creator"), "creator"), true, "the Creator's owner writes as them");
+assert.equal(slurpMessageRemovable(msg("t", "viewer", "tip", 5)), false, "money stays");
+assert.equal(slurpMessageRemovable(msg("p", "creator", "ppv", 20)), false);
+assert.equal(slurpMessageRemovable(msg("q", "creator", "commission_quote")), false);
+assert.equal(slurpMessageRemovable(msg("x", "creator")), true);
+assert.deepEqual(slurpLastAnswer([msg("1", "viewer"), msg("2", "creator"), msg("3", "creator")]), ["2", "3"]);
+assert.equal(slurpLastAnswer([msg("1", "viewer")]), null, "no answer yet");
+assert.equal(slurpLastAnswer([msg("1", "creator")]), null, "nothing to answer");
+assert.equal(slurpLastAnswer([msg("1", "viewer"), msg("2", "creator", "ppv", 9)]), null, "a paid answer stays");
+const editRoutes = readFileSync(
+  join(client, "../../../server/src/slp/features/messages/slp-message-edit-routes.ts"),
+  "utf8",
+);
+assert.match(
+  editRoutes,
+  /hasPending\(threadId\)\)\s*return reply\.code\(409\)[\s\S]*?deleteSlurpMessages\(app\.db, threadId, answer\)[\s\S]*?force: true/u,
+);
+// Every write is locked while the thread is in a scene; the lock only wraps POST routes.
+const lock = readFileSync(
+  join(client, "../../../server/src/slp/features/messages/scenes/slp-roleplay-scene-lock.ts"),
+  "utf8",
+);
+for (const path of [...editRoutes.matchAll(/app\.(\w+)\("([^"]+)"/gu)]) {
+  assert.equal(path[1], "post", path[2]);
+  assert.ok(lock.includes(`"${path[2]}"`), path[2]);
+}
+// Deleting drops queued bubbles and claims and moves the epoch, so an answer in flight does not land.
+assert.match(
+  readFileSync(join(client, "../../../server/src/slp/data/messages/slp-message-edit-storage.ts"), "utf8"),
+  /delete\(slurpReplyBubbles\)[\s\S]*?delete\(slurpMessageClaims\)[\s\S]*?generationEpoch: String\(Number\(thread\?\.generationEpoch \?\? 0\) \+ 1\)/u,
 );
 
 // ── R8: a Creator answering a comment knows the commenter from DMs ──
