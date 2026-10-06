@@ -10,7 +10,6 @@ import {
 } from "../packages/slurp2/src/engine/packages/client/src/slp/features/onboarding/slp-release.ts";
 import {
   SLP_SETUP_STEPS,
-  SLP_TOUR_LABELS,
   slpOnboardingProgress,
 } from "../packages/slurp2/src/engine/packages/client/src/slp/features/onboarding/slp-onboarding-progress.ts";
 
@@ -23,7 +22,8 @@ assert.equal(slurp2SplashKind(null), "welcome");
 assert.equal(slurp2SplashKind("0.2.60"), "whats-new");
 assert.equal(slurp2SplashKind("an-unknown-version"), "whats-new");
 assert.equal(slurp2SplashKind(SLURP2_VERSION), null);
-assert.equal(getSlurp2UnseenReleases("0.2.72").length, 3);
+// Every release since then, newest first (the list grows with each release).
+assert.ok(getSlurp2UnseenReleases("0.2.72").length >= 3);
 
 const splash = src("features/onboarding/SlpSplash.tsx");
 const welcome = splash.slice(splash.indexOf("function SlurpWelcome("), splash.indexOf("function ReleaseNotes("));
@@ -64,62 +64,47 @@ for (const release of SLURP2_RELEASES) {
   }
 }
 
-// 3. Age gate: restyle only. Text, flow and the Pastapay gag stay; the X/Escape behaviour from 0a stays.
+// 3. Age check: the Pastapay card is the opening day's "license" stage (docs/OPENING-DAY.md). The
+// card, its text and the gag stay; the answer is a stage card, and before it X and Escape leave Slurp.
 const gate = src("features/onboarding/SlpAgeGate.tsx");
-for (const key of [
-  "cardTitle",
-  "cardSub",
-  "cardBrand",
-  "cardFree",
-  "adultConfirmation",
-  "explainerContinue",
-  "enter",
-]) {
+for (const key of ["cardTitle", "cardBrand", "cardFree"]) {
   assert.match(gate, new RegExp(`tt\\("${key}"`, "u"), `gate keeps ${key}`);
 }
 assert.match(gate, /const CARD_NUMBER = "5309 1312 4200 6969"/u);
 assert.match(gate, /ui\.noodle\.agegate\.cardCharging/u);
-assert.match(gate, /<SlpPrimaryButton[\s\S]*?disabled=\{!charged \|\| !confirmedAdult \|\| isPending\}/u);
 assert.doesNotMatch(gate, /font-black uppercase|text-\[0\.55rem\]/u, "no shouting buttons or sub-floor type");
-assert.match(src("app/SlpHomeHost.tsx"), /onClose=\{\(\) => leaveUnlessBackdrop\(onLeave\)\}/u);
+const opening = src("features/onboarding/SlpSiteWelcome.tsx");
+assert.match(opening, /ui\.noodle\.agegate\.notNow/u, "the license has a way back out");
+assert.match(
+  opening,
+  /const close = \(\) => \(confirmed \? onClose\(\) : leaveUnlessBackdrop\(onLeave\)\);/u,
+  "before the age check, X and Escape leave Slurp",
+);
 
 // 4. Wizard: one progress model with short labels, Slurp's own controls, reasons for disabled primaries.
-assert.deepEqual(slpOnboardingProgress({ intro: 0, setupLane: null, step: 1 }), {
-  current: 1,
-  total: 5,
-  label: "welcome",
-});
-assert.deepEqual(slpOnboardingProgress({ intro: 4, setupLane: null, step: 1 }), {
-  current: 5,
-  total: 5,
-  label: "posting",
-});
-assert.equal(slpOnboardingProgress({ intro: null, setupLane: null, step: 1 }), null, "the lane choice is not a step");
-assert.deepEqual(slpOnboardingProgress({ intro: null, setupLane: "easy", step: 1 }), {
+assert.equal(slpOnboardingProgress({ setupLane: null, step: 1 }), null, "no lane yet is not a step");
+assert.deepEqual(slpOnboardingProgress({ setupLane: "easy", step: 1 }), {
   current: 1,
   total: 2,
   label: "who",
 });
-assert.deepEqual(slpOnboardingProgress({ intro: null, setupLane: "easy", step: 4 }), {
+assert.deepEqual(slpOnboardingProgress({ setupLane: "easy", step: 4 }), {
   current: 2,
   total: 2,
   label: "review",
 });
-assert.deepEqual(slpOnboardingProgress({ intro: null, setupLane: "customize", step: 3 }), {
+assert.deepEqual(slpOnboardingProgress({ setupLane: "customize", step: 3 }), {
   current: 3,
   total: 4,
   label: "posting",
 });
-assert.equal(slpOnboardingProgress({ intro: null, setupLane: "customize", step: 5 }), null, "the result is not a step");
-for (const label of [
-  ...SLP_TOUR_LABELS,
-  ...Object.values(SLP_SETUP_STEPS).flatMap((steps) => steps.map((s) => s.label)),
-]) {
+assert.equal(slpOnboardingProgress({ setupLane: "customize", step: 5 }), null, "the result is not a step");
+for (const label of Object.values(SLP_SETUP_STEPS).flatMap((steps) => steps.map((s) => s.label))) {
   const text = en[`ui.slurp.wizard.label.${label}`];
   assert.ok(text, `label ${label} has English copy`);
   assert.ok(text.length <= 12, `label ${label} fits 390 px`);
 }
-for (const key of ["stepOf", "stepCount_one", "stepCount_other", "revealToContinue", "pickOne"]) {
+for (const key of ["stepOf", "stepCount_one", "stepCount_other", "pickOne"]) {
   assert.ok(en[`ui.slurp.wizard.${key}`], `ui.slurp.wizard.${key}`);
 }
 
@@ -139,12 +124,11 @@ assert.match(
   /function ConnectionPicker[\s\S]*?<SlpSheet[\s\S]*?<SlpRadioRow/u,
   "connections use a picker sheet",
 );
-assert.match(panel, /ui\.slurp\.wizard\.revealToContinue/u);
 assert.match(panel, /ui\.slurp\.wizard\.pickOne/u);
-assert.match(panel, /note=\{running \|\| reason\}/u, "every disabled primary says why under it");
+assert.match(panel, /note=\{running \? [\s\S]*? : reason\}/u, "every disabled primary says why under it");
 assert.match(src("modules/chrome/SlpWizardChrome.tsx"), /\[&>button\]:whitespace-nowrap/u, "the footer never wraps");
 assert.match(src("modules/chrome/SlpButton.tsx"), /export function SlpSquareCheck[\s\S]*?rounded-\[5px\]/u);
-// The demo stays, and its title stays hidden until the reveal (B16).
-assert.match(panel, /<LockedSlurpPostCard[\s\S]*?demo=\{\{[\s\S]*?lockedTitle:/u);
+// The locked demo is Mari's post on the opening day's phone: Unlock there reveals it.
+assert.match(src("features/onboarding/SlpSiteWelcome.tsx"), /<SlpPhonePreview[\s\S]*?onUnlock=/u);
 
 console.log("Slurp2 step 8 first-run regressions passed.");
