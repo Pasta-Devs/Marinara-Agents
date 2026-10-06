@@ -4,16 +4,12 @@
 
 Opening day, and the October Discord feedback.
 
-- Opening day replaces the first-run Support ticket: you own your Slurp, Slurp Support is your staff, and story scenes on a full-screen stage (opening, the Pastapay license, your Slurp, set it up, open the doors) use big answer cards beside a live phone preview that changes with every answer. One write at "Open the doors", as before.
-- Settings › Overview shows "Your Slurp" (the phone from today's settings) with Run setup again; "Your file" left the Stir desk. The opening day is translated into German, Korean and Polish.
-- Fixes: a typed reply in the role-play sign-up is no longer lost; a stuck reply bubble no longer keeps a DM on "already writing back"; Pulse no longer shows "creating first post" after the post exists.
-- DMs: edit or delete a message (tips, paid pictures and commissions stay), have the Creator write their last answer again, copy the whole chat, or get a short summary for a lorebook.
-- Comment replies know the commenter from DMs (rapport and the latest lines, never quoted in public).
-- Family bonds (from cards or set by you) never become couples, and a "never with" list per Creator keeps any pair apart.
-- Support desk: Creators write in only about what Support can act on (views, collabs, money), each topic rests 14 days, and quick replies fill the composer with one tap.
-- Fill in an older Creator's empty page fields through the sign-up chat (Creator settings › Overview).
-- Commission requests: edit what fans ask for, next to their first words. Collect: a switch for the daily limit.
-- Ads: tapping an ad opens a sheet with the whole offer.
+- Opening day replaces the first-run ticket: you own your Slurp, Support is your staff, and story scenes with big answer cards change a live phone preview. Settings › Overview shows Your Slurp and Run setup again. In German, Korean and Polish.
+- Fixes: typed sign-up replies are no longer lost; no DM stuck on "already writing back"; no stale "creating first post".
+- DMs: edit or delete messages, have the Creator write it again, copy a chat or a short summary. Comment replies know you from DMs.
+- Family never becomes a couple; keep any two Creators apart.
+- Support desk: tickets only about real levers, topics rest 14 days, quick replies.
+- Fill in an older Creator's empty page in a chat; edit what fans ask for in commissions; Collect without the daily limit; tapping an ad shows the offer.
 
 ## 0.3.17 — 2026-10-06
 
