@@ -30,6 +30,23 @@ assert.match(
   /bond\.kind === "family" && slurpBondActive\(bond\)[\s\S]*?slurpBondFromRelation\(person\.relation\)\?\.kind === "family"[\s\S]*?never: \[\.\.\.\(creator\.romance\.never \?\? \[\]\), other\]/u,
 );
 
+// ── R8: a Creator answering a comment knows the commenter from DMs ──
+const replies = readFileSync(
+  join(client, "../../../server/src/slp/features/messages/slp-reply-generation-service.ts"),
+  "utf8",
+);
+assert.match(
+  replies,
+  /return `\$\{line\}\$\{await describeCommenterDms\(db, creatorAccountId, viewerId, viewerName\)\}`;/u,
+);
+assert.match(
+  replies,
+  /dms\.getThread\(viewerId, creatorAccountId\)[\s\S]*?describeSlurpRapport\(await dms\.rapportFor/u,
+);
+assert.match(replies, /Do not quote private DMs in public/u);
+// DM lines can name a protected identity, so the relationship line is redacted like the comment.
+assert.match(replies, /relationship: protect\(input\.relationship \?\? "no history with this creator yet"\)/u);
+
 // ── R7: the player edits what the fan wants in a commission request ──
 assert.ok(
   SLURP_COMMISSION_ASKS.some((ask) => slurpCommissionBrief("seed").includes(ask)),
