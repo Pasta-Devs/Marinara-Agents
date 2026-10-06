@@ -5011,6 +5011,8 @@
   "ui.slurp.opening.preview.tab.discover": "Discover",
   "ui.slurp.opening.preview.tab.stir": "Stir",
   "ui.slurp.opening.preview.tab.inbox": "Inbox",
+  "ui.slurp.opening.yours.title": "Your Slurp",
+  "ui.slurp.opening.yours.detail": "How your Slurp runs today: pace, pictures, spice, fans and ads. Run setup again to change it the same way you set it up.",
   "ui.slurp.unlocksheet.gambleNeedsCoins": "You need {{amount}} <coin/> to take the bet.",
   "ui.slurp.settings.aiBudget.paced": "World work spreads its calls evenly over the day; replies to your own messages are never held back.",
   "ui.slurp.settings.fanTypes.voiceDraft": "Draft voice",

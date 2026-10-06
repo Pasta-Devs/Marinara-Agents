@@ -9,6 +9,7 @@ import {
   slpRailDefaults,
   slpRailFileRows,
   slpRailNext,
+  slpRailPhoneInput,
   slpRailSettle,
   slpRailStamp,
   slpRailSteps,
@@ -413,6 +414,25 @@ for (const locale of ["en"]) {
   const strings = JSON.parse(readFileSync(`${localeDir}/${locale}.json`, "utf8")) as Record<string, string>;
   const missing = [...new Set(keys)].filter((key) => !strings[key]);
   assert.deepEqual(missing, [], `${locale} is missing opening day copy`);
+}
+
+// S5: "Your Slurp" in Settings › Overview is the welcome's phone from today's settings; the Stir desk
+// lost "Your file".
+{
+  const ctx = context();
+  const today = slpRailPhoneInput(slpRailDefaults(ctx), ctx, true);
+  assert.ok(today.pace && today.spice && today.ads, "every region shows today's value");
+  assert.equal(slpRailPhoneInput(slpRailDefaults(ctx), ctx, false).ads, undefined, "the fun part only when on");
+  const client = "packages/slurp2/src/engine/packages/client/src/slp/";
+  assert.match(
+    readFileSync(`${client}features/backstage/SlpBackstageOverviewPanel.tsx`, "utf8"),
+    /<SlpYourSlurp onRunSetupAgain=\{page\.onRestartOnboarding\} \/>/u,
+  );
+  assert.doesNotMatch(readFileSync(`${client}features/stir/SlpStirDesk.tsx`, "utf8"), /SlpYourFile/u);
+  assert.match(
+    readFileSync(`${client}features/onboarding/SlpSiteWelcome.tsx`, "utf8"),
+    /slpRailPhoneInput\(shownAnswers/u,
+  );
 }
 
 console.log("slurp2 onboarding rail regression passed");

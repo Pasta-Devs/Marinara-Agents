@@ -27,6 +27,7 @@ import {
   slpRailDefaults,
   slpRailFileRows,
   slpRailNext,
+  slpRailPhoneInput,
   slpRailSettle,
   slpRailStamp,
   slpRailSteps,
@@ -197,25 +198,14 @@ export function SlpSiteWelcome({
     const known = state.answers.lane === "recommended" || opening === "again";
     const shown = <K extends keyof SlpRailAnswers>(key: K): SlpRailAnswers[K] =>
       state.answers[key] ?? (known ? answers[key] : undefined);
-    const nameOf = (list: SlpRailContext["textConnections"], id: string | undefined) =>
-      list.find((connection) => connection.id === id)?.name;
     const funOn = answers.fun === "sure" || known;
+    const shownAnswers = Object.fromEntries(
+      (Object.keys({ ...answers, ...state.answers }) as (keyof SlpRailAnswers)[]).map((key) => [key, shown(key)]),
+    ) as SlpRailAnswers;
     preview = {
+      ...slpRailPhoneInput(shownAnswers, context, funOn),
       creators: opening === "again" || state.seen.includes("moveIn"),
       locked: opening === "first" && !state.events.includes("revealed"),
-      pace: shown("pace"),
-      pictures: shown("pictures"),
-      spice: shown("spice"),
-      names: shown("names"),
-      nights: shown("nights"),
-      fans: funOn ? shown("fans") : undefined,
-      size: funOn ? shown("size") : undefined,
-      drama: funOn ? shown("drama") : undefined,
-      ads: funOn ? shown("ads") : undefined,
-      adTone: funOn ? shown("adTone") : undefined,
-      pullStrings: funOn ? shown("pullStrings") : undefined,
-      connectionName: nameOf(context.textConnections, shown("connection")),
-      imageConnectionName: nameOf(context.imageConnections, shown("imageConnection")),
     };
 
     const answer = (id: SlpRailQuestion, value: string) => {

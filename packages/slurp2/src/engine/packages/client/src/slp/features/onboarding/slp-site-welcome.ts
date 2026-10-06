@@ -7,6 +7,7 @@
  * nothing. Nothing is written before "Open the doors": `slpRailStamp` returns the one patch.
  * Pure, so the order, the branching and the mapping run in tests.
  */
+import type { SlpPhonePreviewInput } from "../../modules/preview/slp-phone-preview";
 import {
   SLURP_ACTIVITY_PRESETS,
   SLURP_DEFAULT_ACTIVITY_PRESET,
@@ -389,6 +390,34 @@ export function slpRailDefaults(context: SlpRailContext): SlpRailAnswers {
 }
 
 /** The defaults with the player's answers on top. No text connection: nothing runs on its own. */
+/**
+ * What the phone preview shows for these answers. A missing answer shows nothing; the fun part shows
+ * only when it is on. Used by the welcome stage and by "Your Slurp" in Settings (today's values).
+ */
+export function slpRailPhoneInput(
+  answers: SlpRailAnswers,
+  context: SlpRailContext,
+  funOn: boolean,
+): Omit<SlpPhonePreviewInput, "creators" | "locked"> {
+  const nameOf = (list: readonly SlpRailConnection[], id: string | undefined) =>
+    list.find((connection) => connection.id === id)?.name;
+  return {
+    pace: answers.pace,
+    pictures: answers.pictures,
+    spice: answers.spice,
+    names: answers.names,
+    nights: answers.nights,
+    fans: funOn ? answers.fans : undefined,
+    size: funOn ? answers.size : undefined,
+    drama: funOn ? answers.drama : undefined,
+    ads: funOn ? answers.ads : undefined,
+    adTone: funOn ? answers.adTone : undefined,
+    pullStrings: funOn ? answers.pullStrings : undefined,
+    connectionName: nameOf(context.textConnections, answers.connection),
+    imageConnectionName: nameOf(context.imageConnections, answers.imageConnection),
+  };
+}
+
 export function slpRailAnswers(state: SlpRailState, context: SlpRailContext): SlpRailAnswers {
   const answers = { ...slpRailDefaults(context), ...stripUndefined(state.answers) };
   return context.textConnections.length ? answers : { ...answers, pace: "manual" };

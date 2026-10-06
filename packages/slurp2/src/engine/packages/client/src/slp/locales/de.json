@@ -2911,5 +2911,7 @@
   "ui.slurp.postGuide.editDraft": "Bearbeiten",
   "ui.slurp.postGuide.generatePicture": "Ein Bild zum Entwurf generieren",
   "ui.slurp.postGuide.uploadPicture": "Ein Bild hochladen",
-  "ui.slurp.settings.creators.romanceNever": "Nie mit diesen Creators. Familie ist sowieso nie Romantik."
+  "ui.slurp.settings.creators.romanceNever": "Nie mit diesen Creators. Familie ist sowieso nie Romantik.",
+  "ui.slurp.opening.yours.title": "Dein Slurp",
+  "ui.slurp.opening.yours.detail": "So läuft dein Slurp heute: Tempo, Bilder, Würze, Fans und Werbung. Starte die Einrichtung neu, um es so zu ändern, wie du es eingerichtet hast."
 }

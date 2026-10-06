@@ -633,11 +633,8 @@ export function SlpStirScreen({
   onOpenTarget,
   onOpenSupport,
   onOpenSettings,
-  onRunSetupAgain,
 }: {
   personaId: string | null;
-  /** Support desk › Your file › Run setup again. */
-  onRunSetupAgain?: () => void;
   /** Settings › Stir › Drama, where the packs are switched on (0.3.11). */
   onOpenSettings?: () => void;
   /** A Creator's Slurp Support chat, from the Support desk (docs/SUPPORT-DESK.md). */
@@ -732,7 +729,6 @@ export function SlpStirScreen({
               personaId={personaId}
               onOpenThread={onOpenSupport}
               onPlay={(action, who) => setPlaying({ action, who })}
-              onRunSetupAgain={onRunSetupAgain}
             />
           ) : (
             <>

@@ -32,7 +32,6 @@ export function renderSlurpHomeDestinations({
     myCreatorProfile,
     onNavigate,
     retryAccountsOrReload,
-    setOnboardingMode,
     shellPersonaAccount,
     sourcePickerLoading,
     viewerPersonaId,
@@ -105,11 +104,6 @@ export function renderSlurpHomeDestinations({
               ? () => onNavigate({ mode: "creator", view: "profile", accountId: myCreatorProfile.id, dashboard: true })
               : undefined
           }
-          // The ticket opens over the hub, where the sign-up that may follow lives.
-          onRunSetupAgain={() => {
-            onNavigate({ mode: "creator", view: "hub" });
-            setOnboardingMode("again");
-          }}
         />
       </SlpShell>
     );
@@ -291,11 +285,9 @@ function SlpStirTab({
   onOpenTarget,
   onOpenSupport,
   onOpenSettings,
-  onRunSetupAgain,
 }: {
   personaId: string | null;
   onOpenSettings?: () => void;
-  onRunSetupAgain?: () => void;
   onOpenDashboard?: () => void;
   onOpenTarget?: ComponentProps<typeof SlpStirScreen>["onOpenTarget"];
   onOpenSupport?: (creatorId: string) => void;
@@ -308,7 +300,6 @@ function SlpStirTab({
       onOpenPulse={openSlpPulse}
       onOpenDashboard={onOpenDashboard}
       onOpenTarget={onOpenTarget}
-      onRunSetupAgain={onRunSetupAgain}
     />
   );
 }

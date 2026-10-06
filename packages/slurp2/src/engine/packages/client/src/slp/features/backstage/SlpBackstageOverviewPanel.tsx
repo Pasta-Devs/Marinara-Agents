@@ -18,6 +18,7 @@ import { Toggle } from "../../modules/settings/SlpSettingsControls";
 import { SettingAnchor } from "../../modules/settings/SlpSettingsKit";
 import { slurpAudiencePresetFor } from "../../../../../shared/src/slp/slp-tuning.js";
 import type { SlpBackstagePageProps } from "./slp-backstage-contract";
+import { SlpYourSlurp } from "../onboarding/slp-onboarding-contract";
 import type { SlpBackstageSection, SlpBackstageTarget } from "../../base/navigation/slp-backstage-target";
 import { formatDateTime } from "../../base/ui/slp-date-time";
 import { formatBytes } from "../../modules/settings/slp-backstage-format";
@@ -233,6 +234,8 @@ export function SlpBackstageOverviewPanel(page: SlpBackstagePageProps) {
           </p>
         )}
       </section>
+      {/* The opening day's phone, from today's settings (docs/OPENING-DAY.md, S5). */}
+      <SlpYourSlurp onRunSetupAgain={page.onRestartOnboarding} />
 
       {attention.length > 0 && (
         <section className={`${panelClass} ring-[var(--slurp-warning)]/35`} aria-labelledby="slurp-overview-attention">

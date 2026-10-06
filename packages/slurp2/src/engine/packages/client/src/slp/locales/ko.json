@@ -3725,5 +3725,7 @@
   "ui.slurp.postGuide.editDraft": "수정",
   "ui.slurp.postGuide.generatePicture": "초안과 함께 이미지 생성",
   "ui.slurp.postGuide.uploadPicture": "이미지 업로드",
-  "ui.slurp.settings.creators.romanceNever": "이 크리에이터와는 절대 안 됩니다. 가족은 어차피 로맨스가 되지 않습니다."
+  "ui.slurp.settings.creators.romanceNever": "이 크리에이터와는 절대 안 됩니다. 가족은 어차피 로맨스가 되지 않습니다.",
+  "ui.slurp.opening.yours.title": "나의 Slurp",
+  "ui.slurp.opening.yours.detail": "오늘 Slurp가 돌아가는 방식: 속도, 사진, 수위, 팬, 광고. 설정을 다시 실행하면 처음 설정할 때처럼 바꿀 수 있습니다."
 }

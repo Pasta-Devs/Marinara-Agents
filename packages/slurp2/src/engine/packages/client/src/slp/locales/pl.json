@@ -2947,5 +2947,7 @@
   "ui.slurp.postGuide.editDraft": "Edytuj",
   "ui.slurp.postGuide.generatePicture": "Generuj obraz wraz ze szkicem",
   "ui.slurp.postGuide.uploadPicture": "Prześlij obraz",
-  "ui.slurp.settings.creators.romanceNever": "Nigdy z tymi Twórcami. Rodzina i tak nigdy nie jest romansem."
+  "ui.slurp.settings.creators.romanceNever": "Nigdy z tymi Twórcami. Rodzina i tak nigdy nie jest romansem.",
+  "ui.slurp.opening.yours.title": "Twój Slurp",
+  "ui.slurp.opening.yours.detail": "Tak dziś działa Twój Slurp: tempo, zdjęcia, pikanteria, fani i reklamy. Uruchom konfigurację ponownie, by zmienić to tak samo, jak przy pierwszym ustawieniu."
 }
