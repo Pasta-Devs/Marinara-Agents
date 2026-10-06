@@ -3181,7 +3181,7 @@
         },
         "id": "relationship-tracker",
         "name": "Relationship Tracker",
-        "version": "0.6.2",
+        "version": "0.6.3",
         "description": "Tracks how the characters and your persona feel about each other. Add the Agent in Chat Settings → Agents → Tracker Agents for Roleplay mode.",
         "engine": {
           "min": "2.4.4",
@@ -3249,8 +3249,8 @@
           },
           {
             "path": "client.js",
-            "sha256": "c009aef56c8b6ac495005570b38ba1d4047ccea5485cfb04f89ab16132960b31",
-            "bytes": 60590
+            "sha256": "ee75d1c65835398961c5cc73ca7240f9bfb07e64f67b901dee3a5e84f6030faa",
+            "bytes": 68206
           },
           {
             "path": "contracts/relationship-state-v1.schema.json",
@@ -3281,9 +3281,9 @@
       "category": "tracker",
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/relationship-tracker.png",
       "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/relationship-tracker-0.6.2.zip",
-        "sha256": "40dbf026b4f88fa72a2def0ffa18742c113fb668902c310199b8f83bc4e90bf8",
-        "bytes": 198763
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/relationship-tracker-0.6.3.zip",
+        "sha256": "5e3d6fd318bfbd8c360c96857a5ecc1b596bf1630768789bfa45e06eb82796a0",
+        "bytes": 206379
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents/blob/main/packages/relationship-tracker/README.md"
     },

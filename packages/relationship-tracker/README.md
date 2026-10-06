@@ -12,6 +12,7 @@ The Tracker Panel's routes are privileged. When Marinara is opened from another 
 
 ## Use
 
+- In the Tracker Panel, Relationship Tracker is a collapsible section with the same header as the built-in trackers, and it remembers whether you collapsed it. In the desktop Trackers window, the window's own drawer collapses it instead.
 - Every assigned character card appears in the web, whether or not that character is currently in the scene. Defined lines use the four fixed color categories: positive, neutral, negative, complicated.
 - On desktop, hover or keyboard-focus a line to reveal its label. On touch and pen devices, press a line to reveal its label; press elsewhere in the web to dismiss it. This works for character-to-character lines and character-to-persona spokes.
 - The editor uses separate Character A and Character B selectors. Setting a relationship to **Undefined** and saving removes its line. Manual locks stay protected until **Resume automatic updates** is used.

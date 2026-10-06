@@ -16,6 +16,34 @@
     negative: "#fb7185",
     complicated: "#c084fc",
   });
+  const SECTION_TITLE = "Relationship Tracker";
+  const SECTION_COLLAPSED_STORAGE_KEY = "marinara.relationship-tracker.trackerPanelCollapsed";
+  // 24px stroke icons drawn like the Lucide icons on the Engine's built-in tracker sections.
+  const svgIcon = (paths, size) => `<svg viewBox="0 0 24 24" width="24" height="24" style="width:${size};height:${size}" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">${paths}</svg>`;
+  const WEB_ICON_PATHS = '<circle cx="12" cy="5" r="3"></circle><circle cx="5" cy="18" r="3"></circle><circle cx="19" cy="18" r="3"></circle><path d="M10.6 7.6 6.4 15.4M13.4 7.6l4.2 7.8M8 18h8"></path>';
+  const CHEVRON_ICON_PATHS = '<path d="m6 9 6 6 6-6"></path>';
+
+  // Remembered across reloads like the built-in sections' collapsed state; blocked storage keeps it for this page.
+  let sectionCollapsedFallback = false;
+
+  function isSectionCollapsed() {
+    try {
+      const stored = globalThis.localStorage?.getItem(SECTION_COLLAPSED_STORAGE_KEY);
+      if (stored === "true" || stored === "false") return stored === "true";
+    } catch {
+      // Storage can be blocked; use this page's choice.
+    }
+    return sectionCollapsedFallback;
+  }
+
+  function rememberSectionCollapsed(collapsed) {
+    sectionCollapsedFallback = collapsed;
+    try {
+      globalThis.localStorage?.setItem(SECTION_COLLAPSED_STORAGE_KEY, String(collapsed));
+    } catch {
+      // The choice still lasts for this page.
+    }
+  }
 
   const escapeHtml = (value) => String(value ?? "")
     .replaceAll("&", "&amp;")
@@ -317,6 +345,22 @@
       for (const group of this.shadowRoot.querySelectorAll?.("[data-line-group]") ?? []) {
         group.classList.toggle("line-label-active", group.dataset.lineGroup === key);
       }
+    }
+
+    // Collapse in place: a full render() would wipe unsaved editor input.
+    setSectionCollapsed(collapsed) {
+      rememberSectionCollapsed(collapsed);
+      const toggle = this.shadowRoot.querySelector?.("[data-section-toggle]");
+      toggle?.setAttribute("aria-expanded", String(!collapsed));
+      toggle?.setAttribute("title", `${collapsed ? "Expand" : "Collapse"} ${SECTION_TITLE}`);
+      const body = this.shadowRoot.querySelector?.("[data-section-body]");
+      if (body) body.hidden = collapsed;
+    }
+
+    // The desktop Trackers window wraps each tracker in a drawer that already shows its title and
+    // collapse arrow, as it does for built-in trackers; only the Tracker Panel needs this header.
+    hostProvidesHeader() {
+      return Boolean(this.closest?.(".mari-drawer__body"));
     }
 
     async loadPortrait(characterId) {
@@ -621,6 +665,9 @@
           this.setActiveLineLabel(null);
         }
       });
+      this.shadowRoot.querySelector?.("[data-section-toggle]")?.addEventListener("click", () => {
+        this.setSectionCollapsed(!isSectionCollapsed());
+      });
       const settingsDetails = this.shadowRoot.querySelector?.("[data-settings-details]");
       settingsDetails?.addEventListener("toggle", () => { this._settingsOpen = settingsDetails.open; });
       const helpDetails = this.shadowRoot.querySelector?.("[data-help-details]");
@@ -913,6 +960,34 @@
     updateProcessingStatusView() {
       const slot = this.shadowRoot.querySelector?.("[data-processing-status-slot]");
       if (slot) slot.innerHTML = this.renderProcessingStatus();
+      const headerSlot = this.shadowRoot.querySelector?.("[data-processing-header-slot]");
+      if (headerSlot) headerSlot.innerHTML = this.renderHeaderActivity();
+    }
+
+    processingLabel() {
+      return this._processing.source === "history"
+        ? "Relationship Tracker is updating from history…"
+        : "Relationship Tracker is processing this turn…";
+    }
+
+    // Built-in section headers spin their re-run icon while trackers run, so a collapsed section still shows activity.
+    renderHeaderActivity() {
+      const status = this._processing;
+      if (status.chatId !== this.currentChatId() || !status.processing) return "";
+      return `<span class="section-spinner" aria-hidden="true" title="${this.processingLabel()}"></span>`;
+    }
+
+    renderSectionHeader(collapsed) {
+      return `
+        <div class="section-header">
+          <button type="button" class="section-toggle" data-section-toggle aria-expanded="${!collapsed}" aria-controls="relationship-tracker-body" title="${collapsed ? "Expand" : "Collapse"} ${SECTION_TITLE}">
+            <span class="section-chevron" aria-hidden="true">${svgIcon(CHEVRON_ICON_PATHS, "0.6875rem")}</span>
+            <span class="section-icon" aria-hidden="true">${svgIcon(WEB_ICON_PATHS, "0.6875rem")}</span>
+            <span class="section-title">${SECTION_TITLE}</span>
+          </button>
+          <span class="section-actions" data-processing-header-slot>${this.renderHeaderActivity()}</span>
+        </div>
+      `;
     }
 
     renderProcessingStatus() {
@@ -920,9 +995,7 @@
       if (status.chatId !== this.currentChatId()) return "";
       if (status.processing) {
         const history = status.source === "history";
-        const label = history
-          ? "Relationship Tracker is updating from history…"
-          : "Relationship Tracker is processing this turn…";
+        const label = this.processingLabel();
         return `
           <div class="processing-status" role="status" aria-live="polite" data-processing-source="${history ? "history" : "automatic"}">
             <span class="processing-spinner" aria-hidden="true"></span>
@@ -950,13 +1023,32 @@
         const actionError = state.error ? `<p class="error" role="alert">${escapeHtml(state.error)}</p>` : "";
         content = `${actionError}${this.renderGraph(state.value)}${this.renderHistory(state.value, busy)}${this.renderEditor(state.value, busy)}${this.renderPersonaEditor(state.value, busy)}${this.renderSettings(state.value, busy)}`;
       }
+      const ownHeader = !this.hostProvidesHeader();
+      const collapsed = ownHeader && isSectionCollapsed();
+      this.replaceChildren?.(); // Drop a toolbar tile left in light DOM by an earlier view.
       this.shadowRoot.innerHTML = `
         <style>
           :host { display: block; min-width: 0; color: var(--foreground, #f5f5f5); container-type: inline-size; }
           * { box-sizing: border-box; }
-          .relationship-tracker { display: grid; min-width: 0; gap: 0.7rem; padding: clamp(0.45rem, 2.5cqw, 0.8rem); border: 1px solid var(--border, rgba(127,127,127,.35)); border-radius: 0.8rem; background: var(--tracker-panel-section-background, transparent); font: inherit; overflow: hidden; }
-          h3, h4, p, fieldset { margin: 0; }
-          h3 { font-size: 0.95rem; line-height: 1.25; }
+          /* No card of its own: the host's section shell supplies the background, veil and divider, as for built-in trackers. */
+          .relationship-tracker { display: block; min-width: 0; font: inherit; }
+          .section-body { display: grid; min-width: 0; gap: 0.7rem; padding: clamp(0.45rem, 2.5cqw, 0.8rem); overflow: hidden; }
+          .section-body[hidden] { display: none; }
+          /* Mirrors the Engine's SectionHeader (SectionControls.tsx) and its constrained-width title scale. */
+          .section-header { position: relative; display: flex; min-height: 1.75rem; align-items: center; gap: 0.25rem; border-bottom: 1px solid color-mix(in oklab, var(--border, #3f3f46) 42%, transparent); padding: 0.125rem 0.25rem; }
+          .section-toggle { display: flex; flex: 1 1 0%; min-width: 0; align-items: center; align-self: stretch; gap: 0.25rem; margin: 0; padding: 0; border: 0; border-radius: var(--radius-sm, 0.25rem); color: inherit; background: transparent; font: inherit; text-align: left; cursor: pointer; user-select: none; overflow-wrap: normal; transition: background-color .15s cubic-bezier(.4, 0, .2, 1); }
+          .section-toggle:hover { background: color-mix(in oklab, var(--accent, #27272a) 18%, transparent); }
+          .section-toggle:focus-visible { outline: none; box-shadow: inset 0 0 0 1px var(--border, #3f3f46); }
+          .section-chevron, .section-icon { display: flex; flex-shrink: 0; align-items: center; justify-content: center; height: 0.875rem; color: var(--tracker-profile-icon, var(--muted-foreground, #a1a1aa)); }
+          .section-chevron { width: 0.75rem; opacity: .6; }
+          .section-chevron svg { transition: transform .15s cubic-bezier(.16, 1, .3, 1); }
+          .section-toggle[aria-expanded="false"] .section-chevron svg { transform: rotate(-90deg); }
+          .section-icon { width: 0.875rem; opacity: .75; }
+          .section-title { min-width: 0; flex: 1 1 0%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: color-mix(in oklab, var(--foreground, #f4f4f5) 62%, transparent); font-size: calc(0.625rem * var(--tracker-panel-font-scale, 1)); font-weight: 600; line-height: calc(0.75rem * var(--tracker-panel-font-scale, 1)); letter-spacing: 0.08em; text-transform: uppercase; }
+          .section-actions { display: flex; min-height: 1.5rem; flex-shrink: 0; align-items: center; gap: 0.125rem; margin-left: 0.125rem; }
+          .section-actions:empty { display: none; }
+          .section-spinner { width: 0.75rem; height: 0.75rem; margin: 0.375rem; border: 2px solid color-mix(in oklab, var(--muted-foreground, #a1a1aa) 28%, transparent); border-top-color: color-mix(in oklab, var(--muted-foreground, #a1a1aa) 62%, transparent); border-radius: 999px; animation: spin .8s linear infinite; }
+          h4, p, fieldset { margin: 0; }
           h4 { font-size: 0.84rem; line-height: 1.3; }
           p { color: var(--muted-foreground, #a3a3a3); font-size: 0.78rem; line-height: 1.4; }
           .error { color: color-mix(in srgb, #ef4444 65%, var(--foreground, #f5f5f5)); }
@@ -1021,43 +1113,60 @@
           .settings input { width: 4.5rem; }
           textarea { resize: vertical; line-height: 1.35; }
           @container (max-width: 320px) {
-            .relationship-tracker { padding: 0.45rem; }
+            .section-body { padding: 0.45rem; }
             .history-form, .editor fieldset, .settings fieldset { grid-template-columns: 1fr; }
             .editor label, .wide-field { grid-column: 1; }
             .relationship-web { min-height: 12rem; }
             .edge-label, .character-name { font-size: 13px; }
           }
-          @media (prefers-reduced-motion: reduce) { .loading span, .processing-spinner { animation: none; } .edge-label { transition: none; } }
+          @media (prefers-reduced-motion: reduce) { .loading span, .processing-spinner, .section-spinner { animation: none; } .edge-label, .section-toggle, .section-chevron svg { transition: none; } }
         </style>
-        <section class="relationship-tracker" aria-label="Relationship Tracker">
-          <h3>Relationship Tracker</h3>
-          <details class="panel-help" data-help-details ${this._helpOpen ? "open" : ""}>
-            <summary>Panel size & layout</summary>
-            <p>Choose Compact, Standard, or Expanded under Settings → Appearance → Tracker Panel → Desktop size. Use the Tracker Panel header controls to dock or detach the whole panel.</p>
-          </details>
-          <div class="processing-slot" data-processing-status-slot>${this.renderProcessingStatus()}</div>
-          ${content}
+        <section class="relationship-tracker" aria-label="${SECTION_TITLE}">
+          ${ownHeader ? this.renderSectionHeader(collapsed) : ""}
+          <div class="section-body" id="relationship-tracker-body" data-section-body ${collapsed ? "hidden" : ""}>
+            <details class="panel-help" data-help-details ${this._helpOpen ? "open" : ""}>
+              <summary>Panel size & layout</summary>
+              <p>Choose Compact, Standard, or Expanded under Settings → Appearance → Tracker Panel → Desktop size. Use the Tracker Panel header controls to dock or detach the whole panel.</p>
+            </details>
+            <div class="processing-slot" data-processing-status-slot>${this.renderProcessingStatus()}</div>
+            ${content}
+          </div>
         </section>
       `;
       this.bindControls();
     }
 
+    renderToolbar() {
+      const hostClass = typeof this._props?.toolbarButtonClass === "string" ? this._props.toolbarButtonClass.trim() : "";
+      if (hostClass) {
+        // Wear the host's chat-widget button class like other packages' controls. Host classes style only light
+        // DOM, so the tile is slotted. It has no action of its own: presses pass through, so in the Trackers
+        // window they open the drawer, as a built-in tracker's preview does.
+        this.shadowRoot.innerHTML = "<style>:host { display: contents; }</style><slot></slot>";
+        this.innerHTML = `<span class="${escapeHtml(hostClass)}" role="img" aria-label="${SECTION_TITLE}" style="pointer-events: none;">${svgIcon(WEB_ICON_PATHS, "0.875rem")}</span>`;
+        return;
+      }
+      this.replaceChildren?.();
+      this.shadowRoot.innerHTML = `
+        <style>
+          :host { display: contents; }
+          button { display: inline-flex; align-items: center; justify-content: center; min-width: 2rem; min-height: 2rem; padding: 0.4rem; border: 0; border-radius: 0.5rem; color: inherit; background: transparent; font: inherit; opacity: 0.7; }
+        </style>
+        <button type="button" disabled aria-label="${SECTION_TITLE}" title="Relationship Tracker web loaded">${svgIcon(WEB_ICON_PATHS, "0.875rem")}</button>
+      `;
+    }
+
     render() {
       const view = this.getAttribute("view");
       if (view === "toolbar") {
-        this.shadowRoot.innerHTML = `
-          <style>
-            :host { display: contents; }
-            button { display: inline-flex; align-items: center; justify-content: center; min-width: 2rem; min-height: 2rem; padding: 0.4rem; border: 0; border-radius: 0.5rem; color: inherit; background: transparent; font: inherit; opacity: 0.7; }
-          </style>
-          <button type="button" disabled aria-label="Relationship Tracker" title="Relationship Tracker web loaded">↔</button>
-        `;
+        this.renderToolbar();
         return;
       }
       if (view === "tracker") {
         this.renderTracker();
         return;
       }
+      this.replaceChildren?.();
       this.shadowRoot.innerHTML = "";
     }
   }
