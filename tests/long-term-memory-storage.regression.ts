@@ -116,6 +116,8 @@ async function main() {
     deleteRejectedSuggestionsForSource,
     listRejectedSuggestions,
   } = await import(`${source}/rejected-suggestions.ts`);
+  const { DEFAULT_LTM_GLOBAL_SETTINGS } =
+    await import("../packages/long-term-memory/src/engine/packages/shared/src/features/agents/long-term-memory/schema.ts");
 
   const dataDir = await mkdtemp(join(tmpdir(), "marinara-ltm-storage-"));
   const warnings: unknown[][] = [];
@@ -317,6 +319,37 @@ async function main() {
         "the generated-keyword filter toggle must persist",
       );
       await updateLtmGlobalSettings({ longTermMemoryStopWordsFilterGenerated: true }, root);
+
+      // #1246: an invalid persisted setting must load its default instead of
+      // making every settings read (and recall) throw.
+      await writeFile(ltmSettingsPath(root), '{"version":1,"longTermMemorySemanticWeight":null}\n');
+      assert.equal(
+        (await getLtmGlobalSettings(root)).longTermMemorySemanticWeight,
+        DEFAULT_LTM_GLOBAL_SETTINGS.longTermMemorySemanticWeight,
+        "a null persisted weight must load its default instead of throwing",
+      );
+      await writeFile(ltmSettingsPath(root), '{"version":1,"longTermMemoryRecallStyle":"legacy-unknown"}\n');
+      assert.equal(
+        (await getLtmGlobalSettings(root)).longTermMemoryRecallStyle,
+        DEFAULT_LTM_GLOBAL_SETTINGS.longTermMemoryRecallStyle,
+        "an unknown persisted recall style must load the default instead of throwing",
+      );
+      const recoveredWeight = await updateLtmGlobalSettings({ longTermMemorySemanticWeight: null }, root);
+      assert.equal(
+        recoveredWeight.longTermMemorySemanticWeight,
+        DEFAULT_LTM_GLOBAL_SETTINGS.longTermMemorySemanticWeight,
+        "saving a null weight must recover to the default",
+      );
+      assert.equal(
+        "longTermMemorySemanticWeight" in JSON.parse(await readFile(ltmSettingsPath(root), "utf8")),
+        false,
+        "an invalid null weight must not be persisted",
+      );
+      assert.equal(
+        (await updateLtmGlobalSettings({ longTermMemorySemanticWeight: 0.42 }, root)).longTermMemorySemanticWeight,
+        0.42,
+        "a valid weight must still persist",
+      );
 
       const quarantine = join(root, "quarantine", "expired");
       await mkdir(quarantine, { recursive: true });
@@ -619,6 +652,11 @@ async function main() {
         ...exported,
         settings: {
           ...exported.settings,
+          global: {
+            ...exported.settings.global,
+            longTermMemorySemanticWeight: null,
+            longTermMemoryRecallStyle: "legacy-unknown",
+          },
           policies: { version: 1, policies: [] },
           retrieval: {
             version: 1,
@@ -653,6 +691,17 @@ async function main() {
         "backups must reject contradictory scalar and array scope aliases",
       );
       await replaceLongTermMemoryData(legacyBackup, freshRoot);
+      const restoredGlobal = await getLtmGlobalSettings(freshRoot);
+      assert.equal(
+        restoredGlobal.longTermMemorySemanticWeight,
+        DEFAULT_LTM_GLOBAL_SETTINGS.longTermMemorySemanticWeight,
+        "a restored null weight must fall back to its default",
+      );
+      assert.equal(
+        restoredGlobal.longTermMemoryRecallStyle,
+        DEFAULT_LTM_GLOBAL_SETTINGS.longTermMemoryRecallStyle,
+        "a restored unknown recall style must fall back to the default",
+      );
       const reexportedLegacy = await exportLongTermMemoryData(freshRoot);
       assert.equal("policies" in reexportedLegacy.settings, false);
       assert.equal("retrieval" in reexportedLegacy.settings, false);

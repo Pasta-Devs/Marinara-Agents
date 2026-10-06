@@ -81,10 +81,10 @@ const ltmGlobalSettingsShape = z
     longTermMemoryScoreThreshold: z.number().finite().min(0).max(1).optional(),
     longTermMemoryRecallContextMessages: z.number().int().min(1).max(20).optional(),
     longTermMemoryRecallStyle: z.enum(["balanced", "exact", "broad", "story", "custom"]).optional(),
-    longTermMemorySemanticWeight: z.number().finite().min(0).max(1).nullable().optional(),
-    longTermMemoryLexicalWeight: z.number().finite().min(0).max(1).nullable().optional(),
-    longTermMemoryGraphWeight: z.number().finite().min(0).max(1).nullable().optional(),
-    longTermMemoryKeywordWeight: z.number().finite().min(0).max(1).nullable().optional(),
+    longTermMemorySemanticWeight: z.number().finite().min(0).max(1).optional(),
+    longTermMemoryLexicalWeight: z.number().finite().min(0).max(1).optional(),
+    longTermMemoryGraphWeight: z.number().finite().min(0).max(1).optional(),
+    longTermMemoryKeywordWeight: z.number().finite().min(0).max(1).optional(),
     longTermMemoryStopWords: z.array(z.string().trim().min(1).max(80)).max(200).optional(),
     longTermMemoryStopWordsFilterGenerated: z.boolean().optional(),
     longTermMemoryIncludeResolved: z.boolean().optional(),
@@ -105,6 +105,14 @@ export const ltmGlobalSettingsSchema = z.preprocess((value) => {
   for (const key of Object.keys(normalized)) {
     if (LTM_GLOBAL_LEGACY_KEYS.test(key)) delete normalized[key];
   }
+  for (const key of [
+    "longTermMemorySemanticWeight",
+    "longTermMemoryLexicalWeight",
+    "longTermMemoryGraphWeight",
+    "longTermMemoryKeywordWeight",
+  ]) {
+    if (normalized[key] == null) delete normalized[key];
+  }
   if ("longTermMemoryRecallStyle" in normalized) {
     normalized.longTermMemoryRecallStyle =
       input.longTermMemoryRecallStyle === "exact" ||
@@ -114,6 +122,7 @@ export const ltmGlobalSettingsSchema = z.preprocess((value) => {
       input.longTermMemoryRecallStyle === "balanced"
         ? input.longTermMemoryRecallStyle
         : undefined;
+    if (normalized.longTermMemoryRecallStyle === undefined) delete normalized.longTermMemoryRecallStyle;
   }
   return normalized;
 }, ltmGlobalSettingsShape);
