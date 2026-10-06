@@ -27,4 +27,13 @@ want, and a first read of where it lives. Not triaged against code yet.
 | R10 | Export a DM thread, or better a summary, to paste into lorebooks or the Long-Term Memory agent. | Terahurts | Thread menu: copy as text, and a "Summarize" assist action on the AI budget. |
 | R11 | Tapping an ad shows nothing: there is no ad page or sheet behind it. | gunterlie, 2026-10-06 | Find what the inline ad card does on tap; give it a destination (an ad sheet with the brand, the product, the offer). |
 
+## Status (0.3.18)
+
+All of B1–B3 and R1–R11 are built in 0.3.18 (see CHANGELOG.md). Choices made on the way:
+
+- R1: a pushy fan, badges and burnout no longer open tickets (no Support lever for them; badges show
+  nowhere outside the case file). If badges should become visible on pages, that is a new request.
+- R5: the switch turns the daily limit off; it does not shorten it.
+- R6: the update runs as Support's part from Creator settings › Overview, for Creators Slurp runs.
+
 Positive note: Minimax M3 (via Nano) gives Creators distinct voices in chat (Terahurts).
