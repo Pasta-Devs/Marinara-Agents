@@ -26,9 +26,17 @@ export type SlpDeskTicketKind = (typeof SLP_DESK_TICKET_KINDS)[number];
 export const SLP_DESK_TICKET_STATUSES = ["open", "waiting", "resolved"] as const;
 export type SlpDeskTicketStatus = (typeof SLP_DESK_TICKET_STATUSES)[number];
 
-/** What a ticket a Creator opens is about. Picked from their real situation by the tick. */
+/** What a ticket a Creator opens is about. "fan", "badge" and "burnout" are only read from older saves. */
 export const SLP_DESK_TICKET_TOPICS = ["views", "fan", "badge", "collab", "money", "burnout"] as const;
 export type SlpDeskTicketTopic = (typeof SLP_DESK_TICKET_TOPICS)[number];
+/**
+ * R1 (docs/FEEDBACK-2026-10.md): a Creator writes in only about what Support can act on, each with a
+ * lever: views (a Discover feature), collab (a suggested collab), money (coins). Badges show nowhere
+ * outside the case file, and a pushy fan or being tired has no lever, so those never open a ticket.
+ */
+export const SLP_DESK_OPENED_TOPICS = ["views", "collab", "money"] as const satisfies readonly SlpDeskTicketTopic[];
+/** A topic rests this long per Creator after a ticket about it, so the same ask does not repeat. */
+export const SLP_DESK_TOPIC_REST_DAYS = 14;
 
 export const SLP_DESK_PERKS = ["feature", "badge", "coins"] as const;
 export type SlpDeskPerkKind = (typeof SLP_DESK_PERKS)[number];
@@ -134,6 +142,8 @@ export type SlpSupportDesk = {
   /** Notices already sent ("milestone:1000", "trending:<post id>"), so each goes out once. */
   noticed: string[];
   log: SlpDeskLogEntry[];
+  /** The topics this Creator wrote in about, newest last (R1: each rests a while). */
+  ticketTopics: { topic: SlpDeskTicketTopic; at: string }[];
 };
 
 export const SLP_DEFAULT_SUPPORT_DESK: SlpSupportDesk = {
@@ -156,6 +166,7 @@ export const SLP_DEFAULT_SUPPORT_DESK: SlpSupportDesk = {
   asks: [],
   noticed: [],
   log: [],
+  ticketTopics: [],
 };
 
 // ---------------------------------------------------------------------------------------------
@@ -336,6 +347,12 @@ export function normalizeSlpSupportDesk(raw: unknown): SlpSupportDesk {
       .map(date)
       .filter((entry): entry is string => entry !== null)
       .slice(-ASKS_MAX),
+    ticketTopics: (Array.isArray(value.ticketTopics) ? value.ticketTopics : [])
+      .map(record)
+      .filter((entry): entry is Record<string, unknown> => entry !== null)
+      .map((entry) => ({ topic: oneOf(SLP_DESK_TICKET_TOPICS, entry.topic), at: date(entry.at) }))
+      .filter((entry): entry is { topic: SlpDeskTicketTopic; at: string } => Boolean(entry.topic && entry.at))
+      .slice(-8),
     noticed: (Array.isArray(value.noticed) ? value.noticed : [])
       .map((entry) => str(entry, 120))
       .filter(Boolean)
@@ -565,21 +582,36 @@ export function slpDeskTick(
     elapsed > 0 &&
     rolls[1] < 1 - Math.pow(1 - pace, elapsed / DAY_MS)
   ) {
-    events.push({ kind: "ticket", topic: slpDeskTicketTopic(next, input.situation ?? {}, rolls[2]) });
+    const topic = slpDeskTicketTopic(next, input.situation ?? {}, rolls[2], at);
+    if (topic) {
+      events.push({ kind: "ticket", topic });
+      next = { ...next, ticketTopics: [...next.ticketTopics, { topic, at: at.toISOString() }].slice(-8) };
+    }
   }
   return { desk: next, events };
 }
 
-/** What a Creator writes in about, from their real situation first, then by chance. */
+/**
+ * What a Creator writes in about: their real situation first, then by chance, never a topic that is
+ * still resting. Null when every topic rests (no ticket this time).
+ */
 export function slpDeskTicketTopic(
   desk: SlpSupportDesk,
   situation: { viewsDown?: boolean; hasCollabWish?: boolean },
   roll: number,
-): SlpDeskTicketTopic {
-  if (situation.viewsDown || (desk.throttle && slpDeskActive(desk.throttle.until))) return "views";
-  if (situation.hasCollabWish) return "collab";
-  const open: SlpDeskTicketTopic[] = ["fan", "money", "burnout", ...(desk.badges.length < 2 ? ["badge" as const] : [])];
-  return open[Math.min(open.length - 1, Math.floor(roll * open.length))]!;
+  at = new Date(),
+): SlpDeskTicketTopic | null {
+  const resting = new Set(
+    desk.ticketTopics
+      .filter((entry) => at.getTime() - Date.parse(entry.at) < SLP_DESK_TOPIC_REST_DAYS * DAY_MS)
+      .map((entry) => entry.topic),
+  );
+  const fresh = (topic: SlpDeskTicketTopic) => !resting.has(topic);
+  if ((situation.viewsDown || (desk.throttle && slpDeskActive(desk.throttle.until, at))) && fresh("views"))
+    return "views";
+  if (situation.hasCollabWish && fresh("collab")) return "collab";
+  const open = SLP_DESK_OPENED_TOPICS.filter(fresh);
+  return open.length ? open[Math.min(open.length - 1, Math.floor(roll * open.length))]! : null;
 }
 
 /** Trust change for a resolved ticket's rating (1–5). */

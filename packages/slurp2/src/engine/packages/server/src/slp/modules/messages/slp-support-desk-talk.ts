@@ -77,6 +77,9 @@ export function slurpDeskPromptData(input: {
   const { desk, settings } = input;
   return {
     standing: slpDeskPromptLine(desk, input.supportName),
+    // R1: Creators asked Support for things Slurp does not have. These are all it can do.
+    whatSupportCanDo:
+      "feature you on Discover for a few days, give coins, set a challenge or a contract with a bonus, suggest a collab with another Creator. Never ask Support for anything else: no verification or badges, no blocking or moderation tools, no new app features.",
     ...(input.pendingOffer
       ? {
           pendingOffer: input.pendingOffer.summary,

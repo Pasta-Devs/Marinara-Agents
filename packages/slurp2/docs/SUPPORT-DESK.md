@@ -20,18 +20,18 @@ idea + a world wish). That is the whole toolset. This design replaces the fan pa
 
 ## Decisions
 
-| Topic                        | Decision                                                                                  |
-| ---------------------------- | ----------------------------------------------------------------------------------------- |
-| Where Support threads live   | A Support desk section at the bottom of the Stir tab. Persona inboxes no longer list them. |
-| Support writing to *your* Creators | Stays in that Creator's inbox (it is their mail). AI Support sends notices, badges, offers. |
-| Relationship                 | Trust meter per Creator. No rapport, mood tiers, strikes, pictures, fees or subscriptions. |
-| Limit on the player          | Risk only. Nothing blocks a move; shady moves raise the Creator's suspicion.              |
-| Getting caught               | Chance per world tick, rising with suspicion. Shown as "Risk n%". Private fallout only.   |
-| Rumours                      | Player picks: told by Support (traceable, more suspicion) or planted anonymously (less).  |
-| Rock-bottom Trust            | The Creator threatens to leave; a visible win-back window; then paused, never deleted.    |
-| Creator tickets              | Creators may write in with a ticket (status + rating). Off by default, set in Stir settings. |
-| Identity                     | Faceless team, always "Slurp Support". Old kept lines keep the host name they had.        |
-| AI Support vs your Creators  | Honest by default. "Slurp plays games with my Creators too" is a Stir setting, off.       |
+| Topic                              | Decision                                                                                     |
+| ---------------------------------- | -------------------------------------------------------------------------------------------- |
+| Where Support threads live         | A Support desk section at the bottom of the Stir tab. Persona inboxes no longer list them.   |
+| Support writing to _your_ Creators | Stays in that Creator's inbox (it is their mail). AI Support sends notices, badges, offers.  |
+| Relationship                       | Trust meter per Creator. No rapport, mood tiers, strikes, pictures, fees or subscriptions.   |
+| Limit on the player                | Risk only. Nothing blocks a move; shady moves raise the Creator's suspicion.                 |
+| Getting caught                     | Chance per world tick, rising with suspicion. Shown as "Risk n%". Private fallout only.      |
+| Rumours                            | Player picks: told by Support (traceable, more suspicion) or planted anonymously (less).     |
+| Rock-bottom Trust                  | The Creator threatens to leave; a visible win-back window; then paused, never deleted.       |
+| Creator tickets                    | Creators may write in with a ticket (status + rating). Off by default, set in Stir settings. |
+| Identity                           | Faceless team, always "Slurp Support". Old kept lines keep the host name they had.           |
+| AI Support vs your Creators        | Honest by default. "Slurp plays games with my Creators too" is a Stir setting, off.          |
 
 ## Standing: Trust and suspicion
 
@@ -103,11 +103,11 @@ Rule kept from today: nothing Support does can name or touch a fan.
 
 New message kinds in a Support thread:
 
-| Kind     | Who     | What                                                                         |
-| -------- | ------- | ---------------------------------------------------------------------------- |
-| `offer`  | Support | Holds one `SlpStirStep` + its preview; status `pending/accepted/countered/declined`. |
+| Kind     | Who     | What                                                                                   |
+| -------- | ------- | -------------------------------------------------------------------------------------- |
+| `offer`  | Support | Holds one `SlpStirStep` + its preview; status `pending/accepted/countered/declined`.   |
 | `notice` | Slurp   | Milestone, trending post, payout, badge granted, challenge result. Centred system row. |
-| `note`   | Support | Internal note. The player's own; never in any prompt, never seen by the Creator. |
+| `note`   | Support | Internal note. The player's own; never in any prompt, never seen by the Creator.       |
 
 Tickets are thread state, not a message: `{ topic, status: open | waiting | resolved, openedBy,
 rating? }`.
@@ -195,3 +195,12 @@ Advanced: Trust and suspicion rates, risk curve, win-back window length.
   several couples, each Creator monogamous or polyamorous; see DECISIONS, "0.3.5 Polyamory".
 - Desk notices and notes are "quiet" lines (`deskQuiet`): no reply flag, no unread, never the line
   a reply answers. Effects of a desk pass run only after its record is written.
+
+## Ticket topics (0.3.18, R1)
+
+- A Creator writes in only about what Support can act on: views (a Discover feature), collab (a
+  suggested collab) and money (coins). Badges show nowhere outside the case file, and a pushy fan or
+  being tired has no lever, so those topics are read from older saves only.
+- Each topic rests 14 days per Creator (`ticketTopics` on the desk record).
+- The Creator's talk prompt lists what Support can do (`whatSupportCanDo`) and tells them not to ask
+  for anything else.

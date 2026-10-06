@@ -212,6 +212,25 @@ const tick = (value: SlpSupportDesk, days: number, patch: Partial<Parameters<typ
     },
   });
   assert.equal(tick(open, 3, { settings: on, rolls: [0.99, 0, 0] }).events.length, 0);
+  // R1: only topics Support has a lever for, and a topic rests 14 days per Creator.
+  const topics = new Set(
+    [0, 0.2, 0.4, 0.6, 0.8, 0.99].map(
+      (roll) => (tick(desk(), 3, { settings: on, rolls: [0.99, 0, roll] }).events[0] as { topic?: string })?.topic,
+    ),
+  );
+  assert.deepEqual([...topics].sort(), ["collab", "money", "views"], "never badges, a pushy fan or burnout");
+  const first = tick(desk(), 3, { settings: on, rolls: [0.99, 0, 0] });
+  assert.deepEqual(first.events, [{ kind: "ticket", topic: "views" }]);
+  assert.equal(first.desk.ticketTopics.at(-1)?.topic, "views");
+  const second = tick(first.desk, 4, { settings: on, rolls: [0.99, 0, 0] });
+  assert.deepEqual(second.events, [{ kind: "ticket", topic: "collab" }], "views is resting");
+  const third = tick(second.desk, 5, { settings: on, rolls: [0.99, 0, 0] });
+  assert.deepEqual(third.events, [{ kind: "ticket", topic: "money" }]);
+  assert.equal(tick(third.desk, 6, { settings: on, rolls: [0.99, 0, 0] }).events.length, 0, "every topic rests");
+  assert.deepEqual(tick(third.desk, 20, { settings: on, rolls: [0.99, 0, 0] }).events, [
+    { kind: "ticket", topic: "views" },
+  ]);
+  assert.deepEqual(normalizeSlpSupportDesk({}).ticketTopics, [], "older saves read as no history");
 }
 
 // 7. The attitude is read from the card, stable per Creator.
