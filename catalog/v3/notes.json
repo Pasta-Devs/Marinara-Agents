@@ -546,6 +546,12 @@
     "relationship-tracker": {
       "versions": [
         {
+          "version": "0.6.3",
+          "date": "2026-10-06",
+          "notes": "- In the Tracker Panel, Relationship Tracker now has the same collapsible header as World, Persona and the other trackers instead of its own card, and remembers whether you collapsed it. While it runs, the header shows a small spinner.\n- In the desktop Trackers window, the drawer's own header is used, and Relationship Tracker's button now matches the other trackers' buttons.",
+          "highlight": false
+        },
+        {
           "version": "0.6.2",
           "date": "2026-10-02",
           "notes": "- Fixed \"Invalid or missing X-Admin-Secret header\" when Marinara is opened from another device (LAN, phone, or proxy). The panel now sends the admin secret saved on that device and explains where to save it.\n- Update from History falls back to the default agent connection, then the chat's, when no tracker connection is chosen.\n- Automatic runs keep valid changes when the model omits an empty list or returns one malformed persona entry.\n- Switching persona or removing a card mid-run no longer reports a failed run.\n- Tapping a line label or finishing an automatic update no longer wipes unsaved editor text or closes open sections.\n- The persona no longer covers a lone character or sits under relationship lines, and its arrowheads show.\n- The lock checkbox stays beside its label at Compact width; status colours are readable in the light theme.",
