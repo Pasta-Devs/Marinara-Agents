@@ -65,11 +65,18 @@ assert.match(
   /\? \("populated" as const\)\s*: \("spanning" as const\)/u,
   "routes without content must not reserve a blank rail",
 );
-// The age check is a card in the Support ticket (docs/ONBOARDING-RAIL.md); the ticket stays open, so
-// the card's own confetti plays out in place.
-assert.match(ageGate, /tt\("notNow"/u, "the age check must offer a direct exit");
-assert.match(ageGate, /setConfetti\(true\)/u, "the age-gate confetti payoff must remain");
-assert.match(ageGate, /setConfetti\(true\);\s*onComplete\(\);/u, "entry must begin while confetti continues");
+// The age check is opening day's license scene (docs/OPENING-DAY.md): its answer cards hold the
+// direct exit, and the scene's own confetti plays when the doors open and Mari unlocks.
+const openingDay = slurp2Source(
+  join(root, "packages/slurp2/src/engine/packages/client/src/slp/features/onboarding/SlpSiteWelcome.tsx"),
+);
+assert.match(ageGate, /tt\("cardBrand", "Pastapay"\)/u, "the Pastapay gag stays on the license card");
+assert.match(
+  openingDay,
+  /\{ id: "leave", label: t\("ui\.noodle\.agegate\.notNow"\), ghost: true \}[\s\S]*?onLeave\?\.\(\)/u,
+  "the age check must offer a direct exit",
+);
+assert.match(openingDay, /\{celebrate > 0 && <SlurpConfetti fixed \/>\}/u, "the confetti payoff must remain");
 
 // Only observed live balances animate. Static prices and history keep using the same quiet component.
 assert.match(coin, /watchAmount\?: number/u, "coin amounts must accept an observed live balance");

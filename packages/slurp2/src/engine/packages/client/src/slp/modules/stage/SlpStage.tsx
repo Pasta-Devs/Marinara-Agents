@@ -55,6 +55,12 @@ export function SlpStage({
 }) {
   const paced = pace > 0 && !slpPrefersReducedMotion();
   const [shown, setShown] = useState(() => (paced ? history : lines.length));
+  // A new scene starts its talk afresh, with steam before its first line.
+  const [sceneShown, setSceneShown] = useState(scene);
+  if (sceneShown !== scene) {
+    setSceneShown(scene);
+    setShown(0);
+  }
   // A scene that rewinds (a Change) must not skip the pause on its new lines.
   if (paced && shown > lines.length) setShown(lines.length);
   else if (paced && shown < Math.min(history, lines.length)) setShown(Math.min(history, lines.length));
@@ -113,7 +119,10 @@ export function SlpStage({
 
       <div className="grid min-h-0 flex-1 grid-rows-[minmax(0,52fr)_minmax(0,48fr)] md:mx-auto md:w-full md:max-w-[1120px] md:grid-cols-2 md:grid-rows-1">
         <section className="relative grid min-h-0 place-items-center overflow-hidden [perspective:1200px]">
-          <div key={stageKey} className="slp-stage-in absolute inset-0 flex flex-col items-center justify-center gap-3.5 px-4 py-2">
+          <div
+            key={stageKey}
+            className="slp-stage-in absolute inset-0 flex flex-col items-center justify-center gap-3.5 px-4 py-2"
+          >
             {stage}
           </div>
           {stageOverlay}

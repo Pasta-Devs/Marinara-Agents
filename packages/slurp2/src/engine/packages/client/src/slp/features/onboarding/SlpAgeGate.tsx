@@ -68,7 +68,10 @@ export function SlurpAgeGate({ personaName, done = false }: { personaName: strin
 
   const shownNumber = CARD_NUMBER.slice(0, typed).padEnd(CARD_NUMBER.length, "•");
   return (
-    <div className="flex w-full flex-col items-center gap-3.5" aria-label={tt("cardTitle", "Confirm that you are 18 or older")}>
+    <div
+      className="flex w-full flex-col items-center gap-3.5"
+      aria-label={tt("cardTitle", "Confirm that you are 18 or older")}
+    >
       <div className="slp-pastapay relative flex aspect-[1.586/1] w-[min(80vw,330px)] flex-col justify-between overflow-hidden rounded-[18px] bg-gradient-to-br from-zinc-800 to-zinc-950 p-[18px] text-zinc-100 shadow-[0_30px_60px_rgb(0_0_0/0.6),inset_0_1px_0_rgb(255_255_255/0.12)]">
         <div className="flex items-center justify-between">
           <CreditCard size={26} aria-hidden="true" className="text-[var(--noodle-accent-foreground)]" />
@@ -94,7 +97,9 @@ export function SlurpAgeGate({ personaName, done = false }: { personaName: strin
         className={cn(
           SLP_TYPE.meta,
           "flex items-center gap-1.5 rounded-full px-3 py-1.5",
-          charged ? "bg-[color-mix(in_srgb,var(--slurp-success)_20%,transparent)] text-[var(--slurp-text)]" : "text-[var(--slurp-muted)]",
+          charged
+            ? "bg-[color-mix(in_srgb,var(--slurp-success)_20%,transparent)] text-[var(--slurp-text)]"
+            : "text-[var(--slurp-muted)]",
         )}
       >
         {charged ? (

@@ -139,11 +139,12 @@ assert.match(
   "Each reason must name the creator it belongs to",
 );
 
-// A run that created nothing must not be recorded as finished onboarding.
+// Opening day completes onboarding at its one write ("Open the doors"). A sign-up afterwards, even one
+// that created nobody, must not write "not_started": that would send the owner through opening day again.
 assert.match(
   panel,
-  /selected\.size === 0 \|\| newIds\.length === 0 \? "zero" : "completed"/u,
-  "Nothing created must not write the completed onboarding state",
+  /\.\.\.\(selectionOnly \? \{\} : \{ onboarding: "completed" as const \}\)/u,
+  "the sign-up after opening day never resets onboarding",
 );
 assert.match(
   panel,

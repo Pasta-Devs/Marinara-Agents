@@ -87,7 +87,9 @@ export function SlpChoiceCards({
                 <span
                   className={cn(
                     "mt-0.5 block text-[12.5px] leading-4",
-                    lit ? "text-[color-mix(in_srgb,var(--slurp-on-accent)_72%,transparent)]" : "text-[var(--slurp-muted)]",
+                    lit
+                      ? "text-[color-mix(in_srgb,var(--slurp-on-accent)_72%,transparent)]"
+                      : "text-[var(--slurp-muted)]",
                   )}
                 >
                   {choice.hint}
