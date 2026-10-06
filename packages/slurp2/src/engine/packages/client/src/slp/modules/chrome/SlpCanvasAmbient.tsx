@@ -37,8 +37,14 @@ export function SlpCanvasAmbient() {
     const onScroll = () => {
       lastScrollAt = performance.now();
     };
+    // Measuring every picture each second is real work on a long feed: with nothing scrolled since
+    // the last look, check again only every 3 s (for pictures that finished loading).
+    let lastLookAt = Number.NEGATIVE_INFINITY;
     const look = () => {
-      if (document.visibilityState !== "visible" || !slpAmbientMayLook(performance.now(), lastScrollAt)) return;
+      const now = performance.now();
+      if (document.visibilityState !== "visible" || !slpAmbientMayLook(now, lastScrollAt)) return;
+      if (lastScrollAt < lastLookAt && now - lastLookAt < 3000) return;
+      lastLookAt = now;
       const src = slpLeadingPhotoSrc(frame);
       if (src) setLayers((now) => (now.current === src ? now : { current: src, previous: now.current }));
     };

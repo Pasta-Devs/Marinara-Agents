@@ -90,8 +90,10 @@ async function getPrivatePanelResponse(repository, personaRepository, chatId) {
 }
 
 function sendFailure(context, reply, label, error) {
-  context.api.runtime.logger?.warn?.(`Relationship Tracker ${label} failed`, error);
   const failure = errorResponse(error);
+  const logger = context.api.runtime.logger;
+  if (failure.statusCode >= 500) logger?.error?.(error, "Relationship Tracker %s failed", label);
+  else logger?.warn?.("Relationship Tracker %s rejected: %s", label, error?.message);
   return reply.status(failure.statusCode).send(failure.body);
 }
 

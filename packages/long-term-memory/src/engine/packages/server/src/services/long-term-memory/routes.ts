@@ -51,6 +51,7 @@ import {
   ltmWriteScopeSchema,
   ltmScopeSchema,
   type LtmScope,
+  type LtmResolvedGlobalSettings,
   ltmSectionKeySchema,
   ltmSectionSchema,
   ltmStatusSchema,
@@ -60,6 +61,7 @@ import {
   ltmSubjectsSchema,
   ltmRejectedSuggestionsClearResponseSchema,
   ltmRejectedSuggestionsResponseSchema,
+  ltmResolveSubjectIdentityResponseSchema,
 } from "../../../../shared/src/features/agents/long-term-memory/schema.js";
 import { clearLtmDebugLog, exportLtmDebugLog, readLtmDebugLog } from "./debug-log.js";
 import { projectLongTermMemoryDraftReview } from "./draft-review.js";
@@ -77,10 +79,12 @@ import { CURRENT_LTM_CHUNK_FORMAT_VERSION } from "./chunking.js";
 import { retrieveLongTermMemory } from "./retrieval.js";
 import { applyLongTermMemoryDraft, preflightLongTermMemoryDraft } from "./reconciliation.js";
 import { applyLtmScopeLinksToDerivedNotes } from "./scope-links.js";
-import { getLtmGlobalSettings, updateLtmGlobalSettings } from "./settings.js";
+import { getLtmGlobalSettings, ltmGeneratedStopWords, updateLtmGlobalSettings } from "./settings.js";
+import { buildStopWordSet } from "./keyword-extract.js";
+import { withLtmVaultLock } from "./vault-lock.js";
 import type { LongTermMemoryDraftStore } from "./draft-store.js";
 import type { LongTermMemoryStorage } from "./storage.js";
-import { readLongTermMemoryInjectionReceipt } from "./usage.js";
+import { readLongTermMemoryAttempt, readLongTermMemoryInjectionReceipt } from "./usage.js";
 import {
   ltmModeForChatMode,
   normalizeLtmChatCharacterIds,
@@ -105,6 +109,7 @@ import {
 } from "../../../../shared/src/features/agents/long-term-memory/scope.js";
 import { applyLtmIdentityRepairs, LtmIdentityRepairError, previewLtmIdentityRepairs } from "./identity-repair.js";
 import { loadTrustedLtmSubjectCatalog } from "./subject-identity.js";
+import { resolveLtmSubjectIdentityReview } from "./subject-choice-review.js";
 import { LtmServiceError, ltmErrorResponse } from "./service-error.js";
 import {
   deleteAllLongTermMemoryData,
@@ -381,6 +386,7 @@ const rejectedSuggestionsQuery = z
   .object({
     sourceNoteId: ltmNoteIdSchema.optional(),
     chatId: z.string().min(1).max(120).optional(),
+    includeResolved: queryBoolean,
   })
   .strict();
 const rejectedSuggestionsDeleteQuery = z.object({ sourceNoteId: ltmNoteIdSchema }).strict();
@@ -475,6 +481,11 @@ export function createLongTermMemoryRoutes(runtime: {
         };
       }
     };
+    // The recall index fingerprints the effective generated stop-word set, so only a
+    // change to that normalized set (or the filter flag that gates it) needs a rebuild.
+    // Comparing the normalized set keeps equivalent spellings from rebuilding needlessly.
+    const effectiveIndexStopWords = (settings: LtmResolvedGlobalSettings) =>
+      JSON.stringify([...buildStopWordSet(ltmGeneratedStopWords(settings))].sort());
     app.get("/status", async () => {
       await storage.initializeLtmStore();
       const dirs = getLongTermMemoryDirectories(root);
@@ -557,9 +568,22 @@ export function createLongTermMemoryRoutes(runtime: {
     );
     app.delete("/debug-log", async () => clearLtmDebugLog(root));
     app.get<{ Params: { chatId: string } }>("/last-injection/:chatId", async (request) => {
-      const receipt = await readLongTermMemoryInjectionReceipt(request.params.chatId, root);
+      const [receipt, observedAttempt] = await Promise.all([
+        readLongTermMemoryInjectionReceipt(request.params.chatId, root),
+        readLongTermMemoryAttempt(request.params.chatId, root),
+      ]);
+      const attempt = observedAttempt
+        ? { ...observedAttempt, confirmed: receipt?.attemptId === observedAttempt.attemptId }
+        : null;
       if (!receipt)
-        return { memoryCount: 0, tokenCount: 0, memories: [], state: "not_recorded" as const, dispatchedAt: null };
+        return {
+          memoryCount: 0,
+          tokenCount: 0,
+          memories: [],
+          state: "not_recorded" as const,
+          dispatchedAt: null,
+          attempt,
+        };
       const notesById = new Map((await storage.listNotes()).map((note) => [note.id, note]));
       const memories = new Map<
         string,
@@ -596,6 +620,7 @@ export function createLongTermMemoryRoutes(runtime: {
         memories: [...memories.values()],
         state: memories.size ? ("injected" as const) : ("no_matches" as const),
         dispatchedAt: receipt.dispatchedAt,
+        attempt,
       };
     });
     app.get("/settings", async () => getLtmGlobalSettings(root));
@@ -622,9 +647,25 @@ export function createLongTermMemoryRoutes(runtime: {
       }
     });
     app.delete("/data", async () => deleteAllLongTermMemoryData(root));
-    app.post("/settings/reset", async () => resetLongTermMemorySettings(root));
+    // Settings that change the recall index persist first, then rebuild under the
+    // reentrant vault lock so a concurrent recall never sees the new settings beside a
+    // stale index. A failed rebuild is reported as deferred without rolling the save back.
+    app.post("/settings/reset", async () =>
+      withLtmVaultLock(root, async () => {
+        const before = effectiveIndexStopWords(await getLtmGlobalSettings(root));
+        const result = await resetLongTermMemorySettings(root);
+        const after = effectiveIndexStopWords(await getLtmGlobalSettings(root));
+        return { ...result, rebuild: before === after ? null : await rebuildAfterMutation() };
+      }),
+    );
     app.put<{ Body: unknown }>("/settings", { bodyLimit: MAINTENANCE_BODY_LIMIT_BYTES }, async (request) =>
-      updateLtmGlobalSettings(ltmGlobalSettingsSchema.parse(request.body ?? {}), root),
+      withLtmVaultLock(root, async () => {
+        const parsed = ltmGlobalSettingsSchema.parse(request.body ?? {});
+        const before = effectiveIndexStopWords(await getLtmGlobalSettings(root));
+        const saved = await updateLtmGlobalSettings(parsed, root);
+        const after = effectiveIndexStopWords(saved);
+        return { ...saved, rebuild: before === after ? null : await rebuildAfterMutation() };
+      }),
     );
     app.get("/extraction-settings", async () => getLtmExtractionConfig(root));
     app.put<{ Body: unknown }>(
@@ -1408,6 +1449,21 @@ export function createLongTermMemoryRoutes(runtime: {
         return reply.status(400).send({ error: "Invalid rejected-suggestion ID", code: "ltm_invalid_request" });
       return deleteRejectedSuggestion(parsed.data, root);
     });
+    app.post<{ Params: { id: string }; Body: unknown }>(
+      "/rejected-suggestions/:id/resolve-identity",
+      { bodyLimit: MAINTENANCE_BODY_LIMIT_BYTES },
+      async (request, reply) => {
+        try {
+          const id = z.string().uuid().parse(request.params.id);
+          return ltmResolveSubjectIdentityResponseSchema.parse(
+            await resolveLtmSubjectIdentityReview(id, request.body, root),
+          );
+        } catch (error) {
+          const result = routeError(error, "Failed to save subject identity choices");
+          return reply.status(result.statusCode).send(result.body);
+        }
+      },
+    );
     app.post<{ Params: { id: string }; Body: unknown }>(
       "/drafts/:id/preflight",
       { bodyLimit: DRAFT_BODY_LIMIT_BYTES },

@@ -12,9 +12,21 @@ import { resolveStoredChatOptions, resolveStoredMaxTokens } from "../generation/
 import type { ImageCaptioningRuntime } from "../generation/image-captioning-runtime.js";
 import { clampGenerationMaxOutputTokens } from "../generation/output-token-limits.js";
 import { noodleSamplingOptions } from "./noodle-sampling-options.js";
-import { noodleTimelineRefreshMaxTokens } from "./noodle-post-target.js";
+import {
+  NOODLE_TIMELINE_MIN_OUTPUT_TOKENS,
+  noodleTimelineMaxTokensForPrompt,
+  noodleTimelineRefreshMaxTokens,
+} from "./noodle-post-target.js";
 import { withConnectionFallbackProvider } from "../llm/connection-fallback-provider.js";
-import { llmFetch, type ChatMessage } from "../llm/base-provider.js";
+import {
+  BaseLLMProvider,
+  fitMessagesToContext,
+  llmFetch,
+  type ChatCompletionResult,
+  type ChatMessage,
+  type ChatOptions,
+  type LLMUsage,
+} from "../llm/base-provider.js";
 import { createLLMProvider } from "../llm/provider-registry.js";
 import { createCharacterGalleryStorage } from "../storage/character-gallery.storage.js";
 import { createCharactersStorage } from "../storage/characters.storage.js";
@@ -72,6 +84,74 @@ type PublicGenerationInput = {
   /** Scheduler-owned automatic refreshes pass background so they yield to user generation. */
   admissionMode?: ConnectionAdmissionMode;
 };
+
+class NoodleTimelineTooLongError extends Error {
+  constructor() {
+    super(
+      "The timeline prompt is too long for this connection's context window. No timeline changes were saved. In Noodle settings, use fewer active accounts or turn off Lorebook context. You can also turn off Allow Noodle references in some chats, or load the model with a larger context size.",
+    );
+  }
+}
+
+/**
+ * Lowers each timeline request's max_tokens for the connection it wraps, so the bundled context fitter
+ * never has to cut the prompt. Only the primary connection is wrapped: a configured fallback still gets
+ * the original request and fits it to its own context.
+ */
+class NoodleTimelineBudgetProvider extends BaseLLMProvider {
+  /** True when this connection's last answer ran out of a lowered max_tokens. */
+  answeredUnderLoweredBudget = false;
+
+  constructor(private readonly provider: BaseLLMProvider) {
+    // This facade delegates all I/O; keep connection credentials confined to the wrapped provider.
+    super("", "", provider.maxContextValue ?? undefined, null, provider.maxTokensOverrideValue);
+  }
+
+  private sized(messages: ChatMessage[], options: ChatOptions): ChatOptions {
+    if (options.maxTokens === undefined) return options;
+    const fit = fitMessagesToContext(messages, {
+      maxContext: this.provider.maxContextValue ?? undefined,
+      maxTokens: options.maxTokens,
+    });
+    const maxTokens = noodleTimelineMaxTokensForPrompt(fit, options.maxTokens);
+    if (maxTokens === null) {
+      logger.warn(
+        "[noodle] The timeline prompt needs ~%d of the connection's %d context tokens, leaving less than %d tokens for the answer",
+        fit.estimatedTokensBefore,
+        fit.maxContext,
+        Math.min(options.maxTokens, NOODLE_TIMELINE_MIN_OUTPUT_TOKENS),
+      );
+      throw new NoodleTimelineTooLongError();
+    }
+    if (maxTokens < options.maxTokens)
+      logDebugOverride(
+        options.debugMode === true,
+        "[debug/noodle] Lowered the answer budget from %d to %d tokens so the whole prompt fits the %d-token context",
+        options.maxTokens,
+        maxTokens,
+        fit.maxContext,
+      );
+    return { ...options, maxTokens };
+  }
+
+  async *chat(messages: ChatMessage[], options: ChatOptions): AsyncGenerator<string, LLMUsage | void, unknown> {
+    return yield* this.provider.chat(messages, this.sized(messages, options));
+  }
+
+  override async chatComplete(messages: ChatMessage[], options: ChatOptions): Promise<ChatCompletionResult> {
+    this.answeredUnderLoweredBudget = false;
+    const sized = this.sized(messages, options);
+    const result = await this.provider.chatComplete(messages, sized);
+    // Only a length stop counts: an empty "error" result sends ConnectionFallbackProvider to the
+    // fallback, whose own length stop must not be read as this connection's.
+    this.answeredUnderLoweredBudget = sized.maxTokens !== options.maxTokens && result.finishReason === "length";
+    return result;
+  }
+
+  override embed(texts: string[], model: string, signal?: AbortSignal): Promise<number[][]> {
+    return this.provider.embed(texts, model, signal);
+  }
+}
 
 function parseStringArray(value: unknown): string[] {
   if (Array.isArray(value)) return value.filter((item): item is string => typeof item === "string" && item.length > 0);
@@ -150,14 +230,16 @@ export function createPublicNoodleGenerationService(db: DB) {
           input.connection.defaultParameters,
         );
         const fallbackConnection = await connections.getFallbackForMain();
-        const provider = withConnectionFallbackProvider({
-          primary: primaryProvider,
+        const fallbackArgs = {
           primaryConnectionId: input.connection.id,
           fallbackConnection,
           fallbackBaseUrl: fallbackConnection ? resolveBaseUrl(fallbackConnection) : "",
           category: "main",
           admissionMode: input.admissionMode,
-        });
+        } as const;
+        const provider = withConnectionFallbackProvider({ primary: primaryProvider, ...fallbackArgs });
+        const timelinePrimary = new NoodleTimelineBudgetProvider(primaryProvider);
+        const timelineProvider = withConnectionFallbackProvider({ primary: timelinePrimary, ...fallbackArgs });
         await ensurePersonaAccounts(noodle, characters);
         if (settings.allowProfessorMari) await ensureProfessorMariAccount(noodle, characters);
         const personaAccount = await resolvePersonaAccount(noodle, characters, input.personaId);
@@ -320,18 +402,24 @@ export function createPublicNoodleGenerationService(db: DB) {
           debugMode,
           responseFormat: noodleResponseFormat(input.connection.model, "timeline"),
         } as const;
-        let result: Awaited<ReturnType<typeof provider.chatComplete>>;
+        // A lowered answer that ran out of room is a context problem, not a bad answer worth correcting.
+        const cutByLoweredBudget = (completion: ChatCompletionResult) =>
+          completion.finishReason === "length" && timelinePrimary.answeredUnderLoweredBudget;
+        let result: Awaited<ReturnType<typeof timelineProvider.chatComplete>>;
         try {
-          result = await provider.chatComplete(requestMessages, completionOptions);
+          result = await timelineProvider.chatComplete(requestMessages, completionOptions);
         } catch (error) {
+          const imagesTooLong = error instanceof NoodleTimelineTooLongError;
           if (
             !canRetryNoodleVisionRequest(firstAttemptKind, prompt.visionAttachmentCount) ||
-            !isUnsupportedNoodleVisionInputError(error)
+            !(imagesTooLong || isUnsupportedNoodleVisionInputError(error))
           )
             throw error;
           logger.warn(
             error,
-            "[noodle/vision] The selected timeline model rejected image input; retrying the refresh as text-only",
+            imagesTooLong
+              ? "[noodle/vision] The timeline prompt does not fit the context with its images; retrying the refresh as text-only"
+              : "[noodle/vision] The selected timeline model rejected image input; retrying the refresh as text-only",
           );
           logDebugOverride(
             debugMode,
@@ -340,7 +428,7 @@ export function createPublicNoodleGenerationService(db: DB) {
           );
           requestMessages = prompt.textOnlyMessages;
           firstAttemptKind = "text_only_fallback";
-          result = await provider.chatComplete(prompt.textOnlyMessages, completionOptions);
+          result = await timelineProvider.chatComplete(prompt.textOnlyMessages, completionOptions);
         }
         let content = result.content ?? "";
         logDebugOverride(
@@ -380,6 +468,7 @@ export function createPublicNoodleGenerationService(db: DB) {
           rejectionReason: retryReason,
           createdAt: new Date().toISOString(),
         });
+        if (retryReason && cutByLoweredBudget(result)) throw new NoodleTimelineTooLongError();
         if (retryReason) {
           const allowedHandles = selectedParticipants.map((account) => `@${account.handle}`);
           const knownTargetHandles = activeAccounts.map((account) => `@${account.handle}`);
@@ -398,7 +487,7 @@ export function createPublicNoodleGenerationService(db: DB) {
             "[debug/noodle] Correction prompt sent to model:\n%s",
             formatNoodleMessagesForLog(correctionMessages),
           );
-          result = await provider.chatComplete(correctionMessages, completionOptions);
+          result = await timelineProvider.chatComplete(correctionMessages, completionOptions);
           content = result.content ?? "";
           logDebugOverride(
             debugMode,
@@ -426,6 +515,7 @@ export function createPublicNoodleGenerationService(db: DB) {
             rejectionReason: correctedRetryReason,
             createdAt: new Date().toISOString(),
           });
+          if (correctedRetryReason && cutByLoweredBudget(result)) throw new NoodleTimelineTooLongError();
           if (retryReason === NOODLE_EMPTY_TIMELINE_REASON && correctedRetryReason === NOODLE_EMPTY_TIMELINE_REASON) {
             throw new Error(
               "The generation model returned no timeline activity twice. No timeline changes were saved. Try again, or lower Accounts per refresh.",

@@ -2,15 +2,20 @@ import { createHash } from "node:crypto";
 import {
   ltmExtractionDroppedCandidateSchema,
   ltmRejectedSuggestionSchema,
+  ltmExtractionDraftSchema,
   type LtmExtractionDroppedCandidate,
   type LtmExtractionDraft,
   type LtmRejectedSuggestion,
+  type LtmSavedSubjectIdentityChoice,
 } from "../../../../shared/src/features/agents/long-term-memory/schema.js";
 import { readJsonFile, writeJsonAtomic } from "./atomic-json.js";
 import { getLongTermMemoryRoot, ltmRejectedSuggestionsPath } from "./paths.js";
-import { nowIso } from "./ltm-utils.js";
+import { nowIso, normalizeSubjectName } from "./ltm-utils.js";
 import { logger } from "./package-runtime.js";
 import { withLtmVaultLock } from "./vault-lock.js";
+import { ltmScopeFamilyId } from "./chat-scope.js";
+import { draftPathForId } from "./draft-store.js";
+import { commitLtmMutation } from "./mutation-transaction.js";
 
 export const LTM_REJECTED_SUGGESTIONS_LIMIT = 10_000;
 
@@ -31,7 +36,12 @@ function fingerprint(
   candidate: LtmExtractionDroppedCandidate,
   includeRecoveryCandidate = true,
 ) {
-  const { validatorCode: _validatorCode, recoveryCandidate: _recoveryCandidate, ...legacyCandidate } = candidate;
+  const {
+    validatorCode: _validatorCode,
+    recoveryCandidate: _recoveryCandidate,
+    identityReview: _identityReview,
+    ...legacyCandidate
+  } = candidate;
   const fingerprintCandidate = includeRecoveryCandidate
     ? { ...legacyCandidate, ...(candidate.recoveryCandidate ? { recoveryCandidate: candidate.recoveryCandidate } : {}) }
     : legacyCandidate;
@@ -84,21 +94,105 @@ function sortSuggestions(suggestions: LtmRejectedSuggestion[]) {
 }
 
 export async function listRejectedSuggestions(
-  filter: { sourceNoteId?: string; chatId?: string } = {},
+  filter: { sourceNoteId?: string; chatId?: string; includeResolved?: boolean } = {},
   root = getLongTermMemoryRoot(),
 ) {
   return withLtmVaultLock(root, async () => {
-    const suggestions = (await readSuggestionsUnlocked(root)).filter(
+    const records = await readSuggestionsUnlocked(root);
+    const savedByFamily = new Map<string, Map<string, LtmSavedSubjectIdentityChoice>>();
+    for (const record of records
+      .filter((item) => item.identityResolution)
+      .sort(
+        (left, right) =>
+          left.identityResolution!.resolvedAt.localeCompare(right.identityResolution!.resolvedAt) ||
+          left.id.localeCompare(right.id),
+      )) {
+      const familyId = ltmScopeFamilyId(record.scope);
+      if (!familyId) continue;
+      const choices = savedByFamily.get(familyId) ?? new Map<string, LtmSavedSubjectIdentityChoice>();
+      for (const choice of record.identityResolution!.choices) choices.set(normalizeSubjectName(choice.name), choice);
+      savedByFamily.set(familyId, choices);
+    }
+    const suggestions = records.filter(
       (item) =>
+        (filter.includeResolved || !item.identityResolution) &&
         (!filter.sourceNoteId || item.source.sourceNoteId === filter.sourceNoteId) &&
         (!filter.chatId || item.source.chatId === filter.chatId),
     );
-    return sortSuggestions(suggestions);
+    return sortSuggestions(
+      suggestions.flatMap((item) => {
+        // Resolved records are only listed on explicit request so the pending view stays
+        // focused; return them untouched for the saved-choice management surface.
+        if (item.identityResolution) return [item];
+        const choices = savedByFamily.get(ltmScopeFamilyId(item.scope) ?? "");
+        if (
+          item.candidate.recoveryCandidate?.subjectNames?.some(
+            (name) => choices?.get(normalizeSubjectName(name))?.action === "skip",
+          )
+        )
+          return [];
+        const identityReview = item.candidate.identityReview?.map((participant) => {
+          const choice = choices?.get(normalizeSubjectName(participant.name));
+          if (!choice || choice.action === "skip") return participant;
+          return {
+            ...participant,
+            matchedSubjectKey: choice.subject.key,
+            candidates: participant.candidates.some((candidate) => candidate.subject.key === choice.subject.key)
+              ? participant.candidates
+              : [...participant.candidates.slice(0, 9), { name: choice.name, subject: choice.subject }],
+          };
+        });
+        return [{ ...item, candidate: { ...item.candidate, ...(identityReview ? { identityReview } : {}) } }];
+      }),
+    );
   });
 }
 
 export async function readAllRejectedSuggestions(root = getLongTermMemoryRoot()) {
   return withLtmVaultLock(root, () => readSuggestionsUnlocked(root));
+}
+
+export async function readSavedLtmSubjectIdentityChoices(
+  scope: LtmRejectedSuggestion["scope"],
+  root = getLongTermMemoryRoot(),
+) {
+  const familyId = ltmScopeFamilyId(scope);
+  if (!familyId) return [];
+  return (await readAllRejectedSuggestions(root))
+    .filter((item) => item.identityResolution && ltmScopeFamilyId(item.scope) === familyId)
+    .sort(
+      (left, right) =>
+        left.identityResolution!.resolvedAt.localeCompare(right.identityResolution!.resolvedAt) ||
+        left.id.localeCompare(right.id),
+    )
+    .flatMap((item) => item.identityResolution!.choices.map((choice) => ({ ...choice, familyId })));
+}
+
+// A resolved rejection remains the owner of its remembered decisions. Publish the decision
+// and its independent review draft in one existing mutation journal; do not supersede other
+// pending proposals from the same source or lose either half on an interrupted write.
+export async function resolveRejectedSuggestionIdentity(
+  id: string,
+  resolution: NonNullable<LtmRejectedSuggestion["identityResolution"]>,
+  draft: LtmExtractionDraft | null,
+  root = getLongTermMemoryRoot(),
+) {
+  return withLtmVaultLock(root, async () => {
+    const existing = await readSuggestionsUnlocked(root);
+    const current = existing.find((item) => item.id === id);
+    if (!current || current.identityResolution) throw new Error("Rejected suggestion is no longer pending.");
+    const next = existing.map((item) =>
+      item.id === id ? ltmRejectedSuggestionSchema.parse({ ...item, identityResolution: resolution }) : item,
+    );
+    await commitLtmMutation(root, {
+      files: [
+        { path: ltmRejectedSuggestionsPath(root), before: existing, after: next },
+        ...(draft
+          ? [{ path: draftPathForId(draft.id, root), before: null, after: ltmExtractionDraftSchema.parse(draft) }]
+          : []),
+      ],
+    });
+  });
 }
 
 export async function addRejectedSuggestions(draft: LtmExtractionDraft, root = getLongTermMemoryRoot()) {
@@ -164,9 +258,23 @@ export async function addRejectedSuggestions(draft: LtmExtractionDraft, root = g
 export async function deleteRejectedSuggestion(id: string, root = getLongTermMemoryRoot()) {
   return withLtmVaultLock(root, async () => {
     const existing = await readSuggestionsUnlocked(root);
+    const current = existing.find((item) => item.id === id);
+    if (!current) return { deleted: false, id };
     const next = existing.filter((item) => item.id !== id);
-    if (next.length === existing.length) return { deleted: false, id };
-    await writeJsonAtomic(ltmRejectedSuggestionsPath(root), next);
+    // Deleting a saved identity choice undoes it: the next extraction asks again. Its
+    // recovery draft goes in the same journal only while still pending; accepted is history.
+    const draftId = current.identityResolution?.draftId;
+    const draft = draftId ? await readJsonFile<LtmExtractionDraft | null>(draftPathForId(draftId, root), null) : null;
+    if (draft?.status !== "pending") {
+      await writeJsonAtomic(ltmRejectedSuggestionsPath(root), next);
+      return { deleted: true, id };
+    }
+    await commitLtmMutation(root, {
+      files: [
+        { path: ltmRejectedSuggestionsPath(root), before: existing, after: next },
+        { path: draftPathForId(draftId!, root), before: draft, after: null },
+      ],
+    });
     return { deleted: true, id };
   });
 }
@@ -198,7 +306,7 @@ export async function writeRejectedSuggestions(suggestions: LtmRejectedSuggestio
 export async function deleteRejectedSuggestionsForSource(sourceNoteId: string, root = getLongTermMemoryRoot()) {
   return withLtmVaultLock(root, async () => {
     const existing = await readSuggestionsUnlocked(root);
-    const next = existing.filter((item) => item.source.sourceNoteId !== sourceNoteId);
+    const next = existing.filter((item) => item.source.sourceNoteId !== sourceNoteId || item.identityResolution);
     const deletedCount = existing.length - next.length;
     if (deletedCount) await writeJsonAtomic(ltmRejectedSuggestionsPath(root), next);
     return { deletedCount, sourceNoteId };

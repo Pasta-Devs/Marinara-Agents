@@ -133,6 +133,8 @@ export const mapThread = (row: Record<string, unknown>): SlurpThread => ({
   strikes: int(row.strikes as string),
   lastStrikeAt: (row.lastStrikeAt as string | null) ?? null,
   notes: readStoredNotes(row.notes),
+  sceneChatId: (row.sceneChatId as string | null) ?? null,
+  sceneStartedAt: (row.sceneStartedAt as string | null) ?? null,
   createdAt: String(row.createdAt),
   updatedAt: String(row.updatedAt),
 });

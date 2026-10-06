@@ -429,11 +429,7 @@ const LEGACY_SLP_CREATOR_DEFAULT_GENERATION_GUIDANCE =
 export const LEGACY_SLURP_DEFAULT_GENERATION_GUIDANCE =
   "All Slurp creators and viewers are adults (18+). This is an adult creator page: flirty, suggestive, teasing, and sensual posts are common, and explicit posts appear regularly when they suit the creator — but they are not required and need not be the majority. Tease the locked posts and answer flirty comments in kind. Keep each creator's personality intact: a shy creator flirts shyly, a blunt one bluntly, a funny one filthily. Ordinary posts — updates, humor, behind the scenes, project news — matter just as much and keep both the page and the character human. Keep low mood or conflict uncommon and character-specific, and do not let recent posts set the default mood.";
 
-/**
- * Three shipped spice levels for the generation guidance. The middle level is the default; the
- * settings surface writes one of these verbatim into `generationGuidance`, and any edit to the
- * text is preserved as the user's own.
- */
+/** The old Writing spice presets (before 0.3.17), written verbatim into `generationGuidance`. */
 export const SLURP_GUIDANCE_PRESETS = {
   mild: "All Slurp creators and viewers are adults (18+). This is an adult creator page, but a restrained one: posts are flirty, teasing, and suggestive rather than graphic. Innuendo, charm, and anticipation do the work, and locked posts are teased instead of described. Do not write explicit sexual detail. Keep each creator's personality intact: a shy creator flirts shyly, a blunt one flirts bluntly. Ordinary posts about their day, work, and mood stay just as important as the flirty ones.",
   steamy:
@@ -444,7 +440,12 @@ export const SLURP_GUIDANCE_PRESETS = {
 
 export type SlurpGuidanceLevel = keyof typeof SLURP_GUIDANCE_PRESETS;
 
-export const SLP_CREATOR_DEFAULT_GENERATION_GUIDANCE: string = SLURP_GUIDANCE_PRESETS.steamy;
+// House style (0.3.17), no spice: level and Language reach the prompt as their own lines. The presets
+// above stay only so `readSlurpSpice` can recognise and migrate them.
+export const SLURP_HOUSE_STYLE_GUIDANCE =
+  "All Slurp creators and viewers are adults (18+). This is an adult creator page. How far each creator goes is set by their spice level; their personality decides how: a shy creator stays tamer and flirts shyly, an outgoing one is bolder and blunter. Tease the locked posts and answer flirty comments in kind. Ordinary posts about their day, work, and mood matter just as much and keep the feed believable. Keep each creator's personality intact.";
+
+export const SLP_CREATOR_DEFAULT_GENERATION_GUIDANCE: string = SLURP_HOUSE_STYLE_GUIDANCE;
 
 /** The middle level shipped with a typo before the levels existed; migrate it forward. */
 export const LEGACY_TYPO_SLURP_DEFAULT_GENERATION_GUIDANCE =

@@ -4,7 +4,7 @@ import { motion } from "framer-motion";
 import { useState } from "react";
 import { useTranslation as useUiTranslation } from "react-i18next";
 import type { SlpAccount } from "../../../../../shared/src/slp/slp-social.types.js";
-import { Avatar, SLP_EYEBROW_CLASS, SLP_TYPE } from "../../base/chrome/SlpChrome";
+import { Avatar, SLP_EYEBROW_CLASS, SLP_TYPE, useSlpMediaQuery } from "../../base/chrome/SlpChrome";
 import { startSlpTask, useSlpTasks, type SlpPulseTarget, type SlpTask } from "../../base/state/slp-task-store";
 import type { SlpTaskAgainScreen } from "../../base/state/slp-task-list";
 import { api } from "../../../lib/api-client.js";
@@ -37,7 +37,13 @@ import { SlpButton, SlpPrimaryButton } from "./SlpButton";
 
 export type SlpPulseBudgetNote = { onOpenBudget: () => void; onDismiss: () => void };
 
-export function SlpPulseCard({ open, onOpen, note = false }: { open: boolean; onOpen: () => void; note?: boolean }) {
+/** `rail`: the desktop rail copy, mounted but hidden on phones, where it must not poll /slurp/tasks. */
+export function SlpPulseCard(props: { open: boolean; onOpen: () => void; note?: boolean; rail?: boolean }) {
+  const railHidden = !useSlpMediaQuery("(min-width: 1024px)");
+  return props.rail && railHidden ? null : <SlpPulseCardBody {...props} />;
+}
+
+function SlpPulseCardBody({ open, onOpen, note = false }: { open: boolean; onOpen: () => void; note?: boolean }) {
   const { t } = useUiTranslation();
   const serverTasks = useSlpPulseTasks(false);
   // Long actions started in this tab count too (task B), so the dot shows the moment one starts.

@@ -181,7 +181,10 @@ export function useSlurpThreadViewState(props: SlurpThreadViewProps) {
   const activeConversationRef = useRef({ personaId, threadId });
   activeConversationRef.current = { personaId, threadId: thread?.id ?? threadId };
   const messageSearchQuery = useSlurpMessageSearch(threadId, personaId, messageSearch);
-  const searchMessages = messageSearchQuery.data?.pages.flatMap((page) => page.messages) ?? [];
+  const searchMessages = useMemo(
+    () => messageSearchQuery.data?.pages.flatMap((p) => p.messages) ?? [],
+    [messageSearchQuery.data],
+  );
   const searchMessageIds = useMemo(() => searchMessages.map((message) => message.id), [searchMessages]);
   useEffect(() => {
     if (
@@ -216,31 +219,32 @@ export function useSlurpThreadViewState(props: SlurpThreadViewProps) {
   const commissions = useMemo(() => threadQuery.data?.commissions ?? [], [threadQuery.data?.commissions]);
   const relationship = "relationship" in (threadQuery.data ?? {}) ? threadQuery.data?.relationship : undefined;
   const availability = threadQuery.data?.creatorAvailability ?? relationship?.availability;
-  // A cleared conversation removes its messages, but commission history remains visible in chat.
-  // Commissions are paid work and must not disappear when the conversation is tidied.
-  const commissionTimeline = commissions.map((commission) => {
-    const linkedMessages = messages.filter((message) => message.metadata.commissionId === commission.id);
-    const latestMessage = linkedMessages.reduce<SlurpMessage | null>(
-      (latest, message) => (!latest || message.createdAt > latest.createdAt ? message : latest),
-      null,
-    );
-    const at = latestMessage
-      ? latestMessage.createdAt > commission.updatedAt
-        ? latestMessage.createdAt
-        : commission.updatedAt
-      : commission.updatedAt;
-    return {
-      kind: "commission" as const,
-      at,
-      commission,
-      deliveryMessage: commission.deliveryMessageId
-        ? (messages.find((message) => message.id === commission.deliveryMessageId) ?? null)
-        : null,
-    };
-  });
-  // Captured once per thread: the inbox count drops to zero as soon as opening marks it read, and
-  // the marker must stay on the same message while new replies arrive below it.
-  // The side (and so which count applies) is only known once the thread has loaded.
+  // Paid commissions stay after a clear. Memoized, as the draft (keystrokes) lives in this model.
+  const commissionTimeline = useMemo(
+    () =>
+      commissions.map((commission) => {
+        const linkedMessages = messages.filter((message) => message.metadata.commissionId === commission.id);
+        const latestMessage = linkedMessages.reduce<SlurpMessage | null>(
+          (latest, message) => (!latest || message.createdAt > latest.createdAt ? message : latest),
+          null,
+        );
+        const at = latestMessage
+          ? latestMessage.createdAt > commission.updatedAt
+            ? latestMessage.createdAt
+            : commission.updatedAt
+          : commission.updatedAt;
+        return {
+          kind: "commission" as const,
+          at,
+          commission,
+          deliveryMessage: commission.deliveryMessageId
+            ? (messages.find((message) => message.id === commission.deliveryMessageId) ?? null)
+            : null,
+        };
+      }),
+    [commissions, messages],
+  );
+  // Captured once per thread (opening zeroes the count); the side is known once the thread loads.
   const unreadMarkerRef = useRef<{
     threadId: string | null;
     unread: { viewer: number; creator: number } | null;
@@ -256,13 +260,17 @@ export function useSlurpThreadViewState(props: SlurpThreadViewProps) {
     unreadMarkerRef.current.messageId = count > 0 ? (incoming[Math.max(0, incoming.length - count)]?.id ?? null) : null;
   }
   const firstUnreadMessageId = unreadMarkerRef.current.messageId ?? null;
-  const timeline = [
-    ...messages
-      .filter((message) => typeof message.metadata.commissionId !== "string")
-      .filter((message) => !hiddenReplyIds.has(message.id))
-      .map((message) => ({ kind: "message" as const, at: message.createdAt, message })),
-    ...commissionTimeline,
-  ].sort((left, right) => left.at.localeCompare(right.at));
+  const timeline = useMemo(
+    () =>
+      [
+        ...messages
+          .filter((message) => typeof message.metadata.commissionId !== "string")
+          .filter((message) => !hiddenReplyIds.has(message.id))
+          .map((message) => ({ kind: "message" as const, at: message.createdAt, message })),
+        ...commissionTimeline,
+      ].sort((left, right) => left.at.localeCompare(right.at)),
+    [messages, hiddenReplyIds, commissionTimeline],
+  );
   const visibleTimeline = visibleCount >= timeline.length ? timeline : timeline.slice(timeline.length - visibleCount);
   const olderCount = timeline.length - visibleTimeline.length;
   const commissionTimelineKey = commissionTimeline

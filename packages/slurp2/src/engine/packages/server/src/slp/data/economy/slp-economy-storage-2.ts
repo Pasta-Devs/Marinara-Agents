@@ -314,6 +314,38 @@ export function createEconomyStorage2(context: SlurpStorageContext) {
         at,
       );
     },
+    /**
+     * `getCreatorSubscriptionCharge` for every shown Creator at once. Every feed and profile page
+     * priced each Creator separately: two settings clones, a price parse, an occurrence parse and an
+     * account scan per row. Here those are read once and the Creator's tags come from the account.
+     */
+    async getCreatorSubscriptionCharges(
+      creators: readonly { id: string; settings: { profile: { tags?: string[] } } }[],
+      at: Date = new Date(),
+    ): Promise<Record<string, number>> {
+      const [prices, settings, occurrences] = await Promise.all([
+        readCreatorPrices(),
+        this.getSettings(),
+        this.listStoryOccurrences().catch(() => []),
+      ]);
+      return Object.fromEntries(
+        creators.map((creator) => [
+          creator.id,
+          settings.walletEnabled
+            ? slurpSubscriptionCharge(
+                prices[creator.id] ?? settings.walletSubscriptionCost,
+                createSlpActiveModifierProvider([
+                  slurpPlatformEventModifierSource(settings.platformEvents, {
+                    occurrences,
+                    creator: { id: creator.id, tags: creator.settings.profile.tags ?? [] },
+                  }),
+                ]),
+                at,
+              )
+            : 0,
+        ]),
+      );
+    },
     /** Set a creator's own weekly price, or clear it back to the Slurp-wide default with `null`. */
     async setCreatorSubscriptionPrice(creatorAccountId: string, price: number | null): Promise<void> {
       const prices = await readCreatorPrices();

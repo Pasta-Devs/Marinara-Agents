@@ -4,17 +4,21 @@ export type PackageNoodleSettings = NoodleSettings & {
   imageWidth: number;
   imageHeight: number;
   enableImageInterpretation: boolean;
+  autoTranslatePosts: boolean;
+  showImagesToWriter: boolean;
   promptPresets: import("./noodle-prompt-presets").NoodlePromptPreset[];
 };
 export type PackageNoodleSettingsUpdateInput = NoodleSettingsUpdateInput &
   Partial<Pick<PackageNoodleSettings, "imageWidth" | "imageHeight">> &
-  Partial<Pick<PackageNoodleSettings, "enableImageInterpretation">> &
+  Partial<Pick<PackageNoodleSettings, "enableImageInterpretation" | "autoTranslatePosts" | "showImagesToWriter">> &
   Partial<Pick<PackageNoodleSettings, "promptPresets">>;
 const PACKAGE_NOODLE_SETTINGS_DEFAULTS: PackageNoodleSettings = {
   ...DEFAULT_NOODLE_SETTINGS,
   imageWidth: 1024,
   imageHeight: 1536,
   enableImageInterpretation: true,
+  autoTranslatePosts: false,
+  showImagesToWriter: true,
   promptPresets: [],
 };
 
@@ -32,7 +36,7 @@ const PACKAGE_NOODLE_SETTINGS_DEFAULTS: PackageNoodleSettings = {
 export type NoodleSettingsSectionId = "general" | "timeline" | "images" | "participants" | "advanced";
 
 export const NOODLE_SETTINGS_SECTION_KEYS: Record<NoodleSettingsSectionId, readonly (keyof PackageNoodleSettings)[]> = {
-  general: ["generationConnectionId", "refreshesPerDay", "theme"],
+  general: ["generationConnectionId", "refreshesPerDay", "theme", "autoTranslatePosts"],
   timeline: ["maxGeneratedPostsPerRefresh", "maxRepliesPerRefresh", "maxRepostsPerRefresh", "maxLikesPerRefresh"],
   images: [
     "imageWidth",
@@ -48,6 +52,7 @@ export const NOODLE_SETTINGS_SECTION_KEYS: Record<NoodleSettingsSectionId, reado
     "imageCaptioningEnabled",
     "imageCaptioningConnectionId",
     "imageCaptioningUseConnectionDefault",
+    "showImagesToWriter",
   ],
   participants: [
     "participantSelectionMode",

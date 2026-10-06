@@ -40,13 +40,10 @@
 // override. Never commit a catalog generated that way — validation rejects it.
 export const INCOMPLETE_PACKAGE_IDS = new Set(["pixelforge"]);
 
-// Quartermaster and Relationship Tracker graduate with the next Marinara Engine main release.
-export const STAGING_ONLY_PACKAGE_IDS = new Set([
-  "modern-life-sim",
-  "ruleset-5e-2014",
-  "quartermaster",
-  "relationship-tracker",
-]);
+// To graduate a package to stable users, follow "Packages that are not ready for
+// everyone" in CONTRIBUTING.md (Quartermaster and Relationship Tracker did so for
+// Marinara Engine v2.5.0).
+export const STAGING_ONLY_PACKAGE_IDS = new Set(["modern-life-sim", "ruleset-5e-2014"]);
 
 // A package is in exactly one state. Both sets hiding the same id would make
 // the published/overlay split order-dependent, so reject it at import time.

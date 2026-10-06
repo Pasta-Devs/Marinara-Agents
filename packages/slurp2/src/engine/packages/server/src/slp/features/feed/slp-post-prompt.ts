@@ -69,6 +69,8 @@ export type SlurpPostPromptInput = {
   /** The Creator's private content menu. See `slurp-post-guidance.ts`. */
   contentMenu?: string;
   sourceCharacterContext: string;
+  /** Who else the beat puts in this post, beyond their names (`resolveSlurpBeatCastContext`). */
+  castContext?: string;
   /**
    * The flavour brief: who they are and how they sound, a varied handful of true details, and the
    * player's steering, in plain words. See `slp-creator-flavour.ts`. Replaces the card dump.
@@ -355,6 +357,7 @@ export function buildNoodlerPostMessages(input: SlurpPostPromptInput): ChatMessa
           ),
         ]
       : []),
+    ...(input.castContext?.trim() ? ["", "# Who else is in this post", protect(input.castContext)] : []),
     ...(input.project
       ? [
           "",

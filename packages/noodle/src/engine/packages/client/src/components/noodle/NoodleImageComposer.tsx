@@ -1,6 +1,12 @@
 import { ImagePlus, Link, X } from "lucide-react";
 import { useTranslation as useUiTranslation } from "react-i18next";
 
+// ponytail: Chrome on Android 13+ answers an image-only `accept` with its photo picker, which has no
+// camera. Any non-image type sends it to the chooser that offers Camera and Files, as Marinara's chat
+// attachments already do. Ceiling: this leans on Chrome's picker rule, and the Marinara Android app's
+// WebView never offers a camera. Upgrade path: a second input with `capture` behind a "Take photo" button.
+export const NOODLE_IMAGE_ACCEPT = "image/*,android/allowCamera";
+
 export function NoodleImageComposer({
   imageUrl,
   onImageUrlChange,

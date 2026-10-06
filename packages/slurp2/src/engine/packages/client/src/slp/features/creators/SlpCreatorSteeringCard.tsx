@@ -14,7 +14,8 @@ import {
   type SlpSteeringPace,
   type SlpSteeringSupportNote,
 } from "../../../../../shared/src/slp/slp-creator-steering.js";
-import { SLP_SPICE_LEVELS, type SlpSpiceLevel } from "../../../../../shared/src/slp/slp-spice.js";
+import type { SlpSpiceStep } from "../../../../../shared/src/slp/slp-spice.js";
+import { SlpSpiceLevelChoice } from "./SlpSpiceLevelChoice";
 import { ChipListInput } from "../../modules/settings/SlpSettingsInputs";
 import { Toggle } from "../../modules/settings/SlpSettingsControls";
 import { errorMessage } from "../../modules/settings/slp-backstage-format";
@@ -121,9 +122,6 @@ function SupportNote({
   );
 }
 
-const above = (level: SlpSpiceLevel, max: SlpSpiceLevel) =>
-  SLP_SPICE_LEVELS.indexOf(level) > SLP_SPICE_LEVELS.indexOf(max);
-
 /**
  * How spicy this Creator gets, what turns them on and their hard noes. Their level sits under the
  * Slurp-wide limit (Backstage › Spice); their own words decide how they do it.
@@ -137,36 +135,19 @@ function SpiceBlock({
   name: string;
   spice: SlpCreatorSpice;
   steering: { turnOns: string[]; hardNoes: string[] };
-  save: (patch: { spiceLevel?: SlpSpiceLevel | null; turnOns?: string[]; hardNoes?: string[] }) => void;
+  save: (patch: { spiceLevel?: SlpSpiceStep | null; turnOns?: string[]; hardNoes?: string[] }) => void;
 }) {
   const { t } = useTranslation();
-  const level = spice.level ?? "flirty";
-  const capped = above(level, spice.max);
   return (
     <div data-slurp-spice className="space-y-4 border-t border-[var(--slurp-outline)] pt-4">
-      <PillChoice<SlpSpiceLevel>
-        layout="row"
+      {/* The same scale and control as Content rules and Settings › Spice (0.3.17). */}
+      <SlpSpiceLevelChoice
         label={t("ui.slurp.spice.level", { name })}
-        detail={
-          capped
-            ? t("ui.slurp.spice.levelCapped", { name, max: t(`ui.slurp.spice.levels.${spice.max}`) })
-            : t(`ui.slurp.spice.levelDetail.${level}`, { name })
-        }
-        options={SLP_SPICE_LEVELS.map((value) => ({ value, label: t(`ui.slurp.spice.levels.${value}`) }))}
-        value={level}
+        value={spice.own ? spice.level : null}
+        inherited={spice.inherited ?? spice.level ?? "flirty"}
+        max={spice.max}
         onChange={(spiceLevel) => save({ spiceLevel })}
       />
-      {spice.own ? (
-        <button
-          type="button"
-          onClick={() => save({ spiceLevel: null })}
-          className="-mt-2 min-h-11 text-xs font-semibold text-[var(--slurp-muted)] underline-offset-2 hover:text-[var(--slurp-text)] hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)]"
-        >
-          {t("ui.slurp.spice.useDefault")}
-        </button>
-      ) : (
-        <p className="-mt-2 text-xs leading-5 text-[var(--slurp-muted)]">{t("ui.slurp.spice.followsDefault")}</p>
-      )}
       <ChipListInput
         label={t("ui.slurp.spice.turnOns")}
         values={steering.turnOns}

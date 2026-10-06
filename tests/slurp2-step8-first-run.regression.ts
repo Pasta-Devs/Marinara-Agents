@@ -10,6 +10,7 @@ import {
 } from "../packages/slurp2/src/engine/packages/client/src/slp/features/onboarding/slp-release.ts";
 import {
   SLP_SETUP_STEPS,
+  SLP_TOUR_LABELS,
   slpOnboardingProgress,
 } from "../packages/slurp2/src/engine/packages/client/src/slp/features/onboarding/slp-onboarding-progress.ts";
 
@@ -25,30 +26,29 @@ assert.equal(slurp2SplashKind(SLURP2_VERSION), null);
 assert.equal(getSlurp2UnseenReleases("0.2.72").length, 3);
 
 const splash = src("features/onboarding/SlpSplash.tsx");
-// G's thread replaced the welcome modal and the "What's new" sheet: one chat, replies as chips.
-const chips = splash.slice(splash.indexOf("const chips: SlpChatChip[]"), splash.indexOf("<Modal"));
+const welcome = splash.slice(splash.indexOf("function SlurpWelcome("), splash.indexOf("function ReleaseNotes("));
+const whatsNew = splash.slice(splash.indexOf("function SlurpWhatsNew("));
 assert.match(
-  chips,
-  /consenting\s*\?[\s\S]*?label: "I get it: alpha, my own risk"/u,
-  "the welcome keeps its one consent reply",
+  welcome,
+  /type="checkbox"[\s\S]*?I understand this is alpha software/u,
+  "the welcome keeps its one consent tick",
 );
-assert.match(chips, /\{ id: "leave", label: "Leave Slurp", onSelect: onLeave \}/u, "first-run consent has a real exit");
+assert.match(welcome, /Tick the box above to get in\./u, "the disabled Let me in says why");
 assert.match(
-  src("modules/chrome/SlpChatShell.tsx"),
-  /tabIndex=\{-1\} data-autofocus/u,
-  "initial focus lands on the chat header, not the Discord link (B39)",
+  welcome,
+  /<SlpButton variant="tertiary" onClick=\{onLeave\}[\s\S]*?Leave Slurp/u,
+  "first-run consent has a real exit",
 );
 assert.match(
-  src("features/onboarding/slp-g-thread.ts"),
-  /if \(mode === "welcome"\) return \{ messages, scrollTo: null \};/u,
-  "a fresh install does not list every release",
+  welcome,
+  /tabIndex=\{-1\}\s*data-autofocus/u,
+  "initial focus lands on the heading, not the Discord link (B39)",
 );
-assert.doesNotMatch(splash, /type="checkbox"|approved/u, "updates never ask for consent again");
-assert.match(
-  chips,
-  /: \[\{ id: "got-it", label: "Got it", primary: true, onSelect: finish \}\]/u,
-  "after an update, Got it closes the thread",
-);
+assert.doesNotMatch(welcome, /What changed|getSlurp2UnseenReleases/u, "a fresh install does not list every release");
+assert.doesNotMatch(whatsNew, /type="checkbox"|approved/u, "updates never ask for consent again");
+assert.match(whatsNew, /<SlpSheet[\s\S]*?onClose=\{onDismiss\}[\s\S]*?Got it/u, "What's new is a dismissible sheet");
+assert.match(whatsNew, /data-autofocus/u);
+assert.match(whatsNew, /sticky top-0/u, "older releases keep their version heading while scrolled");
 assert.doesNotMatch(splash, /max-h-64/u, "one scroll container, no nested notes box");
 assert.match(
   src("app/SlpHomeHost.tsx"),
@@ -64,41 +64,57 @@ for (const release of SLURP2_RELEASES) {
   }
 }
 
-// 3. Age check: the Pastapay card is a step of the Support ticket now (docs/ONBOARDING-RAIL.md). Text
-// and the gag stay; the explainer before it went into the ticket; the X/Escape behaviour from 0a stays.
+// 3. Age gate: restyle only. Text, flow and the Pastapay gag stay; the X/Escape behaviour from 0a stays.
 const gate = src("features/onboarding/SlpAgeGate.tsx");
-for (const key of ["cardTitle", "cardSub", "cardBrand", "cardFree", "adultConfirmation", "enter"]) {
+for (const key of [
+  "cardTitle",
+  "cardSub",
+  "cardBrand",
+  "cardFree",
+  "adultConfirmation",
+  "explainerContinue",
+  "enter",
+]) {
   assert.match(gate, new RegExp(`tt\\("${key}"`, "u"), `gate keeps ${key}`);
 }
 assert.match(gate, /const CARD_NUMBER = "5309 1312 4200 6969"/u);
 assert.match(gate, /ui\.noodle\.agegate\.cardCharging/u);
-assert.match(gate, /<SlpPrimaryButton[\s\S]*?disabled=\{!charged \|\| !confirmedAdult\}/u);
+assert.match(gate, /<SlpPrimaryButton[\s\S]*?disabled=\{!charged \|\| !confirmedAdult \|\| isPending\}/u);
 assert.doesNotMatch(gate, /font-black uppercase|text-\[0\.55rem\]/u, "no shouting buttons or sub-floor type");
-assert.match(
-  src("features/onboarding/SlpSiteWelcome.tsx"),
-  /const close = \(\) => \(confirmed \? onClose\(\) : leaveUnlessBackdrop\(onLeave\)\);/u,
-  "before the age check, X and Escape leave Slurp",
-);
+assert.match(src("app/SlpHomeHost.tsx"), /onClose=\{\(\) => leaveUnlessBackdrop\(onLeave\)\}/u);
 
 // 4. Wizard: one progress model with short labels, Slurp's own controls, reasons for disabled primaries.
-assert.equal(slpOnboardingProgress({ setupLane: null, step: 1 }), null, "no lane yet is not a step");
-assert.deepEqual(slpOnboardingProgress({ setupLane: "easy", step: 1 }), {
+assert.deepEqual(slpOnboardingProgress({ intro: 0, setupLane: null, step: 1 }), {
+  current: 1,
+  total: 5,
+  label: "welcome",
+});
+assert.deepEqual(slpOnboardingProgress({ intro: 4, setupLane: null, step: 1 }), {
+  current: 5,
+  total: 5,
+  label: "posting",
+});
+assert.equal(slpOnboardingProgress({ intro: null, setupLane: null, step: 1 }), null, "the lane choice is not a step");
+assert.deepEqual(slpOnboardingProgress({ intro: null, setupLane: "easy", step: 1 }), {
   current: 1,
   total: 2,
   label: "who",
 });
-assert.deepEqual(slpOnboardingProgress({ setupLane: "easy", step: 4 }), {
+assert.deepEqual(slpOnboardingProgress({ intro: null, setupLane: "easy", step: 4 }), {
   current: 2,
   total: 2,
   label: "review",
 });
-assert.deepEqual(slpOnboardingProgress({ setupLane: "customize", step: 3 }), {
+assert.deepEqual(slpOnboardingProgress({ intro: null, setupLane: "customize", step: 3 }), {
   current: 3,
   total: 4,
   label: "posting",
 });
-assert.equal(slpOnboardingProgress({ setupLane: "customize", step: 5 }), null, "the result is not a step");
-for (const label of [...Object.values(SLP_SETUP_STEPS).flatMap((steps) => steps.map((s) => s.label))]) {
+assert.equal(slpOnboardingProgress({ intro: null, setupLane: "customize", step: 5 }), null, "the result is not a step");
+for (const label of [
+  ...SLP_TOUR_LABELS,
+  ...Object.values(SLP_SETUP_STEPS).flatMap((steps) => steps.map((s) => s.label)),
+]) {
   const text = en[`ui.slurp.wizard.label.${label}`];
   assert.ok(text, `label ${label} has English copy`);
   assert.ok(text.length <= 12, `label ${label} fits 390 px`);
@@ -123,11 +139,12 @@ assert.match(
   /function ConnectionPicker[\s\S]*?<SlpSheet[\s\S]*?<SlpRadioRow/u,
   "connections use a picker sheet",
 );
+assert.match(panel, /ui\.slurp\.wizard\.revealToContinue/u);
 assert.match(panel, /ui\.slurp\.wizard\.pickOne/u);
 assert.match(panel, /note=\{running \|\| reason\}/u, "every disabled primary says why under it");
 assert.match(src("modules/chrome/SlpWizardChrome.tsx"), /\[&>button\]:whitespace-nowrap/u, "the footer never wraps");
 assert.match(src("modules/chrome/SlpButton.tsx"), /export function SlpSquareCheck[\s\S]*?rounded-\[5px\]/u);
-// The demo moved into the Support ticket, and its title stays hidden until the reveal (B16).
-assert.match(src("features/onboarding/SlpRailCards.tsx"), /<LockedSlurpPostCard[\s\S]*?demo=\{\{[\s\S]*?lockedTitle:/u);
+// The demo stays, and its title stays hidden until the reveal (B16).
+assert.match(panel, /<LockedSlurpPostCard[\s\S]*?demo=\{\{[\s\S]*?lockedTitle:/u);
 
 console.log("Slurp2 step 8 first-run regressions passed.");

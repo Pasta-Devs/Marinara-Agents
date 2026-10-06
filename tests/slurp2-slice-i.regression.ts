@@ -742,7 +742,7 @@ const creator = (id: string, text: string, tags: string[], over: Partial<SlurpTi
   const builder = readFileSync(join(repo, "scripts/build-feature-packages.mjs"), "utf8");
   assert.match(
     builder,
-    /optionalPermissions: \[\{ permission: "mari-actions", capabilityApi: \{ major: 1, minor: 50 \} \}\]/u,
+    /optionalPermissions: \[\s*\{ permission: "mari-actions", capabilityApi: \{ major: 1, minor: 50 \} \}/u,
   );
   assert.match(builder, /permissions: featurePermissions\(feature\),/u);
   const manifest = JSON.parse(readFileSync(join(repo, "packages/slurp2/manifest.json"), "utf8")) as {

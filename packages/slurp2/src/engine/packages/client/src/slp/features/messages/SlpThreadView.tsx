@@ -8,7 +8,7 @@ import {
 } from "./SlpMessages";
 import { CommissionRow } from "./commissions/SlpCommissions";
 import { Info, Loader2 } from "lucide-react";
-import { useContext, useRef, type ReactNode } from "react";
+import { useCallback, useContext, useMemo, useRef, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { cn } from "../../../lib/utils";
 import { ModalPortalContext } from "../../../components/ui/Modal";
@@ -22,6 +22,9 @@ import {
 import { SlpButton } from "../../modules/chrome/SlpButton";
 import { noteSlpAiUseOnce, SlpUsesAiMark } from "../../modules/chrome/SlpAiMark";
 import { SlpCanvasAmbient } from "../../modules/chrome/SlpCanvasAmbient";
+import { useSlurpUIStore } from "../../base/state/slp-package-store";
+import { isSlpSceneLine, SlpSceneLineRow, SlpSceneLockBar } from "./scenes/SlpSceneLines";
+import { SlpSceneStartSheet } from "./scenes/SlpSceneStartSheet";
 import { getApiErrorMessage } from "../../../lib/api-client";
 import { useSlurpThreadViewModel } from "./slp-thread-actions";
 import { SLP_THREAD_COLUMN_CLASS, type SlurpThreadViewProps } from "./slp-thread-view-model";
@@ -29,9 +32,14 @@ import { SlpErrorState, SlpSkeleton } from "../../modules/chrome/SlpStateKit";
 import { SlpThreadHeader } from "./SlpThreadHeader";
 import { SlpThreadComposer } from "./SlpThreadComposer";
 import { SlpThreadDrawer } from "./SlpThreadDrawer";
-import { MessageBubble, SlurpAwayAnimation, SlurpBubbleStyles, SlurpPlatformActionCard } from "./SlpMessageBubble";
+import {
+  MessageBubble,
+  SlurpAwayAnimation,
+  slurpBubbleSurface,
+  SlurpBubbleStyles,
+  SlurpPlatformActionCard,
+} from "./SlpMessageBubble";
 import { slurpBubbleGroup } from "./slp-bubble-group";
-import { slurpBubbleSurface } from "../../modules/chrome/SlpChatShell";
 import { readSlpStirProposal, SlpStirSupportCards } from "../stir/slp-stir-contract";
 import { readSlpDeskOffer, SlpDeskOfferCard } from "./SlpDeskRows";
 import { readSlpDramaChoice, SlpDramaChoiceCard } from "./SlpDramaChoiceCard";
@@ -114,6 +122,17 @@ export function SlurpThreadView(props: SlurpThreadViewProps) {
   // Until the conversation has loaded there is nothing to read and no policy to send under, so the
   // composer stays away instead of offering a live input on a blank screen.
   const notLoaded = !threadQuery.data;
+  // Roleplay scenes (docs/SCENES.md): offered when this Engine runs them and the thread is free.
+  const sceneHost = useSlurpUIStore((state) => state.sceneHost);
+  // A stable callback lets memoized bubbles skip re-renders; the ref always calls the latest one.
+  const openProfileRef = useRef(model.onOpenProfile);
+  openProfileRef.current = model.onOpenProfile;
+  const openProfile = useCallback((accountId: string) => openProfileRef.current(accountId), []);
+  // One formatter per language: two toLocaleDateString calls per row re-ran on every keystroke.
+  const dayFormat = useMemo(() => new Intl.DateTimeFormat(i18n.language, { dateStyle: "medium" }), [i18n.language]);
+  const sceneChatId = thread?.sceneChatId ?? null;
+  const canStartScene = Boolean(sceneHost && threadQuery.data?.scenes && !sceneChatId);
+  const creatorName = creator?.displayName ?? "";
   // "Not now" gets the away card: a reply status that means it, or (after a reload, when only the
   // owed reply is left) a Creator who is not online or is cooling off.
   const away = slurpAwayKind({ status: waitingNote, availability, coolUntil: relationship?.coolUntil });
@@ -218,13 +237,8 @@ export function SlurpThreadView(props: SlurpThreadViewProps) {
                 </div>
               )}
               {visibleTimeline.map((entry, index) => {
-                const date = new Date(entry.at).toLocaleDateString(i18n.language, { dateStyle: "medium" });
-                const previousDate =
-                  index > 0
-                    ? new Date(visibleTimeline[index - 1]!.at).toLocaleDateString(i18n.language, {
-                        dateStyle: "medium",
-                      })
-                    : null;
+                const date = dayFormat.format(new Date(entry.at));
+                const previousDate = index > 0 ? dayFormat.format(new Date(visibleTimeline[index - 1]!.at)) : null;
                 return (
                   <div
                     key={entry.kind === "message" ? entry.message.id : entry.commission.id}
@@ -246,7 +260,14 @@ export function SlurpThreadView(props: SlurpThreadViewProps) {
                       </div>
                     )}
                     {entry.kind === "message" ? (
-                      standaloneTip?.id === entry.message.id ? (
+                      isSlpSceneLine(entry.message) ? (
+                        <SlpSceneLineRow
+                          message={entry.message}
+                          personaId={personaId}
+                          creatorName={creatorName}
+                          canStart={canStartScene}
+                        />
+                      ) : standaloneTip?.id === entry.message.id ? (
                         <SlurpPlatformActionCard message={entry.message} relationship={relationship} />
                       ) : (
                         <>
@@ -257,7 +278,7 @@ export function SlurpThreadView(props: SlurpThreadViewProps) {
                             ownsCreator={ownsCreator}
                             group={slurpBubbleGroup(visibleTimeline, index, firstUnreadMessageId)}
                             fresh={Boolean(openedWith.current && !openedWith.current.has(entry.message.id))}
-                            onOpenProfile={model.onOpenProfile}
+                            onOpenProfile={openProfile}
                           />
                           {/* The Support desk: an Offer sits under the line that made it (docs/SUPPORT-DESK.md). */}
                           {readSlpDeskOffer(entry.message) && (
@@ -454,7 +475,13 @@ export function SlurpThreadView(props: SlurpThreadViewProps) {
             </p>
           )}
 
-          {!notLoaded && <SlpThreadComposer model={model} />}
+          {!notLoaded &&
+            (sceneChatId ? (
+              <SlpSceneLockBar sceneChatId={sceneChatId} creatorName={creatorName} />
+            ) : (
+              <SlpThreadComposer model={model} />
+            ))}
+          <SlpSceneStartSheet personaId={personaId} creatorName={creatorName} />
         </div>
 
         <SlpThreadDrawer model={model} />

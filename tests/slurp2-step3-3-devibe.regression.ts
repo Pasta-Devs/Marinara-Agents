@@ -136,4 +136,4 @@ assert.equal(slpAmbientMayLook(10_000, 10_000 - 100), false, "mid-fling");
 assert.equal(slpAmbientMayLook(10_000, 10_000 - SLP_AMBIENT_SCROLL_QUIET_MS), true, "settled");
 const ambient = client("modules/chrome/SlpCanvasAmbient.tsx");
 assert.match(ambient, /frame\.addEventListener\("scroll", onScroll, \{ capture: true, passive: true \}\)/u);
-assert.match(ambient, /!slpAmbientMayLook\(performance\.now\(\), lastScrollAt\)/u);
+assert.match(ambient, /const now = performance\.now\(\);[\s\S]{0,120}?!slpAmbientMayLook\(now, lastScrollAt\)/u);

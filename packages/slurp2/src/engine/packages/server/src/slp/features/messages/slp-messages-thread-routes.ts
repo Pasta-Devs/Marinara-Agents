@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { logger } from "../../../lib/logger.js";
 import { type SlurpCommissionPricing, slurpCommissionQuote } from "../../modules/economy/slp-creator-pricing.js";
 import { selectSlurpAttentionCommissions } from "./slp-inbox-attention.js";
 import { activeSlurpStrikes, slurpDmPictureVerdict } from "../../modules/world/slp-stance.js";
@@ -21,6 +22,8 @@ import { slurpIsCouplePage } from "../../modules/projects/slp-creator-couples.js
 import { readSlurpPlayerCoupleView } from "../projects/slp-projects-contract.js";
 import type { SlpMessagesContext } from "./slp-messages-context.js";
 import { readSlurpSupportDesk } from "../../data/creators/slp-support-desk-storage.js";
+import { reconcileSlpThreadScene } from "./scenes/slp-roleplay-scene-origin.js";
+import { slpScenesAvailable } from "../../base/host/slp-scene-host.js";
 
 const messagePageSchema = personaQuerySchema.extend({
   cursorAt: z.string().datetime().optional(),
@@ -156,8 +159,9 @@ export async function slpMessagesThreadRoutes(app: FastifyInstance, messaging: S
     // Slurp Support's threads are the player's from every persona (`slp-support.ts`), but they live on
     // the Stir desk (docs/SUPPORT-DESK.md); the inbox gets one link row with their count. With a
     // Creator this persona runs, Support is someone writing to them: that stays in the inbound list.
+    const accounts = await slurp.listNoodlerAccounts();
     const operatedIds = new Set(
-      (await slurp.listNoodlerAccounts())
+      accounts
         .filter((account) => account.sourceKind === "persona" && account.sourceEntityId === viewer.id)
         .map((account) => account.id),
     );
@@ -171,22 +175,38 @@ export async function slpMessagesThreadRoutes(app: FastifyInstance, messaging: S
     // conversations the player started, and anything a fan or the world opened was unreachable.
     const operated = [...operatedIds];
     const inbound = await messages.listThreadsForCreators(operated);
+    // The counterpart is the fan here, not the Creator, so name them or the row is a blank. Looked up
+    // once per fan: this list polls every 30 s and used to make five lookups per thread.
+    const accountById = new Map(accounts.map((account) => [account.id, account]));
+    const counterparts = new Map<string, Promise<{ name: string | null; handle: string | null }>>();
+    const counterpartOf = (id: string) => {
+      let found = counterparts.get(id);
+      if (!found) {
+        found = (async () => {
+          const fan = await population.get(id);
+          const account = accountById.get(id) ?? (await slurp.getNoodlerAccountById(id));
+          const name =
+            (id === SLURP_SUPPORT_ACCOUNT_ID ? SLURP_SUPPORT_NAME : null) ??
+            fan?.displayName ??
+            account?.displayName ??
+            (await slurp.getViewer(id).catch(() => null))?.displayName ??
+            null;
+          return { name, handle: fan?.handle ?? account?.handle ?? null };
+        })();
+        counterparts.set(id, found);
+      }
+      return found;
+    };
     const inboundViews = await Promise.all(
-      inbound.map(async (thread) => ({
-        ...thread,
-        side: "creator" as const,
-        // The counterpart is the fan here, not the Creator, so name them or the row is a blank.
-        counterpartName:
-          (thread.viewerAccountId === SLURP_SUPPORT_ACCOUNT_ID ? SLURP_SUPPORT_NAME : null) ??
-          (await population.get(thread.viewerAccountId))?.displayName ??
-          (await slurp.getNoodlerAccountById(thread.viewerAccountId))?.displayName ??
-          (await slurp.getViewer(thread.viewerAccountId).catch(() => null))?.displayName ??
-          null,
-        counterpartHandle:
-          (await population.get(thread.viewerAccountId))?.handle ??
-          (await slurp.getNoodlerAccountById(thread.viewerAccountId))?.handle ??
-          null,
-      })),
+      inbound.map(async (thread) => {
+        const counterpart = await counterpartOf(thread.viewerAccountId);
+        return {
+          ...thread,
+          side: "creator" as const,
+          counterpartName: counterpart.name,
+          counterpartHandle: counterpart.handle,
+        };
+      }),
     );
     const [viewerCommissionLists, creatorCommissionLists] = await Promise.all([
       Promise.all(threads.map((thread) => messages.listCommissionsForThread(thread.id))),
@@ -238,6 +258,11 @@ export async function slpMessagesThreadRoutes(app: FastifyInstance, messaging: S
     // else's inbox, even on a single-user install. Slurp Support's threads are every persona's.
     const side = thread ? await seatIn(viewer.id, thread) : null;
     if (!thread || !side) return reply.code(404).send({ error: "Thread not found" });
+    // A scene that ended while Slurp could not hear it: settle the lock and bring the recap in.
+    if (thread.sceneChatId)
+      await reconcileSlpThreadScene(app.db, thread).catch((error) => {
+        logger.warn({ err: error, threadId: thread.id }, "[slurp-message] Could not reconcile the scene");
+      });
     await messages.markRead(thread.id, side);
     const creator = await slurp.getNoodlerAccountById(thread.creatorAccountId);
     if (!creator) return reply.code(404).send({ error: "Creator not found" });
@@ -272,6 +297,9 @@ export async function slpMessagesThreadRoutes(app: FastifyInstance, messaging: S
         await messages.getCreatorMessaging(thread.creatorAccountId),
       ),
       relationship: await relationshipFor(thread, creator, side, presence.creatorAvailability),
+      // Roleplay scenes (docs/SCENES.md): the player's own thread with an Engine character's page.
+      scenes:
+        slpScenesAvailable() && side === "viewer" && creator.sourceKind === "character" && thread.state === "active",
     };
   });
 
@@ -352,6 +380,8 @@ export async function slpMessagesThreadRoutes(app: FastifyInstance, messaging: S
     const thread = await messages.getThreadById(threadId);
     const side = thread ? await seatIn(viewer.id, thread) : null;
     if (!thread || !side) return reply.code(404).send({ error: "Thread not found" });
+    if (thread.sceneChatId && (await reconcileSlpThreadScene(app.db, thread)))
+      return reply.code(409).send({ error: "You are in a scene together. End it first." });
     await messages.resetThread(thread.id);
     // Empty, but read back through the masking helper all the same: every route that returns a
     // thread's messages goes through one door.
@@ -404,7 +434,11 @@ export async function slpMessagesThreadRoutes(app: FastifyInstance, messaging: S
    */
   app.get("/messages/compose", async (req, reply) => {
     const parsed = personaQuerySchema
-      .extend({ creatorAccountId: z.string().trim().min(1), support: z.enum(["1", "true"]).optional() })
+      .extend({
+        creatorAccountId: z.string().trim().min(1),
+        support: z.enum(["1", "true"]).optional(),
+        peek: z.enum(["1", "true"]).optional(),
+      })
       .safeParse(req.query);
     if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
     const viewer = await requireViewer(parsed.data.personaId);
@@ -413,7 +447,12 @@ export async function slpMessagesThreadRoutes(app: FastifyInstance, messaging: S
     if (!creator) return reply.code(404).send({ error: "Creator not found" });
     // Writing as Slurp Support opens Support's one thread with this Creator, from any persona.
     const thread = await messages.getThread(parsed.data.support ? SLURP_SUPPORT_ACCOUNT_ID : viewer.id, creator.id);
-    if (thread) await messages.markRead(thread.id, "viewer");
+    if (thread?.sceneChatId)
+      await reconcileSlpThreadScene(app.db, thread).catch((error) => {
+        logger.warn({ err: error, threadId: thread.id }, "[slurp-message] Could not reconcile the scene");
+      });
+    // A profile peeks for prices and policy; only an opened chat reads the thread.
+    if (thread && !parsed.data.peek) await messages.markRead(thread.id, "viewer");
     const page = thread ? await messages.listMessagePage(thread.id) : { messages: [], nextCursor: null };
     const presence = await creatorPresence(creator, thread?.id);
     return {
@@ -430,6 +469,12 @@ export async function slpMessagesThreadRoutes(app: FastifyInstance, messaging: S
       subscribed: (await slurp.listSubscriptionsForViewer(viewer.id)).some(
         (entry) => entry.creatorAccountId === creator.id,
       ),
+      // Roleplay scenes (docs/SCENES.md): only once the thread exists, and never in Support's thread.
+      scenes:
+        slpScenesAvailable() &&
+        !parsed.data.support &&
+        thread?.state === "active" &&
+        creator.sourceKind === "character",
     };
   });
 }

@@ -745,8 +745,11 @@ export function createAutomaticTrackingRuntime(repository, activity, {
         const resultData = automaticResultData(result, parseJsonish);
         const prepared = normalizePreparedTrackingContext(preparedContext, context?.chatId);
         const combined = personaRepository && prepared.activePersona ? requireRecord(resultData, "Relationship Tracker combined result") : null;
-        if (combined) requireExactKeys(combined, ["u", "p"], "Relationship Tracker combined result");
-        const cardResultData = combined ? { u: combined.u } : resultData;
+        // Models often omit an empty half; treat a missing u or p as [] but still reject unknown keys.
+        if (combined && Object.keys(combined).some((key) => key !== "u" && key !== "p")) {
+          requireExactKeys(combined, ["u", "p"], "Relationship Tracker combined result");
+        }
+        const cardResultData = combined ? { u: combined.u ?? [] } : resultData;
         if (!prepared.trackingEnabled) {
           return consumedResult(result, {
             schemaVersion: 1,

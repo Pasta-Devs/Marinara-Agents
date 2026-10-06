@@ -1,7 +1,12 @@
 import { createHash } from "node:crypto";
 import { readdir, readFile } from "node:fs/promises";
 import { basename } from "node:path";
-import { ltmUsageSchema, type LtmUsage } from "../../../../shared/src/features/agents/long-term-memory/schema.js";
+import {
+  ltmRecallAttemptSchema,
+  ltmUsageSchema,
+  type LtmRecallAttempt,
+  type LtmUsage,
+} from "../../../../shared/src/features/agents/long-term-memory/schema.js";
 import { readJsonFile, writeJsonAtomic } from "./atomic-json.js";
 import type { LtmBudgetedChunk } from "./budget.js";
 import { isEnoent } from "./ltm-utils.js";
@@ -24,6 +29,7 @@ export function parseLongTermMemoryInjectionReceipt(value: unknown) {
     v.version !== 1 ||
     typeof v.chatId !== "string" ||
     !v.chatId ||
+    (v.attemptId !== undefined && typeof v.attemptId !== "string") ||
     typeof v.dispatchedAt !== "string" ||
     !Number.isFinite(Date.parse(v.dispatchedAt)) ||
     !Number.isInteger(v.serializedTokenCount) ||
@@ -57,6 +63,30 @@ export async function readLongTermMemoryInjectionReceipt(chatId: string, root = 
   return readJsonFile(longTermMemoryInjectionReceiptPath(chatId, root), null).then((value) =>
     value ? parseLongTermMemoryInjectionReceipt(value) : null,
   );
+}
+export const longTermMemoryAttemptPath = (chatId: string, root = getLongTermMemoryRoot()) =>
+  safeJoin(
+    getLongTermMemoryDirectories(root).events,
+    `runtime-receipts/attempt-${createHash("sha256").update(chatId).digest("hex")}.json`,
+  );
+export async function readLongTermMemoryAttempt(chatId: string, root = getLongTermMemoryRoot()) {
+  const value = await readJsonFile(longTermMemoryAttemptPath(chatId, root), null);
+  if (!value) return null;
+  const parsed = ltmRecallAttemptSchema.safeParse(value);
+  return parsed.success ? parsed.data : null;
+}
+const attemptLocks = new Map<string, Promise<void>>();
+export async function recordLongTermMemoryAttempt(attempt: LtmRecallAttempt, root = getLongTermMemoryRoot()) {
+  const chatId = attempt.chatId.trim();
+  if (!chatId) return null;
+  return withKeyedLock(attemptLocks, longTermMemoryAttemptPath(chatId, root), async () => {
+    const existing = await readLongTermMemoryAttempt(chatId, root);
+    // A slow older recall must not overwrite a newer attempt's observed outcome.
+    if (existing && Date.parse(existing.at) > Date.parse(attempt.at)) return existing;
+    const value = ltmRecallAttemptSchema.parse({ ...attempt, chatId });
+    await writeJsonAtomic(longTermMemoryAttemptPath(chatId, root), value);
+    return value;
+  });
 }
 
 /**
@@ -121,6 +151,7 @@ export async function recordLongTermMemoryInjection(
       const receipt = {
         version: 1,
         chatId,
+        ...(input.accountingId ? { attemptId: input.accountingId } : {}),
         dispatchedAt: now,
         serializedTokenCount: Math.max(0, Math.floor(input.serializedTokenCount)),
         chunks: chunks.map((item) => ({

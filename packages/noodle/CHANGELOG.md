@@ -1,5 +1,25 @@
 # Noodle release notes
 
+## 1.5.1 — 2026-10-04
+
+- New Show images to the writer switch in Settings → Advanced → Image Understanding. Turn it off and Noodle never sends timeline images to the model that writes your timeline. Image captioning, when on, still sends them to the captioning connection, which is the Noodle generation connection unless you choose another. The switch is on by default, so nothing changes unless you turn it off.
+- The Image captioning help now says what happens when it is off: the writer model gets up to 8 recent timeline images, if Show images to the writer is on and the model accepts them.
+
+## 1.5.0 — 2026-10-03
+
+- Noodle can now translate posts and comments for you. Turn on Translate posts automatically in Settings → General. It uses the translator defaults you saved in a chat's Translation settings and leaves what your personas wrote alone. Posts already in your language get no extra copy, and turning the switch off stops the translations still waiting.
+- Translations now stay after you refresh the timeline, leave Noodle or reload the page, and a translation you hide stays hidden. This browser keeps them, so another device translates again.
+
+## 1.4.1 — 2026-10-02 [highlight]
+
+- Fixed timeline refreshes on local models that failed after a short, empty-looking answer. When the prompt plus the room Noodle keeps for its answer did not fit the connection's context window, Noodle cut your characters, chats and timeline out of the prompt before sending. It now keeps the whole prompt and lowers the answer limit instead. If too little room is left for an answer, the refresh stops and says what to turn down.
+
+## 1.4.0 — 2026-10-01
+
+- You can now translate posts and comments, your own included. Pick Translate in a post's menu or under a comment, and use the same button to hide it again. Noodle uses the translator defaults you saved in a chat's Translation settings, or Google Translate into English if you have not saved any.
+- In Chrome on Android, adding a picture to a post or comment now offers the camera as well as your files. The Marinara Android app doesn't offer the camera yet.
+- Noodle's description now says what it is in plain words.
+
 ## 1.3.1 — 2026-09-30
 
 - When Noodle cannot load, it now says so instead of showing an empty timeline. If Marinara Engine blocked it because this device has no Admin Secret, it explains how to set one.

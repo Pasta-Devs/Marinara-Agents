@@ -135,7 +135,12 @@ for (const [name, source] of [
     `${name} shows a status strip under its header`,
   );
 }
-assert.match(prompts, /settingKey: "postGuidance"/u, "the content level is one tap away on Prompts");
+// 0.3.17: the default level moved to Settings › Spice, next to the limit and the language.
+assert.match(
+  slurp2Source(`${root}features/creators/SlpSpicePanel.tsx`),
+  /function SpiceDefaults[\s\S]*<SlpSpiceLevelChoice[\s\S]*<SpiceDefaults/u,
+  "the default level lives on Spice",
+);
 assert.match(
   slurp2Source(`${root}features/creators/settings/SlpCreatorSettingsTab.tsx`),
   /headed && \(\s*<StatusStrip[\s\S]*settingKey: `block:\$\{block\.id\}`/u,

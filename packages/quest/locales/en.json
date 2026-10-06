@@ -6,12 +6,12 @@
   },
   "package": {
     "name": "Quest Tracker",
-    "description": "Manages quest objectives, completion states, and rewards. Add the Agent in Chat Settings → Agents → Tracker Agents for Roleplay mode."
+    "description": "Keeps track of your quests, their goals, and their rewards. Add the Agent in Chat Settings → Agents → Tracker Agents for Roleplay mode."
   },
   "agents": {
     "quest": {
       "name": "Quest Tracker",
-      "description": "Manages quest objectives, completion states, and rewards. Add the Agent in Chat Settings → Agents → Tracker Agents for Roleplay mode.",
+      "description": "Keeps track of your quests, their goals, and their rewards. Add the Agent in Chat Settings → Agents → Tracker Agents for Roleplay mode.",
       "promptTemplates": {
         "epic-campaign": {
           "name": "Epic Campaign",

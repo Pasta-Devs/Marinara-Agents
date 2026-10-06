@@ -71,6 +71,8 @@ export const slurpDmReplySchema = z.object({
   collab: z.record(z.string(), z.unknown()).nullable().optional().catch(undefined),
   /** Only in a chat with the player: what the talk did to the two of them. Read by `readSlurpDmUs`. */
   us: z.record(z.string(), z.unknown()).nullable().optional().catch(undefined),
+  /** Only when offered: her pitch for a roleplay scene (docs/SCENES.md). */
+  sceneInvite: z.string().nullable().optional().catch(undefined),
 });
 
 export type SlurpDmReply = {
@@ -98,6 +100,8 @@ export type SlurpDmReply = {
   desk?: Record<string, unknown>;
   collab?: Record<string, unknown>;
   us?: Record<string, unknown>;
+  /** Her pitch for a roleplay scene, when the reply was offered the field (docs/SCENES.md). */
+  sceneInvite?: string;
 };
 
 /** The reply plus what the resolved stance allows the creator to do about the conversation. */
@@ -200,6 +204,7 @@ export function readSlurpDmReply(value: unknown): SlurpDmReply {
     ...(parsed.data.desk ? { desk: parsed.data.desk } : {}),
     ...(parsed.data.collab ? { collab: parsed.data.collab } : {}),
     ...(parsed.data.us ? { us: parsed.data.us } : {}),
+    ...(parsed.data.sceneInvite ? { sceneInvite: parsed.data.sceneInvite } : {}),
   };
 }
 

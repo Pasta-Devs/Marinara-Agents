@@ -6,12 +6,12 @@
   },
   "package": {
     "name": "Continuity Checker",
-    "description": "Post-processes the latest assistant message to fix concrete spatial, timeline, and physical logic errors without changing the story. Add the Agent in Chat Settings → Agents → Writer Agents for Roleplay mode."
+    "description": "Fixes mistakes about places, time, and physical details in AI messages without changing the story. Add the Agent in Chat Settings → Agents → Writer Agents for Roleplay mode."
   },
   "agents": {
     "continuity": {
       "name": "Continuity Checker",
-      "description": "Post-processes the latest assistant message to fix concrete spatial, timeline, and physical logic errors without changing the story."
+      "description": "Fixes mistakes about places, time, and physical details in AI messages without changing the story."
     }
   }
 }

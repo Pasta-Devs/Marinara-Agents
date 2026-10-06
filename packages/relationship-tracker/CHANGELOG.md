@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.6.2 — 2026-10-02 [highlight]
+
+- Fixed "Invalid or missing X-Admin-Secret header" when Marinara is opened from another device (LAN, phone, or proxy). The panel now sends the admin secret saved on that device and explains where to save it.
+- Update from History falls back to the default agent connection, then the chat's, when no tracker connection is chosen.
+- Automatic runs keep valid changes when the model omits an empty list or returns one malformed persona entry.
+- Switching persona or removing a card mid-run no longer reports a failed run.
+- Tapping a line label or finishing an automatic update no longer wipes unsaved editor text or closes open sections.
+- The persona no longer covers a lone character or sits under relationship lines, and its arrowheads show.
+- The lock checkbox stays beside its label at Compact width; status colours are readable in the light theme.
+
+## 0.6.1 — 2026-10-01
+
+- The description now says what it does in plain words.
+
 ## 0.6.0 — 2026-09-26
 
 - First staging release, with Professor Mari and Crimson Orc sharing pasta as its catalogue cover. Tracks character-card relationships and each character's one-way perception of the active persona in Roleplay group chats, drawn as a fixed-circle relationship web in the Tracker Panel.

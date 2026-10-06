@@ -44,6 +44,9 @@ import { SlpReplyComposer } from "./SlpReplyComposer";
 // mid-edit the other copy does not take over. Move the sheet to the controller if that matters.
 let slpEditSheetOwned = false;
 
+// A fresh Map per render is a new useMemo dependency for the Markdown renderer below.
+const EMPTY_ACCOUNTS = new Map<string, SlpAccount>();
+
 export function SlpPostCard({
   post,
   ctx,
@@ -96,8 +99,8 @@ export function SlpPostCard({
     replyManagement,
     mentions,
   } = ctx;
-  const accountById = ctx.accountById ?? new Map<string, SlpAccount>();
-  const accountByHandle = ctx.accountByHandle ?? new Map<string, SlpAccount>();
+  const accountById = ctx.accountById ?? EMPTY_ACCOUNTS;
+  const accountByHandle = ctx.accountByHandle ?? EMPTY_ACCOUNTS;
   const authorAccount = accountById.get(post.authorAccountId) ?? null;
   const author = authorAccount ?? post.authorSnapshot;
   const fallbackDivRef = useRef<HTMLDivElement | null>(null);

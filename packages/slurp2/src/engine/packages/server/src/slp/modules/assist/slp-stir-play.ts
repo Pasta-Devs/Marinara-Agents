@@ -4,12 +4,16 @@
 import { isSlpActionName, SLP_ACTION_META, type SlpActionName } from "../../../../../shared/src/slp/slp-actions.js";
 import type { SlpStirPlay, SlpStirStep } from "../../../../../shared/src/slp/slp-stir.js";
 
+/** Levers on Stir's own rows ("End it") that are not deck cards: without them "End it" did nothing. */
+const SLP_STIR_ROW_LEVERS: ReadonlySet<string> = new Set(["end-drama", "end-bond"]);
+
 /**
- * A step Stir may run: a deck lever or a Support desk tool (the desk opens its tools in the same play
- * sheet). Writing help and pictures stay in their own fields.
+ * A step Stir may run: a deck lever, a row lever, or a Support desk tool (the desk opens its tools in
+ * the same play sheet). Writing help and pictures stay in their own fields.
  */
 export const isSlpStirPlayAction = (name: string): name is SlpActionName =>
-  isSlpActionName(name) && (SLP_ACTION_META[name].deck || SLP_ACTION_META[name].category === "desk");
+  isSlpActionName(name) &&
+  (SLP_ACTION_META[name].deck || SLP_ACTION_META[name].category === "desk" || SLP_STIR_ROW_LEVERS.has(name));
 
 /**
  * The input a play runs with: never a dry run. `preview` belongs to outside helpers (Mari, the brand

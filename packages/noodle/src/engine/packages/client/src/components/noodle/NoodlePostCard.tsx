@@ -5,6 +5,7 @@ import {
   Heart,
   Image as ImageIcon,
   ImagePlus,
+  Languages,
   ListChecks,
   Loader2,
   MessageCircle,
@@ -53,8 +54,9 @@ import {
 import type { ChatImage } from "../../hooks/use-gallery";
 import { Avatar, getNoodleAccentStyle, NOODLE_ICON_SCOPE_CLASS, useNoodleAccent } from "./NoodleShell";
 import { formatTime } from "./NoodleDateTime";
-import { NoodleImageComposer } from "./NoodleImageComposer";
+import { NOODLE_IMAGE_ACCEPT, NoodleImageComposer } from "./NoodleImageComposer";
 import { NoodlePollComposer } from "./NoodlePollComposer";
+import { useNoodleTranslations, type NoodleTranslation } from "./noodle-translation";
 import { PostImageCropEditor, PostImageFrame } from "./PostImageCropEditor";
 import { useTranslation as useUiTranslation } from "react-i18next";
 
@@ -900,7 +902,10 @@ interface NoodlePostCardMentionsCap {
   selectReplyMention: (account: NoodleAccount) => void;
 }
 
-type NoodlePostCardAuthor = Pick<NoodleAuthorSnapshot, "id" | "handle" | "displayName" | "avatarUrl" | "avatarCrop">;
+type NoodlePostCardAuthor = Pick<
+  NoodleAuthorSnapshot,
+  "id" | "kind" | "handle" | "displayName" | "avatarUrl" | "avatarCrop"
+>;
 export type NoodlePostCardModel = Pick<
   NoodlePost,
   "id" | "authorAccountId" | "content" | "imageUrl" | "imagePrompt" | "metadata" | "createdAt" | "access"
@@ -1005,7 +1010,7 @@ export function PostImageEditControls({
       <input
         ref={editing.fileInputRef}
         type="file"
-        accept="image/*"
+        accept={NOODLE_IMAGE_ACCEPT}
         className="hidden"
         onChange={editing.selectReplacement}
       />
@@ -1172,6 +1177,8 @@ export interface NoodlePostCardCtx {
   replyManagement?: NoodlePostCardReplyManagementCap;
   /** @mention autocomplete capability. Absent → no mention suggestions. */
   mentions?: NoodlePostCardMentionsCap;
+  /** Translate posts and comments without waiting for Translate. */
+  autoTranslate?: boolean;
 }
 
 interface NoodlePostCardControllerOptions {
@@ -1596,6 +1603,19 @@ export function NoodlePostCard({ post, ctx }: { post: NoodlePostCardModel; ctx: 
     if (!reply.parentInteractionId || !replyById.has(reply.parentInteractionId)) appendReplyBranch(reply);
   }
   for (const reply of replies) appendReplyBranch(reply);
+  // Automatic translation skips what the user's own personas wrote.
+  const autoTranslateItems = ctx.autoTranslate
+    ? [
+        ...(author?.kind === "persona" ? [] : [post]),
+        ...replies.filter(
+          (reply) => (accountById.get(reply.actorAccountId)?.kind ?? reply.actorSnapshot?.kind) !== "persona",
+        ),
+      ]
+        .map((item) => [item.id, item.content ?? ""] as const)
+        .filter(([, text]) => text.trim())
+    : null;
+  const translations = useNoodleTranslations(autoTranslateItems);
+  const postTranslation = translations.read(post.id, post.content);
   const replyTarget = replyParentInteractionId ? (replyById.get(replyParentInteractionId) ?? null) : null;
   const replyTargetActor = replyTarget
     ? (accountById.get(replyTarget.actorAccountId) ?? replyTarget.actorSnapshot)
@@ -1749,6 +1769,29 @@ export function NoodlePostCard({ post, ctx }: { post: NoodlePostCardModel; ctx: 
       )}
     </div>
   );
+  // Shown under the original, as a translated chat message is; the same action hides it again.
+  const renderTranslation = (translation: NoodleTranslation | null, className: string) =>
+    translation && (
+      <div
+        data-noodle-translation
+        aria-live={translation.asked ? "polite" : "off"}
+        className="mt-2 border-t border-[var(--noodle-divider)] pt-2"
+      >
+        <p className="text-[0.68rem] font-semibold text-[var(--muted-foreground)]">
+          {translation.text === null
+            ? localizeUi("ui.noodle.noodlepostcard.translating")
+            : localizeUi("ui.noodle.noodlepostcard.translation")}
+        </p>
+        {translation.text !== null && (
+          <NoodleTextContent
+            content={translation.text}
+            accountByHandle={accountByHandle}
+            onOpenProfile={openProfile}
+            className={cn("mt-1", className)}
+          />
+        )}
+      </div>
+    );
   const editingExistingPoll = Boolean(poll && pollEditing);
   const editingPollIsValid = !editingExistingPoll || noodlePollInputSchema.safeParse(pollEditing?.value).success;
   const postEditActions = (
@@ -1832,6 +1875,21 @@ export function NoodlePostCard({ post, ctx }: { post: NoodlePostCardModel; ctx: 
                 </button>
                 {postMenuId === post.id && (
                   <div className="absolute right-0 top-[calc(100%+0.25rem)] z-30 min-w-32 overflow-hidden rounded-lg border border-[var(--noodle-divider)] bg-[var(--background)] py-1 text-xs shadow-2xl shadow-black/30">
+                    {post.content.trim() && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setPostMenuId(null);
+                          translations.toggle(post.id, post.content);
+                        }}
+                        className="flex w-full items-center gap-2 px-3 py-2 text-left transition-colors hover:bg-[var(--noodle-accent)]/10"
+                      >
+                        <Languages size={14} className="text-[var(--noodle-accent)]" />
+                        {postTranslation
+                          ? localizeUi("ui.noodle.noodlepostcard.hideTranslation")
+                          : localizeUi("ui.noodle.noodlepostcard.translate")}
+                      </button>
+                    )}
                     <button
                       type="button"
                       onClick={() => startEditingPost(post)}
@@ -1909,6 +1967,7 @@ export function NoodlePostCard({ post, ctx }: { post: NoodlePostCardModel; ctx: 
                     className={cn("leading-6", post.title ? "mt-1" : "mt-2")}
                   />
                 )}
+              {renderTranslation(postTranslation, "leading-6")}
             </>
           )}
           {poll && editingPostId !== post.id && (
@@ -2059,6 +2118,8 @@ export function NoodlePostCard({ post, ctx }: { post: NoodlePostCardModel; ctx: 
                 const likedReplyByPersona = personaAccount
                   ? replyLikes.some((interaction) => interaction.actorAccountId === personaAccount.id)
                   : false;
+                const replyContent = reply.content ?? "";
+                const replyTranslation = translations.read(reply.id, replyContent);
                 const canManageReply = canManageReplyOverride
                   ? canManageReplyOverride(reply)
                   : Boolean(
@@ -2183,6 +2244,7 @@ export function NoodlePostCard({ post, ctx }: { post: NoodlePostCardModel; ctx: 
                             className="mt-1 leading-5"
                           />
                         ) : null}
+                        {editingReplyId !== reply.id && renderTranslation(replyTranslation, "leading-5")}
                         {reply.imageUrl && (
                           <button
                             type="button"
@@ -2242,6 +2304,29 @@ export function NoodlePostCard({ post, ctx }: { post: NoodlePostCardModel; ctx: 
                           >
                             <MessageCircle size={14} />
                           </button>
+                          {replyContent.trim() && editingReplyId !== reply.id && (
+                            <button
+                              type="button"
+                              onClick={() => translations.toggle(reply.id, replyContent)}
+                              className={cn(
+                                noodleCommentActionClass,
+                                "w-7",
+                                replyTranslation && "bg-[var(--noodle-accent)]/10",
+                              )}
+                              title={
+                                replyTranslation
+                                  ? localizeUi("ui.noodle.noodlepostcard.hideTranslation")
+                                  : localizeUi("ui.noodle.noodlepostcard.translateComment")
+                              }
+                              aria-label={
+                                replyTranslation
+                                  ? localizeUi("ui.noodle.noodlepostcard.hideTranslation")
+                                  : localizeUi("ui.noodle.noodlepostcard.translateComment")
+                              }
+                            >
+                              <Languages size={14} />
+                            </button>
+                          )}
                           {canManageReply && editingReplyId !== reply.id && (
                             <>
                               <button

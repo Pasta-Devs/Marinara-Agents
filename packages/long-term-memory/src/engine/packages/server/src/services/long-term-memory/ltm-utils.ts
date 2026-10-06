@@ -4,6 +4,21 @@ export function nowIso(): string {
   return new Date().toISOString();
 }
 
+export function normalizeSubjectName(value: string) {
+  return value
+    .trim()
+    .replace(/([a-z0-9])([A-Z])/g, "$1_$2")
+    .toLowerCase()
+    .normalize("NFKD")
+    .replace(/\p{M}/gu, "")
+    .replace(/[^\p{L}0-9]+/gu, "_")
+    .replace(/^_+|_+$/g, "")
+    .replace(/_+/g, "_")
+    .replace(/[^a-z0-9_]/gu, (letter) => `u${letter.codePointAt(0)!.toString(16)}`)
+    .slice(0, 120)
+    .replace(/_+$/g, "");
+}
+
 export function safeSnippet(text: string | undefined) {
   const value = text?.replace(/\s+/g, " ").trim() ?? "";
   if (!value || value.length < 12) return undefined;

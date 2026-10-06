@@ -1,6 +1,7 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import {
+  SLP_SPICE_LANGUAGES,
   SLP_SPICE_LEVELS,
   SLP_TASTE_NEVER_MAX,
   SLP_TASTE_STRENGTHS,
@@ -17,7 +18,7 @@ const chip = z.string().trim().min(1).max(SLP_TASTE_TEXT_MAX);
 /** What the Spice page shows. What Slurp learned stays on the server; the page gets the noticed chips. */
 function view(state: SlpSpiceState) {
   return {
-    spice: { max: state.max, tastes: state.tastes, never: state.never },
+    spice: { max: state.max, tastes: state.tastes, never: state.never, language: state.language ?? "dirty" },
     noticed: slurpNoticedTastes(state, new Date()),
   };
 }
@@ -46,6 +47,8 @@ export async function slpSpiceRoutes(app: FastifyInstance) {
           .max(SLP_TASTES_MAX)
           .optional(),
         never: z.array(chip).max(SLP_TASTE_NEVER_MAX).optional(),
+        /** Which words once it gets naked (0.3.17). */
+        language: z.enum(SLP_SPICE_LANGUAGES).optional(),
       })
       .strict()
       .safeParse(req.body ?? {});

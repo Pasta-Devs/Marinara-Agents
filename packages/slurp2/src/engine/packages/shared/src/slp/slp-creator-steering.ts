@@ -39,6 +39,25 @@ export const SLP_STEERING_TOPICS_MAX = 6;
 export const SLP_STEERING_NUDGE_MAX = 160;
 export const SLP_STEERING_NUDGES_MAX = 6;
 
+export const SLP_ROMANCE_ONLY_MAX = 100;
+export type SlpCreatorRomance = { off: boolean; only: string[] };
+
+/** Whether both Creators' romance settings allow the two of them together (0.3.17). */
+export function slpRomanceAllows(
+  a: { id: string; romance?: SlpCreatorRomance },
+  b: { id: string; romance?: SlpCreatorRomance },
+): boolean {
+  const allows = (self: typeof a, other: typeof b) =>
+    !self.romance?.off && (!self.romance?.only.length || self.romance.only.includes(other.id));
+  return allows(a, b) && allows(b, a);
+}
+
+/** The same, for two Creators Slurp runs; a player's page, or nobody cast yet, is never held to it. */
+export const slpRomancePairAllowed = (
+  a: { id: string; automatic: boolean; romance?: SlpCreatorRomance } | undefined,
+  b: { id: string; automatic: boolean; romance?: SlpCreatorRomance } | undefined,
+) => !a || !b || !a.automatic || !b.automatic || slpRomanceAllows(a, b);
+
 /** A one-off idea for one upcoming post ("gym post tonight"). Used once, then gone. */
 export type SlpCreatorNudge = { id: string; text: string; story: boolean; createdAt: string };
 
@@ -50,6 +69,11 @@ export type SlpCreatorSteering = {
   mood: SlpSteeringMood | null;
   /** Monogamous, polyamorous, or null = from their card (0.3.5). */
   relationshipStyle: SlpRelationshipStyle | null;
+  /**
+   * Romance with other Creators (0.3.17): `off` = never; `only` = just these Creators (empty = anyone
+   * who fits). The world, storylines and drama keep to it; the player's own Stir set-up may override.
+   */
+  romance: SlpCreatorRomance;
   /** Topics that come up more. */
   push: string[];
   /** Topics they leave alone for now. */
@@ -86,6 +110,7 @@ export const SLP_DEFAULT_STEERING: SlpCreatorSteering = {
   lifePhase: "",
   mood: null,
   relationshipStyle: null,
+  romance: { off: false, only: [] },
   push: [],
   avoid: [],
   pace: "usual",
@@ -134,6 +159,12 @@ function supportNote(raw: unknown): SlpSteeringSupportNote | null {
   };
 }
 
+function romance(raw: unknown): SlpCreatorRomance {
+  const value = raw && typeof raw === "object" && !Array.isArray(raw) ? (raw as Record<string, unknown>) : {};
+  const only = Array.isArray(value.only) ? value.only.map((id) => text(id, 128)).filter(Boolean) : [];
+  return { off: value.off === true, only: [...new Set(only)].slice(0, SLP_ROMANCE_ONLY_MAX) };
+}
+
 export function normalizeSlpCreatorSteering(raw: unknown): SlpCreatorSteering {
   const value = raw && typeof raw === "object" && !Array.isArray(raw) ? (raw as Record<string, unknown>) : {};
   return {
@@ -143,6 +174,7 @@ export function normalizeSlpCreatorSteering(raw: unknown): SlpCreatorSteering {
     relationshipStyle: SLP_RELATIONSHIP_STYLES.includes(value.relationshipStyle as SlpRelationshipStyle)
       ? (value.relationshipStyle as SlpRelationshipStyle)
       : null,
+    romance: romance(value.romance),
     push: topics(value.push),
     avoid: topics(value.avoid),
     pace: SLP_STEERING_PACES.includes(value.pace as SlpSteeringPace) ? (value.pace as SlpSteeringPace) : "usual",

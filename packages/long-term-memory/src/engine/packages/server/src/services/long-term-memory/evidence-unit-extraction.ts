@@ -133,6 +133,7 @@ export function diagnosticsRequireExtractionReview(diagnostics: readonly LtmExtr
     (diagnostic) =>
       diagnostic.code === "candidate_reconciliation_ambiguous" ||
       diagnostic.code === "candidate_reconciliation_incomplete" ||
+      diagnostic.code === "ambiguous_subject_identity" ||
       diagnostic.code === "event_shaped_character_fact",
   );
 }
@@ -1073,13 +1074,14 @@ async function preflightExtractionPromptContext({
       provider: extractionOptions.languageModel.name,
       model: extractionOptions.languageModel.model,
       counts: {
-        maxContext: providerMaxContext,
+        ...(providerMaxContext != null ? { maxContext: providerMaxContext } : {}),
         requestedOutputTokens: requestedMaxTokens ?? 0,
         providerCappedOutputTokens: providerCappedMaxTokens ?? 0,
         fittedOutputTokens,
         minimumOutputTokens: MIN_LTM_EXTRACTION_OUTPUT_TOKENS,
-        estimatedPromptTokens: fit?.estimatedTokensBefore ?? 0,
-        fittedPromptTokens: fit?.estimatedTokensAfter ?? 0,
+        ...(fit
+          ? { estimatedPromptTokens: fit.estimatedTokensBefore, fittedPromptTokens: fit.estimatedTokensAfter }
+          : {}),
       },
       details: { reason: "output_budget_below_viability_floor" },
     });
@@ -1314,7 +1316,7 @@ export async function runLongTermMemoryEvidenceUnitExtraction(
     counts: {
       messages: messages.length,
       promptChars,
-      promptTokens: estimateLtmPromptTokens(messages.map((message) => message.content).join("\n")),
+      estimatedPromptTokens: estimateLtmPromptTokens(messages.map((message) => message.content).join("\n")),
       sourceChars: options.sourceText.length,
     },
     details: {
@@ -1342,29 +1344,31 @@ export async function runLongTermMemoryEvidenceUnitExtraction(
     });
 
     const content = result.content?.trim() ?? "";
+    const incomplete = ["length", "max_tokens", "token_limit"].includes(result.finishReason.toLowerCase());
     await recordLtmDebugEvent({
       operationId: options.operationId,
       root: options.root,
       phase: "llm",
       action: "evidence_unit_response",
-      status: content ? "ok" : "error",
+      status: content ? (incomplete ? "warning" : "ok") : "error",
       sourceNoteId: options.sourceNote.id,
       provider: options.languageModel.name,
       model: options.languageModel.model,
       durationMs: Date.now() - started,
-      counts: {
-        responseChars: content.length,
-        promptTokens: result.usage?.promptTokens ?? 0,
-        completionTokens: result.usage?.completionTokens ?? 0,
-        completionReasoningTokens: result.usage?.completionReasoningTokens ?? 0,
-        totalTokens: result.usage?.totalTokens ?? 0,
-      },
+      counts: Object.fromEntries(
+        Object.entries({
+          responseChars: content.length,
+          promptTokens: result.usage?.promptTokens,
+          completionTokens: result.usage?.completionTokens,
+          completionReasoningTokens: result.usage?.completionReasoningTokens,
+          totalTokens: result.usage?.totalTokens,
+        }).filter(([, count]) => count != null),
+      ),
       details: {
         finishReason: result.finishReason,
         responseSnippet: content.slice(0, 1_500),
       },
     });
-    const incomplete = ["length", "max_tokens", "token_limit"].includes(result.finishReason.toLowerCase());
     if (!content) {
       throw new LtmServiceError(
         "empty_output: extraction model returned no content; the source remains retryable",
@@ -1475,6 +1479,7 @@ export function compileEvidenceUnitExtraction(options: {
   totalCandidates?: number;
   providerCandidates?: number;
   parserRejectionCount?: number;
+  userSkippedUnits?: number;
   normalizedAdditions?: number;
   parserDroppedCandidates?: LtmExtractionDroppedCandidate[];
   preValidationDroppedCandidates?: LtmExtractionDroppedCandidate[];
@@ -1592,7 +1597,10 @@ export function compileEvidenceUnitExtraction(options: {
     providerCandidates:
       options.providerCandidates ??
       options.totalCandidates ??
-      options.unitResponse.units.length + parserDroppedCandidates.length + preValidationDroppedCandidates.length,
+      options.unitResponse.units.length +
+        parserDroppedCandidates.length +
+        preValidationDroppedCandidates.length +
+        (options.userSkippedUnits ?? 0),
     normalizedAdditions: (options.normalizedAdditions ?? 0) + normalized.addedUnits,
     parserRejections: parserRejectionCount,
     validationRejections:
@@ -1603,6 +1611,7 @@ export function compileEvidenceUnitExtraction(options: {
     deduplications:
       validated.keptUnits.length - dedupResult.deduplicated.length - duplicateAliasClosure.droppedCandidates.length,
     keptUnits: closed.units.length,
+    ...(options.userSkippedUnits ? { userSkips: options.userSkippedUnits } : {}),
   });
   const totalCandidates = accounting.providerCandidates + accounting.normalizedAdditions;
   const outcome = summarizeExtractionOutcome({

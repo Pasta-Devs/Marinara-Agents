@@ -73,6 +73,8 @@ export type SlurpThread = {
   counterpartName?: string | null;
   counterpartHandle?: string | null;
   subscribed: boolean;
+  /** The Engine scene this thread is in while it runs (docs/SCENES.md): the thread is locked. */
+  sceneChatId?: string | null;
 };
 export type SlurpCommission = {
   id: string;
@@ -211,3 +213,6 @@ export { CreatorMessagingGroup } from "./SlpCreatorMessagingGroup.js";
 
 // The Creator settings modal edits one Creator's message policy.
 export { useSetSlurpCreatorMessaging } from "./slp-messages-hooks.js";
+
+// The role-play sign-up draws its chat with the same bubbles as a real thread.
+export { slurpBubbleSurface } from "./SlpMessageBubble.js";

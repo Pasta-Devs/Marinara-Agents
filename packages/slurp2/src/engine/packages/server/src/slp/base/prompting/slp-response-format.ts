@@ -399,6 +399,17 @@ function withUs<T extends { properties: object; required: readonly string[] }>(s
     : schema;
 }
 
+/** A DM schema, with the "sceneInvite" field added when the Creator may pitch a scene (docs/SCENES.md). */
+function withSceneInvite<T extends { properties: object; required: readonly string[] }>(schema: T, invite: boolean) {
+  return invite
+    ? {
+        ...schema,
+        properties: { ...schema.properties, sceneInvite: nullableString },
+        required: [...schema.required, "sceneInvite"],
+      }
+    : schema;
+}
+
 export function slpResponseFormat(
   model: string,
   kind:
@@ -421,6 +432,8 @@ export function slpResponseFormat(
     collab?: boolean;
     /** A reply to the player may say what the talk did to the two of them ("us"). */
     us?: boolean;
+    /** A reply to the player may pitch a roleplay scene ("sceneInvite"). */
+    sceneInvite?: boolean;
   } = {},
 ): { type: string; [key: string]: unknown } {
   if (!isOpenAIGpt56Model(model)) return { type: "json_object" };
@@ -436,7 +449,10 @@ export function slpResponseFormat(
             : kind === "noodler_dm"
               ? options.staff
                 ? slpCreatorStaffDmSchema
-                : withUs(options.collab ? slpCreatorCollabDmSchema : slpCreatorDmSchema, options.us === true)
+                : withSceneInvite(
+                    withUs(options.collab ? slpCreatorCollabDmSchema : slpCreatorDmSchema, options.us === true),
+                    options.sceneInvite === true,
+                  )
               : kind === "noodler_fan_activity"
                 ? {
                     type: "object",

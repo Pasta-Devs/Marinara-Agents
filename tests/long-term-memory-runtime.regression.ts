@@ -25,14 +25,27 @@ async function main() {
   Module._initPaths();
   const source = "../packages/long-term-memory/src/engine/packages/server/src/services/long-term-memory";
   const { activate } = await import(`${source}/server-entry.ts`);
-  const { longTermMemoryRecallIndexPath, parseLtmRecallIndex, rebuildLongTermMemoryIndexes } = await import(
-    `${source}/rebuild.ts`
-  );
+  const {
+    longTermMemoryRecallIndexPath,
+    parseLtmRecallIndex,
+    rebuildLongTermMemoryIndexes,
+    loadOrRebuildLongTermMemoryIndexes,
+  } = await import(`${source}/rebuild.ts`);
+  const { withLtmVaultLock } = await import(`${source}/vault-lock.ts`);
+  const { LongTermMemoryStorage } = await import(`${source}/storage.ts`);
+  const { notePathForId } = await import(`${source}/paths.ts`);
+  const { invalidateLtmVaultSnapshot } = await import(`${source}/vault-snapshot.ts`);
   const { ltmIndexStatePath, readLtmIndexState } = await import(`${source}/index-state.ts`);
+  const { repairLongTermMemory } = await import(`${source}/maintenance.ts`);
   const { retrieveLongTermMemory } = await import(`${source}/retrieval.ts`);
   const { applyLtmBudget } = await import(`${source}/budget.ts`);
   const { serializeLongTermMemoryPrompt } = await import(`${source}/prompt.ts`);
-  const { readLongTermMemoryUsage } = await import(`${source}/usage.ts`);
+  const {
+    readLongTermMemoryUsage,
+    readLongTermMemoryInjectionReceipt,
+    readLongTermMemoryAttempt,
+    recordLongTermMemoryAttempt,
+  } = await import(`${source}/usage.ts`);
   const { readLtmDebugLog } = await import(`${source}/debug-log.ts`);
   const { resolveLongTermMemoryRecallSettings } =
     await import("../packages/long-term-memory/src/engine/packages/shared/src/features/agents/long-term-memory/runtime-settings.ts");
@@ -840,6 +853,12 @@ async function main() {
       assert.equal(explained.rejected.length, 1);
       assert.equal(explained.rejected[0].rejectionReason, "lower_rank");
       assert.equal(explained.chunks[0].lanes.length > 0, true);
+      assert.equal(explained.semanticOutcome, "disabled", "#1211: an unweighted semantic lane must read as disabled");
+      assert.equal(explained.indexSnapshot.loadOutcome, "loaded");
+      assert.ok(
+        explained.indexSnapshot.indexedChunks >= explained.indexSnapshot.eligibleChunks,
+        "#1211: eligible chunks cannot exceed indexed chunks",
+      );
       assert.equal(
         await readFile(recallIndexPath, "utf8"),
         indexBeforeRecall,
@@ -859,6 +878,12 @@ async function main() {
       });
       assert.equal(lexicalFallback.embeddingsAvailable, false);
       assert.equal(
+        lexicalFallback.semanticOutcome,
+        "no_matches",
+        "#1211: an unavailable-looking embeddingsAvailable must distinguish a valid index with no matches",
+      );
+      assert.equal(lexicalFallback.indexSnapshot.loadOutcome, "upgraded");
+      assert.equal(
         lexicalFallback.chunks.some((chunk: any) => chunk.chunk.noteId === "world_visible"),
         true,
       );
@@ -875,7 +900,7 @@ async function main() {
       assert.deepEqual(
         thresholded.chunks.map((chunk: any) => chunk.chunk.noteId),
         ["world_visible", "world_visible_second"],
-        "minimum score must apply to fused relevance, not a candidate's strongest lane",
+        "minimum score must apply to the strongest weighted lane, not fused rank or relative top-result normalization",
       );
       const resolvedExcluded = await retrieveLongTermMemory({
         root: storage.root,
@@ -1064,18 +1089,315 @@ async function main() {
         for (const pattern of testCase.matches) assert.match(text, pattern);
         for (const pattern of testCase.doesNotMatch) assert.doesNotMatch(text, pattern);
       }
+
+      // #1194: a targeted responder in a multi-character chat must recall only notes scoped to
+      // its own character, while the Engine's full-set handoff keeps today's chat-wide recall.
+      const targetedChat = {
+        id: "chat-targeted-group",
+        name: "Targeted group chat",
+        mode: "roleplay",
+        characterIds: ["character-a", "character-b"],
+        groupId: null,
+        personaId: null,
+        connectionId: null,
+        metadata: { enableLongTermMemory: true, longTermMemoryBudgetTokens: 4096 },
+        lastMessageAt: null,
+        updatedAt: "2026-07-18T00:00:00.000Z",
+      };
+      chats.push(targetedChat);
+      const targetedText = "targeted group cipher";
+      const targetedNote = (id: string, scope: Record<string, unknown>) =>
+        note(id, targetedChat.id, `The ${targetedText} is recorded for ${id}.`, { scope });
+      try {
+        await storage.createNote(targetedNote("world_target_a", { characterIds: ["character-a"] }));
+        await storage.createNote(targetedNote("world_target_b", { characterIds: ["character-b"] }));
+        await storage.createNote(
+          targetedNote("world_target_chat", { chatId: targetedChat.id, chatIds: [targetedChat.id] }),
+        );
+        await storage.createNote(targetedNote("world_target_persona", { personaIds: ["persona-a"] }));
+        await storage.createNote(targetedNote("world_target_mixed", { characterIds: ["character-a", "character-b"] }));
+        await storage.createNote(
+          targetedNote("world_target_foreign", {
+            characterIds: ["character-c"],
+            chatId: targetedChat.id,
+            chatIds: [targetedChat.id],
+          }),
+        );
+        // The create API refuses unscoped notes, so a legacy/imported global note is written directly.
+        await writeFile(
+          notePathForId("world_target_global", "world", storage.root),
+          JSON.stringify(
+            note("world_target_global", targetedChat.id, `The ${targetedText} is recorded for world_target_global.`, {
+              scope: {},
+            }),
+          ),
+        );
+        invalidateLtmVaultSnapshot(storage.root);
+        await rebuildLongTermMemoryIndexes({ root: storage.root });
+        const recallNotes = async (characterIds: string[]) =>
+          (
+            await runtime.recall({
+              chatId: targetedChat.id,
+              chatMode: "roleplay",
+              characterIds,
+              messages: [{ role: "user", content: targetedText }],
+              debugMode: false,
+            })
+          )?.receipt.artifact.chunks
+            .map((chunk: any) => chunk.chunk.noteId)
+            .sort() ?? [];
+        assert.deepEqual(await recallNotes(["character-a"]), ["world_target_a"]);
+        assert.deepEqual(await recallNotes(["character-b"]), ["world_target_b"]);
+        const chatWide = await recallNotes(["character-a", "character-b"]);
+        for (const id of [
+          "world_target_a",
+          "world_target_b",
+          "world_target_global",
+          "world_target_chat",
+          "world_target_mixed",
+          "world_target_foreign",
+        ]) {
+          assert.equal(chatWide.includes(id), true, `${id} must stay eligible for a non-targeted group recall`);
+        }
+        assert.equal(chatWide.includes("world_target_persona"), false, "persona-only notes stay out of group recall");
+        assert.equal((await recallNotes([])).includes("world_target_a"), true);
+        assert.equal((await recallNotes(["character-c"])).includes("world_target_a"), true);
+        // #1194: strict-subset detection reads the chat's current character list, so growing the
+        // group after the index rebuild must switch the original two-id recall to targeted filtering.
+        targetedChat.characterIds = ["character-a", "character-b", "character-c"];
+        const grownTargeted = await recallNotes(["character-a", "character-b"]);
+        assert.deepEqual(grownTargeted, ["world_target_a", "world_target_b", "world_target_mixed"]);
+        for (const id of ["world_target_global", "world_target_chat", "world_target_persona", "world_target_foreign"]) {
+          assert.equal(grownTargeted.includes(id), false, `${id} must stay out of a targeted group recall`);
+        }
+      } finally {
+        chats.pop();
+      }
       const legacyReadable = await runtime.recall(input);
       assert.match(legacyReadable.text, /beneath the observatory/);
       const first = await runtime.recall(input);
       assert.match(first.text, /beneath the observatory/);
       assert.doesNotMatch(first.text, /another chat/, "recall must enforce chat scope");
       assert.ok(first.receipt, "non-empty recall must return an opaque receipt");
+      const firstAttempt = await readLongTermMemoryAttempt("chat-a", storage.root);
+      assert.equal(firstAttempt?.attemptId, first.receipt.id, "the recall attempt id must match its receipt id");
+      assert.equal(firstAttempt?.receiptId, first.receipt.id);
+      assert.equal(firstAttempt?.outcome, "completed");
+      assert.equal(firstAttempt?.reason, "ready");
       await runtime.recall({ ...input, debugMode: true });
       const recallExplanation = (await readLtmDebugLog({ phase: "retrieval" }, storage.root)).at(-1);
       assert.equal(recallExplanation?.action, "recall_explanation");
+      assert.equal(
+        recallExplanation?.operationId,
+        (await readLongTermMemoryAttempt("chat-a", storage.root))?.attemptId,
+        "the explanation must carry the shared recall attempt id",
+      );
       assert.equal(recallExplanation?.details?.selected?.[0]?.noteId, "world_visible");
       assert.equal(JSON.stringify(recallExplanation).includes(input.messages[0].content), false);
       assert.equal(JSON.stringify(recallExplanation).includes("beneath the observatory"), false);
+
+      // #1211: the explanation must record effective parameters, the recall-time
+      // index snapshot, and a semantic outcome that distinguishes disabled,
+      // unavailable, incompatible, no_matches, and contributed.
+      const explanationDetails = recallExplanation?.details as Record<string, unknown>;
+      assert.ok(
+        ["disabled", "unavailable", "incompatible", "no_matches", "contributed"].includes(
+          String(explanationDetails.semanticOutcome),
+        ),
+        "#1211: the explanation must record the semantic lane outcome",
+      );
+      assert.equal(explanationDetails.indexLoadOutcome, "loaded");
+      assert.equal(explanationDetails.mode, "roleplay");
+      assert.equal(explanationDetails.includeResolved, false);
+      assert.equal(explanationDetails.exclusiveCharacterTargeting, false);
+      assert.equal(typeof explanationDetails.indexGeneratedAt, "string");
+      assert.equal(typeof explanationDetails.indexedChunks, "number");
+      assert.equal(typeof explanationDetails.eligibleChunks, "number");
+      assert.equal(typeof explanationDetails.embeddedChunks, "number");
+      assert.ok(
+        (explanationDetails.indexedChunks as number) >= (explanationDetails.eligibleChunks as number),
+        "#1211: eligible chunks cannot exceed indexed chunks",
+      );
+      assert.equal(explanationDetails.rejectedLimit, 20);
+      assert.equal(typeof explanationDetails.contextMessagesUsed, "number");
+
+      const originalRecallMetadata = chats[0].metadata;
+      try {
+        chats[0].metadata = {
+          ...originalRecallMetadata,
+          longTermMemoryBudgetTokens: 128,
+          longTermMemoryRecallPreamble: "p".repeat(300),
+          longTermMemorySemanticWeight: 0,
+          longTermMemoryLexicalWeight: 0,
+          longTermMemoryKeywordWeight: 0,
+          longTermMemoryGraphWeight: 0,
+        };
+        const tightInput = {
+          ...input,
+          messages: [{ role: "user", content: "world_visible world_visible_second" }],
+          debugMode: true,
+        };
+        const beforeSerialization = await retrieveLongTermMemory({
+          root: storage.root,
+          queryText: tightInput.messages[0].content,
+          scope: { chatId: "chat-a", chatIds: ["chat-a"] },
+          mode: "roleplay",
+          maxTokens: 128,
+          semanticWeight: 0,
+          lexicalWeight: 0,
+          keywordWeight: 0,
+          graphWeight: 0,
+        });
+        assert.equal(beforeSerialization.chunks.length, 2);
+        const tightRecall = await runtime.recall(tightInput);
+        assert.equal(tightRecall.receipt.artifact.chunks.length, 1, "framing and preamble drop the second chunk");
+        const tightExplanation = (await readLtmDebugLog({ phase: "retrieval" }, storage.root)).at(-1)!;
+        assert.deepEqual(
+          tightExplanation.details.selected.map((candidate: any) => candidate.noteId),
+          tightRecall.receipt.artifact.chunks.map((candidate: any) => candidate.chunk.noteId),
+          "debug selection must describe the serialized artifact, not pre-serialization recall",
+        );
+        assert.equal(tightExplanation.counts.selected, 1);
+        assert.equal(tightExplanation.counts.usedTokens, tightRecall.receipt.artifact.estimatedTokens);
+        assert.equal(tightExplanation.counts.rejected, 1);
+        assert.equal(tightExplanation.details.rejected[0].rejectionReason, "prompt_budget");
+        assert.equal(tightExplanation.details.rejected[0].thresholdPassed, true);
+        assert.match(tightExplanation.uiSummary, /^1 memories selected; 1 candidates rejected\.$/);
+        assert.equal(JSON.stringify(tightExplanation).includes("p".repeat(300)), false);
+
+        chats[0].metadata.longTermMemoryRecallPreamble = "p".repeat(500);
+        assert.equal(await runtime.recall(tightInput), null, "a preamble can leave no room for any chunk");
+        const budgetAttempt = await readLongTermMemoryAttempt("chat-a", storage.root);
+        assert.equal(budgetAttempt?.outcome, "skipped");
+        assert.equal(budgetAttempt?.reason, "prompt_budget");
+        const emptyExplanation = (await readLtmDebugLog({ phase: "retrieval" }, storage.root)).at(-1)!;
+        assert.deepEqual(emptyExplanation.counts, { selected: 0, rejected: 2, usedTokens: 0 });
+        assert.deepEqual(emptyExplanation.details.selected, []);
+
+        for (const threshold of [0, 0.5, 0.6, 0.61]) {
+          chats[0].metadata = {
+            ...originalRecallMetadata,
+            longTermMemoryRecallStyle: "balanced",
+            longTermMemoryScoreThreshold: threshold,
+          };
+          const thresholdRecall = await runtime.recall({
+            ...input,
+            messages: [{ role: "user", content: "observatory cobalt archive" }],
+            debugMode: true,
+          });
+          const explanation = (await readLtmDebugLog({ phase: "retrieval" }, storage.root)).at(-1)!;
+          assert.equal(explanation.details.scoreThreshold, threshold, "even an all-rejected recall must be explained");
+          assert.equal(explanation.counts.selected, thresholdRecall?.receipt.artifact.chunks.length ?? 0);
+          for (const candidate of thresholdRecall?.receipt.artifact.chunks ?? []) {
+            const detail = explanation.details.selected.find((item: any) => item.noteId === candidate.chunk.noteId);
+            assert.equal(detail.fusedScore, candidate.score);
+            assert.equal(detail.relevanceScore, candidate.relevanceScore);
+            assert.equal(detail.score, detail.relevanceScore, "keep the legacy UI relevance field compatible");
+            assert.notEqual(detail.fusedScore, detail.relevanceScore);
+            assert.equal(detail.thresholdPassed, true);
+          }
+          for (const candidate of explanation.details.rejected) {
+            assert.equal(typeof candidate.fusedScore, "number");
+            assert.equal(candidate.thresholdPassed, candidate.relevanceScore >= threshold);
+          }
+          if (threshold === 0.6) {
+            assert.equal(
+              thresholdRecall.receipt.artifact.chunks[0].relevanceScore,
+              0.6,
+              "equality passes the threshold",
+            );
+          }
+          if (threshold === 0.61) {
+            assert.equal(thresholdRecall, null, "scores remain capped by the balanced lane weights");
+            assert.ok(explanation.details.rejected.length > 0);
+            assert.ok(explanation.details.rejected.every((candidate: any) => candidate.thresholdPassed === false));
+          }
+        }
+      } finally {
+        chats[0].metadata = originalRecallMetadata;
+      }
+
+      const boundedChat = {
+        ...chats[0],
+        id: "chat-bounded-explanation",
+        groupId: null,
+        metadata: {
+          longTermMemoryMaxChunks: 100,
+          longTermMemoryBudgetTokens: 128,
+          longTermMemoryRecallPreamble: "p".repeat(500),
+          longTermMemorySemanticWeight: 0,
+          longTermMemoryLexicalWeight: 0,
+          longTermMemoryKeywordWeight: 0,
+          longTermMemoryGraphWeight: 0,
+        },
+      };
+      const noteIds = Array.from({ length: 120 }, (_, index) => `world_bounded_${index}`);
+      chats.push(boundedChat);
+      try {
+        for (const [index, id] of noteIds.entries()) {
+          await storage.createNote(note(id, boundedChat.id, String(index)));
+        }
+        await rebuildLongTermMemoryIndexes({ root: storage.root });
+        for (const candidateCount of [120, 25]) {
+          const queryText = noteIds.slice(0, candidateCount).join(" ");
+          const candidates = await retrieveLongTermMemory({
+            root: storage.root,
+            queryText,
+            scope: { chatId: boundedChat.id, chatIds: [boundedChat.id] },
+            mode: "roleplay",
+            maxChunks: 100,
+            maxTokens: 128,
+            semanticWeight: 0,
+            lexicalWeight: 0,
+            keywordWeight: 0,
+            graphWeight: 0,
+            explain: true,
+            rejectedLimit: 20,
+          });
+          assert.equal(candidates.chunks.length, Math.min(100, candidateCount));
+          assert.equal(candidates.rejected.length, candidateCount === 120 ? 20 : 0);
+          assert.equal(
+            candidates.chunks.some((candidate: any) =>
+              candidates.rejected.some((rejected: any) => rejected.chunkId === candidate.chunk.id),
+            ),
+            false,
+            "retrieval selection and rejection are disjoint",
+          );
+          assert.equal(
+            await runtime.recall({
+              ...input,
+              chatId: boundedChat.id,
+              messages: [{ role: "user", content: queryText }],
+              debugMode: true,
+            }),
+            null,
+          );
+          const explanation = (await readLtmDebugLog({ phase: "retrieval" }, storage.root)).at(-1)!;
+          assert.equal(explanation.counts.rejected, explanation.details.rejected.length);
+          assert.equal(explanation.details.rejected.length, 20, "combined rejection diagnostics stay bounded");
+          assert.match(explanation.uiSummary, /^0 memories selected; 20 candidates rejected\.$/);
+          assert.equal(
+            explanation.details.rejected.some((candidate: any) => candidate.rejectionReason === "prompt_budget"),
+            true,
+            "a full retrieval rejection list must still surface a prompt-budget omission",
+          );
+          assert.deepEqual(
+            explanation.details.rejected.map((candidate: any) => [candidate.noteId, candidate.rejectionReason]),
+            candidates.rejected.length
+              ? [
+                  ...candidates.rejected
+                    .slice(0, 19)
+                    .map((candidate: any) => [candidate.noteId, candidate.rejectionReason]),
+                  [candidates.chunks[0].chunk.noteId, "prompt_budget"],
+                ]
+              : candidates.chunks.slice(0, 20).map((candidate: any) => [candidate.chunk.noteId, "prompt_budget"]),
+            "reserve a bounded slot for a prompt-budget omission while retaining retrieval rejections",
+          );
+        }
+      } finally {
+        chats.pop();
+        await storage.deleteNotesPermanently(noteIds);
+      }
 
       chats[0].metadata = {
         ...chats[0].metadata,
@@ -1106,6 +1428,11 @@ async function main() {
         true,
       );
       assert.equal(
+        (await readLongTermMemoryInjectionReceipt("chat-a", storage.root)).attemptId,
+        first.receipt.id,
+        "the confirmed receipt must carry the recall attempt id",
+      );
+      assert.equal(
         await runtime.recordPromptAccepted({
           chatId: "chat-a",
           receipt: first.receipt,
@@ -1133,15 +1460,131 @@ async function main() {
         }),
         false,
       );
+      assert.equal(
+        (await readLongTermMemoryInjectionReceipt("chat-a", storage.root)).attemptId,
+        regenerated.receipt.id,
+        "a null-receipt regeneration must confirm the pending recall attempt",
+      );
       const usage = await readLongTermMemoryUsage(storage.root);
       assert.equal(usage.chats["chat-a"].chunks["world_visible::facts"].injectionCount, 2);
 
       assert.equal(await runtime.recall({ ...input, messages: [] }), null, "empty prompts must not recall");
+      const emptyQueryAttempt = await readLongTermMemoryAttempt("chat-a", storage.root);
+      assert.equal(emptyQueryAttempt?.outcome, "skipped");
+      assert.equal(emptyQueryAttempt?.reason, "empty_query");
       assert.equal(
         await runtime.recall({ ...input, messages: [{ role: "user", content: "unrelated zephyr" }] }),
         null,
         "empty retrieval must return null",
       );
+      const noMatchAttempt = await readLongTermMemoryAttempt("chat-a", storage.root);
+      assert.equal(noMatchAttempt?.outcome, "completed");
+      assert.equal(noMatchAttempt?.reason, "no_matches");
+      assert.equal(
+        await runtime.recall({
+          ...input,
+          messages: [{ role: "user", content: "beneath the observatory" }],
+          signal: AbortSignal.abort(),
+        }),
+        null,
+        "an already-cancelled recall must not run",
+      );
+      const cancelledAttempt = await readLongTermMemoryAttempt("chat-a", storage.root);
+      assert.equal(cancelledAttempt?.outcome, "cancelled");
+      assert.equal(
+        await runtime.recall({ ...input, chatId: "chat-never-existed" }),
+        null,
+        "an unknown chat must not recall",
+      );
+      const missingChatAttempt = await readLongTermMemoryAttempt("chat-never-existed", storage.root);
+      assert.equal(missingChatAttempt?.outcome, "skipped");
+      assert.equal(missingChatAttempt?.reason, "chat_not_found");
+
+      await recordLongTermMemoryAttempt(
+        {
+          version: 1,
+          chatId: "chat-attempt-order",
+          attemptId: "00000000-0000-4000-8000-000000000201",
+          at: "2030-01-01T00:00:00.000Z",
+          outcome: "completed",
+          debugEnabled: false,
+        },
+        storage.root,
+      );
+      await recordLongTermMemoryAttempt(
+        {
+          version: 1,
+          chatId: "chat-attempt-order",
+          attemptId: "00000000-0000-4000-8000-000000000202",
+          at: "2020-01-01T00:00:00.000Z",
+          outcome: "failed",
+          debugEnabled: false,
+        },
+        storage.root,
+      );
+      assert.equal(
+        (await readLongTermMemoryAttempt("chat-attempt-order", storage.root))?.attemptId,
+        "00000000-0000-4000-8000-000000000201",
+        "a slow older recall must not overwrite a newer observed attempt",
+      );
+
+      // #1212: overlapping recalls must order by invocation start, not completion. Hold the
+      // older recall at its first await so the newer one finishes first, then release it.
+      {
+        const originalGetChat = api.runtime.persistence.getChat;
+        let releaseOlder!: () => void;
+        const gate = new Promise<void>((resolve) => (releaseOlder = resolve));
+        let getChatCalls = 0;
+        api.runtime.persistence.getChat = async (chatId: string) => {
+          getChatCalls += 1;
+          if (getChatCalls === 1) await gate;
+          return originalGetChat(chatId);
+        };
+        try {
+          const olderRecall = runtime.recall(input);
+          const newerRecall = runtime.recall(input);
+          const newerResult = await newerRecall;
+          releaseOlder();
+          const olderResult = await olderRecall;
+          assert.ok(newerResult?.receipt && olderResult?.receipt);
+          assert.equal(
+            (await readLongTermMemoryAttempt("chat-a", storage.root))?.attemptId,
+            newerResult.receipt.id,
+            "a slow older recall must not overwrite the newer attempt when it finishes later",
+          );
+        } finally {
+          api.runtime.persistence.getChat = originalGetChat;
+        }
+      }
+
+      // #1212: a chat lookup failure is an observed recall failure, not host-side non-invocation.
+      {
+        const originalGetChat = api.runtime.persistence.getChat;
+        api.runtime.persistence.getChat = async () => {
+          throw new Error("persistence unavailable");
+        };
+        try {
+          await assert.rejects(runtime.recall(input), /persistence unavailable/);
+        } finally {
+          api.runtime.persistence.getChat = originalGetChat;
+        }
+        assert.equal(
+          (await readLongTermMemoryAttempt("chat-a", storage.root))?.outcome,
+          "failed",
+          "a chat persistence failure must be recorded as a failed recall attempt",
+        );
+      }
+
+      const settingsPath = join(storage.root, "config", "settings.json");
+      const originalSettings = await readFile(settingsPath, "utf8").catch(() => null);
+      try {
+        await writeFile(settingsPath, "{ not valid settings\n");
+        await assert.rejects(runtime.recall(input));
+        assert.equal((await readLongTermMemoryAttempt("chat-a", storage.root))?.outcome, "failed");
+      } finally {
+        if (originalSettings === null) await rm(settingsPath, { force: true });
+        else await writeFile(settingsPath, originalSettings);
+      }
 
       await writeFile(longTermMemoryRecallIndexPath(storage.root), "{malformed\n");
       const recovered = await runtime.recall(input);
@@ -1264,6 +1707,378 @@ async function main() {
         preferencesBeforeUninstall,
         "uninstall and reinstall must preserve exact agent preference bytes",
       );
+
+      // #1178: reconcile index freshness under the vault lock and honor recall cancellation.
+      {
+        const vaultRoot = storage.root;
+        const recallIndexPath = longTermMemoryRecallIndexPath(vaultRoot);
+        const deferred = () => {
+          let resolve!: () => void;
+          const promise = new Promise<void>((next) => (resolve = next));
+          return { promise, resolve };
+        };
+
+        // Concurrent stale loaders: while the vault lock is held, only a buggy loader's
+        // pre-lock freshness read can run; a fixed loader queues before reading. Releasing
+        // the lock must produce exactly one rebuild.
+        await storage.createNote(note("world_1178_lock", "chat-a", "A cobalt archive lock-coordination entry."));
+        const concurrentEmbeds: string[][] = [];
+        const concurrentAdapter = {
+          spaceId: "test-space",
+          label: "concurrent test embeddings",
+          async embed(texts: string[]) {
+            concurrentEmbeds.push(texts);
+            return texts.map(() => [1, 0]);
+          },
+        };
+        const originalListNotes = LongTermMemoryStorage.prototype.listNotes;
+        let preLockReads = 0;
+        LongTermMemoryStorage.prototype.listNotes = async function (this: { root: string }, ...args: unknown[]) {
+          const notes = await originalListNotes.apply(this, args);
+          if (this.root === vaultRoot) preLockReads += 1;
+          return notes;
+        };
+        const lockHold = deferred();
+        const holder = withLtmVaultLock(vaultRoot, () => lockHold.promise);
+        let firstLoad: Promise<unknown> | undefined;
+        let secondLoad: Promise<unknown> | undefined;
+        try {
+          firstLoad = loadOrRebuildLongTermMemoryIndexes(vaultRoot, concurrentAdapter, []);
+          secondLoad = loadOrRebuildLongTermMemoryIndexes(vaultRoot, concurrentAdapter, []);
+          for (let turn = 0; turn < 100 && preLockReads < 2; turn += 1) {
+            await new Promise((next) => setImmediate(next));
+          }
+        } finally {
+          LongTermMemoryStorage.prototype.listNotes = originalListNotes;
+          lockHold.resolve();
+        }
+        await Promise.all([holder, firstLoad, secondLoad]);
+        assert.equal(
+          concurrentEmbeds.length,
+          1,
+          "concurrent stale loaders must recheck freshness under the lock and rebuild once",
+        );
+
+        // Recall cancellation must reach rebuild embedding work, avoid publishing after
+        // abort, and release the vault lock so a queued reader proceeds.
+        await storage.createNote(note("world_1178_abort", "chat-a", "A cobalt archive cancellation entry."));
+        const embeddingEntered = deferred();
+        const releaseEmbedding = deferred();
+        let rebuildSignal: AbortSignal | undefined;
+        const originalConcurrentEmbed = concurrentAdapter.embed;
+        concurrentAdapter.embed = async (texts: string[], signal?: AbortSignal) => {
+          if (texts.length > 1) {
+            rebuildSignal = signal;
+            embeddingEntered.resolve();
+            await releaseEmbedding.promise;
+          }
+          return originalConcurrentEmbed(texts);
+        };
+        const abortController = new AbortController();
+        let waiterDone = false;
+        let recallOutcome: { error?: Error } | undefined;
+        try {
+          const pendingRecall = retrieveLongTermMemory({
+            root: vaultRoot,
+            embeddingAdapter: concurrentAdapter,
+            signal: abortController.signal,
+            queryText: "cobalt archive",
+            scope: { chatId: "chat-a", chatIds: ["chat-a"] },
+            mode: "roleplay",
+            semanticWeight: 0,
+          }).then(
+            () => ({}),
+            (error: Error) => ({ error }),
+          );
+          await embeddingEntered.promise;
+          assert.equal(rebuildSignal, abortController.signal, "recall cancellation must reach rebuild embedding work");
+          const waiter = storage.listNotes().then(() => {
+            waiterDone = true;
+          });
+          abortController.abort();
+          releaseEmbedding.resolve();
+          recallOutcome = await pendingRecall;
+          await waiter;
+        } finally {
+          concurrentAdapter.embed = originalConcurrentEmbed;
+          releaseEmbedding.resolve();
+        }
+        assert.equal(waiterDone, true, "cancelled rebuild must release the vault lock for waiters");
+        assert.equal(recallOutcome?.error?.name, "AbortError", "cancelled recall must not resolve after abort");
+
+        // Cancellation during a semantic upgrade must not quarantine the valid lexical
+        // index or suppress a later upgrade retry.
+        await rebuildLongTermMemoryIndexes({ root: vaultRoot, embeddingAdapter: null, stopWords: [] });
+        const lexicalIndexBytes = await readFile(recallIndexPath, "utf8");
+        const upgradeController = new AbortController();
+        const abortingAdapter = {
+          spaceId: "test-space",
+          label: "aborting test embeddings",
+          async embed() {
+            upgradeController.abort();
+            throw new DOMException("cancelled", "AbortError");
+          },
+        };
+        await assert.rejects(
+          () => loadOrRebuildLongTermMemoryIndexes(vaultRoot, abortingAdapter, [], upgradeController.signal),
+          { name: "AbortError" },
+          "a cancelled semantic upgrade must surface cancellation",
+        );
+        assert.equal(
+          await readFile(recallIndexPath, "utf8"),
+          lexicalIndexBytes,
+          "cancellation must not quarantine or rewrite the valid lexical index",
+        );
+        const upgraded = await loadOrRebuildLongTermMemoryIndexes(vaultRoot, {
+          spaceId: "test-space",
+          label: "retry test embeddings",
+          async embed(texts: string[]) {
+            return texts.map(() => [1, 0]);
+          },
+        });
+        assert.ok(upgraded.embeddings.embeddedChunkCount > 0, "a later semantic upgrade must still be attempted");
+
+        // A cancelled recall that is handed an already-current index must reject before
+        // ranking, not return a result the generation path could still publish.
+        const preloadedController = new AbortController();
+        preloadedController.abort();
+        const preloadedIndex = parseLtmRecallIndex(JSON.parse(await readFile(recallIndexPath, "utf8")));
+        await assert.rejects(
+          () =>
+            retrieveLongTermMemory({
+              root: vaultRoot,
+              embeddingAdapter: null,
+              signal: preloadedController.signal,
+              index: preloadedIndex,
+              queryText: "cobalt archive",
+              scope: { chatId: "chat-a", chatIds: ["chat-a"] },
+              mode: "roleplay",
+              semanticWeight: 0,
+            }),
+          { name: "AbortError" },
+          "a cancelled recall with a preloaded index must not return results",
+        );
+
+        // Cancellation stopped in flight must not issue another embedding batch.
+        const batchController = new AbortController();
+        let batchCalls = 0;
+        await assert.rejects(
+          () =>
+            embedLongTermMemoryTexts(
+              Array.from({ length: 129 }, (_, index) => `chunk-${index}`),
+              {
+                signal: batchController.signal,
+                embeddingAdapter: {
+                  spaceId: "test-space",
+                  label: "batch test embeddings",
+                  async embed(texts: string[]) {
+                    batchCalls += 1;
+                    batchController.abort();
+                    return texts.map(() => [1]);
+                  },
+                },
+              },
+            ),
+          { name: "AbortError" },
+          "cancellation must stop further embedding batches",
+        );
+        assert.equal(batchCalls, 1, "only the in-flight batch may run after cancellation");
+      }
+
+      // #1193 repair: a recall queued behind a settings save must resolve settings and load
+      // the index under the same vault lock, so it cannot republish an index built with the
+      // stop words it read before the save.
+      {
+        const vaultRoot = storage.root;
+        const recallIndexPath = longTermMemoryRecallIndexPath(vaultRoot);
+        const { getLtmGlobalSettings, updateLtmGlobalSettings } = await import(`${source}/settings.ts`);
+        const { chunkNotes, stableJsonHash } = await import(`${source}/chunking.ts`);
+        const deferred = () => {
+          let resolve!: () => void;
+          const promise = new Promise<void>((next) => (resolve = next));
+          return { promise, resolve };
+        };
+        const indexHashFor = async (stopWords: readonly string[]) =>
+          stableJsonHash(chunkNotes(await storage.listNotes(), { includeSourceNotes: false, stopWords }));
+        const originalSettings = await getLtmGlobalSettings(vaultRoot);
+        try {
+          await updateLtmGlobalSettings(
+            { longTermMemoryStopWords: ["cobalt"], longTermMemoryStopWordsFilterGenerated: true },
+            vaultRoot,
+          );
+          await rebuildLongTermMemoryIndexes({ root: vaultRoot, embeddingAdapter: null, stopWords: ["cobalt"] });
+          assert.equal(
+            parseLtmRecallIndex(JSON.parse(await readFile(recallIndexPath, "utf8"))).sourceHash,
+            await indexHashFor(["cobalt"]),
+            "the recall index must start matching the persisted stop words",
+          );
+
+          // Hold the vault, queue the settings save first, then a recall. The recall reads
+          // S0 before the save writes S1; a loader that resolves stop words outside the lock
+          // republishes S0 and fails the final assertion.
+          const gate = deferred();
+          const holder = withLtmVaultLock(vaultRoot, () => gate.promise);
+          await new Promise((next) => setImmediate(next));
+          const saveAndRebuild = withLtmVaultLock(vaultRoot, async () => {
+            await updateLtmGlobalSettings(
+              { longTermMemoryStopWords: ["observatory"], longTermMemoryStopWordsFilterGenerated: true },
+              vaultRoot,
+            );
+            await rebuildLongTermMemoryIndexes({ root: vaultRoot, embeddingAdapter: null });
+          });
+          const recall = retrieveLongTermMemory({
+            root: vaultRoot,
+            embeddingAdapter: null,
+            queryText: "cobalt archive",
+            scope: { chatId: "chat-a", chatIds: ["chat-a"] },
+            mode: "roleplay",
+            semanticWeight: 0,
+          });
+          for (let turn = 0; turn < 100; turn += 1) await new Promise((next) => setImmediate(next));
+          gate.resolve();
+          await Promise.all([holder, saveAndRebuild, recall]);
+          assert.equal(
+            parseLtmRecallIndex(JSON.parse(await readFile(recallIndexPath, "utf8"))).sourceHash,
+            await indexHashFor(["observatory"]),
+            "a recall queued behind a settings save must not republish an index built with the old stop words",
+          );
+        } finally {
+          await updateLtmGlobalSettings(
+            {
+              longTermMemoryStopWords: originalSettings.longTermMemoryStopWords,
+              longTermMemoryStopWordsFilterGenerated: originalSettings.longTermMemoryStopWordsFilterGenerated,
+            },
+            vaultRoot,
+          );
+          await rebuildLongTermMemoryIndexes({ root: vaultRoot, embeddingAdapter: null });
+        }
+      }
+
+      // #1179: the private vault-mutation boundary serializes host publication/rollback
+      // and resets the package-owned caches so reads never see a partially published vault.
+      {
+        const vaultRoot = storage.root;
+        const liveRuntime = services.get("long-term-memory:runtime");
+        assert.equal(
+          typeof liveRuntime.withVaultMutation,
+          "function",
+          "the runtime service must expose a private vault-mutation hook",
+        );
+        assert.equal(typeof liveRuntime.recall, "function", "recall must remain registered");
+        assert.equal(
+          typeof liveRuntime.recordPromptAccepted,
+          "function",
+          "recordPromptAccepted must remain registered",
+        );
+
+        const mutationPath = join(vaultRoot, "vault", "world", "world_1179_mutation.json");
+        await storage.createNote(note("world_1179_mutation", "chat-a", "Original observatory text."));
+        await rebuildLongTermMemoryIndexes({ root: vaultRoot, embeddingAdapter: null, stopWords: [] });
+        const currentMutationText = async () =>
+          (await storage.listNotes()).find((entry) => entry.id === "world_1179_mutation")?.sections.facts.text;
+        assert.equal(await currentMutationText(), "Original observatory text.", "the snapshot must warm first");
+
+        const published = note("world_1179_mutation", "chat-a", "Replacement from a trusted host.");
+        assert.equal(
+          await liveRuntime.withVaultMutation(async () => {
+            await writeFile(mutationPath, `${JSON.stringify(published)}\n`);
+            return "published";
+          }),
+          "published",
+          "the boundary must preserve the operation return value",
+        );
+        assert.equal(
+          await currentMutationText(),
+          "Replacement from a trusted host.",
+          "publication must reset the cached snapshot before the next read",
+        );
+
+        const deferred = () => {
+          let resolve!: () => void;
+          const promise = new Promise<void>((next) => (resolve = next));
+          return { promise, resolve };
+        };
+        const mutationEntered = deferred();
+        const mutationGate = deferred();
+        const serialized = note("world_1179_mutation", "chat-a", "Serialized replacement text.");
+        const mutation = liveRuntime.withVaultMutation(async () => {
+          await writeFile(mutationPath, "{\n");
+          mutationEntered.resolve();
+          await mutationGate.promise;
+          await writeFile(mutationPath, `${JSON.stringify(serialized)}\n`);
+          return "published";
+        });
+        await mutationEntered.promise;
+        let queuedReadSettled = false;
+        const queuedRead = storage.listNotes().finally(() => {
+          queuedReadSettled = true;
+        });
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        assert.equal(
+          queuedReadSettled,
+          false,
+          "a read queued behind the mutation must stay pending while the mutation holds the vault",
+        );
+        mutationGate.resolve();
+        const [mutationResult, queuedNotes] = await Promise.all([mutation, queuedRead]);
+        assert.equal(mutationResult, "published", "the serialized mutation must still complete");
+        assert.equal(
+          queuedNotes.find((entry) => entry.id === "world_1179_mutation")?.sections.facts.text,
+          "Serialized replacement text.",
+          "a read queued behind the mutation must rebuild from the published bytes, not the warm snapshot",
+        );
+
+        const intermediate = note("world_1179_mutation", "chat-a", "Intermediate publication text.");
+        const restored = note("world_1179_mutation", "chat-a", "Restored after a failed publication.");
+        await assert.rejects(
+          liveRuntime.withVaultMutation(async () => {
+            await writeFile(mutationPath, `${JSON.stringify(intermediate)}\n`);
+            // A host read during publication warms the package snapshot with the intermediate bytes.
+            await storage.listNotes();
+            await writeFile(mutationPath, `${JSON.stringify(restored)}\n`);
+            throw new Error("host publication failed");
+          }),
+          /host publication failed/u,
+          "the boundary must propagate the operation error",
+        );
+        assert.equal(
+          await currentMutationText(),
+          "Restored after a failed publication.",
+          "rollback must reset the cache so the next read sees the restored disk bytes, not the intermediate snapshot",
+        );
+        assert.equal(
+          (await storage.listNotes()).some((entry) => entry.id === "world_1179_mutation"),
+          true,
+          "a failed mutation must release the vault lock for later reads",
+        );
+
+        // Official maintenance quarantine must also drop the note from live recall.
+        await storage.createNote(note("world_1179_quarantine", "chat-a", "Quarantined recall text."));
+        await rebuildLongTermMemoryIndexes({ root: vaultRoot, embeddingAdapter: null, stopWords: [] });
+        await writeFile(join(vaultRoot, "vault", "world", "world_1179_quarantine.json"), "{");
+        const quarantineRepair = await repairLongTermMemory(["quarantine_malformed_notes"], vaultRoot);
+        assert.equal(
+          quarantineRepair.actions[0]?.count,
+          1,
+          "official maintenance must quarantine the malformed recall note",
+        );
+        const quarantinedRecall = await retrieveLongTermMemory({
+          root: vaultRoot,
+          embeddingAdapter: null,
+          queryText: "Quarantined recall text.",
+          scope: { chatId: "chat-a", chatIds: ["chat-a"] },
+          mode: "roleplay",
+          semanticWeight: 0,
+        });
+        assert.equal(
+          quarantinedRecall.chunks.some(
+            (hit) =>
+              hit.chunk.noteId === "world_1179_quarantine" || hit.chunk.text.includes("Quarantined recall text."),
+          ),
+          false,
+          "recall must not serve a note quarantined by official maintenance",
+        );
+      }
     },
     [
       () => cleanup?.(),

@@ -2,8 +2,8 @@
   "schemaVersion": 1,
   "id": "expression",
   "name": "Expression Engine",
-  "version": "1.0.4",
-  "description": "Detects character emotions and selects VN sprites/expressions. Add the Agent in Chat Settings → Agents → Tracker Agents for Roleplay mode.",
+  "version": "1.0.5",
+  "description": "Changes character sprites to match how they feel. Add the Agent in Chat Settings → Agents → Tracker Agents for Roleplay mode.",
   "engine": {
     "min": "2.3.0",
     "maxExclusive": "4.0.0"
@@ -17,8 +17,8 @@
   "files": [
     {
       "path": "agents.json",
-      "sha256": "aed1adb28892b40e7c1c5d44b79d0efbf6a32ffbf388fe21bce106b90a3fd537",
-      "bytes": 1912
+      "sha256": "3b54e55b8a66525491f241824f6313376c86b528b3783a7c1576b45ee4df6ef6",
+      "bytes": 1899
     }
   ],
   "permissions": [

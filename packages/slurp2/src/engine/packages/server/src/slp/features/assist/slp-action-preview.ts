@@ -94,6 +94,8 @@ async function previewOther(
         detail: { field: String(input.field) },
         summary: `Writes ${String(input.field)} text for the player to use.`,
       };
+    case "draft-post":
+      return { who, summary: `Drafts a post for ${nameOf} for the player to review; nothing is posted.` };
     case "draw-picture":
     case "use-picture":
     case "undo-picture":
@@ -146,8 +148,10 @@ async function previewOther(
       return {
         who,
         detail: { idea: post.idea ?? null, story: post.story },
-        error: ownPage,
-        summary: `${nameOf} writes and posts their next ${post.story ? "Story" : "post"} now.`,
+        // Review for everyone (0.3.14): Stir never posts this; the card opens the page's composer,
+        // which drafts the idea for the player to check. Professor Mari still runs it directly.
+        error: "draftInComposer",
+        summary: `${nameOf} drafts their next ${post.story ? "Story" : "post"} for the player to review.`,
       };
     }
     case "set-spice": {

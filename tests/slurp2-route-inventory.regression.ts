@@ -6,6 +6,11 @@ import { join } from "node:path";
 // parser. The route list below is the post-rename inventory. BASELINE is derived from it through
 // the explicit mapping table, so a method change or a missing route cannot pass by rebaselining.
 const EXPECTED = [
+  // Roleplay scenes from a DM thread (docs/SCENES.md).
+  "GET /messages/threads/:threadId/scene/origin",
+  "POST /messages/threads/:threadId/scene/invite/:messageId/decline",
+  "POST /messages/threads/:threadId/scene/plan",
+  "POST /messages/threads/:threadId/scene/recap/:messageId/reach",
   // 0.3.5: the Slurp Support desk.
   "GET /slurp/desk",
   "POST /slurp/desk/note",
@@ -53,6 +58,8 @@ const EXPECTED = [
   "POST /slurp/ties/collabs/:id/push",
   "POST /slurp/ties/collabs/:id/decline",
   "POST /slurp/ties/collabs/:id/block",
+  "POST /slurp/ties/collabs/:id/drop",
+  "POST /slurp/ties/collabs/:id/post-now",
   "POST /slurp/ties/unblock",
   "POST /slurp/ties/rivalries/:id/cool",
   "POST /slurp/ties/deals/:id/answer",
@@ -312,6 +319,11 @@ const RETAINED_OLD_PATHS = new Set([
   "GET /noodler/posts/:id/media/:position",
 ]);
 const ADDED_ROUTES = new Set([
+  // Roleplay scenes from a DM thread (docs/SCENES.md).
+  "GET /messages/threads/:threadId/scene/origin",
+  "POST /messages/threads/:threadId/scene/invite/:messageId/decline",
+  "POST /messages/threads/:threadId/scene/plan",
+  "POST /messages/threads/:threadId/scene/recap/:messageId/reach",
   // The recovery reset: clears activity, keeps Creators and settings.
   "DELETE /data/activity",
   "PATCH /messages/threads/:threadId/details",
@@ -358,6 +370,8 @@ const ADDED_ROUTES = new Set([
   "POST /slurp/ties/collabs/:id/push",
   "POST /slurp/ties/collabs/:id/decline",
   "POST /slurp/ties/collabs/:id/block",
+  "POST /slurp/ties/collabs/:id/drop",
+  "POST /slurp/ties/collabs/:id/post-now",
   "POST /slurp/ties/unblock",
   "POST /slurp/ties/rivalries/:id/cool",
   "POST /slurp/ties/deals/:id/answer",
@@ -474,17 +488,17 @@ const EXPECTED_HANDLER_COUNTS = {
   "features/feed": 39,
   "features/maintenance": 15,
   "features/media": 7,
-  "features/messages": 45,
+  "features/messages": 49,
   "features/notifications": 4,
   "features/onboarding": 7,
-  "features/projects": 29,
+  "features/projects": 31,
   "features/settings": 8,
   "features/world": 15,
 } as const;
 // W: +5 POST, +1 GET (Stir). R: +3 POST, +1 GET, +1 PATCH, +1 DELETE (brands).
 // 0.3.4: +1 POST, +1 PUT (Creator Pages). 0.3.5: +1 GET, +3 POST (Support desk). 0.3.7: +1 POST (rewrite all).
 // 0.3.8: +1 GET, +5 POST (Drama: bonds, drama view, choice, start, end). 0.3.11: +1 POST (fan notes).
-const EXPECTED_METHOD_COUNTS = { DELETE: 19, GET: 83, PATCH: 20, POST: 153, PUT: 7 } as const;
+const EXPECTED_METHOD_COUNTS = { DELETE: 19, GET: 84, PATCH: 20, POST: 158, PUT: 7 } as const;
 
 const root = join(import.meta.dirname, "../packages/slurp2/src/engine/packages/server/src/slp");
 const registration = /\bapp\.(get|post|put|patch|delete|addContentTypeParser)(?:<[^()]*?>)?\(\s*["'`]([^"'`]+)["'`]/gu;
@@ -539,8 +553,8 @@ const methodCounts = Object.fromEntries(
     }, new Map<string, number>()),
 );
 assert.deepEqual(methodCounts, EXPECTED_METHOD_COUNTS, "HTTP method multiset changed from staging");
-// 0.3.5: +4 (the Support desk). 0.3.7: +1 (rewrite all).
-assert.equal(foundRoutes.filter((route) => !route.startsWith("ADDCONTENTTYPEPARSER ")).length, 282);
+// 0.3.5: +4 (the Support desk). 0.3.7: +1 (rewrite all). Roleplay scenes: +4. 0.3.17: +2 (collab drop, post now).
+assert.equal(foundRoutes.filter((route) => !route.startsWith("ADDCONTENTTYPEPARSER ")).length, 288);
 assert.deepEqual(handlerCounts, EXPECTED_HANDLER_COUNTS, "handler count changed in a feature");
 assert.ok(foundRoutes.includes("POST /slurp/posts/:id/media"), "the renamed POST media route must remain registered");
 assert.ok(

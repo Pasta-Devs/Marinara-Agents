@@ -19,6 +19,7 @@ import {
   SLP_EXPLICIT_LEVELS,
   slpTasteKey,
   type SlpExplicitLevelName,
+  type SlpSpiceLanguage,
   type SlpSpiceState,
   type SlpTaste,
   type SlpTasteNoticed,
@@ -393,6 +394,18 @@ const DM_LEVEL: Record<Exclude<SlpExplicitLevelName, "none">, string> = {
 };
 
 /**
+ * Which words, once it gets naked (0.3.17). "dirty" is the word list the old steamy and explicit
+ * Writing presets carried, now only where the level allows nudity. How far a post goes is already
+ * its own line (`slurpPostLevelInstruction`), a chat's is DM_LEVEL.
+ */
+const LANGUAGE: Record<SlpSpiceLanguage, string> = {
+  soft: "Keep the words soft and suggestive: innuendo and euphemism, never crude.",
+  frank: "Say what happens plainly and frankly, without being crude.",
+  dirty:
+    "When there is nudity or sex, use thorough, graphic, horny descriptions. Name the body in dirty everyday words, not clinical ones: tits, nipples, ass, pussy, clit, cock, balls, cum, wet, dripping, hard, leaking. Describe how it looks, feels, and moves.",
+};
+
+/**
  * The spice part of the flavour brief, in plain sentences. `level` is where this chat or post may
  * go; a chat with somebody who has not subscribed stays one step lower and says so.
  */
@@ -405,11 +418,16 @@ export function slurpSpiceBriefLines(input: {
   hardNoes: readonly string[];
   never: readonly string[];
   taste?: string | null;
+  /** The player's word choice (Settings › Spice); null reads as "dirty", the old shipped default. */
+  language?: SlpSpiceLanguage | null;
 }): string[] {
   if (input.level === "none") return [];
   const noes = [...new Set([...input.hardNoes, ...input.never])];
+  const language = input.language ?? "dirty";
   return [
     input.use === "dm" ? DM_LEVEL[input.level] : "",
+    // Soft and frank words fit any spicy level; the dirty word list only once nudity is allowed.
+    input.use !== "comment" && (language !== "dirty" || input.level !== "suggestive") ? LANGUAGE[language] : "",
     input.use === "dm" && input.held ? "The full thing is for subscribers or a paid unlock; tease the rest." : "",
     input.turnOns.length ? `What turns you on and what you like showing: ${input.turnOns.join(", ")}.` : "",
     noes.length ? `Your hard noes, whatever anybody offers: ${noes.join(", ")}.` : "",
@@ -529,4 +547,20 @@ export function slurpAnswerNoticed(
   }
   const taste: SlpTaste = { id: newId(), text: label.trim(), strength: answer === "stronger" ? "often" : "hint" };
   return { ...state, learned, tastes: [...state.tastes, taste] };
+}
+
+/**
+ * The Language an install starts with (0.3.17), from the Writing text it had: the mild preset was
+ * soft words, the steamy and explicit presets (and the shipped default) the dirty word list. An
+ * edited text keeps its own words: the word list means dirty, "no explicit detail" soft, else frank.
+ */
+export function slurpSpiceLanguageFor(
+  guidance: string,
+  shipped: { mild: string; dirty: readonly string[] },
+): SlpSpiceLanguage {
+  if (guidance === shipped.mild) return "soft";
+  if (shipped.dirty.includes(guidance)) return "dirty";
+  if (/\b(pussy|cock|clit|tits)\b/iu.test(guidance)) return "dirty";
+  if (/\b(do not|don't|never) (write|describe) explicit/iu.test(guidance)) return "soft";
+  return "frank";
 }

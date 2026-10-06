@@ -24,6 +24,8 @@ const ACTIVITY_KINDS: Array<[SlurpAwayKind, RegExp]> = [
 export function slurpAwayKind(input: SlurpAwayInput): { kind: SlurpAwayKind; backAt: number | null } {
   const now = input.now ?? Date.now();
   const coolUntil = input.coolUntil ? Date.parse(input.coolUntil) : Number.NaN;
+  // In a roleplay scene with someone: busy, back when the scene ends.
+  if (input.status === "in_scene") return { kind: "busy", backAt: null };
   if (input.status === "cooling" || (Number.isFinite(coolUntil) && coolUntil > now)) {
     return { kind: "cooling", backAt: Number.isFinite(coolUntil) && coolUntil > now ? coolUntil : null };
   }

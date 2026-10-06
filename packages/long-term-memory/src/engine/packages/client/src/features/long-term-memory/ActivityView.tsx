@@ -38,6 +38,9 @@ const debugPhases: LtmDebugEvent["phase"][] = [
 ];
 
 const actionLabelKeys: Record<string, string> = {
+  extract_source_note: "ui.longTermMemory.activityview.actionAiExtraction",
+  evidence_unit_request: "ui.longTermMemory.activityview.actionAiExtraction",
+  evidence_unit_context_preflight: "ui.longTermMemory.activityview.actionAiExtraction",
   evidence_unit_response: "ui.longTermMemory.activityview.actionAiExtraction",
   evidence_unit_json_parse: "ui.longTermMemory.activityview.actionReadExtractionResult",
   recall_explanation: "ui.longTermMemory.activityview.actionMemoryRecall",
@@ -57,6 +60,16 @@ function humanizeDebugText(text: string, lookup: DebugTextLookup, internalRecord
 function describeEvent(event: LtmDebugEvent, debugTextLookup: DebugTextLookup, localizeUi: LtmTranslationFunction) {
   const internalRecordLabel = localizeUi("ui.longTermMemory.activityview.anInternalRecord");
   if (event.error) return humanizeDebugText(event.error.message, debugTextLookup, internalRecordLabel);
+  if (isTruncatedResponse(event))
+    return localizeUi("ui.longTermMemory.activityview.outputTruncated", {
+      finishReason: String(event.details?.finishReason),
+    });
+  if (event.action === "evidence_unit_context_preflight") {
+    if (event.details?.reason === "prompt_trim_required")
+      return localizeUi("ui.longTermMemory.activityview.promptTooLarge");
+    if (event.details?.reason === "output_budget_below_viability_floor")
+      return localizeUi("ui.longTermMemory.activityview.outputBudgetTooSmall");
+  }
   if (event.message) return humanizeDebugText(event.message, debugTextLookup, internalRecordLabel);
   if (event.uiSummary) return humanizeDebugText(event.uiSummary, debugTextLookup, internalRecordLabel);
   const summary = event.details?.summary;
@@ -98,15 +111,30 @@ function groupOperations(events: LtmDebugEvent[]): DebugOperation[] {
     .sort((left, right) => right.events.at(-1)!.ts.localeCompare(left.events.at(-1)!.ts));
 }
 
+function isTruncatedResponse(event: LtmDebugEvent) {
+  return (
+    event.action === "evidence_unit_response" &&
+    ["length", "max_tokens", "token_limit"].includes(String(event.details?.finishReason ?? "").toLowerCase())
+  );
+}
+
 function operationStatus(events: LtmDebugEvent[], localizeUi: LtmTranslationFunction) {
   const started = events.find((event) => event.status === "started");
   const terminal = started
     ? events.findLast(
-        (event) => event.phase === started.phase && event.action === started.action && event.status !== "started",
+        (event) =>
+          event.phase === started.phase &&
+          (event.action === started.action ||
+            (started.action === "evidence_unit_request" && event.action === "evidence_unit_response")) &&
+          event.status !== "started",
       )
     : events.at(-1);
-  const status = terminal?.status ?? (started ? "started" : "warning");
-  if (status === "ok" && events.some((event) => event.status === "warning")) {
+  const status =
+    terminal?.status ?? (events.some((event) => event.status === "error") ? "error" : started ? "started" : "warning");
+  if (
+    status === "ok" &&
+    events.some((event) => event.status === "warning" || event.status === "error" || isTruncatedResponse(event))
+  ) {
     return {
       status: "warning",
       label: localizeUi("ui.longTermMemory.activityview.completedWithWarnings"),
@@ -142,10 +170,16 @@ function eventMetadata(event: LtmDebugEvent) {
 
 function summarizeCounts(events: LtmDebugEvent[], localizeUi: LtmTranslationFunction, locale: string) {
   const counts = new Map<string, number>();
-  for (const event of events) for (const [label, count] of Object.entries(event.counts ?? {})) counts.set(label, count);
+  for (const event of events)
+    for (const [label, count] of Object.entries(event.counts ?? {}))
+      counts.set(
+        event.action === "evidence_unit_request" && label === "promptTokens" ? "estimatedPromptTokens" : label,
+        count,
+      );
   if (!counts.size) return "";
   const summary: string[] = [];
-  const inputTokens = counts.get("promptTokens") ?? counts.get("inputTokens");
+  const inputTokens = counts.get("promptTokens");
+  const estimatedInputTokens = counts.get("estimatedPromptTokens") ?? counts.get("inputTokens");
   const reasoningTokens = counts.get("completionReasoningTokens") ?? counts.get("reasoningTokens");
   const outputTokens = counts.get("completionTokens") ?? counts.get("outputTokens") ?? counts.get("responseTokens");
   const totalTokens = counts.get("totalTokens");
@@ -153,6 +187,12 @@ function summarizeCounts(events: LtmDebugEvent[], localizeUi: LtmTranslationFunc
     summary.push(
       localizeUi("ui.longTermMemory.activityview.inputTokens", {
         count: inputTokens.toLocaleString(locale),
+      }),
+    );
+  if (estimatedInputTokens != null)
+    summary.push(
+      localizeUi("ui.longTermMemory.activityview.estimatedInputTokens", {
+        count: estimatedInputTokens.toLocaleString(locale),
       }),
     );
   if (reasoningTokens != null)
@@ -180,6 +220,7 @@ function summarizeCounts(events: LtmDebugEvent[], localizeUi: LtmTranslationFunc
           !/chars$/i.test(label) &&
           label !== "promptTokens" &&
           label !== "inputTokens" &&
+          label !== "estimatedPromptTokens" &&
           label !== "completionReasoningTokens" &&
           label !== "reasoningTokens" &&
           label !== "completionTokens" &&
@@ -204,19 +245,24 @@ function warningMessages(
   localizeUi: LtmTranslationFunction,
 ) {
   return events
-    .filter((event) => event.status === "warning")
+    .filter((event) => event.status === "warning" || isTruncatedResponse(event))
     .map((event) => describeEvent(event, debugTextLookup, localizeUi));
 }
 
-function latestRecallEvent(events: LtmDebugEvent[], chatId?: string | null) {
-  return events
-    .filter(
-      (event) =>
-        event.phase === "retrieval" &&
-        event.action === "recall_explanation" &&
-        (!chatId || event.chatId === chatId || event.details?.chatId === chatId),
-    )
-    .sort((left, right) => right.ts.localeCompare(left.ts))[0];
+function latestRecallEvent(events: LtmDebugEvent[], chatId?: string | null, attemptId?: string | null) {
+  const candidates = events.filter(
+    (event) =>
+      event.phase === "retrieval" &&
+      event.action === "recall_explanation" &&
+      (!chatId || event.chatId === chatId || event.details?.chatId === chatId),
+  );
+  // Prefer the explanation carrying the same attempt id as the recorded recall
+  // rather than trusting timestamp order, which can pair the wrong attempts.
+  const correlated = attemptId ? candidates.find((event) => event.operationId === attemptId) : undefined;
+  // With a known attempt, never fall back to another recall's explanation; a missing
+  // match means the current attempt has no recorded workflow.
+  if (attemptId) return correlated;
+  return candidates.sort((left, right) => right.ts.localeCompare(left.ts))[0];
 }
 
 function recallDetails(event: LtmDebugEvent | undefined) {
@@ -291,7 +337,12 @@ export default function ActivityView({ props, onOpenMemory }: LongTermMemoryDest
   const recallEvents = filter === "all" ? (activity.data?.events ?? []) : (recallActivity.data?.events ?? []);
   const recallLoading = filter === "all" ? activity.isLoading : recallActivity.isLoading;
   const recallError = filter === "all" ? activity.isError : recallActivity.isError;
-  const recallEvent = latestRecallEvent(recallEvents, props.chatId);
+  const lastInjection = useQuery({
+    enabled: Boolean(props.chatId),
+    queryKey: queryKeys.lastInjection(props.chatId),
+    queryFn: () => request<LtmLastInjectionResponse>(`/last-injection/${encodeURIComponent(props.chatId!)}`),
+  });
+  const recallEvent = latestRecallEvent(recallEvents, props.chatId, lastInjection.data?.attempt?.attemptId);
   const recallWorkflow = recallDetails(recallEvent) as {
     maxChunks?: number;
     maxTokens?: number;
@@ -299,12 +350,18 @@ export default function ActivityView({ props, onOpenMemory }: LongTermMemoryDest
     weights?: Record<string, number>;
     selected?: Array<Record<string, unknown>>;
     rejected?: Array<Record<string, unknown>>;
+    semanticOutcome?: string;
+    indexLoadOutcome?: string;
+    indexGeneratedAt?: string;
+    indexedChunks?: number;
+    eligibleChunks?: number;
+    embeddedChunks?: number;
+    mode?: string;
+    includeResolved?: boolean;
+    exclusiveCharacterTargeting?: boolean;
+    contextMessagesUsed?: number;
+    rejectedLimit?: number;
   } | null;
-  const lastInjection = useQuery({
-    enabled: Boolean(props.chatId),
-    queryKey: queryKeys.lastInjection(props.chatId),
-    queryFn: () => request<LtmLastInjectionResponse>(`/last-injection/${encodeURIComponent(props.chatId!)}`),
-  });
 
   const clear = async () => {
     if (
@@ -474,6 +531,16 @@ export default function ActivityView({ props, onOpenMemory }: LongTermMemoryDest
           ) : null}
         </summary>
         <div className="space-y-3 border-t border-[var(--border)] px-3 py-3 text-xs">
+          {lastInjection.data?.attempt && lastInjection.data.attempt.reason !== "no_matches" ? (
+            <p
+              className="text-[var(--muted-foreground)]"
+              data-ltm-recall-confirmation={lastInjection.data.attempt.confirmed ? "confirmed" : "unconfirmed"}
+            >
+              {lastInjection.data.attempt.confirmed
+                ? localizeUi("ui.longTermMemory.activityview.recallWorkflowInjectionConfirmed")
+                : localizeUi("ui.longTermMemory.activityview.recallWorkflowInjectionNotConfirmed")}
+            </p>
+          ) : null}
           {recallLoading ? (
             <StatusSurface busy>{localizeUi("ui.longTermMemory.activityview.loadingRecallWorkflow")}</StatusSurface>
           ) : recallError ? (
@@ -502,6 +569,69 @@ export default function ActivityView({ props, onOpenMemory }: LongTermMemoryDest
                   {(recallEvent.counts?.usedTokens ?? 0).toLocaleString(locale)}{" "}
                   {localizeUi("ui.longTermMemory.activityview.tokens")}
                 </span>
+                {typeof recallWorkflow.mode === "string" ? (
+                  <span>
+                    {localizeUi("ui.longTermMemory.activityview.recallMode", {
+                      mode: humanizeLabel(recallWorkflow.mode),
+                    })}
+                  </span>
+                ) : null}
+                {typeof recallWorkflow.contextMessagesUsed === "number" ? (
+                  <span>
+                    {localizeUi("ui.longTermMemory.activityview.recallContextMessages", {
+                      count: recallWorkflow.contextMessagesUsed,
+                    })}
+                  </span>
+                ) : null}
+                {typeof recallWorkflow.indexedChunks === "number" ||
+                typeof recallWorkflow.eligibleChunks === "number" ? (
+                  <span>
+                    {localizeUi("ui.longTermMemory.activityview.recallIndexSummary", {
+                      indexed: recallWorkflow.indexedChunks ?? 0,
+                      eligible: recallWorkflow.eligibleChunks ?? 0,
+                      outcome: humanizeLabel(String(recallWorkflow.indexLoadOutcome ?? "loaded")),
+                    })}
+                  </span>
+                ) : null}
+                {typeof recallWorkflow.indexGeneratedAt === "string" ? (
+                  <span>
+                    {localizeUi("ui.longTermMemory.activityview.recallIndexBuiltAt", {
+                      value: formatTimestamp(recallWorkflow.indexGeneratedAt, locale),
+                    })}
+                  </span>
+                ) : null}
+                {typeof recallWorkflow.embeddedChunks === "number" ? (
+                  <span>
+                    {localizeUi("ui.longTermMemory.activityview.recallIndexEmbeddedChunks", {
+                      count: recallWorkflow.embeddedChunks,
+                    })}
+                  </span>
+                ) : null}
+                {typeof recallWorkflow.semanticOutcome === "string" ? (
+                  <span>
+                    {localizeUi("ui.longTermMemory.activityview.recallSemanticOutcome", {
+                      outcome: humanizeLabel(recallWorkflow.semanticOutcome),
+                    })}
+                  </span>
+                ) : null}
+                {typeof recallWorkflow.includeResolved === "boolean" ? (
+                  <span>
+                    {localizeUi(
+                      recallWorkflow.includeResolved
+                        ? "ui.longTermMemory.activityview.recallResolvedEligible"
+                        : "ui.longTermMemory.activityview.recallResolvedExcluded",
+                    )}
+                  </span>
+                ) : null}
+                {typeof recallWorkflow.exclusiveCharacterTargeting === "boolean" ? (
+                  <span>
+                    {localizeUi(
+                      recallWorkflow.exclusiveCharacterTargeting
+                        ? "ui.longTermMemory.activityview.recallTargetedCharactersOnly"
+                        : "ui.longTermMemory.activityview.recallChatWideTargeting",
+                    )}
+                  </span>
+                ) : null}
               </div>
               {recallWorkflow.weights ? (
                 <p className="text-[var(--muted-foreground)]">
@@ -550,10 +680,14 @@ export default function ActivityView({ props, onOpenMemory }: LongTermMemoryDest
               {recallWorkflow.rejected?.length ? (
                 <div>
                   <h4 className="mb-1 font-semibold">
-                    {localizeUi("ui.longTermMemory.activityview.rejectedCandidates")}
+                    {localizeUi("ui.longTermMemory.activityview.rejectedCandidatesUpTo", {
+                      limit: recallWorkflow.rejectedLimit ?? 20,
+                    })}
                   </h4>
                   <ul
-                    aria-label={localizeUi("ui.longTermMemory.activityview.rejectedCandidates")}
+                    aria-label={localizeUi("ui.longTermMemory.activityview.rejectedCandidatesUpTo", {
+                      limit: recallWorkflow.rejectedLimit ?? 20,
+                    })}
                     className="space-y-1 text-[var(--muted-foreground)]"
                   >
                     {recallWorkflow.rejected.map((candidate, index) => {
@@ -616,8 +750,17 @@ export default function ActivityView({ props, onOpenMemory }: LongTermMemoryDest
             const lastEvent = operation.events.at(-1)!;
             const status = operationStatus(operation.events, localizeUi);
             const sourceNoteId = operation.events.find((event) => event.sourceNoteId)?.sourceNoteId;
+            const principalEvent =
+              operation.events.find((event) => event.status === "error") ??
+              operation.events.find((event) => event.status === "warning" || isTruncatedResponse(event)) ??
+              lastEvent;
+            const summary = compactSummary(describeEvent(principalEvent, debugTextLookup, localizeUi));
+            const model = operation.events.find((event) => event.model)?.model;
+            const durationMs = lastEvent.durationMs;
             const countSummary = summarizeCounts(operation.events, localizeUi, locale);
-            const warnings = warningMessages(operation.events, debugTextLookup, localizeUi);
+            const warnings = warningMessages(operation.events, debugTextLookup, localizeUi).filter(
+              (warning) => compactSummary(warning) !== summary,
+            );
             return (
               <li key={operation.operationId} className="mari-editor-panel mari-editor-panel--soft">
                 <details className="group">
@@ -638,18 +781,20 @@ export default function ActivityView({ props, onOpenMemory }: LongTermMemoryDest
                           {status.label}
                         </span>
                       </span>
-                      <span className="mt-1 block text-xs text-[var(--muted-foreground)]">
-                        {sourceNoteId && noteTitles.has(sourceNoteId)
-                          ? noteTitles.get(sourceNoteId)
-                          : compactSummary(describeEvent(lastEvent, debugTextLookup, localizeUi))}
-                      </span>
+                      {sourceNoteId && noteTitles.has(sourceNoteId) ? (
+                        <span className="mt-1 block text-xs text-[var(--muted-foreground)]">
+                          {noteTitles.get(sourceNoteId)}
+                        </span>
+                      ) : null}
+                      <span className="mt-1 block text-xs text-[var(--muted-foreground)]">{summary}</span>
                       <span className="mt-1 block text-[0.6875rem] text-[var(--muted-foreground)]">
                         {formatTimestamp(lastEvent.ts, locale)}
-                        {lastEvent.durationMs != null
+                        {durationMs != null
                           ? localizeUi("ui.longTermMemory.activityview.value1Ms", {
-                              value1: lastEvent.durationMs.toLocaleString(locale),
+                              value1: durationMs.toLocaleString(locale),
                             })
                           : ""}
+                        {model ? localizeUi("ui.longTermMemory.activityview.value1_9a93137", { value1: model }) : ""}
                         {countSummary
                           ? localizeUi("ui.longTermMemory.activityview.value1_9a93137", { value1: countSummary })
                           : ""}

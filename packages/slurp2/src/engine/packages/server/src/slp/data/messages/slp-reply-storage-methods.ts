@@ -125,11 +125,15 @@ export function createSlurpReplyMethods(db: DB) {
         .orderBy(asc(slurpThreads.lastMessageAt));
       const nowMs = Date.now();
       const nowIso = new Date(nowMs).toISOString();
+      // A Creator in a roleplay scene answers nobody until it ends; her threads keep their obligation
+      // but must not take the oldest-first slots from everyone else (docs/SCENES.md).
+      const inScene = new Set(rows.filter((row) => row.sceneChatId).map((row) => String(row.creatorAccountId)));
       const candidates = rows
         .map(mapThread)
         .filter(
           (thread) =>
             thread.needsReply &&
+            !inScene.has(thread.creatorAccountId) &&
             (!thread.coolUntil || thread.coolUntil <= nowIso) &&
             (!thread.replyNotBeforeAt || Date.parse(thread.replyNotBeforeAt) <= nowMs),
         );

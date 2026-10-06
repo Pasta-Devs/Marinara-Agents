@@ -104,6 +104,8 @@ import { findPendingSlurpDeskOffer, slurpDeskPromptData } from "../../modules/me
 import { readSlurpSupportDesk } from "../../data/creators/slp-support-desk-storage.js";
 import { SLURP_SUPPORT_ACCOUNT_ID } from "../../../../../shared/src/slp/slp-support.js";
 import { slpWithProviderRetry } from "../../base/model/slp-provider-retry.js";
+import { slpScenesAvailable } from "../../base/host/slp-scene-host.js";
+import { slpSceneInviteAllowed } from "../../modules/messages/slp-roleplay-scene-rules.js";
 
 type GenerationConnection = NonNullable<Awaited<ReturnType<ReturnType<typeof createConnectionsStorage>["getWithKey"]>>>;
 
@@ -166,6 +168,7 @@ export function buildSlurpMessageChat(input: {
     imageUrl: string | null;
     unlockedByFan?: boolean;
   }>;
+  unlockedPostIds: ReadonlySet<string>; // all they own: a shared card older than recentPosts too
   /** What the pictures in the conversation show, keyed by message id. */
   imageContexts?: Map<string, string>;
   /** The Creator's private content menu. See `slurp-post-guidance.ts`. */
@@ -178,6 +181,8 @@ export function buildSlurpMessageChat(input: {
   promptInstructions?: SlurpReusablePromptInstruction[];
   /** Slurp Support's thread only: where the Creator stands with Slurp (`slp-support-desk-talk.ts`). */
   supportDesk?: Record<string, string | boolean>;
+  /** The Creator may pitch a roleplay scene in this reply (docs/SCENES.md). */
+  sceneInvite?: boolean;
 }): ChatMessage[] {
   const protect = (value: string | null | undefined) =>
     protectCreatorGeneratedIdentity(value, input.disclosureMode, input.publicIdentity) ?? "";
@@ -198,6 +203,7 @@ export function buildSlurpMessageChat(input: {
     openedBy: input.openedBy,
     requestFee: input.requestFee,
     isRequest: input.isRequest,
+    sceneInvite: input.sceneInvite === true,
     // The whole stored history, so a sign-up chat is still known once it scrolls out of the window.
     history: input.history,
   });
@@ -424,7 +430,7 @@ export function buildSlurpMessageChat(input: {
       protect,
       image: (message) =>
         input.imageContexts?.has(message.id) ? protect(input.imageContexts.get(message.id)) : undefined,
-      postUnlocked: (postId) => Boolean(input.recentPosts?.some((post) => post.id === postId && post.unlockedByFan)),
+      postUnlocked: (postId) => typeof postId === "string" && input.unlockedPostIds.has(postId),
     }),
   };
 
@@ -494,6 +500,8 @@ export async function buildSlurpMessagePrompt(input: SlurpMessagePromptInput): P
   publicIdentity: Parameters<typeof slpCreatorIdentityInstruction>[1];
   viewerPageId?: string;
   usPageId?: string;
+  /** The reply may pitch a roleplay scene (docs/SCENES.md). */
+  sceneInvite: boolean;
 }> {
   const slurp = createSlurpStorage(input.db);
   const disclosureMode = input.creator.settings.privacy.identityDisclosure ?? "open";
@@ -561,7 +569,7 @@ export async function buildSlurpMessagePrompt(input: SlurpMessagePromptInput): P
   // The memory is the tie said out loud, and an invited character holds a tie like anybody else.
   const fanMemory = fanMember || isSlurpCharacterFanAccount(input.viewer) ? slurpFanMemoryForPrompt(tie) : undefined;
   // What this fan already owns, so a Creator never tries to sell them a post they bought.
-  const unlockedPostIds = new Set(
+  const unlockedPostIds = new Set<string>(
     (await slurp.listPostUnlocksForViewer(input.viewer.id).catch(() => [])).map((unlock) => unlock.postId),
   );
   const recentPosts = slurpDmRecentPosts(recentPostRows, unlockedPostIds, RECENT_POSTS);
@@ -607,8 +615,21 @@ export async function buildSlurpMessagePrompt(input: SlurpMessagePromptInput): P
           ticketResolved: input.history.at(-1)?.metadata?.deskTicketResolved === true,
         })
       : undefined;
+  // Roleplay scenes (docs/SCENES.md): the player's own chat with an Engine character's page, free of a
+  // scene, with no invite of hers still open and none in the last few days.
+  const sceneInvite =
+    slpScenesAvailable() &&
+    !supportDesk &&
+    input.viewer.kind === "persona" &&
+    !characterFanVoice &&
+    !fanMember &&
+    source?.kind === "character" &&
+    thread?.state === "active" &&
+    !thread.sceneChatId &&
+    slpSceneInviteAllowed(input.history, new Date());
   const messages = buildSlurpMessageChat({
     ...input,
+    sceneInvite,
     supportDesk,
     continuityInstruction,
     contentMenu: await resolveSlurpCreatorMenu(input.db, input.creator.id).catch(() => ""),
@@ -621,6 +642,7 @@ export async function buildSlurpMessagePrompt(input: SlurpMessagePromptInput): P
     fanMemory,
     stance,
     recentPosts,
+    unlockedPostIds,
     availability,
     disclosureMode,
     publicIdentity,
@@ -661,7 +683,7 @@ export async function buildSlurpMessagePrompt(input: SlurpMessagePromptInput): P
   // A concealed page offers no collab: the header does not name it. "us": the player's own page.
   const viewerPageId = viewerPage && !viewerPage.concealed ? viewerPageAccount?.id : undefined;
   const usPageId = viewerPage?.us ? viewerPageAccount?.id : undefined;
-  return { messages, stance, disclosureMode, publicIdentity, recentPosts, viewerPageId, usPageId };
+  return { messages, stance, disclosureMode, publicIdentity, recentPosts, viewerPageId, usPageId, sceneInvite };
 }
 
 export async function generateSlurpMessageReply(input: SlurpMessagePromptInput): Promise<SlurpGeneratedDmReply> {
@@ -673,6 +695,7 @@ export async function generateSlurpMessageReply(input: SlurpMessagePromptInput):
     recentPosts,
     viewerPageId: pageId,
     usPageId,
+    sceneInvite,
   } = await buildSlurpMessagePrompt(input);
   const support = input.viewer.id === SLURP_SUPPORT_ACCOUNT_ID;
   const budget = (await createSlurpStorage(input.db).getSettings()).modelBudget;
@@ -721,7 +744,11 @@ export async function generateSlurpMessageReply(input: SlurpMessagePromptInput):
     debugMode,
     responseFormat: support
       ? slpResponseFormat(input.connection.model, "noodler_dm", { staff: true })
-      : slpResponseFormat(input.connection.model, "noodler_dm", { collab: Boolean(pageId), us: Boolean(usPageId) }),
+      : slpResponseFormat(input.connection.model, "noodler_dm", {
+          collab: Boolean(pageId),
+          us: Boolean(usPageId),
+          sceneInvite,
+        }),
   });
   const content = response.content ?? "";
   logDebugOverride(
@@ -764,5 +791,10 @@ export async function generateSlurpMessageReply(input: SlurpMessagePromptInput):
     agreedCollab: pageId ? readSlurpDmCollab(generated.collab, pageId, (value) => protect(value, 200)) : undefined,
     us: usPageId ? readSlurpDmUs(generated.us, (value) => protect(value, 120)) : undefined,
     usPageId,
+    // Her pitch for a roleplay scene: shown to the player, so redacted like the reply itself.
+    sceneInvite:
+      sceneInvite && typeof generated.sceneInvite === "string" && generated.sceneInvite.trim()
+        ? (protect(generated.sceneInvite.trim(), 600) ?? undefined)
+        : undefined,
   };
 }

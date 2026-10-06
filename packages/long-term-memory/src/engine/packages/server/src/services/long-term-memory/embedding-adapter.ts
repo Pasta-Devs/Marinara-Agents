@@ -10,16 +10,19 @@ export type MemoryRecallEmbeddingOptions = {
 export async function embedLongTermMemoryTexts(texts: string[], options: MemoryRecallEmbeddingOptions = {}) {
   const adapter = options.embeddingAdapter;
   if (!adapter || texts.length === 0) return null;
+  options.signal?.throwIfAborted();
   const vectors: number[][] = [];
   let batch: string[] = [];
   let characters = 0;
   for (const text of texts) {
+    options.signal?.throwIfAborted();
     if (text.length > MAX_EMBEDDING_CHARACTERS) return null;
     if (
       batch.length > 0 &&
       (batch.length >= MAX_EMBEDDING_TEXTS || characters + text.length > MAX_EMBEDDING_CHARACTERS)
     ) {
       const batchVectors = await adapter.embed(batch, options.signal);
+      options.signal?.throwIfAborted();
       if (!batchVectors || batchVectors.length !== batch.length) return null;
       vectors.push(...batchVectors);
       batch = [];
@@ -30,6 +33,7 @@ export async function embedLongTermMemoryTexts(texts: string[], options: MemoryR
   }
   if (batch.length > 0) {
     const batchVectors = await adapter.embed(batch, options.signal);
+    options.signal?.throwIfAborted();
     if (!batchVectors || batchVectors.length !== batch.length) return null;
     vectors.push(...batchVectors);
   }

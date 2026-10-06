@@ -57,12 +57,19 @@ export function createReserveStorage2(context: SlurpStorageContext) {
     deleteStoredInteraction,
   } = context;
   const storage = {
-    async publishDueNoodlerPreparedPosts(at = new Date()): Promise<number> {
+    /** `skipCreatorIds`: Creators busy in a roleplay scene (docs/SCENES.md); their posts wait. */
+    async publishDueNoodlerPreparedPosts(
+      at = new Date(),
+      skipCreatorIds: ReadonlySet<string> = new Set(),
+    ): Promise<number> {
       // Posting settings: "feed.posting-rate" events scale posts per day here (R1-112).
       const settings = await this.getPostingSettings();
       if (!settings.autoPostingScheduleEnabled) return 0;
       const due = (await this.listNoodlerPreparedPosts()).filter(
-        (item) => item.state === "prepared" && Date.parse(item.publishAt) <= at.getTime(),
+        (item) =>
+          item.state === "prepared" &&
+          Date.parse(item.publishAt) <= at.getTime() &&
+          !skipCreatorIds.has(item.creatorAccountId),
       );
       if (due.length === 0) return 0;
       // One pass over posts for the whole batch: the crash-recovery lookup below only needs

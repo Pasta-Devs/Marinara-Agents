@@ -88,7 +88,7 @@ export function SlpSharedPostCard({
   });
   return (
     <div className={cn("flex w-[min(16rem,70vw)] flex-col gap-1", mine ? "items-end" : "items-start")}>
-      <div className="w-full overflow-hidden rounded-2xl bg-[color-mix(in_srgb,var(--slurp-surface-raised)_86%,transparent)] shadow-[var(--slurp-highlight),var(--slurp-shadow-raised)] ring-1 ring-inset ring-[var(--noodle-divider)] backdrop-blur-md">
+      <div className="w-full overflow-hidden rounded-2xl bg-[color-mix(in_srgb,var(--slurp-surface-raised)_95%,transparent)] shadow-[var(--slurp-highlight),var(--slurp-shadow-raised)] ring-1 ring-inset ring-[var(--noodle-divider)]">
         {locked ? (
           <div className="relative">
             <SlpLockedMediaTile

@@ -1,5 +1,5 @@
 // The splash screen needs the shipped version and its public notes inside the client bundle.
-export const SLURP2_VERSION = "0.3.13";
+export const SLURP2_VERSION = "0.3.17";
 
 export interface Slurp2ReleaseEntry {
   version: string;
@@ -8,17 +8,32 @@ export interface Slurp2ReleaseEntry {
 }
 
 /**
- * The public release history shown in G's thread (SlpSplash.tsx). Newest first; at most 3 player-facing,
+ * The public release history shown in the "What's new" sheet. Newest first; at most 3 player-facing,
  * in-universe bullets per release (technical detail lives in CHANGELOG.md).
  */
 export const SLURP2_RELEASES: Slurp2ReleaseEntry[] = [
   {
-    version: "0.3.13",
-    date: "2026-10-01",
+    version: "0.3.17",
+    date: "2026-10-06",
     notes: [
-      "New here? Slurp Support opens a ticket for you: a short chat that shows you around, lets you try a locked post with Mari and sets up your Slurp in a few taps.",
-      "This thread is where I post what's new from now on. Tap the version in Settings › Overview to read it again.",
-      "Stir › Desk keeps your welcome ticket as Your file, with Run setup again.",
+      "Spice lives in one place now: one level from Clean to Explicit for words and pictures, and a new Language choice for how they say it. Set it for everyone in Settings › Spice, or per Creator.",
+      "Decide who may fall for whom: switch romance off for a Creator, or pick who they could end up with. Collab partners finally know who they are working with.",
+      "Slurp is quicker on phones and desktop, Stir's End it and collab buttons work, and opening a profile no longer marks your chat as read.",
+    ],
+  },
+  {
+    version: "0.3.16",
+    date: "2026-10-05",
+    notes: [
+      "Stir on your page, or Draft post for a Creator, uses one idea to draft a post. Review its words and picture together, then Post; Edit opens the full editor.",
+    ],
+  },
+  {
+    version: "0.3.15",
+    date: "2026-10-05",
+    notes: [
+      "Take a Creator chat into a scene. Choose whether she stays reachable, then bring the memory back to your messages when you finish.",
+      "Give New post an idea and review the drafted caption and picture before posting, on your own page or a Creator page.",
     ],
   },
   {
@@ -666,12 +681,9 @@ export const SLURP2_RELEASES: Slurp2ReleaseEntry[] = [
 ];
 
 /** Everything newer than the acknowledged version. */
-export function getSlurp2UnseenReleases(
-  seenVersion: string | null,
-  releases: readonly Slurp2ReleaseEntry[] = SLURP2_RELEASES,
-): Slurp2ReleaseEntry[] {
-  const seenIndex = seenVersion === null ? -1 : releases.findIndex((release) => release.version === seenVersion);
-  return seenIndex === -1 ? releases.slice() : releases.slice(0, seenIndex);
+export function getSlurp2UnseenReleases(seenVersion: string | null): Slurp2ReleaseEntry[] {
+  const seenIndex = seenVersion === null ? -1 : SLURP2_RELEASES.findIndex((release) => release.version === seenVersion);
+  return seenIndex === -1 ? SLURP2_RELEASES : SLURP2_RELEASES.slice(0, seenIndex);
 }
 
 /** Which splash is due: consent on a fresh install, "What's new" after an update, none when up to date. */

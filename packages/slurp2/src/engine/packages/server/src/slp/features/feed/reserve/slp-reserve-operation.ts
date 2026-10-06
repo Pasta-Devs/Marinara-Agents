@@ -40,6 +40,7 @@ import {
   planSlurpOpportunity,
   slurpSkippedLastSlot,
 } from "../../../data/feed/slp-opportunity-storage.js";
+import { slpCreatorsInScene } from "../../messages/slp-messages-contract.js";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -69,10 +70,14 @@ export async function prepareNextCreatorReservePost(db: DB, at = new Date()): Pr
   const state = await noodle.ensureNoodlerReserveState(at);
   if (at.getTime() < Date.parse(state.preparationNotBefore)) return "holding";
 
-  const [items, accounts] = await Promise.all([
+  const [items, enabledAccounts, busy] = await Promise.all([
     noodle.listNoodlerPreparedPosts(),
     noodle.listAutoPostEnabledAccounts(),
+    slpCreatorsInScene(db),
   ]);
+  // A Creator in a locking roleplay scene gets nothing prepared: publishing skips them, so a post
+  // written now was discarded once its slot ran an interval late (docs/SCENES.md).
+  const accounts = enabledAccounts.filter((candidate) => !busy.has(candidate.id));
   if (accounts.length === 0) return "ineligible";
   // A slot leaves the working set once it is a whole interval overdue, which is also when
   // `reconcileNoodlerPreparedPosts` retires it. This was a hardcoded hour that happened to agree
@@ -84,7 +89,7 @@ export async function prepareNextCreatorReservePost(db: DB, at = new Date()): Pr
       Date.parse(item.publishAt) > at.getTime() - DAY_MS / settings.postsPerDay,
   );
   const existingSlot = active
-    .filter((item) => item.state === "scheduled")
+    .filter((item) => item.state === "scheduled" && !busy.has(item.creatorAccountId))
     .filter((item) => settings.autoPostGenerationMode === "pre_generate" || Date.parse(item.publishAt) <= at.getTime())
     .sort((left, right) => Date.parse(left.publishAt) - Date.parse(right.publishAt))[0];
   let slotId = existingSlot?.id ?? null;
@@ -421,7 +426,8 @@ export async function runCreatorAutoPostPoll(
     reconcile: async () => {
       await noodle.reconcileNoodlerPreparedPosts(at);
     },
-    publishDue: () => noodle.publishDueNoodlerPreparedPosts(at),
+    // A Creator in a locking roleplay scene posts nothing until it ends (docs/SCENES.md).
+    publishDue: async () => noodle.publishDueNoodlerPreparedPosts(at, await slpCreatorsInScene(db)),
     prepare: () => prepareNextCreatorReservePost(db, at),
     generationMode: async () => (await noodle.getSettings()).autoPostGenerationMode,
   });

@@ -15,16 +15,18 @@
  * - **Spice.** A stage above a Creator's spice (or the player's ceiling) is skipped, never forced.
  * - **Nothing piles up.** A job that could not go out in its stage expires and drops.
  */
+import { slpRomancePairAllowed } from "../../../../../../shared/src/slp/slp-creator-steering.js";
 import { hash } from "../../projects/slp-project.js";
-import type {
-  SlpDrama,
-  SlpDramaBeat,
-  SlpDramaLevel,
-  SlpDramaOutcome,
-  SlpDramaRole,
-  SlpDramaStage,
-  SlpRelationToPlayer,
-  SlpSituation,
+import {
+  slpDramaCouplePairs,
+  type SlpDrama,
+  type SlpDramaBeat,
+  type SlpDramaLevel,
+  type SlpDramaOutcome,
+  type SlpDramaRole,
+  type SlpDramaStage,
+  type SlpRelationToPlayer,
+  type SlpSituation,
 } from "../../../../../../shared/src/slp/slp-drama.js";
 
 const HOUR = 3_600_000;
@@ -52,6 +54,8 @@ export type SlpDramaCreator = {
   tags: readonly string[];
   joinedAt: string;
   followers: number;
+  /** The player's romance setting (0.3.17). */
+  romance?: { off: boolean; only: string[] };
 };
 
 /** What the ties say, as the runtime needs it. */
@@ -249,9 +253,19 @@ export function slpDramaCast(
   roles: readonly SlpDramaRole[],
   keys: readonly string[],
   cast: Readonly<Record<string, string>>,
-  input: { world: SlpDramaWorld; busy: ReadonlySet<string>; seed: string; at: Date },
+  input: {
+    world: SlpDramaWorld;
+    busy: ReadonlySet<string>;
+    seed: string;
+    at: Date;
+    couples?: readonly (readonly [string, string])[];
+  },
 ): Record<string, string> | null {
   const next = { ...cast };
+  // Couple roles keep the romance settings, cast before (a situation, a stage) or now.
+  const who = (id?: string) => input.world.creators.find((creator) => creator.id === id);
+  const pairOk = (a?: string, b?: string) => slpRomancePairAllowed(who(a), who(b));
+  if (!(input.couples ?? []).every(([x, y]) => pairOk(cast[x], cast[y]))) return null;
   const byKey = new Map(roles.map((role) => [role.key, role]));
   const playerKey = roles.find((role) => role.player)?.key;
   // A role's conditions name other roles ("tied to him"): those are cast too, and first.
@@ -279,7 +293,10 @@ export function slpDramaCast(
     const options = input.world.creators
       .filter((creator) => !taken.has(creator.id) && (role.player || !input.busy.has(creator.id)))
       .map((creator) => ({ creator, fit: fits(role, creator, current, input.world, playerKey) }))
-      .filter((option) => option.fit.ok)
+      .filter((option) => {
+        const as = (role: string) => (role === key ? option.creator.id : current[role]);
+        return option.fit.ok && (input.couples ?? []).every(([x, y]) => pairOk(as(x), as(y)));
+      })
       .sort((left, right) => {
         const newcomer = (creator: SlpDramaCreator) =>
           Number(input.at.getTime() - Date.parse(creator.joinedAt) < NEWCOMER_DAYS * DAY);
@@ -477,6 +494,7 @@ export function slpAdvanceDrama(
     const needed = stageRoles(stage, drama.roles);
     const playerKey = drama.roles.find((role) => role.player)?.key;
     const cast = slpDramaCast(drama.roles, needed, aliveCast(run.cast), {
+      couples: slpDramaCouplePairs(drama),
       world: input.world,
       busy: busy(),
       seed: `${run.id}:${key}`,
@@ -587,6 +605,7 @@ export function slpAdvanceDrama(
     if (lead && !pick.requires) base[pick.roles[0]!.key] = lead;
     const first = pick.stages[0]!;
     const cast = slpDramaCast(pick.roles, [pick.roles[0]!.key, ...stageRoles(first, pick.roles)], base, {
+      couples: slpDramaCouplePairs(pick),
       world: input.world,
       busy: busy(),
       seed: id,
@@ -772,6 +791,7 @@ export function slpDramaLeadFits(
     {
       ...input,
       seed: `lead:${leadId}`,
+      couples: slpDramaCouplePairs(drama),
     },
   );
   const playerKey = drama.roles.find((entry) => entry.player)?.key;

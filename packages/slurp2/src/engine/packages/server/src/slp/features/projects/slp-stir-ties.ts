@@ -72,6 +72,7 @@ const WHY: Record<
   notInto: [409, "Neither romance nor dating is something they are looking for."],
   noDating: [409, "One of them does not date, and would not start for this."],
   orientation: [409, "They are not each other's type."],
+  romance: [409, "Their romance settings keep these two apart."],
   pageOpen: [409, "Their shared page is already open."],
   polyOff: [409, "Polyamory is off in Settings › Stir."],
   mono: [409, "One of them is monogamous and already with someone."],

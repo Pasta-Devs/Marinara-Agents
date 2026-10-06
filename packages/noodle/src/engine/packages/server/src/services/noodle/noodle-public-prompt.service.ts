@@ -459,14 +459,21 @@ export async function buildRefreshPrompt(input: {
   const system = composeNoodleTimelineSystemPrompt(timelineBaseText, timelineVoiceText);
   const timelineFeatureInstructions = noodleTimelineFeatureInstructions(input.settings);
 
-  const visionCandidates = await prepareNoodleVisionAttachments([
-    ...collectNoodlePromptImageCandidates(recentPosts, recentInteractions, {
-      priorityActorAccountId: input.personaAccount?.id,
-    }),
-    ...collectNoodlePromptImageCandidates(recalledPosts, recalledInteractions, {
-      priorityActorAccountId: input.personaAccount?.id,
-    }),
-  ]);
+  // With "Show images to the writer" off, no timeline image reaches the writer, not even one whose
+  // caption failed; captions still reach it as text. Images are read only to be shown or captioned.
+  const showImagesToWriter =
+    (input.settings as NoodleSettings & { showImagesToWriter?: boolean }).showImagesToWriter !== false;
+  const visionCandidates =
+    showImagesToWriter || input.imageCaptioning.enabled
+      ? await prepareNoodleVisionAttachments([
+          ...collectNoodlePromptImageCandidates(recentPosts, recentInteractions, {
+            priorityActorAccountId: input.personaAccount?.id,
+          }),
+          ...collectNoodlePromptImageCandidates(recalledPosts, recalledInteractions, {
+            priorityActorAccountId: input.personaAccount?.id,
+          }),
+        ])
+      : [];
   const captionedImages = new Map<string, string>();
   let visionAttachments: NoodleVisionAttachment[] = visionCandidates;
   if (input.imageCaptioning.enabled) {
@@ -483,7 +490,7 @@ export async function buildRefreshPrompt(input: {
     visionAttachments = [];
     for (const result of captionResults) {
       if (result.caption) captionedImages.set(result.input.attachment.key, result.caption);
-      else visionAttachments.push(result.input.attachment);
+      else if (showImagesToWriter) visionAttachments.push(result.input.attachment);
     }
   }
   const attachedImageKeys = new Set(visionAttachments.map((attachment) => attachment.key));

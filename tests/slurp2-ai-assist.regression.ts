@@ -36,6 +36,7 @@ assert.deepEqual(
   [
     "add-idea",
     // R: brand logos and product pictures, the brands a helper can name, and the Stir brand deal lever.
+    "draft-post",
     "draw-brand-picture",
     "draw-picture",
     "improve-text",

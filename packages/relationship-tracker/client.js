@@ -34,21 +34,63 @@
     return words.slice(0, 2).map((word) => Array.from(word)[0] ?? "").join("").toUpperCase();
   };
 
+  const UNSAFE_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"]);
+
+  // ponytail: package routes are privileged, so LAN/remote sessions need the admin secret the engine
+  // client keeps under this localStorage key. Replace with a host-provided fetch if the engine adds one.
+  function storedAdminSecret() {
+    try {
+      return globalThis.localStorage?.getItem("marinara_admin_secret")?.trim() || "";
+    } catch {
+      return ""; // Storage can be blocked; loopback access still works without the header.
+    }
+  }
+
+  // Turn the engine's privileged-route refusals into a step the user can take on this device.
+  // Wording matches Noodle and Slurp (Pasta-Devs/Marinara-Agents#1136).
+  function responseError(response, body, fallback) {
+    const message = typeof body?.error === "string" ? body.error : "";
+    if (response.status === 403 && /admin.secret/iu.test(message)) {
+      return /X-Admin-Secret/u.test(message) && storedAdminSecret()
+        ? "The Admin Secret saved on this device does not match the Engine's ADMIN_SECRET. Enter the same value in Settings → Advanced → Admin Access."
+        : "Marinara Engine blocked Relationship Tracker because this device has no Admin Secret. Set ADMIN_SECRET in the Engine's .env file if it is not set yet, then enter the same value in Settings → Advanced → Admin Access.";
+    }
+    return message || `${fallback} (${response.status}).`;
+  }
+
+  function apiFetch(url, { method = "GET", body } = {}) {
+    const headers = { Accept: "application/json" };
+    if (body !== undefined) headers["Content-Type"] = "application/json";
+    // Engine CSRF presence marker; sent explicitly instead of relying on the engine's global fetch shim.
+    if (UNSAFE_METHODS.has(method)) headers["x-marinara-csrf"] = "1";
+    const secret = storedAdminSecret();
+    if (secret) headers["X-Admin-Secret"] = secret;
+    return fetch(url, {
+      method,
+      credentials: "same-origin",
+      headers,
+      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+    });
+  }
+
   function nodeRadius(characterCount) {
     if (characterCount > 12) return 22;
     if (characterCount > 8) return 27;
     return 34;
   }
 
-  function circularPositions(characters) {
+  function circularPositions(characters, { reserveCenter = false } = {}) {
     const count = characters.length;
     if (count === 0) return [];
-    if (count === 1) return [{ ...characters[0], x: GRAPH_WIDTH / 2, y: GRAPH_HEIGHT / 2 }];
-    const startAngle = count === 2 ? 0 : -Math.PI / 2;
+    if (count === 1 && !reserveCenter) return [{ ...characters[0], x: GRAPH_WIDTH / 2, y: GRAPH_HEIGHT / 2 }];
+    // With the persona at the centre, use an odd number of slots (leaving the spare one at the bottom)
+    // so no character sits on the persona and no relationship line crosses it.
+    const slots = reserveCenter && count % 2 === 0 ? count + 1 : count;
+    const startAngle = slots > count ? Math.PI / 2 + (Math.PI * 2) / slots : count === 2 ? 0 : -Math.PI / 2;
     const radiusX = count > 12 ? 270 : 248;
     const radiusY = count > 12 ? 168 : 150;
     return characters.map((character, index) => {
-      const angle = startAngle + (Math.PI * 2 * index) / count;
+      const angle = startAngle + (Math.PI * 2 * index) / slots;
       return {
         ...character,
         x: Math.round((GRAPH_WIDTH / 2 + Math.cos(angle) * radiusX) * 100) / 100,
@@ -107,6 +149,9 @@
       this._editorPairKey = null;
       this._editorPersonaCharacterId = null;
       this._activeLineLabel = null;
+      this._pendingRefresh = false;
+      this._settingsOpen = null;
+      this._helpOpen = false;
       this._requestToken = 0;
       this._historyRequestToken = 0;
       this._statusGeneration = 0;
@@ -150,6 +195,8 @@
         this._historyRequestToken += 1;
         this._history = this.emptyHistoryState(chatId);
         this._activeLineLabel = null;
+        this._pendingRefresh = false;
+        this._settingsOpen = null;
         this._editorPairKey = null;
         this._editorPersonaCharacterId = null;
         if (chatId) void this.loadPanel(chatId);
@@ -213,18 +260,15 @@
     async pollProcessingStatus(chatId, generation = this._statusGeneration) {
       let delay = IDLE_STATUS_POLL_MS;
       try {
-        const response = await fetch(`/api/relationship-tracker/v1/chats/${encodeURIComponent(chatId)}/status`, {
-          credentials: "same-origin",
-          headers: { Accept: "application/json" },
-        });
+        const response = await apiFetch(`/api/relationship-tracker/v1/chats/${encodeURIComponent(chatId)}/status`);
         const body = await response.json().catch(() => ({}));
-        if (!response.ok) throw new Error(body?.error || `Processing status read failed (${response.status}).`);
+        if (!response.ok) throw new Error(responseError(response, body, "Processing status read failed"));
         if (generation !== this._statusGeneration || chatId !== this.currentChatId()) return;
         const previous = this._processing.chatId === chatId ? this._processing : this.emptyProcessingStatus(chatId);
         const completedRevision = Number.isInteger(body?.completedRevision) && body.completedRevision >= 0
           ? body.completedRevision
           : previous.completedRevision;
-        const refreshAfterCompletion = completedRevision > previous.completedRevision;
+        if (completedRevision > previous.completedRevision) this._pendingRefresh = true;
         const processing = body?.processing === true;
         this._processing = {
           chatId,
@@ -238,7 +282,11 @@
         };
         delay = processing ? ACTIVE_STATUS_POLL_MS : IDLE_STATUS_POLL_MS;
         this.updateProcessingStatusView();
-        if (refreshAfterCompletion && this._panel.status !== "saving") await this.loadPanel(chatId);
+        // Defer (not drop) the refresh while saving or editing, so a re-render never wipes unsaved input.
+        if (this._pendingRefresh && this._panel.status !== "saving" && !this.isEditing()) {
+          this._pendingRefresh = false;
+          await this.loadPanel(chatId);
+        }
       } catch {
         if (generation !== this._statusGeneration || chatId !== this.currentChatId()) return;
         const previous = this._processing.chatId === chatId ? this._processing : this.emptyProcessingStatus(chatId);
@@ -258,12 +306,22 @@
       }
     }
 
+    isEditing() {
+      const active = this.shadowRoot.activeElement;
+      return Boolean(active?.closest?.("[data-relationship-editor], [data-persona-editor]") &&
+        /^(INPUT|TEXTAREA|SELECT)$/u.test(active.tagName));
+    }
+
+    setActiveLineLabel(key) {
+      this._activeLineLabel = key;
+      for (const group of this.shadowRoot.querySelectorAll?.("[data-line-group]") ?? []) {
+        group.classList.toggle("line-label-active", group.dataset.lineGroup === key);
+      }
+    }
+
     async loadPortrait(characterId) {
       try {
-        const response = await fetch(`/api/characters/${encodeURIComponent(characterId)}`, {
-          credentials: "same-origin",
-          headers: { Accept: "application/json" },
-        });
+        const response = await apiFetch(`/api/characters/${encodeURIComponent(characterId)}`);
         if (!response.ok) return null;
         const body = await response.json().catch(() => ({}));
         return typeof body?.avatarPath === "string" && body.avatarPath.trim() ? body.avatarPath : null;
@@ -275,12 +333,9 @@
     async loadPanel(chatId) {
       const token = ++this._requestToken;
       try {
-        const response = await fetch(`/api/relationship-tracker/v1/chats/${encodeURIComponent(chatId)}/panel`, {
-          credentials: "same-origin",
-          headers: { Accept: "application/json" },
-        });
+        const response = await apiFetch(`/api/relationship-tracker/v1/chats/${encodeURIComponent(chatId)}/panel`);
         const body = await response.json().catch(() => ({}));
-        if (!response.ok) throw new Error(body?.error || `Relationship web read failed (${response.status}).`);
+        if (!response.ok) throw new Error(responseError(response, body, "Relationship web read failed"));
         const characters = Array.isArray(body?.characters) ? body.characters : [];
         const portraits = Object.fromEntries(await Promise.all(characters.map(async (character) => [
           character.characterId,
@@ -303,19 +358,17 @@
 
     async saveSettings(injectionMode, presenceLookbackMessages) {
       const chatId = this.currentChatId();
-      if (!chatId || this._history.status === "updating") return;
+      if (!chatId || this._panel.status === "saving" || this._history.status === "updating") return;
       const token = ++this._requestToken;
       this._panel = { ...this._panel, status: "saving", error: "" };
       this.render();
       try {
-        const response = await fetch(`/api/relationship-tracker/v1/chats/${encodeURIComponent(chatId)}/settings`, {
+        const response = await apiFetch(`/api/relationship-tracker/v1/chats/${encodeURIComponent(chatId)}/settings`, {
           method: "PATCH",
-          credentials: "same-origin",
-          headers: { Accept: "application/json", "Content-Type": "application/json" },
-          body: JSON.stringify({ injectionMode, presenceLookbackMessages }),
+          body: { injectionMode, presenceLookbackMessages },
         });
         const body = await response.json().catch(() => ({}));
-        if (!response.ok) throw new Error(body?.error || `Settings update failed (${response.status}).`);
+        if (!response.ok) throw new Error(responseError(response, body, "Settings update failed"));
         if (token !== this._requestToken || chatId !== this.currentChatId()) return;
         this._panel = {
           ...this._panel,
@@ -332,26 +385,25 @@
         };
       } catch (error) {
         if (token !== this._requestToken || chatId !== this.currentChatId()) return;
-        this._panel = { ...this._panel, status: "error", error: error instanceof Error ? error.message : String(error) };
+        // Keep the web visible and show the error inline, like the other actions.
+        this._panel = { ...this._panel, status: "ready", error: error instanceof Error ? error.message : String(error) };
       }
       this.render();
     }
 
     async postRelationshipAction(path, body, failureLabel) {
       const chatId = this.currentChatId();
-      if (!chatId || this._history.status === "updating") return;
+      if (!chatId || this._panel.status === "saving" || this._history.status === "updating") return;
       const token = ++this._requestToken;
       this._panel = { ...this._panel, status: "saving", error: "" };
       this.render();
       try {
-        const response = await fetch(`/api/relationship-tracker/v1/chats/${encodeURIComponent(chatId)}/${path}`, {
+        const response = await apiFetch(`/api/relationship-tracker/v1/chats/${encodeURIComponent(chatId)}/${path}`, {
           method: "POST",
-          credentials: "same-origin",
-          headers: { Accept: "application/json", "Content-Type": "application/json" },
-          body: JSON.stringify(body),
+          body,
         });
         const responseBody = await response.json().catch(() => ({}));
-        if (!response.ok) throw new Error(responseBody?.error || `${failureLabel} (${response.status}).`);
+        if (!response.ok) throw new Error(responseError(response, responseBody, failureLabel));
         if (token !== this._requestToken || chatId !== this.currentChatId()) return;
         this._panel = { ...this._panel, status: "ready", value: responseBody, error: "" };
       } catch (error) {
@@ -383,19 +435,17 @@
 
     async setPersonaVisibility(showPersona) {
       const chatId = this.currentChatId();
-      if (!chatId || this._history.status === "updating") return;
+      if (!chatId || this._panel.status === "saving" || this._history.status === "updating") return;
       const token = ++this._requestToken;
       this._panel = { ...this._panel, status: "saving", error: "" };
       this.render();
       try {
-        const response = await fetch(`/api/relationship-tracker/v1/chats/${encodeURIComponent(chatId)}/persona/visibility`, {
+        const response = await apiFetch(`/api/relationship-tracker/v1/chats/${encodeURIComponent(chatId)}/persona/visibility`, {
           method: "PATCH",
-          credentials: "same-origin",
-          headers: { Accept: "application/json", "Content-Type": "application/json" },
-          body: JSON.stringify({ showPersona }),
+          body: { showPersona },
         });
         const body = await response.json().catch(() => ({}));
-        if (!response.ok) throw new Error(body?.error || `Persona visibility update failed (${response.status}).`);
+        if (!response.ok) throw new Error(responseError(response, body, "Persona visibility update failed"));
         if (token !== this._requestToken || chatId !== this.currentChatId()) return;
         this._panel = { ...this._panel, status: "ready", value: body, error: "" };
       } catch (error) {
@@ -423,14 +473,12 @@
       this._history = { chatId, messageCount, status: "updating", error: "", result: null };
       this.render();
       try {
-        const response = await fetch(`/api/relationship-tracker/v1/chats/${encodeURIComponent(chatId)}/history-update`, {
+        const response = await apiFetch(`/api/relationship-tracker/v1/chats/${encodeURIComponent(chatId)}/history-update`, {
           method: "POST",
-          credentials: "same-origin",
-          headers: { Accept: "application/json", "Content-Type": "application/json" },
-          body: JSON.stringify({ messageCount }),
+          body: { messageCount },
         });
         const body = await response.json().catch(() => ({}));
-        if (!response.ok) throw new Error(body?.error || `History update failed (${response.status}).`);
+        if (!response.ok) throw new Error(responseError(response, body, "History update failed"));
         if (token !== this._historyRequestToken || chatId !== this.currentChatId()) return;
         this._history = { chatId, messageCount, status: "success", error: "", result: body };
         await this.loadPanel(chatId);
@@ -481,8 +529,9 @@
         for (const control of this.shadowRoot.querySelectorAll?.("[data-defined-field]") ?? []) {
           control.disabled = !defined;
         }
-        const labelInput = this.shadowRoot.querySelector?.("[data-editor-label]");
-        if (labelInput) labelInput.required = defined;
+        for (const control of this.shadowRoot.querySelectorAll?.("[data-editor-label], [data-editor-description]") ?? []) {
+          control.required = defined;
+        }
       });
       const editorForm = this.shadowRoot.querySelector?.("[data-relationship-editor]");
       editorForm?.addEventListener("submit", (event) => {
@@ -519,6 +568,9 @@
       personaState?.addEventListener("change", () => {
         const defined = personaState.value === "defined";
         for (const control of this.shadowRoot.querySelectorAll?.("[data-persona-defined-field]") ?? []) control.disabled = !defined;
+        for (const control of this.shadowRoot.querySelectorAll?.("[data-persona-label], [data-persona-description]") ?? []) {
+          control.required = defined;
+        }
       });
       this.shadowRoot.querySelector?.("[data-persona-editor]")?.addEventListener("submit", (event) => {
         event.preventDefault();
@@ -558,18 +610,21 @@
         hitTarget.addEventListener("pointerup", (event) => {
           if (event.pointerType !== "touch" && event.pointerType !== "pen") return;
           event.preventDefault();
-          this._activeLineLabel = hitTarget.dataset.lineKey;
-          this.render();
+          // Toggle in place: a full render() would wipe unsaved editor input and collapse open sections.
+          this.setActiveLineLabel(hitTarget.dataset.lineKey);
         });
       }
       const graph = this.shadowRoot.querySelector?.("[data-relationship-web]");
       graph?.addEventListener("pointerup", (event) => {
         const packageLine = event.target?.closest?.("[data-line-key]");
         if ((event.pointerType === "touch" || event.pointerType === "pen") && !packageLine && this._activeLineLabel !== null) {
-          this._activeLineLabel = null;
-          this.render();
+          this.setActiveLineLabel(null);
         }
       });
+      const settingsDetails = this.shadowRoot.querySelector?.("[data-settings-details]");
+      settingsDetails?.addEventListener("toggle", () => { this._settingsOpen = settingsDetails.open; });
+      const helpDetails = this.shadowRoot.querySelector?.("[data-help-details]");
+      helpDetails?.addEventListener("toggle", () => { this._helpOpen = helpDetails.open; });
       const retry = this.shadowRoot.querySelector?.("[data-retry]");
       retry?.addEventListener("click", () => {
         const chatId = this.currentChatId();
@@ -589,7 +644,7 @@
         const accessible = `${edge.nodeA.name} and ${edge.nodeB.name}: ${edge.label || "relationship"}`;
         const edgeId = `${edge.characterAId}--${edge.characterBId}`;
         return `
-          <g class="edge${this._activeLineLabel === edgeId ? " line-label-active" : ""}" data-edge="${escapeHtml(edgeId)}" style="--edge-color:${color}">
+          <g class="edge${this._activeLineLabel === edgeId ? " line-label-active" : ""}" data-edge="${escapeHtml(edgeId)}" style="--edge-color:${color}" data-line-group="${escapeHtml(edgeId)}">
             <line class="edge-visible" x1="${edge.nodeA.x}" y1="${edge.nodeA.y}" x2="${edge.nodeB.x}" y2="${edge.nodeB.y}"></line>
             <line class="edge-hit" data-line-key="${escapeHtml(edgeId)}" x1="${edge.nodeA.x}" y1="${edge.nodeA.y}" x2="${edge.nodeB.x}" y2="${edge.nodeB.y}" tabindex="0" role="img" aria-label="${escapeHtml(accessible)}">
               <title>${escapeHtml(accessible)}</title>
@@ -633,11 +688,17 @@
           const color = CATEGORY_COLORS[entry.colorCategory] ?? CATEGORY_COLORS.neutral;
           const accessible = `${node.name}'s perception of ${value.persona.name}: ${entry.label}`;
           const spokeId = `persona--${entry.characterId}--${value.persona.id}`;
-          const midpointX = (node.x + GRAPH_WIDTH / 2) / 2;
-          const midpointY = (node.y + GRAPH_HEIGHT / 2) / 2;
-          return `<g class="persona-spoke${this._activeLineLabel === spokeId ? " line-label-active" : ""}" style="--edge-color:${color}">
-            <line class="persona-spoke-visible" x1="${node.x}" y1="${node.y}" x2="${GRAPH_WIDTH / 2}" y2="${GRAPH_HEIGHT / 2}" marker-end="url(#persona-arrow)"></line>
-            <line class="edge-hit" data-line-key="${escapeHtml(spokeId)}" x1="${node.x}" y1="${node.y}" x2="${GRAPH_WIDTH / 2}" y2="${GRAPH_HEIGHT / 2}" tabindex="0" role="img" aria-label="${escapeHtml(accessible)}"><title>${escapeHtml(accessible)}</title></line>
+          const centerX = GRAPH_WIDTH / 2;
+          const centerY = GRAPH_HEIGHT / 2;
+          // Stop just outside the persona halo (r=48) so the arrowhead is visible.
+          const length = Math.hypot(node.x - centerX, node.y - centerY) || 1;
+          const endX = Math.round((centerX + ((node.x - centerX) / length) * 52) * 100) / 100;
+          const endY = Math.round((centerY + ((node.y - centerY) / length) * 52) * 100) / 100;
+          const midpointX = (node.x + endX) / 2;
+          const midpointY = (node.y + endY) / 2;
+          return `<g class="persona-spoke${this._activeLineLabel === spokeId ? " line-label-active" : ""}" data-line-group="${escapeHtml(spokeId)}" style="--edge-color:${color}">
+            <line class="persona-spoke-visible" x1="${node.x}" y1="${node.y}" x2="${endX}" y2="${endY}" marker-end="url(#persona-arrow)"></line>
+            <line class="edge-hit" data-line-key="${escapeHtml(spokeId)}" x1="${node.x}" y1="${node.y}" x2="${endX}" y2="${endY}" tabindex="0" role="img" aria-label="${escapeHtml(accessible)}"><title>${escapeHtml(accessible)}</title></line>
             <text class="edge-label" x="${midpointX}" y="${midpointY - 8}" text-anchor="middle">${escapeHtml(truncate(entry.label || "Perception", 44))}</text>
           </g>`;
         }).join("");
@@ -657,7 +718,7 @@
       if (characters.length === 0) {
         return `<div class="empty-web"><span aria-hidden="true">◎</span><p>No character cards are assigned to this Roleplay chat.</p></div>`;
       }
-      const positions = circularPositions(characters);
+      const positions = circularPositions(characters, { reserveCenter: value?.showPersona === true && Boolean(value?.persona) });
       const edges = definedEdges(value, positions);
       const personaSpokes = this.renderPersonaSpokes(value, positions);
       return `
@@ -704,7 +765,6 @@
             <h4>Relationship editor</h4>
             ${relationship.manuallyLocked ? `<span class="lock-status">Manually locked</span>` : `<span class="automatic-status">Automatic</span>`}
           </div>
-          ${this._panel.error ? `<p class="error" role="alert">${escapeHtml(this._panel.error)}</p>` : ""}
           <form data-relationship-editor>
             <fieldset ${unavailable ? "disabled" : ""}>
               <label>
@@ -768,7 +828,7 @@
       };
       const defined = perception.state === "defined";
       return `<section class="editor persona-editor" aria-label="Persona perception editor">
-        <div class="section-heading"><h4>Character perception of ${escapeHtml(persona.name)}</h4><button type="button" class="secondary" data-persona-visibility>${value.showPersona === true ? "Hide persona from graphic" : "Show persona in graphic"}</button></div>
+        <div class="section-heading"><h4>Character perception of ${escapeHtml(persona.name)}</h4><button type="button" class="secondary" data-persona-visibility ${busy ? "disabled" : ""}>${value.showPersona === true ? "Hide persona from graphic" : "Show persona in graphic"}</button></div>
         <p>Graphics visibility does not disable tracking or prompt injection.</p>
         <form data-persona-editor><fieldset ${busy || value?.configured !== true ? "disabled" : ""}>
           <label>Character<select data-persona-character>${characters.map((entry) => `<option value="${escapeHtml(entry.characterId)}" ${entry.characterId === selected.characterId ? "selected" : ""}>${escapeHtml(entry.name)}</option>`).join("")}</select></label>
@@ -828,7 +888,7 @@
         ? settings.presenceLookbackMessages
         : DEFAULT_LOOKBACK;
       return `
-        <details class="settings" ${mode ? "" : "open"}>
+        <details class="settings" data-settings-details ${(this._settingsOpen ?? !mode) ? "open" : ""}>
           <summary>Tracker settings</summary>
           <div class="settings-body">
             <fieldset ${busy ? "disabled" : ""}>
@@ -886,7 +946,9 @@
       } else {
         const saving = state.status === "saving";
         const busy = saving || this._history.status === "updating";
-        content = `${this.renderGraph(state.value)}${this.renderHistory(state.value, busy)}${this.renderEditor(state.value, busy)}${this.renderPersonaEditor(state.value, busy)}${this.renderSettings(state.value, busy)}`;
+        // One error slot for every action (settings, relationship, persona), visible even with fewer than two cards.
+        const actionError = state.error ? `<p class="error" role="alert">${escapeHtml(state.error)}</p>` : "";
+        content = `${actionError}${this.renderGraph(state.value)}${this.renderHistory(state.value, busy)}${this.renderEditor(state.value, busy)}${this.renderPersonaEditor(state.value, busy)}${this.renderSettings(state.value, busy)}`;
       }
       this.shadowRoot.innerHTML = `
         <style>
@@ -897,12 +959,12 @@
           h3 { font-size: 0.95rem; line-height: 1.25; }
           h4 { font-size: 0.84rem; line-height: 1.3; }
           p { color: var(--muted-foreground, #a3a3a3); font-size: 0.78rem; line-height: 1.4; }
-          .error { color: #fca5a5; }
+          .error { color: color-mix(in srgb, #ef4444 65%, var(--foreground, #f5f5f5)); }
           .processing-slot { display: contents; }
           .processing-slot:empty { display: none; }
           .processing-status { display: flex; align-items: center; gap: 0.5rem; min-width: 0; border: 1px solid color-mix(in srgb, var(--primary, #67e8f9) 45%, transparent); border-radius: 0.55rem; padding: 0.42rem 0.55rem; color: var(--foreground, #f5f5f5); background: color-mix(in srgb, var(--primary, #67e8f9) 10%, transparent); font-size: 0.75rem; font-weight: 650; }
           .processing-spinner { flex: 0 0 auto; width: 0.85rem; height: 0.85rem; border: 2px solid color-mix(in srgb, var(--primary, #67e8f9) 28%, transparent); border-top-color: var(--primary, #67e8f9); border-radius: 999px; animation: spin .8s linear infinite; }
-          .status-warning { color: #fde68a; }
+          .status-warning { color: color-mix(in srgb, #f59e0b 65%, var(--foreground, #f5f5f5)); }
           .loading, .empty-web { display: grid; place-items: center; gap: 0.45rem; min-height: 9rem; text-align: center; }
           .loading span { width: 1.25rem; height: 1.25rem; border: 2px solid color-mix(in srgb, var(--primary, #67e8f9) 25%, transparent); border-top-color: var(--primary, #67e8f9); border-radius: 999px; animation: spin .8s linear infinite; }
           .empty-web span { font-size: 2.25rem; color: var(--muted-foreground, #a3a3a3); opacity: .65; }
@@ -931,16 +993,16 @@
           .history-form { display: grid; grid-template-columns: minmax(0, 1fr) minmax(8rem, auto); align-items: end; gap: 0.5rem; }
           .history-form label { display: grid; gap: 0.3rem; }
           .history-form input { width: 6rem; }
-          .history-success { color: #a7f3d0; }
+          .history-success { color: color-mix(in srgb, #10b981 65%, var(--foreground, #f5f5f5)); }
           .section-heading { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 0.4rem; }
           .lock-status, .automatic-status { border-radius: 999px; padding: 0.16rem 0.45rem; font-size: 0.68rem; font-weight: 700; }
-          .lock-status { color: #fde68a; background: rgba(245, 158, 11, .16); }
-          .automatic-status { color: #a7f3d0; background: rgba(16, 185, 129, .14); }
+          .lock-status { color: color-mix(in srgb, #f59e0b 65%, var(--foreground, #f5f5f5)); background: rgba(245, 158, 11, .16); }
+          .automatic-status { color: color-mix(in srgb, #10b981 65%, var(--foreground, #f5f5f5)); background: rgba(16, 185, 129, .14); }
           .editor fieldset { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 0.55rem; padding: 0; border: 0; }
           .wide-field { grid-column: 1 / -1; }
           .editor label { display: grid; align-content: start; gap: 0.3rem; }
-          .editor .lock-choice { display: flex; flex-direction: row; justify-content: flex-start; }
-          .lock-choice input { width: auto; }
+          .editor .lock-choice { display: flex; flex-direction: row; flex-wrap: nowrap; align-items: flex-start; justify-content: flex-start; }
+          .lock-choice input { flex: 0 0 auto; width: auto; margin-top: 0.15em; }
           .editor-actions { display: flex; flex-wrap: wrap; gap: 0.45rem; }
           .editor-actions button { flex: 1 1 9rem; }
           .secondary { color: var(--muted-foreground, #a3a3a3); }
@@ -969,7 +1031,7 @@
         </style>
         <section class="relationship-tracker" aria-label="Relationship Tracker">
           <h3>Relationship Tracker</h3>
-          <details class="panel-help">
+          <details class="panel-help" data-help-details ${this._helpOpen ? "open" : ""}>
             <summary>Panel size & layout</summary>
             <p>Choose Compact, Standard, or Expanded under Settings → Appearance → Tracker Panel → Desktop size. Use the Tracker Panel header controls to dock or detach the whole panel.</p>
           </details>

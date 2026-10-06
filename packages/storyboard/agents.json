@@ -2,7 +2,7 @@
   {
     "id": "storyboard",
     "name": "Storyboard",
-    "description": "Plans still or animated Game and Roleplay storyboards with separate planning prompts and shared provider formatters.",
+    "description": "Turns Game and Roleplay scenes into storyboards of still images or short animations.",
     "phase": "post_processing",
     "enabledByDefault": false,
     "category": "misc",

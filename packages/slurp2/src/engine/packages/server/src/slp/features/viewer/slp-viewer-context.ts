@@ -90,13 +90,7 @@ export function createSlpViewerContext(
       ),
     );
     // Prices for the visible creators only, so a large roster costs one lookup per shown row.
-    const subscriptionPrices = Object.fromEntries(
-      await Promise.all(
-        visibleAccounts.map(
-          async (account) => [account.id, await noodle.getCreatorSubscriptionCharge(account.id)] as const,
-        ),
-      ),
-    );
+    const subscriptionPrices = await noodle.getCreatorSubscriptionCharges(visibleAccounts);
     // The persona's fan account: likes, comments and votes on other Creators' posts are stored
     // under it, so the client needs it to recognise them as the player's own (R1-020).
     const fanActor = await noodle.getSlurpAccountForEntity("persona", viewer.entityId, "viewer").catch(() => null);

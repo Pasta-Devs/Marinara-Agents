@@ -38,6 +38,13 @@ const activity = readFileSync(
   ),
   "utf8",
 );
+const lastInjectionSummary = readFileSync(
+  new URL(
+    "../packages/long-term-memory/src/engine/packages/client/src/features/long-term-memory/LastInjectionSummary.tsx",
+    import.meta.url,
+  ),
+  "utf8",
+);
 const settings = readFileSync(
   new URL(
     "../packages/long-term-memory/src/engine/packages/client/src/features/long-term-memory/MemorySettings.tsx",
@@ -175,9 +182,46 @@ assert.match(workspace, /extractionDidNotFinish/u);
 assert.match(activity, /completionReasoningTokens/u);
 assert.match(activity, /data-ltm-activity-warnings/u);
 assert.match(settings, /reasoningEffort: resolved\.reasoningEffort \?\? "low"/u);
+assert.match(settings, /memorySettingsSavedIndexRebuilt/u);
+assert.match(settings, /memorySettingsSavedIndexRebuildFailed/u);
+assert.match(settings, /memorySettingsResetIndexRebuildFailed/u);
+assert.match(settings, /rebuild\?\.status === "deferred"/u);
+// #1193 repair: extraction edits made while the awaited global rebuild is in flight must
+// survive, mirroring the submitted-snapshot guard used for global settings.
+assert.match(
+  settings,
+  /setExtractionFormState\(\(current\) => \(current && same\(current, submitted\) \? saved : current\)\)/u,
+);
+assert.equal(
+  locale["ui.longTermMemory.memorysettings.memorySettingsSavedIndexRebuilt"],
+  "Memory settings saved and the recall index was rebuilt.",
+);
+assert.equal(
+  locale["ui.longTermMemory.memorysettings.memorySettingsSavedIndexRebuildFailed"],
+  "Memory settings saved, but the recall index rebuild failed: {{error}}",
+);
+assert.equal(
+  locale["ui.longTermMemory.memorysettings.memorySettingsResetIndexRebuildFailed"],
+  "Memory settings reset to defaults, but the recall index rebuild failed: {{error}}",
+);
 assert.equal(locale["ui.longTermMemory.sourcesworkspace.syncSelected_8c57bdb"], undefined);
 assert.equal(locale["ui.longTermMemory.sourcesworkspace.refreshSelectedSources"], "Refresh selected sources");
 assert.equal(locale["ui.longTermMemory.activityview.totalTokens"], "Total: {{count}} tokens");
+// #1210: the debug toggle gates recall explanations, not all debug activity; extraction/apply
+// logging is separate and the setting only applies once settings are saved.
+assert.equal(locale["ui.longTermMemory.memorysettings.recordDebugActivity"], "Record recall explanations");
+assert.match(
+  locale["ui.longTermMemory.memorysettings.recordsLongTermMemoryOperationsForTroubleshootingActivityMay"],
+  /A chat override or host debug mode can also turn them on/u,
+);
+assert.match(
+  locale["ui.longTermMemory.memorysettings.recordsLongTermMemoryOperationsForTroubleshootingActivityMay"],
+  /Extraction, draft, and apply activity is always recorded/u,
+);
+assert.match(
+  locale["ui.longTermMemory.memorysettings.recordsLongTermMemoryOperationsForTroubleshootingActivityMay"],
+  /takes effect after you save settings/u,
+);
 assert.equal(
   locale["ui.longTermMemory.longtermmemorydetail.savedButNotSearchable"],
   "Saved with lexical recall only: semantic embeddings are unavailable.",
@@ -683,6 +727,77 @@ assert.equal(locale["ui.longTermMemory.reviewqueue.reviewFailed"], "Review faile
 assert.equal(locale["ui.longTermMemory.reviewqueue.charactersRemainingOne"], "{{count}} character remaining");
 assert.equal(locale["ui.longTermMemory.reviewqueue.charactersRemainingOther"], "{{count}} characters remaining");
 assert.match(locale["ui.longTermMemory.sourceoperation.deleteDetachment"], /detached/u);
+
+// #1212: the last-injection panel surfaces package-observed recall outcomes and
+// the recall workflow marks whether that attempt was confirmed.
+assert.match(lastInjectionSummary, /data\?\.attempt/u);
+assert.match(lastInjectionSummary, /observedAttempt\.outcome === "cancelled"/u);
+assert.match(lastInjectionSummary, /observedAttempt\.outcome === "failed"/u);
+assert.match(lastInjectionSummary, /observedAttempt\.outcome === "skipped"/u);
+assert.match(lastInjectionSummary, /observedAttempt\.reason === "chat_not_found"/u);
+assert.match(lastInjectionSummary, /observedAttempt\.reason === "empty_query"/u);
+assert.match(lastInjectionSummary, /observedAttempt\.reason === "prompt_budget"/u);
+assert.match(lastInjectionSummary, /recallCompletedNotConfirmed/u);
+// A newer unconfirmed/failed/skipped attempt must override an older confirmed
+// receipt rather than presenting the stale injection as the latest result.
+assert.match(lastInjectionSummary, /const attemptOverridesInjection = observedRecallMessage !== null;/u);
+assert.match(lastInjectionSummary, /attemptOverridesInjection\s*\? observedRecallMessage/u);
+assert.match(lastInjectionSummary, /!attemptOverridesInjection && data\?\.memories\.length/u);
+assert.match(lastInjectionSummary, /attemptOverridesInjection \|\| !data\?\.memories\.length/u);
+// With a known attempt id the recall workflow must not fall back to another
+// attempt's explanation; a missing match means no recorded explanation.
+assert.match(activity, /if \(attemptId\) return correlated;/u);
+assert.doesNotMatch(activity, /correlated \?\? candidates\.sort/u);
+assert.match(activity, /data-ltm-recall-confirmation/u);
+assert.match(activity, /recallWorkflowInjectionConfirmed/u);
+assert.match(activity, /recallWorkflowInjectionNotConfirmed/u);
+assert.equal(
+  locale["ui.longTermMemory.lastinjectionsummary.recallCompletedNotConfirmed"],
+  "Recall completed but no saved memory was confirmed in the latest model context.",
+);
+assert.equal(
+  locale["ui.longTermMemory.activityview.recallWorkflowInjectionConfirmed"],
+  "This recall was confirmed in the latest model context.",
+);
+
+// #1211: the recall workflow explains effective parameters, the recall-time
+// index snapshot, and the semantic outcome, and it labels the bounded
+// rejected-candidate list instead of implying it is exhaustive.
+assert.match(activity, /recallWorkflow\.semanticOutcome/u);
+assert.match(activity, /recallWorkflow\.indexedChunks/u);
+assert.match(activity, /recallWorkflow\.eligibleChunks/u);
+assert.match(activity, /recallWorkflow\.rejectedLimit/u);
+assert.match(activity, /recallMode/u);
+assert.match(activity, /recallIndexSummary/u);
+assert.match(activity, /recallSemanticOutcome/u);
+assert.match(activity, /rejectedCandidatesUpTo/u);
+assert.equal(
+  locale["ui.longTermMemory.activityview.rejectedCandidatesUpTo"],
+  "Recorded rejected candidates — up to {{limit}}",
+);
+assert.equal(locale["ui.longTermMemory.activityview.recallSemanticOutcome"], "Semantic matching: {{outcome}}");
+assert.equal(
+  locale["ui.longTermMemory.activityview.recallIndexSummary"],
+  "Recall index: {{indexed}} indexed · {{eligible}} eligible · {{outcome}}",
+);
+// #1211 review repair: the index snapshot must also surface the build time and
+// embedded-chunk count, and eligibility/targeting must render an explicit state
+// for both true and false rather than disappearing when false.
+assert.match(activity, /recallWorkflow\.indexGeneratedAt/u);
+assert.match(activity, /recallWorkflow\.embeddedChunks/u);
+assert.match(activity, /recallIndexBuiltAt/u);
+assert.match(activity, /recallIndexEmbeddedChunks/u);
+assert.match(activity, /typeof recallWorkflow\.includeResolved === "boolean"/u);
+assert.match(activity, /typeof recallWorkflow\.exclusiveCharacterTargeting === "boolean"/u);
+assert.match(activity, /recallResolvedExcluded/u);
+assert.match(activity, /recallChatWideTargeting/u);
+assert.equal(locale["ui.longTermMemory.activityview.recallIndexBuiltAt"], "Index built: {{value}}");
+assert.equal(locale["ui.longTermMemory.activityview.recallIndexEmbeddedChunks"], "Embedded chunks: {{count}}");
+assert.equal(locale["ui.longTermMemory.activityview.recallResolvedExcluded"], "Resolved memories were excluded");
+assert.equal(
+  locale["ui.longTermMemory.activityview.recallChatWideTargeting"],
+  "Not limited to the responding character",
+);
 
 process.stdout.write(
   "Long-Term Memory feedback clarity UI regression: labels, outcomes, usage, warnings, and defaults ok\n",

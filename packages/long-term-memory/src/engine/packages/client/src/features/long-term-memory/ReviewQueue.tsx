@@ -1,4 +1,4 @@
-import { useEffect, useId, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Check, ChevronRight, Loader2, X } from "lucide-react";
 import {
@@ -16,6 +16,7 @@ import {
   type LtmRejectedSuggestionsClearResponse,
   type LtmRejectedSuggestion,
   type LtmRejectedSuggestionsResponse,
+  type LtmSavedSubjectIdentityChoice,
 } from "../../../../shared/src/features/agents/long-term-memory/schema.js";
 import { invalidateLtmQueries, queryKeys, request, requestNotesByIds } from "./api";
 import { humanizeLabel, labelKeys, localizedLabel } from "./display-labels";
@@ -23,6 +24,7 @@ import { Button, IconButton, InfoPopover, inputClass, StatusSurface } from "./sh
 import type { LongTermMemoryDestinationProps } from "./types";
 import { selectLtmPluralForm, useLtmTranslation } from "./localization";
 import { LtmWorkspace, type LtmWorkspacePane } from "./LtmWorkspace";
+import SubjectIdentityReview from "./SubjectIdentityReview";
 import {
   ambiguousLinkChoiceTarget,
   ambiguousLinkUnresolvedChoiceValue,
@@ -685,6 +687,15 @@ function recoveryLabel(
   return hints.join(", ") || localizeUi("ui.longTermMemory.reviewqueue.reviewRejectedCandidate");
 }
 
+function savedIdentityChoiceLabel(
+  choice: LtmSavedSubjectIdentityChoice,
+  localizeUi: ReturnType<typeof useLtmTranslation>["t"],
+) {
+  if (choice.action === "skip") return localizeUi("ui.longTermMemory.reviewqueue.skipIdentityParticipant");
+  if (choice.action === "different") return localizeUi("ui.longTermMemory.reviewqueue.differentIdentity");
+  return choice.subject.ref?.id ?? choice.subject.key;
+}
+
 const rejectionReasonLabels: Partial<Record<LtmExtractionDropReason, string>> = {
   invalid_format: "ui.longTermMemory.reviewqueue.rejectionReasonInvalidFormat",
   placeholder_output: "ui.longTermMemory.reviewqueue.rejectionReasonPlaceholderOutput",
@@ -1236,6 +1247,10 @@ export default function ReviewQueue({
     queryKey: queryKeys.rejectedSuggestions,
     queryFn: () => request<LtmRejectedSuggestionsResponse>("/rejected-suggestions"),
   });
+  const savedIdentityChoices = useQuery({
+    queryKey: queryKeys.savedIdentityChoices,
+    queryFn: () => request<LtmRejectedSuggestionsResponse>("/rejected-suggestions?includeResolved=true"),
+  });
   const contextNoteIds = useMemo(() => {
     const ids = new Set<string>();
     for (const source of review.data?.sources ?? []) {
@@ -1248,8 +1263,11 @@ export default function ReviewQueue({
       ids.add(suggestion.source.sourceNoteId);
       if (suggestion.candidate.recovery?.noteId) ids.add(suggestion.candidate.recovery.noteId);
     }
+    for (const suggestion of savedIdentityChoices.data?.suggestions ?? []) {
+      ids.add(suggestion.source.sourceNoteId);
+    }
     return [...ids].sort();
-  }, [rejectedSuggestions.data?.suggestions, review.data?.sources]);
+  }, [rejectedSuggestions.data?.suggestions, savedIdentityChoices.data?.suggestions, review.data?.sources]);
   const notes = useQuery({
     queryKey: [...queryKeys.notes, "review-context", contextNoteIds],
     queryFn: ({ signal }) => requestNotesByIds<LtmNote>(contextNoteIds, signal, true),
@@ -1270,14 +1288,21 @@ export default function ReviewQueue({
       ...new Set([
         ...(review.data?.sources ?? []).map((source) => source.sourceNoteId),
         ...(rejectedSuggestions.data?.suggestions ?? []).map((suggestion) => suggestion.source.sourceNoteId),
+        ...(savedIdentityChoices.data?.suggestions ?? []).map((suggestion) => suggestion.source.sourceNoteId),
         ...(selectedSourceId ? [selectedSourceId] : []),
       ]),
     ],
-    [rejectedSuggestions.data?.suggestions, review.data?.sources, selectedSourceId],
+    [
+      rejectedSuggestions.data?.suggestions,
+      savedIdentityChoices.data?.suggestions,
+      review.data?.sources,
+      selectedSourceId,
+    ],
   );
   const selectedSourceIsLive =
     review.data?.sources.some((source) => source.sourceNoteId === selectedSourceId) ||
     rejectedSuggestions.data?.suggestions.some((suggestion) => suggestion.source.sourceNoteId === selectedSourceId) ||
+    savedIdentityChoices.data?.suggestions.some((suggestion) => suggestion.source.sourceNoteId === selectedSourceId) ||
     false;
   useEffect(() => {
     if (!review.isSuccess || !rejectedSuggestions.isSuccess || !selectedSourceId || selectedSourceIsLive) {
@@ -1297,6 +1322,10 @@ export default function ReviewQueue({
     selectedReviewSource?.drafts.find((item) => item.draft.id === selectedDraftId) ?? selectedReviewSource?.drafts[0];
   const sourceRejectedSuggestions =
     rejectedSuggestions.data?.suggestions.filter((item) => item.source.sourceNoteId === effectiveSourceId) ?? [];
+  const sourceSavedIdentityChoices =
+    savedIdentityChoices.data?.suggestions.filter(
+      (item) => item.identityResolution && item.source.sourceNoteId === effectiveSourceId,
+    ) ?? [];
   const needsSourceReextraction = Boolean(
     selectedReviewSource?.drafts.some(
       (item) =>
@@ -1317,6 +1346,8 @@ export default function ReviewQueue({
   const [preflightByDraftId, setPreflightByDraftId] = useState<Map<string, LtmDraftPreflightResponse>>(new Map());
   const [preflightKey, setPreflightKey] = useState<string | null>(null);
   const [deleteSuggestionError, setDeleteSuggestionError] = useState("");
+  const [identityDirtyIds, setIdentityDirtyIds] = useState<Set<string>>(new Set());
+  const identitySaveRequestsRef = useRef(new Map<string, () => Promise<boolean>>());
   const [rejectedSuggestionsMessage, setRejectedSuggestionsMessage] = useState("");
   const [clearingSourceId, setClearingSourceId] = useState<string | null>(null);
   const [extractingSourceId, setExtractingSourceId] = useState<string | null>(null);
@@ -1339,6 +1370,29 @@ export default function ReviewQueue({
   const persistReviewStateSnapshotRef = useRef<(key: string, chatId: string | null | undefined) => boolean>(() => true);
   const flushReviewStateRef = useRef<() => boolean>(() => true);
   const reviewStateKey = reviewStateStorageKey(props.chatId);
+  const onIdentityDirtyChange = useCallback((suggestionId: string, dirty: boolean) => {
+    setIdentityDirtyIds((current) => {
+      const next = new Set(current);
+      if (dirty) next.add(suggestionId);
+      else next.delete(suggestionId);
+      return next;
+    });
+  }, []);
+  const onIdentityRegisterSave = useCallback((suggestionId: string, save: (() => Promise<boolean>) | null) => {
+    if (save) identitySaveRequestsRef.current.set(suggestionId, save);
+    else identitySaveRequestsRef.current.delete(suggestionId);
+  }, []);
+  const onIdentityResolved = useCallback(
+    (skipped: boolean) =>
+      setRejectedSuggestionsMessage(
+        localizeUi(
+          skipped
+            ? "ui.longTermMemory.reviewqueue.identitySuggestionSkipped"
+            : "ui.longTermMemory.reviewqueue.identitySuggestionResolved",
+        ),
+      ),
+    [localizeUi],
+  );
   const reviewDataSignature = useMemo(
     () =>
       review.data
@@ -1436,13 +1490,18 @@ export default function ReviewQueue({
     return () => window.removeEventListener("pagehide", handlePageHide);
   }, []);
   useEffect(() => {
-    if (reviewStatePersisted || (!editedById.size && !linkChoicesById.size)) {
+    if (!identityDirtyIds.size && (reviewStatePersisted || (!editedById.size && !linkChoicesById.size))) {
       onSaveRequest?.(null);
       return;
     }
-    onSaveRequest?.(async () => flushReviewStateRef.current());
+    onSaveRequest?.(async () => {
+      for (const save of identitySaveRequestsRef.current.values()) {
+        if (!(await save())) return false;
+      }
+      return flushReviewStateRef.current();
+    });
     return () => onSaveRequest?.(null);
-  }, [editedById.size, linkChoicesById.size, onSaveRequest, reviewStatePersisted]);
+  }, [editedById.size, identityDirtyIds.size, linkChoicesById.size, onSaveRequest, reviewStatePersisted]);
   useEffect(
     () => () => {
       mountedRef.current = false;
@@ -1655,9 +1714,18 @@ export default function ReviewQueue({
   useEffect(
     () =>
       onDirtyChange?.(
-        reviewStateMismatch || (!reviewStatePersisted && (editedById.size > 0 || linkChoicesById.size > 0)),
+        reviewStateMismatch ||
+          identityDirtyIds.size > 0 ||
+          (!reviewStatePersisted && (editedById.size > 0 || linkChoicesById.size > 0)),
       ),
-    [editedById.size, linkChoicesById.size, onDirtyChange, reviewStateMismatch, reviewStatePersisted],
+    [
+      editedById.size,
+      identityDirtyIds.size,
+      linkChoicesById.size,
+      onDirtyChange,
+      reviewStateMismatch,
+      reviewStatePersisted,
+    ],
   );
   useEffect(() => () => onDirtyChange?.(false), [onDirtyChange]);
 
@@ -2262,7 +2330,13 @@ export default function ReviewQueue({
     setDeleteSuggestionError("");
     try {
       await request(`/rejected-suggestions/${encodeURIComponent(suggestion.id)}`, "DELETE");
-      await invalidateLtmQueries(queryClient, [queryKeys.rejectedSuggestions]);
+      // A saved identity choice also drops its pending recovery draft on delete.
+      await invalidateLtmQueries(queryClient, [
+        queryKeys.rejectedSuggestions,
+        ...(suggestion.identityResolution
+          ? [queryKeys.savedIdentityChoices, queryKeys.review, queryKeys.pendingDrafts]
+          : []),
+      ]);
     } catch (error) {
       setDeleteSuggestionError(
         error instanceof Error ? error.message : localizeUi("ui.longTermMemory.reviewqueue.requestFailed"),
@@ -2822,7 +2896,8 @@ export default function ReviewQueue({
     !rejectedSuggestions.isLoading &&
     !rejectedSuggestions.isError &&
     !review.data?.sources.length &&
-    !rejectedSuggestions.data?.suggestions.length;
+    !rejectedSuggestions.data?.suggestions.length &&
+    !savedIdentityChoices.data?.suggestions.some((suggestion) => suggestion.identityResolution);
   const workspaceUnavailable = reviewQueueEmpty || reviewContextBusy || reviewContextFailed;
   const reviewDataUnavailable =
     review.isLoading || review.isError || rejectedSuggestions.isLoading || rejectedSuggestions.isError;
@@ -3015,6 +3090,7 @@ export default function ReviewQueue({
                         <button
                           type="button"
                           data-ltm-review-source-select={id}
+                          disabled={identityDirtyIds.size > 0}
                           aria-current={active || undefined}
                           aria-expanded={expanded}
                           aria-controls={panelId}
@@ -3039,6 +3115,7 @@ export default function ReviewQueue({
                         {rejectedCount ? (
                           <Button
                             data-ltm-review-rejected-count={rejectedCount}
+                            disabled={identityDirtyIds.size > 0}
                             className="!min-h-11 !min-w-11 shrink-0 rounded-full border border-[var(--marinara-editor-warning)]/40 px-2 py-0.5 text-[0.625rem] font-semibold text-[var(--marinara-editor-warning)] underline underline-offset-2"
                             style={{ minHeight: 44, minWidth: 44 }}
                             onClick={() => {
@@ -3155,7 +3232,10 @@ export default function ReviewQueue({
                     </Button>
                   ) : null}
                   {effectiveSourceId && selectedSourceIsExtractable && needsSourceReextraction ? (
-                    <Button disabled={extractingSourceId !== null} onClick={() => void reextractSource()}>
+                    <Button
+                      disabled={extractingSourceId !== null || identityDirtyIds.size > 0}
+                      onClick={() => void reextractSource()}
+                    >
                       {extractingSourceId === effectiveSourceId ? (
                         <Loader2
                           aria-hidden="true"
@@ -3211,7 +3291,7 @@ export default function ReviewQueue({
                             destructive
                             data-ltm-clear-rejected-suggestions
                             className="min-h-[2.75rem]"
-                            disabled={dismissingId !== null || clearingSourceId !== null}
+                            disabled={dismissingId !== null || clearingSourceId !== null || identityDirtyIds.size > 0}
                             onClick={() => void clearRejectedSuggestions()}
                           >
                             {clearingSourceId === sourceNoteId ? (
@@ -3284,6 +3364,15 @@ export default function ReviewQueue({
                                 </details>
                               ) : null}
                             </div>
+                            {item.candidate.identityReview?.length ? (
+                              <SubjectIdentityReview
+                                suggestionId={item.id}
+                                review={item.candidate.identityReview}
+                                onDirtyChange={onIdentityDirtyChange}
+                                onRegisterSave={onIdentityRegisterSave}
+                                onResolved={onIdentityResolved}
+                              />
+                            ) : null}
                             <div className="flex flex-wrap gap-2">
                               {onRecoverCandidate ? (
                                 <Button
@@ -3311,6 +3400,61 @@ export default function ReviewQueue({
                       </article>
                     );
                   })}
+                </details>
+              ) : null}
+              {sourceSavedIdentityChoices.length ? (
+                <details
+                  data-ltm-saved-identity-choices
+                  aria-label={localizeUi("ui.longTermMemory.reviewqueue.savedIdentityChoices")}
+                  className="group rounded-lg border border-[var(--border)] bg-[var(--secondary)]/20"
+                >
+                  <summary className="flex min-h-14 cursor-pointer list-none items-start gap-2 rounded-lg p-3 hover:bg-[var(--accent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--ring)]">
+                    <ChevronRight
+                      aria-hidden="true"
+                      size="0.875rem"
+                      className="mt-1 shrink-0 transition-transform group-open:rotate-90"
+                    />
+                    <span>
+                      <span className="block text-sm font-semibold">
+                        {localizeUi("ui.longTermMemory.reviewqueue.savedIdentityChoices")}
+                      </span>
+                      <span className="block text-xs text-[var(--muted-foreground)]">
+                        {localizeUi("ui.longTermMemory.reviewqueue.savedIdentityChoicesDescription")}
+                      </span>
+                    </span>
+                  </summary>
+                  <div className="space-y-3 border-t border-[var(--border)] p-3">
+                    {sourceSavedIdentityChoices.map((item) => (
+                      <article
+                        key={item.id}
+                        data-ltm-saved-identity-choice={item.id}
+                        className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-[var(--border)] p-3"
+                      >
+                        <p className="text-sm font-medium">
+                          {(item.identityResolution?.choices ?? [])
+                            .map((choice) => `${choice.name}: ${savedIdentityChoiceLabel(choice, localizeUi)}`)
+                            .join(" · ")}
+                        </p>
+                        <Button
+                          destructive
+                          disabled={dismissingId !== null || clearingSourceId !== null}
+                          aria-label={localizeUi("ui.longTermMemory.reviewqueue.deleteSuggestionNamed", {
+                            value1: item.candidate.message,
+                          })}
+                          onClick={() => void deleteRejectedSuggestion(item)}
+                        >
+                          {dismissingId === item.id ? (
+                            <Loader2
+                              aria-hidden="true"
+                              size="0.875rem"
+                              className="animate-spin motion-reduce:animate-none"
+                            />
+                          ) : null}
+                          {localizeUi("ui.longTermMemory.reviewqueue.delete")}
+                        </Button>
+                      </article>
+                    ))}
+                  </div>
                 </details>
               ) : null}
               <div className="flex flex-wrap items-center justify-between gap-2">

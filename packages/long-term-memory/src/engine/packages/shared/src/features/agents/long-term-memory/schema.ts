@@ -2146,6 +2146,33 @@ export const ltmExtractionRecoveryHintSchema = z
   })
   .strict();
 
+const ltmIdentityNameSchema = z.string().trim().min(1).max(240);
+export const ltmSubjectIdentityReviewSchema = z
+  .object({
+    name: ltmIdentityNameSchema,
+    candidates: z.array(z.object({ name: ltmIdentityNameSchema, subject: ltmSubjectSchema }).strict()).max(10),
+    allowDifferent: z.boolean(),
+    matchedSubjectKey: ltmSubjectSchema.shape.key.optional(),
+  })
+  .strict();
+
+export const ltmSubjectIdentityDecisionSchema = z.discriminatedUnion("action", [
+  z.object({ name: ltmIdentityNameSchema, action: z.literal("bind"), subjectKey: ltmSubjectSchema.shape.key }).strict(),
+  z.object({ name: ltmIdentityNameSchema, action: z.literal("different") }).strict(),
+  z.object({ name: ltmIdentityNameSchema, action: z.literal("skip") }).strict(),
+]);
+export const ltmResolveSubjectIdentityRequestSchema = z
+  .object({
+    choices: z.array(ltmSubjectIdentityDecisionSchema).min(1).max(2),
+  })
+  .strict();
+
+export const ltmSavedSubjectIdentityChoiceSchema = z.discriminatedUnion("action", [
+  z.object({ name: ltmIdentityNameSchema, action: z.literal("bind"), subject: ltmSubjectSchema }).strict(),
+  z.object({ name: ltmIdentityNameSchema, action: z.literal("different"), subject: ltmSubjectSchema }).strict(),
+  z.object({ name: ltmIdentityNameSchema, action: z.literal("skip") }).strict(),
+]);
+
 export const ltmExtractionDroppedCandidateSchema = z
   .object({
     index: z.number().int().min(0).max(LTM_EXTRACTION_MAX_CANDIDATES),
@@ -2155,6 +2182,7 @@ export const ltmExtractionDroppedCandidateSchema = z
     snippet: z.string().min(1).max(280).optional(),
     issues: z.array(z.string().trim().min(1).max(240)).max(8).optional(),
     recovery: ltmExtractionRecoveryHintSchema.optional(),
+    identityReview: z.array(ltmSubjectIdentityReviewSchema).min(1).max(2).optional(),
     recoveryCandidate: ltmEvidenceUnitSchema
       .extend({
         subjectId: z.preprocess(
@@ -2187,6 +2215,14 @@ export const ltmRejectedSuggestionSchema = z
     candidate: ltmExtractionDroppedCandidateSchema,
     createdAt: ltmIsoTimestampSchema,
     lastSeenAt: ltmIsoTimestampSchema,
+    identityResolution: z
+      .object({
+        choices: z.array(ltmSavedSubjectIdentityChoiceSchema).min(1).max(2),
+        resolvedAt: ltmIsoTimestampSchema,
+        draftId: z.string().uuid().optional(),
+      })
+      .strict()
+      .optional(),
   })
   .strict();
 
@@ -2234,12 +2270,17 @@ export const ltmExtractionAccountingSchema = z
     validationRejections: z.number().int().min(0),
     deduplications: z.number().int().min(0),
     keptUnits: z.number().int().min(0),
+    userSkips: z.number().int().min(0).optional(),
   })
   .strict()
   .superRefine((accounting, ctx) => {
     const candidates = accounting.providerCandidates + accounting.normalizedAdditions;
     const dispositions =
-      accounting.parserRejections + accounting.validationRejections + accounting.deduplications + accounting.keptUnits;
+      accounting.parserRejections +
+      accounting.validationRejections +
+      accounting.deduplications +
+      accounting.keptUnits +
+      (accounting.userSkips ?? 0);
     if (candidates !== dispositions) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
@@ -2277,6 +2318,14 @@ export const ltmExtractionDraftSchema = z
     invalidationReason: z.string().min(1).max(2_000).optional(),
   })
   .strip();
+
+export const ltmResolveSubjectIdentityResponseSchema = z
+  .object({
+    resolved: z.literal(true),
+    suggestionId: z.string().uuid(),
+    draft: ltmExtractionDraftSchema.nullable(),
+  })
+  .strict();
 
 export const ltmDraftFreshnessSchema = z.enum([
   "fresh",
@@ -2945,13 +2994,45 @@ export const ltmInjectionUiSummarySchema = z.object({
   memories: z.array(ltmLastInjectionMemorySchema).default([]),
 });
 
+export const ltmRecallAttemptOutcomeSchema = z.enum(["completed", "skipped", "cancelled", "failed"]);
+
+// Package-owned trace of one recall call. Only outcomes the package directly
+// observed are recorded; a missing attempt means the host never invoked recall.
+export const ltmRecallAttemptSchema = z
+  .object({
+    version: z.literal(1),
+    chatId: z.string().max(200),
+    attemptId: z.string().uuid(),
+    at: ltmIsoTimestampSchema,
+    outcome: ltmRecallAttemptOutcomeSchema,
+    reason: z.string().max(120).optional(),
+    debugEnabled: z.boolean().default(false),
+    receiptId: z.string().uuid().optional(),
+  })
+  .strict();
+
+export const ltmLastInjectionAttemptSchema = ltmRecallAttemptSchema.extend({
+  confirmed: z.boolean().default(false),
+});
+
 export const ltmLastInjectionResponseSchema = z.object({
   memoryCount: z.number(),
   tokenCount: z.number(),
   memories: z.array(ltmLastInjectionMemorySchema),
   state: z.enum(["injected", "no_matches", "not_recorded"]).default("not_recorded"),
   dispatchedAt: ltmIsoTimestampSchema.nullable().default(null),
+  attempt: ltmLastInjectionAttemptSchema.nullable().default(null),
 });
+
+/**
+ * Why the semantic lane did or did not contribute to one recall. It separates a
+ * lane that is switched off from a provider that is unavailable, an index built
+ * for a different embedding space, and a valid index that simply matched nothing.
+ */
+export type LtmSemanticOutcome = "disabled" | "unavailable" | "incompatible" | "no_matches" | "contributed";
+
+/** How one recall obtained its index, as observed by the loader that produced it. */
+export type LtmIndexLoadOutcome = "loaded" | "upgraded" | "rebuilt" | "preloaded";
 
 export const ltmPendingDraftsCountResponseSchema = z.object({
   count: z.number(),
@@ -3056,6 +3137,10 @@ export type LtmExtractionDropReason = z.infer<typeof ltmExtractionDropReasonSche
 export type LtmExtractionRecoveryHint = z.infer<typeof ltmExtractionRecoveryHintSchema>;
 export type LtmExtractionDroppedCandidate = z.infer<typeof ltmExtractionDroppedCandidateSchema>;
 export type LtmRejectedSuggestion = z.infer<typeof ltmRejectedSuggestionSchema>;
+export type LtmSubjectIdentityReview = z.infer<typeof ltmSubjectIdentityReviewSchema>;
+export type LtmSubjectIdentityDecision = z.infer<typeof ltmSubjectIdentityDecisionSchema>;
+export type LtmSavedSubjectIdentityChoice = z.infer<typeof ltmSavedSubjectIdentityChoiceSchema>;
+export type LtmResolveSubjectIdentityResponse = z.infer<typeof ltmResolveSubjectIdentityResponseSchema>;
 export type LtmExtractionOutcomeState = z.infer<typeof ltmExtractionOutcomeStateSchema>;
 export type LtmExtractionOutcome = z.infer<typeof ltmExtractionOutcomeSchema>;
 export type LtmExtractionResponse = z.infer<typeof ltmExtractionResponseSchema>;
@@ -3098,6 +3183,9 @@ export type LtmImportSourceNotesResponse = z.infer<typeof ltmImportSourceNotesRe
 export type LtmEvidenceUnit = z.infer<typeof ltmEvidenceUnitSchema>;
 export type LtmEvidenceUnitExtractionResponse = z.infer<typeof ltmEvidenceUnitExtractionResponseSchema>;
 export type LtmLastInjectionMemory = z.infer<typeof ltmLastInjectionMemorySchema>;
+export type LtmRecallAttemptOutcome = z.infer<typeof ltmRecallAttemptOutcomeSchema>;
+export type LtmRecallAttempt = z.infer<typeof ltmRecallAttemptSchema>;
+export type LtmLastInjectionAttempt = z.infer<typeof ltmLastInjectionAttemptSchema>;
 export type LtmLastInjectionResponse = z.infer<typeof ltmLastInjectionResponseSchema>;
 export type LtmPendingDraftsCountResponse = z.infer<typeof ltmPendingDraftsCountResponseSchema>;
 

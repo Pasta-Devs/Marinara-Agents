@@ -106,6 +106,9 @@ async function main() {
   let browserServer: ReturnType<typeof createServer> | null = null;
   let releaseReextraction: (() => void) | null = null;
   const reextractionRequests: Array<{ path: string; body: Record<string, unknown> }> = [];
+  const identityResolutionRequests: Array<{ id: string; choices: unknown }> = [];
+  const resolvedIdentitySuggestionIds = new Set<string>();
+  let identityResolutionFailures = 1;
   let markReextractionStarted: () => void = () => undefined;
   const reextractionStarted = new Promise<void>((resolve) => {
     markReextractionStarted = resolve;
@@ -163,6 +166,8 @@ async function main() {
       const rejectedSuggestionId = "2a1b5c7d-9e0f-4a1b-8c2d-3e4f5a6b7c8d";
       const otherRejectedSuggestionId = "3b2c6d8e-0f1a-4b2c-9d3e-4f5a6b7c8d9e";
       const thirdRejectedSuggestionId = "4c3d7e9f-1a2b-4c3d-8e4f-5a6b7c8d9e0f";
+      const identityRejectedSuggestionId = "5d4e8f0a-2b3c-4d5e-9f60-7a8b9c0d1e2f";
+      const skipIdentitySuggestionId = "6e5f901b-3c4d-5e6f-a071-8b9c0d1e2f3a";
       let savedNote: Record<string, unknown> | null = null;
       const noteTimestamp = "2026-07-30T00:00:00.000Z";
       let legacyGlobalNote = {
@@ -549,6 +554,7 @@ async function main() {
       let lastReviewDiscardMessage = "";
       let confirmDelete = false;
       let lastDeleteConfirmation: { title: string; message: string; confirmLabel?: string } | null = null;
+      let notifyDeleteConfirmation: (() => void) | undefined;
       const permanentDeleteCalls: string[][] = [];
       let holdDeleteTargetLookup = false;
       let releaseDeleteTargetLookup: (() => void) | null = null;
@@ -1223,12 +1229,94 @@ async function main() {
                   createdAt: "2026-07-30T00:00:00.000Z",
                   lastSeenAt: "2026-07-30T00:00:00.000Z",
                 },
+                {
+                  id: identityRejectedSuggestionId,
+                  fingerprint: "d".repeat(64),
+                  source: { sourceNoteId: "source_mobile_recovery" },
+                  scope: { characterIds: ["character-a"] },
+                  modes: ["roleplay"],
+                  candidate: {
+                    index: 3,
+                    reason: "ambiguous_subject",
+                    message: "An extracted relationship with two participants.",
+                    snippet: "Ari trusts Mira.",
+                    identityReview: [
+                      {
+                        name: "Ari",
+                        candidates: [
+                          {
+                            name: "Ari",
+                            subject: { key: "character:character-a", ref: { kind: "character", id: "character-a" } },
+                          },
+                          {
+                            name: "Ari",
+                            subject: { key: "persona:persona-a", ref: { kind: "persona", id: "persona-a" } },
+                          },
+                        ],
+                        allowDifferent: false,
+                      },
+                      {
+                        name: "Mira",
+                        candidates: [
+                          {
+                            name: "Mira",
+                            subject: { key: "character:character-b", ref: { kind: "character", id: "character-b" } },
+                          },
+                        ],
+                        allowDifferent: true,
+                      },
+                    ],
+                  },
+                  createdAt: "2026-07-30T00:00:00.000Z",
+                  lastSeenAt: "2026-07-30T00:00:00.000Z",
+                },
+                {
+                  id: skipIdentitySuggestionId,
+                  fingerprint: "e".repeat(64),
+                  source: { sourceNoteId: "source_mobile_recovery" },
+                  scope: { characterIds: ["character-a"] },
+                  modes: ["roleplay"],
+                  candidate: {
+                    index: 4,
+                    reason: "ambiguous_subject",
+                    message: "An extracted fact for one participant.",
+                    snippet: "Nox lives nearby.",
+                    identityReview: [
+                      {
+                        name: "Nox",
+                        candidates: [
+                          {
+                            name: "Nox",
+                            subject: { key: "character:character-a", ref: { kind: "character", id: "character-a" } },
+                          },
+                        ],
+                        allowDifferent: true,
+                      },
+                    ],
+                  },
+                  createdAt: "2026-07-30T00:00:00.000Z",
+                  lastSeenAt: "2026-07-30T00:00:00.000Z",
+                },
               ].filter(
                 (suggestion) =>
                   !clearedRejectedSourceIds.has(suggestion.source.sourceNoteId) &&
-                  suggestion.id !== deletedSuggestionId,
+                  suggestion.id !== deletedSuggestionId &&
+                  !resolvedIdentitySuggestionIds.has(suggestion.id),
               );
           return send(200, { suggestions, total: suggestions.length });
+        }
+        if (request.method === "POST" && url.pathname.endsWith("/resolve-identity")) {
+          const chunks: Buffer[] = [];
+          for await (const chunk of request) chunks.push(Buffer.from(chunk));
+          const id = decodeURIComponent(url.pathname.split("/").at(-2)!);
+          const body = JSON.parse(Buffer.concat(chunks).toString("utf8") || "{}") as { choices?: unknown };
+          identityResolutionRequests.push({ id, choices: body.choices });
+          if (identityResolutionFailures > 0) {
+            identityResolutionFailures -= 1;
+            return send(500, { error: "Identity choice fixture failed" });
+          }
+          resolvedIdentitySuggestionIds.add(id);
+          return send(200, { resolved: true, suggestionId: id, draft: null });
         }
         if (request.method === "POST" && url.pathname.endsWith("/notes")) {
           const chunks: Buffer[] = [];
@@ -1542,6 +1630,7 @@ async function main() {
         "captureDeleteConfirmation",
         (options: { title: string; message: string; confirmLabel?: string }) => {
           lastDeleteConfirmation = options;
+          notifyDeleteConfirmation?.();
           return confirmDelete;
         },
       );
@@ -2301,6 +2390,119 @@ async function main() {
       );
       assert.deepEqual(desktopExtractionLayout.selectHeights, [44, 44]);
       assert.equal(desktopExtractionLayout.infoSize, 14);
+      const debugEvent = (operationId: string, action: string, status: string, fields = {}) => ({
+        id: `${operationId}-${action}-${status}`,
+        operationId,
+        ts: noteTimestamp,
+        phase: "llm",
+        action,
+        status,
+        sourceNoteId: legacyGlobalNote.id,
+        ...fields,
+      });
+      const debugEvents = [
+        debugEvent("estimated", "extract_source_note", "started"),
+        debugEvent("estimated", "evidence_unit_request", "started", {
+          model: "fixture-model",
+          counts: { estimatedPromptTokens: 123 },
+        }),
+        debugEvent("estimated", "evidence_unit_response", "ok", {
+          durationMs: 450,
+          details: { finishReason: "stop", responseSnippet: "private response snippet" },
+        }),
+        debugEvent("estimated", "extract_source_note", "ok", { durationMs: 500 }),
+        debugEvent("reported", "evidence_unit_request", "started", { counts: { estimatedPromptTokens: 123 } }),
+        debugEvent("reported", "evidence_unit_response", "ok", {
+          counts: { promptTokens: 40, completionTokens: 12, completionReasoningTokens: 8, totalTokens: 60 },
+        }),
+        debugEvent("zero", "evidence_unit_request", "started", { counts: { inputTokens: 123 } }),
+        debugEvent("zero", "evidence_unit_response", "ok", { counts: { promptTokens: 0 } }),
+        debugEvent("truncated", "extract_source_note", "started"),
+        debugEvent("truncated", "evidence_unit_response", "warning", {
+          details: { finishReason: "length", responseSnippet: "private response snippet" },
+        }),
+        debugEvent("truncated", "extract_source_note", "ok"),
+        debugEvent("context", "evidence_unit_request", "started"),
+        debugEvent("context", "evidence_unit_context_preflight", "error", {
+          details: { reason: "prompt_trim_required" },
+        }),
+        debugEvent("budget", "evidence_unit_request", "started"),
+        debugEvent("budget", "evidence_unit_context_preflight", "error", {
+          details: { reason: "output_budget_below_viability_floor" },
+        }),
+        debugEvent("partial", "import_sources", "started"),
+        debugEvent("partial", "extract_source_note", "error", { error: { message: "One source failed." } }),
+        debugEvent("partial", "import_sources", "ok"),
+        debugEvent("noduration", "recall_explanation", "ok"),
+      ];
+      const assertDebugActivity = async (activityPage: typeof page) => {
+        await activityPage.locator("#settings-tab-debug").click();
+        const activity = activityPage.locator('[data-ltm-surface="activity"]');
+        const operation = (id: string) =>
+          activity
+            .locator(":scope > ol > li > details > summary")
+            .nth(
+              ["estimated", "reported", "zero", "truncated", "context", "budget", "partial", "noduration"].indexOf(id),
+            );
+        await operation("estimated").waitFor();
+        const estimated = await operation("estimated").innerText();
+        assert.match(estimated, /AI extraction/u);
+        assert.match(estimated, /fixture-model/u);
+        assert.match(estimated, /500 ms/u);
+        assert.match(estimated, /Estimated input: 123 tokens/u);
+        assert.doesNotMatch(estimated, /Input \(provider-reported\)|Output:|Total:/u);
+        const reported = await operation("reported").innerText();
+        assert.match(reported, /Completed/u, "a standalone request/response pair must not stay Running");
+        assert.match(reported, /Input \(provider-reported\): 40 tokens/u);
+        assert.match(reported, /Reasoning: 8 tokens/u);
+        assert.match(reported, /Output: 12 tokens/u);
+        assert.match(reported, /Total: 60 tokens/u);
+        assert.match(await operation("zero").innerText(), /Estimated input: 123 tokens/u);
+        assert.match(await operation("zero").innerText(), /Input \(provider-reported\): 0 tokens/u);
+        assert.match(await operation("truncated").innerText(), /Completed with warnings/u);
+        assert.match(await operation("truncated").innerText(), /output limit.*length/iu);
+        assert.match(await operation("context").innerText(), /Failed/u);
+        assert.match(await operation("context").innerText(), /too large.*context/iu);
+        assert.match(await operation("budget").innerText(), /Failed/u);
+        assert.match(await operation("budget").innerText(), /too small.*response/iu);
+        assert.match(await operation("partial").innerText(), /Completed with warnings/u);
+        assert.match(await operation("partial").innerText(), /One source failed\./u);
+        assert.doesNotMatch(
+          await operation("noduration").innerText(),
+          / ms/u,
+          "an operation without a recorded duration must not display a fabricated one",
+        );
+        assert.doesNotMatch(await activity.innerText(), /private response snippet/u);
+        assert.equal(
+          await activityPage.evaluate(
+            () => document.documentElement.scrollWidth <= document.documentElement.clientWidth,
+          ),
+          true,
+        );
+      };
+      const openDebugActivity = async (context: typeof browserContext, navigation: "desktop" | "mobile") => {
+        const debugPage = await context.newPage();
+        await debugPage.route("**/api/long-term-memory/debug-log?*", (route) =>
+          route.fulfill({ json: { events: debugEvents } }),
+        );
+        await debugPage.goto(`http://127.0.0.1:${address.port}/`);
+        await debugPage.evaluate(() => customElements.whenDefined("marinara-capability-long-term-memory"));
+        await debugPage.evaluate(() => {
+          const element = document.createElement("marinara-capability-long-term-memory");
+          element.setAttribute("view", "detail");
+          document.body.append(element);
+        });
+        await debugPage.locator(`[data-ltm-navigation="${navigation}"] [data-ltm-destination="settings"]`).click();
+        await assertDebugActivity(debugPage);
+        return debugPage;
+      };
+      const desktopDebugPage = await openDebugActivity(browserContext, "desktop");
+      const estimatedOperation = desktopDebugPage.locator('[data-ltm-surface="activity"] > ol > li > details').first();
+      await estimatedOperation.locator(":scope > summary").click();
+      const responseEvent = estimatedOperation.locator(":scope > ol > li").filter({ hasText: "450 ms" });
+      await responseEvent.getByText("Technical details", { exact: true }).click();
+      assert.match(await responseEvent.locator("pre").innerText(), /private response snippet/u);
+      await desktopDebugPage.close();
       await page.locator('[data-ltm-navigation="desktop"] [data-ltm-destination="vault"]').click();
       await page.evaluate((version) => {
         const element = document.createElement("marinara-capability-long-term-memory") as HTMLElement & {
@@ -2383,7 +2585,8 @@ async function main() {
       assert.ok(reviewQueries.length > 0);
       assert.ok(reviewQueries.every((query) => query === "?includeInvalidated=true"));
       assert.ok(rejectedSuggestionQueries.length > 0);
-      assert.ok(rejectedSuggestionQueries.every((query) => query === ""));
+      assert.ok(rejectedSuggestionQueries.every((query) => query === "" || query === "?includeResolved=true"));
+      assert.ok(rejectedSuggestionQueries.some((query) => query === "?includeResolved=true"));
       assert.ok(reviewContextQueries.length > 0);
       assert.ok(reviewContextQueries.every((query) => query.startsWith("?ids=")));
       assert.ok(reviewContextQueries.some((query) => query.includes("world_merge_target_mobile")));
@@ -2993,7 +3196,129 @@ async function main() {
               Node.DOCUMENT_POSITION_FOLLOWING,
           ),
       );
-      await page.locator("[data-ltm-rejected-suggestions] > summary").click();
+      const recoveryReviewSource = page.locator('[data-ltm-review-source-select="source_mobile_recovery"]');
+      if ((await recoveryReviewSource.getAttribute("aria-expanded")) !== "true") await recoveryReviewSource.click();
+      const rejectedSuggestions = page.locator("[data-ltm-rejected-suggestions]");
+      await rejectedSuggestions.waitFor({ state: "attached" });
+      if (!(await rejectedSuggestions.evaluate((element) => (element as HTMLDetailsElement).open)))
+        await rejectedSuggestions.locator(":scope > summary").click();
+      const recoveryRejectedArticle = page.locator('article[data-ltm-rejected-source="source_mobile_recovery"]');
+      await recoveryRejectedArticle.waitFor();
+      const identityReview = page.locator(`[data-ltm-identity-review="${identityRejectedSuggestionId}"]`);
+      await identityReview.waitFor();
+      if (visualOutputDir) {
+        await identityReview.scrollIntoViewIfNeeded();
+        await page.screenshot({ path: join(visualOutputDir, "long-term-memory-identity-desktop.png"), fullPage: true });
+        await page.setViewportSize({ width: 390, height: 844 });
+        await showWorkspacePane("workbench");
+        await identityReview.scrollIntoViewIfNeeded();
+        await page.screenshot({ path: join(visualOutputDir, "long-term-memory-identity-mobile.png"), fullPage: true });
+        await page.setViewportSize({ width: 1280, height: 900 });
+      }
+      const identitySelects = identityReview.getByRole("combobox");
+      assert.equal(await identitySelects.nth(0).inputValue(), "", "identity candidates must not be preselected");
+      assert.equal(await identitySelects.nth(1).inputValue(), "", "each participant starts without a binding");
+      assert.equal(
+        await identityReview.getByRole("button", { name: "Save choices and review memory" }).isDisabled(),
+        true,
+      );
+      const identityArticle = identityReview.locator("xpath=ancestor::article[@data-ltm-rejected-suggestion]");
+      assert.equal(
+        await identityArticle.getByRole("button", { name: /^Delete suggestion:/ }).count(),
+        1,
+        "identity rows must keep a per-suggestion delete action",
+      );
+      assert.equal(
+        await identityArticle.getByRole("button", { name: /^Recover suggestion:/ }).count(),
+        1,
+        "identity rows must keep the manual recovery action",
+      );
+      assert.deepEqual(
+        await identitySelects
+          .nth(0)
+          .locator("option")
+          .evaluateAll((options) => options.map((option) => (option as HTMLOptionElement).textContent)),
+        [
+          "Choose identity",
+          "Ari (character: character-a) · character:character-a",
+          "Ari (persona: persona-a) · persona:persona-a",
+          "Skip this participant",
+        ],
+      );
+      assert.ok(
+        await identitySelects.evaluateAll((selects) =>
+          selects.every((select) => select.getBoundingClientRect().height >= 44),
+        ),
+        "desktop identity controls retain 44px touch targets",
+      );
+      await identitySelects.nth(0).focus();
+      await identitySelects.nth(0).press("ArrowDown");
+      await identitySelects.nth(0).press("Enter");
+      assert.equal(await identitySelects.nth(0).inputValue(), "character:character-a");
+      await identitySelects.nth(1).selectOption("different");
+      assert.equal(
+        await page.locator('[data-ltm-review-source-select="source_mobile_single"]').isDisabled(),
+        true,
+        "changing source cannot silently discard unsaved identity decisions",
+      );
+      await identityReview.getByRole("button", { name: "Discard identity choices" }).click();
+      assert.equal(await identitySelects.nth(0).inputValue(), "");
+      assert.equal(await identitySelects.nth(1).inputValue(), "");
+      assert.equal(await page.locator('[data-ltm-review-source-select="source_mobile_single"]').isEnabled(), true);
+      await identitySelects.nth(0).selectOption("character:character-a");
+      await identitySelects.nth(1).selectOption("different");
+      const saveIdentityChoices = identityReview.getByRole("button", { name: "Save choices and review memory" });
+      const failedIdentitySave = page.waitForResponse(
+        (response) => response.request().method() === "POST" && response.url().endsWith("/resolve-identity"),
+      );
+      await saveIdentityChoices.click();
+      assert.equal((await failedIdentitySave).status(), 500);
+      await identityReview.getByRole("alert").getByText("Identity choice fixture failed").waitFor();
+      assert.equal(await identitySelects.nth(0).inputValue(), "character:character-a");
+      assert.equal(await identitySelects.nth(1).inputValue(), "different");
+      const retriedIdentitySave = page.waitForResponse(
+        (response) => response.request().method() === "POST" && response.url().endsWith("/resolve-identity"),
+      );
+      await saveIdentityChoices.click();
+      assert.equal((await retriedIdentitySave).status(), 200);
+      assert.deepEqual(identityResolutionRequests.at(-1), {
+        id: identityRejectedSuggestionId,
+        choices: [
+          { name: "Ari", action: "bind", subjectKey: "character:character-a" },
+          { name: "Mira", action: "different" },
+        ],
+      });
+      await page.getByText("Identity choices saved. Review the pending memory draft before applying it.").waitFor();
+      await page.locator(`[data-ltm-identity-review="${identityRejectedSuggestionId}"]`).waitFor({ state: "detached" });
+
+      const skipIdentityReview = page.locator(`[data-ltm-identity-review="${skipIdentitySuggestionId}"]`);
+      await skipIdentityReview.waitFor();
+      await page.setViewportSize({ width: 390, height: 844 });
+      await showWorkspacePane("workbench");
+      const skipIdentitySelect = skipIdentityReview.getByRole("combobox");
+      assert.ok(
+        (await skipIdentitySelect.boundingBox())!.height >= 44,
+        "mobile identity control retains a 44px touch target",
+      );
+      await skipIdentitySelect.focus();
+      await skipIdentitySelect.press("End");
+      assert.equal(await skipIdentitySelect.inputValue(), "skip");
+      const skipIdentityResponse = page.waitForResponse(
+        (response) => response.request().method() === "POST" && response.url().endsWith("/resolve-identity"),
+      );
+      await skipIdentityReview.getByRole("button", { name: "Save skip choice" }).click();
+      assert.equal((await skipIdentityResponse).status(), 200);
+      assert.deepEqual(identityResolutionRequests.at(-1), {
+        id: skipIdentitySuggestionId,
+        choices: [{ name: "Nox", action: "skip" }],
+      });
+      await page.getByText("Skip choice saved. The whole fact or relationship was skipped.").waitFor();
+      await page.setViewportSize({ width: 1280, height: 900 });
+      await showWorkspacePane("workbench");
+
+      if ((await recoveryReviewSource.getAttribute("aria-expanded")) !== "true") await recoveryReviewSource.click();
+      if (!(await rejectedSuggestions.evaluate((element) => (element as HTMLDetailsElement).open)))
+        await rejectedSuggestions.locator(":scope > summary").click();
       const recoveryReviewText = await page.locator('[data-ltm-workspace-pane="workbench"]').innerText();
       assert.match(recoveryReviewText, /Mobile recovery source/u);
       assert.match(recoveryReviewText, /Mobile recovery memory/u);
@@ -3395,6 +3720,9 @@ async function main() {
         element.dispatchEvent(new CustomEvent("marinara-capability-props"));
       });
       const beforeDeleteCalls = permanentDeleteCalls.length;
+      const cancelledConfirmation = new Promise<void>((resolve) => {
+        notifyDeleteConfirmation = resolve;
+      });
       const cancelledTargetResolution = page.waitForResponse(
         (response) =>
           response.request().method() === "GET" &&
@@ -3402,7 +3730,8 @@ async function main() {
       );
       await page.locator("[data-ltm-bulk-actions]").getByRole("button", { name: "Delete" }).click();
       await cancelledTargetResolution;
-      await page.waitForTimeout(0);
+      await cancelledConfirmation;
+      notifyDeleteConfirmation = undefined;
       assert.equal(permanentDeleteCalls.length, beforeDeleteCalls, "Cancel must not send a deletion request");
       assert.ok(lastDeleteConfirmation);
       assert.equal(lastDeleteConfirmation?.title, "Permanently delete 2 memories?");
@@ -3415,12 +3744,13 @@ async function main() {
       assert.match(lastDeleteConfirmation?.message ?? "", /Excerpt: .*memory text/u);
       assert.match(lastDeleteConfirmation?.message ?? "", /Available in: All memories/u);
       confirmDelete = true;
-      const deleteRequest = page.waitForRequest(
-        (request) =>
-          request.method() === "POST" && request.url().endsWith("/api/long-term-memory/notes/permanent-delete"),
+      const deleteResponse = page.waitForResponse(
+        (response) =>
+          response.request().method() === "POST" &&
+          response.url().endsWith("/api/long-term-memory/notes/permanent-delete"),
       );
       await page.locator("[data-ltm-bulk-actions]").getByRole("button", { name: "Delete" }).click();
-      await deleteRequest;
+      await deleteResponse;
       assert.deepEqual(permanentDeleteCalls.at(-1), deleteTargetIds);
 
       // A selection change while the delete-target lookup is still resolving must
@@ -4484,6 +4814,8 @@ async function main() {
       assert.equal(mobileExtractionLayout.columns, 1);
       assert.deepEqual(mobileExtractionLayout.labelHeights, [44, 44]);
       assert.deepEqual(mobileExtractionLayout.selectWidths, mobileExtractionLayout.fieldWidths);
+      const mobileDebugPage = await openDebugActivity(mobileContext, "mobile");
+      await mobileDebugPage.close();
       await mobilePage.setViewportSize({ width: 320, height: 720 });
       assert.ok(
         await mobilePage.locator(".mari-editor-header").evaluate((header) => {

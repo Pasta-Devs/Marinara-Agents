@@ -1728,6 +1728,94 @@ async function main() {
     "identityKeyForUnit must predict the existing legacy target for keyless source-backed units",
   );
 
+  // 4j. Outside Roleplay a short form of a trusted character/persona must still produce an
+  //     explicit identity review, without offering a local "different" identity and without
+  //     creating a local character.
+  const conversationRoster = {
+    entries: [
+      {
+        subject: {
+          key: "character:char_alex_rivera",
+          ref: { kind: "character" as const, id: "char_alex_rivera" },
+        },
+        name: "Alex Rivera",
+        aliases: [],
+        canonicalSlug: "alex_rivera",
+        provenance: "roster:character:char_alex_rivera",
+      },
+    ],
+    notes: [] as any[],
+  };
+  for (const mode of ["conversation", "game"] as const) {
+    const conversationUnit = unit({
+      bucket: "character_fact",
+      subjectId: "alex",
+      subjectNames: ["Alex"],
+      text: "Alex waits at the docks.",
+    });
+    const conversationResolution = prepareLtmSubjectIdentityContext({
+      units: [conversationUnit],
+      catalog: conversationRoster,
+      scope,
+      mode,
+      sourceBackedNpcSourceText: "Alex waits at the docks.",
+      sourceBackedNpcSourceTitle: "Docks",
+    }).resolve({ units: [conversationUnit], existingNotes: [] });
+    assert.equal(conversationResolution.units.length, 0, `${mode} short names must require review`);
+    assert.equal(conversationResolution.droppedCandidates.length, 1, `${mode} short names must be recoverable`);
+    const review = conversationResolution.droppedCandidates[0]?.identityReview;
+    assert.ok(review, `${mode} short names must offer identity choices`);
+    assert.deepEqual(
+      review?.map((participant) => ({
+        name: participant.name,
+        keys: participant.candidates.map((candidate) => candidate.subject.key),
+        allowDifferent: participant.allowDifferent,
+      })),
+      [{ name: "Alex", keys: ["character:char_alex_rivera"], allowDifferent: false }],
+      `${mode} review must offer the trusted identity only and no local identity`,
+    );
+  }
+
+  // 4k. A saved decision must be reusable outside Roleplay so the review endpoint can
+  //     re-resolve and persist a chosen binding. Decisions are keyed by the scope family,
+  //     not by mode, while local "different" identities stay Roleplay-only.
+  const conversationFamilyId = ltmScopeFamilyId(scope)!;
+  const savedConversationCatalog = {
+    ...conversationRoster,
+    identityChoices: [
+      {
+        name: "Alex",
+        action: "bind" as const,
+        subject: conversationRoster.entries[0]!.subject,
+        familyId: conversationFamilyId,
+      },
+    ],
+  };
+  const savedConversationUnit = unit({
+    bucket: "character_fact",
+    subjectId: "alex",
+    subjectNames: ["Alex"],
+    text: "Alex waits at the docks.",
+  });
+  const savedConversationResolution = prepareLtmSubjectIdentityContext({
+    units: [savedConversationUnit],
+    catalog: savedConversationCatalog,
+    scope,
+    mode: "conversation",
+    sourceBackedNpcSourceText: "Alex waits at the docks.",
+    sourceBackedNpcSourceTitle: "Docks",
+  }).resolve({ units: [savedConversationUnit], existingNotes: [] });
+  assert.equal(
+    savedConversationResolution.droppedCandidates.length,
+    0,
+    "a saved conversation binding must be reusable instead of failing closed",
+  );
+  assert.equal(
+    savedConversationResolution.units[0]?.subjects?.[0]?.key,
+    "character:char_alex_rivera",
+    "a saved conversation binding must resolve to the chosen trusted identity",
+  );
+
   // 4f. Production catalog shape: an imported roleplay source note must not fork variants of a
   //     roster character or collide with its identity. This uses only the `notes` and
   //     `localSourceNotes` inputs that loadTrustedLtmSubjectCatalog supplies in production.
@@ -1966,6 +2054,264 @@ async function main() {
       "unscoped or foreign legacy notes must not bind local subjects",
     );
   }
+
+  // --- #1225: short names for known characters/personas must go to review, never fork locals ---
+  const shortNameRoster = [
+    { kind: "character" as const, id: "char_alex_rivera", name: "Alex Rivera" },
+    { kind: "persona" as const, id: "persona_sam_carter", name: "Sam Carter" },
+  ];
+  const shortNameSourceNote = {
+    ...sourceNote,
+    id: "short-name-source",
+    title: "The meeting",
+    sections: { source: { text: "Alex meets Sam at the docks.", updatedAt: timestamp } },
+  };
+  const shortNameAlexKey = "character:char_alex_rivera";
+  const samKey = "persona:persona_sam_carter";
+  const shortNameCatalog = buildTrustedLtmSubjectCatalog({
+    roster: shortNameRoster,
+    notes: [],
+    localSourceNotes: [shortNameSourceNote],
+  });
+  assert.equal(
+    shortNameCatalog.entries.some(
+      (entry) => entry.sourceScope === "local_source" && ["alex", "sam"].includes(entry.canonicalSlug),
+    ),
+    false,
+    "#1225: short source names must not seed local identities beside a trusted roster",
+  );
+
+  const alexUnit = unit({ bucket: "character_fact", subjectId: "alex", subjectNames: ["Alex"], text: "Alex waits." });
+  const alexResolution = prepareLtmSubjectIdentityContext({
+    units: [alexUnit],
+    catalog: shortNameCatalog,
+    scope,
+    sourceBackedNpcSourceText: shortNameSourceNote.sections.source.text,
+    sourceBackedNpcSourceTitle: shortNameSourceNote.title,
+  }).resolve({ units: [alexUnit], existingNotes: [] });
+  assert.equal(alexResolution.units.length, 0, "#1225: a short name must not resolve to a subject automatically");
+  assert.equal(alexResolution.droppedCandidates.length, 1);
+  assert.equal(alexResolution.droppedCandidates[0]!.reason, "ambiguous_subject");
+  assert.equal(alexResolution.diagnostics[0]!.code, "ambiguous_subject_identity");
+  assert.equal(
+    alexResolution.diagnostics[0]!.severity,
+    "warning",
+    "an identity question is review, not an extraction failure",
+  );
+  assert.deepEqual((alexResolution.diagnostics[0]!.details as any).competingSubjectKeys, [shortNameAlexKey]);
+  assert.deepEqual(alexResolution.droppedCandidates[0]!.recoveryCandidate?.subjectNames, ["Alex"]);
+  assert.deepEqual(
+    (alexResolution.droppedCandidates[0] as any).identityReview?.map((participant: any) => ({
+      name: participant.name,
+      keys: participant.candidates.map((candidate: any) => candidate.subject.key),
+      allowDifferent: participant.allowDifferent,
+    })),
+    [{ name: "Alex", keys: [shortNameAlexKey], allowDifferent: true }],
+    "#1225: review must carry explicit bind/different/skip choices, not just a generic recovery hint",
+  );
+
+  const shortSharedFirstNameCatalog = buildTrustedLtmSubjectCatalog({
+    roster: [
+      { kind: "character" as const, id: "char_alex_rivera", name: "Alex Rivera" },
+      { kind: "character" as const, id: "char_alex_moreau", name: "Alex Moreau" },
+    ],
+    notes: [],
+    localSourceNotes: [shortNameSourceNote],
+  });
+  assert.equal(
+    shortSharedFirstNameCatalog.entries.some(
+      (entry) => entry.sourceScope === "local_source" && entry.canonicalSlug === "alex",
+    ),
+    false,
+    "#1225: a shared first name must not seed a local identity either",
+  );
+  const sharedAlexResolution = prepareLtmSubjectIdentityContext({
+    units: [alexUnit],
+    catalog: shortSharedFirstNameCatalog,
+    scope,
+    sourceBackedNpcSourceText: shortNameSourceNote.sections.source.text,
+    sourceBackedNpcSourceTitle: shortNameSourceNote.title,
+  }).resolve({ units: [alexUnit], existingNotes: [] });
+  assert.equal(sharedAlexResolution.units.length, 0);
+  assert.deepEqual((sharedAlexResolution.diagnostics[0]!.details as any).competingSubjectKeys?.sort(), [
+    "character:char_alex_moreau",
+    "character:char_alex_rivera",
+  ]);
+
+  // A minor character sharing the persona's first name is not merged with the persona.
+  const personaOnlyCatalog = buildTrustedLtmSubjectCatalog({
+    roster: [{ kind: "persona" as const, id: "persona_sam_carter", name: "Sam Carter" }],
+    notes: [],
+    localSourceNotes: [shortNameSourceNote],
+  });
+  const samUnit = unit({ bucket: "character_fact", subjectId: "sam", subjectNames: ["Sam"], text: "Sam waves." });
+  const samResolution = prepareLtmSubjectIdentityContext({
+    units: [samUnit],
+    catalog: personaOnlyCatalog,
+    scope,
+    sourceBackedNpcSourceText: shortNameSourceNote.sections.source.text,
+    sourceBackedNpcSourceTitle: shortNameSourceNote.title,
+  }).resolve({ units: [samUnit], existingNotes: [] });
+  assert.equal(samResolution.units.length, 0);
+  assert.deepEqual((samResolution.diagnostics[0]!.details as any).competingSubjectKeys, [samKey]);
+
+  // A saved explicit choice persists and is reused, including for relationship participants.
+  const chosenAlex = unit({
+    bucket: "character_fact",
+    subjectId: "alex_choice",
+    subjectNames: ["Alex"],
+    subjectKeys: [shortNameAlexKey],
+    text: "Alex waits.",
+  });
+  const chosenSam = unit({
+    bucket: "character_fact",
+    subjectId: "sam_choice",
+    subjectNames: ["Sam"],
+    subjectKeys: [samKey],
+    text: "Sam waves.",
+  });
+  const keylessRelationship = unit({
+    bucket: "relationship_state",
+    subjectId: "alex_sam",
+    subjectNames: ["Alex", "Sam"],
+    text: "Alex trusts Sam.",
+  });
+  const choiceContext = prepareLtmSubjectIdentityContext({
+    units: [chosenAlex, chosenSam, keylessRelationship],
+    catalog: shortNameCatalog,
+    scope,
+  });
+  const choiceResolution = choiceContext.resolve({
+    units: [chosenAlex, chosenSam, keylessRelationship],
+    existingNotes: [],
+  });
+  assert.equal(choiceResolution.droppedCandidates.length, 0, "saved choices must clear review");
+  assert.deepEqual(
+    choiceResolution.units
+      .filter((candidate) => candidate.bucket === "character_fact")
+      .map((candidate) => candidate.subjects?.[0]?.key),
+    [shortNameAlexKey, samKey],
+  );
+  assert.deepEqual(
+    choiceResolution.units
+      .find((candidate) => candidate.bucket === "relationship_state")
+      ?.subjects?.map((subject) => subject.key)
+      .sort(),
+    [shortNameAlexKey, samKey].sort(),
+    "#1225: a relationship must use the same subjects as the character memories",
+  );
+
+  const shortChosenNotes = compileLtmEvidenceUnits({
+    units: choiceResolution.units.filter((candidate) => candidate.bucket === "character_fact"),
+    existingNotes: [],
+    scope,
+    modes: ["roleplay"],
+    aliasChoices: choiceResolution.aliasChoices,
+  }).mutations.filter((mutation) => mutation.kind === "create_note");
+  const persistedAlex = {
+    ...shortChosenNotes.find((mutation) => mutation.note.subjects?.[0]?.key === shortNameAlexKey)!.note,
+    createdAt: timestamp,
+    updatedAt: timestamp,
+    version: 1,
+  };
+  assert.equal(persistedAlex.title, "Alex", "the chosen short name must persist on the canonical note");
+  const persistedCatalog = buildTrustedLtmSubjectCatalog({
+    roster: shortNameRoster,
+    notes: [persistedAlex] as any,
+    localSourceNotes: [shortNameSourceNote],
+  });
+  const reimportResolution = prepareLtmSubjectIdentityContext({
+    units: [alexUnit],
+    catalog: persistedCatalog,
+    scope,
+  }).resolve({ units: [alexUnit], existingNotes: [] });
+  assert.equal(reimportResolution.droppedCandidates.length, 0);
+  assert.equal(
+    reimportResolution.units[0]!.subjects?.[0]?.key,
+    shortNameAlexKey,
+    "#1225: a saved choice must be reused",
+  );
+
+  // Exact full names and explicit aliases still bind automatically.
+  const fullNameUnit = unit({
+    bucket: "character_fact",
+    subjectId: "alex_rivera",
+    subjectNames: ["Alex Rivera"],
+    text: "Alex Rivera waits.",
+  });
+  const fullNameResolution = prepareLtmSubjectIdentityContext({
+    units: [fullNameUnit],
+    catalog: shortNameCatalog,
+    scope,
+  }).resolve({ units: [fullNameUnit], existingNotes: [] });
+  assert.equal(fullNameResolution.droppedCandidates.length, 0);
+  assert.equal(fullNameResolution.units[0]!.subjects?.[0]?.key, shortNameAlexKey);
+  const aliasedCatalog = buildTrustedLtmSubjectCatalog({
+    roster: [{ kind: "character" as const, id: "char_alex_rivera", name: "Alex Rivera", aliases: ["Alex"] }],
+    notes: [],
+  });
+  const shortAliasResolution = prepareLtmSubjectIdentityContext({
+    units: [alexUnit],
+    catalog: aliasedCatalog,
+    scope,
+    sourceBackedNpcSourceText: shortNameSourceNote.sections.source.text,
+  }).resolve({ units: [alexUnit], existingNotes: [] });
+  assert.equal(
+    shortAliasResolution.units[0]!.subjects?.[0]?.key,
+    shortNameAlexKey,
+    "an explicit alias must still bind automatically",
+  );
+
+  const groupChoiceScope = { chatId: "choice_branch_a", groupId: "choice_group", groupIds: ["choice_group"] };
+  const groupSamSubject = localCharacterSubjectForName(groupChoiceScope, "Sam")!;
+  const groupChoiceCatalog = {
+    ...shortNameCatalog,
+    identityChoices: [
+      {
+        familyId: ltmScopeFamilyId(groupChoiceScope)!,
+        name: "Sam",
+        action: "different" as const,
+        subject: groupSamSubject,
+      },
+    ],
+  };
+  const groupChoice = prepareLtmSubjectIdentityContext({
+    units: [samUnit],
+    catalog: groupChoiceCatalog,
+    scope: { ...groupChoiceScope, chatId: "choice_branch_b" },
+    mode: "roleplay",
+  }).resolve({ units: [samUnit], existingNotes: [] });
+  assert.deepEqual(
+    groupChoice.units[0]?.subjectKeys,
+    [groupSamSubject.key],
+    "remembered different-character identities are shared by branches in the same group family",
+  );
+  const gameChoice = prepareLtmSubjectIdentityContext({
+    units: [samUnit],
+    catalog: groupChoiceCatalog,
+    scope: groupChoiceScope,
+    mode: "game",
+  }).resolve({ units: [samUnit], existingNotes: [] });
+  assert.equal(gameChoice.units.length, 0, "a remembered local identity must never enter Game mode");
+  const missingChoice = prepareLtmSubjectIdentityContext({
+    units: [alexUnit],
+    catalog: {
+      ...shortNameCatalog,
+      identityChoices: [
+        {
+          familyId: ltmScopeFamilyId(scope)!,
+          name: "Alex",
+          action: "bind" as const,
+          subject: { key: "character:removed" },
+        },
+      ],
+    },
+    scope,
+    mode: "roleplay",
+    sourceBackedNpcSourceText: shortNameSourceNote.sections.source.text,
+  }).resolve({ units: [alexUnit], existingNotes: [] });
+  assert.equal(missingChoice.units.length, 0, "a missing saved binding must not silently become a new local character");
+  assert.equal(missingChoice.diagnostics[0]?.details?.matchBasis, "saved_identity_unavailable");
 
   process.stdout.write(
     "Long-Term Memory local-character regression: scoped identity, review risk, safeguards, and isolation passed\n",

@@ -2,7 +2,7 @@
   {
     "id": "continuity",
     "name": "Continuity Checker",
-    "description": "Post-processes the latest assistant message to fix concrete spatial, timeline, and physical logic errors without changing the story.",
+    "description": "Fixes mistakes about places, time, and physical details in AI messages without changing the story.",
     "phase": "post_processing",
     "enabledByDefault": false,
     "category": "writer",

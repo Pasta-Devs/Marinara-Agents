@@ -2,8 +2,8 @@
   "schemaVersion": 1,
   "id": "quest",
   "name": "Quest Tracker",
-  "version": "1.0.4",
-  "description": "Manages quest objectives, completion states, and rewards. Add the Agent in Chat Settings → Agents → Tracker Agents for Roleplay mode.",
+  "version": "1.0.5",
+  "description": "Keeps track of your quests, their goals, and their rewards. Add the Agent in Chat Settings → Agents → Tracker Agents for Roleplay mode.",
   "engine": {
     "min": "2.3.0",
     "maxExclusive": "4.0.0"
@@ -17,8 +17,8 @@
   "files": [
     {
       "path": "agents.json",
-      "sha256": "18157d0a54da2e433d82cd2f77b7b6d7ff772fcfae06962da0e24bf034ceac06",
-      "bytes": 10653
+      "sha256": "650723afef32f6b767be42882deca9b71db7d73b06e46574eeccab34216b57a5",
+      "bytes": 10655
     }
   ],
   "permissions": [

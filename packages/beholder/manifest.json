@@ -2,8 +2,8 @@
   "schemaVersion": 1,
   "id": "beholder",
   "name": "Beholder",
-  "version": "1.3.11",
-  "description": "Tracks each roleplay character's clothing by body slot, held items, wounds, missing parts, bare slots, and species, then keeps that physical state available to the next response, and shows it on a paper doll you can open from the roleplay toolbar. Pick the prompt template for your model: one prompt for a SOTA model (GPT-5.5+, Opus 4.8+, Kimi K3+), or five passes for the local Beholder model (GetBeholder/Beholder-GGUF) — free, offline, and private. Add the Agent in Chat Settings → Agents → Tracker Agents for Roleplay mode.",
+  "version": "1.3.12",
+  "description": "Keeps track of what each character is wearing and holding, plus any injuries, so the story stays consistent. You can check it on a paper doll from the roleplay toolbar. Works with big online models, or with the free Beholder model that runs privately on your computer. Add the Agent in Chat Settings → Agents → Tracker Agents for Roleplay mode.",
   "engine": {
     "min": "2.4.4",
     "maxExclusive": "4.0.0"
@@ -24,12 +24,12 @@
   "files": [
     {
       "path": "agents.json",
-      "sha256": "857de89a01ae6279fb423820571025922539fb053d857eac900c160f7e0e55b7",
-      "bytes": 10271
+      "sha256": "c7ab972853e8f0d9e89fc282cff20bb9dfb571b95dffa3c4a6e659a76f9d78a8",
+      "bytes": 10086
     },
     {
       "path": "client.js",
-      "sha256": "27cbb272155fff308377a6fb737312a6defb7fc245911b7aa9b954f15002b01b",
+      "sha256": "a9cba5a457dba49f86c61b1ba0d6845065a6236caeee66970333014142c8d0fd",
       "bytes": 449376
     }
   ],

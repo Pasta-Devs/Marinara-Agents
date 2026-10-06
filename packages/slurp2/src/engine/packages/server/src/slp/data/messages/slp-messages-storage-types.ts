@@ -54,6 +54,9 @@ export type SlurpThread = {
   strikes: number;
   lastStrikeAt: string | null;
   notes: SlurpThreadNote[];
+  /** The Engine scene this thread is in, while it runs. */
+  sceneChatId: string | null;
+  sceneStartedAt: string | null;
   createdAt: string;
   updatedAt: string;
 };

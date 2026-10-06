@@ -33,6 +33,24 @@ export function slpClampExplicitLevel<T extends SlpExplicitLevelName>(level: T, 
   return SLP_EXPLICIT_LEVELS.indexOf(level) > top ? (SLP_EXPLICIT_LEVELS[top] as T) : level;
 }
 
+/**
+ * One scale everywhere (0.3.17): Clean, then the three spice levels. Clean is the picture level
+ * "none". The Slurp-wide limit keeps the three spice levels; a Creator's level may also be Clean.
+ */
+export const SLP_SPICE_STEPS = ["clean", ...SLP_SPICE_LEVELS] as const;
+export type SlpSpiceStep = (typeof SLP_SPICE_STEPS)[number];
+export const slpSpiceStepOf = (level: string | null | undefined): SlpSpiceStep | null =>
+  level === "none" ? "clean" : slpSpiceFromExplicit(level);
+export const slpExplicitOfStep = (step: SlpSpiceStep): SlpExplicitLevelName =>
+  step === "clean" ? "none" : SLP_SPICE_TO_EXPLICIT[step];
+
+/**
+ * Which words posts and chats use once they get naked (0.3.17). It took the word lists out of the
+ * old Writing presets, so the level alone says how far and this says how it is said.
+ */
+export const SLP_SPICE_LANGUAGES = ["soft", "frank", "dirty"] as const;
+export type SlpSpiceLanguage = (typeof SLP_SPICE_LANGUAGES)[number];
+
 export const SLP_TASTE_STRENGTHS = ["hint", "often", "obsessed"] as const;
 export type SlpTasteStrength = (typeof SLP_TASTE_STRENGTHS)[number];
 
@@ -81,12 +99,21 @@ export type SlpSpiceState = {
   learned: Record<string, SlpTasteLearned>;
   /** Noticed labels the player removed; never suggested again. */
   dismissed: string[];
+  /** Null until set once from the old Writing preset (`readSlurpSpice`); read as "dirty". */
+  language: SlpSpiceLanguage | null;
 };
 
 /** Slurp's own app setting that holds the state below. */
 export const SLP_SPICE_SETTING_KEY = "slurp2.spice";
 
-export const SLP_DEFAULT_SPICE: SlpSpiceState = { max: "explicit", tastes: [], never: [], learned: {}, dismissed: [] };
+export const SLP_DEFAULT_SPICE: SlpSpiceState = {
+  max: "explicit",
+  tastes: [],
+  never: [],
+  learned: {},
+  dismissed: [],
+  language: null,
+};
 
 const text = (value: unknown, max: number) =>
   typeof value === "string" ? value.replace(/\s+/gu, " ").trim().slice(0, max).trim() : "";
@@ -138,6 +165,9 @@ export function normalizeSlpSpice(raw: unknown): SlpSpiceState {
     never: slpSpiceList(value.never, SLP_TASTE_TEXT_MAX, SLP_TASTE_NEVER_MAX),
     learned,
     dismissed: slpSpiceList(value.dismissed, SLP_TASTE_TEXT_MAX, 100).map(slpTasteKey),
+    language: SLP_SPICE_LANGUAGES.includes(value.language as SlpSpiceLanguage)
+      ? (value.language as SlpSpiceLanguage)
+      : null,
   };
 }
 

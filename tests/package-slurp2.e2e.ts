@@ -346,45 +346,45 @@ test.describe("standalone Slurp package", () => {
     expect(errors).toEqual([]);
   });
 
-  test("requires the current release acknowledgement in G's thread", async ({ page }, testInfo) => {
+  test("requires the current release acknowledgement and keeps older notes collapsed", async ({ page }, testInfo) => {
     const errors = collectUnexpectedErrors(page);
     await page.addInitScript(() => localStorage.removeItem("slurp2:splash-seen-version"));
     await page.goto("/");
     await openSlurp(page);
     const splash = page.getByRole("dialog", { name: `Slurp ${SLURP_VERSION}`, exact: true });
     await expect(splash).toBeVisible();
-    // A first run is the welcome only: no release list, and the composer is switched off.
-    await expect(splash.getByText("G can’t read this. Find me in Slurp General.")).toBeVisible();
-    const consent = splash.getByRole("button", { name: "I get it: alpha, my own risk" });
-    // G types his lines one by one; the reply chips show after the last one.
-    await expect(consent).toBeVisible({ timeout: 10_000 });
-    await expect(splash.getByText(/Your provider may bill every call\./u)).toBeVisible();
-    await expect(splash.getByRole("heading", { name: /^Slurp \d/u })).toHaveCount(0);
-    expect(await page.evaluate(() => localStorage.getItem("slurp2:splash-seen-version"))).toBeNull();
+    const enter = splash.getByRole("button", { name: "Let me in" });
+    await expect(enter).toBeDisabled();
+    await expect(splash.locator("#slurp2-earlier-releases")).toBeHidden();
+    const history = splash.getByRole("button", { name: /Show \d+ earlier releases/u });
+    await history.click();
+    await expect(splash.locator("#slurp2-earlier-releases")).toBeVisible();
+    await splash.getByRole("button", { name: "Hide earlier releases" }).click();
+    await page.keyboard.press("Escape");
+    await expect(splash).toBeVisible();
     await splash.screenshot({ path: testInfo.outputPath("slurp2-release-acknowledgement.png") });
-    await consent.click();
-    await expect(splash.getByText(/Support will take it from here/u)).toBeVisible();
-    expect(await page.evaluate(() => localStorage.getItem("slurp2:splash-seen-version"))).toBe(SLURP_VERSION);
+    await splash.getByRole("checkbox", { name: /I understand this is alpha software/u }).check();
+    await enter.click();
     await expect(splash).toBeHidden();
+    expect(await page.evaluate(() => localStorage.getItem("slurp2:splash-seen-version"))).toBe(SLURP_VERSION);
     expect(errors).toEqual([]);
   });
 
-  test("the first-run Support ticket displays translated copy", async ({ page }, testInfo) => {
+  test("the first-run introduction displays translated copy", async ({ page }, testInfo) => {
     const errors = collectUnexpectedErrors(page);
     await getSlurpSettings(page);
     expect((await page.request.patch("/api/slurp2/settings", { data: { onboarding: "not_started" } })).ok()).toBe(true);
     await page.addInitScript(() => {
       localStorage.setItem("marinara:slurp2:package-ui", JSON.stringify({ onboardingState: "not_started" }));
-      localStorage.removeItem("slurp2:support-rail");
     });
     await page.goto("/");
     await openSlurp(page);
-    const introduction = page.getByRole("dialog", { name: "Slurp Support", exact: true });
-    await expect(introduction.getByText("Ticket #000001 · Open")).toBeVisible();
-    // Support types its lines one by one; the "Hi!" chip shows after the last one.
-    await expect(introduction.getByRole("button", { name: "Hi!", exact: true })).toBeVisible({ timeout: 10_000 });
-    await expect(introduction.getByText("Welcome to Slurp! I'm Slurp Support. Yes, all of us.")).toBeVisible();
-    await expect(introduction).not.toContainText("ui.slurp.");
+    const introduction = page.getByRole("dialog", { name: "Slurp", exact: true });
+    await expect(introduction.getByRole("heading", { name: "So, what is Slurp?" })).toBeVisible();
+    await expect(
+      introduction.getByText("Slurp is a local roleplay space for creators, fans, posts, and conversations."),
+    ).toBeVisible();
+    await expect(introduction).not.toContainText("ui.noodle.");
     await introduction.screenshot({ path: testInfo.outputPath("slurp2-first-run-introduction.png") });
     expect(errors).toEqual([]);
   });
@@ -887,21 +887,23 @@ test("edits all messaging Details inline and persists overrides", async ({ page 
   expect(errors).toEqual([]);
 });
 
-test("update opens G's thread on the new releases", async ({ page }, testInfo) => {
+test("update sheet restores G and the alpha message", async ({ page }, testInfo) => {
   test.skip(!testInfo.project.name.includes("desktop"), "Three widths in one session.");
   await page.addInitScript(() => localStorage.setItem("slurp2:splash-seen-version", "0.2.75"));
   await page.goto("/");
   await openSlurp(page);
   const errors = collectUnexpectedErrors(page);
-  const sheet = page.getByRole("dialog", { name: `Slurp ${SLURP_VERSION}`, exact: true });
-  await expect(sheet.getByText("Hey, I’m G. The dude responsible for all the bugs.")).toBeVisible();
+  const sheet = page.getByRole("dialog", { name: `What's new in ${SLURP_VERSION}`, exact: true });
+  await expect(sheet.getByRole("heading", { name: "Hey, I’m G." })).toBeVisible();
+  await expect(sheet.getByText("The dude responsible for all the bugs.")).toBeVisible();
   await expect(sheet.getByText(/You’re testing alpha software/)).toBeVisible();
-  await expect(sheet.getByRole("separator").filter({ hasText: "New" })).toBeInViewport();
   await expect(
-    sheet.getByRole("heading", { name: new RegExp(`^Slurp ${SLURP_VERSION.replaceAll(".", "\\.")}\\b`, "u") }),
+    sheet.getByText(
+      "Keep in mind: Slurp uses image and text generation in the background. Be sure you can afford that.",
+    ),
   ).toBeVisible();
-  const face = sheet.locator('img[src^="data:image/svg+xml"]').first();
-  await expect(face).toBeAttached();
+  const face = sheet.locator('img[src^="data:image/svg+xml"]');
+  await expect(face).toBeVisible();
   expect(await face.evaluate((img) => (img as HTMLImageElement).naturalWidth)).toBeGreaterThan(0);
   for (const width of [1440, 768, 390]) {
     await page.setViewportSize({ width, height: 900 });
@@ -910,6 +912,5 @@ test("update opens G's thread on the new releases", async ({ page }, testInfo) =
   }
   await sheet.getByRole("button", { name: "Got it", exact: true }).click();
   await expect(sheet).toBeHidden();
-  expect(await page.evaluate(() => localStorage.getItem("slurp2:splash-seen-version"))).toBe(SLURP_VERSION);
   expect(errors).toEqual([]);
 });

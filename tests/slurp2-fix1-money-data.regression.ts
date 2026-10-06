@@ -80,9 +80,14 @@ assert.match(sendRoutes, /opened\.status === "fee_required"/u);
 
 // ── R1-066: the shown price and the 402 check use the real charge (platform events included) ──
 assert.match(economy2, /async getCreatorSubscriptionCharge\(creatorAccountId: string, at: Date = new Date\(\)\)/u);
+// The feed prices every shown Creator in one batch with the same event-aware charge.
 assert.match(
   read("server/src/slp/features/viewer/slp-viewer-context.ts"),
-  /noodle\.getCreatorSubscriptionCharge\(account\.id\)/u,
+  /noodle\.getCreatorSubscriptionCharges\(visibleAccounts\)/u,
+);
+assert.match(
+  economy2,
+  /async getCreatorSubscriptionCharges\([\s\S]*?slurpSubscriptionCharge\([\s\S]*?slurpPlatformEventModifierSource\(settings\.platformEvents/u,
 );
 assert.match(
   read("server/src/slp/features/economy/slp-wallet-routes.ts"),

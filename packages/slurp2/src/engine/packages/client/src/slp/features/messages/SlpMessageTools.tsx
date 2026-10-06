@@ -1,4 +1,4 @@
-import { Loader2, Megaphone, Send } from "lucide-react";
+import { ImagePlus, Loader2, Megaphone, Send } from "lucide-react";
 import { toast } from "sonner";
 import { Avatar, SLP_TYPE } from "../../base/chrome/SlpChrome";
 import { SlpAutoGrowTextarea } from "../../base/ui/SlpAutoGrowTextarea";
@@ -402,12 +402,19 @@ export function FanImageTool({
               />
             )}
             {activeMode === "upload" && (
-              <input
-                type="file"
-                accept="image/*"
-                onChange={(event) => setFile(event.target.files?.[0] ?? null)}
-                className="text-xs"
-              />
+              // The whole button opens the picker; a bare file input only reacted on its "Choose file" text.
+              <label className="flex min-h-11 cursor-pointer items-center gap-2 rounded-lg px-3 text-sm font-semibold ring-1 ring-inset ring-[var(--noodle-divider)] transition-colors hover:bg-[var(--accent)] focus-within:ring-2 focus-within:ring-[var(--noodle-accent)]">
+                <ImagePlus size={18} aria-hidden="true" className="shrink-0" />
+                <span className="min-w-0 truncate">
+                  {file?.name ?? localizeUi("ui.slurp.messages.photoChoose", { defaultValue: "Choose a photo" })}
+                </span>
+                <input
+                  type="file"
+                  accept="image/*"
+                  onChange={(event) => setFile(event.target.files?.[0] ?? null)}
+                  className="sr-only"
+                />
+              </label>
             )}
             <input
               value={content}

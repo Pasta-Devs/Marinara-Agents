@@ -2,8 +2,8 @@
   "schemaVersion": 1,
   "id": "lorebook-keeper",
   "name": "Lorebook Keeper",
-  "version": "1.0.5",
-  "description": "Creates and updates durable chat lorebook entries from important story facts, characters, places, and world changes. Add the Agent in Chat Settings → Agents → Misc Agents/Lorebook Keeper for Roleplay and Game modes.",
+  "version": "1.0.6",
+  "description": "Saves important story facts, characters, places, and world changes to the chat's lorebook as you play. Add the Agent in Chat Settings → Agents → Misc Agents/Lorebook Keeper for Roleplay and Game modes.",
   "engine": {
     "min": "2.4.4",
     "maxExclusive": "4.0.0"
@@ -17,8 +17,8 @@
   "files": [
     {
       "path": "agents.json",
-      "sha256": "ee5a5f30a5b84cbf1608c767d34cd0094cd52b2f765cb04ba6ea40c5efda9d8e",
-      "bytes": 3509
+      "sha256": "73f7966e093375bc64880564ab07e9f5fcd09d83b667a976b4e4844daef0b828",
+      "bytes": 3495
     }
   ],
   "permissions": [

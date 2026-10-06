@@ -1,12 +1,27 @@
 # Slurp release notes
 
-## 0.3.13 — 2026-10-01
+## 0.3.17 — 2026-10-06
 
-First run as two chats. Design: `docs/ONBOARDING-RAIL.md`.
+Spice in one place, user reports, speed.
 
-- G's thread replaces the welcome splash and the What's new sheet: the welcome and consent as a chat, then every release as a message, with a disabled composer that points to Slurp General. Settings › Overview has a version pill that opens it.
-- The Support ticket replaces the age gate, the five-screen tour and the setup choice: hello, the 18+ card, what Slurp is, Mari's locked post, core questions (who, AI connection, pace, pictures, spice, names, nights), an optional fun part (fans, size, drama, ads, pulling strings), a member file to review and one "Stamp it" that writes the settings.
-- Your file in Stir › Support desk and "Run setup again" in Backstage reopen the ticket at the questions.
+- Spice: one level (Clean, Flirty, Suggestive, Explicit) for text and pictures, set in Settings › Spice, per Creator in Content rules or Stir. New Language: soft, frank or dirty. Writing keeps only the house style; old presets move over.
+- Romance per Creator (Collaborations): off, or only with chosen Creators.
+- Collabs: the partner's look and identity reach the post and picture; agreed collabs get Post it now and Drop it.
+- Stir: End it works; leaving a Support chat returns to Desk. Send a photo: the whole button picks a file.
+- Faster: chat typing, profiles, notifications, feed, inbox; less polling; no blur on chat bubbles.
+- Fixes: a profile no longer marks its chat read; bulk add no longer hangs; scenes keep Keep out recaps private and hold tips and drama questions; failed pictures retry.
+
+## 0.3.16 — 2026-10-05
+
+- The shared guide explicitly offers image generation with an on/off toggle and direct image upload; uploading switches generation off so drafting preserves the photo.
+- Stir on your persona page and Write a post in an NPC Creator’s Stir use the same simple one-idea draft, with caption and picture preview together. Edit opens the full composer without losing your draft.
+
+## 0.3.15 — 2026-10-05
+
+- Start real Engine roleplay scenes from character-backed Creator DMs, or accept a Creator invite. Choose availability and how the recap can reach Slurp.
+- Lock the DM and pause the Creator while a locking scene runs; return the recap to the thread on conclude and recover missed releases after discard, convert, delete, or restart.
+- Draft a post from one idea for review in the same composer on every page; Stir hands its draft to the composer.
+- Requires Engine Capability API 1.66 for native scene origins.
 
 ## 0.3.12 — 2026-10-01
 

@@ -187,7 +187,7 @@ export const SLURP2_SOURCE_MODULES: Record<string, readonly string[]> = {
     "packages/client/src/slp/features/onboarding/SlpOnboardingPanel.tsx",
     "packages/client/src/slp/features/onboarding/slp-onboarding-wizard-model.ts",
     "packages/client/src/slp/features/onboarding/SlpOnboardingSteps.tsx",
-    // The tour and the locked-post demo moved into the Support ticket (docs/ONBOARDING-RAIL.md).
+    // The tour and the locked-post demo moved into the first-run rail (docs/OPENING-DAY.md).
     "packages/client/src/slp/features/onboarding/SlpSiteWelcome.tsx",
     "packages/client/src/slp/features/onboarding/SlpRailCards.tsx",
   ],
@@ -876,11 +876,7 @@ export const SLURP2_SOURCE_MODULES: Record<string, readonly string[]> = {
   "packages/client/src/components/slurp/SlurpAgeGate.tsx": [
     "packages/client/src/slp/features/onboarding/SlpAgeGate.tsx",
   ],
-  // G's thread: the splash renders in the shared chat shell.
-  "packages/client/src/components/slurp/SlurpSplash.tsx": [
-    "packages/client/src/slp/features/onboarding/SlpSplash.tsx",
-    "packages/client/src/slp/modules/chrome/SlpChatShell.tsx",
-  ],
+  "packages/client/src/components/slurp/SlurpSplash.tsx": ["packages/client/src/slp/features/onboarding/SlpSplash.tsx"],
   "packages/client/src/components/slurp/SlurpCreatorBulkEdit.tsx": [
     "packages/client/src/slp/features/creators/SlpCreatorBulkEdit.tsx",
   ],

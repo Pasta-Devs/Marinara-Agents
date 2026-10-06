@@ -64,6 +64,7 @@ const FORCED_NOTE: Record<SlurpCoupleForced["misfit"], SlpStirNote["kind"]> = {
   notInto: "reluctant",
   noDating: "awkward",
   orientation: "awkward",
+  romance: "awkward",
 };
 
 export type SlurpTiePreview = Pick<SlpActionPreview, "who" | "detail" | "when" | "notes" | "error" | "summary"> &

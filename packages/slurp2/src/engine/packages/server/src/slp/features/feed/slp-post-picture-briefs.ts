@@ -76,6 +76,8 @@ export function slurpPostPictureBriefs(input: {
   // partner the spice consent gate chose (`partner`), and only when the beat names that one person.
   const clothed = sexualLevel === "none" || sexualLevel === "suggestive";
   const company = !input.partner && clothed && input.cast?.length ? slurpNameList(input.cast) : null;
+  // A collab partner reaches a nude or explicit picture only through the spice check (`partner`):
+  // their own level and hard noes decide, as for any partner.
   const pictureCast = clothed || (Boolean(input.partner) && input.cast?.length === 1);
   // Produce mode briefs the picture from the situation, never from the caption the model just
   // wrote. Identity protection still applies: the brief carries the Creator's own place and

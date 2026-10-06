@@ -48,7 +48,7 @@ export const SLURP_REPLY_STATUS_FALLBACKS: Record<string, string> = {
 };
 
 /** Reply outcomes that only mean "not now". They render as the away animation, without words. */
-export const SLURP_AWAY_STATUSES = new Set(["queued", "owed", "cooling", "ineligible"]);
+export const SLURP_AWAY_STATUSES = new Set(["queued", "owed", "cooling", "ineligible", "in_scene"]);
 /** The away card's headline. The status line below it carries the detail. */
 export const SLURP_AWAY_TITLE_FALLBACKS: Record<string, string> = {
   queued: "{{name}} is away",

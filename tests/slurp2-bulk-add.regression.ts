@@ -104,6 +104,24 @@ async function main() {
     old.some((entry) => entry.status === "rejected"),
     "the old burst is refused",
   );
+  // Both running items refused at the same moment: each used to wait for the other to stop.
+  let bothRefused = 0;
+  const together = await Promise.race([
+    slpSettleAdaptive(
+      ["x", "y", "z"],
+      async (id, slowDown) => {
+        if (bothRefused < 2) {
+          bothRefused += 1;
+          await new Promise((resolve) => setTimeout(resolve, 5));
+          await slowDown();
+        }
+        return id;
+      },
+      2,
+    ),
+    new Promise<"hung">((resolve) => setTimeout(() => resolve("hung"), 2_000)),
+  ]);
+  assert.notEqual(together, "hung", "two items refused together do not wait for each other forever");
 
   // --- A refused request is paused and sent again, as the Engine does for chat. ---
   assert.equal(slpIsRateLimitError(new Error("OpenAI-compatible API error 429: slow down")), true);

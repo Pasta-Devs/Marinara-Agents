@@ -568,7 +568,7 @@ export function SlpShell({
                   )}
                   {slurpActive && (
                     <div className="mb-3">
-                      <SlpPulseCard open={pulseOpen} onOpen={openSlpPulse} note={Boolean(budgetNote)} />
+                      <SlpPulseCard rail open={pulseOpen} onOpen={openSlpPulse} note={Boolean(budgetNote)} />
                     </div>
                   )}
                   <button

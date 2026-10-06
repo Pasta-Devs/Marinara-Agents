@@ -143,11 +143,25 @@ export function createHistoryUpdateService(repository, runtime, activity, {
         });
         const agentConfig = await runtime.getAgentConfig();
         const connectionId = typeof agentConfig?.connectionId === "string" ? agentConfig.connectionId.trim() : "";
-        if (!connectionId) fail("Choose a Relationship Tracker model connection before updating from history.", {
+        // Match the Automatic pipeline: agent connection, then the agents default, then the chat's connection.
+        let model;
+        if (typeof runtime.languageModels.resolveForRequest === "function") {
+          const chat = await runtime.persistence.getChat?.(chatId);
+          try {
+            model = await runtime.languageModels.resolveForRequest({
+              connectionId: connectionId || null,
+              chatConnectionId: typeof chat?.connectionId === "string" ? chat.connectionId : null,
+            });
+          } catch {
+            model = null;
+          }
+        } else if (connectionId) {
+          model = await runtime.languageModels.resolve(connectionId);
+        }
+        if (!model) fail("Choose a Relationship Tracker model connection before updating from history.", {
           code: "model_connection_required",
           statusCode: 409,
         });
-        const model = await runtime.languageModels.resolve(connectionId);
         const maximumModelOutput = Number.isFinite(model.maxOutputTokens) && model.maxOutputTokens > 0
           ? model.maxOutputTokens
           : 1600;
@@ -160,17 +174,24 @@ export function createHistoryUpdateService(repository, runtime, activity, {
           statusCode: 413,
         });
         const abortController = new AbortController();
-        const timeout = setTimeout(() => abortController.abort(), modelTimeoutMs);
-        timeout.unref?.();
+        let timeout;
+        // Race the timeout too, so a host that ignores the abort signal cannot leave this chat locked.
+        const timedOut = new Promise((_, reject) => {
+          timeout = setTimeout(() => {
+            abortController.abort();
+            reject(new Error("History model request timed out."));
+          }, modelTimeoutMs);
+          timeout.unref?.();
+        });
         let completion;
         try {
-          completion = await model.chatComplete(fitted.messages, {
+          completion = await Promise.race([model.chatComplete(fitted.messages, {
             temperature,
             maxTokens: fitted.maxTokens ?? maxTokens,
             debugMode: runtime.isDebugAgentsEnabled?.() === true,
             signal: abortController.signal,
             responseFormat: { type: "json_object" },
-          });
+          }), timedOut]);
         } catch (error) {
           if (abortController.signal.aborted) fail("The history update model request timed out.", {
             code: "history_model_timeout",
@@ -196,16 +217,18 @@ export function createHistoryUpdateService(repository, runtime, activity, {
         }
         let applied;
         let personaUpdates = [];
+        let cardUpdates = [];
         try {
           const allowedCharacters = buildAllowedCharacterReferences(snapshot.characters
             .map((character) => ({ characterId: character.id, name: characterCardName(character, "") })));
           const evidenceText = recentMessages.map((message) => message?.content ?? "").join("\n");
           if (personaSnapshot?.persona) {
             requireExactKeys(parsed, ["u", "p"], "History model result");
-            normalizeHistoryRelationshipDelta({ u: parsed.u }, allowedCharacters, snapshot.state.relationships, { evidenceText });
+            cardUpdates = normalizeHistoryRelationshipDelta({ u: parsed.u }, allowedCharacters, snapshot.state.relationships, { evidenceText });
             personaUpdates = normalizePersonaDelta(parsed.p, allowedCharacters, personaSnapshot, { evidenceText });
           }
-          if (personaSnapshot?.persona && parsed.u.length > 0 && personaUpdates.length > 0) {
+          // Count effective changes, not raw tuples: echoed unchanged pairs must not make a run "mixed".
+          if (personaSnapshot?.persona && cardUpdates.length > 0 && personaUpdates.length > 0) {
             fail("History cannot atomically save card and persona changes in one run; retry with one change domain.", {
               code: "history_mixed_state_delta",
               statusCode: 502,

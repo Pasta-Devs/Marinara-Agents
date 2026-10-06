@@ -162,6 +162,15 @@ export function useSlurpTiesMutations(personaId: string) {
       mutationFn: (id: string) => post(`/collabs/${encodeURIComponent(id)}/block`),
       onSuccess: store,
     }),
+    // An agreed collab whose host never posted: call it off (no block), or make the host post it now.
+    drop: useMutation({
+      mutationFn: (id: string) => post(`/collabs/${encodeURIComponent(id)}/drop`),
+      onSuccess: (view) => (store(view), played()),
+    }),
+    postNow: useMutation({
+      mutationFn: (id: string) => post(`/collabs/${encodeURIComponent(id)}/post-now`),
+      onSuccess: (view) => (store(view), played()),
+    }),
     unblock: useMutation({ mutationFn: (pair: string) => post("/unblock", { key: pair }), onSuccess: store }),
     suggest: useMutation({
       mutationFn: (pair: { aId: string; bId: string }) => play("suggest-collab", { ...pair, happen: false }),

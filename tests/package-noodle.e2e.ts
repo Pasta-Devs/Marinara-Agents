@@ -1,4 +1,4 @@
-import { expect, test, type Locator, type Page } from "@playwright/test";
+import { expect, test, type Locator, type Page, type Route } from "@playwright/test";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
@@ -90,6 +90,39 @@ async function openNoodleSettings(page: Page) {
     await noodle.getByRole("button", { name: "Settings", exact: true }).click();
   }
   await expect(noodle.getByRole("heading", { name: "Noodle settings" })).toBeVisible();
+}
+
+async function saveTranslatorDefaults(page: Page, language: string) {
+  const response = await page.request.put("/api/app-settings/translator-defaults", {
+    data: {
+      value: JSON.stringify({
+        translationProvider: "deepl",
+        translationOutputTargetLang: language,
+        translationDeeplApiKey: "test-key",
+      }),
+    },
+  });
+  expect(response.ok()).toBe(true);
+}
+
+async function setAutoTranslate(page: Page, autoTranslatePosts: boolean) {
+  expect((await page.request.put("/api/noodle/settings", { data: { autoTranslatePosts } })).ok()).toBe(true);
+}
+
+async function createMariPost(page: Page, content: string) {
+  const response = await page.request.post("/api/noodle/posts", {
+    data: { authorKind: "character", authorEntityId: "__professor_mari__", content },
+  });
+  expect(response.ok()).toBe(true);
+  return (await response.json()) as { id: string; content: string };
+}
+
+async function createMariComment(page: Page, postId: string, content: string) {
+  const response = await page.request.post(`/api/noodle/posts/${postId}/interactions`, {
+    data: { actorKind: "character", actorEntityId: "__professor_mari__", type: "reply", content },
+  });
+  expect(response.ok()).toBe(true);
+  return (await response.json()) as { id: string; content: string };
 }
 
 async function setStoredTheme(page: Page, theme: "dark" | "light") {
@@ -341,6 +374,511 @@ test.describe("package-owned Noodle interface", () => {
       expect(errors).toEqual([]);
     } finally {
       await page.request.delete(`/api/noodle/posts/${post.id}`, { timeout: 5_000 }).catch(() => undefined);
+    }
+  });
+
+  test("post image pickers let a phone take a photo as well as choose a file", async ({ page }) => {
+    // Chrome on Android 13+ answers an image-only accept list with a photo picker that has no camera (#6939).
+    await page.request.get("/api/noodle");
+    const postResponse = await page.request.post("/api/noodle/posts", {
+      data: {
+        authorKind: "character",
+        authorEntityId: "__professor_mari__",
+        content: `Camera picker regression ${Date.now()}`,
+      },
+    });
+    expect(postResponse.ok()).toBe(true);
+    const post = (await postResponse.json()) as { id: string };
+    try {
+      await page.goto("/");
+      await openNoodle(page);
+      const noodle = page.locator('[data-component="NoodleView"]');
+      const imagePickers = noodle.locator('input[type="file"][accept*="image/"]');
+      // The post composer and the comment composer.
+      await expect(imagePickers).toHaveCount(2);
+      const article = noodle.locator(`[data-noodle-post-id="${post.id}"]`);
+      await article.getByRole("button", { name: "Post actions", exact: true }).click();
+      await article.getByRole("button", { name: "Edit", exact: true }).click();
+      // Plus the picker that replaces an edited post's image.
+      await expect(imagePickers).toHaveCount(3);
+      expect(await imagePickers.evaluateAll((inputs) => inputs.map((input) => input.getAttribute("accept")))).toEqual(
+        Array(3).fill("image/*,android/allowCamera"),
+      );
+    } finally {
+      await page.request.delete(`/api/noodle/posts/${post.id}`, { timeout: 5_000 }).catch(() => undefined);
+    }
+  });
+
+  test("posts and comments translate with the saved translator defaults", async ({ page }) => {
+    const errors = collectUnexpectedErrors(page);
+    const translateBodies: Array<Record<string, unknown>> = [];
+    let failTranslation = false;
+    await page.route("**/api/translate", async (route) => {
+      const body = route.request().postDataJSON() as Record<string, unknown>;
+      translateBodies.push(body);
+      if (failTranslation) {
+        await route.fulfill({ status: 400, json: { error: "Connection ID is required for AI translation" } });
+        return;
+      }
+      await route.fulfill({ json: { translatedText: `Przetłumaczone: ${String(body.text)}` } });
+    });
+    // Refresh timeline needs a generation connection; answer it with the current timeline instead of a model.
+    const isBootstrap = (url: URL) => url.pathname === "/api/noodle";
+    await page.route(isBootstrap, async (route) => {
+      const response = await route.fetch();
+      const bootstrap = (await response.json()) as { settings: Record<string, unknown> };
+      bootstrap.settings.generationConnectionId = "translation-regression-connection";
+      await route.fulfill({ response, json: bootstrap });
+    });
+    await page.route("**/api/noodle/refresh", async (route) => {
+      const bootstrap = await (await page.request.get("/api/noodle")).json();
+      await route.fulfill({ json: { bootstrap, imagePromptReviewItems: [] } });
+    });
+    const savedDefaults = await page.request.put("/api/app-settings/translator-defaults", {
+      data: {
+        value: JSON.stringify({
+          translationProvider: "deepl",
+          translationOutputTargetLang: "PL",
+          translationDeeplApiKey: "test-key",
+        }),
+      },
+    });
+    expect(savedDefaults.ok()).toBe(true);
+    await page.request.get("/api/noodle");
+    const postResponse = await page.request.post("/api/noodle/posts", {
+      data: {
+        authorKind: "character",
+        authorEntityId: "__professor_mari__",
+        content: `Translation regression ${Date.now()}`,
+      },
+    });
+    expect(postResponse.ok()).toBe(true);
+    const post = (await postResponse.json()) as { id: string; content: string };
+    try {
+      const commentResponse = await page.request.post(`/api/noodle/posts/${post.id}/interactions`, {
+        data: {
+          actorKind: "character",
+          actorEntityId: "__professor_mari__",
+          type: "reply",
+          content: "A comment worth translating.",
+        },
+      });
+      expect(commentResponse.ok()).toBe(true);
+      const comment = (await commentResponse.json()) as { id: string };
+
+      await page.goto("/");
+      await openNoodle(page);
+      const noodle = page.locator('[data-component="NoodleView"]');
+      const article = page.locator(`[data-noodle-post-id="${post.id}"]`);
+      const commentRow = article.locator(`[data-noodle-interaction-id="${comment.id}"]`);
+      const translations = article.locator("[data-noodle-translation]");
+      await expect(article).toContainText(post.content);
+
+      await article.getByRole("button", { name: "Post actions", exact: true }).click();
+      await article.getByRole("button", { name: "Translate", exact: true }).click();
+      await expect(translations).toHaveCount(1);
+      await expect(translations).toContainText(`Przetłumaczone: ${post.content}`);
+      // The original stays above its translation.
+      await expect(article.getByText(post.content, { exact: true })).toBeVisible();
+      expect(translateBodies).toEqual([
+        { text: post.content, provider: "deepl", targetLanguage: "PL", deeplApiKey: "test-key" },
+      ]);
+      await article.getByRole("button", { name: "Post actions", exact: true }).click();
+      await article.getByRole("button", { name: "Hide translation", exact: true }).click();
+      await expect(translations).toHaveCount(0);
+
+      // A provider error reaches the reader instead of an empty translation.
+      failTranslation = true;
+      await commentRow.getByRole("button", { name: "Translate comment" }).click();
+      await expect(page.getByText("Connection ID is required for AI translation")).toBeVisible();
+      await expect(translations).toHaveCount(0);
+      failTranslation = false;
+
+      await commentRow.getByRole("button", { name: "Translate comment" }).click();
+      const commentTranslation = commentRow.locator("[data-noodle-translation]");
+      await expect(commentTranslation).toContainText("Przetłumaczone: A comment worth translating.");
+      // Screen readers announce a translation the reader asked for.
+      await expect(commentTranslation).toHaveAttribute("aria-live", "polite");
+      expect(translateBodies).toHaveLength(3);
+
+      // Shown translations stay through a timeline refresh, leaving Noodle and a reload, without asking again;
+      // the hidden one stays hidden.
+      await noodle.getByRole("button", { name: "Refresh timeline" }).click();
+      await expect(page.getByText("Noodle timeline refreshed")).toBeVisible();
+      await expect(translations).toHaveCount(1);
+      await expect(commentTranslation).toContainText("Przetłumaczone: A comment worth translating.");
+      await page.getByRole("tab", { name: "Home" }).click();
+      await expect(noodle).toBeHidden();
+      await openNoodle(page);
+      await expect(commentTranslation).toContainText("Przetłumaczone: A comment worth translating.");
+      await page.reload();
+      await openNoodle(page);
+      await expect(commentTranslation).toContainText("Przetłumaczone: A comment worth translating.");
+      await expect(translations).toHaveCount(1);
+      expect(translateBodies).toHaveLength(3);
+
+      await commentRow.getByRole("button", { name: "Hide translation" }).click();
+      await expect(translations).toHaveCount(0);
+      // Showing it again reuses the saved translation.
+      await article.getByRole("button", { name: "Post actions", exact: true }).click();
+      await article.getByRole("button", { name: "Translate", exact: true }).click();
+      await expect(translations).toContainText(`Przetłumaczone: ${post.content}`);
+      expect(translateBodies).toHaveLength(3);
+      expect(errors.filter((error) => !error.includes("400"))).toEqual([]);
+    } finally {
+      await page.request.delete(`/api/noodle/posts/${post.id}`, { timeout: 5_000 }).catch(() => undefined);
+      await page.request
+        .put("/api/app-settings/translator-defaults", { data: { value: "" }, timeout: 5_000 })
+        .catch(() => undefined);
+    }
+  });
+
+  test("a translation hidden while loading cannot cancel the next one", async ({ page }) => {
+    // Translate, hide, and translate again while the first request is still out; its late error must not count.
+    const held: Route[] = [];
+    await page.route("**/api/translate", (route) => {
+      held.push(route);
+    });
+    await page.request.get("/api/noodle");
+    const postResponse = await page.request.post("/api/noodle/posts", {
+      data: {
+        authorKind: "character",
+        authorEntityId: "__professor_mari__",
+        content: `Stale translation regression ${Date.now()}`,
+      },
+    });
+    expect(postResponse.ok()).toBe(true);
+    const post = (await postResponse.json()) as { id: string };
+    try {
+      await page.goto("/");
+      await openNoodle(page);
+      const article = page.locator(`[data-noodle-post-id="${post.id}"]`);
+      const translation = article.locator("[data-noodle-translation]");
+      const choose = async (action: "Translate" | "Hide translation") => {
+        await article.getByRole("button", { name: "Post actions", exact: true }).click();
+        await article.getByRole("button", { name: action, exact: true }).click();
+      };
+      await choose("Translate");
+      await expect.poll(() => held.length).toBe(1);
+      await choose("Hide translation");
+      await expect(translation).toHaveCount(0);
+      await choose("Translate");
+      await expect.poll(() => held.length).toBe(2);
+      await expect(translation).toContainText("Translating…");
+
+      const staleFailure = page.waitForResponse(
+        (response) => new URL(response.url()).pathname === "/api/translate" && response.status() === 500,
+      );
+      await held[0].fulfill({ status: 500, json: { error: "Stale translation failed" } });
+      await staleFailure;
+      await held[1].fulfill({ json: { translatedText: "Fresh translation" } });
+      await expect(translation).toContainText("Fresh translation");
+      await expect(page.getByText("Stale translation failed")).toHaveCount(0);
+    } finally {
+      await page.request.delete(`/api/noodle/posts/${post.id}`, { timeout: 5_000 }).catch(() => undefined);
+    }
+  });
+
+  test("automatic translation translates other accounts once and keeps a hidden translation hidden", async ({
+    page,
+  }) => {
+    const errors = collectUnexpectedErrors(page);
+    const personaId = await prepareNoodlePersona(page, "Noodle Translation Persona");
+    const translated: Array<{ text: string; targetLanguage: unknown }> = [];
+    await page.route("**/api/translate", async (route) => {
+      const body = route.request().postDataJSON() as Record<string, unknown>;
+      const text = String(body.text);
+      translated.push({ text, targetLanguage: body.targetLanguage });
+      // Text already in the target language comes back unchanged, as Google and DeepL return it.
+      const translatedText = text.startsWith("Już po polsku") ? text : `${String(body.targetLanguage)}: ${text}`;
+      await route.fulfill({ json: { translatedText } });
+    });
+    const languagesFor = (text: string) =>
+      translated.filter((request) => request.text === text).map((request) => request.targetLanguage);
+    const createdPostIds: string[] = [];
+    try {
+      await saveTranslatorDefaults(page, "PL");
+      await page.request.get("/api/noodle");
+      const stamp = Date.now();
+      const createPost = async (data: Record<string, unknown>) => {
+        const response = await page.request.post("/api/noodle/posts", { data });
+        expect(response.ok()).toBe(true);
+        const created = (await response.json()) as { id: string; content: string };
+        createdPostIds.push(created.id);
+        return created;
+      };
+      const post = await createPost({
+        authorKind: "character",
+        authorEntityId: "__professor_mari__",
+        content: `Automatic translation ${stamp}`,
+      });
+      const ownPost = await createPost({
+        authorKind: "persona",
+        authorEntityId: personaId,
+        content: `My own words ${stamp}`,
+      });
+      const polishPost = await createPost({
+        authorKind: "character",
+        authorEntityId: "__professor_mari__",
+        content: `Już po polsku ${stamp}`,
+      });
+      const commentResponse = await page.request.post(`/api/noodle/posts/${post.id}/interactions`, {
+        data: {
+          actorKind: "character",
+          actorEntityId: "__professor_mari__",
+          type: "reply",
+          content: `An automatic comment ${stamp}`,
+        },
+      });
+      expect(commentResponse.ok()).toBe(true);
+      const comment = (await commentResponse.json()) as { id: string; content: string };
+
+      await page.goto("/");
+      await openNoodle(page);
+      await openNoodleSettings(page);
+      const noodle = page.locator('[data-component="NoodleView"]');
+      await noodle.getByRole("button", { name: "General", exact: true }).click();
+      const autoTranslateSetting = noodle
+        .locator("label")
+        .filter({ hasText: "Translate posts automatically" })
+        .locator('input[type="checkbox"]');
+      // The switch is controlled by saved settings, so it turns on after the save starts rather than on click.
+      await autoTranslateSetting.click();
+      await expect(autoTranslateSetting).toBeChecked();
+      await expect
+        .poll(async () => {
+          const bootstrap = (await (await page.request.get("/api/noodle")).json()) as {
+            settings: { autoTranslatePosts?: boolean };
+          };
+          return bootstrap.settings.autoTranslatePosts;
+        })
+        .toBe(true);
+      // Back to the timeline: forget the remembered settings view, keeping the persona.
+      await page.evaluate(() => localStorage.removeItem("marinara:noodle:ui"));
+      await page.reload();
+      await openNoodle(page);
+      const article = page.locator(`[data-noodle-post-id="${post.id}"]`);
+      const translations = article.locator("[data-noodle-translation]");
+      const postTranslation = translations.filter({ hasText: post.content });
+      const commentTranslation = article.locator(
+        `[data-noodle-interaction-id="${comment.id}"] [data-noodle-translation]`,
+      );
+      await expect(postTranslation).toContainText(`PL: ${post.content}`);
+      await expect(commentTranslation).toContainText(`PL: ${comment.content}`);
+      // Nobody asked for these, so screen readers do not announce each one as it arrives.
+      await expect(postTranslation).toHaveAttribute("aria-live", "off");
+      await expect(page.locator(`[data-noodle-post-id="${ownPost.id}"] [data-noodle-translation]`)).toHaveCount(0);
+      expect(languagesFor(post.content)).toEqual(["PL"]);
+      expect(languagesFor(comment.content)).toEqual(["PL"]);
+      expect(languagesFor(ownPost.content)).toEqual([]);
+      // A post already in the target language gets no copy of itself under it.
+      await expect.poll(() => languagesFor(polishPost.content)).toEqual(["PL"]);
+      await expect(page.locator(`[data-noodle-post-id="${polishPost.id}"] [data-noodle-translation]`)).toHaveCount(0);
+
+      await article.getByRole("button", { name: "Post actions", exact: true }).click();
+      // The post menu comes before the comment's own Hide translation button.
+      await article.getByRole("button", { name: "Hide translation", exact: true }).first().click();
+      await expect(postTranslation).toHaveCount(0);
+      await page.reload();
+      await openNoodle(page);
+      await expect(commentTranslation).toContainText(`PL: ${comment.content}`);
+      await expect(translations).toHaveCount(1);
+      expect(languagesFor(post.content)).toEqual(["PL"]);
+      expect(languagesFor(comment.content)).toEqual(["PL"]);
+
+      // New translator defaults translate again, except what the reader hid.
+      await saveTranslatorDefaults(page, "DE");
+      await page.reload();
+      await openNoodle(page);
+      await expect(commentTranslation).toContainText(`DE: ${comment.content}`);
+      await expect(translations).toHaveCount(1);
+      expect(languagesFor(post.content)).toEqual(["PL"]);
+      expect(languagesFor(comment.content)).toEqual(["PL", "DE"]);
+
+      // Turned off, only translations the reader asked for stay.
+      await setAutoTranslate(page, false);
+      await page.reload();
+      await openNoodle(page);
+      await expect(article).toContainText(comment.content);
+      await expect(translations).toHaveCount(0);
+      expect(errors).toEqual([]);
+    } finally {
+      for (const postId of createdPostIds) {
+        await page.request.delete(`/api/noodle/posts/${postId}`, { timeout: 5_000 }).catch(() => undefined);
+      }
+      await page.request
+        .put("/api/noodle/settings", { data: { autoTranslatePosts: false }, timeout: 5_000 })
+        .catch(() => undefined);
+      await page.request
+        .put("/api/app-settings/translator-defaults", { data: { value: "" }, timeout: 5_000 })
+        .catch(() => undefined);
+      await page.request.delete(`/api/characters/personas/${personaId}`, { timeout: 5_000 }).catch(() => undefined);
+    }
+  });
+
+  test("turning automatic translation off stops waiting translations and a hide while translating is remembered", async ({
+    page,
+  }) => {
+    const errors = collectUnexpectedErrors(page);
+    const personaId = await prepareNoodlePersona(page, "Noodle Translation Stop Persona");
+    // Hold every translation until released, so some are still waiting when the switch turns off.
+    const held: Route[] = [];
+    const requested: string[] = [];
+    let holdTranslations = true;
+    await page.route("**/api/translate", async (route) => {
+      const text = String((route.request().postDataJSON() as Record<string, unknown>).text);
+      requested.push(text);
+      if (holdTranslations) held.push(route);
+      else await route.fulfill({ json: { translatedText: `PL: ${text}` } });
+    });
+    const release = async () => {
+      for (const route of held.splice(0)) {
+        const text = String((route.request().postDataJSON() as Record<string, unknown>).text);
+        await route.fulfill({ json: { translatedText: `PL: ${text}` } }).catch(() => undefined);
+      }
+    };
+    let postId: string | null = null;
+    try {
+      await saveTranslatorDefaults(page, "PL");
+      await page.request.get("/api/noodle");
+      const stamp = Date.now();
+      const post = await createMariPost(page, `Stop automatic translation ${stamp}`);
+      postId = post.id;
+      for (let index = 0; index < 3; index += 1) {
+        await createMariComment(page, post.id, `Waiting comment ${index} ${stamp}`);
+      }
+      await setAutoTranslate(page, true);
+
+      await page.goto("/");
+      await openNoodle(page);
+      const article = page.locator(`[data-noodle-post-id="${post.id}"]`);
+      const translations = article.locator("[data-noodle-translation]");
+      await expect(translations).toHaveCount(4);
+      await expect(translations.first()).toContainText("Translating…");
+      // Two requests go out at a time; the rest wait.
+      await expect.poll(() => requested.length).toBe(2);
+
+      // Hiding a translation still on its way is remembered.
+      await article.getByRole("button", { name: "Post actions", exact: true }).click();
+      await article.getByRole("button", { name: "Hide translation", exact: true }).first().click();
+      await expect(translations).toHaveCount(3);
+
+      await openNoodleSettings(page);
+      const noodle = page.locator('[data-component="NoodleView"]');
+      await noodle.getByRole("button", { name: "General", exact: true }).click();
+      const autoTranslateSetting = noodle
+        .locator("label")
+        .filter({ hasText: "Translate posts automatically" })
+        .locator('input[type="checkbox"]');
+      await expect(autoTranslateSetting).toBeChecked();
+      await autoTranslateSetting.click();
+      await expect(autoTranslateSetting).not.toBeChecked();
+      await release();
+      // ponytail: a fixed wait, because proving that no request follows needs a window of time.
+      await page.waitForTimeout(1_000);
+      expect(requested).toHaveLength(2);
+      const postRequests = requested.filter((text) => text === post.content).length;
+
+      // Back on: the comments are translated, and the post hidden while translating stays hidden.
+      holdTranslations = false;
+      await setAutoTranslate(page, true);
+      await page.evaluate(() => localStorage.removeItem("marinara:noodle:ui"));
+      await page.reload();
+      await openNoodle(page);
+      await expect(translations).toHaveCount(3);
+      for (const translation of await translations.all())
+        await expect(translation).toContainText("PL: Waiting comment");
+      expect(requested.filter((text) => text === post.content)).toHaveLength(postRequests);
+      expect(errors).toEqual([]);
+    } finally {
+      holdTranslations = false;
+      await release();
+      if (postId) await page.request.delete(`/api/noodle/posts/${postId}`, { timeout: 5_000 }).catch(() => undefined);
+      await page.request
+        .put("/api/noodle/settings", { data: { autoTranslatePosts: false }, timeout: 5_000 })
+        .catch(() => undefined);
+      await page.request
+        .put("/api/app-settings/translator-defaults", { data: { value: "" }, timeout: 5_000 })
+        .catch(() => undefined);
+      await page.request.delete(`/api/characters/personas/${personaId}`, { timeout: 5_000 }).catch(() => undefined);
+    }
+  });
+
+  test("saved translations stay under their limit without dropping ones on screen", async ({ page }) => {
+    const errors = collectUnexpectedErrors(page);
+    const personaId = await prepareNoodlePersona(page, "Noodle Translation Limit Persona");
+    const requested: string[] = [];
+    await page.route("**/api/translate", async (route) => {
+      const text = String((route.request().postDataJSON() as Record<string, unknown>).text);
+      requested.push(text);
+      await route.fulfill({ json: { translatedText: `PL: ${text}` } });
+    });
+    const savedKey = "marinara:noodle:translations";
+    const readSaved = () =>
+      page.evaluate((key) => JSON.parse(localStorage.getItem(key) ?? "{}") as Record<string, unknown>, savedKey);
+    let postId: string | null = null;
+    try {
+      await saveTranslatorDefaults(page, "PL");
+      await page.request.get("/api/noodle");
+      const stamp = Date.now();
+      const post = await createMariPost(page, `Saved translation limit ${stamp}`);
+      postId = post.id;
+      const comment = await createMariComment(page, post.id, `A comment past the limit ${stamp}`);
+      await setAutoTranslate(page, true);
+      // The post's translation is the oldest saved one, followed by `others` that are not on screen.
+      const seed = async (others: number) => {
+        // Nothing may still be on its way, or its save would overwrite the seeded translations.
+        await expect(page.locator("[data-noodle-translation]").filter({ hasText: "Translating…" })).toHaveCount(0);
+        await page.evaluate(
+          ({ key, id, content, count }) => {
+            const saved: Record<string, unknown> = {
+              [id]: { source: content, target: "deepl:PL", text: `PL: ${content}` },
+            };
+            for (let index = 0; index < count; index += 1) {
+              saved[`elsewhere-${index}`] = { source: "Elsewhere", target: "deepl:PL", text: "PL: Elsewhere" };
+            }
+            localStorage.setItem(key, JSON.stringify(saved));
+          },
+          { key: savedKey, id: post.id, content: post.content, count: others },
+        );
+        await page.reload();
+        await openNoodle(page);
+      };
+      const article = page.locator(`[data-noodle-post-id="${post.id}"]`);
+      const postTranslation = article.locator("[data-noodle-translation]").filter({ hasText: post.content });
+      const commentTranslation = article.locator(
+        `[data-noodle-interaction-id="${comment.id}"] [data-noodle-translation]`,
+      );
+
+      // Below the limit, saving a translation forgets nothing.
+      await page.goto("/");
+      await seed(150);
+      await expect(commentTranslation).toContainText(`PL: ${comment.content}`);
+      await expect(postTranslation).toContainText(`PL: ${post.content}`);
+      const belowLimit = await readSaved();
+      expect(Object.keys(belowLimit).filter((id) => id.startsWith("elsewhere-"))).toHaveLength(150);
+      expect(belowLimit[post.id]).toBeTruthy();
+      expect(belowLimit[comment.id]).toBeTruthy();
+
+      // At the limit, the oldest translation not on screen goes; the post's stays and is not asked for again.
+      await seed(299);
+      await expect(commentTranslation).toContainText(`PL: ${comment.content}`);
+      await expect(postTranslation).toContainText(`PL: ${post.content}`);
+      await expect.poll(async () => Object.keys(await readSaved()).length).toBe(300);
+      const atLimit = await readSaved();
+      expect(atLimit[post.id]).toBeTruthy();
+      expect(atLimit["elsewhere-0"]).toBeUndefined();
+      expect(requested.filter((text) => text === post.content)).toEqual([]);
+      expect(errors).toEqual([]);
+    } finally {
+      if (postId) await page.request.delete(`/api/noodle/posts/${postId}`, { timeout: 5_000 }).catch(() => undefined);
+      await page.request
+        .put("/api/noodle/settings", { data: { autoTranslatePosts: false }, timeout: 5_000 })
+        .catch(() => undefined);
+      await page.request
+        .put("/api/app-settings/translator-defaults", { data: { value: "" }, timeout: 5_000 })
+        .catch(() => undefined);
+      await page.request.delete(`/api/characters/personas/${personaId}`, { timeout: 5_000 }).catch(() => undefined);
     }
   });
 
@@ -1337,7 +1875,7 @@ test.describe("package-owned Noodle interface", () => {
       await expect(characterComment.getByRole("button", { name: "Delete comment" })).toBeVisible();
       await expect(ownComment.locator("[data-noodle-avatar-fallback]")).toHaveCSS("color", NOODLE_BLUE_RGB);
       await expect(ownComment.locator("[data-noodle-comment-metadata]")).toHaveCSS("color", NOODLE_BLUE_RGB);
-      for (const name of ["Like comment", "Edit comment", "Delete comment"]) {
+      for (const name of ["Like comment", "Translate comment", "Edit comment", "Delete comment"]) {
         await expect(ownComment.getByRole("button", { name })).toHaveCSS("color", NOODLE_BLUE_RGB);
       }
 
@@ -1348,7 +1886,7 @@ test.describe("package-owned Noodle interface", () => {
       await expect(ownComment).toBeVisible();
       await expectSurfaceAccent(ownComment.locator("[data-noodle-avatar-fallback]"), "#7EA7FF");
       await expectSurfaceAccent(ownComment.locator("[data-noodle-comment-metadata]"), "#7EA7FF");
-      for (const name of ["Like comment", "Edit comment", "Delete comment"]) {
+      for (const name of ["Like comment", "Translate comment", "Edit comment", "Delete comment"]) {
         await expectSurfaceAccent(ownComment.getByRole("button", { name }), "#7EA7FF");
       }
 

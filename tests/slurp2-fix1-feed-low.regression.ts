@@ -38,8 +38,12 @@ assert.match(en["ui.slurp.settings.postShowMoreLengthDetail"] ?? "", /six lines/
 assert.match(read("client/src/slp/modules/post/SlpComposerPurpose.tsx"), /ui\.slurp\.composer\.purposeGuideOnly/u);
 // R1-040: the Story cutoff moves with a minute clock.
 // T: the rail's rings now come from the shared Story-ring state the host computes (SlpHomeHost).
-for (const file of ["client/src/slp/app/screens/SlpScreenHub.tsx", "client/src/slp/app/SlpHomeHost.tsx"])
-  assert.match(read(file), /useSlpMinuteClock\(\)/u, file);
+assert.match(read("client/src/slp/app/screens/SlpScreenHub.tsx"), /useSlpMinuteClock\(\)/u);
+// The host re-checks once a minute but sets state only when the live set changes (no app-wide tick).
+assert.match(
+  read("client/src/slp/app/SlpHomeHost.tsx"),
+  /slurpLiveStories\(creators \?\? \[\], Date\.now\(\) - lifetimeMs\)[\s\S]{0,200}?key\(previous\) === key\(next\) \? previous : next[\s\S]{0,160}?setInterval\(refresh, 60_000\)/u,
+);
 // R1-043 / R1-044 / R1-045
 assert.doesNotMatch(read("client/src/slp/app/screens/SlpScreenComposer.tsx"), /Shared an image\./u);
 assert.match(read("client/src/slp/modules/post/SlpPostMenu.tsx"), /ui\.slurp\.post\.saveImageFailed/u);

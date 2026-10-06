@@ -1,3 +1,4 @@
+import { useSlurpUIStore } from "../../base/state/slp-package-store";
 import { cn } from "../../../lib/utils";
 import { SlpStoryRingAvatar } from "../../modules/story/SlpStoryRing";
 import {
@@ -11,6 +12,7 @@ import {
   MoreVertical,
   Search,
   Trash2,
+  Clapperboard,
   UserRound,
   X,
 } from "lucide-react";
@@ -70,12 +72,17 @@ export function SlpThreadHeader({ model }: { model: SlurpThreadViewModel }) {
     setTierOpen,
     thread,
     threadId: threadIdProp,
+    threadQuery,
     tierOpen,
     tierTriggerRef,
   } = model;
   // A chat opened from a profile is addressed by its Creator; once it loads it has a thread like any
   // other, so Search, Memories, Commissions and Clear show there too (R1-008).
   const threadId = thread?.id ?? threadIdProp;
+  // Roleplay scenes (docs/SCENES.md): this Engine runs them, this thread may, and it is not in one.
+  const sceneHost = useSlurpUIStore((state) => state.sceneHost);
+  const setSceneSheet = useSlurpUIStore((state) => state.setSceneSheet);
+  const canStartScene = Boolean(sceneHost && threadQuery.data?.scenes && thread && !thread.sceneChatId);
   const tierLabel = thread?.rapport ? localizeUi(`ui.slurp.rapport.tier.${thread.rapport.tier}`) : "";
   // Her partner (or crush) is no fan tier: the header says where the two of them are, and opens You two.
   const partnerStage = relationship?.couple && relationship.couple.stage !== "split" ? relationship.couple.stage : null;
@@ -306,6 +313,12 @@ export function SlpThreadHeader({ model }: { model: SlurpThreadViewModel }) {
             <SlpSheetItem onSelect={menuAction(() => setDrawerMode("memories"))}>
               <BookHeart aria-hidden="true" />
               {localizeUi("ui.slurp.messages.memories", { defaultValue: "Memories" })}
+            </SlpSheetItem>
+          )}
+          {canStartScene && thread && (
+            <SlpSheetItem onSelect={menuAction(() => setSceneSheet({ threadId: thread.id }))}>
+              <Clapperboard aria-hidden="true" />
+              {localizeUi("ui.slurp.rpScene.menuStart")}
             </SlpSheetItem>
           )}
           {/* Slurp's staff do not commission pictures: Support has its own photo tools (0.3.6). */}

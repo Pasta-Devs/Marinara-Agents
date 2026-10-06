@@ -3,12 +3,17 @@ import { Plus, X } from "lucide-react";
 import { toast } from "sonner";
 import { useTranslation } from "react-i18next";
 import {
+  SLP_SPICE_LANGUAGES,
   SLP_SPICE_LEVELS,
   SLP_TASTE_IDEAS,
   SLP_TASTE_STRENGTHS,
   SLP_TASTE_TEXT_MAX,
   SLP_TASTES_MAX,
+  slpExplicitOfStep,
+  slpSpiceStepOf,
   slpTasteKey,
+  type SlpSpiceLanguage,
+  type SlpSpiceLevel,
   type SlpTaste,
   type SlpTasteStrength,
 } from "../../../../../shared/src/slp/slp-spice.js";
@@ -19,6 +24,8 @@ import { errorMessage } from "../../modules/settings/slp-backstage-format";
 import { SlpButton, SlpPrimaryButton } from "../../modules/chrome/SlpButton";
 import { noteClass, selectClass } from "./slp-creator-classes";
 import { useSlurpSpice, useSlurpSpiceMutations } from "./slp-spice-hooks";
+import { SlpSpiceLevelChoice } from "./SlpSpiceLevelChoice";
+import { useSlurpPostGuidance, useUpdateSlurpPostGuidance } from "../settings/slp-post-guidance-contract";
 
 const pill =
   "flex min-h-10 min-w-0 flex-1 cursor-pointer items-center justify-center rounded-md px-2 text-center text-xs font-semibold transition-colors focus-within:ring-2 focus-within:ring-[var(--slurp-focus)] motion-reduce:transition-none";
@@ -84,6 +91,58 @@ function TasteRow({
  * Backstage › Spice: how far Slurp goes, the player's own taste, the never list, and what Slurp
  * noticed they like. No AI calls here; the taste reaches posts, offers and chats Slurp already writes.
  */
+/**
+ * Every Creator's default level and the words they use (0.3.17). The level lives with the post
+ * guidance (Creators override it in Content rules); the language with the rest of spice.
+ */
+function SpiceDefaults({
+  max,
+  language,
+  busy,
+  onLanguage,
+}: {
+  max: SlpSpiceLevel;
+  language: SlpSpiceLanguage;
+  busy: boolean;
+  onLanguage: (language: SlpSpiceLanguage) => void;
+}) {
+  const { t } = useTranslation();
+  const guidance = useSlurpPostGuidance();
+  const update = useUpdateSlurpPostGuidance();
+  const builtIn = guidance.data ? (slpSpiceStepOf(guidance.data.builtInLevel) ?? undefined) : undefined;
+  return (
+    <SettingsGroup title={t("ui.slurp.spice.defaultTitle")}>
+      <SlpSpiceLevelChoice
+        label={t("ui.slurp.spice.defaultLevel")}
+        value={slpSpiceStepOf(guidance.data?.defaults.level)}
+        inherited={builtIn}
+        inheritLabelKey="ui.slurp.spice.inheritShipped"
+        max={max}
+        disabled={!guidance.data || update.isPending}
+        onChange={(step) =>
+          update.mutate(
+            { level: step ? slpExplicitOfStep(step) : "" },
+            { onError: (error) => toast.error(errorMessage(error)) },
+          )
+        }
+      />
+      <ChoiceSetting
+        variant="cards"
+        label={t("ui.slurp.spice.language")}
+        detail={t("ui.slurp.spice.languageDetail")}
+        options={SLP_SPICE_LANGUAGES.map((value) => ({
+          value,
+          label: t(`ui.slurp.spice.languages.${value}`),
+          detail: t(`ui.slurp.spice.languageHint.${value}`),
+        }))}
+        value={language}
+        disabled={busy}
+        onChange={onLanguage}
+      />
+    </SettingsGroup>
+  );
+}
+
 export function SlpSpicePanel() {
   const { t } = useTranslation();
   const query = useSlurpSpice();
@@ -161,6 +220,13 @@ export function SlpSpicePanel() {
           </ul>
         </section>
       )}
+
+      <SpiceDefaults
+        max={spice.max}
+        language={spice.language}
+        busy={busy}
+        onLanguage={(language) => patch.mutate({ language }, { onError })}
+      />
 
       <SettingsGroup title={t("ui.slurp.spice.maxTitle")}>
         <ChoiceSetting

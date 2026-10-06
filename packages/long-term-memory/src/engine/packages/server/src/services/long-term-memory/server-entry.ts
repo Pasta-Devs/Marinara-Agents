@@ -1,6 +1,6 @@
 import { join } from "node:path";
 import { configurePackageRuntime, type CapabilityRuntimeHost } from "./package-runtime.js";
-import { activateLongTermMemoryStorage } from "./runtime.js";
+import { activateLongTermMemoryStorage, withLongTermMemoryVaultMutation } from "./runtime.js";
 import { prepareGenerationLongTermMemory, recordGenerationLongTermMemoryDispatch } from "./generation-injection.js";
 import { createLongTermMemoryRoutes } from "./routes.js";
 import { adoptLegacyLongTermMemoryAgentConfig, adoptLegacyLongTermMemoryChats } from "./legacy-adoption.js";
@@ -23,6 +23,7 @@ export async function activate({ api, dataDir }: ActivationContext) {
   const releaseHost = configurePackageRuntime({ ...api.runtime, dataDir });
   try {
     active = await activateLongTermMemoryStorage(join(dataDir, "long-term-memory"));
+    const activationRoot = active.root;
     await adoptLegacyLongTermMemoryAgentConfig(active.root);
     await adoptLegacyLongTermMemoryChats();
     const releaseRoutes = await api.registerPrivilegedRoutes(createLongTermMemoryRoutes(active), {
@@ -44,6 +45,7 @@ export async function activate({ api, dataDir }: ActivationContext) {
       }) => prepareGenerationLongTermMemory({ ...input, root: active!.root }),
       recordPromptAccepted: (input: { chatId: string; receipt: unknown; messages: Array<{ content: string }> }) =>
         recordGenerationLongTermMemoryDispatch({ ...input, root: active!.root }),
+      withVaultMutation: <T>(operation: () => Promise<T>) => withLongTermMemoryVaultMutation(activationRoot, operation),
     });
     return async () => {
       releaseRoutes();

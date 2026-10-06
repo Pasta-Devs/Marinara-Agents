@@ -2,7 +2,7 @@
   {
     "id": "prose-guardian",
     "name": "Prose Guardian",
-    "description": "Post-processes the latest assistant message to remove banned words, repetition, and unwanted prose habits without changing the meaning.",
+    "description": "Removes banned words, repetition, and unwanted writing habits from AI messages without changing what they say.",
     "phase": "post_processing",
     "enabledByDefault": false,
     "category": "writer",

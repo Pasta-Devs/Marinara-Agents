@@ -32,6 +32,8 @@ This is an **alpha** and the package is **staging only**: Engine `staging` teste
 
 0.3.1 makes NPCs a rule for each life (off by default in a new one), lets you stay the night once you're dating, and fixes the places where a life could get stuck, starting with the end of someone's party.
 
+0.3.2 fixes plans landing on a party, dating more than one person, dragging the phone button on a phone, and pictures while a new season's outfits are painted.
+
 All generation — cast readings, scene lines, backgrounds and outfit pictures — runs through the Engine profile's own configured model and image connections. The package adds no external services and sends nothing anywhere else. The numbers (bonds, money, time, outcomes) are always decided by the package's code; the model only writes the words.
 
 ## Requirements

@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../../../lib/api-client";
 import { slpKeys } from "../../base/state/slp-query-keys";
 import type {
+  SlpSpiceLanguage,
   SlpSpiceLevel,
   SlpTaste,
   SlpTasteNoticed,
@@ -10,7 +11,7 @@ import type {
 
 /** Backstage › Spice, as the server shows it. What Slurp learned stays on the server. */
 export type SlpSpiceView = {
-  spice: { max: SlpSpiceLevel; tastes: SlpTaste[]; never: string[] };
+  spice: { max: SlpSpiceLevel; tastes: SlpTaste[]; never: string[]; language: SlpSpiceLanguage };
   noticed: SlpTasteNoticed[];
 };
 
@@ -35,6 +36,7 @@ export function useSlurpSpiceMutations() {
         max?: SlpSpiceLevel;
         tastes?: { id?: string; text: string; strength: SlpTasteStrength }[];
         never?: string[];
+        language?: SlpSpiceLanguage;
       }) => api.patch<SlpSpiceView>(path, patch),
       onSuccess: store,
     }),

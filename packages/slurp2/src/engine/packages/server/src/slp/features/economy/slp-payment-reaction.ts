@@ -50,7 +50,8 @@ export async function reactToSlurpPayment(
     const messages = createSlurpMessagesStorage(db);
     const thread = await messages.getThread(input.viewerAccountId, input.creatorAccountId);
     // No thread means no conversation to react in. Opening one uninvited is a different feature.
-    if (!thread || thread.state !== "active") return;
+    // A roleplay scene holds the thread (docs/SCENES.md): no fan line lands in the paused chat.
+    if (!thread || thread.state !== "active" || thread.sceneChatId) return;
     // One answer per spending spree, and not every payment. The decision comes before the marker:
     // a stored marker is a fan message, and the away scheduler answered it later even when this
     // path had decided to stay quiet.

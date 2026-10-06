@@ -27,7 +27,7 @@ import { type SlurpAccount } from "../../modules/records/slp-storage-model.js";
 import { createPromptOverridesStorage } from "../../../services/storage/prompt-overrides.storage.js";
 import { generateCreatorPostImage, SLURP_SECONDARY_IMAGE_COUNT } from "../media/slp-media-contract.js";
 import { finishSlurpPostImage } from "./slp-post-media-operation.js";
-import { recordSlurpBeatFacts, resolveSlurpBeatDay } from "./slp-post-beat-service.js";
+import { recordSlurpBeatFacts, resolveSlurpBeatCastContext, resolveSlurpBeatDay } from "./slp-post-beat-service.js";
 import { slurpArcBeat, slurpPlannedExplicitLevel } from "../../modules/feed/slp-post-beat.js";
 import { slpCreatorUnlockPriceMetadata } from "../../modules/economy/slp-prices.js";
 import { persistCreatorPostWithUploadedMedia, type SlpCreatorPostMediaUpload } from "../../base/media/slp-media.js";
@@ -135,8 +135,7 @@ export async function generateCreatorPost(
   const { account } = input;
   const settings = await noodle.getSettings();
   const autoPosting = account.settings.scheduler.autoPosting;
-  // The composer's AI image toggle is a request from the user, so it counts like the scheduler's
-  // own setting. Without this a Creator with scheduled images off could never ask for one.
+  // The composer's AI image toggle is the user's request: it counts like the scheduler's own setting.
   const imagesEnabled = (autoPosting?.imagesEnabled === true || input.request.generateImage === true) && !input.media;
 
   const connections = createConnectionsStorage(db);
@@ -160,9 +159,8 @@ export async function generateCreatorPost(
     : undefined;
   // Derive the identity from the row already in hand; resolving it again would re-read it.
   const publicIdentity = await slpCreatorPublicIdentityFor(db, linkedPublicAccount);
-  // Read the card at post time rather than relying on the bio and stage voice frozen at setup, so
-  // sharpening a character sharpens its Creator and existing Creators improve without a migration.
-  // Concealed modes get the stage profile draft's seed; disclosure limits what may be said, not who.
+  // Read the card at post time (not the bio and voice frozen at setup), so a sharper character makes a
+  // sharper Creator without a migration. Concealed modes get the stage seed; disclosure limits what, not who.
   const sourceCharacterContext = await resolveCreatorCharacterCanon(db, linkedPublicAccount, disclosureMode);
   const loreContext = await resolveSlurpPostLore(db, {
     settings,
@@ -373,6 +371,7 @@ export async function generateCreatorPost(
   const messages = buildNoodlerPostMessages({
     account,
     sourceCharacterContext,
+    castContext: await resolveSlurpBeatCastContext(db, beat?.castIds),
     flavourBrief,
     stagePersonality: account.settings.privacy.stagePersonality ?? "",
     stageFacts: account.settings.stage,

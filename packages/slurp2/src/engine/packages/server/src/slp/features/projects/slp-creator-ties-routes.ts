@@ -1,13 +1,18 @@
 import type { FastifyInstance } from "fastify";
+import { logger } from "../../../lib/logger.js";
+import { createSlurpStorage } from "../../data/slp-storage.js";
+import { generateAndApplyCreatorPost, resolveSlurpAutomaticPostAccess } from "../feed/slp-feed-contract.js";
 import { z } from "zod";
 import { newId } from "../../../utils/id-generator.js";
 import type { SlpRouteDeps } from "../viewer/slp-viewer-contract.js";
 import { mutateSlurpCreatorTies, readSlurpCreatorTiesDocument } from "../../data/projects/slp-creator-ties-storage.js";
 import {
   slurpBlockCollab,
+  slurpCollabDueNow,
   slurpCollabOpen,
   slurpCoolRivalry,
   slurpDeclineCollab,
+  slurpDropCollab,
   slurpPushCollab,
   slurpRivalryActive,
   slurpSuggestCollab,
@@ -62,6 +67,7 @@ const COUPLE_ERRORS: Record<SlurpCoupleError, [number, string]> = {
   notInto: [409, "Neither romance nor dating is something they are looking for."],
   noDating: [409, "One of them does not date, and would not start for this."],
   orientation: [409, "They are not each other's type."],
+  romance: [409, "Their romance settings keep these two apart."],
   pageOpen: [409, "Their shared page is already open."],
   mono: [409, "One of them is monogamous and already with someone."],
 };
@@ -202,6 +208,27 @@ export async function slpCreatorTiesRoutes(app: FastifyInstance, deps: SlpRouteD
   app.post("/slurp/ties/collabs/:id/block", (req, reply) =>
     change(req, reply, (ties, at) => slurpBlockCollab(ties, id(req), at)),
   );
+  app.post("/slurp/ties/collabs/:id/drop", (req, reply) =>
+    change(req, reply, (ties, at) => slurpDropCollab(ties, id(req), at)),
+  );
+  // Due now, then the host writes it at once (the beat planner takes a due collab first). Not awaited:
+  // a post takes a model call, and the Studio view answers right away.
+  // One post per collab at a time: a second tap while the first is being written is refused.
+  const postingNow = new Set<string>();
+  app.post("/slurp/ties/collabs/:id/post-now", async (req, reply) => {
+    const collabId = id(req);
+    if (postingNow.has(collabId)) return reply.code(409).send({ error: "That collab is being posted already." });
+    const hostId = (await readSlurpCreatorTiesDocument(app.db)).ties.collabs.find((c) => c.id === collabId)?.hostId;
+    const answer = await change(req, reply, (ties, at) => slurpCollabDueNow(ties, collabId, at));
+    if (hostId && !reply.sent) {
+      postingNow.add(collabId);
+      void resolveSlurpAutomaticPostAccess(createSlurpStorage(app.db), hostId)
+        .then((access) => generateAndApplyCreatorPost(app.db, { mode: "noodler", targetAccountId: hostId, access }))
+        .catch((error: unknown) => logger.warn(error, "[slurp-ties] Could not post the collab now"))
+        .finally(() => postingNow.delete(collabId));
+    }
+    return answer;
+  });
   app.post("/slurp/ties/unblock", async (req, reply) => {
     const parsed = z
       .object({ key: z.string().trim().min(3).max(260) })

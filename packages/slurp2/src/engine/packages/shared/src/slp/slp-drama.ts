@@ -271,3 +271,9 @@ export type SlpDramaSettings = z.infer<typeof slpDramaSettingsSchema>;
 export const SLP_DEFAULT_DRAMA_SETTINGS: SlpDramaSettings = slpDramaSettingsSchema.parse({});
 
 export const normalizeSlpDramaSettings = (raw: unknown): SlpDramaSettings => slpDramaSettingsSchema.parse(raw ?? {});
+
+/** The role pairs a drama ends as a couple: casting keeps the player's romance settings for them (0.3.17). */
+export const slpDramaCouplePairs = (drama: { stages: readonly { outcomes: readonly SlpDramaOutcome[] }[] }) =>
+  drama.stages.flatMap((stage) =>
+    stage.outcomes.flatMap((outcome) => (outcome.kind === "tie" && outcome.tie === "couple" ? [outcome.between] : [])),
+  );

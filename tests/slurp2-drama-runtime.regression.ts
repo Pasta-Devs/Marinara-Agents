@@ -157,6 +157,37 @@ async function main() {
     { world: world(), busy: new Set(), seed: "s", at: new Date(T0) },
   );
   assert.deepEqual(cast, { her: "mia", you: "me", him: "jake" });
+  // 0.3.17: a role pair that ends as a couple never pairs two the player's romance settings keep apart.
+  const kept = people.map((entry) => (entry.id === "jake" ? { ...entry, romance: { off: true, only: [] } } : entry));
+  const recast = slpDramaCast(
+    open.roles,
+    ["her", "him"],
+    {},
+    { world: world(kept), busy: new Set(), seed: "s", at: new Date(T0), couples: [["her", "him"]] },
+  );
+  assert.notEqual(recast?.him, "jake", "romance off keeps Jake out of a couple role");
+  assert.equal(
+    slpDramaCast(
+      open.roles,
+      ["her"],
+      { her: "mia", him: "jake" },
+      {
+        world: world(kept),
+        busy: new Set(),
+        seed: "s",
+        at: new Date(T0),
+        couples: [["her", "him"]],
+      },
+    ),
+    null,
+    "a pair cast before (a situation, an earlier stage) is held to the romance settings too",
+  );
+  assert.equal(
+    slpDramaCast(open.roles, ["her", "him"], {}, { world: world(kept), busy: new Set(), seed: "s", at: new Date(T0) })
+      ?.him,
+    "jake",
+    "without a couple outcome the setting does not matter",
+  );
   assert.equal(
     slpDramaCast(
       open.roles,

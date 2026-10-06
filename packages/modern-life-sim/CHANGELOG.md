@@ -1,3 +1,10 @@
+## 0.3.2 — 2026-10-02
+- If someone is throwing a party or going to one, they won't make plans with you for those hours, even if you said you can't come. When you invite someone out, you can see the hours they have a party.
+- If someone starts dating you knowing you already have a partner, they're okay with it. This also fixes the lives you're already playing.
+- On a phone, you can drag the phone button with your finger.
+- When a new season starts, people keep last season's outfit until the new one is ready.
+- Fixes in the optional Adult Module.
+
 ## 0.3.1 — 2026-10-01
 - NPCs is a rule now, life by life: people who aren't in your cast, like a club's staff and its regulars. It's off by default in a new life; a life that already had them keeps it on. Off, they step aside with their pictures, nothing deleted.
 - Once you're dating, you can stay the night at theirs, or have them stay at yours.

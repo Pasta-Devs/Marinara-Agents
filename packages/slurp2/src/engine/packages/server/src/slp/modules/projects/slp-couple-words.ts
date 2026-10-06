@@ -55,5 +55,9 @@ export function slurpForcedCoupleLine(couple: SlurpCouple, creatorId: string, pa
       return mine
         ? `${partner} is not who you usually go for, so it feels awkward and new, and you are still figuring it out.`
         : `You are not who ${partner} usually goes for, so it is awkward and new for both of you.`;
+    case "romance":
+      return mine
+        ? `You were not looking for anything with ${partner}, so this is new and a little awkward.`
+        : `${partner} was not looking for anything with you, so you take it slow.`;
   }
 }

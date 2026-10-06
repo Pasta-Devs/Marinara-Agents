@@ -90,6 +90,8 @@ async function main() {
   const { getLtmGlobalSettings, ltmSettingsPath, updateLtmGlobalSettings } = await import(`${source}/settings.ts`);
   const { ltmMutationTransactionSchema, recoverLtmMutations } = await import(`${source}/mutation-transaction.ts`);
   const { readLtmNoteSummary, writeLtmNoteSummary, rebuildLtmNoteSummary } = await import(`${source}/index-state.ts`);
+  const { rebuildLongTermMemoryIndexes, loadOrRebuildLongTermMemoryIndexes } = await import(`${source}/rebuild.ts`);
+  const { repairLongTermMemory } = await import(`${source}/maintenance.ts`);
   const { runLongTermMemoryRetention } = await import(`${source}/retention.ts`);
   const { rebuildLtmActivityIndex, readLtmActivityEvents } = await import(`${source}/activity-index.ts`);
   const { renderSectionContributions } = await import(`${source}/section-contributions.ts`);
@@ -3210,6 +3212,43 @@ async function main() {
         149,
         "activity reads must not depend on rescanning the full event log",
       );
+
+      const quarantineRoot = join(dataDir, "maintenance-quarantine-invalidation");
+      const quarantineStorage = new LongTermMemoryStorage(quarantineRoot);
+      await quarantineStorage.createNote({
+        ...noteInput,
+        id: "world_quarantine_healthy",
+        title: "Healthy world",
+      });
+      await quarantineStorage.createNote({
+        ...noteInput,
+        id: "world_quarantine_bad",
+        title: "Malformed world",
+        sections: { facts: { text: "Quarantined note text.", updatedAt: timestamp } },
+      });
+      await rebuildLongTermMemoryIndexes({ root: quarantineRoot, embeddingAdapter: null, stopWords: [] });
+      await quarantineStorage.listNotes();
+      await writeFile(notePathForId("world_quarantine_bad", "world", quarantineRoot), "{");
+      const quarantineRepair = await repairLongTermMemory(["quarantine_malformed_notes"], quarantineRoot);
+      assert.equal(quarantineRepair.actions[0]?.count, 1, "official maintenance must quarantine the malformed note");
+      await assert.rejects(stat(notePathForId("world_quarantine_bad", "world", quarantineRoot)), { code: "ENOENT" });
+      assert.deepEqual(
+        (await quarantineStorage.listNotes()).map((note) => note.id),
+        ["world_quarantine_healthy"],
+        "official quarantine must invalidate the warm snapshot before the next read",
+      );
+      const quarantineIndex = await loadOrRebuildLongTermMemoryIndexes(quarantineRoot, null, []);
+      assert.equal(
+        Object.hasOwn(quarantineIndex.metadata.byNoteId, "world_quarantine_bad"),
+        false,
+        "the recall index must not retain the quarantined note id",
+      );
+      assert.equal(
+        Object.values(quarantineIndex.metadata.chunks).some((chunk) => chunk.text.includes("Quarantined note text.")),
+        false,
+        "the recall index must not retain the quarantined note text",
+      );
+      await quarantineStorage.cleanup();
 
       process.stdout.write(
         "Long-Term Memory storage regression: restart, recovery, self-check, cleanup, stable root ok\n",

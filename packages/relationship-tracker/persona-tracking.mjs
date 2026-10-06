@@ -31,9 +31,21 @@ export function personaPreparedContext(snapshot, allowedCharacters) {
   };
 }
 
-export function normalizePersonaDelta(input, allowedCharacters, personaSnapshot, { evidenceText = "" } = {}) {
+// lenient (Automatic path): drop invalid tuples one at a time, like card deltas, instead of failing the whole list.
+export function normalizePersonaDelta(input, allowedCharacters, personaSnapshot, { evidenceText = "", lenient = false } = {}) {
+  if (lenient && input === undefined) return [];
   if (!Array.isArray(input)) fail("Persona perception updates must be an array.");
   if (!personaSnapshot?.persona) return [];
+  if (lenient) {
+    return input.flatMap((tuple) => {
+      try {
+        return normalizePersonaDelta([tuple], allowedCharacters, personaSnapshot, { evidenceText });
+      } catch (error) {
+        if (error instanceof PersonaTrackingError) return [];
+        throw error;
+      }
+    }).filter((update, index, updates) => updates.findIndex((entry) => entry.characterId === update.characterId) === index);
+  }
   const byAlias = new Map(allowedCharacters.map((entry) => [entry.alias, entry]));
   const baseline = new Map(personaSnapshot.perceptions.map((entry) => [entry.characterId, entry]));
   const seen = new Set();
@@ -71,7 +83,10 @@ export function normalizePersonaDelta(input, allowedCharacters, personaSnapshot,
 }
 
 export async function applyPersonaDelta(repository, chatId, input, context, stalePolicy) {
-  const updates = normalizePersonaDelta(input, context.allowedCharacters, context.personaSnapshot, { evidenceText: context.evidenceText });
+  const updates = normalizePersonaDelta(input, context.allowedCharacters, context.personaSnapshot, {
+    evidenceText: context.evidenceText,
+    lenient: stalePolicy === "skip",
+  });
   const storedState = updates.length ? await repository.applyAutomaticPerceptions(chatId, updates, {
     expectedStateRevision: context.personaStateRevision,
     stalePolicy,

@@ -79,6 +79,7 @@ export const queryKeys = {
   review: ["long-term-memory", "draft-review"] as const,
   pendingDrafts: ["long-term-memory", "pending-drafts"] as const,
   rejectedSuggestions: ["long-term-memory", "rejected-suggestions"] as const,
+  savedIdentityChoices: ["long-term-memory", "saved-identity-choices"] as const,
   integrity: ["long-term-memory", "integrity"] as const,
   preview: ["long-term-memory", "import-preview"] as const,
   lorebookPreview: ["long-term-memory", "lorebook-import-preview"] as const,

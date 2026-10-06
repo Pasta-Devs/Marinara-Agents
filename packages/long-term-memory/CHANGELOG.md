@@ -1,5 +1,52 @@
 # Long-Term Memory changelog
 
+## 1.4.5 — 2026-10-05
+
+- Stop a short or partial name for a known character or persona from creating a duplicate local character memory. A first-name form with no explicit alias now waits in review for an explicit identity choice instead of being bound by first name alone or forking a new identity; when more than one trusted character shares the name, the ambiguous candidates are never merged. Once the choice is made it is saved and reused, and relationship memories resolve both participants with the same subjects as their character memories.
+- Review Queue offers bind-existing, different-character, and skip choices for each participant. Decisions are remembered within the chat or group and included in backups. Saved decisions are listed per source; deleting one undoes it, so the next extraction asks again. Recovered content becomes a pending draft without renaming existing memories, replacing other pending proposals, or applying changes automatically.
+
+## 1.4.4 — 2026-10-04
+
+- Complete recall explanations. Each recorded recall now states the parameters that actually applied (mode, resolved eligibility, character targeting, and how many recent messages were scanned), a snapshot of the index that served it (how it was obtained — loaded, upgraded, or rebuilt; indexed, eligible, and embedded chunk counts; and when it was built), and a semantic outcome that tells disabled, unavailable, incompatible, no-matches, and contributed apart. The Activity recall workflow shows a concise explanation of those facts — the effective parameters, the index snapshot including its build time and embedded count, and the semantic outcome — and labels the rejected list as bounded: recorded rejected candidates up to the cap, not the full set.
+
+## 1.4.3 — 2026-10-03
+
+- Correlate recall selection with the confirmed injection through one attempt id, and record the outcomes the package actually observes: completed, skipped with a reason, cancelled, or failed. The last-injection panel now distinguishes a cancelled, failed, skipped, or completed-but-unconfirmed recall from one that never ran, instead of collapsing them all into "no recall recorded". Host-side non-invocation stays unknown.
+
+## 1.4.2 — 2026-10-03
+
+- Make the debug activity toggle honest: it now says it records recall explanations, notes that a chat override or host debug mode can also turn them on, states that extraction, draft, and apply activity is always recorded separately, and notes that the setting takes effect after saving settings.
+
+## 1.3.41 — 2026-10-03
+
+- Make extraction debug reporting trustworthy: show estimated input tokens and provider-reported usage distinctly, surface the failing step and warnings in collapsed activity entries, flag truncated model responses, and keep preflight failures when context metadata is missing.
+- Stop showing a duration for activity entries that recorded no timing.
+
+## 1.3.40 — 2026-10-03
+
+- Recall activity now reports the memories that were actually injected and their token use, and separates the fused rank score from the weighted-lane threshold in each candidate's details. When the prompt budget drops a selected memory, it now appears as a bounded prompt-budget rejection instead of being hidden behind the ranking rejections. The threshold help text now states that the value filters on the strongest weighted lane score, not the fused rank score.
+
+## 1.3.39 — 2026-10-02 [highlight]
+
+- In a group chat, a targeted responder now recalls only memories scoped to that character. Global, chat-only, persona-only, mixed-character, and other characters' shared-chat memories are no longer injected into a single responder's prompt; a non-targeted or single-character recall keeps its existing chat-wide behavior.
+
+## 1.3.38 — 2026-10-02
+
+- Rebuild the recall index during a settings save when a stop-word or "filter generated" change alters what it contains, and report the save as saved-but-index-failed instead of a plain success when that rebuild fails. A recall queued behind that save no longer republishes an index built with the old stop words, and extraction edits made while the rebuild is in flight stay unsaved instead of being discarded.
+
+## 1.3.37 — 2026-10-02
+
+- The description now says what it does in plain words.
+
+## 1.3.36 — 2026-10-02
+
+- Drop the cached vault scan as official maintenance quarantines a malformed note, so full reads and recall stop serving the removed note's id and text without a package restart.
+- Add a private runtime vault-mutation boundary that keeps the vault lock across a trusted host publication and its rollback and resets the package initialization and snapshot caches on both paths.
+
+## 1.3.35 — 2026-10-02
+
+- Check recall-index freshness and rebuild it under the vault lock so two concurrent stale recalls rebuild once instead of twice. Forward recall cancellation into rebuild, semantic-upgrade embedding, and caller-supplied index recall, so a timed-out recall stops instead of holding the vault lock, ranking an abandoned index, or publishing a cancelled dispatch receipt.
+
 ## 1.3.34 — 2026-09-30 [highlight]
 
 - Stop Long-Term Memory from failing to activate when the vault contains a note that no longer passes validation. The invalid note is skipped by the note index and still surfaces as a vault read error, so the package no longer rolls back to an old version.

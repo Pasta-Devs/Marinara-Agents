@@ -7,6 +7,7 @@ import { deliverDueSlurpCommissions } from "./commissions/slp-commission-deliver
 import { replyToSlurpMessage } from "./slp-message-operation.js";
 import { slurpPollBackoffMs } from "../../base/model/slp-poll-backoff.js";
 import { slurpPausedNow } from "../../data/settings/slp-pause-storage.js";
+import { reconcileSlpThreadScene } from "./scenes/slp-roleplay-scene-origin.js";
 
 const INITIAL_DELAY_MS = 15_000;
 // Delayed reply bubbles are timed in seconds, and a 60 s poll delivered every second bubble a
@@ -99,6 +100,11 @@ export function startSlurpMessageScheduler(app: FastifyInstance, registerStop?: 
       // half a reply rather than prevent one.
       const settings = await createSlurpStorage(app.db).getSettings();
       const awayReplies = settings.messagesAwayRepliesEnabled && !settings.paused;
+      // A scene that ended while its release was lost would keep its Creator busy for good.
+      for (const thread of await storage.listSceneThreads())
+        await reconcileSlpThreadScene(app.db, thread).catch((error) => {
+          logger.warn({ err: error, threadId: thread.id }, "[slurp-message] Could not reconcile the scene");
+        });
       for (const thread of awayReplies ? await storage.listThreadsAwaitingReply() : []) {
         if (stopped) break;
         // The fan's newest message is the one being answered, even when a creator bubble or

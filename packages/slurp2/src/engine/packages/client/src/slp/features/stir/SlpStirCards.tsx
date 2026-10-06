@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { CircleAlert, Clock, Info, X } from "lucide-react";
+import { CircleAlert, Clock, Info, Pencil, X } from "lucide-react";
+import { useSlurpUIStore } from "../../base/state/slp-package-store";
 import { toast } from "sonner";
 import { useTranslation } from "react-i18next";
 import { cn } from "../../../lib/utils";
@@ -310,7 +311,21 @@ export function SlpStirCard({ card, onRemove }: { card: SlpActionPreview; onRemo
           <X size={16} aria-hidden="true" />
         </button>
       )}
-      {card.error ? (
+      {card.action === "write-post" && card.error === "draftInComposer" && a ? (
+        // Review for everyone (0.3.14): Stir hands the idea to the page's composer, which drafts it.
+        <SlpButton
+          variant="secondary"
+          className="self-start text-xs"
+          onClick={() => {
+            const store = useSlurpUIStore.getState();
+            store.setComposeGuide({ accountId: a.id, idea: String(card.detail.idea ?? "") });
+            store.setNavigation({ mode: "creator", view: "profile", accountId: a.id });
+          }}
+        >
+          <Pencil size={14} aria-hidden="true" />
+          {t("ui.slurp.postGuide.draftInComposer")}
+        </SlpButton>
+      ) : card.error ? (
         <p className={cn(SLP_TYPE.meta, "flex items-start gap-1.5 text-[var(--slurp-danger)]")}>
           <CircleAlert size={14} aria-hidden="true" className="mt-0.5 shrink-0" />
           {t(`ui.slurp.stir.cant.${card.error}`, {
