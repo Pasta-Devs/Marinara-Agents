@@ -2313,6 +2313,103 @@ async function main() {
   assert.equal(missingChoice.units.length, 0, "a missing saved binding must not silently become a new local character");
   assert.equal(missingChoice.diagnostics[0]?.details?.matchBasis, "saved_identity_unavailable");
 
+  // --- #1226: a new local character never receives non-Roleplay availability ---
+  const innSource = {
+    ...sourceNote,
+    sections: {
+      source: {
+        text: "Jordan the innkeeper hides a ledger. Mara keeps the map. Sam Carter carries the lantern.",
+        updatedAt: timestamp,
+      },
+    },
+  };
+  const innHash = sourceHashForLtmSourceNote(innSource);
+  const jordanSubject = localCharacterSubjectForName(scope, "Jordan the innkeeper")!;
+  const innUnits = () => [
+    {
+      ...unit({
+        bucket: "character_fact",
+        subjectId: "jordan_the_innkeeper",
+        subjectNames: ["Jordan the innkeeper"],
+        text: "Jordan the innkeeper hides a ledger.",
+      }),
+      subjects: [jordanSubject],
+      claimKind: "static" as const,
+      sourceHash: innHash,
+    },
+    {
+      ...unit({ bucket: "character_fact", subjectId: "mara", subjectNames: ["Mara"], text: "Mara keeps the map." }),
+      subjects: [mara.subject],
+      claimKind: "static" as const,
+      sourceHash: innHash,
+    },
+    {
+      ...unit({
+        bucket: "character_fact",
+        subjectId: "sam_carter",
+        subjectNames: ["Sam Carter"],
+        text: "Sam Carter carries the lantern.",
+      }),
+      subjects: [{ key: "persona:persona_sam_carter", ref: { kind: "persona" as const, id: "persona_sam_carter" } }],
+      claimKind: "static" as const,
+      sourceHash: innHash,
+    },
+  ];
+  const compileInn = (modes: ("conversation" | "roleplay" | "game")[]) =>
+    compileEvidenceUnitExtraction({
+      unitResponse: { summary: "Inn memories", units: innUnits() },
+      sourceText: innSource.sections.source.text,
+      sourceNote: innSource,
+      existingNotes: [],
+      scope,
+      modes,
+      mode: "roleplay",
+      sourceHash: innHash,
+      skipStructuredBackfill: true,
+    });
+  const createdModes = (result: ReturnType<typeof compileInn>) =>
+    Object.fromEntries(
+      result.compiledResponse.mutations.flatMap((mutation) =>
+        mutation.kind === "create_note" ? [[mutation.note.id, mutation.note.modes]] : [],
+      ),
+    );
+
+  const restricted = compileInn(["conversation", "roleplay", "game"]);
+  for (const mutation of restricted.compiledResponse.mutations) ltmDraftMutationSchema.parse(mutation);
+  assert.deepEqual(
+    createdModes(restricted),
+    {
+      char_jordan_the_innkeeper: ["roleplay"],
+      char_mara: ["conversation", "roleplay", "game"],
+      char_sam_carter: ["conversation", "roleplay", "game"],
+    },
+    "a new local character is restricted to Roleplay while trusted subjects keep every selected mode",
+  );
+  assert.deepEqual(
+    restricted.diagnostics
+      .filter((diagnostic) => diagnostic.code.startsWith("local_character_"))
+      .map((diagnostic) => [diagnostic.severity, diagnostic.code, diagnostic.noteId]),
+    [["warning", "local_character_restricted_to_roleplay", "char_jordan_the_innkeeper"]],
+  );
+  assert.equal(restricted.outcome.state, "success");
+
+  const dropped = compileInn(["conversation", "game"]);
+  for (const mutation of dropped.compiledResponse.mutations) ltmDraftMutationSchema.parse(mutation);
+  assert.deepEqual(
+    createdModes(dropped),
+    { char_mara: ["conversation", "game"], char_sam_carter: ["conversation", "game"] },
+    "without Roleplay the local memory is dropped and the rest of the source is still proposed",
+  );
+  assert.deepEqual(
+    dropped.diagnostics
+      .filter((diagnostic) => diagnostic.code.startsWith("local_character_"))
+      .map((diagnostic) => [diagnostic.severity, diagnostic.code, diagnostic.noteId]),
+    [["error", "local_character_requires_roleplay", "char_jordan_the_innkeeper"]],
+  );
+  assert.equal(dropped.outcome.droppedCandidates[0]?.validatorCode, "local_character_requires_roleplay");
+  assert.equal(dropped.accounting.validationRejections, 1);
+  assert.equal(dropped.outcome.state, "partial_success");
+
   process.stdout.write(
     "Long-Term Memory local-character regression: scoped identity, review risk, safeguards, and isolation passed\n",
   );

@@ -188,6 +188,12 @@
     "long-term-memory": {
       "versions": [
         {
+          "version": "1.4.6",
+          "date": "2026-10-06",
+          "notes": "- Stop a newly met minor character from failing the whole import when Conversation or Game is selected alongside Roleplay. Local character memories are available only in Roleplay, so such a memory is now restricted to Roleplay with a warning; when Roleplay is not selected it is skipped with an explanation. The other memories from the same source are still proposed.",
+          "highlight": false
+        },
+        {
           "version": "1.4.5",
           "date": "2026-10-05",
           "notes": "- Stop a short or partial name for a known character or persona from creating a duplicate local character memory. A first-name form with no explicit alias now waits in review for an explicit identity choice instead of being bound by first name alone or forking a new identity; when more than one trusted character shares the name, the ambiguous candidates are never merged. Once the choice is made it is saved and reused, and relationship memories resolve both participants with the same subjects as their character memories.\n- Review Queue offers bind-existing, different-character, and skip choices for each participant. Decisions are remembered within the chat or group and included in backups. Saved decisions are listed per source; deleting one undoes it, so the next extraction asks again. Recovered content becomes a pending draft without renaming existing memories, replacing other pending proposals, or applying changes automatically.",
@@ -299,12 +305,6 @@
           "version": "1.3.27",
           "date": "2026-09-27",
           "notes": "- Use All / Chats / Branches / Characters / Personas tabs in the Sources \"Find sources in\" picker so it matches Memory Vault and availability scope pickers.\n- Collapse the Sources \"Make memories available in\" destination search, tab rail, and result list under a summary that shows the current destination, matching the Memory Vault picker.\n- Show one spinner and one source count while a source task runs instead of a duplicated loader and a repeated count.",
-          "highlight": false
-        },
-        {
-          "version": "1.3.26",
-          "date": "2026-09-27",
-          "notes": "- Render the Memory Vault unsaved-changes and rename-details dialogs as small centred cards again; both used a width class the Engine never emits, so they stretched across the screen.",
           "highlight": false
         }
       ]

@@ -81,7 +81,8 @@ export function compileLtmEvidenceUnits(options: CompileLtmEvidenceUnitsOptions)
         title: titleForUnits(units, target.noteType, resolvedSubjectNames),
         type: target.noteType,
         status: target.status,
-        modes: options.modes,
+        // Local character identities are Roleplay-only; the note schema rejects any other availability.
+        modes: subjects?.some(isLocalCharacterSubject) ? (["roleplay"] as LtmMode[]) : options.modes,
         scope: options.scope,
         tags: target.tags,
         keywords: unitKeywords,

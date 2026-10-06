@@ -1520,7 +1520,12 @@ export function compileEvidenceUnitExtraction(options: {
   });
   const keptUnits = validated.keptUnits;
   const dedupResult = deduplicateUnits(keptUnits, options.existingNotes, options.scope);
-  const closed = closeSourceEventGraph(dedupResult.deduplicated, options.sourceNote, options.existingNotes);
+  const roleplayOnly = dropLocalCharactersOutsideRoleplay(
+    dedupResult.deduplicated,
+    options.modes,
+    options.existingNotes,
+  );
+  const closed = closeSourceEventGraph(roleplayOnly.units, options.sourceNote, options.existingNotes);
   const parserDroppedCandidates = options.parserDroppedCandidates ?? [];
   const parserRejectionCount = options.parserRejectionCount ?? parserDroppedCandidates.length;
   const preValidationDroppedCandidates = options.preValidationDroppedCandidates ?? [];
@@ -1552,6 +1557,7 @@ export function compileEvidenceUnitExtraction(options: {
     ...parserDroppedCandidates,
     ...preValidationDroppedCandidates,
     ...validated.droppedCandidates,
+    ...roleplayOnly.droppedCandidates,
     ...closed.droppedCandidates,
     ...duplicateAliasClosure.droppedCandidates,
   ];
@@ -1560,6 +1566,7 @@ export function compileEvidenceUnitExtraction(options: {
     parserRejectionCount +
     preValidationDroppedCandidates.length +
     validated.droppedCandidates.length +
+    roleplayOnly.droppedCandidates.length +
     closed.droppedCandidates.length +
     duplicateAliasClosure.droppedCandidates.length;
   const duplicateTitles = duplicateAliasClosure.units.length
@@ -1580,8 +1587,24 @@ export function compileEvidenceUnitExtraction(options: {
   const diagnostics = [
     ...validated.diagnostics,
     ...dedupResult.diagnostics.filter((diagnostic) => !rejectedAliasIds.has(diagnostic.mutationId)),
+    ...roleplayOnly.diagnostics,
     ...closed.diagnostics,
     ...duplicateAliasClosure.diagnostics,
+    // The compiler narrows a new local character note to Roleplay when other modes were also selected.
+    ...compiled.mutations.flatMap((mutation): LtmExtractionDiagnostic[] =>
+      mutation.kind === "create_note" && mutation.note.modes.length < options.modes.length
+        ? [
+            {
+              severity: "warning",
+              code: "local_character_restricted_to_roleplay",
+              mutationId: mutation.id,
+              noteId: mutation.note.id,
+              message:
+                "Local character memories are available only in Roleplay mode, so this memory was restricted to Roleplay.",
+            },
+          ]
+        : [],
+    ),
   ];
   if (options.unitResponse.incomplete) {
     diagnostics.push({
@@ -1606,6 +1629,7 @@ export function compileEvidenceUnitExtraction(options: {
     validationRejections:
       preValidationDroppedCandidates.length +
       validated.droppedCandidates.length +
+      roleplayOnly.droppedCandidates.length +
       closed.droppedCandidates.length +
       duplicateAliasClosure.droppedCandidates.length,
     deduplications:
@@ -1631,6 +1655,37 @@ export function compileEvidenceUnitExtraction(options: {
     outcome,
     accounting,
   };
+}
+
+// A new local character note must be Roleplay-only, so without Roleplay it cannot be created at all.
+function dropLocalCharactersOutsideRoleplay(units: LtmEvidenceUnit[], modes: LtmMode[], existingNotes: LtmNote[]) {
+  const droppedCandidates: LtmExtractionDroppedCandidate[] = [];
+  const diagnostics: LtmExtractionDiagnostic[] = [];
+  if (modes.includes("roleplay")) return { units, droppedCandidates, diagnostics };
+  const existingIds = new Set(existingNotes.map((note) => note.id));
+  const message = "Local character memories are available only in Roleplay mode; select Roleplay to keep this memory.";
+  const kept = units.filter((unit, index) => {
+    const noteId = noteIdForEvidenceUnit(unit);
+    if (existingIds.has(noteId) || !unit.subjects?.some(isLocalCharacterSubject)) return true;
+    droppedCandidates.push({
+      index,
+      reason: "target_note_outside_scope",
+      validatorCode: "local_character_requires_roleplay",
+      message,
+      snippet: safeSnippet(unit.text),
+      recoveryCandidate: unit,
+    });
+    diagnostics.push({
+      severity: "error",
+      code: "local_character_requires_roleplay",
+      candidateIndex: index,
+      mutationId: unit.id,
+      noteId,
+      message,
+    });
+    return false;
+  });
+  return { units: kept, droppedCandidates, diagnostics };
 }
 
 function closeSourceEventGraph(
