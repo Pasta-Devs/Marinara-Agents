@@ -24,11 +24,15 @@ export function SlurpInlineAdTile({
   onAction: () => void;
   labels: { sponsored: string; hide: string; actionFallback: string };
 }) {
+  const [open, setOpen] = useState(false);
   return (
     <div className="relative aspect-square overflow-hidden bg-[var(--background)]">
       <button
         type="button"
-        onClick={onAction}
+        onClick={() => {
+          setOpen(true);
+          onAction();
+        }}
         className="group block h-full w-full text-left focus-visible:z-10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--noodle-accent)]"
         aria-label={`${labels.sponsored}: ${promotion.brand}, ${promotion.actionLabel ?? labels.actionFallback}`}
       >
@@ -60,6 +64,7 @@ export function SlurpInlineAdTile({
       >
         <EyeOff size={15} aria-hidden="true" />
       </button>
+      <SlurpAdSheet promotion={promotion} open={open} onClose={() => setOpen(false)} sponsored={labels.sponsored} />
     </div>
   );
 }
@@ -88,6 +93,11 @@ export function SlurpInlineAd({
   const { t: localizeUi } = useUiTranslation();
   const [menuOpen, setMenuOpen] = useState(false);
   const [imageFailed, setImageFailed] = useState(false);
+  const [open, setOpen] = useState(false);
+  const show = () => {
+    setOpen(true);
+    onAction();
+  };
   const menuRef = useRef<HTMLButtonElement | null>(null);
   const menuLabel = localizeUi("ui.slurp.home.moreActions", { defaultValue: "More actions" });
   // Each slot shows the picture drawn for its shape; an older ad without a banner is cropped from the top.
@@ -130,9 +140,12 @@ export function SlurpInlineAd({
       </div>
       {promotion.copy && <p className={cn(SLP_TYPE.body, "mt-3 whitespace-pre-line break-words")}>{promotion.copy}</p>}
       {imageUrl && !imageFailed && (
-        <div
+        <button
+          type="button"
+          onClick={show}
+          aria-label={promotion.actionLabel ?? labels.actionFallback}
           className={cn(
-            "relative -mx-4 mt-3 w-[calc(100%+2rem)] overflow-hidden bg-[var(--slurp-media-stage,#17131a)]",
+            "relative -mx-4 mt-3 block w-[calc(100%+2rem)] overflow-hidden bg-[var(--slurp-media-stage,#17131a)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--noodle-accent)]",
             wide ? "" : "aspect-[4/5] max-h-[32rem]",
             SLP_IMG_FRAME_CLASS,
           )}
@@ -146,9 +159,9 @@ export function SlurpInlineAd({
             className="slp-crop-top h-full w-full object-cover"
             onError={() => setImageFailed(true)}
           />
-        </div>
+        </button>
       )}
-      <SlpButton variant="secondary" onClick={onAction} className="mt-3 w-full">
+      <SlpButton variant="secondary" onClick={show} className="mt-3 w-full">
         <ExternalLink size={16} aria-hidden="true" />
         {promotion.actionLabel ?? labels.actionFallback}
       </SlpButton>
@@ -175,6 +188,72 @@ export function SlurpInlineAd({
           </SlpSheetItem>
         )}
       </SlpSheet>
+      <SlurpAdSheet promotion={promotion} open={open} onClose={() => setOpen(false)} sponsored={labels.sponsored} />
     </article>
+  );
+}
+
+const PRICE_FEEL = { budget: "$", everyday: "$$", premium: "$$$" } as const;
+
+/**
+ * Where a tapped ad goes (docs/FEEDBACK-2026-10.md R11): the whole promotion in one sheet, the
+ * picture full size, the brand, the product, the copy and the price feel. The brands live inside
+ * Slurp, so there is no outside page to open.
+ */
+function SlurpAdSheet({
+  promotion,
+  open,
+  onClose,
+  sponsored,
+}: {
+  promotion: SlurpPromotion;
+  open: boolean;
+  onClose: () => void;
+  sponsored: string;
+}) {
+  const { t: localizeUi } = useUiTranslation();
+  const [imageFailed, setImageFailed] = useState(false);
+  return (
+    <SlpSheet open={open} onClose={onClose} title={promotion.brand}>
+      {promotion.imageUrl && !imageFailed && (
+        <div className={cn("aspect-[4/5] max-h-[60dvh] w-full overflow-hidden rounded-2xl", SLP_IMG_FRAME_CLASS)}>
+          <SlurpMediaImg
+            src={promotion.imageUrl}
+            alt=""
+            decoding="async"
+            className="slp-crop-top h-full w-full object-cover"
+            onError={() => setImageFailed(true)}
+          />
+        </div>
+      )}
+      <div className="mt-4 flex items-center gap-3">
+        <Avatar
+          account={{
+            displayName: promotion.brand.split(/\s+/u).slice(0, 2).join(" "),
+            avatarUrl: promotion.brandLogoUrl ?? null,
+          }}
+        />
+        <div className="min-w-0 flex-1">
+          <div className="flex min-w-0 items-center gap-2">
+            <h3 className={cn(SLP_TYPE.title, "min-w-0 truncate")}>{promotion.brand}</h3>
+            <span className={slpTagClass()}>{sponsored}</span>
+          </div>
+          {promotion.product && (
+            <p className="mt-0.5 text-sm font-semibold leading-5 text-[var(--slurp-text)]">
+              {promotion.product}
+              {promotion.priceFeel && (
+                <span
+                  className="ms-2 text-[var(--slurp-muted)]"
+                  aria-label={localizeUi(`ui.slurp.ads.price.${promotion.priceFeel}`)}
+                >
+                  {PRICE_FEEL[promotion.priceFeel]}
+                </span>
+              )}
+            </p>
+          )}
+        </div>
+      </div>
+      {promotion.copy && <p className={cn(SLP_TYPE.body, "mt-3 whitespace-pre-line break-words")}>{promotion.copy}</p>}
+    </SlpSheet>
   );
 }

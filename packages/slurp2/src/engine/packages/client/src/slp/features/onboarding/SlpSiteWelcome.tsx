@@ -46,7 +46,7 @@ const STORE_KEY = "slurp2:support-rail";
 const EMPTY: SlpRailState = { answers: {}, events: [], seen: [] };
 /** Steam before each Support line. */
 const PACE_MS = 650;
-const O = "ui.slurp.opening.";
+const O = `ui.slurp.opening.`; // a template literal: the locale validator reads quoted keys whole
 
 /** The emoji on each answer card. */
 const GLYPH: Record<string, string> = {

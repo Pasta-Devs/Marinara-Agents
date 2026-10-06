@@ -387,7 +387,6 @@ export function ViewerHub({
       onAction={() => {
         // The rating system has no positive signal without this.
         recordSlurpAdAction.mutate({ personaId: scope!.viewer.entityId, promotionId: ad.id });
-        toast.info(localizeUi("ui.slurp.ads.opened", { brand: ad.brand }));
       }}
       // A silently failed hide leaves the ad on screen, so say so rather than
       // letting the reader think it worked.
@@ -637,7 +636,6 @@ export function ViewerHub({
               }}
               onAdAction={(ad) => {
                 recordSlurpAdAction.mutate({ personaId: scope!.viewer.entityId, promotionId: ad.id });
-                toast.info(localizeUi("ui.slurp.ads.opened", { brand: ad.brand }));
               }}
               onAdHide={(ad) =>
                 hideSlurpAd.mutate(
