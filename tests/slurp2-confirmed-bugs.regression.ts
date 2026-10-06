@@ -27,8 +27,11 @@ assert.match(
 
 const taskRoutes = source(`${slp}/server/src/slp/features/maintenance/slp-maintenance-routes.ts`);
 // Pulse + E (task C): a first post that made it or failed stays one day as Done / Failed (with why and
-// Try again) instead of vanishing; a running one always shows. Changed on purpose.
-assert.match(taskRoutes, /\.filter\(\(row\) => row\.status === "running" \|\| recent\(row\.updatedAt\)\)/u);
+// Try again) instead of vanishing; a running or queued one always shows (B3, 0.3.18). Changed on purpose.
+assert.match(
+  taskRoutes,
+  /\.filter\(\(row\) => row\.status === "running" \|\| row\.status === "queued" \|\| recent\(row\.updatedAt\)\)/u,
+);
 assert.match(taskRoutes, /audience\.lastRun\.error \?\?/u);
 
 const dayPlan = source(`${slp}/server/src/slp/modules/audience/slp-fan-activity-day-plan.ts`);

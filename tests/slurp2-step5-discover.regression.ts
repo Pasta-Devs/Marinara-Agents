@@ -166,7 +166,8 @@ assert.match(hub, /discoverAd=\{/u);
 assert.match(hub, /return renderInlineAd\(ad\)/u);
 assert.match(ad, /slpTagClass\(\)\}>\{labels\.sponsored\}/u);
 assert.doesNotMatch(ad, /uppercase/u);
-assert.match(ad, /<SlpButton variant="secondary" onClick=\{onAction\}/u);
+// R11 (0.3.18): the button opens the ad sheet, which records the tap.
+assert.match(ad, /<SlpButton variant="secondary" onClick=\{show\}/u);
 assert.match(ad, /kind="menu"/u);
 // Rails and the suggested row use the same card.
 assert.match(client("app/screens/SlpScreenSubscriptions.tsx"), /layout="row"/u);

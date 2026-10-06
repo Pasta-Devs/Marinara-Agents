@@ -88,6 +88,9 @@ export const slpCreatorFanArchetypeWeightsSchema = z
     message: "At least one fan archetype weight must be greater than zero.",
   });
 
+const slurpCustomLines = z
+  .array(z.string().trim().min(1).max(SLURP_CUSTOM_OPENER_MAX_LENGTH))
+  .max(SLURP_CUSTOM_OPENERS_MAX);
 /**
  * Creator settings are owned by Slurp. Keep this deliberately narrow: public Noodle settings
  * must not become an implicit dependency of Creator scheduling or generation.
@@ -373,18 +376,10 @@ export const slurpSettingsSchema = z.object({
   messagesCoolOffMinutes: z.number().int().min(0).max(10080),
   /** Minutes a fan thinks over a quote before answering it. 0 = the next world tick. */
   messagesQuoteAnswerMinutes: z.number().int().min(0).max(10080),
-  /** The player's own first lines for fan DMs. Empty = the built-in ones. */
-  messagesFanOpeners: z
-    .array(z.string().trim().min(1).max(SLURP_CUSTOM_OPENER_MAX_LENGTH))
-    .max(SLURP_CUSTOM_OPENERS_MAX),
-  /** The player's own first words for commission requests. Empty = the built-in ones. */
-  messagesCommissionOpeners: z
-    .array(z.string().trim().min(1).max(SLURP_CUSTOM_OPENER_MAX_LENGTH))
-    .max(SLURP_CUSTOM_OPENERS_MAX),
-  /** The player's own "what the fan wants" for commission requests. Empty = the built-in ones. */
-  messagesCommissionAsks: z
-    .array(z.string().trim().min(1).max(SLURP_CUSTOM_OPENER_MAX_LENGTH))
-    .max(SLURP_CUSTOM_OPENERS_MAX),
+  /** The player's own fan DM first lines, commission first words and asks (R7). Empty = built-in. */
+  messagesFanOpeners: slurpCustomLines,
+  messagesCommissionOpeners: slurpCustomLines,
+  messagesCommissionAsks: slurpCustomLines,
   /**
    * Creator replies to comments in any 24 hours, installation-wide (your comments and the
    * audience's share it). No "off": the audience drain runs on page loads and this is its only cap.

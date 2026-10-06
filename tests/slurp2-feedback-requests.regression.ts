@@ -195,7 +195,8 @@ assert.match(
 );
 const server = join(client, "../../../server/src/slp");
 const settings = readFileSync(join(server, "modules/settings/slp-settings.ts"), "utf8");
-assert.match(settings, /messagesCommissionAsks: z\s*\.array\(z\.string\(\)\.trim\(\)\.min\(1\)/u);
+assert.match(settings, /messagesCommissionAsks: slurpCustomLines,/u);
+assert.match(settings, /const slurpCustomLines = z\s*\.array\(z\.string\(\)\.trim\(\)\.min\(1\)/u);
 assert.match(settings, /messagesCommissionAsks: \[\],/u, "empty = the built-in asks");
 assert.match(
   readFileSync(join(server, "features/world/slp-world-actions.ts"), "utf8"),
