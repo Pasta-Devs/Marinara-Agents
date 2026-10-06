@@ -98,6 +98,8 @@ export function useSlurpThread(threadId: string | null, personaId: string | null
         scenes?: boolean;
       }>(`/slurp2/messages/threads/${encodeURIComponent(threadId!)}?personaId=${encodeURIComponent(personaId!)}`),
     enabled: Boolean(threadId && personaId),
+    // Opening a chat marks it read and must show what arrived meanwhile, whatever the cache age.
+    refetchOnMount: "always",
     refetchInterval: threadId && personaId ? 30_000 : false,
     refetchIntervalInBackground: false,
   });
@@ -184,8 +186,16 @@ export function useSlurpRequestAction(threadId: string | null, personaId: string
  * The conversation with one creator, started or not. Used when the player opens a chat from a
  * profile, where there may be no thread yet and creating one on sight would charge a fee.
  */
-/** `support`: Slurp Support's one thread with this Creator, the same from every persona. */
-export function useSlurpCompose(creatorAccountId: string | null, personaId: string | null, support = false) {
+/**
+ * `support`: Slurp Support's one thread with this Creator, the same from every persona.
+ * `peek`: a profile reading only prices and policy; it neither marks the thread read nor polls.
+ */
+export function useSlurpCompose(
+  creatorAccountId: string | null,
+  personaId: string | null,
+  support = false,
+  peek = false,
+) {
   return useQuery({
     queryKey: [
       ...slpKeys.noodlerRoot(),
@@ -193,6 +203,7 @@ export function useSlurpCompose(creatorAccountId: string | null, personaId: stri
       "compose",
       creatorAccountId ?? "none",
       support ? "support" : (personaId ?? "none"),
+      ...(peek ? ["peek"] : []),
     ],
     queryFn: () =>
       api.get<{
@@ -216,12 +227,13 @@ export function useSlurpCompose(creatorAccountId: string | null, personaId: stri
         /** Whether this thread can start a roleplay scene on this Engine (docs/SCENES.md). */
         scenes?: boolean;
       }>(
-        `/slurp2/messages/compose?personaId=${encodeURIComponent(personaId!)}&creatorAccountId=${encodeURIComponent(creatorAccountId!)}${support ? "&support=1" : ""}`,
+        `/slurp2/messages/compose?personaId=${encodeURIComponent(personaId!)}&creatorAccountId=${encodeURIComponent(creatorAccountId!)}${support ? "&support=1" : ""}${peek ? "&peek=1" : ""}`,
       ),
     enabled: Boolean(creatorAccountId && personaId),
     // Same poll as `useSlurpThread`. Without it a chat opened from a profile never saw the
     // queued off-hours reply, which is most of what the pacing model exists to produce.
-    refetchInterval: creatorAccountId && personaId ? 30_000 : false,
+    refetchOnMount: peek ? true : "always",
+    refetchInterval: creatorAccountId && personaId && !peek ? 30_000 : false,
     refetchIntervalInBackground: false,
   });
 }

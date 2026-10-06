@@ -6,7 +6,7 @@ import { isSlurpStory, SLP_CREATOR_FEED_WINDOW_SIZE, type SlurpViewerCreator } f
 import { SlurpMomentsShelf, SlurpMomentViewer } from "./SlpScreenMoments";
 import { slpShowPostInPlace } from "../../modules/post/SlpPostPurposeNote";
 import { ArrowUp, LayoutGrid, List, Search, UserRound } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useDeferredValue, useEffect, useMemo, useState } from "react";
 import { useSlpDrawnCount } from "../../base/ui/slp-drawn-count";
 import { useSlpStoryRings } from "../../modules/story/SlpStoryRing";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
@@ -177,7 +177,7 @@ export function ViewerHub({
   useEffect(() => {
     if (feedIsOnScreen) onFeedShown();
   }, [feedIsOnScreen, onFeedShown]);
-  const searchTerm = search.trim().toLowerCase();
+  const searchTerm = useDeferredValue(search).trim().toLowerCase(); // filtering no longer blocks typing
   // Search and Following come from the server, page by page (R1-084); the loaded feed alone missed
   // older posts. The derived view below still gives Stories, Creators and the "all" feed.
   const sliceActive = Boolean(searchTerm) || tab === "following";

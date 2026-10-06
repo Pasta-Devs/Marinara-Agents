@@ -94,9 +94,8 @@ export async function loadSlurpTieCreators(db: DB, at = new Date()): Promise<Slu
     accounts.map(async (account: Account) => {
       const text = await readSlurpCreatorFitText(db, { account, source: await storage.resolveAccountSource(account) });
       // Polyamory (0.3.5): the style the player picked, else poly words on their card.
-      const style = await readSlurpCreatorSteering(db, account.id)
-        .then((steering) => steering.relationshipStyle)
-        .catch(() => null);
+      const steering = await readSlurpCreatorSteering(db, account.id).catch(() => null);
+      const style = steering?.relationshipStyle ?? null;
       const cardPeople = await readSlurpCardPeople(db, account.id).catch(() => []);
       return {
         id: account.id,
@@ -110,6 +109,8 @@ export async function loadSlurpTieCreators(db: DB, at = new Date()): Promise<Slu
           .map((person) => person.name),
         cardPeople,
         poly: style ? style === "poly" : SLP_POLY_CARD_WORDS.test(text),
+        // An unreadable setting is no permission: fail closed (no romance) until it reads again.
+        romance: steering ? steering.romance : { off: true, only: [] },
         followers: slurpCreatorReach(
           { accountId: account.id, createdAt: account.createdAt, realFollowers: followers.get(account.id) ?? 0, scale },
           at,

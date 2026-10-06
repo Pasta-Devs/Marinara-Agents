@@ -357,7 +357,10 @@ const read = (path: string) => readFileSync(new URL(path, root), "utf8");
   assert.match(card, /<SlpLockedMediaTile/u, "a locked post shows the locked tile");
   assert.match(card, /unlock\.mutateAsync\(\{ personaId, postId \}\)/u, "and unlocks in place");
   assert.match(card, /slpShowPostInPlace\(postId\)[\s\S]*onOpenProfile\(authorId\)/u, "tap opens the post");
-  assert.match(read("client/src/slp/features/messages/SlpThreadView.tsx"), /onOpenProfile=\{model\.onOpenProfile\}/u);
+  assert.match(
+    read("client/src/slp/features/messages/SlpThreadView.tsx"),
+    /openProfileRef\.current = model\.onOpenProfile;[\s\S]*?onOpenProfile=\{openProfile\}/u,
+  );
   assert.match(read("client/src/slp/features/feed/slp-feed-contract.ts"), /export \{ useUnlockCreatorPost \}/u);
   for (const path of [
     "server/src/slp/features/messages/slp-message-operation.ts",

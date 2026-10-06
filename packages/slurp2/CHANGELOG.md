@@ -1,5 +1,16 @@
 # Slurp release notes
 
+## 0.3.17 — 2026-10-06
+
+Spice in one place, user reports, speed.
+
+- Spice: one level (Clean, Flirty, Suggestive, Explicit) for text and pictures, set in Settings › Spice, per Creator in Content rules or Stir. New Language: soft, frank or dirty. Writing keeps only the house style; old presets move over.
+- Romance per Creator (Collaborations): off, or only with chosen Creators.
+- Collabs: the partner's look and identity reach the post and picture; agreed collabs get Post it now and Drop it.
+- Stir: End it works; leaving a Support chat returns to Desk. Send a photo: the whole button picks a file.
+- Faster: chat typing, profiles, notifications, feed, inbox; less polling; no blur on chat bubbles.
+- Fixes: a profile no longer marks its chat read; bulk add no longer hangs; scenes keep Keep out recaps private and hold tips and drama questions; failed pictures retry.
+
 ## 0.3.16 — 2026-10-05
 
 - The shared guide explicitly offers image generation with an on/off toggle and direct image upload; uploading switches generation off so drafting preserves the photo.

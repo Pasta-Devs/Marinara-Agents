@@ -3,6 +3,7 @@
  * dates, aromantic, orientation) and how much chemistry two Creators have. Pure.
  */
 import { SLURP_NEVER_PATTERN } from "../feed/slp-life-moments.js";
+import { slpRomanceAllows } from "../../../../../shared/src/slp/slp-creator-steering.js";
 import { slurpSharedNiche, type SlurpTieCreator } from "./slp-creator-ties.js";
 import type { SlurpCoupleForced } from "./slp-creator-couples.js";
 
@@ -14,7 +15,7 @@ const NOT_INTO_ANYONE = /\b(aromantic|asexual)\b/iu;
 const ROMANTIC =
   /\b(romantic|flirt\w*|lonely|single|looking for love|crush\w*|hopeless romantic|heart on (her|his|their) sleeve)\b/iu;
 
-export type SlurpCoupleMisfit = "taken" | "notInto" | "noDating" | "orientation" | "same" | "busy";
+export type SlurpCoupleMisfit = "taken" | "notInto" | "noDating" | "orientation" | "romance" | "same" | "busy";
 
 type Want = "same" | "other" | "any";
 
@@ -79,6 +80,12 @@ export function slurpCoupleMisfitOf(a: SlurpTieCreator, b: SlurpTieCreator): Slu
     const hit = pairs.find(([self, other]) => self.automatic && test(self, other));
     return hit ? { misfit, byId: hit[0].id } : null;
   };
+  // The player's romance setting (0.3.17) is about Creators with each other: a crush on the player's
+  // own page, or the player's own steers, are not held to it.
+  const romance = pairs.find(
+    ([self, other]) => self.automatic && other.automatic && !slpRomanceAllows(self, { id: other.id }),
+  );
+  if (romance) return { misfit: "romance", byId: romance[0].id };
   return (
     (cards ? null : first("taken", (self) => (self.cardPartners ?? []).length > 0)) ??
     first("notInto", (self) => NOT_INTO_ANYONE.test(self.text)) ??

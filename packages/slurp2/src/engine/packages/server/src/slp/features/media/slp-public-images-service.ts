@@ -569,7 +569,9 @@ export function createPublicSlpImagesService(db: DB) {
           if (claimOwned) {
             await noodle.finalizePostImageClaim(post.id, claimToken, {
               imageUrl: null,
-              imagePrompt: null,
+              // Kept: the background retry only picks failed posts that still have a prompt, so a
+              // null here meant a failed picture was never drawn again.
+              imagePrompt: post.imagePrompt,
               metadata: {
                 imageGenerationFailed: true,
                 imageGenerationError: getErrorMessage(error).slice(0, 500),

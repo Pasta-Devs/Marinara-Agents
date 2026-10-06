@@ -100,10 +100,19 @@ export async function slpSettleAdaptive<T, R>(
     changed = new Promise<void>((next) => (wake = next));
     resolve();
   };
-  // The caller is one of the running items: it goes on once nothing else is running.
+  // The caller is one of the running items: it goes on once every other running item is waiting
+  // here too, in arrival order. Waiting for `active > 1` alone deadlocked when two items were
+  // refused together: each counted the other as running.
+  const waiting: number[] = [];
+  let ticket = 0;
   const slowDown = async () => {
     limit = 1;
-    while (active > 1) await changed;
+    const mine = ticket++;
+    waiting.push(mine);
+    notify();
+    while (active > waiting.length || waiting[0] !== mine) await changed;
+    waiting.shift();
+    notify();
   };
   await Promise.all(
     Array.from({ length: Math.min(limit, items.length) }, async () => {

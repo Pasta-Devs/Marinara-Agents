@@ -278,12 +278,16 @@ export function slurpDmTranscript(
   // A desk note is the player's own (docs/SUPPORT-DESK.md): no model ever reads it.
   return (
     history
-      // A scene that ended without a recap left only a note for the player (docs/SCENES.md).
-      .filter(
-        (line) =>
+      // A scene that ended without a recap left only a note for the player (docs/SCENES.md), and a
+      // recap set to "Keep out" promises she will not remember it.
+      .filter((line) => {
+        const scene = line.metadata?.scene as { kind?: unknown; reach?: unknown } | undefined;
+        return (
           line.metadata?.deskNote !== true &&
-          (line.metadata?.scene as { kind?: unknown } | undefined)?.kind !== "ended",
-      )
+          scene?.kind !== "ended" &&
+          !(scene?.kind === "recap" && scene.reach === "none")
+        );
+      })
       .map((line) => {
         const speaker = sideSpeaker(line);
         const from = speaker ? protect(sideLabel(speaker)) : line.role === "creator" ? creatorLabel : viewerLabel;

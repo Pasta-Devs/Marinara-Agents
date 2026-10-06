@@ -24,6 +24,7 @@
  *
  * Couples have their own rules in `slp-creator-couples.ts` and their own list in the same document.
  */
+import type { SlpCreatorRomance } from "../../../../../shared/src/slp/slp-creator-steering.js";
 import { SLURP_DRAMATIC, SLURP_NEVER_PATTERN } from "../feed/slp-life-moments.js";
 import { DAY_MS, clampText, hash } from "./slp-project.js";
 import { readSlurpTieStamp, slurpClampShare, SLURP_COLLAB_DEFAULT_SHARE } from "./slp-tie-stamp.js";
@@ -67,6 +68,8 @@ export type SlurpTieCreator = {
   cardPeople?: readonly { name: string; relation: string }[];
   /** Polyamory (0.3.5): their steering's relationship style, else poly words on their card. */
   poly?: boolean;
+  /** The player's romance setting for them (0.3.17): never, or only with some Creators. */
+  romance?: SlpCreatorRomance;
 };
 
 export type SlurpCollabStatus = "asked" | "agreed" | "planned" | "posted" | "declined" | "blocked";
@@ -557,6 +560,29 @@ export function slurpDeclineCollab(ties: SlurpCreatorTies, id: string, at: Date)
   if (!collab) return "notFound";
   if (collab.status !== "asked") return "notOpen";
   return update(ties, id, { status: "declined", decline: "player", answeredAt: at.toISOString() });
+}
+
+/** Call an open collab off without blocking the pair: it is over, and they may team up again later. */
+export function slurpDropCollab(ties: SlurpCreatorTies, id: string, at: Date): SlurpCreatorTies | SlurpTieError {
+  const collab = ties.collabs.find((entry) => entry.id === id);
+  if (!collab) return "notFound";
+  if (!slurpCollabOpen(collab)) return "notOpen";
+  return update(ties, id, { status: "declined", decline: "player", answeredAt: at.toISOString() });
+}
+
+/**
+ * An agreed collab is due now: announced if it never was, and its drop is this moment, so the host's
+ * next post is the joint one. A host who never posted left it "agreed" with a past date for good.
+ */
+export function slurpCollabDueNow(ties: SlurpCreatorTies, id: string, at: Date): SlurpCreatorTies | SlurpTieError {
+  const collab = ties.collabs.find((entry) => entry.id === id);
+  if (!collab) return "notFound";
+  // "planned" already has a post on the way: only an agreed collab can be pushed, or it posts twice.
+  if (collab.status !== "agreed") return "notOpen";
+  return update(ties, id, {
+    announcedAt: collab.announcedAt ?? at.toISOString(),
+    dropAt: at.toISOString(),
+  });
 }
 
 /** Never pair these two: the request ends and the pair is not asked again until unblocked. */

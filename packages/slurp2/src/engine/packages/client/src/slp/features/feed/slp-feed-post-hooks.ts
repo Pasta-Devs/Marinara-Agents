@@ -25,8 +25,11 @@ import type {
 
 /** Set by a post action: the next profile fetch reads every page once, so older posts refresh too. */
 let slpProfilePostsStale = false;
+/** Bumped by every post action: a background page fill started before one is dropped, not merged. */
+let slpProfilePostsGeneration = 0;
 export function markSlpProfilePostsStale() {
   slpProfilePostsStale = true;
+  slpProfilePostsGeneration += 1;
 }
 
 const profilePostTime = (item: SlurpProfilePost) =>
@@ -56,27 +59,57 @@ export function useCreatorPosts(accountId: string | null, personaId: string | nu
     queryFn: async ({ signal }) => {
       const cached = qc.getQueryData<SlurpProfilePost[]>(queryKey);
       const firstPageOnly = Boolean(cached) && !slpProfilePostsStale;
+      const refreshAll = Boolean(cached) && slpProfilePostsStale;
       slpProfilePostsStale = false;
-      const items: SlurpProfilePost[] = [];
-      let cursor: SlurpPageCursor | null = null;
-      do {
+      const fetchPage = (cursor: SlurpPageCursor | null, pageSignal?: AbortSignal) => {
         const query = new URLSearchParams({ limit: "20" });
         if (personaId) query.set("personaId", personaId);
         if (cursor) {
           query.set("cursorAt", cursor.createdAt);
           query.set("cursorId", cursor.id);
         }
-        const page: {
-          items: SlurpProfilePost[];
-          nextCursor: SlurpPageCursor | null;
-        } = await api.get(`/slurp2/slurp/accounts/${encodeURIComponent(accountId!)}/posts?${query.toString()}`, {
-          signal,
+        return api.get<{ items: SlurpProfilePost[]; nextCursor: SlurpPageCursor | null }>(
+          `/slurp2/slurp/accounts/${encodeURIComponent(accountId!)}/posts?${query.toString()}`,
+          { signal: pageSignal },
+        );
+      };
+      const first = await fetchPage(null, signal);
+      if (firstPageOnly) return mergeSlpProfileFirstPage(cached!, first.items, Boolean(first.nextCursor));
+      if (refreshAll) {
+        // A post action changed older posts too: read every page once before answering.
+        const items = [...first.items];
+        for (let cursor = first.nextCursor; cursor;) {
+          const page = await fetchPage(cursor, signal);
+          items.push(...page.items);
+          cursor = page.nextCursor;
+        }
+        return items;
+      }
+      // A cold profile shows page one at once; older pages follow in the background. It used to
+      // walk every page in sequence first, 15 round trips for 300 posts before anything showed.
+      const generation = slpProfilePostsGeneration;
+      if (first.nextCursor)
+        void (async () => {
+          const rest: SlurpProfilePost[] = [];
+          // Stops once nobody shows this profile any more, so leaving it costs no further requests.
+          const watched = () => (qc.getQueryCache().find({ queryKey })?.getObserversCount() ?? 0) > 0;
+          for (let cursor: SlurpPageCursor | null = first.nextCursor; cursor;) {
+            if (!watched()) return;
+            const page = await fetchPage(cursor);
+            rest.push(...page.items);
+            cursor = page.nextCursor;
+          }
+          // A post was deleted or changed meanwhile: its full refresh is the truth, not this fill.
+          if (generation !== slpProfilePostsGeneration) return;
+          qc.setQueryData<SlurpProfilePost[]>(queryKey, (current) => {
+            const shown = current ?? first.items;
+            const ids = new Set(shown.map(slpProfilePostId));
+            return [...shown, ...rest.filter((item) => !ids.has(slpProfilePostId(item)))];
+          });
+        })().catch(() => {
+          slpProfilePostsStale = true;
         });
-        items.push(...page.items);
-        cursor = page.nextCursor;
-        if (firstPageOnly) return mergeSlpProfileFirstPage(cached!, items, Boolean(cursor));
-      } while (cursor);
-      return items;
+      return first.items;
     },
     enabled: Boolean(accountId),
     staleTime: 30_000,

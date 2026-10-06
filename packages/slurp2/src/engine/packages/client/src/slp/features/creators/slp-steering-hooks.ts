@@ -2,10 +2,17 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../../../lib/api-client";
 import { slpKeys } from "../../base/state/slp-query-keys";
 import type { SlpCreatorSteering } from "../../../../../shared/src/slp/slp-creator-steering.js";
-import type { SlpSpiceLevel } from "../../../../../shared/src/slp/slp-spice.js";
+import type { SlpSpiceLevel, SlpSpiceStep } from "../../../../../shared/src/slp/slp-spice.js";
 
 /** The Creator's spice: their level (own or Slurp-wide), the limit, and the tastes they lean into. */
-export type SlpCreatorSpice = { level: SlpSpiceLevel | null; own: boolean; max: SlpSpiceLevel; leans: string[] };
+export type SlpCreatorSpice = {
+  level: SlpSpiceStep | null;
+  own: boolean;
+  max: SlpSpiceLevel;
+  leans: string[];
+  /** The Slurp-wide level ("Use Slurp-wide (…)"); older servers send none. */
+  inherited?: SlpSpiceStep | null;
+};
 type SteeringAnswer = { steering: SlpCreatorSteering; spice: SlpCreatorSpice | null };
 /** A change to what posts say also reports the posts already prepared, so the app can ask. */
 type PatchAnswer = SteeringAnswer & { prepared?: { posts: number; calls: number } | null };
@@ -25,7 +32,7 @@ export function useSlurpCreatorSteeringMutations(creatorId: string) {
     patch: useMutation({
       mutationFn: (
         patch: Partial<Omit<SlpCreatorSteering, "nudges" | "support" | "limitsMoved">> & {
-          spiceLevel?: SlpSpiceLevel | null;
+          spiceLevel?: SlpSpiceStep | null;
         },
       ) => api.patch<PatchAnswer>(path(creatorId), patch),
       onSuccess: (answer, patch) => {

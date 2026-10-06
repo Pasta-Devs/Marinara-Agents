@@ -11,7 +11,7 @@ import type {
   SlpSceneSettings,
 } from "../../../../../../shared/src/slp/slp-roleplay-scene";
 import { useSlurpUIStore } from "../../../base/state/slp-package-store";
-import { messageKeys } from "../slp-message-keys";
+import { invalidateSlurpMessages } from "../slp-message-keys";
 
 const threadPath = (threadId: string) => `/slurp2/messages/threads/${encodeURIComponent(threadId)}`;
 
@@ -51,8 +51,8 @@ function useSceneLineMutation<T>(
   return useMutation({
     mutationFn: (input: T & { threadId: string; messageId: string; personaId: string }) =>
       api.post<{ scene: SlpSceneLine }>(path(input), body(input)),
-    onSettled: (_data, _error, input) =>
-      qc.invalidateQueries({ queryKey: messageKeys.thread(input.threadId, input.personaId) }),
+    // A chat opened from a profile reads the compose query, not the thread one: refresh both.
+    onSettled: () => invalidateSlurpMessages(qc),
   });
 }
 

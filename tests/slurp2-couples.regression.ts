@@ -121,6 +121,19 @@ const input = (at: number, over: Partial<SlurpCouplesInput> = {}): SlurpCouplesI
   assert.equal(slurpCoupleFit(creator("x", "Asexual and proud, loves climbing.", ["fitness"]), mira).misfit, "notInto");
   assert.equal(slurpCoupleFit(tess, kai).misfit, "orientation", "a lesbian card is not paired with a man");
   assert.ok(slurpCoupleFit(tess, rue).fits, "a lesbian card with a woman fits");
+  // 0.3.17: the player's romance setting, per Creator: off, or only with some Creators.
+  assert.ok(slurpCoupleFit(mira, kai).fits, "no setting changes nothing");
+  assert.deepEqual(
+    slurpCoupleFit({ ...mira, romance: { off: true, only: [] } }, kai),
+    { fits: false, misfit: "romance", chemistry: 0, cards: false },
+    "romance off keeps a Creator out of every couple",
+  );
+  assert.equal(slurpCoupleFit(kai, { ...mira, romance: { off: false, only: ["someone-else"] } }).misfit, "romance");
+  assert.ok(slurpCoupleFit({ ...mira, romance: { off: false, only: [kai.id] } }, kai).fits, "the picked one fits");
+  assert.ok(
+    slurpCoupleFit({ ...mira, romance: { off: true, only: [] } }, { ...kai, automatic: false }).fits,
+    "a crush on the player's own page is not held to it",
+  );
   assert.equal(
     slurpCoupleFit(tess, { ...rue, gender: null }).misfit,
     "orientation",

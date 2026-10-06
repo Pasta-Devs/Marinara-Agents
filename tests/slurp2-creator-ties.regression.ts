@@ -23,6 +23,8 @@ import {
   slurpPlanCollab,
   slurpPostIncomeParts,
   slurpPushCollab,
+  slurpCollabDueNow,
+  slurpDropCollab,
   slurpRivalryActive,
   slurpRivalryFits,
   slurpSettleCollab,
@@ -452,6 +454,17 @@ async function main() {
     const resuggested = slurpSuggestCollab(blocked, mira, kai, { at, id: "s5" }) as SlurpCreatorTies;
     assert.deepEqual(resuggested.blocked, []);
     assert.equal(slurpPushCollab(blocked, "nope", at), "notFound");
+    // 0.3.17: an agreed collab the host never posted — post it now, or drop it without a block.
+    const agreedTies = pushed as SlurpCreatorTies;
+    const due = slurpCollabDueNow(agreedTies, "s1", at) as SlurpCreatorTies;
+    assert.equal(due.collabs[0]!.dropAt, at.toISOString(), "due now");
+    assert.ok(due.collabs[0]!.announcedAt, "an unannounced collab skips the announcement");
+    const planned = { ...agreedTies, collabs: [{ ...agreedTies.collabs[0]!, status: "planned" as const }] };
+    assert.equal(slurpCollabDueNow(planned, "s1", at), "notOpen", "a planned collab already has a post on the way");
+    const dropped = slurpDropCollab(agreedTies, "s1", at) as SlurpCreatorTies;
+    assert.equal(dropped.collabs[0]!.status, "declined");
+    assert.deepEqual(dropped.blocked, [], "dropping never blocks the pair");
+    assert.equal(slurpDropCollab(dropped, "s1", at), "notOpen");
     // In-story: the two agree in their DM on a different split.
     const dm = slurpAgreeCollabInDm(ties, rue, me, { at, id: "d1", idea: "leg day vlog", hostShare: 60 });
     const agreed = dm.collabs.find((collab) => collab.origin === "dm")!;
@@ -928,7 +941,7 @@ async function main() {
       "brand offers right after the money",
     );
     // W: collabs are world levers now: the Stir tab lists them, not the own page (0.3.11: in "Now showing").
-    assert.match(read("client/src/slp/features/stir/SlpStirScreen.tsx"), /<NowShowing view=\{view\}/u);
+    assert.match(read("client/src/slp/features/stir/SlpStirScreen.tsx"), /<NowShowing\s+view=\{view\}/u);
     const panel = read("client/src/slp/features/projects/SlpCollabsPanel.tsx");
     for (const action of [
       "actions.push.mutate",

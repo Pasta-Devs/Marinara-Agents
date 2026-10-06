@@ -253,6 +253,7 @@ async function flavourSpiceLines(
     hardNoes: spice.hardNoes,
     never: spice.spice.never,
     taste: taste?.text ?? null,
+    language: spice.spice.language,
   });
 }
 

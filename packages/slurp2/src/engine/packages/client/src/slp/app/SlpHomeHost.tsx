@@ -27,7 +27,6 @@ import { renderSlurpHomeCreatorFlow } from "./screens/SlpHomeCreatorFlow";
 import { renderSlurpHomeDestinations } from "./screens/SlpHomeDestinations";
 import { SlpHomeFeedRail } from "./screens/SlpHomeFeedRail";
 import { SlpStirCreatorSheet, SlpStirReadyPlanHost } from "../features/stir/slp-stir-contract";
-import { useSlpMinuteClock } from "../base/ui/slp-minute-clock";
 import type { SlpStoryRings } from "../modules/story/SlpStoryRing";
 import { slpStoryRings, slpStoryStartId } from "../modules/story/slp-story-rings";
 import { slurpLiveStories } from "./screens/slp-hub-view";
@@ -542,10 +541,22 @@ function useSlurpStoryRings({
 }: Pick<ReturnType<typeof useSlurpHomeState>, "viewerQuery" | "slurpSettingsQuery"> &
   Pick<SlurpHomeProps, "navigation" | "onNavigate">): SlpStoryRings {
   const [pending, setPending] = useState<string | null>(null);
-  const now = useSlpMinuteClock();
-  const cutoff = now - (slurpSettingsQuery.data?.storyLifetimeHours ?? 72) * 60 * 60 * 1000;
+  const lifetimeMs = (slurpSettingsQuery.data?.storyLifetimeHours ?? 72) * 60 * 60 * 1000;
   const creators = viewerQuery.data?.creators;
-  const live = useMemo(() => slurpLiveStories(creators ?? [], cutoff), [creators, cutoff]);
+  // Checked once a minute so a Story expires on screen (R1-040), but state changes only when the
+  // live set does: a plain minute clock here re-rendered the whole app every minute.
+  const [live, setLive] = useState(() => slurpLiveStories(creators ?? [], Date.now() - lifetimeMs));
+  useEffect(() => {
+    const refresh = () =>
+      setLive((previous) => {
+        const next = slurpLiveStories(creators ?? [], Date.now() - lifetimeMs);
+        const key = (stories: typeof next) => stories.map((story) => `${story.postId}:${story.watched}`).join("|");
+        return key(previous) === key(next) ? previous : next;
+      });
+    refresh();
+    const timer = window.setInterval(refresh, 60_000);
+    return () => window.clearInterval(timer);
+  }, [creators, lifetimeMs]);
   const rings = useMemo(() => slpStoryRings(live), [live]);
   const onHub = navigation.mode === "creator" && (navigation.view === "hub" || navigation.view === "search");
   const onProfileOf = navigation.mode === "creator" && navigation.view === "profile" ? navigation.accountId : null;

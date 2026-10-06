@@ -26,6 +26,7 @@ import type {
   SlpStirView,
 } from "../../../../../shared/src/slp/slp-stir.js";
 import { SlpPeoplePanel } from "../projects/slp-projects-contract";
+import { SlpStirCollabButtons } from "./SlpStirCollabButtons";
 import { useSlurpStir, useSlurpStirDismiss, useSlurpStirPreview } from "./slp-stir-hooks";
 import { SlpStirBox } from "./SlpStirBox";
 import { SlpStirPlanSheet, useSlpStirDoIt, useSlpStirUndo } from "./SlpStirCards";
@@ -106,11 +107,14 @@ function NowShowing({
   onSeeAll,
   onOpen,
   onEndDrama,
+  personaId,
 }: {
   view: SlpStirView;
   onSeeAll?: () => void;
   onOpen: (lever: NonNullable<ReturnType<typeof slpStirLiveLever>>) => void;
   onEndDrama: (runId: string) => void;
+  /** Shows "Post it now" and "Drop it" on agreed collabs. */
+  personaId?: string | null;
 }) {
   const { t, i18n } = useTranslation();
   const byId = new Map(view.creators.map((creator) => [creator.id, creator]));
@@ -198,6 +202,14 @@ function NowShowing({
                 )}
               </>
             );
+            const collabId = entry.kind === "collab" && entry.state === "agreed" ? entry.id.split(":")[1] : null;
+            if (collabId && personaId)
+              return (
+                <li key={entry.id} className={cn(row, "flex-wrap")}>
+                  {body}
+                  <SlpStirCollabButtons collabId={collabId} personaId={personaId} />
+                </li>
+              );
             return (
               <li key={entry.id}>
                 {lever ? (
@@ -612,6 +624,8 @@ function StartAStory({
  * the full Business and Relationships lists sit at the end. Every play shows a preview first; plays
  * are free, only a card marked AI calls the AI connection.
  */
+let lastStirMode: "stir" | "desk" = "stir";
+
 export function SlpStirScreen({
   personaId,
   onOpenPulse,
@@ -639,12 +653,22 @@ export function SlpStirScreen({
   const preview = useSlurpStirPreview();
   const doIt = useSlpStirDoIt();
   // Stir is the world's levers; the Support desk is Slurp's own staff work (0.3.11: its own mode).
-  const [mode, setMode] = useState<"stir" | "desk">("stir");
+  // Remembered across the Support chat it opens: leaving that chat remounts Stir, which reset to Stir.
+  const [mode, setModeState] = useState<"stir" | "desk">(() => lastStirMode);
+  const setMode = (next: "stir" | "desk") => {
+    lastStirMode = next;
+    setModeState(next);
+  };
   const [people, setPeople] = useState(false);
   // Ending a drama runs through the runner like any play: a preview, the ledger, a toast.
   const endDrama = (runId: string) =>
     preview.mutate([{ action: "end-drama", input: { runId } }], {
-      onSuccess: ({ cards }) => (cards[0]?.error ? void toast.error(cards[0].summary) : doIt.run(cards, "deck")),
+      onSuccess: ({ cards }) =>
+        !cards[0]
+          ? void toast.error(t("ui.slurp.stir.cant.generic"))
+          : cards[0].error
+            ? void toast.error(cards[0].summary)
+            : doIt.run(cards, "deck"),
       onError: (error) => void toast.error(errorMessage(error)),
     });
   const names = (view?.creators ?? [])
@@ -717,7 +741,13 @@ export function SlpStirScreen({
               ) : view ? (
                 <>
                   <YourRelationship view={view} />
-                  <NowShowing view={view} onSeeAll={onOpenPulse} onOpen={setPlaying} onEndDrama={endDrama} />
+                  <NowShowing
+                    view={view}
+                    onSeeAll={onOpenPulse}
+                    onOpen={setPlaying}
+                    onEndDrama={endDrama}
+                    personaId={personaId}
+                  />
                   <Suggested suggestions={view.suggestions} onPlay={playSuggestion} pending={preview.isPending} />
                   <StartAStory
                     key={view.dramas.length ? "packs" : "no-packs"}

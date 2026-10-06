@@ -160,9 +160,10 @@ export function createMessagesStorageConversation(context: SlurpMessagesContext)
             .set({
               state: input.role === "creator" && current.state === "request" ? "active" : current.state,
               lastMessageAt: message.createdAt > current.lastMessageAt ? message.createdAt : current.lastMessageAt,
+              // A line with no words (a scene's "ended" note) keeps the last real preview, not a blank.
               lastMessagePreview:
                 message.createdAt >= current.lastMessageAt
-                  ? slurpMessagePreview(kind, content, price)
+                  ? slurpMessagePreview(kind, content, price) || current.lastMessagePreview
                   : current.lastMessagePreview,
               viewerUnread: input.role === "creator" ? String(Number(current.viewerUnread) + 1) : current.viewerUnread,
               creatorUnread: quiet

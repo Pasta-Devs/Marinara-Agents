@@ -116,7 +116,8 @@ export function useStageProfileViewModel(props: StageProfileViewProps) {
   const tipCreator = useTipSlurpCreator();
   const [tipOpen, setTipOpen] = useState(false);
   // The compose query is the viewer-facing source for action prices and messaging policy.
-  const offerMessaging = useSlurpCompose(profile.id, viewerAccount?.entityId ?? null).data?.messaging ?? null;
+  const offerMessaging =
+    useSlurpCompose(profile.id, viewerAccount?.entityId ?? null, false, true).data?.messaging ?? null;
   const [customTip, setCustomTip] = useState("");
   const walletQuery = useSlurpWallet(viewerAccount?.entityId ?? null);
   const subscriptionState = slpProfileSubscriptionState({

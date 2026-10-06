@@ -1,5 +1,5 @@
 // The splash screen needs the shipped version and its public notes inside the client bundle.
-export const SLURP2_VERSION = "0.3.16";
+export const SLURP2_VERSION = "0.3.17";
 
 export interface Slurp2ReleaseEntry {
   version: string;
@@ -12,6 +12,15 @@ export interface Slurp2ReleaseEntry {
  * in-universe bullets per release (technical detail lives in CHANGELOG.md).
  */
 export const SLURP2_RELEASES: Slurp2ReleaseEntry[] = [
+  {
+    version: "0.3.17",
+    date: "2026-10-06",
+    notes: [
+      "Spice lives in one place now: one level from Clean to Explicit for words and pictures, and a new Language choice for how they say it. Set it for everyone in Settings › Spice, or per Creator.",
+      "Decide who may fall for whom: switch romance off for a Creator, or pick who they could end up with. Collab partners finally know who they are working with.",
+      "Slurp is quicker on phones and desktop, Stir's End it and collab buttons work, and opening a profile no longer marks your chat as read.",
+    ],
+  },
   {
     version: "0.3.16",
     date: "2026-10-05",

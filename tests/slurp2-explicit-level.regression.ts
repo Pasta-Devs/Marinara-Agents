@@ -63,9 +63,18 @@ for (const level of ["none", "suggestive", "nudity", "explicit"]) {
 const creatorPublishing = slurp2Source(
   "packages/slurp2/src/engine/packages/client/src/slp/features/creators/settings/SlpCreatorPublishingSection.tsx",
 );
-assert.match(creatorPublishing, /SLURP_EXPLICIT_LEVELS/u, "Creator settings must offer every picture level");
-assert.match(creatorPublishing, /creatorId: creator\.id, level/u, "the selected level must save as a Creator override");
-assert.match(creatorPublishing, /Use shared \(\{\{level\}\}\)/u, "inherit must show the active shared level");
+// 0.3.17: one spice scale (Clean = "none", then Flirty, Suggestive, Explicit) offers every level.
+assert.match(creatorPublishing, /<SlpSpiceLevelChoice/u, "Creator settings must offer every picture level");
+assert.match(
+  slurp2Source("packages/slurp2/src/engine/packages/client/src/slp/features/creators/SlpSpiceLevelChoice.tsx"),
+  /SLP_SPICE_STEPS\.map/u,
+);
+assert.match(
+  creatorPublishing,
+  /creatorId: creator\.id, level: step \? slpExplicitOfStep\(step\) : ""/u,
+  "the selected level must save as a Creator override",
+);
+assert.match(creatorPublishing, /inherited=\{/u, "inherit must show the active shared level");
 
 // An image model reads "poorly lit" and "dull" as instructions and returns exactly that.
 for (const path of [

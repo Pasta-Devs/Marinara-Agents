@@ -27,6 +27,9 @@ const client = new QueryClient({
   defaultOptions: {
     queries: {
       retry: (failures, error) => failures < 5 && !(error instanceof ApiError && error.status < 500),
+      // Without a floor every remount and window focus refetches; returning to the app on a phone
+      // fired 10-15 requests at once. Invalidations and polls still refetch immediately.
+      staleTime: 15_000,
     },
   },
 });

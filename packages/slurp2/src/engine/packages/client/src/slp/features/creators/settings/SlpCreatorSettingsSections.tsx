@@ -23,6 +23,7 @@ import { SlurpCreatorImprover } from "../SlpCreatorImprover";
 import { SlurpCreatorProfileEditor } from "../SlpCreatorProfileEditor";
 import { SlurpCreatorStrategyGroup } from "../SlpCreatorStrategyGroup";
 import { CreatorCollabsEditor } from "../SlpCreatorMetrics";
+import { SlpCreatorRomanceGroup } from "./SlpCreatorRomanceGroup";
 import { useCreatorAccounts } from "../slp-creators-hooks";
 import { SlpWardrobeManager } from "../SlpWardrobeManager";
 import { SlpCanonAnchorsEditor } from "../SlpCanonAnchorsEditor";
@@ -267,6 +268,7 @@ export function SlpCreatorCollaborationsSection({ creator, active }: SlpCreatorS
         onSave={(next) => updateSettings.mutate({ creatorCollabs: next })}
         t={t}
       />
+      <SlpCreatorRomanceGroup creator={creator} creators={accounts.data} />
     </SettingAnchor>
   );
 }

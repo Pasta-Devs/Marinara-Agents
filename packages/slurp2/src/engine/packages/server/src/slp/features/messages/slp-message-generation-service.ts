@@ -168,6 +168,7 @@ export function buildSlurpMessageChat(input: {
     imageUrl: string | null;
     unlockedByFan?: boolean;
   }>;
+  unlockedPostIds: ReadonlySet<string>; // all they own: a shared card older than recentPosts too
   /** What the pictures in the conversation show, keyed by message id. */
   imageContexts?: Map<string, string>;
   /** The Creator's private content menu. See `slurp-post-guidance.ts`. */
@@ -429,7 +430,7 @@ export function buildSlurpMessageChat(input: {
       protect,
       image: (message) =>
         input.imageContexts?.has(message.id) ? protect(input.imageContexts.get(message.id)) : undefined,
-      postUnlocked: (postId) => Boolean(input.recentPosts?.some((post) => post.id === postId && post.unlockedByFan)),
+      postUnlocked: (postId) => typeof postId === "string" && input.unlockedPostIds.has(postId),
     }),
   };
 
@@ -568,7 +569,7 @@ export async function buildSlurpMessagePrompt(input: SlurpMessagePromptInput): P
   // The memory is the tie said out loud, and an invited character holds a tie like anybody else.
   const fanMemory = fanMember || isSlurpCharacterFanAccount(input.viewer) ? slurpFanMemoryForPrompt(tie) : undefined;
   // What this fan already owns, so a Creator never tries to sell them a post they bought.
-  const unlockedPostIds = new Set(
+  const unlockedPostIds = new Set<string>(
     (await slurp.listPostUnlocksForViewer(input.viewer.id).catch(() => [])).map((unlock) => unlock.postId),
   );
   const recentPosts = slurpDmRecentPosts(recentPostRows, unlockedPostIds, RECENT_POSTS);
@@ -641,6 +642,7 @@ export async function buildSlurpMessagePrompt(input: SlurpMessagePromptInput): P
     fanMemory,
     stance,
     recentPosts,
+    unlockedPostIds,
     availability,
     disclosureMode,
     publicIdentity,

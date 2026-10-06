@@ -273,6 +273,26 @@ export function SlpCollabsPanel({ personaId }: { personaId: string }) {
                           {t("ui.slurp.ties.push")}
                         </SlpButton>
                       ))}
+                    {collab.status === "agreed" && (
+                      <>
+                        <SlpButton
+                          variant="secondary"
+                          disabled={busy}
+                          onClick={() => actions.postNow.mutate(collab.id, { onError })}
+                          className="min-h-11 px-4 text-sm"
+                        >
+                          {t("ui.slurp.stir.now.postCollab")}
+                        </SlpButton>
+                        <SlpButton
+                          variant="quiet"
+                          disabled={busy}
+                          onClick={() => actions.drop.mutate(collab.id, { onError })}
+                          className="min-h-11 px-4 text-sm"
+                        >
+                          {t("ui.slurp.stir.now.dropCollab")}
+                        </SlpButton>
+                      </>
+                    )}
                     <SlpButton
                       variant="tertiary"
                       disabled={busy}

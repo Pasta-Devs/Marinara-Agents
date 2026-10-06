@@ -1,5 +1,5 @@
 import { Camera, Check, CheckCheck, Cloud, Copy, Dumbbell, Moon, Plane, WifiOff } from "lucide-react";
-import { useEffect, useRef, useState, type KeyboardEvent, type PointerEvent } from "react";
+import { memo, useEffect, useRef, useState, type KeyboardEvent, type PointerEvent } from "react";
 import { SlpHeartGlyph } from "../../base/chrome/SlpGlyphs";
 import { useTranslation as useUiTranslation } from "react-i18next";
 import { useSlurpMediaSrc } from "../../base/media/slp-media-src";
@@ -66,7 +66,8 @@ export function SlurpBubbleStyles() {
 export function slurpBubbleSurface(mine: boolean): string {
   return mine
     ? "bg-[var(--noodle-accent)] text-[var(--slurp-on-accent)] [&_svg]:!text-[var(--slurp-on-accent)] shadow-[var(--slurp-highlight),0_6px_16px_-10px_color-mix(in_srgb,var(--noodle-accent)_70%,transparent)]"
-    : "bg-[color-mix(in_srgb,var(--slurp-surface-raised)_86%,transparent)] text-[var(--slurp-text)] shadow-[var(--slurp-highlight),var(--slurp-shadow-raised)] backdrop-blur-md";
+    : // No backdrop blur: dozens of blurred bubbles made long threads stutter on phones (0.3.17).
+      "bg-[color-mix(in_srgb,var(--slurp-surface-raised)_95%,transparent)] text-[var(--slurp-text)] shadow-[var(--slurp-highlight),var(--slurp-shadow-raised)]";
 }
 
 /** Per kind: the badge glyph, its motion, and what drifts off it. "away" is the original card. */
@@ -251,7 +252,8 @@ export function SlurpAwayAnimation({
 const SLURP_LONG_PRESS_MS = 480;
 const SLURP_DOUBLE_TAP_MS = 320;
 
-export function MessageBubble({
+// Memoized: the thread re-renders on every composer keystroke; unchanged bubbles skip it.
+export const MessageBubble = memo(function MessageBubble({
   message,
   locale,
   personaId,
@@ -626,7 +628,7 @@ export function MessageBubble({
       </SlpSheet>
     </div>
   );
-}
+});
 
 export function SlurpPlatformActionCard({
   message,

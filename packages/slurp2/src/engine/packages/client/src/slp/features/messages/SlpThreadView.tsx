@@ -8,7 +8,7 @@ import {
 } from "./SlpMessages";
 import { CommissionRow } from "./commissions/SlpCommissions";
 import { Info, Loader2 } from "lucide-react";
-import { useContext, useRef, type ReactNode } from "react";
+import { useCallback, useContext, useMemo, useRef, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { cn } from "../../../lib/utils";
 import { ModalPortalContext } from "../../../components/ui/Modal";
@@ -124,6 +124,12 @@ export function SlurpThreadView(props: SlurpThreadViewProps) {
   const notLoaded = !threadQuery.data;
   // Roleplay scenes (docs/SCENES.md): offered when this Engine runs them and the thread is free.
   const sceneHost = useSlurpUIStore((state) => state.sceneHost);
+  // A stable callback lets memoized bubbles skip re-renders; the ref always calls the latest one.
+  const openProfileRef = useRef(model.onOpenProfile);
+  openProfileRef.current = model.onOpenProfile;
+  const openProfile = useCallback((accountId: string) => openProfileRef.current(accountId), []);
+  // One formatter per language: two toLocaleDateString calls per row re-ran on every keystroke.
+  const dayFormat = useMemo(() => new Intl.DateTimeFormat(i18n.language, { dateStyle: "medium" }), [i18n.language]);
   const sceneChatId = thread?.sceneChatId ?? null;
   const canStartScene = Boolean(sceneHost && threadQuery.data?.scenes && !sceneChatId);
   const creatorName = creator?.displayName ?? "";
@@ -231,13 +237,8 @@ export function SlurpThreadView(props: SlurpThreadViewProps) {
                 </div>
               )}
               {visibleTimeline.map((entry, index) => {
-                const date = new Date(entry.at).toLocaleDateString(i18n.language, { dateStyle: "medium" });
-                const previousDate =
-                  index > 0
-                    ? new Date(visibleTimeline[index - 1]!.at).toLocaleDateString(i18n.language, {
-                        dateStyle: "medium",
-                      })
-                    : null;
+                const date = dayFormat.format(new Date(entry.at));
+                const previousDate = index > 0 ? dayFormat.format(new Date(visibleTimeline[index - 1]!.at)) : null;
                 return (
                   <div
                     key={entry.kind === "message" ? entry.message.id : entry.commission.id}
@@ -277,7 +278,7 @@ export function SlurpThreadView(props: SlurpThreadViewProps) {
                             ownsCreator={ownsCreator}
                             group={slurpBubbleGroup(visibleTimeline, index, firstUnreadMessageId)}
                             fresh={Boolean(openedWith.current && !openedWith.current.has(entry.message.id))}
-                            onOpenProfile={model.onOpenProfile}
+                            onOpenProfile={openProfile}
                           />
                           {/* The Support desk: an Offer sits under the line that made it (docs/SUPPORT-DESK.md). */}
                           {readSlpDeskOffer(entry.message) && (

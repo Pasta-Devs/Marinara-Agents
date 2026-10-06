@@ -568,6 +568,12 @@
     "slurp2": {
       "versions": [
         {
+          "version": "0.3.17",
+          "date": "2026-10-06",
+          "notes": "Spice in one place, user reports, speed.\n\n- Spice: one level (Clean, Flirty, Suggestive, Explicit) for text and pictures, set in Settings › Spice, per Creator in Content rules or Stir. New Language: soft, frank or dirty. Writing keeps only the house style; old presets move over.\n- Romance per Creator (Collaborations): off, or only with chosen Creators.\n- Collabs: the partner's look and identity reach the post and picture; agreed collabs get Post it now and Drop it.\n- Stir: End it works; leaving a Support chat returns to Desk. Send a photo: the whole button picks a file.\n- Faster: chat typing, profiles, notifications, feed, inbox; less polling; no blur on chat bubbles.\n- Fixes: a profile no longer marks its chat read; bulk add no longer hangs; scenes keep Keep out recaps private and hold tips and drama questions; failed pictures retry.",
+          "highlight": false
+        },
+        {
           "version": "0.3.16",
           "date": "2026-10-05",
           "notes": "- The shared guide explicitly offers image generation with an on/off toggle and direct image upload; uploading switches generation off so drafting preserves the photo.\n- Stir on your persona page and Write a post in an NPC Creator’s Stir use the same simple one-idea draft, with caption and picture preview together. Edit opens the full composer without losing your draft.",
@@ -679,12 +685,6 @@
           "version": "0.2.74",
           "date": "2026-09-26",
           "notes": "- Settings are rows: what a setting does on the left, its control on the right. Each page says its name once; Reset is at the bottom and resets only that page.\n- Overview is the only summary page, with fan and schedule buttons and more tiles. New names: Connections, Storylines (a Story is the short image post) and Writing. Maintenance is one page.\n- On a phone, settings open on a list of sections.\n- Connections has one row per job and the chat carryover. Creator pictures now sets the connection Creator pictures really use.\n- Images uses picture shapes instead of number fields. Story images moved to Publishing. Storyline types, ads and events are compact lists; long explanations fold under How this works.\n- Writing starts with Spice level and How far pictures go.",
-          "highlight": false
-        },
-        {
-          "version": "0.2.73",
-          "date": "2026-09-26",
-          "notes": "- Your own messages no longer use the AI budget: a Creator answers a message you send or a tip you give at once, even when the hourly or daily limit is reached. Only answers that arrive while you are away count against it. The mode and the DM replies switch still apply.",
           "highlight": false
         }
       ]

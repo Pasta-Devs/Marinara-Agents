@@ -79,6 +79,15 @@ assert.match(
   JSON.stringify(dm[1]),
   /You and Alex spent time together in person\. What happened: They talked all night\./u,
 );
+// "Keep out" promises she will not remember the scene: its recap never reaches her prompt.
+assert.equal(
+  slurpDmTranscript(
+    [line("creator", { kind: "recap", sceneChatId: "s", title: "Shoot", summary: "Secret.", reach: "none" })] as never,
+    { writer: "creator", creator: { name: "Mina", handle: "mina" }, viewer: { name: "Alex", handle: "alex" } },
+  ).length,
+  0,
+  "A kept-out recap is not in her transcript",
+);
 
 // ── Invites stay rare: none while one is open, none within three days of the last ──
 const now = new Date("2026-10-05T12:00:00Z");

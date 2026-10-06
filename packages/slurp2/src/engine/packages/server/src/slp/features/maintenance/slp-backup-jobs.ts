@@ -94,9 +94,15 @@ export function createSlpBackupJobs(app: FastifyInstance, deps: SlpRouteDeps) {
 
   // Sweep orphaned archives once at startup and again each hour. The timer is unref'd so a
   // deactivated package never keeps the host process alive, and sweeps are idempotent.
+  // A reload (sideload, update) builds a new instance in the same process, and the old timer swept
+  // with its own empty job map, deleting the new instance's live archives. One timer per process:
+  // the newest instance replaces the previous one, across bundle copies too (hence globalThis).
   void sweepBackupArchives();
+  const sweepSlot = globalThis as { __slurp2BackupSweepTimer?: ReturnType<typeof setInterval> };
+  clearInterval(sweepSlot.__slurp2BackupSweepTimer);
   const backupSweepTimer = setInterval(() => void sweepBackupArchives(), BACKUP_SWEEP_INTERVAL_MS);
   backupSweepTimer.unref();
+  sweepSlot.__slurp2BackupSweepTimer = backupSweepTimer;
 
   const newBackupJob = (kind: "export" | "restore", detail: string): BackupJob => ({
     id: randomUUID(),

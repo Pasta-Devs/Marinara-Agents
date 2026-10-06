@@ -26,6 +26,7 @@ import {
   slurpNoticedTastes,
   slurpSpiceAngle,
   slurpSpiceBriefLines,
+  slurpSpiceLanguageFor,
   slurpSpiceLabelsOf,
   slurpTasteChance,
   slurpTasteFit,
@@ -331,6 +332,26 @@ assert.ok(
   "sexting touches the taste",
 );
 assert.deepEqual(slurpSpiceBriefLines({ use: "dm", level: "none", turnOns: ["x"], hardNoes: [], never: [] }), []);
+// 0.3.17: the Language choice says which words (how far is the post's own level line), and the
+// dirty word list only once nudity is allowed. No stored language reads as "dirty" (the old default).
+const post = (level: "suggestive" | "nudity" | "explicit", language?: "soft" | "frank" | "dirty") =>
+  slurpSpiceBriefLines({ use: "post", level, turnOns: [], hardNoes: [], never: [], language }).join(" ");
+assert.equal(post("suggestive"), "", "with dirty words a flirty level gets no language line");
+assert.match(post("nudity"), /dirty everyday words/u);
+assert.match(post("explicit", "soft"), /innuendo and euphemism/u);
+assert.doesNotMatch(post("explicit", "frank"), /pussy/u);
+assert.deepEqual(slurpSpiceBriefLines({ use: "post", level: "none", turnOns: [], hardNoes: [], never: [] }), []);
+assert.equal(normalizeSlpSpice({}).language, null, "unset until the old preset is migrated");
+assert.equal(normalizeSlpSpice({ language: "frank" }).language, "frank");
+// The one-time migration: mild → soft; shipped steamy/explicit and the house style → dirty; an edited
+// text keeps its own words.
+const shipped = { mild: "MILD", dirty: ["STEAMY", "EXPLICIT", "HOUSE"] };
+assert.equal(slurpSpiceLanguageFor("MILD", shipped), "soft");
+assert.equal(slurpSpiceLanguageFor("STEAMY", shipped), "dirty");
+assert.equal(slurpSpiceLanguageFor("HOUSE", shipped), "dirty");
+assert.equal(slurpSpiceLanguageFor("Keep it classy. Do not write explicit sexual detail.", shipped), "soft");
+assert.equal(slurpSpiceLanguageFor("Lots of tits and teasing.", shipped), "dirty");
+assert.equal(slurpSpiceLanguageFor("Cozy, warm, a little cheeky.", shipped), "frank");
 assert.equal(slurpDmSpiceLevel("explicit", true), "explicit", "subscribers get the Creator's level");
 assert.equal(slurpDmSpiceLevel("explicit", false), "nudity", "everybody else gets the tease");
 assert.ok(
@@ -482,7 +503,7 @@ for (const route of ['app.get("/slurp/spice"', 'app.patch("/slurp/spice"', 'app.
 assert.doesNotMatch(routes, /chatComplete|generate\w*\(/u, "the Spice page makes no AI calls");
 assert.match(server("slp-server-entry.ts"), /await slpSpiceRoutes\(app\);/u);
 const steeringRoutes = server("features/creators/slp-steering-routes.ts");
-assert.match(steeringRoutes, /spiceLevel: z\.enum\(SLP_SPICE_LEVELS\)\.nullable\(\)\.optional\(\)/u);
+assert.match(steeringRoutes, /spiceLevel: z\.enum\(SLP_SPICE_STEPS\)\.nullable\(\)\.optional\(\)/u);
 assert.match(steeringRoutes, /levelChanged \|\| slurpSteeringContentChanged/u);
 assert.match(
   server("features/creators/slp-creators-routes.ts"),

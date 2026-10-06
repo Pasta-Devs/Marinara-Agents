@@ -552,11 +552,13 @@ export function NoodlerPostComposer({
           onUpload={() => imageFileRef.current?.click()}
           initialIdea={handedGuide?.idea ?? ""}
           autoRun={Boolean(handedGuide) && open}
-          onDraft={(guided) => {
+          onDraft={(drafted) => {
             if (handedGuide) setComposeGuide(null);
-            guideDealId.current = guided.dealId;
-            updateDraft({ body: guided.text });
-            if (guided.image) takeDrawnPicture(guided.image);
+            guideDealId.current = drafted.dealId;
+            // The guided preview shows only picture, title and text: a poll or link left from an
+            // older draft would be posted unseen.
+            updateDraft(guided ? { body: drafted.text, poll: null, linkedPostId: null } : { body: drafted.text });
+            if (drafted.image) takeDrawnPicture(drafted.image);
           }}
         />
 

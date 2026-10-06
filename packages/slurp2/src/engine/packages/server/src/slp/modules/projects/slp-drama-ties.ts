@@ -4,6 +4,7 @@
  * never make a tie those rules refuse (a busy pair, a monogamous partner, a full friend list): then
  * the outcome simply does not happen.
  */
+import { slpRomanceAllows } from "../../../../../shared/src/slp/slp-creator-steering.js";
 import type { SlpDramaOutcome } from "../../../../../shared/src/slp/slp-drama.js";
 import {
   slurpBondActive,
@@ -92,6 +93,8 @@ export function slurpApplyDramaTie<T extends SlurpDramaTieDocument>(
     });
     return typeof next === "string" ? document : { ...document, ties: next };
   }
+  // The player's romance setting (0.3.17) holds against a drama too: no couple, the story still ends.
+  if (from.automatic && to.automatic && !slpRomanceAllows(from, to)) return document;
   const next = slurpSetUpCouple(document.couples, from, to, {
     at: input.at,
     id: input.newId(),
