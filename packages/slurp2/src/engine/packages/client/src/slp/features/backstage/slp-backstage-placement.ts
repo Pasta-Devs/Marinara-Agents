@@ -51,6 +51,7 @@ export const SLP_BACKSTAGE_SETTING_PLACEMENT: Record<keyof SlurpSettings, SlpBac
   pricingMaxWeeklyChangePercent: world("wallet", "weekly price change"),
   walletStipendFloor: world("wallet", "stipend", "balance floor"),
   walletDayStartHour: world("wallet", "wallet day", "reset hour"),
+  walletPayoutDailyLimit: world("wallet", "collect", "payout", "redeem", "cooldown", "daily limit"),
   walletAdReward: world("wallet", "ad reward"),
   walletAdDailyCap: world("wallet", "daily ad cap"),
   walletEngagementReward: world("wallet", "engagement reward"),

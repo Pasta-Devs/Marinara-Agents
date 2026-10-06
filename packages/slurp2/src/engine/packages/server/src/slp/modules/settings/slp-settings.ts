@@ -333,6 +333,8 @@ export const slurpSettingsSchema = z.object({
   /** Daily stipend tops the balance up to this floor. Zero disables the stipend. */
   walletStipendFloor: z.number().int().min(0).max(99_999),
   walletDayStartHour: z.number().int().min(0).max(23),
+  /** Collect moves at most a daily allowance of earnings. Off: Collect moves all of them (R5). */
+  walletPayoutDailyLimit: z.boolean(),
   walletAdReward: z.number().int().min(0).max(999),
   walletAdDailyCap: z.number().int().min(0).max(9999),
   walletEngagementReward: z.number().int().min(0).max(999),
@@ -502,6 +504,7 @@ export const DEFAULT_SLURP_SETTINGS: SlurpSettings = {
   pricingMaxWeeklyChangePercent: 15,
   walletStipendFloor: SLURP_DEFAULT_ECONOMY.stipendFloor,
   walletDayStartHour: SLURP_DEFAULT_ECONOMY.dayStartHour,
+  walletPayoutDailyLimit: true,
   walletAdReward: SLURP_DEFAULT_ECONOMY.adReward,
   walletAdDailyCap: SLURP_DEFAULT_ECONOMY.adDailyCap,
   walletEngagementReward: SLURP_DEFAULT_ECONOMY.engagementReward,

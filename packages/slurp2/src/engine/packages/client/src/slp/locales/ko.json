@@ -3043,6 +3043,8 @@
   "ui.slurp.settings.wallet.engagementReward": "다른 사람의 게시물에 댓글이나 설문 투표를 할 때 지급",
   "ui.slurp.settings.wallet.explainer": "끄기: 모든 잠금 해제와 구독이 무료입니다. 켜기: 게시물 잠금 해제와 크리에이터 구독에 지갑의 Slurp 코인이 사용되며, 부족해지면 영향이 있습니다: 결제할 수 없는 구독은 만료됩니다.",
   "ui.slurp.settings.wallet.pricingDynamicCharactersDetail": "매주 한 번, 각 캐릭터 크리에이터는 인기도에 따라 구독, 잠긴 게시물, 커미션 가격을 조정합니다. 이미 구독한 가격은 그대로 유지됩니다.",
+  "ui.slurp.settings.wallet.payoutDailyLimit": "받기 일일 한도",
+  "ui.slurp.settings.wallet.payoutDailyLimitDetail": "받기는 크리에이터 수익 중 하루 몫을 지갑으로 옮깁니다. 끄면 받기가 수익 전부를 한 번에 옮깁니다.",
   "ui.slurp.studio.fanSpent": "{{count}} <coin/>",
   "ui.slurp.studio.goalProgress": "{{target}} <coin/> 중 {{raised}}",
   "ui.slurp.studio.payout": "모으기",

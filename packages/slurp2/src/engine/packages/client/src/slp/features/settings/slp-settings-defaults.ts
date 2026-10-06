@@ -130,6 +130,7 @@ export const SLURP_SETTINGS_SECTION_KEYS: Record<SlurpResettableSection, readonl
     "pricingMaxWeeklyChangePercent",
     "walletStipendFloor",
     "walletDayStartHour",
+    "walletPayoutDailyLimit",
     "walletAdReward",
     "walletAdDailyCap",
     "walletEngagementReward",

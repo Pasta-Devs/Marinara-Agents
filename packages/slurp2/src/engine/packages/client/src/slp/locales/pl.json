@@ -2256,6 +2256,8 @@
   "ui.slurp.settings.wallet.engagementReward": "Płatne za komentarz albo głos w ankiecie pod postem kogoś innego",
   "ui.slurp.settings.wallet.explainer": "Wyłączone: każde odblokowanie i subskrypcja są na koszt firmy. Włączone: odblokowanie posta i subskrypcja u twórcy zabierają SlurpCoiny z Twojego portfela, a brak środków ma konsekwencje: subskrypcja, za którą nie możesz zapłacić, wygasa.",
   "ui.slurp.settings.wallet.pricingDynamicCharactersDetail": "Raz w tygodniu każdy twórca-postać zmienia ceny subskrypcji, zablokowanego posta i zleceń wraz ze swoją popularnością. Twoje własne subskrypcje zachowują cenę, przy której się zapisałeś.",
+  "ui.slurp.settings.wallet.payoutDailyLimit": "Dzienny limit odbioru",
+  "ui.slurp.settings.wallet.payoutDailyLimitDetail": "Odbierz przenosi do Portfela dzienną część zarobków Twórcy. Wyłączone: Odbierz przenosi wszystko naraz.",
   "ui.slurp.studio.fanSpent": "{{count}} <coin/>",
   "ui.slurp.studio.goalProgress": "{{raised}} z {{target}} <coin/>",
   "ui.slurp.studio.payout": "Zbierz",

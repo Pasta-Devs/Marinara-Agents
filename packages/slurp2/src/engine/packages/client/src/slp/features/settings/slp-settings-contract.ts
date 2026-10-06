@@ -33,6 +33,8 @@ export type SlurpSettings = {
   pricingMaxWeeklyChangePercent: number;
   walletStipendFloor: number;
   walletDayStartHour: number;
+  /** Collect moves at most a daily allowance; false moves all earnings. */
+  walletPayoutDailyLimit: boolean;
   walletAdReward: number;
   walletAdDailyCap: number;
   walletEngagementReward: number;

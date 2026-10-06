@@ -25,6 +25,7 @@ export const SLP_BACKSTAGE_LABEL_KEYS: Partial<Record<keyof SlurpSettings, strin
   pricingMaxWeeklyChangePercent: "ui.slurp.settings.wallet.pricingMaxWeeklyChange",
   walletStipendFloor: "ui.slurp.settings.wallet.stipendFloor",
   walletDayStartHour: "ui.slurp.settings.wallet.dayStartHour",
+  walletPayoutDailyLimit: "ui.slurp.settings.wallet.payoutDailyLimit",
   walletAdReward: "ui.slurp.settings.wallet.adReward",
   walletAdDailyCap: "ui.slurp.settings.wallet.adDailyCap",
   walletEngagementReward: "ui.slurp.settings.wallet.engagementReward",

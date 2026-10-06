@@ -148,7 +148,9 @@ export function createEconomyStorage3(context: SlurpStorageContext) {
      * limit is shared by every Creator the same persona runs, so a second page does not double it.
      */
     async getPayoutState(creatorAccountId: string, at = new Date()) {
-      const crowdWeight = (await this.getSettings()).simulationTuning.economy.crowdWeight;
+      const settings = await this.getSettings();
+      const crowdWeight = settings.simulationTuning.economy.crowdWeight;
+      const dailyLimit = settings.walletPayoutDailyLimit;
       const creator = await this.getNoodlerAccountById(creatorAccountId);
       const earnings = await this.getEarnings(creatorAccountId);
       let othersToday = 0;
@@ -160,11 +162,12 @@ export function createEconomyStorage3(context: SlurpStorageContext) {
             sibling.sourceEntityId === creator.sourceEntityId
           )
             othersToday += slurpPaidOutToday(await this.getEarnings(sibling.id), at);
-      const allowance = slurpPayoutAllowance(earnings, at, crowdWeight, othersToday);
+      const allowance = slurpPayoutAllowance(earnings, at, crowdWeight, othersToday, dailyLimit);
       return {
         earnings,
         crowdWeight,
         othersToday,
+        dailyLimit,
         allowance,
         allowanceCoins: slurpPayoutCoins(allowance, crowdWeight),
       };
@@ -178,8 +181,8 @@ export function createEconomyStorage3(context: SlurpStorageContext) {
       if (!creator || creator.sourceKind !== "persona" || !creator.sourceEntityId) return { status: "refused" };
       const recipientId = creator.sourceEntityId;
       const run = enqueueFinancial(async () => {
-        const { earnings: current, crowdWeight, othersToday } = await this.getPayoutState(creatorAccountId);
-        const next = payoutEarnings(current, amount, new Date(), crowdWeight, othersToday);
+        const { earnings: current, crowdWeight, othersToday, dailyLimit } = await this.getPayoutState(creatorAccountId);
+        const next = payoutEarnings(current, amount, new Date(), crowdWeight, othersToday, dailyLimit);
         if (!next) return { status: "refused" as const };
         const previousWalletValue = await settingsStore.get(slurpWalletKey(recipientId));
         const previousViewerSettingsValue = await settingsStore.get(slurpViewerSettingsKey(recipientId));

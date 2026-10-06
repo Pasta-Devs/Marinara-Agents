@@ -2218,6 +2218,8 @@
   "ui.slurp.settings.wallet.engagementReward": "Bezahlt pro Kommentar oder Umfragestimme auf dem Beitrag eines anderen",
   "ui.slurp.settings.wallet.explainer": "Aus: Jede Freischaltung und jedes Abonnement geht aufs Haus. An: Das Freischalten eines Beitrags und das Abonnieren eines Creators nehmen SlurpCoins aus deinem Wallet, und leer sein hat Folgen: ein Abonnement, das du nicht bezahlen kannst, läuft aus.",
   "ui.slurp.settings.wallet.pricingDynamicCharactersDetail": "Einmal pro Woche bewegt jeder Charakter-Creator seine Abonnement-, Beitrags- und Auftragspreise mit seiner Popularität. Deine eigenen Abonnements behalten den Preis, zu dem du sie abgeschlossen hast.",
+  "ui.slurp.settings.wallet.payoutDailyLimit": "Tageslimit beim Einsammeln",
+  "ui.slurp.settings.wallet.payoutDailyLimitDetail": "Einsammeln verschiebt jeden Tag einen Teil deiner Creator-Einnahmen in die Wallet. Aus: Einsammeln verschiebt alles auf einmal.",
   "ui.slurp.studio.fanSpent": "{{count}} <coin/>",
   "ui.slurp.studio.goalProgress": "{{raised}} von {{target}} <coin/>",
   "ui.slurp.studio.payout": "Einsammeln",
