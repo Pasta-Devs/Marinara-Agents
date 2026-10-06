@@ -132,6 +132,7 @@ export const SLP_BACKSTAGE_LABEL_KEYS: Partial<Record<keyof SlurpSettings, strin
   messagesQuoteAnswerMinutes: "ui.slurp.settings.messaging.quoteAnswer",
   messagesFanOpeners: "ui.slurp.settings.messaging.fanOpeners",
   messagesCommissionOpeners: "ui.slurp.settings.messaging.commissionOpeners",
+  messagesCommissionAsks: "ui.slurp.settings.messaging.commissionAsks",
   autopurgeEnabled: "ui.slurp.settings.autopurge.schedule",
   autopurgeRetentionValue: "ui.slurp.settings.autopurge.olderThan",
   autopurgeRetentionUnit: "ui.slurp.settings.autopurge.unit",

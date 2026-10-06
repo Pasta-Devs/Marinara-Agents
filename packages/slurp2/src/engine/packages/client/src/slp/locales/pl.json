@@ -592,6 +592,8 @@
   "ui.slurp.settings.messaging.fanOpenersDetail": "Jedna wiadomość w linii. Nowy fan zaczyna czat jedną z tych linii. Gdy budżet AI pozwala na przepisywanie, model pisze ją potem od nowa głosem fana.",
   "ui.slurp.settings.messaging.commissionOpeners": "Początki próśb o zlecenie",
   "ui.slurp.settings.messaging.commissionOpenersDetail": "Jeden początek w linii. Każda prośba zaczyna się jednym z nich, a potem mówi, czego fan chce. Gdy budżet AI pozwala na przepisywanie, model pisze prośbę potem od nowa.",
+  "ui.slurp.settings.messaging.commissionAsks": "Czego chcą fani",
+  "ui.slurp.settings.messaging.commissionAsksDetail": "Jedno życzenie w wierszu. Prośba podaje jedno z nich po pierwszych słowach. Gdy budżet AI pozwala na przepisywanie, model potem pisze prośbę od nowa.",
   "ui.slurp.settings.messaging.openersReset": "Użyj wbudowanych linii",
   "ui.slurp.settings.aiBudget.pendingRewrites": "Wiadomości i prośby fanów czekające na przepisanie: {{count}}",
   "ui.slurp.settings.aiBudget.rewriting": "Przepisywanie. Zostało: {{count}}",

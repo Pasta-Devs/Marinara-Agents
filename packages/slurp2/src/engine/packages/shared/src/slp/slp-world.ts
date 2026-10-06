@@ -530,6 +530,26 @@ export const SLURP_COMMISSION_OPENERS: readonly string[] = [
 ];
 
 /**
+ * What the fan wants, after the first words of a commission brief. Vague on purpose (see
+ * slp-world-copy.ts). Players can replace them in Messaging settings.
+ */
+export const SLURP_COMMISSION_ASKS: readonly string[] = [
+  "something soft, whatever direction you feel like taking it",
+  "something in your usual style, but just for me",
+  "a set built around one idea, your pick of which",
+  "something a bit moodier than your last few",
+  "whatever you have been wanting to make and have not yet",
+  "something I can keep for myself rather than scroll past",
+  "a piece with the feel of your older work",
+  "a quick sketch, nothing polished",
+  "a detailed full-body piece with a proper background",
+  "the two of us together in one scene",
+  "a small set of three around the same theme",
+  "a simple headshot I can use as an icon",
+  "a painted scene, as detailed as you like",
+];
+
+/**
  * An opening line from somebody who has never written before. Vague on purpose, like the briefs:
  * a first message that pretends to know something specific about a post it has not read is worse
  * than one that simply says hello. Players can replace them in Messaging settings.

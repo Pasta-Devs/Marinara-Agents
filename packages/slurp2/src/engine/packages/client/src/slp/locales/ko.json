@@ -1420,6 +1420,8 @@
   "ui.slurp.settings.messaging.fanOpenersDetail": "한 줄에 메시지 하나. 새 팬은 이 중 한 줄로 채팅을 시작합니다. AI 예산이 다시 쓰기를 허용하면 모델이 팬의 말투로 다시 씁니다.",
   "ui.slurp.settings.messaging.commissionOpeners": "커미션 요청의 첫마디",
   "ui.slurp.settings.messaging.commissionOpenersDetail": "한 줄에 첫마디 하나. 각 요청은 이 중 하나로 시작한 뒤 팬이 원하는 것을 말합니다. AI 예산이 다시 쓰기를 허용하면 모델이 요청을 다시 씁니다.",
+  "ui.slurp.settings.messaging.commissionAsks": "팬이 요청하는 내용",
+  "ui.slurp.settings.messaging.commissionAsksDetail": "한 줄에 하나씩 적으세요. 요청은 첫 마디 다음에 이 중 하나를 말합니다. AI 예산이 다시 쓰기를 허용하면 모델이 요청을 다시 씁니다.",
   "ui.slurp.settings.messaging.openersReset": "기본 문장 사용",
   "ui.slurp.settings.aiBudget.pendingRewrites": "다시 쓰기를 기다리는 팬 메시지와 요청: {{count}}",
   "ui.slurp.settings.aiBudget.rewriting": "다시 쓰는 중. 남은 항목: {{count}}",

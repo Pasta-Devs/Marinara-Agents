@@ -4440,6 +4440,8 @@
   "ui.slurp.settings.messaging.fanOpenersDetail": "One message per line. A new fan starts a chat with one of these lines. When the AI budget allows rewrites, the model then writes it again in the fan's voice.",
   "ui.slurp.settings.messaging.commissionOpeners": "First words of commission requests",
   "ui.slurp.settings.messaging.commissionOpenersDetail": "One opener per line. Each request starts with one of these, then says what the fan wants. When the AI budget allows rewrites, the model then writes the request again.",
+  "ui.slurp.settings.messaging.commissionAsks": "What fans ask for",
+  "ui.slurp.settings.messaging.commissionAsksDetail": "One wish per line. A request says one of these after its first words. When the AI budget allows rewrites, the model then writes the request again.",
   "ui.slurp.settings.messaging.openersReset": "Use the built-in lines",
   "ui.slurp.settings.aiBudget.pendingRewrites": "Fan messages and requests waiting for a rewrite: {{count}}",
   "ui.slurp.settings.aiBudget.rewriting": "Rewriting. Waiting now: {{count}}",

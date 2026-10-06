@@ -175,6 +175,7 @@ export const SLP_BACKSTAGE_SETTING_PLACEMENT: Record<keyof SlurpSettings, SlpBac
   messagesQuoteAnswerMinutes: world("messaging", "quote", "commission", "answer delay", "thinking time"),
   messagesFanOpeners: world("messaging", "fan openers", "first message", "templates"),
   messagesCommissionOpeners: world("messaging", "commission openers", "request", "templates"),
+  messagesCommissionAsks: world("messaging", "commission asks", "request", "fan wants", "templates"),
   autopurgeEnabled: maintenance("automatic cleanup", "autopurge"),
   autopurgeRetentionValue: maintenance("retention", "keep media"),
   autopurgeRetentionUnit: maintenance("retention unit"),

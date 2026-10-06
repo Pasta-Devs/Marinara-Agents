@@ -1,6 +1,7 @@
 import { MessageCircle, RotateCcw } from "lucide-react";
 import { useEffect, useState } from "react";
 import {
+  SLURP_COMMISSION_ASKS,
   SLURP_COMMISSION_OPENERS,
   SLURP_CUSTOM_OPENER_MAX_LENGTH,
   SLURP_CUSTOM_OPENERS_MAX,
@@ -38,7 +39,7 @@ function OpenerListField({
   disabled,
   onSave,
 }: {
-  settingKey: "messagesFanOpeners" | "messagesCommissionOpeners";
+  settingKey: "messagesFanOpeners" | "messagesCommissionOpeners" | "messagesCommissionAsks";
   label: string;
   detail: string;
   resetLabel: string;
@@ -407,7 +408,7 @@ export function SlpMessagingPanel(page: SlpBackstagePageProps) {
         />
         <AdvancedGroup
           title={t("ui.slurp.settings.messaging.openersTitle", { defaultValue: "Your own first lines" })}
-          count={2}
+          count={3}
         >
           <OpenerListField
             settingKey="messagesFanOpeners"
@@ -436,6 +437,19 @@ export function SlpMessagingPanel(page: SlpBackstagePageProps) {
             builtIn={SLURP_COMMISSION_OPENERS}
             disabled={updateSettings.isPending}
             onSave={(value) => void update("messagesCommissionOpeners", value)}
+          />
+          <OpenerListField
+            settingKey="messagesCommissionAsks"
+            label={t("ui.slurp.settings.messaging.commissionAsks", { defaultValue: "What fans ask for" })}
+            detail={t("ui.slurp.settings.messaging.commissionAsksDetail", {
+              defaultValue:
+                "One wish per line. A request says one of these after its first words. When the AI budget allows rewrites, the model then writes the request again.",
+            })}
+            resetLabel={t("ui.slurp.settings.messaging.openersReset", { defaultValue: "Use the built-in lines" })}
+            value={settings.messagesCommissionAsks}
+            builtIn={SLURP_COMMISSION_ASKS}
+            disabled={updateSettings.isPending}
+            onSave={(value) => void update("messagesCommissionAsks", value)}
           />
         </AdvancedGroup>
       </SettingsGroup>

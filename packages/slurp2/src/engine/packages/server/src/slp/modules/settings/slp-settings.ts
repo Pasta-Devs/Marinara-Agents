@@ -379,6 +379,10 @@ export const slurpSettingsSchema = z.object({
   messagesCommissionOpeners: z
     .array(z.string().trim().min(1).max(SLURP_CUSTOM_OPENER_MAX_LENGTH))
     .max(SLURP_CUSTOM_OPENERS_MAX),
+  /** The player's own "what the fan wants" for commission requests. Empty = the built-in ones. */
+  messagesCommissionAsks: z
+    .array(z.string().trim().min(1).max(SLURP_CUSTOM_OPENER_MAX_LENGTH))
+    .max(SLURP_CUSTOM_OPENERS_MAX),
   /**
    * Creator replies to comments in any 24 hours, installation-wide (your comments and the
    * audience's share it). No "off": the audience drain runs on page loads and this is its only cap.
@@ -635,6 +639,7 @@ export const DEFAULT_SLURP_SETTINGS: SlurpSettings = {
   messagesQuoteAnswerMinutes: 1440,
   messagesFanOpeners: [],
   messagesCommissionOpeners: [],
+  messagesCommissionAsks: [],
   creatorRepliesPerDay: DEFAULT_SLP_CREATOR_REPLIES_PER_24_HOURS,
   autopurgeEnabled: false,
   autopurgeRetentionValue: 4,

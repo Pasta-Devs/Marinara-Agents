@@ -15,23 +15,11 @@
  */
 
 import type { SlurpAudienceTone } from "../../../../../shared/src/slp/slp-tone.js";
-import { SLURP_COMMISSION_OPENERS, SLURP_FAN_OPENERS } from "../../../../../shared/src/slp/slp-world.js";
-
-const COMMISSION_ASKS = [
-  "something soft, whatever direction you feel like taking it",
-  "something in your usual style, but just for me",
-  "a set built around one idea, your pick of which",
-  "something a bit moodier than your last few",
-  "whatever you have been wanting to make and have not yet",
-  "something I can keep for myself rather than scroll past",
-  "a piece with the feel of your older work",
-  "a quick sketch, nothing polished",
-  "a detailed full-body piece with a proper background",
-  "the two of us together in one scene",
-  "a small set of three around the same theme",
-  "a simple headshot I can use as an icon",
-  "a painted scene, as detailed as you like",
-] as const;
+import {
+  SLURP_COMMISSION_ASKS,
+  SLURP_COMMISSION_OPENERS,
+  SLURP_FAN_OPENERS,
+} from "../../../../../shared/src/slp/slp-world.js";
 
 const COMMISSION_CLOSERS = [
   "No rush at all.",
@@ -70,12 +58,17 @@ function pickIndex(seed: string, salt: string, length: number): number {
 }
 
 /** One commission brief. Three banks combined give several hundred distinct requests. */
-export function slurpCommissionBrief(seed: string, openers: readonly string[] = []): string {
-  // The player's own openers (Messaging settings) replace the built-in ones when there are any.
+export function slurpCommissionBrief(
+  seed: string,
+  openers: readonly string[] = [],
+  asks: readonly string[] = [],
+): string {
+  // The player's own lists (Messaging settings) replace the built-in ones when there are any.
   const bank = openers.length > 0 ? openers : SLURP_COMMISSION_OPENERS;
+  const wants = asks.length > 0 ? asks : SLURP_COMMISSION_ASKS;
   return [
     bank[pickIndex(seed, "opener", bank.length)]!,
-    COMMISSION_ASKS[pickIndex(seed, "ask", COMMISSION_ASKS.length)]!,
+    wants[pickIndex(seed, "ask", wants.length)]!,
     COMMISSION_CLOSERS[pickIndex(seed, "closer", COMMISSION_CLOSERS.length)]!,
   ].join(" ");
 }

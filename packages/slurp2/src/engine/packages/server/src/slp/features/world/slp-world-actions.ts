@@ -103,7 +103,10 @@ export async function applyAction(
   action: SlurpWorldAction,
   at: Date,
   noodle: ReturnType<typeof createSlurpStorage>,
-  settings: Pick<SlurpSettings, "fanTypes" | "messagesFanOpeners" | "messagesCommissionOpeners">,
+  settings: Pick<
+    SlurpSettings,
+    "fanTypes" | "messagesFanOpeners" | "messagesCommissionOpeners" | "messagesCommissionAsks"
+  >,
   characterFanPinnedTypeIds: ReadonlyMap<string, string | null>,
 ): Promise<boolean> {
   const { fanTypes } = settings;
@@ -227,6 +230,7 @@ export async function applyAction(
     const brief = slurpCommissionBrief(
       `${action.creatorAccountId}:${action.actorAccountId}:${at.toISOString()}`,
       settings.messagesCommissionOpeners,
+      settings.messagesCommissionAsks,
     );
     const commission = await messages.createCommission(action.actorAccountId, action.creatorAccountId, brief);
     // `"open_request"` means this fan already has one waiting. Piling on a second is exactly what

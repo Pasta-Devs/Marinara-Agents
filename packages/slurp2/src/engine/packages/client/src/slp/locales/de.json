@@ -580,6 +580,8 @@
   "ui.slurp.settings.messaging.fanOpenersDetail": "Eine Nachricht pro Zeile. Ein neuer Fan beginnt einen Chat mit einer dieser Zeilen. Wenn das KI-Budget Umschreiben erlaubt, schreibt das Modell sie danach in der Stimme des Fans neu.",
   "ui.slurp.settings.messaging.commissionOpeners": "Anfang von Auftragsanfragen",
   "ui.slurp.settings.messaging.commissionOpenersDetail": "Ein Anfang pro Zeile. Jede Anfrage beginnt mit einem davon und sagt dann, was der Fan möchte. Wenn das KI-Budget Umschreiben erlaubt, schreibt das Modell die Anfrage danach neu.",
+  "ui.slurp.settings.messaging.commissionAsks": "Was Fans sich wünschen",
+  "ui.slurp.settings.messaging.commissionAsksDetail": "Ein Wunsch pro Zeile. Eine Anfrage nennt nach ihren ersten Worten einen davon. Wenn das KI-Budget Umschreibungen erlaubt, schreibt das Modell die Anfrage danach neu.",
   "ui.slurp.settings.messaging.openersReset": "Eingebaute Zeilen verwenden",
   "ui.slurp.settings.aiBudget.pendingRewrites": "Fan-Nachrichten und Anfragen, die auf Umschreiben warten: {{count}}",
   "ui.slurp.settings.aiBudget.rewriting": "Wird umgeschrieben. Noch offen: {{count}}",

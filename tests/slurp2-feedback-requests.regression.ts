@@ -2,9 +2,34 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { slurpCommissionBrief } from "../packages/slurp2/src/engine/packages/server/src/slp/modules/world/slp-world-copy.ts";
+import { SLURP_COMMISSION_ASKS } from "../packages/slurp2/src/engine/packages/shared/src/slp/slp-world.ts";
 
 const client = join(import.meta.dirname, "..", "packages/slurp2/src/engine/packages/client/src/slp");
 const src = (path: string) => readFileSync(join(client, path), "utf8");
+
+// ── R7: the player edits what the fan wants in a commission request ──
+assert.ok(
+  SLURP_COMMISSION_ASKS.some((ask) => slurpCommissionBrief("seed").includes(ask)),
+  "built-in asks by default",
+);
+assert.match(
+  slurpCommissionBrief("seed", ["Hi."], ["a tiny frog"]),
+  /^Hi\. a tiny frog /u,
+  "the player's own asks win",
+);
+const server = join(client, "../../../server/src/slp");
+const settings = readFileSync(join(server, "modules/settings/slp-settings.ts"), "utf8");
+assert.match(settings, /messagesCommissionAsks: z\s*\.array\(z\.string\(\)\.trim\(\)\.min\(1\)/u);
+assert.match(settings, /messagesCommissionAsks: \[\],/u, "empty = the built-in asks");
+assert.match(
+  readFileSync(join(server, "features/world/slp-world-actions.ts"), "utf8"),
+  /settings\.messagesCommissionOpeners,\s*settings\.messagesCommissionAsks,/u,
+);
+assert.match(
+  src("features/messages/SlpMessagingPanel.tsx"),
+  /settingKey="messagesCommissionAsks"[\s\S]*?builtIn=\{SLURP_COMMISSION_ASKS\}/u,
+);
 
 // ── R11: tapping an ad showed nothing ──
 // Every ad tap (the button, the picture, a wall tile) opens the ad sheet and still records the tap.

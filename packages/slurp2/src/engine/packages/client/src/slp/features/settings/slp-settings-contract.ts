@@ -166,6 +166,8 @@ export type SlurpSettings = {
   messagesFanOpeners: string[];
   /** The player's own first words for commission requests; empty = the built-in ones. */
   messagesCommissionOpeners: string[];
+  /** The player's own "what the fan wants" for commission requests; empty = the built-in ones. */
+  messagesCommissionAsks: string[];
   /** Creator replies to comments in any 24 hours (1–200). */
   creatorRepliesPerDay: number;
   autopurgeEnabled: boolean;
