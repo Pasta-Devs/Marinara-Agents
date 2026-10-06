@@ -5,6 +5,10 @@ import { join } from "node:path";
 import { slurpCommissionBrief } from "../packages/slurp2/src/engine/packages/server/src/slp/modules/world/slp-world-copy.ts";
 import { SLURP_COMMISSION_ASKS } from "../packages/slurp2/src/engine/packages/shared/src/slp/slp-world.ts";
 import {
+  slurpThreadSummaryMessages,
+  slurpThreadTranscript,
+} from "../packages/slurp2/src/engine/packages/server/src/slp/modules/messages/slp-thread-export.ts";
+import {
   slurpLastAnswer,
   slurpMessageEditable,
   slurpMessageRemovable,
@@ -69,6 +73,38 @@ for (const path of [...editRoutes.matchAll(/app\.(\w+)\("([^"]+)"/gu)]) {
 assert.match(
   readFileSync(join(client, "../../../server/src/slp/data/messages/slp-message-edit-storage.ts"), "utf8"),
   /delete\(slurpReplyBubbles\)[\s\S]*?delete\(slurpMessageClaims\)[\s\S]*?generationEpoch: String\(Number\(thread\?\.generationEpoch \?\? 0\) \+ 1\)/u,
+);
+
+// ── R10: a DM thread as text, or a summary, to paste into a lorebook ──
+const row = (role: "viewer" | "creator", content: string, extra: Record<string, unknown> = {}) => ({
+  role,
+  kind: "text",
+  content,
+  imageUrl: null,
+  createdAt: "2026-10-06T12:34:56.000Z",
+  senderSnapshot: {},
+  ...extra,
+});
+const names = { viewer: "Gunter", creator: "Riley" };
+assert.equal(
+  slurpThreadTranscript(
+    [
+      row("viewer", "hey"),
+      row("creator", "hi you", { senderSnapshot: { displayName: "Riley Vale" } }),
+      row("creator", "", { kind: "ppv" }),
+      row("creator", "  "),
+    ],
+    names,
+  ),
+  "[2026-10-06 12:34] Gunter: hey\n[2026-10-06 12:34] Riley Vale: hi you\n[2026-10-06 12:34] Riley: [locked picture]",
+);
+const summaryPrompt = slurpThreadSummaryMessages("x".repeat(200_000), names);
+assert.ok(summaryPrompt[1]!.content.length <= 120_000, "the newest part of a long thread");
+assert.match(summaryPrompt[0]!.content, /Gunter and Riley/u);
+// Each side reads what it may see: the fan's copy goes through the same mask as the thread.
+assert.match(
+  readFileSync(join(client, "../../../server/src/slp/features/messages/slp-thread-export-routes.ts"), "utf8"),
+  /side === "viewer" \? maskForViewer\(message\) : message/u,
 );
 
 // ── R8: a Creator answering a comment knows the commenter from DMs ──

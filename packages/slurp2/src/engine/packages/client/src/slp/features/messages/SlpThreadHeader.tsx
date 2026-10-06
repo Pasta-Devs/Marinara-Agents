@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { useSlurpUIStore } from "../../base/state/slp-package-store";
 import { cn } from "../../../lib/utils";
 import { SlpStoryRingAvatar } from "../../modules/story/SlpStoryRing";
@@ -13,6 +14,8 @@ import {
   Search,
   Trash2,
   Clapperboard,
+  ClipboardCopy,
+  ScrollText,
   UserRound,
   X,
 } from "lucide-react";
@@ -26,6 +29,7 @@ import { CommissionRow } from "./commissions/SlpCommissions";
 import type { SlurpThreadViewModel } from "./slp-thread-actions";
 import { SlpDeskTrustChip } from "../../modules/desk/SlpDeskCaseFile";
 import { SlpDeskTicketBar } from "./SlpDeskTicketBar";
+import { copySlpThread, SlpThreadSummarySheet } from "./SlpThreadExportSheet";
 
 const ICON_BUTTON =
   "relative flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-[var(--slurp-muted)] transition-[background-color,transform] hover:bg-[var(--accent)] active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] motion-reduce:transition-none motion-reduce:active:scale-100 [&_svg]:!text-current";
@@ -125,6 +129,7 @@ export function SlpThreadHeader({ model }: { model: SlurpThreadViewModel }) {
   // The player may speak as Slurp Support (Slurp's staff) in any chat with a Creator they do not run.
   // Support's own thread is a staff console: it has no way back to the persona's voice.
   const canSwitchVoice = Boolean(personaId && targetCreatorAccountId && !ownsCreator && !asSupport);
+  const [summaryOpen, setSummaryOpen] = useState(false);
   const menuAction = (run: () => void) => () => {
     setHeaderMenuOpen(false);
     run();
@@ -315,6 +320,18 @@ export function SlpThreadHeader({ model }: { model: SlurpThreadViewModel }) {
               {localizeUi("ui.slurp.messages.memories", { defaultValue: "Memories" })}
             </SlpSheetItem>
           )}
+          {threadId && personaId && (
+            <SlpSheetItem onSelect={menuAction(() => void copySlpThread(personaId, threadId, localizeUi))}>
+              <ClipboardCopy aria-hidden="true" />
+              {localizeUi("ui.slurp.messages.exportCopy")}
+            </SlpSheetItem>
+          )}
+          {threadId && personaId && (
+            <SlpSheetItem onSelect={menuAction(() => setSummaryOpen(true))}>
+              <ScrollText aria-hidden="true" />
+              {localizeUi("ui.slurp.messages.summaryTitle")}
+            </SlpSheetItem>
+          )}
           {canStartScene && thread && (
             <SlpSheetItem onSelect={menuAction(() => setSceneSheet({ threadId: thread.id }))}>
               <Clapperboard aria-hidden="true" />
@@ -356,6 +373,15 @@ export function SlpThreadHeader({ model }: { model: SlurpThreadViewModel }) {
           </SlpSheetGroup>
         )}
       </SlpSheet>
+
+      {threadId && personaId && (
+        <SlpThreadSummarySheet
+          personaId={personaId}
+          threadId={threadId}
+          open={summaryOpen}
+          onClose={() => setSummaryOpen(false)}
+        />
+      )}
 
       {messageSearchOpen && (
         <div
