@@ -1,6 +1,6 @@
 import type { DB } from "../../../db/connection.js";
 import { and, asc, eq, lte } from "../../../db/file-query.js";
-import { slpCreatorFirstPostJobs } from "../../../db/schema/slurp.js";
+import { slpCreatorFirstPostJobs, slpPosts } from "../../../db/schema/slurp.js";
 import { logger } from "../../../lib/logger.js";
 import { newId, now } from "../../../utils/id-generator.js";
 import { generateAndApplyCreatorPost } from "../feed/slp-feed-contract.js";
@@ -109,6 +109,16 @@ export function createSlurpFirstPostQueue(db: DB) {
       .limit(1);
     const job = rows[0];
     if (!job) return false;
+    // The Creator already posted since this job was queued (a restart handed a finished job back, or
+    // another path wrote the first post): that post is the first post. Writing another would double it.
+    const already = await slpLatestPostSince(db, job.creatorAccountId, job.createdAt);
+    if (already) {
+      await db
+        .update(slpCreatorFirstPostJobs)
+        .set({ status: "generated", postId: already, error: null, updatedAt: now() })
+        .where(eq(slpCreatorFirstPostJobs.id, job.id));
+      return true;
+    }
     const attempt = attempts(job.attempts) + 1;
     await db
       .update(slpCreatorFirstPostJobs)
@@ -223,4 +233,13 @@ export function createSlurpFirstPostQueue(db: DB) {
   };
   queues.set(db, queue);
   return queue;
+}
+
+/** The newest top-level post the Creator published at or after `since`, or null. */
+export async function slpLatestPostSince(db: DB, creatorAccountId: string, since: string): Promise<string | null> {
+  const rows = await db.select().from(slpPosts).where(eq(slpPosts.authorAccountId, creatorAccountId));
+  const after = rows
+    .filter((row) => !row.parentPostId && String(row.createdAt) >= since)
+    .sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)));
+  return after[0] ? String(after[0].id) : null;
 }

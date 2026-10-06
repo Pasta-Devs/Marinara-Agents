@@ -34,4 +34,26 @@ assert.match(
   /const stale = await db\.select\(\)\.from\(slurpMessageClaims\)\.where\(eq\(slurpMessageClaims\.threadId, threadId\)\);/u,
 );
 
+// ── B3: Pulse stuck on "creating first post" after the posts exist ──
+// The queue never writes a second first post: a Creator who posted since the job was queued is done.
+const firstPosts = src("features/onboarding/slp-first-post-queue-service.ts");
+assert.match(
+  firstPosts,
+  /const already = await slpLatestPostSince\(db, job\.creatorAccountId, job\.createdAt\);[\s\S]*?status: "generated", postId: already/u,
+);
+assert.ok(
+  firstPosts.indexOf("slpLatestPostSince(db, job.creatorAccountId") <
+    firstPosts.indexOf("generateAndApplyCreatorPost(db"),
+  "checked before the model is called",
+);
+assert.match(
+  firstPosts,
+  /!row\.parentPostId && String\(row\.createdAt\) >= since/u,
+  "top-level posts since the job only",
+);
+// Pulse shows a queued or running first-post job whose post exists as done, with that post to open.
+const maintenance = src("features/maintenance/slp-maintenance-routes.ts");
+assert.match(maintenance, /import \{ slpLatestPostSince \} from "\.\.\/onboarding\/slp-onboarding-contract\.js";/u);
+assert.match(maintenance, /status: madeId \? "generated" : row\.status,[\s\S]*?postId: madeId \?\? row\.postId,/u);
+
 console.log("slurp2 feedback bugs regression passed");
