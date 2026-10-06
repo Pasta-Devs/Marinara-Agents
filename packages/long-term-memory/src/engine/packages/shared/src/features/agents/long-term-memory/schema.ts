@@ -2146,6 +2146,33 @@ export const ltmExtractionRecoveryHintSchema = z
   })
   .strict();
 
+const ltmIdentityNameSchema = z.string().trim().min(1).max(240);
+export const ltmSubjectIdentityReviewSchema = z
+  .object({
+    name: ltmIdentityNameSchema,
+    candidates: z.array(z.object({ name: ltmIdentityNameSchema, subject: ltmSubjectSchema }).strict()).max(10),
+    allowDifferent: z.boolean(),
+    matchedSubjectKey: ltmSubjectSchema.shape.key.optional(),
+  })
+  .strict();
+
+export const ltmSubjectIdentityDecisionSchema = z.discriminatedUnion("action", [
+  z.object({ name: ltmIdentityNameSchema, action: z.literal("bind"), subjectKey: ltmSubjectSchema.shape.key }).strict(),
+  z.object({ name: ltmIdentityNameSchema, action: z.literal("different") }).strict(),
+  z.object({ name: ltmIdentityNameSchema, action: z.literal("skip") }).strict(),
+]);
+export const ltmResolveSubjectIdentityRequestSchema = z
+  .object({
+    choices: z.array(ltmSubjectIdentityDecisionSchema).min(1).max(2),
+  })
+  .strict();
+
+export const ltmSavedSubjectIdentityChoiceSchema = z.discriminatedUnion("action", [
+  z.object({ name: ltmIdentityNameSchema, action: z.literal("bind"), subject: ltmSubjectSchema }).strict(),
+  z.object({ name: ltmIdentityNameSchema, action: z.literal("different"), subject: ltmSubjectSchema }).strict(),
+  z.object({ name: ltmIdentityNameSchema, action: z.literal("skip") }).strict(),
+]);
+
 export const ltmExtractionDroppedCandidateSchema = z
   .object({
     index: z.number().int().min(0).max(LTM_EXTRACTION_MAX_CANDIDATES),
@@ -2155,6 +2182,7 @@ export const ltmExtractionDroppedCandidateSchema = z
     snippet: z.string().min(1).max(280).optional(),
     issues: z.array(z.string().trim().min(1).max(240)).max(8).optional(),
     recovery: ltmExtractionRecoveryHintSchema.optional(),
+    identityReview: z.array(ltmSubjectIdentityReviewSchema).min(1).max(2).optional(),
     recoveryCandidate: ltmEvidenceUnitSchema
       .extend({
         subjectId: z.preprocess(
@@ -2187,6 +2215,14 @@ export const ltmRejectedSuggestionSchema = z
     candidate: ltmExtractionDroppedCandidateSchema,
     createdAt: ltmIsoTimestampSchema,
     lastSeenAt: ltmIsoTimestampSchema,
+    identityResolution: z
+      .object({
+        choices: z.array(ltmSavedSubjectIdentityChoiceSchema).min(1).max(2),
+        resolvedAt: ltmIsoTimestampSchema,
+        draftId: z.string().uuid().optional(),
+      })
+      .strict()
+      .optional(),
   })
   .strict();
 
@@ -2234,12 +2270,17 @@ export const ltmExtractionAccountingSchema = z
     validationRejections: z.number().int().min(0),
     deduplications: z.number().int().min(0),
     keptUnits: z.number().int().min(0),
+    userSkips: z.number().int().min(0).optional(),
   })
   .strict()
   .superRefine((accounting, ctx) => {
     const candidates = accounting.providerCandidates + accounting.normalizedAdditions;
     const dispositions =
-      accounting.parserRejections + accounting.validationRejections + accounting.deduplications + accounting.keptUnits;
+      accounting.parserRejections +
+      accounting.validationRejections +
+      accounting.deduplications +
+      accounting.keptUnits +
+      (accounting.userSkips ?? 0);
     if (candidates !== dispositions) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
@@ -2277,6 +2318,14 @@ export const ltmExtractionDraftSchema = z
     invalidationReason: z.string().min(1).max(2_000).optional(),
   })
   .strip();
+
+export const ltmResolveSubjectIdentityResponseSchema = z
+  .object({
+    resolved: z.literal(true),
+    suggestionId: z.string().uuid(),
+    draft: ltmExtractionDraftSchema.nullable(),
+  })
+  .strict();
 
 export const ltmDraftFreshnessSchema = z.enum([
   "fresh",
@@ -3088,6 +3137,10 @@ export type LtmExtractionDropReason = z.infer<typeof ltmExtractionDropReasonSche
 export type LtmExtractionRecoveryHint = z.infer<typeof ltmExtractionRecoveryHintSchema>;
 export type LtmExtractionDroppedCandidate = z.infer<typeof ltmExtractionDroppedCandidateSchema>;
 export type LtmRejectedSuggestion = z.infer<typeof ltmRejectedSuggestionSchema>;
+export type LtmSubjectIdentityReview = z.infer<typeof ltmSubjectIdentityReviewSchema>;
+export type LtmSubjectIdentityDecision = z.infer<typeof ltmSubjectIdentityDecisionSchema>;
+export type LtmSavedSubjectIdentityChoice = z.infer<typeof ltmSavedSubjectIdentityChoiceSchema>;
+export type LtmResolveSubjectIdentityResponse = z.infer<typeof ltmResolveSubjectIdentityResponseSchema>;
 export type LtmExtractionOutcomeState = z.infer<typeof ltmExtractionOutcomeStateSchema>;
 export type LtmExtractionOutcome = z.infer<typeof ltmExtractionOutcomeSchema>;
 export type LtmExtractionResponse = z.infer<typeof ltmExtractionResponseSchema>;

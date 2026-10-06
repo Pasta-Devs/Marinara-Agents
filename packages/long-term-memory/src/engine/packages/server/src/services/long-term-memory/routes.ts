@@ -61,6 +61,7 @@ import {
   ltmSubjectsSchema,
   ltmRejectedSuggestionsClearResponseSchema,
   ltmRejectedSuggestionsResponseSchema,
+  ltmResolveSubjectIdentityResponseSchema,
 } from "../../../../shared/src/features/agents/long-term-memory/schema.js";
 import { clearLtmDebugLog, exportLtmDebugLog, readLtmDebugLog } from "./debug-log.js";
 import { projectLongTermMemoryDraftReview } from "./draft-review.js";
@@ -108,6 +109,7 @@ import {
 } from "../../../../shared/src/features/agents/long-term-memory/scope.js";
 import { applyLtmIdentityRepairs, LtmIdentityRepairError, previewLtmIdentityRepairs } from "./identity-repair.js";
 import { loadTrustedLtmSubjectCatalog } from "./subject-identity.js";
+import { resolveLtmSubjectIdentityReview } from "./subject-choice-review.js";
 import { LtmServiceError, ltmErrorResponse } from "./service-error.js";
 import {
   deleteAllLongTermMemoryData,
@@ -384,6 +386,7 @@ const rejectedSuggestionsQuery = z
   .object({
     sourceNoteId: ltmNoteIdSchema.optional(),
     chatId: z.string().min(1).max(120).optional(),
+    includeResolved: queryBoolean,
   })
   .strict();
 const rejectedSuggestionsDeleteQuery = z.object({ sourceNoteId: ltmNoteIdSchema }).strict();
@@ -1446,6 +1449,21 @@ export function createLongTermMemoryRoutes(runtime: {
         return reply.status(400).send({ error: "Invalid rejected-suggestion ID", code: "ltm_invalid_request" });
       return deleteRejectedSuggestion(parsed.data, root);
     });
+    app.post<{ Params: { id: string }; Body: unknown }>(
+      "/rejected-suggestions/:id/resolve-identity",
+      { bodyLimit: MAINTENANCE_BODY_LIMIT_BYTES },
+      async (request, reply) => {
+        try {
+          const id = z.string().uuid().parse(request.params.id);
+          return ltmResolveSubjectIdentityResponseSchema.parse(
+            await resolveLtmSubjectIdentityReview(id, request.body, root),
+          );
+        } catch (error) {
+          const result = routeError(error, "Failed to save subject identity choices");
+          return reply.status(result.statusCode).send(result.body);
+        }
+      },
+    );
     app.post<{ Params: { id: string }; Body: unknown }>(
       "/drafts/:id/preflight",
       { bodyLimit: DRAFT_BODY_LIMIT_BYTES },

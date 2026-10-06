@@ -133,6 +133,7 @@ export function diagnosticsRequireExtractionReview(diagnostics: readonly LtmExtr
     (diagnostic) =>
       diagnostic.code === "candidate_reconciliation_ambiguous" ||
       diagnostic.code === "candidate_reconciliation_incomplete" ||
+      diagnostic.code === "ambiguous_subject_identity" ||
       diagnostic.code === "event_shaped_character_fact",
   );
 }
@@ -1478,6 +1479,7 @@ export function compileEvidenceUnitExtraction(options: {
   totalCandidates?: number;
   providerCandidates?: number;
   parserRejectionCount?: number;
+  userSkippedUnits?: number;
   normalizedAdditions?: number;
   parserDroppedCandidates?: LtmExtractionDroppedCandidate[];
   preValidationDroppedCandidates?: LtmExtractionDroppedCandidate[];
@@ -1595,7 +1597,10 @@ export function compileEvidenceUnitExtraction(options: {
     providerCandidates:
       options.providerCandidates ??
       options.totalCandidates ??
-      options.unitResponse.units.length + parserDroppedCandidates.length + preValidationDroppedCandidates.length,
+      options.unitResponse.units.length +
+        parserDroppedCandidates.length +
+        preValidationDroppedCandidates.length +
+        (options.userSkippedUnits ?? 0),
     normalizedAdditions: (options.normalizedAdditions ?? 0) + normalized.addedUnits,
     parserRejections: parserRejectionCount,
     validationRejections:
@@ -1606,6 +1611,7 @@ export function compileEvidenceUnitExtraction(options: {
     deduplications:
       validated.keptUnits.length - dedupResult.deduplicated.length - duplicateAliasClosure.droppedCandidates.length,
     keptUnits: closed.units.length,
+    ...(options.userSkippedUnits ? { userSkips: options.userSkippedUnits } : {}),
   });
   const totalCandidates = accounting.providerCandidates + accounting.normalizedAdditions;
   const outcome = summarizeExtractionOutcome({

@@ -601,6 +601,7 @@ async function extractLongTermMemoryFromSourceNoteInner(
         units: targetResolution.units,
       },
       providerCandidates: extractionPayload.totalCandidates,
+      userSkippedUnits: identityResolution.skippedUnits,
       parserRejectionCount: extractionPayload.parserRejections,
       normalizedAdditions: normalizedExtraction.addedUnits,
       parserDroppedCandidates: extractionPayload.droppedCandidates,

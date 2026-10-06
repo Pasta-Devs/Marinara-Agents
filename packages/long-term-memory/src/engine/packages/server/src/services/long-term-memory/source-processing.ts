@@ -21,7 +21,11 @@ import {
 } from "./source-extraction.js";
 import { LongTermMemoryStorage } from "./storage.js";
 import { loadTrustedLtmSubjectCatalog } from "./subject-identity.js";
-import { compileEvidenceUnitExtraction, sourceHashForEvidenceUnitExtraction } from "./evidence-unit-extraction.js";
+import {
+  compileEvidenceUnitExtraction,
+  sourceHashForEvidenceUnitExtraction,
+  diagnosticsRequireExtractionReview,
+} from "./evidence-unit-extraction.js";
 import { extractionFingerprintForLtmSourceNote } from "./source-hash.js";
 import { canUpdateLtmScopedTarget } from "./scoped-targets.js";
 import { LtmServiceError } from "./service-error.js";
@@ -125,13 +129,7 @@ function reviewRequiredForExtraction(
     // Prefer the pre-truncation signal from compile/extract. Fall back to scanning retained
     // diagnostics only when a path did not carry requiresReview (e.g. deterministic game ingest).
     options.requiresReview === true ||
-    (options.diagnostics?.some(
-      (diagnostic) =>
-        diagnostic.code === "candidate_reconciliation_ambiguous" ||
-        diagnostic.code === "candidate_reconciliation_incomplete" ||
-        diagnostic.code === "event_shaped_character_fact",
-    ) ??
-      false)
+    diagnosticsRequireExtractionReview(options.diagnostics ?? [])
   );
 }
 function canMarkCurrent(prepared: PreparedSource) {

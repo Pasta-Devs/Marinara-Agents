@@ -28,12 +28,19 @@ async function main(routeScenario: RouteScenario) {
   const {
     ltmDraftNoteInputSchema,
     ltmDraftPreflightResponseSchema,
+    ltmExtractionDraftSchema,
     ltmExtractionSettingsPatchSchema,
     ltmExtractionSettingsSchema,
   } =
     await import("../packages/long-term-memory/src/engine/packages/shared/src/features/agents/long-term-memory/schema.ts");
-  const { addRejectedSuggestions } =
+  const { addRejectedSuggestions, readAllRejectedSuggestions, listRejectedSuggestions } =
     await import("../packages/long-term-memory/src/engine/packages/server/src/services/long-term-memory/rejected-suggestions.ts");
+  const { extractionFingerprintForLtmSourceNote, sourceHashForLtmSourceNote } =
+    await import("../packages/long-term-memory/src/engine/packages/server/src/services/long-term-memory/source-hash.ts");
+  const { buildTrustedLtmSubjectCatalog, loadTrustedLtmSubjectCatalog, prepareLtmSubjectIdentityContext } =
+    await import("../packages/long-term-memory/src/engine/packages/server/src/services/long-term-memory/subject-identity.ts");
+  const { compileEvidenceUnitExtraction } =
+    await import("../packages/long-term-memory/src/engine/packages/server/src/services/long-term-memory/evidence-unit-extraction.ts");
   const { longTermMemoryAttemptPath, longTermMemoryInjectionReceiptPath, recordLongTermMemoryZeroMatch } =
     await import("../packages/long-term-memory/src/engine/packages/server/src/services/long-term-memory/usage.ts");
   const { prepareGenerationLongTermMemory } =
@@ -86,6 +93,7 @@ async function main(routeScenario: RouteScenario) {
   let notifyAbortChatComplete: (() => void) | undefined;
   const refineWarnings: any[] = [];
   const largeLoreEntry = `${"A".repeat(13_000)} ${"B".repeat(13_000)}`;
+  let shortNameRosterEnabled = false;
   let scenarioError: unknown;
   try {
     assert.deepEqual(installed.manifest.permissions, [
@@ -397,6 +405,9 @@ async function main(routeScenario: RouteScenario) {
                   data: { name: "Professor Mari" },
                   comment: "",
                 },
+                ...(shortNameRosterEnabled
+                  ? [{ id: "char_alex_rivera", data: { name: "Alex Rivera" }, comment: "" }]
+                  : []),
               ];
             },
             async listPersonas() {
@@ -409,6 +420,7 @@ async function main(routeScenario: RouteScenario) {
                   id: "persona-b",
                   data: { name: "Kira Luna", comment: "Private detective" },
                 },
+                ...(shortNameRosterEnabled ? [{ id: "persona_sam_carter", data: { name: "Sam Carter" } }] : []),
               ];
             },
           },
@@ -1219,6 +1231,709 @@ async function main(routeScenario: RouteScenario) {
       });
     }
     if (routeScenario === "all" || routeScenario === "scope-identity") {
+      if (routeScenario === "scope-identity") {
+        shortNameRosterEnabled = true;
+        const shortNameChat = {
+          ...chats[0],
+          id: "chat-short-name-identity",
+          name: "Short Name Identity",
+          characterIds: ["char_alex_rivera"],
+          groupId: null,
+          personaId: "persona_sam_carter",
+          metadata: {},
+        };
+        chats.push(shortNameChat);
+        const identityScope = { chatId: shortNameChat.id, chatIds: [shortNameChat.id] };
+        const alexKey = "character:char_alex_rivera";
+        const samKey = "persona:persona_sam_carter";
+        const localFamilySource = {
+          id: "source_short_name_identity",
+          title: "Alex meets Sam",
+          type: "source",
+          status: "active",
+          modes: ["roleplay"],
+          scope: identityScope,
+          tags: ["source_summary"],
+          keywords: [],
+          links: [],
+          provenance: { kind: "chat_summary", sourceId: shortNameChat.id, entryId: "short-name-identity" },
+          sections: {
+            source: {
+              text: "Alex meets Sam at the docks. Alex waits at the docks. Alex trusts Sam. Alex skips this detail. Alex has an invalid review. Alex and Sam remain distinct. Alex from a missing source. Alex from a stale source. Alex from a scope-stale source.",
+              updatedAt: "2026-07-17T00:00:00.000Z",
+            },
+          },
+        };
+        await storageService.storage.createNote(localFamilySource);
+        await storageService.storage.createNote({
+          id: "char_short_name_alex_memory",
+          title: "Alex Rivera",
+          type: "character",
+          status: "active",
+          modes: ["roleplay"],
+          scope: identityScope,
+          tags: [],
+          keywords: [],
+          links: [],
+          subjects: [{ key: alexKey, ref: { kind: "character", id: "char_alex_rivera" } }],
+          sections: { facts: { text: "Alex Rivera studies maps.", updatedAt: "2026-07-17T00:00:00.000Z" } },
+        });
+        await storageService.storage.createNote({
+          id: "char_short_name_sam_memory",
+          title: "Sam Carter",
+          type: "character",
+          status: "active",
+          modes: ["roleplay"],
+          scope: identityScope,
+          tags: [],
+          keywords: [],
+          links: [],
+          subjects: [{ key: samKey, ref: { kind: "persona", id: "persona_sam_carter" } }],
+          sections: { facts: { text: "Sam Carter keeps the route.", updatedAt: "2026-07-17T00:00:00.000Z" } },
+        });
+        const shortNameSource = await storageService.storage.getNote(localFamilySource.id);
+        const identityNotes = [
+          await storageService.storage.getNote("char_short_name_alex_memory"),
+          await storageService.storage.getNote("char_short_name_sam_memory"),
+        ].filter(Boolean);
+        const roster = [
+          { kind: "character" as const, id: "char_alex_rivera", name: "Alex Rivera" },
+          { kind: "persona" as const, id: "persona_sam_carter", name: "Sam Carter" },
+        ];
+        let candidateNumber = 0;
+        const makeIdentityUnit = (bucket: "character_fact" | "relationship_state", names: string[], text: string) => ({
+          id: `10000000-0000-4000-8000-${String(++candidateNumber).padStart(12, "0")}`,
+          bucket,
+          claimKind: "static" as const,
+          subjectId: names.join("_").toLowerCase(),
+          sectionKey: bucket === "relationship_state" ? "relationship" : "facts",
+          text,
+          importance: "major" as const,
+          keywords: [],
+          evidence: [`source_note:${localFamilySource.id}`],
+          confidence: 0.95,
+          salience: 0.8,
+          status: "active" as const,
+          links: [],
+          sourceHash: sourceHashForLtmSourceNote(shortNameSource),
+          subjectNames: names,
+        });
+        const deriveDropped = (unit: any, sourceNote: any = shortNameSource, scope: any = identityScope) => {
+          const catalog = buildTrustedLtmSubjectCatalog({
+            roster,
+            notes: identityNotes as any,
+            localSourceNotes: [sourceNote],
+          });
+          const resolved = prepareLtmSubjectIdentityContext({
+            units: [unit],
+            catalog,
+            scope,
+            mode: "roleplay",
+            sourceBackedNpcSourceText: sourceNote.sections.source.text,
+            sourceBackedNpcSourceTitle: sourceNote.title,
+          }).resolve({ units: [unit], existingNotes: identityNotes as any });
+          assert.equal(resolved.units.length, 0, `short-name candidate ${unit.text} must require review`);
+          assert.equal(resolved.droppedCandidates.length, 1, `short-name candidate ${unit.text} must be recoverable`);
+          assert.equal(resolved.droppedCandidates[0]!.reason, "ambiguous_subject");
+          assert.equal(resolved.diagnostics[0]?.severity, "warning");
+          assert.ok(resolved.droppedCandidates[0]!.identityReview);
+          assert.ok(resolved.droppedCandidates[0]!.recoveryCandidate);
+          return resolved.droppedCandidates[0]!;
+        };
+        const addIdentitySuggestion = async (sourceNote: any, scope: any, candidate: any) => {
+          const sourceHash = sourceHashForLtmSourceNote(sourceNote);
+          const extractionFingerprint = extractionFingerprintForLtmSourceNote(sourceNote, {
+            extractionMode: "roleplay",
+          });
+          const fixtureDraft = ltmExtractionDraftSchema.parse({
+            id: candidate.recoveryCandidate.id,
+            createdAt: "2026-07-17T00:00:00.000Z",
+            updatedAt: "2026-07-17T00:00:00.000Z",
+            source: { sourceNoteId: sourceNote.id, chatId: scope.chatId, sourceHash, extractionFingerprint },
+            scope,
+            modes: ["roleplay"],
+            summary: "Short-name identity review fixture",
+            mutations: [],
+          });
+          await addRejectedSuggestions(
+            {
+              ...fixtureDraft,
+              extractionOutcome: {
+                state: "partial_success",
+                totalCandidates: 1,
+                keptUnits: 0,
+                droppedUnits: 1,
+                droppedCandidates: [candidate],
+                droppedCandidateDetailsTruncated: false,
+              },
+            } as any,
+            storageService.root,
+          );
+          const saved = await readAllRejectedSuggestions(storageService.root);
+          return saved.find((item: any) => item.candidate.recoveryCandidate?.id === candidate.recoveryCandidate?.id)!;
+        };
+        const shortNameCatalog = buildTrustedLtmSubjectCatalog({
+          roster,
+          notes: identityNotes as any,
+          localSourceNotes: [shortNameSource],
+        });
+        assert.equal(
+          shortNameCatalog.entries.some((entry: any) => entry.sourceScope === "local_source"),
+          false,
+          "short source names must not seed a local identity beside the trusted roster",
+        );
+        assert.equal(
+          identityNotes.some((note: any) =>
+            note.subjects?.some((subject: any) => subject.ref?.kind === "local_character"),
+          ),
+          false,
+        );
+        const alexUnit = makeIdentityUnit("character_fact", ["Alex"], "Alex waits at the docks.");
+        const alexDropped = deriveDropped(alexUnit);
+        assert.deepEqual(
+          alexDropped.identityReview?.map((participant: any) => ({
+            name: participant.name,
+            keys: participant.candidates.map((candidate: any) => candidate.subject.key),
+            allowDifferent: participant.allowDifferent,
+          })),
+          [{ name: "Alex", keys: [alexKey], allowDifferent: true }],
+        );
+        const siblingDraft = await storageService.drafts.createDraft({
+          source: { sourceNoteId: shortNameSource.id, chatId: identityScope.chatId },
+          scope: identityScope,
+          modes: ["roleplay"],
+          response: { summary: "An independent sibling review", mutations: [] },
+        });
+        const alexSuggestion = await addIdentitySuggestion(shortNameSource, identityScope, alexDropped);
+        assert.equal(alexSuggestion.source.sourceHash, sourceHashForLtmSourceNote(shortNameSource));
+        assert.deepEqual(
+          alexSuggestion.source.extractionFingerprint,
+          extractionFingerprintForLtmSourceNote(shortNameSource, { extractionMode: "roleplay" }),
+        );
+        const alexBefore = await storageService.storage.getNote("char_short_name_alex_memory");
+        const alexBind = await app.inject({
+          method: "POST",
+          url: `/api/long-term-memory/rejected-suggestions/${alexSuggestion.id}/resolve-identity`,
+          headers,
+          payload: { choices: [{ name: "Alex", action: "bind", subjectKey: alexKey }] },
+        });
+        assert.equal(alexBind.statusCode, 200, alexBind.body);
+        assert.equal(alexBind.json().resolved, true);
+        assert.equal(alexBind.json().draft.reviewRequired, true);
+        assert.equal(alexBind.json().draft.status, "pending");
+        assert.equal(
+          alexBind.json().draft.mutations.some((mutation: any) => mutation.noteId === "char_short_name_alex_memory"),
+          true,
+          "trusted bind must reuse the existing memory",
+        );
+        assert.equal(
+          alexBind.json().draft.mutations.some((mutation: any) => mutation.kind === "create_note"),
+          false,
+          "trusted bind must not fork a new memory",
+        );
+        assert.equal(
+          alexBind.json().draft.mutations.some((mutation: any) => mutation.kind === "set_title"),
+          false,
+          "trusted bind must not rename the existing memory",
+        );
+        assert.equal((await storageService.storage.getNote("char_short_name_alex_memory")).title, alexBefore.title);
+        assert.deepEqual(
+          (await storageService.storage.getNote("char_short_name_alex_memory")).sections,
+          alexBefore.sections,
+        );
+        assert.equal((await storageService.drafts.getDraft(siblingDraft.id)).status, "pending");
+        const draftCountAfterBind = (await storageService.drafts.listDrafts()).length;
+        const alexRepeat = await app.inject({
+          method: "POST",
+          url: `/api/long-term-memory/rejected-suggestions/${alexSuggestion.id}/resolve-identity`,
+          headers,
+          payload: { choices: [{ name: "Alex", action: "bind", subjectKey: alexKey }] },
+        });
+        assert.equal(alexRepeat.statusCode, 200, alexRepeat.body);
+        assert.equal(alexRepeat.json().draft.id, alexBind.json().draft.id);
+        assert.equal((await storageService.drafts.listDrafts()).length, draftCountAfterBind);
+        const changedAlexChoice = await app.inject({
+          method: "POST",
+          url: `/api/long-term-memory/rejected-suggestions/${alexSuggestion.id}/resolve-identity`,
+          headers,
+          payload: { choices: [{ name: "Alex", action: "different" }] },
+        });
+        assert.equal(changedAlexChoice.statusCode, 409, changedAlexChoice.body);
+        await storageService.drafts.deleteDraft(siblingDraft.id);
+
+        const relationshipUnit = makeIdentityUnit("relationship_state", ["Alex", "Sam"], "Alex trusts Sam.");
+        const relationshipDropped = deriveDropped(relationshipUnit);
+        assert.deepEqual(
+          relationshipDropped.identityReview?.map((participant: any) => participant.name),
+          ["Alex", "Sam"],
+        );
+        const relationshipSuggestion = await addIdentitySuggestion(shortNameSource, identityScope, relationshipDropped);
+        const remainingReview = await app.inject({
+          method: "GET",
+          url: "/api/long-term-memory/rejected-suggestions",
+          headers,
+        });
+        const rememberedAlex = remainingReview
+          .json()
+          .suggestions.find((item: any) => item.id === relationshipSuggestion.id);
+        assert.equal(
+          rememberedAlex.candidate.identityReview[0].matchedSubjectKey,
+          alexKey,
+          "a participant already chosen in another pending candidate must not be asked about again",
+        );
+        assert.equal(rememberedAlex.candidate.identityReview[1].matchedSubjectKey, undefined);
+        const relationshipResponse = await app.inject({
+          method: "POST",
+          url: `/api/long-term-memory/rejected-suggestions/${relationshipSuggestion.id}/resolve-identity`,
+          headers,
+          payload: {
+            choices: [
+              { name: "Alex", action: "bind", subjectKey: alexKey },
+              { name: "Sam", action: "different" },
+            ],
+          },
+        });
+        assert.equal(relationshipResponse.statusCode, 200, relationshipResponse.body);
+        const relationshipDraft = relationshipResponse.json().draft;
+        assert.equal(relationshipDraft.reviewRequired, true);
+        const relationshipNote = relationshipDraft.mutations.find(
+          (mutation: any) => mutation.note?.type === "relationship",
+        )?.note;
+        assert.ok(relationshipNote, "different-character recovery must retain a relationship mutation");
+        const savedSamChoice = (await readAllRejectedSuggestions(storageService.root))
+          .find((item: any) => item.id === relationshipSuggestion.id)
+          ?.identityResolution.choices.find((choice: any) => choice.name === "Sam");
+        assert.equal(savedSamChoice.action, "different");
+        assert.equal(savedSamChoice.subject.ref.kind, "local_character");
+        assert.notEqual(savedSamChoice.subject.key, samKey);
+        assert.deepEqual(
+          relationshipNote.subjects.map((subject: any) => subject.key).sort(),
+          [alexKey, savedSamChoice.subject.key].sort(),
+          "relationship recovery must use the chosen keys for both participants",
+        );
+        const reloadedCatalog = await loadTrustedLtmSubjectCatalog(identityScope, storageService.root);
+        assert.equal(
+          reloadedCatalog.identityChoices.some((choice: any) => choice.name === "Sam" && choice.action === "different"),
+          true,
+          "a fresh loader must read saved identity choices",
+        );
+        const reimportedRelationship = prepareLtmSubjectIdentityContext({
+          units: [relationshipUnit],
+          catalog: reloadedCatalog,
+          scope: identityScope,
+          mode: "roleplay",
+        }).resolve({ units: [relationshipUnit], existingNotes: identityNotes as any });
+        assert.equal(reimportedRelationship.droppedCandidates.length, 0);
+        assert.deepEqual(
+          reimportedRelationship.units[0]?.subjects?.map((subject: any) => subject.key).sort(),
+          [alexKey, savedSamChoice.subject.key].sort(),
+        );
+        const samCharacter = makeIdentityUnit("character_fact", ["Sam"], "Sam knows astronomy.");
+        const sameSam = prepareLtmSubjectIdentityContext({
+          units: [samCharacter],
+          catalog: reloadedCatalog,
+          scope: identityScope,
+          mode: "roleplay",
+        }).resolve({ units: [samCharacter], existingNotes: identityNotes as any });
+        assert.deepEqual(
+          sameSam.units[0]?.subjectKeys,
+          [savedSamChoice.subject.key],
+          "a different-character decision applies to character memories as well as relationships",
+        );
+        const pendingUnit = makeIdentityUnit("character_fact", ["Alex"], "Alex hums while mapping stars.");
+        const pendingSuggestion = await addIdentitySuggestion(
+          shortNameSource,
+          identityScope,
+          deriveDropped(pendingUnit),
+        );
+        const pendingBind = await app.inject({
+          method: "POST",
+          url: `/api/long-term-memory/rejected-suggestions/${pendingSuggestion.id}/resolve-identity`,
+          headers,
+          payload: { choices: [{ name: "Alex", action: "bind", subjectKey: alexKey }] },
+        });
+        assert.equal(pendingBind.statusCode, 200, pendingBind.body);
+        const pendingDraftId = pendingBind.json().draft.id;
+        assert.equal((await storageService.drafts.getDraft(pendingDraftId)).status, "pending");
+        for (const recoveredDraft of [alexBind.json().draft, relationshipDraft]) {
+          const mutationIds = recoveredDraft.mutations.map((mutation: any) => mutation.id);
+          const preflight = await app.inject({
+            method: "POST",
+            url: `/api/long-term-memory/drafts/${recoveredDraft.id}/preflight`,
+            headers,
+            payload: { mutationIds },
+          });
+          assert.equal(preflight.statusCode, 200, preflight.body);
+          assert.deepEqual(preflight.json().blockedMutationIds, []);
+          const accepted = await app.inject({
+            method: "POST",
+            url: `/api/long-term-memory/drafts/${recoveredDraft.id}/accept`,
+            headers,
+            payload: { mutationIds },
+          });
+          assert.equal(accepted.statusCode, 200, accepted.body);
+          assert.deepEqual(
+            new Set(accepted.json().appliedMutationIds),
+            new Set(mutationIds),
+            "recovered drafts must pass the normal review/apply path only after explicit acceptance",
+          );
+        }
+        assert.equal((await storageService.storage.getNote("char_short_name_alex_memory")).title, "Alex Rivera");
+        const skipUnit = makeIdentityUnit("character_fact", ["Alex"], "Alex skips this detail.");
+        const skipSuggestion = await addIdentitySuggestion(shortNameSource, identityScope, deriveDropped(skipUnit));
+        const skipResponse = await app.inject({
+          method: "POST",
+          url: `/api/long-term-memory/rejected-suggestions/${skipSuggestion.id}/resolve-identity`,
+          headers,
+          payload: { choices: [{ name: "Alex", action: "skip" }] },
+        });
+        assert.equal(skipResponse.statusCode, 200, skipResponse.body);
+        assert.equal(skipResponse.json().draft, null);
+        assert.equal(
+          (
+            await app.inject({
+              method: "GET",
+              url: `/api/long-term-memory/rejected-suggestions?sourceNoteId=${shortNameSource.id}`,
+              headers,
+            })
+          )
+            .json()
+            .suggestions.some((item: any) => item.id === skipSuggestion.id),
+          false,
+        );
+        const savedSkip = (await readAllRejectedSuggestions(storageService.root)).find(
+          (item: any) => item.id === skipSuggestion.id,
+        );
+        assert.equal(savedSkip.identityResolution.choices[0].action, "skip");
+        const skippedCatalog = await loadTrustedLtmSubjectCatalog(identityScope, storageService.root);
+        const freshSkipped = prepareLtmSubjectIdentityContext({
+          units: [skipUnit],
+          catalog: skippedCatalog,
+          scope: identityScope,
+          mode: "roleplay",
+        }).resolve({ units: [skipUnit], existingNotes: identityNotes as any });
+        assert.equal(freshSkipped.droppedCandidates.length, 0);
+        assert.equal(freshSkipped.units.length, 0);
+        assert.equal(freshSkipped.skippedUnits, 1);
+        const skippedAccounting = compileEvidenceUnitExtraction({
+          unitResponse: { summary: "Skipped identity", units: [] },
+          providerCandidates: 1,
+          userSkippedUnits: freshSkipped.skippedUnits,
+          sourceText: shortNameSource.sections.source.text,
+          sourceNote: shortNameSource,
+          existingNotes: identityNotes as any,
+          scope: identityScope,
+          modes: ["roleplay"],
+          mode: "roleplay",
+          sourceHash: sourceHashForLtmSourceNote(shortNameSource),
+          skipStructuredBackfill: true,
+        });
+        assert.equal(skippedAccounting.accounting.userSkips, 1);
+        assert.equal(skippedAccounting.accounting.validationRejections, 0);
+        const otherScope = { chatId: "chat_other_identity_family", chatIds: ["chat_other_identity_family"] };
+        const otherFamily = prepareLtmSubjectIdentityContext({
+          units: [skipUnit],
+          catalog: skippedCatalog,
+          scope: otherScope,
+          mode: "roleplay",
+          sourceBackedNpcSourceText: shortNameSource.sections.source.text,
+        }).resolve({ units: [skipUnit], existingNotes: [] });
+        assert.equal(otherFamily.skippedUnits, 0, "a saved skip must not leak into another chat family");
+        assert.equal(otherFamily.droppedCandidates.length, 1);
+
+        const sameFirstNameCatalog = buildTrustedLtmSubjectCatalog({
+          roster: [...roster, { kind: "character" as const, id: "char_alex_moreau", name: "Alex Moreau" }],
+          notes: identityNotes as any,
+          localSourceNotes: [shortNameSource],
+        });
+        const sameFirstName = prepareLtmSubjectIdentityContext({
+          units: [alexUnit],
+          catalog: sameFirstNameCatalog,
+          scope: identityScope,
+          mode: "roleplay",
+          sourceBackedNpcSourceText: shortNameSource.sections.source.text,
+          sourceBackedNpcSourceTitle: shortNameSource.title,
+        }).resolve({ units: [alexUnit], existingNotes: identityNotes as any });
+        assert.equal(sameFirstName.units.length, 0);
+        assert.deepEqual(
+          (sameFirstName.diagnostics[0]!.details as any).competingSubjectKeys.sort(),
+          [alexKey, "character:char_alex_moreau"].sort(),
+        );
+
+        const invalidUnit = makeIdentityUnit("character_fact", ["Alex"], "Alex has an invalid review.");
+        const invalidSuggestion = await addIdentitySuggestion(
+          shortNameSource,
+          identityScope,
+          deriveDropped(invalidUnit),
+        );
+        const invalidBodies = [
+          { choices: [] },
+          { choices: [{ name: "Wrong", action: "skip" }] },
+          { choices: [{ name: "Alex", action: "bind", subjectKey: "character:foreign_alex" }] },
+          { choices: [{ name: "Alex", action: "bind", subjectKey: "local_character:other_family:alex" }] },
+        ];
+        for (const payload of invalidBodies) {
+          const invalidResponse = await app.inject({
+            method: "POST",
+            url: `/api/long-term-memory/rejected-suggestions/${invalidSuggestion.id}/resolve-identity`,
+            headers,
+            payload,
+          });
+          assert.equal(invalidResponse.statusCode, 400, invalidResponse.body);
+        }
+        const missingSuggestionResponse = await app.inject({
+          method: "POST",
+          url: "/api/long-term-memory/rejected-suggestions/10000000-0000-4000-8000-000000000099/resolve-identity",
+          headers,
+          payload: { choices: [{ name: "Alex", action: "skip" }] },
+        });
+        assert.equal(missingSuggestionResponse.statusCode, 404, missingSuggestionResponse.body);
+        const invalidRelationshipUnit = makeIdentityUnit(
+          "relationship_state",
+          ["Alex", "Sam"],
+          "Alex and Sam remain distinct.",
+        );
+        const invalidRelationship = await addIdentitySuggestion(
+          shortNameSource,
+          identityScope,
+          deriveDropped(invalidRelationshipUnit),
+        );
+        for (const payload of [
+          { choices: [{ name: "Alex", action: "skip" }] },
+          {
+            choices: [
+              { name: "Wrong", action: "skip" },
+              { name: "Sam", action: "skip" },
+            ],
+          },
+          {
+            choices: [
+              { name: "Alex", action: "bind", subjectKey: alexKey },
+              { name: "Sam", action: "bind", subjectKey: alexKey },
+            ],
+          },
+        ]) {
+          const invalidResponse = await app.inject({
+            method: "POST",
+            url: `/api/long-term-memory/rejected-suggestions/${invalidRelationship.id}/resolve-identity`,
+            headers,
+            payload,
+          });
+          assert.equal(invalidResponse.statusCode, 400, invalidResponse.body);
+        }
+        for (const item of [invalidSuggestion, invalidRelationship]) {
+          assert.equal(
+            (await storageService.drafts.listDrafts()).some((draft: any) => draft.id === item.id),
+            false,
+          );
+          assert.equal(
+            (await readAllRejectedSuggestions(storageService.root)).find((saved: any) => saved.id === item.id)
+              ?.identityResolution,
+            undefined,
+          );
+        }
+        const missingSource = {
+          ...shortNameSource,
+          id: "source_short_name_missing",
+          title: "Missing short-name source",
+        };
+        const missingCandidate = makeIdentityUnit("character_fact", ["Alex"], "Alex from a missing source.");
+        missingCandidate.sourceHash = sourceHashForLtmSourceNote(missingSource);
+        const missingSuggestion = await addIdentitySuggestion(
+          missingSource,
+          identityScope,
+          deriveDropped(missingCandidate, missingSource),
+        );
+        const missingResponse = await app.inject({
+          method: "POST",
+          url: `/api/long-term-memory/rejected-suggestions/${missingSuggestion.id}/resolve-identity`,
+          headers,
+          payload: { choices: [{ name: "Alex", action: "bind", subjectKey: alexKey }] },
+        });
+        assert.equal(missingResponse.statusCode, 409, missingResponse.body);
+        const staleSource = {
+          ...shortNameSource,
+          id: "source_short_name_stale",
+          title: "Stale short-name source",
+        };
+        await storageService.storage.createNote(staleSource);
+        const staleCandidate = makeIdentityUnit("character_fact", ["Alex"], "Alex from a stale source.");
+        staleCandidate.sourceHash = sourceHashForLtmSourceNote(staleSource);
+        const staleSuggestion = await addIdentitySuggestion(
+          staleSource,
+          identityScope,
+          deriveDropped(staleCandidate, staleSource),
+        );
+        await storageService.storage.updateNote(staleSource.id, { title: "Changed stale source" });
+        const staleResponse = await app.inject({
+          method: "POST",
+          url: `/api/long-term-memory/rejected-suggestions/${staleSuggestion.id}/resolve-identity`,
+          headers,
+          payload: { choices: [{ name: "Alex", action: "bind", subjectKey: alexKey }] },
+        });
+        assert.equal(staleResponse.statusCode, 409, staleResponse.body);
+        const scopedStaleSource = {
+          ...shortNameSource,
+          id: "source_short_name_scope_stale",
+          title: "Scoped stale source",
+        };
+        await storageService.storage.createNote(scopedStaleSource);
+        const scopedStaleCandidate = makeIdentityUnit("character_fact", ["Alex"], "Alex from a scope-stale source.");
+        scopedStaleCandidate.sourceHash = sourceHashForLtmSourceNote(scopedStaleSource);
+        const scopedStaleSuggestion = await addIdentitySuggestion(
+          scopedStaleSource,
+          identityScope,
+          deriveDropped(scopedStaleCandidate, scopedStaleSource),
+        );
+        await storageService.storage.updateNote(scopedStaleSource.id, {
+          scope: { chatId: "chat-scope-changed", chatIds: ["chat-scope-changed"] },
+        });
+        const scopedStaleResponse = await app.inject({
+          method: "POST",
+          url: `/api/long-term-memory/rejected-suggestions/${scopedStaleSuggestion.id}/resolve-identity`,
+          headers,
+          payload: { choices: [{ name: "Alex", action: "bind", subjectKey: alexKey }] },
+        });
+        assert.equal(scopedStaleResponse.statusCode, 409, scopedStaleResponse.body);
+        for (const item of [missingSuggestion, staleSuggestion, scopedStaleSuggestion]) {
+          assert.equal(
+            (await storageService.drafts.listDrafts()).some((draft: any) => draft.id === item.id),
+            false,
+          );
+          assert.equal(
+            (await readAllRejectedSuggestions(storageService.root)).find((saved: any) => saved.id === item.id)
+              ?.identityResolution,
+            undefined,
+          );
+        }
+        for (const item of [
+          invalidSuggestion,
+          invalidRelationship,
+          missingSuggestion,
+          staleSuggestion,
+          scopedStaleSuggestion,
+        ]) {
+          const deleted = await app.inject({
+            method: "DELETE",
+            url: `/api/long-term-memory/rejected-suggestions/${item.id}`,
+            headers,
+          });
+          assert.equal(deleted.statusCode, 200, deleted.body);
+        }
+        const pendingBeforeBackup = await app.inject({
+          method: "GET",
+          url: "/api/long-term-memory/rejected-suggestions",
+          headers,
+        });
+        assert.equal(pendingBeforeBackup.statusCode, 200, pendingBeforeBackup.body);
+        assert.equal(pendingBeforeBackup.json().total, 0);
+        const backup = await app.inject({ method: "GET", url: "/api/long-term-memory/backup/export", headers });
+        assert.equal(backup.statusCode, 200, backup.body);
+        assert.equal(
+          backup
+            .json()
+            .rejectedSuggestions.some((item: any) => item.id === alexSuggestion.id && item.identityResolution),
+          true,
+        );
+        assert.equal(
+          backup
+            .json()
+            .rejectedSuggestions.some(
+              (item: any) => item.id === skipSuggestion.id && item.identityResolution.choices[0].action === "skip",
+            ),
+          true,
+        );
+        const isolatedRoot = await mkdtemp(join(tmpdir(), "marinara-ltm-identity-backup-"));
+        try {
+          const { replaceLongTermMemoryData } =
+            await import("../packages/long-term-memory/src/engine/packages/server/src/services/long-term-memory/backup-restore.ts");
+          await replaceLongTermMemoryData(backup.json(), isolatedRoot);
+          assert.equal((await listRejectedSuggestions({}, isolatedRoot)).length, 0);
+          const restoredChoices = await readAllRejectedSuggestions(isolatedRoot);
+          assert.equal(
+            restoredChoices.some((item: any) => item.id === skipSuggestion.id),
+            true,
+          );
+          assert.equal(
+            restoredChoices.find((item: any) => item.id === skipSuggestion.id).identityResolution.choices[0].action,
+            "skip",
+          );
+          const restoredCatalog = await loadTrustedLtmSubjectCatalog(identityScope, isolatedRoot);
+          const restoredSkip = prepareLtmSubjectIdentityContext({
+            units: [skipUnit],
+            catalog: restoredCatalog,
+            scope: identityScope,
+            mode: "roleplay",
+          }).resolve({ units: [skipUnit], existingNotes: [] });
+          assert.equal(
+            restoredSkip.skippedUnits,
+            1,
+            "restored decisions must affect fresh extraction, not just round-trip as JSON",
+          );
+        } finally {
+          await rm(isolatedRoot, { recursive: true, force: true });
+        }
+        // A remembered choice is undone with the normal Delete: the record and its still-pending
+        // recovery draft go, an accepted draft stays, and a fresh extraction asks again.
+        const resolvedListing = await app.inject({
+          method: "GET",
+          url: `/api/long-term-memory/rejected-suggestions?includeResolved=true&sourceNoteId=${shortNameSource.id}`,
+          headers,
+        });
+        assert.equal(resolvedListing.statusCode, 200, resolvedListing.body);
+        assert.equal(
+          resolvedListing
+            .json()
+            .suggestions.some((item: any) => item.id === skipSuggestion.id && item.identityResolution),
+          true,
+          "resolved choices must be listable for management",
+        );
+        // Every saved choice for "Alex" must go so the name has nothing left to reuse.
+        for (const resolvedId of [
+          pendingSuggestion.id,
+          skipSuggestion.id,
+          alexSuggestion.id,
+          relationshipSuggestion.id,
+        ]) {
+          const deletedChoice = await app.inject({
+            method: "DELETE",
+            url: `/api/long-term-memory/rejected-suggestions/${resolvedId}`,
+            headers,
+          });
+          assert.deepEqual(deletedChoice.json(), { deleted: true, id: resolvedId });
+        }
+        assert.equal(
+          await storageService.drafts.getDraft(pendingDraftId),
+          null,
+          "deleting a saved choice must remove its still-pending recovery draft",
+        );
+        assert.notEqual(
+          (await storageService.drafts.getDraft(alexBind.json().draft.id))?.status ?? "pending",
+          "pending",
+          "an accepted recovery draft is history and must survive",
+        );
+        const afterForgetCatalog = await loadTrustedLtmSubjectCatalog(identityScope, storageService.root);
+        const afterForget = prepareLtmSubjectIdentityContext({
+          units: [skipUnit],
+          catalog: afterForgetCatalog,
+          scope: identityScope,
+          mode: "roleplay",
+        }).resolve({ units: [skipUnit], existingNotes: identityNotes as any });
+        assert.equal(afterForget.skippedUnits, 0, "a forgotten skip must not skip the unit");
+        assert.equal(afterForget.droppedCandidates.length, 1, "a forgotten choice must re-surface review again");
+        const repeatDelete = await app.inject({
+          method: "DELETE",
+          url: `/api/long-term-memory/rejected-suggestions/${skipSuggestion.id}`,
+          headers,
+        });
+        assert.deepEqual(repeatDelete.json(), { deleted: false, id: skipSuggestion.id });
+        await storageService.storage.deleteNotesPermanently([
+          "char_short_name_alex_memory",
+          "char_short_name_sam_memory",
+        ]);
+        chats.splice(chats.indexOf(shortNameChat), 1);
+        shortNameRosterEnabled = false;
+      }
       const observatoryFamilyId = "group_observatory_branches_37a983fd32de";
       const archiveChatFamilyId = "chat_chat_b_58689bbec408";
       await storageService.storage.createNote({

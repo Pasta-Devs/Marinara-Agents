@@ -53,7 +53,7 @@ export type LtmDraftListFilter = {
   chatId?: string;
 };
 
-function draftPathForId(id: string, root = getLongTermMemoryRoot()) {
+export function draftPathForId(id: string, root = getLongTermMemoryRoot()) {
   return safeJoin(getLongTermMemoryDirectories(root).drafts, `${id}.json`);
 }
 
