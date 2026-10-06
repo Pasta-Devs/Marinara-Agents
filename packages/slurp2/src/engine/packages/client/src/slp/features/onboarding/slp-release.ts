@@ -1,5 +1,5 @@
 // The splash screen needs the shipped version and its public notes inside the client bundle.
-export const SLURP2_VERSION = "0.3.17";
+export const SLURP2_VERSION = "0.3.18";
 
 export interface Slurp2ReleaseEntry {
   version: string;
@@ -12,6 +12,15 @@ export interface Slurp2ReleaseEntry {
  * in-universe bullets per release (technical detail lives in CHANGELOG.md).
  */
 export const SLURP2_RELEASES: Slurp2ReleaseEntry[] = [
+  {
+    version: "0.3.18",
+    date: "2026-10-06",
+    notes: [
+      "Opening day: you own this Slurp now. Slurp Support walks you through it on a live phone that changes with every answer, then you open the doors. Settings › Overview shows your Slurp and runs the setup again.",
+      "Edit or delete your messages, have a Creator write their answer again, and copy a chat or a short summary for your lorebook. Creators also remember you from DMs when they answer your comments.",
+      "Family never turns into romance, you can keep any two Creators apart, and Collect can move all your earnings at once. Tapping an ad shows the whole offer.",
+    ],
+  },
   {
     version: "0.3.17",
     date: "2026-10-06",

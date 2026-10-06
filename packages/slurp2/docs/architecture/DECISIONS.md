@@ -724,3 +724,25 @@ modules, rejected alternative, and migration consequence.
 - **Rejected alternatives:** a second composer for the player's page; letting Stir post for the
   player's page unattended (it is the player's voice).
 - **Migration consequence:** none.
+
+## Opening day and the October feedback (0.3.18, 2026-10-06)
+
+- **Problem:** the first-run Support ticket read as "a modal with text bubbles", and the October
+  Discord thread listed three bugs and eleven requests (`docs/FEEDBACK-2026-10.md`).
+- **Decision:**
+  - Opening day (`docs/OPENING-DAY.md`): the pure rail script stays (`slp-site-welcome.ts`, one write);
+    it renders on a shared stage (`modules/stage/`) beside a live phone preview (`modules/preview/`).
+    Settings › Overview reuses the phone through `slpRailPhoneInput`.
+  - One rule per concern, shared by every caller: `slpRomanceAllows` reads a `never` list (player
+    blocks, plus family bonds and card family filled in by `loadSlurpTieCreators`); DM edit rules live
+    in `shared/src/slp/slp-message-edit.ts` for the routes and the bubble menu alike.
+  - DM edits never touch money rows (tips, paid pictures, commission steps). Deleting bumps the
+    thread's generation epoch and clears its bubbles and claims, so an answer in flight is dropped.
+    Deleted DM pictures stay on disk: a DM can reuse a post's file.
+  - Thread summaries are the player's own tap, so they never spend the world's AI budget.
+  - Desk tickets come only from topics with a lever (views, collab, money), each resting 14 days.
+- **Rejected alternatives:** a separate G screen redesign (staging's G stays); per-gate family checks
+  in couples, drama and Stir; unlinking deleted DM media.
+- **Migration consequence:** new optional fields read leniently (`romance.never`,
+  `ticketTopics`, `supportDesk.quickReplies`, `messagesCommissionAsks`, `walletPayoutDailyLimit`); no
+  schema change.
