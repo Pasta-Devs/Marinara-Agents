@@ -410,10 +410,18 @@ for (const opening of ["first", "again"] as const)
   }
 for (const value of ["manual", "occasional", "lively", "veryActive"]) keys.push(`${O}hint.pace.${value}`);
 for (const value of ["clean", "flirty", "suggestive", "explicit"]) keys.push(`${O}hint.spice.${value}`);
-for (const locale of ["en"]) {
+const english = JSON.parse(readFileSync(`${localeDir}/en.json`, "utf8")) as Record<string, string>;
+const placeholders = (text: string) => (text.match(/\{\{\w+\}\}/gu) ?? []).sort().join();
+for (const locale of ["en", "de", "ko", "pl"]) {
   const strings = JSON.parse(readFileSync(`${localeDir}/${locale}.json`, "utf8")) as Record<string, string>;
   const missing = [...new Set(keys)].filter((key) => !strings[key]);
   assert.deepEqual(missing, [], `${locale} is missing opening day copy`);
+  // Every opening day line is translated, with the same placeholders as the English.
+  for (const [key, text] of Object.entries(english))
+    if (key.startsWith(O)) {
+      assert.ok(strings[key], `${locale} ${key}`);
+      assert.equal(placeholders(strings[key]!), placeholders(text), `${locale} ${key}`);
+    }
 }
 
 // S5: "Your Slurp" in Settings › Overview is the welcome's phone from today's settings; the Stir desk
