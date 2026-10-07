@@ -42,6 +42,17 @@ export function buildLtmKeywordIndex(chunks: LtmMemoryChunk[]): LtmKeywordIndex 
   };
 }
 
+/** Score of a keyword hit whose normalized phrase equals the normalized query exactly. */
+export const LTM_KEYWORD_MAX_SCORE = 4;
+
+/** Whole-token containment, so `king` does not match inside `looking`. Both
+ * sides are space-joined normalized tokens; edges are non-alphanumeric.
+ * Persisted keys are only length-checked, so escape before building the pattern. */
+function containsKeywordToken(haystack: string, needle: string) {
+  const escaped = needle.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return new RegExp(`(^|[^\\p{L}\\p{N}])${escaped}(?![\\p{L}\\p{N}])`, "u").test(haystack);
+}
+
 export function searchLtmKeywordIndex(
   index: LtmKeywordIndex,
   queryText: string,
@@ -93,9 +104,12 @@ export function searchLtmKeywordIndex(
     .sort(([left], [right]) => left.localeCompare(right))
     .slice(0, maxKeywordCatalogEntries)) {
     if (normalizedTerms.includes(keyword)) continue;
-    const exactContained = normalizedQuery.includes(keyword) || keyword.includes(normalizedQuery);
+    const exactContained =
+      containsKeywordToken(normalizedQuery, keyword) || containsKeywordToken(keyword, normalizedQuery);
     if (!exactContained) {
-      const overlappingTerm = normalizedTerms.find((term) => keyword.includes(term) || term.includes(keyword));
+      const overlappingTerm = normalizedTerms.find(
+        (term) => containsKeywordToken(keyword, term) || containsKeywordToken(term, keyword),
+      );
       if (!overlappingTerm) continue;
       const overlapRatio =
         Math.min(overlappingTerm.length, keyword.length) / Math.max(overlappingTerm.length, keyword.length);

@@ -1,5 +1,10 @@
 # Long-Term Memory changelog
 
+## 1.4.9 — 2026-10-07
+
+- Let lane weights and rank fusion decide recall order again. An unbounded BM25 raw score was added as a bonus on top of the fused score, which let a deep lexical hit outrank the best semantic hit of a higher-weighted lane; fusion now uses only the bounded per-lane score.
+- Give keyword matches an absolute relevance. A partial or fuzzy keyword match used to be normalized against the best hit of the same query, so a weak match could reach full keyword relevance; it is now measured against the exact-phrase ceiling. Fuzzy keyword matches also require whole-token or word-boundary containment, so a keyword like "king" no longer triggers on "looking".
+
 ## 1.4.8 — 2026-10-07
 
 - Ignore an invalid saved recall setting instead of letting it break settings, recall, and search. A null recall weight or an unknown recall style saved by another build used to make every settings read throw until settings.json was edited by hand. Both now fall back to the defaults, and the invalid value is no longer written back.

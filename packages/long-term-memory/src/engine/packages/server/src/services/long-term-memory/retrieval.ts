@@ -11,7 +11,7 @@ import { searchLtmBm25 } from "./bm25.js";
 import { embedLongTermMemoryTexts, type MemoryRecallEmbeddingOptions } from "./embedding-adapter.js";
 import { expandLtmGraph } from "./graph.js";
 import { buildStopWordSet } from "./keyword-extract.js";
-import { searchLtmKeywordIndex } from "./keyword-index.js";
+import { LTM_KEYWORD_MAX_SCORE, searchLtmKeywordIndex } from "./keyword-index.js";
 import { getLtmMetadataMatches } from "./metadata-index.js";
 import { resolvePackageEmbeddingAdapter } from "./package-runtime.js";
 import { loadOrRebuildLongTermMemoryIndexes, type LtmRecallIndex } from "./rebuild.js";
@@ -164,13 +164,12 @@ export async function retrieveLongTermMemory(input: RetrieveLongTermMemoryInput)
     stopWords: buildStopWordSet(triggerStopWords),
   });
   if ((input.keywordWeight ?? 1) > 0 && keywords.length) {
-    const max = keywords[0]?.score ?? 1;
     lanes.push({
       name: "keyword",
       weight: input.keywordWeight ?? 1,
       items: keywords.map((hit) => ({
         chunkId: hit.chunkId,
-        rawScore: hit.score / max,
+        rawScore: Math.min(1, hit.score / LTM_KEYWORD_MAX_SCORE),
         reason: hit.reasons.join(","),
       })),
     });
