@@ -272,21 +272,28 @@ export const DEFAULT_LTM_STREAM_DESCRIPTIONS_BY_MODE: Record<
   },
 };
 
-export const DEFAULT_LTM_RECALL_STYLE_BY_MODE: Record<LtmMode, LongTermMemoryRecallStyle> = {
-  roleplay: "story",
-  conversation: "balanced",
-  game: "exact",
-};
-
 export const DEFAULT_LTM_RECALL_STYLE = "balanced" satisfies LongTermMemoryRecallStyle;
 export const DEFAULT_LTM_RECALL_PREAMBLE = "Relevant long-term memories for this reply:";
 
+/**
+ * Per-style lane weights. A candidate's relevance is its strongest weighted lane
+ * score, so a lane contributes at most `weight × lane ceiling`: 1 for vector,
+ * keyword, direct and BM25, and 0.5 for graph, which is capped at
+ * `1 / (distance + 1)`. Each style's strongest lane carries weight 1, so a score
+ * threshold filters the same strength of match in every style; scaling a style's
+ * weights together moves only its threshold scale, not its fused order. Graph
+ * weights stay at or below 0.6, so graph-only neighbours (at most 0.3) sit under
+ * the default threshold instead of all passing or all failing it at once.
+ *
+ * `custom` has no preset: a custom style reads the user's own saved weights, so a
+ * dead preset here only invited drift. Issue #1258.
+ */
 export const LTM_RECALL_STYLE_WEIGHTS = {
   balanced: {
-    semanticWeight: 0.6,
-    lexicalWeight: 0.3,
-    graphWeight: 0.1,
-    keywordWeight: 0.2,
+    semanticWeight: 1,
+    lexicalWeight: 0.85,
+    graphWeight: 0.15,
+    keywordWeight: 0.65,
   },
   exact: {
     semanticWeight: 0.15,
@@ -296,24 +303,18 @@ export const LTM_RECALL_STYLE_WEIGHTS = {
   },
   broad: {
     semanticWeight: 1,
-    lexicalWeight: 0.25,
-    graphWeight: 0.4,
-    keywordWeight: 0.2,
+    lexicalWeight: 0.4,
+    graphWeight: 0.3,
+    keywordWeight: 0.3,
   },
   story: {
-    semanticWeight: 0.55,
-    lexicalWeight: 0.35,
-    graphWeight: 0.5,
-    keywordWeight: 0.3,
-  },
-  custom: {
-    semanticWeight: 0.6,
-    lexicalWeight: 0.4,
-    graphWeight: 0.15,
-    keywordWeight: 0.3,
+    semanticWeight: 1,
+    lexicalWeight: 0.75,
+    graphWeight: 0.6,
+    keywordWeight: 0.65,
   },
 } as const satisfies Record<
-  LongTermMemoryRecallStyle,
+  Exclude<LongTermMemoryRecallStyle, "custom">,
   {
     semanticWeight: number;
     lexicalWeight: number;

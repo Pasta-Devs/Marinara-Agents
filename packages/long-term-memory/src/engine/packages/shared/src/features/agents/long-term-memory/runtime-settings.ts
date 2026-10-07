@@ -1,11 +1,10 @@
 import {
-  DEFAULT_LTM_RECALL_STYLE_BY_MODE,
+  DEFAULT_LTM_RECALL_STYLE,
   LTM_RECALL_STYLE_WEIGHTS,
   parseLongTermMemoryRecallStyle,
   type LongTermMemoryRecallStyle,
   type LtmRecallWeights,
 } from "./constants.js";
-import { ltmModeForChatMode } from "./scope.js";
 import type { LtmResolvedGlobalSettings } from "./schema.js";
 
 export interface ResolvedLongTermMemoryRecallSettings {
@@ -97,13 +96,15 @@ export function resolveLongTermMemoryRecallSettings(input: {
   requestDebug?: boolean;
 }): ResolvedLongTermMemoryRecallSettings {
   const { chatMetadata, globalSettings } = input;
-  const modeFallback = DEFAULT_LTM_RECALL_STYLE_BY_MODE[ltmModeForChatMode(input.chatMode)];
   const chatRecallStyle = readRecallStyle(chatMetadata.longTermMemoryRecallStyle);
+  // Issue #1258: a per-mode style map never applied because resolved global
+  // settings always carry a style; the balanced default is now the single fallback.
   const globalRecallStyle = globalSettings
     ? parseLongTermMemoryRecallStyle(globalSettings.longTermMemoryRecallStyle)
-    : modeFallback;
+    : DEFAULT_LTM_RECALL_STYLE;
   const recallStyle = chatRecallStyle ?? globalRecallStyle;
-  const styleWeights = LTM_RECALL_STYLE_WEIGHTS[recallStyle];
+  const styleWeights =
+    recallStyle === "custom" ? LTM_RECALL_STYLE_WEIGHTS.balanced : LTM_RECALL_STYLE_WEIGHTS[recallStyle];
   const globalWeights =
     globalRecallStyle === "custom"
       ? resolveGlobalWeights(globalSettings, LTM_RECALL_STYLE_WEIGHTS.balanced)

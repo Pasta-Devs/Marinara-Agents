@@ -15,6 +15,8 @@ export interface LtmRankLaneItem {
   chunkId: string;
   reason: string;
   rawScore?: number;
+  /** Absolute 0-1 lane score when the lane computes one; otherwise the lane's own normalization applies. */
+  normalizedScore?: number;
 }
 
 export interface LtmRankLane {
@@ -40,7 +42,12 @@ export function reciprocalRankFuse(lanes: LtmRankLane[], options: { cooldowns?: 
     lane.items.forEach((item, index) => {
       const rank = index + 1;
       const rawScore = typeof item.rawScore === "number" && Number.isFinite(item.rawScore) ? item.rawScore : 0;
-      const normalizedRawScore = lane.name === "bm25" ? rawScore / (rawScore + 1) : Math.max(0, Math.min(1, rawScore));
+      const explicitNormalized =
+        typeof item.normalizedScore === "number" && Number.isFinite(item.normalizedScore)
+          ? Math.max(0, Math.min(1, item.normalizedScore))
+          : undefined;
+      const normalizedRawScore =
+        explicitNormalized ?? (lane.name === "bm25" ? rawScore / (rawScore + 1) : Math.max(0, Math.min(1, rawScore)));
       const rawFactor = typeof item.rawScore === "number" ? normalizedRawScore : 1;
       const score = lane.weight * (1 / (RRF_K + rank)) * rawFactor;
       const candidate =
