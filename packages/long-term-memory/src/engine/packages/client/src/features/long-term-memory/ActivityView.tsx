@@ -395,10 +395,6 @@ export default function ActivityView({
     const labels = new Map((scopeTargets.data?.chats ?? []).map((chat) => [chat.id, chat.label]));
     return (chatId: string) => labels.get(chatId) ?? chatId;
   }, [scopeTargets.data]);
-  const chipCounts = useMemo(
-    () => new Map(debugChips.map((candidate) => [candidate, filterByChip(operations, candidate).length])),
-    [operations],
-  );
   const query = search.trim().toLocaleLowerCase(locale);
   // The memory filter selects whole operations and composes with the chips and search
   // rather than replacing them; each matching operation keeps its full event list.
@@ -408,6 +404,11 @@ export default function ActivityView({
         ? operations.filter((operation) => operationReferencesMemory(operation, memoryFilterId))
         : operations,
     [operations, memoryFilterId],
+  );
+  // Counts describe the memory-filtered domain so they match the listed operations.
+  const chipCounts = useMemo(
+    () => new Map(debugChips.map((candidate) => [candidate, filterByChip(filteredOperations, candidate).length])),
+    [filteredOperations],
   );
   const visibleOperations = useMemo(
     () =>

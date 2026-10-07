@@ -2687,6 +2687,12 @@ async function main() {
         await activity.locator('[data-ltm-debug-operation="recall"]').waitFor();
         await activity.locator('[data-ltm-debug-operation="recall-rejected"]').waitFor();
         await activity.locator('[data-ltm-debug-operation="late-reference"]').waitFor();
+        // Chip counts describe the memory-filtered domain, not the whole loaded log.
+        const listedOperations = await activity.locator("[data-ltm-debug-operation]").count();
+        assert.match(
+          await activity.locator('[data-ltm-debug-chip="all"]').innerText(),
+          new RegExp(`All\\s+${listedOperations}`, "u"),
+        );
         // An unrelated operation and an apply carrying only change ids are excluded.
         assert.equal(await activity.locator('[data-ltm-debug-operation="unrelated"]').count(), 0);
         assert.equal(await activity.locator('[data-ltm-debug-operation="apply"]').count(), 0);
