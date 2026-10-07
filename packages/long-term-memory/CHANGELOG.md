@@ -1,5 +1,15 @@
 # Long-Term Memory changelog
 
+## 1.4.11 — 2026-10-07
+
+- Filter the Debug tab by whole operation on the client. A phase or "Errors only" filter no longer queries a subset of events, so a truncated extraction cannot read "Completed" and a partial import cannot flip to "Failed".
+- Replace only whole-token memory ids in debug text. An id that is only a prefix of another id (for example `character_mara_missing`) is no longer rewritten as `Mara Quill_missing`.
+- Note when the Debug tab shows only the newest 200 events and offer "Show up to 1,000".
+- Read "No completion recorded" instead of "Running" when a started run has no completion after an hour.
+- Resolve Debug tab memory titles for the ids on screen with `requestNotesByIds` instead of downloading the whole vault, and stop refetching the lookup on window focus.
+- Render Technical details JSON only while its section is open.
+- Clear a stale export or clear error when Refresh succeeds.
+
 ## 1.4.10 — 2026-10-07
 
 - Count only in-scope memories toward the recall caps. Keyword, tag and note buckets were truncated to 128 entries before the chat's scope, status and mode filter ran, so 128+ out-of-scope chunks sharing a popular keyword or `#tag` could crowd an in-scope memory out of the exact keyword hit, the direct hit, and the graph seeds those hits produce. The fuzzy keyword scan had the same flaw at 512 vault-wide keywords, which could leave a late-alphabet keyword unmatchable; both caps now count only what the current chat may recall.

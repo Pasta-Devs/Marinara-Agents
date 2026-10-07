@@ -2473,6 +2473,18 @@ async function main() {
           "an operation without a recorded duration must not display a fabricated one",
         );
         assert.doesNotMatch(await activity.innerText(), /private response snippet/u);
+        // Filtering is client-side and keeps whole operations: a partial import
+        // that ended ok but recorded an error must not flip to "Failed" when the
+        // "Errors only" filter is selected.
+        await activity.locator("select").selectOption("errors");
+        const partialOperation = activity
+          .locator(":scope > ol > li > details > summary")
+          .filter({ hasText: "Import sources" });
+        await partialOperation.waitFor();
+        assert.match(await partialOperation.innerText(), /Completed with warnings/u);
+        assert.match(await partialOperation.innerText(), /One source failed\./u);
+        await activity.locator("select").selectOption("all");
+        await operation("estimated").waitFor();
         assert.equal(
           await activityPage.evaluate(
             () => document.documentElement.scrollWidth <= document.documentElement.clientWidth,
@@ -2482,9 +2494,22 @@ async function main() {
       };
       const openDebugActivity = async (context: typeof browserContext, navigation: "desktop" | "mobile") => {
         const debugPage = await context.newPage();
-        await debugPage.route("**/api/long-term-memory/debug-log?*", (route) =>
-          route.fulfill({ json: { events: debugEvents } }),
-        );
+        await debugPage.route("**/api/long-term-memory/debug-log?*", (route) => {
+          const query = new URL(route.request().url()).searchParams;
+          const matches = (value: unknown, expected: string | null) => !expected || value === expected;
+          const filtered = debugEvents.filter((event) => {
+            const record = event as Record<string, unknown>;
+            return (
+              matches(record.operationId, query.get("operationId")) &&
+              matches(record.sourceNoteId, query.get("sourceNoteId")) &&
+              matches(record.draftId, query.get("draftId")) &&
+              matches(record.status, query.get("status")) &&
+              matches(record.phase, query.get("phase"))
+            );
+          });
+          const limit = Number(query.get("limit") ?? 0);
+          route.fulfill({ json: { events: limit > 0 ? filtered.slice(-limit) : filtered } });
+        });
         await debugPage.goto(`http://127.0.0.1:${address.port}/`);
         await debugPage.evaluate(() => customElements.whenDefined("marinara-capability-long-term-memory"));
         await debugPage.evaluate(() => {
@@ -2493,7 +2518,24 @@ async function main() {
           document.body.append(element);
         });
         await debugPage.locator(`[data-ltm-navigation="${navigation}"] [data-ltm-destination="settings"]`).click();
+        // The detail view mounts the Vault first, which pages all notes; count
+        // note queries only from the settings navigation on, so this measures
+        // the Debug tab's own title lookup.
+        const noteQueryStart = noteQueries.length;
+        const notesByIdsResponse = debugPage.waitForResponse((response) =>
+          new URL(response.url()).searchParams.has("ids"),
+        );
         await assertDebugActivity(debugPage);
+        await notesByIdsResponse;
+        // Start at the Debug tab's own ids lookup so a Vault page that is still
+        // in flight cannot be read as Debug paging the whole vault.
+        const idsIndex = noteQueries.slice(noteQueryStart).findIndex((query) => query.includes("ids="));
+        assert.ok(idsIndex >= 0, "Debug resolves memory titles by id");
+        assert.equal(
+          noteQueries.slice(noteQueryStart + idsIndex).some((query) => query.includes("limit=500")),
+          false,
+          "Debug does not page the whole vault for titles",
+        );
         return debugPage;
       };
       const desktopDebugPage = await openDebugActivity(browserContext, "desktop");
@@ -4427,9 +4469,17 @@ async function main() {
       await retryReextract.click();
       await page.locator("[data-ltm-reextract-result]").waitFor();
       assert.match(await desktopSourcesNavigation.innerText(), /Completed 1/u);
+      // Re-extract and its retry send the current availability modes (#1227);
+      // the retry repeats the original selection even after the mode filter changes.
       assert.deepEqual(reextractionRequests, [
-        { path: "/api/long-term-memory/notes/source_desktop_reextract/extract", body: {} },
-        { path: "/api/long-term-memory/notes/source_desktop_reextract/extract", body: {} },
+        {
+          path: "/api/long-term-memory/notes/source_desktop_reextract/extract",
+          body: { modes: ["conversation"] },
+        },
+        {
+          path: "/api/long-term-memory/notes/source_desktop_reextract/extract",
+          body: { modes: ["conversation"] },
+        },
       ]);
       await page.locator('[data-ltm-source-tab="lorebooks"]').click();
       await page.locator('[data-ltm-source-preview="lorebooks"]').waitFor();

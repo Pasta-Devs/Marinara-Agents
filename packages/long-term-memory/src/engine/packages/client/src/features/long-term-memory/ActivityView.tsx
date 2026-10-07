@@ -1,24 +1,39 @@
 import { useMemo, useState } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Check, ChevronRight, Copy, Download, RotateCw, Trash2 } from "lucide-react";
 import type {
   LtmDebugEvent,
   LtmLastInjectionResponse,
   LtmNote,
 } from "../../../../shared/src/features/agents/long-term-memory/schema.js";
-import { invalidateLtmQueries, queryKeys, request, requestAllNotes, requestRaw } from "./api";
+import { invalidateLtmQueries, queryKeys, request, requestNotesByIds, requestRaw } from "./api";
 import { Button, InfoPopover, StatusSurface, inputClass } from "./shared-controls";
 import { humanizeLabel, labelKeys, localizedLabel } from "./display-labels";
 import type { LongTermMemoryDestinationProps } from "./types";
 import { LastInjectionSummary } from "./LastInjectionSummary";
 import { useLtmTranslation, type LtmTranslationFunction } from "./localization";
+import {
+  collectDebugNoteIds,
+  deriveOperationStatus,
+  filterOperations,
+  groupOperations,
+  humanizeDebugText,
+  isTruncatedResponse,
+  LTM_DEBUG_STALE_OPERATION_MS,
+  type DebugActivityFilter,
+  type DebugOperationStatus,
+} from "./debug-activity";
 
 type DebugLogResponse = { events: LtmDebugEvent[] };
-type DebugOperation = { operationId: string; events: LtmDebugEvent[] };
-type ActivityFilter = "all" | "errors" | LtmDebugEvent["phase"];
-type DebugTextLookup = {
-  pattern: RegExp;
-  titlesByNormalizedId: ReadonlyMap<string, string>;
+
+const debugStatusLabelKeys: Record<DebugOperationStatus, string> = {
+  started: "ui.longTermMemory.activityview.running",
+  ok: "ui.longTermMemory.activityview.completed",
+  skipped: "ui.longTermMemory.activityview.skipped",
+  warning: "ui.longTermMemory.activityview.warning",
+  completed_with_warnings: "ui.longTermMemory.activityview.completedWithWarnings",
+  error: "ui.longTermMemory.activityview.failed",
+  incomplete: "ui.longTermMemory.activityview.noCompletionRecorded",
 };
 
 const debugPhases: LtmDebugEvent["phase"][] = [
@@ -51,15 +66,13 @@ function formatTimestamp(timestamp: string, locale: string) {
   return Number.isNaN(date.getTime()) ? timestamp : date.toLocaleString(locale);
 }
 
-function humanizeDebugText(text: string, lookup: DebugTextLookup, internalRecordLabel: string) {
-  return text.replace(lookup.pattern, (id) => {
-    return lookup.titlesByNormalizedId.get(id.toLowerCase()) ?? internalRecordLabel;
-  });
-}
-
-function describeEvent(event: LtmDebugEvent, debugTextLookup: DebugTextLookup, localizeUi: LtmTranslationFunction) {
+function describeEvent(
+  event: LtmDebugEvent,
+  noteTitles: ReadonlyMap<string, string>,
+  localizeUi: LtmTranslationFunction,
+) {
   const internalRecordLabel = localizeUi("ui.longTermMemory.activityview.anInternalRecord");
-  if (event.error) return humanizeDebugText(event.error.message, debugTextLookup, internalRecordLabel);
+  if (event.error) return humanizeDebugText(event.error.message, noteTitles, internalRecordLabel);
   if (isTruncatedResponse(event))
     return localizeUi("ui.longTermMemory.activityview.outputTruncated", {
       finishReason: String(event.details?.finishReason),
@@ -70,10 +83,10 @@ function describeEvent(event: LtmDebugEvent, debugTextLookup: DebugTextLookup, l
     if (event.details?.reason === "output_budget_below_viability_floor")
       return localizeUi("ui.longTermMemory.activityview.outputBudgetTooSmall");
   }
-  if (event.message) return humanizeDebugText(event.message, debugTextLookup, internalRecordLabel);
-  if (event.uiSummary) return humanizeDebugText(event.uiSummary, debugTextLookup, internalRecordLabel);
+  if (event.message) return humanizeDebugText(event.message, noteTitles, internalRecordLabel);
+  if (event.uiSummary) return humanizeDebugText(event.uiSummary, noteTitles, internalRecordLabel);
   const summary = event.details?.summary;
-  if (typeof summary === "string") return humanizeDebugText(summary, debugTextLookup, internalRecordLabel);
+  if (typeof summary === "string") return humanizeDebugText(summary, noteTitles, internalRecordLabel);
   const reason = event.details?.reason;
   if (typeof reason === "string")
     return localizeUi("ui.longTermMemory.activityview.eventDescription", {
@@ -96,60 +109,13 @@ function actionLabel(action: string, localizeUi: LtmTranslationFunction) {
   return key ? localizeUi(key) : humanizeLabel(action);
 }
 
-function groupOperations(events: LtmDebugEvent[]): DebugOperation[] {
-  const operations = new Map<string, LtmDebugEvent[]>();
-  for (const event of events) {
-    const operation = operations.get(event.operationId) ?? [];
-    operation.push(event);
-    operations.set(event.operationId, operation);
-  }
-  return [...operations.entries()]
-    .map(([operationId, operationEvents]) => ({
-      operationId,
-      events: operationEvents.sort((left, right) => left.ts.localeCompare(right.ts)),
-    }))
-    .sort((left, right) => right.events.at(-1)!.ts.localeCompare(left.events.at(-1)!.ts));
-}
-
-function isTruncatedResponse(event: LtmDebugEvent) {
-  return (
-    event.action === "evidence_unit_response" &&
-    ["length", "max_tokens", "token_limit"].includes(String(event.details?.finishReason ?? "").toLowerCase())
-  );
-}
-
-function operationStatus(events: LtmDebugEvent[], localizeUi: LtmTranslationFunction) {
-  const started = events.find((event) => event.status === "started");
-  const terminal = started
-    ? events.findLast(
-        (event) =>
-          event.phase === started.phase &&
-          (event.action === started.action ||
-            (started.action === "evidence_unit_request" && event.action === "evidence_unit_response")) &&
-          event.status !== "started",
-      )
-    : events.at(-1);
-  const status =
-    terminal?.status ?? (events.some((event) => event.status === "error") ? "error" : started ? "started" : "warning");
-  if (
-    status === "ok" &&
-    events.some((event) => event.status === "warning" || event.status === "error" || isTruncatedResponse(event))
-  ) {
-    return {
-      status: "warning",
-      label: localizeUi("ui.longTermMemory.activityview.completedWithWarnings"),
-    } as const;
-  }
-  return {
-    status,
-    label: {
-      started: localizeUi("ui.longTermMemory.activityview.running"),
-      ok: localizeUi("ui.longTermMemory.activityview.completed"),
-      skipped: localizeUi("ui.longTermMemory.activityview.skipped"),
-      warning: localizeUi("ui.longTermMemory.activityview.warning"),
-      error: localizeUi("ui.longTermMemory.activityview.failed"),
-    }[status],
-  };
+function operationStatus(
+  events: LtmDebugEvent[],
+  localizeUi: LtmTranslationFunction,
+  options?: { now?: number; staleMs?: number },
+) {
+  const status = deriveOperationStatus(events, options);
+  return { status, label: localizeUi(debugStatusLabelKeys[status]) };
 }
 
 function eventMetadata(event: LtmDebugEvent) {
@@ -241,12 +207,12 @@ function summarizeCounts(events: LtmDebugEvent[], localizeUi: LtmTranslationFunc
 
 function warningMessages(
   events: LtmDebugEvent[],
-  debugTextLookup: DebugTextLookup,
+  noteTitles: ReadonlyMap<string, string>,
   localizeUi: LtmTranslationFunction,
 ) {
   return events
     .filter((event) => event.status === "warning" || isTruncatedResponse(event))
-    .map((event) => describeEvent(event, debugTextLookup, localizeUi));
+    .map((event) => describeEvent(event, noteTitles, localizeUi));
 }
 
 function latestRecallEvent(events: LtmDebugEvent[], chatId?: string | null, attemptId?: string | null) {
@@ -292,26 +258,21 @@ export default function ActivityView({ props, onOpenMemory }: LongTermMemoryDest
   const [pending, setPending] = useState<"clear" | "export" | null>(null);
   const [actionError, setActionError] = useState("");
   const [copiedEventId, setCopiedEventId] = useState<string | null>(null);
-  const [filter, setFilter] = useState<ActivityFilter>("all");
-  const [recallOpen, setRecallOpen] = useState(false);
-  const activityPath = (() => {
-    const parameters = new URLSearchParams({ limit: "200" });
-    if (filter === "errors") parameters.set("status", "error");
-    else if (filter !== "all") parameters.set("phase", filter);
-    return `/debug-log?${parameters.toString()}`;
-  })();
+  const [openTechnicalDetails, setOpenTechnicalDetails] = useState<ReadonlySet<string>>(new Set());
+  const [filter, setFilter] = useState<DebugActivityFilter>("all");
+  const [limit, setLimit] = useState(200);
   const activity = useQuery({
-    queryKey: [...queryKeys.activity, filter],
-    queryFn: () => request<DebugLogResponse>(activityPath),
+    queryKey: [...queryKeys.activity, limit],
+    queryFn: () => request<DebugLogResponse>(`/debug-log?limit=${limit}`),
   });
-  const recallActivity = useQuery({
-    queryKey: [...queryKeys.activity, "recall-workflow"],
-    enabled: recallOpen && filter !== "all",
-    queryFn: () => request<DebugLogResponse>("/debug-log?limit=200&phase=retrieval"),
-  });
+  const noteIds = useMemo(() => collectDebugNoteIds(activity.data?.events ?? []), [activity.data]);
   const notes = useQuery({
-    queryKey: queryKeys.notes,
-    queryFn: () => requestAllNotes<LtmNote>("/notes?includeGlobal=true"),
+    queryKey: [...queryKeys.notes, "activity-context", noteIds],
+    queryFn: ({ signal }) => requestNotesByIds<LtmNote>(noteIds, signal, true),
+    enabled: noteIds.length > 0,
+    staleTime: 5 * 60 * 1000,
+    refetchOnWindowFocus: false,
+    placeholderData: keepPreviousData,
   });
   const noteTitles = useMemo(
     () =>
@@ -323,20 +284,13 @@ export default function ActivityView({ props, onOpenMemory }: LongTermMemoryDest
       ),
     [localizeUi, notes.data],
   );
-  const debugTextLookup = useMemo<DebugTextLookup>(() => {
-    const titlesByNormalizedId = new Map([...noteTitles].map(([id, title]) => [id.toLowerCase(), title]));
-    const escapedIds = [...titlesByNormalizedId.keys()]
-      .sort((left, right) => right.length - left.length)
-      .map((id) => id.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
-    return {
-      titlesByNormalizedId,
-      pattern: new RegExp([...escapedIds, "\\b[0-9a-f]{8}-[0-9a-f-]{27,}\\b"].join("|"), "gi"),
-    };
-  }, [noteTitles]);
-  const operations = groupOperations(activity.data?.events ?? []);
-  const recallEvents = filter === "all" ? (activity.data?.events ?? []) : (recallActivity.data?.events ?? []);
-  const recallLoading = filter === "all" ? activity.isLoading : recallActivity.isLoading;
-  const recallError = filter === "all" ? activity.isError : recallActivity.isError;
+  const operations = useMemo(
+    () => filterOperations(groupOperations(activity.data?.events ?? []), filter),
+    [activity.data, filter],
+  );
+  const recallEvents = activity.data?.events ?? [];
+  const recallLoading = activity.isLoading;
+  const recallError = activity.isError;
   const lastInjection = useQuery({
     enabled: Boolean(props.chatId),
     queryKey: queryKeys.lastInjection(props.chatId),
@@ -377,7 +331,7 @@ export default function ActivityView({ props, onOpenMemory }: LongTermMemoryDest
     setActionError("");
     try {
       await request<unknown>("/debug-log", "DELETE");
-      await invalidateLtmQueries(queryClient, [queryKeys.activity, [...queryKeys.activity, "recall-workflow"]]);
+      await invalidateLtmQueries(queryClient, [queryKeys.activity]);
     } catch (error) {
       setActionError(
         error instanceof Error ? error.message : localizeUi("ui.longTermMemory.activityview.couldNotClearActivity"),
@@ -471,12 +425,12 @@ export default function ActivityView({ props, onOpenMemory }: LongTermMemoryDest
           className="flex flex-wrap gap-2"
         >
           <Button
-            disabled={activity.isFetching || recallActivity.isFetching}
-            onClick={() =>
-              void (filter === "all" || !recallOpen
-                ? activity.refetch()
-                : Promise.all([activity.refetch(), recallActivity.refetch()]))
-            }
+            disabled={activity.isFetching}
+            onClick={() => {
+              void activity.refetch().then((result) => {
+                if (!result.isError) setActionError("");
+              });
+            }}
           >
             <RotateCw aria-hidden="true" size="0.875rem" /> {localizeUi("ui.longTermMemory.activityview.refresh")}
           </Button>
@@ -494,7 +448,7 @@ export default function ActivityView({ props, onOpenMemory }: LongTermMemoryDest
         <select
           className={inputClass}
           value={filter}
-          onChange={(event) => setFilter(event.target.value as ActivityFilter)}
+          onChange={(event) => setFilter(event.target.value as DebugActivityFilter)}
         >
           <option value="all">{localizeUi("ui.longTermMemory.activityview.allPhases")}</option>
           <option value="errors">{localizeUi("ui.longTermMemory.activityview.errorsOnly")}</option>
@@ -516,11 +470,7 @@ export default function ActivityView({ props, onOpenMemory }: LongTermMemoryDest
         />
       ) : null}
 
-      <details
-        data-ltm-recall-workflow
-        className="mari-editor-panel mari-editor-panel--soft"
-        onToggle={(event) => setRecallOpen(event.currentTarget.open)}
-      >
+      <details data-ltm-recall-workflow className="mari-editor-panel mari-editor-panel--soft">
         <summary className="flex min-h-11 cursor-pointer items-center justify-between gap-3 px-3 py-2 text-xs font-semibold">
           <span>{localizeUi("ui.longTermMemory.activityview.latestRecallWorkflow")}</span>
           {recallEvent?.counts ? (
@@ -737,28 +687,43 @@ export default function ActivityView({ props, onOpenMemory }: LongTermMemoryDest
         </StatusSurface>
       ) : null}
       {activity.data?.events.length === 0 ? (
-        <StatusSurface>
-          {filter === "all"
-            ? localizeUi("ui.longTermMemory.activityview.noActivityHasBeenRecordedYet")
-            : localizeUi("ui.longTermMemory.activityview.noActivityMatchesThisFilter")}
-        </StatusSurface>
+        <StatusSurface>{localizeUi("ui.longTermMemory.activityview.noActivityHasBeenRecordedYet")}</StatusSurface>
+      ) : activity.data && operations.length === 0 ? (
+        <StatusSurface>{localizeUi("ui.longTermMemory.activityview.noActivityMatchesThisFilter")}</StatusSurface>
+      ) : null}
+      {activity.data && activity.data.events.length >= limit ? (
+        <div className="flex flex-wrap items-center gap-2 text-xs text-[var(--muted-foreground)]">
+          <span>
+            {localizeUi("ui.longTermMemory.activityview.newestEventsShown", {
+              count: limit.toLocaleString(locale),
+            })}
+          </span>
+          {limit < 1_000 ? (
+            <Button onClick={() => setLimit(1_000)}>
+              {localizeUi("ui.longTermMemory.activityview.showUpTo1_000Events")}
+            </Button>
+          ) : null}
+        </div>
       ) : null}
       {operations.length ? (
         <ol className="space-y-2" aria-label={localizeUi("ui.longTermMemory.activityview.longTermMemoryActivityLog")}>
           {operations.map((operation) => {
             const firstEvent = operation.events[0];
             const lastEvent = operation.events.at(-1)!;
-            const status = operationStatus(operation.events, localizeUi);
+            const status = operationStatus(operation.events, localizeUi, {
+              now: Date.now(),
+              staleMs: LTM_DEBUG_STALE_OPERATION_MS,
+            });
             const sourceNoteId = operation.events.find((event) => event.sourceNoteId)?.sourceNoteId;
             const principalEvent =
               operation.events.find((event) => event.status === "error") ??
               operation.events.find((event) => event.status === "warning" || isTruncatedResponse(event)) ??
               lastEvent;
-            const summary = compactSummary(describeEvent(principalEvent, debugTextLookup, localizeUi));
+            const summary = compactSummary(describeEvent(principalEvent, noteTitles, localizeUi));
             const model = operation.events.find((event) => event.model)?.model;
             const durationMs = lastEvent.durationMs;
             const countSummary = summarizeCounts(operation.events, localizeUi, locale);
-            const warnings = warningMessages(operation.events, debugTextLookup, localizeUi).filter(
+            const warnings = warningMessages(operation.events, noteTitles, localizeUi).filter(
               (warning) => compactSummary(warning) !== summary,
             );
             return (
@@ -831,7 +796,7 @@ export default function ActivityView({ props, onOpenMemory }: LongTermMemoryDest
                               {operationStatus([event], localizeUi).label}
                             </span>
                           </div>
-                          <p className="mt-1 leading-relaxed">{describeEvent(event, debugTextLookup, localizeUi)}</p>
+                          <p className="mt-1 leading-relaxed">{describeEvent(event, noteTitles, localizeUi)}</p>
                           <p className="mt-1 text-[0.6875rem] text-[var(--muted-foreground)]">
                             {formatTimestamp(event.ts, locale)}
                             {event.durationMs != null
@@ -841,7 +806,18 @@ export default function ActivityView({ props, onOpenMemory }: LongTermMemoryDest
                               : ""}
                           </p>
                           {Object.keys(metadata).length ? (
-                            <details className="mt-2 rounded bg-[var(--background)]">
+                            <details
+                              className="mt-2 rounded bg-[var(--background)]"
+                              onToggle={(toggleEvent) => {
+                                const open = toggleEvent.currentTarget.open;
+                                setOpenTechnicalDetails((current) => {
+                                  const next = new Set(current);
+                                  if (open) next.add(event.id);
+                                  else next.delete(event.id);
+                                  return next;
+                                });
+                              }}
+                            >
                               <summary className="min-h-11 cursor-pointer px-2 py-3 font-medium">
                                 {localizeUi("ui.longTermMemory.activityview.technicalDetails")}
                               </summary>
@@ -862,13 +838,15 @@ export default function ActivityView({ props, onOpenMemory }: LongTermMemoryDest
                                     ? localizeUi("ui.longTermMemory.activityview.copied")
                                     : localizeUi("ui.longTermMemory.activityview.copyJson")}
                                 </Button>
-                                <pre className="overflow-x-auto text-[0.6875rem] text-[var(--muted-foreground)]">
-                                  {humanizeDebugText(
-                                    JSON.stringify(metadata, null, 2),
-                                    debugTextLookup,
-                                    localizeUi("ui.longTermMemory.activityview.anInternalRecord"),
-                                  )}
-                                </pre>
+                                {openTechnicalDetails.has(event.id) ? (
+                                  <pre className="overflow-x-auto text-[0.6875rem] text-[var(--muted-foreground)]">
+                                    {humanizeDebugText(
+                                      JSON.stringify(metadata, null, 2),
+                                      noteTitles,
+                                      localizeUi("ui.longTermMemory.activityview.anInternalRecord"),
+                                    )}
+                                  </pre>
+                                ) : null}
                               </div>
                             </details>
                           ) : null}
