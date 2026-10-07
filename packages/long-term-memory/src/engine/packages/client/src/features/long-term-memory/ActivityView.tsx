@@ -261,11 +261,20 @@ export default function ActivityView({ props, onOpenMemory }: LongTermMemoryDest
   const [openTechnicalDetails, setOpenTechnicalDetails] = useState<ReadonlySet<string>>(new Set());
   const [filter, setFilter] = useState<DebugActivityFilter>("all");
   const [limit, setLimit] = useState(200);
+  const [recallOpen, setRecallOpen] = useState(false);
   const activity = useQuery({
     queryKey: [...queryKeys.activity, limit],
     queryFn: () => request<DebugLogResponse>(`/debug-log?limit=${limit}`),
   });
-  const noteIds = useMemo(() => collectDebugNoteIds(activity.data?.events ?? []), [activity.data]);
+  const recallActivity = useQuery({
+    queryKey: [...queryKeys.activity, "recall-workflow"],
+    enabled: recallOpen,
+    queryFn: () => request<DebugLogResponse>("/debug-log?limit=200&phase=retrieval"),
+  });
+  const noteIds = useMemo(
+    () => collectDebugNoteIds([...(activity.data?.events ?? []), ...(recallActivity.data?.events ?? [])]),
+    [activity.data, recallActivity.data],
+  );
   const notes = useQuery({
     queryKey: [...queryKeys.notes, "activity-context", noteIds],
     queryFn: ({ signal }) => requestNotesByIds<LtmNote>(noteIds, signal, true),
@@ -288,9 +297,9 @@ export default function ActivityView({ props, onOpenMemory }: LongTermMemoryDest
     () => filterOperations(groupOperations(activity.data?.events ?? []), filter),
     [activity.data, filter],
   );
-  const recallEvents = activity.data?.events ?? [];
-  const recallLoading = activity.isLoading;
-  const recallError = activity.isError;
+  const recallEvents = recallOpen ? (recallActivity.data?.events ?? []) : (activity.data?.events ?? []);
+  const recallLoading = recallOpen ? recallActivity.isLoading : activity.isLoading;
+  const recallError = recallOpen ? recallActivity.isError : activity.isError;
   const lastInjection = useQuery({
     enabled: Boolean(props.chatId),
     queryKey: queryKeys.lastInjection(props.chatId),
@@ -425,11 +434,13 @@ export default function ActivityView({ props, onOpenMemory }: LongTermMemoryDest
           className="flex flex-wrap gap-2"
         >
           <Button
-            disabled={activity.isFetching}
+            disabled={activity.isFetching || recallActivity.isFetching}
             onClick={() => {
-              void activity.refetch().then((result) => {
-                if (!result.isError) setActionError("");
-              });
+              void Promise.all(recallOpen ? [activity.refetch(), recallActivity.refetch()] : [activity.refetch()]).then(
+                (results) => {
+                  if (!results.some((result) => result.isError)) setActionError("");
+                },
+              );
             }}
           >
             <RotateCw aria-hidden="true" size="0.875rem" /> {localizeUi("ui.longTermMemory.activityview.refresh")}
@@ -470,7 +481,11 @@ export default function ActivityView({ props, onOpenMemory }: LongTermMemoryDest
         />
       ) : null}
 
-      <details data-ltm-recall-workflow className="mari-editor-panel mari-editor-panel--soft">
+      <details
+        data-ltm-recall-workflow
+        className="mari-editor-panel mari-editor-panel--soft"
+        onToggle={(event) => setRecallOpen(event.currentTarget.open)}
+      >
         <summary className="flex min-h-11 cursor-pointer items-center justify-between gap-3 px-3 py-2 text-xs font-semibold">
           <span>{localizeUi("ui.longTermMemory.activityview.latestRecallWorkflow")}</span>
           {recallEvent?.counts ? (

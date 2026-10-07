@@ -5,6 +5,7 @@
 - Filter the Debug tab by whole operation on the client. A phase or "Errors only" filter no longer queries a subset of events, so a truncated extraction cannot read "Completed" and a partial import cannot flip to "Failed".
 - Replace only whole-token memory ids in debug text. An id that is only a prefix of another id (for example `character_mara_missing`) is no longer rewritten as `Mara Quill_missing`.
 - Note when the Debug tab shows only the newest 200 events and offer "Show up to 1,000".
+- Keep the "Latest recall workflow" on the newest retrieval-phase explanation.
 - Read "No completion recorded" instead of "Running" when a started run has no completion after an hour.
 - Resolve Debug tab memory titles for the ids on screen with `requestNotesByIds` instead of downloading the whole vault, and stop refetching the lookup on window focus.
 - Render Technical details JSON only while its section is open.

@@ -2434,6 +2434,14 @@ async function main() {
         debugEvent("partial", "extract_source_note", "error", { error: { message: "One source failed." } }),
         debugEvent("partial", "import_sources", "ok"),
         debugEvent("noduration", "recall_explanation", "ok"),
+        // The recall panel must query retrieval-phase events directly so newer
+        // non-retrieval events cannot push the latest recall explanation out of
+        // the unfiltered limit window.
+        debugEvent("recall", "recall_explanation", "ok", {
+          phase: "retrieval",
+          counts: { selected: 2, rejected: 1 },
+          details: { maxChunks: 8, maxTokens: 2048, scoreThreshold: 0.5 },
+        }),
       ];
       const assertDebugActivity = async (activityPage: typeof page) => {
         await activityPage.locator("#settings-tab-debug").click();
@@ -2526,6 +2534,15 @@ async function main() {
           new URL(response.url()).searchParams.has("ids"),
         );
         await assertDebugActivity(debugPage);
+        const recallPanel = debugPage.locator("[data-ltm-recall-workflow]");
+        // The panel must query the retrieval phase directly: newer non-retrieval
+        // events can push the latest recall explanation out of the unfiltered window.
+        const retrievalRequest = debugPage.waitForRequest(
+          (request) => new URL(request.url()).searchParams.get("phase") === "retrieval",
+        );
+        await recallPanel.locator("summary").click();
+        await retrievalRequest;
+        await recallPanel.getByText("Limits:").waitFor();
         await notesByIdsResponse;
         // Start at the Debug tab's own ids lookup so a Vault page that is still
         // in flight cannot be read as Debug paging the whole vault.
