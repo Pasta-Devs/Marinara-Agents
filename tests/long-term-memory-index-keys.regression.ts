@@ -333,10 +333,23 @@ async function main() {
     (distinctiveKeywordHit?.score ?? 0) / LTM_KEYWORD_MAX_SCORE > 0.75,
     "a distinctive exact phrase must still score high",
   );
+  // Frequency counts only chunks the search may return: `mira` is generic across
+  // the vault but sits on a single chunk of this scope, so it keeps full weight.
+  const scopedKeywordHit = searchLtmKeywordIndex(calibrationKeywords, "mira tomas", {
+    topK: 10,
+    allowedChunks: new Set(["generic-0", "calibration-distinctive", "unique-0", "unique-1", "unique-2", "unique-3"]),
+  })[0];
+  assert.equal(scopedKeywordHit?.chunkId, "generic-0");
+  assert.equal(
+    (scopedKeywordHit?.score ?? 0) / LTM_KEYWORD_MAX_SCORE,
+    0.75,
+    "a keyword common only outside the recall scope must keep full weight inside it",
+  );
 
   // The threshold filters the same strength of match in every style only while
-  // each preset's strongest lane can reach full relevance, and graph-only
-  // neighbours (at most half the graph weight) stay under the default threshold.
+  // each preset's strongest lane can reach full relevance, graph-only neighbours
+  // (at most half the graph weight) stay under the default threshold, and an
+  // exact keyword term clears it when the semantic lane is unavailable.
   const { DEFAULT_LTM_GLOBAL_SETTINGS } =
     await import("../packages/long-term-memory/src/engine/packages/shared/src/features/agents/long-term-memory/schema.ts");
   for (const [style, weights] of Object.entries(LTM_RECALL_STYLE_WEIGHTS)) {
@@ -344,6 +357,10 @@ async function main() {
     assert.ok(
       weights.graphWeight * 0.5 < DEFAULT_LTM_GLOBAL_SETTINGS.longTermMemoryScoreThreshold,
       `${style}: graph-only neighbours must stay under the default threshold`,
+    );
+    assert.ok(
+      weights.keywordWeight * (3 / LTM_KEYWORD_MAX_SCORE) >= DEFAULT_LTM_GLOBAL_SETTINGS.longTermMemoryScoreThreshold,
+      `${style}: an exact keyword term must clear the default threshold`,
     );
   }
 

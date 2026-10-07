@@ -283,7 +283,9 @@ export const DEFAULT_LTM_RECALL_PREAMBLE = "Relevant long-term memories for this
  * threshold filters the same strength of match in every style; scaling a style's
  * weights together moves only its threshold scale, not its fused order. Graph
  * weights stay at or below 0.6, so graph-only neighbours (at most 0.3) sit under
- * the default threshold instead of all passing or all failing it at once.
+ * the default threshold instead of all passing or all failing it at once, and
+ * keyword weights stay at or above 0.5, so an exact keyword term (0.75 × weight)
+ * still clears it when the semantic lane is unavailable.
  *
  * `custom` has no preset: a custom style reads the user's own saved weights, so a
  * dead preset here only invited drift. Issue #1258.
@@ -305,7 +307,7 @@ export const LTM_RECALL_STYLE_WEIGHTS = {
     semanticWeight: 1,
     lexicalWeight: 0.4,
     graphWeight: 0.3,
-    keywordWeight: 0.3,
+    keywordWeight: 0.5,
   },
   story: {
     semanticWeight: 1,
