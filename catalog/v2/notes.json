@@ -188,6 +188,12 @@
     "long-term-memory": {
       "versions": [
         {
+          "version": "1.4.11",
+          "date": "2026-10-07",
+          "notes": "- Stop losing selected memories while building the recall prompt. The budget counted only chunk text, so the framing and preamble pushed the assembled prompt past the limit and the serializer dropped its last chunks without reconsidering the smaller ones it had skipped; a high-scoring memory could be dropped while one that fit was left out. The fixed prompt overhead is now reserved in the recall budget, and a chunk that no longer fits is skipped so later chunks that still fit are kept.",
+          "highlight": false
+        },
+        {
           "version": "1.4.10",
           "date": "2026-10-07",
           "notes": "- Count only in-scope memories toward the recall caps. Keyword, tag and note buckets were truncated to 128 entries before the chat's scope, status and mode filter ran, so 128+ out-of-scope chunks sharing a popular keyword or `#tag` could crowd an in-scope memory out of the exact keyword hit, the direct hit, and the graph seeds those hits produce. The fuzzy keyword scan had the same flaw at 512 vault-wide keywords, which could leave a late-alphabet keyword unmatchable; both caps now count only what the current chat may recall.",
@@ -299,12 +305,6 @@
           "version": "1.3.32",
           "date": "2026-09-29",
           "notes": "- Keep timeline events extracted from flat summaries without recognized headings instead of dropping them as invalid, so a valid event and any memory that links to it survive normalization.\n- Stop the structured backfill from adding character memory units the provider already returned for the same source, and stop text under an unrecognized structured heading from falling into the previous section.",
-          "highlight": false
-        },
-        {
-          "version": "1.3.31",
-          "date": "2026-09-28",
-          "notes": "- Keep character facts whose wording looks event-shaped for review instead of deleting them, so durable abilities, roles, and possessions phrased in past-tense narrative are not lost before a human decides.\n- Block low-risk auto-apply when that review warning is present, including when the warning falls outside the retained diagnostic list.",
           "highlight": false
         }
       ]

@@ -8,6 +8,7 @@ import { resolveLongTermMemoryRecallSettings } from "../../../../shared/src/feat
 import { resolveChatLtmScope, ltmModeForChatMode } from "./chat-scope.js";
 import { readJsonFile, writeJsonAtomic } from "./atomic-json.js";
 import {
+  estimateLongTermMemoryPromptOverhead,
   serializeLongTermMemoryPrompt,
   isLongTermMemoryPromptPresent,
   type LtmSerializedPromptArtifact,
@@ -144,6 +145,14 @@ export async function prepareGenerationLongTermMemory(input: {
       : undefined;
   const rejectedLimit = 20;
   const mode = ltmModeForChatMode(chat.mode) as LtmMode;
+  // The serializer adds framing, preamble, labels and escaping on top of chunk text.
+  // Reserve that fixed overhead in the retrieval budget so its refill can consider the
+  // chunks that still fit. When the overhead alone fills the budget, keep the raw budget
+  // so the serializer still reports a prompt-budget skip instead of an empty no-match.
+  const budgetTokens = recall.budgetTokens ?? 4096;
+  const promptOverheadTokens = estimateLongTermMemoryPromptOverhead(recall.recallPreamble);
+  const retrievalBudgetTokens =
+    budgetTokens > promptOverheadTokens ? budgetTokens - promptOverheadTokens : budgetTokens;
   let retrieval;
   try {
     retrieval = await retrieveLongTermMemory({
@@ -155,7 +164,8 @@ export async function prepareGenerationLongTermMemory(input: {
       exclusiveCharacterIds,
       includeResolved: recall.includeResolved,
       maxChunks: recall.maxChunks,
-      maxTokens: recall.budgetTokens,
+      maxTokens: retrievalBudgetTokens,
+      promptNormalizedEstimate: true,
       minScore: recall.scoreThreshold,
       semanticWeight: recall.weights.semanticWeight,
       lexicalWeight: recall.weights.lexicalWeight,
@@ -171,7 +181,7 @@ export async function prepareGenerationLongTermMemory(input: {
   }
   const artifact = serializeLongTermMemoryPrompt(retrieval.chunks, {
     preamble: recall.recallPreamble,
-    maxTokens: retrieval.maxTokens,
+    maxTokens: budgetTokens,
   });
   if (debugEnabled) {
     const selected = artifact?.chunks ?? [];
@@ -251,6 +261,13 @@ export async function prepareGenerationLongTermMemory(input: {
     });
   }
   if (retrieval.chunks.length === 0) {
+    // A candidate rejected by the reserved budget is a prompt-budget skip, not a no-match;
+    // recording it as a zero-match would overwrite the last injection receipt and tell the
+    // user nothing matched when the budget simply left no room.
+    if (retrieval.budgetExhausted) {
+      await recordAttempt("skipped", { reason: "prompt_budget", debugEnabled });
+      return null;
+    }
     await recordAttempt("completed", { reason: "no_matches", debugEnabled });
     await recordLongTermMemoryZeroMatch(input.chatId, input.root).catch((error) =>
       logger.warn(error, "[ltm] Failed to record zero-match recall for chat %s", input.chatId),

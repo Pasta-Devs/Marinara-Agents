@@ -468,6 +468,23 @@ async function main() {
       );
       assert.doesNotMatch(tight.content, /B{100}/);
 
+      // #1252: a chunk dropped for size must not hide smaller later chunks that still fit.
+      const refill = serializeLongTermMemoryPrompt(
+        [
+          makeChunk("world", "world_refill_a", "A".repeat(60)),
+          makeChunk("world", "world_refill_b", "B".repeat(200)),
+          makeChunk("world", "world_refill_c", "C".repeat(60)),
+        ],
+        { maxTokens: 100 },
+      );
+      assert.ok(refill);
+      assert.deepEqual(
+        refill.chunks.map(({ chunk }) => chunk.noteId),
+        ["world_refill_a", "world_refill_c"],
+      );
+      assert.doesNotMatch(refill.content, /B{200}/);
+      assert.ok(refill.estimatedTokens <= 100);
+
       const duplicateA = makeChunk("world", "world_duplicate_a", "Same fact").chunk;
       const duplicateB = makeChunk("world", "world_duplicate_b", "Same fact").chunk;
       const deduped = applyLtmBudget(
@@ -1277,7 +1294,9 @@ async function main() {
         assert.equal(tightExplanation.counts.selected, 1);
         assert.equal(tightExplanation.counts.usedTokens, tightRecall.receipt.artifact.estimatedTokens);
         assert.equal(tightExplanation.counts.rejected, 1);
-        assert.equal(tightExplanation.details.rejected[0].rejectionReason, "prompt_budget");
+        // #1252: the fixed prompt overhead is reserved in the retrieval budget, so the
+        // second chunk is rejected there instead of being accepted then popped by the serializer.
+        assert.equal(tightExplanation.details.rejected[0].rejectionReason, "budget");
         assert.equal(tightExplanation.details.rejected[0].thresholdPassed, true);
         assert.match(tightExplanation.uiSummary, /^1 memories selected; 1 candidates rejected\.$/);
         assert.equal(JSON.stringify(tightExplanation).includes("p".repeat(300)), false);
@@ -1290,6 +1309,26 @@ async function main() {
         const emptyExplanation = (await readLtmDebugLog({ phase: "retrieval" }, storage.root)).at(-1)!;
         assert.deepEqual(emptyExplanation.counts, { selected: 0, rejected: 2, usedTokens: 0 });
         assert.deepEqual(emptyExplanation.details.selected, []);
+
+        // #1252 review repair: when the reserved overhead leaves less room than any candidate
+        // needs, the recall is budget-exhausted, not a genuine no-match. It must report
+        // skipped/prompt_budget and must not overwrite the last injection receipt with an
+        // empty zero-match state.
+        chats[0].metadata.longTermMemoryRecallPreamble = "p".repeat(370);
+        const receiptBeforeBudgetExhaustion = await readLongTermMemoryInjectionReceipt("chat-a", storage.root);
+        assert.equal(
+          await runtime.recall(tightInput),
+          null,
+          "a preamble that leaves less room than any chunk must not inject",
+        );
+        const budgetOnlyAttempt = await readLongTermMemoryAttempt("chat-a", storage.root);
+        assert.equal(budgetOnlyAttempt?.outcome, "skipped");
+        assert.equal(budgetOnlyAttempt?.reason, "prompt_budget");
+        assert.deepEqual(
+          await readLongTermMemoryInjectionReceipt("chat-a", storage.root),
+          receiptBeforeBudgetExhaustion,
+          "a budget-exhausted recall must not record a zero-match injection receipt",
+        );
 
         for (const threshold of [0, 0.5, 0.6, 0.61]) {
           chats[0].metadata = {
@@ -1414,6 +1453,47 @@ async function main() {
       } finally {
         chats.pop();
         await storage.deleteNotesPermanently(noteIds);
+      }
+
+      // #1252 review repair: retrieval must estimate the prompt-normalized chunk text, not the
+      // raw legacy text, so a chunk the serializer can fit is not rejected before serialization.
+      // `summary:`/`text:` label lines are dropped when the bullet is rendered.
+      const legacySummaryChat = {
+        ...chats[0],
+        id: "chat-legacy-summary",
+        groupId: null,
+        metadata: {
+          enableLongTermMemory: true,
+          longTermMemoryBudgetTokens: 128,
+          longTermMemoryRecallPreamble: "p",
+          longTermMemorySemanticWeight: 0,
+          longTermMemoryLexicalWeight: 0,
+          longTermMemoryKeywordWeight: 0,
+          longTermMemoryGraphWeight: 0,
+        },
+      };
+      chats.push(legacySummaryChat);
+      try {
+        await storage.createNote(
+          note("world_legacy_summary", legacySummaryChat.id, `Known fact\nsummary: ${"cobalt ".repeat(90)}`),
+        );
+        await rebuildLongTermMemoryIndexes({ root: storage.root });
+        const legacySummaryRecall = await runtime.recall({
+          chatId: legacySummaryChat.id,
+          chatMode: "roleplay",
+          characterIds: [],
+          messages: [{ role: "user", content: "world_legacy_summary" }],
+          debugMode: false,
+        });
+        assert.match(
+          legacySummaryRecall?.text ?? "",
+          /Known fact/,
+          "a legacy summary: chunk the serializer can fit must not be rejected by retrieval's raw estimate",
+        );
+        assert.doesNotMatch(legacySummaryRecall?.text ?? "", /summary:/);
+      } finally {
+        chats.pop();
+        await storage.deleteNotesPermanently(["world_legacy_summary"]);
       }
 
       chats[0].metadata = {
