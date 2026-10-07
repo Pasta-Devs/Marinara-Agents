@@ -2434,73 +2434,176 @@ async function main() {
         debugEvent("partial", "extract_source_note", "error", { error: { message: "One source failed." } }),
         debugEvent("partial", "import_sources", "ok"),
         debugEvent("noduration", "recall_explanation", "ok"),
-        // The recall panel must query retrieval-phase events directly so newer
-        // non-retrieval events cannot push the latest recall explanation out of
-        // the unfiltered limit window.
+        // Fixture events predate the one-hour stale-threshold, so a started step in
+        // a completed operation must not read as unfinished (M1), while a
+        // started-only operation still reads "No completion recorded".
+        debugEvent("oldstarted", "extract_source_note", "started"),
+        // Every recall is an ordinary history row: one names its source chat by the
+        // /scope-targets label, one keeps the raw id when the lookup has no match.
+        debugEvent("recall-desktop", "recall_explanation", "ok", {
+          phase: "retrieval",
+          chatId: "desktop-chat",
+          counts: { selected: 1, rejected: 0, usedTokens: 12 },
+          details: {
+            chatId: "desktop-chat",
+            selected: [],
+            rejected: [],
+          },
+        }),
         debugEvent("recall", "recall_explanation", "ok", {
           phase: "retrieval",
-          counts: { selected: 2, rejected: 1 },
-          details: { maxChunks: 8, maxTokens: 2048, scoreThreshold: 0.5 },
+          chatId: "chat-artifact",
+          counts: { selected: 1, rejected: 1, usedTokens: 42 },
+          details: {
+            chatId: "chat-artifact",
+            maxChunks: 8,
+            maxTokens: 2048,
+            scoreThreshold: 0.5,
+            mode: "on_relevance",
+            includeResolved: false,
+            exclusiveCharacterTargeting: false,
+            contextMessagesUsed: 3,
+            indexLoadOutcome: "loaded",
+            indexedChunks: 4,
+            eligibleChunks: 3,
+            embeddedChunks: 2,
+            semanticOutcome: "available",
+            rejectedLimit: 20,
+            weights: { semantic: 0.6 },
+            selected: [{ noteId: "world_legacy_global", sectionKey: "facts", score: 0.9, lanes: ["semantic"] }],
+            rejected: [
+              { noteId: "world_scoped_desktop", sectionKey: "facts", score: 0.4, rejectionReason: "below_threshold" },
+            ],
+          },
         }),
       ];
-      const assertDebugActivity = async (activityPage: typeof page) => {
+      const assertDebugActivity = async (activityPage: typeof page, navigation: "desktop" | "mobile") => {
         await activityPage.locator("#settings-tab-debug").click();
         const activity = activityPage.locator('[data-ltm-surface="activity"]');
-        const operation = (id: string) =>
-          activity
-            .locator(":scope > ol > li > details > summary")
-            .nth(
-              ["estimated", "reported", "zero", "truncated", "context", "budget", "partial", "noduration"].indexOf(id),
-            );
-        await operation("estimated").waitFor();
-        const estimated = await operation("estimated").innerText();
+        const details = activity.locator("[data-ltm-debug-details]");
+        const showEvents = async () => {
+          const tab = activity.locator('[data-ltm-workspace-pane-tab="navigator"]');
+          if (await tab.count()) await tab.click();
+        };
+        const operation = async (id: string) => {
+          await showEvents();
+          await activity.locator(`[data-ltm-debug-operation="${id}"]`).click();
+          await details.waitFor();
+          return details.innerText();
+        };
+        const estimated = await operation("estimated");
         assert.match(estimated, /AI extraction/u);
         assert.match(estimated, /fixture-model/u);
         assert.match(estimated, /500 ms/u);
         assert.match(estimated, /Estimated input: 123 tokens/u);
         assert.doesNotMatch(estimated, /Input \(provider-reported\)|Output:|Total:/u);
-        const reported = await operation("reported").innerText();
+        // M1: a completed operation's old started steps must not age into "No completion
+        // recorded"; a started-only old operation still must.
+        assert.doesNotMatch(estimated, /No completion recorded/u);
+        assert.match(await operation("oldstarted"), /No completion recorded/u);
+        const reported = await operation("reported");
         assert.match(reported, /Completed/u, "a standalone request/response pair must not stay Running");
         assert.match(reported, /Input \(provider-reported\): 40 tokens/u);
         assert.match(reported, /Reasoning: 8 tokens/u);
         assert.match(reported, /Output: 12 tokens/u);
         assert.match(reported, /Total: 60 tokens/u);
-        assert.match(await operation("zero").innerText(), /Estimated input: 123 tokens/u);
-        assert.match(await operation("zero").innerText(), /Input \(provider-reported\): 0 tokens/u);
-        assert.match(await operation("truncated").innerText(), /Completed with warnings/u);
-        assert.match(await operation("truncated").innerText(), /output limit.*length/iu);
-        assert.match(await operation("context").innerText(), /Failed/u);
-        assert.match(await operation("context").innerText(), /too large.*context/iu);
-        assert.match(await operation("budget").innerText(), /Failed/u);
-        assert.match(await operation("budget").innerText(), /too small.*response/iu);
-        assert.match(await operation("partial").innerText(), /Completed with warnings/u);
-        assert.match(await operation("partial").innerText(), /One source failed\./u);
+        assert.match(await operation("zero"), /Estimated input: 123 tokens/u);
+        assert.match(await operation("zero"), /Input \(provider-reported\): 0 tokens/u);
+        assert.match(await operation("truncated"), /Completed with warnings/u);
+        assert.match(await operation("truncated"), /output limit.*length/iu);
+        assert.match(await operation("context"), /Failed/u);
+        assert.match(await operation("context"), /too large.*context/iu);
+        assert.match(await operation("budget"), /Failed/u);
+        assert.match(await operation("budget"), /too small.*response/iu);
+        assert.match(await operation("partial"), /Completed with warnings/u);
+        assert.match(await operation("partial"), /One source failed\./u);
         assert.doesNotMatch(
-          await operation("noduration").innerText(),
+          await operation("noduration"),
           / ms/u,
           "an operation without a recorded duration must not display a fabricated one",
         );
+        // The response snippet is never on screen; Copy JSON is the only raw-record path.
         assert.doesNotMatch(await activity.innerText(), /private response snippet/u);
-        // Filtering is client-side and keeps whole operations: a partial import
-        // that ended ok but recorded an error must not flip to "Failed" when the
-        // "Errors only" filter is selected.
-        await activity.locator("select").selectOption("errors");
-        const partialOperation = activity
-          .locator(":scope > ol > li > details > summary")
-          .filter({ hasText: "Import sources" });
-        await partialOperation.waitFor();
-        assert.match(await partialOperation.innerText(), /Completed with warnings/u);
-        assert.match(await partialOperation.innerText(), /One source failed\./u);
-        await activity.locator("select").selectOption("all");
-        await operation("estimated").waitFor();
+        await operation("estimated");
+        await details.getByRole("button", { name: /^Copy JSON/u }).click();
+        const copied = await activityPage.evaluate(() => navigator.clipboard.readText());
+        assert.match(copied, /private response snippet/u);
+        assert.match(copied, /"operationId": "estimated"/u);
+        assert.match(copied, /estimated-evidence_unit_response-ok/u);
+        assert.doesNotMatch(await activity.innerText(), /private response snippet/u);
+        // Chips filter whole operations: a partial import that ended ok but recorded
+        // an error must not flip to "Failed" under Problems.
+        await showEvents();
+        await activity.locator('[data-ltm-debug-chip="problems"]').click();
+        await activity.locator('[data-ltm-debug-operation="partial"]').waitFor();
+        const partial = await operation("partial");
+        assert.match(partial, /Completed with warnings/u);
+        assert.match(partial, /One source failed\./u);
+        await showEvents();
+        await activity.locator('[data-ltm-debug-chip="all"]').click();
+        // Search narrows whole operations and keeps the full event list of the match.
+        await showEvents();
+        const searchBox = activity.locator("[data-ltm-debug-search]");
+        await searchBox.fill("fixture-model");
+        await activity.locator('[data-ltm-debug-operation="estimated"]').waitFor();
+        assert.equal(await activity.locator('[data-ltm-debug-operation="reported"]').count(), 0);
+        const searchedEstimated = await operation("estimated");
+        assert.match(searchedEstimated, /AI extraction/u);
+        assert.match(searchedEstimated, /500 ms/u);
+        await showEvents();
+        await searchBox.fill("");
+        // A recorded recall is an ordinary history row naming its source chat, and
+        // its selected/rejected memory names read before the run parameters.
+        const recall = await operation("recall");
+        assert.match(recall, /Memory recall/u);
+        assert.match(recall, /Recall from chat-artifact/u);
+        assert.match(recall, /Selected chunks[\s\S]*Run parameters/u);
+        assert.match(recall, /Legacy global memory/u);
+        // M6: the recalled-memory link keeps a 44px touch target.
+        const recalledBox = await activity.locator('[data-ltm-recalled-note="world_legacy_global"]').boundingBox();
+        assert.ok(recalledBox && recalledBox.height >= 44, "recalled memory links keep a 44px touch target");
+        // M2: a recall whose chat resolves through /scope-targets shows the chat label.
+        const resolvedRecall = await operation("recall-desktop");
+        assert.match(resolvedRecall, /Recall from Current Final Branch/u);
+        assert.doesNotMatch(resolvedRecall, /desktop-chat/u);
+        // M4: labelled Details facts (and the resolved source memory) render in the workbench.
+        const estimatedFacts = await operation("estimated");
+        assert.match(estimatedFacts, /Details[\s\S]*Source: Legacy global memory/u);
+        assert.match(estimatedFacts, /Model: fixture-model/u);
+        assert.match(estimatedFacts, /Duration: 500 ms/u);
+        // M3: search also matches the displayed subject, which is not in any event text.
+        await showEvents();
+        await searchBox.fill("Current Final Branch");
+        await activity.locator('[data-ltm-debug-operation="recall-desktop"]').waitFor();
+        assert.equal(await activity.locator('[data-ltm-debug-operation="recall"]').count(), 0);
+        await showEvents();
+        await searchBox.fill("");
         assert.equal(
           await activityPage.evaluate(
             () => document.documentElement.scrollWidth <= document.documentElement.clientWidth,
           ),
           true,
         );
+        if (navigation === "mobile") {
+          // M5: selecting a row on a phone opens Details and moves focus to its tab,
+          // leaving nothing focused on the now-hidden row; the switcher returns to Events.
+          await showEvents();
+          const focusRow = activity.locator('[data-ltm-debug-operation="estimated"]');
+          await focusRow.focus();
+          await focusRow.press("Enter");
+          await details.waitFor();
+          await activityPage.waitForFunction(
+            () => document.activeElement?.getAttribute("data-ltm-workspace-pane-tab") === "workbench",
+          );
+          assert.match(await details.innerText(), /AI extraction/u);
+          await activity.locator('[data-ltm-workspace-pane-tab="navigator"]').click();
+        }
+        return details;
       };
       const openDebugActivity = async (context: typeof browserContext, navigation: "desktop" | "mobile") => {
+        await context.grantPermissions(["clipboard-read", "clipboard-write"], {
+          origin: `http://127.0.0.1:${address.port}`,
+        });
         const debugPage = await context.newPage();
         await debugPage.route("**/api/long-term-memory/debug-log?*", (route) => {
           const query = new URL(route.request().url()).searchParams;
@@ -2533,16 +2636,7 @@ async function main() {
         const notesByIdsResponse = debugPage.waitForResponse((response) =>
           new URL(response.url()).searchParams.has("ids"),
         );
-        await assertDebugActivity(debugPage);
-        const recallPanel = debugPage.locator("[data-ltm-recall-workflow]");
-        // The panel must query the retrieval phase directly: newer non-retrieval
-        // events can push the latest recall explanation out of the unfiltered window.
-        const retrievalRequest = debugPage.waitForRequest(
-          (request) => new URL(request.url()).searchParams.get("phase") === "retrieval",
-        );
-        await recallPanel.locator("summary").click();
-        await retrievalRequest;
-        await recallPanel.getByText("Limits:").waitFor();
+        await assertDebugActivity(debugPage, navigation);
         await notesByIdsResponse;
         // Start at the Debug tab's own ids lookup so a Vault page that is still
         // in flight cannot be read as Debug paging the whole vault.
@@ -2556,11 +2650,10 @@ async function main() {
         return debugPage;
       };
       const desktopDebugPage = await openDebugActivity(browserContext, "desktop");
-      const estimatedOperation = desktopDebugPage.locator('[data-ltm-surface="activity"] > ol > li > details').first();
-      await estimatedOperation.locator(":scope > summary").click();
-      const responseEvent = estimatedOperation.locator(":scope > ol > li").filter({ hasText: "450 ms" });
-      await responseEvent.getByText("Technical details", { exact: true }).click();
-      assert.match(await responseEvent.locator("pre").innerText(), /private response snippet/u);
+      // D31-adjacent handoff: a resolved recall-memory name opens its Vault memory.
+      await desktopDebugPage.locator('[data-ltm-debug-operation="recall"]').click();
+      await desktopDebugPage.locator('[data-ltm-recalled-note="world_legacy_global"]').click();
+      await desktopDebugPage.locator('[data-ltm-surface="vault"]').waitFor();
       await desktopDebugPage.close();
       await page.locator('[data-ltm-navigation="desktop"] [data-ltm-destination="vault"]').click();
       await page.evaluate((version) => {
