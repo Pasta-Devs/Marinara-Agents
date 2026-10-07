@@ -188,6 +188,12 @@
     "long-term-memory": {
       "versions": [
         {
+          "version": "1.4.15",
+          "date": "2026-10-08",
+          "notes": "- Rename the Vault memory's \"View all activity\" link to \"Open debug log\" and open the Debug tab filtered to that memory, with no operation selected.\n- Match whole operations against explicit memory-id references in the loaded debug events (extraction source and produced target notes, recall selected/rejected candidates), composing with search and the existing chips. The filter is clearable and states that apply operations log change IDs, not memory IDs, so some are not shown.",
+          "highlight": false
+        },
+        {
           "version": "1.4.14",
           "date": "2026-10-07",
           "notes": "- Rebuild the Debug tab as a two-pane workspace: an event navigator with search and counted All / Problems / Recall / Extraction chips, plus a details pane for the selected operation. Raw records move behind Copy JSON; the response snippet is no longer shown on screen.\n- Record every recall as an ordinary history row that names its source chat. Selected and rejected memory names continue to open the Vault memory they belong to.\n- Show each operation's status as an icon with hidden text, keep steps that share an operation in one timeline, and group rows under Today / Earlier.",
@@ -299,12 +305,6 @@
           "version": "1.3.36",
           "date": "2026-10-02",
           "notes": "- Drop the cached vault scan as official maintenance quarantines a malformed note, so full reads and recall stop serving the removed note's id and text without a package restart.\n- Add a private runtime vault-mutation boundary that keeps the vault lock across a trusted host publication and its rollback and resets the package initialization and snapshot caches on both paths.",
-          "highlight": false
-        },
-        {
-          "version": "1.3.35",
-          "date": "2026-10-02",
-          "notes": "- Check recall-index freshness and rebuild it under the vault lock so two concurrent stale recalls rebuild once instead of twice. Forward recall cancellation into rebuild, semantic-upgrade embedding, and caller-supplied index recall, so a timed-out recall stops instead of holding the vault lock, ranking an abandoned index, or publishing a cancelled dispatch receipt.",
           "highlight": false
         }
       ]

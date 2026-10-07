@@ -458,7 +458,7 @@ assert.equal(locale["ui.longTermMemory.memoryvault.memoryInfo"], "Memory info");
 assert.equal(locale["ui.longTermMemory.memoryvault.memoryOptions"], "Memory options");
 assert.equal(locale["ui.longTermMemory.memoryvault.renameDetails"], "Rename details");
 assert.equal(locale["ui.longTermMemory.memoryvault.previewRename"], "Preview rename");
-assert.equal(locale["ui.longTermMemory.memoryvault.viewAllActivity"], "View all activity");
+assert.equal(locale["ui.longTermMemory.memoryvault.openDebugLog"], "Open debug log");
 assert.equal(locale["ui.longTermMemory.memoryvault.groups"], "Chats");
 assert.equal(locale["ui.longTermMemory.memoryvault.unsavedNavigationTitle"], "Unsaved changes");
 assert.match(locale["ui.longTermMemory.memoryvault.unsavedNavigationDescription"], /before leaving this memory/u);

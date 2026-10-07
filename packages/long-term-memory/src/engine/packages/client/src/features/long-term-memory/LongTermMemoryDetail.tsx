@@ -145,6 +145,7 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
   } | null>(null);
   const [selectedSource, setSelectedSource] = useState<SourceTab>("chats");
   const [openActivityRequest, setOpenActivityRequest] = useState(0);
+  const [openActivityMemoryId, setOpenActivityMemoryId] = useState<string | null>(null);
   const [onboardingSource, setOnboardingSource] = useState<SourceTab>("chats");
   const Destination = destinations[destination];
   const destinationLabel = (value: LongTermMemoryDestination) => localizeUi(destinationLabelKeys[value]);
@@ -322,9 +323,10 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
     setDestination("sources");
     return true;
   };
-  const openActivity = async () => {
+  const openActivity = async (memoryId: string) => {
     if (!(await confirmDestinationChange(destinationLabel("settings")))) return;
     setDestinationDirty(false);
+    setOpenActivityMemoryId(memoryId);
     setOpenActivityRequest((value) => value + 1);
     setDestination("settings");
   };
@@ -1571,8 +1573,11 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
                     onOpenSources={openSources}
                     onOpenVault={() => void selectDestination("vault")}
                     onOpenReview={openReview}
-                    onOpenActivity={destination === "vault" ? () => void openActivity() : undefined}
+                    onOpenActivity={
+                      destination === "vault" ? (memoryId: string) => void openActivity(memoryId) : undefined
+                    }
                     openActivityRequest={openActivityRequest}
+                    openActivityMemoryId={openActivityMemoryId}
                     onOpenActivityHandled={() => setOpenActivityRequest(0)}
                     onRecoverCandidate={recoverCandidate}
                     openedNoteId={openedNoteId}
