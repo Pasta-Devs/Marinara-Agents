@@ -755,20 +755,13 @@ assert.match(lastInjectionSummary, /const attemptOverridesInjection = observedRe
 assert.match(lastInjectionSummary, /attemptOverridesInjection\s*\? observedRecallMessage/u);
 assert.match(lastInjectionSummary, /!attemptOverridesInjection && data\?\.memories\.length/u);
 assert.match(lastInjectionSummary, /attemptOverridesInjection \|\| !data\?\.memories\.length/u);
-// With a known attempt id the recall workflow must not fall back to another
-// attempt's explanation; a missing match means no recorded explanation.
-assert.match(activity, /if \(attemptId\) return correlated;/u);
-assert.doesNotMatch(activity, /correlated \?\? candidates\.sort/u);
-assert.match(activity, /data-ltm-recall-confirmation/u);
-assert.match(activity, /recallWorkflowInjectionConfirmed/u);
-assert.match(activity, /recallWorkflowInjectionNotConfirmed/u);
+// PR 2 (#1259): the separate latest-recall panel, its correlation, and its
+// injection-confirmation line were replaced by the selected recall operation's
+// details pane; those ActivityView keys and the `data-ltm-recall-confirmation`
+// contract no longer exist. LastInjectionSummary keeps its own outcome keys.
 assert.equal(
   locale["ui.longTermMemory.lastinjectionsummary.recallCompletedNotConfirmed"],
   "Recall completed but no saved memory was confirmed in the latest model context.",
-);
-assert.equal(
-  locale["ui.longTermMemory.activityview.recallWorkflowInjectionConfirmed"],
-  "This recall was confirmed in the latest model context.",
 );
 
 // #1211: the recall workflow explains effective parameters, the recall-time

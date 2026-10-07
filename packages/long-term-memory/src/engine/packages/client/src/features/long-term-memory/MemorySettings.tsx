@@ -1672,7 +1672,7 @@ export default function MemorySettings({
         role="tabpanel"
         aria-labelledby="settings-tab-debug"
         hidden={activeTab !== "debug"}
-        className="mari-editor-panel space-y-3 p-3"
+        className="space-y-3 p-3"
       >
         <Toggle
           label={localizeUi("ui.longTermMemory.memorysettings.recordDebugActivity")}
