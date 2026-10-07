@@ -56,57 +56,73 @@ function bullet(text: string) {
   return lines.map((line, index) => `${index === 0 ? "- " : "  "}${line}`).join("\n");
 }
 
+// One chunk's text as the serializer renders it: `text:`/`summary:` label lines are
+// dropped and bullet markers are applied. Retrieval can estimate chunk cost from this
+// form so its budget matches the prompt the serializer actually assembles.
+export function formatLongTermMemoryPromptBullet(text: string) {
+  return bullet(escapeXml(text));
+}
+
+function renderLongTermMemoryPrompt(selected: LtmBudgetedChunk[], options: { preamble?: string }) {
+  const groups = new Map<string, string[]>();
+  const titledGroups = new Map<string, Map<string, { title: string; bullets: string[] }>>();
+  const sectionOrder: string[] = [];
+  for (const item of selected) {
+    const text = formatLtmChunkPromptText(item.chunk).trim();
+    const label = LABELS[item.chunk.noteType] ?? item.chunk.noteType.toUpperCase();
+    if (!sectionOrder.includes(label)) sectionOrder.push(label);
+    const formatted = formatLongTermMemoryPromptBullet(text);
+    if (item.chunk.noteType === "character" || item.chunk.noteType === "relationship") {
+      const byTitle = titledGroups.get(label) ?? new Map<string, { title: string; bullets: string[] }>();
+      const group = byTitle.get(item.chunk.noteId) ?? { title: memoryTitle(item), bullets: [] };
+      group.bullets.push(formatted);
+      byTitle.set(item.chunk.noteId, group);
+      titledGroups.set(label, byTitle);
+    } else {
+      groups.set(label, [...(groups.get(label) ?? []), formatted]);
+    }
+  }
+  const body = sectionOrder
+    .map((label) => {
+      const titled = titledGroups.get(label);
+      if (titled) {
+        return `[${label}]\n${Array.from(titled.values(), ({ title, bullets }) => `${escapeXml(title)}:\n${bullets.join("\n")}`).join("\n\n")}`;
+      }
+      return `[${label}]\n${groups.get(label)!.join("\n")}`;
+    })
+    .join("\n\n");
+  const preamble = options.preamble?.trim();
+  const content = [preamble ? escapeXml(preamble) : "", REFERENCE_DATA_FRAMING, body].filter(Boolean).join("\n\n");
+  return { content, estimatedTokens: Math.ceil(content.length / 4) + 6 };
+}
+
+// Fixed prompt cost that exists before any chunk is added: preamble, framing and the
+// serializer's constant. Callers subtract it from the recall budget so retrieval can
+// refill with chunks that still fit once the serializer adds its own text.
+export function estimateLongTermMemoryPromptOverhead(preamble?: string) {
+  const trimmed = preamble?.trim();
+  const content = [trimmed ? escapeXml(trimmed) : "", REFERENCE_DATA_FRAMING].filter(Boolean).join("\n\n");
+  return Math.ceil(content.length / 4) + 6;
+}
+
 export function serializeLongTermMemoryPrompt(
   chunks: LtmBudgetedChunk[],
   options: { preamble?: string; maxTokens: number },
 ): LtmSerializedPromptArtifact | null {
   const selected: LtmBudgetedChunk[] = [];
-  let estimatedTokens = 6;
   for (const item of chunks) {
     const text = formatLtmChunkPromptText(item.chunk).trim();
-    if (!text || estimatedTokens + item.estimatedTokens > options.maxTokens) continue;
-    estimatedTokens += item.estimatedTokens;
+    if (!text) continue;
     selected.push(item);
+    // Fit against the rendered prompt so labels, titles, escaping and framing count.
+    // A chunk that does not fit is skipped, never popped off the end, so smaller later
+    // chunks are still tried. Re-rendering per candidate is O(n²) in chunks, and n is
+    // bounded by the caller's maxChunks recall cap.
+    if (renderLongTermMemoryPrompt(selected, options).estimatedTokens > options.maxTokens) selected.pop();
   }
   if (!selected.length) return null;
-
-  while (selected.length > 0) {
-    const groups = new Map<string, string[]>();
-    const titledGroups = new Map<string, Map<string, { title: string; bullets: string[] }>>();
-    const sectionOrder: string[] = [];
-    for (const item of selected) {
-      const text = formatLtmChunkPromptText(item.chunk).trim();
-      const label = LABELS[item.chunk.noteType] ?? item.chunk.noteType.toUpperCase();
-      if (!sectionOrder.includes(label)) sectionOrder.push(label);
-      const formatted = bullet(escapeXml(text));
-      if (item.chunk.noteType === "character" || item.chunk.noteType === "relationship") {
-        const byTitle = titledGroups.get(label) ?? new Map<string, { title: string; bullets: string[] }>();
-        const group = byTitle.get(item.chunk.noteId) ?? { title: memoryTitle(item), bullets: [] };
-        group.bullets.push(formatted);
-        byTitle.set(item.chunk.noteId, group);
-        titledGroups.set(label, byTitle);
-      } else {
-        groups.set(label, [...(groups.get(label) ?? []), formatted]);
-      }
-    }
-    const body = sectionOrder
-      .map((label) => {
-        const titled = titledGroups.get(label);
-        if (titled) {
-          return `[${label}]\n${Array.from(titled.values(), ({ title, bullets }) => `${escapeXml(title)}:\n${bullets.join("\n")}`).join("\n\n")}`;
-        }
-        return `[${label}]\n${groups.get(label)!.join("\n")}`;
-      })
-      .join("\n\n");
-    const preamble = options.preamble?.trim();
-    const content = [preamble ? escapeXml(preamble) : "", REFERENCE_DATA_FRAMING, body].filter(Boolean).join("\n\n");
-    const finalTokens = Math.ceil(content.length / 4) + 6;
-    if (finalTokens <= options.maxTokens) {
-      return { kind: "long_term_memory", chunks: selected, content, estimatedTokens: finalTokens };
-    }
-    selected.pop();
-  }
-  return null;
+  const { content, estimatedTokens } = renderLongTermMemoryPrompt(selected, options);
+  return { kind: "long_term_memory", chunks: selected, content, estimatedTokens };
 }
 
 export function isLongTermMemoryPromptPresent(messages: ReadonlyArray<{ content: string }>, content: string) {

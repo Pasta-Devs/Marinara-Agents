@@ -1,4 +1,5 @@
 import type { LtmMemoryChunk } from "../../../../shared/src/features/agents/long-term-memory/schema.js";
+import { formatLongTermMemoryPromptBullet } from "./prompt.js";
 import { formatLtmChunkPromptText } from "./prompt-text.js";
 import type { LtmRankedCandidate } from "./ranking.js";
 
@@ -24,6 +25,8 @@ export interface LtmBudgetOptions {
   explain?: boolean;
   rejectedLimit?: number;
   dedupeExactText?: boolean;
+  /** Estimate from the serialized bullet text (prompt cost) instead of the raw chunk text. */
+  promptNormalizedEstimate?: boolean;
 }
 
 export interface LtmBudgetRejectedCandidate {
@@ -45,6 +48,11 @@ export interface LtmBudgetRejectedCandidate {
 
 function estimateTokens(text: string) {
   return Math.max(1, Math.ceil(text.length / 4));
+}
+
+function chunkEstimatedTokens(chunk: LtmMemoryChunk, promptNormalizedEstimate?: boolean) {
+  const text = formatLtmChunkPromptText(chunk);
+  return estimateTokens(promptNormalizedEstimate ? formatLongTermMemoryPromptBullet(text) : text);
 }
 
 function tierFor(chunk: LtmMemoryChunk): 1 | 2 | 3 {
@@ -72,6 +80,7 @@ function pushRejected(
   candidate: LtmRankedCandidate,
   chunk: LtmMemoryChunk | undefined,
   rejectionReason: LtmBudgetRejectedCandidate["rejectionReason"],
+  promptNormalizedEstimate?: boolean,
 ) {
   if (rejected.length >= rejectedLimit) return;
   rejected.push({
@@ -87,7 +96,7 @@ function pushRejected(
     laneScores: candidate.laneScores,
     rawLaneScores: candidate.rawLaneScores,
     cooldownPenalty: candidate.cooldownPenalty,
-    estimatedTokens: chunk ? estimateTokens(formatLtmChunkPromptText(chunk)) : undefined,
+    estimatedTokens: chunk ? chunkEstimatedTokens(chunk, promptNormalizedEstimate) : undefined,
     rejectionReason: chunk ? rejectionReason : "missing_chunk",
   });
 }
@@ -104,13 +113,14 @@ export function applyLtmBudget(
   const rejectedLimit = Math.max(0, options.rejectedLimit ?? 20);
   const scoreThreshold = Math.max(0, Math.min(1, options.relevanceScoreThreshold ?? 0));
   let usedTokens = 0;
+  let budgetExhausted = false;
 
   for (const candidate of candidates) {
     const comparableScore = candidate.relevanceScore;
     if (scoreThreshold > 0 && comparableScore < scoreThreshold) {
       if (options.explain && rejected.length < rejectedLimit) {
         const chunk = chunksById.get(candidate.chunkId);
-        pushRejected(rejected, rejectedLimit, candidate, chunk, "score_threshold");
+        pushRejected(rejected, rejectedLimit, candidate, chunk, "score_threshold", options.promptNormalizedEstimate);
       }
       continue;
     }
@@ -118,7 +128,7 @@ export function applyLtmBudget(
     const chunk = chunksById.get(candidate.chunkId);
     if (!chunk) {
       if (options.explain && rejected.length < rejectedLimit) {
-        pushRejected(rejected, rejectedLimit, candidate, chunk, "missing_chunk");
+        pushRejected(rejected, rejectedLimit, candidate, chunk, "missing_chunk", options.promptNormalizedEstimate);
       }
       continue;
     }
@@ -127,7 +137,7 @@ export function applyLtmBudget(
       const comparableText = normalizedComparableText(chunk);
       if (comparableText && selectedText.has(comparableText)) {
         if (options.explain && rejected.length < rejectedLimit) {
-          pushRejected(rejected, rejectedLimit, candidate, chunk, "duplicate_text");
+          pushRejected(rejected, rejectedLimit, candidate, chunk, "duplicate_text", options.promptNormalizedEstimate);
         }
         continue;
       }
@@ -135,15 +145,16 @@ export function applyLtmBudget(
 
     if (selected.length >= options.maxChunks) {
       if (options.explain && rejected.length < rejectedLimit) {
-        pushRejected(rejected, rejectedLimit, candidate, chunk, "lower_rank");
+        pushRejected(rejected, rejectedLimit, candidate, chunk, "lower_rank", options.promptNormalizedEstimate);
       }
       continue;
     }
 
-    const estimatedTokens = estimateTokens(formatLtmChunkPromptText(chunk));
+    const estimatedTokens = chunkEstimatedTokens(chunk, options.promptNormalizedEstimate);
     if (usedTokens + estimatedTokens > options.maxTokens) {
+      budgetExhausted = true;
       if (options.explain && rejected.length < rejectedLimit) {
-        pushRejected(rejected, rejectedLimit, candidate, chunk, "budget");
+        pushRejected(rejected, rejectedLimit, candidate, chunk, "budget", options.promptNormalizedEstimate);
       }
       continue;
     }
@@ -183,5 +194,6 @@ export function applyLtmBudget(
     usedTokens,
     maxTokens: options.maxTokens,
     rejected,
+    budgetExhausted,
   };
 }

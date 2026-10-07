@@ -40,6 +40,8 @@ export type RetrieveLongTermMemoryInput = MemoryRecallEmbeddingOptions & {
   keywordWeight?: number;
   explain?: boolean;
   rejectedLimit?: number;
+  /** Estimate chunk cost from the serialized prompt text, matching the prompt serializer. */
+  promptNormalizedEstimate?: boolean;
   /** Restrict ranking to these note types before budgeting, so bounded callers do not lose targets to unrelated chunks. */
   noteTypes?: readonly LtmNote["type"][];
   /** Reconciliation needs every matching chunk, even when two notes share identical text. */
@@ -231,6 +233,7 @@ export async function retrieveLongTermMemory(input: RetrieveLongTermMemoryInput)
     explain: input.explain,
     rejectedLimit: input.rejectedLimit,
     dedupeExactText: input.dedupeExactText ?? true,
+    promptNormalizedEstimate: input.promptNormalizedEstimate,
   });
   // Bounded callers reconcile note ids, so "truncated" means a ranked note was dropped from the
   // budget entirely. Dropping extra chunks of a note that is already in the window hides nothing.

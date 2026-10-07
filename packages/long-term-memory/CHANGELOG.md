@@ -1,6 +1,6 @@
 # Long-Term Memory changelog
 
-## 1.4.11 — 2026-10-07
+## 1.4.12 — 2026-10-07
 
 - Filter the Debug tab by whole operation on the client. A phase or "Errors only" filter no longer queries a subset of events, so a truncated extraction cannot read "Completed" and a partial import cannot flip to "Failed".
 - Replace only whole-token memory ids in debug text. An id that is only a prefix of another id (for example `character_mara_missing`) is no longer rewritten as `Mara Quill_missing`.
@@ -9,6 +9,10 @@
 - Resolve Debug tab memory titles for the ids on screen with `requestNotesByIds` instead of downloading the whole vault, and stop refetching the lookup on window focus.
 - Render Technical details JSON only while its section is open.
 - Clear a stale export or clear error when Refresh succeeds.
+
+## 1.4.11 — 2026-10-07
+
+- Stop losing selected memories while building the recall prompt. The budget counted only chunk text, so the framing and preamble pushed the assembled prompt past the limit and the serializer dropped its last chunks without reconsidering the smaller ones it had skipped; a high-scoring memory could be dropped while one that fit was left out. The fixed prompt overhead is now reserved in the recall budget, and a chunk that no longer fits is skipped so later chunks that still fit are kept.
 
 ## 1.4.10 — 2026-10-07
 

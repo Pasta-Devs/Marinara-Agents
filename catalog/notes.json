@@ -188,9 +188,15 @@
     "long-term-memory": {
       "versions": [
         {
-          "version": "1.4.11",
+          "version": "1.4.12",
           "date": "2026-10-07",
           "notes": "- Filter the Debug tab by whole operation on the client. A phase or \"Errors only\" filter no longer queries a subset of events, so a truncated extraction cannot read \"Completed\" and a partial import cannot flip to \"Failed\".\n- Replace only whole-token memory ids in debug text. An id that is only a prefix of another id (for example `character_mara_missing`) is no longer rewritten as `Mara Quill_missing`.\n- Note when the Debug tab shows only the newest 200 events and offer \"Show up to 1,000\".\n- Read \"No completion recorded\" instead of \"Running\" when a started run has no completion after an hour.\n- Resolve Debug tab memory titles for the ids on screen with `requestNotesByIds` instead of downloading the whole vault, and stop refetching the lookup on window focus.\n- Render Technical details JSON only while its section is open.\n- Clear a stale export or clear error when Refresh succeeds.",
+          "highlight": false
+        },
+        {
+          "version": "1.4.11",
+          "date": "2026-10-07",
+          "notes": "- Stop losing selected memories while building the recall prompt. The budget counted only chunk text, so the framing and preamble pushed the assembled prompt past the limit and the serializer dropped its last chunks without reconsidering the smaller ones it had skipped; a high-scoring memory could be dropped while one that fit was left out. The fixed prompt overhead is now reserved in the recall budget, and a chunk that no longer fits is skipped so later chunks that still fit are kept.",
           "highlight": false
         },
         {
@@ -299,12 +305,6 @@
           "version": "1.3.33",
           "date": "2026-09-29",
           "notes": "- Offer the planted_in and paid_off_in timeline link relations during extraction, so foreshadowing and payoff links between events are captured instead of being treated as invalid.",
-          "highlight": false
-        },
-        {
-          "version": "1.3.32",
-          "date": "2026-09-29",
-          "notes": "- Keep timeline events extracted from flat summaries without recognized headings instead of dropping them as invalid, so a valid event and any memory that links to it survive normalization.\n- Stop the structured backfill from adding character memory units the provider already returned for the same source, and stop text under an unrecognized structured heading from falling into the previous section.",
           "highlight": false
         }
       ]
