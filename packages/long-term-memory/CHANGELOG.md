@@ -1,5 +1,9 @@
 # Long-Term Memory changelog
 
+## 1.4.11 — 2026-10-07
+
+- Stop losing selected memories while building the recall prompt. The budget counted only chunk text, so the framing and preamble pushed the assembled prompt past the limit and the serializer dropped its last chunks without reconsidering the smaller ones it had skipped; a high-scoring memory could be dropped while one that fit was left out. The fixed prompt overhead is now reserved in the recall budget, and a chunk that no longer fits is skipped so later chunks that still fit are kept.
+
 ## 1.4.10 — 2026-10-07
 
 - Count only in-scope memories toward the recall caps. Keyword, tag and note buckets were truncated to 128 entries before the chat's scope, status and mode filter ran, so 128+ out-of-scope chunks sharing a popular keyword or `#tag` could crowd an in-scope memory out of the exact keyword hit, the direct hit, and the graph seeds those hits produce. The fuzzy keyword scan had the same flaw at 512 vault-wide keywords, which could leave a late-alphabet keyword unmatchable; both caps now count only what the current chat may recall.
