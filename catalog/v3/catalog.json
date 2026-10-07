@@ -2442,7 +2442,7 @@
         },
         "id": "long-term-memory",
         "name": "Long-Term Memory",
-        "version": "1.4.11",
+        "version": "1.4.12",
         "description": "Remembers important things from your chat summaries, characters, and lorebooks, and brings them back when they matter. Enable it per chat from Chat Settings → Agents → Long-Term Memory. In Roleplay and Game, you can also add it from Chat Settings → Agents → Misc Agents.",
         "engine": {
           "min": "2.4.1",
@@ -2479,8 +2479,8 @@
           },
           {
             "path": "client.js",
-            "sha256": "c325234a519311292ed8fb22f8636964032c304034750ce01ccb22b6134c9e97",
-            "bytes": 949581
+            "sha256": "48f03f4869fd07182cf317cb690723c27b6e0be95df65865dd1022c2bb6d9364",
+            "bytes": 951347
           }
         ],
         "permissions": [
@@ -2496,9 +2496,9 @@
       "category": "misc",
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/long-term-memory.png",
       "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/long-term-memory-1.4.11.zip",
-        "sha256": "a1f2bdb501f1a9362e65e5efe4dcf035f4cf3b3b13498390f26519e914c3d9a7",
-        "bytes": 1412140
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/long-term-memory-1.4.12.zip",
+        "sha256": "b3be1df9cb8f2d6dad233a748848887888f45e1504286eaaf5b01059f271aa86",
+        "bytes": 1413906
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents#long-term-memory"
     },

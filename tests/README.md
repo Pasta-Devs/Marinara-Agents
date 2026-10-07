@@ -39,7 +39,7 @@ privileged routes, debug logging, and the exact release artifact lifecycle:
 ```bash
 cd ../Marinara-Engine
  set -e
-for test in storage extraction-graph extraction-reliability runtime routes-notes routes-imports routes-drafts routes-scope-identity routes-backup routes conversation-summary-import debug-log browser installation lifecycle local-characters review-queue-ambiguous-link scope-targets scope-fallback-labels source-task index-keys candidate-reconciliation reconciliation-recall; do
+for test in storage extraction-graph extraction-reliability runtime routes-notes routes-imports routes-drafts routes-scope-identity routes-backup routes conversation-summary-import debug-log debug-activity browser installation lifecycle local-characters review-queue-ambiguous-link scope-targets scope-fallback-labels source-task index-keys candidate-reconciliation reconciliation-recall; do
   MARINARA_ENGINE_ROOT="$PWD" pnpm --filter @marinara-engine/server exec tsx \
     "$PWD/../Marinara-Agents/tests/long-term-memory-${test}.regression.ts"
 done
@@ -99,7 +99,7 @@ check exercises the same inputs and cannot pass while the removed check fails.
 | Layer | Owning suites (`long-term-memory-*.regression.*`) | Contracts |
 | --- | --- | --- |
 | Direct services | `storage`, `runtime`, `extraction-graph`, `extraction-reliability`, `conversation-summary-import`, `candidate-reconciliation`, `reconciliation-recall` | Storage recovery/quarantine, lineage-safe retraction, draft dependencies, activity persistence, retrieval lanes and scope, receipt idempotency/redaction, extraction graph validation, identity/dedup boundaries, bounded candidate reconciliation and recall beyond the prompt window, import invariants |
-| Focused helpers | `index-keys`, `local-characters`, `scope-targets`, `scope-fallback-labels`, `source-task`, `debug-log` | Unsafe keys, local identity isolation, scope selection/labels, task cancellation, debug persistence |
+| Focused helpers | `index-keys`, `local-characters`, `scope-targets`, `scope-fallback-labels`, `source-task`, `debug-log`, `debug-activity` | Unsafe keys, local identity isolation, scope selection/labels, task cancellation, debug persistence, debug event filtering/status and id lookup |
 | HTTP integration | `routes-notes`, `routes-imports`, `routes-drafts`, `routes-scope-identity`, `routes-backup`, and the direct `routes` scenario | Auth/permissions, validation, statuses and client-consumed errors, request-to-service and response-to-persistence mapping, scope translation, applied mutation IDs, preflight, cancellation, backup semantics |
 | Browser | `browser`, `loading`, `feedback-clarity-ui` | Visible workflows, request construction, response consumption, archive undo/partial failure, review/re-extraction, activation, loading and layout; retain explicit static contracts where behavioral proof is absent |
 | Installation | `installation` | Exact ZIP install, offline restart, full-backup inclusion, uninstall/reinstall and durable-byte preservation; `lifecycle` runs browser plus installation |
