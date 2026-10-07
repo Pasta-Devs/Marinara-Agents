@@ -197,6 +197,15 @@ async function main() {
   assert.equal(phraseHit?.chunkId, "phrase-chunk", "a whole-token overlap must still trigger a fuzzy keyword hit");
   assert.ok((phraseHit?.score ?? 0) < 4, "a fuzzy keyword hit must stay below the exact-phrase score ceiling");
 
+  const regexKeyIndex = buildLtmKeywordIndex([{ ...chunk("regex-key-chunk", "regex-key-note"), keywords: ["cobalt"] }]);
+  regexKeyIndex.byKeyword["cobalt("] = ["regex-key-chunk"];
+  assert.ok(
+    searchLtmKeywordIndex(regexKeyIndex, "cobalt", { topK: 10 }).some(
+      ({ chunkId }: { chunkId: string }) => chunkId === "regex-key-chunk",
+    ),
+    "a persisted keyword key with regex metacharacters must not break keyword search",
+  );
+
   const { reciprocalRankFuse } = await import(`${source}/ranking.ts`);
   const { LTM_RECALL_STYLE_WEIGHTS } =
     await import("../packages/long-term-memory/src/engine/packages/shared/src/features/agents/long-term-memory/constants.ts");

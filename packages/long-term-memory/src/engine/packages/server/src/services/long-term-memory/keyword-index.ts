@@ -46,9 +46,11 @@ export function buildLtmKeywordIndex(chunks: LtmMemoryChunk[]): LtmKeywordIndex 
 export const LTM_KEYWORD_MAX_SCORE = 4;
 
 /** Whole-token containment, so `king` does not match inside `looking`. Both
- * sides are space-joined normalized tokens; edges are non-alphanumeric. */
+ * sides are space-joined normalized tokens; edges are non-alphanumeric.
+ * Persisted keys are only length-checked, so escape before building the pattern. */
 function containsKeywordToken(haystack: string, needle: string) {
-  return new RegExp(`(^|[^\\p{L}\\p{N}])${needle}(?![\\p{L}\\p{N}])`, "u").test(haystack);
+  const escaped = needle.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return new RegExp(`(^|[^\\p{L}\\p{N}])${escaped}(?![\\p{L}\\p{N}])`, "u").test(haystack);
 }
 
 export function searchLtmKeywordIndex(
