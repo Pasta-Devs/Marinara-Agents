@@ -188,6 +188,12 @@
     "long-term-memory": {
       "versions": [
         {
+          "version": "1.4.9",
+          "date": "2026-10-07",
+          "notes": "- Let lane weights and rank fusion decide recall order again. An unbounded BM25 raw score was added as a bonus on top of the fused score, which let a deep lexical hit outrank the best semantic hit of a higher-weighted lane; fusion now uses only the bounded per-lane score.\n- Give keyword matches an absolute relevance. A partial or fuzzy keyword match used to be normalized against the best hit of the same query, so a weak match could reach full keyword relevance; it is now measured against the exact-phrase ceiling. Fuzzy keyword matches also require whole-token or word-boundary containment, so a keyword like \"king\" no longer triggers on \"looking\".",
+          "highlight": false
+        },
+        {
           "version": "1.4.8",
           "date": "2026-10-07",
           "notes": "- Ignore an invalid saved recall setting instead of letting it break settings, recall, and search. A null recall weight or an unknown recall style saved by another build used to make every settings read throw until settings.json was edited by hand. Both now fall back to the defaults, and the invalid value is no longer written back.",
@@ -299,12 +305,6 @@
           "version": "1.3.30",
           "date": "2026-09-28",
           "notes": "- Add a second optional place selector to the Memory Vault. When two places are selected they combine with AND, so the list and bulk selection show only memories available in both; clearing the second place restores the normal single-place view.",
-          "highlight": false
-        },
-        {
-          "version": "1.3.29",
-          "date": "2026-09-27",
-          "notes": "- Align the bulk Change Availability workbench with the single-memory Memory Availability editor: same Available in heading and pills, collapsible place picker, and clearer chat-mode eligibility versus place-scope copy. Add/Remove still drives incremental `enableModes` / `disableModes` and `addScope` / `removeScope`.",
           "highlight": false
         }
       ]

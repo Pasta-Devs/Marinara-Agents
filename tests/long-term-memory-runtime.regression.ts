@@ -788,6 +788,23 @@ async function main() {
         ["world_keyword_exact"],
         "an exact keyword match must retain absolute relevance above the threshold",
       );
+      const fuzzyKeywordRecall = await retrieveLongTermMemory({
+        root: storage.root,
+        queryText: "obscryl",
+        scope: { chatId: "chat-a", chatIds: ["chat-a"] },
+        mode: "roleplay",
+        semanticWeight: 0,
+        lexicalWeight: 0,
+        graphWeight: 0,
+        keywordWeight: 1,
+        maxChunks: 5,
+        maxTokens: 4096,
+      });
+      assert.equal(fuzzyKeywordRecall.chunks[0]?.chunk.noteId, "world_keyword_exact");
+      assert.ok(
+        (fuzzyKeywordRecall.chunks[0]?.relevanceScore ?? 0) < 1,
+        "a partial keyword match must not normalize to the full keyword weight",
+      );
       const graphOnly = await retrieveLongTermMemory({
         root: storage.root,
         queryText: "stormvault ledger",

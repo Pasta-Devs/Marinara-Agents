@@ -184,6 +184,48 @@ async function main() {
     "a hyphenated query token containing a built-in stop-word component must be rejected",
   );
 
+  const falsePositiveChunk = { ...chunk("king-chunk", "king-note"), keywords: ["king"] };
+  const falsePositiveIndex = buildLtmKeywordIndex([falsePositiveChunk]);
+  assert.deepEqual(
+    searchLtmKeywordIndex(falsePositiveIndex, "I was looking for the map", { topK: 10 }),
+    [],
+    "a keyword that only appears inside another word must not produce a keyword hit",
+  );
+  const phraseChunk = { ...chunk("phrase-chunk", "phrase-note"), keywords: ["king cobra"] };
+  const phraseIndex = buildLtmKeywordIndex([phraseChunk]);
+  const phraseHit = searchLtmKeywordIndex(phraseIndex, "king", { topK: 10 })[0];
+  assert.equal(phraseHit?.chunkId, "phrase-chunk", "a whole-token overlap must still trigger a fuzzy keyword hit");
+  assert.ok((phraseHit?.score ?? 0) < 4, "a fuzzy keyword hit must stay below the exact-phrase score ceiling");
+
+  const { reciprocalRankFuse } = await import(`${source}/ranking.ts`);
+  const { LTM_RECALL_STYLE_WEIGHTS } =
+    await import("../packages/long-term-memory/src/engine/packages/shared/src/features/agents/long-term-memory/constants.ts");
+  for (const [style, weights] of Object.entries(LTM_RECALL_STYLE_WEIGHTS)) {
+    if (weights.semanticWeight <= weights.lexicalWeight) continue;
+    const ranked = reciprocalRankFuse([
+      {
+        name: "vector",
+        weight: weights.semanticWeight,
+        items: [{ chunkId: "vector-top", rawScore: 0.9, reason: "vector" }],
+      },
+      {
+        name: "bm25",
+        weight: weights.lexicalWeight,
+        items: Array.from({ length: 10 }, (_, index) => ({ chunkId: `bm25-${index}`, rawScore: 40, reason: "bm25" })),
+      },
+    ]);
+    assert.equal(
+      ranked[0]?.chunkId,
+      "vector-top",
+      `${style}: the top semantic hit must outrank deep BM25 hits when its lane weight is higher`,
+    );
+  }
+  const unboundedRaw = reciprocalRankFuse([
+    { name: "vector", weight: 0.6, items: [{ chunkId: "vector-top", rawScore: 1, reason: "vector" }] },
+    { name: "bm25", weight: 0.3, items: [{ chunkId: "bm25-top", rawScore: 1_000_000, reason: "bm25" }] },
+  ]);
+  assert.equal(unboundedRaw[0]?.chunkId, "vector-top", "an unbounded raw score must not invert lane weights");
+
   assertOwnKeys(parsedRecall.metadata.chunks, "metadata index must retain reserved chunk IDs");
   assertOwnKeys(parsedRecall.metadata.byTag, "metadata index must retain reserved tags");
   assert.deepEqual(
