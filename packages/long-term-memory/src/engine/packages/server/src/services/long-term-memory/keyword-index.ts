@@ -45,6 +45,16 @@ export function buildLtmKeywordIndex(chunks: LtmMemoryChunk[]): LtmKeywordIndex 
 /** Score of a keyword hit whose normalized phrase equals the normalized query exactly. */
 export const LTM_KEYWORD_MAX_SCORE = 4;
 
+/**
+ * Issue #1258: a keyword shared by much of the recallable vault carries little
+ * signal, so a hit is scaled by an idf-like factor. A keyword unique to one chunk
+ * keeps full weight; one present on every chunk keeps `log(2) / log(1 + chunkCount)`.
+ */
+function keywordFrequencyWeight(documentFrequency: number, totalChunks: number) {
+  if (totalChunks <= 1 || documentFrequency <= 1) return 1;
+  return Math.log(1 + totalChunks / documentFrequency) / Math.log(1 + totalChunks);
+}
+
 /** Whole-token containment, so `king` does not match inside `looking`. Both
  * sides are space-joined normalized tokens; edges are non-alphanumeric.
  * Persisted keys are only length-checked, so escape before building the pattern. */
@@ -71,6 +81,23 @@ export function searchLtmKeywordIndex(
   const maxCandidatesPerKeyword = Math.max(1, options.maxCandidatesPerKeyword ?? 128);
   const maxKeywordCatalogEntries = Math.max(1, options.maxKeywordCatalogEntries ?? 512);
   const maxCandidates = Math.max(1, options.maxCandidates ?? options.topK ?? 50);
+  // Like the #1251 caps, frequency counts only chunks the caller allows, so a
+  // keyword common in other chats keeps its weight where it is distinctive.
+  const totalChunks = options.allowedChunks
+    ? Array.from(options.allowedChunks).filter((chunkId) => Object.hasOwn(index.byChunkId, chunkId)).length
+    : Object.keys(index.byChunkId).length;
+  const documentFrequencies = new Map<string, number>();
+  const documentFrequency = (keyword: string) => {
+    let count = documentFrequencies.get(keyword);
+    if (count === undefined) {
+      const chunkIds = Object.hasOwn(index.byKeyword, keyword) ? (index.byKeyword[keyword] ?? []) : [];
+      count = options.allowedChunks
+        ? chunkIds.filter((chunkId) => options.allowedChunks?.has(chunkId)).length
+        : chunkIds.length;
+      documentFrequencies.set(keyword, count);
+    }
+    return count;
+  };
 
   const hits = new Map<string, { score: number; reasons: string[]; matchedKeywords: Set<string> }>();
 
@@ -80,7 +107,9 @@ export function searchLtmKeywordIndex(
     const dedupeKey = `${keyword}\0${reason}`;
     if (existing.matchedKeywords.has(dedupeKey)) return;
     existing.matchedKeywords.add(dedupeKey);
-    existing.score += score;
+    // Best match per chunk instead of a sum: two generic exact keywords used to
+    // add up to the exact-phrase ceiling on a chunk that shares nothing else.
+    existing.score = Math.max(existing.score, score * keywordFrequencyWeight(documentFrequency(keyword), totalChunks));
     existing.reasons.push(reason);
     hits.set(chunkId, existing);
   };

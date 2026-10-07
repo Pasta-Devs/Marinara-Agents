@@ -46,7 +46,9 @@ function assertOwnKeys(record: object, message: string) {
 
 async function main() {
   const { buildLtmBm25Index, searchLtmBm25 } = await import(`${source}/bm25.ts`);
-  const { buildLtmKeywordIndex, searchLtmKeywordIndex } = await import(`${source}/keyword-index.ts`);
+  const { buildLtmKeywordIndex, LTM_KEYWORD_MAX_SCORE, searchLtmKeywordIndex } = await import(
+    `${source}/keyword-index.ts`
+  );
   const { buildStopWordSet } = await import(`${source}/keyword-extract.ts`);
   const { buildLtmMetadataIndex, getLtmMetadataMatches } = await import(`${source}/metadata-index.ts`);
   const { parseLtmRecallIndex } = await import(`${source}/rebuild.ts`);
@@ -273,6 +275,94 @@ async function main() {
     { name: "bm25", weight: 0.3, items: [{ chunkId: "bm25-top", rawScore: 1_000_000, reason: "bm25" }] },
   ]);
   assert.equal(unboundedRaw[0]?.chunkId, "vector-top", "an unbounded raw score must not invert lane weights");
+
+  // Issue #1258: every lane must share one absolute 0-1 scale, or the score
+  // threshold drops from many memories to almost none instead of removing the
+  // progressively weaker matches. A 202-chunk corpus gives the idf magnitude the
+  // old `score / (score + 1)` normalized away.
+  const bm25Corpus = [
+    ...Array.from({ length: 200 }, (_, index) => ({
+      ...chunk(`filler-${String(index).padStart(3, "0")}`, `filler_note_${index}`),
+      text: `filler unique${index} padding padding`,
+      keywords: [],
+    })),
+    { ...chunk("calibration-strong", "calibration_note_strong"), text: "cobalt archive observatory", keywords: [] },
+    { ...chunk("calibration-weak", "calibration_note_weak"), text: "cobalt padding padding padding", keywords: [] },
+  ];
+  const bm25Hits = searchLtmBm25(buildLtmBm25Index(bm25Corpus), "cobalt archive observatory", { topK: 10 });
+  const strongBm25 = bm25Hits.find(({ chunkId }) => chunkId === "calibration-strong");
+  const weakBm25 = bm25Hits.find(({ chunkId }) => chunkId === "calibration-weak");
+  assert.ok(strongBm25, "the multi-term BM25 match must be found");
+  assert.ok(weakBm25, "the single-term BM25 match must be found");
+  assert.ok(
+    bm25Hits.some((hit) => hit.normalizedScore < 0.9),
+    "a long query must not normalize every BM25 hit above 0.9",
+  );
+  assert.ok(
+    weakBm25.normalizedScore < strongBm25.normalizedScore,
+    "a one-term hit must stay below a multi-term hit on the absolute scale",
+  );
+  assert.ok(
+    weakBm25.normalizedScore < 0.5,
+    "sharing one of three query terms must not approach the full-coverage score",
+  );
+
+  // Two generic shared keywords must not sum to the exact-phrase ceiling, while a
+  // distinctive exact phrase must still reach high keyword relevance.
+  const calibrationKeywords = buildLtmKeywordIndex([
+    ...Array.from({ length: 15 }, (_, index) => ({
+      ...chunk(`generic-${index}`, `generic_note_${index}`),
+      keywords: ["mira", "tomas"],
+    })),
+    { ...chunk("calibration-distinctive", "calibration_note_distinctive"), keywords: ["crimson observatory ledger"] },
+    ...Array.from({ length: 4 }, (_, index) => ({
+      ...chunk(`unique-${index}`, `unique_note_${index}`),
+      keywords: [`unique-keyword-${index}`],
+    })),
+  ]);
+  const genericKeywordHits = searchLtmKeywordIndex(calibrationKeywords, "mira tomas", { topK: 10 });
+  assert.ok(
+    (genericKeywordHits[0]?.score ?? 0) / LTM_KEYWORD_MAX_SCORE < 0.5,
+    "two generic shared keywords must stay well below full keyword relevance",
+  );
+  const distinctiveKeywordHit = searchLtmKeywordIndex(calibrationKeywords, "crimson observatory ledger", {
+    topK: 10,
+  })[0];
+  assert.equal(distinctiveKeywordHit?.chunkId, "calibration-distinctive");
+  assert.ok(
+    (distinctiveKeywordHit?.score ?? 0) / LTM_KEYWORD_MAX_SCORE > 0.75,
+    "a distinctive exact phrase must still score high",
+  );
+  // Frequency counts only chunks the search may return: `mira` is generic across
+  // the vault but sits on a single chunk of this scope, so it keeps full weight.
+  const scopedKeywordHit = searchLtmKeywordIndex(calibrationKeywords, "mira tomas", {
+    topK: 10,
+    allowedChunks: new Set(["generic-0", "calibration-distinctive", "unique-0", "unique-1", "unique-2", "unique-3"]),
+  })[0];
+  assert.equal(scopedKeywordHit?.chunkId, "generic-0");
+  assert.equal(
+    (scopedKeywordHit?.score ?? 0) / LTM_KEYWORD_MAX_SCORE,
+    0.75,
+    "a keyword common only outside the recall scope must keep full weight inside it",
+  );
+
+  // The threshold filters the same strength of match in every style only while
+  // each preset's strongest lane can reach full relevance, graph-only neighbours
+  // (at most half the graph weight) stay under the default threshold, and an
+  // exact keyword term clears it when the semantic lane is unavailable.
+  const { DEFAULT_LTM_GLOBAL_SETTINGS } =
+    await import("../packages/long-term-memory/src/engine/packages/shared/src/features/agents/long-term-memory/schema.ts");
+  for (const [style, weights] of Object.entries(LTM_RECALL_STYLE_WEIGHTS)) {
+    assert.equal(Math.max(...Object.values(weights)), 1, `${style}: the strongest lane must carry weight 1`);
+    assert.ok(
+      weights.graphWeight * 0.5 < DEFAULT_LTM_GLOBAL_SETTINGS.longTermMemoryScoreThreshold,
+      `${style}: graph-only neighbours must stay under the default threshold`,
+    );
+    assert.ok(
+      weights.keywordWeight * (3 / LTM_KEYWORD_MAX_SCORE) >= DEFAULT_LTM_GLOBAL_SETTINGS.longTermMemoryScoreThreshold,
+      `${style}: an exact keyword term must clear the default threshold`,
+    );
+  }
 
   assertOwnKeys(parsedRecall.metadata.chunks, "metadata index must retain reserved chunk IDs");
   assertOwnKeys(parsedRecall.metadata.byTag, "metadata index must retain reserved tags");

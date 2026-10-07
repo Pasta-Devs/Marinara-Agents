@@ -68,12 +68,25 @@ export function searchLtmBm25(
   const scores = new Map<string, number>();
   const queryTerms = new Set(tokenizeLtmText(query));
   const maxCandidates = Math.max(1, options.maxCandidates ?? options.topK ?? 50);
+  // Issue #1258: an unbounded idf sum made `score / (score + 1)` saturate near 1
+  // for almost every hit, so the score threshold behaved as a cliff. Scaling by the
+  // score of a reference document that contains each query term once at average
+  // length measures how much of the query a chunk covers: a full-coverage match
+  // approaches 1 and a partial match scales with the idf it shares. At tf = 1 and
+  // dl = avgDocLength the length normalization cancels, so each present term
+  // contributes exactly its idf.
+  // ponytail: the reference is not an upper bound. Repeated terms, or a chunk much
+  // shorter than average, can clamp a partial match at 1 beside a full one. The
+  // true ceiling, Σidf·(K1+1), compresses real hits below ~0.3 and would need the
+  // recall presets retuned for that range.
+  let referenceScore = 0;
 
   for (const term of queryTerms) {
     const entry = Object.hasOwn(index.terms, term) ? index.terms[term] : undefined;
     if (!entry) continue;
 
     const idf = Math.log(1 + (index.chunkCount - entry.documentFrequency + 0.5) / (entry.documentFrequency + 0.5));
+    referenceScore += idf;
     const postings = entry.postings.filter(
       (posting) => !options.allowedChunks || options.allowedChunks.has(posting.chunkId),
     );
@@ -89,7 +102,11 @@ export function searchLtmBm25(
   }
 
   return Array.from(scores.entries())
-    .map(([chunkId, score]) => ({ chunkId, score }))
+    .map(([chunkId, score]) => ({
+      chunkId,
+      score,
+      normalizedScore: referenceScore > 0 ? Math.min(1, score / referenceScore) : 0,
+    }))
     .sort((a, b) => b.score - a.score || a.chunkId.localeCompare(b.chunkId))
     .slice(0, maxCandidates);
 }

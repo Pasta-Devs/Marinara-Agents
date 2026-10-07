@@ -188,6 +188,12 @@
     "long-term-memory": {
       "versions": [
         {
+          "version": "1.4.13",
+          "date": "2026-10-07",
+          "notes": "- Put every recall lane on one comparable 0-1 scale. BM25 is now scaled against a reference document that contains each query term once at average length, instead of saturating near 1, so raising the score threshold removes progressively weaker memories in every style instead of dropping from many to almost none. Keyword matches use the best match on a chunk and count for less when a keyword is shared by much of what the chat can recall, and the graph lane's half-weight ceiling is now documented.\n- Retune the recall presets on that scale. Each style's strongest lane now carries full weight, so a threshold filters the same strength of match in every style, and recall defaults to 12 memories at a score threshold of 0.35. A threshold saved under the old scale (for example 0.25) now means something different, so re-check it after updating.\n- Remove the per-mode recall style defaults, which never applied because resolved global settings always carry a style.",
+          "highlight": false
+        },
+        {
           "version": "1.4.12",
           "date": "2026-10-07",
           "notes": "- Filter the Debug tab by whole operation on the client. A phase or \"Errors only\" filter no longer queries a subset of events, so a truncated extraction cannot read \"Completed\" and a partial import cannot flip to \"Failed\".\n- Replace only whole-token memory ids in debug text. An id that is only a prefix of another id (for example `character_mara_missing`) is no longer rewritten as `Mara Quill_missing`.\n- Note when the Debug tab shows only the newest 200 events and offer \"Show up to 1,000\".\n- Keep the \"Latest recall workflow\" on the newest retrieval-phase explanation.\n- Read \"No completion recorded\" instead of \"Running\" when a started run has no completion after an hour.\n- Resolve Debug tab memory titles for the ids on screen with `requestNotesByIds` instead of downloading the whole vault, and stop refetching the lookup on window focus.\n- Render Technical details JSON only while its section is open.\n- Clear a stale export or clear error when Refresh succeeds.",
@@ -300,12 +306,6 @@
           "date": "2026-09-30",
           "notes": "- Stop Long-Term Memory from failing to activate when the vault contains a note that no longer passes validation. The invalid note is skipped by the note index and still surfaces as a vault read error, so the package no longer rolls back to an old version.",
           "highlight": true
-        },
-        {
-          "version": "1.3.33",
-          "date": "2026-09-29",
-          "notes": "- Offer the planted_in and paid_off_in timeline link relations during extraction, so foreshadowing and payoff links between events are captured instead of being treated as invalid.",
-          "highlight": false
         }
       ]
     },

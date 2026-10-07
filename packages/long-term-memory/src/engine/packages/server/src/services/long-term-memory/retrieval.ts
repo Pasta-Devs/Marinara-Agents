@@ -162,7 +162,12 @@ export async function retrieveLongTermMemory(input: RetrieveLongTermMemoryInput)
     lanes.push({
       name: "bm25",
       weight: input.lexicalWeight ?? 1,
-      items: lexical.map((hit) => ({ chunkId: hit.chunkId, rawScore: hit.score, reason: "bm25" })),
+      items: lexical.map((hit) => ({
+        chunkId: hit.chunkId,
+        rawScore: hit.score,
+        normalizedScore: hit.normalizedScore,
+        reason: "bm25",
+      })),
     });
   }
   const keywords = searchLtmKeywordIndex(index.keywords, query, {

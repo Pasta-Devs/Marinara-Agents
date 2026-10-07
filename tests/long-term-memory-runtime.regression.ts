@@ -927,7 +927,10 @@ async function main() {
         queryText: "world_visible cobalt archive",
         scope: { chatId: "chat-a", chatIds: ["chat-a"] },
         mode: "roleplay",
-        minScore: 0.75,
+        // Issue #1258: the calibrated scale spreads these chunks instead of
+        // saturating them all at 1.0, so 0.4 keeps the two relevant memories and
+        // drops the keyword-only one. This threshold used to sit at 0.75.
+        minScore: 0.4,
         maxChunks: 10,
         maxTokens: 4096,
       });
@@ -1331,9 +1334,15 @@ async function main() {
         );
 
         for (const threshold of [0, 0.5, 0.6, 0.61]) {
+          // Issue #1258: every preset's strongest lane now carries weight 1, so pin
+          // custom weights below 1 to keep a reachable cap above which all reject.
           chats[0].metadata = {
             ...originalRecallMetadata,
-            longTermMemoryRecallStyle: "balanced",
+            longTermMemoryRecallStyle: "custom",
+            longTermMemorySemanticWeight: 0.6,
+            longTermMemoryLexicalWeight: 0.3,
+            longTermMemoryGraphWeight: 0.1,
+            longTermMemoryKeywordWeight: 0.2,
             longTermMemoryScoreThreshold: threshold,
           };
           const thresholdRecall = await runtime.recall({
@@ -1364,7 +1373,7 @@ async function main() {
             );
           }
           if (threshold === 0.61) {
-            assert.equal(thresholdRecall, null, "scores remain capped by the balanced lane weights");
+            assert.equal(thresholdRecall, null, "scores remain capped by the lane weights");
             assert.ok(explanation.details.rejected.length > 0);
             assert.ok(explanation.details.rejected.every((candidate: any) => candidate.thresholdPassed === false));
           }
