@@ -2452,6 +2452,9 @@ async function main() {
         }),
         debugEvent("recall", "recall_explanation", "ok", {
           phase: "retrieval",
+          // No shared source note: this recall must match the memory filter only
+          // through its selected candidate id.
+          sourceNoteId: undefined,
           chatId: "chat-artifact",
           counts: { selected: 1, rejected: 1, usedTokens: 42 },
           details: {
@@ -2476,7 +2479,42 @@ async function main() {
             ],
           },
         }),
+        // D31: explicit memory-id references the Vault memory filter must match (produced
+        // target, rejected recall candidate), plus operations it must not: an unrelated
+        // source and an apply carrying only change/mutation ids.
+        debugEvent("target", "extract_source_note", "ok", {
+          sourceNoteId: "source_target_other",
+          noteId: legacyGlobalNote.id,
+        }),
+        // Two events; only the second references the memory, so matching must find the
+        // operation by that single event and still show both events and the status.
+        debugEvent("late-reference", "extract_source_note", "started", { sourceNoteId: "world_unrelated" }),
+        debugEvent("late-reference", "extract_source_note", "ok", {
+          sourceNoteId: undefined,
+          noteId: legacyGlobalNote.id,
+          durationMs: 700,
+        }),
+        debugEvent("recall-rejected", "recall_explanation", "ok", {
+          phase: "retrieval",
+          // Matches only through the rejected candidate id, not a shared source note.
+          sourceNoteId: undefined,
+          chatId: "chat-artifact",
+          details: {
+            chatId: "chat-artifact",
+            selected: [],
+            rejected: [
+              { noteId: legacyGlobalNote.id, sectionKey: "facts", score: 0.3, rejectionReason: "below_threshold" },
+            ],
+          },
+        }),
+        debugEvent("apply", "apply_changes", "ok", {
+          sourceNoteId: undefined,
+          mutationIds: ["11111111-2222-3333-4444-555555555555"],
+        }),
+        debugEvent("unrelated", "extract_source_note", "ok", { sourceNoteId: "world_unrelated" }),
       ];
+      // Simulates a retained log that holds no events for the handed memory.
+      let debugLogEmpty = false;
       const assertDebugActivity = async (activityPage: typeof page, navigation: "desktop" | "mobile") => {
         await activityPage.locator("#settings-tab-debug").click();
         const activity = activityPage.locator('[data-ltm-surface="activity"]');
@@ -2600,12 +2638,144 @@ async function main() {
         }
         return details;
       };
+      // D31: the Vault memory link opens Debug filtered to that memory, with no server
+      // correlation. The filter matches only explicit structured memory-id references.
+      const assertMemoryFilteredDebug = async (debugPage: typeof page, navigation: "desktop" | "mobile") => {
+        const activity = debugPage.locator('[data-ltm-surface="activity"]');
+        const details = activity.locator("[data-ltm-debug-details]");
+        const filterChip = activity.locator('[data-ltm-debug-memory-filter="world_legacy_global"]');
+        const showEvents = async () => {
+          const tab = activity.locator('[data-ltm-workspace-pane-tab="navigator"]');
+          if (await tab.count()) await tab.click();
+        };
+        const openFromVault = async () => {
+          await debugPage.locator(`[data-ltm-navigation="${navigation}"] [data-ltm-destination="vault"]`).click();
+          await debugPage.locator('[data-ltm-surface="vault"]').waitFor();
+          await debugPage.getByLabel("Search memories").fill("Legacy global memory");
+          await debugPage
+            .locator('[data-ltm-note-type="world"]')
+            .filter({ hasText: /^Legacy global memory/u })
+            .locator("button")
+            .first()
+            .click();
+          // The link lives in the Vault inspector's collapsible Record info section.
+          await debugPage.locator("[data-ltm-details-toggle]").click();
+          await debugPage
+            .locator("[data-ltm-record-info]")
+            .first()
+            .evaluate((element) => {
+              (element as HTMLDetailsElement).open = true;
+            });
+          await debugPage.getByRole("button", { name: "Open debug log" }).click();
+          await activity.waitFor();
+          await filterChip.waitFor();
+        };
+
+        // A previous Debug selection must not survive the memory handoff.
+        await showEvents();
+        await activity.locator('[data-ltm-debug-operation="estimated"]').click();
+        await details.waitFor();
+        await openFromVault();
+        // Entry: nothing is selected, the filter names the memory, and the caveat is shown.
+        assert.equal(await details.count(), 0, "the memory handoff selects no operation");
+        assert.match(await filterChip.innerText(), /Legacy global memory/u);
+        assert.match(await activity.innerText(), /Apply operations log change IDs, not memory IDs/u);
+        // Matching extraction source, produced target, recall candidates, and a
+        // single later event each pull their whole operation in.
+        await activity.locator('[data-ltm-debug-operation="estimated"]').waitFor();
+        await activity.locator('[data-ltm-debug-operation="target"]').waitFor();
+        await activity.locator('[data-ltm-debug-operation="recall"]').waitFor();
+        await activity.locator('[data-ltm-debug-operation="recall-rejected"]').waitFor();
+        await activity.locator('[data-ltm-debug-operation="late-reference"]').waitFor();
+        // An unrelated operation and an apply carrying only change ids are excluded.
+        assert.equal(await activity.locator('[data-ltm-debug-operation="unrelated"]').count(), 0);
+        assert.equal(await activity.locator('[data-ltm-debug-operation="apply"]').count(), 0);
+        // A matching operation keeps its full event list and its status.
+        await activity.locator('[data-ltm-debug-operation="estimated"]').click();
+        await details.waitFor();
+        const matched = await details.innerText();
+        assert.match(matched, /AI extraction/u);
+        assert.match(matched, /500 ms/u);
+        // The recall rows match through their candidate ids, not a shared source note.
+        await showEvents();
+        await activity.locator('[data-ltm-debug-operation="recall-rejected"]').click();
+        await details.waitFor();
+        assert.match(await details.innerText(), /Legacy global memory/u);
+        // late-reference matches through one later event and still shows every event.
+        await showEvents();
+        await activity.locator('[data-ltm-debug-operation="late-reference"]').click();
+        await details.waitFor();
+        assert.match(await details.innerText(), /Completed/u);
+        assert.equal(await details.locator("ol > li").count(), 2, "a matched operation keeps all of its events");
+
+        // Clearing the filter makes the other loaded operations available again.
+        await showEvents();
+        await filterChip.getByRole("button", { name: "Clear memory filter" }).click();
+        await activity.locator('[data-ltm-debug-operation="unrelated"]').waitFor();
+        assert.equal(await activity.locator("[data-ltm-debug-memory-filter]").count(), 0);
+
+        // A cleared filter must not come back when the Debug tab is reopened.
+        await debugPage.locator("#settings-tab-recall").click();
+        await debugPage.locator("#settings-tab-debug").click();
+        await showEvents();
+        assert.equal(await activity.locator("[data-ltm-debug-memory-filter]").count(), 0);
+        await activity.locator('[data-ltm-debug-operation="unrelated"]').waitFor();
+
+        // Re-open from the Vault link and compose with the chips and search.
+        await openFromVault();
+        await showEvents();
+        await activity.locator('[data-ltm-debug-chip="recall"]').click();
+        await activity.locator('[data-ltm-debug-operation="recall"]').waitFor();
+        await activity.locator('[data-ltm-debug-operation="recall-rejected"]').waitFor();
+        assert.equal(await activity.locator('[data-ltm-debug-operation="estimated"]').count(), 0);
+        assert.equal(await activity.locator('[data-ltm-debug-operation="target"]').count(), 0);
+        await activity.locator('[data-ltm-debug-chip="all"]').click();
+        await activity.locator("[data-ltm-debug-search]").fill("fixture-model");
+        await activity.locator('[data-ltm-debug-operation="estimated"]').waitFor();
+        assert.equal(await activity.locator('[data-ltm-debug-operation="target"]').count(), 0);
+        // No-match: an empty result names the memory coverage, not a plain miss.
+        await activity.locator("[data-ltm-debug-search]").fill("no-such-operation");
+        await activity
+          .getByText("No matching operations in the loaded debug log. This does not mean the memory never changed.")
+          .waitFor();
+        await activity.locator("[data-ltm-debug-search]").fill("");
+
+        if (navigation === "mobile") {
+          // The link lands on Events; selecting a row opens Details; the switcher returns.
+          await showEvents();
+          assert.equal(await details.count(), 0);
+          await activity.locator('[data-ltm-debug-operation="estimated"]').click();
+          await details.waitFor();
+          assert.match(await details.innerText(), /AI extraction/u);
+          await activity.locator('[data-ltm-workspace-pane-tab="navigator"]').click();
+        }
+
+        // Leave the remaining Debug flow unfiltered.
+        await showEvents();
+        await filterChip.getByRole("button", { name: "Clear memory filter" }).click();
+
+        // An empty retained log still names the memory coverage, not "no activity".
+        debugLogEmpty = true;
+        await openFromVault();
+        await activity
+          .getByText("No matching operations in the loaded debug log. This does not mean the memory never changed.")
+          .waitFor();
+        debugLogEmpty = false;
+        // Restore the real log for the remaining Debug flow.
+        await debugPage.locator("#settings-tab-recall").click();
+        await debugPage.locator("#settings-tab-debug").click();
+        await activity.locator('[data-ltm-debug-operation="estimated"]').waitFor();
+      };
       const openDebugActivity = async (context: typeof browserContext, navigation: "desktop" | "mobile") => {
         await context.grantPermissions(["clipboard-read", "clipboard-write"], {
           origin: `http://127.0.0.1:${address.port}`,
         });
         const debugPage = await context.newPage();
         await debugPage.route("**/api/long-term-memory/debug-log?*", (route) => {
+          if (debugLogEmpty) {
+            route.fulfill({ json: { events: [] } });
+            return;
+          }
           const query = new URL(route.request().url()).searchParams;
           const matches = (value: unknown, expected: string | null) => !expected || value === expected;
           const filtered = debugEvents.filter((event) => {
@@ -2647,6 +2817,7 @@ async function main() {
           false,
           "Debug does not page the whole vault for titles",
         );
+        await assertMemoryFilteredDebug(debugPage, navigation);
         return debugPage;
       };
       const desktopDebugPage = await openDebugActivity(browserContext, "desktop");

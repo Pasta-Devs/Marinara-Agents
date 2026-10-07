@@ -1,5 +1,10 @@
 # Long-Term Memory changelog
 
+## 1.4.15 — 2026-10-08
+
+- Rename the Vault memory's "View all activity" link to "Open debug log" and open the Debug tab filtered to that memory, with no operation selected.
+- Match whole operations against explicit memory-id references in the loaded debug events (extraction source and produced target notes, recall selected/rejected candidates), composing with search and the existing chips. The filter is clearable and states that apply operations log change IDs, not memory IDs, so some are not shown.
+
 ## 1.4.14 — 2026-10-07
 
 - Rebuild the Debug tab as a two-pane workspace: an event navigator with search and counted All / Problems / Recall / Extraction chips, plus a details pane for the selected operation. Raw records move behind Copy JSON; the response snippet is no longer shown on screen.

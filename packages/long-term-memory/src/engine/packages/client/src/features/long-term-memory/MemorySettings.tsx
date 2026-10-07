@@ -251,6 +251,7 @@ export default function MemorySettings({
   onDirtyChange,
   onOpenMemory,
   openActivityRequest,
+  openActivityMemoryId,
   onOpenActivityHandled,
 }: LongTermMemoryDestinationProps) {
   const { t: localizeUi, locale } = useLtmTranslation();
@@ -293,11 +294,15 @@ export default function MemorySettings({
   const message = messageState.text;
   const setMessage = (text: string, tone: "success" | "danger" = "success") => setMessageState({ text, tone });
   const [activeTab, setActiveTab] = useState<SettingsTab>("recall");
+  // Capture the Vault memory link's target before the handoff request is reset, so the
+  // Debug tab can open filtered to that memory without a stale filter on later entries.
+  const [debugMemoryId, setDebugMemoryId] = useState<string | null>(null);
   useEffect(() => {
     if (!openActivityRequest) return;
+    setDebugMemoryId(openActivityMemoryId ?? null);
     setActiveTab("debug");
     onOpenActivityHandled?.();
-  }, [onOpenActivityHandled, openActivityRequest]);
+  }, [onOpenActivityHandled, openActivityRequest, openActivityMemoryId]);
   const [selectedActions, setSelectedActions] = useState<RepairAction[]>([]);
   const [identityPreview, setIdentityPreview] = useState<LtmIdentityRepairPreviewResponse | null>(null);
   const [selectedIdentityCandidates, setSelectedIdentityCandidates] = useState<string[]>([]);
@@ -1682,7 +1687,14 @@ export default function MemorySettings({
           checked={globalForm.longTermMemoryDebug}
           onChange={(value) => setGlobalForm({ ...globalForm, longTermMemoryDebug: value })}
         />
-        {activeTab === "debug" ? <ActivityView props={props} onOpenMemory={onOpenMemory} /> : null}
+        {activeTab === "debug" ? (
+          <ActivityView
+            props={props}
+            onOpenMemory={onOpenMemory}
+            openActivityMemoryId={debugMemoryId}
+            onOpenActivityMemoryIdHandled={() => setDebugMemoryId(null)}
+          />
+        ) : null}
       </section>
     </section>
   );

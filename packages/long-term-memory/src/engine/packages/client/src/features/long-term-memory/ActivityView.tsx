@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   AlertTriangle,
@@ -240,6 +240,28 @@ function operationHasProblems(operation: DebugOperation) {
   );
 }
 
+// D31: match only explicit memory-id references in the structured log records — extraction
+// source ids, produced target-note ids and recall selected/rejected candidate ids. Prose,
+// titles, partial id strings and Recent-changes events are not evidence of a debug
+// operation, and apply operations log change/mutation ids, so `mutationIds` is not consulted.
+function operationReferencesMemory(operation: DebugOperation, memoryId: string) {
+  return operation.events.some((event) => {
+    if (event.sourceNoteId === memoryId || event.noteId === memoryId) return true;
+    const details = event.details;
+    if (!details || typeof details !== "object" || Array.isArray(details)) return false;
+    return (["selected", "rejected"] as const).some((key) => {
+      const candidates = (details as Record<string, unknown>)[key];
+      return (
+        Array.isArray(candidates) &&
+        candidates.some(
+          (candidate) =>
+            candidate && typeof candidate === "object" && (candidate as { noteId?: unknown }).noteId === memoryId,
+        )
+      );
+    });
+  });
+}
+
 // Chips select whole operations through the shared #1255 helper; only the
 // Problems predicate (warnings, errors and truncated responses) is extra.
 const chipFilters: Record<Exclude<DebugChip, "problems">, DebugActivityFilter> = {
@@ -307,7 +329,12 @@ async function confirm(
   return window.confirm(`${title}\n\n${message}`);
 }
 
-export default function ActivityView({ props, onOpenMemory }: LongTermMemoryDestinationProps) {
+export default function ActivityView({
+  props,
+  onOpenMemory,
+  openActivityMemoryId,
+  onOpenActivityMemoryIdHandled,
+}: LongTermMemoryDestinationProps) {
   const { t: localizeUi, locale } = useLtmTranslation();
   const queryClient = useQueryClient();
   const [pending, setPending] = useState<"clear" | "export" | null>(null);
@@ -318,6 +345,18 @@ export default function ActivityView({ props, onOpenMemory }: LongTermMemoryDest
   const [selectedOperationId, setSelectedOperationId] = useState<string | null>(null);
   const [activePane, setActivePane] = useState<LtmWorkspacePane>("navigator");
   const [limit, setLimit] = useState(200);
+  // D31: a memory handoff opens the navigator filtered to that memory and with nothing
+  // selected, whether or not a previous Debug selection existed.
+  const [memoryFilterId, setMemoryFilterId] = useState<string | null>(openActivityMemoryId ?? null);
+  useEffect(() => {
+    if (!openActivityMemoryId) return;
+    setMemoryFilterId(openActivityMemoryId);
+    setSelectedOperationId(null);
+    setActivePane("navigator");
+    // The handoff target is consumed once; the tab must not re-apply a filter the
+    // user cleared when it is reopened.
+    onOpenActivityMemoryIdHandled?.();
+  }, [openActivityMemoryId, onOpenActivityMemoryIdHandled]);
   const activity = useQuery({
     queryKey: [...queryKeys.activity, limit],
     queryFn: () => request<DebugLogResponse>(`/debug-log?limit=${limit}`),
@@ -361,12 +400,21 @@ export default function ActivityView({ props, onOpenMemory }: LongTermMemoryDest
     [operations],
   );
   const query = search.trim().toLocaleLowerCase(locale);
+  // The memory filter selects whole operations and composes with the chips and search
+  // rather than replacing them; each matching operation keeps its full event list.
+  const filteredOperations = useMemo(
+    () =>
+      memoryFilterId
+        ? operations.filter((operation) => operationReferencesMemory(operation, memoryFilterId))
+        : operations,
+    [operations, memoryFilterId],
+  );
   const visibleOperations = useMemo(
     () =>
-      filterByChip(operations, chip).filter(
+      filterByChip(filteredOperations, chip).filter(
         (operation) => !query || operationMatchesSearch(operation, query, noteTitles, chatLabel, localizeUi, locale),
       ),
-    [operations, chip, query, noteTitles, chatLabel, localizeUi, locale],
+    [filteredOperations, chip, query, noteTitles, chatLabel, localizeUi, locale],
   );
   const selectedOperation = useMemo(
     () => operations.find((operation) => operation.operationId === selectedOperationId) ?? null,
@@ -850,6 +898,34 @@ export default function ActivityView({ props, onOpenMemory }: LongTermMemoryDest
           content: (
             <div className="space-y-3">
               <div className="mari-editor-panel mari-editor-panel--soft space-y-2 p-3" data-ltm-debug-controls>
+                {memoryFilterId ? (
+                  <div className="space-y-1">
+                    <span
+                      data-ltm-debug-memory-filter={memoryFilterId}
+                      className="inline-flex min-h-11 max-w-full items-center gap-1 rounded-full border border-[var(--border)] bg-[var(--secondary)]/35 pl-3 pr-1 text-xs"
+                    >
+                      <span className="min-w-0 truncate">
+                        {localizeUi("ui.longTermMemory.activityview.memoryFilter", {
+                          memory:
+                            noteTitles.get(memoryFilterId) ??
+                            localizeUi("ui.longTermMemory.activityview.unknownMemory"),
+                        })}
+                      </span>
+                      <button
+                        type="button"
+                        aria-label={localizeUi("ui.longTermMemory.activityview.clearMemoryFilter")}
+                        title={localizeUi("ui.longTermMemory.activityview.clearMemoryFilter")}
+                        onClick={() => setMemoryFilterId(null)}
+                        className="grid h-11 w-11 shrink-0 place-items-center rounded-full text-[var(--muted-foreground)] hover:bg-[var(--accent)]"
+                      >
+                        <X aria-hidden="true" size="0.875rem" />
+                      </button>
+                    </span>
+                    <p className="text-[0.6875rem] text-[var(--muted-foreground)]">
+                      {localizeUi("ui.longTermMemory.activityview.memoryFilterCoverage")}
+                    </p>
+                  </div>
+                ) : null}
                 <label className="relative block">
                   <Search
                     aria-hidden="true"
@@ -909,13 +985,13 @@ export default function ActivityView({ props, onOpenMemory }: LongTermMemoryDest
                 className="mari-editor-panel min-w-0"
                 style={{ maxHeight: "calc(100vh - 12rem)", overflowY: "auto" }}
               >
-                {activity.data?.events.length === 0 ? (
+                {activity.data && visibleOperations.length === 0 ? (
                   <StatusSurface>
-                    {localizeUi("ui.longTermMemory.activityview.noActivityHasBeenRecordedYet")}
-                  </StatusSurface>
-                ) : activity.data && visibleOperations.length === 0 ? (
-                  <StatusSurface>
-                    {localizeUi("ui.longTermMemory.activityview.noActivityMatchesThisFilter")}
+                    {memoryFilterId
+                      ? localizeUi("ui.longTermMemory.activityview.noOperationsForMemory")
+                      : activity.data.events.length === 0
+                        ? localizeUi("ui.longTermMemory.activityview.noActivityHasBeenRecordedYet")
+                        : localizeUi("ui.longTermMemory.activityview.noActivityMatchesThisFilter")}
                   </StatusSurface>
                 ) : (
                   groups.map((group) =>
