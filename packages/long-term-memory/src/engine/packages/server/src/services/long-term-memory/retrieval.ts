@@ -133,13 +133,17 @@ export async function retrieveLongTermMemory(input: RetrieveLongTermMemoryInput)
       .map((chunk) => chunk.id),
   );
   const lanes: LtmRankLane[] = [];
-  const metadata = getLtmMetadataMatches(index.metadata, {
-    noteIds: Array.from(
-      query.matchAll(/\b(?:source|char|rel|scene|thread|world|faction|location|rule|tone)_[a-z0-9_]+\b/g),
-      (match) => match[0],
-    ),
-    tags: Array.from(query.matchAll(/#([a-z][a-z0-9_]+)/g), (match) => match[1]!),
-  }).filter((hit) => allowed.has(hit.chunkId));
+  const metadata = getLtmMetadataMatches(
+    index.metadata,
+    {
+      noteIds: Array.from(
+        query.matchAll(/\b(?:source|char|rel|scene|thread|world|faction|location|rule|tone)_[a-z0-9_]+\b/g),
+        (match) => match[0],
+      ),
+      tags: Array.from(query.matchAll(/#([a-z][a-z0-9_]+)/g), (match) => match[1]!),
+    },
+    { allowedChunks: allowed },
+  );
   if (metadata.length) {
     lanes.push({
       name: "direct",

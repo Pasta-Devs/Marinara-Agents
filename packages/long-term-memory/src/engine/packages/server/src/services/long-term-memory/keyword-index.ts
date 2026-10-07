@@ -85,24 +85,50 @@ export function searchLtmKeywordIndex(
     hits.set(chunkId, existing);
   };
 
+  // Issue #1251: every cap counts only chunks the caller allows, so out-of-scope
+  // entries cannot crowd in-scope ones out of a bucket before the scope filter.
+  const takeAllowed = (chunkIds: string[]) => {
+    if (!options.allowedChunks) return chunkIds.slice(0, maxCandidatesPerKeyword);
+    const taken: string[] = [];
+    for (const chunkId of chunkIds) {
+      if (!options.allowedChunks.has(chunkId)) continue;
+      taken.push(chunkId);
+      if (taken.length >= maxCandidatesPerKeyword) break;
+    }
+    return taken;
+  };
+  // The fuzzy catalog cap must count only keywords an allowed chunk actually has,
+  // or late-alphabet in-scope keywords fall outside the vault-wide slice.
+  const inScopeCatalogKeywords = options.allowedChunks
+    ? new Set(
+        Array.from(options.allowedChunks).flatMap((chunkId) =>
+          Object.hasOwn(index.byChunkId, chunkId) ? (index.byChunkId[chunkId] ?? []) : [],
+        ),
+      )
+    : undefined;
+
   const exactQueryMatches = Object.hasOwn(index.byKeyword, normalizedQuery)
     ? index.byKeyword[normalizedQuery]
     : undefined;
-  for (const chunkId of (exactQueryMatches ?? []).slice(0, maxCandidatesPerKeyword)) {
+  for (const chunkId of takeAllowed(exactQueryMatches ?? [])) {
     add(chunkId, normalizedQuery, 4, `keyword:exact:${normalizedQuery}`);
   }
 
   for (const term of normalizedTerms) {
     if (term === normalizedQuery) continue;
     const exactTermMatches = Object.hasOwn(index.byKeyword, term) ? index.byKeyword[term] : undefined;
-    for (const chunkId of (exactTermMatches ?? []).slice(0, maxCandidatesPerKeyword)) {
+    for (const chunkId of takeAllowed(exactTermMatches ?? [])) {
       add(chunkId, term, 3, `keyword:exact:${term}`);
     }
   }
 
-  for (const [keyword, chunkIds] of Object.entries(index.byKeyword)
-    .sort(([left], [right]) => left.localeCompare(right))
-    .slice(0, maxKeywordCatalogEntries)) {
+  let catalogEntries = 0;
+  for (const [keyword, chunkIds] of Object.entries(index.byKeyword).sort(([left], [right]) =>
+    left.localeCompare(right),
+  )) {
+    if (catalogEntries >= maxKeywordCatalogEntries) break;
+    if (inScopeCatalogKeywords && !inScopeCatalogKeywords.has(keyword)) continue;
+    catalogEntries += 1;
     if (normalizedTerms.includes(keyword)) continue;
     const exactContained =
       containsKeywordToken(normalizedQuery, keyword) || containsKeywordToken(keyword, normalizedQuery);
@@ -113,14 +139,14 @@ export function searchLtmKeywordIndex(
       if (!overlappingTerm) continue;
       const overlapRatio =
         Math.min(overlappingTerm.length, keyword.length) / Math.max(overlappingTerm.length, keyword.length);
-      for (const chunkId of chunkIds.slice(0, maxCandidatesPerKeyword)) {
+      for (const chunkId of takeAllowed(chunkIds)) {
         add(chunkId, keyword, 0.75 + overlapRatio * 0.75, `keyword:fuzzy:${keyword}`);
       }
       continue;
     }
     const overlapRatio =
       Math.min(normalizedQuery.length, keyword.length) / Math.max(normalizedQuery.length, keyword.length);
-    for (const chunkId of chunkIds.slice(0, maxCandidatesPerKeyword)) {
+    for (const chunkId of takeAllowed(chunkIds)) {
       add(chunkId, keyword, 1.25 + overlapRatio, `keyword:fuzzy:${keyword}`);
     }
   }

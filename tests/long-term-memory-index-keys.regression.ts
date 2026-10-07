@@ -206,6 +206,45 @@ async function main() {
     "a persisted keyword key with regex metacharacters must not break keyword search",
   );
 
+  // Issue #1251: the scope filter must run before each bucket cap, or out-of-scope
+  // chunks crowd in-scope chunks out of the exact, direct and fuzzy lanes entirely.
+  const crowdedOutOfScope = Array.from({ length: 130 }, (_, index) => {
+    const id = `out-of-scope-${String(index).padStart(3, "0")}`;
+    return { ...chunk(id, `out_of_scope_${index}`), keywords: ["cobalt"], tags: ["cobalt"] };
+  });
+  const crowdedInScope = { ...chunk("zz-in-scope", "zz_in_scope_note"), keywords: ["cobalt"], tags: ["cobalt"] };
+  const crowdedAllowed = new Set(["zz-in-scope"]);
+  assert.deepEqual(
+    searchLtmKeywordIndex(buildLtmKeywordIndex([...crowdedOutOfScope, crowdedInScope]), "cobalt", {
+      topK: 10,
+      allowedChunks: crowdedAllowed,
+    }).map(({ chunkId }: { chunkId: string }) => chunkId),
+    ["zz-in-scope"],
+    "an in-scope chunk after 128 out-of-scope keyword entries must still produce an exact keyword hit",
+  );
+  assert.deepEqual(
+    getLtmMetadataMatches(
+      buildLtmMetadataIndex([...crowdedOutOfScope, crowdedInScope]),
+      { tags: ["cobalt"] },
+      { topK: 10, allowedChunks: crowdedAllowed },
+    ).map(({ chunkId }: { chunkId: string }) => chunkId),
+    ["zz-in-scope"],
+    "an in-scope chunk after 128 out-of-scope tag entries must still produce a direct hit",
+  );
+
+  const catalogFillers = Array.from({ length: 512 }, (_, index) => {
+    const id = `catalog-filler-${String(index).padStart(3, "0")}`;
+    return { ...chunk(id, `catalog_filler_${index}`), keywords: [`aaa-${String(index).padStart(3, "0")}`] };
+  });
+  const lateKeywordChunk = { ...chunk("zz-late-keyword", "zz_late_keyword_note"), keywords: ["zzz-cobalt"] };
+  assert.ok(
+    searchLtmKeywordIndex(buildLtmKeywordIndex([...catalogFillers, lateKeywordChunk]), "cobalt", {
+      topK: 10,
+      allowedChunks: new Set(["zz-late-keyword"]),
+    }).some(({ chunkId }: { chunkId: string }) => chunkId === "zz-late-keyword"),
+    "a late-alphabet in-scope keyword must survive the fuzzy catalog cap",
+  );
+
   const { reciprocalRankFuse } = await import(`${source}/ranking.ts`);
   const { LTM_RECALL_STYLE_WEIGHTS } =
     await import("../packages/long-term-memory/src/engine/packages/shared/src/features/agents/long-term-memory/constants.ts");

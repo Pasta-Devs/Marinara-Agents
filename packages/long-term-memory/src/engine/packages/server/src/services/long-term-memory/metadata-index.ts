@@ -46,7 +46,7 @@ export function getLtmMetadataMatches(
     noteIds?: string[];
     tags?: string[];
   },
-  options: { topK?: number; maxBucketEntries?: number } = {},
+  options: { topK?: number; maxBucketEntries?: number; allowedChunks?: Set<string> } = {},
 ) {
   const scores = new Map<string, { score: number; reasons: string[] }>();
   const maxBucketEntries = Math.max(1, options.maxBucketEntries ?? 128);
@@ -60,13 +60,26 @@ export function getLtmMetadataMatches(
     scores.set(chunkId, existing);
   }
 
+  // Issue #1251: the bucket and candidate caps count only chunks the caller
+  // allows, so out-of-scope entries cannot crowd in-scope ones out of the lane.
+  function takeAllowed(chunkIds: string[]) {
+    if (!options.allowedChunks) return chunkIds.slice(0, maxBucketEntries);
+    const taken: string[] = [];
+    for (const chunkId of chunkIds) {
+      if (!options.allowedChunks.has(chunkId)) continue;
+      taken.push(chunkId);
+      if (taken.length >= maxBucketEntries) break;
+    }
+    return taken;
+  }
+
   for (const noteId of query.noteIds ?? []) {
     const matches = Object.hasOwn(index.byNoteId, noteId) ? index.byNoteId[noteId] : undefined;
-    for (const chunkId of (matches ?? []).slice(0, maxBucketEntries)) add(chunkId, 1, `note:${noteId}`);
+    for (const chunkId of takeAllowed(matches ?? [])) add(chunkId, 1, `note:${noteId}`);
   }
   for (const tag of query.tags ?? []) {
     const matches = Object.hasOwn(index.byTag, tag) ? index.byTag[tag] : undefined;
-    for (const chunkId of (matches ?? []).slice(0, maxBucketEntries)) add(chunkId, 0.8, `tag:${tag}`);
+    for (const chunkId of takeAllowed(matches ?? [])) add(chunkId, 0.8, `tag:${tag}`);
   }
 
   return Array.from(scores.entries())
