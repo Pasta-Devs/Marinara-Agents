@@ -589,12 +589,12 @@ export default function ActivityView({ props, onOpenMemory }: LongTermMemoryDest
               <Copy aria-hidden="true" size="0.875rem" />
             )}
             {localizeUi("ui.longTermMemory.activityview.copyJson")}
-            {copiedOperationId === selectedOperation.operationId ? (
-              <span className="sr-only" role="status">
-                {localizeUi("ui.longTermMemory.activityview.copied")}
-              </span>
-            ) : null}
           </Button>
+          <span className="sr-only" role="status">
+            {copiedOperationId === selectedOperation.operationId
+              ? localizeUi("ui.longTermMemory.activityview.copied")
+              : ""}
+          </span>
         </header>
         {problems.length ? (
           <ul className="list-disc pl-4 text-[var(--marinara-editor-warning)]" data-ltm-activity-warnings>
