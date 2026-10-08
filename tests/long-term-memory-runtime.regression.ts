@@ -1313,6 +1313,39 @@ async function main() {
         assert.deepEqual(emptyExplanation.counts, { selected: 0, rejected: 2, usedTokens: 0 });
         assert.deepEqual(emptyExplanation.details.selected, []);
 
+        // Issue #1265: title framing can exceed the retrieval estimate even when
+        // the fixed prompt overhead was reserved; report that serializer drop.
+        chats[0].metadata.longTermMemoryRecallPreamble = "";
+        const serializerDropIds = ["char_serializer_drop_a", "char_serializer_drop_b"];
+        for (const id of serializerDropIds) {
+          await storage.createNote(
+            note(id, "chat-a", `A short serializer budget fixture ${id}.`, {
+              type: "character",
+              title: "T".repeat(240),
+              keywords: [],
+            }),
+          );
+        }
+        await rebuildLongTermMemoryIndexes({ root: storage.root });
+        const serializerDropRecall = await runtime.recall({
+          ...tightInput,
+          messages: [{ role: "user", content: serializerDropIds.join(" ") }],
+        });
+        assert.deepEqual(
+          serializerDropRecall?.receipt.artifact.chunks.map((candidate: any) => candidate.chunk.noteId),
+          [serializerDropIds[0]],
+          "a title-framed chunk that does not fit is skipped while a fitting chunk remains injected",
+        );
+        const serializerDropExplanation = (await readLtmDebugLog({ phase: "retrieval" }, storage.root)).at(-1)!;
+        assert.ok(
+          serializerDropExplanation.details.rejected.some(
+            (candidate: any) => candidate.rejectionReason === "prompt_budget",
+          ),
+          "the serializer drop must be reported as a prompt-budget rejection",
+        );
+        await storage.deleteNotesPermanently(serializerDropIds);
+        await rebuildLongTermMemoryIndexes({ root: storage.root });
+
         // #1252 review repair: when the reserved overhead leaves less room than any candidate
         // needs, the recall is budget-exhausted, not a genuine no-match. It must report
         // skipped/prompt_budget and must not overwrite the last injection receipt with an
@@ -1356,6 +1389,7 @@ async function main() {
           for (const candidate of thresholdRecall?.receipt.artifact.chunks ?? []) {
             const detail = explanation.details.selected.find((item: any) => item.noteId === candidate.chunk.noteId);
             assert.equal(detail.fusedScore, candidate.score);
+            assert.equal(typeof detail.fusedRank, "number");
             assert.equal(detail.relevanceScore, candidate.relevanceScore);
             assert.equal(detail.score, detail.relevanceScore, "keep the legacy UI relevance field compatible");
             assert.notEqual(detail.fusedScore, detail.relevanceScore);
@@ -1363,6 +1397,7 @@ async function main() {
           }
           for (const candidate of explanation.details.rejected) {
             assert.equal(typeof candidate.fusedScore, "number");
+            assert.equal(typeof candidate.fusedRank, "number");
             assert.equal(candidate.thresholdPassed, candidate.relevanceScore >= threshold);
           }
           if (threshold === 0.6) {

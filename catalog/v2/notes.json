@@ -188,6 +188,12 @@
     "long-term-memory": {
       "versions": [
         {
+          "version": "1.4.16",
+          "date": "2026-10-08",
+          "notes": "- Make `/search` resolve the scoped chat's recall settings and prompt budget like generation, while preserving explicit request overrides.\n- Show fused rank beside relevance in Debug and remove unused cooldown behavior.",
+          "highlight": false
+        },
+        {
           "version": "1.4.15",
           "date": "2026-10-08",
           "notes": "- Rename the Vault memory's \"View all activity\" link to \"Open debug log\" and open the Debug tab filtered to that memory, with no operation selected.\n- Match whole operations against explicit memory-id references in the loaded debug events (extraction source and produced target notes, recall selected/rejected candidates), composing with search and the existing chips. The filter is clearable and states that apply operations log change IDs, not memory IDs, so some are not shown.",
@@ -299,12 +305,6 @@
           "version": "1.3.37",
           "date": "2026-10-02",
           "notes": "- The description now says what it does in plain words.",
-          "highlight": false
-        },
-        {
-          "version": "1.3.36",
-          "date": "2026-10-02",
-          "notes": "- Drop the cached vault scan as official maintenance quarantines a malformed note, so full reads and recall stop serving the removed note's id and text without a package restart.\n- Add a private runtime vault-mutation boundary that keeps the vault lock across a trusted host publication and its rollback and resets the package initialization and snapshot caches on both paths.",
           "highlight": false
         }
       ]

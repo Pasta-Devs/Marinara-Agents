@@ -275,6 +275,11 @@ async function main() {
     { name: "bm25", weight: 0.3, items: [{ chunkId: "bm25-top", rawScore: 1_000_000, reason: "bm25" }] },
   ]);
   assert.equal(unboundedRaw[0]?.chunkId, "vector-top", "an unbounded raw score must not invert lane weights");
+  assert.deepEqual(
+    unboundedRaw.map(({ fusedRank }: { fusedRank: number }) => fusedRank),
+    [1, 2],
+    "fused candidates expose their one-based rank before budget ordering",
+  );
 
   // Issue #1258: every lane must share one absolute 0-1 scale, or the score
   // threshold drops from many memories to almost none instead of removing the

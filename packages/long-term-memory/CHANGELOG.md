@@ -1,5 +1,10 @@
 # Long-Term Memory changelog
 
+## 1.4.16 — 2026-10-08
+
+- Make `/search` resolve the scoped chat's recall settings and prompt budget like generation, while preserving explicit request overrides.
+- Show fused rank beside relevance in Debug and remove unused cooldown behavior.
+
 ## 1.4.15 — 2026-10-08
 
 - Rename the Vault memory's "View all activity" link to "Open debug log" and open the Debug tab filtered to that memory, with no operation selected.

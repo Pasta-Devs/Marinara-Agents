@@ -2473,9 +2473,25 @@ async function main() {
             semanticOutcome: "available",
             rejectedLimit: 20,
             weights: { semantic: 0.6 },
-            selected: [{ noteId: "world_legacy_global", sectionKey: "facts", score: 0.9, lanes: ["semantic"] }],
+            selected: [
+              {
+                noteId: "world_legacy_global",
+                sectionKey: "facts",
+                score: 0.35,
+                fusedScore: 0.02,
+                fusedRank: 1,
+                lanes: ["semantic"],
+              },
+            ],
             rejected: [
-              { noteId: "world_scoped_desktop", sectionKey: "facts", score: 0.4, rejectionReason: "below_threshold" },
+              {
+                noteId: "world_scoped_desktop",
+                sectionKey: "facts",
+                score: 0.45,
+                fusedScore: 0.01,
+                fusedRank: 2,
+                rejectionReason: "lower_rank",
+              },
             ],
           },
         }),
@@ -2597,6 +2613,8 @@ async function main() {
         assert.match(recall, /Recall from chat-artifact/u);
         assert.match(recall, /Selected chunks[\s\S]*Run parameters/u);
         assert.match(recall, /Legacy global memory/u);
+        assert.match(recall, /Fused rank 1[\s\S]*35%/u);
+        assert.match(recall, /Fused rank 2[\s\S]*45%[\s\S]*Cut by the memory limit \(lower fused rank\)/u);
         // M6: the recalled-memory link keeps a 44px touch target.
         const recalledBox = await activity.locator('[data-ltm-recalled-note="world_legacy_global"]').boundingBox();
         assert.ok(recalledBox && recalledBox.height >= 44, "recalled memory links keep a 44px touch target");

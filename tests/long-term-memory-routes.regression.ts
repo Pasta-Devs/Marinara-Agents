@@ -2602,17 +2602,136 @@ async function main(routeScenario: RouteScenario) {
         ].sort(),
       );
       await storageService.storage.deleteNotesPermanently(["char_mara"]);
-      const searched = await app.inject({
-        method: "POST",
-        url: "/api/long-term-memory/search",
-        headers,
-        payload: {
-          queryText: "cobalt observatory",
-          scope: { chatId: "chat-a", chatIds: ["chat-a"] },
+      const previousChatMetadata = chats[0].metadata;
+      const previousChatCharacterIds = chats[0].characterIds;
+      const characterScopeSentinel = "world_search_character_scope_sentinel";
+      await storageService.storage.createNote({
+        id: characterScopeSentinel,
+        type: "world",
+        status: "active",
+        modes: ["roleplay"],
+        scope: { characterIds: ["character-nyra"] },
+        tags: [],
+        keywords: ["nyra-scope-sentinel"],
+        links: [],
+        sections: {
+          facts: {
+            text: "Nyra-only scope sentinel must not enter Mara search results.",
+            updatedAt: "2026-07-17T00:00:00.000Z",
+          },
         },
       });
-      assert.equal(searched.statusCode, 200, searched.body);
-      assert.equal(searched.json().chunks[0]?.chunk.noteId, "world_route_fixture");
+      try {
+        chats[0].characterIds = ["character-mara", "character-nyra"];
+        chats[0].metadata = {
+          ...previousChatMetadata,
+          longTermMemoryRecallStyle: "custom",
+          longTermMemoryBudgetTokens: 512,
+          longTermMemoryMaxChunks: 1,
+          longTermMemoryScoreThreshold: 0,
+          longTermMemoryIncludeResolved: true,
+          longTermMemoryRecallPreamble: "Recall test preview",
+          longTermMemorySemanticWeight: 0,
+          longTermMemoryLexicalWeight: 0.6,
+          longTermMemoryGraphWeight: 0,
+          longTermMemoryKeywordWeight: 0.4,
+        };
+        const recallQuery = "cobalt observatory";
+        const recallScope = {
+          chatId: "chat-a",
+          chatIds: ["chat-a"],
+          groupId: "observatory-branches",
+          groupIds: ["observatory-branches"],
+          characterIds: ["character-mara"],
+        };
+        const searched = await app.inject({
+          method: "POST",
+          url: "/api/long-term-memory/search",
+          headers,
+          payload: { queryText: recallQuery, scope: recallScope },
+        });
+        assert.equal(searched.statusCode, 200, searched.body);
+        const searchResult = searched.json();
+        assert.equal(searchResult.chunks[0]?.chunk.noteId, "world_route_fixture");
+        const characterScopedSearch = await app.inject({
+          method: "POST",
+          url: "/api/long-term-memory/search",
+          headers,
+          payload: {
+            queryText: "nyra-scope-sentinel",
+            scope: {
+              chatId: "chat-a",
+              chatIds: ["chat-a"],
+              characterIds: ["character-mara"],
+            },
+          },
+        });
+        assert.equal(characterScopedSearch.statusCode, 200, characterScopedSearch.body);
+        assert.equal(
+          characterScopedSearch
+            .json()
+            .chunks.some((candidate: any) => candidate.chunk.noteId === characterScopeSentinel),
+          false,
+          "chat characters must not widen an explicit character scope",
+        );
+        chats[0].characterIds = previousChatCharacterIds;
+        const turnRecall = await prepareGenerationLongTermMemory({
+          root: storageService.storage.root,
+          chatId: "chat-a",
+          chatMode: "roleplay",
+          characterIds: ["character-mara"],
+          messages: [{ role: "user", content: recallQuery }],
+          debugMode: true,
+        });
+        assert.ok(turnRecall, "the same chat query and scope must produce a turn recall");
+        assert.deepEqual(
+          searchResult.chunks.map((candidate: any) => candidate.chunk.noteId),
+          turnRecall?.receipt.artifact.chunks.map((candidate: any) => candidate.chunk.noteId),
+          "search defaults must select the memories the same chat turn injects",
+        );
+        assert.deepEqual(searchResult.recallSettings, {
+          mode: "roleplay",
+          recallStyle: "custom",
+          maxChunks: 1,
+          maxTokens: 512,
+          scoreThreshold: 0,
+          includeResolved: true,
+          weights: { semanticWeight: 0, lexicalWeight: 0.6, graphWeight: 0, keywordWeight: 0.4 },
+        });
+        assert.equal(searchResult.maxTokens, 512 - searchResult.promptOverheadTokens);
+        assert.equal(searchResult.promptBudgetTokens, 512);
+        assert.ok(searchResult.promptOverheadTokens > 0);
+        assert.ok(searchResult.chunks.every((candidate: any) => typeof candidate.estimatedTokens === "number"));
+
+        const explicitOverrides = await app.inject({
+          method: "POST",
+          url: "/api/long-term-memory/search",
+          headers,
+          payload: {
+            queryText: recallQuery,
+            scope: recallScope,
+            maxChunks: 2,
+            maxTokens: 256,
+            minScore: 0,
+            includeResolved: false,
+            semanticWeight: 0.25,
+          },
+        });
+        assert.equal(explicitOverrides.statusCode, 200, explicitOverrides.body);
+        assert.deepEqual(explicitOverrides.json().recallSettings, {
+          mode: "roleplay",
+          recallStyle: "custom",
+          maxChunks: 2,
+          maxTokens: 256,
+          scoreThreshold: 0,
+          includeResolved: false,
+          weights: { semanticWeight: 0.25, lexicalWeight: 0.6, graphWeight: 0, keywordWeight: 0.4 },
+        });
+      } finally {
+        chats[0].metadata = previousChatMetadata;
+        chats[0].characterIds = previousChatCharacterIds;
+        await storageService.storage.deleteNotesPermanently([characterScopeSentinel]);
+      }
       const transferPreview = await app.inject({
         method: "POST",
         url: "/api/long-term-memory/notes/transfer-preview",

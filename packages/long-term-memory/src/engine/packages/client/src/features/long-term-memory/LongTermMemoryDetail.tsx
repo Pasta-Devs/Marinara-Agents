@@ -1343,7 +1343,6 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
                                       </li>
                                     </ul>
                                     <p>{localizeUi("ui.longTermMemory.longtermmemorydetail.underTheHoodFusion")}</p>
-                                    <p>{localizeUi("ui.longTermMemory.longtermmemorydetail.underTheHoodCooldown")}</p>
                                   </div>
                                 </details>
                               </>
