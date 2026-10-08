@@ -757,6 +757,8 @@
   "ui.slurp.settings.lifeMomentRateRarely": "Selten",
   "ui.slurp.settings.lifeMomentRateSometimes": "Manchmal",
   "ui.slurp.settings.lifeMomentRateOften": "Oft",
+  "ui.slurp.settings.pictureReuse": "Bilder wiederverwenden",
+  "ui.slurp.settings.pictureReuseDetail": "Wie oft ein Beitrag ein früheres Bild statt eines neuen zeigt: noch eins vom Shooting, ein altes Foto oder ein Ausschnitt aus einem gesperrten Set. Jedes Bild kommt höchstens einmal wieder. Aus heißt: Jeder Beitrag bekommt ein neues Bild; eine Wiederverwendung, die du selbst wählst, geht trotzdem.",
   "ui.slurp.settings.storyJobs": "Was Stories tun",
   "ui.slurp.settings.storyJobsDetail": "Wie oft jede Art von Story vorkommt. Jede nur, wenn sie passt: ein Countdown braucht einen Drop unterwegs, eine Antwort braucht den Kommentar eines Fans.",
   "ui.slurp.settings.storyJob.countdown": "Countdown zu einem Drop",

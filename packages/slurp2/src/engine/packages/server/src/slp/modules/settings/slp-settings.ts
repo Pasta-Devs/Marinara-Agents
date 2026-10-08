@@ -120,6 +120,8 @@ export const slurpSettingsSchema = z.object({
   storyLifetimeHours: z.number().int().min(1).max(168),
   /** How often an automatic post goes out free as a teaser. See `slurpTeaserPost`. */
   teaserRate: z.enum(SLURP_TEASER_RATE),
+  /** How often posts reuse an earlier picture. See `slurpReuseDelivery`. */
+  pictureReuse: z.enum(["off", "rare", "regular"]),
   /** Share of a Creator's automatic posts that continue a project rather than standing alone. */
   projectRate: z.enum(SLURP_PROJECT_RATE),
   /** Multiplies every arc chapter's day range. */
@@ -513,6 +515,7 @@ export const DEFAULT_SLURP_SETTINGS: SlurpSettings = {
   storyImagesEnabled: true,
   storyLifetimeHours: 72,
   teaserRate: SLURP_DEFAULT_TEASER_RATE,
+  pictureReuse: "regular",
   projectRate: SLURP_DEFAULT_PROJECT_RATE,
   arcPace: SLURP_DEFAULT_ARC_PACE,
   discoveryTags: SLURP_DISCOVERY_TAG_SEED.map((entry) => ({ ...entry })),

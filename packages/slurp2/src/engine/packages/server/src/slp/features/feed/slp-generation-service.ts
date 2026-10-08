@@ -403,7 +403,7 @@ export async function generateCreatorPost(
     allowScenePlan: askModelForScene,
     sceneShots,
     wardrobePrompt: askModelForScene
-      ? slurpWardrobePrompt(wardrobeLooks, input.request.access, recentWardrobeIds)
+      ? slurpWardrobePrompt(wardrobeLooks, input.request.access, recentWardrobeIds, account.displayName)
       : null,
     imageGenerationPrompt: settings.imageGenerationPrompt,
     generationGuidance: settings.generationGuidance,
@@ -503,6 +503,7 @@ export async function generateCreatorPost(
     access: input.request.access,
     scene: askModelForScene ? generated.scene : null,
     recentIds: recentWardrobeIds,
+    creatorName: account.displayName,
   });
 
   // What the picture is and may show, in one place so the two briefs agree on level, shoot and effort.

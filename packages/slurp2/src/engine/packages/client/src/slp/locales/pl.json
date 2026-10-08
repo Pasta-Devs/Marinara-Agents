@@ -773,6 +773,8 @@
   "ui.slurp.settings.lifeMomentRateRarely": "Rzadko",
   "ui.slurp.settings.lifeMomentRateSometimes": "Czasami",
   "ui.slurp.settings.lifeMomentRateOften": "Często",
+  "ui.slurp.settings.pictureReuse": "Ponowne użycie zdjęć",
+  "ui.slurp.settings.pictureReuseDetail": "Jak często post pokazuje wcześniejsze zdjęcie zamiast nowego: jeszcze jedno z sesji, stare zdjęcie albo wykadrowany podgląd zablokowanego zestawu. Każde zdjęcie wraca najwyżej raz. Wyłączone oznacza, że każdy post dostaje nowe zdjęcie; ponowne użycie wybrane przez ciebie nadal działa.",
   "ui.slurp.settings.storyJobs": "Co robią Relacje",
   "ui.slurp.settings.storyJobsDetail": "Jak często pojawia się każdy rodzaj Relacji. Każda tylko wtedy, gdy ma sens: odliczanie wymaga zbliżającej się publikacji, odpowiedź wymaga komentarza fana.",
   "ui.slurp.settings.storyJob.countdown": "Odliczanie do publikacji",
