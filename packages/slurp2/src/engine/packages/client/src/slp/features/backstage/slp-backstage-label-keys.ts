@@ -36,6 +36,7 @@ export const SLP_BACKSTAGE_LABEL_KEYS: Partial<Record<keyof SlurpSettings, strin
   storyImagesEnabled: "ui.slurp.settings.storyImagesEnabled",
   storyLifetimeHours: "ui.slurp.settings.storyLifetimeHours",
   teaserRate: "ui.slurp.settings.wallet.teaserRate",
+  pictureReuse: "ui.slurp.settings.pictureReuse",
   projectRate: "ui.slurp.settings.projectRate",
   arcPace: "ui.slurp.settings.arcPace",
   arcAffectsMood: "ui.slurp.settings.arcAffectsMood",

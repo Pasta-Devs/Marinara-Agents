@@ -574,6 +574,12 @@
     "slurp2": {
       "versions": [
         {
+          "version": "0.3.18",
+          "date": "2026-10-08",
+          "notes": "Engine macros in Slurp, fewer recycled pictures.\n\n- Character cards and wardrobe looks resolve Engine macros such as `{{random::red::green::blue}}`, `{{char}}`, `{{user}}` and `{{#if}}`. A wardrobe look rolls again for each post.\n- Macros that need a chat, such as `{{input}}` or chat variables, resolve to nothing in Slurp.\n- Picture reuse: each earlier picture goes up again at most once, and a repost is never the source of another repost. New setting in Settings › Publishing: Off, Rare or Regular (the old behavior). Off stops automatic reuse; a reuse the player picks still works.",
+          "highlight": false
+        },
+        {
           "version": "0.3.17",
           "date": "2026-10-06",
           "notes": "Spice in one place, user reports, speed.\n\n- Spice: one level (Clean, Flirty, Suggestive, Explicit) for text and pictures, set in Settings › Spice, per Creator in Content rules or Stir. New Language: soft, frank or dirty. Writing keeps only the house style; old presets move over.\n- Romance per Creator (Collaborations): off, or only with chosen Creators.\n- Collabs: the partner's look and identity reach the post and picture; agreed collabs get Post it now and Drop it.\n- Stir: End it works; leaving a Support chat returns to Desk. Send a photo: the whole button picks a file.\n- Faster: chat typing, profiles, notifications, feed, inbox; less polling; no blur on chat bubbles.\n- Fixes: a profile no longer marks its chat read; bulk add no longer hangs; scenes keep Keep out recaps private and hold tips and drama questions; failed pictures retry.",
@@ -685,12 +691,6 @@
           "version": "0.2.75",
           "date": "2026-09-26",
           "notes": "- Fewer selfies and mirror shots: posts now use a propped-up phone, video stills or a friend with the camera more often. Mirror shots are rare, because the image model drew the Creator twice.\n- Pictures no longer show the phone: phone and selfie words are removed from every picture prompt, and the negative prompt names phones and doubled people.\n- Creators copy each other less: a post sees what the other Creators' pictures showed (clothes, room), and its own history lists subjects instead of camera words.\n- More variety: more places, moments, company and post ideas to draw from.\n- From staging 0.2.41: the world tick blocks the Engine much less. Slurp settings are validated once per change instead of on every read, and the tick now pauses between Creators, commissions, and actions so other pages and packages can respond.",
-          "highlight": false
-        },
-        {
-          "version": "0.2.74",
-          "date": "2026-09-26",
-          "notes": "- Settings are rows: what a setting does on the left, its control on the right. Each page says its name once; Reset is at the bottom and resets only that page.\n- Overview is the only summary page, with fan and schedule buttons and more tiles. New names: Connections, Storylines (a Story is the short image post) and Writing. Maintenance is one page.\n- On a phone, settings open on a list of sections.\n- Connections has one row per job and the chat carryover. Creator pictures now sets the connection Creator pictures really use.\n- Images uses picture shapes instead of number fields. Story images moved to Publishing. Storyline types, ads and events are compact lists; long explanations fold under How this works.\n- Writing starts with Spice level and How far pictures go.",
           "highlight": false
         }
       ]

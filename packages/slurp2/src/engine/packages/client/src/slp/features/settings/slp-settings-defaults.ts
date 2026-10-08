@@ -37,6 +37,7 @@ export const SLURP_SETTINGS_SECTION_KEYS: Record<SlurpResettableSection, readonl
     "lifeMomentRate",
     "storyJobs",
     "teaserRate",
+    "pictureReuse",
   ],
   // Carryover is about Engine chats, so it resets with the Connections page it lives on.
   connections: ["carryoverModes", "carryoverHours", "carryoverMaxItems"],

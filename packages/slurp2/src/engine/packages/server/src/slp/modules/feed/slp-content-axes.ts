@@ -314,6 +314,9 @@ export function slurpWorkflowPublishes(state: SlurpContentWorkflow): boolean {
   return PUBLISHING.has(state);
 }
 
+/** The `pictureReuse` setting. */
+export type SlurpPictureReuse = "off" | "rare" | "regular";
+
 /**
  * Whether this post reuses a real earlier picture instead of taking a new one.
  *
@@ -321,19 +324,24 @@ export function slurpWorkflowPublishes(state: SlurpContentWorkflow): boolean {
  * a public teaser often shows a cropped corner of a recent locked set; anything else now and then
  * reposts an older picture. Text-only, Story, and set posts are left alone: a set is new work, and
  * a Story is taken now.
+ *
+ * `rate` is the player's picture reuse setting: off never reuses, rare keeps a third of the odds.
  */
 export function slurpReuseDelivery(
   axes: SlurpPostAxes,
   available: { shoot: boolean; archive: boolean; preview: boolean },
   creatorAccountId: string,
   sequence: number,
+  rate: SlurpPictureReuse = "regular",
 ): SlurpPostAxes {
-  if (axes.delivery !== "new_capture") return axes;
-  const draw = (reuse: number) =>
-    slurpWeightedPick("reuseDelivery", creatorAccountId, sequence, [
+  if (axes.delivery !== "new_capture" || rate === "off") return axes;
+  const draw = (odds: number) => {
+    const reuse = rate === "rare" ? Math.round(odds / 3) : odds;
+    return slurpWeightedPick("reuseDelivery", creatorAccountId, sequence, [
       { value: true, weight: reuse },
       { value: false, weight: 100 - reuse },
     ]);
+  };
   if (axes.intent === "callback" && available.shoot && draw(60)) return { ...axes, delivery: "existing_media" };
   if (axes.intent === "teaser" && available.preview && draw(50)) return { ...axes, delivery: "cropped_preview" };
   if (
