@@ -96,7 +96,11 @@ export function searchLtmBm25(
   const referenceEntries = presentEntries.sort((left, right) => right.idf - left.idf).slice(0, 8);
   const referenceScore = referenceEntries.reduce((total, { idf }) => total + idf, 0);
 
-  for (const { entry, idf } of referenceEntries) {
+  // Issue #1264 (CodeRabbit): summing every present term let a chunk that only shares
+  // common words reach the reference. Each chunk instead keeps its 16 strongest term
+  // contributions, so a memory matching a ninth-ranked term still scores.
+  const contributions = new Map<string, number[]>();
+  for (const { entry, idf } of presentEntries) {
     const postings = entry.postings.filter(
       (posting) => !options.allowedChunks || options.allowedChunks.has(posting.chunkId),
     );
@@ -107,8 +111,19 @@ export function searchLtmBm25(
       if (!document) continue;
       const denominator = posting.count + K1 * (1 - B + B * (document.length / index.avgDocLength));
       const score = idf * ((posting.count * (K1 + 1)) / denominator);
-      scores.set(posting.chunkId, (scores.get(posting.chunkId) ?? 0) + score);
+      const list = contributions.get(posting.chunkId) ?? [];
+      list.push(score);
+      contributions.set(posting.chunkId, list);
     }
+  }
+  for (const [chunkId, list] of contributions) {
+    scores.set(
+      chunkId,
+      list
+        .sort((a, b) => b - a)
+        .slice(0, 16)
+        .reduce((total, score) => total + score, 0),
+    );
   }
 
   return Array.from(scores.entries())

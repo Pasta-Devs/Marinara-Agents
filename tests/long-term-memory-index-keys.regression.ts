@@ -487,6 +487,21 @@ async function main() {
     "terms excluded from the top-eight reference must not saturate the score",
   );
 
+  // A memory whose only match is a ninth-ranked query term must still score; the
+  // reference bounds the normalization, not which memories can be credited.
+  const ninthTermIndex = buildLtmBm25Index([
+    { ...chunk("rare-only", "rare_only_note"), text: rareTerms.join(" ") },
+    ...Array.from({ length: 5 }, (_, index) => ({ ...chunk(`lantern-${index}`, `lantern_${index}`), text: "lantern" })),
+    ...Array.from({ length: 4 }, (_, index) => ({ ...chunk(`other-${index}`, `other_${index}`), text: "harbour" })),
+  ]);
+  const ninthTermHit = searchLtmBm25(ninthTermIndex, [...rareTerms, "lantern"].join(" "), { topK: 10 }).find(
+    ({ chunkId }: { chunkId: string }) => chunkId === "lantern-0",
+  );
+  assert.ok(
+    ninthTermHit && ninthTermHit.normalizedScore > 0,
+    "a memory matching only terms outside the eight-term reference must still score",
+  );
+
   // Issue #1264: a late-alphabet in-scope keyword must still fuzzy-match when the
   // scope holds more in-scope keywords than the fuzzy catalog cap.
   const wideKeywords = Array.from({ length: 600 }, (_, index) => {
