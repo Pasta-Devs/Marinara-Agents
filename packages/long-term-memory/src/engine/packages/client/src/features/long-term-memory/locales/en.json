@@ -324,7 +324,7 @@
   "ui.longTermMemory.memorysettings.duplicateNoteS": "duplicate note(s),",
   "ui.longTermMemory.memorysettings.exactFullName": ", exact full name",
   "ui.longTermMemory.memorysettings.exactWordsMatch": "Exact words match",
-  "ui.longTermMemory.memorysettings.excludesCandidatesWhoseCombinedRetrievalScoreFallsBelowThis": "Excludes candidates whose strongest weighted lane score is below this value on the shared 0-1 lane scale. Each lane's score is capped by its weight, and the graph lane caps at half its weight; this is not the fused rank score or a score relative to the top result. 0 disables this filter.",
+  "ui.longTermMemory.memorysettings.excludesCandidatesWhoseCombinedRetrievalScoreFallsBelowThis": "Excludes candidates whose strongest weighted lane score is below this value on the shared 0-1 lane scale. Each lane's score is capped by its weight, and the graph lane caps at half its weight; this is not the fused rank score or a score relative to the top result. Values above 0.4 are read as 0.4, because the rescaled weights leave little above that. 0 disables this filter.",
   "ui.longTermMemory.memorysettings.existingNoteChunks": "Existing-note chunks",
   "ui.longTermMemory.memorysettings.existingNoteTokenBudget": "Existing-note token budget",
   "ui.longTermMemory.memorysettings.exportBackup": "Export backup",

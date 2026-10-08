@@ -47,7 +47,7 @@ async function main() {
     recordLongTermMemoryAttempt,
   } = await import(`${source}/usage.ts`);
   const { readLtmDebugLog } = await import(`${source}/debug-log.ts`);
-  const { resolveLongTermMemoryRecallSettings } =
+  const { resolveLongTermMemoryRecallSettings, LTM_RECALL_SCORE_THRESHOLD_CEILING } =
     await import("../packages/long-term-memory/src/engine/packages/shared/src/features/agents/long-term-memory/runtime-settings.ts");
   const { DEFAULT_LTM_GLOBAL_SETTINGS } =
     await import("../packages/long-term-memory/src/engine/packages/shared/src/features/agents/long-term-memory/schema.ts");
@@ -1333,13 +1333,15 @@ async function main() {
           "a budget-exhausted recall must not record a zero-match injection receipt",
         );
 
-        for (const threshold of [0, 0.5, 0.6, 0.61]) {
-          // Issue #1258: every preset's strongest lane now carries weight 1, so pin
-          // custom weights below 1 to keep a reachable cap above which all reject.
+        for (const threshold of [0, 0.2, 0.4, 0.5, 0.61]) {
+          // Issue #1264: a saved threshold above 0.4 reads as 0.4. Pin the semantic
+          // weight at 0.4 so the top vector match reaches the clamped ceiling exactly,
+          // which proves both the clamp and threshold equality.
+          const effectiveThreshold = Math.min(threshold, LTM_RECALL_SCORE_THRESHOLD_CEILING);
           chats[0].metadata = {
             ...originalRecallMetadata,
             longTermMemoryRecallStyle: "custom",
-            longTermMemorySemanticWeight: 0.6,
+            longTermMemorySemanticWeight: 0.4,
             longTermMemoryLexicalWeight: 0.3,
             longTermMemoryGraphWeight: 0.1,
             longTermMemoryKeywordWeight: 0.2,
@@ -1351,7 +1353,11 @@ async function main() {
             debugMode: true,
           });
           const explanation = (await readLtmDebugLog({ phase: "retrieval" }, storage.root)).at(-1)!;
-          assert.equal(explanation.details.scoreThreshold, threshold, "even an all-rejected recall must be explained");
+          assert.equal(
+            explanation.details.scoreThreshold,
+            effectiveThreshold,
+            "a saved threshold above 0.4 must read as 0.4",
+          );
           assert.equal(explanation.counts.selected, thresholdRecall?.receipt.artifact.chunks.length ?? 0);
           for (const candidate of thresholdRecall?.receipt.artifact.chunks ?? []) {
             const detail = explanation.details.selected.find((item: any) => item.noteId === candidate.chunk.noteId);
@@ -1363,21 +1369,33 @@ async function main() {
           }
           for (const candidate of explanation.details.rejected) {
             assert.equal(typeof candidate.fusedScore, "number");
-            assert.equal(candidate.thresholdPassed, candidate.relevanceScore >= threshold);
+            assert.equal(candidate.thresholdPassed, candidate.relevanceScore >= effectiveThreshold);
           }
-          if (threshold === 0.6) {
-            assert.equal(
-              thresholdRecall.receipt.artifact.chunks[0].relevanceScore,
-              0.6,
+          if (effectiveThreshold === LTM_RECALL_SCORE_THRESHOLD_CEILING) {
+            assert.ok(
+              (thresholdRecall?.receipt.artifact.chunks ?? []).some(
+                (candidate: any) => candidate.relevanceScore === effectiveThreshold,
+              ),
               "equality passes the threshold",
             );
           }
-          if (threshold === 0.61) {
-            assert.equal(thresholdRecall, null, "scores remain capped by the lane weights");
-            assert.ok(explanation.details.rejected.length > 0);
-            assert.ok(explanation.details.rejected.every((candidate: any) => candidate.thresholdPassed === false));
-          }
         }
+        // Issue #1264: saved thresholds are clamped, so the direct retrieval cap still
+        // rejects everything above the lane weights.
+        const aboveCap = await retrieveLongTermMemory({
+          root: storage.root,
+          queryText: "observatory cobalt archive",
+          scope: { chatId: "chat-a", chatIds: ["chat-a"] },
+          mode: "roleplay",
+          semanticWeight: 0.4,
+          lexicalWeight: 0.3,
+          graphWeight: 0.1,
+          keywordWeight: 0.2,
+          minScore: LTM_RECALL_SCORE_THRESHOLD_CEILING + 0.01,
+          maxChunks: 10,
+          maxTokens: 4096,
+        });
+        assert.deepEqual(aboveCap.chunks, [], "scores remain capped by the lane weights");
       } finally {
         chats[0].metadata = originalRecallMetadata;
       }
