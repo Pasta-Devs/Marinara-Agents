@@ -1457,6 +1457,11 @@ export function createLongTermMemoryRoutes(runtime: {
         ...body,
         root,
         mode,
+        // A scope that only names the chat resolves like a turn, adding the chat's group and persona.
+        scope:
+          chat && Object.keys(body.scope ?? {}).every((key) => key === "chatId" || key === "chatIds")
+            ? resolveChatLtmScope(chat)
+            : body.scope,
         characterIds:
           body.characterIds ??
           (body.scope?.characterIds !== undefined

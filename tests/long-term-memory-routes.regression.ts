@@ -2605,6 +2605,7 @@ async function main(routeScenario: RouteScenario) {
       const previousChatMetadata = chats[0].metadata;
       const previousChatCharacterIds = chats[0].characterIds;
       const characterScopeSentinel = "world_search_character_scope_sentinel";
+      const groupScopeSentinel = "world_search_group_scope_sentinel";
       await storageService.storage.createNote({
         id: characterScopeSentinel,
         type: "world",
@@ -2703,6 +2704,49 @@ async function main(routeScenario: RouteScenario) {
         assert.ok(searchResult.promptOverheadTokens > 0);
         assert.ok(searchResult.chunks.every((candidate: any) => typeof candidate.estimatedTokens === "number"));
 
+        // A scope that only names the chat must recall the chat's group memories like a turn does.
+        await storageService.storage.createNote({
+          id: groupScopeSentinel,
+          type: "world",
+          status: "active",
+          modes: ["roleplay"],
+          scope: { groupId: "observatory-branches" },
+          tags: [],
+          keywords: ["branchwide-sentinel"],
+          links: [],
+          sections: {
+            facts: {
+              text: "Branchwide sentinel shared by every chat in the group.",
+              updatedAt: "2026-07-17T00:00:00.000Z",
+            },
+          },
+        });
+        const chatOnlySearch = await app.inject({
+          method: "POST",
+          url: "/api/long-term-memory/search",
+          headers,
+          payload: { queryText: "branchwide-sentinel", scope: { chatId: "chat-a" } },
+        });
+        assert.equal(chatOnlySearch.statusCode, 200, chatOnlySearch.body);
+        const chatOnlyTurn = await prepareGenerationLongTermMemory({
+          root: storageService.storage.root,
+          chatId: "chat-a",
+          chatMode: "roleplay",
+          characterIds: ["character-mara"],
+          messages: [{ role: "user", content: "branchwide-sentinel" }],
+          debugMode: true,
+        });
+        assert.deepEqual(
+          chatOnlySearch.json().chunks.map((candidate: any) => candidate.chunk.noteId),
+          [groupScopeSentinel],
+          "a chat-only search scope must include the chat's group memories",
+        );
+        assert.deepEqual(
+          chatOnlySearch.json().chunks.map((candidate: any) => candidate.chunk.noteId),
+          chatOnlyTurn?.receipt.artifact.chunks.map((candidate: any) => candidate.chunk.noteId),
+          "a chat-only search scope must select what the chat's turn injects",
+        );
+
         const explicitOverrides = await app.inject({
           method: "POST",
           url: "/api/long-term-memory/search",
@@ -2730,7 +2774,7 @@ async function main(routeScenario: RouteScenario) {
       } finally {
         chats[0].metadata = previousChatMetadata;
         chats[0].characterIds = previousChatCharacterIds;
-        await storageService.storage.deleteNotesPermanently([characterScopeSentinel]);
+        await storageService.storage.deleteNotesPermanently([characterScopeSentinel, groupScopeSentinel]);
       }
       const transferPreview = await app.inject({
         method: "POST",
