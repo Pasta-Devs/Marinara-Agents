@@ -8,6 +8,7 @@ import type {
   LtmIntegrityResponse,
 } from "../../../../shared/src/features/agents/long-term-memory/schema.js";
 import { LTM_RECALL_STYLE_WEIGHTS } from "../../../../shared/src/features/agents/long-term-memory/constants.js";
+import { LTM_RECALL_SCORE_THRESHOLD_CEILING } from "../../../../shared/src/features/agents/long-term-memory/runtime-settings.js";
 import { invalidateLtmQueries, queryKeys, request, requestHost, requestRaw } from "./api";
 import { Button, InfoPopover, NumberField, StatusSurface, inputClass } from "./shared-controls";
 import type { LongTermMemoryDestinationProps } from "./types";
@@ -1037,7 +1038,7 @@ export default function MemorySettings({
             )}
             value={globalForm.longTermMemoryScoreThreshold}
             min={0}
-            max={1}
+            max={LTM_RECALL_SCORE_THRESHOLD_CEILING}
             step={0.01}
             onChange={(value) =>
               setGlobalForm({
