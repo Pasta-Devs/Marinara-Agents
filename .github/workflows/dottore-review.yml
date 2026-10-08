@@ -1,0 +1,50 @@
+name: Dottore Review
+
+# The reviewer lives in Marinara-Engine. This wrapper runs it against this repository:
+# the status, comments, token and secrets belong here, and .github/dottore-review/rules.json
+# is read from the PR base branch. When the engine changes, bump the pinned SHA in a small PR.
+
+on:
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: Pull request number to review.
+        required: true
+      comment_body:
+        description: Slash command body that requested the review.
+        default: ""
+      review_mode:
+        description: Review mode for the requested pass.
+        type: choice
+        options: [auto, full, incremental]
+        default: auto
+      requested_by:
+        description: GitHub login that requested the dispatch.
+        default: ""
+      last_reviewed_sha:
+        description: Explicit Dottore-reviewed head SHA from the dispatcher, when known.
+        default: ""
+
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+  statuses: write
+
+# Distinct from the engine's own group, which would otherwise cancel this caller.
+concurrency:
+  group: dottore-review-caller-${{ github.repository }}-${{ inputs.pr_number }}
+  cancel-in-progress: true
+
+jobs:
+  review:
+    uses: Pasta-Devs/Marinara-Engine/.github/workflows/dottore-review.yml@27b38ecb185d73384ae13a4fcd28a4e9040742a5
+    with:
+      pr_number: ${{ inputs.pr_number }}
+      comment_body: ${{ inputs.comment_body }}
+      review_mode: ${{ inputs.review_mode }}
+      requested_by: ${{ inputs.requested_by }}
+      last_reviewed_sha: ${{ inputs.last_reviewed_sha }}
+    secrets:
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      LLM_BASE_URL: ${{ secrets.LLM_BASE_URL }}

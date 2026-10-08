@@ -1,0 +1,114 @@
+name: Dottore Review Command
+
+on:
+  issue_comment:
+    types: [created]
+
+permissions:
+  actions: write
+  contents: read
+  issues: write
+  pull-requests: read
+
+jobs:
+  dispatch:
+    if: >
+      github.event.issue.pull_request &&
+      startsWith(github.event.comment.body, '/dottore') &&
+      contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'),
+               github.event.comment.author_association)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Dispatch trusted Dottore reviewer
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUM: ${{ github.event.issue.number }}
+          COMMENT_BODY: ${{ github.event.comment.body }}
+          COMMENT_AUTHOR: ${{ github.event.comment.user.login }}
+          DOTTORE_BASE_REFS: ${{ vars.DOTTORE_BASE_REFS || 'refactor,main,staging' }}
+        run: |
+          # Keep this bootstrap deliberately inert: it only authorizes the slash command
+          # and dispatches the trusted reviewer workflow on the PR base ref.
+          # It must not checkout, install, or execute code from the pull request.
+          REVIEW_MODE=auto
+          if ! [[ "$COMMENT_BODY" =~ ^/dottore([[:space:]]+full)?[[:space:]]*$ ]]; then
+            echo "No supported examination command; use /dottore or /dottore full."
+            exit 0
+          fi
+          if [[ "$COMMENT_BODY" =~ ^/dottore[[:space:]]+full[[:space:]]*$ ]]; then
+            REVIEW_MODE=full
+          fi
+          TARGET_REF="$(gh pr view "$PR_NUM" --repo "${{ github.repository }}" --json baseRefName -q .baseRefName)"
+          if ! jq -en --arg refs "$DOTTORE_BASE_REFS" --arg ref "$TARGET_REF" '$refs | split(",") | index($ref) != null' >/dev/null; then
+            echo "::error::Unsupported Dottore review base ref: $TARGET_REF"
+            exit 1
+          fi
+          gh api "repos/${{ github.repository }}/contents/.github/workflows/dottore-review.yml?ref=$TARGET_REF" --silent >/dev/null || {
+            echo "::error::Dottore trusted workflow not found on base ref $TARGET_REF"
+            exit 1
+          }
+
+          COMMENT_DISPLAY="$(printf '%s' "$COMMENT_BODY" | tr '\r\n' '  ' | sed -e 's/\\/\\\\/g' -e 's/`/\\`/g')"
+          if [ "${#COMMENT_DISPLAY}" -gt 180 ]; then
+            COMMENT_DISPLAY="${COMMENT_DISPLAY:0:177}..."
+          fi
+
+          status_body() {
+            local title="$1"
+            local detail="$2"
+            printf '%s\n' \
+              '<!-- dottore:command-status -->' \
+              "## 🎭 Dottore Review — $title" \
+              '' \
+              "Command: \`$COMMENT_DISPLAY\`" \
+              "Mode: \`$REVIEW_MODE\`" \
+              "Requested by: \`$COMMENT_AUTHOR\`" \
+              "Target ref: \`$TARGET_REF\`" \
+              "Status: $detail"
+          }
+
+          upsert_status() {
+            local title="$1"
+            local detail="$2"
+            local body
+            body="$(status_body "$title" "$detail")"
+            local comment_id
+            comment_id="$(gh api "repos/${{ github.repository }}/issues/$PR_NUM/comments?per_page=100" \
+              --paginate \
+              --jq '.[] | select(.user.login == "github-actions[bot]") | select(.body | contains("<!-- dottore:command-status -->")) | .id' \
+              | tail -n 1)"
+            if [ -n "$comment_id" ]; then
+              gh api \
+                --method PATCH \
+                "repos/${{ github.repository }}/issues/comments/$comment_id" \
+                -f body="$body" >/dev/null
+            else
+              gh api \
+                --method POST \
+                "repos/${{ github.repository }}/issues/$PR_NUM/comments" \
+                -f body="$body" >/dev/null
+            fi
+          }
+
+          upsert_status "Experiment in Progress" "Specimen admitted; dispatching the trusted examination." \
+            || echo "::warning::Unable to write Dottore command status before dispatch."
+
+          set +e
+          DISPATCH_OUTPUT="$(gh workflow run dottore-review.yml \
+            --repo "${{ github.repository }}" \
+            --ref "$TARGET_REF" \
+            -f pr_number="$PR_NUM" \
+            -f comment_body="$COMMENT_BODY" \
+            -f review_mode="$REVIEW_MODE" \
+            -f requested_by="$COMMENT_AUTHOR" 2>&1)"
+          DISPATCH_RC=$?
+          set -e
+
+          if [ "$DISPATCH_RC" -ne 0 ]; then
+            upsert_status "Experiment Interrupted" "GitHub refused the examination. Inspect the Dottore Review Command run log." \
+              || echo "::warning::Unable to write Dottore command dispatch failure status."
+            echo "$DISPATCH_OUTPUT"
+            exit "$DISPATCH_RC"
+          fi
+
+          # The reviewer owns status updates after dispatch; do not overwrite a fast result.

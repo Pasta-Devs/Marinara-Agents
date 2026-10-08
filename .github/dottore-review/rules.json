@@ -1,0 +1,147 @@
+{
+  "exclude_paths": [
+    "artifacts/**",
+    "packages/**/agents.json",
+    "packages/**/client.js",
+    "packages/**/server.mjs",
+    "sources/engine/**"
+  ],
+  "review_focus": [
+    "correctness",
+    "user-visible regressions",
+    "security and privacy",
+    "Engine and Agents ownership boundary",
+    "package compatibility and catalog integrity",
+    "failure paths",
+    "missing regression tests",
+    "CI and catalog validation failures"
+  ],
+  "severity_policy": {
+    "blocking": "The PR should not merge because the changed behavior is broken, unsafe, or violates a hard architecture boundary.",
+    "high": "A likely production or data-loss regression, security/privacy issue, or serious package install, catalog, or persistence contract risk.",
+    "medium": "A concrete bug, edge case, maintainability trap, or missing test tied directly to changed behavior.",
+    "low": "A small but actionable correctness, proof, or maintainability risk tied to changed behavior.",
+    "nitpick": "Optional changed-line polish with no behavior risk, such as readability, naming, tiny duplication, stale comments, dead code, type clarity, or local consistency."
+  },
+  "nitpick_policy": {
+    "max_count": 2,
+    "line_scope": "changed-line only",
+    "risk": "No behavior-risk requirement; use for optional polish only.",
+    "side": "RIGHT only"
+  },
+  "control_warn_types": {
+    "Proof Gap": "Important changed behavior lacks focused proof.",
+    "Review Limitation": "Dottore lacked full packet/context to prove a suspected issue.",
+    "Non-blocking Coverage": "Useful coverage or context note that should not block merge by itself."
+  },
+  "repo_concerns": [
+    "Package logic, default prompts, package-owned runtime code, metadata, artwork, manifests, artifacts, and catalog entries belong in this repository. Package loading, capability APIs and shared contracts, Engine UI and settings, storage, provider and model routing, orchestration, and compatibility handling belong in Marinara-Engine; a package change that patches or reimplements host behavior crosses that boundary.",
+    "Bundles (packages/**/client.js, packages/**/server.mjs), artifacts, catalogs, file hashes, checksums, and catalog sizes are generated. Their source or build scripts change and they are rebuilt; they are never hand-edited.",
+    "Changes to package permissions, archive handling, install or update behavior, executable client or server code, or Engine snapshots are security-sensitive and need explicit validation notes.",
+    "About Me is a core Conversation feature and must never be published as an Agent package.",
+    "Changed behavior with realistic regression risk needs the smallest runnable regression proof or manual proof."
+  ],
+  "path_instructions": [
+    {
+      "name": "Package manifests",
+      "prefixes": ["packages/"],
+      "guidance": ["CONTRIBUTING.md"],
+      "checks": [
+        "For packages/<id>/manifest.json: verify Engine compatibility, permissions, entrypoints, restart requirements, declared files, hashes, sizes, and package/category identity.",
+        "Compatibility metadata (engine.min and engine.maxExclusive) stays aligned with the current minimum Marinara Engine version; it is the catalog-lane source of truth."
+      ]
+    },
+    {
+      "name": "Build and catalog scripts",
+      "prefixes": ["scripts/"],
+      "guidance": ["CONTRIBUTING.md"],
+      "checks": [
+        "Treat package construction, archive paths, catalog integrity, checksums, and generated payload handling as security-sensitive."
+      ]
+    },
+    {
+      "name": "Catalog lanes",
+      "prefixes": ["catalog/catalog.json", "catalog/v"],
+      "guidance": ["CONTRIBUTING.md"],
+      "checks": [
+        "Verify catalog entries match package manifests and artifacts. Canonical catalog URLs remain on main; Engine staging securely maps official artifacts to this repository's staging branch for testing.",
+        "Every Engine-major lane under catalog/v*/catalog.json matches the package manifests and artifacts. Builders route packages into lanes; entries are never hand-placed or copied between lanes."
+      ]
+    },
+    {
+      "name": "Workflows and repository automation",
+      "prefixes": [".github/"],
+      "guidance": ["CONTRIBUTING.md", "SECURITY.md"],
+      "checks": [
+        "Workflow changes stay narrow, testable, and least-privilege; pull_request_target dispatchers must not check out or execute pull-request code.",
+        "The Catalog validation job and the owner-approval gate keep working; an outside contributor must never bypass the SpicyMarinara approval requirement."
+      ]
+    },
+    {
+      "name": "Gacha Forge package",
+      "prefixes": ["packages/gacha-forge/"],
+      "guidance": ["packages/gacha-forge/README.md"],
+      "checks": []
+    },
+    {
+      "name": "Long-Term Memory package",
+      "prefixes": ["packages/long-term-memory/"],
+      "guidance": ["packages/long-term-memory/docs/ARCHITECTURE.md"],
+      "checks": []
+    },
+    {
+      "name": "Long-Term Memory client",
+      "prefixes": ["packages/long-term-memory/src/engine/packages/client/"],
+      "guidance": ["packages/long-term-memory/docs/UI.md"],
+      "checks": []
+    },
+    {
+      "name": "Memory Nag package",
+      "prefixes": ["packages/memory-nag/"],
+      "guidance": ["packages/memory-nag/README.md"],
+      "checks": []
+    },
+    {
+      "name": "Modern Life Sim package",
+      "prefixes": ["packages/modern-life-sim/"],
+      "guidance": ["packages/modern-life-sim/README.md"],
+      "checks": []
+    },
+    {
+      "name": "Noodle package",
+      "prefixes": ["packages/noodle/"],
+      "guidance": ["packages/noodle/README.md"],
+      "checks": []
+    },
+    {
+      "name": "Pixelforge package",
+      "prefixes": ["packages/pixelforge/"],
+      "guidance": ["packages/pixelforge/README.md"],
+      "checks": []
+    },
+    {
+      "name": "Quartermaster package",
+      "prefixes": ["packages/quartermaster/"],
+      "guidance": ["packages/quartermaster/README.md"],
+      "checks": []
+    },
+    {
+      "name": "Relationship Tracker package",
+      "prefixes": ["packages/relationship-tracker/"],
+      "guidance": ["packages/relationship-tracker/README.md"],
+      "checks": []
+    },
+    {
+      "name": "5e (SRD 5.1) ruleset package",
+      "prefixes": ["packages/ruleset-5e-2014/"],
+      "guidance": ["packages/ruleset-5e-2014/README.md"],
+      "checks": []
+    },
+    {
+      "name": "Slurp2 package",
+      "prefixes": ["packages/slurp2/"],
+      "guidance": ["packages/slurp2/README.md"],
+      "checks": []
+    }
+  ]
+}
