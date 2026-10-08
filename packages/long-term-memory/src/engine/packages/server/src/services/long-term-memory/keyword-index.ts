@@ -65,11 +65,12 @@ function containsKeywordToken(haystack: string, needle: string) {
 
 /** Issue #1264: names the query uses, i.e. a capitalised word that is not the
  * start of a sentence, quote, or line. Names keep full keyword credit on a single
- * match. The lookbehind avoids consuming an adjacent capitalised word's context,
- * and horizontal whitespace keeps a message or line break from starting a name. */
+ * match. Check the context before horizontal whitespace without consuming it. */
 function queryNameTerms(queryText: string) {
   const names = new Set<string>();
-  for (const match of queryText.matchAll(/(?<![.!?"\n*(\s])[^\S\r\n]+(\p{Lu}[\p{L}'-]*)/gu)) {
+  for (const match of queryText.matchAll(/[^\S\r\n]+(\p{Lu}[\p{L}'-]*)/gu)) {
+    const precedingContext = queryText.slice(0, match.index).replace(/[^\S\r\n]+$/u, "");
+    if (/(?:^|[.!?"\r\n*(])$/u.test(precedingContext)) continue;
     names.add(match[1]!.toLocaleLowerCase().replace(/'s$/, ""));
   }
   return names;

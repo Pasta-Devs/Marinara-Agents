@@ -93,13 +93,10 @@ export function searchLtmBm25(
       idf: Math.log(1 + (index.chunkCount - entry.documentFrequency + 0.5) / (entry.documentFrequency + 0.5)),
     });
   }
-  const referenceScore = presentEntries
-    .map(({ idf }) => idf)
-    .sort((left, right) => right - left)
-    .slice(0, 8)
-    .reduce((total, idf) => total + idf, 0);
+  const referenceEntries = presentEntries.sort((left, right) => right.idf - left.idf).slice(0, 8);
+  const referenceScore = referenceEntries.reduce((total, { idf }) => total + idf, 0);
 
-  for (const { entry, idf } of presentEntries) {
+  for (const { entry, idf } of referenceEntries) {
     const postings = entry.postings.filter(
       (posting) => !options.allowedChunks || options.allowedChunks.has(posting.chunkId),
     );

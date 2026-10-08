@@ -396,13 +396,19 @@ async function main() {
     (fuzzyMatchHit?.score ?? 0) / LTM_KEYWORD_MAX_SCORE <= 0.5,
     "one exact keyword must stay capped despite multiple fuzzy hits",
   );
-  const sentenceStartHit = searchLtmKeywordIndex(singleMatchIndex, "Mira arrived", { topK: 10 })[0];
+  const sentenceStartHit = searchLtmKeywordIndex(singleMatchIndex, "   Mira arrived", { topK: 10 })[0];
   assert.equal(sentenceStartHit?.chunkId, "name-chunk");
   assert.ok(
     (sentenceStartHit?.score ?? 0) / LTM_KEYWORD_MAX_SCORE <= 0.5,
-    "capitalisation at the start of a sentence must not count as a name",
+    "capitalisation at sentence start after leading spaces must not count as a name",
   );
-  const nameHit = searchLtmKeywordIndex(singleMatchIndex, "Meet Mira at the bar", { topK: 10 })[0];
+  const sentenceBoundaryHit = searchLtmKeywordIndex(singleMatchIndex, "We waited.   Mira arrived", { topK: 10 })[0];
+  assert.equal(sentenceBoundaryHit?.chunkId, "name-chunk");
+  assert.ok(
+    (sentenceBoundaryHit?.score ?? 0) / LTM_KEYWORD_MAX_SCORE <= 0.5,
+    "capitalisation after sentence punctuation and spaces must not count as a name",
+  );
+  const nameHit = searchLtmKeywordIndex(singleMatchIndex, "Meet   Mira at the bar", { topK: 10 })[0];
   assert.equal(nameHit?.chunkId, "name-chunk");
   assert.ok(
     (nameHit?.score ?? 0) / LTM_KEYWORD_MAX_SCORE >= 0.75,
@@ -411,7 +417,7 @@ async function main() {
   const pairHit = searchLtmKeywordIndex(singleMatchIndex, "tomas cobalt arrive", { topK: 10 })[0];
   assert.equal(pairHit?.chunkId, "pair-chunk");
   assert.ok((pairHit?.score ?? 0) / LTM_KEYWORD_MAX_SCORE >= 0.75, "two distinct keywords must keep full credit");
-  const messageStartHit = searchLtmKeywordIndex(singleMatchIndex, "we can wait\nHalf a sandwich remains", {
+  const messageStartHit = searchLtmKeywordIndex(singleMatchIndex, "we can wait\n   Half a sandwich remains", {
     topK: 10,
   })[0];
   assert.equal(messageStartHit?.chunkId, "everyday-chunk");
@@ -457,6 +463,28 @@ async function main() {
     paddedMatch.normalizedScore,
     baseMatch.normalizedScore,
     "query padding beyond the eight highest-idf terms must not change the reference",
+  );
+
+  const rareTerms = Array.from({ length: 8 }, (_, index) => `rare${index}`);
+  const commonText = Array.from({ length: 400 }, (_, index) => `common${index}`).join(" ");
+  const commonOnlyIndex = buildLtmBm25Index([
+    { ...chunk("common-only", "common_only"), text: commonText },
+    ...Array.from({ length: 18 }, (_, index) => ({
+      ...chunk(`common-filler-${index}`, `common_filler_${index}`),
+      text: commonText,
+    })),
+    { ...chunk("rare-only", "rare_only"), text: rareTerms.join(" ") },
+  ]);
+  const commonOnlyHit = searchLtmBm25(
+    commonOnlyIndex,
+    [...rareTerms, ...Array.from({ length: 400 }, (_, index) => `common${index}`)].join(" "),
+    {
+      topK: 30,
+    },
+  ).find(({ chunkId }: { chunkId: string }) => chunkId === "common-only");
+  assert.ok(
+    !commonOnlyHit || commonOnlyHit.normalizedScore < 1,
+    "terms excluded from the top-eight reference must not saturate the score",
   );
 
   // Issue #1264: a late-alphabet in-scope keyword must still fuzzy-match when the
