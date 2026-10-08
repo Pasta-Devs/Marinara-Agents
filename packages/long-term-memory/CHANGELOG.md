@@ -1,5 +1,10 @@
 # Long-Term Memory changelog
 
+## 1.4.17 — 2026-10-08
+
+- Make `/search` resolve the scoped chat's recall settings and prompt budget like generation, while preserving explicit request overrides.
+- Show fused rank beside relevance in Debug and remove unused cooldown behavior.
+
 ## 1.4.16 — 2026-10-08 [highlight]
 
 - Stop one everyday word from deciding recall alone. A single exact keyword counts for half the keyword lane unless the chat uses it as a name; two distinct keywords or a phrase still count in full.
