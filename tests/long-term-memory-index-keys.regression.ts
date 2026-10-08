@@ -346,23 +346,176 @@ async function main() {
     "a keyword common only outside the recall scope must keep full weight inside it",
   );
 
-  // The threshold filters the same strength of match in every style only while
-  // each preset's strongest lane can reach full relevance, graph-only neighbours
-  // (at most half the graph weight) stay under the default threshold, and an
-  // exact keyword term clears it when the semantic lane is unavailable.
+  // Issue #1264: the threshold filters the same strength of match in every style
+  // while each preset's strongest lane carries the rescaled 0.7 ceiling and
+  // graph-only neighbours (at most half the graph weight) stay under the default
+  // threshold. A single ordinary keyword is now capped at half the lane, so only
+  // two distinct keywords (or a name) clear the default threshold.
   const { DEFAULT_LTM_GLOBAL_SETTINGS } =
     await import("../packages/long-term-memory/src/engine/packages/shared/src/features/agents/long-term-memory/schema.ts");
   for (const [style, weights] of Object.entries(LTM_RECALL_STYLE_WEIGHTS)) {
-    assert.equal(Math.max(...Object.values(weights)), 1, `${style}: the strongest lane must carry weight 1`);
+    assert.equal(
+      Math.max(...Object.values(weights)),
+      0.7,
+      `${style}: the strongest lane must carry the rescaled ceiling`,
+    );
     assert.ok(
       weights.graphWeight * 0.5 < DEFAULT_LTM_GLOBAL_SETTINGS.longTermMemoryScoreThreshold,
       `${style}: graph-only neighbours must stay under the default threshold`,
     );
+  }
+  for (const [style, weights] of Object.entries(LTM_RECALL_STYLE_WEIGHTS)) {
     assert.ok(
       weights.keywordWeight * (3 / LTM_KEYWORD_MAX_SCORE) >= DEFAULT_LTM_GLOBAL_SETTINGS.longTermMemoryScoreThreshold,
-      `${style}: an exact keyword term must clear the default threshold`,
+      `${style}: two distinct keywords must clear the default threshold`,
     );
   }
+
+  // Issue #1264: one ordinary exact keyword must not clear the lane alone, while a
+  // name used mid-sentence, two distinct keywords, or a multi-word phrase keep full credit.
+  const singleMatchIndex = buildLtmKeywordIndex([
+    { ...chunk("everyday-chunk", "everyday_note"), keywords: ["half"] },
+    { ...chunk("name-chunk", "name_note"), keywords: ["mira"] },
+    { ...chunk("pair-chunk", "pair_note"), keywords: ["tomas", "cobalt"] },
+  ]);
+  const everydayHit = searchLtmKeywordIndex(singleMatchIndex, "There's half a sandwich left", { topK: 10 })[0];
+  assert.equal(everydayHit?.chunkId, "everyday-chunk");
+  assert.ok(
+    (everydayHit?.score ?? 0) / LTM_KEYWORD_MAX_SCORE <= 0.5,
+    "a single everyday exact keyword must cap at half the keyword lane",
+  );
+  const fuzzyMatchIndex = buildLtmKeywordIndex([
+    {
+      ...chunk("fuzzy-match-chunk", "fuzzy_match_note"),
+      keywords: ["half", "half sandwich", "half meal", "half leftovers"],
+    },
+  ]);
+  const fuzzyMatchHit = searchLtmKeywordIndex(fuzzyMatchIndex, "There's half sandwich meal leftovers", { topK: 10 })[0];
+  assert.equal(fuzzyMatchHit?.chunkId, "fuzzy-match-chunk");
+  assert.ok(
+    (fuzzyMatchHit?.score ?? 0) / LTM_KEYWORD_MAX_SCORE <= 0.5,
+    "one exact keyword must stay capped despite multiple fuzzy hits",
+  );
+  const sentenceStartHit = searchLtmKeywordIndex(singleMatchIndex, "   Mira arrived", { topK: 10 })[0];
+  assert.equal(sentenceStartHit?.chunkId, "name-chunk");
+  assert.ok(
+    (sentenceStartHit?.score ?? 0) / LTM_KEYWORD_MAX_SCORE <= 0.5,
+    "capitalisation at sentence start after leading spaces must not count as a name",
+  );
+  const sentenceBoundaryHit = searchLtmKeywordIndex(singleMatchIndex, "We waited.   Mira arrived", { topK: 10 })[0];
+  assert.equal(sentenceBoundaryHit?.chunkId, "name-chunk");
+  assert.ok(
+    (sentenceBoundaryHit?.score ?? 0) / LTM_KEYWORD_MAX_SCORE <= 0.5,
+    "capitalisation after sentence punctuation and spaces must not count as a name",
+  );
+  const nameHit = searchLtmKeywordIndex(singleMatchIndex, "Meet   Mira at the bar", { topK: 10 })[0];
+  assert.equal(nameHit?.chunkId, "name-chunk");
+  assert.ok(
+    (nameHit?.score ?? 0) / LTM_KEYWORD_MAX_SCORE >= 0.75,
+    "a name used mid-sentence must keep full credit on a single keyword",
+  );
+  const pairHit = searchLtmKeywordIndex(singleMatchIndex, "tomas cobalt arrive", { topK: 10 })[0];
+  assert.equal(pairHit?.chunkId, "pair-chunk");
+  assert.ok((pairHit?.score ?? 0) / LTM_KEYWORD_MAX_SCORE >= 0.75, "two distinct keywords must keep full credit");
+  const messageStartHit = searchLtmKeywordIndex(singleMatchIndex, "we can wait\n   Half a sandwich remains", {
+    topK: 10,
+  })[0];
+  assert.equal(messageStartHit?.chunkId, "everyday-chunk");
+  assert.ok(
+    (messageStartHit?.score ?? 0) / LTM_KEYWORD_MAX_SCORE <= 0.5,
+    "a word after a line or message break must not count as a name",
+  );
+  const adjacentNameHit = searchLtmKeywordIndex(singleMatchIndex, "I met Captain Mira today", { topK: 10 })[0];
+  assert.equal(adjacentNameHit?.chunkId, "name-chunk");
+  assert.ok(
+    (adjacentNameHit?.score ?? 0) / LTM_KEYWORD_MAX_SCORE >= 0.75,
+    "a name must keep full credit beside another capitalised word",
+  );
+
+  // Issue #1264: the BM25 reference is the eight highest-idf query terms present in
+  // the index, so padding the query with lower-idf narration does not shrink a
+  // matching chunk's normalized score.
+  const referenceCorpus = [
+    ...Array.from({ length: 200 }, (_, index) => {
+      const tokens = ["filler"];
+      if (index < 100) for (let term = 1; term <= 8; term += 1) tokens.push(`common${term}`);
+      if (index < 190) for (let term = 9; term <= 12; term += 1) tokens.push(`common${term}`);
+      return {
+        ...chunk(`ref-filler-${String(index).padStart(3, "0")}`, `ref_filler_${index}`),
+        text: tokens.join(" "),
+      };
+    }),
+    { ...chunk("ref-match", "ref_match_note"), text: "cobalt" },
+  ];
+  const referenceIndex = buildLtmBm25Index(referenceCorpus);
+  const baseQuery = `cobalt ${Array.from({ length: 8 }, (_, index) => `common${index + 1}`).join(" ")}`;
+  const paddedQuery = `${baseQuery} common9 common10 common11 common12`;
+  const baseMatch = searchLtmBm25(referenceIndex, baseQuery, { topK: 10 }).find(
+    ({ chunkId }: { chunkId: string }) => chunkId === "ref-match",
+  );
+  const paddedMatch = searchLtmBm25(referenceIndex, paddedQuery, { topK: 10 }).find(
+    ({ chunkId }: { chunkId: string }) => chunkId === "ref-match",
+  );
+  assert.ok(baseMatch, "the matching chunk must be found for the base BM25 query");
+  assert.ok(paddedMatch, "the matching chunk must be found for the padded BM25 query");
+  assert.ok(baseMatch.normalizedScore > 0.1, "a matching chunk must not normalize to near zero");
+  assert.equal(
+    paddedMatch.normalizedScore,
+    baseMatch.normalizedScore,
+    "query padding beyond the eight highest-idf terms must not change the reference",
+  );
+
+  const rareTerms = Array.from({ length: 8 }, (_, index) => `rare${index}`);
+  const commonText = Array.from({ length: 400 }, (_, index) => `common${index}`).join(" ");
+  const commonOnlyIndex = buildLtmBm25Index([
+    { ...chunk("common-only", "common_only"), text: commonText },
+    ...Array.from({ length: 18 }, (_, index) => ({
+      ...chunk(`common-filler-${index}`, `common_filler_${index}`),
+      text: commonText,
+    })),
+    { ...chunk("rare-only", "rare_only"), text: rareTerms.join(" ") },
+  ]);
+  const commonOnlyHit = searchLtmBm25(
+    commonOnlyIndex,
+    [...rareTerms, ...Array.from({ length: 400 }, (_, index) => `common${index}`)].join(" "),
+    {
+      topK: 30,
+    },
+  ).find(({ chunkId }: { chunkId: string }) => chunkId === "common-only");
+  assert.ok(
+    !commonOnlyHit || commonOnlyHit.normalizedScore < 1,
+    "terms excluded from the top-eight reference must not saturate the score",
+  );
+
+  // A memory whose only match is a ninth-ranked query term must still score; the
+  // reference bounds the normalization, not which memories can be credited.
+  const ninthTermIndex = buildLtmBm25Index([
+    { ...chunk("rare-only", "rare_only_note"), text: rareTerms.join(" ") },
+    ...Array.from({ length: 5 }, (_, index) => ({ ...chunk(`lantern-${index}`, `lantern_${index}`), text: "lantern" })),
+    ...Array.from({ length: 4 }, (_, index) => ({ ...chunk(`other-${index}`, `other_${index}`), text: "harbour" })),
+  ]);
+  const ninthTermHit = searchLtmBm25(ninthTermIndex, [...rareTerms, "lantern"].join(" "), { topK: 10 }).find(
+    ({ chunkId }: { chunkId: string }) => chunkId === "lantern-0",
+  );
+  assert.ok(
+    ninthTermHit && ninthTermHit.normalizedScore > 0,
+    "a memory matching only terms outside the eight-term reference must still score",
+  );
+
+  // Issue #1264: a late-alphabet in-scope keyword must still fuzzy-match when the
+  // scope holds more in-scope keywords than the fuzzy catalog cap.
+  const wideKeywords = Array.from({ length: 600 }, (_, index) => {
+    const id = `wide-${String(index).padStart(3, "0")}`;
+    return { ...chunk(id, `wide_note_${index}`), keywords: [`aaa${String(index).padStart(3, "0")}`] };
+  });
+  const wideTarget = { ...chunk("wide-target", "wide_target_note"), keywords: ["zzzz cobalt"] };
+  assert.ok(
+    searchLtmKeywordIndex(buildLtmKeywordIndex([...wideKeywords, wideTarget]), "cobalt", {
+      topK: 10,
+      allowedChunks: new Set([...wideKeywords.map((entry) => entry.id), wideTarget.id]),
+    }).some(({ chunkId }: { chunkId: string }) => chunkId === "wide-target"),
+    "a late-alphabet in-scope keyword must survive the fuzzy catalog cap beyond 512 entries",
+  );
 
   assertOwnKeys(parsedRecall.metadata.chunks, "metadata index must retain reserved chunk IDs");
   assertOwnKeys(parsedRecall.metadata.byTag, "metadata index must retain reserved tags");

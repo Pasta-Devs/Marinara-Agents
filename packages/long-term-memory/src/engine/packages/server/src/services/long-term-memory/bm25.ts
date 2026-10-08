@@ -75,18 +75,32 @@ export function searchLtmBm25(
   // approaches 1 and a partial match scales with the idf it shares. At tf = 1 and
   // dl = avgDocLength the length normalization cancels, so each present term
   // contributes exactly its idf.
+  // Issue #1264: a long chat window has many query terms, and dividing by all of
+  // them drove real BM25 scores below 0.1. Reference the eight highest-idf query
+  // terms present in the index instead, so unrelated narration padding cannot
+  // shrink a matching chunk's normalized score toward zero.
   // ponytail: the reference is not an upper bound. Repeated terms, or a chunk much
   // shorter than average, can clamp a partial match at 1 beside a full one. The
   // true ceiling, Σidf·(K1+1), compresses real hits below ~0.3 and would need the
   // recall presets retuned for that range.
-  let referenceScore = 0;
-
+  type Bm25TermEntry = LtmBm25Index["terms"][string];
+  const presentEntries: Array<{ entry: Bm25TermEntry; idf: number }> = [];
   for (const term of queryTerms) {
     const entry = Object.hasOwn(index.terms, term) ? index.terms[term] : undefined;
     if (!entry) continue;
+    presentEntries.push({
+      entry,
+      idf: Math.log(1 + (index.chunkCount - entry.documentFrequency + 0.5) / (entry.documentFrequency + 0.5)),
+    });
+  }
+  const referenceEntries = presentEntries.sort((left, right) => right.idf - left.idf).slice(0, 8);
+  const referenceScore = referenceEntries.reduce((total, { idf }) => total + idf, 0);
 
-    const idf = Math.log(1 + (index.chunkCount - entry.documentFrequency + 0.5) / (entry.documentFrequency + 0.5));
-    referenceScore += idf;
+  // Issue #1264 (CodeRabbit): summing every present term let a chunk that only shares
+  // common words reach the reference. Each chunk instead keeps its 16 strongest term
+  // contributions, so a memory matching a ninth-ranked term still scores.
+  const contributions = new Map<string, number[]>();
+  for (const { entry, idf } of presentEntries) {
     const postings = entry.postings.filter(
       (posting) => !options.allowedChunks || options.allowedChunks.has(posting.chunkId),
     );
@@ -97,8 +111,19 @@ export function searchLtmBm25(
       if (!document) continue;
       const denominator = posting.count + K1 * (1 - B + B * (document.length / index.avgDocLength));
       const score = idf * ((posting.count * (K1 + 1)) / denominator);
-      scores.set(posting.chunkId, (scores.get(posting.chunkId) ?? 0) + score);
+      const list = contributions.get(posting.chunkId) ?? [];
+      list.push(score);
+      contributions.set(posting.chunkId, list);
     }
+  }
+  for (const [chunkId, list] of contributions) {
+    scores.set(
+      chunkId,
+      list
+        .sort((a, b) => b - a)
+        .slice(0, 16)
+        .reduce((total, score) => total + score, 0),
+    );
   }
 
   return Array.from(scores.entries())
