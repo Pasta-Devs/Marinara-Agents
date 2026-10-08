@@ -16,10 +16,15 @@ import {
   XCircle,
   type LucideIcon,
 } from "lucide-react";
-import type { LtmDebugEvent, LtmNote } from "../../../../shared/src/features/agents/long-term-memory/schema.js";
+import type {
+  LtmDebugEvent,
+  LtmDraftReviewResponse,
+  LtmExtractionDropReason,
+  LtmNote,
+} from "../../../../shared/src/features/agents/long-term-memory/schema.js";
 import { invalidateLtmQueries, ltmScopeTargetsKey, queryKeys, request, requestNotesByIds, requestRaw } from "./api";
 import { Button, InfoPopover, StatusSurface, inputClass } from "./shared-controls";
-import { humanizeLabel, labelKeys, localizedLabel } from "./display-labels";
+import { humanizeLabel, labelKeys, localizedLabel, rejectionReasonLabels } from "./display-labels";
 import type { LongTermMemoryDestinationProps } from "./types";
 import { useLtmTranslation, type LtmTranslationFunction } from "./localization";
 import { LtmWorkspace, type LtmWorkspacePane } from "./LtmWorkspace";
@@ -60,6 +65,15 @@ const actionLabelKeys: Record<string, string> = {
   evidence_unit_response: "ui.longTermMemory.activityview.actionAiExtraction",
   evidence_unit_json_parse: "ui.longTermMemory.activityview.actionReadExtractionResult",
   recall_explanation: "ui.longTermMemory.activityview.actionMemoryRecall",
+};
+
+const recallReasonLabelKeys: Record<string, string> = {
+  budget: "ui.longTermMemory.activityview.recallReasonBudget",
+  lower_rank: "ui.longTermMemory.activityview.lowerFusedRank",
+  duplicate_text: "ui.longTermMemory.activityview.recallReasonDuplicate",
+  score_threshold: "ui.longTermMemory.activityview.recallReasonThreshold",
+  missing_chunk: "ui.longTermMemory.activityview.recallReasonMissingChunk",
+  prompt_budget: "ui.longTermMemory.activityview.recallReasonPromptBudget",
 };
 
 const debugStatusIcons: Record<DebugOperationStatus, LucideIcon> = {
@@ -210,12 +224,23 @@ function problemMessages(
 ) {
   return events
     .filter((event) => event.status === "error" || event.status === "warning" || isTruncatedResponse(event))
-    .map((event) => describeEvent(event, noteTitles, localizeUi));
+    .map((event) => ({
+      message: describeEvent(event, noteTitles, localizeUi),
+      guidance:
+        isTruncatedResponse(event) || event.details?.reason === "output_budget_below_viability_floor"
+          ? "ui.longTermMemory.activityview.tryOutputBudget"
+          : event.details?.reason === "prompt_trim_required"
+            ? "ui.longTermMemory.activityview.tryContext"
+            : "ui.longTermMemory.activityview.tryRecordedProblem",
+    }));
 }
 
-function recallDetails(event: LtmDebugEvent | undefined) {
-  const details = event?.details;
-  return details && typeof details === "object" && !Array.isArray(details) ? details : null;
+function recordDetails(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : null;
+}
+
+function recordRows(value: unknown) {
+  return Array.isArray(value) ? value.map(recordDetails).filter((row) => row !== null) : [];
 }
 
 function operationSubject(
@@ -249,6 +274,7 @@ function operationReferencesMemory(operation: DebugOperation, memoryId: string) 
     if (event.sourceNoteId === memoryId || event.noteId === memoryId) return true;
     const details = event.details;
     if (!details || typeof details !== "object" || Array.isArray(details)) return false;
+    if (Array.isArray(details.targetNoteIds) && details.targetNoteIds.includes(memoryId)) return true;
     return (["selected", "rejected"] as const).some((key) => {
       const candidates = (details as Record<string, unknown>)[key];
       return (
@@ -332,10 +358,19 @@ async function confirm(
 export default function ActivityView({
   props,
   onOpenMemory,
+  onOpenReview,
   openActivityMemoryId,
   onOpenActivityMemoryIdHandled,
 }: LongTermMemoryDestinationProps) {
   const { t: localizeUi, locale } = useLtmTranslation();
+  const recordedNumber = (value: unknown) =>
+    typeof value === "number" && Number.isFinite(value)
+      ? value.toLocaleString(locale)
+      : localizeUi("ui.longTermMemory.activityview.notRecorded");
+  const relevance = (value: unknown) =>
+    typeof value === "number" && Number.isFinite(value)
+      ? localizeUi("ui.longTermMemory.activityview.value1", { value1: Math.round(value * 100) })
+      : localizeUi("ui.longTermMemory.activityview.notRecorded");
   const queryClient = useQueryClient();
   const [pending, setPending] = useState<"clear" | "export" | null>(null);
   const [actionError, setActionError] = useState("");
@@ -422,7 +457,12 @@ export default function ActivityView({
     [operations, selectedOperationId],
   );
   const selectedRecallEvent = selectedOperation?.events.find((event) => event.action === "recall_explanation");
-  const recallWorkflow = recallDetails(selectedRecallEvent) as {
+  const review = useQuery({
+    queryKey: queryKeys.review,
+    queryFn: () => request<LtmDraftReviewResponse>("/drafts/review?includeInvalidated=true"),
+    enabled: Boolean(onOpenReview && selectedOperation?.events.some((event) => event.action === "draft_deferred")),
+  });
+  const recallWorkflow = recordDetails(selectedRecallEvent?.details) as {
     maxChunks?: number;
     maxTokens?: number;
     scoreThreshold?: number;
@@ -581,14 +621,9 @@ export default function ActivityView({
               {fusedRank == null ? null : (
                 <>{localizeUi("ui.longTermMemory.activityview.fusedRank", { rank: fusedRank })} · </>
               )}
-              {score == null
-                ? "--"
-                : localizeUi("ui.longTermMemory.activityview.value1", { value1: Math.round(score * 100) })}{" "}
-              ·{" "}
+              {relevance(score)} ·{" "}
               {rejected
-                ? candidate.rejectionReason === "lower_rank"
-                  ? localizeUi("ui.longTermMemory.activityview.lowerFusedRank")
-                  : humanizeLabel(String(candidate.rejectionReason ?? "rejected"))
+                ? localizedLabel(String(candidate.rejectionReason ?? "rejected"), localizeUi, recallReasonLabelKeys)
                 : Array.isArray(candidate.lanes)
                   ? candidate.lanes.join(", ")
                   : ""}
@@ -598,6 +633,80 @@ export default function ActivityView({
       })}
     </ul>
   );
+
+  const renderDroppedCandidates = (event: LtmDebugEvent, showSource: boolean) => {
+    const outcome = recordDetails(event.details?.extractionOutcome);
+    const dropped = recordRows(outcome?.droppedCandidates);
+    const groups = new Map<string, typeof dropped>();
+    for (const candidate of dropped) {
+      const reason = typeof candidate.reason === "string" ? candidate.reason : "other";
+      const candidates = groups.get(reason) ?? [];
+      candidates.push(candidate);
+      groups.set(reason, candidates);
+    }
+    const remaining =
+      typeof outcome?.droppedUnits === "number" && Number.isFinite(outcome.droppedUnits)
+        ? Math.max(0, outcome.droppedUnits - dropped.length)
+        : null;
+    const draftId = selectedOperation?.events.find(
+      (item) => item.draftId && item.sourceNoteId === event.sourceNoteId,
+    )?.draftId;
+    const pendingDraft =
+      !review.isError &&
+      review.data?.sources.some(
+        (source) =>
+          source.sourceNoteId === event.sourceNoteId &&
+          source.drafts.some(
+            (item) =>
+              item.draft.status === "pending" &&
+              item.freshness !== "not_pending" &&
+              (!draftId || item.draft.id === draftId),
+          ),
+      );
+    return (
+      <div key={event.id} className="space-y-2">
+        {showSource && event.sourceNoteId ? (
+          <p className="font-medium">{noteTitles.get(event.sourceNoteId) ?? event.sourceNoteId}</p>
+        ) : null}
+        <p>
+          {typeof outcome?.droppedUnits === "number" && Number.isFinite(outcome.droppedUnits)
+            ? localizeUi("ui.longTermMemory.activityview.notKeptCount", { count: recordedNumber(outcome.droppedUnits) })
+            : localizeUi("ui.longTermMemory.activityview.notRecorded")}
+        </p>
+        {[...groups].map(([reason, candidates]) => (
+          <div key={reason} data-ltm-debug-drop-reason={reason}>
+            <h5 className="font-medium">
+              {localizeUi(
+                rejectionReasonLabels[reason as LtmExtractionDropReason] ??
+                  "ui.longTermMemory.reviewqueue.rejectionReasonOther",
+              )}{" "}
+              ({candidates.length})
+            </h5>
+            <ul className="space-y-2 pl-3">
+              {candidates.map((candidate, index) => (
+                <li key={index}>
+                  {typeof candidate.message === "string" ? <p>{candidate.message}</p> : null}
+                  {typeof candidate.snippet === "string" && candidate.snippet.trim() ? (
+                    <blockquote className="mt-1 text-[var(--muted-foreground)]">{candidate.snippet}</blockquote>
+                  ) : null}
+                </li>
+              ))}
+            </ul>
+          </div>
+        ))}
+        {remaining != null && remaining > 0 ? (
+          <p>{localizeUi("ui.longTermMemory.activityview.andMore", { count: recordedNumber(remaining) })}</p>
+        ) : outcome?.droppedCandidateDetailsTruncated === true ? (
+          <p>{localizeUi("ui.longTermMemory.activityview.samplesOnly")}</p>
+        ) : null}
+        {pendingDraft && onOpenReview ? (
+          <Button onClick={() => onOpenReview(event.sourceNoteId)}>
+            {localizeUi("ui.longTermMemory.longtermmemorydetail.openReviewQueue")}
+          </Button>
+        ) : null}
+      </div>
+    );
+  };
 
   const renderDetails = () => {
     if (!selectedOperation) {
@@ -617,8 +726,14 @@ export default function ActivityView({
     const countSummary = summarizeCounts(selectedOperation.events, localizeUi, locale);
     const problems = problemMessages(selectedOperation.events, noteTitles, localizeUi);
     const subject = operationSubject(selectedOperation, noteTitles, chatLabel);
+    const compiled = selectedOperation.events.filter((event) => event.action === "evidence_units_compiled");
+    const deferred = selectedOperation.events.filter((event) => event.action === "draft_deferred");
+    const apply = selectedOperation.events.filter((event) => event.action === "mutations_selected");
     return (
-      <article data-ltm-debug-details className="mari-editor-panel min-w-0 space-y-3 p-3 text-xs">
+      <article
+        data-ltm-debug-details
+        className="mari-editor-panel min-w-0 space-y-3 p-3 text-xs [overflow-wrap:anywhere]"
+      >
         <header className="space-y-1">
           <div className="flex flex-wrap items-center gap-2">
             <h3 className="font-semibold">{title}</h3>
@@ -652,46 +767,140 @@ export default function ActivityView({
           </span>
         </header>
         {problems.length ? (
-          <ul className="list-disc pl-4 text-[var(--marinara-editor-warning)]" data-ltm-activity-warnings>
-            {problems.map((problem, index) => (
-              <li key={`${problem}-${index}`}>{problem}</li>
-            ))}
-          </ul>
+          <StatusSurface
+            tone={status.status === "error" ? "danger" : "warning"}
+            className="py-3"
+            data-ltm-activity-warnings
+          >
+            <ul className="space-y-2">
+              {problems.map((problem, index) => (
+                <li key={index}>
+                  <p>{problem.message}</p>
+                  <p className="mt-1">
+                    <strong>{localizeUi("ui.longTermMemory.activityview.whatToTry")}: </strong>
+                    {localizeUi(problem.guidance)}
+                  </p>
+                </li>
+              ))}
+            </ul>
+          </StatusSurface>
+        ) : null}
+        <section>
+          <h4 className="mb-1 font-semibold">{localizeUi("ui.longTermMemory.activityview.result")}</h4>
+          {selectedRecallEvent ? (
+            <p>
+              {localizeUi("ui.longTermMemory.activityview.recallCounts", {
+                selected: recordedNumber(selectedRecallEvent.counts?.selected),
+                rejected: recordedNumber(selectedRecallEvent.counts?.rejected),
+              })}
+            </p>
+          ) : compiled.length ? (
+            compiled.map((event) => {
+              const kinds = recordDetails(event.details?.mutationKinds);
+              const targets = event.details?.targetNoteIds;
+              return (
+                <div key={event.id} className="space-y-1">
+                  {compiled.length > 1 && event.sourceNoteId ? (
+                    <p>{noteTitles.get(event.sourceNoteId) ?? event.sourceNoteId}</p>
+                  ) : null}
+                  <p>
+                    {localizeUi("ui.longTermMemory.activityview.extractionCounts", {
+                      candidates: recordedNumber(event.counts?.totalCandidates),
+                      units: recordedNumber(event.counts?.units),
+                      mutations: recordedNumber(event.counts?.mutations),
+                      targets: recordedNumber(event.counts?.targetNotes),
+                      duplicates: recordedNumber(event.counts?.deduplications),
+                    })}
+                  </p>
+                  {kinds ? (
+                    <p>
+                      {Object.entries(kinds)
+                        .filter(([, count]) => typeof count === "number")
+                        .map(([kind, count]) =>
+                          localizeUi("ui.longTermMemory.activityview.countWithLabel", {
+                            count: recordedNumber(count),
+                            label: humanizeLabel(kind),
+                          }),
+                        )
+                        .join(" · ")}
+                    </p>
+                  ) : null}
+                  {Array.isArray(targets) ? (
+                    <p>
+                      {targets
+                        .filter((id): id is string => typeof id === "string")
+                        .map((id) => noteTitles.get(id) ?? id)
+                        .join(" · ")}
+                    </p>
+                  ) : null}
+                </div>
+              );
+            })
+          ) : (
+            <p>{localizeUi("ui.longTermMemory.activityview.notRecorded")}</p>
+          )}
+        </section>
+        {compiled.length || deferred.length ? (
+          <section>
+            <h4 className="mb-1 font-semibold">{localizeUi("ui.longTermMemory.activityview.notKept")}</h4>
+            {deferred.length ? (
+              deferred.map((event) => renderDroppedCandidates(event, deferred.length > 1))
+            ) : (
+              <p>{localizeUi("ui.longTermMemory.activityview.notRecorded")}</p>
+            )}
+          </section>
+        ) : null}
+        {apply.length ? (
+          <section>
+            <h4 className="mb-1 font-semibold">{localizeUi("ui.longTermMemory.activityview.notSaved")}</h4>
+            {apply.map((event) => {
+              const ids = event.details?.skippedMutationIds;
+              return (
+                <p key={event.id}>
+                  {Array.isArray(ids)
+                    ? ids.length
+                      ? ids.filter((id) => typeof id === "string").join(" · ") ||
+                        localizeUi("ui.longTermMemory.activityview.notRecorded")
+                      : localizeUi("ui.longTermMemory.activityview.noSkippedChanges")
+                    : localizeUi("ui.longTermMemory.activityview.notRecorded")}
+                </p>
+              );
+            })}
+          </section>
         ) : null}
         {recallWorkflow ? (
           <>
-            {recallWorkflow.selected?.length ? (
+            {recordRows(recallWorkflow.selected).length ? (
               <section>
-                <h4 className="mb-1 font-semibold">{localizeUi("ui.longTermMemory.activityview.selectedChunks")}</h4>
-                {renderRecallCandidates(recallWorkflow.selected, false)}
+                <h4 className="mb-1 font-semibold">{localizeUi("ui.longTermMemory.activityview.added")}</h4>
+                {renderRecallCandidates(recordRows(recallWorkflow.selected), false)}
               </section>
             ) : null}
-            {recallWorkflow.rejected?.length ? (
+            {recordRows(recallWorkflow.rejected).length ? (
               <section>
-                <h4 className="mb-1 font-semibold">
+                <h4 className="mb-1 font-semibold">{localizeUi("ui.longTermMemory.activityview.notAdded")}</h4>
+                <p className="mb-1 text-[var(--muted-foreground)]">
                   {localizeUi("ui.longTermMemory.activityview.rejectedCandidatesUpTo", {
                     limit: recallWorkflow.rejectedLimit ?? 20,
                   })}
-                </h4>
-                {renderRecallCandidates(recallWorkflow.rejected, true)}
+                </p>
+                {renderRecallCandidates(recordRows(recallWorkflow.rejected), true)}
               </section>
             ) : null}
             <section>
               <h4 className="mb-1 font-semibold">{localizeUi("ui.longTermMemory.activityview.runParameters")}</h4>
               <div className="grid gap-1 text-[var(--muted-foreground)] sm:grid-cols-2">
-                <span>{localizeUi("ui.longTermMemory.activityview.recentContextWasUsedForRecall")}</span>
                 <span>
-                  {localizeUi("ui.longTermMemory.activityview.limits")} {String(recallWorkflow.maxChunks ?? "--")}{" "}
-                  {localizeUi("ui.longTermMemory.activityview.chunks")}{" "}
-                  {Number(recallWorkflow.maxTokens ?? 0).toLocaleString(locale)}{" "}
+                  {localizeUi("ui.longTermMemory.activityview.limits")} {recordedNumber(recallWorkflow.maxChunks)}{" "}
+                  {localizeUi("ui.longTermMemory.activityview.chunks")} {recordedNumber(recallWorkflow.maxTokens)}{" "}
                   {localizeUi("ui.longTermMemory.activityview.tokens")}
                 </span>
                 <span>
-                  {localizeUi("ui.longTermMemory.activityview.threshold")} {String(recallWorkflow.scoreThreshold ?? 0)}
+                  {localizeUi("ui.longTermMemory.activityview.threshold")} {relevance(recallWorkflow.scoreThreshold)}
                 </span>
                 <span>
                   {localizeUi("ui.longTermMemory.activityview.used")}{" "}
-                  {(selectedRecallEvent?.counts?.usedTokens ?? 0).toLocaleString(locale)}{" "}
+                  {recordedNumber(selectedRecallEvent?.counts?.usedTokens)}{" "}
                   {localizeUi("ui.longTermMemory.activityview.tokens")}
                 </span>
                 {typeof recallWorkflow.mode === "string" ? (
@@ -712,9 +921,12 @@ export default function ActivityView({
                 typeof recallWorkflow.eligibleChunks === "number" ? (
                   <span>
                     {localizeUi("ui.longTermMemory.activityview.recallIndexSummary", {
-                      indexed: recallWorkflow.indexedChunks ?? 0,
-                      eligible: recallWorkflow.eligibleChunks ?? 0,
-                      outcome: humanizeLabel(String(recallWorkflow.indexLoadOutcome ?? "loaded")),
+                      indexed: recordedNumber(recallWorkflow.indexedChunks),
+                      eligible: recordedNumber(recallWorkflow.eligibleChunks),
+                      outcome:
+                        typeof recallWorkflow.indexLoadOutcome === "string"
+                          ? humanizeLabel(recallWorkflow.indexLoadOutcome)
+                          : localizeUi("ui.longTermMemory.activityview.notRecorded"),
                     })}
                   </span>
                 ) : null}
@@ -758,10 +970,11 @@ export default function ActivityView({
                   </span>
                 ) : null}
               </div>
-              {recallWorkflow.weights ? (
+              {recordDetails(recallWorkflow.weights) ? (
                 <p className="mt-1 text-[var(--muted-foreground)]">
                   {localizeUi("ui.longTermMemory.activityview.weights")}{" "}
-                  {Object.entries(recallWorkflow.weights)
+                  {Object.entries(recordDetails(recallWorkflow.weights)!)
+                    .filter(([, value]) => typeof value === "number")
                     .map(([name, value]) => `${humanizeLabel(name)} ${value}`)
                     .join(" · ")}
                 </p>

@@ -100,6 +100,8 @@ export function collectDebugNoteIds(events: readonly LtmDebugEvent[]): string[] 
     const details = event.details;
     if (!details || typeof details !== "object" || Array.isArray(details)) continue;
     collectText((details as Record<string, unknown>).summary);
+    if (Array.isArray(details.targetNoteIds))
+      for (const id of details.targetNoteIds) if (typeof id === "string") ids.add(id);
     for (const key of ["selected", "rejected"] as const) {
       const candidates = (details as Record<string, unknown>)[key];
       if (!Array.isArray(candidates)) continue;

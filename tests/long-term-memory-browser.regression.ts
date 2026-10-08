@@ -2433,7 +2433,40 @@ async function main() {
         debugEvent("partial", "import_sources", "started"),
         debugEvent("partial", "extract_source_note", "error", { error: { message: "One source failed." } }),
         debugEvent("partial", "import_sources", "ok"),
-        debugEvent("noduration", "recall_explanation", "ok"),
+        debugEvent("breakdown", "evidence_units_compiled", "warning", {
+          sourceNoteId: "source_mobile_review",
+          counts: { totalCandidates: 12, units: 7, mutations: 2, targetNotes: 2, deduplications: 1 },
+          details: {
+            mutationKinds: { create_note: 1, append_section: 1 },
+            targetNoteIds: ["world_legacy_global", "world_scoped_desktop"],
+          },
+        }),
+        debugEvent("breakdown", "draft_deferred", "ok", {
+          sourceNoteId: "source_mobile_review",
+          details: {
+            extractionOutcome: {
+              state: "partial_success",
+              totalCandidates: 12,
+              keptUnits: 7,
+              droppedUnits: 4,
+              droppedCandidateDetailsTruncated: true,
+              droppedCandidates: [
+                { reason: "missing_source_evidence", message: "No supporting quote.", snippet: "x".repeat(280) },
+                { reason: "missing_source_evidence", message: "Evidence was omitted." },
+                {
+                  reason: "candidate_overflow",
+                  message: "Dropped candidates exceeding the extraction processing limit.",
+                },
+              ],
+            },
+          },
+        }),
+        debugEvent("noduration", "recall_explanation", "ok", {
+          details: { selected: "truncated", rejected: [null], weights: "truncated", eligibleChunks: 3 },
+        }),
+        debugEvent("noduration", "draft_deferred", "ok", {
+          details: { extractionOutcome: { droppedUnits: "truncated" } },
+        }),
         // Fixture events predate the one-hour stale-threshold, so a started step in
         // a completed operation must not read as unfinished (M1), while a
         // started-only operation still reads "No completion recorded".
@@ -2456,7 +2489,7 @@ async function main() {
           // through its selected candidate id.
           sourceNoteId: undefined,
           chatId: "chat-artifact",
-          counts: { selected: 1, rejected: 1, usedTokens: 42 },
+          counts: { selected: 1, rejected: 6, usedTokens: 42 },
           details: {
             chatId: "chat-artifact",
             maxChunks: 8,
@@ -2492,15 +2525,18 @@ async function main() {
                 fusedRank: 2,
                 rejectionReason: "lower_rank",
               },
+              ...["budget", "duplicate_text", "score_threshold", "missing_chunk", "prompt_budget"].map(
+                (rejectionReason) => ({ noteId: "world_scoped_desktop", sectionKey: "facts", rejectionReason }),
+              ),
             ],
           },
         }),
         // D31: explicit memory-id references the Vault memory filter must match (produced
         // target, rejected recall candidate), plus operations it must not: an unrelated
         // source and an apply carrying only change/mutation ids.
-        debugEvent("target", "extract_source_note", "ok", {
+        debugEvent("target", "evidence_units_compiled", "ok", {
           sourceNoteId: "source_target_other",
-          noteId: legacyGlobalNote.id,
+          details: { targetNoteIds: [legacyGlobalNote.id] },
         }),
         // Two events; only the second references the memory, so matching must find the
         // operation by that single event and still show both events and the status.
@@ -2519,7 +2555,7 @@ async function main() {
             chatId: "chat-artifact",
             selected: [],
             rejected: [
-              { noteId: legacyGlobalNote.id, sectionKey: "facts", score: 0.3, rejectionReason: "below_threshold" },
+              { noteId: legacyGlobalNote.id, sectionKey: "facts", score: 0.3, rejectionReason: "score_threshold" },
             ],
           },
         }),
@@ -2527,10 +2563,16 @@ async function main() {
           sourceNoteId: undefined,
           mutationIds: ["11111111-2222-3333-4444-555555555555"],
         }),
+        debugEvent("apply", "mutations_selected", "ok", {
+          sourceNoteId: undefined,
+          details: { skippedMutationIds: ["11111111-2222-3333-4444-555555555555"] },
+        }),
         debugEvent("unrelated", "extract_source_note", "ok", { sourceNoteId: "world_unrelated" }),
       ];
       // Simulates a retained log that holds no events for the handed memory.
       let debugLogEmpty = false;
+      let debugReviewPending = true;
+      const debugReviewSources = structuredClone(reviewSources);
       const assertDebugActivity = async (activityPage: typeof page, navigation: "desktop" | "mobile") => {
         await activityPage.locator("#settings-tab-debug").click();
         const activity = activityPage.locator('[data-ltm-surface="activity"]');
@@ -2571,11 +2613,47 @@ async function main() {
         assert.match(await operation("budget"), /too small.*response/iu);
         assert.match(await operation("partial"), /Completed with warnings/u);
         assert.match(await operation("partial"), /One source failed\./u);
+        assert.match(await operation("truncated"), /What to try[\s\S]*output budget/iu);
+        const breakdown = await operation("breakdown");
+        assert.match(
+          breakdown,
+          /Result[\s\S]*12 candidates[\s\S]*7 kept units[\s\S]*2 changes[\s\S]*2 target memories/u,
+        );
+        assert.match(breakdown, /1 duplicates[\s\S]*Create note[\s\S]*Append section/u);
+        assert.match(breakdown, /Not kept[\s\S]*No supporting quote\.[\s\S]*Evidence was omitted\./u);
+        assert.match(breakdown, /The extraction processing limit was exceeded\./u);
+        assert.doesNotMatch(breakdown, /unspecified extraction reason/u);
+        assert.equal(await details.locator("[data-ltm-debug-drop-reason]").count(), 2);
+        assert.equal(await details.locator("blockquote").count(), 1, "missing snippets do not render blank quotes");
+        assert.match(breakdown, /and 1 more/u);
+        assert.equal(
+          await activityPage.evaluate(
+            () => document.documentElement.scrollWidth <= document.documentElement.clientWidth,
+          ),
+          true,
+          "long candidate quotes must wrap on desktop and mobile",
+        );
+        await details.getByRole("button", { name: "Open Review Queue" }).click();
+        await activityPage.locator('[data-ltm-review-source-select="source_mobile_review"]').waitFor();
+        debugReviewPending = false;
+        await activityPage.locator(`[data-ltm-navigation="${navigation}"] [data-ltm-destination="settings"]`).click();
+        await activityPage.locator("#settings-tab-debug").click();
+        await operation("breakdown");
+        await details.getByRole("button", { name: "Open Review Queue" }).waitFor({ state: "hidden" });
+        debugReviewPending = true;
+        assert.match(await operation("apply"), /Not saved[\s\S]*11111111-2222-3333-4444-555555555555/u);
         assert.doesNotMatch(
           await operation("noduration"),
           / ms/u,
           "an operation without a recorded duration must not display a fabricated one",
         );
+        assert.match(await operation("noduration"), /Minimum relevance: Not recorded/u);
+        assert.match(await operation("noduration"), /Not recorded indexed · 3 eligible · Not recorded/u);
+        const missingOutcome = await details
+          .getByRole("heading", { name: "Not kept", exact: true })
+          .locator("..")
+          .innerText();
+        assert.match(missingOutcome.trim(), /^Not kept\s+Not recorded$/u);
         // The response snippet is never on screen; Copy JSON is the only raw-record path.
         assert.doesNotMatch(await activity.innerText(), /private response snippet/u);
         await operation("estimated");
@@ -2611,7 +2689,16 @@ async function main() {
         const recall = await operation("recall");
         assert.match(recall, /Memory recall/u);
         assert.match(recall, /Recall from chat-artifact/u);
-        assert.match(recall, /Selected chunks[\s\S]*Run parameters/u);
+        assert.match(recall, /1 added · 6 not added[\s\S]*Added[\s\S]*Not added[\s\S]*Run parameters/u);
+        assert.match(recall, /Minimum relevance: 50%/u);
+        for (const reason of [
+          "Token budget reached",
+          "Duplicate text",
+          "Below minimum relevance",
+          "Memory chunk unavailable",
+          "Prompt budget reached",
+        ])
+          assert.match(recall, new RegExp(reason, "u"));
         assert.match(recall, /Legacy global memory/u);
         assert.match(recall, /Fused rank 1[\s\S]*35%/u);
         assert.match(recall, /Fused rank 2[\s\S]*45%[\s\S]*Cut by the memory limit \(lower fused rank\)/u);
@@ -2702,6 +2789,10 @@ async function main() {
         // single later event each pull their whole operation in.
         await activity.locator('[data-ltm-debug-operation="estimated"]').waitFor();
         await activity.locator('[data-ltm-debug-operation="target"]').waitFor();
+        await activity.locator('[data-ltm-debug-operation="target"]').click();
+        await details.waitFor();
+        assert.match(await details.innerText(), /Result[\s\S]*Legacy global memory/u);
+        await showEvents();
         await activity.locator('[data-ltm-debug-operation="recall"]').waitFor();
         await activity.locator('[data-ltm-debug-operation="recall-rejected"]').waitFor();
         await activity.locator('[data-ltm-debug-operation="late-reference"]').waitFor();
@@ -2795,6 +2886,14 @@ async function main() {
           origin: `http://127.0.0.1:${address.port}`,
         });
         const debugPage = await context.newPage();
+        await debugPage.route("**/api/long-term-memory/drafts/review?*", async (route) => {
+          const response = await route.fetch();
+          const review = { ...(await response.json()), sources: structuredClone(debugReviewSources) };
+          for (const source of review.sources)
+            if (source.sourceNoteId === "source_mobile_review")
+              for (const item of source.drafts) item.draft.status = debugReviewPending ? "pending" : "accepted";
+          await route.fulfill({ response, json: review });
+        });
         await debugPage.route("**/api/long-term-memory/debug-log?*", (route) => {
           if (debugLogEmpty) {
             route.fulfill({ json: { events: [] } });

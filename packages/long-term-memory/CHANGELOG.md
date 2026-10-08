@@ -1,5 +1,9 @@
 # Long-Term Memory changelog
 
+## 1.4.19 — 2026-10-09
+
+- Show extraction results and grouped candidates not kept, recall candidates added or not added with their recorded reasons and settings, and skipped apply changes in Debug. Explain recorded problems with guidance, and link pending extraction drafts to Review Queue without duplicating recovery actions.
+
 ## 1.4.18 — 2026-10-08
 
 - Open the Memory Vault and switch back to it quickly in large libraries. The place pickers worked out which chats, branches, characters and personas have memories by comparing every place with every memory on each redraw; they now look places up in an index built once, so a library of about 800 places and 180 memories redraws in milliseconds instead of most of a second.

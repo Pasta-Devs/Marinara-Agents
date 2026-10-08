@@ -95,6 +95,14 @@ shows last-injection loading, error, retry, and result states. Memory Settings
 groups extraction, retention, maintenance, identity repair, and activity; repair
 actions report their result without hiding vault-health warnings.
 
+Debug operation details lead with recorded problems and guidance, then extraction,
+recall, or apply outcomes before diagnostic facts and the timeline. Dropped
+candidates are grouped by reason with optional quotes and honest truncation counts.
+Recall shows recorded settings, with relevance and its minimum on the same percentage
+scale. A pending source draft can open the existing Review Queue through the shell's
+navigation guard. Missing outcome data is not reconstructed; raw response snippets
+remain available only through Copy JSON, never on screen.
+
 ## State Rules
 
 Keep these states distinct in UI changes:

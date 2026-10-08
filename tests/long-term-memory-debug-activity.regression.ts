@@ -78,10 +78,13 @@ const collected = collectDebugNoteIds([
     status: "error",
     sourceNoteId: "source_a",
     error: { message: "record 11111111-2222-3333-4444-555555555555 missing" },
-    details: { summary: "world_lantern_guild_v2 and character_mara_missing ready" },
+    details: {
+      summary: "world_lantern_guild_v2 and character_mara_missing ready",
+      targetNoteIds: ["world_target_only", null, 42],
+    },
   }),
 ]);
-assert.deepEqual(collected, ["character_mara_missing", "source_a", "world_lantern_guild_v2"]);
+assert.deepEqual(collected, ["character_mara_missing", "source_a", "world_lantern_guild_v2", "world_target_only"]);
 
 // A prose token past the 120-char id cap is not requested, so one long word
 // cannot fail the whole batch and blank every title.
