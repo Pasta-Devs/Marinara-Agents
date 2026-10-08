@@ -1595,6 +1595,8 @@
   "ui.slurp.settings.lifeMomentRateRarely": "거의 안 함",
   "ui.slurp.settings.lifeMomentRateSometimes": "가끔",
   "ui.slurp.settings.lifeMomentRateOften": "자주",
+  "ui.slurp.settings.pictureReuse": "사진 재사용",
+  "ui.slurp.settings.pictureReuseDetail": "게시물이 새 사진 대신 이전 사진을 다시 보여 주는 빈도입니다: 촬영에서 한 장 더, 옛날 사진, 또는 잠긴 세트의 잘린 미리보기. 각 사진은 최대 한 번만 다시 나옵니다. 끄면 모든 게시물에 새 사진이 붙고, 직접 고른 재사용은 그대로 됩니다.",
   "ui.slurp.settings.storyJobs": "스토리가 하는 일",
   "ui.slurp.settings.storyJobsDetail": "각 유형의 스토리가 등장하는 빈도입니다. 상황에 맞을 때만 나옵니다: 카운트다운에는 다가오는 드롭이 필요하고, 답장에는 팬의 댓글이 필요합니다.",
   "ui.slurp.settings.storyJob.countdown": "드롭까지 카운트다운",

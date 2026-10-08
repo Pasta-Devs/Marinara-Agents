@@ -62,6 +62,7 @@ export const SLP_BACKSTAGE_SETTING_PLACEMENT: Record<keyof SlurpSettings, SlpBac
   storyImagesEnabled: automation("general", "story posts", "image stories"),
   storyLifetimeHours: automation("general", "story lifetime", "moments"),
   teaserRate: automation("general", "teaser", "free posts", "fish for subscribers"),
+  pictureReuse: automation("general", "picture reuse", "repost", "old photo", "recycle"),
   projectRate: content("storylines", "storyline", "plans", "plan rate"),
   arcPace: content("storylines", "storyline", "plan pace", "story speed"),
   arcAffectsMood: content("storylines", "storyline", "plan mood"),

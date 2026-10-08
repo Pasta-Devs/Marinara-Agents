@@ -3039,6 +3039,8 @@
   "ui.slurp.settings.lifeMomentRateRarely": "Rarely",
   "ui.slurp.settings.lifeMomentRateSometimes": "Sometimes",
   "ui.slurp.settings.lifeMomentRateOften": "Often",
+  "ui.slurp.settings.pictureReuse": "Picture reuse",
+  "ui.slurp.settings.pictureReuseDetail": "How often a post shows an earlier picture again instead of a new one: one more from a shoot, an old photo, or a cropped preview of a locked set. Each picture comes back at most once. Off means every post gets a new picture; a reuse you choose yourself still works.",
   "ui.slurp.settings.storyJobs": "What Stories do",
   "ui.slurp.settings.storyJobsDetail": "How often each kind of Story comes up. Each one only when it fits: a countdown needs a drop on the way, a reply needs a fan's comment.",
   "ui.slurp.settings.storyJob.countdown": "Count down to a drop",

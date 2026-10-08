@@ -1,3 +1,5 @@
+import { resolveMacros } from "@marinara-engine/shared";
+
 function promptRecord(value: unknown): Record<string, unknown> {
   if (!value) return {};
   if (typeof value === "string") {
@@ -52,14 +54,21 @@ function promptField(primary: unknown, fallback?: unknown): string {
 }
 
 /**
- * Card macros for a Slurp prompt. Cards are written for roleplay chats, so `{{char}}` is the Creator
- * and `{{user}}` the player; unresolved, the model saw template syntax where the person should be.
- * An empty name (the concealed brief) keeps the source name out of the prompt.
+ * Engine macros for Slurp text (card fields, wardrobe looks). Cards are written for roleplay chats,
+ * so `{{char}}` is the Creator and `{{user}}` the player; unresolved, the model saw template syntax
+ * where the person should be. An empty name (the concealed brief) keeps the source name out of the
+ * prompt. Slurp has no chat, so chat-only macros (`{{input}}`, chat variables) resolve to nothing;
+ * `{{random::…}}` rolls again on every call.
  */
 export function slpResolveCardMacros(text: string, name: string): string {
-  return text
-    .replace(/\{\{\s*char\s*\}\}/giu, name.trim() || "the Creator")
-    .replace(/\{\{\s*user\s*\}\}/giu, "the player");
+  if (!text.includes("{{")) return text;
+  // Cards write `{{ Char }}` too; the Engine resolver only knows the tight form.
+  const tight = text.replace(/\{\{\s*(char|user)\s*\}\}/giu, (_, macro: string) => `{{${macro.toLowerCase()}}}`);
+  return resolveMacros(
+    tight,
+    { char: name.trim() || "the Creator", user: "the player", characters: [], variables: {} },
+    { trimResult: false },
+  );
 }
 
 export function noodlerConcealedSourceText(data: unknown): string {

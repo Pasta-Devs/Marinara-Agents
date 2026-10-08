@@ -44,6 +44,7 @@ export type SlurpSettings = {
   storyImagesEnabled: boolean;
   storyLifetimeHours: number;
   teaserRate: "off" | "rare" | "regular" | "often";
+  pictureReuse: "off" | "rare" | "regular";
   projectRate: "off" | "rare" | "regular" | "often";
   arcPace: "slow" | "normal" | "fast";
   arcAffectsMood: boolean;

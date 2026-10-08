@@ -1,5 +1,13 @@
 # Slurp release notes
 
+## 0.3.18 — 2026-10-08
+
+Engine macros in Slurp, fewer recycled pictures.
+
+- Character cards and wardrobe looks resolve Engine macros such as `{{random::red::green::blue}}`, `{{char}}`, `{{user}}` and `{{#if}}`. A wardrobe look rolls again for each post.
+- Macros that need a chat, such as `{{input}}` or chat variables, resolve to nothing in Slurp.
+- Picture reuse: each earlier picture goes up again at most once, and a repost is never the source of another repost. New setting in Settings › Publishing: Off, Rare or Regular (the old behavior). Off stops automatic reuse; a reuse the player picks still works.
+
 ## 0.3.17 — 2026-10-06
 
 Spice in one place, user reports, speed.

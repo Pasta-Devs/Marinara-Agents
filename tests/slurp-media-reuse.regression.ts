@@ -73,6 +73,17 @@ assert.deepEqual(
   [],
 );
 
+// A picture goes up again at most once, and a repost never feeds the next one.
+const reposted = [
+  post("used", "public", 10 * DAY),
+  post("repost", "public", 5 * DAY, { reusedFromPostId: "used" }),
+  post("unused", "public", 10 * DAY),
+  post("shot-used", "public", DAY, { shootId: "shoot-2" }),
+  post("callback", "public", 0, { shootId: "shoot-2", reusedFromPostId: "shot-used" }),
+];
+assert.deepEqual(ids(slurpReuseCandidates(reposted, { kind: "archive", access: "public", at })), ["unused"]);
+assert.deepEqual(slurpReuseCandidates(reposted, { kind: "shoot", access: "public", at, shootId: "shoot-2" }), []);
+
 // Deterministic pick, so a retry reuses the same picture.
 const archive = slurpReuseCandidates(posts, { kind: "archive", access: "locked", at });
 assert.equal(slurpPickReuse(archive, "creator-a", 4)?.id, slurpPickReuse(archive, "creator-a", 4)?.id);
@@ -119,6 +130,17 @@ const casual = Array.from({ length: 400 }, (_, sequence) =>
   slurpReuseDelivery({ intent: "casual", delivery: "new_capture" }, { ...none, archive: true }, "creator-a", sequence),
 ).filter((axes) => axes.delivery === "existing_media").length;
 assert.ok(casual > 0 && casual < 100, `archive reposts should be occasional, got ${casual}/400`);
+
+// The picture reuse setting: off never reuses automatically, rare keeps about a third of the odds.
+const rated = (rate: "off" | "rare" | "regular") =>
+  Array.from({ length: 400 }, (_, sequence) =>
+    slurpReuseDelivery({ intent: "callback", delivery: "new_capture" }, all, "creator-a", sequence, rate),
+  ).filter((axes) => axes.delivery !== "new_capture").length;
+assert.equal(rated("off"), 0);
+assert.ok(
+  rated("rare") > 0 && rated("rare") < rated("regular") / 2,
+  `rare reuse ${rated("rare")} vs ${rated("regular")}`,
+);
 
 // A callback's new picture keeps the drop's clothes and light when the brief is known.
 const brief = slurpImageBrief({
