@@ -1,5 +1,9 @@
 # Long-Term Memory changelog
 
+## 1.4.18 — 2026-10-08
+
+- Open the Memory Vault and switch back to it quickly in large libraries. The place pickers worked out which chats, branches, characters and personas have memories by comparing every place with every memory on each redraw; they now look places up in an index built once, so a library of about 800 places and 180 memories redraws in milliseconds instead of most of a second.
+
 ## 1.4.17 — 2026-10-08
 
 - Make `/search` resolve the scoped chat's recall settings and prompt budget like generation, while preserving explicit request overrides.

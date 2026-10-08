@@ -1,4 +1,10 @@
 import type { LtmMode, LtmScope } from "../../../../shared/src/features/agents/long-term-memory/schema.js";
+import {
+  getLtmScopeChatIds,
+  getLtmScopeGroupIds,
+  getLtmScopePersonaIds,
+} from "../../../../shared/src/features/agents/long-term-memory/scope.js";
+import { uniqueStrings } from "../../../../shared/src/features/agents/long-term-memory/utils.js";
 
 export type ScopeTargetChat = {
   id: string;
@@ -40,6 +46,33 @@ export type ScopeIndexes = {
   characterIdsByChatId: Map<string, Set<string>>;
   chatsByCharacterId: Map<string, ScopeTargetChat[]>;
 };
+
+/** Keeps the first item for each id, in order, without the quadratic `findIndex` scan. */
+export function uniqueById<T extends { id: string }>(items: readonly T[]): T[] {
+  const seen = new Set<string>();
+  return items.filter((item) => {
+    if (seen.has(item.id)) return false;
+    seen.add(item.id);
+    return true;
+  });
+}
+
+/**
+ * Answers `memoryPresence.some((scope) => ltmScopesOverlap(scope, place, { includeGlobal: false }))`
+ * from one id index. Without globals, two scopes overlap only by sharing a chat, group,
+ * character or persona id, so pickers no longer rescan every memory for every place.
+ */
+export function buildScopeMemoryPresence(memoryPresence: readonly LtmScope[]) {
+  const chatIds = new Set(memoryPresence.flatMap((scope) => getLtmScopeChatIds(scope)));
+  const groupIds = new Set(memoryPresence.flatMap((scope) => getLtmScopeGroupIds(scope)));
+  const characterIds = new Set(memoryPresence.flatMap((scope) => uniqueStrings(scope.characterIds ?? [])));
+  const personaIds = new Set(memoryPresence.flatMap((scope) => getLtmScopePersonaIds(scope)));
+  return (scope: LtmScope | null | undefined) =>
+    getLtmScopeChatIds(scope).some((id) => chatIds.has(id)) ||
+    getLtmScopeGroupIds(scope).some((id) => groupIds.has(id)) ||
+    uniqueStrings(scope?.characterIds ?? []).some((id) => characterIds.has(id)) ||
+    getLtmScopePersonaIds(scope).some((id) => personaIds.has(id));
+}
 
 export function buildScopeIndexes(chats: ScopeTargetChat[]): ScopeIndexes {
   const chatsById = new Map(chats.map((chat) => [chat.id, chat]));

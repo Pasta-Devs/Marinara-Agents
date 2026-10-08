@@ -26,7 +26,6 @@ import {
   getLtmScopeChatIds,
   getLtmScopeGroupIds,
   getLtmScopePersonaIds,
-  ltmScopesOverlap,
   normalizeLtmScope,
 } from "../../../../shared/src/features/agents/long-term-memory/scope.js";
 import {
@@ -51,10 +50,12 @@ import { selectLtmPluralForm, useLtmTranslation, type LtmTranslationFunction } f
 import { LtmWorkspace, type LtmWorkspacePane } from "./LtmWorkspace";
 import {
   buildScopeIndexes,
+  buildScopeMemoryPresence,
   deriveScopeBranchChats,
   deriveScopeBranches,
   deriveScopeConversations,
   type ScopeTargets,
+  uniqueById,
 } from "./scope-targets";
 import {
   AvailabilityTabRail,
@@ -240,13 +241,13 @@ function ScopeTargetPicker({
   ] as const;
   const [query, setQuery] = useState("");
   const [activeKind, setActiveKind] = useState<(typeof categories)[number][0]>("all");
-  const flatTargets = [
+  const flatTargets = uniqueById([
     targets.all,
     ...targets.chat,
     ...targets.branch,
     ...targets.character,
     ...targets.persona,
-  ].filter((target, index, items) => items.findIndex((item) => item.id === target.id) === index);
+  ]);
   const activeTargets =
     activeKind === "all"
       ? flatTargets.filter((target) => target.id !== "all")
@@ -258,19 +259,23 @@ function ScopeTargetPicker({
             ? targets.character
             : targets.persona;
   const needle = query.trim().toLocaleLowerCase();
+  const branchTargetIds = new Set(targets.branch.map((target) => target.id));
+  const chatTargetIds = new Set(targets.chat.map((target) => target.id));
+  const characterTargetIds = new Set(targets.character.map((target) => target.id));
   const targetKind = (target: Target, kind: (typeof categories)[number][0]) => {
     if (kind !== "all") return kind;
-    if (targets.branch.some((candidate) => candidate.id === target.id)) return "branch" as const;
-    if (targets.chat.some((candidate) => candidate.id === target.id)) return "chat" as const;
-    if (targets.character.some((candidate) => candidate.id === target.id)) return "character" as const;
+    if (branchTargetIds.has(target.id)) return "branch" as const;
+    if (chatTargetIds.has(target.id)) return "chat" as const;
+    if (characterTargetIds.has(target.id)) return "character" as const;
     return "persona" as const;
   };
   const targetFullName = (target: Target, kind: (typeof categories)[number][0]) => {
     const resolvedKind = targetKind(target, kind);
     const comment = target.comment?.trim();
     if (resolvedKind === "branch") {
-      const chat = scopeTargets?.chats.find((candidate) => candidate.id === target.scope?.chatIds?.[0]);
-      const chatName = target.chatName?.trim() || chat?.chatName?.trim();
+      const chatName =
+        target.chatName?.trim() ||
+        scopeTargets?.chats.find((candidate) => candidate.id === target.scope?.chatIds?.[0])?.chatName?.trim();
       return chatName ? `${chatName} - ${target.label}` : target.label;
     }
     return resolvedKind === "persona" && comment ? `${target.label} - ${comment}` : target.label;
@@ -301,21 +306,14 @@ function ScopeTargetPicker({
         ]),
   ];
   const regularTargets = displayedTargets;
-  const hasMemoryPresence = scopeTargets?.memoryPresence !== undefined && scopeTargets.memoryPresence !== null;
-  const targetsWithMemories = hasMemoryPresence
-    ? regularTargets.filter((target) =>
-        scopeTargets?.memoryPresence?.some((scope) => ltmScopesOverlap(scope, target.scope, { includeGlobal: false })),
-      )
-    : [];
-  const targetsWithoutMemories = hasMemoryPresence
-    ? regularTargets.filter(
-        (target) =>
-          !scopeTargets?.memoryPresence?.some((scope) =>
-            ltmScopesOverlap(scope, target.scope, { includeGlobal: false }),
-          ),
-      )
-    : [];
-  const neutralTargets = hasMemoryPresence ? [] : regularTargets;
+  const memoryPresence = scopeTargets?.memoryPresence;
+  const hasMemories = useMemo(
+    () => (memoryPresence ? buildScopeMemoryPresence(memoryPresence) : null),
+    [memoryPresence],
+  );
+  const targetsWithMemories = hasMemories ? regularTargets.filter((target) => hasMemories(target.scope)) : [];
+  const targetsWithoutMemories = hasMemories ? regularTargets.filter((target) => !hasMemories(target.scope)) : [];
+  const neutralTargets = hasMemories ? [] : regularTargets;
   const [noMemoriesOpen, setNoMemoriesOpen] = useState(false);
   const noMemoriesPreference = useRef(false);
   const wasSearching = useRef(false);
@@ -1796,7 +1794,7 @@ export default function MemoryVault({
     ? linkContextNotes.filter((note) => note.links.some((link) => link.target === draft.id))
     : [];
   const outgoingLinks = draft?.links.filter((link) => link.relation !== "extracted_from") ?? [];
-  const targets: Target[] = [
+  const targets: Target[] = uniqueById([
     {
       id: "all",
       label: localizeUi("ui.longTermMemory.memoryvault.allMemories"),
@@ -1834,7 +1832,7 @@ export default function MemoryVault({
       comment: persona.comment,
       scope: { personaId: persona.id },
     })),
-  ].filter((candidate, index, items) => items.findIndex((item) => item.id === candidate.id) === index);
+  ]);
   const scopeIndexes = useMemo(() => buildScopeIndexes(scopeTargets.data?.chats ?? []), [scopeTargets.data?.chats]);
   const currentChat = props.chatId ? scopeIndexes.chatsById.get(props.chatId) : undefined;
   const selectedChat =
@@ -1876,10 +1874,10 @@ export default function MemoryVault({
         scope: { characterIds: [currentChat.characterIds[0]] },
       }
     : null;
-  const pickerCharacterScopeTargets = [
+  const pickerCharacterScopeTargets = uniqueById([
     ...(currentCharacterTarget ? [currentCharacterTarget] : []),
     ...characterScopeTargets,
-  ].filter((candidate, index, items) => items.findIndex((item) => item.id === candidate.id) === index);
+  ]);
   // The primary picker folds the selected character into a place so the place also
   // shows that character's memories. The secondary place stays literal: otherwise
   // its scope becomes "the place OR the primary character" and the AND view
@@ -1916,10 +1914,10 @@ export default function MemoryVault({
         scope: scopeTargets.data?.currentScope ?? { chatId: currentChat.id, chatIds: [currentChat.id] },
       }
     : null;
-  const pickerConversationScopeTargets = [
+  const pickerConversationScopeTargets = uniqueById([
     ...(currentConversationScopeTarget ? [currentConversationScopeTarget] : []),
     ...conversationScopeTargets,
-  ].filter((candidate, index, items) => items.findIndex((item) => item.id === candidate.id) === index);
+  ]);
   // The secondary place stays literal for the current chat too. Reusing currentScope
   // here would fold the primary character (and persona) into the second place, so
   // "A AND (B OR A)" collapses back to A.
@@ -1933,15 +1931,15 @@ export default function MemoryVault({
         scope: chatOnlyLtmScope(currentChat.id),
       }
     : null;
-  const pickerSecondaryConversationScopeTargets = [
+  const pickerSecondaryConversationScopeTargets = uniqueById([
     ...(secondaryCurrentConversationScopeTarget ? [secondaryCurrentConversationScopeTarget] : []),
     ...secondaryConversationScopeTargets,
-  ].filter((candidate, index, items) => items.findIndex((item) => item.id === candidate.id) === index);
+  ]);
   const branchScopeTargetsFor = (characterId: string) =>
     branches.map((branch) => ({
       id: `chat:${branch.id}`,
       label: branch.label,
-      chatName: scopeTargets.data?.chats.find((chat) => chat.id === branch.id)?.chatName,
+      chatName: branch.chatName,
       scope: {
         chatId: branch.id,
         chatIds: [branch.id],
@@ -1962,10 +1960,10 @@ export default function MemoryVault({
         scope: scopeTargets.data?.currentScope ?? { chatId: currentChat.id, chatIds: [currentChat.id] },
       }
     : null;
-  const pickerBranchScopeTargets = [
+  const pickerBranchScopeTargets = uniqueById([
     ...(currentBranchTarget ? [currentBranchTarget] : []),
     ...branchScopeTargets,
-  ].filter((candidate, index, items) => items.findIndex((item) => item.id === candidate.id) === index);
+  ]);
   const secondaryCurrentBranchScopeTarget: Target | null =
     currentChat?.groupId && currentBranchTarget
       ? {
@@ -1978,10 +1976,10 @@ export default function MemoryVault({
           },
         }
       : null;
-  const pickerSecondaryBranchScopeTargets = [
+  const pickerSecondaryBranchScopeTargets = uniqueById([
     ...(secondaryCurrentBranchScopeTarget ? [secondaryCurrentBranchScopeTarget] : []),
     ...secondaryBranchScopeTargets,
-  ].filter((candidate, index, items) => items.findIndex((item) => item.id === candidate.id) === index);
+  ]);
   const statusScopeTargets: Target[] = statuses.map((status) => ({
     id: status,
     label: statusLabel(status),
