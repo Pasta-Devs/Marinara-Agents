@@ -1,5 +1,9 @@
 # Long-Term Memory changelog
 
+## 1.4.18 — 2026-10-08
+
+- Open the Memory Vault and switch back to it quickly in large libraries. The place pickers worked out which chats, branches, characters and personas have memories by comparing every place with every memory on each redraw; they now look places up in an index built once, so a library of about 800 places and 180 memories redraws in milliseconds instead of most of a second.
+
 ## 1.4.15 — 2026-10-08
 
 - Rename the Vault memory's "View all activity" link to "Open debug log" and open the Debug tab filtered to that memory, with no operation selected.
