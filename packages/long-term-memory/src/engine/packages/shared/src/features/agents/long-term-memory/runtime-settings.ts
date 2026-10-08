@@ -34,8 +34,13 @@ function parseMaxChunks(value: unknown) {
   return parseSparseNumber(value, 1, 100, true);
 }
 
+/** Issue #1264: the rescaled weights cap realistic matches near 0.5, so a saved
+ * threshold above 0.4 would otherwise inject almost nothing. Read it as 0.4. */
+export const LTM_RECALL_SCORE_THRESHOLD_CEILING = 0.4;
+
 function parseScoreThreshold(value: unknown) {
-  return parseSparseNumber(value, 0, 1);
+  const parsed = parseSparseNumber(value, 0, 1);
+  return parsed === undefined ? undefined : Math.min(parsed, LTM_RECALL_SCORE_THRESHOLD_CEILING);
 }
 
 function parseContextMessages(value: unknown) {

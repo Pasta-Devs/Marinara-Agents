@@ -63,6 +63,19 @@ function containsKeywordToken(haystack: string, needle: string) {
   return new RegExp(`(^|[^\\p{L}\\p{N}])${escaped}(?![\\p{L}\\p{N}])`, "u").test(haystack);
 }
 
+/** Issue #1264: names the query uses, i.e. a capitalised word that is not the
+ * start of a sentence, quote, or line. Names keep full keyword credit on a single
+ * match. Check the context before horizontal whitespace without consuming it. */
+function queryNameTerms(queryText: string) {
+  const names = new Set<string>();
+  for (const match of queryText.matchAll(/[^\S\r\n]+(\p{Lu}[\p{L}'-]*)/gu)) {
+    const precedingContext = queryText.slice(0, match.index).replace(/[^\S\r\n]+$/u, "");
+    if (/(?:^|[.!?"\r\n*(])$/u.test(precedingContext)) continue;
+    names.add(match[1]!.toLocaleLowerCase().replace(/'s$/, ""));
+  }
+  return names;
+}
+
 export function searchLtmKeywordIndex(
   index: LtmKeywordIndex,
   queryText: string,
@@ -99,17 +112,26 @@ export function searchLtmKeywordIndex(
     return count;
   };
 
-  const hits = new Map<string, { score: number; reasons: string[]; matchedKeywords: Set<string> }>();
+  const hits = new Map<
+    string,
+    { score: number; reasons: string[]; matchedKeywords: Set<string>; exactTerms: Set<string> }
+  >();
 
   const add = (chunkId: string, keyword: string, score: number, reason: string) => {
     if (options.allowedChunks && !options.allowedChunks.has(chunkId)) return;
-    const existing = hits.get(chunkId) ?? { score: 0, reasons: [], matchedKeywords: new Set<string>() };
+    const existing = hits.get(chunkId) ?? {
+      score: 0,
+      reasons: [],
+      matchedKeywords: new Set<string>(),
+      exactTerms: new Set<string>(),
+    };
     const dedupeKey = `${keyword}\0${reason}`;
     if (existing.matchedKeywords.has(dedupeKey)) return;
     existing.matchedKeywords.add(dedupeKey);
     // Best match per chunk instead of a sum: two generic exact keywords used to
     // add up to the exact-phrase ceiling on a chunk that shares nothing else.
     existing.score = Math.max(existing.score, score * keywordFrequencyWeight(documentFrequency(keyword), totalChunks));
+    if (reason.startsWith("keyword:exact:")) existing.exactTerms.add(reason.slice("keyword:exact:".length));
     existing.reasons.push(reason);
     hits.set(chunkId, existing);
   };
@@ -151,33 +173,44 @@ export function searchLtmKeywordIndex(
     }
   }
 
-  let catalogEntries = 0;
-  for (const [keyword, chunkIds] of Object.entries(index.byKeyword).sort(([left], [right]) =>
-    left.localeCompare(right),
-  )) {
-    if (catalogEntries >= maxKeywordCatalogEntries) break;
+  // Issue #1264: pick the bounded fuzzy catalog by overlap with the query terms
+  // instead of alphabetical order, so a keyword late in a large scope is still
+  // reachable. The cap still bounds how many keywords get their postings scanned.
+  const fuzzyCandidates: Array<{ keyword: string; chunkIds: string[]; score: number }> = [];
+  for (const [keyword, chunkIds] of Object.entries(index.byKeyword)) {
     if (inScopeCatalogKeywords && !inScopeCatalogKeywords.has(keyword)) continue;
-    catalogEntries += 1;
     if (normalizedTerms.includes(keyword)) continue;
     const exactContained =
       containsKeywordToken(normalizedQuery, keyword) || containsKeywordToken(keyword, normalizedQuery);
-    if (!exactContained) {
-      const overlappingTerm = normalizedTerms.find(
-        (term) => containsKeywordToken(keyword, term) || containsKeywordToken(term, keyword),
-      );
-      if (!overlappingTerm) continue;
+    if (exactContained) {
       const overlapRatio =
-        Math.min(overlappingTerm.length, keyword.length) / Math.max(overlappingTerm.length, keyword.length);
-      for (const chunkId of takeAllowed(chunkIds)) {
-        add(chunkId, keyword, 0.75 + overlapRatio * 0.75, `keyword:fuzzy:${keyword}`);
-      }
+        Math.min(normalizedQuery.length, keyword.length) / Math.max(normalizedQuery.length, keyword.length);
+      fuzzyCandidates.push({ keyword, chunkIds, score: 1.25 + overlapRatio });
       continue;
     }
+    const overlappingTerm = normalizedTerms.find(
+      (term) => containsKeywordToken(keyword, term) || containsKeywordToken(term, keyword),
+    );
+    if (!overlappingTerm) continue;
     const overlapRatio =
-      Math.min(normalizedQuery.length, keyword.length) / Math.max(normalizedQuery.length, keyword.length);
-    for (const chunkId of takeAllowed(chunkIds)) {
-      add(chunkId, keyword, 1.25 + overlapRatio, `keyword:fuzzy:${keyword}`);
+      Math.min(overlappingTerm.length, keyword.length) / Math.max(overlappingTerm.length, keyword.length);
+    fuzzyCandidates.push({ keyword, chunkIds, score: 0.75 + overlapRatio * 0.75 });
+  }
+  fuzzyCandidates.sort((left, right) => right.score - left.score || left.keyword.localeCompare(right.keyword));
+  for (const candidate of fuzzyCandidates.slice(0, maxKeywordCatalogEntries)) {
+    for (const chunkId of takeAllowed(candidate.chunkIds)) {
+      add(chunkId, candidate.keyword, candidate.score, `keyword:fuzzy:${candidate.keyword}`);
     }
+  }
+
+  // Issue #1264: one ordinary exact keyword must not clear the threshold alone.
+  // Two or more distinct keywords, a multi-word phrase, or a name keep full credit.
+  const nameTerms = queryNameTerms(queryText);
+  for (const hit of hits.values()) {
+    if (hit.exactTerms.size !== 1) continue;
+    const [term] = hit.exactTerms;
+    if (term!.includes(" ") || nameTerms.has(term!)) continue;
+    hit.score = Math.min(hit.score, LTM_KEYWORD_MAX_SCORE / 2);
   }
 
   return [...hits.entries()]

@@ -13,7 +13,7 @@ export interface LtmBudgetedChunk {
   lanes: string[];
   laneScores?: Record<string, number>;
   rawLaneScores?: Record<string, number>;
-  cooldownPenalty?: number;
+  fusedRank: number;
   tier: 1 | 2 | 3;
   estimatedTokens: number;
 }
@@ -41,7 +41,7 @@ export interface LtmBudgetRejectedCandidate {
   lanes: string[];
   laneScores?: Record<string, number>;
   rawLaneScores?: Record<string, number>;
-  cooldownPenalty?: number;
+  fusedRank: number;
   estimatedTokens?: number;
   rejectionReason: "budget" | "lower_rank" | "missing_chunk" | "score_threshold" | "duplicate_text";
 }
@@ -95,7 +95,7 @@ function pushRejected(
     lanes: candidate.lanes,
     laneScores: candidate.laneScores,
     rawLaneScores: candidate.rawLaneScores,
-    cooldownPenalty: candidate.cooldownPenalty,
+    fusedRank: candidate.fusedRank,
     estimatedTokens: chunk ? chunkEstimatedTokens(chunk, promptNormalizedEstimate) : undefined,
     rejectionReason: chunk ? rejectionReason : "missing_chunk",
   });
@@ -169,7 +169,7 @@ export function applyLtmBudget(
       lanes: candidate.lanes,
       laneScores: candidate.laneScores,
       rawLaneScores: candidate.rawLaneScores,
-      cooldownPenalty: candidate.cooldownPenalty,
+      fusedRank: candidate.fusedRank,
       tier: tierFor(chunk),
       estimatedTokens,
     });

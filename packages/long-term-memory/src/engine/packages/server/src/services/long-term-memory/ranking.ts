@@ -4,11 +4,11 @@ export interface LtmRankedCandidate {
   normalizedScore?: number;
   finalNormalizedScore?: number;
   relevanceScore: number;
+  fusedRank: number;
   reasons: string[];
   lanes: string[];
   laneScores?: Record<string, number>;
   rawLaneScores?: Record<string, number>;
-  cooldownPenalty?: number;
 }
 
 export interface LtmRankLaneItem {
@@ -25,15 +25,9 @@ export interface LtmRankLane {
   items: LtmRankLaneItem[];
 }
 
-export type LtmRankCooldown = {
-  chunkId: string;
-  penalty: number;
-  reason: string;
-};
-
 const RRF_K = 60;
 
-export function reciprocalRankFuse(lanes: LtmRankLane[], options: { cooldowns?: LtmRankCooldown[] } = {}) {
+export function reciprocalRankFuse(lanes: LtmRankLane[]) {
   const candidates = new Map<string, LtmRankedCandidate>();
 
   for (const lane of lanes) {
@@ -56,6 +50,7 @@ export function reciprocalRankFuse(lanes: LtmRankLane[], options: { cooldowns?: 
           chunkId: item.chunkId,
           score: 0,
           relevanceScore: 0,
+          fusedRank: 0,
           reasons: [],
           lanes: [],
           laneScores: {},
@@ -79,20 +74,12 @@ export function reciprocalRankFuse(lanes: LtmRankLane[], options: { cooldowns?: 
     });
   }
 
-  const cooldowns = new Map(options.cooldowns?.map((cooldown) => [cooldown.chunkId, cooldown]) ?? []);
-  for (const candidate of candidates.values()) {
-    const cooldown = cooldowns.get(candidate.chunkId);
-    if (!cooldown) continue;
-    candidate.cooldownPenalty = cooldown.penalty;
-    candidate.score *= cooldown.penalty;
-    candidate.reasons.push(cooldown.reason);
-  }
-
   const ranked = Array.from(candidates.values()).sort(
     (a, b) => b.score - a.score || a.chunkId.localeCompare(b.chunkId),
   );
   const topScore = ranked[0]?.score ?? 0;
-  for (const candidate of ranked) {
+  for (const [index, candidate] of ranked.entries()) {
+    candidate.fusedRank = index + 1;
     const finalNormalizedScore = topScore > 0 ? candidate.score / topScore : 0;
     candidate.finalNormalizedScore = finalNormalizedScore;
   }

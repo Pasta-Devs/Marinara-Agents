@@ -554,6 +554,7 @@ export default function ActivityView({
       {candidates.map((candidate, index) => {
         const noteId = typeof candidate.noteId === "string" ? candidate.noteId : undefined;
         const score = typeof candidate.score === "number" ? candidate.score : undefined;
+        const fusedRank = typeof candidate.fusedRank === "number" ? candidate.fusedRank : undefined;
         const title = noteId ? noteTitles.get(noteId) : undefined;
         return (
           <li
@@ -577,12 +578,17 @@ export default function ActivityView({
             </span>
             <span>
               {localizeUi("ui.longTermMemory.activityview.relevance")}{" "}
+              {fusedRank == null ? null : (
+                <>{localizeUi("ui.longTermMemory.activityview.fusedRank", { rank: fusedRank })} · </>
+              )}
               {score == null
                 ? "--"
                 : localizeUi("ui.longTermMemory.activityview.value1", { value1: Math.round(score * 100) })}{" "}
               ·{" "}
               {rejected
-                ? humanizeLabel(String(candidate.rejectionReason ?? "rejected"))
+                ? candidate.rejectionReason === "lower_rank"
+                  ? localizeUi("ui.longTermMemory.activityview.lowerFusedRank")
+                  : humanizeLabel(String(candidate.rejectionReason ?? "rejected"))
                 : Array.isArray(candidate.lanes)
                   ? candidate.lanes.join(", ")
                   : ""}

@@ -4,6 +4,18 @@
 
 - Open the Memory Vault and switch back to it quickly in large libraries. The place pickers worked out which chats, branches, characters and personas have memories by comparing every place with every memory on each redraw; they now look places up in an index built once, so a library of about 800 places and 180 memories redraws in milliseconds instead of most of a second.
 
+## 1.4.17 — 2026-10-08
+
+- Make `/search` resolve the scoped chat's recall settings and prompt budget like generation, while preserving explicit request overrides.
+- Show fused rank beside relevance in Debug and remove unused cooldown behavior.
+
+## 1.4.16 — 2026-10-08 [highlight]
+
+- Stop one everyday word from deciding recall alone. A single exact keyword counts for half the keyword lane unless the chat uses it as a name; two distinct keywords or a phrase still count in full.
+- Make BM25 count on real chat windows: normalize against the query's eight highest-idf indexed terms instead of every term, so narration padding no longer drives a matching memory toward zero.
+- Choose the bounded fuzzy keyword catalog by query overlap, not alphabetically, so a keyword past the first 512 in a vault can still match.
+- Rescale the recall presets by 0.7 and retune balanced so the default 0.35 threshold keeps the previous 0.5 selection. A saved threshold above 0.4 now reads as 0.4; re-check custom weights.
+
 ## 1.4.15 — 2026-10-08
 
 - Rename the Vault memory's "View all activity" link to "Open debug log" and open the Debug tab filtered to that memory, with no operation selected.

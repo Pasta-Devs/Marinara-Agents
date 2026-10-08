@@ -88,10 +88,13 @@ import { readLongTermMemoryAttempt, readLongTermMemoryInjectionReceipt } from ".
 import {
   ltmModeForChatMode,
   normalizeLtmChatCharacterIds,
+  parseLtmChatMetadata,
   resolveChatLtmScope,
   resolveChatLtmWriteScope,
   getLtmChatDisplayName,
 } from "./chat-scope.js";
+import { estimateLongTermMemoryPromptOverhead } from "./prompt.js";
+import { resolveLongTermMemoryRecallSettings } from "../../../../shared/src/features/agents/long-term-memory/runtime-settings.js";
 import { isLtmSourceNote } from "./source-extraction.js";
 import { processLongTermMemorySource } from "./source-processing.js";
 import {
@@ -1423,9 +1426,72 @@ export function createLongTermMemoryRoutes(runtime: {
         }
       },
     );
-    app.post<{ Body: unknown }>("/search", { bodyLimit: SEARCH_BODY_LIMIT_BYTES }, async (request) =>
-      retrieveLongTermMemory({ ...searchBody.parse(request.body), root }),
-    );
+    app.post<{ Body: unknown }>("/search", { bodyLimit: SEARCH_BODY_LIMIT_BYTES }, async (request) => {
+      const body = searchBody.parse(request.body);
+      const scopedChatIds = new Set([
+        ...(body.scope?.chatId ? [body.scope.chatId] : []),
+        ...(body.scope?.chatIds ?? []),
+      ]);
+      const chat =
+        scopedChatIds.size === 1 ? await getPackagePersistence().getChat(scopedChatIds.values().next().value!) : null;
+      const mode = body.mode ?? (chat ? ltmModeForChatMode(chat.mode) : undefined);
+      const recall = resolveLongTermMemoryRecallSettings({
+        chatMode: mode ?? "roleplay",
+        chatMetadata: parseLtmChatMetadata(chat?.metadata),
+        globalSettings: await getLtmGlobalSettings(root),
+      });
+      const promptBudgetTokens = body.maxTokens ?? recall.budgetTokens ?? 4096;
+      const promptOverheadTokens = estimateLongTermMemoryPromptOverhead(recall.recallPreamble);
+      const retrievalMaxTokens =
+        promptBudgetTokens > promptOverheadTokens ? promptBudgetTokens - promptOverheadTokens : promptBudgetTokens;
+      const maxChunks = body.maxChunks ?? recall.maxChunks ?? 20;
+      const scoreThreshold = body.minScore ?? recall.scoreThreshold ?? 0;
+      const includeResolved = body.includeResolved ?? recall.includeResolved;
+      const weights = {
+        semanticWeight: body.semanticWeight ?? recall.weights.semanticWeight,
+        lexicalWeight: body.lexicalWeight ?? recall.weights.lexicalWeight,
+        graphWeight: body.graphWeight ?? recall.weights.graphWeight,
+        keywordWeight: body.keywordWeight ?? recall.weights.keywordWeight,
+      };
+      const result = await retrieveLongTermMemory({
+        ...body,
+        root,
+        mode,
+        // A scope that only names the chat resolves like a turn, adding the chat's group and persona.
+        scope:
+          chat && Object.keys(body.scope ?? {}).every((key) => key === "chatId" || key === "chatIds")
+            ? resolveChatLtmScope(chat)
+            : body.scope,
+        characterIds:
+          body.characterIds ??
+          (body.scope?.characterIds !== undefined
+            ? undefined
+            : chat
+              ? normalizeLtmChatCharacterIds(chat.characterIds)
+              : undefined),
+        includeResolved,
+        maxChunks,
+        maxTokens: retrievalMaxTokens,
+        minScore: scoreThreshold,
+        ...weights,
+        explain: body.explain ?? recall.debugEnabled,
+        promptNormalizedEstimate: true,
+      });
+      return {
+        ...result,
+        promptBudgetTokens,
+        promptOverheadTokens,
+        recallSettings: {
+          mode,
+          recallStyle: recall.recallStyle,
+          maxChunks,
+          maxTokens: promptBudgetTokens,
+          scoreThreshold,
+          includeResolved,
+          weights,
+        },
+      };
+    });
     app.get<{ Querystring: unknown }>("/drafts", async (request) =>
       draftStore.listDrafts(draftQuery.parse(request.query)),
     );
