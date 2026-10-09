@@ -30,8 +30,12 @@ const SUSPICIOUS_RELATIONSHIP_DELTA_THRESHOLD = 30;
 const MAJOR_RELATIONSHIP_CAUSE_PATTERN =
   /\b(?:betray(?:al|ed|s|ing)?|breakdown|breakthrough|confess(?:ed|es|ion|ing)?|crisis|danger|life[- ]threatening|public commitment|reconcil(?:e|ed|es|iation|ing)|rescu(?:e|ed|es|ing)|saved|saves|saving)\b/i;
 
+function hasNonZeroRelationshipChange(unit: LtmEvidenceUnit): boolean {
+  return Object.values(unit.dimensionChanges ?? {}).some((value) => value !== 0);
+}
+
 function relationshipDescribesChange(unit: LtmEvidenceUnit): boolean {
-  return unit.claimKind === "change" || Object.keys(unit.dimensionChanges ?? {}).length > 0;
+  return unit.claimKind === "change" || hasNonZeroRelationshipChange(unit);
 }
 
 function lexicalOverlap(sourceText: string, proposedText: string) {
@@ -298,7 +302,7 @@ export function validateLtmEvidenceUnits({
     }
 
     unitDiagnostics.push(...relationshipDimensionDiagnostics(unit, candidateIndex, noteId));
-    if (unit.claimKind === "static" && Object.keys(unit.dimensionChanges ?? {}).length > 0) {
+    if (unit.claimKind === "static" && hasNonZeroRelationshipChange(unit)) {
       unitDiagnostics.push({
         severity: "error",
         code: "static_relationship_dimension_change",

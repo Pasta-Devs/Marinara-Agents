@@ -7,13 +7,19 @@ import { runRegressionToCompletion } from "./regression-helpers.ts";
 
 async function main() {
   const source = "../packages/long-term-memory/src/engine/packages/server/src/services/long-term-memory";
-  const { compileEvidenceUnitExtraction, evidenceUnitMessages, evidenceUnitResponseFormat, parseEvidenceUnitPayload } =
-    await import(`${source}/evidence-unit-extraction.ts`);
+  const {
+    compileEvidenceUnitExtraction,
+    diagnosticsRequireExtractionReview,
+    evidenceUnitMessages,
+    evidenceUnitResponseFormat,
+    parseEvidenceUnitPayload,
+  } = await import(`${source}/evidence-unit-extraction.ts`);
   const { compileLtmEvidenceUnits } = await import(`${source}/evidence-unit-compiler.ts`);
   const { deduplicateUnits } = await import(`${source}/dedup.ts`);
   const {
     analyzeTrustedLtmNoteSubjects,
     buildTrustedLtmSubjectCatalog,
+    prepareLtmSubjectIdentityContext,
     resolveLtmSubjectIdentities,
     subjectsEqual,
     trustedLtmIdentityNotesForSource,
@@ -814,135 +820,166 @@ async function main() {
       "requiresReview must be computed from full diagnostics before truncation",
     );
 
-    const dataDir = await mkdtemp(join(tmpdir(), "marinara-ltm-event-shaped-truncated-review-"));
-    const releaseHost = configurePackageRuntime({
-      isDebugAgentsEnabled: () => false,
-      logger: { debug() {}, info() {}, warn() {}, error() {} },
-      dataDir,
-      resources: {
-        listCharacters: async () => [{ id: "mara", data: { name: "Mara" }, comment: "" }],
-        listPersonas: async () => [],
-        listLorebooks: async () => [],
-      },
-      persistence: {
-        getChat: async () => null,
-        listChats: async () => [],
-        updateChatMetadata: async () => {},
-      },
-    });
-    const root = join(dataDir, "long-term-memory");
-    const reviewScope = { characterIds: ["mara"] };
-    try {
-      const storage = new LongTermMemoryStorage(root);
-      const durableFact = "The observatory archive keeps a cobalt ledger.";
-      const eventShapedText = "Mara learned to read the observatory script.";
-      const sourceText = `${durableFact} ${eventShapedText}`;
-      await storage.createNote({
-        ...chat,
-        id: "source_event_shaped_truncated_review",
-        title: "Truncated event-shaped review source",
-        scope: reviewScope,
-        sections: { source: { text: sourceText, updatedAt: timestamp } },
-      } as never);
-      const reviewSource = (await storage.getNote("source_event_shaped_truncated_review"))!;
-      const sourceHash = sourceHashForLtmSourceNote(reviewSource);
-      const fixtureUnits = [
-        ...Array.from({ length: 520 }, (_, index) => ({
-          bucket: "world_fact" as const,
-          subjectId: `pad_diag_${index}`,
-          sectionKey: "facts",
-          text: `Unrelated token salad ${index} xyzzy quux plugh.`,
-          claimKind: "static" as const,
-          importance: "minor" as const,
-          evidence: [`source_note:${reviewSource.id}`],
-          confidence: 0.9,
-          salience: 0.5,
-          status: "active" as const,
-          links: [] as [],
-          sourceHash,
-        })),
-        {
-          bucket: "character_fact" as const,
-          subjectId: "mara",
-          sectionKey: "facts",
-          text: eventShapedText,
-          claimKind: "static" as const,
-          importance: "major" as const,
-          evidence: [`source_note:${reviewSource.id}`],
-          confidence: 0.9,
-          salience: 0.8,
-          status: "active" as const,
-          links: [] as [],
-          subjectNames: ["Mara"],
-          sourceHash,
+    for (const reviewSignal of ["event", "borrowed", "borrowed-truncated", "control"] as const) {
+      const dataDir = await mkdtemp(join(tmpdir(), "marinara-ltm-truncated-review-"));
+      const releaseHost = configurePackageRuntime({
+        isDebugAgentsEnabled: () => false,
+        logger: { debug() {}, info() {}, warn() {}, error() {} },
+        dataDir,
+        resources: {
+          listCharacters: async () => [
+            { id: "mara", data: { name: "Mara" }, comment: "" },
+            { id: "seo", data: { name: "서무진" }, comment: "" },
+          ],
+          listPersonas: async () => [],
+          listLorebooks: async () => [],
         },
-        {
-          bucket: "world_fact" as const,
-          subjectId: "cobalt_ledger",
-          sectionKey: "facts",
-          text: durableFact,
-          claimKind: "static" as const,
-          importance: "major" as const,
-          evidence: [`source_note:${reviewSource.id}`],
-          confidence: 0.95,
-          salience: 0.8,
-          status: "active" as const,
-          links: [] as [],
-          sourceHash,
+        persistence: {
+          getChat: async () => null,
+          listChats: async () => [],
+          updateChatMetadata: async () => {},
         },
-      ];
-      const committed = await processLongTermMemorySource({
-        sourceNote: reviewSource as never,
-        languageModel: {
-          name: "FixtureModel",
-          model: "fixture-model",
-          maxContext: null,
-          maxOutputTokens: null,
-          fitContext(messages: unknown[], fitOptions: { maxTokens: number }) {
-            return {
-              messages,
-              maxTokens: fitOptions.maxTokens,
-              estimatedTokensBefore: 20,
-              estimatedTokensAfter: 20,
-              trimmed: false,
-            };
-          },
-          async chatComplete() {
-            return {
-              content: JSON.stringify({
-                summary: "Durable world fact with a truncated event-shaped warning.",
-                units: fixtureUnits,
-              }),
-              finishReason: "stop",
-            };
-          },
-        } as never,
-        scope: reviewScope,
-        modes: ["roleplay"],
-        mode: "roleplay",
-        extractionMode: "roleplay",
-        operationId: randomUUID(),
-        root,
-        applyLowRisk: true,
       });
-      assert.equal(committed.draft.reviewRequired, true, "truncated event-shaped warnings must still require review");
-      assert.equal(
-        committed.diagnostics.some((diagnostic) => diagnostic.code === "event_shaped_character_fact"),
-        false,
-        "bounded diagnostics must omit the truncated event-shaped warning",
-      );
-      assert.ok(
-        committed.draft.mutations.some((mutation) => mutation.risk === "low"),
-        "fixture must still produce an otherwise low-risk mutation",
-      );
-      assert.equal(
-        committed.appliedMutationIds.length,
-        0,
-        "truncated event-shaped warnings must block low-risk auto-apply",
-      );
-    } finally {
-      releaseHost();
-      await rm(dataDir, { recursive: true, force: true });
+      const root = join(dataDir, "long-term-memory");
+      const reviewScope = { characterIds: ["mara", "seo"] };
+      try {
+        const storage = new LongTermMemoryStorage(root);
+        const durableFact = "The observatory archive keeps a cobalt ledger.";
+        const eventShapedText =
+          reviewSignal === "event"
+            ? "Mara learned to read the observatory script."
+            : "서무진 can read the observatory script.";
+        const borrowedText = "The observatory script is legible.";
+        const sourceText = `${durableFact} ${eventShapedText} ${borrowedText}`;
+        await storage.createNote({
+          ...chat,
+          id: "source_event_shaped_truncated_review",
+          title: "Truncated event-shaped review source",
+          scope: reviewScope,
+          sections: { source: { text: sourceText, updatedAt: timestamp } },
+        } as never);
+        const reviewSource = (await storage.getNote("source_event_shaped_truncated_review"))!;
+        const sourceHash = sourceHashForLtmSourceNote(reviewSource);
+        const fixtureUnits = [
+          ...Array.from(
+            { length: reviewSignal === "event" || reviewSignal === "borrowed-truncated" ? 520 : 0 },
+            (_, index) => ({
+              bucket: "world_fact" as const,
+              subjectId: `pad_diag_${index}`,
+              sectionKey: "facts",
+              text: `Unrelated token salad ${index} xyzzy quux plugh.`,
+              claimKind: "static" as const,
+              importance: "minor" as const,
+              evidence: [`source_note:${reviewSource.id}`],
+              confidence: 0.9,
+              salience: 0.5,
+              status: "active" as const,
+              links: [] as [],
+              sourceHash,
+            }),
+          ),
+          {
+            bucket: "character_fact" as const,
+            subjectId: reviewSignal === "event" ? "mara" : "seo_mujin",
+            sectionKey: reviewSignal === "event" ? "facts" : "abilities",
+            text: eventShapedText,
+            claimKind: "static" as const,
+            importance: "major" as const,
+            evidence: [`source_note:${reviewSource.id}`],
+            confidence: 0.9,
+            salience: 0.8,
+            status: "active" as const,
+            links: [] as [],
+            subjectNames: [reviewSignal === "event" ? "Mara" : "서무진"],
+            sourceHash,
+          },
+          ...(reviewSignal.startsWith("borrowed")
+            ? [
+                unit(reviewSource, {
+                  bucket: "character_fact",
+                  subjectId: "seo_mujin",
+                  sectionKey: "abilities",
+                  text: borrowedText,
+                  claimKind: "static",
+                }),
+              ]
+            : []),
+          {
+            bucket: "world_fact" as const,
+            subjectId: "cobalt_ledger",
+            sectionKey: "facts",
+            text: durableFact,
+            claimKind: "static" as const,
+            importance: "major" as const,
+            evidence: [`source_note:${reviewSource.id}`],
+            confidence: 0.95,
+            salience: 0.8,
+            status: "active" as const,
+            links: [] as [],
+            sourceHash,
+          },
+        ];
+        const committed = await processLongTermMemorySource({
+          sourceNote: reviewSource as never,
+          languageModel: {
+            name: "FixtureModel",
+            model: "fixture-model",
+            maxContext: null,
+            maxOutputTokens: null,
+            fitContext(messages: unknown[], fitOptions: { maxTokens: number }) {
+              return {
+                messages,
+                maxTokens: fitOptions.maxTokens,
+                estimatedTokensBefore: 20,
+                estimatedTokensAfter: 20,
+                trimmed: false,
+              };
+            },
+            async chatComplete() {
+              return {
+                content: JSON.stringify({
+                  summary: "Durable world fact with a truncated event-shaped warning.",
+                  units: fixtureUnits,
+                }),
+                finishReason: "stop",
+              };
+            },
+          } as never,
+          scope: reviewScope,
+          modes: ["roleplay"],
+          mode: "roleplay",
+          extractionMode: "roleplay",
+          operationId: randomUUID(),
+          root,
+          applyLowRisk: true,
+        });
+        assert.equal(
+          committed.draft.reviewRequired,
+          reviewSignal !== "control",
+          `${reviewSignal}: required review must block auto-apply`,
+        );
+        assert.equal(
+          committed.diagnostics.some(
+            (diagnostic) =>
+              diagnostic.code ===
+              (reviewSignal === "event" ? "event_shaped_character_fact" : "borrowed_subject_identity"),
+          ),
+          reviewSignal === "borrowed",
+          `${reviewSignal}: review signal must survive even when the diagnostic is truncated`,
+        );
+        assert.ok(
+          committed.draft.mutations.some((mutation) => mutation.risk === "low"),
+          "fixture must still produce an otherwise low-risk mutation",
+        );
+        assert.equal(
+          committed.appliedMutationIds.length > 0,
+          reviewSignal === "control",
+          `${reviewSignal}: only the control may auto-apply`,
+        );
+      } finally {
+        releaseHost();
+        await rm(dataDir, { recursive: true, force: true });
+      }
     }
   }
 
@@ -1654,6 +1691,309 @@ async function main() {
       (diagnostic) => diagnostic.details?.validatorCode === "static_relationship_dimension_change",
     ),
     true,
+  );
+
+  // #1277: zero-valued deltas are "no change", an empty subjectKeys array is an omitted
+  // field, and a nameless candidate borrows a solidly named sibling with the same subjectId.
+  const staticRelationshipZeroDelta = compile(chat, [
+    unit(chat, {
+      bucket: "relationship_state",
+      subjectId: "alice_rowan_static_zero",
+      sectionKey: "state",
+      text: "Alice and Rowan trust each other.",
+      claimKind: "static",
+      subjectNames: ["Alice", "Rowan"],
+      dimensionChanges: { trust: 0 },
+    }),
+  ]);
+  assert.equal(staticRelationshipZeroDelta.accounting.keptUnits, 1);
+  assert.equal(
+    staticRelationshipZeroDelta.diagnostics.some(
+      (diagnostic) => diagnostic.details?.validatorCode === "static_relationship_dimension_change",
+    ),
+    false,
+  );
+
+  const koreanSubject = {
+    subject: { key: "character:seo_mujin", ref: { kind: "character" as const, id: "seo_mujin" } },
+    name: "서무진",
+    aliases: [],
+    canonicalSlug: "seo-mujin",
+  };
+  const parsedEmptyKeys = parseEvidenceUnitPayload(
+    {
+      summary: "Extraction graph regression",
+      units: [
+        {
+          bucket: "character_fact",
+          subjectId: "seo_mujin",
+          sectionKey: "abilities",
+          text: "서무진 can read the observatory script.",
+          claimKind: "static",
+          importance: "major",
+          keywords: [],
+          evidence: ["source_note:source_chat_graph_regression"],
+          confidence: 0.9,
+          salience: 0.8,
+          status: "active",
+          links: [],
+          subjectNames: ["서무진"],
+          subjectKeys: [],
+        },
+      ],
+    },
+    sourceHashForLtmSourceNote(chat),
+    [],
+  );
+  const namedSubjectUnit = parsedEmptyKeys.response.units[0]!;
+  assert.equal(namedSubjectUnit.subjectKeys, undefined, "empty subjectKeys must normalize to an omitted field");
+  const namelessSubjectUnit = unit(chat, {
+    bucket: "character_fact",
+    subjectId: "seo_mujin",
+    sectionKey: "abilities",
+    text: "서무진 can read the observatory script with ease.",
+    claimKind: "static",
+  });
+  const borrowedIdentityResolution = resolveLtmSubjectIdentities({
+    units: [namedSubjectUnit, namelessSubjectUnit],
+    catalog: { entries: [koreanSubject], notes: [] },
+    existingNotes: [],
+    scope: {},
+  });
+  assert.equal(borrowedIdentityResolution.units.length, 2);
+  assert.equal(
+    borrowedIdentityResolution.units[0]!.subjectId,
+    borrowedIdentityResolution.units[1]!.subjectId,
+    "a nameless candidate must borrow its named sibling's identity",
+  );
+  assert.equal(
+    borrowedIdentityResolution.diagnostics.some((diagnostic) => diagnostic.code === "borrowed_subject_identity"),
+    true,
+  );
+  assert.equal(diagnosticsRequireExtractionReview(borrowedIdentityResolution.diagnostics), true);
+
+  const { ltmScopeFamilyId, localCharacterSubjectForName } = await import(`${source}/chat-scope.ts`);
+  const borrowingCatalog = buildTrustedLtmSubjectCatalog({
+    roster: [
+      { kind: "character", id: "seo", name: "서무진", aliases: ["서 선생"] },
+      { kind: "character", id: "mara", name: "Mara", aliases: ["Guard"] },
+      { kind: "character", id: "rowan", name: "Rowan", aliases: ["Guard"] },
+      { kind: "character", id: "alex", name: "Alex Morgan", aliases: [] },
+    ],
+    notes: [],
+  });
+  const borrowingOptions = { catalog: borrowingCatalog, scope: scopedChat.scope, mode: "roleplay" as const };
+  const skippedCatalog = (name: string) => ({
+    ...borrowingCatalog,
+    identityChoices: [{ name, action: "skip" as const, familyId: ltmScopeFamilyId(scopedChat.scope)! }],
+  });
+  const pairDonor = { ...namedSubjectUnit, bucket: "relationship_state" as const, subjectNames: ["서무진", "Rowan"] };
+  const relationshipRecipient = { ...namelessSubjectUnit, bucket: "relationship_state" as const };
+
+  // Failed identities may not be rescued by a superficially similar ID, another
+  // bucket, or a donor whose identity is unavailable/contested/skipped.
+  for (const { label, donors, recipient, catalog = borrowingCatalog, sourceText, donorBasis } of [
+    {
+      label: "exact ID, not a stripped prefix",
+      donors: [namedSubjectUnit],
+      recipient: { ...namelessSubjectUnit, subjectId: "char_seo_mujin" },
+    },
+    {
+      label: "ambiguous alias",
+      donors: [{ ...namedSubjectUnit, subjectId: "guard" }],
+      recipient: { ...namelessSubjectUnit, subjectId: "guard" },
+    },
+    {
+      label: "fuzzy recipient",
+      donors: [{ ...namedSubjectUnit, subjectId: "rowen" }],
+      recipient: { ...namelessSubjectUnit, subjectId: "rowen" },
+    },
+    {
+      label: "relationship cardinality",
+      donors: [{ ...pairDonor, subjectId: "mara" }],
+      recipient: { ...relationshipRecipient, subjectId: "mara" },
+    },
+    { label: "same bucket required", donors: [namedSubjectUnit], recipient: relationshipRecipient },
+    {
+      label: "reversed relationship ID",
+      donors: [{ ...pairDonor, subjectId: "seo_mujin_rowan" }],
+      recipient: { ...relationshipRecipient, subjectId: "rowan_seo_mujin" },
+    },
+    {
+      label: "invalid explicit key",
+      donors: [namedSubjectUnit],
+      recipient: { ...namelessSubjectUnit, subjectKeys: ["character:missing"] },
+    },
+    {
+      label: "internal empty keys stay strict",
+      donors: [namedSubjectUnit],
+      recipient: { ...namelessSubjectUnit, subjectKeys: [] },
+    },
+    {
+      label: "explicit unknown name",
+      donors: [namedSubjectUnit],
+      recipient: { ...namelessSubjectUnit, subjectNames: ["없는사람"] },
+    },
+    {
+      label: "conflicting named siblings",
+      donors: [namedSubjectUnit, { ...namedSubjectUnit, subjectNames: ["Rowan"] }],
+      recipient: namelessSubjectUnit,
+    },
+    {
+      label: "ambiguous donor",
+      donors: [{ ...namedSubjectUnit, subjectNames: ["Guard"] }],
+      recipient: namelessSubjectUnit,
+    },
+    {
+      label: "fuzzy donor",
+      donors: [{ ...namedSubjectUnit, subjectNames: ["Rowen"] }],
+      recipient: namelessSubjectUnit,
+      donorBasis: "spelling_variation",
+    },
+    {
+      label: "partial donor",
+      donors: [{ ...namedSubjectUnit, subjectNames: ["Alex"] }],
+      recipient: namelessSubjectUnit,
+      sourceText: "Alex speaks.",
+      donorBasis: "partial_name_requires_review",
+    },
+    {
+      label: "out-of-scope local donor",
+      donors: [namedSubjectUnit],
+      recipient: namelessSubjectUnit,
+      catalog: {
+        entries: [
+          {
+            ...koreanSubject,
+            subject: localCharacterSubjectForName({ chatId: "other-chat" }, "서무진")!,
+            familyId: ltmScopeFamilyId({ chatId: "other-chat" })!,
+          },
+        ],
+        notes: [],
+      },
+    },
+    {
+      label: "untrusted donor",
+      donors: [{ ...namedSubjectUnit, subjectNames: ["없는사람"] }],
+      recipient: namelessSubjectUnit,
+    },
+    {
+      label: "skipped donor",
+      donors: [namedSubjectUnit],
+      recipient: namelessSubjectUnit,
+      catalog: skippedCatalog("서무진"),
+    },
+    {
+      label: "skipped recipient",
+      donors: [namedSubjectUnit],
+      recipient: namelessSubjectUnit,
+      catalog: skippedCatalog("seo_mujin"),
+    },
+    {
+      label: "contested explicit keys stay closed",
+      donors: [
+        namedSubjectUnit,
+        { ...namelessSubjectUnit, subjectKeys: ["character:seo"] },
+        { ...namelessSubjectUnit, subjectKeys: ["character:rowan"] },
+      ],
+      recipient: namelessSubjectUnit,
+    },
+  ]) {
+    const options = { ...borrowingOptions, catalog, sourceBackedNpcSourceText: sourceText };
+    const baselineContext = prepareLtmSubjectIdentityContext({ ...options, units: [recipient] });
+    const baseline = baselineContext.resolve({ units: [recipient], existingNotes: [] });
+    assert.equal(baseline.units.length, 0, `${label}: fixture must fail or skip without a donor`);
+    const context = prepareLtmSubjectIdentityContext({ ...options, units: [...donors, recipient] });
+    if (donorBasis) {
+      assert.equal(
+        context.resolve({ units: donors, existingNotes: [] }).diagnostics[0]?.details?.matchBasis,
+        donorBasis,
+        `${label}: exercise the intended rejection`,
+      );
+    }
+    const result = context.resolve({ units: [recipient], existingNotes: [] });
+    assert.deepEqual(result, baseline, `${label}: preserve rejection or skip`);
+    assert.equal(
+      context.identityKeyForUnit(recipient),
+      baselineContext.identityKeyForUnit(recipient),
+      `${label}: prediction must also stay unchanged`,
+    );
+  }
+
+  // Known, uniquely aliased, saved-choice, and newly source-backed identities all
+  // use a full-batch preparation pass; prediction and actual resolution must agree.
+  for (const reverse of [false, true]) {
+    const pairUnits = reverse ? [relationshipRecipient, pairDonor] : [pairDonor, relationshipRecipient];
+    const pairContext = prepareLtmSubjectIdentityContext({ ...borrowingOptions, units: pairUnits });
+    const pairResult = pairContext.resolve({ units: pairUnits, existingNotes: [] });
+    assert.equal(pairResult.units.length, 2);
+    assert.equal(pairResult.units[0]!.subjectKeys!.length, 2);
+    assert.deepEqual(pairResult.units[0]!.subjectKeys, pairResult.units[1]!.subjectKeys);
+    assert.equal(pairContext.identityKeyForUnit(pairDonor), pairContext.identityKeyForUnit(relationshipRecipient));
+    assert.equal(diagnosticsRequireExtractionReview(pairResult.diagnostics), true);
+    for (const { catalog, name, sourceText } of [
+      { catalog: borrowingCatalog, name: "서무진", sourceText: undefined },
+      { catalog: borrowingCatalog, name: "서 선생", sourceText: undefined },
+      {
+        catalog: {
+          ...borrowingCatalog,
+          identityChoices: [
+            {
+              name: "Guard",
+              action: "bind" as const,
+              subject: borrowingCatalog.entries[0]!.subject,
+              familyId: ltmScopeFamilyId(scopedChat.scope)!,
+            },
+          ],
+        },
+        name: "Guard",
+        sourceText: undefined,
+      },
+      { catalog: { entries: [], notes: [] }, name: "서무진", sourceText: "서무진 can read the observatory script." },
+    ]) {
+      const donor = { ...namedSubjectUnit, subjectNames: [name] };
+      const units = reverse ? [namelessSubjectUnit, donor] : [donor, namelessSubjectUnit];
+      const context = prepareLtmSubjectIdentityContext({
+        ...borrowingOptions,
+        catalog,
+        units,
+        sourceBackedNpcSourceText: sourceText,
+      });
+      const result = context.resolve({ units, existingNotes: [] });
+      assert.equal(result.units.length, 2);
+      assert.equal(result.droppedCandidates.length, 0);
+      assert.deepEqual(result.units[0]!.subjectKeys, result.units[1]!.subjectKeys);
+      assert.equal(context.identityKeyForUnit(donor), context.identityKeyForUnit(namelessSubjectUnit));
+      assert.equal(diagnosticsRequireExtractionReview(result.diagnostics), true);
+      if (sourceText) assert.ok(result.units[0]!.subjectKeys![0]!.startsWith("local_character:"));
+
+      const backfill = normalizeStructuredSummaryEvidenceUnits({
+        units,
+        sourceText:
+          "## Character Facts\n- character: 서무진 | abilities: 서무진 can read the observatory script with ease.",
+        sourceNote: scopedChat,
+        sourceHash: sourceHashForLtmSourceNote(scopedChat),
+        allowedBuckets: ["character_fact"],
+        mode: "roleplay",
+        characterIdentityKey: context.identityKeyForUnit,
+      });
+      assert.equal(backfill.addedUnits, 0, "backfill must not duplicate the borrowed character fact");
+    }
+  }
+  const englishRecipient = { ...namelessSubjectUnit, subjectId: "mara" };
+  const englishBaseline = prepareLtmSubjectIdentityContext({ ...borrowingOptions, units: [englishRecipient] });
+  const englishWithDonor = prepareLtmSubjectIdentityContext({
+    ...borrowingOptions,
+    units: [{ ...namedSubjectUnit, subjectId: "mara" }, englishRecipient],
+  });
+  assert.deepEqual(
+    englishWithDonor.resolve({ units: [englishRecipient], existingNotes: [] }),
+    englishBaseline.resolve({ units: [englishRecipient], existingNotes: [] }),
+    "successful English resolution must not borrow even from a differently named sibling",
+  );
+  assert.equal(
+    englishWithDonor.identityKeyForUnit(englishRecipient),
+    englishBaseline.identityKeyForUnit(englishRecipient),
   );
 
   const dedupUnit = (text: string, subjectId = "dedup_subject", sectionKey = "facts") =>
