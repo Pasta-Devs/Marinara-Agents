@@ -263,6 +263,9 @@ async function rewriteChecks() {
       "white mask. Write comma-separated Danbooru tags only. Shares stark lab photography with cold lighting and clinical framing.",
   });
   assert.equal(copied.prompt, "1boy, solo, white mask.");
+  // A rewrite that is nothing but copied guidance counts as no rewrite: the caller sends the base prompt.
+  const onlyCopied = await runRewrite({ agentsDefault: true, answer: "Write comma-separated Danbooru tags only." });
+  assert.equal(onlyCopied.prompt, null);
   assert.equal(
     removeCopiedPromptGuidance("masterpiece, best quality, 1boy", ["masterpiece, best quality"]),
     "masterpiece, best quality, 1boy",

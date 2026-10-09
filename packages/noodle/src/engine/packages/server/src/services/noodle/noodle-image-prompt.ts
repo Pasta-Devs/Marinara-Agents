@@ -43,13 +43,18 @@ export function compileNoodleImagePrompts(input: CompileImagePromptInput, rewrit
  * (Pasta-Devs/Marinara-Agents#1282), ignoring case and punctuation. Only guidance written as a
  * sentence counts: it ends with . ! or ? and has at least four words between commas, so tag lists
  * and tag phrases such as "masterpiece, best quality" are never removed. If the text was nothing
- * but copied guidance, it comes back unchanged.
+ * but copied guidance, it comes back unchanged; pass `allowEmpty` when the caller has its own
+ * fallback, as the rewrite does with the base prompt.
  * ponytail: package-owned copy of the Engine's `removeCopiedPromptGuidance`
  * (Pasta-Devs/Marinara-Engine#7357); the vendored shared dist is frozen, so keep the two in step.
  * Shorter or unpunctuated instructions are kept even when copied; telling them from tags would
  * need a grammar check.
  */
-export function removeCopiedPromptGuidance(text: string, guidance: ReadonlyArray<string | null | undefined>): string {
+export function removeCopiedPromptGuidance(
+  text: string,
+  guidance: ReadonlyArray<string | null | undefined>,
+  { allowEmpty = false }: { allowEmpty?: boolean } = {},
+): string {
   const tokens = Array.from(text.matchAll(/[\p{L}\p{N}]+/gu), (match) => ({
     word: match[0].toLowerCase(),
     start: match.index,
@@ -94,7 +99,7 @@ export function removeCopiedPromptGuidance(text: string, guidance: ReadonlyArray
     .join("\n")
     .replace(/\n{3,}/gu, "\n\n")
     .trim();
-  return tidy || text;
+  return tidy || (allowEmpty ? "" : text);
 }
 
 function stripCodeFence(value: string): string {

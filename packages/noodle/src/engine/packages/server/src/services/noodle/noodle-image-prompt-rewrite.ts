@@ -118,8 +118,13 @@ export async function rewriteNoodleImagePrompt(input: {
     const parsed = parseRecord(result.content);
     const rewritten =
       typeof parsed.prompt === "string" ? parsed.prompt.trim().slice(0, MAX_REWRITTEN_PROMPT_LENGTH) : "";
-    // Guidance is applied, never sent as written, even when the model copies it.
-    return removeCopiedPromptGuidance(rewritten, [instructions, styleGuidance, ...(input.extraGuidance ?? [])]) || null;
+    // Guidance is applied, never sent as written, even when the model copies it. A rewrite that was
+    // nothing but copied guidance counts as no rewrite, so the caller sends the base prompt.
+    return (
+      removeCopiedPromptGuidance(rewritten, [instructions, styleGuidance, ...(input.extraGuidance ?? [])], {
+        allowEmpty: true,
+      }) || null
+    );
   } catch (error) {
     logger.warn(error, "[noodle] Image prompt instruction rewrite failed; using the original prompt");
     return null;
