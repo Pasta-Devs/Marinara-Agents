@@ -12,6 +12,7 @@ export const LTM_DEBUG_STALE_OPERATION_MS = 60 * 60 * 1000;
 // unknown id (deleted, proposed, another vault) is left alone instead of mangled.
 const UUID_SOURCE = "\\b[0-9a-f]{8}-[0-9a-f-]{27,}\\b";
 const NOTE_ID_SOURCE = "[a-z][a-z0-9]*(?:_[a-z0-9]+)*";
+const NOTE_ID_ONLY_PATTERN = new RegExp(`^${NOTE_ID_SOURCE}$`);
 const DEBUG_TOKEN_PATTERN = new RegExp(
   `(?:${UUID_SOURCE})|(?<![A-Za-z0-9_])(?:${NOTE_ID_SOURCE})(?![A-Za-z0-9_])`,
   "gi",
@@ -100,6 +101,9 @@ export function collectDebugNoteIds(events: readonly LtmDebugEvent[]): string[] 
     const details = event.details;
     if (!details || typeof details !== "object" || Array.isArray(details)) continue;
     collectText((details as Record<string, unknown>).summary);
+    if (Array.isArray(details.targetNoteIds))
+      for (const id of details.targetNoteIds)
+        if (typeof id === "string" && id.length <= 120 && NOTE_ID_ONLY_PATTERN.exec(id)?.[0] === id) ids.add(id);
     for (const key of ["selected", "rejected"] as const) {
       const candidates = (details as Record<string, unknown>)[key];
       if (!Array.isArray(candidates)) continue;

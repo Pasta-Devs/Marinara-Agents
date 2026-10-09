@@ -1,6 +1,24 @@
-import type { LtmNote } from "../../../../shared/src/features/agents/long-term-memory/schema.js";
+import type {
+  LtmExtractionDropReason,
+  LtmNote,
+} from "../../../../shared/src/features/agents/long-term-memory/schema.js";
 
 export type LabelLocalizer = (key: string) => string;
+
+export const rejectionReasonLabels: Partial<Record<LtmExtractionDropReason, string>> = {
+  invalid_format: "ui.longTermMemory.reviewqueue.rejectionReasonInvalidFormat",
+  candidate_overflow: "ui.longTermMemory.reviewqueue.rejectionReasonCandidateOverflow",
+  placeholder_output: "ui.longTermMemory.reviewqueue.rejectionReasonPlaceholderOutput",
+  quote_not_found_in_source: "ui.longTermMemory.reviewqueue.rejectionReasonQuoteNotFound",
+  missing_source_evidence: "ui.longTermMemory.reviewqueue.rejectionReasonMissingEvidence",
+  source_summary_payload: "ui.longTermMemory.reviewqueue.rejectionReasonSourceSummary",
+  unsupported_bucket: "ui.longTermMemory.reviewqueue.rejectionReasonUnsupportedBucket",
+  target_note_outside_scope: "ui.longTermMemory.reviewqueue.rejectionReasonOutsideScope",
+  ambiguous_subject: "ui.longTermMemory.reviewqueue.rejectionReasonAmbiguousSubject",
+  untrusted_subject: "ui.longTermMemory.reviewqueue.rejectionReasonUntrustedSubject",
+  invalid_subject_cardinality: "ui.longTermMemory.reviewqueue.rejectionReasonInvalidSubjectCardinality",
+  too_long_to_keep_safely: "ui.longTermMemory.reviewqueue.rejectionReasonTooLong",
+};
 
 export const labelKeys = {
   noteType: {

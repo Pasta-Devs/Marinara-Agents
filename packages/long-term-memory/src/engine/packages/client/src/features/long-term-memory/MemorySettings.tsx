@@ -251,6 +251,7 @@ export default function MemorySettings({
   props,
   onDirtyChange,
   onOpenMemory,
+  onOpenReview,
   openActivityRequest,
   openActivityMemoryId,
   onOpenActivityHandled,
@@ -1692,6 +1693,7 @@ export default function MemorySettings({
           <ActivityView
             props={props}
             onOpenMemory={onOpenMemory}
+            onOpenReview={onOpenReview}
             openActivityMemoryId={debugMemoryId}
             onOpenActivityMemoryIdHandled={() => setDebugMemoryId(null)}
           />
