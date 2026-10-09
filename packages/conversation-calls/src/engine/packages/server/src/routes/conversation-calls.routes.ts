@@ -652,7 +652,7 @@ function resolveTurnCharacterId(
 function formatPromptOptionList(values: string[], fallback: string) {
   const unique = Array.from(new Set(values.map((value) => value.trim()).filter(Boolean))).slice(0, 16);
   if (unique.length === 0) return fallback;
-  return unique.map((value) => `"${value.replace(/"/g, '\\"')}"`).join("|");
+  return unique.map((value) => `"${value.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`).join("|");
 }
 
 function coalesceAdjacentChatMessages(messages: ChatMessage[]): ChatMessage[] {
