@@ -292,9 +292,14 @@ export default function MemorySettings({
   const [messageState, setMessageState] = useState<{
     text: string;
     tone: "success" | "danger";
-  }>({ text: "", tone: "success" });
+    // Which StatusSurface owns the message: the Debug panel shows only its own save
+    // feedback, while every other tab (and every unrelated action such as a backup
+    // export) uses the shared surface.
+    surface: "shared" | "debug";
+  }>({ text: "", tone: "success", surface: "shared" });
   const message = messageState.text;
-  const setMessage = (text: string, tone: "success" | "danger" = "success") => setMessageState({ text, tone });
+  const setMessage = (text: string, tone: "success" | "danger" = "success", surface: "shared" | "debug" = "shared") =>
+    setMessageState({ text, tone, surface });
   const [activeTab, setActiveTab] = useState<SettingsTab>("recall");
   // Capture the Vault memory link's target before the handoff request is reset, so the
   // Debug tab can open filtered to that memory without a stale filter on later entries.
@@ -336,6 +341,11 @@ export default function MemorySettings({
     extractionFormState && savedExtraction && !same(extractionFormState, savedExtraction),
   );
   const dirty = globalDirty || extractionDirty;
+  // D05: a toggle-local cue for the one setting the Debug panel owns. It reuses the
+  // existing save flow and leave guard rather than adding a second persistence path.
+  const debugDirty = Boolean(
+    globalForm && savedGlobal && globalForm.longTermMemoryDebug !== savedGlobal.longTermMemoryDebug,
+  );
   useEffect(() => {
     onDirtyChange?.(dirty);
     return () => onDirtyChange?.(false);
@@ -343,6 +353,9 @@ export default function MemorySettings({
 
   const saveSettings = async () => {
     if (!globalDirty && !extractionDirty) return;
+    // Keep the Debug panel's surface for saves started there; every other save shows in
+    // the shared surface (D05).
+    const surface: "shared" | "debug" = activeTab === "debug" ? "debug" : "shared";
     setPending("global");
     setMessage("");
     let rebuild: SettingsRebuildOutcome | null = null;
@@ -379,16 +392,18 @@ export default function MemorySettings({
             error: rebuild.error ?? "",
           }),
           "danger",
+          surface,
         );
       } else if (rebuild?.status === "complete") {
-        setMessage(localizeUi("ui.longTermMemory.memorysettings.memorySettingsSavedIndexRebuilt"));
+        setMessage(localizeUi("ui.longTermMemory.memorysettings.memorySettingsSavedIndexRebuilt"), "success", surface);
       } else {
-        setMessage(localizeUi("ui.longTermMemory.memorysettings.memorySettingsSaved"));
+        setMessage(localizeUi("ui.longTermMemory.memorysettings.memorySettingsSaved"), "success", surface);
       }
     } catch (error) {
       setMessage(
         errorMessage(error, localizeUi("ui.longTermMemory.memorysettings.couldNotSaveMemorySettings")),
         "danger",
+        surface,
       );
     } finally {
       setPending("");
@@ -953,7 +968,9 @@ export default function MemorySettings({
           </button>
         ))}
       </div>
-      {message ? <StatusSurface tone={messageState.tone}>{message}</StatusSurface> : null}
+      {/* The Debug panel renders its own message beside the toggle, so the shared
+          surface yields there instead of showing the same save feedback twice. */}
+      {message && activeTab !== "debug" ? <StatusSurface tone={messageState.tone}>{message}</StatusSurface> : null}
 
       <section
         id="settings-panel-recall"
@@ -962,14 +979,12 @@ export default function MemorySettings({
         hidden={activeTab !== "recall"}
         className="mari-editor-panel space-y-3 p-3"
       >
-        <div>
-          <h3 className="flex items-center gap-1 text-sm font-semibold">
-            {localizeUi("ui.longTermMemory.memorysettings.globalRecall")}
-            <InfoPopover
-              label={localizeUi("ui.longTermMemory.memorysettings.globalRecall")}
-              content={localizeUi("ui.longTermMemory.memorysettings.defaultsUsedByEveryChatUnlessThatChatOverrides")}
-            />
-          </h3>
+        <div className="flex items-center gap-1">
+          <h3 className="text-sm font-semibold">{localizeUi("ui.longTermMemory.memorysettings.globalRecall")}</h3>
+          <InfoPopover
+            label={localizeUi("ui.longTermMemory.memorysettings.globalRecall")}
+            content={localizeUi("ui.longTermMemory.memorysettings.defaultsUsedByEveryChatUnlessThatChatOverrides")}
+          />
         </div>
         <div className="grid gap-2 sm:grid-cols-2">
           <Toggle
@@ -1379,13 +1394,13 @@ export default function MemorySettings({
           </p>
         </div>
         <div className="border-t border-[var(--border)] pt-3">
-          <h4 className="flex items-center gap-1 text-xs font-semibold">
-            {localizeUi("ui.longTermMemory.memorysettings.backupAndReset")}
+          <div className="flex items-center gap-1">
+            <h4 className="text-xs font-semibold">{localizeUi("ui.longTermMemory.memorysettings.backupAndReset")}</h4>
             <InfoPopover
               label={localizeUi("ui.longTermMemory.memorysettings.backupAndReset")}
               content={localizeUi("ui.longTermMemory.memorysettings.exportOrReplaceThePackageOwnedMemoryVaultAnd")}
             />
-          </h4>
+          </div>
           <div className="mt-2 flex flex-wrap gap-2">
             <Button disabled={pending !== ""} onClick={() => void exportBackup()}>
               <Download aria-hidden="true" size="0.875rem" />{" "}
@@ -1484,15 +1499,15 @@ export default function MemorySettings({
           {localizeUi("ui.longTermMemory.memorysettings.runSelectedMaintenance")}
         </Button>
         <div className="border-t border-[var(--border)] pt-3">
-          <h4 className="flex items-center gap-1 text-xs font-semibold">
-            {localizeUi("ui.longTermMemory.memorysettings.identityRepair")}
+          <div className="flex items-center gap-1">
+            <h4 className="text-xs font-semibold">{localizeUi("ui.longTermMemory.memorysettings.identityRepair")}</h4>
             <InfoPopover
               label={localizeUi("ui.longTermMemory.memorysettings.identityRepair")}
               content={localizeUi(
                 "ui.longTermMemory.memorysettings.previewDuplicateTrustedIdentitiesBeforeMergingAndArchivingDuplicates",
               )}
             />
-          </h4>
+          </div>
           <div className="mt-2 flex flex-wrap gap-2">
             <Button disabled={pending !== ""} onClick={() => void previewIdentities()}>
               {localizeUi("ui.longTermMemory.memorysettings.previewIdentityRepairs")}
@@ -1689,6 +1704,19 @@ export default function MemorySettings({
           checked={globalForm.longTermMemoryDebug}
           onChange={(value) => setGlobalForm({ ...globalForm, longTermMemoryDebug: value })}
         />
+        {debugDirty ? (
+          <div className="flex flex-wrap items-center gap-2" data-ltm-debug-dirty>
+            <span className="text-xs text-[var(--muted-foreground)]">
+              {localizeUi("ui.longTermMemory.memorysettings.unsavedDebugChange")}
+            </span>
+            <Button primary disabled={pending !== ""} onClick={() => void saveSettings()}>
+              {localizeUi("ui.longTermMemory.memorysettings.saveDebugChange")}
+            </Button>
+          </div>
+        ) : null}
+        {message && messageState.surface === "debug" ? (
+          <StatusSurface tone={messageState.tone}>{message}</StatusSurface>
+        ) : null}
         {activeTab === "debug" ? (
           <ActivityView
             props={props}

@@ -181,6 +181,8 @@ assert.match(workspace, /readyForReviewWithRejectedSuggestions/u);
 assert.match(workspace, /extractionDidNotFinish/u);
 assert.match(activity, /completionReasoningTokens/u);
 assert.match(activity, /data-ltm-activity-warnings/u);
+// #1275 repair: a failed/corrupt index cannot also report semantic search as available.
+assert.match(activity, /embeddingsAvailable && !indexUnusable/u);
 assert.equal(locale["ui.longTermMemory.activityview.result"], "Result");
 assert.equal(locale["ui.longTermMemory.activityview.notKept"], "Not kept");
 assert.equal(locale["ui.longTermMemory.activityview.notAdded"], "Not added");
@@ -190,6 +192,10 @@ assert.match(settings, /memorySettingsSavedIndexRebuilt/u);
 assert.match(settings, /memorySettingsSavedIndexRebuildFailed/u);
 assert.match(settings, /memorySettingsResetIndexRebuildFailed/u);
 assert.match(settings, /rebuild\?\.status === "deferred"/u);
+// #1275 repair: the Debug panel's save surface shows only save feedback started on the
+// Debug tab; unrelated action feedback (e.g. a backup export) stays in the shared surface.
+assert.match(settings, /messageState\.surface === "debug"/u);
+assert.match(settings, /surface: "shared" \| "debug" = "shared"/u);
 // #1193 repair: extraction edits made while the awaited global rebuild is in flight must
 // survive, mirroring the submitted-snapshot guard used for global settings.
 assert.match(

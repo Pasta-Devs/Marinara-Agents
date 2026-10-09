@@ -607,6 +607,12 @@ async function main() {
             },
           });
         if (request.method === "GET" && url.pathname.endsWith("/settings")) return send(200, {});
+        if (request.method === "PUT" && url.pathname.endsWith("/settings")) {
+          const chunks: Buffer[] = [];
+          for await (const chunk of request) chunks.push(Buffer.from(chunk));
+          // Echo the saved settings so the toggle-local Save can be observed end to end.
+          return send(200, JSON.parse(Buffer.concat(chunks).toString("utf8") || "{}"));
+        }
         if (request.method === "POST" && url.pathname.endsWith("/notes/batch")) {
           const chunks: Buffer[] = [];
           for await (const chunk of request) chunks.push(Buffer.from(chunk));
@@ -656,19 +662,21 @@ async function main() {
           return send(200, { count: pendingDraftCount });
         if (request.method === "GET" && url.pathname.endsWith("/last-injection/chat-artifact")) {
           lastInjectionRequests += 1;
-          return lastInjectionRequests === 1
-            ? send(200, {
-                memoryCount: 1,
-                tokenCount: 42,
-                memories: [
-                  {
-                    noteId: "retained-memory",
-                    title: "Retained memory",
-                    tokenCount: 42,
-                  },
-                ],
-              })
-            : send(503, { error: "latest recall failed" });
+          if (lastInjectionRequests === 1)
+            return send(200, {
+              memoryCount: 1,
+              tokenCount: 42,
+              memories: [
+                {
+                  noteId: "retained-memory",
+                  title: "Retained memory",
+                  tokenCount: 42,
+                },
+              ],
+            });
+          // Keep the failure in flight briefly so the retry's disabled guard is observable.
+          await new Promise((resolve) => setTimeout(resolve, 120));
+          return send(503, { error: "latest recall failed" });
         }
         if (request.method === "GET" && url.pathname.endsWith("/drafts/review")) {
           reviewQueries.push(url.search);
@@ -2527,7 +2535,7 @@ async function main() {
             embeddedChunks: 2,
             semanticOutcome: "available",
             rejectedLimit: 20,
-            weights: { semantic: 0.6 },
+            weights: { semanticWeight: 0.6 },
             selected: [
               {
                 noteId: "world_legacy_global",
@@ -2594,11 +2602,26 @@ async function main() {
       // Simulates a retained log that holds no events for the handed memory.
       let debugLogEmpty = false;
       let debugReviewPending = true;
+      let debugExportError = false;
+      let debugLogError = false;
+      let debugClearDeletes = 0;
+      let debugLogDelayMs = 0;
+      let debugLogRequests = 0;
       const debugReviewSources = structuredClone(reviewSources);
       const assertDebugActivity = async (activityPage: typeof page, navigation: "desktop" | "mobile") => {
+        // D18/D33: the noncompact Activity log Retry keeps a 44px target. Fail the
+        // first load, measure the Retry, then recover through it.
+        debugLogError = true;
         await activityPage.locator("#settings-tab-debug").click();
         const activity = activityPage.locator('[data-ltm-surface="activity"]');
         const details = activity.locator("[data-ltm-debug-details]");
+        const activityRetry = activity.locator('[data-ltm-status="danger"]').getByRole("button", { name: "Retry" });
+        await activityRetry.waitFor();
+        const activityRetryBox = await activityRetry.boundingBox();
+        assert.ok(activityRetryBox && activityRetryBox.height >= 44, "Activity log Retry keeps a 44px target");
+        debugLogError = false;
+        await activityRetry.click();
+        await activity.locator('[data-ltm-debug-operation="estimated"]').waitFor();
         const showEvents = async () => {
           const tab = activity.locator('[data-ltm-workspace-pane-tab="navigator"]');
           if (await tab.count()) await tab.click();
@@ -2740,6 +2763,168 @@ async function main() {
         // M6: the recalled-memory link keeps a 44px touch target.
         const recalledBox = await activity.locator('[data-ltm-recalled-note="world_legacy_global"]').boundingBox();
         assert.ok(recalledBox && recalledBox.height >= 44, "recalled memory links keep a 44px touch target");
+        // PR 4 (#1275): label/separator/health and honest export controls.
+        assert.equal(
+          await activity.getByRole("heading", { name: "Activity log", exact: true }).count(),
+          1,
+          "the log heading reads Activity log",
+        );
+        assert.equal(
+          await activity.locator('[role="group"][aria-label="Log actions"]').count(),
+          1,
+          "the toolbar is named Log actions",
+        );
+        assert.match(
+          await activity.locator("[data-ltm-debug-export-warning]").innerText(),
+          /full Activity log[\s\S]*model output[\s\S]*before sharing[\s\S]*Filters and search do not limit the export/iu,
+        );
+        const healthText = await activity.locator("[data-ltm-debug-health]").innerText();
+        assert.match(healthText, /\d+ events loaded/u);
+        assert.match(healthText, /Log size unavailable/u);
+        assert.match(healthText, /Index /u);
+        assert.match(healthText, /Semantic search /u);
+        // D21: operation metadata composes with one spaced middle-dot separator.
+        assert.match(reported, /Reasoning: 8 tokens · Output: 12 tokens[\s\S]*Total: 60 tokens/u);
+        // D20: runtime count/weight names read as localized labels, not camelCase.
+        assert.match(recall, /42 used tokens/u);
+        assert.match(recall, /Semantic weight 0\.6/u);
+        // D23: a completed operation's start step is Started/Succeeded, never Running.
+        assert.match(estimated, /Started/u);
+        assert.match(estimated, /Succeeded/u);
+        assert.doesNotMatch(estimated, /Running/u);
+        // D14: a warning status carries an icon and stronger weight.
+        await operation("truncated");
+        const warningStatus = details.locator('[data-ltm-debug-detail-status="completed_with_warnings"]');
+        assert.equal((await warningStatus.locator("svg").count()) > 0, true, "warning status shows an icon");
+        assert.match((await warningStatus.getAttribute("class")) ?? "", /items-center/u);
+        assert.equal(
+          await warningStatus.locator("span.font-semibold").count(),
+          1,
+          "warning status label is emphasized",
+        );
+        // D13: Copy JSON keeps its polite live-region confirmation and reset.
+        await operation("estimated");
+        await details.getByRole("button", { name: /^Copy JSON/u }).click();
+        await activity.locator('[role="status"]', { hasText: "Copied" }).first().waitFor();
+        // D07: export uses a timestamped fallback filename and announces success.
+        const exportButton = activity.getByRole("button", { name: "Export full log" });
+        const downloadPromise = activityPage.waitForEvent("download");
+        await exportButton.click();
+        await activityPage.waitForFunction(() => {
+          const button = [...document.querySelectorAll("button")].find((candidate) =>
+            candidate.textContent?.includes("Export full log"),
+          );
+          return button instanceof HTMLButtonElement && button.getAttribute("aria-disabled") === "true";
+        });
+        assert.equal(
+          await activityPage.evaluate(() => document.activeElement?.textContent?.includes("Export full log") ?? false),
+          true,
+          "the export control keeps focus while the action is pending",
+        );
+        const download = await downloadPromise;
+        assert.match(download.suggestedFilename(), /^ltm-debug-log-\d{4}/u);
+        await activity.getByText("Full Activity log exported.").waitFor();
+        // D07: a failed export surfaces the server's JSON error text.
+        debugExportError = true;
+        await exportButton.click();
+        await activity.getByText("Export fixture failed.").waitFor();
+        debugExportError = false;
+        // D32: Clear confirms its all-chat scope and permanent, memory-safe behavior;
+        // cancelling makes no DELETE request.
+        const clearButton = activity.getByRole("button", { name: "Clear", exact: true });
+        const clearDeletesBefore = debugClearDeletes;
+        await activityPage.evaluate(() => {
+          (window as unknown as { __ltmConfirmResult?: boolean }).__ltmConfirmResult = false;
+          (window as unknown as { __ltmConfirmCalls?: number }).__ltmConfirmCalls = 0;
+          (window as unknown as { __ltmLastConfirm?: string }).__ltmLastConfirm = undefined;
+        });
+        // #1275 repair: a same-turn double activation opens the host confirmation once;
+        // the guard is acquired before the dialog is awaited.
+        await activityPage.evaluate(() => {
+          const button = [...document.querySelectorAll('[data-ltm-surface="activity"] button')].find(
+            (candidate) => candidate.textContent?.trim() === "Clear",
+          );
+          if (button instanceof HTMLButtonElement) {
+            button.click();
+            button.click();
+          }
+        });
+        await activityPage.waitForFunction(() =>
+          Boolean((window as unknown as { __ltmLastConfirm?: string }).__ltmLastConfirm),
+        );
+        assert.equal(
+          await activityPage.evaluate(
+            () => (window as unknown as { __ltmConfirmCalls?: number }).__ltmConfirmCalls ?? 0,
+          ),
+          1,
+          "a same-turn double Clear opens the confirmation once",
+        );
+        const clearConfirmation = await activityPage.evaluate(
+          () => (window as unknown as { __ltmLastConfirm?: string }).__ltmLastConfirm ?? "",
+        );
+        assert.match(clearConfirmation, /for every chat/u);
+        assert.match(clearConfirmation, /Memories and settings are not affected/u);
+        assert.equal(debugClearDeletes, clearDeletesBefore, "cancelling Clear must not send a DELETE");
+        await activityPage.evaluate(() => {
+          (window as unknown as { __ltmConfirmResult?: boolean }).__ltmConfirmResult = true;
+        });
+        await clearButton.click();
+        await activity.getByText("Activity log cleared.").waitFor();
+        assert.equal(debugClearDeletes, clearDeletesBefore + 1);
+        // D06: focus returns to the initiating control after the host confirmation.
+        await activityPage.waitForFunction(() =>
+          [...document.querySelectorAll("button")].some(
+            (button) => button.textContent?.trim() === "Clear" && button === document.activeElement,
+          ),
+        );
+        // D05: the Debug toggle shows a local cue and saves through the existing PUT
+        // flow, with its feedback shown exactly once in the Debug panel.
+        const debugToggle = activityPage.locator("#settings-panel-debug input[type=checkbox]").first();
+        const debugChecked = await debugToggle.isChecked();
+        const debugDirty = activityPage.locator("[data-ltm-debug-dirty]");
+        await debugToggle.click();
+        await debugDirty.getByText(/Unsaved change to recall explanations/u).waitFor();
+        await debugDirty.getByRole("button", { name: "Save now" }).click();
+        await activityPage.getByText("Memory settings saved.").waitFor();
+        assert.equal(
+          await activityPage
+            .locator('[data-ltm-surface="memory-settings"] [data-ltm-status]')
+            .filter({ hasText: "Memory settings saved." })
+            .count(),
+          1,
+          "save feedback is shown once in the Debug panel",
+        );
+        assert.equal(await debugToggle.isChecked(), !debugChecked, "saving persists the toggled Debug setting");
+        // D06 repair: a same-turn double Refresh must coalesce into one debug-log
+        // request; the button guard reads React Query's rendered `isFetching`, which is
+        // still false for a second activation in the same task.
+        debugLogDelayMs = 200;
+        const refreshRequestsBefore = debugLogRequests;
+        await activityPage.evaluate(() => {
+          const button = [...document.querySelectorAll('[data-ltm-surface="activity"] button')].find((candidate) =>
+            /refresh/i.test(candidate.textContent ?? ""),
+          );
+          if (button instanceof HTMLButtonElement) {
+            button.click();
+            button.click();
+          }
+        });
+        const refreshPending = (expectPending: boolean) => {
+          const button = [...document.querySelectorAll('[data-ltm-surface="activity"] button')].find((candidate) =>
+            /refresh/i.test(candidate.textContent ?? ""),
+          );
+          return (
+            button instanceof HTMLButtonElement && Boolean(button.querySelector(".animate-spin")) === expectPending
+          );
+        };
+        await activityPage.waitForFunction(refreshPending, true);
+        await activityPage.waitForFunction(refreshPending, false);
+        assert.equal(
+          debugLogRequests,
+          refreshRequestsBefore + 1,
+          "a same-turn double Refresh coalesces into one debug-log request",
+        );
+        debugLogDelayMs = 0;
         // M2: a recall whose chat resolves through /scope-targets shows the chat label.
         const resolvedRecall = await operation("recall-desktop");
         assert.match(resolvedRecall, /Recall from Current Final Branch/u);
@@ -2929,7 +3114,14 @@ async function main() {
               for (const item of source.drafts) item.draft.status = debugReviewPending ? "pending" : "accepted";
           await route.fulfill({ response, json: review });
         });
-        await debugPage.route("**/api/long-term-memory/debug-log?*", (route) => {
+        await debugPage.route("**/api/long-term-memory/debug-log?*", async (route) => {
+          debugLogRequests += 1;
+          // A delay keeps the first request in flight so a same-turn second activation is observable.
+          if (debugLogDelayMs > 0) await new Promise((resolve) => setTimeout(resolve, debugLogDelayMs));
+          if (debugLogError) {
+            route.fulfill({ status: 500, json: { error: "Activity fixture failed." } });
+            return;
+          }
           if (debugLogEmpty) {
             route.fulfill({ json: { events: [] } });
             return;
@@ -2949,13 +3141,45 @@ async function main() {
           const limit = Number(query.get("limit") ?? 0);
           route.fulfill({ json: { events: limit > 0 ? filtered.slice(-limit) : filtered } });
         });
+        await debugPage.route("**/api/long-term-memory/debug-log/export", async (route) => {
+          // A small delay lets the test observe the pending/disabled guard.
+          await new Promise((resolve) => setTimeout(resolve, 120));
+          if (debugExportError) {
+            await route.fulfill({
+              status: 500,
+              contentType: "application/json",
+              body: JSON.stringify({ error: "Export fixture failed." }),
+            });
+            return;
+          }
+          await route.fulfill({ contentType: "application/x-ndjson", body: '{"id":"fixture"}\n' });
+        });
+        await debugPage.route("**/api/long-term-memory/debug-log", async (route) => {
+          if (route.request().method() === "DELETE") {
+            debugClearDeletes += 1;
+            await route.fulfill({ json: { ok: true } });
+            return;
+          }
+          await route.continue();
+        });
         await debugPage.goto(`http://127.0.0.1:${address.port}/`);
         await debugPage.evaluate(() => customElements.whenDefined("marinara-capability-long-term-memory"));
-        await debugPage.evaluate(() => {
+        // String form keeps the inline confirmAction out of the tsx/esbuild `__name`
+        // transform, which is unavailable inside the page.
+        await debugPage.evaluate(`(() => {
           const element = document.createElement("marinara-capability-long-term-memory");
           element.setAttribute("view", "detail");
+          // Exercise the host confirmation flow rather than a native dialog, so
+          // cancel/confirm outcomes and focus restoration are observable.
+          element.capabilityProps = {
+            confirmAction: (options) => {
+              window.__ltmLastConfirm = options.message;
+              window.__ltmConfirmCalls = (window.__ltmConfirmCalls ?? 0) + 1;
+              return window.__ltmConfirmResult ?? true;
+            },
+          };
           document.body.append(element);
-        });
+        })()`);
         await debugPage.locator(`[data-ltm-navigation="${navigation}"] [data-ltm-destination="settings"]`).click();
         // The detail view mounts the Vault first, which pages all notes; count
         // note queries only from the settings navigation on, so this measures
@@ -3015,8 +3239,25 @@ async function main() {
       });
       await lastInjection.click();
       await lastInjection.locator('[data-ltm-status="danger"]').waitFor();
-      await lastInjection.getByRole("button", { name: /retry/i }).click();
-      await lastInjection.locator('[data-ltm-status="danger"]').waitFor();
+      // D18: compact Retry keeps a 24px target.
+      const compactRetry = lastInjection.getByRole("button", { name: /retry/i });
+      const compactRetryBox = await compactRetry.boundingBox();
+      assert.ok(compactRetryBox && compactRetryBox.height >= 24, "compact Retry keeps a 24px target");
+      await compactRetry.click();
+      // D27 repair: a cached-data retry still shows the title without a loading flash,
+      // but the Retry control stays disabled while that refetch is in flight.
+      await page.waitForFunction(() => {
+        const button = [...document.querySelectorAll("button")].find((candidate) =>
+          /retry/i.test(candidate.textContent ?? ""),
+        );
+        return button instanceof HTMLButtonElement && button.disabled;
+      });
+      await page.waitForFunction(() => {
+        const button = [...document.querySelectorAll("button")].find((candidate) =>
+          /retry/i.test(candidate.textContent ?? ""),
+        );
+        return button instanceof HTMLButtonElement && !button.disabled;
+      });
       assert.equal(lastInjectionRequests, 3);
       assert.equal(await lastInjection.getByText("Retained memory").count(), 0);
       assert.equal(await lastInjection.getByText("42 tokens").count(), 0);
