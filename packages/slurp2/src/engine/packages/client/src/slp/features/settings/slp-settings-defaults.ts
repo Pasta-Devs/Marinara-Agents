@@ -101,6 +101,7 @@ export const SLURP_SETTINGS_SECTION_KEYS: Record<SlurpResettableSection, readonl
   ],
   messaging: [
     "messagesAwayRepliesEnabled",
+    "messagesPauseFollowUpsUntilReply",
     "messagesReplyBubbleLimit",
     "messagesDefaultDmPolicy",
     "messagesDefaultRequestFee",

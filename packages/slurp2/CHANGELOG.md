@@ -1,5 +1,11 @@
 # Slurp release notes
 
+## 0.3.19 — 2026-10-10
+
+Stop a Creator from texting again after being left on read.
+
+- New Settings › Messaging toggle, off by default: "Stop after one unanswered text." A Creator may write first once (an opener, a check-in, a recurring update, a drama question), then nothing more until you actually reply. Replies to your messages, and anything a Creator already owes you (a promise, a reminder, a finished commission), still arrive on schedule.
+
 ## 0.3.18 — 2026-10-08
 
 Engine macros in Slurp, fewer recycled pictures.

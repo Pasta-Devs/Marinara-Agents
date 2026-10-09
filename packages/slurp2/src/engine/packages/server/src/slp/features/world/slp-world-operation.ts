@@ -651,8 +651,7 @@ export async function advanceSlurpWorld(db: DB, until = new Date()): Promise<Slu
         }
       }
       // The audience reacting is the only channel the world had into a Creator that she could
-      // actually feel, and it went straight into the counters without touching her. This is not a
-      // rolling average on purpose: the thing being modelled is noticing your notifications.
+      // actually feel, and it went straight into the counters without touching her. Not a rolling average: the thing being modelled is noticing your notifications.
       const slurpForPulse = createSlurpStorage(db);
       for (const [creatorAccountId, weight] of landedBy) {
         if (weight < SLURP_POST_LANDED_REACTIONS) continue;
@@ -738,7 +737,8 @@ export async function advanceSlurpWorld(db: DB, until = new Date()): Promise<Slu
           if (existingThread) {
             const isPlayer = async (memberId: string) => Boolean(await noodle.getViewer(memberId));
             const at = { creatorAccountId: account.id, tie, thread: existingThread, until };
-            const input = { ...at, messages, isPlayer, unit: slurpDeterministicUnit };
+            const pauseUntilReply = settings.messagesPauseFollowUpsUntilReply;
+            const input = { ...at, messages, isPlayer, unit: slurpDeterministicUnit, pauseUntilReply };
             if (await planSlurpCreatorCheckIn(input).catch(() => false)) opened += 1;
             continue;
           }
@@ -755,6 +755,7 @@ export async function advanceSlurpWorld(db: DB, until = new Date()): Promise<Slu
           const sent = await messages
             .sendCreatorMessage(account.id, tie.memberId, {
               content: slurpCreatorOpener(`${account.id}:${tie.memberId}:${localDayKey(until)}`, kind),
+              metadata: { unsolicited: true }, // nobody asked; see slurpAllowsUnsolicitedText
             })
             .catch(() => null);
           if (sent) opened += 1;

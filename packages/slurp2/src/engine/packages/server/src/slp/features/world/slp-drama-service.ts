@@ -154,6 +154,8 @@ async function sendDramaJob(
       const sent = await messages.sendCreatorMessage(job.actorId, viewer, {
         content: text(job.choice!.question),
         metadata: {
+          // Nobody asked this question either; it is the drama runtime writing first. Settings ›
+          // Messaging "Stop after one unanswered text" reads any `dramaChoice` message as unsolicited.
           dramaChoice: {
             runId: job.runId,
             stage: job.choice!.stage ?? null,

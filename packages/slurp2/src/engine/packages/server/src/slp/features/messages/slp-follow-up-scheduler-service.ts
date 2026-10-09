@@ -6,6 +6,7 @@ import {
   isFollowUpDue,
   isFollowUpLate,
   formatFollowUpContext,
+  slurpAllowsUnsolicitedText,
   type ScheduledFollowUp,
 } from "../../modules/messages/slp-follow-up.js";
 import { generateSlurpMessageReply, SlurpMessageBudgetUnavailableError } from "./slp-message-generation-service.js";
@@ -168,6 +169,21 @@ export function startSlurpFollowUpScheduler(app: FastifyInstance, registerStop?:
             // asked for it) is dropped, never postponed. A promise was made in a reply and still goes
             // out (Pulse + E decision: follow-ups are promises; the switch stops new first messages).
             if (!messaging.proactiveMessages && followUp.type === "opener") {
+              await messages.cancelScheduledFollowUp(threadRow.id, followUp.id);
+              continue;
+            }
+            // Nobody asked for this one either (an opener, a check-in, or a recurring update); a
+            // promise, reminder, or task update is owed and is never checked here. Cancelled, not
+            // postponed, same as the switch above: `appendMessage` re-checks this at write time
+            // (against a fresh settings read, not this poll's), so this is only the early exit that
+            // saves the model call — a toggle flipped mid-poll never causes a wrong cancellation.
+            const unsolicited =
+              followUp.type === "opener" || followUp.type === "check_in" || followUp.type === "recurring";
+            if (
+              unsolicited &&
+              (await slurp.getSettings()).messagesPauseFollowUpsUntilReply &&
+              !slurpAllowsUnsolicitedText(history)
+            ) {
               await messages.cancelScheduledFollowUp(threadRow.id, followUp.id);
               continue;
             }
