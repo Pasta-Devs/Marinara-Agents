@@ -2862,6 +2862,10 @@ export async function conversationCallsRoutes(
       if (isBlankAudioTranscript(transcript)) {
         return reply.status(400).send({ error: `${transcriber} did not detect speech.` });
       }
+      // A slow server can answer after hang-up: an ended call gets no message and no reply.
+      if ((await calls.getSession(session.id))?.status !== "active") {
+        return reply.status(400).send({ error: "Call is not active" });
+      }
       const userMessage = await calls.createMessage({
         callId: session.id,
         chatId: session.chatId,

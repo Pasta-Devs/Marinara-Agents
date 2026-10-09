@@ -185,6 +185,21 @@ async function main() {
   assert.match(server, /prefix:"\/api\/conversation-calls",runtime:\w+\.runtime/u);
   assert.match(server, /call-audio\.wav/u);
 
+  // Hanging up while a slow server transcribes: the route checks the call again before saving or answering.
+  const routes = await readFile(
+    new URL(
+      "../packages/conversation-calls/src/engine/packages/server/src/routes/conversation-calls.routes.ts",
+      import.meta.url,
+    ),
+    "utf8",
+  );
+  assert.match(
+    routes,
+    /await transcribeCallAudio\([\s\S]*?\(await calls\.getSession\(session\.id\)\)\?\.status !== "active"[\s\S]*?calls\.createMessage\(/u,
+    "an ended call gets no message and no reply after a slow transcription",
+  );
+  assert.match(server, /\(await \w+\.getSession\(\w+\.id\)\)\?\.status!=="active"\)return \w+\.status\(400\)/u);
+
   process.stdout.write("Calls speech-to-text regression passed.\n");
 }
 
