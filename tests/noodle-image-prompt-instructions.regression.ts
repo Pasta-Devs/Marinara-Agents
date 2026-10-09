@@ -64,7 +64,9 @@ assert.match(danbooru.styleGuidance, danbooruStyle);
 assert.doesNotMatch(danbooru.forRewrite.prompt, danbooruStyle, "the rewrite model gets it as guidance only");
 assert.match(danbooru.literal.prompt, danbooruStyle, "without a prompt writer a profile's Style text applies");
 
-// Style text a user writes into a copy of Auto is theirs: it still applies, as in the Engine.
+// Style text a user writes into a copy of Auto is theirs: it still applies, and the rewrite model gets it
+// as guidance like any other Style text, as in the Engine since Pasta-Devs/Marinara-Engine#7357
+// (Pasta-Devs/Marinara-Agents#1282). Before, it sat in the prompt that model edits.
 const autoCopyProfiles = styleProfiles("auto-copy");
 const autoProfile = autoCopyProfiles.profiles.find((profile) => profile.id === "auto")!;
 autoCopyProfiles.profiles = [
@@ -72,9 +74,15 @@ autoCopyProfiles.profiles = [
   { ...autoProfile, id: "auto-copy", builtIn: false, styleText: "watercolor, soft pastel palette" },
 ];
 const autoCopy = compileFor(autoCopyProfiles);
-assert.equal(autoCopy.styleGuidance, "");
+assert.equal(autoCopy.styleGuidance, "watercolor, soft pastel palette");
 assert.match(autoCopy.literal.prompt, /watercolor, soft pastel palette/u);
-assert.match(autoCopy.forRewrite.prompt, /watercolor, soft pastel palette/u);
+assert.doesNotMatch(autoCopy.forRewrite.prompt, /watercolor/u, "the rewrite model gets it as guidance only");
+// The vendored shared helper still drops it: it predates Pasta-Devs/Marinara-Engine#7357.
+assert.equal(
+  resolveImageStyleGuidanceText(autoCopyProfiles, "auto-copy"),
+  "",
+  "the vendored resolveImageStyleGuidanceText changed; Noodle's own style guidance may no longer be needed",
+);
 
 // ── The real generateNoodlePostImage, with storage, providers and the rewrite model stubbed ──────
 const servicePath = new URL(

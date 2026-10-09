@@ -1,7 +1,6 @@
 import {
   compileImagePrompt,
   DEFAULT_IMAGE_STYLE_PROFILES,
-  resolveImageStyleGuidanceText,
   type CompileImagePromptInput,
 } from "@marinara-engine/shared";
 
@@ -22,9 +21,11 @@ const AUTO_STYLE_INSTRUCTION =
  */
 export function compileNoodleImagePrompts(input: CompileImagePromptInput, rewritePrompt = input.prompt) {
   const styled = compileImagePrompt(input);
-  const styleGuidance = resolveImageStyleGuidanceText(input.styleProfiles, styled.profile.id);
   const autoInstruction =
     styled.profile.baseStyle === "auto" && styled.profile.styleText.trim() === AUTO_STYLE_INSTRUCTION;
+  // Style text a user writes into Auto or a copy of it is guidance like any other, as in the Engine's
+  // resolveImageStyleGuidanceText since Pasta-Devs/Marinara-Engine#7357; the vendored copy drops it.
+  const styleGuidance = autoInstruction ? "" : (styled.profile.styleText?.trim() ?? "");
   const literal = autoInstruction ? compileImagePrompt({ ...input, omitProfileStyleText: true }) : styled;
   const forRewrite =
     !styleGuidance && rewritePrompt === input.prompt
