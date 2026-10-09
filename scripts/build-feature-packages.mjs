@@ -158,8 +158,8 @@ const slurp2OwnedSourcePaths = [
   "packages/server/src/services/garnish-ads",
   "packages/server/src/db/schema/slurp.ts",
 ];
-// Calls overrides these vendored files with its own copies. The copies under sources/engine stay
-// only because scripts/vendored-engine-baseline.json pins them; Calls no longer builds from them.
+// Calls owns these files. The surface and routes replace vendored copies that stay under
+// sources/engine only because scripts/vendored-engine-baseline.json pins them; Calls does not build from those.
 const conversationCallsSourceRoot = join(packagesDir, "conversation-calls/src/engine");
 const conversationCallsOwnedSourcePaths = [
   "packages/client/src/components/chat/ConversationCallSurface.tsx",
