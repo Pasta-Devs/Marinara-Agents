@@ -566,19 +566,21 @@ export default function ActivityView({
   } | null;
 
   const clear = async () => {
-    if (
-      pendingRef.current ||
-      !(await confirm(
-        props,
-        localizeUi("ui.longTermMemory.activityview.clearActivityLog"),
-        localizeUi("ui.longTermMemory.activityview.clearActivityLogDescription"),
-        localizeUi("ui.longTermMemory.activityview.clearLog"),
-      ))
-    )
-      return;
+    // Acquire the guard before the host confirmation (export does the same in
+    // `beginPending`) so a second activation in the same turn cannot open a duplicate
+    // dialog; a cancel or failure releases it in `finally`.
     if (!beginPending("clear")) return;
-    setActionState({ text: "", tone: "success" });
     try {
+      if (
+        !(await confirm(
+          props,
+          localizeUi("ui.longTermMemory.activityview.clearActivityLog"),
+          localizeUi("ui.longTermMemory.activityview.clearActivityLogDescription"),
+          localizeUi("ui.longTermMemory.activityview.clearLog"),
+        ))
+      )
+        return;
+      setActionState({ text: "", tone: "success" });
       await request<unknown>("/debug-log", "DELETE");
       await invalidateLtmQueries(queryClient, [queryKeys.activity]);
       setActionState({ text: localizeUi("ui.longTermMemory.activityview.clearedLog"), tone: "success" });

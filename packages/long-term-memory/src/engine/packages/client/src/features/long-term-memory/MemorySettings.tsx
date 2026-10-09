@@ -292,9 +292,14 @@ export default function MemorySettings({
   const [messageState, setMessageState] = useState<{
     text: string;
     tone: "success" | "danger";
-  }>({ text: "", tone: "success" });
+    // Which StatusSurface owns the message: the Debug panel shows only its own save
+    // feedback, while every other tab (and every unrelated action such as a backup
+    // export) uses the shared surface.
+    surface: "shared" | "debug";
+  }>({ text: "", tone: "success", surface: "shared" });
   const message = messageState.text;
-  const setMessage = (text: string, tone: "success" | "danger" = "success") => setMessageState({ text, tone });
+  const setMessage = (text: string, tone: "success" | "danger" = "success", surface: "shared" | "debug" = "shared") =>
+    setMessageState({ text, tone, surface });
   const [activeTab, setActiveTab] = useState<SettingsTab>("recall");
   // Capture the Vault memory link's target before the handoff request is reset, so the
   // Debug tab can open filtered to that memory without a stale filter on later entries.
@@ -348,6 +353,9 @@ export default function MemorySettings({
 
   const saveSettings = async () => {
     if (!globalDirty && !extractionDirty) return;
+    // Keep the Debug panel's surface for saves started there; every other save shows in
+    // the shared surface (D05).
+    const surface: "shared" | "debug" = activeTab === "debug" ? "debug" : "shared";
     setPending("global");
     setMessage("");
     let rebuild: SettingsRebuildOutcome | null = null;
@@ -384,16 +392,18 @@ export default function MemorySettings({
             error: rebuild.error ?? "",
           }),
           "danger",
+          surface,
         );
       } else if (rebuild?.status === "complete") {
-        setMessage(localizeUi("ui.longTermMemory.memorysettings.memorySettingsSavedIndexRebuilt"));
+        setMessage(localizeUi("ui.longTermMemory.memorysettings.memorySettingsSavedIndexRebuilt"), "success", surface);
       } else {
-        setMessage(localizeUi("ui.longTermMemory.memorysettings.memorySettingsSaved"));
+        setMessage(localizeUi("ui.longTermMemory.memorysettings.memorySettingsSaved"), "success", surface);
       }
     } catch (error) {
       setMessage(
         errorMessage(error, localizeUi("ui.longTermMemory.memorysettings.couldNotSaveMemorySettings")),
         "danger",
+        surface,
       );
     } finally {
       setPending("");
@@ -1704,7 +1714,9 @@ export default function MemorySettings({
             </Button>
           </div>
         ) : null}
-        {message ? <StatusSurface tone={messageState.tone}>{message}</StatusSurface> : null}
+        {message && messageState.surface === "debug" ? (
+          <StatusSurface tone={messageState.tone}>{message}</StatusSurface>
+        ) : null}
         {activeTab === "debug" ? (
           <ActivityView
             props={props}

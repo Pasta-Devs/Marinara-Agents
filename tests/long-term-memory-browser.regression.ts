@@ -2835,11 +2835,29 @@ async function main() {
         const clearDeletesBefore = debugClearDeletes;
         await activityPage.evaluate(() => {
           (window as unknown as { __ltmConfirmResult?: boolean }).__ltmConfirmResult = false;
+          (window as unknown as { __ltmConfirmCalls?: number }).__ltmConfirmCalls = 0;
           (window as unknown as { __ltmLastConfirm?: string }).__ltmLastConfirm = undefined;
         });
-        await clearButton.click();
+        // #1275 repair: a same-turn double activation opens the host confirmation once;
+        // the guard is acquired before the dialog is awaited.
+        await activityPage.evaluate(() => {
+          const button = [...document.querySelectorAll('[data-ltm-surface="activity"] button')].find(
+            (candidate) => candidate.textContent?.trim() === "Clear",
+          );
+          if (button instanceof HTMLButtonElement) {
+            button.click();
+            button.click();
+          }
+        });
         await activityPage.waitForFunction(() =>
           Boolean((window as unknown as { __ltmLastConfirm?: string }).__ltmLastConfirm),
+        );
+        assert.equal(
+          await activityPage.evaluate(
+            () => (window as unknown as { __ltmConfirmCalls?: number }).__ltmConfirmCalls ?? 0,
+          ),
+          1,
+          "a same-turn double Clear opens the confirmation once",
         );
         const clearConfirmation = await activityPage.evaluate(
           () => (window as unknown as { __ltmLastConfirm?: string }).__ltmLastConfirm ?? "",
@@ -3156,6 +3174,7 @@ async function main() {
           element.capabilityProps = {
             confirmAction: (options) => {
               window.__ltmLastConfirm = options.message;
+              window.__ltmConfirmCalls = (window.__ltmConfirmCalls ?? 0) + 1;
               return window.__ltmConfirmResult ?? true;
             },
           };

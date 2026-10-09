@@ -192,6 +192,10 @@ assert.match(settings, /memorySettingsSavedIndexRebuilt/u);
 assert.match(settings, /memorySettingsSavedIndexRebuildFailed/u);
 assert.match(settings, /memorySettingsResetIndexRebuildFailed/u);
 assert.match(settings, /rebuild\?\.status === "deferred"/u);
+// #1275 repair: the Debug panel's save surface shows only save feedback started on the
+// Debug tab; unrelated action feedback (e.g. a backup export) stays in the shared surface.
+assert.match(settings, /messageState\.surface === "debug"/u);
+assert.match(settings, /surface: "shared" \| "debug" = "shared"/u);
 // #1193 repair: extraction edits made while the awaited global rebuild is in flight must
 // survive, mirroring the submitted-snapshot guard used for global settings.
 assert.match(
