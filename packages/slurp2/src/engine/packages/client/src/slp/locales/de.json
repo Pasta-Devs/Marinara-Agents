@@ -2144,6 +2144,8 @@
   "ui.slurp.settings.creators.proactiveMessagesDetail": "Aus: Dieser Creator schreibt nie zuerst. Dinge, die er in einem Chat versprochen hat, kommen trotzdem an.",
   "ui.slurp.profile.offer.requestFee": "Eine Nachrichtenanfrage kostet {{count}} <coin/>. Sie öffnet den Thread; sie kauft keine Antwort.",
   "ui.slurp.profile.offer.ppv": "Gesperrte Fotos im Chat kosten je {{count}} <coin/>.",
+  "ui.slurp.settings.messaging.pauseFollowUpsUntilReply": "Nach einer unbeantworteten Nachricht stoppen",
+  "ui.slurp.settings.messaging.pauseFollowUpsUntilReplyDetail": "Ein Creator darf einmal von sich aus schreiben, dann wartet er auf deine Antwort, bevor er erneut von sich aus schreibt. Antworten auf deine Nachrichten und alles, was dir ein Creator bereits schuldet (ein Versprechen, eine Erinnerung, eine fertige Auftragsarbeit), kommen trotzdem an.",
   "ui.slurp.settings.messaging.bubbleLimit": "So viele Nachrichten je Antwort, höchstens",
   "ui.slurp.settings.messaging.bubbleLimitDetail": "Die meisten Nachrichten, in die eine Antwort aufgeteilt werden kann, so wie ein Mensch tippt. Eine Antwort kann weniger nutzen, und kurze, müde oder gereizte tun das. Setze es auf 1, um immer eine Nachricht zu bekommen.",
   "ui.slurp.settings.messaging.clearHint": "Um eine Unterhaltung zu leeren, öffne sie und wähle ⋮ › Unterhaltung löschen.",

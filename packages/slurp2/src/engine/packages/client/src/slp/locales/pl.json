@@ -2182,6 +2182,8 @@
   "ui.slurp.settings.creators.proactiveMessagesDetail": "Wyłączone: ten twórca nigdy nie pisze pierwszy. Rzeczy, które obiecał w czacie, wciąż nadchodzą.",
   "ui.slurp.profile.offer.requestFee": "Prośba o wiadomość kosztuje {{count}} <coin/>. Otwiera wątek; nie kupuje odpowiedzi.",
   "ui.slurp.profile.offer.ppv": "Zablokowane zdjęcia na czacie kosztują {{count}} <coin/> każde.",
+  "ui.slurp.settings.messaging.pauseFollowUpsUntilReply": "Zatrzymaj po jednej wiadomości bez odpowiedzi",
+  "ui.slurp.settings.messaging.pauseFollowUpsUntilReplyDetail": "Kreator może napisać pierwszy raz sam, a potem czeka na twoją prawdziwą odpowiedź, zanim napisze ponownie z własnej inicjatywy. Odpowiedzi na twoje wiadomości i wszystko, co kreator już ci obiecał (obietnica, przypomnienie, gotowe zamówienie), wciąż docierają.",
   "ui.slurp.settings.messaging.bubbleLimit": "Maksymalna liczba wiadomości w jednej odpowiedzi",
   "ui.slurp.settings.messaging.bubbleLimitDetail": "Największa liczba wiadomości, na które można podzielić jedną odpowiedź, tak jak ktoś pisze SMS-y. Odpowiedź może użyć mniej, a krótkie, zmęczone albo napięte tak robią. Ustaw na 1, aby zawsze dostawać jedną wiadomość.",
   "ui.slurp.settings.messaging.clearHint": "Aby wyczyścić jedną rozmowę, otwórz ją i wybierz ⋮ › Wyczyść rozmowę.",

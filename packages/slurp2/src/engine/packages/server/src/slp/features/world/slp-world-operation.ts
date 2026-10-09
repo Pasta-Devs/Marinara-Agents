@@ -717,7 +717,6 @@ export async function advanceSlurpWorld(db: DB, until = new Date()): Promise<Slu
       // Creators writing first. The rapport model has measured silence since it shipped and nothing
       // ever read the number: somebody who used to be here every day going quiet is the most legible
       // thing in the whole relationship model, and it moved a counter nobody saw.
-      //
       // Tier 1, so it stays free and safe to run unattended. Only the opener is canned — the moment
       // the fan answers, the reply runs through the full direct-message path with rapport, arc, and
       // the creator's recent posts. A cheap invitation to a real conversation.
@@ -738,7 +737,8 @@ export async function advanceSlurpWorld(db: DB, until = new Date()): Promise<Slu
           if (existingThread) {
             const isPlayer = async (memberId: string) => Boolean(await noodle.getViewer(memberId));
             const at = { creatorAccountId: account.id, tie, thread: existingThread, until };
-            const input = { ...at, messages, isPlayer, unit: slurpDeterministicUnit };
+            const pauseUntilReply = settings.messagesPauseFollowUpsUntilReply;
+            const input = { ...at, messages, isPlayer, unit: slurpDeterministicUnit, pauseUntilReply };
             if (await planSlurpCreatorCheckIn(input).catch(() => false)) opened += 1;
             continue;
           }
@@ -755,6 +755,7 @@ export async function advanceSlurpWorld(db: DB, until = new Date()): Promise<Slu
           const sent = await messages
             .sendCreatorMessage(account.id, tie.memberId, {
               content: slurpCreatorOpener(`${account.id}:${tie.memberId}:${localDayKey(until)}`, kind),
+              metadata: { unsolicited: true }, // nobody asked; see slurpAllowsUnsolicitedText
             })
             .catch(() => null);
           if (sent) opened += 1;

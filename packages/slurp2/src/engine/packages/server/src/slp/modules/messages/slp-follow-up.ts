@@ -265,6 +265,53 @@ export function slurpFailedFollowUpPatch(
     : { status: "pending", scheduledAt: slurpFollowUpRetryAt(firstDueAt, now), firstDueAt };
 }
 
+/** The shape `slurpAllowsUnsolicitedText` needs from a stored message. Duck-typed: a `SlurpMessage` fits as-is. */
+export type SlpGateMessage = {
+  role: "viewer" | "creator";
+  kind?: string;
+  metadata?: Record<string, unknown> | null;
+};
+
+/** A quote, a system note, or a Support desk notice asks for nothing; it is not the viewer replying. */
+const isRealViewerReply = (message: SlpGateMessage): boolean =>
+  message.role === "viewer" && message.kind !== "system" && message.metadata?.deskQuiet !== true;
+
+/** Already-shipped follow-up types that are "nobody asked" rather than an owed promise. */
+const SLURP_UNSOLICITED_FOLLOW_UP_TYPES: ReadonlySet<string> = new Set(["opener", "check_in", "recurring"]);
+
+/**
+ * A creator message counts whether or not it carries the newer `metadata.unsolicited` marker:
+ * every send this gate must cover already stamps `metadata.followUpType` (the follow-up scheduler)
+ * or `metadata.dramaChoice` (the drama choice job), including rows written before this setting
+ * shipped. Only the canned first-touch opener (`slp-world-operation.ts`) has no other marker, so it
+ * carries `metadata.unsolicited` explicitly.
+ */
+export const isUnsolicitedCreatorMessage = (message: SlpGateMessage): boolean => {
+  if (message.role !== "creator") return false;
+  const meta = message.metadata;
+  if (!meta) return false;
+  if (meta.unsolicited === true) return true;
+  if (meta.dramaChoice != null) return true;
+  return typeof meta.followUpType === "string" && SLURP_UNSOLICITED_FOLLOW_UP_TYPES.has(meta.followUpType);
+};
+
+/**
+ * Settings › Messaging: "Stop after one unanswered text" (global, off by default). Scans a
+ * thread's messages, oldest first, same order `listMessages` already returns.
+ *
+ * A direct reply, an owed promise/reminder/task update, a commission delivery, or a scene/system
+ * line is neither case below and is skipped. Everything else in the window must be one or the
+ * other, so exhausting a full window without a match is read as "still blocked", not "allowed" —
+ * only a thread with no messages at all (a brand-new thread's first text) is allowed by default.
+ */
+export function slurpAllowsUnsolicitedText(history: readonly SlpGateMessage[]): boolean {
+  for (let i = history.length - 1; i >= 0; i--) {
+    if (isRealViewerReply(history[i])) return true;
+    if (isUnsolicitedCreatorMessage(history[i])) return false;
+  }
+  return history.length === 0;
+}
+
 /**
  * Generate a follow-up message prompt context.
  */
