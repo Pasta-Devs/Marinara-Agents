@@ -14,18 +14,57 @@ const AUTO_STYLE_INSTRUCTION =
 /**
  * Compile a post image prompt so Style text meant for a prompt writer stays out of the words sent to
  * the image model (Pasta-Devs/Marinara-Agents#1278). `styleGuidance` is the Style text the rewrite
- * model gets as guidance, so `forRewrite` leaves it out of the prompt that model edits. `literal` is
- * sent when no rewrite runs or it fails: it keeps a style profile's Style text, as the Engine does
- * when no prompt writer handled the style, but never the built-in Auto instruction.
+ * model gets as guidance, so `forRewrite` leaves it out of the prompt that model edits. `rewritePrompt`
+ * is the source of that prompt when it differs from `input.prompt`, for example without the appearance
+ * notes the rewrite model gets as context (Pasta-Devs/Marinara-Agents#1282). `literal` is sent when no
+ * rewrite runs or it fails: it keeps a style profile's Style text, as the Engine does when no prompt
+ * writer handled the style, but never the built-in Auto instruction.
  */
-export function compileNoodleImagePrompts(input: CompileImagePromptInput) {
+export function compileNoodleImagePrompts(input: CompileImagePromptInput, rewritePrompt = input.prompt) {
   const styled = compileImagePrompt(input);
-  const unstyled = compileImagePrompt({ ...input, omitProfileStyleText: true });
   const styleGuidance = resolveImageStyleGuidanceText(input.styleProfiles, styled.profile.id);
   const autoInstruction =
     styled.profile.baseStyle === "auto" && styled.profile.styleText.trim() === AUTO_STYLE_INSTRUCTION;
-  const literal = autoInstruction ? unstyled : styled;
-  return { styleGuidance, literal, forRewrite: styleGuidance ? unstyled : literal };
+  const literal = autoInstruction ? compileImagePrompt({ ...input, omitProfileStyleText: true }) : styled;
+  const forRewrite =
+    !styleGuidance && rewritePrompt === input.prompt
+      ? literal
+      : compileImagePrompt({
+          ...input,
+          prompt: rewritePrompt,
+          omitProfileStyleText: Boolean(styleGuidance) || autoInstruction || input.omitProfileStyleText,
+        });
+  return { styleGuidance, literal, forRewrite };
+}
+
+/**
+ * Remove each sentence of `guidance` that the rewrite model copied word for word into `text`
+ * (Pasta-Devs/Marinara-Agents#1282). Only sentences with at least four words between commas count,
+ * so a tag list such as "masterpiece, best quality" that a user wants in the prompt is never removed.
+ * ponytail: package-owned copy of the Engine's `removeCopiedPromptGuidance`
+ * (Pasta-Devs/Marinara-Engine#7357); the vendored shared dist is frozen, so keep the two in step.
+ */
+export function removeCopiedPromptGuidance(text: string, guidance: ReadonlyArray<string | null | undefined>): string {
+  let result = text;
+  for (const sentence of guidance.flatMap((value) => (value ?? "").split(/[.!?](?=\s|$)|\n+/u))) {
+    const isProse = sentence.split(/[,;:]/u).some((part) => (part.match(/[\p{L}\p{N}]+/gu)?.length ?? 0) >= 4);
+    if (!isProse) continue;
+    const words = sentence.match(/[\p{L}\p{N}]+/gu) ?? [];
+    const copy = new RegExp(`(?<![\\p{L}\\p{N}])${words.join("[^\\p{L}\\p{N}]+")}(?![\\p{L}\\p{N}])[.!?]?`, "giu");
+    result = result.replace(copy, "");
+  }
+  if (result === text) return text;
+  return result
+    .split("\n")
+    .map((line) =>
+      line
+        .replace(/\s*[,;](?:\s*[,;])+/gu, ",")
+        .replace(/^[\s,;]+|[\s,;]+$/gu, "")
+        .replace(/ {2,}/gu, " "),
+    )
+    .join("\n")
+    .replace(/\n{3,}/gu, "\n\n")
+    .trim();
 }
 
 function stripCodeFence(value: string): string {
