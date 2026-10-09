@@ -137,9 +137,12 @@ export function ChatSettings({ props }: { props: CapabilityProps }) {
           ) : null}
         </div>
       </div>
+      {/* D27: initial load only, so a background refetch keeps the existing data and
+          title instead of flashing the loading title; error/Retry behavior is unchanged. */}
       <LastInjectionSummary
         data={lastInjection.data}
-        loading={lastInjection.isFetching}
+        loading={lastInjection.isLoading}
+        retryPending={lastInjection.isFetching}
         error={lastInjection.isError}
         onRetry={() => void lastInjection.refetch()}
         compact

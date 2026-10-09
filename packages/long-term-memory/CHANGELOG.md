@@ -1,5 +1,9 @@
 # Long-Term Memory changelog
 
+## 1.4.20 — 2026-10-09
+
+- Polish the Debug controls: unsaved cues and inline save beside Record recall explanations, pending spinners with focus held on the action, clearer full-log export with an honest privacy warning, and a compact health line. Localize count, weight and action labels, pluralize scanned-message wording, space metadata consistently, and report timeline steps with their own Started/Succeeded/Warning/Failed/Skipped wording. Confirm that clearing the log removes every chat's debug events without touching memories or settings.
+
 ## 1.4.19 — 2026-10-09
 
 - Show extraction results and grouped candidates not kept, recall candidates added or not added with their recorded reasons and settings, and skipped apply changes in Debug. Explain recorded problems with guidance, and link pending extraction drafts to Review Queue without duplicating recovery actions.
