@@ -43,6 +43,9 @@ jobs:
       - name: Test Calls autoplay recovery
         run: npx tsx tests/calls-playback.regression.ts
 
+      - name: Test Calls speech-to-text server fallback and speech queue
+        run: npx tsx tests/calls-speech-to-text.regression.ts
+
       - name: Test Calls release and SwarmUI video generation
         run: |
           node tests/conversation-calls-summary.regression.mjs

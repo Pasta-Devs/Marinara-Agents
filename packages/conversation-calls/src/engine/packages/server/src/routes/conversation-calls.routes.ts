@@ -40,6 +40,11 @@ import { createLLMProvider } from "../services/llm/provider-registry.js";
 import { withConnectionFallbackProvider } from "../services/llm/connection-fallback-provider.js";
 import { sidecarSpeechService } from "../services/sidecar/sidecar-speech.service.js";
 import {
+  transcribeCallAudio,
+  type CallSpeechHost,
+  type CallTranscription,
+} from "../services/conversation/call-transcription.js";
+import {
   getActiveStatusOverride,
   getEffectiveCurrentStatus,
   type WeekSchedule,
@@ -2309,7 +2314,10 @@ function ensureSoundboardDir() {
   return SOUNDBOARD_ROOT;
 }
 
-export async function conversationCallsRoutes(app: FastifyInstance) {
+export async function conversationCallsRoutes(
+  app: FastifyInstance,
+  opts: { runtime?: { integrations?: { speech?: CallSpeechHost } } } = {},
+) {
   const chats = createChatsStorage(app.db);
   const calls = createConversationCallsStorage(app.db);
   const connections = createConnectionsStorage(app.db);
@@ -2823,20 +2831,36 @@ export async function conversationCallsRoutes(app: FastifyInstance) {
       if (kind !== "audio") {
         return reply.status(400).send({ error: "Local Whisper transcription only accepts audio input" });
       }
-      let transcript = "";
+      // Stop a speech-to-text server request when the browser goes away.
+      const disconnected = new AbortController();
+      const onClose = () => {
+        if (!reply.raw.writableFinished) disconnected.abort();
+      };
+      reply.raw.once("close", onClose);
+      let transcription: CallTranscription;
       try {
-        transcript = (await sidecarSpeechService.transcribeWav(buffer)).trim();
+        transcription = await transcribeCallAudio(buffer, {
+          speech: opts.runtime?.integrations?.speech,
+          signal: disconnected.signal,
+          localWhisper: (wav) => sidecarSpeechService.transcribeWav(wav),
+          onSpeechServerError: (error) =>
+            logger.warn(error, "[conversation-call] Speech-to-text server failed; trying Local Whisper"),
+        });
       } catch (error) {
-        logger.warn(error, "[conversation-call] Local Whisper transcription failed");
+        logger.warn(error, "[conversation-call] Call transcription failed");
         return reply.status(400).send({
           error: error instanceof Error ? error.message : "Local Whisper transcription failed",
         });
+      } finally {
+        reply.raw.off("close", onClose);
       }
+      const { transcript, speechServer } = transcription;
+      const transcriber = speechServer ? "The speech-to-text server" : "Local Whisper";
       if (!transcript) {
-        return reply.status(400).send({ error: "Local Whisper did not return a transcript" });
+        return reply.status(400).send({ error: `${transcriber} did not return a transcript` });
       }
       if (isBlankAudioTranscript(transcript)) {
-        return reply.status(400).send({ error: "Local Whisper did not detect speech." });
+        return reply.status(400).send({ error: `${transcriber} did not detect speech.` });
       }
       const userMessage = await calls.createMessage({
         callId: session.id,
@@ -2845,8 +2869,9 @@ export async function conversationCallsRoutes(app: FastifyInstance) {
         participantKind: "user",
         kind: "speech",
         content: transcript,
+        // localWhisper keeps meaning "Local Whisper wrote this"; speechServer marks the Engine's server.
         extra: {
-          localWhisper: true,
+          ...(speechServer ? { speechServer: true } : { localWhisper: true }),
           mimeType,
         },
       });

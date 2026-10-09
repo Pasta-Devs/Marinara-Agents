@@ -163,7 +163,9 @@ const slurp2OwnedSourcePaths = [
 const conversationCallsSourceRoot = join(packagesDir, "conversation-calls/src/engine");
 const conversationCallsOwnedSourcePaths = [
   "packages/client/src/components/chat/ConversationCallSurface.tsx",
+  "packages/client/src/lib/call-speech-queue.ts",
   "packages/server/src/routes/conversation-calls.routes.ts",
+  "packages/server/src/services/conversation/call-transcription.ts",
 ];
 // Release builds must bundle the current source; runtime reuse is for explicit non-release verification builds.
 const releaseBuild = process.env.MARINARA_RELEASE_BUILD !== "0";
@@ -542,7 +544,7 @@ const features = [
   {
     id: "conversation-calls",
     name: "Calls",
-    version: "1.0.17",
+    version: "1.1.0",
     minEngineVersion: "2.4.1",
     description: "Adds live audio and video calls with Conversation characters.",
     kind: ["agent", "conversation-calls"],
@@ -739,7 +741,8 @@ import * as characterVideos from ${JSON.stringify(resolve(prepared.buildRoot, "p
 import { createConversationCallsStorage } from ${JSON.stringify(resolve(prepared.buildRoot, "packages/server/src/services/storage/conversation-calls.storage.ts"))};
 let readinessStorage = null;
 export async function activate({ app, api }) {
-  await app.register(register, { prefix: ${JSON.stringify(feature.prefix)} });
+  // runtime.integrations.speech (newer Engines) lets calls use the Speech to Text server from Connections.
+  await app.register(register, { prefix: ${JSON.stringify(feature.prefix)}, runtime: api.runtime });
   readinessStorage = createConversationCallsStorage(app.db);
   const cleanups = [
     api.registerService("conversation-calls:command", commandRuntime),

@@ -44,6 +44,7 @@ import type {
   MessageReaction,
 } from "@marinara-engine/shared";
 import { cn, generateClientId, getAvatarCropStyle, type AvatarCropValue } from "../../lib/utils";
+import { createCallSpeechQueue } from "../../lib/call-speech-queue";
 import type { CharacterMap, PersonaInfo } from "./chat-area.types";
 import {
   conversationCallKeys,
@@ -1199,7 +1200,7 @@ export function ConversationCallSurface({
   const micSpeechFrameCountRef = useRef(0);
   const userSpeakingRef = useRef(false);
   const callInteractionQueueRef = useRef<Promise<void>>(Promise.resolve());
-  const callSpeechSubmissionPendingRef = useRef(false);
+  const [callSpeechQueue] = useState(() => createCallSpeechQueue());
   const callSpeechDropNoticeAtRef = useRef(0);
   const speechRecognitionRef = useRef<BrowserSpeechRecognition | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
@@ -1449,14 +1450,14 @@ export function ConversationCallSurface({
 
   const cleanupLiveCallMedia = useCallback(() => {
     activeCallVoiceRef.current = null;
-    callSpeechSubmissionPendingRef.current = false;
+    callSpeechQueue.clear();
     userInterruptionVoicedMsRef.current = 0;
     voicePlaybackInterruptedRef.current = false;
     ttsService.stop();
     stopLiveMicCapture();
     stopStream(cameraStream);
     stopStream(screenStream);
-  }, [cameraStream, screenStream, stopLiveMicCapture, stopStream]);
+  }, [callSpeechQueue, cameraStream, screenStream, stopLiveMicCapture, stopStream]);
 
   useEffect(() => {
     callCancelledRef.current = session.status !== "active";
@@ -2381,7 +2382,7 @@ export function ConversationCallSurface({
   }, [callAudioEnabled, markUserActivity, recording, submitText]);
 
   const submitRecordedCallMedia = useCallback(
-    async (blob: Blob, includeVideo: boolean) => {
+    async (blob: Blob, includeVideo: boolean, transcribed: () => void) => {
       const shouldUseLocalWhisper = !includeVideo && (localWhisperInputMode || recordingWillUseLocalWhisperFallback);
       if (shouldUseLocalWhisper) {
         const file = await convertRecordedAudioToWavFile(blob);
@@ -2391,7 +2392,7 @@ export function ConversationCallSurface({
           nativePreferred: false,
           transcriptionMode: "local_whisper",
         });
-        callSpeechSubmissionPendingRef.current = false;
+        transcribed();
         await playTurns(result.turns);
         return;
       }
@@ -2407,7 +2408,7 @@ export function ConversationCallSurface({
         kind: includeVideo ? "video" : "audio",
         nativePreferred: nativeInputMode,
       });
-      callSpeechSubmissionPendingRef.current = false;
+      transcribed();
       await playTurns(result.turns);
     },
     [localWhisperInputMode, nativeInputMode, playTurns, recordingWillUseLocalWhisperFallback, sendMedia],
@@ -2415,7 +2416,9 @@ export function ConversationCallSurface({
 
   const enqueueRecordedCallMedia = useCallback(
     (blob: Blob, includeVideo: boolean) => {
-      if (callSpeechSubmissionPendingRef.current) {
+      // Speech recorded while earlier clips are transcribed waits its turn; the interaction queue keeps order.
+      const release = callSpeechQueue.hold();
+      if (!release) {
         const now = Date.now();
         if (now - callSpeechDropNoticeAtRef.current >= CALL_SPEECH_BACKPRESSURE_NOTICE_MS) {
           callSpeechDropNoticeAtRef.current = now;
@@ -2424,15 +2427,12 @@ export function ConversationCallSurface({
         return;
       }
 
-      callSpeechSubmissionPendingRef.current = true;
       void enqueueCallInteraction(
-        () => submitRecordedCallMedia(blob, includeVideo),
+        () => submitRecordedCallMedia(blob, includeVideo, release),
         "Call speech transcription failed.",
-      ).finally(() => {
-        callSpeechSubmissionPendingRef.current = false;
-      });
+      ).finally(release);
     },
-    [enqueueCallInteraction, submitRecordedCallMedia],
+    [callSpeechQueue, enqueueCallInteraction, submitRecordedCallMedia],
   );
 
   const startRecording = useCallback(async () => {
