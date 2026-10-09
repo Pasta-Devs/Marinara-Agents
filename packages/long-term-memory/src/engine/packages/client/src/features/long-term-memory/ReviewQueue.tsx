@@ -1089,6 +1089,7 @@ const diagnosticCategoryKeys: Record<string, string> = {
   source_backed_npc_identity: "ui.longTermMemory.extractiondetails.normalizedCorrected",
   subject_identity_corrected: "ui.longTermMemory.extractiondetails.normalizedCorrected",
   subject_identity_normalized: "ui.longTermMemory.extractiondetails.normalizedCorrected",
+  borrowed_subject_identity: "ui.longTermMemory.extractiondetails.normalizedCorrected",
   low_lexical_evidence: "ui.longTermMemory.extractiondetails.lowEvidence",
   missing_evidence: "ui.longTermMemory.extractiondetails.lowEvidence",
   missing_source_note_evidence: "ui.longTermMemory.extractiondetails.lowEvidence",

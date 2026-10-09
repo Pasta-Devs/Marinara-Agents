@@ -1,5 +1,9 @@
 # Long-Term Memory changelog
 
+## 1.4.21 — 2026-10-09
+
+- Keep extraction results that should be kept. An explicitly empty `subjectKeys` array now behaves like an omitted field instead of falling back to name matching, and a relationship change whose dimension deltas are all zero is no longer treated as a change. A nameless candidate can also borrow the identity a named sibling in the same batch resolved for the same subjectId, so it lands on the right memory instead of being rejected; borrowed identities stay in Review Queue.
+
 ## 1.4.20 — 2026-10-09
 
 - Polish the Debug controls: unsaved cues and inline save beside Record recall explanations, pending spinners with focus held on the action, clearer full-log export with an honest privacy warning, and a compact health line. Localize count, weight and action labels, pluralize scanned-message wording, space metadata consistently, and report timeline steps with their own Started/Succeeded/Warning/Failed/Skipped wording. Confirm that clearing the log removes every chat's debug events without touching memories or settings.

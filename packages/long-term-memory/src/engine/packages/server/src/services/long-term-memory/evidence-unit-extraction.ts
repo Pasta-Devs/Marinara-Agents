@@ -134,6 +134,7 @@ export function diagnosticsRequireExtractionReview(diagnostics: readonly LtmExtr
       diagnostic.code === "candidate_reconciliation_ambiguous" ||
       diagnostic.code === "candidate_reconciliation_incomplete" ||
       diagnostic.code === "ambiguous_subject_identity" ||
+      diagnostic.code === "borrowed_subject_identity" ||
       diagnostic.code === "event_shaped_character_fact",
   );
 }
@@ -603,6 +604,11 @@ function deterministicEvidenceUnitId(record: Record<string, unknown>, expectedSo
 function normalizedEvidenceUnitRecord(unit: unknown, expectedSourceHash: string, trustedEvidence: string[]): unknown {
   if (!unit || typeof unit !== "object" || Array.isArray(unit)) return unit;
   const record = unit as Record<string, unknown>;
+  // An explicitly empty subjectKeys array must behave like an omitted field so it
+  // cannot suppress trusted name-based resolution. The internal resolver stays strict.
+  const { subjectKeys: rawSubjectKeys, ...recordWithoutSubjectKeys } = record;
+  const normalizedRecord =
+    Array.isArray(rawSubjectKeys) && rawSubjectKeys.length === 0 ? recordWithoutSubjectKeys : record;
   const names = Array.isArray(record.subjectNames) ? record.subjectNames : [];
   const expectedNames = record.bucket === "character_fact" ? 1 : record.bucket === "relationship_state" ? 2 : 0;
   const recoverableNames =
@@ -636,9 +642,9 @@ function normalizedEvidenceUnitRecord(unit: unknown, expectedSourceHash: string,
       ? `${rawSubject.slice(0, maxSubjectLength - 11).replace(/_+$/g, "")}_${stableJsonHash(rawSubject).slice(0, 10)}`
       : subjectId;
   return {
-    ...record,
+    ...normalizedRecord,
     ...(boundedSubject !== record.subjectId ? { subjectId: boundedSubject } : {}),
-    id: deterministicEvidenceUnitId(record, expectedSourceHash),
+    id: deterministicEvidenceUnitId(normalizedRecord, expectedSourceHash),
     sourceHash: expectedSourceHash,
     ...(record.evidence === undefined && trustedEvidence.length ? { evidence: trustedEvidence } : {}),
   };

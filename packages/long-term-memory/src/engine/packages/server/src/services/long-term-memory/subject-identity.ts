@@ -413,6 +413,7 @@ type PreparedLtmSubjectIdentityContext = {
   unresolvedBySubject: Map<string, string[]>;
   batchNames: BatchSubjectNameResolution;
   establishedKeysBySubject: Map<string, string[]>;
+  namedDerivedKeysBySubject: Map<string, string[]>;
   sourceBackedNpcSourceText?: string;
   sourceBackedNpcSourceTitle?: string;
   scope?: LtmScope;
@@ -1040,6 +1041,49 @@ export function prepareLtmSubjectIdentityContext({
     ),
   ]);
 
+  // A nameless, keyless candidate may borrow the identity a named sibling in this
+  // batch resolved for the same bucket + subjectId. Only solid name matches qualify,
+  // and disagreeing siblings disqualify the key. Borrowed identities require review.
+  const namedDerivedKeysBySubject = new Map<string, string[]>();
+  {
+    const derived = new Map<string, string[]>();
+    const contested = new Set<string>();
+    const sameKeys = (left: string[], right: string[]) => {
+      if (left.length !== right.length) return false;
+      const sortedRight = [...right].sort();
+      return [...left].sort().every((key, index) => key === sortedRight[index]);
+    };
+    for (const unit of units) {
+      if (unit.bucket !== "character_fact" && unit.bucket !== "relationship_state") continue;
+      if (unit.subjectKeys !== undefined || !unit.subjectNames?.length) continue;
+      if (unit.subjectNames.some((name) => batchNames.skippedNames.has(normalizeSubjectName(name)))) continue;
+      const match = resolveNamedUnitSubjects(unit, batchNames, index, {
+        scope,
+        mode,
+        sourceBackedNpcSourceText,
+        sourceBackedNpcSourceTitle,
+      });
+      if (match.status !== "matched") continue;
+      if (match.basis !== "trusted_key" && match.basis !== "exact_name" && match.basis !== "unique_alias") continue;
+      const keys = match.entries.map((entry) => entry.subject.key);
+      // Donor and lookup share the raw subjectId, deliberately: a prefix-stripped
+      // match would let a differently named sibling borrow across IDs (fail-closed).
+      const subjectKey = `${unit.bucket}\u0000${unit.subjectId}`;
+      const prior = derived.get(subjectKey);
+      if (prior === undefined) derived.set(subjectKey, keys);
+      else if (!sameKeys(prior, keys)) contested.add(subjectKey);
+      const establishedSubjectKey = `${unit.bucket}\u0000${stripNotePrefix(normalizeSubjectIdentifier(unit.subjectId, ""))}`;
+      const established = establishedKeysBySubject.get(establishedSubjectKey);
+      if (contestedSubjectKeys.has(establishedSubjectKey) || (established && !sameKeys(established, keys))) {
+        contested.add(subjectKey);
+      }
+    }
+    for (const [subjectKey, keys] of derived) {
+      if (contested.has(subjectKey)) continue;
+      namedDerivedKeysBySubject.set(subjectKey, keys);
+    }
+  }
+
   const context: PreparedLtmSubjectIdentityContext = {
     catalog: effectiveCatalog,
     index,
@@ -1047,6 +1091,7 @@ export function prepareLtmSubjectIdentityContext({
     unresolvedBySubject,
     batchNames,
     establishedKeysBySubject,
+    namedDerivedKeysBySubject,
     sourceBackedNpcSourceText,
     sourceBackedNpcSourceTitle,
     scope,
@@ -1064,13 +1109,28 @@ export function prepareLtmSubjectIdentityContext({
               `${unit.bucket}\u0000${stripNotePrefix(normalizeSubjectIdentifier(unit.subjectId, ""))}`,
             )
           : undefined;
-      const effectiveUnit = established ? { ...unit, subjectKeys: established } : unit;
-      const match =
+      let effectiveUnit = established ? { ...unit, subjectKeys: established } : unit;
+      let match =
         hasSubjectNames && effectiveUnit.subjectKeys === undefined
           ? resolveNamedUnitSubjects(unit, batchNames, index, context)
           : ((effectiveUnit.subjectKeys === undefined
               ? batchNames.savedMatches.get(stripNotePrefix(normalizeSubjectName(effectiveUnit.subjectId)))
               : undefined) ?? resolveUnitSubjects(effectiveUnit, index));
+      if (
+        match.status === "untrusted" &&
+        match.basis !== "saved_skip" &&
+        effectiveUnit.subjectKeys === undefined &&
+        !hasSubjectNames
+      ) {
+        const borrowed = namedDerivedKeysBySubject.get(`${unit.bucket}\u0000${unit.subjectId}`);
+        // Adopt the borrowed identity only when its keys resolve, mirroring the
+        // resolution path so prediction cannot target an identity resolve rejects.
+        const borrowedMatch = borrowed && resolveUnitSubjects({ ...effectiveUnit, subjectKeys: borrowed }, index);
+        if (borrowed && borrowedMatch?.status === "matched") {
+          effectiveUnit = { ...effectiveUnit, subjectKeys: borrowed };
+          match = borrowedMatch;
+        }
+      }
       if (match.status !== "matched") {
         // Mirror the resolution path so this pre-resolution key predicts the same target
         // for keyless source-backed units instead of deriving a short-form identity.
@@ -1160,6 +1220,7 @@ function resolveLtmSubjectIdentitiesWithContext({
     unresolvedBySubject,
     batchNames,
     establishedKeysBySubject,
+    namedDerivedKeysBySubject,
     sourceBackedNpcSourceText,
     sourceBackedNpcSourceTitle,
     scope,
@@ -1211,13 +1272,32 @@ function resolveLtmSubjectIdentitiesWithContext({
             `${unit.bucket}\u0000${stripNotePrefix(normalizeSubjectIdentifier(unit.subjectId, ""))}`,
           )
         : undefined;
-    const effectiveUnit = established ? { ...unit, subjectKeys: established } : unit;
-    const match =
+    let effectiveUnit = established ? { ...unit, subjectKeys: established } : unit;
+    let match =
       hasSubjectNames && effectiveUnit.subjectKeys === undefined
         ? resolveNamedUnitSubjects(unit, batchNames, index, context)
         : ((effectiveUnit.subjectKeys === undefined
             ? batchNames.savedMatches.get(stripNotePrefix(normalizeSubjectName(effectiveUnit.subjectId)))
             : undefined) ?? resolveUnitSubjects(effectiveUnit, index));
+    let borrowedIdentity = false;
+    // Only an untrusted, nameless, keyless candidate may borrow from a named sibling
+    // with the exact same bucket + subjectId; ambiguity/cardinality failures stay closed.
+    if (
+      match.status === "untrusted" &&
+      match.basis !== "saved_skip" &&
+      effectiveUnit.subjectKeys === undefined &&
+      !hasSubjectNames
+    ) {
+      const borrowed = namedDerivedKeysBySubject.get(`${unit.bucket}\u0000${unit.subjectId}`);
+      if (borrowed) {
+        const borrowedMatch = resolveUnitSubjects({ ...effectiveUnit, subjectKeys: borrowed }, index);
+        if (borrowedMatch.status === "matched") {
+          effectiveUnit = { ...effectiveUnit, subjectKeys: borrowed };
+          match = borrowedMatch;
+          borrowedIdentity = true;
+        }
+      }
+    }
     if (match.status !== "matched") {
       const sourceBackedNpc = hasSubjectNames
         ? null
@@ -1350,6 +1430,18 @@ function resolveLtmSubjectIdentitiesWithContext({
       subjects,
     };
     resolved.push({ unit: nextUnit, originalNoteId, targetNoteId: canonicalNoteId, candidateIndex });
+
+    if (borrowedIdentity) {
+      diagnostics.push({
+        severity: "warning",
+        code: "borrowed_subject_identity",
+        candidateIndex,
+        mutationId: unit.id,
+        noteId: canonicalNoteId,
+        message: `Used ${subjectNames.join(" and ")} from a named memory with the same subjectId for this unnamed candidate. Review the character match before accepting.`,
+        details: { subjectNames, subjectKeys, matchBasis: "borrowed_subject_identity" },
+      });
+    }
 
     if (entries.some((entry) => batchNames.provisionalKeys.has(entry.subject.key))) {
       diagnostics.push({
