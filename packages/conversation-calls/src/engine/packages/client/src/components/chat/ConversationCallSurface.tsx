@@ -1802,6 +1802,8 @@ export function ConversationCallSurface({
   );
 
   const handleCallEndedByCharacter = useCallback(async () => {
+    // Like hanging up: speech still queued behind this reply must not be sent to an ended call.
+    callCancelledRef.current = true;
     try {
       await endCall.mutateAsync(session.id);
     } catch (error) {

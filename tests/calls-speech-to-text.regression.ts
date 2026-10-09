@@ -137,6 +137,26 @@ async function main() {
     assert.deepEqual(reported, []);
   }
 
+  // The browser went away while the server answered "off": Local Whisper does not start either.
+  {
+    const local = whisper();
+    const controller = new AbortController();
+    await assert.rejects(
+      transcribeCallAudio(wav, {
+        speech: {
+          transcribe: async () => {
+            controller.abort();
+            return null;
+          },
+        },
+        signal: controller.signal,
+        localWhisper: local.run,
+      }),
+      { name: "AbortError" },
+    );
+    assert.equal(local.calls.length, 0);
+  }
+
   // Speech recorded while an earlier clip is transcribed is kept, up to the limit. The old gate held one.
   {
     assert.ok(CALL_SPEECH_QUEUE_LIMIT > 1, "a clip recorded during transcription waits instead of being dropped");

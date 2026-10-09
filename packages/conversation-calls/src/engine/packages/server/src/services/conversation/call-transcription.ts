@@ -49,6 +49,8 @@ export async function transcribeCallAudio(
       options.onSpeechServerError?.(error);
     }
   }
+  // Nor when the browser left while the server was answering.
+  options.signal?.throwIfAborted();
   try {
     return { transcript: (await options.localWhisper(wav)).trim(), speechServer: false };
   } catch (error) {
