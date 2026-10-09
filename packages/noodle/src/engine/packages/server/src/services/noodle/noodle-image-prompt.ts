@@ -43,6 +43,8 @@ export function compileNoodleImagePrompts(input: CompileImagePromptInput, rewrit
  * so a tag list such as "masterpiece, best quality" that a user wants in the prompt is never removed.
  * ponytail: package-owned copy of the Engine's `removeCopiedPromptGuidance`
  * (Pasta-Devs/Marinara-Engine#7357); the vendored shared dist is frozen, so keep the two in step.
+ * Short instructions under four words are kept even when copied; telling them from short tags
+ * would need a grammar check.
  */
 export function removeCopiedPromptGuidance(text: string, guidance: ReadonlyArray<string | null | undefined>): string {
   let result = text;
