@@ -3,7 +3,7 @@
 ## 1.1.1 — 2026-10-09 [highlight]
 
 - Mic recording calls no longer lose some of your speech with "Selected provider/model cannot receive provider-native audio input."
-- A call in a hidden or covered tab no longer cuts a sentence into pieces at short pauses. It now waits until it has heard about 3 seconds of quiet, so replies there can take a little longer.
+- A call left in a background tab or behind other windows no longer cuts a sentence into pieces at short pauses. It now waits until it has heard about 3 seconds of quiet, so replies there can take a little longer.
 
 ## 1.1.0 — 2026-10-09
 

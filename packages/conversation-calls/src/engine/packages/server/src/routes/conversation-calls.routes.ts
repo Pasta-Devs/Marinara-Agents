@@ -2791,7 +2791,10 @@ export async function conversationCallsRoutes(
       return reply.status(400).send({ error: "Conversation call audio is not enabled in Chat Settings" });
     }
     // Every part is read before any field is used: the client sends transcriptionMode after the file.
-    const data = await readCallUpload(req.parts({ limits: { fileSize: MAX_AUDIO_UPLOAD_BYTES } }));
+    // One file and at most 16 fields (the client sends six); anything more is refused.
+    const data = await readCallUpload(
+      req.parts({ limits: { fileSize: MAX_AUDIO_UPLOAD_BYTES, files: 1, fields: 16 } }),
+    );
     if (!data) return reply.status(400).send({ error: "No media uploaded" });
     const { buffer, fields } = data;
     const requestDebug = fields?.debugMode?.value === "true";

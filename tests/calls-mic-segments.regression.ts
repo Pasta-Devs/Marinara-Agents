@@ -214,11 +214,14 @@ async function main() {
   const mediaRoute = routes.slice(routes.indexOf('app.post<{ Params: { id: string } }>("/:id/media"'));
   assert.match(
     mediaRoute,
-    /^[\s\S]{0,1200}readCallUpload\(req\.parts\(\{ limits: \{ fileSize: MAX_AUDIO_UPLOAD_BYTES \} \}\)\)/u,
+    /^[\s\S]{0,1200}readCallUpload\(\s*req\.parts\(\{ limits: \{ fileSize: MAX_AUDIO_UPLOAD_BYTES, files: 1, fields: 16 \} \}\)/u,
   );
   assert.doesNotMatch(mediaRoute.slice(0, mediaRoute.indexOf("app.post", 10)), /req\.file\(/u);
   const server = await readFile(new URL("../packages/conversation-calls/server.mjs", import.meta.url), "utf8");
-  assert.ok(/\.parts\(\{limits:\{fileSize:\w+\}\}\)/u.test(server), "the built server.mjs reads every part");
+  assert.ok(
+    /\.parts\(\{limits:\{fileSize:\w+,files:1,fields:16\}\}\)/u.test(server),
+    "the built server.mjs reads every part",
+  );
 
   const client = await readFile(new URL("../packages/conversation-calls/client.js", import.meta.url), "utf8");
   assert.ok(/Math\.min\(Math\.max\(0,\w+-\w+\),240\)/u.test(client), "the built client.js counts only measured quiet");
