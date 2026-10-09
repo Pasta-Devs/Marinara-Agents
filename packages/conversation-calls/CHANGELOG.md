@@ -1,5 +1,10 @@
 # Calls release notes
 
+## 1.1.1 — 2026-10-09 [highlight]
+
+- Mic recording calls no longer lose some of your speech with "Selected provider/model cannot receive provider-native audio input."
+- A call left in a background tab or behind other windows no longer cuts a sentence into pieces at short pauses. It now waits until it has heard about 3 seconds of quiet, so replies there can take a little longer.
+
 ## 1.1.0 — 2026-10-09
 
 - Mic recording calls use your own speech-to-text server when it is turned on in Connections → Speech to Text (newer Engines). Local Whisper still handles speech when the server is off or fails.

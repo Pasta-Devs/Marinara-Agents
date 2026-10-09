@@ -44,6 +44,13 @@ import type {
   MessageReaction,
 } from "@marinara-engine/shared";
 import { cn, generateClientId, getAvatarCropStyle, type AvatarCropValue } from "../../lib/utils";
+import {
+  CALL_MIC_MIN_PEAK_RMS,
+  CALL_MIC_MIN_SEGMENT_MS,
+  CALL_MIC_MIN_VOICED_MS,
+  CALL_MIC_VAD_INTERVAL_MS,
+  createCallMicSegmenter,
+} from "../../lib/call-mic-segmenter";
 import { createCallSpeechQueue } from "../../lib/call-speech-queue";
 import type { CharacterMap, PersonaInfo } from "./chat-area.types";
 import {
@@ -156,15 +163,6 @@ const MOBILE_CALL_PICKER_TABS: ConversationMediaPickerTab[] = [
 
 const CALL_SILENCE_CHECK_MS = 150_000;
 const CALL_SILENCE_POLL_MS = 10_000;
-const CALL_MIC_VAD_INTERVAL_MS = 120;
-const CALL_MIC_MIN_SEGMENT_MS = 420;
-const CALL_MIC_SILENCE_MS = 3_000;
-const CALL_MIC_MAX_SEGMENT_MS = 60_000;
-const CALL_MIC_RMS_START = 0.022;
-const CALL_MIC_RMS_CONTINUE = 0.013;
-const CALL_MIC_CONFIRM_FRAMES = 2;
-const CALL_MIC_MIN_VOICED_MS = 180;
-const CALL_MIC_MIN_PEAK_RMS = 0.022;
 const CALL_TTS_INTERRUPT_VOICED_MS = 600;
 const CALL_TTS_INTERRUPT_TEXT_MAX_CHARS = 1200;
 const CALL_TTS_MAX_REQUEST_CHARS = 3_900;
@@ -1196,8 +1194,6 @@ export function ConversationCallSurface({
   const micAudioSourceRef = useRef<MediaStreamAudioSourceNode | null>(null);
   const micVadIntervalRef = useRef<number | null>(null);
   const micSegmentRef = useRef<LiveMicSegment | null>(null);
-  const micLastSpeechAtRef = useRef(0);
-  const micSpeechFrameCountRef = useRef(0);
   const userSpeakingRef = useRef(false);
   const callInteractionQueueRef = useRef<Promise<void>>(Promise.resolve());
   const [callSpeechQueue] = useState(() => createCallSpeechQueue());
@@ -1413,7 +1409,6 @@ export function ConversationCallSurface({
       window.clearInterval(micVadIntervalRef.current);
       micVadIntervalRef.current = null;
     }
-    micSpeechFrameCountRef.current = 0;
     setUserSpeakingState(false);
     const segment = micSegmentRef.current;
     micSegmentRef.current = null;
@@ -2552,52 +2547,22 @@ export function ConversationCallSurface({
         recorder.start(500);
       };
 
-      micLastSpeechAtRef.current = 0;
-      micSpeechFrameCountRef.current = 0;
+      const segmenter = createCallMicSegmenter();
       micVadIntervalRef.current = window.setInterval(() => {
         analyser.getByteTimeDomainData(timeDomain);
         const rms = audioRmsFromTimeDomain(timeDomain);
-        const now = Date.now();
         const segment = micSegmentRef.current;
-        const speaking = rms >= (segment ? CALL_MIC_RMS_CONTINUE : CALL_MIC_RMS_START);
-        if (speaking) {
-          micSpeechFrameCountRef.current += 1;
-        } else if (!segment) {
-          micSpeechFrameCountRef.current = 0;
-        }
-        const speechConfirmed = segment ? speaking : micSpeechFrameCountRef.current >= CALL_MIC_CONFIRM_FRAMES;
+        const { step, speechConfirmed } = segmenter.check(rms, Date.now(), segment?.startedAt ?? null);
         setUserSpeakingState(speechConfirmed);
         updateVoiceInterruptionDetector(speechConfirmed);
 
-        if (segment && now - segment.startedAt >= CALL_MIC_MAX_SEGMENT_MS) {
-          stopSegment();
-          if (speaking) {
-            micLastSpeechAtRef.current = now;
-            micSpeechFrameCountRef.current = CALL_MIC_CONFIRM_FRAMES;
-            startSegment(rms);
-          }
-          return;
-        }
-
-        if (segment && speaking) {
+        if (step === "speech" && segment) {
           segment.voicedMs += CALL_MIC_VAD_INTERVAL_MS;
           segment.peakRms = Math.max(segment.peakRms, rms);
-          markUserActivity();
-          micLastSpeechAtRef.current = now;
-          return;
         }
-
-        if (!segment && speaking) {
-          markUserActivity();
-          micLastSpeechAtRef.current = now;
-          startSegment(rms);
-          return;
-        }
-
-        if (segment && now - micLastSpeechAtRef.current >= CALL_MIC_SILENCE_MS) {
-          micSpeechFrameCountRef.current = 0;
-          stopSegment();
-        }
+        if (step === "speech" || step === "start") markUserActivity();
+        if (step === "split" || step === "end") stopSegment();
+        if (step === "split" || step === "start") startSegment(rms);
       }, CALL_MIC_VAD_INTERVAL_MS);
       setRecording(true);
     } catch (error) {

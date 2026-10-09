@@ -163,9 +163,11 @@ const slurp2OwnedSourcePaths = [
 const conversationCallsSourceRoot = join(packagesDir, "conversation-calls/src/engine");
 const conversationCallsOwnedSourcePaths = [
   "packages/client/src/components/chat/ConversationCallSurface.tsx",
+  "packages/client/src/lib/call-mic-segmenter.ts",
   "packages/client/src/lib/call-speech-queue.ts",
   "packages/server/src/routes/conversation-calls.routes.ts",
   "packages/server/src/services/conversation/call-transcription.ts",
+  "packages/server/src/services/conversation/call-upload.ts",
 ];
 // Release builds must bundle the current source; runtime reuse is for explicit non-release verification builds.
 const releaseBuild = process.env.MARINARA_RELEASE_BUILD !== "0";
@@ -544,7 +546,7 @@ const features = [
   {
     id: "conversation-calls",
     name: "Calls",
-    version: "1.1.0",
+    version: "1.1.1",
     minEngineVersion: "2.4.1",
     description: "Adds live audio and video calls with Conversation characters.",
     kind: ["agent", "conversation-calls"],
