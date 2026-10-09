@@ -1,7 +1,6 @@
 import {
   compileImagePrompt,
   DEFAULT_IMAGE_STYLE_PROFILES,
-  resolveImageStyleGuidanceText,
   type CompileImagePromptInput,
 } from "@marinara-engine/shared";
 
@@ -14,18 +13,93 @@ const AUTO_STYLE_INSTRUCTION =
 /**
  * Compile a post image prompt so Style text meant for a prompt writer stays out of the words sent to
  * the image model (Pasta-Devs/Marinara-Agents#1278). `styleGuidance` is the Style text the rewrite
- * model gets as guidance, so `forRewrite` leaves it out of the prompt that model edits. `literal` is
- * sent when no rewrite runs or it fails: it keeps a style profile's Style text, as the Engine does
- * when no prompt writer handled the style, but never the built-in Auto instruction.
+ * model gets as guidance, so `forRewrite` leaves it out of the prompt that model edits. `rewritePrompt`
+ * is the source of that prompt when it differs from `input.prompt`, for example without the appearance
+ * notes the rewrite model gets as context (Pasta-Devs/Marinara-Agents#1282). `literal` is sent when no
+ * rewrite runs or it fails: it keeps a style profile's Style text, as the Engine does when no prompt
+ * writer handled the style, but never the built-in Auto instruction.
  */
-export function compileNoodleImagePrompts(input: CompileImagePromptInput) {
+export function compileNoodleImagePrompts(input: CompileImagePromptInput, rewritePrompt = input.prompt) {
   const styled = compileImagePrompt(input);
-  const unstyled = compileImagePrompt({ ...input, omitProfileStyleText: true });
-  const styleGuidance = resolveImageStyleGuidanceText(input.styleProfiles, styled.profile.id);
   const autoInstruction =
     styled.profile.baseStyle === "auto" && styled.profile.styleText.trim() === AUTO_STYLE_INSTRUCTION;
-  const literal = autoInstruction ? unstyled : styled;
-  return { styleGuidance, literal, forRewrite: styleGuidance ? unstyled : literal };
+  // Style text a user writes into Auto or a copy of it is guidance like any other, as in the Engine's
+  // resolveImageStyleGuidanceText since Pasta-Devs/Marinara-Engine#7357; the vendored copy drops it.
+  const styleGuidance = autoInstruction ? "" : (styled.profile.styleText?.trim() ?? "");
+  const literal = autoInstruction ? compileImagePrompt({ ...input, omitProfileStyleText: true }) : styled;
+  const forRewrite =
+    !styleGuidance && rewritePrompt === input.prompt
+      ? literal
+      : compileImagePrompt({
+          ...input,
+          prompt: rewritePrompt,
+          omitProfileStyleText: Boolean(styleGuidance) || autoInstruction || input.omitProfileStyleText,
+        });
+  return { styleGuidance, literal, forRewrite };
+}
+
+/**
+ * Remove each sentence of `guidance` that the rewrite model copied word for word into `text`
+ * (Pasta-Devs/Marinara-Agents#1282), ignoring case and punctuation. Only guidance written as a
+ * sentence counts: it ends with . ! or ? and has at least four words between commas, so tag lists
+ * and tag phrases such as "masterpiece, best quality" are never removed. If the text was nothing
+ * but copied guidance, it comes back unchanged; pass `allowEmpty` when the caller has its own
+ * fallback, as the rewrite does with the base prompt.
+ * ponytail: package-owned copy of the Engine's `removeCopiedPromptGuidance`
+ * (Pasta-Devs/Marinara-Engine#7357); the vendored shared dist is frozen, so keep the two in step.
+ * Shorter or unpunctuated instructions are kept even when copied; telling them from tags would
+ * need a grammar check.
+ */
+export function removeCopiedPromptGuidance(
+  text: string,
+  guidance: ReadonlyArray<string | null | undefined>,
+  { allowEmpty = false }: { allowEmpty?: boolean } = {},
+): string {
+  const tokens = Array.from(text.matchAll(/[\p{L}\p{N}]+/gu), (match) => ({
+    word: match[0].toLowerCase(),
+    start: match.index,
+    end: match.index + match[0].length,
+  }));
+  const spans: Array<[number, number]> = [];
+  // Only sentence ends split guidance; a line break inside a sentence is just a space.
+  for (const piece of guidance.flatMap((value) => (value ?? "").split(/(?<=[.!?])\s+/u))) {
+    const sentence = piece.trim();
+    const isProse =
+      /[.!?]$/u.test(sentence) &&
+      sentence.split(/[,;:]/u).some((part) => (part.match(/[\p{L}\p{N}]+/gu)?.length ?? 0) >= 4);
+    if (!isProse) continue;
+    const words = (sentence.match(/[\p{L}\p{N}]+/gu) ?? []).map((word) => word.toLowerCase());
+    for (let index = 0; index + words.length <= tokens.length; index += 1) {
+      if (!words.every((word, offset) => tokens[index + offset]!.word === word)) continue;
+      const last = tokens[index + words.length - 1]!;
+      spans.push([tokens[index]!.start, /[.!?]/u.test(text[last.end] ?? "") ? last.end + 1 : last.end]);
+      index += words.length - 1;
+    }
+  }
+  if (spans.length === 0) return text;
+  let result = "";
+  let cursor = 0;
+  for (const [start, end] of spans.sort((a, b) => a[0] - b[0])) {
+    if (start < cursor) continue;
+    result += text.slice(cursor, start);
+    cursor = end;
+  }
+  result += text.slice(cursor);
+  // Drop the empty list items and stray spaces the removal left; split instead of a regex so long
+  // runs of whitespace can't make it slow.
+  const tidy = result
+    .split("\n")
+    .map((line) =>
+      line
+        .split(",")
+        .map((part) => part.trim().replace(/ {2,}/gu, " "))
+        .filter(Boolean)
+        .join(", "),
+    )
+    .join("\n")
+    .replace(/\n{3,}/gu, "\n\n")
+    .trim();
+  return tidy || (allowEmpty ? "" : text);
 }
 
 function stripCodeFence(value: string): string {

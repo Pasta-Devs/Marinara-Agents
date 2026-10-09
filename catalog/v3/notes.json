@@ -340,6 +340,12 @@
     "noodle": {
       "versions": [
         {
+          "version": "1.5.3",
+          "date": "2026-10-09",
+          "notes": "- Interpret image prompts now works without an Agents default connection. When none is set under Settings → Connections → Defaults, Noodle's own text connection rewrites the image prompt. Before, the rewrite was skipped, so your image connection's Image Prompting Instructions had no effect and the style profile's Style text was pasted into the prompt.\n- Include descriptions now gives the character's appearance notes to the AI that rewrites the image prompt instead of leaving them in the prompt it edits, where they reached ComfyUI as plain text. With Interpret image prompts off, the notes are still added as written.\n- Style text you write into Auto or a copy of it now guides the rewrite too.\n- If the rewrite copies a full sentence of your Image Prompting Instructions, the Style text or the character's image habits, Noodle removes it. Short phrases and tag lists such as \"masterpiece, best quality\" stay.\n- The help texts now say what happens when Interpret image prompts is off.",
+          "highlight": true
+        },
+        {
           "version": "1.5.2",
           "date": "2026-10-09",
           "notes": "- Image prompts no longer include text meant for the AI that writes them. The poster's Personality and image habits and your image connection's Image Prompting Instructions now only guide the rewrite that Interpret image prompts runs. Before, Noodle pasted them word for word into the prompt sent to ComfyUI and other image services, which broke tag-only prompts. With Interpret image prompts off, or when the rewrite fails, the image service gets the prompt without them.\n- A style profile's Style text now reaches the rewrite once, as guidance, instead of also sitting in the prompt it edits. The Auto profile's note \"Infer a consistent visual style from the character, game, scene, and selected image model\" never ends up in the image prompt. Style text from the other profiles still applies when no rewrite runs.",

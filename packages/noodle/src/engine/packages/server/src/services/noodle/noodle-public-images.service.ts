@@ -187,7 +187,7 @@ export async function generateNoodlePostImage(input: {
     }
   }
 
-  const postPrompt = await loadPrompt(input.promptOverrides, NOODLE_IMAGE_POST, {
+  const postPromptContext = {
     authorName: input.account.displayName,
     postContent: input.postContent,
     draftPrompt: input.draftPrompt,
@@ -195,20 +195,31 @@ export async function generateNoodlePostImage(input: {
     characterDescription,
     characterImageInstructions,
     characterPersonality,
-  });
+  };
+  const postPrompt = await loadPrompt(input.promptOverrides, NOODLE_IMAGE_POST, postPromptContext);
+  const enableImageInterpretation =
+    (input.settings as PackageNoodleSettings & { enableImageInterpretation?: boolean }).enableImageInterpretation !==
+    false;
+  // Include descriptions: the rewrite model gets the appearance notes as character context, so the
+  // prompt it edits leaves them out; without a rewrite they are added as written
+  // (Pasta-Devs/Marinara-Agents#1282).
+  const rewritePostPrompt =
+    characterDescription && enableImageInterpretation && !input.promptOverride
+      ? await loadPrompt(input.promptOverrides, NOODLE_IMAGE_POST, { ...postPromptContext, characterDescription: "" })
+      : postPrompt;
   const {
     styleGuidance,
     literal: compiledPrompt,
     forRewrite,
-  } = compileNoodleImagePrompts({
-    kind: "illustration",
-    prompt: postPrompt,
-    styleProfiles: imageSettings.styleProfiles,
-    imageDefaults,
-  });
-  const enableImageInterpretation =
-    (input.settings as PackageNoodleSettings & { enableImageInterpretation?: boolean }).enableImageInterpretation !==
-    false;
+  } = compileNoodleImagePrompts(
+    {
+      kind: "illustration",
+      prompt: postPrompt,
+      styleProfiles: imageSettings.styleProfiles,
+      imageDefaults,
+    },
+    rewritePostPrompt,
+  );
   const imagePromptInstructions = input.imageConnection.imagePromptInstructions?.trim();
   const characterContext = [
     characterDescription ? `Appearance:\n${characterDescription}` : "",
@@ -229,11 +240,14 @@ export async function generateNoodlePostImage(input: {
         instructions: imagePromptInstructions,
         characterContext,
         styleGuidance,
+        noodleConnectionId: input.settings.generationConnectionId,
+        extraGuidance: [characterImageInstructions],
       })
     : null;
-  // The connection's Image Prompting Instructions, the poster's personality and image habits, and the
-  // profile's Style text guide the rewrite model only. Without a rewrite the image model gets the base
-  // prompt; pasted instructions reached it as stray words (Pasta-Devs/Marinara-Agents#1278).
+  // The connection's Image Prompting Instructions, the poster's appearance notes, personality and image
+  // habits, and the profile's Style text guide the rewrite model only. Without a rewrite the image model
+  // gets the base prompt with the appearance notes; pasted instructions reached it as stray words
+  // (Pasta-Devs/Marinara-Agents#1278, Pasta-Devs/Marinara-Agents#1282).
   if (rewriteRequested && !rewrittenPrompt) {
     logger.warn(
       "[noodle] Image prompt rewrite gave no prompt for %s; sending the base prompt without the image instructions",
