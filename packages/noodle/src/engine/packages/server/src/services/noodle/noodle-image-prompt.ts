@@ -56,13 +56,16 @@ export function removeCopiedPromptGuidance(text: string, guidance: ReadonlyArray
     result = result.replace(copy, "");
   }
   if (result === text) return text;
+  // Drop the empty list items and stray spaces the removal left; split instead of a regex so long
+  // runs of whitespace can't make it slow.
   return result
     .split("\n")
     .map((line) =>
       line
-        .replace(/\s*[,;](?:\s*[,;])+/gu, ",")
-        .replace(/^[\s,;]+|[\s,;]+$/gu, "")
-        .replace(/ {2,}/gu, " "),
+        .split(",")
+        .map((part) => part.trim().replace(/ {2,}/gu, " "))
+        .filter(Boolean)
+        .join(", "),
     )
     .join("\n")
     .replace(/\n{3,}/gu, "\n\n")
