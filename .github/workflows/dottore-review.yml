@@ -38,7 +38,7 @@ concurrency:
 
 jobs:
   review:
-    uses: Pasta-Devs/Marinara-Engine/.github/workflows/dottore-review.yml@27b38ecb185d73384ae13a4fcd28a4e9040742a5
+    uses: Pasta-Devs/Marinara-Engine/.github/workflows/dottore-review.yml@3b689099620c3dbec245c47accddeaa63865b0ef
     with:
       pr_number: ${{ inputs.pr_number }}
       comment_body: ${{ inputs.comment_body }}
@@ -48,3 +48,5 @@ jobs:
     secrets:
       OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
       LLM_BASE_URL: ${{ secrets.LLM_BASE_URL }}
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      ANTHROPIC_BASE_URL: ${{ secrets.ANTHROPIC_BASE_URL }}
