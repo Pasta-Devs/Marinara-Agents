@@ -651,7 +651,8 @@ export async function advanceSlurpWorld(db: DB, until = new Date()): Promise<Slu
         }
       }
       // The audience reacting is the only channel the world had into a Creator that she could
-      // actually feel, and it went straight into the counters without touching her. Not a rolling average: the thing being modelled is noticing your notifications.
+      // actually feel, and it went straight into the counters without touching her. This is not a
+      // rolling average on purpose: the thing being modelled is noticing your notifications.
       const slurpForPulse = createSlurpStorage(db);
       for (const [creatorAccountId, weight] of landedBy) {
         if (weight < SLURP_POST_LANDED_REACTIONS) continue;
@@ -716,7 +717,6 @@ export async function advanceSlurpWorld(db: DB, until = new Date()): Promise<Slu
       // Creators writing first. The rapport model has measured silence since it shipped and nothing
       // ever read the number: somebody who used to be here every day going quiet is the most legible
       // thing in the whole relationship model, and it moved a counter nobody saw.
-      //
       // Tier 1, so it stays free and safe to run unattended. Only the opener is canned — the moment
       // the fan answers, the reply runs through the full direct-message path with rapport, arc, and
       // the creator's recent posts. A cheap invitation to a real conversation.
