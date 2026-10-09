@@ -39,26 +39,48 @@ export function compileNoodleImagePrompts(input: CompileImagePromptInput, rewrit
 
 /**
  * Remove each sentence of `guidance` that the rewrite model copied word for word into `text`
- * (Pasta-Devs/Marinara-Agents#1282). Only sentences with at least four words between commas count,
- * so a tag list such as "masterpiece, best quality" that a user wants in the prompt is never removed.
+ * (Pasta-Devs/Marinara-Agents#1282), ignoring case and punctuation. Only guidance written as a
+ * sentence counts: it ends with . ! or ? and has at least four words between commas, so tag lists
+ * and tag phrases such as "masterpiece, best quality" are never removed. If the text was nothing
+ * but copied guidance, it comes back unchanged.
  * ponytail: package-owned copy of the Engine's `removeCopiedPromptGuidance`
  * (Pasta-Devs/Marinara-Engine#7357); the vendored shared dist is frozen, so keep the two in step.
- * Short instructions under four words are kept even when copied; telling them from short tags
- * would need a grammar check.
+ * Shorter or unpunctuated instructions are kept even when copied; telling them from tags would
+ * need a grammar check.
  */
 export function removeCopiedPromptGuidance(text: string, guidance: ReadonlyArray<string | null | undefined>): string {
-  let result = text;
-  for (const sentence of guidance.flatMap((value) => (value ?? "").split(/[.!?](?=\s|$)|\n+/u))) {
-    const isProse = sentence.split(/[,;:]/u).some((part) => (part.match(/[\p{L}\p{N}]+/gu)?.length ?? 0) >= 4);
+  const tokens = Array.from(text.matchAll(/[\p{L}\p{N}]+/gu), (match) => ({
+    word: match[0].toLowerCase(),
+    start: match.index,
+    end: match.index + match[0].length,
+  }));
+  const spans: Array<[number, number]> = [];
+  for (const piece of guidance.flatMap((value) => (value ?? "").split(/(?<=[.!?])\s+|\n+/u))) {
+    const sentence = piece.trim();
+    const isProse =
+      /[.!?]$/u.test(sentence) &&
+      sentence.split(/[,;:]/u).some((part) => (part.match(/[\p{L}\p{N}]+/gu)?.length ?? 0) >= 4);
     if (!isProse) continue;
-    const words = sentence.match(/[\p{L}\p{N}]+/gu) ?? [];
-    const copy = new RegExp(`(?<![\\p{L}\\p{N}])${words.join("[^\\p{L}\\p{N}]+")}(?![\\p{L}\\p{N}])[.!?]?`, "giu");
-    result = result.replace(copy, "");
+    const words = (sentence.match(/[\p{L}\p{N}]+/gu) ?? []).map((word) => word.toLowerCase());
+    for (let index = 0; index + words.length <= tokens.length; index += 1) {
+      if (!words.every((word, offset) => tokens[index + offset]!.word === word)) continue;
+      const last = tokens[index + words.length - 1]!;
+      spans.push([tokens[index]!.start, /[.!?]/u.test(text[last.end] ?? "") ? last.end + 1 : last.end]);
+      index += words.length - 1;
+    }
   }
-  if (result === text) return text;
+  if (spans.length === 0) return text;
+  let result = "";
+  let cursor = 0;
+  for (const [start, end] of spans.sort((a, b) => a[0] - b[0])) {
+    if (start < cursor) continue;
+    result += text.slice(cursor, start);
+    cursor = end;
+  }
+  result += text.slice(cursor);
   // Drop the empty list items and stray spaces the removal left; split instead of a regex so long
   // runs of whitespace can't make it slow.
-  return result
+  const tidy = result
     .split("\n")
     .map((line) =>
       line
@@ -70,6 +92,7 @@ export function removeCopiedPromptGuidance(text: string, guidance: ReadonlyArray
     .join("\n")
     .replace(/\n{3,}/gu, "\n\n")
     .trim();
+  return tidy || text;
 }
 
 function stripCodeFence(value: string): string {

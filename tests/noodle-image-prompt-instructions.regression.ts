@@ -260,6 +260,11 @@ async function rewriteChecks() {
     "masterpiece, best quality, 1boy",
     "tag lists are never removed",
   );
+  assert.equal(
+    removeCopiedPromptGuidance("1boy, cold lighting with deep shadows", ["cold lighting with deep shadows"]),
+    "1boy, cold lighting with deep shadows",
+    "a tag phrase that isn't written as a sentence stays",
+  );
 }
 
 async function main() {
