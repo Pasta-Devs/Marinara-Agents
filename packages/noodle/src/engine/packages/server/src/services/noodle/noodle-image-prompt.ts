@@ -55,7 +55,8 @@ export function removeCopiedPromptGuidance(text: string, guidance: ReadonlyArray
     end: match.index + match[0].length,
   }));
   const spans: Array<[number, number]> = [];
-  for (const piece of guidance.flatMap((value) => (value ?? "").split(/(?<=[.!?])\s+|\n+/u))) {
+  // Only sentence ends split guidance; a line break inside a sentence is just a space.
+  for (const piece of guidance.flatMap((value) => (value ?? "").split(/(?<=[.!?])\s+/u))) {
     const sentence = piece.trim();
     const isProse =
       /[.!?]$/u.test(sentence) &&

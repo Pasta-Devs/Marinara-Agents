@@ -265,6 +265,13 @@ async function rewriteChecks() {
     "1boy, cold lighting with deep shadows",
     "a tag phrase that isn't written as a sentence stays",
   );
+  assert.equal(
+    removeCopiedPromptGuidance("1boy, Use moody lighting and show long shadows in rain., solo", [
+      "Use moody lighting\nand show long shadows in rain.",
+    ]),
+    "1boy, solo",
+    "a sentence wrapped over two lines is still one sentence",
+  );
 }
 
 async function main() {
