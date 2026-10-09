@@ -644,9 +644,13 @@ export default function ActivityView({
       candidates.push(candidate);
       groups.set(reason, candidates);
     }
-    const remaining =
+    const droppedUnits =
       typeof outcome?.droppedUnits === "number" && Number.isFinite(outcome.droppedUnits)
-        ? Math.max(0, outcome.droppedUnits - dropped.length)
+        ? outcome.droppedUnits
+        : event.counts?.droppedUnits;
+    const remaining =
+      typeof droppedUnits === "number" && Number.isFinite(droppedUnits)
+        ? Math.max(0, droppedUnits - dropped.length)
         : null;
     const draftId = selectedOperation?.events.find(
       (item) => item.draftId && item.sourceNoteId === event.sourceNoteId,
@@ -669,8 +673,8 @@ export default function ActivityView({
           <p className="font-medium">{noteTitles.get(event.sourceNoteId) ?? event.sourceNoteId}</p>
         ) : null}
         <p>
-          {typeof outcome?.droppedUnits === "number" && Number.isFinite(outcome.droppedUnits)
-            ? localizeUi("ui.longTermMemory.activityview.notKeptCount", { count: recordedNumber(outcome.droppedUnits) })
+          {remaining != null
+            ? localizeUi("ui.longTermMemory.activityview.notKeptCount", { count: recordedNumber(droppedUnits) })
             : localizeUi("ui.longTermMemory.activityview.notRecorded")}
         </p>
         {[...groups].map(([reason, candidates]) => (
@@ -696,7 +700,10 @@ export default function ActivityView({
         ))}
         {remaining != null && remaining > 0 ? (
           <p>{localizeUi("ui.longTermMemory.activityview.andMore", { count: recordedNumber(remaining) })}</p>
-        ) : outcome?.droppedCandidateDetailsTruncated === true ? (
+        ) : null}
+        {remaining !== 0 ||
+        !Array.isArray(outcome?.droppedCandidates) ||
+        outcome?.droppedCandidateDetailsTruncated === true ? (
           <p>{localizeUi("ui.longTermMemory.activityview.samplesOnly")}</p>
         ) : null}
         {pendingDraft && onOpenReview ? (

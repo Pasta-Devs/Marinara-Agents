@@ -71,6 +71,8 @@ assert.equal(
 
 // D17: only note-id-shaped ids are collected for the titles lookup, from
 // structured fields and prose; UUIDs and ordinary words are not requested.
+const overlongId = `source_${"x".repeat(120)}`;
+const atCapId = `source_${"y".repeat(113)}`;
 const collected = collectDebugNoteIds([
   event({
     operationId: "op-ids",
@@ -80,16 +82,34 @@ const collected = collectDebugNoteIds([
     error: { message: "record 11111111-2222-3333-4444-555555555555 missing" },
     details: {
       summary: "world_lantern_guild_v2 and character_mara_missing ready",
-      targetNoteIds: ["world_target_only", null, 42],
+      targetNoteIds: [
+        "world_target_only",
+        "single",
+        atCapId,
+        overlongId,
+        "",
+        "World_uppercase",
+        "world__invalid",
+        "world_bad-id",
+        "world_newline\n",
+        "11111111-2222-3333-4444-555555555555",
+        null,
+        42,
+      ],
     },
   }),
 ]);
-assert.deepEqual(collected, ["character_mara_missing", "source_a", "world_lantern_guild_v2", "world_target_only"]);
+assert.deepEqual(collected, [
+  "character_mara_missing",
+  "single",
+  "source_a",
+  atCapId,
+  "world_lantern_guild_v2",
+  "world_target_only",
+]);
 
 // A prose token past the 120-char id cap is not requested, so one long word
 // cannot fail the whole batch and blank every title.
-const overlongId = `source_${"x".repeat(120)}`;
-const atCapId = `source_${"y".repeat(113)}`;
 assert.equal(atCapId.length, 120);
 assert.deepEqual(
   collectDebugNoteIds([

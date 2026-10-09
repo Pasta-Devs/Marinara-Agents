@@ -2443,6 +2443,7 @@ async function main() {
         }),
         debugEvent("breakdown", "draft_deferred", "ok", {
           sourceNoteId: "source_mobile_review",
+          counts: { droppedUnits: 9 },
           details: {
             extractionOutcome: {
               state: "partial_success",
@@ -2466,6 +2467,27 @@ async function main() {
         }),
         debugEvent("noduration", "draft_deferred", "ok", {
           details: { extractionOutcome: { droppedUnits: "truncated" } },
+        }),
+        debugEvent("counts-only", "draft_deferred", "ok", {
+          counts: { droppedUnits: 3 },
+          details: { truncated: true },
+        }),
+        debugEvent("sample-only", "draft_deferred", "ok", {
+          counts: { droppedUnits: 3 },
+          details: {
+            extractionOutcome: {
+              droppedUnits: "truncated",
+              droppedCandidates: [{ reason: "invalid_format", message: "One recorded sample." }],
+            },
+          },
+        }),
+        debugEvent("missing-samples", "draft_deferred", "ok", {
+          counts: { droppedUnits: 5 },
+          details: { extractionOutcome: { droppedUnits: 0 } },
+        }),
+        debugEvent("complete-empty", "draft_deferred", "ok", {
+          counts: { droppedUnits: 5 },
+          details: { extractionOutcome: { droppedUnits: 0, droppedCandidates: [] } },
         }),
         // Fixture events predate the one-hour stale-threshold, so a started step in
         // a completed operation must not read as unfinished (M1), while a
@@ -2642,6 +2664,18 @@ async function main() {
         await details.getByRole("button", { name: "Open Review Queue" }).waitFor({ state: "hidden" });
         debugReviewPending = true;
         assert.match(await operation("apply"), /Not saved[\s\S]*11111111-2222-3333-4444-555555555555/u);
+        for (const [id, count, more, incomplete] of [
+          ["counts-only", 3, 3, true],
+          ["sample-only", 3, 2, true],
+          ["missing-samples", 0, 0, true],
+          ["complete-empty", 0, 0, false],
+        ] as const) {
+          const outcome = await operation(id);
+          assert.match(outcome, new RegExp(`\\b${count} not kept\\b`, "u"));
+          if (more) assert.match(outcome, new RegExp(`and ${more} more`, "u"));
+          else assert.doesNotMatch(outcome, /and \d+ more/u);
+          assert.equal(outcome.includes("this breakdown is incomplete."), incomplete);
+        }
         assert.doesNotMatch(
           await operation("noduration"),
           / ms/u,
@@ -2653,7 +2687,8 @@ async function main() {
           .getByRole("heading", { name: "Not kept", exact: true })
           .locator("..")
           .innerText();
-        assert.match(missingOutcome.trim(), /^Not kept\s+Not recorded$/u);
+        assert.match(missingOutcome.trim(), /^Not kept\s+Not recorded\s+Only the recorded candidate samples/u);
+        assert.match(missingOutcome, /this breakdown is incomplete\./u);
         // The response snippet is never on screen; Copy JSON is the only raw-record path.
         assert.doesNotMatch(await activity.innerText(), /private response snippet/u);
         await operation("estimated");
