@@ -108,7 +108,7 @@ assert.match(artifactClient, /aria-expanded/u);
 assert.doesNotMatch(artifactClient, /Per-chat call access, microphone handling/u);
 
 const callSurfaceSource = await readFile(
-  join(repoRoot, "sources/engine/packages/client/src/components/chat/ConversationCallSurface.tsx"),
+  join(packageRoot, "src/engine/packages/client/src/components/chat/ConversationCallSurface.tsx"),
   "utf8",
 );
 assert.match(callSurfaceSource, /CALL_AUDIO_CONVERSION_YIELD_SAMPLES = 32_768/u);
