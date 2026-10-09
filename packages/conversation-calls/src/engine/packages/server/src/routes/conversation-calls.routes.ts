@@ -44,6 +44,7 @@ import {
   type CallSpeechHost,
   type CallTranscription,
 } from "../services/conversation/call-transcription.js";
+import { readCallUpload } from "../services/conversation/call-upload.js";
 import {
   getActiveStatusOverride,
   getEffectiveCurrentStatus,
@@ -2789,14 +2790,10 @@ export async function conversationCallsRoutes(
     if (ttsSettings.callAudioEnabled !== true) {
       return reply.status(400).send({ error: "Conversation call audio is not enabled in Chat Settings" });
     }
-    const data = await req.file({ limits: { fileSize: MAX_AUDIO_UPLOAD_BYTES } });
+    // Every part is read before any field is used: the client sends transcriptionMode after the file.
+    const data = await readCallUpload(req.parts({ limits: { fileSize: MAX_AUDIO_UPLOAD_BYTES } }));
     if (!data) return reply.status(400).send({ error: "No media uploaded" });
-    const chunks: Buffer[] = [];
-    for await (const chunk of data.file) {
-      chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
-    }
-    const buffer = Buffer.concat(chunks);
-    const fields = data.fields as Record<string, { value?: string } | undefined>;
+    const { buffer, fields } = data;
     const requestDebug = fields?.debugMode?.value === "true";
     const requestMusicPlayerEnabled =
       fields?.musicPlayerEnabled?.value === "true"
