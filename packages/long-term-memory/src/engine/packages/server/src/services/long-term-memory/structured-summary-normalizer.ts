@@ -854,7 +854,10 @@ function parseStructuredRelationshipLine(
     subjectId: normalizedSubject,
     sectionKey: "state",
     text: text.slice(0, 2_000),
-    claimKind: causedBy || (dimensionChanges && Object.keys(dimensionChanges).length > 0) ? "change" : "static",
+    claimKind:
+      causedBy || (dimensionChanges && Object.values(dimensionChanges).some((value) => value !== 0))
+        ? "change"
+        : "static",
     importance,
     keywords: [],
     evidence: sourceEvidence(sourceNote),
