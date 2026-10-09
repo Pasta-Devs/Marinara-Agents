@@ -5,7 +5,7 @@
 - Interpret image prompts now works without an Agents default connection. When none is set under Settings → Connections → Defaults, Noodle's own text connection rewrites the image prompt. Before, the rewrite was skipped, so your image connection's Image Prompting Instructions had no effect and the style profile's Style text was pasted into the prompt.
 - Include descriptions now gives the character's appearance notes to the AI that rewrites the image prompt instead of leaving them in the prompt it edits, where they reached ComfyUI as plain text. With Interpret image prompts off, the notes are still added as written.
 - Style text you write into Auto or a copy of it now guides the rewrite too.
-- If the rewrite copies a sentence of your Image Prompting Instructions, the Style text or the character's image habits word for word, Noodle removes it before sending. Tag lists such as "masterpiece, best quality" stay.
+- If the rewrite copies a full sentence of your Image Prompting Instructions, the Style text or the character's image habits, Noodle removes it. Short phrases and tag lists such as "masterpiece, best quality" stay.
 - The help texts now say what happens when Interpret image prompts is off.
 
 ## 1.5.2 — 2026-10-09 [highlight]
