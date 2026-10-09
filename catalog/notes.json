@@ -36,6 +36,12 @@
     "conversation-calls": {
       "versions": [
         {
+          "version": "1.1.0",
+          "date": "2026-10-09",
+          "notes": "- Mic recording calls use your own speech-to-text server when it is turned on in Connections → Speech to Text (newer Engines). Local Whisper still handles speech when the server is off or fails.\n- Speech you record while an earlier clip is still being transcribed now waits its turn instead of being dropped.",
+          "highlight": true
+        },
+        {
           "version": "1.0.17",
           "date": "2026-09-19",
           "notes": "- Keep calls responsive when Safari blocks voice playback: wait for a new touch or key press, and let stopping a call cancel pending playback.",

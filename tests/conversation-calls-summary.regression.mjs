@@ -86,7 +86,7 @@ assert.deepEqual(buildCallSummaryCompletionOptions(selected.model), {
 
 const packageRoot = join(repoRoot, "packages/conversation-calls");
 const manifest = JSON.parse(await readFile(join(packageRoot, "manifest.json"), "utf8"));
-assert.equal(manifest.version, "1.0.17");
+assert.equal(manifest.version, "1.1.0");
 assert.equal(manifest.engine.min, "2.4.1");
 for (const payload of manifest.files) {
   const bytes = await readFile(join(packageRoot, payload.path));
@@ -108,12 +108,12 @@ assert.match(artifactClient, /aria-expanded/u);
 assert.doesNotMatch(artifactClient, /Per-chat call access, microphone handling/u);
 
 const callSurfaceSource = await readFile(
-  join(repoRoot, "sources/engine/packages/client/src/components/chat/ConversationCallSurface.tsx"),
+  join(packageRoot, "src/engine/packages/client/src/components/chat/ConversationCallSurface.tsx"),
   "utf8",
 );
 assert.match(callSurfaceSource, /CALL_AUDIO_CONVERSION_YIELD_SAMPLES = 32_768/u);
 assert.match(callSurfaceSource, /await yieldDuringAudioConversion\(\)/u);
-assert.match(callSurfaceSource, /callSpeechSubmissionPendingRef\.current = false;\s+await playTurns\(result\.turns\)/u);
+assert.match(callSurfaceSource, /transcribed\(\);\s+await playTurns\(result\.turns\)/u);
 
 for (const relativePath of ["catalog/catalog.json", "catalog/v2/catalog.json", "catalog/v3/catalog.json"]) {
   const catalog = JSON.parse(await readFile(join(repoRoot, relativePath), "utf8"));

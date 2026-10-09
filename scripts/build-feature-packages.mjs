@@ -158,6 +158,15 @@ const slurp2OwnedSourcePaths = [
   "packages/server/src/services/garnish-ads",
   "packages/server/src/db/schema/slurp.ts",
 ];
+// Calls owns these files. The surface and routes replace vendored copies that stay under
+// sources/engine only because scripts/vendored-engine-baseline.json pins them; Calls does not build from those.
+const conversationCallsSourceRoot = join(packagesDir, "conversation-calls/src/engine");
+const conversationCallsOwnedSourcePaths = [
+  "packages/client/src/components/chat/ConversationCallSurface.tsx",
+  "packages/client/src/lib/call-speech-queue.ts",
+  "packages/server/src/routes/conversation-calls.routes.ts",
+  "packages/server/src/services/conversation/call-transcription.ts",
+];
 // Release builds must bundle the current source; runtime reuse is for explicit non-release verification builds.
 const releaseBuild = process.env.MARINARA_RELEASE_BUILD !== "0";
 const reuseExistingRuntime = !releaseBuild && process.env.MARINARA_REUSE_FEATURE_RUNTIME === "1";
@@ -182,7 +191,7 @@ function featurePermissions(feature) {
 }
 
 async function prepareFeatureBuildRoot(feature) {
-  if (feature.id === "noodle" || feature.id === "slurp2") {
+  if (feature.id === "noodle" || feature.id === "slurp2" || feature.id === "conversation-calls") {
     if (!existsSync(feature.packageSourceRoot)) {
       throw new Error(`Missing package-owned ${feature.name} source`);
     }
@@ -535,7 +544,7 @@ const features = [
   {
     id: "conversation-calls",
     name: "Calls",
-    version: "1.0.17",
+    version: "1.1.0",
     minEngineVersion: "2.4.1",
     description: "Adds live audio and video calls with Conversation characters.",
     kind: ["agent", "conversation-calls"],
@@ -544,6 +553,8 @@ const features = [
     serverImport: "packages/server/src/routes/conversation-calls.routes.ts",
     serverExport: "conversationCallsRoutes",
     prefix: "/api/conversation-calls",
+    packageSourceRoot: conversationCallsSourceRoot,
+    ownedSourcePaths: conversationCallsOwnedSourcePaths,
   },
   ...[
     ["uno", "UNO", "Play UNO with Conversation characters.", "Uno", "/uno", ["uno"], "Group card game"],
@@ -725,12 +736,13 @@ export async function selfCheck({ api }) {
 }\n`
         : feature.id === "conversation-calls"
           ? `import { ${feature.serverExport} as register } from ${JSON.stringify(target)};
-import * as commandRuntime from ${JSON.stringify(resolve(sourceRoot, "packages/server/src/services/generation/conversation-call-command-runtime.ts"))};
-import * as characterVideos from ${JSON.stringify(resolve(sourceRoot, "packages/server/src/services/conversation/call-character-videos.service.ts"))};
-import { createConversationCallsStorage } from ${JSON.stringify(resolve(sourceRoot, "packages/server/src/services/storage/conversation-calls.storage.ts"))};
+import * as commandRuntime from ${JSON.stringify(resolve(prepared.buildRoot, "packages/server/src/services/generation/conversation-call-command-runtime.ts"))};
+import * as characterVideos from ${JSON.stringify(resolve(prepared.buildRoot, "packages/server/src/services/conversation/call-character-videos.service.ts"))};
+import { createConversationCallsStorage } from ${JSON.stringify(resolve(prepared.buildRoot, "packages/server/src/services/storage/conversation-calls.storage.ts"))};
 let readinessStorage = null;
 export async function activate({ app, api }) {
-  await app.register(register, { prefix: ${JSON.stringify(feature.prefix)} });
+  // runtime.integrations.speech (newer Engines) lets calls use the Speech to Text server from Connections.
+  await app.register(register, { prefix: ${JSON.stringify(feature.prefix)}, runtime: api.runtime });
   readinessStorage = createConversationCallsStorage(app.db);
   const cleanups = [
     api.registerService("conversation-calls:command", commandRuntime),
