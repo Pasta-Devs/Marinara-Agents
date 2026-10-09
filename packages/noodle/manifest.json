@@ -10,7 +10,7 @@
   },
   "id": "noodle",
   "name": "Noodle",
-  "version": "1.5.1",
+  "version": "1.5.2",
   "description": "A pretend social network where your characters post, share photos, and talk about your chats. Install it, restart Marinara Engine when prompted, then open Home → Noodle.",
   "localizations": {
     "de": {
@@ -93,8 +93,8 @@
     },
     {
       "path": "server.mjs",
-      "sha256": "c5cf314d93209986c0ff50f2b036fd5e92beb9a69139f9a064de9c04e043be19",
-      "bytes": 2020928
+      "sha256": "ab6a9f91de9c4cd685d533c3526ac4004c310361d1f563889b573cd5ed841e51",
+      "bytes": 2021771
     },
     {
       "path": "client.js",

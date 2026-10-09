@@ -1,5 +1,10 @@
 # Noodle release notes
 
+## 1.5.2 — 2026-10-09 [highlight]
+
+- Image prompts no longer include text meant for the AI that writes them. The poster's Personality and image habits and your image connection's Image Prompting Instructions now only guide the rewrite that Interpret image prompts runs. Before, Noodle pasted them word for word into the prompt sent to ComfyUI and other image services, which broke tag-only prompts. With Interpret image prompts off, or when the rewrite fails, the image service gets the prompt without them.
+- A style profile's Style text now reaches the rewrite once, as guidance, instead of also sitting in the prompt it edits. The Auto profile's note "Infer a consistent visual style from the character, game, scene, and selected image model" never ends up in the image prompt. Style text from the other profiles still applies when no rewrite runs.
+
 ## 1.5.1 — 2026-10-04
 
 - New Show images to the writer switch in Settings → Advanced → Image Understanding. Turn it off and Noodle never sends timeline images to the model that writes your timeline. Image captioning, when on, still sends them to the captioning connection, which is the Noodle generation connection unless you choose another. The switch is on by default, so nothing changes unless you turn it off.

@@ -108,10 +108,11 @@ jobs:
           node tests/world-maps-ui-contract.regression.mjs
           npx tsx --tsconfig tests/tsconfig.regressions.json tests/map-location-limit.regression.ts
 
-      - name: Test Noodle timeline context budget and writer images
+      - name: Test Noodle timeline context budget, writer images and image prompts
         run: |
           npx tsx --tsconfig tests/tsconfig.regressions.json tests/noodle-timeline-context-budget.regression.ts
           npx tsx --tsconfig tests/tsconfig.regressions.json tests/noodle-writer-images.regression.ts
+          npx tsx --tsconfig tests/tsconfig.regressions.json tests/noodle-image-prompt-instructions.regression.ts
 
       - name: Test Long-Term Memory feedback clarity UI contracts
         run: node tests/long-term-memory-feedback-clarity-ui.regression.mjs
