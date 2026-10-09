@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.6.4 — 2026-10-09 [highlight]
+
+- Fixed Update from History failing with "Persona update 1 must contain exactly five values" when a persona is active. The tracker now tells the model the exact shape of a persona perception, so it stops copying the lock flag into its answer.
+- The same fix helps automatic updates, which were quietly skipping those persona perception changes.
+- If a model still returns the wrong shape, the error now says how many values it sent.
+
 ## 0.6.3 — 2026-10-06
 
 - In the Tracker Panel, Relationship Tracker now has the same collapsible header as World, Persona and the other trackers instead of its own card, and remembers whether you collapsed it. While it runs, the header shows a small spinner.
