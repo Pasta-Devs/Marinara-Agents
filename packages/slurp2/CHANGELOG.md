@@ -1,5 +1,9 @@
 # Slurp release notes
 
+## 0.3.20 — 2026-10-10
+
+- Choose what a breakup leaves behind: keep the usual history, move on without dwelling on it, or forget the relationship in future posts and chats. Stir offers the same choices for existing exes. Published posts and messages stay.
+
 ## 0.3.19 — 2026-10-10
 
 Stop a Creator from texting again after being left on read.
