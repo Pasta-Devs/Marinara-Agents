@@ -559,12 +559,60 @@ const brokeUp = (at = T0 + 10 * DAY, id = "c1"): SlurpCouple => slurpBreakUp(tog
   for (const pair of [
     [oldKeep, newForget],
     [newForget, oldKeep],
-  ])
+  ]) {
+    const clock: SlurpCouplesInput = {
+      creators: noCreators,
+      activity: 1,
+      storylines: [],
+      rivals: new Set(),
+      collabbedWith: new Map(),
+      newId: () => "stale-reunion",
+    };
+    for (let day = 21; day <= 55; day++) {
+      const advanced = slurpAdvanceCouples(pair, { ...clock, at: new Date(T0 + day * DAY) });
+      assert.deepEqual(
+        advanced.find((couple) => couple.id === oldKeep.id),
+        oldKeep,
+        "a superseded breakup stays historical: no automatic reunion or moving-on moment",
+      );
+    }
+    const pending = {
+      ...oldKeep,
+      moments: [{ id: "old-breakup", kind: "breakup" as const, at: at.toISOString(), detail: "" }],
+    };
+    assert.equal(
+      slurpCoupleBeat({
+        creatorId: "mira",
+        sequence: 0,
+        couples: pair.map((couple) => (couple === oldKeep ? pending : couple)),
+        names,
+        at,
+      }),
+      null,
+      "the older untold breakup cannot supply a post after the newest record was forgotten",
+    );
     assert.equal(
       slurpRelationshipLine(pair, "mira", names, { at }),
       "",
       'the newest record for this pair is forgotten, so it never falls back to an older "keep" one, in either array order',
     );
+    for (const newest of [newForget, { ...newForget, stage: "together" as const, aftermath: undefined }]) {
+      const next = slurpAdvanceBonds([], {
+        creators: noCreators,
+        couples: pair.map((entry) => (entry === newForget ? newest : entry)),
+        at,
+        activity: 1,
+        rivals: new Set(),
+        collabbedWith: new Map(),
+        newId: () => "stale-ex",
+      });
+      assert.equal(
+        next.filter((bond) => bond.kind === "ex" && bond.endedAt === null).length,
+        0,
+        "a paused-clock older keep breakup never seeds an ex bond after the newest record forgot or reunited",
+      );
+    }
+  }
 }
 
 // ─── 11. An old forgotten record and a newer active one, for the same pair, in both orders: the

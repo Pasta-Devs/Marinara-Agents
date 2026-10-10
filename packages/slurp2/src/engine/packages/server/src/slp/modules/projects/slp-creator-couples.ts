@@ -436,6 +436,7 @@ export function slurpAdvanceCouples(couples: readonly SlurpCouple[], input: Slur
   const stamp = input.at.toISOString();
   let next = [...couples];
   for (const [index, couple] of next.entries()) {
+    if (!slurpCoupleActive(couple) && slurpCoupleOf(next, couple.aId, couple.bId) !== couple) continue;
     const taken = new Set(
       next
         .filter((other) => other !== couple && slurpCoupleActive(other))

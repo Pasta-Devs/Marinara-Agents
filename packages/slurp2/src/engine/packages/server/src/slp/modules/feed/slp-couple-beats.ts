@@ -13,6 +13,7 @@
 import { hash } from "../projects/slp-project.js";
 import {
   SLURP_COUPLE_MOMENT_DAYS,
+  slurpCoupleOf,
   slurpCoupleOther,
   type SlurpCouple,
   type SlurpCoupleMoment,
@@ -141,6 +142,7 @@ export function slurpCoupleBeat(input: {
 }): (SlurpBeat & { tie: SlurpTieStamp }) | null {
   const { creatorId, at } = input;
   for (const couple of input.couples) {
+    if (slurpCoupleOf(input.couples, couple.aId, couple.bId) !== couple) continue;
     // #1293: forgetting stops the relationship from reaching any future post, big moment or cameo.
     if (couple.aftermath === "forget") continue;
     const partnerId = slurpCoupleOther(couple, creatorId);

@@ -270,6 +270,7 @@ export function slurpAdvanceBonds(bonds: readonly SlurpBond[], input: SlurpBonds
   // forgotten ex is not fed to drama casting or the People map as one anymore. Ended, not deleted, so
   // a card or another breakup never remakes it (`made` below counts an ended bond too).
   for (const couple of input.couples) {
+    if (slurpCoupleOf(input.couples, couple.aId, couple.bId) !== couple) continue;
     // All of this pair's active ex bonds, not just one: a stray extra never survives a reunion or a forget.
     const exes = next.filter(
       (bond) =>
