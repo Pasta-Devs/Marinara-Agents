@@ -1,5 +1,6 @@
 import type { LtmNote } from "../../../../shared/src/features/agents/long-term-memory/schema.js";
 import { getLtmKeywordIntent } from "../../../../shared/src/features/agents/long-term-memory/keywords.js";
+import { isHangulToken, stripHangulParticle } from "./hangul-lexical.js";
 
 const TOKEN_PATTERN = /[\p{L}\p{N}]+(?:['’\-][\p{L}\p{N}]+)*/gu;
 const SENTENCE_SPLIT_PATTERN = /[.!?\n\r]+/;
@@ -214,11 +215,16 @@ function isStopWord(token: string, extraStopWords?: ReadonlySet<string>) {
 
 export function normalizeKeywordToken(token: string, extraStopWords?: ReadonlySet<string>) {
   const normalized = normalizeStopWordCandidate(token);
-  if (normalized.length < 3) return null;
-  if (/^\d+$/.test(normalized)) return null;
-  if (isStopWord(normalized, extraStopWords)) return null;
-  if (normalized.split(" ").some((part) => isStopWord(part, extraStopWords))) return null;
-  return normalized;
+  // Issue #1295: Korean words are dense, so a two-syllable noun carries as much
+  // signal as a longer English token. Admit Hangul tokens from two syllables and
+  // fold a trailing particle so `반지를` and `반지` index under the same key.
+  const candidate = isHangulToken(normalized) ? stripHangulParticle(normalized) : normalized;
+  const minimumLength = isHangulToken(candidate) ? 2 : 3;
+  if (candidate.length < minimumLength) return null;
+  if (/^\d+$/.test(candidate)) return null;
+  if (isStopWord(candidate, extraStopWords)) return null;
+  if (candidate.split(" ").some((part) => isStopWord(part, extraStopWords))) return null;
+  return candidate;
 }
 
 function tokenizeKeywordText(text: string, extraStopWords?: ReadonlySet<string>) {
@@ -241,7 +247,9 @@ function collectPhrases(tokens: string[], extraStopWords?: ReadonlySet<string>) 
       if (slice.length !== size) continue;
       if (slice.every((token) => isStopWord(token, extraStopWords))) continue;
       const phrase = slice.join(" ");
-      if (phrase.length < 3 || /^\d+$/.test(phrase.replace(/\s+/g, ""))) continue;
+      // Issue #1295: a single two-syllable Hangul noun is a complete keyword.
+      const minimumLength = isHangulToken(phrase) ? 2 : 3;
+      if (phrase.length < minimumLength || /^\d+$/.test(phrase.replace(/\s+/g, ""))) continue;
       phrases.push(phrase);
     }
   }

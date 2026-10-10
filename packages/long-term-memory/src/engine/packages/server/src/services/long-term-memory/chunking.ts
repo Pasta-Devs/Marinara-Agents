@@ -13,7 +13,11 @@ import {
 } from "../../../../shared/src/features/agents/long-term-memory/schema.js";
 import { buildStopWordSet, extractNoteKeywords } from "./keyword-extract.js";
 
-export const CURRENT_LTM_CHUNK_FORMAT_VERSION = 4;
+// Issue #1295: bump when the chunk representation changes in a way that must
+// invalidate stored recall indexes (here, keyword extraction and BM25
+// tokenization). The value is folded into every chunk sourceHash, so existing
+// vaults rebuild once through the normal locked freshness check.
+export const CURRENT_LTM_CHUNK_FORMAT_VERSION = 5;
 
 export interface ChunkLtmNotesOptions {
   includeSourceNotes?: boolean;
@@ -93,6 +97,7 @@ export function chunkNoteSections(note: LtmNote, extraStopWords?: ReadonlySet<st
           scope: note.scope,
           tags: note.tags,
           keywords,
+          chunkFormatVersion: CURRENT_LTM_CHUNK_FORMAT_VERSION,
           sectionKey: "profile",
           section,
         }),
@@ -131,6 +136,7 @@ export function chunkNoteSections(note: LtmNote, extraStopWords?: ReadonlySet<st
           scope: note.scope,
           tags: note.tags,
           keywords,
+          chunkFormatVersion: CURRENT_LTM_CHUNK_FORMAT_VERSION,
           sectionKey,
           section,
         }),
