@@ -85,6 +85,9 @@ jobs:
       - name: Test catalog lane routing and build provenance
         run: node scripts/test-catalog-lanes.mjs
 
+      - name: Test Slurp unanswered follow-up control
+        run: npx tsx --tsconfig tests/tsconfig.regressions.json tests/slurp2-pause-follow-ups-until-reply.regression.ts
+
       - name: Validate package localization catalogs
         run: |
           node scripts/tests/ui-translation-retention.regression.mjs

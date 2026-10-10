@@ -156,6 +156,13 @@ export const SLP_BACKSTAGE_SETTING_PLACEMENT: Record<keyof SlurpSettings, SlpBac
   platformEvents: content("events", "occasions", "holidays", "christmas", "halloween", "special dates"),
   storyAutomation: content("storylines", "occasion automation", "suggestions", "automatic occasions", "start events"),
   messagesAwayRepliesEnabled: world("messaging", "away replies", "automatic messages"),
+  messagesPauseFollowUpsUntilReply: world(
+    "messaging",
+    "stop after one unanswered text",
+    "left on read",
+    "opener",
+    "follow-up",
+  ),
   messagesReplyBubbleLimit: world("messaging", "reply bubbles", "message length"),
   messagesDefaultDmPolicy: world("messaging", "DM policy", "message access"),
   messagesDefaultRequestFee: world("messaging", "message request fee"),

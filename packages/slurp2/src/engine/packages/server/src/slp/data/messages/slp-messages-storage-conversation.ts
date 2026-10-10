@@ -23,6 +23,7 @@ import {
 import { mapMessage, now } from "./slp-messages-storage-helpers.js";
 import { isSlurpFileUniqueConstraintError } from "../../base/host/slp-file-errors.js";
 import { int } from "./slp-messages-storage-helpers.js";
+import { isUnsolicitedCreatorMessage, slurpAllowsUnsolicitedText } from "../../modules/messages/slp-follow-up.js";
 import { createSlurpPopulationStorage } from "../audience/slp-audience-storage-funnel.js";
 import type { SlurpMessage } from "./slp-messages-storage-types.js";
 import type { SlurpMessagesContext } from "./slp-messages-storage-context.js";
@@ -93,12 +94,32 @@ export function createMessagesStorageConversation(context: SlurpMessagesContext)
         createdAt: input.createdAt ?? timestamp,
       };
       const rapport = await context.storage.rapportFor(thread.viewerAccountId, thread.creatorAccountId);
+      // Settings › Messaging "Stop after one unanswered text": checked only when the message about
+      // to be appended is itself unsolicited (an opener, a check-in, a recurring update, a
+      // drama-choice question, the canned first-touch opener). Read once here, applied inside the
+      // transaction below against the thread's live history, so this is the one race-proof gate
+      // every send path shares — including the ones that call `sendCreatorMessage` directly and
+      // never pass through the follow-up scheduler's own, earlier, AI-spend-saving check.
+      const checkUnsolicitedGate = isUnsolicitedCreatorMessage({ role: input.role, kind, metadata: input.metadata });
+      const pauseUntilReply = checkUnsolicitedGate
+        ? (await slurp.getSettings()).messagesPauseFollowUpsUntilReply
+        : false;
       let stored = false;
       try {
         await db.transaction(async (tx) => {
           const currentRows = await tx.select().from(slurpThreads).where(eq(slurpThreads.id, threadId));
           const current = currentRows[0];
           if (!current) return;
+          if (pauseUntilReply) {
+            const recentRows = await tx
+              .select()
+              .from(slurpMessages)
+              .where(eq(slurpMessages.threadId, threadId))
+              .orderBy(desc(slurpMessages.createdAt))
+              .limit(60);
+            // The query is newest-first; the gate scans oldest-first, same order `listMessages` uses.
+            if (!slurpAllowsUnsolicitedText(recentRows.map(mapMessage).reverse())) return;
+          }
           if (current.state === "declined") return;
           if (input.paymentReactionSince) {
             const recentMessages = await tx

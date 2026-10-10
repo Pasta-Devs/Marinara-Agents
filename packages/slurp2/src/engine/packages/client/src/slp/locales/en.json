@@ -2833,6 +2833,8 @@
   "ui.slurp.settings.messaging.repliesTitle": "Replies",
   "ui.slurp.settings.messaging.awayReplies": "Answer while you are away",
   "ui.slurp.settings.messaging.awayRepliesDetail": "A Creator answers a message you left unanswered, in the background. Turn this off and they answer only while you are in the conversation. Commissions and the rest of a reply already sent still arrive.",
+  "ui.slurp.settings.messaging.pauseFollowUpsUntilReply": "Stop after one unanswered text",
+  "ui.slurp.settings.messaging.pauseFollowUpsUntilReplyDetail": "A Creator may write first once, then waits for you to actually reply before writing first again. Replies to your messages, and anything a Creator already owes you (a promise, a reminder, a finished commission), still arrive.",
   "ui.slurp.settings.messaging.bubbleLimit": "Up to this many messages per reply",
   "ui.slurp.settings.messaging.bubbleLimitDetail": "The most messages one reply can be split into, the way a person texts. A reply can use fewer, and short, tired or tense ones do. Set it to 1 to always get one message.",
   "ui.slurp.settings.messaging.delaysTitle": "Reply timing",

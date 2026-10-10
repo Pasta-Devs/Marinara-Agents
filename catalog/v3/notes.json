@@ -604,6 +604,12 @@
     "slurp2": {
       "versions": [
         {
+          "version": "0.3.19",
+          "date": "2026-10-10",
+          "notes": "Stop a Creator from texting again after being left on read.\n\n- New Settings › Messaging toggle, off by default: \"Stop after one unanswered text.\" A Creator may write first once (an opener, a check-in, a recurring update, a drama question), then nothing more until you actually reply. Replies to your messages, and anything a Creator already owes you (a promise, a reminder, a finished commission), still arrive on schedule.",
+          "highlight": false
+        },
+        {
           "version": "0.3.18",
           "date": "2026-10-08",
           "notes": "Engine macros in Slurp, fewer recycled pictures.\n\n- Character cards and wardrobe looks resolve Engine macros such as `{{random::red::green::blue}}`, `{{char}}`, `{{user}}` and `{{#if}}`. A wardrobe look rolls again for each post.\n- Macros that need a chat, such as `{{input}}` or chat variables, resolve to nothing in Slurp.\n- Picture reuse: each earlier picture goes up again at most once, and a repost is never the source of another repost. New setting in Settings › Publishing: Off, Rare or Regular (the old behavior). Off stops automatic reuse; a reuse the player picks still works.",
@@ -715,12 +721,6 @@
           "version": "0.2.76",
           "date": "2026-09-27",
           "notes": "- Added an edit toggle at the bottom of messaging Details → Advanced. Numbers become inline sliders, options become selectors, and context can be edited directly. Calculated values use saved overrides without changing payment records.",
-          "highlight": false
-        },
-        {
-          "version": "0.2.75",
-          "date": "2026-09-26",
-          "notes": "- Fewer selfies and mirror shots: posts now use a propped-up phone, video stills or a friend with the camera more often. Mirror shots are rare, because the image model drew the Creator twice.\n- Pictures no longer show the phone: phone and selfie words are removed from every picture prompt, and the negative prompt names phones and doubled people.\n- Creators copy each other less: a post sees what the other Creators' pictures showed (clothes, room), and its own history lists subjects instead of camera words.\n- More variety: more places, moments, company and post ideas to draw from.\n- From staging 0.2.41: the world tick blocks the Engine much less. Slurp settings are validated once per change instead of on every read, and the tick now pauses between Creators, commissions, and actions so other pages and packages can respond.",
           "highlight": false
         }
       ]
