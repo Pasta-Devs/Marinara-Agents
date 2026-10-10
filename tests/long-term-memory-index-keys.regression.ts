@@ -49,7 +49,7 @@ async function main() {
   const { buildLtmKeywordIndex, LTM_KEYWORD_MAX_SCORE, searchLtmKeywordIndex } = await import(
     `${source}/keyword-index.ts`
   );
-  const { buildStopWordSet } = await import(`${source}/keyword-extract.ts`);
+  const { buildStopWordSet, normalizeKeywordTerms } = await import(`${source}/keyword-extract.ts`);
   const { buildLtmMetadataIndex, getLtmMetadataMatches } = await import(`${source}/metadata-index.ts`);
   const { parseLtmRecallIndex } = await import(`${source}/rebuild.ts`);
   const { readLongTermMemoryUsage, recordLongTermMemoryInjection } = await import(`${source}/usage.ts`);
@@ -565,6 +565,73 @@ async function main() {
     }
   } finally {
     await rm(root, { recursive: true, force: true });
+  }
+
+  // Issue #1295: Korean recall. Short Hangul nouns must survive normalization,
+  // particles must fold, and a spacing-only compound difference must still match.
+  {
+    for (const keyword of ["반지", "약속", "비밀", "서래", "무진", "선물", "동쪽 다리"]) {
+      assert.ok(normalizeKeywordTerms(keyword).length > 0, `Korean keyword ${keyword} must remain searchable`);
+    }
+
+    const koreanKeywordChunk = { ...chunk("korean-keyword-chunk", "korean_keyword_note"), keywords: ["반지", "선물"] };
+    const koreanKeywordIndex = buildLtmKeywordIndex([koreanKeywordChunk]);
+    assert.deepEqual(
+      searchLtmKeywordIndex(koreanKeywordIndex, "반지를", { topK: 10 }).map(
+        ({ chunkId }: { chunkId: string }) => chunkId,
+      ),
+      ["korean-keyword-chunk"],
+      "a Korean particle query must match the stored noun keyword",
+    );
+
+    const koreanChunks = [
+      { ...chunk("korean-particle", "korean_particle_note"), text: "무진에게 반지를 선물", keywords: ["반지"] },
+      { ...chunk("korean-spacing", "korean_spacing_note"), text: "그림선물", keywords: ["그림선물"] },
+      { ...chunk("korean-other", "korean_other_note"), text: "시장에서 과일을 샀다", keywords: ["시장"] },
+    ];
+    const koreanBm25 = buildLtmBm25Index(koreanChunks);
+    const bm25Hit = (query: string) =>
+      searchLtmBm25(koreanBm25, query, { topK: 10 }).map(({ chunkId }: { chunkId: string }) => chunkId);
+
+    assert.ok(
+      bm25Hit("반지").includes("korean-particle"),
+      "a bare-noun query must match a stored memory written with the particle form",
+    );
+    assert.ok(
+      bm25Hit("그림 선물").includes("korean-spacing"),
+      "a spaced query must match a space-less Korean compound",
+    );
+    assert.equal(
+      bm25Hit("반지를").includes("korean-other"),
+      false,
+      "an unrelated Korean memory must not match a particle query",
+    );
+  }
+
+  // Issue #1295 (review): Hangul aliases must not inflate BM25 document length.
+  // An English-only score must match an alias-free corpus of the same shape, and
+  // a Hangul chunk's length must count only its written tokens.
+  {
+    const english = { ...chunk("mixed-en", "mixed_en_note"), text: "the silver ring glimmers" };
+    const aliasHeavy = { ...chunk("mixed-ko", "mixed_ko_note"), text: "무진에게 반지를 선물" };
+    const aliasFree = { ...chunk("mixed-plain", "mixed_plain_note"), text: "alpha beta gamma" };
+
+    const withKorean = buildLtmBm25Index([english, aliasHeavy]);
+    const withoutKorean = buildLtmBm25Index([english, aliasFree]);
+    assert.equal(
+      withKorean.documents["mixed-ko"]!.length,
+      3,
+      "a Hangul chunk's BM25 length must count only its written tokens, not aliases",
+    );
+
+    const ids = (index: ReturnType<typeof buildLtmBm25Index>) =>
+      searchLtmBm25(index, "ring glimmers", { topK: 5 }).map(({ chunkId }: { chunkId: string }) => chunkId);
+    const score = (index: ReturnType<typeof buildLtmBm25Index>) =>
+      searchLtmBm25(index, "ring glimmers", { topK: 5 }).find(
+        ({ chunkId }: { chunkId: string }) => chunkId === "mixed-en",
+      )?.score;
+    assert.deepEqual(ids(withKorean), ids(withoutKorean), "English ordering must not change when Hangul aliases exist");
+    assert.equal(score(withKorean), score(withoutKorean), "English score must not be skewed by Hangul aliases");
   }
 
   console.info("Long-Term Memory reserved-key regressions passed.");

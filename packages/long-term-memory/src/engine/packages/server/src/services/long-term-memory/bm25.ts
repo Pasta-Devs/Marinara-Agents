@@ -3,15 +3,47 @@ import type {
   LtmBm25Posting,
   LtmMemoryChunk,
 } from "../../../../shared/src/features/agents/long-term-memory/schema.js";
+import { isHangulToken, stripHangulParticle } from "./hangul-lexical.js";
 
 const TOKEN_PATTERN = /[\p{L}\p{N}_]+/gu;
 const K1 = 1.2;
 const B = 0.75;
 
+/**
+ * Tokenizes recall text for BM25.
+ *
+ * Issue #1295: Korean attaches particles to the noun (`반지를`) and sometimes
+ * drops the space inside a compound (`그림선물`), so a plain Unicode split cannot
+ * match `반지` or `그림 선물`. Hangul tokens additionally emit a
+ * particle-stripped stem and an adjacent-Hangul bigram; the alias only adds a
+ * match when the query uses the other surface form.
+ *
+ * `tokens` carries the aliases for matching, while `originalCount` counts only
+ * the tokens actually written in the text, so synthetic aliases cannot inflate
+ * BM25 length normalization (which would also perturb alias-free languages).
+ */
 export function tokenizeLtmText(text: string) {
-  return Array.from(text.toLocaleLowerCase().matchAll(TOKEN_PATTERN), (match) => match[0]).filter(
-    (token) => token.length > 1,
-  );
+  const lowered = text.toLocaleLowerCase();
+  const matches = Array.from(lowered.matchAll(TOKEN_PATTERN));
+  const tokens: string[] = [];
+  let originalCount = 0;
+  for (let index = 0; index < matches.length; index += 1) {
+    const match = matches[index]!;
+    const token = match[0];
+    if (token.length <= 1) continue;
+    tokens.push(token);
+    originalCount += 1;
+
+    const stem = stripHangulParticle(token);
+    if (stem !== token && stem.length > 1) tokens.push(stem);
+
+    const next = matches[index + 1];
+    if (!next || !isHangulToken(token) || !isHangulToken(next[0])) continue;
+    const gap = lowered.slice(match.index! + token.length, next.index);
+    if (!/^\s*$/u.test(gap)) continue;
+    tokens.push(`${token}${next[0]}`);
+  }
+  return { tokens, originalCount };
 }
 
 export function buildLtmBm25Index(chunks: LtmMemoryChunk[]): LtmBm25Index {
@@ -20,9 +52,9 @@ export function buildLtmBm25Index(chunks: LtmMemoryChunk[]): LtmBm25Index {
   let totalLength = 0;
 
   for (const chunk of chunks) {
-    const tokens = tokenizeLtmText(chunk.text);
-    totalLength += tokens.length;
-    documents.set(chunk.id, { length: tokens.length });
+    const { tokens, originalCount } = tokenizeLtmText(chunk.text);
+    totalLength += originalCount;
+    documents.set(chunk.id, { length: originalCount });
 
     const counts = new Map<string, number>();
     for (const token of tokens) counts.set(token, (counts.get(token) ?? 0) + 1);
@@ -66,7 +98,7 @@ export function searchLtmBm25(
   if (index.chunkCount === 0 || index.avgDocLength === 0) return [];
 
   const scores = new Map<string, number>();
-  const queryTerms = new Set(tokenizeLtmText(query));
+  const queryTerms = new Set(tokenizeLtmText(query).tokens);
   const maxCandidates = Math.max(1, options.maxCandidates ?? options.topK ?? 50);
   // Issue #1258: an unbounded idf sum made `score / (score + 1)` saturate near 1
   // for almost every hit, so the score threshold behaved as a cliff. Scaling by the

@@ -1006,7 +1006,7 @@ async function main(routeScenario: RouteScenario) {
         url: "/api/long-term-memory/status",
         headers,
       });
-      assert.equal(rebuiltStatus.json().indexes.chunkFormatVersion, 4);
+      assert.equal(rebuiltStatus.json().indexes.chunkFormatVersion, 5);
       const batch = await app.inject({
         method: "POST",
         url: "/api/long-term-memory/notes/batch",

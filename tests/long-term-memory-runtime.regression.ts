@@ -2237,6 +2237,34 @@ async function main() {
           false,
           "recall must not serve a note quarantined by official maintenance",
         );
+
+        // Issue #1295: Korean short keywords and particles must survive lexical
+        // recall without any embedding source.
+        await storage.createNote(
+          note("world_korean_ring", "chat-a", "무진에게 반지 선물", { keywords: ["반지", "선물"] }),
+        );
+        await storage.createNote(note("world_korean_market", "chat-a", "시장에서 과일을 샀다", { keywords: ["시장"] }));
+        await rebuildLongTermMemoryIndexes({ root: vaultRoot, embeddingAdapter: null, stopWords: [] });
+        const koreanRecall = await retrieveLongTermMemory({
+          root: vaultRoot,
+          embeddingAdapter: null,
+          queryText: "반지를 받았다",
+          scope: { chatId: "chat-a", chatIds: ["chat-a"] },
+          mode: "roleplay",
+          semanticWeight: 0,
+          maxChunks: 5,
+          maxTokens: 4096,
+        });
+        assert.equal(koreanRecall.embeddingsAvailable, false);
+        assert.ok(
+          koreanRecall.chunks.some((hit) => hit.chunk.noteId === "world_korean_ring"),
+          "a Korean particle query must recall the right memory through lexical and keyword lanes",
+        );
+        assert.equal(
+          koreanRecall.chunks.some((hit) => hit.chunk.noteId === "world_korean_market"),
+          false,
+          "an unrelated Korean memory must not be recalled for the particle query",
+        );
       }
     },
     [
