@@ -2007,6 +2007,7 @@ async function main() {
       keys: "local",
     },
     { label: "name inside a longer name", roster: [], name: "이수", sourceText: "이수이가 서가를 읽었다.", keys: [] },
+    { label: "final ㄹ rejects 으로", roster: [], name: "한별", sourceText: "한별으로 서가를 읽었다.", keys: [] },
     { label: "returned particle binds to known", roster: ["서무진"], name: "서무진은", keys: ["character:seo"] },
     {
       label: "short tail needs review",

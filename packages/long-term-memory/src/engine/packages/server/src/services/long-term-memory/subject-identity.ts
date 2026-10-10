@@ -1986,6 +1986,7 @@ function isHangulParticle(stem: string, particle: string) {
   if (HANGUL_PARTICLE_ANY.test(particle)) return true;
   const final = syllable % 28;
   if (final === 0) return HANGUL_PARTICLE_OPEN.test(particle);
+  if (final === 8 && particle.startsWith("으")) return false;
   return HANGUL_PARTICLE_CLOSED.test(final === 8 ? particle.replace(/^로/u, "으로") : particle);
 }
 
