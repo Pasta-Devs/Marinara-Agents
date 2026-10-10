@@ -608,6 +608,32 @@ async function main() {
     );
   }
 
+  // Issue #1295 (review): Hangul aliases must not inflate BM25 document length.
+  // An English-only score must match an alias-free corpus of the same shape, and
+  // a Hangul chunk's length must count only its written tokens.
+  {
+    const english = { ...chunk("mixed-en", "mixed_en_note"), text: "the silver ring glimmers" };
+    const aliasHeavy = { ...chunk("mixed-ko", "mixed_ko_note"), text: "무진에게 반지를 선물" };
+    const aliasFree = { ...chunk("mixed-plain", "mixed_plain_note"), text: "alpha beta gamma" };
+
+    const withKorean = buildLtmBm25Index([english, aliasHeavy]);
+    const withoutKorean = buildLtmBm25Index([english, aliasFree]);
+    assert.equal(
+      withKorean.documents["mixed-ko"]!.length,
+      3,
+      "a Hangul chunk's BM25 length must count only its written tokens, not aliases",
+    );
+
+    const ids = (index: ReturnType<typeof buildLtmBm25Index>) =>
+      searchLtmBm25(index, "ring glimmers", { topK: 5 }).map(({ chunkId }: { chunkId: string }) => chunkId);
+    const score = (index: ReturnType<typeof buildLtmBm25Index>) =>
+      searchLtmBm25(index, "ring glimmers", { topK: 5 }).find(
+        ({ chunkId }: { chunkId: string }) => chunkId === "mixed-en",
+      )?.score;
+    assert.deepEqual(ids(withKorean), ids(withoutKorean), "English ordering must not change when Hangul aliases exist");
+    assert.equal(score(withKorean), score(withoutKorean), "English score must not be skewed by Hangul aliases");
+  }
+
   console.info("Long-Term Memory reserved-key regressions passed.");
 }
 
