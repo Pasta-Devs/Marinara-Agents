@@ -183,18 +183,19 @@ const brokeUp = (at = T0 + 10 * DAY, id = "c1"): SlurpCouple => slurpBreakUp(tog
       "a forgotten couple never supplies a beat, even with an untold breakup moment",
     );
 
-  // moveOn: a breakup moment that is already queued from before the choice never gets told either.
+  // moveOn: breakup, moving-on, fight and jealousy moments queued before the choice are suppressed.
   const movedOn: SlurpCouple = { ...forgotten, aftermath: "moveOn" };
-  for (let sequence = 0; sequence < 10; sequence++) {
-    const beat = slurpCoupleBeat({
-      creatorId: "mira",
-      sequence,
-      couples: [movedOn],
-      names,
-      at: new Date(T0 + 1 * DAY),
-    });
-    assert.ok(!beat || beat.tie.moment !== "breakup", "moveOn filters a pending breakup moment out of the beat");
-  }
+  for (const kind of ["breakup", "movingOn", "fight", "jealous"] as const)
+    for (let sequence = 0; sequence < 10; sequence++) {
+      const beat = slurpCoupleBeat({
+        creatorId: "mira",
+        sequence,
+        couples: [{ ...movedOn, moments: [{ ...forgotten.moments[0]!, kind }] }],
+        names,
+        at: new Date(T0 + 1 * DAY),
+      });
+      assert.equal(beat, null, `moveOn suppresses pending ${kind} drama`);
+    }
 }
 
 // ─── 5. Relationship lines: ambient, direct, player, group, chat bridge ──────────────────────────

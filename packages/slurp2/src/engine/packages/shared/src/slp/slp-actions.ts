@@ -300,7 +300,7 @@ export const SLP_ACTIONS = {
     inputs: {
       coupleId: "The couple (from list-world).",
       steer: `One of: ${SLP_COUPLE_STEERS.join(", ")}.`,
-      aftermath: `For breakUp only: one of ${SLP_BREAKUP_AFTERMATHS.join(", ")} (optional; default keep).`,
+      aftermath: `For breakUp only: one of ${SLP_BREAKUP_AFTERMATHS.join(", ")} (optional; default keep). Never send it with moveOn, forget or any other steer.`,
     },
     schema: z
       .object({

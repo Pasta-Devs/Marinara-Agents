@@ -160,7 +160,10 @@ export function slurpCoupleBeat(input: {
     const page = couple.page;
     const pageOpen = Boolean(page && !page.closedAt);
     const fresh = couple.moments
-      .filter((moment) => !(couple.aftermath === "moveOn" && (moment.kind === "breakup" || moment.kind === "movingOn")))
+      .filter(
+        (moment) =>
+          !(couple.aftermath === "moveOn" && ["breakup", "movingOn", "fight", "jealous"].includes(moment.kind)),
+      )
       .filter((moment) => at.getTime() - Date.parse(moment.at) < SLURP_COUPLE_MOMENT_DAYS * DAY_MS)
       .filter((moment) => !couple.told.includes(`${creatorId}:${moment.id}`))
       // Jealousy is theirs to post, not the one it is about.
