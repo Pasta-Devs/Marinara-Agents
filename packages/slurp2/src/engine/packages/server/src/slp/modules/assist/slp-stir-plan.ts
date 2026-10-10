@@ -50,6 +50,7 @@ export function buildSlpStirPlanMessages(context: SlpStirPlanContext) {
     "Rules:",
     "- Use only the actions listed, with inputs exactly as described. Use only ids from the lists below; never invent one.",
     "- Do only what the player asked. Do not add extra steps.",
+    "- A couple that moved on or forgot the relationship stays that way unless the player explicitly asks to reunite them.",
     `- At most ${SLP_STIR_STEPS_MAX} steps.`,
     "- If it is unclear who is meant (two Creators could fit, or no one is named and nobody is in focus), ask one short question instead and give no steps.",
     "- A brand deal (offer-brand-deal) names a brand or product from the Brands list; with none named, leave both out and the best fit is picked.",
@@ -73,7 +74,7 @@ export function buildSlpStirPlanMessages(context: SlpStirPlanContext) {
   const world = context.world;
   const lists = [
     world.couples.length
-      ? `# Couples\n${world.couples.map((couple) => `- ${couple.id}: ${who(couple.aId)} + ${who(couple.bId)}, ${couple.stage}${couple.page ? `, shared page ${couple.page}` : ""}`).join("\n")}`
+      ? `# Couples\n${world.couples.map((couple) => `- ${couple.id}: ${who(couple.aId)} + ${who(couple.bId)}, ${couple.stage}${couple.aftermath === "forget" ? ", relationship forgotten" : couple.aftermath === "moveOn" ? ", moved on (relationship remembered)" : ""}${couple.page ? `, shared page ${couple.page}` : ""}`).join("\n")}`
       : "",
     world.collabs.length
       ? `# Collab requests\n${world.collabs.map((collab) => `- ${collab.id}: ${who(collab.hostId)} + ${who(collab.partnerId)}, ${collab.status}`).join("\n")}`

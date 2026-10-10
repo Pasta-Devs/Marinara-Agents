@@ -86,8 +86,11 @@ export type SlurpTiesCouple = {
   forced?: { misfit: "taken" | "notInto" | "noDating" | "orientation"; byId: string };
   /** A couple with the player's own page, kept out of public. */
   secret?: boolean;
+  /** #1293: how an ex handles the breakup; none is the usual memory and fallout. Older servers send none. */
+  aftermath?: "moveOn" | "forget" | null;
 };
-export type SlurpCoupleSteer = "date" | "drama" | "patchUp" | "breakUp" | "reunite" | "official" | "secret" | "public";
+export type SlurpCoupleSteer =
+  "date" | "drama" | "patchUp" | "breakUp" | "reunite" | "official" | "secret" | "public" | "moveOn" | "forget";
 /** Mirrors `SlurpBond` on the server (Drama): friends, roommates, coworkers and exes. */
 export type SlurpTiesBondKind = "friend" | "roommate" | "coworker" | "ex";
 export type SlurpTiesBond = {
@@ -182,8 +185,12 @@ export function useSlurpTiesMutations(personaId: string) {
       onSuccess: played,
     }),
     steerCouple: useMutation({
-      mutationFn: (input: { id: string; steer: SlurpCoupleSteer }) =>
-        play("steer-couple", { coupleId: input.id, steer: input.steer }),
+      mutationFn: (input: { id: string; steer: SlurpCoupleSteer; aftermath?: "moveOn" | "forget" }) =>
+        play("steer-couple", {
+          coupleId: input.id,
+          steer: input.steer,
+          ...(input.aftermath ? { aftermath: input.aftermath } : {}),
+        }),
       onSuccess: played,
     }),
     couplePage: useMutation({

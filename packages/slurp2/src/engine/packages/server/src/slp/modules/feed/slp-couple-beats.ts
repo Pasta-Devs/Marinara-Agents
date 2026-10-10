@@ -141,6 +141,8 @@ export function slurpCoupleBeat(input: {
 }): (SlurpBeat & { tie: SlurpTieStamp }) | null {
   const { creatorId, at } = input;
   for (const couple of input.couples) {
+    // #1293: forgetting stops the relationship from reaching any future post, big moment or cameo.
+    if (couple.aftermath === "forget") continue;
     const partnerId = slurpCoupleOther(couple, creatorId);
     // Polyamory (0.3.5): every partner is named; the stamp keeps the first one.
     const partnerIds = slurpCouplePartners(couple, creatorId).filter((id) => input.names.has(id));
@@ -156,6 +158,7 @@ export function slurpCoupleBeat(input: {
     const page = couple.page;
     const pageOpen = Boolean(page && !page.closedAt);
     const fresh = couple.moments
+      .filter((moment) => !(couple.aftermath === "moveOn" && (moment.kind === "breakup" || moment.kind === "movingOn")))
       .filter((moment) => at.getTime() - Date.parse(moment.at) < SLURP_COUPLE_MOMENT_DAYS * DAY_MS)
       .filter((moment) => !couple.told.includes(`${creatorId}:${moment.id}`))
       // Jealousy is theirs to post, not the one it is about.

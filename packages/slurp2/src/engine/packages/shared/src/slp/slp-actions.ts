@@ -83,7 +83,16 @@ export const SLP_COUPLE_STEERS = [
   "official",
   "secret",
   "public",
+  "moveOn",
+  "forget",
 ] as const;
+/**
+ * What a breakup leaves behind (#1293): the usual memory and fallout, moved on (history stays, no
+ * more dwelling), or forgotten (stops reaching future posts and chats). The client omits "keep"; absent
+ * means keep, so older servers and clients still agree.
+ */
+export const SLP_BREAKUP_AFTERMATHS = ["keep", "moveOn", "forget"] as const;
+export type SlpBreakupAftermath = (typeof SLP_BREAKUP_AFTERMATHS)[number];
 /** The chapter moves open without Director mode. */
 export const SLP_STORYLINE_MOVES = ["hold", "release", "skip", "back", "insert", "label"] as const;
 const note = z.string().trim().max(SLP_ASSIST_NOTE_MAX).optional();
@@ -286,12 +295,20 @@ export const SLP_ACTIONS = {
     schema: z.object({ aId: accountId, bId: accountId }).strict(),
   },
   "steer-couple": {
-    summary: "Nudge a couple: plan a date, stir some drama, patch it up, break up, or get back together.",
+    summary:
+      "Nudge a couple: plan a date, stir some drama, patch it up, break up, or get back together. For an ex (moveOn, forget) it changes what the breakup leaves behind.",
     inputs: {
       coupleId: "The couple (from list-world).",
       steer: `One of: ${SLP_COUPLE_STEERS.join(", ")}.`,
+      aftermath: `For breakUp only: one of ${SLP_BREAKUP_AFTERMATHS.join(", ")} (optional; default keep).`,
     },
-    schema: z.object({ coupleId: accountId, steer: z.enum(SLP_COUPLE_STEERS) }).strict(),
+    schema: z
+      .object({
+        coupleId: accountId,
+        steer: z.enum(SLP_COUPLE_STEERS),
+        aftermath: z.enum(SLP_BREAKUP_AFTERMATHS).optional(),
+      })
+      .strict(),
   },
   "set-bond": {
     summary:
@@ -612,6 +629,8 @@ export type SlpStirWorld = {
     page: "open" | "closed" | null;
     /** A couple with the player's own page, kept out of public. */
     secret?: boolean;
+    /** #1293: how an ex handles the breakup; absent is the usual memory and fallout. */
+    aftermath?: Exclude<SlpBreakupAftermath, "keep"> | null;
   }[];
   collabs: { id: string; hostId: string; partnerId: string; status: string }[];
   rivalries: { id: string; fromId: string; toId: string; stage: string }[];

@@ -1,4 +1,8 @@
-import type { SlpActionName } from "../../../../../shared/src/slp/slp-actions.js";
+import {
+  SLP_COUPLE_STEERS,
+  type SlpActionName,
+  type SlpBreakupAftermath,
+} from "../../../../../shared/src/slp/slp-actions.js";
 
 export type SlpStirForm = Record<string, string | boolean | string[] | null>;
 type Form = SlpStirForm;
@@ -34,7 +38,15 @@ export function slpStirStepOf(action: SlpActionName, form: Form): Record<string,
     case "add-to-couple":
       return form.pick && one ? { coupleId: form.pick, accountId: one } : null;
     case "steer-couple":
-      return form.pick && form.steer ? { coupleId: form.pick, steer: form.steer } : null;
+      if (!form.pick || !form.steer) return null;
+      // #1293: "keep" is today's breakup, so only the other two travel.
+      return {
+        coupleId: form.pick,
+        steer: form.steer,
+        ...(form.steer === "breakUp" && (form.aftermath === "moveOn" || form.aftermath === "forget")
+          ? { aftermath: form.aftermath }
+          : {}),
+      };
     case "couple-page":
       return form.pick ? { coupleId: form.pick, open: form.open !== false } : null;
     case "push-collab":
@@ -153,4 +165,37 @@ export function deskReward(choice: string): Record<string, unknown> {
   if (choice === "coins") return { perk: "coins", coins: 200 };
   if (choice === "rising" || choice === "verified") return { perk: "badge", badge: choice };
   return { perk: "feature", days: 2 };
+}
+
+/**
+ * The nudges a couple can take now. An ex (split) gets back together, moves on or forgets (#1293),
+ * minus the way it already handles the breakup; secret/public are for couples with the player's page.
+ */
+export function slpStirCoupleSteers(
+  couple: { stage: string; secret?: boolean; aftermath?: SlpBreakupAftermath | null },
+  withPlayer: boolean,
+): (typeof SLP_COUPLE_STEERS)[number][] {
+  return SLP_COUPLE_STEERS.filter((steer) => {
+    if (couple.stage === "split")
+      return steer === "reunite" || ((steer === "moveOn" || steer === "forget") && couple.aftermath !== steer);
+    switch (steer) {
+      case "reunite":
+      case "moveOn":
+      case "forget":
+        return false;
+      case "patchUp":
+        return couple.stage === "rocky";
+      case "drama":
+        return couple.stage === "dating" || couple.stage === "together";
+      case "date":
+        return couple.stage !== "rocky";
+      case "official":
+        return couple.stage === "sparks" || couple.stage === "dating";
+      case "secret":
+      case "public":
+        return withPlayer && (steer === "secret") !== Boolean(couple.secret);
+      default:
+        return true;
+    }
+  });
 }

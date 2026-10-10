@@ -68,6 +68,8 @@ For manual-only Illustrator on the updated Engine staging build, set **Run Inter
 
 Slurp offers **Image context for reactions** in settings for fan reactions and creator replies: **Auto** prefers the stored image prompt and falls back to vision, **Stored image prompt only** uses that prompt only, and **Vision** describes the image. Public fans do not receive locked images. Manual creator refresh shows how many requests remain.
 
+When breaking a Slurp couple up, choose whether they keep the usual breakup history, **Move on** without dwelling on it, or **Forget the relationship** in future posts and chats. For existing exes, **Stir → Nudge a couple** can move them on or forget the relationship. Published posts and messages stay. Where Undo is offered, use **Recent plays → Undo** to restore the previous choice.
+
 ### In development
 
 These packages are being built in this repository but are not ready for the stable catalog yet. A package is either **in development** (hidden from every Engine channel) or **staging only** (offered to Engine `staging` testers, hidden from stable `main` users). See [Contributing § Packages that are not ready for everyone](CONTRIBUTING.md#packages-that-are-not-ready-for-everyone).

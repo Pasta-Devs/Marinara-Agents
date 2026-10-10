@@ -26,6 +26,7 @@
  *   with a goodbye post.
  */
 import { DAY_MS, hash } from "./slp-project.js";
+import type { SlpBreakupAftermath } from "../../../../../shared/src/slp/slp-actions.js";
 import { slurpCollabFit, slurpPairKey, slurpSharedNiche, type SlurpTieCreator } from "./slp-creator-ties.js";
 import { slurpCoupleFit, slurpCoupleMisfitOf, type SlurpCoupleFit, type SlurpCoupleMisfit } from "./slp-couple-fit.js";
 import {
@@ -123,6 +124,11 @@ export type SlurpCouple = {
    * the crowd do not name the player while it is set; she still knows, and says so in private.
    */
   secret?: boolean;
+  /**
+   * #1293: what an ex's breakup leaves behind; absent (or "keep") is the usual memory and fallout.
+   * Only ever set while `stage` is "split"; a reunion (manual or automatic) clears it.
+   */
+  aftermath?: Exclude<SlpBreakupAftermath, "keep">;
 };
 
 export type SlurpCoupleForced = { misfit: Exclude<SlurpCoupleMisfit, "same" | "busy">; byId: string };
@@ -142,8 +148,19 @@ export function slurpCoupleFor(couples: readonly SlurpCouple[], creatorId: strin
 
 /** The newest couple of these two, active or over, or null. */
 export function slurpCoupleOf(couples: readonly SlurpCouple[], a: string, b: string): SlurpCouple | null {
-  const key = slurpPairKey(a, b);
-  return [...couples].reverse().find((couple) => slurpPairKey(couple.aId, couple.bId) === key) ?? null;
+  if (a === b) return null;
+  return (
+    couples
+      .filter((couple) => {
+        const members = [couple.aId, couple.bId, ...(couple.moreIds ?? [])];
+        return members.includes(a) && members.includes(b);
+      })
+      .sort(
+        (left, right) =>
+          Number(slurpCoupleActive(right)) - Number(slurpCoupleActive(left)) ||
+          Date.parse(right.stageAt) - Date.parse(left.stageAt),
+      )[0] ?? null
+  );
 }
 
 // ─── The world clock ────────────────────────────────────────────────────────────────────────────
@@ -368,9 +385,11 @@ function advanceCouple(
       next = slurpWithMoment(next, slurpCoupleMoment(next, "anniversary", stamp, label));
   }
 
-  // Exes (U): a week or so after a breakup each posts about moving on, once.
+  // Exes (U): a week or so after a breakup each posts about moving on, once. Not with a chosen
+  // aftermath (#1293): moving on already happened quietly, and a forgotten ex never reaches a post.
   if (
     couple.ending === "breakup" &&
+    !couple.aftermath &&
     slurpDaysSince(couple.stageAt, at) >= 5 + (hash(`${couple.id}:${couple.stageAt}:on`) % 5) &&
     !couple.moments.some((entry) => entry.kind === "movingOn" && entry.at >= couple.stageAt)
   )
@@ -393,9 +412,11 @@ function advanceCouple(
       ? slurpBreakUp(next, at)
       : slurpWithMoment({ ...next, stage: "together", stageAt: stamp }, slurpCoupleMoment(next, "makeup", stamp));
   }
-  // Split: now and then they find their way back. Sparks that fizzled stay over.
+  // Split: now and then they find their way back. Sparks that fizzled stay over. Not with a chosen
+  // aftermath (#1293): moving on or forgetting only undoes by an explicit reunite, never the clock.
   if (
     couple.ending === "breakup" &&
+    !couple.aftermath &&
     couple.reunions < MAX_REUNIONS &&
     roll % 4 === 0 &&
     !taken.has(a.id) &&
@@ -528,9 +549,11 @@ export function slurpBreakUp(couple: SlurpCouple, at: Date): SlurpCouple {
  */
 export function slurpGetBackTogether(couple: SlurpCouple, at: Date, official = false): SlurpCouple {
   const stamp = at.toISOString();
+  // #1293: getting back together clears a chosen aftermath; it was about the breakup that just ended.
+  const { aftermath: _aftermath, ...was } = couple;
   return slurpWithMoment(
     {
-      ...couple,
+      ...was,
       stage: official ? "together" : "dating",
       stageAt: stamp,
       ...(official ? { togetherAt: stamp } : {}),
@@ -600,20 +623,31 @@ export type SlurpCoupleSteer =
   | "official"
   /** Keep a couple with the player out of public, or go public again. */
   | "secret"
-  | "public";
+  | "public"
+  /** #1293, an existing ex only: switch what the breakup leaves behind. */
+  | "moveOn"
+  | "forget";
 
 /** The player steers a couple's story: plan a date, stir some drama, patch it up, end it, or reunite. */
 export function slurpSteerCouple(
   couples: readonly SlurpCouple[],
   id: string,
   steer: SlurpCoupleSteer,
-  input: { at: Date; creators: readonly SlurpTieCreator[] },
+  input: { at: Date; creators: readonly SlurpTieCreator[]; aftermath?: SlpBreakupAftermath },
 ): SlurpCouple[] | SlurpCoupleError {
   const couple = couples.find((entry) => entry.id === id);
   if (!couple) return "notFound";
+  const aftermath = input.aftermath && input.aftermath !== "keep" ? input.aftermath : null;
+  // Trust boundary (#1293): an aftermath only ever means anything on a breakup; anywhere else, a
+  // caller that sent one anyway is refused rather than silently humoured.
+  if (input.aftermath !== undefined && steer !== "breakUp") return "notOpen";
   const stamp = input.at.toISOString();
   const byId = new Map(input.creators.map((creator) => [creator.id, creator]));
   const replace = (next: SlurpCouple) => couples.map((entry) => (entry.id === id ? next : entry));
+  // #1293, an existing ex: switch what the breakup already left behind. Never touches `stageAt`, so
+  // "you broke up N days ago" still counts from the real breakup.
+  if ((steer === "moveOn" || steer === "forget") && couple.stage === "split")
+    return replace({ ...couple, aftermath: steer });
   const live = couple.stage === "dating" || couple.stage === "together" || couple.stage === "sparks";
   if (steer === "date" && live)
     return replace(slurpWithMoment(couple, slurpCoupleMoment(couple, "date", stamp, pickDate(couple, byId, stamp))));
@@ -636,12 +670,14 @@ export function slurpSteerCouple(
     return replace(
       slurpWithMoment({ ...couple, stage: "together", stageAt: stamp }, slurpCoupleMoment(couple, "makeup", stamp)),
     );
-  if (steer === "breakUp" && slurpCoupleActive(couple))
-    return replace(
+  if (steer === "breakUp" && slurpCoupleActive(couple)) {
+    const split =
       couple.stage === "sparks"
-        ? { ...couple, stage: "split", stageAt: stamp, ending: "fizzled" }
-        : slurpBreakUp(couple, input.at),
-    );
+        ? { ...couple, stage: "split" as const, stageAt: stamp, ending: "fizzled" as const }
+        : slurpBreakUp(couple, input.at);
+    // #1293: the choice travels with the breakup itself; absent (or "keep") is today's behaviour.
+    return replace(aftermath ? { ...split, aftermath } : split);
+  }
   if (steer === "reunite" && couple.stage === "split") {
     const a = byId.get(couple.aId);
     const b = byId.get(couple.bId);

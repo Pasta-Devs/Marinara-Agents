@@ -1,17 +1,20 @@
-import { CalendarHeart, EyeOff, Eye, HeartCrack, HeartHandshake } from "lucide-react";
-import { useId, type ReactNode } from "react";
+import { CalendarHeart, EyeOff, Eye, HeartCrack, HeartHandshake, HeartOff } from "lucide-react";
+import { useId, useRef, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { cn } from "../../../lib/utils";
 import { SLP_SPICE_LEVELS } from "../../../../../shared/src/slp/slp-spice.js";
 import { SlpButton } from "../../modules/chrome/SlpButton";
+import { SlpBreakupAftermathPick } from "../../modules/creator/SlpBreakupAftermath";
+import { slpAftermathChoices } from "../../modules/creator/slp-breakup-aftermath";
 import { SlpHeartGlyph, SlpSparkleGlyph } from "../../base/chrome/SlpGlyphs";
 import { formatRelativeTime, formatUpcomingDay } from "../../base/ui/slp-date-time";
 import { useSlpStirDoIt } from "./SlpStirCards";
 import { useSlurpStirPreview } from "./slp-stir-hooks";
+import type { SlpBreakupAftermath } from "../../../../../shared/src/slp/slp-actions.js";
 import type { SlpPlayerCouple as SlurpPlayerCouple } from "../../../../../shared/src/slp/slp-stir.js";
 
-type Steer = "date" | "official" | "patchUp" | "secret" | "public" | "breakUp" | "reunite";
+type Steer = "date" | "official" | "patchUp" | "secret" | "public" | "breakUp" | "reunite" | "moveOn" | "forget";
 
 const LADDER = ["sparks", "dating", "together"] as const;
 
@@ -44,6 +47,14 @@ export function SlpYouTwo({
   const titleId = useId();
   const preview = useSlurpStirPreview();
   const doIt = useSlpStirDoIt();
+  // #1293: breaking up (or, after it, moving on or forgetting) picks what it leaves behind first.
+  const [ending, setEnding] = useState(false);
+  const endingTrigger = useRef<HTMLButtonElement | null>(null);
+  const [aftermath, setAftermath] = useState<SlpBreakupAftermath>("keep");
+  const beginEnding = () => {
+    setAftermath(slpAftermathChoices(couple)[0] ?? "keep");
+    setEnding(true);
+  };
   const over = couple.stage === "split";
   const rocky = couple.stage === "rocky";
   const reached = rocky ? 2 : LADDER.indexOf(couple.stage as (typeof LADDER)[number]);
@@ -56,7 +67,8 @@ export function SlpYouTwo({
       .mutateAsync([step])
       .then(({ cards }) => (cards[0]?.error ? void toast.error(t("ui.slurp.youTwo.cant")) : doIt.run(cards, "sheet")))
       .catch(() => void toast.error(t("ui.slurp.youTwo.cant")));
-  const run = (steer: Steer) => play({ action: "steer-couple", input: { coupleId: couple.id, steer } });
+  const run = (steer: Steer, aftermath?: "moveOn" | "forget") =>
+    play({ action: "steer-couple", input: { coupleId: couple.id, steer, ...(aftermath ? { aftermath } : {}) } });
   // Her public side: one step more or less in what her posts show (her spice level).
   const spiceAt = couple.herSpice ? SLP_SPICE_LEVELS.indexOf(couple.herSpice) : -1;
   const shift = (by: 1 | -1) =>
@@ -194,22 +206,77 @@ export function SlpYouTwo({
         </div>
       )}
 
-      <div className="mt-3 flex flex-wrap gap-2">
-        {moves
-          .filter((move) => move.show)
-          .map((move) => (
+      {!ending && (
+        <div className="mt-3 flex flex-wrap gap-2">
+          {moves
+            .filter((move) => move.show)
+            .map((move) => (
+              <SlpButton
+                key={move.steer}
+                ref={move.steer === "breakUp" ? endingTrigger : undefined}
+                variant={move.quiet ? "tertiary" : "secondary"}
+                disabled={preview.isPending || doIt.pending}
+                onClick={() => (move.steer === "breakUp" ? beginEnding() : void run(move.steer))}
+                className="min-h-11 px-4 text-sm"
+              >
+                {move.icon}
+                {t(`ui.slurp.youTwo.move.${move.steer}`)}
+              </SlpButton>
+            ))}
+          {over && (
             <SlpButton
-              key={move.steer}
-              variant={move.quiet ? "tertiary" : "secondary"}
+              variant="tertiary"
               disabled={preview.isPending || doIt.pending}
-              onClick={() => void run(move.steer)}
+              ref={endingTrigger}
+              onClick={beginEnding}
               className="min-h-11 px-4 text-sm"
             >
-              {move.icon}
-              {t(`ui.slurp.youTwo.move.${move.steer}`)}
+              <HeartOff size={15} aria-hidden="true" />
+              {t("ui.slurp.breakup.afterwards")}
             </SlpButton>
-          ))}
-      </div>
+          )}
+        </div>
+      )}
+      {over && couple.aftermath && (
+        <p className="mt-2 text-xs text-[var(--slurp-muted)]">{t(`ui.slurp.breakup.state.${couple.aftermath}`)}</p>
+      )}
+      {ending && (
+        <div className="mt-3 space-y-3">
+          <SlpBreakupAftermathPick
+            label={t(over ? "ui.slurp.breakup.aftermath.labelEx" : "ui.slurp.breakup.aftermath.label")}
+            options={slpAftermathChoices(couple)}
+            value={aftermath}
+            onChange={setAftermath}
+          />
+          {(over || !couple.pageOpen) && (
+            <p className="text-xs text-[var(--slurp-muted)]">{t("ui.slurp.breakup.undoHint")}</p>
+          )}
+          <div className="flex gap-2">
+            <SlpButton
+              variant="quiet"
+              className="flex-1"
+              disabled={preview.isPending || doIt.pending}
+              onClick={() => {
+                setEnding(false);
+                requestAnimationFrame(() => endingTrigger.current?.focus());
+              }}
+            >
+              {t("ui.slurp.breakup.cancel")}
+            </SlpButton>
+            <SlpButton
+              variant="danger"
+              className="flex-1"
+              disabled={preview.isPending || doIt.pending}
+              onClick={() => {
+                setEnding(false);
+                void (over ? run(aftermath as Steer) : run("breakUp", aftermath === "keep" ? undefined : aftermath));
+              }}
+            >
+              {t(over ? "ui.slurp.breakup.apply" : "ui.slurp.youTwo.move.breakUp")}
+            </SlpButton>
+          </div>
+        </div>
+      )}
     </section>
   );
 }
