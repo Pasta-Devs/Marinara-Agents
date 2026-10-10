@@ -200,6 +200,12 @@
     "long-term-memory": {
       "versions": [
         {
+          "version": "1.4.22",
+          "date": "2026-10-10",
+          "notes": "- Resolve Korean character names written with a particle. A Hangul name followed directly by a whole particle such as `은`, `가`, `를`, `에게` or `한테` now counts as present in the source, a returned name with a trailing particle binds to the known name before the particle, and a 2-syllable name that is the tail of a known 3-syllable name goes to Review Queue instead of becoming a separate character.",
+          "highlight": false
+        },
+        {
           "version": "1.4.21",
           "date": "2026-10-09",
           "notes": "- Keep extraction results that should be kept. An explicitly empty `subjectKeys` array now behaves like an omitted field instead of falling back to name matching, and a relationship change whose dimension deltas are all zero is no longer treated as a change. A nameless candidate can also borrow the identity a named sibling in the same batch resolved for the same subjectId, so it lands on the right memory instead of being rejected; borrowed identities stay in Review Queue.",
@@ -312,12 +318,6 @@
           "date": "2026-10-03",
           "notes": "- Correlate recall selection with the confirmed injection through one attempt id, and record the outcomes the package actually observes: completed, skipped with a reason, cancelled, or failed. The last-injection panel now distinguishes a cancelled, failed, skipped, or completed-but-unconfirmed recall from one that never ran, instead of collapsing them all into \"no recall recorded\". Host-side non-invocation stays unknown.",
           "highlight": false
-        },
-        {
-          "version": "1.4.2",
-          "date": "2026-10-03",
-          "notes": "- Make the debug activity toggle honest: it now says it records recall explanations, notes that a chat override or host debug mode can also turn them on, states that extraction, draft, and apply activity is always recorded separately, and notes that the setting takes effect after saving settings.",
-          "highlight": true
         }
       ]
     },

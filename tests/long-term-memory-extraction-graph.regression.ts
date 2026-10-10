@@ -1996,6 +1996,59 @@ async function main() {
     englishBaseline.identityKeyForUnit(englishRecipient),
   );
 
+  // Korean particles and short names (#1291): a whole particle is a name boundary, a stripped particle
+  // only binds to a known name, and a 2-syllable tail of a known 3-syllable name goes to review.
+  for (const { label, roster, name, sourceText, keys, basis } of [
+    {
+      label: "particle after a new name",
+      roster: [],
+      name: "서무진",
+      sourceText: "서무진은 서가를 읽었다.",
+      keys: "local",
+    },
+    { label: "name inside a longer name", roster: [], name: "이수", sourceText: "이수이가 서가를 읽었다.", keys: [] },
+    { label: "final ㄹ rejects 으로", roster: [], name: "한별", sourceText: "한별으로 서가를 읽었다.", keys: [] },
+    { label: "returned particle binds to known", roster: ["서무진"], name: "서무진은", keys: ["character:seo"] },
+    {
+      label: "short tail needs review",
+      roster: ["도진욱"],
+      name: "진욱",
+      sourceText: "진욱이 웃었다.",
+      keys: [],
+      basis: "partial_name_requires_review",
+    },
+    { label: "exact short name wins", roster: ["도진욱", "진욱"], name: "진욱", keys: ["character:jin"] },
+  ] as Array<{
+    label: string;
+    roster: string[];
+    name: string;
+    sourceText?: string;
+    keys: "local" | string[];
+    basis?: string;
+  }>) {
+    const catalog = buildTrustedLtmSubjectCatalog({
+      roster: roster.map((rosterName) => ({
+        kind: "character" as const,
+        id: rosterName === "진욱" ? "jin" : rosterName === "서무진" ? "seo" : "do",
+        name: rosterName,
+        aliases: [],
+      })),
+      notes: [],
+    });
+    const donor = { ...namedSubjectUnit, subjectNames: [name] };
+    const result = prepareLtmSubjectIdentityContext({
+      ...borrowingOptions,
+      catalog,
+      units: [donor],
+      sourceBackedNpcSourceText: sourceText,
+    }).resolve({ units: [donor], existingNotes: [] });
+    const resolved = result.units[0]?.subjectKeys ?? [];
+    if (keys === "local") assert.ok(resolved[0]?.startsWith("local_character:"), label);
+    else assert.deepEqual(resolved, keys, label);
+    assert.equal(result.droppedCandidates.length, keys !== "local" && keys.length === 0 ? 1 : 0, label);
+    if (basis) assert.equal(result.diagnostics[0]?.details?.matchBasis, basis, label);
+  }
+
   const dedupUnit = (text: string, subjectId = "dedup_subject", sectionKey = "facts") =>
     unit(chat, {
       bucket: "world_fact",
