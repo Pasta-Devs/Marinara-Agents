@@ -7,13 +7,15 @@ import { SlpSparkleGlyph } from "../../base/chrome/SlpGlyphs";
 import { SlpButton, SlpChip, SlpPrimaryButton } from "../../modules/chrome/SlpButton";
 import { SlpSheet } from "../../modules/chrome/SlpSheet";
 import { Toggle } from "../../modules/settings/SlpSettingsControls";
+import { SlpBreakupAftermathPick } from "../../modules/creator/SlpBreakupAftermath";
+import { slpAftermathChoices } from "../../modules/creator/slp-breakup-aftermath";
 import { errorMessage } from "../../modules/settings/slp-backstage-format";
 import {
   SLP_ACTION_META,
   SLP_BOND_KINDS,
-  SLP_COUPLE_STEERS,
   SLP_STORYLINE_MOVES,
   type SlpActionName,
+  type SlpBreakupAftermath,
 } from "../../../../../shared/src/slp/slp-actions.js";
 import { SLP_STEERING_MOODS, SLP_STEERING_PACES } from "../../../../../shared/src/slp/slp-creator-steering.js";
 import { SLP_SPICE_LEVELS } from "../../../../../shared/src/slp/slp-spice.js";
@@ -24,7 +26,7 @@ import { SlpStirCard, slpStirCantLine, useSlpStirDoIt } from "./SlpStirCards";
 import { SlpStirDeskFields } from "./SlpStirDeskFields";
 import { SlpStirBrandPick } from "./SlpStirBrandPick";
 import { Choice, CreatorPicker } from "./SlpStirFormParts";
-import { slpStirStepOf, type SlpStirForm } from "./slp-stir-steps";
+import { slpStirCoupleSteers, slpStirStepOf, type SlpStirForm } from "./slp-stir-steps";
 
 const inputClass = `min-h-11 w-full rounded-xl bg-[var(--slurp-canvas)] px-3 text-base ring-1 ring-inset ring-[var(--slurp-outline)] sm:text-sm ${focusRing}`;
 
@@ -509,13 +511,18 @@ export function SlpStirPlaySheet({
           label={t("ui.slurp.stir.form.couple")}
           empty={t("ui.slurp.stir.form.noCouples")}
           value={(form.pick as string) ?? null}
-          onChange={(pick) => set({ pick, steer: null })}
+          onChange={(pick) => set({ pick, steer: null, aftermath: null })}
           items={couples.map((couple) => ({
             id: couple.id,
             title: couple.moreIds?.length
               ? [couple.aId, couple.bId, ...couple.moreIds].map(nameOf).join(" · ")
               : t("ui.slurp.stir.pair", { a: nameOf(couple.aId), b: nameOf(couple.bId) }),
-            detail: t(`ui.slurp.stir.live.couple.${couple.stage}`),
+            detail: [
+              t(`ui.slurp.stir.live.couple.${couple.stage}`),
+              couple.stage === "split" && couple.aftermath ? t(`ui.slurp.breakup.state.${couple.aftermath}`) : "",
+            ]
+              .filter(Boolean)
+              .join(" · "),
             who: who(couple.aId, couple.bId),
           }))}
         />,
@@ -525,32 +532,33 @@ export function SlpStirPlaySheet({
         const withPlayer = [couple.aId, couple.bId, ...(couple.moreIds ?? [])].some(
           (id) => creators.find((creator) => creator.id === id)?.automatic === false,
         );
-        const allowed = SLP_COUPLE_STEERS.filter((steer) =>
-          couple.stage === "split"
-            ? steer === "reunite"
-            : steer === "reunite"
-              ? false
-              : steer === "patchUp"
-                ? couple.stage === "rocky"
-                : steer === "drama"
-                  ? couple.stage === "dating" || couple.stage === "together"
-                  : steer === "date"
-                    ? couple.stage !== "rocky"
-                    : steer === "official"
-                      ? couple.stage === "sparks" || couple.stage === "dating"
-                      : steer === "secret" || steer === "public"
-                        ? withPlayer && (steer === "secret") !== Boolean(couple.secret)
-                        : true,
-        );
+        const allowed = slpStirCoupleSteers(couple, withPlayer);
         body.push(
           <Choice
             key="steer"
             label={t("ui.slurp.stir.form.steer")}
             value={(form.steer as string) ?? null}
-            onChange={(steer) => set({ steer })}
+            onChange={(steer) => set({ steer, aftermath: null })}
             options={allowed.map((steer) => ({ value: steer, label: t(`ui.slurp.stir.steer.${steer}`) }))}
           />,
         );
+        // #1293: a breakup says what it leaves behind; the usual memory and fallout stay the default.
+        if (form.steer === "breakUp")
+          body.push(
+            <SlpBreakupAftermathPick
+              key="aftermath"
+              label={t("ui.slurp.breakup.aftermath.label")}
+              options={slpAftermathChoices(couple)}
+              value={(form.aftermath as SlpBreakupAftermath | null) ?? "keep"}
+              onChange={(aftermath) => set({ aftermath })}
+            />,
+          );
+        if (form.steer === "moveOn" || form.steer === "forget")
+          body.push(
+            <p key="aftermathHint" className={cn(SLP_TYPE.meta, "text-[var(--slurp-muted)]")}>
+              {t(`ui.slurp.breakup.aftermath.${form.steer}Hint`)}
+            </p>,
+          );
       }
       if (couple && action === "couple-page")
         body.push(

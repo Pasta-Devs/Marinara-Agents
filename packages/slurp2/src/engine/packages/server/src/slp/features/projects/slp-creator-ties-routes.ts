@@ -38,7 +38,9 @@ import {
   type SlurpCoupleError,
 } from "../../modules/projects/slp-creator-couples.js";
 import { closeSlurpCouplePage, closeSlurpCouplePages, openSlurpCouplePage } from "./slp-creator-couples-service.js";
+import { SLP_BREAKUP_AFTERMATHS } from "../../../../../shared/src/slp/slp-actions.js";
 import {
+  slurpSyncExBonds,
   SLURP_BOND_KINDS,
   SLURP_BOND_MAX_LEVEL,
   slurpBondActive,
@@ -317,10 +319,14 @@ export async function slpCreatorTiesRoutes(app: FastifyInstance, deps: SlpRouteD
     const viewer = await viewerFrom(req.body, reply);
     if (!viewer) return;
     const outcome = await mutateSlurpCreatorTies(app.db, (document) => {
-      const next = run(document.couples, new Date());
+      const at = new Date();
+      const next = run(document.couples, at);
       return typeof next === "string"
         ? { document, result: next }
-        : { document: { ...document, couples: next }, result: "ok" as const };
+        : {
+            document: { ...document, couples: next, bonds: slurpSyncExBonds(document.bonds, next, at) },
+            result: "ok" as const,
+          };
     });
     if (outcome && outcome !== "ok")
       return reply.code(COUPLE_ERRORS[outcome][0]).send({ error: COUPLE_ERRORS[outcome][1] });
@@ -345,14 +351,17 @@ export async function slpCreatorTiesRoutes(app: FastifyInstance, deps: SlpRouteD
   /** Plan a date, stir some drama, patch it up, end it, or get them back together. */
   app.post("/slurp/ties/couples/:id/steer", async (req, reply) => {
     const parsed = z
-      .object({ steer: z.enum(["date", "drama", "patchUp", "breakUp", "reunite"]) })
+      .object({
+        steer: z.enum(["date", "drama", "patchUp", "breakUp", "reunite", "moveOn", "forget"]),
+        aftermath: z.enum(SLP_BREAKUP_AFTERMATHS).optional(),
+      })
       .passthrough()
       .safeParse(req.body);
     if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
     const creators = await loadSlurpTieCreators(app.db);
     const before = (await readSlurpCreatorTiesDocument(app.db)).couples;
     const answer = await changeCouples(req, reply, (couples, at) =>
-      slurpSteerCouple(couples, id(req), parsed.data.steer, { at, creators }),
+      slurpSteerCouple(couples, id(req), parsed.data.steer, { at, creators, aftermath: parsed.data.aftermath }),
     );
     // A breakup closes their shared page: stop its renewals too.
     if (parsed.data.steer === "breakUp")

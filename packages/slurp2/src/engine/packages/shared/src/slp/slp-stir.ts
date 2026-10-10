@@ -5,7 +5,7 @@
  * what the Stir tab shows ("In play", suggestions). See docs/architecture/README.md ("Stir").
  */
 import { z } from "zod";
-import type { SlpActionName, SlpStirWorld } from "./slp-actions.js";
+import type { SlpActionName, SlpBreakupAftermath, SlpStirWorld } from "./slp-actions.js";
 
 /** The player's own page and a Creator as a couple (Details › You two, Stir's "Your relationship"). */
 export type SlpPlayerCouple = {
@@ -16,6 +16,8 @@ export type SlpPlayerCouple = {
   togetherAt: string | null;
   stageAt: string;
   secret: boolean;
+  /** A breakup closes this shared page and cannot be undone. */
+  pageOpen?: boolean;
   lastDate: { at: string; detail: string } | null;
   lastFight: { at: string; detail: string } | null;
   /** Days since they got together at that mark: 30, 90, 180, then every 365. */
@@ -23,6 +25,8 @@ export type SlpPlayerCouple = {
   /** Her public side: how far her posts go, and what she posted this week (paid = subscribers only). */
   herSpice?: "flirty" | "suggestive" | "explicit" | null;
   herWeek?: { posts: number; paid: number };
+  /** #1293: how an ex handles the breakup; absent is the usual memory and fallout. */
+  aftermath?: Exclude<SlpBreakupAftermath, "keep"> | null;
 };
 
 /** When a play shows in the world. */
@@ -197,6 +201,8 @@ export type SlpStirView = {
     page: "open" | "closed" | null;
     /** A couple with the player's own page, kept out of public. */
     secret?: boolean;
+    /** #1293: how an ex handles the breakup; absent is the usual memory and fallout. */
+    aftermath?: Exclude<SlpBreakupAftermath, "keep"> | null;
   }[];
   collabs: { id: string; hostId: string; partnerId: string; status: string }[];
   rivalries: { id: string; fromId: string; toId: string; stage: string }[];

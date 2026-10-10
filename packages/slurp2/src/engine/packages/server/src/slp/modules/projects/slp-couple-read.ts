@@ -12,6 +12,7 @@ import type {
 } from "./slp-creator-couples.js";
 
 const STAGES: readonly SlurpCoupleStage[] = ["sparks", "dating", "together", "rocky", "split"];
+const AFTERMATHS = ["moveOn", "forget"] as const;
 const FORCED: readonly SlurpCoupleForced["misfit"][] = ["taken", "notInto", "noDating", "orientation"];
 const KINDS: readonly SlurpCoupleMomentKind[] = [
   "flirt",
@@ -49,13 +50,14 @@ export function readSlurpCouples(raw: unknown): SlurpCouple[] {
     if (!item || !id || !aId || !bId || aId === bId || !startedAt) return [];
     const page = record(item.page);
     const pageAccount = clampText(page?.accountId, 128);
+    const stage = STAGES.includes(item.stage as SlurpCoupleStage) ? (item.stage as SlurpCoupleStage) : "split";
     return [
       {
         id,
         aId,
         bId,
         origin: (["card", "world", "player", "storyline"] as const).find((origin) => origin === item.origin) ?? "world",
-        stage: STAGES.includes(item.stage as SlurpCoupleStage) ? (item.stage as SlurpCoupleStage) : "split",
+        stage,
         ending: (["breakup", "fizzled"] as const).find((ending) => ending === item.ending) ?? null,
         startedAt,
         stageAt: date(item.stageAt) ?? startedAt,
@@ -93,6 +95,10 @@ export function readSlurpCouples(raw: unknown): SlurpCouple[] {
           return misfit && (byId === aId || byId === bId) ? { forced: { misfit, byId } } : {};
         })(),
         ...(item.secret === true ? { secret: true } : {}),
+        // #1293: an aftermath only ever means anything for an ex; drop it for any other stage.
+        ...(stage === "split" && AFTERMATHS.includes(item.aftermath as (typeof AFTERMATHS)[number])
+          ? { aftermath: item.aftermath as (typeof AFTERMATHS)[number] }
+          : {}),
       },
     ];
   });

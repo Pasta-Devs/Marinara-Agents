@@ -604,6 +604,12 @@
     "slurp2": {
       "versions": [
         {
+          "version": "0.3.20",
+          "date": "2026-10-10",
+          "notes": "- Choose what a breakup leaves behind: keep the usual history, move on while remembering the relationship without ongoing pining or breakup drama, or forget the relationship in future posts and chats. Stir can also move on or forget an existing ex relationship. Published posts and messages stay; Undo restores the previous choice.",
+          "highlight": false
+        },
+        {
           "version": "0.3.19",
           "date": "2026-10-10",
           "notes": "Stop a Creator from texting again after being left on read.\n\n- New Settings › Messaging toggle, off by default: \"Stop after one unanswered text.\" A Creator may write first once (an opener, a check-in, a recurring update, a drama question), then nothing more until you actually reply. Replies to your messages, and anything a Creator already owes you (a promise, a reminder, a finished commission), still arrive on schedule.",
@@ -715,12 +721,6 @@
           "version": "0.2.77",
           "date": "2026-09-27",
           "notes": "- Restore G’s animated face, introduction and alpha reminder in the themed update sheet.\n- Remember Details edit mode per conversation and viewer in this browser. Turning it off keeps saved edits.\n- Expose the displayed state timestamps and conversation cooldown for inline editing too.",
-          "highlight": false
-        },
-        {
-          "version": "0.2.76",
-          "date": "2026-09-27",
-          "notes": "- Added an edit toggle at the bottom of messaging Details → Advanced. Numbers become inline sliders, options become selectors, and context can be edited directly. Calculated values use saved overrides without changing payment records.",
           "highlight": false
         }
       ]
