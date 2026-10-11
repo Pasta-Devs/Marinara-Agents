@@ -234,3 +234,22 @@ export async function loadOrRebuildLongTermMemoryIndexes(
     }
   });
 }
+
+/**
+ * Bring the recall index up to date for the embedding source the host currently resolves.
+ * The Engine calls this from a connection or agent save. A deliberate save is a retry, so it
+ * clears the process-local auto-upgrade guard under the vault lock. Rejecting when the new source
+ * still cannot embed the vault lets the Engine report `failed` instead of a false "refreshed".
+ */
+export async function refreshLongTermMemoryIndexes(root: string, signal?: AbortSignal) {
+  const embeddingAdapter = await resolvePackageEmbeddingAdapter();
+  // Clear the guard while holding the vault lock: an upgrade that failed just before this call
+  // restores the guard on its way out, and clearing first would let it win and skip the retry.
+  const index = await withLtmVaultLock(root, async () => {
+    clearAutoUpgradeFailure(root, embeddingAdapter ?? null);
+    return loadOrRebuildLongTermMemoryIndexes(root, embeddingAdapter ?? null, undefined, signal);
+  });
+  if (embeddingAdapter && index.embeddings.chunks.length > 0 && !getUsableEmbeddingState(index, embeddingAdapter)) {
+    throw new Error("Long-term memory could not embed the vault with the new embedding source");
+  }
+}
