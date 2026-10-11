@@ -7,10 +7,17 @@ export type MemoryRecallEmbeddingOptions = {
   signal?: AbortSignal;
 };
 
-export async function embedLongTermMemoryTexts(texts: string[], options: MemoryRecallEmbeddingOptions = {}) {
+// Indexed chunks are documents; only a recall search query is a query. Kept off the shared options
+// type so a rebuild or retrieval input cannot carry it.
+export async function embedLongTermMemoryTexts(
+  texts: string[],
+  options: MemoryRecallEmbeddingOptions & { inputType?: "query" | "document" } = {},
+) {
   const adapter = options.embeddingAdapter;
   if (!adapter || texts.length === 0) return null;
   options.signal?.throwIfAborted();
+  // The type is a positional argument: older Engines hand the second argument to AbortSignal.any.
+  const inputType = options.inputType ?? "document";
   const vectors: number[][] = [];
   let batch: string[] = [];
   let characters = 0;
@@ -21,7 +28,7 @@ export async function embedLongTermMemoryTexts(texts: string[], options: MemoryR
       batch.length > 0 &&
       (batch.length >= MAX_EMBEDDING_TEXTS || characters + text.length > MAX_EMBEDDING_CHARACTERS)
     ) {
-      const batchVectors = await adapter.embed(batch, options.signal);
+      const batchVectors = await adapter.embed(batch, options.signal, inputType);
       options.signal?.throwIfAborted();
       if (!batchVectors || batchVectors.length !== batch.length) return null;
       vectors.push(...batchVectors);
@@ -32,7 +39,7 @@ export async function embedLongTermMemoryTexts(texts: string[], options: MemoryR
     characters += text.length;
   }
   if (batch.length > 0) {
-    const batchVectors = await adapter.embed(batch, options.signal);
+    const batchVectors = await adapter.embed(batch, options.signal, inputType);
     options.signal?.throwIfAborted();
     if (!batchVectors || batchVectors.length !== batch.length) return null;
     vectors.push(...batchVectors);

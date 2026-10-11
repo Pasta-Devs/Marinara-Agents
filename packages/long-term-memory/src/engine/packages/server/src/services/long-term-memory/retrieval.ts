@@ -210,7 +210,9 @@ export async function retrieveLongTermMemory(input: RetrieveLongTermMemoryInput)
   } else if (!hasUsableVectorIndex(index.embeddings, embeddingAdapter.spaceId)) {
     semanticOutcome = "incompatible";
   } else {
-    const queryVector = (await embedLongTermMemoryTexts([query], { ...input, embeddingAdapter }))?.[0];
+    const queryVector = (
+      await embedLongTermMemoryTexts([query], { ...input, embeddingAdapter, inputType: "query" })
+    )?.[0];
     if (!queryVector) {
       semanticOutcome = "unavailable";
     } else if (queryVector.length !== index.embeddings.dimension) {

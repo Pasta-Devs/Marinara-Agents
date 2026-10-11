@@ -550,11 +550,13 @@ async function main() {
         note("world_tagged", "chat-a", "The brass warding marker is recorded here.", { tags: ["cobalt_tag"] }),
       );
       const embedCalls: string[] = [];
+      const embedInputTypes = new Map<string, string | undefined>();
       const testEmbeddingAdapter = {
         spaceId: "test-space",
         label: "test embeddings",
-        async embed(texts: string[]) {
+        async embed(texts: string[], _signal?: AbortSignal, inputType?: "query" | "document") {
           embedCalls.push(...texts);
+          for (const text of texts) embedInputTypes.set(text, inputType);
           return texts.map((text) =>
             text.includes("beneath the observatory")
               ? [1, 0]
@@ -577,11 +579,13 @@ async function main() {
         embeddings: testEmbeddingAdapter,
       });
       const embeddingBatchCalls: string[][] = [];
+      const embeddingBatchInputTypes: Array<string | undefined> = [];
       const embeddingBatchAdapter = {
         spaceId: "batch-test-space",
         label: "batch test embeddings",
-        async embed(texts: string[]) {
+        async embed(texts: string[], _signal?: AbortSignal, inputType?: "query" | "document") {
           embeddingBatchCalls.push(texts);
+          embeddingBatchInputTypes.push(inputType);
           if (texts.length > 128 || texts.reduce((total, text) => total + text.length, 0) > 200_000) return null;
           return texts.map((text) => [Number(text.match(/^chunk-(\d+)/)?.[1] ?? -1)]);
         },
@@ -602,6 +606,7 @@ async function main() {
         },
       ]) {
         embeddingBatchCalls.length = 0;
+        embeddingBatchInputTypes.length = 0;
         const vectors = await embedLongTermMemoryTexts(scenario.texts, { embeddingAdapter: embeddingBatchAdapter });
         assert.equal(vectors?.length, scenario.expectedLength);
         assert.deepEqual(
@@ -611,8 +616,12 @@ async function main() {
         );
         assert.equal(embeddingBatchCalls.length, 2);
         assert.ok(scenario.batchCheck(embeddingBatchCalls));
+        assert.deepEqual(embeddingBatchInputTypes, ["document", "document"], "every batch must carry the input type");
       }
       await rebuildLongTermMemoryIndexes({ root: storage.root });
+      // #1302: indexed chunks are document embeddings; only the recall query is a query.
+      assert.ok(embedInputTypes.size > 0);
+      assert.deepEqual([...new Set(embedInputTypes.values())], ["document"]);
       const semantic = await retrieveLongTermMemory({
         root: storage.root,
         queryText: "observatory",
@@ -628,6 +637,7 @@ async function main() {
       assert.equal(semantic.embeddingsAvailable, true);
       assert.equal(semantic.chunks[0]?.chunk.noteId, "world_visible");
       assert.equal(embedCalls.includes("observatory"), true);
+      assert.equal(embedInputTypes.get("observatory"), "query", "recall must embed its query as a query");
       await storage.createNote({
         id: "world_vector_only",
         title: "world_vector_only",
