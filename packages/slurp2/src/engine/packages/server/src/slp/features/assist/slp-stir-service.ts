@@ -422,10 +422,31 @@ export async function readSlpStirView(
     matches,
     dismissed,
   };
+  const shownPlays = plays.slice(0, 12);
+  // Step 1 (Stir follows through): the collabs the shown plays started or pushed, finished ones too,
+  // so a row can say how it went and open the joint post while it exists.
+  const playedIds = new Set(
+    shownPlays.flatMap((play) =>
+      play.steps.flatMap((step) => [step.ref?.collabId ?? step.input.collabId].filter((id) => typeof id === "string")),
+    ),
+  );
+  const playedCollabs = await Promise.all(
+    document.ties.collabs
+      .filter((collab) => playedIds.has(collab.id))
+      .map(async (collab) => ({
+        id: collab.id,
+        hostId: collab.hostId,
+        partnerId: collab.partnerId,
+        status: collab.status,
+        decline: collab.decline,
+        postId: collab.postId && (await storage.getPostById(collab.postId)) ? collab.postId : null,
+      })),
+  );
   return {
     live: slpStirLive(liveInput),
     suggestions: slpStirSuggestions(liveInput),
-    plays: plays.slice(0, 12).map(({ undo: _undo, ...play }) => play),
+    plays: shownPlays.map(({ undo: _undo, ...play }) => play),
+    playedCollabs,
     creators: creators.map(({ lastPostAt: _last, pace: _pace, ideas: _ideas, ...creator }) => creator),
     events: world.events,
     couples: world.couples,

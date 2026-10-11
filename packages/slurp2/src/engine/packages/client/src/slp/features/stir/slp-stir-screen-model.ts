@@ -1,7 +1,12 @@
 // The Stir tab's small rules (0.3.1), apart from the screen so they run in tests: which lever an
 // "In play" card opens, what a deck card needs first, and where a recent play leads.
 import type { SlpActionName } from "../../../../../shared/src/slp/slp-actions.js";
-import type { SlpStirLive, SlpStirPlay, SlpStirView } from "../../../../../shared/src/slp/slp-stir.js";
+import type {
+  SlpStirLive,
+  SlpStirPlay,
+  SlpStirPlayedCollab,
+  SlpStirView,
+} from "../../../../../shared/src/slp/slp-stir.js";
 import type { SlpPulseTarget } from "../../base/state/slp-task-store";
 
 /** The lever an "In play" card opens, already on that thread, or null when there is nothing to steer. */
@@ -61,4 +66,69 @@ export function slpStirPlayTarget(play: SlpStirPlay): SlpPulseTarget | null {
     if (accountId) return { accountId, postId: step.ref?.postId ?? null };
   }
   return null;
+}
+
+/**
+ * How a collab a play started is going now (Step 1, Stir follows through), from its record only:
+ * the locale key and names for the row, the joint post to open once it is up, the one move that
+ * fits ("Make it happen" on a request still waiting), and whether Undo can still take it back.
+ * Null when the play made no collab or was taken back.
+ */
+export type SlpStirCollabProgress = {
+  /** A `ui.slurp.*` key, worded with `host` and `partner`. */
+  label: string;
+  hostId: string | null;
+  partnerId: string | null;
+  target: SlpPulseTarget | null;
+  lever: { action: "push-collab"; pick: string } | null;
+  /** What Undo can still take back: never a joint post on its way or up. */
+  undoable: boolean;
+};
+
+export function slpStirPlayCollab(
+  play: SlpStirPlay,
+  collabs: readonly SlpStirPlayedCollab[] = [],
+): SlpStirCollabProgress | null {
+  if (play.undone) return null;
+  const step = play.steps.find(
+    (entry) => entry.ok && typeof (entry.ref?.collabId ?? entry.input.collabId) === "string",
+  );
+  if (!step) return null;
+  const id = (step.ref?.collabId ?? step.input.collabId) as string;
+  const collab = collabs.find((entry) => entry.id === id);
+  // Only a one-step play is all collab: another step may still be worth taking back.
+  const alone = play.steps.length === 1;
+  if (!collab)
+    return {
+      label: "ui.slurp.stir.follow.gone",
+      hostId: null,
+      partnerId: null,
+      target: null,
+      lever: null,
+      undoable: !alone && play.undoable,
+    };
+  const label =
+    collab.status === "asked"
+      ? "ui.slurp.ties.collab.waiting"
+      : collab.status === "posted"
+        ? collab.postId
+          ? "ui.slurp.ties.collab.posted"
+          : "ui.slurp.stir.follow.postGone"
+        : collab.status === "declined"
+          ? `ui.slurp.ties.decline.${collab.decline ?? "noAnswer"}`
+          : `ui.slurp.ties.collab.${collab.status}`;
+  // The server's Undo rule (`slurpUndoTie`): a suggestion is removed until its post is on the way;
+  // a push puts the request back only while the two are still just agreed.
+  const takesBack =
+    step.action === "push-collab"
+      ? collab.status === "agreed"
+      : collab.status !== "planned" && collab.status !== "posted";
+  return {
+    label,
+    hostId: collab.hostId,
+    partnerId: collab.partnerId,
+    target: { accountId: collab.hostId, postId: collab.postId },
+    lever: collab.status === "asked" ? { action: "push-collab", pick: collab.id } : null,
+    undoable: play.undoable && (!alone || takesBack),
+  };
 }

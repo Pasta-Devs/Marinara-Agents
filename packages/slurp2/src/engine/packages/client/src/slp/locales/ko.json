@@ -2530,6 +2530,8 @@
   "ui.slurp.stir.recent": "최근 플레이",
   "ui.slurp.stir.recentAll": "모두 보기",
   "ui.slurp.stir.recentUndone": "되돌림",
+  "ui.slurp.stir.follow.postGone": "함께 올린 게시물이 삭제됐어요",
+  "ui.slurp.stir.follow.gone": "Slurp에 이 콜라보 기록이 더 이상 없어요",
   "ui.slurp.stir.recentFailed_one": "{{count}}가지가 일어나지 않았어요",
   "ui.slurp.stir.recentFailed_other": "{{count}}가지가 일어나지 않았어요",
   "ui.slurp.stir.surprise": "아무거나",

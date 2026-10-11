@@ -616,6 +616,12 @@
     "slurp2": {
       "versions": [
         {
+          "version": "0.3.21",
+          "date": "2026-10-11",
+          "notes": "- Stir's Recent plays follows a collab you suggested or pushed: waiting for an answer, agreed, coming up, turned down (with the reason), blocked, or up on both pages. A posted collab opens its joint post; a deleted post or a collab Slurp no longer keeps says so.\n- A collab request still waiting shows Make it happen, which opens the usual preview before anything changes.\n- Undo is no longer offered once the joint post is on its way or up; published posts are not taken back.",
+          "highlight": false
+        },
+        {
           "version": "0.3.20",
           "date": "2026-10-10",
           "notes": "- Choose what a breakup leaves behind: keep the usual history, move on while remembering the relationship without ongoing pining or breakup drama, or forget the relationship in future posts and chats. Stir can also move on or forget an existing ex relationship. Published posts and messages stay; Undo restores the previous choice.",
@@ -727,12 +733,6 @@
           "version": "0.2.78",
           "date": "2026-09-27",
           "notes": "- bugfixing\n- Restyle the update sheet header with a larger animated G face, accent tint and integrated alpha reminder.\n- Replace the cost warning with a direct reminder that Slurp uses background image and text generation.",
-          "highlight": false
-        },
-        {
-          "version": "0.2.77",
-          "date": "2026-09-27",
-          "notes": "- Restore G’s animated face, introduction and alpha reminder in the themed update sheet.\n- Remember Details edit mode per conversation and viewer in this browser. Turning it off keeps saved edits.\n- Expose the displayed state timestamps and conversation cooldown for inline editing too.",
           "highlight": false
         }
       ]

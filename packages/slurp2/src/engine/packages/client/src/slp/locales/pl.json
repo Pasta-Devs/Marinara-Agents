@@ -1716,6 +1716,8 @@
   "ui.slurp.stir.recent": "Ostatnie ruchy",
   "ui.slurp.stir.recentAll": "Pokaż wszystkie",
   "ui.slurp.stir.recentUndone": "Cofnięte",
+  "ui.slurp.stir.follow.postGone": "Wspólny post został usunięty",
+  "ui.slurp.stir.follow.gone": "Slurp nie przechowuje już tej współpracy",
   "ui.slurp.stir.recentFailed_one": "1 część się nie wydarzyła",
   "ui.slurp.stir.recentFailed_few": "{{count}} części się nie wydarzyły",
   "ui.slurp.stir.recentFailed_many": "{{count}} części się nie wydarzyło",

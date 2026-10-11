@@ -175,11 +175,26 @@ export type SlpStirSuggestion = {
   step: SlpStirStep | null;
 };
 
+/**
+ * A collab a recent play suggested or pushed, as it stands now: "Recent plays" follows it from the
+ * request to the joint post. `postId` is set only while that post still exists.
+ */
+export type SlpStirPlayedCollab = {
+  id: string;
+  hostId: string;
+  partnerId: string;
+  status: "asked" | "agreed" | "planned" | "posted" | "declined" | "blocked";
+  decline: "busy" | "offBrand" | "noCollabs" | "noAnswer" | "player" | null;
+  postId: string | null;
+};
+
 /** What the Stir tab reads in one request. */
 export type SlpStirView = {
   live: SlpStirLive[];
   suggestions: SlpStirSuggestion[];
   plays: SlpStirPlay[];
+  /** The collabs those plays started or pushed, finished ones too; a removed one is absent. */
+  playedCollabs?: SlpStirPlayedCollab[];
   creators: {
     id: string;
     name: string;

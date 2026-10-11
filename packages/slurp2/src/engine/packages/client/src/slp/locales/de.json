@@ -1692,6 +1692,8 @@
   "ui.slurp.stir.recent": "Letzte Züge",
   "ui.slurp.stir.recentAll": "Alle zeigen",
   "ui.slurp.stir.recentUndone": "Zurückgenommen",
+  "ui.slurp.stir.follow.postGone": "Der gemeinsame Post wurde entfernt",
+  "ui.slurp.stir.follow.gone": "Slurp führt diese Collab nicht mehr",
   "ui.slurp.stir.recentFailed_one": "1 Teil ist nicht passiert",
   "ui.slurp.stir.recentFailed_other": "{{count}} Teile sind nicht passiert",
   "ui.slurp.stir.surprise": "Überrasch mich",

@@ -1,5 +1,11 @@
 # Slurp release notes
 
+## 0.3.21 — 2026-10-11
+
+- Stir's Recent plays follows a collab you suggested or pushed: waiting for an answer, agreed, coming up, turned down (with the reason), blocked, or up on both pages. A posted collab opens its joint post; a deleted post or a collab Slurp no longer keeps says so.
+- A collab request still waiting shows Make it happen, which opens the usual preview before anything changes.
+- Undo is no longer offered once the joint post is on its way or up; published posts are not taken back.
+
 ## 0.3.20 — 2026-10-10
 
 - Choose what a breakup leaves behind: keep the usual history, move on while remembering the relationship without ongoing pining or breakup drama, or forget the relationship in future posts and chats. Stir can also move on or forget an existing ex relationship. Published posts and messages stay; Undo restores the previous choice.
