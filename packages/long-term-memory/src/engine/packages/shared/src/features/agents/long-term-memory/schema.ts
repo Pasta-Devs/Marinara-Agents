@@ -1648,6 +1648,10 @@ export const ltmStatusResponseSchema = z
         chunkFormatVersion: z.number().int().min(1).nullable(),
         embeddingsAvailable: z.boolean(),
         embeddedChunkCount: z.number().int().min(0),
+        /** Label of the source recall would embed with now; null when none resolves. */
+        embeddingSource: z.string().min(1).max(240).nullable(),
+        /** Label of the source the stored vectors came from; null when the index has none. */
+        indexedEmbeddingSource: z.string().min(1).max(240).nullable(),
       })
       .strict(),
   })

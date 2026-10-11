@@ -2783,6 +2783,17 @@ async function main() {
         assert.match(healthText, /Log size unavailable/u);
         assert.match(healthText, /Index /u);
         assert.match(healthText, /Semantic search /u);
+        // #1304: the source shows on the health line, and the "source changed" note follows
+        // availability (the embedding space), not a label difference.
+        const sourceChangedNote = activity.locator("[data-ltm-embedding-source-changed]");
+        if (navigation === "desktop") {
+          assert.match(healthText, /Semantic search unavailable · Renamed connection \(bge-m3\)/u);
+          assert.equal(await sourceChangedNote.count(), 1, "unavailable vectors with equal labels show the note");
+          assert.match(await sourceChangedNote.innerText(), /different embedding model or endpoint/u);
+        } else {
+          assert.match(healthText, /Semantic search available · Renamed connection \(bge-m3\)/u);
+          assert.equal(await sourceChangedNote.count(), 0, "a renamed connection with usable vectors shows no note");
+        }
         // D21: operation metadata composes with one spaced middle-dot separator.
         assert.match(reported, /Reasoning: 8 tokens · Output: 12 tokens[\s\S]*Total: 60 tokens/u);
         // D20: runtime count/weight names read as localized labels, not camelCase.
@@ -3106,6 +3117,25 @@ async function main() {
           origin: `http://127.0.0.1:${address.port}`,
         });
         const debugPage = await context.newPage();
+        await debugPage.route("**/api/long-term-memory/status*", async (route) => {
+          // #1304: desktop keeps two equal labels over unavailable vectors (a switched
+          // sidecar model); mobile shows differing labels over available vectors (a renamed connection).
+          const response = await route.fetch();
+          const status = await response.json();
+          const renamed = navigation === "mobile";
+          await route.fulfill({
+            response,
+            json: {
+              ...status,
+              indexes: {
+                ...status.indexes,
+                embeddingsAvailable: renamed,
+                embeddingSource: "Renamed connection (bge-m3)",
+                indexedEmbeddingSource: renamed ? "Old name (bge-m3)" : "Renamed connection (bge-m3)",
+              },
+            },
+          });
+        });
         await debugPage.route("**/api/long-term-memory/drafts/review?*", async (route) => {
           const response = await route.fetch();
           const review = { ...(await response.json()), sources: structuredClone(debugReviewSources) };

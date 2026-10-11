@@ -417,6 +417,24 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
           {localizeUi("ui.longTermMemory.longtermmemorydetail.semanticRecallUnavailable")}
         </p>
       ) : null}
+      {indexHealth?.embeddingSource ? (
+        <p>
+          {localizeUi("ui.longTermMemory.longtermmemorydetail.embeddingSource", {
+            source: indexHealth.embeddingSource,
+          })}
+        </p>
+      ) : null}
+      {indexHealth?.embeddingSource &&
+      indexHealth.indexedEmbeddingSource &&
+      indexHealth.embeddingsAvailable === false ? (
+        <p className="text-[var(--marinara-editor-warning)]">
+          {localizeUi("ui.longTermMemory.activityview.embeddingSourceChanged", {
+            indexed: indexHealth.indexedEmbeddingSource,
+            current: indexHealth.embeddingSource,
+          })}
+        </p>
+      ) : null}
+      <p>{localizeUi("ui.longTermMemory.longtermmemorydetail.embeddingSourceHelp")}</p>
       {repairButton()}
       {repairMessage ? <p role="status">{repairMessage}</p> : null}
     </div>

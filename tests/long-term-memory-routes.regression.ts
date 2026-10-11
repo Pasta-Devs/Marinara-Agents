@@ -638,10 +638,12 @@ async function main(routeScenario: RouteScenario) {
         "chunkFormatVersion",
         "dirty",
         "embeddedChunkCount",
+        "embeddingSource",
         "embeddingsAvailable",
         "errors",
         "generatedAt",
         "health",
+        "indexedEmbeddingSource",
         "noteCount",
         "rebuildState",
         "sourceHash",
@@ -1007,6 +1009,44 @@ async function main(routeScenario: RouteScenario) {
         headers,
       });
       assert.equal(rebuiltStatus.json().indexes.chunkFormatVersion, 5);
+      {
+        // Stored vectors only count while they belong to the source recall embeds with now (#1304).
+        const { configurePackageRuntime, getPackageRuntime } =
+          await import("../packages/long-term-memory/src/engine/packages/server/src/services/long-term-memory/package-runtime.ts");
+        const originalHost = getPackageRuntime();
+        const fixtureSource = (spaceId: string, label: string) => ({
+          spaceId,
+          label,
+          async embed(texts: string[]) {
+            return texts.map(() => [1, 0]);
+          },
+        });
+        const useSource = (source: ReturnType<typeof fixtureSource>) =>
+          configurePackageRuntime({ ...originalHost, embeddings: source, resolveEmbeddings: async () => source });
+        const embeddingStatus = async () =>
+          (await app.inject({ method: "GET", url: "/api/long-term-memory/status", headers })).json().indexes;
+        let restored: Awaited<ReturnType<typeof app.inject>> | undefined;
+        try {
+          useSource(fixtureSource("source-fixture-a", "Source fixture A"));
+          const built = await app.inject({ method: "POST", url: "/api/long-term-memory/rebuild", headers });
+          assert.equal(built.statusCode, 200, built.body);
+          const matching = await embeddingStatus();
+          assert.equal(matching.embeddingsAvailable, true);
+          assert.equal(matching.embeddingSource, "Source fixture A");
+          assert.equal(matching.indexedEmbeddingSource, "Source fixture A");
+          useSource(fixtureSource("source-fixture-b", "Source fixture B"));
+          const switched = await embeddingStatus();
+          assert.equal(switched.embeddingsAvailable, false, "a switched source must not read as available");
+          assert.equal(switched.embeddingSource, "Source fixture B");
+          assert.equal(switched.indexedEmbeddingSource, "Source fixture A");
+          assert.equal(switched.embeddedChunkCount > 0, true);
+        } finally {
+          configurePackageRuntime(originalHost);
+          // Asserted after the block so a restore failure cannot replace the case's own assertion error.
+          restored = await app.inject({ method: "POST", url: "/api/long-term-memory/rebuild", headers });
+        }
+        assert.equal(restored.statusCode, 200, restored.body);
+      }
       const batch = await app.inject({
         method: "POST",
         url: "/api/long-term-memory/notes/batch",

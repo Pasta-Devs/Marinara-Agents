@@ -76,6 +76,28 @@ The retrieval entrypoint is `retrieval.ts`; ranking and budget behavior are in
 `ranking.ts` and `budget.ts`; host injection and receipts are in
 `generation-injection.ts`.
 
+## Embedding Source
+
+Recall embeddings come from the Engine agent config for `long-term-memory`,
+falling back to the default connection (Connections → Semantic Search
+(Embeddings)). The package resolves that source through
+`resolvePackageEmbeddingAdapter()`; the "Extraction connection" in Memory
+Settings only drives extraction. The built-in fallback is MiniLM, which is
+trained on English, so Korean, Japanese, Chinese or mixed-language vaults
+should set a multilingual embedding model on that connection, such as
+`BAAI/bge-m3` (which needs no query or document prefixes). Keyword and BM25 lanes only match within one language, so a
+multilingual vector lane is the only cross-language bridge.
+
+`GET /status` reports `indexes.embeddingSource` (the label of the source
+recall would embed with now) and `indexes.indexedEmbeddingSource` (the label
+stored with the vectors). `embeddingsAvailable` is true only while the stored
+`spaceId` matches the current adapter's `spaceId`; after a source switch it
+reads false and the vault re-embeds on the next recall or reindex. The labels
+are display text only: the clients show the "source changed" note from
+`embeddingsAvailable === false`, because a renamed connection keeps its
+`spaceId` (vectors stay usable) while a switched sidecar model keeps its
+label.
+
 ## Scope and Safety
 
 Scope resolution is shared between chat context and server retrieval. Changes

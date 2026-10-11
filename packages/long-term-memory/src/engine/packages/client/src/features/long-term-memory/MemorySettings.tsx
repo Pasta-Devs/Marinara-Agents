@@ -1189,6 +1189,7 @@ export default function MemorySettings({
             </span>
             <select
               aria-labelledby={extractionConnectionLabelId}
+              aria-describedby={`${extractionConnectionLabelId}-hint`}
               className={inputClass}
               value={extractionFormState.connectionId ?? ""}
               onChange={(event) =>
@@ -1213,6 +1214,9 @@ export default function MemorySettings({
                 </option>
               ))}
             </select>
+            <p id={`${extractionConnectionLabelId}-hint`} className="text-[0.6875rem] font-normal">
+              {localizeUi("ui.longTermMemory.memorysettings.extractionConnectionHint")}
+            </p>
             {connections.isError ? (
               <StatusSurface tone="danger">
                 {localizeUi("ui.longTermMemory.memorysettings.couldNotLoadLanguageConnections")}{" "}

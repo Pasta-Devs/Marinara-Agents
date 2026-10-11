@@ -1212,6 +1212,22 @@ export default function ActivityView({
       : indexes?.embeddingsAvailable && !indexUnusable
         ? localizeUi("ui.longTermMemory.activityview.semanticAvailable")
         : localizeUi("ui.longTermMemory.activityview.semanticUnavailable");
+  const embeddingSource = indexes?.embeddingSource ?? null;
+  const indexedEmbeddingSource = indexes?.indexedEmbeddingSource ?? null;
+  const healthSemanticWithSource =
+    embeddingSource && !healthMissing && !healthPending
+      ? localizeUi("ui.longTermMemory.activityview.semanticWithSource", {
+          state: healthSemanticText,
+          source: embeddingSource,
+        })
+      : healthSemanticText;
+  // Vectors are reused or re-embedded by embedding space, not by display label, so the
+  // note follows the server's availability verdict: a renamed connection with the same
+  // model keeps working, and a switched sidecar model with the same label does not.
+  const embeddingSourceChanged =
+    !healthMissing &&
+    !healthPending &&
+    Boolean(embeddingSource && indexedEmbeddingSource && indexes?.embeddingsAvailable === false);
 
   return (
     <section ref={activityRef} data-ltm-surface="activity" aria-labelledby="ltm-activity-title" className="space-y-4">
@@ -1299,8 +1315,16 @@ export default function ActivityView({
             "unavailable" rather than presenting another log's size as this one's. */}
         · {localizeUi("ui.longTermMemory.activityview.healthLogSize", { size: healthUnavailable })} ·{" "}
         {localizeUi("ui.longTermMemory.activityview.healthIndex", { index: healthIndexText })} ·{" "}
-        {localizeUi("ui.longTermMemory.activityview.healthSemantic", { state: healthSemanticText })}
+        {localizeUi("ui.longTermMemory.activityview.healthSemantic", { state: healthSemanticWithSource })}
       </p>
+      {embeddingSourceChanged ? (
+        <p className="text-[0.6875rem] text-[var(--muted-foreground)]" data-ltm-embedding-source-changed>
+          {localizeUi("ui.longTermMemory.activityview.embeddingSourceChanged", {
+            indexed: indexedEmbeddingSource,
+            current: embeddingSource,
+          })}
+        </p>
+      ) : null}
 
       <LtmWorkspace
         activeMobilePane={activePane}

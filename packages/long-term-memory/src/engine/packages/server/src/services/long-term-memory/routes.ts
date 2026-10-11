@@ -70,7 +70,13 @@ import { isEnoent } from "./ltm-utils.js";
 import { checkLongTermMemoryIntegrity, repairLongTermMemory } from "./maintenance.js";
 import { applyLtmNoteTransfer, previewLtmNoteTransfer } from "./note-transfer.js";
 import { applyLtmNoteForkRepair, previewLtmNoteForkRepair } from "./note-fork-repair.js";
-import { getPackageLanguageModels, getPackagePersistence, getPackageResources, logger } from "./package-runtime.js";
+import {
+  getPackageLanguageModels,
+  getPackagePersistence,
+  getPackageResources,
+  logger,
+  resolvePackageEmbeddingAdapter,
+} from "./package-runtime.js";
 import { getLongTermMemoryDirectories, LTM_DIR_NAME } from "./paths.js";
 import { longTermMemoryRecallIndexPath, parseLtmRecallIndex, rebuildLongTermMemoryIndexes } from "./rebuild.js";
 import { readLtmIndexState, readLtmNoteSummary } from "./index-state.js";
@@ -496,7 +502,7 @@ export function createLongTermMemoryRoutes(runtime: {
         (info) => ({ logAvailable: true, bytes: info.size }),
         () => ({ logAvailable: false, bytes: 0 }),
       );
-      const [summary, pendingDrafts, state, indexResult] = await Promise.all([
+      const [summary, pendingDrafts, state, indexResult, embeddingAdapter] = await Promise.all([
         readLtmNoteSummary(root),
         draftStore.listDrafts({ status: "pending" }),
         readLtmIndexState(root),
@@ -506,9 +512,12 @@ export function createLongTermMemoryRoutes(runtime: {
             corrupt: false,
           }))
           .catch((error) => ({ index: null, corrupt: !isEnoent(error) })),
+        // A host that cannot resolve embeddings means recall cannot use vectors either.
+        resolvePackageEmbeddingAdapter().catch(() => null),
       ]);
       const { index } = indexResult;
       const chunks = index ? Object.values(index.metadata.chunks) : [];
+      const hasVectors = Boolean(index?.embeddings.embeddedChunkCount);
       return ltmStatusResponseSchema.parse({
         initialized: true,
         directory: LTM_DIR_NAME,
@@ -546,8 +555,12 @@ export function createLongTermMemoryRoutes(runtime: {
           noteCount: index ? summary.savedMemories : null,
           chunkCount: index ? chunks.length : null,
           chunkFormatVersion: index ? CURRENT_LTM_CHUNK_FORMAT_VERSION : null,
-          embeddingsAvailable: Boolean(index?.embeddings.embeddedChunkCount),
+          // Vectors only count while they belong to the source recall would embed with now.
+          embeddingsAvailable:
+            hasVectors && Boolean(embeddingAdapter) && index?.embeddings.spaceId === embeddingAdapter?.spaceId,
           embeddedChunkCount: index?.embeddings.embeddedChunkCount ?? 0,
+          embeddingSource: embeddingAdapter?.label.slice(0, 240) || null,
+          indexedEmbeddingSource: hasVectors ? (index?.embeddings.model ?? null) : null,
         },
       });
     });
