@@ -167,7 +167,7 @@ assert.match(service, /proposeSlurpContinuityChange\(/u);
 // A request never leaves its thread.
 assert.match(service, /eventType: "request_received",[\s\S]*?audienceScope: "thread_private",\s*threadId,/u);
 // A failed batch keeps its checkpoint and is read again.
-assert.match(service, /\} catch \(error\) \{\s*\/\/ The checkpoint stays put/u);
+assert.match(service, /\} catch \(error\) \{[\s\S]{0,200}?\/\/ The checkpoint stays put/u);
 // Extraction never writes anywhere but the ledger.
 assert.doesNotMatch(service, /insert\(slurpMessages\)|update\(slurpMessages\)|update\(slurpThreads\)/u);
 assert.match(

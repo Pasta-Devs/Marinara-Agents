@@ -175,12 +175,9 @@ export async function generateSlpPostImage(input: {
   );
   const allowAvatarReferences = slpImageReferencesSupported(input.imageConnection, imageFallback);
   // The Creator's own appearance, written on the Creator rather than borrowed from a card.
-  //
-  // It is applied unconditionally, unlike the block below it. `imageGenerationIncludeDescriptions`
-  // decides whether to pull the *source character's* description into the picture; it was never
-  // meant to decide whether the picture knows who the Creator is. With it off, a Creator with no
-  // linked source, or a source card with an empty Appearance field, the image model received a
-  // scene containing nobody and invented somebody — a different somebody every post.
+  // `imageGenerationIncludeDescriptions` ("Use the Creator's look") gates this: off, a public
+  // picture uses only the post, image habits and avatar references, same as the DM path in
+  // slp-images-service.ts. The player-facing copy for the toggle says exactly that.
   const stageAppearance = input.settings.imageGenerationIncludeDescriptions
     ? await resolveImageAppearance({
         db: input.db,

@@ -19,6 +19,11 @@ on:
       # artifacts, the harness scripts, and sources/engine below.
       - "packages/noodle/**"
       - "packages/slurp2/**"
+      - "tests/slurp-*.regression.ts"
+      - "tests/slurp2-*.regression.ts"
+      - "tests/slurp2-source.ts"
+      - "tests/tsconfig.regressions.json"
+      - "scripts/run-slurp-regressions.mjs"
       - "scripts/build-feature-packages.mjs"
       - "scripts/install-package-browser-fixture.mjs"
       - "scripts/run-package-browser-tests.mjs"
@@ -140,6 +145,14 @@ jobs:
 
       - name: Install Engine dependencies
         run: pnpm --dir engine install --frozen-lockfile
+
+      - name: Build Engine shared package
+        run: pnpm --dir engine --filter @marinara-engine/shared build
+
+      - name: Slurp regressions
+        env:
+          MARINARA_ENGINE_ROOT: ${{ github.workspace }}/engine
+        run: npm run test:slurp:regressions
 
       - name: Install Playwright Chromium
         run: npx playwright install --with-deps chromium

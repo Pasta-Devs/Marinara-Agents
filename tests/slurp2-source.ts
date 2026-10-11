@@ -100,6 +100,7 @@ export const SLURP2_SOURCE_MODULES: Record<string, readonly string[]> = {
   ],
   "packages/client/src/components/slurp/SlurpBackstagePrompts.tsx": [
     "packages/client/src/slp/features/settings/SlpPromptsPanel.tsx",
+    "packages/client/src/slp/features/settings/SlpConnectionsPanel.tsx",
   ],
   "packages/client/src/components/slurp/SlurpBackstageMaintenance.tsx": [
     "packages/client/src/slp/features/maintenance/SlpAutopurgePanel.tsx",
@@ -335,6 +336,9 @@ export const SLURP2_SOURCE_MODULES: Record<string, readonly string[]> = {
     "packages/server/src/slp/data/messages/slp-messages-storage-commissions.ts",
     "packages/server/src/slp/data/messages/slp-messages-storage-actions.ts",
     "packages/server/src/slp/data/messages/slp-messages-storage-follow-ups.ts",
+    "packages/server/src/slp/data/messages/slp-messages-storage-refunds.ts",
+    "packages/server/src/slp/data/messages/slp-messages-storage-scenes.ts",
+    "packages/server/src/slp/data/messages/slp-messages-storage-facet.ts",
     "packages/server/src/slp/data/messages/slp-messages-storage-helpers.ts",
     "packages/server/src/slp/data/messages/slp-reply-storage-methods.ts",
   ],

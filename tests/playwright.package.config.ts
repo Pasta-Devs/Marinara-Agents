@@ -14,6 +14,7 @@ const packageId = process.env.MARINARA_PACKAGE_ID ?? "noodle";
 export default defineConfig({
   testDir: ".",
   testMatch: "**/package-*.e2e.ts",
+  globalSetup: "./package-browser-warmup.ts",
   timeout: 60_000,
   expect: { timeout: 10_000 },
   fullyParallel: false,

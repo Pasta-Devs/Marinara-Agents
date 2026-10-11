@@ -26,9 +26,9 @@ assert.match(replyMethods, /!thread\.coolUntil \|\| thread\.coolUntil <= nowIso/
 // Storing the reply also discharges the obligation it answers, so the inbox badge and the fan's
 // read receipt stop lying. A message that landed while the reply was being written is a fresh
 // obligation and stays unread.
-assert.match(storage, /creatorUnread:[\s\S]*?newerViewerMessage[\s\S]*?: "0"/u);
-assert.match(storage, /needsReply: newerViewerMessage \? "true" : "false"/u);
-assert.match(storage, /if \(!newerViewerMessage\) \{[\s\S]*?readAt: timestamp/u);
+assert.match(storage, /creatorUnread:[\s\S]*?newerViewer[\s\S]*?: "0"/u);
+assert.match(storage, /needsReply: [^\n]*?newerViewer \? "true" : "false"/u);
+assert.match(storage, /if \(latestRows\[0\]\?\.id !== claim\.triggerMessageId\) return;[\s\S]*?readAt: timestamp/u);
 assert.match(storage, /generationEpoch:[\s\S]*?\+ 1/u);
 assert.match(replyMethods, /status: "completed"[\s\S]*?messageId/u);
 

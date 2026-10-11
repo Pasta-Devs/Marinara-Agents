@@ -126,7 +126,7 @@ assert.match(messageStorage, /createSlurpPopulationStorage\(db\)\.get\(viewerAcc
 
 // Delayed Creator bubbles must not erase a Viewer message that arrived after the batch started.
 assert.match(messageStorage, /const currentRows = await tx\.select\(\)\.from\(slurpThreads\)/u);
-assert.match(messageStorage, /newerViewerMessage/u);
+assert.match(messageStorage, /latestRows\[0\]\?\.id !== claim\.triggerMessageId/u);
 assert.match(
   messageStorage,
   /creatorUnread:[\s\S]*?input\.role === "viewer"[\s\S]*?current\.creatorUnread[\s\S]*?: "0"/u,
@@ -192,7 +192,10 @@ assert.match(
 
 // The plus menu is one action surface. It must not introduce an inner tab or second window.
 assert.doesNotMatch(messages, /Back to message actions/u);
-assert.match(messages, /aria-label="Message actions"/u);
+assert.match(
+  read("client/src/slp/features/messages/SlpThreadHeader.tsx"),
+  /aria-label=\{localizeUi\("ui\.slurp\.messages\.moreActions"/u,
+);
 // A standalone tip becomes a platform-style chat card only after the tip mutation resolves.
 assert.match(messages, /setStandaloneTip\(result\.message\)/u);
 assert.match(messages, /<SlurpPlatformActionCard message=\{entry\.message\}/u);
@@ -200,7 +203,7 @@ assert.match(messages, /Relationship: \{\{tier\}\}/u);
 // Photo actions share one upload/generate surface and require review before either mutation runs.
 assert.match(messages, /const \[reviewing, setReviewing\] = useState\(false\)/u);
 assert.match(messages, /onClick=\{\(\) => setReviewing\(true\)\}/u);
-assert.match(messages, /A photo taken by the viewer persona/u);
+assert.match(read("server/src/slp/modules/messages/slp-messaging.ts"), /A photo the sender took themselves/u);
 // Requests offer guidance without requiring an existing reply obligation or promising an outcome.
 assert.match(messages, /requestHintGuidance\(requestHint\)/u);
 assert.match(messages, /disabled=\{busy \|\| requestReply\.isPending\}/u);

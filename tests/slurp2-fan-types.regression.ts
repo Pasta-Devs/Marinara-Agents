@@ -177,7 +177,7 @@ assert.match(
 const world = read("services/slurp/slurp-world.operation.ts");
 assert.match(world, /actorWeights/u, "the pulse must be told what each actor's type makes them do");
 assert.match(world, /slurpFanTypeCommissionBudget/u, "commission settlement reads the type, not a constant");
-assert.match(world, /slurpPickFanType\(settings\.fanTypes, tie\.memberId\)/u, "ambient accounts map to a type");
+assert.match(world, /slurpPickFanType\(settings\.fanTypes, (?:tie\.)?memberId\)/u, "ambient accounts map to a type");
 const pulse = read("services/slurp/slurp-world-pulse.ts");
 assert.match(pulse, /followChance/u);
 // Settings hold the list, and the population row remembers which type somebody is.

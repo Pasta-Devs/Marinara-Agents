@@ -72,8 +72,9 @@ const generation = slurp2Source(
   "packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-message-generation.service.ts",
 );
 assert.doesNotMatch(generation, /slpGeneratedCreatorReplySchema/u);
+// The DM response format is set where the reply is generated, not where the notes are written.
 assert.match(
-  generation,
+  slurp2Source("packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-reply-generation.service.ts"),
   /slpResponseFormat\(input\.connection\.model, "noodler_dm"(?:, \{ collab: Boolean\(pageId\), us: Boolean\(usPageId\) \})?\)/u,
 );
 

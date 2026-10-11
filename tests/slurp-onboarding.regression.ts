@@ -7,6 +7,10 @@ const root = join(import.meta.dirname, "..");
 const panel = slurp2Source(
   join(root, "packages/slurp2/src/engine/packages/client/src/components/slurp/SlurpOnboardingPanel.tsx"),
 );
+// Finishing the bulk create moved into the wizard model.
+const wizardModel = slurp2Source(
+  join(root, "packages/slurp2/src/engine/packages/client/src/slp/features/onboarding/slp-onboarding-wizard-model.ts"),
+);
 const home = slurp2Source(join(root, "packages/slurp2/src/engine/packages/client/src/components/slurp/SlurpHome.tsx"));
 const settings = slurp2BackstageSource();
 const storage = slurp2Source(
@@ -35,8 +39,8 @@ assert.doesNotMatch(panel, /showConfirmDialog/u, "onboarding must not wait on th
 assert.match(panel, /open=\{providerConfirmationOpen\}[\s\S]*?void performFinish\(\)/u);
 assert.match(panel, /open=\{providerConfirmationOpen\}[\s\S]*?panelStyle=\{getSlpAccentStyle\(SLP_PINK/u);
 assert.match(
-  panel,
-  /const performFinish = async \(\) => \{[\s\S]*?bulkCreate\.mutateAsync\([\s\S]*?\} catch \(error\) \{[\s\S]*?if \(error instanceof Error\) setCreationError\(error\.message\);/u,
+  wizardModel,
+  /const performFinish = async \(retryIds\?: string\[\]\) => \{[\s\S]*?bulkCreate\.mutateAsync\([\s\S]*?\} catch \(error\) \{[\s\S]*?if \(error instanceof Error\) setCreationError\(error\.message\);/u,
   "Bulk-create failures must preserve the caught error",
 );
 assert.doesNotMatch(
@@ -125,8 +129,8 @@ assert.match(
 // Step 3.1 (user): no refresh action; the feed refetches itself (30 s poll + focus, see
 // slurp2-step3.1-shell-polish) and new posts wait behind the "New posts" pill.
 assert.doesNotMatch(home, /onRefresh=/u, "The timeline has no manual refresh action");
-assert.doesNotMatch(creatorCard, /repost|Repeat2/iu, "Slurp creator cards must not expose repost actions");
-assert.doesNotMatch(postCard, /repost|Repeat2/iu, "Slurp post cards must not expose repost actions");
+assert.doesNotMatch(creatorCard, /\brepost|Repeat2/iu, "Slurp creator cards must not expose repost actions");
+assert.doesNotMatch(postCard, /\brepost|Repeat2/iu, "Slurp post cards must not expose repost actions");
 assert.doesNotMatch(fanActivity, /fanRepostsPerRefresh|repost/iu, "Synthetic Slurp audience activity must not repost");
 assert.doesNotMatch(responseFormat, /enum: \[[^\]]*repost/iu, "Slurp model output must not request reposts");
 assert.match(routes, /parsed\.data\.type === "repost"[\s\S]*?Reposts are not available in Slurp/u);

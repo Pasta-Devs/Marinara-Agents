@@ -49,7 +49,7 @@ assert.match(fanActivity, /schedule\(slurpPollBackoffMs\(POLL_MS, consecutiveFai
 const artwork = read("slurp-artwork.operation.ts");
 const backfill = artwork.slice(artwork.indexOf("export async function backfillNextCreatorArtwork"));
 assert.match(backfill, /admissionMode: \{ kind: "background" \}/);
-assert.match(backfill, /if \(isConnectionAdmissionFailure\(error\)\) return "idle";/);
+assert.match(backfill, /if \(slpIsAdmissionFailure\(error\)\) return "idle";/);
 
 console.log("slurp poll backoff regression passed");
 
@@ -62,7 +62,7 @@ assert.match(images, /imageRetryAttempts: attempts/);
 // by hand — which is the one thing left to do after three automatic failures. The automatic pass
 // stops on the attempt counter checked below, so the prompt never needed to be the off switch.
 assert.doesNotMatch(images, /imagePrompt: attempts >= SLP_CREATOR_POST_IMAGE_RETRY_LIMIT \? null : undefined/);
-assert.match(images, /if \(isConnectionAdmissionFailure\(error\)\) \{\s*await noodle\.releasePostImageClaim/);
+assert.match(images, /if \(slpIsAdmissionFailure\(error\)\) \{\s*await noodle\.releasePostImageClaim/);
 assert.match(images, /retryNextFailedPostImage/);
 assert.match(images, /admissionMode: \{ kind: "background" \}/);
 assert.match(autoPost, /retryNextFailedPostImage\(\)/);
@@ -70,17 +70,19 @@ assert.match(autoPost, /retryNextFailedPostImage\(\)/);
 const awaiting = storage.slice(storage.indexOf("async listNoodlerPostsAwaitingImageRetry"));
 // Posts waiting on the user's own prompt review are never hijacked by the automatic retry.
 assert.match(
-  awaiting.slice(0, 1200),
-  /metadata\.imagePendingReview === true \|\| metadata\.imageGenerationFailed !== true/,
+  awaiting.slice(0, 1600),
+  /metadata\.imagePendingReview === true \|\|\s*\(metadata\.imageGenerationFailed !== true && metadata\.imageGenerationDeferred !== true\)/,
 );
 assert.match(
-  awaiting.slice(0, 1400),
+  awaiting.slice(0, 1600),
   /slpCreatorPostImageRetryAttempts\(metadata\) >= SLP_CREATOR_POST_IMAGE_RETRY_LIMIT/,
 );
 
 // The failure fallbacks persist the prompt, or there would be nothing to redraw from.
 const generation = read("slurp-generation.service.ts");
-assert.equal(generation.split("imagePrompt: draftImagePrompt").length - 1, 6);
+// The persist sites moved from the generation service into the post media operation, where the
+// prompt is `prompt`: three failure fallbacks and two success paths.
+assert.equal(generation.split("imagePrompt: prompt").length - 1, 5);
 
 // A busy or unconfigured image connection is a deferral, not a provider failure: counting it as
 // a failure would back the whole poll off while the user is simply using the connection.
@@ -103,14 +105,17 @@ console.log("slurp image retry regression passed");
 // slurp-public-generation.service.ts was deleted: it had no importers, so its copy of this rule
 // would have passed forever no matter what the running code did. The invariant itself still
 // matters, so it stays pointed at the live generation path.
-for (const file of ["slurp-generation.service.ts"]) {
-  const source = read(file);
-  const fallbackCall = source.slice(
-    source.indexOf("withConnectionFallbackProvider({"),
-    source.indexOf("withConnectionAdmissionProvider("),
-  );
+// The composed provider is built in the host integrations, which the generation service calls.
+for (const file of ["slp/base/host/slp-generation-integrations.ts"]) {
+  const source = slurp2Source(join(root, "packages/slurp2/src/engine/packages/server/src", file));
+  const fallbackStart = source.indexOf("withConnectionFallbackProvider({");
+  const fallbackCall = source.slice(fallbackStart, source.indexOf("})", fallbackStart));
   assert.doesNotMatch(fallbackCall, /admissionMode/, `${file} passes admissionMode to the fallback wrapper`);
-  assert.match(source, /withConnectionAdmissionProvider\(\s*fallbackProvider,/, `${file} does not admit its provider`);
+  assert.match(
+    source,
+    /withConnectionAdmissionProvider\(\s*(?:fallbackProvider|withConnectionFallbackProvider\()/,
+    `${file} does not admit its provider`,
+  );
 }
 
 // The correction pass is a step inside an already-admitted run, so it must not book a second
@@ -118,8 +123,8 @@ for (const file of ["slurp-generation.service.ts"]) {
 const admittedGeneration = read("slurp-generation.service.ts");
 assert.equal(
   admittedGeneration.split("provider.chatComplete").length - 1,
-  2,
-  "the first call and the correction turn share one admission",
+  3, // first call, correction turn, and revision turn
+  "the first call, correction and revision turns share one admission",
 );
 assert.doesNotMatch(
   admittedGeneration.slice(admittedGeneration.indexOf("const correctionMessages")),

@@ -139,6 +139,10 @@ export const mapThread = (row: Record<string, unknown>): SlurpThread => ({
   updatedAt: String(row.updatedAt),
 });
 
+// The host media file path lives on the row, never on the mapped commission: every route returns
+// this object straight to the client (`{ commission: ... }`), and a server filesystem path is not
+// client data. A caller that needs the path (listDueCommissionDeliveries, the data reset sweep)
+// reads `row.mediaPath` directly.
 export const mapCommission = (row: Record<string, unknown>): SlurpCommission => ({
   id: String(row.id),
   threadId: String(row.threadId),
@@ -149,7 +153,6 @@ export const mapCommission = (row: Record<string, unknown>): SlurpCommission => 
   price: int(row.price as string),
   deliveryMessageId: (row.deliveryMessageId as string | null) ?? null,
   deliverAt: (row.deliverAt as string | null) ?? null,
-  mediaPath: (row.mediaPath as string | null) ?? null,
   cancellationId: (row.cancellationId as string | null) ?? null,
   deliveryId: (row.deliveryId as string | null) ?? null,
   deliveryClaimToken: (row.deliveryClaimToken as string | null) ?? null,

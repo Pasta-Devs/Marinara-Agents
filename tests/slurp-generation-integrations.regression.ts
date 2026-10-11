@@ -10,7 +10,7 @@ const host = read("packages/slurp2/src/engine/packages/server/src/slp/base/host/
 const post = read("packages/slurp2/src/engine/packages/server/src/slp/features/feed/slp-generation-service.ts");
 const images = read("packages/slurp2/src/engine/packages/server/src/slp/features/media/slp-images-service.ts");
 
-assert.match(build, /capabilityApi: \{ major: 1, minor: 31 \}/u);
+assert.match(build, /capabilityApi: \{ major: 1, minor: 66 \}/u);
 assert.match(entry, /if \(!integrations\)/u);
 assert.match(entry, /setSlurpGenerationIntegrations\(integrations\)/u);
 assert.match(host, /host\?\.llm\.createProvider/u);

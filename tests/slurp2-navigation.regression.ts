@@ -8,12 +8,13 @@ const client = "packages/slurp2/src/engine/packages/client/src";
 
 const router = read(`${client}/slp/app/SlpRouter.tsx`);
 const homeState = read(`${client}/slp/app/slp-home-state.ts`);
+const homeTypes = read(`${client}/slp/app/slp-home.types.ts`);
 const actions = read(`${client}/slp/app/slp-home-actions.ts`);
 const creatorFlow = read(`${client}/slp/app/screens/SlpHomeCreatorFlow.tsx`);
 const destinations = read(`${client}/slp/app/screens/SlpHomeDestinations.tsx`);
 
 assert.doesNotMatch(router, /if \(navigation\.mode !== "creator"\) return null/u);
-assert.match(homeState, /export interface SlurpHomeProps \{\s*navigation: SlurpNavigationState;/u);
+assert.match(homeTypes, /export interface SlurpHomeProps \{\s*navigation: SlurpNavigationState;/u);
 assert.match(homeState, /return \{\s*navigation,/u);
 assert.match(actions, /const \{\s*navigation,/u);
 assert.match(creatorFlow, /const \{[\s\S]*?localizeUi,\s*navigation,/u);

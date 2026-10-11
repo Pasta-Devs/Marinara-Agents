@@ -31,6 +31,7 @@ import { generateSlpImageWithRetry } from "../../base/media/slp-image-retry.js";
 import { rewriteSlpImagePrompt } from "../../base/media/slp-image-prompt-rewrite.js";
 import { slpImageReferencesSupported } from "../../base/media/slp-image-references.js";
 import { resolveImageAppearance } from "./slp-appearance-service.js";
+import { resolveSlurpImageCompanions } from "./slp-image-companions.js";
 import { newSlurpImageRun, recordSlurpImageRun, slurpImageRunStyle, trackSlurpImageAttempt } from "./slp-image-run.js";
 import { type ConnectionAdmissionMode } from "../../../services/generation/connection-admission.js";
 import { characterAppearanceFromRow, characterSlpImageContextFromRow } from "./slp-public-images-service.js";
@@ -42,7 +43,9 @@ import {
   selectSlpImageProviderPrompt,
   slurpApplyImageLook,
   slurpApplyImageSubject,
+  slurpImageCompanionBlocks,
   slurpImageSubjectName,
+  slurpSplitStyleLead,
   slurpImageIdentityContext,
   slurpLookForWriter,
   slurpArtStyle,
@@ -98,9 +101,6 @@ function slurpImageDefaultsForStyle(
 }
 
 type ImageConnection = NonNullable<Awaited<ReturnType<ReturnType<typeof createConnectionsStorage>["getWithKey"]>>>;
-
-/** Another Creator the post is about (a partner, a collab), with the card behind their page. */
-type SlurpImageCompanion = { account: SlpAccount; source: SlpAccount | null };
 
 type CreatorPostImageInput = {
   account: SlpAccount;
@@ -184,18 +184,6 @@ type CreatorPostImageResult = {
   /** Exact positive prompt sent to the image provider. Also stored as `metadata.imageProviderPrompt`. */
   providerPrompt: string;
 };
-
-/** The Creators a post's beat names, as picture companions. The author and unknown ids drop out. */
-async function resolveSlurpImageCompanions(db: DB, ids: unknown, authorId: string): Promise<SlurpImageCompanion[]> {
-  const noodle = createSlurpStorage(db);
-  const companions: SlurpImageCompanion[] = [];
-  for (const id of new Set(Array.isArray(ids) ? ids : [])) {
-    if (typeof id !== "string" || id === authorId) continue;
-    const account = await noodle.getNoodlerAccountById(id);
-    if (account) companions.push({ account, source: await noodle.resolveAccountSource(account) });
-  }
-  return companions;
-}
 
 /**
  * NoodleR analog of generateSlpPostImage. The deliberate difference from public
@@ -403,6 +391,12 @@ async function generateCreatorPostImageRun(
       const row = character ?? persona;
       return {
         name: account.displayName,
+        // Their own "The image model knows this character" switch, for an open identity only.
+        known:
+          (account.settings.privacy.identityDisclosure ?? "open") === "open" &&
+          input.settings.creatorImageNames?.[account.id] !== false
+            ? (character ? characterNameFromRow(character) : persona?.name?.trim()) || ""
+            : "",
         // Descriptions off keeps every look out of the prompt, the companions' too; references stay.
         look: includeAppearance
           ? account.settings.stage?.appearance?.trim() || (appearance ? slurpImageLook(appearance) : "")
@@ -440,12 +434,14 @@ async function generateCreatorPostImageRun(
     // that genuinely wants it can still read the character card.
     characterPersonality: "",
   });
-  const compiledPrompt = compileSlurpImagePrompt({
-    kind: "illustration",
-    prompt: postPrompt,
-    styleProfiles: imageSettings.styleProfiles,
-    imageDefaults,
-  });
+  const compileStyled = (prompt: string) =>
+    compileSlurpImagePrompt({
+      kind: "illustration",
+      prompt,
+      styleProfiles: imageSettings.styleProfiles,
+      imageDefaults,
+    });
+  const compiledPrompt = compileStyled(postPrompt);
   const styleGuidance = resolveImageStyleGuidanceText(imageSettings.styleProfiles, compiledPrompt.profile.id);
   run.styleProfile = slurpImageRunStyle(
     compiledPrompt.profile,
@@ -457,26 +453,12 @@ async function generateCreatorPostImageRun(
   // than wording, so recompile the approved text instead of sending it bare. The compiler omits
   // style values the prompt already carries, so an approved prompt is never double-styled.
   const overridePrompt = input.promptOverride?.prompt.trim();
-  const compiledOverride = overridePrompt
-    ? compileSlurpImagePrompt({
-        kind: "illustration",
-        prompt: overridePrompt,
-        styleProfiles: imageSettings.styleProfiles,
-        imageDefaults,
-      })
-    : null;
+  const compiledOverride = overridePrompt ? compileStyled(overridePrompt) : null;
   // The rewrite is skipped when interpretation is off and discarded when it leaks, and both land on
   // this fallback. Sending the bare draft there dropped the style profile exactly like the review
   // path did, so the draft is compiled too.
   const draftPrompt = input.draftPrompt.trim();
-  const compiledDraft = draftPrompt
-    ? compileSlurpImagePrompt({
-        kind: "illustration",
-        prompt: draftPrompt,
-        styleProfiles: imageSettings.styleProfiles,
-        imageDefaults,
-      })
-    : null;
+  const compiledDraft = draftPrompt ? compileStyled(draftPrompt) : null;
   // A retry resends our own stored draft as the "override". That is the same string the template
   // was just rendered from, so honouring it here would rebuild the retry from the bare draft and
   // drop appearance and image habits — the exact context loss this flag exists to stop. Only a
@@ -619,17 +601,28 @@ async function generateCreatorPostImageRun(
     model: imageModel,
     furry: Boolean(artStyle?.tag.includes("furry")),
   });
+  // The look and the name go behind the style profile's own tags, in front of the scene.
+  const [styleLead, finalPromptBody] = slurpSplitStyleLead(
+    skipInterpretation ? finalPromptScene : slurpViewpointForFamily(finalPromptScene, promptFamily),
+    compileStyled("").prompt,
+  );
   // One copy of the look: the writer's words, Slurp's insert, or the writer's plus the missing traits.
   const finalPromptLook = slurpApplyImageLook(
-    skipInterpretation ? finalPromptScene : slurpViewpointForFamily(finalPromptScene, promptFamily),
+    finalPromptBody,
     redactIdentity(stageAppearance || stripAppearanceLabel(characterDescription)),
     lookMode,
     usedRewrite,
   );
-  // The name leads on every path, with or without the enhancer; a prompt a human approved stays as written.
-  const finalPromptSubject = skipInterpretation
+  // The name leads the look on every path, with or without the enhancer; a prompt a human approved stays as written.
+  const namedLook = skipInterpretation
     ? finalPromptLook
     : slurpApplyImageSubject(finalPromptLook, subjectName, promptFamily);
+  const ownBlock = namedLook.slice(0, namedLook.length - finalPromptBody.length);
+  // Everybody else the scene names gets their own block, between the Creator's and the scene.
+  const blocks = () =>
+    slurpImageCompanionBlocks(finalPromptBody, companionCards, promptFamily, lookMode, usedRewrite, ownBlock);
+  const people = skipInterpretation ? "" : redactIdentity(blocks());
+  const finalPromptSubject = styleLead + ownBlock + people + finalPromptBody;
   const finalPrompt = [
     artStyle ? slurpStyledImagePrompt(finalPromptSubject, styleSource) : finalPromptSubject,
     input.compositionGuard,

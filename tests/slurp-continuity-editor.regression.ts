@@ -50,7 +50,12 @@ assert.match(
 
 // The panel: approve, reject, edit, retract, publish, search, and the plans behind the posts.
 assert.match(creators, /"continuity"/u, "the Creator page has a continuity tab");
-assert.match(creators, /<SlurpContinuityPanel creatorAccountId=\{selectedCreator\.id\}/u);
+assert.match(
+  slurp2Source(
+    "packages/slurp2/src/engine/packages/client/src/slp/features/creators/settings/SlpCreatorSettingsSections.tsx",
+  ),
+  /<SlurpContinuityPanel\s+creatorAccountId=\{creator\.id\}/u,
+);
 for (const action of [
   /proposals\/\$\{encodeURIComponent\(proposal\.id\)\}\/\$\{decision\}/u,
   /facts\/\$\{encodeURIComponent\(fact\.id\)\}\/retract/u,
@@ -80,5 +85,8 @@ const requestsPanel = slurp2Source(
   "packages/slurp2/src/engine/packages/client/src/slp/features/messages/SlpThreadRequestsPanel.tsx",
 );
 assert.match(requestsPanel, /<SlpOpenContinuityButton/u);
-assert.match(creators, /openContinuity\(continuityCreatorId\)/u);
-assert.match(creators, /<SlpContinuityOverview onOpen=\{openContinuity\} \/>/u);
+assert.match(creators, /openSlpCreatorSettings\(continuityCreatorId, \{ tab: "continuity" \}\)/u);
+assert.match(
+  creators,
+  /<SlpContinuityOverview onOpen=\{\(creatorId\) => openSlpCreatorSettings\(creatorId, \{ tab: "continuity" \}\)\} \/>/u,
+);

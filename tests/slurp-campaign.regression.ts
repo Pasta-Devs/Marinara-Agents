@@ -87,7 +87,7 @@ assert.match(
 assert.match(plan, /\(stage \? slurpCampaignStageIntent\(stage\.kind\) : undefined\);/u);
 // The teaser previews its own set's picture, cropped on the server.
 assert.match(plan, /other\.kind === "set"\)\?\.postId/u);
-assert.match(plan, /stage\?\.kind === "teaser" && reuse\.preview[\s\S]*?delivery: "cropped_preview"/u);
+assert.match(plan, /stage\?\.kind === "teaser"\s+&&\s+reuse\.preview[\s\S]*?delivery: "cropped_preview"/u);
 // The stage is claimed by the plan running it; a set outside a campaign opens one.
 assert.match(plan, /moveSlurpCampaignStage\(db, stage, "claimed", \{ at, opportunityId: opportunity\.id \}\)/u);
 assert.match(plan, /axes\?\.intent === "set"[\s\S]*?openSlurpCampaign\(db, \{/u);

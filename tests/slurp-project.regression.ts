@@ -24,7 +24,6 @@ import {
   SLURP_DEFAULT_ARC_AUTO_MODE,
   slurpAutoArcType,
 } from "../packages/slurp2/src/engine/packages/server/src/slp/modules/projects/slp-arc-library.js";
-import { slurp2BackstageSource } from "./slurp2-backstage-source";
 import { slurp2Source } from "./slurp2-source";
 
 const at = new Date("2026-09-09T10:00:00.000Z");
@@ -120,8 +119,17 @@ assert.equal(slurpArcLifeLine([move]), "Moving house (deciding to move)");
   const stance = slurp2Source(join(serverRoot, "slurp/slurp-stance.ts"));
   assert.match(stance, /do not make every reply about it/u);
   const dm = slurp2Source(join(serverRoot, "slurp/slurp-message-generation.service.ts"));
+  // The life line moved into the shared thread-stance helper; the generation path still calls it.
+  assert.match(dm, /resolveSlurpThreadStance\(/u, "the DM generation path must resolve the thread stance");
+  const threadStance = slurp2Source(
+    join(
+      import.meta.dirname,
+      "..",
+      "packages/slurp2/src/engine/packages/server/src/slp/features/messages/slp-thread-stance.ts",
+    ),
+  );
   // Gated by the setting, and protected: an arc title can name a Secret Creator's real city.
-  assert.match(dm, /settings\.arcAffectsMood\s+\? \(protectNoodlerGeneratedIdentity\(\s+slurpArcLifeLine/u);
+  assert.match(threadStance, /settings\.arcAffectsMood\s+\? \(protectCreatorGeneratedIdentity\(\s+slurpArcLifeLine/u);
   const store = slurp2Source(join(serverRoot, "storage/slurp.storage.ts"));
   assert.match(store, /"arc_complete"/u);
   assert.match(store, /await this\.recordArcChange\(creatorAccountId, current, next\)/u);
@@ -268,14 +276,17 @@ assert.doesNotMatch(bare, /Your last posts/u);
 const generation = read("services/slurp/slurp-generation.service.ts");
 // One sequence for both rotations, or the project and the variation drift apart.
 assert.match(generation, /const sequence = await noodle\.countNoodlerPostsByAccount\(account\.id\)/u);
-assert.match(generation, /slurpPostVariation\(account\.id, sequence, settings\.storyRate\)/u);
+assert.match(
+  generation,
+  /slurpPostVariation\(account\.id, sequence, settings\.storyImagesEnabled \? settings\.storyRate : "off"\)/u,
+);
 assert.match(
   generation,
   /slurpPostProject\(\s*account\.id,\s*sequence,\s*slurpArcRotation\(await noodle\.listActiveProjects\(account\.id\)\),\s*settings\.projectRate,?\s*\)/u,
 );
 // Player direction stands both rotations down: their direction is the subject.
-assert.match(generation, /const directed = Boolean\(input\.request\.noodlerPostGuide\?\.trim\(\)\)/u);
-assert.match(generation, /const project = directed\s+\? null/u);
+assert.match(generation, /const directed = Boolean\(input\.request\.noodlerPostGuide\?\.trim\(\) \|\| classicIdea\)/u);
+assert.match(generation, /const project =\s*directed \|\| nudge\s*\?\s*null/u);
 // The project's own posts, not the page's: page history says nothing about where this thread got to.
 assert.match(generation, /listPostsByProject\(project\.id, 4\)/u);
 // Project text is untrusted user input like every other supplied value.
@@ -292,13 +303,13 @@ assert.match(publish, /await this\.advanceProject\(item\.creatorAccountId, item\
 // ── Routes ──────────────────────────────────────────────────────────────────
 const routes = read("routes/slurp.routes.ts");
 for (const route of [
-  'app.get("/noodler/accounts/:id/projects"',
-  'app.post("/noodler/accounts/:id/projects"',
-  'app.patch("/noodler/accounts/:id/projects/:projectId"',
-  'app.delete("/noodler/accounts/:id/projects/:projectId"',
-  'app.get("/noodler/accounts/:id/projects/:projectId/posts"',
-  'app.post("/noodler/accounts/:id/projects/generate"',
-  'app.post("/noodler/accounts/:id/projects/:projectId/library"',
+  'app.get("/slurp/accounts/:id/projects"',
+  'app.post("/slurp/accounts/:id/projects"',
+  'app.patch("/slurp/accounts/:id/projects/:projectId"',
+  'app.delete("/slurp/accounts/:id/projects/:projectId"',
+  'app.get("/slurp/accounts/:id/projects/:projectId/posts"',
+  'app.post("/slurp/accounts/:id/projects/generate"',
+  'app.post("/slurp/accounts/:id/projects/:projectId/library"',
 ]) {
   assert.ok(routes.includes(route), `missing route ${route}`);
 }
@@ -309,10 +320,10 @@ function routeBlock(route: string) {
   return routes.slice(start, end === -1 ? undefined : end);
 }
 for (const route of [
-  'app.get("/noodler/accounts/:id/projects"',
-  'app.post("/noodler/accounts/:id/projects"',
-  'app.patch("/noodler/accounts/:id/projects/:projectId"',
-  'app.delete("/noodler/accounts/:id/projects/:projectId"',
+  'app.get("/slurp/accounts/:id/projects"',
+  'app.post("/slurp/accounts/:id/projects"',
+  'app.patch("/slurp/accounts/:id/projects/:projectId"',
+  'app.delete("/slurp/accounts/:id/projects/:projectId"',
 ]) {
   assert.doesNotMatch(
     routeBlock(route),
@@ -341,9 +352,12 @@ assert.match(panel, /ui\.slurp\.projects\.resume/u);
 assert.match(panel, /ui\.slurp\.projects\.endEarly/u);
 // "Delete" normally takes the content with it. Say that it does not.
 assert.match(panel, /ui\.slurp\.projects\.deleteNote/u);
-assert.match(readClient("components/slurp/SlurpHome.tsx"), /<SlurpProjectsPanel\s+personaId=\{personaId\}/u);
+assert.match(
+  readClient("slp/features/creators/settings/SlpCreatorStorylinesSection.tsx"),
+  /<SlurpProjectsPanel\s+personaId=\{personaId\}/u,
+);
 // The pace is one familiar control beside the Story rate, not a second settings screen.
-assert.match(slurp2BackstageSource(), /ui\.slurp\.settings\.projectRate/u);
+assert.match(readClient("slp/features/projects/SlpStorylinesPanel.tsx"), /ui\.slurp\.settings\.projectRate/u);
 
 const locales = JSON.parse(readClient("localization/locales/en.json")) as Record<string, string>;
 for (const key of ["ui.slurp.projects.heading", "ui.slurp.settings.projectRate", "ui.slurp.projects.status.active"]) {

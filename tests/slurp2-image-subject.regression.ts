@@ -9,7 +9,9 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import {
   slurpApplyImageSubject,
+  slurpImageCompanionBlocks,
   slurpImageSubjectName,
+  slurpSplitStyleLead,
   slurpImageIdentityContext,
 } from "../packages/slurp2/src/engine/packages/server/src/slp/base/media/slp-image-prompt.ts";
 
@@ -43,6 +45,17 @@ assert.equal(
 );
 
 // The post writer may tag the name with its series (NovelAI style); only for the same character.
+// 0.3.23 (player report): the name follows the style profile's tags instead of leading them.
+const [lead, scene] = slurpSplitStyleLead("masterpiece, best quality, 1girl, red hair", "masterpiece, best quality");
+assert.equal(
+  lead + slurpApplyImageSubject(scene, "Asuka Langley Soryu", "tags"),
+  "masterpiece, best quality, asuka langley soryu, 1girl, red hair",
+);
+// No style, a prompt that does not start with it, or a style that ends inside a word: no lead.
+assert.deepEqual(slurpSplitStyleLead("1girl, red hair", ""), ["", "1girl, red hair"]);
+assert.deepEqual(slurpSplitStyleLead("1girl, anime", "anime"), ["", "1girl, anime"]);
+assert.deepEqual(slurpSplitStyleLead("anime screencap", "anime"), ["", "anime screencap"]);
+
 assert.equal(slurpImageSubjectName("fubuki (one punch man)", ["Fubuki", "Blizzard"]), "fubuki (one punch man)");
 assert.equal(
   slurpImageSubjectName("tatsumaki (one punch man)", ["Fubuki", "Blizzard"]),
@@ -51,6 +64,43 @@ assert.equal(
 );
 assert.equal(slurpImageSubjectName(null, ["Fubuki"]), "Fubuki");
 assert.equal(slurpImageSubjectName("", ["Fubuki"]), "Fubuki");
+
+// 0.3.24 (player report): a second person the scene names gets their own labelled look, so a collab
+// picture without the enhancer no longer leaves them to the Creator's features.
+const mika = { name: "Mika", known: "", look: "Short black hair. Green eyes." };
+const collab = "Two people: the Creator and Mika, a fellow Creator.";
+assert.equal(
+  slurpImageCompanionBlocks(collab, [mika], "natural", "writer", false),
+  "Mika: Short black hair. Green eyes.\n",
+);
+// Nobody the scene names, or a rewrite in writer mode that worded every look already: nothing.
+assert.equal(slurpImageCompanionBlocks("The only person in the photo.", [mika], "natural", "writer", false), "");
+assert.equal(slurpImageCompanionBlocks(collab, [mika], "natural", "writer", true), "");
+// After any other rewrite only the traits it left out go in.
+assert.equal(
+  slurpImageCompanionBlocks(`${collab} Mika has short black hair.`, [mika], "natural", "both", true),
+  "Mika: Green eyes.\n",
+);
+// A known character keeps both names when they differ; a tag model gets the name as a tag, once.
+const known = { name: "Blizzard", known: "Fubuki (One Punch Man)", look: "Green hair." };
+assert.equal(
+  slurpImageCompanionBlocks("Two people: the Creator and Blizzard.", [known], "natural", "writer", false),
+  "Blizzard (Fubuki (One Punch Man)): Green hair.\n",
+);
+assert.equal(
+  slurpImageCompanionBlocks("2girls, blizzard", [known], "tags", "writer", false),
+  "fubuki (one punch man), Green hair.\n",
+);
+assert.equal(
+  slurpImageCompanionBlocks("2girls, blizzard, fubuki_\\(one_punch_man\\)", [known], "tags", "writer", true),
+  "",
+);
+
+// A second page of the Creator's own character: the tag is in the Creator's block already.
+assert.equal(
+  slurpImageCompanionBlocks("2girls, blizzard", [known], "tags", "writer", false, "fubuki (one punch man), "),
+  "Green hair.\n",
+);
 
 // The enhancer's identity context: the name and the start of the card, marked as context.
 const context = slurpImageIdentityContext("Makima", `A devil hunter.  ${"Calm and in control. ".repeat(40)}`);
@@ -65,6 +115,12 @@ assert.match(
   /input\.disclosureMode === "open" &&\s+input\.settings\.creatorImageNames\?\.\[input\.account\.id\] !== false/u,
 );
 assert.match(service, /slurpApplyImageSubject\(finalPromptLook, subjectName, promptFamily\)/u);
+assert.match(service, /const finalPromptSubject = styleLead \+ ownBlock \+ people \+ finalPromptBody;/u);
+// A companion's known name follows their own switch and their own open identity.
+assert.match(
+  service,
+  /known:\s+\(account\.settings\.privacy\.identityDisclosure \?\? "open"\) === "open" &&\s+input\.settings\.creatorImageNames\?\.\[account\.id\] !== false/u,
+);
 assert.match(service, /\[\s+identityContext,/u);
 assert.match(
   service,

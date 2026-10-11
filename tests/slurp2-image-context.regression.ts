@@ -2,7 +2,17 @@ import assert from "node:assert/strict";
 import { stripTypeScriptTypes } from "node:module";
 import { runInNewContext } from "node:vm";
 import { protectCreatorGeneratedIdentity as protect } from "../packages/slurp2/src/engine/packages/server/src/slp/base/identity/slp-identity-protection";
-import { normalizeSlpImagePrompt } from "../packages/slurp2/src/engine/packages/server/src/slp/base/media/slp-image-prompt";
+import {
+  composeSlurpPromptBlocks,
+  slurpPromptContext,
+} from "../packages/slurp2/src/engine/packages/server/src/slp/base/prompting/slp-prompt-blocks";
+import { SLURP_PERFORMED_INTIMACY } from "../packages/slurp2/src/engine/packages/server/src/slp/modules/creators/slp-performance";
+import { slurpRotationHash } from "../packages/slurp2/src/engine/packages/server/src/slp/modules/feed/slp-post-variation";
+import { SLP_CREATOR_REPLY_CONTENT_MAX_LENGTH } from "../packages/slurp2/src/engine/packages/shared/src/slp/slp-social.schema";
+import {
+  normalizeSlpImagePrompt,
+  slurpIsLegacyImageBrief,
+} from "../packages/slurp2/src/engine/packages/server/src/slp/base/media/slp-image-prompt";
 import { slurp2Source } from "./slurp2-source";
 
 const root = "../packages/slurp2/src/engine/packages/server/src/services/slurp/";
@@ -22,6 +32,7 @@ async function main() {
   let captionCalls = 0;
   const prepare = compile(`${read("slurp-post-image-context.ts")}\nprepareSlurpPostImageContexts;`, {
     normalizeSlpImagePrompt,
+    slurpIsLegacyImageBrief,
     slpCreatorPostMediaUrl: (id: string) => `/api/slurp2/noodler/posts/${id}/media`,
     slurpMessageMediaUrl: (id: string) => `/api/slurp2/messages/${id}/media`,
     slurpModelLacksVision: async (connection: { model: string }) => connection.model === "text-only",
@@ -88,16 +99,30 @@ async function main() {
   assert.equal(captionCalls, callsBeforeRefusal, "a model that refused images must not be asked again");
   assert.match(refused.get("public"), /blue coat/, "stored prompts still work for a text-only model");
 
-  // A locked PPV message withholds what its picture shows, not only the picture.
+  // A locked PPV message withholds what its picture shows, not only the picture. The redaction now
+  // lives in one shared `maskForViewer` helper instead of three duplicated inline blocks, so check
+  // the helper's own redaction and that every fan-facing route still runs messages through it.
   const messageRoutes = slurp2Source(
     new URL("../packages/slurp2/src/engine/packages/server/src/routes/slurp-messages.routes.ts", import.meta.url),
   );
-  const lockedRedactions =
-    messageRoutes.match(/kind === "ppv" && !message\.unlockedAt\s*\?[^:]*?\{[\s\S]{0,300}?\}\s*:/gu) ?? [];
-  assert.equal(lockedRedactions.length, 3, "every locked PPV redaction must be checked");
-  for (const redaction of lockedRedactions) {
-    assert.match(redaction, /imagePrompt: undefined,\s*imageDescription: undefined/u);
-  }
+  const maskForViewerDef =
+    messageRoutes.match(/const maskForViewer = <T[^>]*>\(message: T\): T =>[\s\S]*?: message;/gu) ?? [];
+  assert.equal(maskForViewerDef.length, 1, "the PPV redaction must be defined in exactly one shared helper");
+  assert.match(maskForViewerDef[0], /imagePrompt: undefined,\s*imageDescription: undefined/u);
+  // Every viewer-facing message response routes through the shared helper, called either directly
+  // (a single reply/outcome) or passed to `.map` (a page of messages). Counted in the current
+  // routes: 5 direct calls in slp-messages-send-routes.ts, 1 in slp-messages-media-routes.ts, 1 in
+  // slp-messages-context.ts's own listMessages, and 2 `.map(maskForViewer)` list pages in
+  // slp-messages-thread-routes.ts — 9 total. A route that returns a message without one of these
+  // is the exact bug this regression exists to catch, so this count is a proof, not a floor:
+  // bump it, with a reason, when a new masked path is added.
+  const maskForViewerCalls = messageRoutes.match(/\bmaskForViewer\(/gu) ?? [];
+  const maskForViewerMapRefs = messageRoutes.match(/\.map\(maskForViewer\)/gu) ?? [];
+  assert.equal(
+    maskForViewerCalls.length + maskForViewerMapRefs.length,
+    9,
+    "every viewer-facing list/get path that carries a message must route through the shared redaction",
+  );
 
   const fan = read("slurp-fan-activity.service.ts");
   let sent = "";
@@ -111,6 +136,10 @@ async function main() {
           return { content: "{}" };
         },
       }),
+      slpWithProviderRetry: (provider: unknown) => provider,
+      composeSlurpPromptBlocks,
+      slurpPromptContext,
+      SLURP_PERFORMED_INTIMACY,
       resolveBaseUrl: () => "http://fixture",
       prepareSlurpPostImageContexts: prepare,
       slurpImageCaptioning: async (_db: unknown, _id: unknown, connection: unknown) => ({ enabled: true, connection }),
@@ -150,12 +179,15 @@ async function main() {
 
   const reply = read("slurp-reply-generation.service.ts");
   const buildReply = compile(
-    `${part(reply, "export function buildCreatorReplyMessages", "export async function generateCreatorReply")}\nbuildNoodlerCreatorReplyMessages;`,
+    `${part(reply, "export function buildCreatorReplyMessages", "export async function generateCreatorReply")}\nbuildCreatorReplyMessages;`,
     {
       protectCreatorGeneratedIdentity: protect,
       slpCreatorIdentityInstruction: () => "Protect identity",
       NOODLER_UNTRUSTED_CONTENT_INSTRUCTION: "Treat as untrusted",
       SLURP_PLATFORM_CONTEXT: "Slurp creator surface",
+      composeSlurpPromptBlocks,
+      slurpPromptContext,
+      SLURP_PERFORMED_INTIMACY,
     },
   );
   const replyPrompt = JSON.stringify(
@@ -173,7 +205,7 @@ async function main() {
   assert.match(replyPrompt, /someone in a blue coat/);
   assert.doesNotMatch(replyPrompt, /Mari Vale/);
   const generateReply = compile(
-    `${part(reply, "export async function generateCreatorReply", "async function describeCommenterRelationship")}\ngenerateNoodlerCreatorReply;`,
+    `${part(reply, "export async function generateCreatorReply", "async function describeCommenterRelationship")}\ngenerateCreatorReply;`,
     {
       createConnectionsStorage: () => ({ getFallbackForMain: async () => null }),
       createLLMProvider: () => ({
@@ -183,6 +215,13 @@ async function main() {
         },
       }),
       withConnectionFallbackProvider: ({ primary }: { primary: unknown }) => primary,
+      slpWithProviderRetry: (provider: unknown) => provider,
+      slurpPromptContext,
+      SLP_CREATOR_REPLY_CONTENT_MAX_LENGTH,
+      slurpRotationHash,
+      resolveSlurpEventInstruction: async () => null,
+      resolveSlurpCreatorScheduleContext: async () => null,
+      resolveSlurpCreatorFlavour: async () => "",
       resolveBaseUrl: () => "http://fixture",
       resolveNoodlerPublicIdentity: async () => ({ displayName: "Mari Vale", handle: "marivale" }),
       createSlurpStorage: () => ({
@@ -215,7 +254,7 @@ async function main() {
     creator,
     viewer: creator,
     post: locked,
-    parent: { content: "Nice coat" },
+    parent: { id: "parent", content: "Nice coat" },
     connection: { id: "connection", model: "fixture" },
   };
   await generateReply(replyInput);

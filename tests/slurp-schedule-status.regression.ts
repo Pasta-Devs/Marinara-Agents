@@ -159,6 +159,6 @@ const settings = slurp2BackstageSource();
 // An older schedule keeps repeating, so it is a note on the Creator, never a "Needs attention" warning.
 assert.doesNotMatch(settings, /function needsAttention\([^)]*\) \{[^}]*scheduleStatus/u);
 assert.match(settings, /creator\.scheduleStatus\?\.state === "stale"/u);
-assert.match(settings, /ui\.slurp\.settings\.creators\.schedule\.\$\{selectedCreator\.scheduleStatus\.state\}/u);
+assert.match(settings, /ui\.slurp\.settings\.creators\.schedule\.\$\{creator\.scheduleStatus\.state\}/u);
 
 console.log("slurp schedule status regression passed");

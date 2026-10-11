@@ -1,5 +1,23 @@
 # Slurp release notes
 
+## 0.3.24 — 2026-10-11
+
+- Changed: in a picture with a second Creator (a partner, a collab), that person now gets their own look in the picture prompt, labelled with their name and placed after the posting Creator's look. Before, their look reached only "Enhance image prompts", so with it off the image model had nothing to draw them from.
+- Changed: the second Creator's "The image model knows this character" switch now applies to pictures on somebody else's page too: their card name goes along (as a tag for tag models) when their identity is open.
+
+## 0.3.23 — 2026-10-11
+
+- Changed: with "The image model knows this character" on, the name now comes after your style profile's tags and in front of the character's look, instead of at the very start of the picture prompt. The inserted look follows the style tags too.
+
+## 0.3.22 — 2026-10-11
+
+- Fixed: reports are now included in backups and restores.
+- Fixed: "Create posts now" names the Creators it skipped or could not post for again, instead of only a count.
+- Fixed: accepting a commission twice in a row (a double tap, or a retry) no longer draws the picture twice.
+- Fixed: chat and commission responses to the fan no longer include a picture's stored file location.
+- Fixed: the settings search box in a settings section now stays reachable on a phone instead of disappearing.
+- Internal: a Slurp Support desk tick checks its throttle against the tick's own time instead of the wall clock.
+
 ## 0.3.21 — 2026-10-11
 
 - Stir's Recent plays follows a collab you suggested or pushed: waiting for an answer, agreed, coming up, turned down (with the reason), blocked, or up on both pages. A posted collab opens its joint post; a deleted post or a collab Slurp no longer keeps says so.

@@ -15,8 +15,9 @@ One picture, from post to image model. Code: `server/src/slp/features/media/slp-
 3. **The look** is the Creator's stored appearance (Stage appearance, else the card's Appearance
    field, else the reference block). Card clothes are removed; the scene decides the outfit.
 4. **The name** (0.3.5): with "The image model knows this character" on (Creator settings › Images,
-   on by default for a linked character or persona) and an open identity, the name leads the prompt,
-   in front of the look: the writer's `subject` when it names the same character as the card or the
+   on by default for a linked character or persona) and an open identity, the name goes in front of
+   the look, behind the style profile's own tags (0.3.23: a name ahead of the style tags read as
+   style, and a picture of two people mixed their features): the writer's `subject` when it names the same character as the card or the
    page, else the card name. The writer's name is never used for somebody else, and never reaches the
    enhancer's scene text with the switch off. An image model that learned a known character draws them from the name far better than
    from any appearance text. A tag model (Pony, Illustrious, NoobAI, NovelAI or a Danbooru style
@@ -29,8 +30,22 @@ One picture, from post to image model. Code: `server/src/slp/features/media/slp-
    who this is (name and the start of the card, context only), the appearance (see below), image
    habits, and the content policy. Personality is context only and never reaches the image model.
 6. **Final assembly in code**, on every path: the device words come out, the viewpoint goes back in,
-   the look is added (see "How Slurp adds the look"), the name leads, the Creator's art style is
-   applied, then the Engine style profile and the negative prompt.
+   the look is added (see "How Slurp adds the look") with the name in front of it, both behind the
+   Engine style profile's tags, the Creator's art style is applied, then the negative prompt.
+
+## Two people in one picture
+
+A post about another Creator (a partner, a collab) can put them in the picture. The enhancer gets
+their looks as context. In final assembly (0.3.24), everybody else the scene names also gets a block
+of their own between the Creator's block and the scene, so the order is: style, the Creator's name
+and look, `Name: look` for each other person, the scene. Without it a collab picture with the
+enhancer off had no look for the second person, and the image model gave them the Creator's
+features. Their own "The image model knows this character" switch and open identity decide whether
+their card name goes along: beside the page name for a natural-language model, as a tag for a tag
+model. The look follows the Creator's rule: nothing after a used rewrite in "The enhancer writes it
+in" mode, the missing traits after any other used rewrite, all of it otherwise. A prompt a human
+approved stays as written. Text order lowers feature mixing; it cannot rule it out on a model
+without regional prompting.
 
 ## "How Slurp adds the look"
 

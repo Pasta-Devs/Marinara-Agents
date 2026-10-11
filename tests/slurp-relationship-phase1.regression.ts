@@ -72,7 +72,7 @@ for (const copy of [storage]) {
   );
   const recovery =
     copy.match(
-      /async function recoverChargingSlurpPayment[\s\S]*?\n\}\n\n(?:async )?function (?:completeSlurpPaymentIntent|queueCommissionOperation)/u,
+      /async function recoverChargingSlurpPayment[\s\S]*?\n\s*\}\n\n\s*(?:async )?function (?:completeSlurpPaymentIntent|queueCommissionOperation)/u,
     )?.[0] ?? "";
   assert.match(
     recovery,
@@ -115,7 +115,7 @@ for (const copy of [storage]) {
   );
   assert.match(
     copy,
-    /const raced = await storage\.getThread[\s\S]*?paymentIntent\?\.status === "charged"[\s\S]*?paymentIntent\?\.status === "settled"[\s\S]*?return \{ status: "ok", thread: raced \}[\s\S]*?chargedByThisCall && !raced/u,
+    /const raced = await context\.storage\.getThread[\s\S]*?paymentIntent\?\.status === "charged"[\s\S]*?paymentIntent\?\.status === "settled"[\s\S]*?return \{ status: "ok", thread: raced \}[\s\S]*?chargedByThisCall && !raced/u,
     "a duplicate thread race must keep a completed request payment and compensate only this call's charge when no thread exists",
   );
   assert.match(
@@ -236,7 +236,7 @@ const cancellation = storage.slice(cancellationStart, storage.indexOf("/**", can
 assert.match(cancellation, /note: "cancelled commission"[\s\S]*?new Error/u);
 assert.match(
   cancellation,
-  /id: `commission:\$\{(?:id|commission\.id)\}:cancellation-message`[\s\S]*?content: "The fan cancelled this commission\. The payment was refunded\."[\s\S]*?state: "declined"/u,
+  /id: `commission:\$\{(?:id|commission\.id)\}:cancellation-message`[\s\S]*?content: walletEnabled[\s\S]*?"The fan cancelled this commission\. The payment was refunded\."[\s\S]*?state: "declined"/u,
   "the cancellation message must use one stable ID and be durable before the terminal state update",
 );
 for (const copy of [storage]) {
@@ -244,7 +244,7 @@ for (const copy of [storage]) {
   const pendingRecovery = copy.slice(pendingRecoveryStart, copy.indexOf("async getThread", pendingRecoveryStart));
   assert.match(
     pendingRecovery,
-    /id: `commission:\$\{commission\.id\}:cancellation-message`[\s\S]*?content: "The fan cancelled this commission\. The payment was refunded\."[\s\S]*?state: "declined"/u,
+    /id: `commission:\$\{commission\.id\}:cancellation-message`[\s\S]*?content: commission\.cancellationId\.endsWith\(":accept"\)[\s\S]*?"The fan cancelled this commission\. The payment was refunded\."[\s\S]*?state: "declined"/u,
     "cancellation recovery must append the stable visible message before terminal state",
   );
 }
@@ -282,8 +282,9 @@ const tipCreator = slurp.slice(
   slurp.indexOf("async spendCoins(", slurp.indexOf("async tipCreator(")),
 );
 const profileTipRoute = profileRoute.slice(
-  profileRoute.indexOf('app.post("/noodler/accounts/:id/tip"'),
-  profileRoute.indexOf('app.put("/noodler/accounts/:id/subscription-price"'),
+  // Slice 12 moved operation routes from /noodler/* to /slurp/* (persisted media URLs stayed).
+  profileRoute.indexOf('app.post("/slurp/accounts/:id/tip"'),
+  profileRoute.indexOf('app.put("/slurp/accounts/:id/subscription-price"'),
 );
 assert.deepEqual(
   {
@@ -342,9 +343,10 @@ assert.match(
   /useTipSlurpCreator[\s\S]*?requestId\?: string/u,
   "profile tip hook must accept an idempotency request ID",
 );
+// The tip action moved out of the Home monolith into SlpProfileLeadingActions.
 assert.match(
-  slurp2Source("packages/slurp2/src/engine/packages/client/src/components/slurp/SlurpHome.tsx"),
-  /tipCreator\.mutate\(\{[\s\S]*?requestId:[\s\S]*?crypto\.randomUUID\(\)/u,
+  slurp2Source("packages/slurp2/src/engine/packages/client/src/slp/app/screens/SlpProfileLeadingActions.tsx"),
+  /tipCreator\.mutate\([\s\S]*?requestId:[\s\S]*?crypto\.randomUUID\(\)/u,
   "profile tip actions must provide a client idempotency request ID",
 );
 assert.doesNotMatch(
@@ -462,9 +464,12 @@ assert.match(
   /useTipInSlurpThread[\s\S]*?requestId\?: string/u,
   "the standalone DM tip hook must accept a stable request ID",
 );
+// The request ID is now pinned to a ref keyed by (persona, creator, amount, note) and reused
+// across retries of the same tip, rather than generated fresh on every call — a stronger
+// idempotency guarantee than a one-shot crypto.randomUUID() inline.
 assert.match(
   client,
-  /tip\.mutateAsync\(\{[\s\S]*?requestId: crypto\.randomUUID\(\)/u,
+  /tipRequestRef\.current\?\.key !== tipKey\) tipRequestRef\.current = \{ id: newRequestId\(\), key: tipKey \}[\s\S]*?tip\.mutateAsync\(\{[\s\S]*?requestId: tipRequestRef\.current\.id/u,
   "standalone DM tip actions must generate a stable request ID",
 );
 assert.match(

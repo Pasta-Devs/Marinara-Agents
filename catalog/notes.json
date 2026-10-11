@@ -616,6 +616,24 @@
     "slurp2": {
       "versions": [
         {
+          "version": "0.3.24",
+          "date": "2026-10-11",
+          "notes": "- Changed: in a picture with a second Creator (a partner, a collab), that person now gets their own look in the picture prompt, labelled with their name and placed after the posting Creator's look. Before, their look reached only \"Enhance image prompts\", so with it off the image model had nothing to draw them from.\n- Changed: the second Creator's \"The image model knows this character\" switch now applies to pictures on somebody else's page too: their card name goes along (as a tag for tag models) when their identity is open.",
+          "highlight": false
+        },
+        {
+          "version": "0.3.23",
+          "date": "2026-10-11",
+          "notes": "- Changed: with \"The image model knows this character\" on, the name now comes after your style profile's tags and in front of the character's look, instead of at the very start of the picture prompt. The inserted look follows the style tags too.",
+          "highlight": false
+        },
+        {
+          "version": "0.3.22",
+          "date": "2026-10-11",
+          "notes": "- Fixed: reports are now included in backups and restores.\n- Fixed: \"Create posts now\" names the Creators it skipped or could not post for again, instead of only a count.\n- Fixed: accepting a commission twice in a row (a double tap, or a retry) no longer draws the picture twice.\n- Fixed: chat and commission responses to the fan no longer include a picture's stored file location.\n- Fixed: the settings search box in a settings section now stays reachable on a phone instead of disappearing.\n- Internal: a Slurp Support desk tick checks its throttle against the tick's own time instead of the wall clock.",
+          "highlight": false
+        },
+        {
           "version": "0.3.21",
           "date": "2026-10-11",
           "notes": "- Stir's Recent plays follows a collab you suggested or pushed: waiting for an answer, agreed, coming up, turned down (with the reason), blocked, or up on both pages. A posted collab opens its joint post; a deleted post or a collab Slurp no longer keeps says so.\n- A collab request still waiting shows Make it happen, which opens the usual preview before anything changes.\n- Undo is no longer offered once the joint post is on its way or up; published posts are not taken back.",
@@ -715,24 +733,6 @@
           "version": "0.3.2",
           "date": "2026-09-29",
           "notes": "- Fix \"Viewer access could not be loaded\" and an empty Home: the viewer feed listed character fan accounts (0.3.0 audience characters) as Creators without a profile, and the client threw on `creator.profile.id`. The feed now lists only accounts with a stage profile.\n- Fix \"Slurp core storage factory is required\" on \"Start over, keep Creators\" and on the Stir routes: both built the messages storage without its core factory.",
-          "highlight": false
-        },
-        {
-          "version": "0.3.1",
-          "date": "2026-09-29",
-          "notes": "- New Backstage action \"Start over, keep Creators\" (`DELETE /api/slurp2/data/activity`): clears posts, post media, comments, messages, fans, world events, queued and stuck work, and the continuity and content plans built on them. It first refunds commissions that were paid and not delivered. Creators, their artwork and projects, follows, the wallet and every Slurp setting stay. For installs that stay empty or stuck after an update.\n- \"Delete all Slurp data\" now also clears post deep details, reports, message follow-ups, world claims and Creator planning rows, which it used to leave behind.\n- The empty Home feed says why: automatic posting is off (with a one-tap \"Turn on automatic posting\"), first posts are still being written, no Creators yet, or no persona yet.",
-          "highlight": false
-        },
-        {
-          "version": "0.3.0",
-          "date": "2026-09-29",
-          "notes": "Small changes.\n\n- Stir, a new tab: make crushes, collabs, rivalries and events happen between your Creators, in your own words or with a card. Every play shows a preview first and has Undo.\n- Life and spice: collabs, couples with an optional shared page, rivalries, brand deals, teases that lead to drops, fan polls, steering with flavour and spice levels.\n- A new look for the whole app: floating phone nav, Hub, Stories, profiles, Discover, Wallet, the Dashboard, a role-play onboarding and a What's new sheet.\n- Messages rebuilt: a real inbox, full-screen chats, write as Slurp Support, AI fans sometimes get an answer, and promised messages arrive.\n- Pulse shows what runs, what is queued, what failed and why, and what comes next. Long actions run in the background and never lock the screen.\n- The AI budget grows with your Creators; limits you set yourself stay. Pictures keep their viewpoint and art style better, with an optional prompt enhancer.\n- 215 fixes.",
-          "highlight": true
-        },
-        {
-          "version": "0.2.78",
-          "date": "2026-09-27",
-          "notes": "- bugfixing\n- Restyle the update sheet header with a larger animated G face, accent tint and integrated alpha reminder.\n- Replace the cost warning with a direct reminder that Slurp uses background image and text generation.",
           "highlight": false
         }
       ]
