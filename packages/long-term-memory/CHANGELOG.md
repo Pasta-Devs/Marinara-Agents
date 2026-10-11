@@ -4,6 +4,10 @@
 
 - Show which embedding source Long-Term Memory uses. The semantic search health line now names the source (for example "Built-in local MiniLM"), says when the saved vectors were built with a different source and will be re-embedded on the next recall or reindex, and no longer reports semantic search as available after the source changed. Memory Settings explains that the Extraction connection only drives extraction, and the vault health panel explains which connection drives recall embeddings, that the built-in model is English-only, and to use a multilingual embedding model for Korean, Japanese, Chinese or mixed-language vaults.
 
+## 1.4.24 — 2026-10-11
+
+- Refresh the recall index when a connection or agent save changes Long-Term Memory's embedding source. The Engine rebuilds the vault for the new source during the save instead of re-embedding it inside the next chat's recall, and a source that still cannot embed the vault reports failure instead of a false success.
+
 ## 1.4.23 — 2026-10-10
 
 - Recall Korean memories that use short words or particles. Two-syllable Korean nouns such as `반지`, `서래` or `선물` are no longer dropped from keyword extraction, a query written with a particle (`반지를`) now matches the stored noun (`반지`) in both the keyword and lexical lanes, and a compound written with or without a space (`그림 선물` and `그림선물`) matches either way. Existing vaults rebuild their recall indexes once after the update.

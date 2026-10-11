@@ -2129,6 +2129,11 @@ async function main() {
           "function",
           "recordPromptAccepted must remain registered",
         );
+        assert.equal(
+          typeof liveRuntime.refresh,
+          "function",
+          "the runtime service must expose the embedding refresh hook",
+        );
 
         const mutationPath = join(vaultRoot, "vault", "world", "world_1179_mutation.json");
         await storage.createNote(note("world_1179_mutation", "chat-a", "Original observatory text."));
@@ -2265,6 +2270,107 @@ async function main() {
           false,
           "an unrelated Korean memory must not be recalled for the particle query",
         );
+      }
+
+      // #1303: the Engine calls refresh on the runtime service when a connection or agent
+      // save changes LTM's embedding configuration. It must rebuild for the new space, report
+      // success, skip an already-current index, and reject a source that still cannot embed.
+      {
+        const vaultRoot = storage.root;
+        const liveRuntime = services.get("long-term-memory:runtime");
+        resolvedAdapter = {
+          spaceId: "refresh-space-a",
+          label: "refresh A",
+          async embed(texts: string[]) {
+            return texts.map(() => [5]);
+          },
+        };
+        await rebuildLongTermMemoryIndexes({ root: vaultRoot, embeddingAdapter: resolvedAdapter });
+        assert.equal(
+          parseLtmRecallIndex(JSON.parse(await readFile(longTermMemoryRecallIndexPath(vaultRoot), "utf8"))).embeddings
+            .spaceId,
+          "refresh-space-a",
+          "the starting index must carry the first embedding space",
+        );
+
+        let refreshBEmbeds = 0;
+        resolvedAdapter = {
+          spaceId: "refresh-space-b",
+          label: "refresh B",
+          async embed(texts: string[]) {
+            refreshBEmbeds += 1;
+            return texts.map(() => [6]);
+          },
+        };
+        assert.deepEqual(
+          await liveRuntime.refresh({ signal: new AbortController().signal }),
+          { status: "refreshed" },
+          "refresh must report success after rebuilding for the new embedding space",
+        );
+        assert.equal(
+          parseLtmRecallIndex(JSON.parse(await readFile(longTermMemoryRecallIndexPath(vaultRoot), "utf8"))).embeddings
+            .spaceId,
+          "refresh-space-b",
+          "refresh must rebuild the persisted index for the new embedding space",
+        );
+        assert.ok(refreshBEmbeds > 0, "refresh must embed the vault once for the new space");
+
+        const embedsAfterRebuild = refreshBEmbeds;
+        assert.deepEqual(await liveRuntime.refresh({ signal: new AbortController().signal }), { status: "refreshed" });
+        assert.equal(
+          refreshBEmbeds,
+          embedsAfterRebuild,
+          "an already-current index must not be re-embedded by a second refresh",
+        );
+
+        resolvedAdapter = {
+          spaceId: "refresh-space-fail",
+          label: "refresh failing",
+          async embed() {
+            throw new Error("provider unavailable");
+          },
+        };
+        await assert.rejects(
+          liveRuntime.refresh({ signal: new AbortController().signal }),
+          /could not embed the vault/u,
+          "a refresh that cannot embed the new space must reject so the Engine reports failure",
+        );
+
+        // A failed in-flight upgrade must not suppress the retry a save just asked for: the save
+        // clears the guard under the vault lock, so refresh cannot skip on a restored guard.
+        let releaseRaceEmbed!: () => void;
+        let raceEmbedEntered!: () => void;
+        const raceEmbedStarted = new Promise<void>((resolve) => (raceEmbedEntered = resolve));
+        const raceEmbedHeld = new Promise<void>((resolve) => (releaseRaceEmbed = resolve));
+        const staleUpgrade = loadOrRebuildLongTermMemoryIndexes(vaultRoot, {
+          spaceId: "refresh-race-space",
+          label: "race failing",
+          async embed() {
+            raceEmbedEntered();
+            await raceEmbedHeld;
+            throw new Error("provider unavailable");
+          },
+        });
+        await raceEmbedStarted;
+        let raceEmbeds = 0;
+        resolvedAdapter = {
+          spaceId: "refresh-race-space",
+          label: "race working",
+          async embed(texts: string[]) {
+            raceEmbeds += 1;
+            return texts.map(() => [8]);
+          },
+        };
+        const retryRefresh = liveRuntime.refresh({ signal: new AbortController().signal });
+        await new Promise((resolve) => setImmediate(resolve)); // let refresh queue on the lock first
+        releaseRaceEmbed();
+        await staleUpgrade;
+        assert.deepEqual(
+          await retryRefresh,
+          { status: "refreshed" },
+          "a refresh must retry after an in-flight upgrade fails, not skip on the guard it restored",
+        );
+        assert.ok(raceEmbeds > 0, "the corrected embedding source must actually run");
       }
     },
     [
