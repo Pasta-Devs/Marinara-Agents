@@ -260,7 +260,7 @@ export class LongTermMemoryStorage {
       const failure = scan.errors.find((item) => !wantedFolder || item.folder === wantedFolder);
       if (failure && !filter.skipInvalid) throw failure.error;
       // Vault health and maintenance report and quarantine the invalid files; recall serves the rest.
-      if (failure) logger.debug(failure.error, "[ltm] Recall skipped %d invalid vault file(s)", scan.errors.length);
+      if (failure) logger.debug("[ltm] Recall skipped %d invalid vault file(s)", scan.errors.length);
       const offset = filter.offset ?? 0;
       let matched = 0;
       const notes: LtmNote[] = [];

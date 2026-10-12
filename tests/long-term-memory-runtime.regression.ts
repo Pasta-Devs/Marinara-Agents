@@ -2283,12 +2283,35 @@ async function main() {
 
         // #1328: a note written by a newer version (unknown field) is skipped by recall, which
         // keeps serving the rest of the vault; full reads and writes still refuse to run over it.
+        // The index is built while the note is still valid, so the downgrade leaves it stale and
+        // recall has to rebuild it over the invalid note, not just load a fresh index.
         await storage.createNote(note("world_1328_future", "chat-a", "A cobalt archive future-field entry."));
+        await rebuildLongTermMemoryIndexes({ root: vaultRoot, embeddingAdapter: null, stopWords: [] });
+        assert.equal(
+          Object.hasOwn(
+            parseLtmRecallIndex(JSON.parse(await readFile(longTermMemoryRecallIndexPath(vaultRoot), "utf8"))).metadata
+              .byNoteId,
+            "world_1328_future",
+          ),
+          true,
+          "the index must contain the note before it becomes invalid",
+        );
         const futureNotePath = join(vaultRoot, "vault", "world", "world_1328_future.json");
         const futureNote = JSON.parse(await readFile(futureNotePath, "utf8"));
         await writeFile(futureNotePath, JSON.stringify({ ...futureNote, futureField: true }));
         invalidateLtmVaultSnapshot(vaultRoot);
         try {
+          const staleOverInvalid = await loadOrRebuildLongTermMemoryIndexes(vaultRoot, null, []);
+          assert.equal(
+            Object.hasOwn(staleOverInvalid.metadata.byNoteId, "world_1328_future"),
+            false,
+            "rebuilding a stale index must skip the invalid note instead of failing",
+          );
+          assert.equal(
+            Object.hasOwn(staleOverInvalid.metadata.byNoteId, "world_1178_lock"),
+            true,
+            "the rebuilt index must keep the valid notes",
+          );
           const futureRecall = await retrieveLongTermMemory({
             root: vaultRoot,
             embeddingAdapter: null,
