@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { chmod, mkdir, mkdtemp, readFile, readdir, rename, rm, stat, utimes, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { runRegressionToCompletion, runWithSafeCleanup } from "./regression-helpers.ts";
 
 async function main() {
@@ -3298,6 +3298,51 @@ async function main() {
         "the recall index must not retain the quarantined note text",
       );
       await quarantineStorage.cleanup();
+
+      // Issue #1328: at the rejected-suggestion cap the least recently seen unresolved
+      // suggestion makes room; a saved identity decision is never evicted.
+      const capRoot = join(dataDir, "rejected-suggestion-cap");
+      await new LongTermMemoryStorage(capRoot).initializeLtmStore();
+      const capFingerprint = (index: number) => createHash("sha256").update(`cap-${index}`).digest("hex");
+      const capSuggestions = (resolved: (index: number) => boolean) =>
+        Array.from({ length: 10_000 }, (_, index) => ({
+          id: randomUUID(),
+          fingerprint: capFingerprint(index),
+          source: { sourceNoteId: `source_cap_${index}`, chatId: "chat-a" },
+          scope: { chatId: "chat-a" },
+          modes: ["roleplay"],
+          candidate: { index: 0, reason: "invalid_format", message: "Rejected candidate.", snippet: "candidate" },
+          createdAt: timestamp,
+          lastSeenAt: new Date(Date.parse(timestamp) + index * 1000).toISOString(),
+          ...(resolved(index)
+            ? { identityResolution: { choices: [{ name: "Sam", action: "skip" }], resolvedAt: timestamp } }
+            : {}),
+        }));
+      const capDraft = { ...rejectionDraft, source: { sourceNoteId: "source_cap_new", chatId: "chat-a" } } as any;
+      await writeFile(ltmRejectedSuggestionsPath(capRoot), JSON.stringify(capSuggestions((index) => index === 0)));
+      assert.equal((await addRejectedSuggestions(capDraft, capRoot)).length, 1);
+      const capped = JSON.parse(await readFile(ltmRejectedSuggestionsPath(capRoot), "utf8")) as Array<{
+        fingerprint: string;
+        source: { sourceNoteId: string };
+      }>;
+      assert.equal(capped.length, 10_000, "the cap must hold after eviction");
+      assert.equal(
+        capped.some((item) => item.source.sourceNoteId === "source_cap_new"),
+        true,
+        "the new suggestion must be stored at the cap",
+      );
+      assert.equal(
+        capped.some((item) => item.fingerprint === capFingerprint(0)),
+        true,
+        "a saved identity decision must survive eviction even when it is the oldest",
+      );
+      assert.equal(
+        capped.some((item) => item.fingerprint === capFingerprint(1)),
+        false,
+        "the least recently seen unresolved suggestion must make room",
+      );
+      await writeFile(ltmRejectedSuggestionsPath(capRoot), JSON.stringify(capSuggestions(() => true)));
+      await assert.rejects(addRejectedSuggestions(capDraft, capRoot), /rejected-suggestion limit reached/u);
 
       process.stdout.write(
         "Long-Term Memory storage regression: restart, recovery, self-check, cleanup, stable root ok\n",

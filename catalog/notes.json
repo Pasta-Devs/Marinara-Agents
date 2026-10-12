@@ -200,6 +200,12 @@
     "long-term-memory": {
       "versions": [
         {
+          "version": "1.4.29",
+          "date": "2026-10-12",
+          "notes": "- Clean up how Long-Term Memory behaves around damaged or old data, with no change to recall scoring or extraction. Extraction no longer stops for good at 10,000 rejected suggestions: the least recently seen ones make room and saved identity decisions are kept.",
+          "highlight": false
+        },
+        {
           "version": "1.4.28",
           "date": "2026-10-12",
           "notes": "- Finish the Memory Settings → Debug details pane. Each event row shows how long ago it last logged, Result reads as counts (for example \"17 candidates found → 9 kept → 9 changes\" or \"148 indexed → 131 usable in this chat → 2 added\"), recall candidates are flat rows with a score bar marking the minimum relevance and a reason that names the limit that applied, a recall that added nothing says why, recall settings read as labelled terms, and What happened lists one sentence per step with its offset from the start. Durations over a second read in seconds or minutes, and a note says what Copy JSON includes.",
@@ -311,12 +317,6 @@
           "version": "1.4.10",
           "date": "2026-10-07",
           "notes": "- Count only in-scope memories toward the recall caps. Keyword, tag and note buckets were truncated to 128 entries before the chat's scope, status and mode filter ran, so 128+ out-of-scope chunks sharing a popular keyword or `#tag` could crowd an in-scope memory out of the exact keyword hit, the direct hit, and the graph seeds those hits produce. The fuzzy keyword scan had the same flaw at 512 vault-wide keywords, which could leave a late-alphabet keyword unmatchable; both caps now count only what the current chat may recall.",
-          "highlight": false
-        },
-        {
-          "version": "1.4.9",
-          "date": "2026-10-07",
-          "notes": "- Let lane weights and rank fusion decide recall order again. An unbounded BM25 raw score was added as a bonus on top of the fused score, which let a deep lexical hit outrank the best semantic hit of a higher-weighted lane; fusion now uses only the bounded per-lane score.\n- Give keyword matches an absolute relevance. A partial or fuzzy keyword match used to be normalized against the best hit of the same query, so a weak match could reach full keyword relevance; it is now measured against the exact-phrase ceiling. Fuzzy keyword matches also require whole-token or word-boundary containment, so a keyword like \"king\" no longer triggers on \"looking\".",
           "highlight": false
         }
       ]

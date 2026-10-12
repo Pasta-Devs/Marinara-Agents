@@ -227,8 +227,19 @@ export async function addRejectedSuggestions(draft: LtmExtractionDraft, root = g
         byFingerprint.set(updated.fingerprint, updated);
         continue;
       }
-      if (byFingerprint.size >= LTM_REJECTED_SUGGESTIONS_LIMIT)
-        throw new Error("Long-term memory rejected-suggestion limit reached.");
+      if (byFingerprint.size >= LTM_REJECTED_SUGGESTIONS_LIMIT) {
+        // At the cap the least recently seen suggestion makes room. A saved identity decision
+        // owns remembered state and entries touched by this call are the newest, so neither is
+        // evicted; the cap throws only when nothing else is left to drop.
+        let oldest: [string, (typeof existing)[number]] | undefined;
+        for (const entry of byFingerprint) {
+          const [, item] = entry;
+          if (item.identityResolution || item.lastSeenAt === timestamp) continue;
+          if (!oldest || item.lastSeenAt < oldest[1].lastSeenAt) oldest = entry;
+        }
+        if (!oldest) throw new Error("Long-term memory rejected-suggestion limit reached.");
+        byFingerprint.delete(oldest[0]);
+      }
       byFingerprint.set(
         value,
         ltmRejectedSuggestionSchema.parse({

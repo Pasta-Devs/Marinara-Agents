@@ -1,5 +1,9 @@
 # Long-Term Memory changelog
 
+## 1.4.29 — 2026-10-12
+
+- Clean up how Long-Term Memory behaves around damaged or old data, with no change to recall scoring or extraction. Extraction no longer stops for good at 10,000 rejected suggestions: the least recently seen ones make room and saved identity decisions are kept.
+
 ## 1.4.28 — 2026-10-12
 
 - Finish the Memory Settings → Debug details pane. Each event row shows how long ago it last logged, Result reads as counts (for example "17 candidates found → 9 kept → 9 changes" or "148 indexed → 131 usable in this chat → 2 added"), recall candidates are flat rows with a score bar marking the minimum relevance and a reason that names the limit that applied, a recall that added nothing says why, recall settings read as labelled terms, and What happened lists one sentence per step with its offset from the start. Durations over a second read in seconds or minutes, and a note says what Copy JSON includes.
