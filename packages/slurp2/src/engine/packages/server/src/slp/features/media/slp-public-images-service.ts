@@ -318,7 +318,7 @@ export async function generateSlpPostImage(input: {
   ]
     .filter(Boolean)
     .join("\n\n");
-  const rewriteAttempted = Boolean(
+  let rewriteAttempted = Boolean(
     (imagePromptInstructions || characterContext || styleGuidance) &&
     input.settings.enableImageInterpretation !== false &&
     !input.promptOverride,
@@ -335,6 +335,9 @@ export async function generateSlpPostImage(input: {
         promptBlocks: slurpPromptContext(input.settings).blocks,
         connectionId: input.settings.imagePromptConnectionId || input.settings.generationConnectionId,
         budget: input.settings.modelBudget,
+        onBudgetSkip: () => {
+          rewriteAttempted = false;
+        },
       })
     : null;
   // The style profile is an Engine setting, not something the interpretation model owns. The

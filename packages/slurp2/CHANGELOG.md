@@ -1,5 +1,10 @@
 # Slurp release notes
 
+## 0.3.25 — 2026-10-12
+
+- Fixed: "Enhance image prompts" no longer drops a usable answer from the prompt model. An answer with a line break inside the prompt, a trailing comma, or text around the JSON object was read as "no prompt", and the picture went out with the capped draft. An answer that is cut off still falls back.
+- Fixed: when the AI budget is Off, the "Enhance image prompts" row is off, or its daily limit is reached, the picture now goes out with the full draft, as with enhancing switched off. Before, each such picture logged "Image prompt rewrite unusable" and its draft was cut to 1,500 characters (player report).
+
 ## 0.3.24 — 2026-10-11
 
 - Changed: in a picture with a second Creator (a partner, a collab), that person now gets their own look in the picture prompt, labelled with their name and placed after the posting Creator's look. Before, their look reached only "Enhance image prompts", so with it off the image model had nothing to draw them from.

@@ -504,7 +504,7 @@ async function generateCreatorPostImageRun(
   // A stored draft we generated ourselves is not a reviewed decision, so a retry still runs
   // interpretation. Only a prompt a human actually approved is sent through untouched.
   const skipInterpretation = Boolean(input.promptOverride) && !input.retryStoredPrompt;
-  const rewriteAttempted = Boolean(
+  let rewriteAttempted = Boolean(
     (imagePromptInstructions || characterContext || styleGuidance) &&
     input.settings.enableImageInterpretation !== false &&
     !skipInterpretation,
@@ -525,6 +525,9 @@ async function generateCreatorPostImageRun(
         connectionId: input.settings.imagePromptConnectionId || input.settings.generationConnectionId,
         viewpoint: viewpoint?.phrase,
         budget: input.playerAsked ? undefined : input.settings.modelBudget,
+        onBudgetSkip: () => {
+          rewriteAttempted = false;
+        },
         onRequest: ({ messages, ...model }) => {
           run.rewrite.model = model;
           run.rewrite.messages = messages;

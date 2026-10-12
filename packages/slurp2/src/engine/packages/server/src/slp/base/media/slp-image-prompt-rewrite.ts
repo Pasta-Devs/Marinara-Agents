@@ -1,6 +1,7 @@
 import type { DB } from "../../../db/connection.js";
 import type { ChatMessage } from "../../../services/llm/base-provider.js";
 import { logger } from "../../../lib/logger.js";
+import { jsonishLooksTruncated, parseGameJsonish } from "../../../services/game/jsonish.js";
 import { resolveBaseUrl } from "../../../services/generation/connection-base-url.js";
 import { resolveIllustratorPromptRuntime } from "../../../services/generation/illustrator-prompt-runtime.js";
 import { createConnectionsStorage } from "../../../services/storage/connections.storage.js";
@@ -10,6 +11,7 @@ import { composeSlurpPromptBlocks, type SlurpPromptBlockOverrides } from "../pro
 import type { SlurpVisualBrief } from "./slp-visual-brief.js";
 import { slurpVisualBriefPolicyText, slurpVisualBriefText } from "./slp-visual-brief.js";
 import { resolveSlurpTextConnection } from "../identity/slp-connection.js";
+import { requireModelAnswer } from "../model/slp-model-answer.js";
 import { claimSlurpModelBudget, type SlurpModelBudget } from "../model/slp-model-worker.js";
 
 const MAX_REWRITTEN_PROMPT_LENGTH = 12_000;
@@ -20,15 +22,12 @@ function parseRecord(value: unknown): Record<string, unknown> {
     return value as Record<string, unknown>;
   }
   if (typeof value !== "string") return {};
-  const text = value
-    .trim()
-    .replace(/^```(?:json)?\s*/iu, "")
-    .replace(/\s*```$/u, "");
-  const start = text.indexOf("{");
-  const end = text.lastIndexOf("}");
-  if (start < 0 || end <= start) return {};
+  // Engine's tolerant parser, as every other Slurp model call: a strict JSON.parse dropped answers
+  // with a line break inside the prompt, a trailing comma, or prose around the fenced object. A cut
+  // answer stays a failure, because the repair would send half a picture.
+  if (jsonishLooksTruncated(value)) return {};
   try {
-    const parsed: unknown = JSON.parse(text.slice(start, end + 1));
+    const parsed = parseGameJsonish(requireModelAnswer(value, "an image prompt rewrite"));
     return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? (parsed as Record<string, unknown>) : {};
   } catch {
     return {};
@@ -64,6 +63,11 @@ export async function rewriteSlpImagePrompt(input: {
    * nothing is counted.
    */
   budget?: SlurpModelBudget;
+  /**
+   * The budget refused the call. That is the player's setting, not a failed rewrite: the caller
+   * sends the draft as with enhancing off, uncapped and without a warning.
+   */
+  onBudgetSkip?: () => void;
   /** Receives the connection, model, and chat actually sent, for the Creator-private Deep details. */
   onRequest?: (request: {
     connectionId: string;
@@ -93,6 +97,7 @@ export async function rewriteSlpImagePrompt(input: {
     if (!textConnection) return null;
     if (input.budget && !(await claimSlurpModelBudget(input.db, input.budget, "image_prompt"))) {
       logger.info("[slurp] Image prompt enhancing is off or over its daily limit; sending the unenhanced draft");
+      input.onBudgetSkip?.();
       return null;
     }
 

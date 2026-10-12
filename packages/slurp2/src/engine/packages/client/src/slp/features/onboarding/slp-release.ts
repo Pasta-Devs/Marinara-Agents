@@ -1,5 +1,5 @@
 // The splash screen needs the shipped version and its public notes inside the client bundle.
-export const SLURP2_VERSION = "0.3.24";
+export const SLURP2_VERSION = "0.3.25";
 
 export interface Slurp2ReleaseEntry {
   version: string;
@@ -12,6 +12,14 @@ export interface Slurp2ReleaseEntry {
  * in-universe bullets per release (technical detail lives in CHANGELOG.md).
  */
 export const SLURP2_RELEASES: Slurp2ReleaseEntry[] = [
+  {
+    version: "0.3.25",
+    date: "2026-10-12",
+    notes: [
+      "Enhance image prompts now understands more of the answers it gets, so fewer pictures fall back to the plain draft.",
+      "With the AI budget off or used up for the day, pictures go out with their full draft and the log stays quiet.",
+    ],
+  },
   {
     version: "0.3.24",
     date: "2026-10-11",

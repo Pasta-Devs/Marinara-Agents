@@ -616,6 +616,12 @@
     "slurp2": {
       "versions": [
         {
+          "version": "0.3.25",
+          "date": "2026-10-12",
+          "notes": "- Fixed: \"Enhance image prompts\" no longer drops a usable answer from the prompt model. An answer with a line break inside the prompt, a trailing comma, or text around the JSON object was read as \"no prompt\", and the picture went out with the capped draft. An answer that is cut off still falls back.\n- Fixed: when the AI budget is Off, the \"Enhance image prompts\" row is off, or its daily limit is reached, the picture now goes out with the full draft, as with enhancing switched off. Before, each such picture logged \"Image prompt rewrite unusable\" and its draft was cut to 1,500 characters (player report).",
+          "highlight": false
+        },
+        {
           "version": "0.3.24",
           "date": "2026-10-11",
           "notes": "- Changed: in a picture with a second Creator (a partner, a collab), that person now gets their own look in the picture prompt, labelled with their name and placed after the posting Creator's look. Before, their look reached only \"Enhance image prompts\", so with it off the image model had nothing to draw them from.\n- Changed: the second Creator's \"The image model knows this character\" switch now applies to pictures on somebody else's page too: their card name goes along (as a tag for tag models) when their identity is open.",
@@ -727,12 +733,6 @@
           "version": "0.3.3",
           "date": "2026-09-29",
           "notes": "- Renamed from Slurp Remastered to Slurp. The Home tab reads \"Slurp\" without the trailing period.\n- New catalog description; it states that the default guidance is tuned for an adult experience.\n- Slurp Legacy (`slurp`) is retired and no longer in the catalog. Its backups still restore here.",
-          "highlight": false
-        },
-        {
-          "version": "0.3.2",
-          "date": "2026-09-29",
-          "notes": "- Fix \"Viewer access could not be loaded\" and an empty Home: the viewer feed listed character fan accounts (0.3.0 audience characters) as Creators without a profile, and the client threw on `creator.profile.id`. The feed now lists only accounts with a stage profile.\n- Fix \"Slurp core storage factory is required\" on \"Start over, keep Creators\" and on the Stir routes: both built the messages storage without its core factory.",
           "highlight": false
         }
       ]

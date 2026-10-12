@@ -15,6 +15,18 @@ const preview = read("client/src/slp/features/settings/SlpPromptPreviewInspector
 assert.match(rewrite, /postContent\?: string/u);
 assert.match(rewrite, /<post_context>/u);
 assert.match(rewrite, /Do not increase the sexual intensity/u);
+// A fenced answer with a line break inside the prompt is valid to a reader; strict JSON.parse dropped it.
+assert.match(rewrite, /parseGameJsonish\(requireModelAnswer\(value,/u);
+assert.doesNotMatch(rewrite, /JSON\.parse\(/u);
+// The AI budget refusing the rewrite is a setting, not a failure: no "rewrite unusable" warning, no cap.
+assert.match(rewrite, /input\.onBudgetSkip\?\.\(\);\s*return null;/u);
+for (const caller of [
+  "server/src/slp/features/media/slp-images-service.ts",
+  "server/src/slp/features/media/slp-public-images-service.ts",
+  "server/src/slp/features/ads/slp-garnish-image-service.ts",
+]) {
+  assert.match(read(caller), /onBudgetSkip: \(\) => \{\s*rewriteAttempted = false;/u, caller);
+}
 assert.match(imageService, /postContent: input\.postContent/u);
 assert.match(imageService, /providerPrompt: finalPrompt/u, "the private result carries the exact provider prompt");
 assert.match(publicImageService, /postContent: input\.postContent/u);

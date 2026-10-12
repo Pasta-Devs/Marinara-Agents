@@ -187,7 +187,7 @@ export async function generateGarnishAdImage(
   ]
     .filter(Boolean)
     .join("\n");
-  const rewriteAttempted = Boolean(imagePromptInstructions) && settings.enableImageInterpretation !== false;
+  let rewriteAttempted = Boolean(imagePromptInstructions) && settings.enableImageInterpretation !== false;
   const prompt = selectSlpImageProviderPrompt({
     rewrittenPrompt: rewriteAttempted
       ? await rewriteSlpImagePrompt({
@@ -198,6 +198,9 @@ export async function generateGarnishAdImage(
           promptBlocks: slurpPromptContext(settings).blocks,
           connectionId: settings.imagePromptConnectionId || settings.generationConnectionId,
           budget: settings.modelBudget,
+          onBudgetSkip: () => {
+            rewriteAttempted = false;
+          },
         })
       : null,
     rawPrompt,
