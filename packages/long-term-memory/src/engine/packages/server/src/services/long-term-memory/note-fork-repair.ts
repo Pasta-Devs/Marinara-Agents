@@ -248,7 +248,7 @@ export async function applyLtmNoteForkRepair(
         archivedNoteIds,
         backupId,
       });
-      await pruneLtmRepairBackups(backupsRoot);
+      await pruneLtmRepairBackups(backupsRoot, { keepPath: backupDirectory });
       return response;
     } catch (error) {
       const restoreRoot = join(dirname(root), `.${basename(root)}-fork-restore-${randomUUID()}`);

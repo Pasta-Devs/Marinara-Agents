@@ -46,7 +46,9 @@ export async function readLongTermMemoryUsage(root = getLongTermMemoryRoot()) {
     // An I/O failure is rethrown: the file may be intact.
     if (!(error instanceof SyntaxError || (error as { name?: string } | null)?.name === "ZodError")) throw error;
     logger.warn(error, "[ltm] Quarantined malformed usage.json; usage statistics restart from empty");
-    await quarantineLtmIndexArtifact(root, path).catch(() => {});
+    // Setting the file aside keeps the original recoverable. If that fails, surface it rather than
+    // return empty statistics that the next write would use to replace the only copy.
+    await quarantineLtmIndexArtifact(root, path);
     return empty();
   }
 }

@@ -63,7 +63,9 @@ export function getLtmRepairBackupsRoot(
 }
 
 // A repair backup only serves the rollback inside the call that made it, so keep the newest few.
-export async function pruneLtmRepairBackups(directory: string, keep = 3) {
+// `keepPath` is the backup the repair just made: it survives even when modification times tie.
+export async function pruneLtmRepairBackups(directory: string, options: { keepPath?: string; keep?: number } = {}) {
+  const { keepPath, keep = 3 } = options;
   try {
     const entries = await readdir(directory, { withFileTypes: true }).catch((error) => {
       if (isEnoent(error)) return [];
@@ -77,8 +79,9 @@ export async function pruneLtmRepairBackups(directory: string, keep = 3) {
           return { path, mtimeMs: (await stat(path)).mtimeMs };
         }),
     );
-    for (const backup of backups.sort((a, b) => b.mtimeMs - a.mtimeMs).slice(keep))
-      await rm(backup.path, { recursive: true, force: true });
+    const newest = (a: (typeof backups)[number], b: (typeof backups)[number]) =>
+      Number(b.path === keepPath) - Number(a.path === keepPath) || b.mtimeMs - a.mtimeMs;
+    for (const backup of backups.sort(newest).slice(keep)) await rm(backup.path, { recursive: true, force: true });
   } catch (error) {
     logger.warn(error, "[ltm] Could not prune repair backups in %s", directory);
   }

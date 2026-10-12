@@ -145,7 +145,7 @@ export async function applyLtmIdentityRepairs(
           },
           integrity,
         });
-        await pruneLtmRepairBackups(getLtmIdentityRepairBackupsRoot(root));
+        await pruneLtmRepairBackups(getLtmIdentityRepairBackupsRoot(root), { keepPath: backup.directory });
         return response;
       } catch (error) {
         try {

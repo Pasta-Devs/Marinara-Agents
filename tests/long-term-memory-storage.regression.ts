@@ -92,7 +92,7 @@ async function main() {
   const { readLtmNoteSummary, writeLtmNoteSummary, rebuildLtmNoteSummary } = await import(`${source}/index-state.ts`);
   const { rebuildLongTermMemoryIndexes, loadOrRebuildLongTermMemoryIndexes } = await import(`${source}/rebuild.ts`);
   const { repairLongTermMemory } = await import(`${source}/maintenance.ts`);
-  const { runLongTermMemoryRetention } = await import(`${source}/retention.ts`);
+  const { pruneLtmRepairBackups, runLongTermMemoryRetention } = await import(`${source}/retention.ts`);
   const { previewLtmNoteForkRepair, applyLtmNoteForkRepair } = await import(`${source}/note-fork-repair.ts`);
   const { readLongTermMemoryUsage } = await import(`${source}/usage.ts`);
   const { rebuildLtmActivityIndex, readLtmActivityEvents } = await import(`${source}/activity-index.ts`);
@@ -3373,6 +3373,21 @@ async function main() {
       await assert.rejects(stat(join(lenientDirs.indexes, "usage.json")), { code: "ENOENT" });
       assert.equal((await readdir(join(lenientRoot, "quarantine", "indexes"))).length, 2);
 
+      // A malformed usage file that cannot be set aside must not be replaced by empty statistics:
+      // the original stays on disk and the read fails instead of letting the next write overwrite it.
+      const stuckRoot = join(dataDir, "usage-quarantine-failure");
+      await new LongTermMemoryStorage(stuckRoot).initializeLtmStore();
+      const stuckUsagePath = join(getLongTermMemoryDirectories(stuckRoot).indexes, "usage.json");
+      await writeFile(stuckUsagePath, "not json\n");
+      await rm(join(stuckRoot, "quarantine"), { recursive: true, force: true });
+      await writeFile(join(stuckRoot, "quarantine"), "not a folder");
+      await assert.rejects(readLongTermMemoryUsage(stuckRoot), undefined, "a failed quarantine must surface");
+      assert.equal(
+        await readFile(stuckUsagePath, "utf8"),
+        "not json\n",
+        "the malformed usage file must stay in place when it cannot be set aside",
+      );
+
       // Issue #1328: recall skips a note it read but cannot validate; an unreadable vault folder is
       // not a content problem and still fails the read, so recall never silently loses a note type.
       const skipRoot = join(dataDir, "skip-invalid");
@@ -3441,6 +3456,21 @@ async function main() {
         forkBackupIds.slice(1).sort(),
         "a fourth repair must keep exactly the newest three backups, including its own",
       );
+      // Equal modification times must not let a prune remove the backup the repair just made.
+      const tiedBackups = join(pruneDataDir, "tied-backups");
+      const tiedStamp = new Date("2026-01-01T00:00:00.000Z");
+      const tiedNames = ["t0", "t1", "t2", "t3", "t4"];
+      for (const current of tiedNames) {
+        for (const name of tiedNames) {
+          await mkdir(join(tiedBackups, name), { recursive: true });
+          await utimes(join(tiedBackups, name), tiedStamp, tiedStamp);
+        }
+        await pruneLtmRepairBackups(tiedBackups, { keepPath: join(tiedBackups, current) });
+        const survivors = await readdir(tiedBackups);
+        assert.equal(survivors.length, 3, "a prune over tied backups must still keep three");
+        assert.equal(survivors.includes(current), true, `the current backup ${current} must survive a timestamp tie`);
+        await rm(tiedBackups, { recursive: true, force: true });
+      }
       const identityBackupsRoot = join(pruneDataDir, "backups", "long-term-memory-identity-repairs");
       await mkdir(join(identityBackupsRoot, randomUUID()), { recursive: true });
       await deleteAllLongTermMemoryData(pruneRoot);
