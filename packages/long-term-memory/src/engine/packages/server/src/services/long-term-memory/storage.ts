@@ -161,6 +161,24 @@ async function rewriteRejectedSuggestions(
   return JSON.stringify(before) === JSON.stringify(after) ? null : { path, before, after };
 }
 
+// Rejected suggestions name notes in `source.sourceNoteId` and `candidate.recovery.noteId`.
+function redirectRejectedSuggestionNoteId(fromId: string, toId: string) {
+  return (suggestion: LtmRejectedSuggestion): LtmRejectedSuggestion => {
+    const source =
+      suggestion.source.sourceNoteId === fromId ? { ...suggestion.source, sourceNoteId: toId } : suggestion.source;
+    const recovery = suggestion.candidate.recovery;
+    return source === suggestion.source && recovery?.noteId !== fromId
+      ? suggestion
+      : {
+          ...suggestion,
+          source,
+          ...(recovery?.noteId === fromId
+            ? { candidate: { ...suggestion.candidate, recovery: { ...recovery, noteId: toId } } }
+            : {}),
+        };
+  };
+}
+
 function rewriteSectionContributionSourceIds(note: LtmNote, fromId: string, toId: string) {
   return Object.fromEntries(
     Object.entries(note.sections).map(([key, section]) => [
@@ -803,9 +821,10 @@ export class LongTermMemoryStorage {
             }),
           });
       }
-      if (noteFiles.length || draftFiles.length)
+      const rejectedFile = await rewriteRejectedSuggestions(this.root, redirectRejectedSuggestionNoteId(from, to));
+      if (noteFiles.length || draftFiles.length || rejectedFile)
         await commitLtmMutation(this.root, {
-          files: [...noteFiles, ...draftFiles],
+          files: [...noteFiles, ...draftFiles, ...(rejectedFile ? [rejectedFile] : [])],
           events: [],
         });
       return {
@@ -897,22 +916,10 @@ export class LongTermMemoryStorage {
             }),
           });
       }
-      const rejectedFile = await rewriteRejectedSuggestions(this.root, (suggestion) => {
-        const source =
-          suggestion.source.sourceNoteId === currentId
-            ? { ...suggestion.source, sourceNoteId: targetId }
-            : suggestion.source;
-        const recovery = suggestion.candidate.recovery;
-        return source === suggestion.source && recovery?.noteId !== currentId
-          ? suggestion
-          : {
-              ...suggestion,
-              source,
-              ...(recovery?.noteId === currentId
-                ? { candidate: { ...suggestion.candidate, recovery: { ...recovery, noteId: targetId } } }
-                : {}),
-            };
-      });
+      const rejectedFile = await rewriteRejectedSuggestions(
+        this.root,
+        redirectRejectedSuggestionNoteId(currentId, targetId),
+      );
       await commitLtmMutation(this.root, {
         files: [
           {
