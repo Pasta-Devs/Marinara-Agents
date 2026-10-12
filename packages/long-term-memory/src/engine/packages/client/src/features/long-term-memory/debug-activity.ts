@@ -1,4 +1,5 @@
 import type { LtmDebugEvent } from "../../../../shared/src/features/agents/long-term-memory/schema.js";
+import type { LtmTranslationFunction } from "./localization";
 
 export type DebugOperation = { operationId: string; events: LtmDebugEvent[] };
 export type DebugActivityFilter = "all" | "errors" | LtmDebugEvent["phase"];
@@ -18,6 +19,40 @@ const DEBUG_TOKEN_PATTERN = new RegExp(
   "gi",
 );
 const UUID_ONLY_PATTERN = /^[0-9a-f]{8}-[0-9a-f-]{27,}$/i;
+
+/** How long ago a timestamp was, as "4 min. ago"; empty when it isn't a date. */
+export function formatAge(timestamp: string, locale: string, now: number) {
+  const then = Date.parse(timestamp);
+  if (!Number.isFinite(then)) return "";
+  // A timestamp ahead of the clock reads "0 sec. ago" rather than a future time.
+  const seconds = Math.max(0, Math.floor((now - then) / 1000));
+  const [value, unit] =
+    seconds < 60
+      ? ([seconds, "second"] as const)
+      : seconds < 3600
+        ? ([Math.floor(seconds / 60), "minute"] as const)
+        : seconds < 86400
+          ? ([Math.floor(seconds / 3600), "hour"] as const)
+          : ([Math.floor(seconds / 86400), "day"] as const);
+  return new Intl.RelativeTimeFormat(locale, { numeric: "always", style: "short" }).format(-value, unit);
+}
+
+/** Under a second in ms, under a minute in seconds (one decimal below 10 s), then minutes and seconds. */
+export function formatDuration(ms: number, locale: string, localizeUi: LtmTranslationFunction) {
+  if (ms < 1000) return localizeUi("ui.longTermMemory.activityview.durationMs", { value: ms.toLocaleString(locale) });
+  if (ms < 60_000) {
+    const value =
+      ms < 10_000
+        ? (Math.floor(ms / 100) / 10).toLocaleString(locale, { minimumFractionDigits: 1, maximumFractionDigits: 1 })
+        : Math.floor(ms / 1000).toLocaleString(locale);
+    return localizeUi("ui.longTermMemory.activityview.durationSeconds", { value });
+  }
+  const seconds = Math.floor(ms / 1000);
+  return localizeUi("ui.longTermMemory.activityview.durationMinutes", {
+    minutes: Math.floor(seconds / 60).toLocaleString(locale),
+    seconds: (seconds % 60).toLocaleString(locale),
+  });
+}
 
 export function isTruncatedResponse(event: LtmDebugEvent) {
   return (

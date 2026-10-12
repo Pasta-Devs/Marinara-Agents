@@ -4,10 +4,13 @@ import {
   collectDebugNoteIds,
   deriveOperationStatus,
   filterOperations,
+  formatAge,
+  formatDuration,
   groupOperations,
   humanizeDebugText,
   LTM_DEBUG_STALE_OPERATION_MS,
 } from "../packages/long-term-memory/src/engine/packages/client/src/features/long-term-memory/debug-activity.js";
+import english from "../packages/long-term-memory/src/engine/packages/client/src/features/long-term-memory/locales/en.json" with { type: "json" };
 import type { LtmDebugEvent } from "../packages/long-term-memory/src/engine/packages/shared/src/features/agents/long-term-memory/schema.js";
 
 let sequence = 0;
@@ -122,5 +125,38 @@ assert.deepEqual(
   ]),
   [atCapId],
 );
+
+// Durations read in the unit that fits: ms under a second, seconds (one decimal under
+// 10 s) under a minute, then minutes and seconds. The shipped English catalog supplies the wording.
+const translate = (key: string, values: Record<string, unknown> = {}) =>
+  (english as Record<string, string>)[key]!.replace(/\{\{(\w+)\}\}/g, (_, name: string) => String(values[name]));
+for (const [ms, expected] of [
+  [0, "0 ms"],
+  [999, "999 ms"],
+  [1_000, "1.0 s"],
+  [9_999, "9.9 s"],
+  [10_000, "10 s"],
+  [59_999, "59 s"],
+  [60_000, "1 min 0 s"],
+  [74_000, "1 min 14 s"],
+] as const) {
+  assert.equal(formatDuration(ms, "en", translate), expected, `${ms} ms`);
+}
+
+// Ages round down to whole seconds, minutes, hours and days; a timestamp ahead of the clock reads as now.
+const ageNow = Date.parse("2026-10-12T12:00:00.000Z");
+for (const [ago, expected] of [
+  [0, "0 sec. ago"],
+  [59_000, "59 sec. ago"],
+  [60_000, "1 min. ago"],
+  [3_599_000, "59 min. ago"],
+  [3_600_000, "1 hr. ago"],
+  [86_399_000, "23 hr. ago"],
+  [86_400_000, "1 day ago"],
+  [-5_000, "0 sec. ago"],
+] as const) {
+  assert.equal(formatAge(new Date(ageNow - ago).toISOString(), "en", ageNow), expected, `${ago} ms ago`);
+}
+assert.equal(formatAge("not a date", "en", ageNow), "");
 
 console.log("long-term-memory debug-activity helpers: ok");

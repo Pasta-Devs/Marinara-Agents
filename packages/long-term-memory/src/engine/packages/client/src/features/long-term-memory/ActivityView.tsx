@@ -34,6 +34,8 @@ import {
   collectDebugNoteIds,
   deriveOperationStatus,
   filterOperations,
+  formatAge,
+  formatDuration,
   groupOperations,
   humanizeDebugText,
   isTruncatedResponse,
@@ -127,6 +129,20 @@ const debugStatusIcons: Record<DebugOperationStatus, LucideIcon> = {
 function formatTimestamp(timestamp: string, locale: string) {
   const date = new Date(timestamp);
   return Number.isNaN(date.getTime()) ? timestamp : date.toLocaleString(locale);
+}
+
+function formatClock(timestamp: string, locale: string, timeStyle: "short" | "medium") {
+  const date = new Date(timestamp);
+  return Number.isNaN(date.getTime()) ? timestamp : date.toLocaleTimeString(locale, { timeStyle });
+}
+
+/** The time alone for today, the date and time otherwise. */
+function formatWhen(timestamp: string, locale: string) {
+  const date = new Date(timestamp);
+  if (Number.isNaN(date.getTime())) return timestamp;
+  return isToday(timestamp)
+    ? formatClock(timestamp, locale, "short")
+    : date.toLocaleString(locale, { dateStyle: "medium", timeStyle: "short" });
 }
 
 /** Prefer the server-provided same-origin filename, else a timestamped jsonl fallback. */
@@ -346,40 +362,33 @@ function recordedCount(value: unknown) {
   return typeof value === "number" && Number.isFinite(value) ? value : null;
 }
 
-// Count name, singular key, plural key. An unrecorded count is left out of the line.
-const extractionCountKeys = [
-  [
-    "totalCandidates",
-    "ui.longTermMemory.activityview.extractionCandidatesOne",
-    "ui.longTermMemory.activityview.extractionCandidates",
-  ],
-  ["units", "ui.longTermMemory.activityview.extractionKept", "ui.longTermMemory.activityview.extractionKept"],
-  [
-    "mutations",
-    "ui.longTermMemory.activityview.extractionChangesOne",
-    "ui.longTermMemory.activityview.extractionChanges",
-  ],
-  [
-    "targetNotes",
-    "ui.longTermMemory.activityview.extractionTargetsOne",
-    "ui.longTermMemory.activityview.extractionTargets",
-  ],
-  [
-    "deduplications",
-    "ui.longTermMemory.activityview.extractionDuplicatesOne",
-    "ui.longTermMemory.activityview.extractionDuplicates",
-  ],
-] as const;
-
-function extractionCounts(event: LtmDebugEvent, localizeUi: LtmTranslationFunction, locale: string) {
-  const parts = extractionCountKeys.flatMap(([name, one, other]) => {
-    const count = recordedCount(event.counts?.[name]);
-    if (count === null) return [];
-    return [
-      localizeUi(selectLtmPluralForm(locale, count) === "one" ? one : other, { count: count.toLocaleString(locale) }),
-    ];
-  });
-  return parts.length ? parts.join(" · ") : localizeUi("ui.longTermMemory.activityview.notRecorded");
+/** Result counts as large numbers over labels. A count the log did not record is left out. */
+function renderResultCounts(
+  counts: ReadonlyArray<readonly [value: number | null, one: string, other: string]>,
+  localizeUi: LtmTranslationFunction,
+  locale: string,
+) {
+  const recorded = counts.filter((count): count is readonly [number, string, string] => count[0] !== null);
+  if (!recorded.length) return <p>{localizeUi("ui.longTermMemory.activityview.notRecorded")}</p>;
+  return (
+    <ol className="flex flex-wrap items-center gap-x-3 gap-y-1">
+      {recorded.map(([value, one, other], index) => (
+        <li key={other} className="flex items-center gap-3">
+          {index ? (
+            <span aria-hidden="true" className="text-[var(--muted-foreground)]">
+              →
+            </span>
+          ) : null}
+          <span>
+            <span className="block text-lg font-semibold tabular-nums">{value.toLocaleString(locale)}</span>
+            <span className="text-[var(--muted-foreground)]">
+              {localizeUi(selectLtmPluralForm(locale, value) === "one" ? one : other)}
+            </span>
+          </span>
+        </li>
+      ))}
+    </ol>
+  );
 }
 
 /** Saved and skipped change counts, in the shape the server logs on `mutations_selected`. */
@@ -388,6 +397,81 @@ function appliedChangeCounts(event: LtmDebugEvent) {
   return Array.isArray(event.mutationIds) && Array.isArray(skipped)
     ? { saved: event.mutationIds.length, skipped: skipped.length }
     : null;
+}
+
+/** One sentence for what a log record did, from the counts it logged; null when the record has no such sentence. */
+function stepText(
+  event: LtmDebugEvent,
+  localizeUi: LtmTranslationFunction,
+  locale: string,
+): { text: string; note?: string; hasDuration?: boolean } | null {
+  if (event.status === "error" || event.status === "skipped") return null;
+  const count = (value: number | null) => (value === null ? null : value.toLocaleString(locale));
+  switch (event.action) {
+    case "evidence_unit_request": {
+      const tokens = count(
+        recordedCount(event.counts?.estimatedPromptTokens ?? event.counts?.promptTokens ?? event.counts?.inputTokens),
+      );
+      return {
+        text: localizeUi("ui.longTermMemory.activityview.stepSentToModel"),
+        note: tokens ? localizeUi("ui.longTermMemory.activityview.estimatedInputTokens", { count: tokens }) : undefined,
+      };
+    }
+    case "evidence_unit_response":
+      return event.durationMs != null
+        ? {
+            text: localizeUi("ui.longTermMemory.activityview.stepModelRepliedAfter", {
+              duration: formatDuration(event.durationMs, locale, localizeUi),
+            }),
+            hasDuration: true,
+          }
+        : { text: localizeUi("ui.longTermMemory.activityview.stepModelReplied") };
+    case "evidence_units_compiled": {
+      const kept = recordedCount(event.counts?.units);
+      const candidates = recordedCount(event.counts?.totalCandidates);
+      if (kept === null || candidates === null) return null;
+      return {
+        text: localizeUi(
+          selectLtmPluralForm(locale, candidates) === "one"
+            ? "ui.longTermMemory.activityview.stepKeptOne"
+            : "ui.longTermMemory.activityview.stepKept",
+          { kept: kept.toLocaleString(locale), candidates: candidates.toLocaleString(locale) },
+        ),
+      };
+    }
+    case "draft_deferred":
+      return { text: localizeUi("ui.longTermMemory.activityview.stepPrepared") };
+    case "mutations_selected": {
+      const applied = appliedChangeCounts(event);
+      if (!applied) return null;
+      const total = applied.saved + applied.skipped;
+      return {
+        text: localizeUi(
+          selectLtmPluralForm(locale, total) === "one"
+            ? "ui.longTermMemory.activityview.stepSelectedOne"
+            : "ui.longTermMemory.activityview.stepSelected",
+          { saved: applied.saved.toLocaleString(locale), total: total.toLocaleString(locale) },
+        ),
+      };
+    }
+    case "apply_draft":
+      return event.status === "ok" ? { text: localizeUi("ui.longTermMemory.activityview.stepSaved") } : null;
+    case "recall_explanation": {
+      const eligible = recordedCount(event.details?.eligibleChunks);
+      const selected = count(recordedCount(event.counts?.selected));
+      if (eligible === null || !selected) return null;
+      return {
+        text: localizeUi(
+          selectLtmPluralForm(locale, eligible) === "one"
+            ? "ui.longTermMemory.activityview.stepRankedOne"
+            : "ui.longTermMemory.activityview.stepRanked",
+          { eligible: eligible.toLocaleString(locale), selected },
+        ),
+      };
+    }
+    default:
+      return null;
+  }
 }
 
 /** The outcome in a few words, from counts the log already holds; empty when none were recorded. */
@@ -808,44 +892,69 @@ export default function ActivityView({
   };
 
   const renderRecallCandidates = (candidates: Array<Record<string, unknown>>, rejected: boolean) => (
-    <ul className="space-y-1 text-[var(--muted-foreground)]">
+    <ul className="divide-y divide-[var(--border)]">
       {candidates.map((candidate, index) => {
         const noteId = typeof candidate.noteId === "string" ? candidate.noteId : undefined;
         const score = typeof candidate.score === "number" ? candidate.score : undefined;
         const fusedRank = typeof candidate.fusedRank === "number" ? candidate.fusedRank : undefined;
         const title = noteId ? noteTitles.get(noteId) : undefined;
+        const threshold = recallWorkflow?.scoreThreshold;
+        const percent = (value: number) => `${Math.min(100, Math.max(0, value * 100))}%`;
+        // The limit that applied, when the run recorded it; the generic reason otherwise.
+        const reasonKey = String(candidate.rejectionReason ?? "rejected");
+        const maxTokens = recordedCount(recallWorkflow?.maxTokens);
+        const maxChunks = recordedCount(recallWorkflow?.maxChunks);
+        const reason =
+          reasonKey === "budget" && maxTokens !== null
+            ? localizeUi("ui.longTermMemory.activityview.recallReasonTokenLimit", {
+                tokens: maxTokens.toLocaleString(locale),
+              })
+            : reasonKey === "lower_rank" && maxChunks !== null
+              ? localizeUi("ui.longTermMemory.activityview.recallReasonMemoryLimit", {
+                  count: maxChunks.toLocaleString(locale),
+                })
+              : localizedLabel(reasonKey, localizeUi, recallReasonLabelKeys);
+        const lanes = Array.isArray(candidate.lanes) ? candidate.lanes.join(", ") : "";
         return (
-          <li
-            key={`${noteId ?? "candidate"}-${index}`}
-            className="flex flex-wrap justify-between gap-2 rounded bg-[var(--background)] px-2 py-1"
-          >
-            <span>
-              {noteId && title && onOpenMemory ? (
-                <button
-                  type="button"
-                  data-ltm-recalled-note={noteId}
-                  className="inline-flex min-h-11 min-w-0 items-center truncate text-left text-[var(--primary)] underline underline-offset-2"
-                  onClick={() => onOpenMemory(noteId)}
-                >
-                  {title}
-                </button>
-              ) : (
-                (title ?? noteId ?? localizeUi("ui.longTermMemory.activityview.unknownMemory"))
-              )}{" "}
-              · {String(candidate.sectionKey ?? "chunk")}
-            </span>
-            <span>
-              {localizeUi("ui.longTermMemory.activityview.relevance")}{" "}
-              {fusedRank == null ? null : (
-                <>{localizeUi("ui.longTermMemory.activityview.fusedRank", { rank: fusedRank })} · </>
-              )}
-              {relevance(score)} ·{" "}
-              {rejected
-                ? localizedLabel(String(candidate.rejectionReason ?? "rejected"), localizeUi, recallReasonLabelKeys)
-                : Array.isArray(candidate.lanes)
-                  ? candidate.lanes.join(", ")
-                  : ""}
-            </span>
+          <li key={`${noteId ?? "candidate"}-${index}`} className="grid gap-1 py-2 text-[var(--muted-foreground)]">
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+              <span className="min-w-0">
+                {noteId && title && onOpenMemory ? (
+                  <button
+                    type="button"
+                    data-ltm-recalled-note={noteId}
+                    className="inline-flex min-h-11 min-w-0 items-center truncate text-left text-[var(--primary)] underline underline-offset-2"
+                    onClick={() => onOpenMemory(noteId)}
+                  >
+                    {title}
+                  </button>
+                ) : (
+                  (title ?? noteId ?? localizeUi("ui.longTermMemory.activityview.unknownMemory"))
+                )}{" "}
+                · {String(candidate.sectionKey ?? "chunk")}
+              </span>
+              <span className="flex items-center gap-2">
+                {score === undefined ? null : (
+                  <span aria-hidden="true" className="relative h-1.5 w-14 rounded-full bg-[var(--border)]">
+                    <span
+                      className="absolute inset-y-0 left-0 rounded-full bg-[var(--primary)]"
+                      style={{ width: percent(score) }}
+                    />
+                    {typeof threshold === "number" && Number.isFinite(threshold) ? (
+                      <span
+                        className="absolute -inset-y-0.5 w-0.5 -translate-x-1/2 bg-[var(--foreground)]"
+                        style={{ left: percent(threshold) }}
+                      />
+                    ) : null}
+                  </span>
+                )}
+                <span className="tabular-nums">{relevance(score)}</span>
+                {fusedRank === undefined ? null : (
+                  <span>· {localizeUi("ui.longTermMemory.activityview.fusedRank", { rank: fusedRank })}</span>
+                )}
+              </span>
+            </div>
+            {rejected ? <p>{reason}</p> : lanes ? <p>{lanes}</p> : null}
           </li>
         );
       })}
@@ -948,7 +1057,7 @@ export default function ActivityView({
     const model = selectedOperation.events.find((event) => event.model)?.model;
     const provider = selectedOperation.events.find((event) => event.provider)?.provider;
     const durationMs = lastEvent.durationMs;
-    // Recall counts already read under Result and Run parameters.
+    // Recall counts already read under Result and Recall settings used.
     const countSummary = summarizeCounts(
       selectedOperation.events.filter((event) => event.action !== "recall_explanation"),
       localizeUi,
@@ -970,6 +1079,114 @@ export default function ActivityView({
           event.status === "error" &&
           (!event.draftId || !selection.draftId || event.draftId === selection.draftId),
       );
+    // `selected` recorded as an empty array, or a recorded count of zero, means nothing was added; a
+    // malformed `selected` with no count is not evidence either way.
+    const nothingAdded =
+      selectedRecallEvent != null &&
+      (Array.isArray(recallWorkflow?.selected)
+        ? recallWorkflow.selected.length === 0
+        : recordedCount(selectedRecallEvent.counts?.selected) === 0);
+    const rejectedRows = recordRows(recallWorkflow?.rejected);
+    // Rests on the logged rejected sample; the pane already says how many rows the log keeps.
+    const allBelowMinimum =
+      typeof recallWorkflow?.scoreThreshold === "number" &&
+      rejectedRows.length > 0 &&
+      rejectedRows.every((row) => row.rejectionReason === "score_threshold");
+    // Whole labels with their values; the first four always show, the rest only when the run recorded them.
+    const weights = recordDetails(recallWorkflow?.weights);
+    const recallSettings: Array<[string, string]> = recallWorkflow
+      ? [
+          [localizeUi("ui.longTermMemory.activityview.settingMemoryLimit"), recordedNumber(recallWorkflow.maxChunks)],
+          [localizeUi("ui.longTermMemory.activityview.settingTokenLimit"), recordedNumber(recallWorkflow.maxTokens)],
+          [
+            localizeUi("ui.longTermMemory.activityview.settingMinimumRelevance"),
+            relevance(recallWorkflow.scoreThreshold),
+          ],
+          [
+            localizeUi("ui.longTermMemory.activityview.settingTokensUsed"),
+            recordedNumber(selectedRecallEvent?.counts?.usedTokens),
+          ],
+          ...(typeof recallWorkflow.mode === "string"
+            ? [[localizeUi("ui.longTermMemory.activityview.settingRecallMode"), humanizeLabel(recallWorkflow.mode)]]
+            : []),
+          ...(typeof recallWorkflow.contextMessagesUsed === "number"
+            ? [
+                [
+                  localizeUi("ui.longTermMemory.activityview.settingMessagesRead"),
+                  recallWorkflow.contextMessagesUsed.toLocaleString(locale),
+                ],
+              ]
+            : []),
+          ...(typeof recallWorkflow.indexLoadOutcome === "string"
+            ? [
+                [
+                  localizeUi("ui.longTermMemory.activityview.settingIndex"),
+                  humanizeLabel(recallWorkflow.indexLoadOutcome),
+                ],
+              ]
+            : []),
+          ...(typeof recallWorkflow.indexGeneratedAt === "string"
+            ? [
+                [
+                  localizeUi("ui.longTermMemory.activityview.settingIndexBuilt"),
+                  formatTimestamp(recallWorkflow.indexGeneratedAt, locale),
+                ],
+              ]
+            : []),
+          ...(typeof recallWorkflow.embeddedChunks === "number"
+            ? [
+                [
+                  localizeUi("ui.longTermMemory.activityview.settingEmbeddedChunks"),
+                  recallWorkflow.embeddedChunks.toLocaleString(locale),
+                ],
+              ]
+            : []),
+          ...(typeof recallWorkflow.semanticOutcome === "string"
+            ? [
+                [
+                  localizeUi("ui.longTermMemory.activityview.settingSemanticMatching"),
+                  humanizeLabel(recallWorkflow.semanticOutcome),
+                ],
+              ]
+            : []),
+          ...(typeof recallWorkflow.includeResolved === "boolean"
+            ? [
+                [
+                  localizeUi("ui.longTermMemory.activityview.settingResolvedMemories"),
+                  localizeUi(
+                    recallWorkflow.includeResolved
+                      ? "ui.longTermMemory.activityview.valueEligible"
+                      : "ui.longTermMemory.activityview.valueExcluded",
+                  ),
+                ],
+              ]
+            : []),
+          ...(typeof recallWorkflow.exclusiveCharacterTargeting === "boolean"
+            ? [
+                [
+                  localizeUi("ui.longTermMemory.activityview.settingCharacterTargeting"),
+                  localizeUi(
+                    recallWorkflow.exclusiveCharacterTargeting
+                      ? "ui.longTermMemory.activityview.valueRespondingCharacter"
+                      : "ui.longTermMemory.activityview.valueWholeChat",
+                  ),
+                ],
+              ]
+            : []),
+          // Weights read as recorded; the log does not guarantee they sum to 1.
+          ...(weights
+            ? [
+                [
+                  localizeUi("ui.longTermMemory.activityview.settingRankingWeights"),
+                  Object.entries(weights)
+                    .filter(([, value]) => typeof value === "number")
+                    .map(([name, value]) => `${localizedLabel(name, localizeUi, weightLabelKeys)} ${value}`)
+                    .join(" · "),
+                ],
+              ]
+            : []),
+        ]
+      : [];
     const hasFacts = subject?.kind === "memory" || Boolean(model || provider || countSummary) || durationMs != null;
     return (
       <article
@@ -1004,7 +1221,22 @@ export default function ActivityView({
               {localizeUi("ui.longTermMemory.activityview.recallSource", { source: subject.value })}
             </p>
           ) : null}
-          <p className="text-[0.6875rem] text-[var(--muted-foreground)]">{formatTimestamp(lastEvent.ts, locale)}</p>
+          <p className="text-[0.6875rem] text-[var(--muted-foreground)]">
+            <time dateTime={lastEvent.ts} title={formatTimestamp(lastEvent.ts, locale)}>
+              {formatWhen(lastEvent.ts, locale)}
+            </time>
+            {[
+              formatAge(lastEvent.ts, locale, Date.now()),
+              durationMs != null
+                ? localizeUi("ui.longTermMemory.activityview.tookDuration", {
+                    duration: formatDuration(durationMs, locale, localizeUi),
+                  })
+                : "",
+            ]
+              .filter(Boolean)
+              .map((part) => ` · ${part}`)
+              .join("")}
+          </p>
           <Button
             aria-label={localizeUi("ui.longTermMemory.activityview.copyJsonForOperation", { value1: title })}
             onClick={() => void copyOperationJson(selectedOperation)}
@@ -1041,15 +1273,48 @@ export default function ActivityView({
             </ul>
           </StatusSurface>
         ) : null}
+        {nothingAdded ? (
+          <StatusSurface tone="neutral" className="py-3" data-ltm-debug-nothing-added>
+            {/* StatusSurface is a flex row; one child keeps the two paragraphs stacked. */}
+            <div>
+              <p>
+                {allBelowMinimum
+                  ? localizeUi("ui.longTermMemory.activityview.recallNothingBelowMinimum", {
+                      threshold: relevance(recallWorkflow?.scoreThreshold),
+                    })
+                  : localizeUi("ui.longTermMemory.activityview.recallNothingAdded")}
+              </p>
+              <p className="mt-1">
+                <strong>{localizeUi("ui.longTermMemory.activityview.whatToTry")}: </strong>
+                {localizeUi("ui.longTermMemory.activityview.tryRecallNothingAdded")}
+              </p>
+            </div>
+          </StatusSurface>
+        ) : null}
         <section>
           <h4 className="mb-1 font-semibold">{localizeUi("ui.longTermMemory.activityview.result")}</h4>
           {selectedRecallEvent ? (
-            <p>
-              {localizeUi("ui.longTermMemory.activityview.recallCounts", {
-                selected: recordedNumber(selectedRecallEvent.counts?.selected),
-                rejected: recordedNumber(selectedRecallEvent.counts?.rejected),
-              })}
-            </p>
+            renderResultCounts(
+              [
+                [
+                  recordedCount(recallWorkflow?.indexedChunks),
+                  "ui.longTermMemory.activityview.resultIndexed",
+                  "ui.longTermMemory.activityview.resultIndexed",
+                ],
+                [
+                  recordedCount(recallWorkflow?.eligibleChunks),
+                  "ui.longTermMemory.activityview.resultUsable",
+                  "ui.longTermMemory.activityview.resultUsable",
+                ],
+                [
+                  recordedCount(selectedRecallEvent.counts?.selected),
+                  "ui.longTermMemory.activityview.resultAdded",
+                  "ui.longTermMemory.activityview.resultAdded",
+                ],
+              ],
+              localizeUi,
+              locale,
+            )
           ) : compiled.length ? (
             compiled.map((event) => {
               const kinds = recordDetails(event.details?.mutationKinds);
@@ -1059,7 +1324,27 @@ export default function ActivityView({
                   {compiled.length > 1 && event.sourceNoteId ? (
                     <p>{noteTitles.get(event.sourceNoteId) ?? event.sourceNoteId}</p>
                   ) : null}
-                  <p>{extractionCounts(event, localizeUi, locale)}</p>
+                  {renderResultCounts(
+                    [
+                      [
+                        recordedCount(event.counts?.totalCandidates),
+                        "ui.longTermMemory.activityview.resultCandidatesFoundOne",
+                        "ui.longTermMemory.activityview.resultCandidatesFound",
+                      ],
+                      [
+                        recordedCount(event.counts?.units),
+                        "ui.longTermMemory.activityview.resultKept",
+                        "ui.longTermMemory.activityview.resultKept",
+                      ],
+                      [
+                        recordedCount(event.counts?.mutations),
+                        "ui.longTermMemory.activityview.resultChangesOne",
+                        "ui.longTermMemory.activityview.resultChanges",
+                      ],
+                    ],
+                    localizeUi,
+                    locale,
+                  )}
                   {kinds ? (
                     <p>
                       {Object.entries(kinds)
@@ -1088,14 +1373,26 @@ export default function ActivityView({
             apply.map((event) => {
               const counts = applyFailedFor(event) ? undefined : appliedChangeCounts(event);
               return (
-                <p key={event.id}>
-                  {counts
-                    ? localizeUi("ui.longTermMemory.activityview.savedSkipped", {
-                        saved: counts.saved.toLocaleString(locale),
-                        skipped: counts.skipped.toLocaleString(locale),
-                      })
-                    : localizeUi("ui.longTermMemory.activityview.notRecorded")}
-                </p>
+                <div key={event.id}>
+                  {renderResultCounts(
+                    counts
+                      ? [
+                          [
+                            counts.saved + counts.skipped,
+                            "ui.longTermMemory.activityview.resultDraftChangesOne",
+                            "ui.longTermMemory.activityview.resultDraftChanges",
+                          ],
+                          [
+                            counts.saved,
+                            "ui.longTermMemory.activityview.resultSaved",
+                            "ui.longTermMemory.activityview.resultSaved",
+                          ],
+                        ]
+                      : [],
+                    localizeUi,
+                    locale,
+                  )}
+                </div>
               );
             })
           ) : (
@@ -1154,100 +1451,15 @@ export default function ActivityView({
               </section>
             ) : null}
             <section>
-              <h4 className="mb-1 font-semibold">{localizeUi("ui.longTermMemory.activityview.runParameters")}</h4>
-              <div className="grid gap-1 text-[var(--muted-foreground)] sm:grid-cols-2">
-                <span>
-                  {localizeUi("ui.longTermMemory.activityview.limits")} {recordedNumber(recallWorkflow.maxChunks)}{" "}
-                  {localizeUi("ui.longTermMemory.activityview.chunks")} {recordedNumber(recallWorkflow.maxTokens)}{" "}
-                  {localizeUi("ui.longTermMemory.activityview.tokens")}
-                </span>
-                <span>
-                  {localizeUi("ui.longTermMemory.activityview.threshold")} {relevance(recallWorkflow.scoreThreshold)}
-                </span>
-                <span>
-                  {localizeUi("ui.longTermMemory.activityview.used")}{" "}
-                  {recordedNumber(selectedRecallEvent?.counts?.usedTokens)}{" "}
-                  {localizeUi("ui.longTermMemory.activityview.tokens")}
-                </span>
-                {typeof recallWorkflow.mode === "string" ? (
-                  <span>
-                    {localizeUi("ui.longTermMemory.activityview.recallMode", {
-                      mode: humanizeLabel(recallWorkflow.mode),
-                    })}
-                  </span>
-                ) : null}
-                {typeof recallWorkflow.contextMessagesUsed === "number" ? (
-                  <span>
-                    {localizeUi(
-                      selectLtmPluralForm(locale, recallWorkflow.contextMessagesUsed) === "one"
-                        ? "ui.longTermMemory.activityview.recallContextMessagesOne"
-                        : "ui.longTermMemory.activityview.recallContextMessages",
-                      { count: recallWorkflow.contextMessagesUsed },
-                    )}
-                  </span>
-                ) : null}
-                {typeof recallWorkflow.indexedChunks === "number" ||
-                typeof recallWorkflow.eligibleChunks === "number" ? (
-                  <span>
-                    {localizeUi("ui.longTermMemory.activityview.recallIndexSummary", {
-                      indexed: recordedNumber(recallWorkflow.indexedChunks),
-                      eligible: recordedNumber(recallWorkflow.eligibleChunks),
-                      outcome:
-                        typeof recallWorkflow.indexLoadOutcome === "string"
-                          ? humanizeLabel(recallWorkflow.indexLoadOutcome)
-                          : localizeUi("ui.longTermMemory.activityview.notRecorded"),
-                    })}
-                  </span>
-                ) : null}
-                {typeof recallWorkflow.indexGeneratedAt === "string" ? (
-                  <span>
-                    {localizeUi("ui.longTermMemory.activityview.recallIndexBuiltAt", {
-                      value: formatTimestamp(recallWorkflow.indexGeneratedAt, locale),
-                    })}
-                  </span>
-                ) : null}
-                {typeof recallWorkflow.embeddedChunks === "number" ? (
-                  <span>
-                    {localizeUi("ui.longTermMemory.activityview.recallIndexEmbeddedChunks", {
-                      count: recallWorkflow.embeddedChunks,
-                    })}
-                  </span>
-                ) : null}
-                {typeof recallWorkflow.semanticOutcome === "string" ? (
-                  <span>
-                    {localizeUi("ui.longTermMemory.activityview.recallSemanticOutcome", {
-                      outcome: humanizeLabel(recallWorkflow.semanticOutcome),
-                    })}
-                  </span>
-                ) : null}
-                {typeof recallWorkflow.includeResolved === "boolean" ? (
-                  <span>
-                    {localizeUi(
-                      recallWorkflow.includeResolved
-                        ? "ui.longTermMemory.activityview.recallResolvedEligible"
-                        : "ui.longTermMemory.activityview.recallResolvedExcluded",
-                    )}
-                  </span>
-                ) : null}
-                {typeof recallWorkflow.exclusiveCharacterTargeting === "boolean" ? (
-                  <span>
-                    {localizeUi(
-                      recallWorkflow.exclusiveCharacterTargeting
-                        ? "ui.longTermMemory.activityview.recallTargetedCharactersOnly"
-                        : "ui.longTermMemory.activityview.recallChatWideTargeting",
-                    )}
-                  </span>
-                ) : null}
-              </div>
-              {recordDetails(recallWorkflow.weights) ? (
-                <p className="mt-1 text-[var(--muted-foreground)]">
-                  {localizeUi("ui.longTermMemory.activityview.weights")}{" "}
-                  {Object.entries(recordDetails(recallWorkflow.weights)!)
-                    .filter(([, value]) => typeof value === "number")
-                    .map(([name, value]) => `${localizedLabel(name, localizeUi, weightLabelKeys)} ${value}`)
-                    .join(" · ")}
-                </p>
-              ) : null}
+              <h4 className="mb-1 font-semibold">{localizeUi("ui.longTermMemory.activityview.recallSettingsUsed")}</h4>
+              <dl className="grid gap-x-6 gap-y-2 sm:grid-cols-2">
+                {recallSettings.map(([term, value]) => (
+                  <div key={term}>
+                    <dt className="text-[var(--muted-foreground)]">{term}</dt>
+                    <dd>{value}</dd>
+                  </div>
+                ))}
+              </dl>
             </section>
           </>
         ) : null}
@@ -1273,9 +1485,7 @@ export default function ActivityView({
               {durationMs != null ? (
                 <span>
                   {localizeUi("ui.longTermMemory.activityview.detailDuration")}:{" "}
-                  {localizeUi("ui.longTermMemory.activityview.durationMs", {
-                    value: durationMs.toLocaleString(locale),
-                  })}
+                  {formatDuration(durationMs, locale, localizeUi)}
                 </span>
               ) : null}
             </div>
@@ -1287,39 +1497,67 @@ export default function ActivityView({
           <ol className="space-y-2">
             {selectedOperation.events.map((event) => {
               const eventStatus = operationStatus([event], localizeUi, false, timelineStatusLabelKeys);
-              const stepDescription = describeEvent(event, noteTitles, localizeUi);
+              const step = stepText(event, localizeUi, locale);
+              // A step with its own sentence keeps the log's message only when it reports a problem.
+              const isProblem = event.status === "error" || event.status === "warning" || isTruncatedResponse(event);
+              const stepDescription = !step || isProblem ? describeEvent(event, noteTitles, localizeUi) : "";
+              const offsetMs = Date.parse(event.ts) - Date.parse(firstEvent.ts);
               return (
-                <li key={event.id} className="border-l-2 border-[var(--border)] pl-3">
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <span className="font-medium">
-                      {localizedLabel(event.phase, localizeUi, labelKeys.debugPhase)} /{" "}
-                      {actionLabel(event.action, localizeUi)}
-                    </span>
-                    <span
-                      data-ltm-debug-step-status={eventStatus.status}
-                      className={`inline-flex items-center gap-1 ${
-                        event.status === "error" ? "text-[var(--destructive)]" : "text-[var(--muted-foreground)]"
-                      }`}
-                    >
-                      {eventStatus.status === "warning" ? <AlertTriangle aria-hidden="true" size="0.75rem" /> : null}
-                      <span className={eventStatus.status === "warning" ? "font-semibold" : undefined}>
-                        {eventStatus.label}
+                <li
+                  key={event.id}
+                  className="grid grid-cols-[4.5rem_minmax(0,1fr)] gap-x-3 border-l-2 border-[var(--border)] pl-3"
+                >
+                  <time
+                    dateTime={event.ts}
+                    title={formatTimestamp(event.ts, locale)}
+                    className="text-[0.6875rem] tabular-nums text-[var(--muted-foreground)]"
+                  >
+                    {offsetMs > 0
+                      ? localizeUi("ui.longTermMemory.activityview.stepOffset", {
+                          duration: formatDuration(offsetMs, locale, localizeUi),
+                        })
+                      : formatClock(event.ts, locale, "medium")}
+                  </time>
+                  <div className="min-w-0">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <span className="font-medium">{step?.text ?? actionLabel(event.action, localizeUi)}</span>
+                      <span
+                        data-ltm-debug-step-status={eventStatus.status}
+                        className={`inline-flex items-center gap-1 ${
+                          event.status === "error" ? "text-[var(--destructive)]" : "text-[var(--muted-foreground)]"
+                        }`}
+                      >
+                        {eventStatus.status === "warning" ? <AlertTriangle aria-hidden="true" size="0.75rem" /> : null}
+                        <span className={eventStatus.status === "warning" ? "font-semibold" : undefined}>
+                          {eventStatus.label}
+                        </span>
                       </span>
-                    </span>
+                    </div>
+                    {step?.note ? <p className="mt-1 text-[var(--muted-foreground)]">{step.note}</p> : null}
+                    {stepDescription ? <p className="mt-1 leading-relaxed">{stepDescription}</p> : null}
+                    {event.durationMs != null && !step?.hasDuration ? (
+                      <p className="mt-1 text-[0.6875rem] text-[var(--muted-foreground)]">
+                        {localizeUi("ui.longTermMemory.activityview.tookDuration", {
+                          duration: formatDuration(event.durationMs, locale, localizeUi),
+                        })}
+                      </p>
+                    ) : null}
                   </div>
-                  {stepDescription ? <p className="mt-1 leading-relaxed">{stepDescription}</p> : null}
-                  <p className="mt-1 text-[0.6875rem] text-[var(--muted-foreground)]">
-                    {formatTimestamp(event.ts, locale)}
-                    {event.durationMs != null
-                      ? ` · ${localizeUi("ui.longTermMemory.activityview.durationMs", {
-                          value: event.durationMs.toLocaleString(locale),
-                        })}`
-                      : ""}
-                  </p>
                 </li>
               );
             })}
           </ol>
+          <p className="mt-2 text-[var(--muted-foreground)]">
+            {localizeUi(
+              selectLtmPluralForm(locale, selectedOperation.events.length) === "one"
+                ? "ui.longTermMemory.activityview.copyJsonNoteOne"
+                : "ui.longTermMemory.activityview.copyJsonNote",
+              { count: selectedOperation.events.length.toLocaleString(locale) },
+            )}
+            {selectedOperation.events.some((event) => typeof event.details?.responseSnippet === "string")
+              ? ` ${localizeUi("ui.longTermMemory.activityview.copyJsonNoteExcerpt")}`
+              : ""}
+          </p>
         </section>
       </article>
     );
@@ -1653,6 +1891,15 @@ export default function ActivityView({
                                       <span className={`mt-1 line-clamp-2 text-xs ${mutedText}`}>{summary}</span>
                                     ) : null}
                                   </span>
+                                  {/* ponytail: the age is computed at render and refreshes with the list; there is no
+                                      ticking timer, so a row reads stale until the next render. Upgrade: a
+                                      once-a-minute tick in state if that matters. */}
+                                  <time
+                                    dateTime={lastEvent.ts}
+                                    className={`shrink-0 whitespace-nowrap text-[0.6875rem] ${mutedText}`}
+                                  >
+                                    {formatAge(lastEvent.ts, locale, Date.now())}
+                                  </time>
                                 </button>
                               </li>
                             );

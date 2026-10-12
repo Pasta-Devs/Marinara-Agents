@@ -1,5 +1,9 @@
 # Long-Term Memory changelog
 
+## 1.4.28 — 2026-10-12
+
+- Finish the Memory Settings → Debug details pane. Each event row shows how long ago it last logged, Result reads as counts (for example "17 candidates found → 9 kept → 9 changes" or "148 indexed → 131 usable in this chat → 2 added"), recall candidates are flat rows with a score bar marking the minimum relevance and a reason that names the limit that applied, a recall that added nothing says why, recall settings read as labelled terms, and What happened lists one sentence per step with its offset from the start. Durations over a second read in seconds or minutes, and a note says what Copy JSON includes.
+
 ## 1.4.27 — 2026-10-12
 
 - Make the open event visible in Memory Settings → Debug. The selected row keeps a background and accent bar wherever the pointer is, the active filter chip reads pressed, and muted row text stays readable on hovered and selected rows. Rows now show the outcome ("7 of 12 kept", "1 added · 6 not added", "1 saved · 1 skipped") instead of repeating their title, and a failed row keeps its error. A compile-evidence warning says how many candidates failed checks. Result counts use the right singular and read "kept"; applied changes show saved and skipped counts rather than raw IDs, and a failed apply reports none; the Details heading appears only when it has content and recall counts are no longer repeated there. The health line drops "Log size unavailable", the Vault "Open debug log" link has a 44 px target, and the recall-failed message names Memory Settings → Debug.
