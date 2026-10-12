@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { Module } from "node:module";
 import { tmpdir } from "node:os";
 import { delimiter, dirname, join, resolve } from "node:path";
@@ -1926,6 +1926,34 @@ async function main() {
           concurrentEmbeds.length,
           1,
           "concurrent stale loaders must recheck freshness under the lock and rebuild once",
+        );
+
+        // #1328: an index that is only out of date is replaced by the rebuild; only an
+        // unreadable one is quarantined, so edits do not park a full copy each time.
+        const quarantinedIndexCopies = () =>
+          readdir(join(vaultRoot, "quarantine", "indexes")).then(
+            (names) => names.length,
+            () => 0,
+          );
+        const copiesBeforeStale = await quarantinedIndexCopies();
+        await storage.createNote(note("world_1328_stale", "chat-a", "A cobalt archive stale-index entry."));
+        const staleRebuilt = await loadOrRebuildLongTermMemoryIndexes(vaultRoot, null, []);
+        assert.equal(
+          Object.hasOwn(staleRebuilt.metadata.byNoteId, "world_1328_stale"),
+          true,
+          "a stale index must be rebuilt with the new note",
+        );
+        assert.equal(
+          await quarantinedIndexCopies(),
+          copiesBeforeStale,
+          "a stale but readable index must be replaced, not quarantined",
+        );
+        await writeFile(recallIndexPath, "{");
+        await loadOrRebuildLongTermMemoryIndexes(vaultRoot, null, []);
+        assert.equal(
+          await quarantinedIndexCopies(),
+          copiesBeforeStale + 1,
+          "an unreadable index must still be quarantined",
         );
 
         // Recall cancellation must reach rebuild embedding work, avoid publishing after

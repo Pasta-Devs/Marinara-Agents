@@ -2,7 +2,7 @@
 
 ## 1.4.29 — 2026-10-12
 
-- Clean up how Long-Term Memory behaves around damaged or old data, with no change to recall scoring or extraction. Extraction no longer stops for good at 10,000 rejected suggestions: the least recently seen ones make room and saved identity decisions are kept.
+- Clean up how Long-Term Memory behaves around damaged or old data, with no change to recall scoring or extraction. Extraction no longer stops for good at 10,000 rejected suggestions: the least recently seen ones make room and saved identity decisions are kept. An out-of-date recall index is rebuilt in place instead of leaving a full copy in quarantine.
 
 ## 1.4.28 — 2026-10-12
 
