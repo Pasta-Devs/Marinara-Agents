@@ -287,8 +287,33 @@ with `manual` it starts only on the Creator the player picks, so no gender rule 
    modular refactor.
 2. **Prompt weight and sameness.** `WORLD-SIMULATION.md` shows what extra prompt lines cost. The
    budget above is a hard cap, and a pack sets how many Creators may run one storyline at once.
-3. **Pictures.** Whether image models hold a `look` line across weeks is unknown. Probe it first.
+3. **Pictures.** The probe shows a `look` line carries within one day of posts; holding it across
+   weeks is still untested.
 4. **Two relationship engines** remain (code couples, pack dramas) until PR 9.
+
+## Probe result (2026-10-12, production, one Creator)
+
+A hand-set condition with today's knobs: a public `circumstance` continuity fact ("six months
+pregnant … part of her daily life and her content") and the look appended to the card's image
+instructions. 14 posts, all generated, all with a picture. DMs were not run.
+
+- **The look carries.** The bump is visible in 12 of 14 pictures (one crop too tight, one flat).
+  Deep details show the look line in the image prompt. No child appeared.
+- **The line does not.** 0 of 14 captions refer to the pregnancy, although Deep details show the
+  fact in the writer's prompt ("Life: …"). As continuity it is background the writer may use, and
+  the beat planner picks every post's subject, so it never becomes the subject. Pictures and
+  captions then disagree.
+
+What this changes in the design:
+
+1. A condition's `line` is not enough on its own. The state reader puts it in the brief as what is
+   true **now** (beside cast, place and time), not as a continuity fact.
+2. The condition must also **feed the beat planner**: its stage deck supplies beats, and about one
+   post in N (a pack value) takes a condition beat as its subject ("the first kick", "cravings at
+   2 am"). The other posts only stay consistent with it.
+3. The probe for PR 1 repeats this run with the line in the brief and condition beats on, and
+   passes when captions reflect the condition in roughly the share the pack sets, without every
+   caption saying it. DMs are added then.
 
 ## Pull requests
 
