@@ -1,7 +1,11 @@
 import { randomUUID } from "node:crypto";
 
 import type { SlurpStorageContext } from "../host/slp-storage-context.js";
-import type { SlpEventOccurrence, SlpInfluenceTarget } from "../../../../../shared/src/slp/slp-story-engine.js";
+import type {
+  SlpEventOccurrence,
+  SlpInfluenceTarget,
+  SlpStoryFact,
+} from "../../../../../shared/src/slp/slp-story-engine.js";
 import {
   slurpInfluenceMultiplier,
   type SlurpInfluenceStory,
@@ -11,6 +15,7 @@ import {
   SLP_STORY_OCCURRENCES_KEY,
   SLP_STORY_OPPORTUNITIES_KEY,
   applySlpStoryOutcomes,
+  putSlpStoryFact,
   readSlpArcOpportunities,
   readSlpOccurrences,
   readSlpStoryFacts,
@@ -77,6 +82,18 @@ export function createStoryEngineStorage({ settingsStore }: SlurpStorageContext)
     },
     async listArcOpportunities() {
       return readSlpArcOpportunities(await settingsStore.get(SLP_STORY_OPPORTUNITIES_KEY));
+    },
+    /** Apply outcomes outside an event: an arc chapter that just started (docs/STORYLINES.md, PR 1). */
+    async applyStoryOutcomes(input: Omit<Parameters<typeof applySlpStoryOutcomes>[0], "facts" | "opportunities">) {
+      const result = applySlpStoryOutcomes({
+        ...input,
+        facts: await this.listStoryFacts(),
+        opportunities: await this.listArcOpportunities(),
+      });
+      await Promise.all([
+        write(SLP_STORY_FACTS_KEY, result.facts),
+        write(SLP_STORY_OPPORTUNITIES_KEY, result.opportunities),
+      ]);
     },
     async reconcileStoryEvents(at = new Date()) {
       const [settings, accounts, existing] = await Promise.all([
@@ -203,6 +220,11 @@ export function createStoryEngineStorage({ settingsStore }: SlurpStorageContext)
         ),
       ]);
       return true;
+    },
+    /** A player condition (Life panel): it takes its track, replacing what was there. */
+    async putStoryCondition(fact: SlpStoryFact) {
+      await write(SLP_STORY_FACTS_KEY, putSlpStoryFact(await this.listStoryFacts(), fact));
+      return fact;
     },
     async removeStoryFact(id: string) {
       const before = await this.listStoryFacts();

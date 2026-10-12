@@ -207,6 +207,11 @@ export function slurpCompanyAllowsOthers(company: string | null | undefined): bo
   return Boolean(company?.trim()) && !/^alone\b/iu.test(company!.trim());
 }
 
+/** Standing conditions for a post: always true, mentioned only when the post is about them. */
+export function slurpRightNowLine(now: readonly string[], protect: (value: string) => string): string {
+  return `Right now: ${now.map(protect).join(" ")} This stays true in this post; mention it only if this post is about it.`;
+}
+
 export function slurpPostBriefSection(
   beat: SlurpBeat,
   at: Date,
@@ -215,6 +220,8 @@ export function slurpPostBriefSection(
   company?: string | null,
   /** Where the day stands at publication, from the schedule or the card's routine. */
   day?: SlurpDayMoment | null,
+  /** Standing conditions (docs/STORYLINES.md, "State"): true in every post, the subject of few. */
+  now: readonly string[] = [],
 ): string {
   // A named person is there even when the drawn company line says "alone": the beat decides.
   const companyAlone = Boolean(company?.trim()) && /^alone\b/iu.test(company!.trim());
@@ -237,6 +244,7 @@ export function slurpPostBriefSection(
       ? ["That place is not where you are right now: post about it from where you are, as a plan, a memory, or a wish."]
       : []),
     `Time: ${slurpPartOfDay(at)}, just before the publication time.`,
+    ...(now.length ? [slurpRightNowLine(now, protect)] : []),
     // One real earlier thing, as a fact. Mentioning it is optional; inventing more of it is not.
     ...(beat.reference
       ? [

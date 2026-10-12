@@ -1,5 +1,12 @@
 # Slurp release notes
 
+## 0.3.29 — 2026-10-12
+
+- Added: what is true about a Creator right now. A condition (one per part of life: body, love, family, home, work, public life) has a line for the writer, a look for pictures, outfit tags to prefer or leave out, and small moments. Posts, Story posts, chat replies and pictures all keep it true; only a share of posts is about it.
+- Added: "Life right now" in a Creator's ✦ sheet, to see, set and remove these conditions.
+- Added: storyline chapters can now set conditions and tags when they start.
+- Changed: a condition never shows in "What has happened in this story world"; it has its own place in each prompt.
+
 ## 0.3.28 — 2026-10-12
 
 - Added: Deep details for chat messages. Hold a Creator's reply (or right-click it) and choose "Deep details" in the Message menu to see what went into it: the chat facts the reply was built from (relationship, stance, heat, memories), the model, the full prompt and the raw answer. It opens in the same window as a post's Deep details.

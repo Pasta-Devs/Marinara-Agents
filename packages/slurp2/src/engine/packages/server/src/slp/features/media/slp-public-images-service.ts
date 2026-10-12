@@ -51,6 +51,7 @@ import {
 } from "../../modules/creators/slp-public-support.js";
 import { bootstrapVisibleSlp } from "../../data/creators/slp-creator-accounts.js";
 import { slurpPromptContext } from "../../base/prompting/slp-prompt-blocks.js";
+import { withSlurpConditionLook } from "../world/slp-world-contract.js";
 
 type ImageConnection = NonNullable<Awaited<ReturnType<ReturnType<typeof createConnectionsStorage>["getWithKey"]>>>;
 
@@ -309,6 +310,7 @@ export async function generateSlpPostImage(input: {
   ]
     .filter(Boolean)
     .join("\n");
+  characterImageInstructions = await withSlurpConditionLook(input.db, input.account.id, characterImageInstructions);
   const lookMode = input.settings.imageAppearanceMode ?? "writer";
   const characterContext = [
     characterDescription && slurpLookForWriter(lookMode) ? `Appearance:\n${characterDescription}` : "",

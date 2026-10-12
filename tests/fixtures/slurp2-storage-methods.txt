@@ -208,3 +208,5 @@ setStoryOccurrenceStatus
 cancelStartedStoryEvent
 removeStoryFact
 removeArcOpportunity
+applyStoryOutcomes
+putStoryCondition

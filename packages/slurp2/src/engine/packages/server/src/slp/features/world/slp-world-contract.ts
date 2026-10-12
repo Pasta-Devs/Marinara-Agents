@@ -20,5 +20,5 @@ export {
   type SlurpDramaLever,
   type SlurpDramaUndo,
 } from "./slp-drama-levers.js";
-export { resolveSlurpEventInstruction } from "./slp-story-context.js";
+export { loadSlurpStoryState, resolveSlurpEventInstruction, withSlurpConditionLook } from "./slp-story-context.js";
 export { markSlurpPlayerPresent } from "./slp-world-tick-state.js";

@@ -123,9 +123,11 @@ export type SlurpBeat = {
    * idea, focus, or pushed topic. Both may change the Creator's life, as their text says. `life`:
    * a day-to-day life moment (see `slp-life-moments.ts`); like a card beat, it changes nothing lasting.
    * `collab`, `sponsor`, `rival`, `couple`: a collab, a brand deal, a rivalry or a couple's story
-   * (see `slp-tie-beats.ts`, `slp-couple-beats.ts`).
+   * (see `slp-tie-beats.ts`, `slp-couple-beats.ts`). `condition`: a small moment of a standing
+   * condition (`world/events/slp-story-state.ts`); like a life moment, it changes nothing lasting.
    */
-  anchorKind: SlurpAnchorKind | "arc" | "steer" | "life" | "collab" | "sponsor" | "rival" | "couple" | "drama";
+  anchorKind:
+    SlurpAnchorKind | "arc" | "steer" | "life" | "collab" | "sponsor" | "rival" | "couple" | "drama" | "condition";
   anchor: string;
   line: string;
   /** Named people in the beat. Empty means alone. */
@@ -477,6 +479,7 @@ export function parseSlurpBeat(raw: unknown): SlurpBeat | null {
         beat.anchorKind === "steer" ||
         beat.anchorKind === "life" ||
         beat.anchorKind === "drama" ||
+        beat.anchorKind === "condition" ||
         TIE_KINDS.includes(beat.anchorKind as string) ||
         SLURP_ANCHOR_KINDS.includes(beat.anchorKind as SlurpAnchorKind)
       ) ||

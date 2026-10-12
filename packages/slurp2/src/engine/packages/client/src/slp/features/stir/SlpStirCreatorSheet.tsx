@@ -8,7 +8,7 @@ import { SlpSheet } from "../../modules/chrome/SlpSheet";
 import type { SlpActionName } from "../../../../../shared/src/slp/slp-actions.js";
 import type { SlpStirPlan, SlpStirPlanRequest } from "../../../../../shared/src/slp/slp-stir.js";
 import { SlpErrorState, SlpSkeleton } from "../../modules/chrome/SlpStateKit";
-import { SlpCreatorSteeringCard } from "../creators/slp-creators-contract";
+import { SlpCreatorLifeCard, SlpCreatorSteeringCard } from "../creators/slp-creators-contract";
 import { useSlurpUIStore } from "../../base/state/slp-package-store";
 import { openSlpStir, setSlpStirDraft, useSlpStirSheet } from "../../base/state/slp-stir-sheet-store";
 import { useSlurpStir } from "./slp-stir-hooks";
@@ -48,11 +48,13 @@ export function SlpStirCreatorSheet({
   // Kept after the sheet closes, so the plan and card sheets it opens stay about them.
   const [about, setAbout] = useState(target);
   const [steerOpen, setSteerOpen] = useState(false);
+  const [lifeOpen, setLifeOpen] = useState(false);
   useEffect(() => {
     if (!target) return;
     setAbout(target);
     // Each Creator's sheet opens as it starts, not as the last one was left.
     setSteerOpen(false);
+    setLifeOpen(false);
   }, [target]);
   // Keyed on `about`, not `target`: a quick card's play sheet closes this sheet (one overlay at a
   // time), and a "none" key would leave the play sheet with no Creators, couples or storylines.
@@ -167,6 +169,36 @@ export function SlpStirCreatorSheet({
               {steerOpen && (
                 <div className="border-t border-[var(--noodle-divider)] px-4 pb-4 pt-3">
                   <SlpCreatorSteeringCard creatorId={creator.id} name={creator.name} />
+                </div>
+              )}
+            </section>
+          )}
+          {creator && !creator.couplePage && (
+            <section className="rounded-2xl bg-[var(--slurp-surface-raised)] shadow-[var(--slurp-shadow-raised),var(--slurp-highlight)]">
+              <button
+                type="button"
+                aria-expanded={lifeOpen}
+                onClick={() => setLifeOpen((open) => !open)}
+                className="flex min-h-14 w-full items-center gap-3 rounded-2xl px-4 text-start focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--slurp-focus)]"
+              >
+                <span className="min-w-0 flex-1">
+                  <span className={cn(SLP_TYPE.body, "block font-semibold")}>{t("ui.slurp.stir.life", { name })}</span>
+                  <span className={cn(SLP_TYPE.meta, "block truncate text-[var(--slurp-muted)]")}>
+                    {t("ui.slurp.stir.lifeDetail")}
+                  </span>
+                </span>
+                <ChevronDown
+                  size={16}
+                  aria-hidden="true"
+                  className={cn(
+                    "shrink-0 text-[var(--slurp-muted)] transition-transform motion-reduce:transition-none",
+                    lifeOpen && "rotate-180",
+                  )}
+                />
+              </button>
+              {lifeOpen && (
+                <div className="border-t border-[var(--noodle-divider)] px-4 pb-4 pt-3">
+                  <SlpCreatorLifeCard creatorId={creator.id} name={creator.name} />
                 </div>
               )}
             </section>

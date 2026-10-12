@@ -90,10 +90,7 @@ assert.match(
 // Mood modifier gated by arcAffectsMood, started from the one arc-change hook.
 assert.equal(slurpArcChapterMood(arc, true), "tired");
 assert.equal(slurpArcChapterMood(arc, false), null);
-assert.match(
-  source("services/storage/slurp.storage.ts"),
-  /slurpArcChapterMood\(after, \(await this\.getSettings\(\)\)\.arcAffectsMood\)/,
-);
+assert.match(source("services/storage/slurp.storage.ts"), /slurpArcChapterMood\(after, settings\.arcAffectsMood\)/);
 
 // Image prompt carries the chapter line, joined before identity protection. The draft is
 // `generated.imagePrompt` in classic mode and the situation-assembled brief in produce mode, so

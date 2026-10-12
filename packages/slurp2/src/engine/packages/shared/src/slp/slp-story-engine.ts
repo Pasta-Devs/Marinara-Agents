@@ -62,6 +62,43 @@ export const slpInfluenceDraftSchema = z
   });
 export type SlpInfluenceDraft = z.infer<typeof slpInfluenceDraftSchema>;
 
+/**
+ * What a Creator's life is like right now, on one track (docs/STORYLINES.md, "State"). A track holds
+ * one condition at a time; a fact without a track is only a tag, as before.
+ */
+export const SLP_STORY_TRACKS = ["body", "love", "family", "home", "work", "public"] as const;
+export type SlpStoryTrack = (typeof SLP_STORY_TRACKS)[number];
+export const SLP_STORY_LINE_MAX = 160;
+export const SLP_STORY_LOOK_MAX = 120;
+export const SLP_STORY_DECK_MAX = 12;
+export const SLP_STORY_SHARE_MAX = 0.5;
+export const SLP_STORY_DEFAULT_SHARE = 0.25;
+
+/** The optional condition parts a creator fact may carry. Stored facts without them stay valid. */
+export const slpStoryConditionFields = {
+  track: z.enum(SLP_STORY_TRACKS).optional(),
+  /** For the writer, in second person: "You are six months pregnant." */
+  line: z.string().trim().min(1).max(SLP_STORY_LINE_MAX).optional(),
+  /** For pictures: "visibly pregnant, about six months". */
+  look: z.string().trim().min(1).max(SLP_STORY_LOOK_MAX).optional(),
+  /** Wardrobe tags to prefer and to leave out while it lasts. */
+  wardrobe: z
+    .object({ prefer: z.array(tag).max(6).default([]), avoid: z.array(tag).max(6).default([]) })
+    .strict()
+    .optional(),
+  /** Small moments a post may be about while it lasts. */
+  deck: z
+    .array(
+      z
+        .object({ line: z.string().trim().min(1).max(SLP_STORY_LINE_MAX), withPartner: z.boolean().optional() })
+        .strict(),
+    )
+    .max(SLP_STORY_DECK_MAX)
+    .optional(),
+  /** The chance an ordinary post takes a deck moment. */
+  share: z.number().min(0).max(SLP_STORY_SHARE_MAX).optional(),
+};
+
 export const slpStoryOutcomeSchema = z.discriminatedUnion("kind", [
   z
     .object({
@@ -69,6 +106,7 @@ export const slpStoryOutcomeSchema = z.discriminatedUnion("kind", [
       tag,
       label: id(120),
       expiresAfterDays: z.number().int().min(1).max(3650).optional(),
+      ...slpStoryConditionFields,
     })
     .strict(),
   z.object({ kind: z.literal("remove-creator-fact"), tag }).strict(),
@@ -315,6 +353,18 @@ export const slpEventOccurrenceSchema = z
   .strict();
 export type SlpEventOccurrence = z.infer<typeof slpEventOccurrenceSchema>;
 
+/** A condition the player sets by hand in the Life panel: one track, until removed or for some days. */
+export const slpStoryConditionInputSchema = z
+  .object({
+    label: id(120),
+    tag: tag.optional(),
+    days: z.number().int().min(1).max(3650).nullable().default(null),
+    ...slpStoryConditionFields,
+    track: z.enum(SLP_STORY_TRACKS),
+  })
+  .strict();
+export type SlpStoryConditionInput = z.input<typeof slpStoryConditionInputSchema>;
+
 export const slpStoryFactSchema = z
   .object({
     id: id(),
@@ -322,10 +372,12 @@ export const slpStoryFactSchema = z
     creatorId: id().optional(),
     tag,
     label: id(120),
-    sourceKind: z.enum(["arc", "event"]),
+    /** `player`: set by hand in the Life panel. */
+    sourceKind: z.enum(["arc", "event", "player"]),
     sourceId: id(),
     createdAt: z.string().datetime({ offset: true }),
     expiresAt: z.string().datetime({ offset: true }).nullable(),
+    ...slpStoryConditionFields,
   })
   .strict();
 export type SlpStoryFact = z.infer<typeof slpStoryFactSchema>;

@@ -424,10 +424,21 @@ export function createProjectsStorage1(context: SlurpStorageContext) {
       // A new chapter, or a storyline that just started (created active or accepted): the first
       // chapter's mood applied to nobody before (R1-071).
       const started = after.status === "active" && before.status !== "active";
-      const mood =
-        (after.chapter !== before.chapter || started) && after.status !== "complete"
-          ? slurpArcChapterMood(after, (await this.getSettings()).arcAffectsMood)
-          : null;
+      const entered = (after.chapter !== before.chapter || started) && after.status !== "complete";
+      const settings = entered ? await this.getSettings() : null;
+      const mood = settings ? slurpArcChapterMood(after, settings.arcAffectsMood) : null;
+      // The chapter's outcomes from its arc type: a condition (a bump, a new flat) or a tag it leaves.
+      const outcomes =
+        settings?.arcLibrary.find((type: { id: string }) => type.id === after.typeId)?.chapters[after.chapter]
+          ?.outcomes ?? [];
+      if (outcomes.length)
+        await this.applyStoryOutcomes({
+          outcomes,
+          participants: isSlurpCrossover(after) ? after.creatorIds : [creatorAccountId],
+          sourceKind: "arc",
+          sourceId: `${after.id}:${after.chapter}`,
+          at: new Date(),
+        });
       // A crossover moves every participant: mood and events reach each of them.
       for (const id of isSlurpCrossover(after) ? after.creatorIds : [creatorAccountId]) {
         if (mood) await mutateCreatorStateNow(id, (state) => addSlurpModifier(state, mood, after.title));

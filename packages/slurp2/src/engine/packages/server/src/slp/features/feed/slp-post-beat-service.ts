@@ -30,7 +30,8 @@ import { SLP_CANON_READING_SCALE } from "../../base/prompting/slp-prompt-safety.
 import { createCharactersStorage } from "../../../services/storage/characters.storage.js";
 import type { SlurpAccount } from "../../modules/records/slp-storage-model.js";
 import { planSlurpBondBeat, planSlurpTieBeat } from "../projects/slp-projects-contract.js";
-import { planSlurpDramaBeat } from "../world/slp-world-contract.js";
+import { planSlurpDramaBeat, type loadSlurpStoryState } from "../world/slp-world-contract.js";
+import { slurpConditionBeat } from "../../modules/world/events/slp-story-state.js";
 import { readSlurpCanonAnchorState, slurpCanonAnchorsFor } from "../../data/creators/slp-canon-anchor-storage.js";
 import {
   normalizeSlurpCanonAnchors,
@@ -75,6 +76,8 @@ export type SlurpBeatContext = {
   steering?: SlpCreatorSteering | null;
   /** The player's next idea for this Creator. It is this post's beat, ahead of the arc. */
   nudge?: SlpCreatorNudge | null;
+  /** Standing conditions (docs/STORYLINES.md, "State"): their deck takes a share of ordinary slots. */
+  story?: Awaited<ReturnType<typeof loadSlurpStoryState>> | null;
   /** Day-to-day life moments: the account (for what really happened) and its tags (for what fits). */
   life?: {
     account: Pick<SlpAccount, "id" | "createdAt">;
@@ -205,6 +208,18 @@ export async function planSlurpBeat(
       at: input.at,
     });
     if (occasion) return occasion;
+    // A small moment of what is true right now (a bump, a new flat), at the condition's share.
+    const condition = input.context.story
+      ? slurpConditionBeat({
+          creatorAccountId: input.accountId,
+          sequence: input.sequence,
+          state: input.context.story.state,
+          history,
+          intents: input.intents,
+          partner: input.context.story.partner,
+        })
+      : null;
+    if (condition) return condition;
     const steered = slurpSteeredBeat(input.accountId, input.sequence, input.context.steering, read, input.intents);
     if (steered) return steered;
     // Drama bonds: now and then a friend, roommate or coworker is in the post.

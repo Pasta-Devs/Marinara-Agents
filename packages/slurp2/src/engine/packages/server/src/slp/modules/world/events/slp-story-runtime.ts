@@ -270,6 +270,21 @@ export function reconcileSlpScheduledOccurrences(input: {
   };
 }
 
+/**
+ * Add a creator fact. A track holds one condition, so a fact on a track replaces the one already
+ * there for that Creator (docs/STORYLINES.md, "State").
+ */
+export function putSlpStoryFact(facts: readonly SlpStoryFact[], fact: SlpStoryFact): SlpStoryFact[] {
+  return [
+    ...facts.filter(
+      (item) =>
+        item.id !== fact.id &&
+        !(fact.track && item.scope === "creator" && item.creatorId === fact.creatorId && item.track === fact.track),
+    ),
+    fact,
+  ];
+}
+
 const expiry = (at: Date, days?: number) => (days ? new Date(at.getTime() + days * DAY).toISOString() : null);
 
 export function applySlpStoryOutcomes(input: {
@@ -304,18 +319,19 @@ export function applySlpStoryOutcomes(input: {
     } else {
       for (const creatorId of input.participants) {
         const id = `${source}:${creatorId}`;
-        if (outcome.kind === "add-creator-fact" && !facts.some((item) => item.id === id))
-          facts.push({
+        if (outcome.kind === "add-creator-fact" && !facts.some((item) => item.id === id)) {
+          const { kind: _kind, expiresAfterDays, ...fact } = outcome;
+          facts = putSlpStoryFact(facts, {
+            ...fact,
             id,
             scope: "creator",
             creatorId,
-            tag: outcome.tag,
-            label: outcome.label,
             sourceKind: input.sourceKind,
             sourceId: input.sourceId,
             createdAt: input.at.toISOString(),
-            expiresAt: expiry(input.at, outcome.expiresAfterDays),
+            expiresAt: expiry(input.at, expiresAfterDays),
           });
+        }
         if (outcome.kind === "remove-creator-fact")
           facts = facts.filter(
             (item) => !(item.scope === "creator" && item.creatorId === creatorId && item.tag === outcome.tag),

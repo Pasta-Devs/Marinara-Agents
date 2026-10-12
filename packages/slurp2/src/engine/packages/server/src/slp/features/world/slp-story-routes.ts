@@ -6,6 +6,7 @@ import { z } from "zod";
 import {
   slpArcBlueprintSchema,
   slpEventBlueprintSchema,
+  slpStoryConditionInputSchema,
   slpStoryPackSchema,
 } from "../../../../../shared/src/slp/slp-story-engine.js";
 import { slpDramaSchema, slpSituationSchema } from "../../../../../shared/src/slp/slp-drama.js";
@@ -23,6 +24,7 @@ import {
 import { projectSlpStoryCalendar } from "../../modules/world/events/slp-story-runtime.js";
 import { slurpContentPackSummaries } from "../../modules/world/events/slp-content-packs.js";
 import type { SlpRouteDeps } from "../viewer/slp-viewer-contract.js";
+import { loadSlurpStoryState } from "./slp-story-context.js";
 
 const PREVIEW_TTL_MS = 15 * 60_000;
 type StagedPreview = { expiresAt: number; preview: SlpStoryPackPreview };
@@ -231,6 +233,45 @@ export async function slpStoryRoutes(app: FastifyInstance, { noodle }: SlpRouteD
     if (!body.success) return reply.code(400).send({ error: body.error.flatten() });
     const occurrence = await noodle.setStoryOccurrenceStatus((req.params as { id: string }).id, body.data.status);
     return occurrence ? { occurrence } : reply.code(404).send({ error: "Occurrence not found." });
+  });
+  // Life panel (docs/STORYLINES.md, PR 1): a Creator's conditions and what reaches the prompts.
+  app.get("/story/state/:accountId", async (req, reply) => {
+    const { accountId } = req.params as { accountId: string };
+    if (!(await noodle.getNoodlerAccountById(accountId))) return reply.code(404).send({ error: "Creator not found." });
+    const now = Date.now();
+    const facts = (await noodle.listStoryFacts()).filter(
+      (fact) =>
+        fact.scope === "creator" &&
+        fact.creatorId === accountId &&
+        (!fact.expiresAt || Date.parse(fact.expiresAt) > now),
+    );
+    return { facts, state: (await loadSlurpStoryState(app.db, accountId, new Date(now))).state };
+  });
+  app.post("/story/state/:accountId", async (req, reply) => {
+    const { accountId } = req.params as { accountId: string };
+    const body = slpStoryConditionInputSchema.safeParse(req.body ?? {});
+    if (!body.success) return reply.code(400).send({ error: body.error.flatten() });
+    if (!(await noodle.getNoodlerAccountById(accountId))) return reply.code(404).send({ error: "Creator not found." });
+    const { days, tag, ...condition } = body.data;
+    const at = new Date();
+    const fact = await noodle.putStoryCondition({
+      ...condition,
+      id: `player:${randomUUID()}`,
+      scope: "creator",
+      creatorId: accountId,
+      tag:
+        tag ??
+        (condition.label
+          .toLocaleLowerCase()
+          .replace(/[^\p{L}\p{N}]+/gu, "-")
+          .replace(/^-|-$/g, "") ||
+          condition.track),
+      sourceKind: "player",
+      sourceId: "life-panel",
+      createdAt: at.toISOString(),
+      expiresAt: days ? new Date(at.getTime() + days * 86_400_000).toISOString() : null,
+    });
+    return { fact };
   });
   app.delete("/story/facts/:id", async (req, reply) =>
     (await noodle.removeStoryFact((req.params as { id: string }).id))

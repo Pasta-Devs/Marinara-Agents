@@ -436,6 +436,7 @@ const addedCalls = [
   "get /slurp2/slurp/wardrobe/lorebooks",
   "get /slurp2/story/calendar?from=${encodeURIComponent(from.toISOString())}&to=${encodeURIComponent(to.toISOString())}",
   "get /slurp2/story/timeline",
+  "delete /slurp2/story/facts/${encodeURIComponent(factId)}",
   "patch /slurp2/messages/threads/${encodeURIComponent(threadId!)}/details",
   "patch /slurp2/slurp/accounts/${encodeURIComponent(id)}/steering",
   "patch /slurp2/slurp/ads/brands/${encodeURIComponent(id)}",
@@ -552,11 +553,12 @@ assert.deepEqual(
   {
     // 0.3.27 "Suggest page style": one mutation, its two error states, and the strategy save now
     // refreshes the list when settled (a refused apply also means the list is stale).
-    useMutation: 213,
-    // 0.3.28: +2 (the import and the one query of SlpMessageDeepDetails).
-    useQuery: 284,
+    // Story state (Life panel): the hooks and the card.
+    useMutation: 216,
+    // 0.3.28: +2 (the import and the one query of SlpMessageDeepDetails). Life panel: +4.
+    useQuery: 288,
     useInfiniteQuery: 9,
-    invalidateQueries: 151,
+    invalidateQueries: 152,
     setQueryData: 26,
     cancelQueries: 7,
     removeQueries: 1,
@@ -564,7 +566,7 @@ assert.deepEqual(
     onMutate: 2,
     // SlpConnectionsPanel.tsx moved into the SlurpBackstagePrompts component mapping, so its one
     // onError no longer counts as state-layer code.
-    onError: 93,
+    onError: 96,
     onSettled: 37,
   },
   "query and mutation wiring counts match the monolith plus the later Slurp2 hooks",

@@ -212,7 +212,13 @@ export type SlurpStoryPromptState = {
     participantIds: readonly string[];
     blueprint: { name: string; guidance?: string };
   }[];
-  facts: readonly { scope: "creator" | "world"; creatorId?: string; label: string; expiresAt: string | null }[];
+  facts: readonly {
+    scope: "creator" | "world";
+    creatorId?: string;
+    label: string;
+    expiresAt: string | null;
+    track?: string;
+  }[];
 };
 
 /**
@@ -250,6 +256,8 @@ export function slurpPlatformEventInstruction(
     .filter(
       (fact) =>
         (fact.expiresAt === null || now < Date.parse(fact.expiresAt)) &&
+        // A condition (a fact on a track) reaches the prompt as "Right now" instead (story state).
+        !fact.track &&
         (fact.scope === "world" || (creator && fact.creatorId === creator.id)),
     )
     .slice(0, 12)

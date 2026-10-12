@@ -16,6 +16,7 @@ import {
   parseSlurpBeatClaims,
   slurpBeatCorrection,
   slurpPostBriefSection,
+  slurpRightNowLine,
   type SlurpClaimCheck,
 } from "../../modules/feed/slp-post-brief.js";
 import type { SlurpBeat, SlurpDayMoment } from "../../modules/feed/slp-post-beat.js";
@@ -129,6 +130,8 @@ export type SlurpPostPromptInput = {
   beatCompany?: string | null;
   /** Where the Creator's day stands at publication. See `resolveSlurpBeatDay`. */
   beatDay?: SlurpDayMoment | null;
+  /** Standing conditions (story state): in the brief, or a short section without a beat. */
+  storyNow?: readonly string[];
 };
 
 /**
@@ -354,9 +357,12 @@ export function buildNoodlerPostMessages(input: SlurpPostPromptInput): ChatMessa
             protect,
             input.beatCompany,
             input.beatDay,
+            input.storyNow,
           ),
         ]
-      : []),
+      : input.storyNow?.length
+        ? ["", "# Right now", slurpRightNowLine(input.storyNow, protect)]
+        : []),
     ...(input.castContext?.trim() ? ["", "# Who else is in this post", protect(input.castContext)] : []),
     ...(input.project
       ? [

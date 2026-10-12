@@ -1,5 +1,5 @@
 // The splash screen needs the shipped version and its public notes inside the client bundle.
-export const SLURP2_VERSION = "0.3.28";
+export const SLURP2_VERSION = "0.3.29";
 
 export interface Slurp2ReleaseEntry {
   version: string;
@@ -12,6 +12,14 @@ export interface Slurp2ReleaseEntry {
  * in-universe bullets per release (technical detail lives in CHANGELOG.md).
  */
 export const SLURP2_RELEASES: Slurp2ReleaseEntry[] = [
+  {
+    version: "0.3.29",
+    date: "2026-10-12",
+    notes: [
+      "Creators now have a life that carries on: a pregnancy, a new flat or a tour stays true in every post, reply and picture until it ends.",
+      "Open a Creator's ✦ sheet and pick “Life right now” to set one yourself, with small moments their posts can be about now and then.",
+    ],
+  },
   {
     version: "0.3.28",
     date: "2026-10-12",

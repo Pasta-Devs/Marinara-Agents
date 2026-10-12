@@ -52,7 +52,8 @@ import { protectCreatorGeneratedIdentity, type PublicIdentity } from "../../base
 import { resolveCreatorCharacterCanon } from "../../data/creators/slp-source-resolve.js";
 import { readSlurpCreatorSteering, removeSlurpCreatorNudge } from "../../data/creators/slp-steering-storage.js";
 import { resolveSlurpCreatorFlavour } from "../../data/creators/slp-flavour-source.js";
-import { resolveSlurpEventInstruction } from "../world/slp-world-contract.js";
+import { loadSlurpStoryState, resolveSlurpEventInstruction } from "../world/slp-world-contract.js";
+import { slurpConditionCloset } from "../../modules/world/events/slp-story-state.js";
 import { slpCreatorPublicIdentityFor, protectBoundedCreatorGeneratedText } from "./slp-public-identity.js";
 import {
   FormattedCreatorGenerationRequest,
@@ -146,16 +147,12 @@ export async function generateCreatorPost(
     admissionMode: input.admissionMode ?? { kind: "foreground" },
   });
   const recentPosts = await noodle.listNoodlerPostsByAccount(account.id, 8);
-  const otherCreatorSubjects = await listSlurpOtherCreatorSubjects(db, account.id, input.generatedAt ?? new Date());
+  const at = input.generatedAt ?? new Date();
+  const otherCreatorSubjects = await listSlurpOtherCreatorSubjects(db, account.id, at);
   const disclosureMode = account.settings.privacy.identityDisclosure ?? "open";
   const linkedPublicAccount = await noodle.resolveAccountSource(account as SlurpAccount);
   const scheduleContext = linkedPublicAccount
-    ? await resolveSlurpCreatorScheduleContext(
-        createCharactersStorage(db),
-        linkedPublicAccount,
-        undefined,
-        input.generatedAt ?? new Date(),
-      )
+    ? await resolveSlurpCreatorScheduleContext(createCharactersStorage(db), linkedPublicAccount, undefined, at)
     : undefined;
   // Derive the identity from the row already in hand; resolving it again would re-read it.
   const publicIdentity = await slpCreatorPublicIdentityFor(db, linkedPublicAccount);
@@ -170,7 +167,9 @@ export async function generateCreatorPost(
   });
   // Rotating angle, skipped for directed posts; one sequence keeps project and variation in step.
   const sequence = await noodle.countNoodlerPostsByAccount(account.id);
-  const wardrobeLooks = await noodle.listWardrobeLooks(account.id).catch(() => []);
+  const story = await loadSlurpStoryState(db, account.id, at); // closet, brief lines and deck beats
+  const looks = await noodle.listWardrobeLooks(account.id).catch(() => []);
+  const wardrobeLooks = slurpConditionCloset(looks, story.state.wardrobe);
   const recentWardrobeIds = recentPosts
     .map((post) => (typeof post.metadata.wardrobeLookId === "string" ? post.metadata.wardrobeLookId : null))
     .filter((id): id is string => Boolean(id));
@@ -266,6 +265,7 @@ export async function generateCreatorPost(
             day: beatDay,
             steering,
             nudge,
+            story,
             life: { account, tags: account.settings.profile.tags ?? [], rate: settings.lifeMomentRate },
             shared: settings.sharedPreseed
               ? { tags: account.settings.profile.tags ?? [], worldEvents: settings.sharedWorldEvents }
@@ -417,6 +417,7 @@ export async function generateCreatorPost(
     beat,
     beatCompany: variation?.company,
     beatDay: beat ? beatDay : null,
+    storyNow: story.state.lines,
     generatedAt: input.generatedAt ?? new Date(),
     publicationTime: input.publicationTime,
   });
