@@ -2619,6 +2619,27 @@ async function main() {
           sourceNoteId: undefined,
           error: { message: "The memory could not be written." },
         }),
+        // One operation applying two drafts: the failure belongs to its own draft only.
+        debugEvent("apply-mixed", "mutations_selected", "ok", {
+          id: "apply-mixed-selected-a",
+          draftId: "draft-a",
+          sourceNoteId: undefined,
+          mutationIds: ["88888888-9999-0000-1111-222222222222"],
+          details: { skippedMutationIds: [] },
+        }),
+        debugEvent("apply-mixed", "apply_draft", "error", {
+          draftId: "draft-a",
+          sourceNoteId: undefined,
+          error: { message: "The memory could not be written." },
+        }),
+        debugEvent("apply-mixed", "mutations_selected", "ok", {
+          id: "apply-mixed-selected-b",
+          draftId: "draft-b",
+          sourceNoteId: undefined,
+          mutationIds: ["99999999-0000-1111-2222-333333333333"],
+          details: { skippedMutationIds: [] },
+        }),
+        debugEvent("apply-mixed", "apply_draft", "ok", { draftId: "draft-b", sourceNoteId: undefined }),
         debugEvent("unrelated", "extract_source_note", "ok", { sourceNoteId: "world_unrelated" }),
       ];
       // Simulates a retained log that holds no events for the handed memory.
@@ -2730,6 +2751,12 @@ async function main() {
           failedApply,
           /1 saved|1 change skipped|No skipped changes/u,
           "a failed apply claims no saves",
+        );
+        const mixedApply = await operation("apply-mixed");
+        assert.match(
+          mixedApply,
+          /Result[\s\S]*Not recorded[\s\S]*1 saved · 0 skipped/u,
+          "only the failed draft loses its saved count",
         );
         for (const [id, count, more, incomplete] of [
           ["counts-only", 3, 3, true],

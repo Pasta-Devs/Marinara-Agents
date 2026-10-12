@@ -960,10 +960,16 @@ export default function ActivityView({
     const deferred = selectedOperation.events.filter((event) => event.action === "draft_deferred");
     const apply = selectedOperation.events.filter((event) => event.action === "mutations_selected");
     // mutations_selected is logged before the changes are written, so a failed apply saved an unknown share.
-    // An auto-apply runs inside the extraction's operation, whose own terminal event can be ok.
-    const applyFailed = selectedOperation.events.some(
-      (event) => event.action === "apply_draft" && event.status === "error",
-    );
+    // An auto-apply runs inside the extraction's operation, whose own terminal event can be ok, and one
+    // operation can apply several drafts, so a failure counts against its own draft; one with no draft
+    // to match counts against every selection.
+    const applyFailedFor = (selection: LtmDebugEvent) =>
+      selectedOperation.events.some(
+        (event) =>
+          event.action === "apply_draft" &&
+          event.status === "error" &&
+          (!event.draftId || !selection.draftId || event.draftId === selection.draftId),
+      );
     const hasFacts = subject?.kind === "memory" || Boolean(model || provider || countSummary) || durationMs != null;
     return (
       <article
@@ -1080,7 +1086,7 @@ export default function ActivityView({
             })
           ) : apply.length ? (
             apply.map((event) => {
-              const counts = applyFailed ? undefined : appliedChangeCounts(event);
+              const counts = applyFailedFor(event) ? undefined : appliedChangeCounts(event);
               return (
                 <p key={event.id}>
                   {counts
@@ -1110,7 +1116,7 @@ export default function ActivityView({
           <section>
             <h4 className="mb-1 font-semibold">{localizeUi("ui.longTermMemory.activityview.notSaved")}</h4>
             {apply.map((event) => {
-              const skipped = applyFailed ? undefined : appliedChangeCounts(event)?.skipped;
+              const skipped = applyFailedFor(event) ? undefined : appliedChangeCounts(event)?.skipped;
               return (
                 <p key={event.id}>
                   {skipped === undefined
