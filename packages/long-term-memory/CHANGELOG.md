@@ -1,5 +1,9 @@
 # Long-Term Memory changelog
 
+## 1.4.27 — 2026-10-12
+
+- Make the open event visible in Memory Settings → Debug. The selected row keeps a background and accent bar wherever the pointer is, the active filter chip reads pressed, and muted row text stays readable on hovered and selected rows. Rows now show the outcome ("7 of 12 kept", "1 added · 6 not added", "1 saved · 1 skipped") instead of repeating their title, and a failed row keeps its error. A compile-evidence warning says how many candidates failed checks. Result counts use the right singular and read "kept"; applied changes show saved and skipped counts rather than raw IDs, and a failed apply reports none; the Details heading appears only when it has content and recall counts are no longer repeated there. The health line drops "Log size unavailable", the Vault "Open debug log" link has a 44 px target, and the recall-failed message names Memory Settings → Debug.
+
 ## 1.4.26 — 2026-10-12
 
 - Ask the embedding model for a query embedding when recall searches the vault, instead of treating the search text like an indexed memory. On Engines that pass the input type through, models that distinguish the two, such as multilingual E5 and nomic-embed-text, apply their query prefix to the search. No reindex is needed, because stored vectors were already document embeddings.

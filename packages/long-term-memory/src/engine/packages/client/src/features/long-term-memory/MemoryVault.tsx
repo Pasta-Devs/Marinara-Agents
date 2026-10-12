@@ -4587,7 +4587,7 @@ export default function MemoryVault({
                                       )}
                                       <button
                                         type="button"
-                                        className="mt-2 block underline underline-offset-2"
+                                        className="mt-2 inline-flex min-h-11 items-center underline underline-offset-2"
                                         onClick={() => onOpenActivity?.(draft.id)}
                                       >
                                         {localizeUi("ui.longTermMemory.memoryvault.openDebugLog")}

@@ -165,10 +165,8 @@ function describeEvent(
       action: actionLabel(event.action, localizeUi),
       detail: humanizeLabel(reason),
     });
-  return localizeUi("ui.longTermMemory.activityview.eventDescription", {
-    action: actionLabel(event.action, localizeUi),
-    detail: humanizeLabel(event.status),
-  });
+  // A bare "{action}: {status}." only repeats the title and the status icon.
+  return "";
 }
 
 function compactSummary(value: string) {
@@ -269,16 +267,48 @@ function summarizeCounts(events: LtmDebugEvent[], localizeUi: LtmTranslationFunc
   return summary.join(" · ");
 }
 
+// The server logs a compile-evidence warning with a count of candidates that failed checks and the
+// model's own summary of the extraction; the warning is about the count, so the summary never names it.
+function isCompileWarning(event: LtmDebugEvent) {
+  return (
+    event.action === "evidence_units_compiled" &&
+    event.status === "warning" &&
+    !event.error &&
+    !isTruncatedResponse(event)
+  );
+}
+
+function unnamedProblem(event: LtmDebugEvent, localizeUi: LtmTranslationFunction, locale: string) {
+  if (event.action === "evidence_units_compiled") {
+    const count = event.counts?.candidateRejectionDiagnostics;
+    if (typeof count !== "number" || !Number.isFinite(count))
+      return localizeUi("ui.longTermMemory.activityview.candidatesFailedChecksSome");
+    return localizeUi(
+      selectLtmPluralForm(locale, count) === "one"
+        ? "ui.longTermMemory.activityview.candidatesFailedChecksOne"
+        : "ui.longTermMemory.activityview.candidatesFailedChecks",
+      { count: count.toLocaleString(locale) },
+    );
+  }
+  return localizeUi("ui.longTermMemory.activityview.eventDescription", {
+    action: actionLabel(event.action, localizeUi),
+    detail: humanizeLabel(event.status),
+  });
+}
+
 /** Errors, warnings and truncated responses are the operation's problems, whole-operation scoped. */
 function problemMessages(
   events: LtmDebugEvent[],
   noteTitles: ReadonlyMap<string, string>,
   localizeUi: LtmTranslationFunction,
+  locale: string,
 ) {
   return events
     .filter((event) => event.status === "error" || event.status === "warning" || isTruncatedResponse(event))
     .map((event) => ({
-      message: describeEvent(event, noteTitles, localizeUi),
+      message: isCompileWarning(event)
+        ? unnamedProblem(event, localizeUi, locale)
+        : describeEvent(event, noteTitles, localizeUi) || unnamedProblem(event, localizeUi, locale),
       guidance:
         isTruncatedResponse(event) || event.details?.reason === "output_budget_below_viability_floor"
           ? "ui.longTermMemory.activityview.tryOutputBudget"
@@ -310,6 +340,90 @@ function operationSubject(
   const sourceNoteId = operation.events.find((event) => event.sourceNoteId)?.sourceNoteId;
   if (sourceNoteId && noteTitles.has(sourceNoteId)) return { kind: "memory", value: noteTitles.get(sourceNoteId)! };
   return null;
+}
+
+function recordedCount(value: unknown) {
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+// Count name, singular key, plural key. An unrecorded count is left out of the line.
+const extractionCountKeys = [
+  [
+    "totalCandidates",
+    "ui.longTermMemory.activityview.extractionCandidatesOne",
+    "ui.longTermMemory.activityview.extractionCandidates",
+  ],
+  ["units", "ui.longTermMemory.activityview.extractionKept", "ui.longTermMemory.activityview.extractionKept"],
+  [
+    "mutations",
+    "ui.longTermMemory.activityview.extractionChangesOne",
+    "ui.longTermMemory.activityview.extractionChanges",
+  ],
+  [
+    "targetNotes",
+    "ui.longTermMemory.activityview.extractionTargetsOne",
+    "ui.longTermMemory.activityview.extractionTargets",
+  ],
+  [
+    "deduplications",
+    "ui.longTermMemory.activityview.extractionDuplicatesOne",
+    "ui.longTermMemory.activityview.extractionDuplicates",
+  ],
+] as const;
+
+function extractionCounts(event: LtmDebugEvent, localizeUi: LtmTranslationFunction, locale: string) {
+  const parts = extractionCountKeys.flatMap(([name, one, other]) => {
+    const count = recordedCount(event.counts?.[name]);
+    if (count === null) return [];
+    return [
+      localizeUi(selectLtmPluralForm(locale, count) === "one" ? one : other, { count: count.toLocaleString(locale) }),
+    ];
+  });
+  return parts.length ? parts.join(" · ") : localizeUi("ui.longTermMemory.activityview.notRecorded");
+}
+
+/** Saved and skipped change counts, in the shape the server logs on `mutations_selected`. */
+function appliedChangeCounts(event: LtmDebugEvent) {
+  const skipped = event.details?.skippedMutationIds;
+  return Array.isArray(event.mutationIds) && Array.isArray(skipped)
+    ? { saved: event.mutationIds.length, skipped: skipped.length }
+    : null;
+}
+
+/** The outcome in a few words, from counts the log already holds; empty when none were recorded. */
+function operationOutcome(operation: DebugOperation, localizeUi: LtmTranslationFunction, locale: string) {
+  const recall = operation.events.find((event) => event.action === "recall_explanation");
+  if (recall) {
+    const selected = recordedCount(recall.counts?.selected);
+    const rejected = recordedCount(recall.counts?.rejected);
+    if (selected === 0) return localizeUi("ui.longTermMemory.activityview.nothingAdded");
+    if (selected !== null && rejected !== null)
+      return localizeUi("ui.longTermMemory.activityview.recallCounts", {
+        selected: selected.toLocaleString(locale),
+        rejected: rejected.toLocaleString(locale),
+      });
+  }
+  const total = (values: (number | null)[]) =>
+    values.length && values.every((value) => value !== null)
+      ? values.reduce<number>((sum, value) => sum + (value ?? 0), 0)
+      : null;
+  const compiled = operation.events.filter((event) => event.action === "evidence_units_compiled");
+  const kept = total(compiled.map((event) => recordedCount(event.counts?.units)));
+  const candidates = total(compiled.map((event) => recordedCount(event.counts?.totalCandidates)));
+  if (kept !== null && candidates !== null)
+    return localizeUi("ui.longTermMemory.activityview.keptOfCandidates", {
+      kept: kept.toLocaleString(locale),
+      candidates: candidates.toLocaleString(locale),
+    });
+  const applied = operation.events.filter((event) => event.action === "mutations_selected").map(appliedChangeCounts);
+  const saved = total(applied.map((counts) => counts && counts.saved));
+  const skipped = total(applied.map((counts) => counts && counts.skipped));
+  if (saved !== null && skipped !== null)
+    return localizeUi("ui.longTermMemory.activityview.savedSkipped", {
+      saved: saved.toLocaleString(locale),
+      skipped: skipped.toLocaleString(locale),
+    });
+  return "";
 }
 
 function operationHasProblems(operation: DebugOperation) {
@@ -455,6 +569,7 @@ export default function ActivityView({
   const [chip, setChip] = useState<DebugChip>("all");
   const [search, setSearch] = useState("");
   const [selectedOperationId, setSelectedOperationId] = useState<string | null>(null);
+  const [hoveredOperationId, setHoveredOperationId] = useState<string | null>(null);
   const [activePane, setActivePane] = useState<LtmWorkspacePane>("navigator");
   const [limit, setLimit] = useState(200);
   // D31: a memory handoff opens the navigator filtered to that memory and with nothing
@@ -833,12 +948,23 @@ export default function ActivityView({
     const model = selectedOperation.events.find((event) => event.model)?.model;
     const provider = selectedOperation.events.find((event) => event.provider)?.provider;
     const durationMs = lastEvent.durationMs;
-    const countSummary = summarizeCounts(selectedOperation.events, localizeUi, locale);
-    const problems = problemMessages(selectedOperation.events, noteTitles, localizeUi);
+    // Recall counts already read under Result and Run parameters.
+    const countSummary = summarizeCounts(
+      selectedOperation.events.filter((event) => event.action !== "recall_explanation"),
+      localizeUi,
+      locale,
+    );
+    const problems = problemMessages(selectedOperation.events, noteTitles, localizeUi, locale);
     const subject = operationSubject(selectedOperation, noteTitles, chatLabel);
     const compiled = selectedOperation.events.filter((event) => event.action === "evidence_units_compiled");
     const deferred = selectedOperation.events.filter((event) => event.action === "draft_deferred");
     const apply = selectedOperation.events.filter((event) => event.action === "mutations_selected");
+    // mutations_selected is logged before the changes are written, so a failed apply saved an unknown share.
+    // An auto-apply runs inside the extraction's operation, whose own terminal event can be ok.
+    const applyFailed = selectedOperation.events.some(
+      (event) => event.action === "apply_draft" && event.status === "error",
+    );
+    const hasFacts = subject?.kind === "memory" || Boolean(model || provider || countSummary) || durationMs != null;
     return (
       <article
         data-ltm-debug-details
@@ -927,15 +1053,7 @@ export default function ActivityView({
                   {compiled.length > 1 && event.sourceNoteId ? (
                     <p>{noteTitles.get(event.sourceNoteId) ?? event.sourceNoteId}</p>
                   ) : null}
-                  <p>
-                    {localizeUi("ui.longTermMemory.activityview.extractionCounts", {
-                      candidates: recordedNumber(event.counts?.totalCandidates),
-                      units: recordedNumber(event.counts?.units),
-                      mutations: recordedNumber(event.counts?.mutations),
-                      targets: recordedNumber(event.counts?.targetNotes),
-                      duplicates: recordedNumber(event.counts?.deduplications),
-                    })}
-                  </p>
+                  <p>{extractionCounts(event, localizeUi, locale)}</p>
                   {kinds ? (
                     <p>
                       {Object.entries(kinds)
@@ -960,6 +1078,20 @@ export default function ActivityView({
                 </div>
               );
             })
+          ) : apply.length ? (
+            apply.map((event) => {
+              const counts = applyFailed ? undefined : appliedChangeCounts(event);
+              return (
+                <p key={event.id}>
+                  {counts
+                    ? localizeUi("ui.longTermMemory.activityview.savedSkipped", {
+                        saved: counts.saved.toLocaleString(locale),
+                        skipped: counts.skipped.toLocaleString(locale),
+                      })
+                    : localizeUi("ui.longTermMemory.activityview.notRecorded")}
+                </p>
+              );
+            })
           ) : (
             <p>{localizeUi("ui.longTermMemory.activityview.notRecorded")}</p>
           )}
@@ -978,15 +1110,19 @@ export default function ActivityView({
           <section>
             <h4 className="mb-1 font-semibold">{localizeUi("ui.longTermMemory.activityview.notSaved")}</h4>
             {apply.map((event) => {
-              const ids = event.details?.skippedMutationIds;
+              const skipped = applyFailed ? undefined : appliedChangeCounts(event)?.skipped;
               return (
                 <p key={event.id}>
-                  {Array.isArray(ids)
-                    ? ids.length
-                      ? ids.filter((id) => typeof id === "string").join(" · ") ||
-                        localizeUi("ui.longTermMemory.activityview.notRecorded")
-                      : localizeUi("ui.longTermMemory.activityview.noSkippedChanges")
-                    : localizeUi("ui.longTermMemory.activityview.notRecorded")}
+                  {skipped === undefined
+                    ? localizeUi("ui.longTermMemory.activityview.notRecorded")
+                    : skipped
+                      ? localizeUi(
+                          selectLtmPluralForm(locale, skipped) === "one"
+                            ? "ui.longTermMemory.activityview.skippedChangesOne"
+                            : "ui.longTermMemory.activityview.skippedChanges",
+                          { count: skipped.toLocaleString(locale) },
+                        )
+                      : localizeUi("ui.longTermMemory.activityview.noSkippedChanges")}
                 </p>
               );
             })}
@@ -1109,40 +1245,43 @@ export default function ActivityView({
             </section>
           </>
         ) : null}
-        <section data-ltm-debug-facts>
-          <h4 className="mb-1 font-semibold">{localizeUi("ui.longTermMemory.activityview.paneDetails")}</h4>
-          <div className="grid gap-1 text-[var(--muted-foreground)] sm:grid-cols-2">
-            {subject?.kind === "memory" ? (
-              <span>
-                {localizeUi("ui.longTermMemory.activityview.detailSource")}: {subject.value}
-              </span>
-            ) : null}
-            {model ? (
-              <span>
-                {localizeUi("ui.longTermMemory.activityview.detailModel")}: {model}
-              </span>
-            ) : null}
-            {provider ? (
-              <span>
-                {localizeUi("ui.longTermMemory.activityview.detailProvider")}: {provider}
-              </span>
-            ) : null}
-            {durationMs != null ? (
-              <span>
-                {localizeUi("ui.longTermMemory.activityview.detailDuration")}:{" "}
-                {localizeUi("ui.longTermMemory.activityview.durationMs", {
-                  value: durationMs.toLocaleString(locale),
-                })}
-              </span>
-            ) : null}
-          </div>
-          {countSummary ? <p className="mt-1 text-[var(--muted-foreground)]">{countSummary}</p> : null}
-        </section>
+        {hasFacts ? (
+          <section data-ltm-debug-facts>
+            <h4 className="mb-1 font-semibold">{localizeUi("ui.longTermMemory.activityview.paneDetails")}</h4>
+            <div className="grid gap-1 text-[var(--muted-foreground)] sm:grid-cols-2">
+              {subject?.kind === "memory" ? (
+                <span>
+                  {localizeUi("ui.longTermMemory.activityview.detailSource")}: {subject.value}
+                </span>
+              ) : null}
+              {model ? (
+                <span>
+                  {localizeUi("ui.longTermMemory.activityview.detailModel")}: {model}
+                </span>
+              ) : null}
+              {provider ? (
+                <span>
+                  {localizeUi("ui.longTermMemory.activityview.detailProvider")}: {provider}
+                </span>
+              ) : null}
+              {durationMs != null ? (
+                <span>
+                  {localizeUi("ui.longTermMemory.activityview.detailDuration")}:{" "}
+                  {localizeUi("ui.longTermMemory.activityview.durationMs", {
+                    value: durationMs.toLocaleString(locale),
+                  })}
+                </span>
+              ) : null}
+            </div>
+            {countSummary ? <p className="mt-1 text-[var(--muted-foreground)]">{countSummary}</p> : null}
+          </section>
+        ) : null}
         <section>
           <h4 className="mb-1 font-semibold">{localizeUi("ui.longTermMemory.activityview.whatHappened")}</h4>
           <ol className="space-y-2">
             {selectedOperation.events.map((event) => {
               const eventStatus = operationStatus([event], localizeUi, false, timelineStatusLabelKeys);
+              const stepDescription = describeEvent(event, noteTitles, localizeUi);
               return (
                 <li key={event.id} className="border-l-2 border-[var(--border)] pl-3">
                   <div className="flex flex-wrap items-center justify-between gap-2">
@@ -1162,7 +1301,7 @@ export default function ActivityView({
                       </span>
                     </span>
                   </div>
-                  <p className="mt-1 leading-relaxed">{describeEvent(event, noteTitles, localizeUi)}</p>
+                  {stepDescription ? <p className="mt-1 leading-relaxed">{stepDescription}</p> : null}
                   <p className="mt-1 text-[0.6875rem] text-[var(--muted-foreground)]">
                     {formatTimestamp(event.ts, locale)}
                     {event.durationMs != null
@@ -1311,10 +1450,7 @@ export default function ActivityView({
         {localizeUi("ui.longTermMemory.activityview.healthEventsLoaded", {
           count: (activity.data?.events.length ?? 0).toLocaleString(locale),
         })}{" "}
-        {/* The status event-log size is a separate file, so the debug log size stays
-            "unavailable" rather than presenting another log's size as this one's. */}
-        · {localizeUi("ui.longTermMemory.activityview.healthLogSize", { size: healthUnavailable })} ·{" "}
-        {localizeUi("ui.longTermMemory.activityview.healthIndex", { index: healthIndexText })} ·{" "}
+        · {localizeUi("ui.longTermMemory.activityview.healthIndex", { index: healthIndexText })} ·{" "}
         {localizeUi("ui.longTermMemory.activityview.healthSemantic", { state: healthSemanticWithSource })}
       </p>
       {embeddingSourceChanged ? (
@@ -1399,6 +1535,7 @@ export default function ActivityView({
                       key={candidate}
                       data-ltm-debug-chip={candidate}
                       aria-pressed={chip === candidate}
+                      style={chip === candidate ? { background: "var(--accent)" } : undefined}
                       onClick={() => setChip(candidate)}
                     >
                       {localizeUi(
@@ -1448,15 +1585,40 @@ export default function ActivityView({
                                 (event) => event.status === "warning" || isTruncatedResponse(event),
                               ) ??
                               lastEvent;
-                            const summary = compactSummary(describeEvent(principalEvent, noteTitles, localizeUi));
+                            // A failed row keeps its error; otherwise the outcome, then any warning message.
+                            const summary =
+                              (principalEvent.status === "error"
+                                ? ""
+                                : operationOutcome(operation, localizeUi, locale)) ||
+                              compactSummary(
+                                isCompileWarning(principalEvent)
+                                  ? unnamedProblem(principalEvent, localizeUi, locale)
+                                  : describeEvent(principalEvent, noteTitles, localizeUi),
+                              );
                             const subject = operationSubject(operation, noteTitles, chatLabel);
+                            // The editor shell restyles `text-[var(--muted-foreground)]` and `.mari-editor-action`
+                            // backgrounds above any utility, and its hover rule recolours only the span under the
+                            // pointer, so the selected and hovered states are a swapped class and inline style
+                            // rather than a layered variant.
+                            const isSelected = selectedOperationId === operation.operationId;
+                            const mutedText =
+                              isSelected || hoveredOperationId === operation.operationId
+                                ? "text-[var(--foreground)]"
+                                : "text-[var(--muted-foreground)]";
                             return (
                               <li key={operation.operationId}>
                                 <button
                                   type="button"
                                   data-ltm-debug-operation={operation.operationId}
-                                  aria-pressed={selectedOperationId === operation.operationId}
+                                  aria-pressed={isSelected}
+                                  style={
+                                    isSelected
+                                      ? { background: "var(--accent)", boxShadow: "inset 3px 0 0 var(--primary)" }
+                                      : undefined
+                                  }
                                   onClick={() => selectOperation(operation.operationId)}
+                                  onPointerEnter={() => setHoveredOperationId(operation.operationId)}
+                                  onPointerLeave={() => setHoveredOperationId(null)}
                                   className="flex min-h-11 w-full items-start gap-2 px-3 py-2 text-left hover:bg-[var(--accent)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--ring)]"
                                 >
                                   <span
@@ -1476,12 +1638,14 @@ export default function ActivityView({
                                         {actionLabel(firstEvent.action, localizeUi)}
                                       </span>
                                       {subject ? (
-                                        <span className="min-w-0 truncate font-normal text-[var(--muted-foreground)]">
+                                        <span className={`min-w-0 truncate font-normal ${mutedText}`}>
                                           · {subject.value}
                                         </span>
                                       ) : null}
                                     </span>
-                                    <span className="mt-1 block text-xs text-[var(--muted-foreground)]">{summary}</span>
+                                    {summary ? (
+                                      <span className={`mt-1 line-clamp-2 text-xs ${mutedText}`}>{summary}</span>
+                                    ) : null}
                                   </span>
                                 </button>
                               </li>

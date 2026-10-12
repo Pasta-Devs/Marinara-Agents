@@ -200,6 +200,12 @@
     "long-term-memory": {
       "versions": [
         {
+          "version": "1.4.27",
+          "date": "2026-10-12",
+          "notes": "- Make the open event visible in Memory Settings → Debug. The selected row keeps a background and accent bar wherever the pointer is, the active filter chip reads pressed, and muted row text stays readable on hovered and selected rows. Rows now show the outcome (\"7 of 12 kept\", \"1 added · 6 not added\", \"1 saved · 1 skipped\") instead of repeating their title, and a failed row keeps its error. A compile-evidence warning says how many candidates failed checks. Result counts use the right singular and read \"kept\"; applied changes show saved and skipped counts rather than raw IDs, and a failed apply reports none; the Details heading appears only when it has content and recall counts are no longer repeated there. The health line drops \"Log size unavailable\", the Vault \"Open debug log\" link has a 44 px target, and the recall-failed message names Memory Settings → Debug.",
+          "highlight": false
+        },
+        {
           "version": "1.4.26",
           "date": "2026-10-12",
           "notes": "- Ask the embedding model for a query embedding when recall searches the vault, instead of treating the search text like an indexed memory. On Engines that pass the input type through, models that distinguish the two, such as multilingual E5 and nomic-embed-text, apply their query prefix to the search. No reindex is needed, because stored vectors were already document embeddings.",
@@ -311,12 +317,6 @@
           "version": "1.4.8",
           "date": "2026-10-07",
           "notes": "- Ignore an invalid saved recall setting instead of letting it break settings, recall, and search. A null recall weight or an unknown recall style saved by another build used to make every settings read throw until settings.json was edited by hand. Both now fall back to the defaults, and the invalid value is no longer written back.",
-          "highlight": false
-        },
-        {
-          "version": "1.4.7",
-          "date": "2026-10-06",
-          "notes": "- Make Sources re-extract use the availability modes currently selected instead of the ones saved earlier on the source, and save them on the source like a fresh import does. \"Retry failed\" still repeats the original attempt, and now says which modes it will use. Each import result shows the extraction mode it imports as, plus every availability mode, instead of only the first availability mode.",
           "highlight": false
         }
       ]
