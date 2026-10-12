@@ -1,5 +1,13 @@
 # Slurp release notes
 
+## 0.3.26 — 2026-10-12
+
+- Added: Creators keep what is always true about them. When Slurp reads a card it also notes the few facts that must hold everywhere (how they communicate, senses and body, languages, firm limits, who runs a shared page), and every post, Story, chat and reply carries them, with no extra AI call. Before, a fact late in the card was missing from most requests.
+- Added: "Always true" in a Creator's Life details, to see and correct those facts. Life details also show with "Model's choice" post ideas.
+- Changed: your Life details edits stay when the card changes: what you added stays, what you removed stays out, the rest follows the card. "Read card again" still clears them.
+- Changed: the card reading covers more of a long card, and cards with 。！？ sentence ends or long one-line attribute lists are no longer cut off.
+- Fixed: a failed read of stored Life details could erase every Creator's details; saving now reports the error.
+
 ## 0.3.25 — 2026-10-12
 
 - Fixed: "Enhance image prompts" no longer drops a usable answer from the prompt model. An answer with a line break inside the prompt, a trailing comma, or text around the JSON object was read as "no prompt", and the picture went out with the capped draft. An answer that is cut off still falls back.

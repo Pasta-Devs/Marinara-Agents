@@ -16,8 +16,9 @@ assert.match(plan, /!\(isTeaser && ctx\.beats\.arc && !nudged\)/u);
 const beats = read("features/feed/slp-post-beat-service.ts");
 assert.match(beats, /const SLURP_ACTIVE_BEAT_FACTS = 3;/u);
 assert.match(beats, /moveSlurpContinuityStatus\(db, "fact", fact\.id, "expired", at\)/u);
-// The background card read never replaces the player's edited anchors.
-assert.match(beats, /writeAnchors\(db, accountId, \{ key, anchors \}, true\)/u);
+// The background card read never replaces the player's edited anchors: proved on a real store in
+// `slurp2-anchor-edits.regression.ts`. Here: the beat service reads through that one store.
+assert.match(beats, /slurpCanonAnchorsFor\(db, accountId, readingText\(context\), at,/u);
 
 // The memory block is identity-protected like the rest of the prompt.
 const prompt = read("features/feed/slp-post-prompt.ts");

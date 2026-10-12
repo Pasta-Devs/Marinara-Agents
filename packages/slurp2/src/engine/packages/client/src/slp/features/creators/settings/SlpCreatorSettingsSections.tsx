@@ -563,18 +563,17 @@ export function SlpCreatorMessagesSection({ creator, onClose }: SlpCreatorSettin
 /** What this Creator's world remembers about them. */
 export function SlpCreatorContinuitySection({ creator }: SlpCreatorSettingsSectionProps) {
   const { t } = useTranslation();
-  // Life details only feed "Post ideas: The Creator's life"; with Model's choice they do nothing.
+  // With Model's choice only "Always true" is used; the rest feeds "Post ideas: The Creator's life".
   const lifeIdeas = useSlurpSettings().data?.postPlanner !== "classic";
   return (
     <div className="space-y-6">
       <SlurpContinuityPanel
         creatorAccountId={creator.id}
         lifeDetails={
-          lifeIdeas ? (
+          <>
+            {lifeIdeas ? null : <p className={noteClass}>{t("ui.slurp.canonAnchors.classicNote")}</p>}
             <SlpCanonAnchorsEditor creatorId={creator.id} />
-          ) : (
-            <p className={noteClass}>{t("ui.slurp.canonAnchors.classicNote")}</p>
-          )
+          </>
         }
       />
       <SlpCreatorSignalsList creatorId={creator.id} />

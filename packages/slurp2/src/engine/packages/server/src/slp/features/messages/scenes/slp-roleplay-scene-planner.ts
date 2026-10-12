@@ -27,6 +27,7 @@ import { slpWithProviderRetry } from "../../../base/model/slp-provider-retry.js"
 import { slpSamplingOptions } from "../../../base/prompting/slp-sampling-options.js";
 import { listSlurpContinuityFor } from "../../../data/continuity/slp-continuity-storage.js";
 import { resolveSlurpCreatorFlavour } from "../../../data/creators/slp-flavour-source.js";
+import { protectCreatorGeneratedIdentity, slpCreatorPublicIdentityFor } from "../../feed/slp-feed-contract.js";
 import { resolveCreatorCharacterCanon } from "../../../data/creators/slp-source-resolve.js";
 import { resolveSlurpCreatorMenu } from "../../../data/settings/slp-post-guidance-storage.js";
 import { createSlurpMessagesStorage, createSlurpStorage } from "../../../data/slp-storage.js";
@@ -122,7 +123,13 @@ export async function planSlpRoleplayScene(
         .filter((message) => message.role === "creator" && message.kind === "text")
         .map((message) => message.content)
         .reverse(),
-    }).catch(() => ""),
+    })
+      // The plan prompt has no identity protection of its own, and the brief names what the card says.
+      .then(
+        async (brief) =>
+          protectCreatorGeneratedIdentity(brief, disclosureMode, await slpCreatorPublicIdentityFor(db, source)) ?? "",
+      )
+      .catch(() => ""),
     characterCanon: (await resolveCreatorCharacterCanon(db, source, disclosureMode).catch(() => "")) ?? "",
     relationship: [
       describeSlurpRapport(thread.rapport, input.viewer.displayName),

@@ -12,10 +12,12 @@ export type SlpCanonAnchors = {
   palette: Record<string, number>;
   heat: { min: number; max: number };
   routine?: { time: string; activity: string }[];
+  /** What must always hold about them. Absent until the card was read for them. */
+  essentials?: string[];
 };
 
 export type SlpCanonAnchorDraft = Record<
-  "people" | "places" | "work" | "objects" | "habits" | "runningJokes" | "routine",
+  "essentials" | "people" | "places" | "work" | "objects" | "habits" | "runningJokes" | "routine",
   string
 > & { heatMin: number; heatMax: number };
 
@@ -27,6 +29,7 @@ const lines = (value: string) =>
 
 export function slpCanonAnchorDraft(anchors: SlpCanonAnchors | null): SlpCanonAnchorDraft {
   return {
+    essentials: (anchors?.essentials ?? []).join("\n"),
     people: (anchors?.people ?? [])
       .map((person) => (person.relation ? `${person.name} - ${person.relation}` : person.name))
       .join("\n"),
@@ -60,5 +63,6 @@ export function slpCanonAnchorsFromDraft(draft: SlpCanonAnchorDraft, palette: Re
       const match = /^(\d{1,2}:\d{2})\s+(.+)$/u.exec(line);
       return match ? [{ time: match[1]!, activity: match[2]!.trim() }] : [];
     }),
+    essentials: lines(draft.essentials),
   };
 }

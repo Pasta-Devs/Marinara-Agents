@@ -20,6 +20,7 @@ import {
 } from "../../modules/creators/slp-creator-flavour.js";
 import type { SlurpCanonAnchors } from "../../modules/feed/slp-post-beat.js";
 import { readSlurpCreatorSteering } from "./slp-steering-storage.js";
+import { SLURP_CANON_ANCHORS_KEY } from "./slp-canon-anchor-storage.js";
 import { readSlurpCreatorTiesDocument } from "../projects/slp-creator-ties-storage.js";
 import { resolveSlurpExplicitLevel } from "../settings/slp-post-guidance-storage.js";
 import { SLP_EXPLICIT_LEVELS } from "../../../../../shared/src/slp/slp-spice.js";
@@ -34,9 +35,6 @@ import {
   slurpTastePick,
   type SlurpSpiceCreator,
 } from "../../modules/creators/slp-spice.js";
-
-/** The beats planner's anchor cache, one entry per Creator. Written by `slp-post-beat-service.ts`. */
-export const SLURP_CANON_ANCHORS_KEY = "slurp2.canon-anchors";
 
 const text = (value: unknown) => (typeof value === "string" ? value : "");
 

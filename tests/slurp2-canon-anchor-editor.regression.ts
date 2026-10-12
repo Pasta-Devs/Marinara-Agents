@@ -19,6 +19,7 @@ const anchors: SlpCanonAnchors = {
   palette: { showcase: 4 },
   heat: { min: 1, max: 2 },
   routine: [{ time: "18:00", activity: "opening the bar" }],
+  essentials: ["cannot speak; signs"],
 };
 
 // Editing without changes gives back the same anchors, palette kept.
@@ -34,6 +35,12 @@ const edited = slpCanonAnchorsFromDraft(
 assert.deepEqual(edited.places, ["the bar", "the rooftop"]);
 assert.deepEqual(edited.routine, [{ time: "08:00", activity: "coffee" }]);
 assert.deepEqual(edited.heat, { min: 3, max: 3 });
+// What is always true is edited as chips like the lists, one entry per line in the draft.
+assert.equal(draft.essentials, "cannot speak; signs");
+assert.deepEqual(slpCanonAnchorsFromDraft({ ...draft, essentials: "blind\n\n mute " }, {}).essentials, [
+  "blind",
+  "mute",
+]);
 // A missing extraction starts from an empty draft.
 assert.equal(slpCanonAnchorDraft(null).people, "");
 
@@ -53,5 +60,6 @@ const editor = slurp2Source(
 assert.match(editor, /<ChipListInput[\s\S]*values=\{entries\(draft\[field\]\)\}[\s\S]*values\.join\("\\n"\)/u);
 assert.doesNotMatch(editor, /<select/u, "heat levels are a button row");
 assert.match(editor, /value=\{draft\.routine\}/u, "routine stays text");
+assert.match(editor, /values=\{entries\(draft\.essentials\)\}/u, "what is always true is editable");
 
 console.log("slurp2 canon anchor editor regression checks passed");

@@ -27,7 +27,7 @@ import { type SlurpAccount } from "../../modules/records/slp-storage-model.js";
 import { createPromptOverridesStorage } from "../../../services/storage/prompt-overrides.storage.js";
 import { generateCreatorPostImage, SLURP_SECONDARY_IMAGE_COUNT } from "../media/slp-media-contract.js";
 import { finishSlurpPostImage } from "./slp-post-media-operation.js";
-import { recordSlurpBeatFacts, resolveSlurpBeatCastContext, resolveSlurpBeatDay } from "./slp-post-beat-service.js";
+import { prepareSlurpBeatRun, resolveSlurpBeatCastContext } from "./slp-post-beat-service.js";
 import { slurpArcBeat, slurpPlannedExplicitLevel } from "../../modules/feed/slp-post-beat.js";
 import { slpCreatorUnlockPriceMetadata } from "../../modules/economy/slp-prices.js";
 import { persistCreatorPostWithUploadedMedia, type SlpCreatorPostMediaUpload } from "../../base/media/slp-media.js";
@@ -216,20 +216,18 @@ export async function generateCreatorPost(
   // Same slot the scheduler used to choose free access, so only its teasers read as one.
   const isTeaser =
     input.request.access === "public" && !directed && slurpTeaserPost(account.id, sequence, settings.teaserRate);
-  // Where the day stands at publication, before planning: the schedule decides where they are.
-  const beatDay =
-    settings.postPlanner === "beats"
-      ? await resolveSlurpBeatDay(db, {
-          accountId: account.id,
-          canonText: sourceCharacterContext,
-          source: linkedPublicAccount,
-          characters: createCharactersStorage(db),
-          at: input.publicationTime ?? input.generatedAt ?? new Date(),
-        })
-      : null;
-  // Beats mode keeps the last posts as facts, not quotes, so they are written before planning.
-  if (settings.postPlanner === "beats" && !input.previewOnly)
-    await recordSlurpBeatFacts(db, account, recentPosts, input.generatedAt ?? new Date());
+  const { readingText, day: beatDay } = await prepareSlurpBeatRun(db, {
+    account,
+    canonText: sourceCharacterContext,
+    source: linkedPublicAccount,
+    disclosureMode,
+    beats: settings.postPlanner === "beats",
+    preview: input.previewOnly === true,
+    model: { connection: input.connection, fallbackConnection },
+    recentPosts,
+    at: input.generatedAt ?? new Date(),
+    publishAt: input.publicationTime,
+  });
   // What this post is for, as opposed to what it is about, and how it goes out. Story and teaser
   // are passed in rather than chosen again, so the decisions cannot contradict each other.
   const {
@@ -261,6 +259,7 @@ export async function generateCreatorPost(
       settings.postPlanner === "beats"
         ? {
             canonText: sourceCharacterContext,
+            readingText,
             connection: input.connection,
             fallbackConnection,
             arc: project ? slurpArcBeat(project) : null,

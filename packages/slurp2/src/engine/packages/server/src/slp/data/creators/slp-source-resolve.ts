@@ -47,12 +47,14 @@ export async function resolveCreatorCharacterCanon(
   db: DB,
   publicAccount: Pick<SlpAccount, "kind" | "entityId"> | null,
   disclosureMode: SlpIdentityDisclosure,
+  /** `SLP_CANON_READING_SCALE` for the cached card reading; a prompt keeps the default. */
+  scale = 1,
 ): Promise<string> {
   if (!publicAccount) return "";
   const characters = createCharactersStorage(db);
   if (publicAccount.kind === "character") {
     const source = await characters.getById(publicAccount.entityId);
-    return source ? slpCreatorCharacterCanonText(source.data, disclosureMode === "open") : "";
+    return source ? slpCreatorCharacterCanonText(source.data, disclosureMode === "open", scale) : "";
   }
   if (publicAccount.kind === "persona") {
     const source = await characters.getPersona(publicAccount.entityId);
@@ -67,6 +69,7 @@ export async function resolveCreatorCharacterCanon(
             backstory: source.backstory,
           },
           disclosureMode === "open",
+          scale,
         )
       : "";
   }

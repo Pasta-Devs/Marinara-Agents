@@ -23,7 +23,8 @@ import {
   findSlurpOpportunityBySlot,
   planSlurpOpportunity,
 } from "../../data/feed/slp-opportunity-storage.js";
-import { planSlurpBeat, readSlurpCanonAnchorState, type SlurpBeatContext } from "./slp-post-beat-service.js";
+import { planSlurpBeat, type SlurpBeatContext } from "./slp-post-beat-service.js";
+import { readSlurpCanonAnchorState } from "../../data/creators/slp-canon-anchor-storage.js";
 import { slurpSharedIdeasFor } from "./slp-shared-preseed-service.js";
 import { slurpBeatIntents } from "../../modules/feed/slp-post-beat.js";
 import { topSlurpDemandTrend } from "../../data/feed/slp-demand-storage.js";

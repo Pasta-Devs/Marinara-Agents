@@ -102,11 +102,18 @@ function canonField(value: string, name: string, max: number): string {
   return `${(end > max * 0.6 ? cut.slice(0, end + 1) : cut).trim()} …`;
 }
 
-export function slpCreatorCharacterCanonText(data: unknown, includeName: boolean): string {
+/**
+ * How much more of each card field the one cached card reading (canon anchors) gets than a post
+ * does. A fact past a post's cut (a character who cannot speak, named in the last paragraph) is
+ * read once there instead of riding in every prompt. Still bounded: about 19,000 characters at most.
+ */
+export const SLP_CANON_READING_SCALE = 4;
+
+export function slpCreatorCharacterCanonText(data: unknown, includeName: boolean, scale = 1): string {
   const source = promptRecord(data);
   const extensions = promptRecord(source.extensions);
   const name = promptField(source.name).trim();
-  const field = (value: string, max: number) => canonField(value, name, max);
+  const field = (value: string, max: number) => canonField(value, name, max * scale);
   return [
     ...(includeName ? [`Name: ${name}`] : []),
     `Description: ${field(promptField(source.description), 1600)}`,

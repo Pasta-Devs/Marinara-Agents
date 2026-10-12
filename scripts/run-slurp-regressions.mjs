@@ -3,11 +3,15 @@ import { existsSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-// Runs every Slurp regression file, four at a time. The two files in PLAIN_TSX keep the default
+// Runs every Slurp regression file, four at a time. The files in PLAIN_TSX keep the default
 // tsconfig, the same exemption `test:noodle:regressions` makes.
 const root = fileURLToPath(new URL("..", import.meta.url));
 const tsx = join(root, "node_modules/.bin/tsx");
-const PLAIN_TSX = new Set(["tests/slurp-phase1-durability.regression.ts", "tests/slurp2-reset-activity.regression.ts"]);
+const PLAIN_TSX = new Set([
+  "tests/slurp-phase1-durability.regression.ts",
+  "tests/slurp2-reset-activity.regression.ts",
+  "tests/slurp2-anchor-edits.regression.ts",
+]);
 const CONCURRENCY = 4;
 const TAIL_LINES = 30;
 const TIMEOUT_MS = 5 * 60 * 1000;

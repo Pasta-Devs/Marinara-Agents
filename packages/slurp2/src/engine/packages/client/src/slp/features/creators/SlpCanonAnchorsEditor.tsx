@@ -16,10 +16,13 @@ const entries = (text: string) =>
     .map((line) => line.trim())
     .filter(Boolean);
 const HEAT_LEVELS = [0, 1, 2, 3] as const;
+/** The server keeps six entries per list; a seventh would be dropped after a "saved". */
+const LIST_MAX = 6;
 
 /**
- * What the Beats planner took from this Creator's card, editable. An extraction can miss a person
- * or invent a habit; this is where the player fixes it. Saved edits win until the card changes.
+ * What Slurp took from this Creator's card, editable: the facts that always hold (in every post,
+ * Story and chat) and the life details post ideas are built from. An extraction can miss a person
+ * or invent a habit; this is where the player fixes it. Saved edits are kept when the card changes.
  */
 export function SlpCanonAnchorsEditor({ creatorId }: { creatorId: string }) {
   const { t } = useTranslation();
@@ -60,6 +63,16 @@ export function SlpCanonAnchorsEditor({ creatorId }: { creatorId: string }) {
       <p className={noteClass}>
         {t("ui.slurp.canonAnchors.detail")} {status}
       </p>
+      <ChipListInput
+        label={t("ui.slurp.canonAnchors.essentials")}
+        values={entries(draft.essentials)}
+        disabled={busy || !state.hasCard}
+        max={LIST_MAX}
+        maxLength={140}
+        wrap
+        onChange={(values) => setDraft((current) => ({ ...current, essentials: values.join("\n") }))}
+        placeholder={t("ui.slurp.canonAnchors.essentialsPlaceholder")}
+      />
       <div className="grid gap-3 lg:grid-cols-2">
         {LIST_FIELDS.map((field) => (
           <ChipListInput
@@ -67,6 +80,9 @@ export function SlpCanonAnchorsEditor({ creatorId }: { creatorId: string }) {
             label={t(`ui.slurp.canonAnchors.${field}`)}
             values={entries(draft[field])}
             disabled={busy || !state.hasCard}
+            max={LIST_MAX}
+            // A person is "Name - relation": two entries of sixty.
+            maxLength={field === "people" ? undefined : 60}
             onChange={(values) => setDraft((current) => ({ ...current, [field]: values.join("\n") }))}
             placeholder={t(`ui.slurp.canonAnchors.${field}Placeholder`)}
           />

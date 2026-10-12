@@ -63,6 +63,12 @@ export type SlurpCanonAnchors = {
   heat: { min: number; max: number };
   /** A typical day from the card, for Creators without a Conversation Schedule. Absent on old caches. */
   routine?: { time: string; activity: string }[];
+  /**
+   * What must hold in everything they write or show: how they communicate, senses and body, the
+   * languages they use, firm limits, who runs the page. Never rotated (`slp-creator-flavour.ts`).
+   * Absent until the card was read for them (caches from before v3).
+   */
+  essentials?: string[];
 };
 
 /** Where the Creator's day stands when the post goes out. `queued`: written just before sleep or a drive. */
