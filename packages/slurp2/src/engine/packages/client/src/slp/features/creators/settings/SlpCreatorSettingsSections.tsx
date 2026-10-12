@@ -242,8 +242,9 @@ export function SlpCreatorContentRulesSection(props: SlpCreatorSettingsSectionPr
 export function SlpCreatorProductionSection({ creator, active }: SlpCreatorSettingsSectionProps) {
   return (
     <div className="space-y-5">
-      <SlpCreatorImagesSection creator={creator} active={active} />
+      {/* Page style first: how they post decides what the picture settings below are for. */}
       <SlurpCreatorStrategyGroup creator={creator} />
+      <SlpCreatorImagesSection creator={creator} active={active} />
     </div>
   );
 }

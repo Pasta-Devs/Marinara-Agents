@@ -61,6 +61,7 @@ import {
 import { slurpContinuityIdentityOf } from "../../modules/continuity/slp-continuity-rules.js";
 
 import { slurpCreatorInScene } from "./scenes/slp-roleplay-scene-lock.js";
+import { saveSlurpMessageDeepDetails } from "../../data/messages/slp-message-deep-details-storage.js";
 export type SlurpReplyOutcome =
   | { status: "replied"; message: SlurpMessage; pacing: SlurpReplyPacing }
   | { status: "queued"; pacing: SlurpReplyPacing }
@@ -365,6 +366,14 @@ export async function replyToSlurpMessage(
         delayed: queuedBubbles.map((bubble) => ({ ...bubble, id: `${claim.claimId}:${bubble.sequence}` })),
       });
       if (!stored) return { status: "ineligible" } as const;
+      // Deep details, read from the Message menu. Nobody can open an AI fan's thread, so it keeps none.
+      if (reply.deepDetails && !aiFan)
+        await saveSlurpMessageDeepDetails(db, {
+          messageId: stored.id,
+          threadId: thread.id,
+          creatorAccountId: thread.creatorAccountId,
+          record: reply.deepDetails,
+        });
       // Never echo a post already shared in this conversation: the creator used to send back the very
       // post the fan had just shared, as if it were news.
       const alreadyShared =

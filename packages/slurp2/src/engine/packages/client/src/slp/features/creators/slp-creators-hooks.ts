@@ -1,5 +1,9 @@
 import type { SlpAccountSettingsPatchInput } from "../../../../../shared/src/slp/slp-social-generation.schema.js";
-import type { SlpAccount, SlpCreatorManagedStageProfile } from "../../../../../shared/src/slp/slp-social.types.js";
+import type {
+  SlpAccount,
+  SlpCreatorManagedStageProfile,
+  SlpPageStyleSuggestion,
+} from "../../../../../shared/src/slp/slp-social.types.js";
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../../../lib/api-client.js";
 import { useActivePersona, usePersonas } from "../../../hooks/use-creator-personas";
@@ -84,19 +88,33 @@ export function useUpdateCreatorStrategy() {
   return useMutation({
     mutationFn: ({
       accountId,
+      expect,
       ...strategy
     }: {
       accountId: string;
       style?: "homemade" | "polished" | "documentary" | "theatrical" | null;
       skipRate?: number | null;
       textOnlyRate?: number | null;
+      intentWeights?: Record<string, number> | null;
       strategyText?: string | null;
+      /** See `slpAccountSettingsPatchSchema`: refuse the save if these keys changed meanwhile. */
+      expect?: Extract<SlpAccountSettingsPatchInput, { subtree: "strategy" }>["expect"];
     }) =>
       api.patch<SlpAccount>(`/slurp2/accounts/${encodeURIComponent(accountId)}/settings`, {
         subtree: "strategy",
         patch: strategy,
+        ...(expect && { expect }),
       } satisfies SlpAccountSettingsPatchInput),
-    onSuccess: () => qc.invalidateQueries({ queryKey: slpKeys.noodlerAccounts() }),
+    // Settled, not success: a refused save also means the list is stale.
+    onSettled: () => qc.invalidateQueries({ queryKey: slpKeys.noodlerAccounts() }),
+  });
+}
+
+/** "Suggest page style": one model call, nothing saved. Apply with `useUpdateCreatorStrategy`. */
+export function useSuggestCreatorPageStyle() {
+  return useMutation({
+    mutationFn: (accountId: string) =>
+      api.post<SlpPageStyleSuggestion>(`/slurp2/slurp/accounts/${encodeURIComponent(accountId)}/strategy/suggest`),
   });
 }
 

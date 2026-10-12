@@ -140,6 +140,13 @@ function intentOptions(saved: Partial<Record<SlurpContentIntent, number>> | unde
   return options.some((option) => option.weight > 0) ? options : shipped;
 }
 
+/** Every intent's weight as the planner draws it: the shipped ones with the Creator's saved ones applied. */
+export function slurpEffectiveIntentWeights(
+  saved: Partial<Record<SlurpContentIntent, number>> | undefined,
+): Record<string, number> {
+  return Object.fromEntries(intentOptions(saved).map((option) => [option.value, option.weight]));
+}
+
 /** Weights that make one intent certain, for a purpose the player chose. */
 export function slurpOnlyIntent(intent: SlurpContentIntent): Partial<Record<SlurpContentIntent, number>> {
   return Object.fromEntries(Object.keys(INTENT_WEIGHTS).map((key) => [key, key === intent ? 1 : 0]));

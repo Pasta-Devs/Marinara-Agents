@@ -24,6 +24,7 @@ import {
   slurpEvents,
   slurpPendingText,
   slpCreatorFirstPostJobs,
+  slpMessageDeepDetails,
   slurpMessageClaims,
   slurpMessages,
   slurpReplyBubbles,
@@ -130,6 +131,7 @@ export function createCreatorsStorage2(context: SlurpStorageContext) {
           // every thread and leave the next install reading someone else's conversations.
           slurpMessageClaims,
           slurpMessages,
+          slpMessageDeepDetails,
           slurpReplyBubbles,
           slurpCommissions,
           slurpFollowUps,

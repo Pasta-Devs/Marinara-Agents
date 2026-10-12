@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import {
+  mergeSlurpCreatorStrategy,
   normalizeSlurpCreatorStrategy,
   slurpCreatorStrategy,
   slurpStrategyInstruction,
@@ -106,7 +107,11 @@ for (const file of [
 const storage = slurp2Source(
   "packages/slurp2/src/engine/packages/server/src/slp/data/creators/slp-creators-storage-4.ts",
 );
-assert.match(storage, /if \(value === null\) delete merged\[key\];/u);
+// The save merges through the pure strategy merge: null resets one key, absent keys stay.
+assert.match(storage, /mergeSlurpCreatorStrategy\(current\.strategy, input\.patch, input\.expect\)/u);
+assert.deepEqual(mergeSlurpCreatorStrategy({ skipRate: 20, textOnlyRate: 70 }, { skipRate: null }), {
+  textOnlyRate: 70,
+});
 
 // One-shot purpose from the composer: certain for this post, never saved to the strategy.
 for (const intent of ["casual", "set", "business", "appreciation"] as const) {

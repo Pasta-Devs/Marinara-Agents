@@ -78,6 +78,7 @@ export function useSlurpThread(threadId: string | null, personaId: string | null
       api.get<{
         thread: SlurpThread;
         messages: SlurpMessage[];
+        deepDetailIds?: string[];
         nextCursor: { createdAt: string; id: string } | null;
         creator: { id: string; handle: string; displayName: string; avatarUrl: string | null } | null;
         counterpart: { id: string; handle: string; displayName: string; avatarUrl: string | null } | null;
@@ -209,6 +210,7 @@ export function useSlurpCompose(
       api.get<{
         thread: SlurpThread | null;
         messages: SlurpMessage[];
+        deepDetailIds?: string[];
         nextCursor: { createdAt: string; id: string } | null;
         creator: { id: string; handle: string; displayName: string; avatarUrl: string | null } | null;
         creatorLastActiveAt?: string | null;

@@ -33,6 +33,8 @@ import { slpWardrobeRoutes } from "./slp-wardrobe-routes.js";
 import { resolveImageAppearance } from "../media/slp-media-contract.js";
 import { normalizeSlpCreatorPage } from "../../../../../shared/src/slp/slp-creator-page.js";
 import { composeSlpCreatorPage, protectSlpCreatorPage } from "./slp-creator-page-service.js";
+import { suggestSlpPageStyle } from "./slp-page-style-service.js";
+import { SlpStrategyConflictError } from "../../modules/creators/slp-creator-strategy.js";
 
 const slpStageProfileUpdateRequestSchema = slpStageProfileUpdateSchema.extend({
   ...slurpDiscoveryProfileSchema.shape,
@@ -86,9 +88,23 @@ export async function slpCreatorsRoutes(app: FastifyInstance, deps: SlpRouteDeps
     }
     // The editor no longer shows the sign-up chat's spice lines; move them before a save drops them.
     if (parsed.data.subtree === "strategy") await moveSlurpStrategyLimits(app.db, account).catch(() => undefined);
-    const updated = await noodle.patchAccountSettings(id, parsed.data);
+    let updated;
+    try {
+      updated = await noodle.patchAccountSettings(id, parsed.data);
+    } catch (error) {
+      if (error instanceof SlpStrategyConflictError) return reply.code(409).send({ error: error.message });
+      throw error;
+    }
     if (!updated) return reply.code(404).send({ error: "Creator account not found" });
     return updated;
+  });
+
+  // "Suggest page style": one model call that proposes a strategy. Saves nothing.
+  app.post("/slurp/accounts/:id/strategy/suggest", async (req, reply) => {
+    const { id } = req.params as { id: string };
+    const result = await suggestSlpPageStyle(app.db, id);
+    if (!result.ok) return reply.code(result.status).send({ error: result.error });
+    return result.suggestion;
   });
 
   app.patch("/accounts/:id/profile", async (req, reply) => {

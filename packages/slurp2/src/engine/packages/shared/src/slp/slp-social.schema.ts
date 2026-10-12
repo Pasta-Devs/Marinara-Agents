@@ -296,7 +296,15 @@ export const slpAccountSettingsPatchSchema = z.discriminatedUnion("subtree", [
   z.object({ subtree: z.literal("social"), patch: slpAccountSocialPatchSchema }).strict(),
   z.object({ subtree: z.literal("scheduler"), patch: slpAccountSchedulerPatchSchema }).strict(),
   z.object({ subtree: z.literal("privacy"), patch: slpAccountPrivacyPatchSchema }).strict(),
-  z.object({ subtree: z.literal("strategy"), patch: slpCreatorStrategyPatchSchema }).strict(),
+  z
+    .object({
+      subtree: z.literal("strategy"),
+      patch: slpCreatorStrategyPatchSchema,
+      // What the editor last saw saved for the keys it changes (null: nothing saved). A key saved
+      // differently meanwhile refuses the whole save instead of overwriting it.
+      expect: slpCreatorStrategyPatchSchema.optional(),
+    })
+    .strict(),
 ]);
 
 const slpAccountIdentityUpdateShape = {

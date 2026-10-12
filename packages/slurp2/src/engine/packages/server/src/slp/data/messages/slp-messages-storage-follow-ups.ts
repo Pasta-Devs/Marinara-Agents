@@ -5,6 +5,7 @@
 // Its own module rather than more of `slurp.storage.ts`, which is already past five thousand
 // lines. It composes that storage for accounts, subscriptions, and the wallet instead of
 // reimplementing them, so a DM tip and a profile tip move coins through exactly one code path.
+import { deleteSlurpThreadMessageDeepDetails } from "./slp-message-deep-details-storage.js";
 import { tolerateMissingTables } from "../../base/host/slp-host-tables.js";
 import { and, desc, eq, gt, inArray, isNotNull, isNull, lt, lte, or } from "../../../db/file-query.js";
 import { newId } from "../../../utils/id-generator.js";
@@ -479,6 +480,7 @@ export function createMessagesStorageFollowUps(context: SlurpMessagesContext) {
         await tx.delete(slurpReplyBubbles).where(eq(slurpReplyBubbles.threadId, threadId));
         await tx.delete(slurpMessageClaims).where(eq(slurpMessageClaims.threadId, threadId));
         await tx.delete(slurpMessages).where(eq(slurpMessages.threadId, threadId));
+        await deleteSlurpThreadMessageDeepDetails(tx, [threadId]);
         await tx.delete(slurpFollowUps).where(eq(slurpFollowUps.threadId, threadId));
         for (const row of await tx.select().from(slurpCommissions).where(eq(slurpCommissions.threadId, threadId))) {
           if (row.state !== "brief" && row.state !== "quoted") continue;

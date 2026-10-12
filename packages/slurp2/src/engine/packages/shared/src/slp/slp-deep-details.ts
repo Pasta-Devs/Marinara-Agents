@@ -254,3 +254,50 @@ export type SlpDeepDetailsResponse = {
   related?: Record<string, { text: string; createdAt: string; access: string }>;
   stats: { likes: number; replies: number; unlocks: number };
 };
+
+/**
+ * Everything that went into one generated direct-message reply, recorded when it was written.
+ *
+ * Like the post record it holds the full prompt, the source card and private notes included, so it
+ * never travels with the message: a thread's reader gets only the ids of the records it keeps, and the
+ * record is served by the managed route. `chat` holds the facts the generator had, never re-read later.
+ */
+export type SlpMessageDeepDetailsRecord = {
+  version: 1;
+  generatedAt: string;
+  model: SlpDeepDetailsRecord["model"];
+  messages: { role: string; content: string }[];
+  rawResponse: string;
+  chat: {
+    rapport: { tier: string; score: number };
+    subscribed: boolean;
+    /** The reply answered a message request, before the chat was accepted. */
+    request: boolean;
+    /** Why a scheduled follow-up or a redo was written, when the reply had such a direction. */
+    direction: string | null;
+    /** The resolved position and every layer behind it. Null in Slurp Support's thread, which has none. */
+    stance: {
+      warmth: string;
+      latitude: string;
+      imageMode: string;
+      evidence: { layer: string; value: string; effect: string }[];
+    } | null;
+    /** How this fan stands with the Creator, and how far the chat may go. */
+    relationship: { posture: string; adultLevel: string } | null;
+    creator: { emotion: string; intent: string } | null;
+    /** What the Creator remembered about this fan, as the prompt carried it. */
+    memories: { tier: string; text: string }[];
+  };
+};
+
+/**
+ * The record a message belongs to. A reply's later bubbles are stored as `<first bubble id>:<n>`,
+ * so every bubble of one reply leads to the one record.
+ */
+export const slpMessageDeepDetailsId = (messageId: string) => messageId.split(":")[0]!;
+
+export type SlpMessageDeepDetailsResponse = {
+  message: { id: string; content: string; createdAt: string };
+  creator: { id: string; displayName: string; handle: string };
+  details: SlpMessageDeepDetailsRecord | null;
+};

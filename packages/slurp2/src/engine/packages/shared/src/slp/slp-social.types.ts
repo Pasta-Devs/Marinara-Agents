@@ -182,6 +182,29 @@ export interface SlpCreatorStrategySettings {
   strategyText?: string;
 }
 
+/** The strategy values a page-style suggestion can change, as the planner uses them now. */
+export interface SlpPageStyleCurrent {
+  style: string;
+  textOnlyRate: number;
+  intentWeights: Record<string, number>;
+  strategyText: string;
+}
+
+/** Only the fields a suggestion would change. */
+export type SlpPageStylePatch = Partial<SlpPageStyleCurrent>;
+
+/** "Suggest page style": nothing is saved until the player applies `proposal`. */
+export interface SlpPageStyleSuggestion {
+  explanation: string;
+  current: SlpPageStyleCurrent;
+  proposal: SlpPageStylePatch;
+  /** What was saved when the suggestion was made, so an apply can refuse a value edited meanwhile. */
+  saved: SlpCreatorStrategySettings;
+  /** What the planner would use after applying: a new style also moves the defaults it derives. */
+  before: { style: string; skipRate: number; textOnlyRate: number };
+  after: { style: string; skipRate: number; textOnlyRate: number };
+}
+
 export interface SlpAccountSettings {
   profile: SlpAccountProfileSettings;
   /** See `SlpCreatorStrategySettings`. Absent until something derives or saves one. */

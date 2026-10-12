@@ -361,6 +361,7 @@ const addedCalls = [
   "get /slurp2/messages/unread-count?personaId=${encodeURIComponent(personaId!)}",
   "get /slurp2/slurp/notifications/unseen-count?personaId=${encodeURIComponent(personaId!)}",
   "get /slurp2/slurp/posts/${encodeURIComponent(postId)}/deep-details",
+  "get /slurp2/slurp/messages/${encodeURIComponent(messageId)}/deep-details?personaId=${encodeURIComponent(personaId)}",
   "post /slurp2/settings/prompt-blocks/generate-preview",
   // The studio keeps every block live for the preview Creator (useSlurpLivePromptBlocks).
   "post /slurp2/settings/prompt-blocks/preview",
@@ -490,6 +491,7 @@ const addedCalls = [
   "post /slurp2/slurp/stories/${encodeURIComponent(input.storyId)}/view",
   "put /slurp2/messages/threads/${encodeURIComponent(input.threadId)}/notes",
   "put /slurp2/slurp/accounts/${encodeURIComponent(input.accountId)}/page",
+  "post /slurp2/slurp/accounts/${encodeURIComponent(accountId)}/strategy/suggest",
   "upload /slurp2/messages/threads/${encodeURIComponent(input.threadId)}/image-upload",
 ];
 const removedCalls = [
@@ -548,8 +550,11 @@ const counts = Object.fromEntries(
 assert.deepEqual(
   counts,
   {
-    useMutation: 212,
-    useQuery: 282,
+    // 0.3.27 "Suggest page style": one mutation, its two error states, and the strategy save now
+    // refreshes the list when settled (a refused apply also means the list is stale).
+    useMutation: 213,
+    // 0.3.28: +2 (the import and the one query of SlpMessageDeepDetails).
+    useQuery: 284,
     useInfiniteQuery: 9,
     invalidateQueries: 151,
     setQueryData: 26,
@@ -559,8 +564,8 @@ assert.deepEqual(
     onMutate: 2,
     // SlpConnectionsPanel.tsx moved into the SlurpBackstagePrompts component mapping, so its one
     // onError no longer counts as state-layer code.
-    onError: 91,
-    onSettled: 36,
+    onError: 93,
+    onSettled: 37,
   },
   "query and mutation wiring counts match the monolith plus the later Slurp2 hooks",
 );

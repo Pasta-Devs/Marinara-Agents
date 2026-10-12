@@ -106,6 +106,7 @@ import { SLURP_SUPPORT_ACCOUNT_ID } from "../../../../../shared/src/slp/slp-supp
 import { slpWithProviderRetry } from "../../base/model/slp-provider-retry.js";
 import { slpScenesAvailable } from "../../base/host/slp-scene-host.js";
 import { slpSceneInviteAllowed } from "../../modules/messages/slp-roleplay-scene-rules.js";
+import { buildSlurpMessageDeepDetailsRecord } from "./slp-message-deep-details-record.js";
 
 type GenerationConnection = NonNullable<Awaited<ReturnType<ReturnType<typeof createConnectionsStorage>["getWithKey"]>>>;
 
@@ -687,16 +688,9 @@ export async function buildSlurpMessagePrompt(input: SlurpMessagePromptInput): P
 }
 
 export async function generateSlurpMessageReply(input: SlurpMessagePromptInput): Promise<SlurpGeneratedDmReply> {
-  const {
-    messages,
-    stance,
-    disclosureMode,
-    publicIdentity,
-    recentPosts,
-    viewerPageId: pageId,
-    usPageId,
-    sceneInvite,
-  } = await buildSlurpMessagePrompt(input);
+  const built = await buildSlurpMessagePrompt(input);
+  const { messages, stance, disclosureMode, publicIdentity, recentPosts, usPageId, sceneInvite } = built;
+  const pageId = built.viewerPageId;
   const support = input.viewer.id === SLURP_SUPPORT_ACCOUNT_ID;
   const budget = (await createSlurpStorage(input.db).getSettings()).modelBudget;
   const context = input.workerContext ?? "present";
@@ -728,7 +722,7 @@ export async function generateSlurpMessageReply(input: SlurpMessagePromptInput):
     }),
   );
   const debugMode = input.debugMode === true || isDebugAgentsEnabled();
-  const response = await provider.chatComplete(messages, {
+  const options = {
     model: input.connection.model,
     ...slpSamplingOptions(
       resolveStoredChatOptions(input.connection.defaultParameters, input.connection.provider, input.connection.model),
@@ -749,7 +743,8 @@ export async function generateSlurpMessageReply(input: SlurpMessagePromptInput):
           us: Boolean(usPageId),
           sceneInvite,
         }),
-  });
+  } as const;
+  const response = await provider.chatComplete(messages, options);
   const content = response.content ?? "";
   logDebugOverride(
     debugMode,
@@ -767,6 +762,8 @@ export async function generateSlurpMessageReply(input: SlurpMessagePromptInput):
   if (!protectedContent) throw new Error("Slurp direct-message generation returned no usable content.");
   const protect = (value: string, max: number) =>
     protectBoundedCreatorGeneratedText(value, disclosureMode, publicIdentity, max);
+  // Deep details keeps the answer redacted like the prompt, so a concealed Creator cannot name its source.
+  const raw = protectCreatorGeneratedIdentity(content, disclosureMode, publicIdentity) ?? "";
   return {
     content: protectedContent,
     latitude: stance.latitude,
@@ -796,5 +793,6 @@ export async function generateSlurpMessageReply(input: SlurpMessagePromptInput):
       sceneInvite && typeof generated.sceneInvite === "string" && generated.sceneInvite.trim()
         ? (protect(generated.sceneInvite.trim(), 600) ?? undefined)
         : undefined,
+    deepDetails: buildSlurpMessageDeepDetailsRecord({ input, support, stance, messages, options, content: raw }),
   };
 }

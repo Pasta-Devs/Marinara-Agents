@@ -1,3 +1,4 @@
+import { deleteSlurpThreadMessageDeepDetails } from "../messages/slp-message-deep-details-storage.js";
 import { and, desc, eq, inArray, or } from "../../../db/file-query.js";
 import { deleteSlurpCreatorPlanningRows } from "../continuity/slp-continuity-storage.js";
 import { slurpCreatorStrategy } from "../../modules/creators/slp-creator-strategy.js";
@@ -228,6 +229,7 @@ export function createCreatorsStorage3(context: SlurpStorageContext) {
             ),
           );
           await tx.delete(slurpMessages).where(inArray(slurpMessages.threadId, threadIds));
+          await deleteSlurpThreadMessageDeepDetails(tx, threadIds);
           await tx.delete(slurpReplyBubbles).where(inArray(slurpReplyBubbles.threadId, threadIds));
           await tx.delete(slurpMessageClaims).where(inArray(slurpMessageClaims.threadId, threadIds));
           await tx.delete(slurpThreads).where(inArray(slurpThreads.id, threadIds));

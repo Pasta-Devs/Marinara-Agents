@@ -51,8 +51,12 @@ const INTENDED_DELTAS: Record<string, [string, string][]> = {
     ["/** Empty while locked unless the URL is an access-checked teaser. */\n  images: SlpPostMedia[];", ""],
     ["partnership?: SlpPostPartnership | null;", ""],
   ],
+  // 0.3.27: a strategy save may carry `expect`, the values the editor last saw, to refuse a stale apply.
   slpAccountSettingsPatchSchema: [
-    [',\n  z.object({ subtree: z.literal("strategy"), patch: slpCreatorStrategyPatchSchema }).strict(),', ","],
+    [
+      ',\n  z\n    .object({\n      subtree: z.literal("strategy"),\n      patch: slpCreatorStrategyPatchSchema,\n      // What the editor last saw saved for the keys it changes (null: nothing saved). A key saved\n      // differently meanwhile refuses the whole save instead of overwriting it.\n      expect: slpCreatorStrategyPatchSchema.optional(),\n    })\n    .strict(),',
+      ",",
+    ],
   ],
   slpCreatorPostCreateShape: [["  format: slpCreatorContentFormatSchema.optional(),\n", ""]],
   slpCreatorGenerationRequestShape: [

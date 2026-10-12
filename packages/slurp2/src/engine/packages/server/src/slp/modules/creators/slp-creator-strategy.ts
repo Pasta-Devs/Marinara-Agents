@@ -64,6 +64,11 @@ const DERIVED: Record<SlurpProductionStyle, { skipRate: number; textOnlyRate: nu
   theatrical: { skipRate: 18, textOnlyRate: 25 },
 };
 
+/** The lean on words a style implies when the user has saved none. */
+export function slurpDerivedTextOnlyRate(style: SlurpProductionStyle): number {
+  return DERIVED[style].textOnlyRate;
+}
+
 function clamp(value: unknown, min: number, max: number): number | null {
   if (typeof value !== "number" || !Number.isFinite(value)) return null;
   return Math.min(max, Math.max(min, Math.round(value)));
@@ -156,4 +161,43 @@ export function normalizeSlurpCreatorStrategy(value: unknown): SlpCreatorStrateg
     next.strategyText = raw.strategyText.trim().slice(0, SLURP_STRATEGY_LIMITS.strategyText);
   }
   return Object.keys(next).length > 0 ? next : undefined;
+}
+
+/** A strategy save that would overwrite a value edited since the editor read it. Nothing was written. */
+export class SlpStrategyConflictError extends Error {
+  constructor() {
+    super("These settings changed since you opened them. Look again before saving.");
+  }
+}
+
+/** JSON with object keys sorted, so two equal weight maps compare equal whatever their key order. */
+function stableJson(value: unknown): string {
+  return JSON.stringify(value, (_key, item: unknown) =>
+    item && typeof item === "object" && !Array.isArray(item)
+      ? Object.fromEntries(Object.entries(item).sort(([a], [b]) => a.localeCompare(b)))
+      : item,
+  );
+}
+
+/**
+ * One strategy save applied to what is stored. Merged key by key so one control never resets
+ * another; `null` returns a value to the derived default; the normalizer drops anything out of
+ * range rather than storing it. `expect` holds what the editor last saw saved for keys it changes
+ * (null: nothing saved); a key saved differently meanwhile throws instead of being overwritten.
+ */
+export function mergeSlurpCreatorStrategy(
+  stored: SlpCreatorStrategySettings | undefined,
+  patch: Record<string, unknown>,
+  expect?: Record<string, unknown>,
+): SlpCreatorStrategySettings | undefined {
+  const merged: Record<string, unknown> = { ...stored };
+  for (const [key, value] of Object.entries(expect ?? {})) {
+    if (value !== undefined && stableJson(merged[key] ?? null) !== stableJson(value))
+      throw new SlpStrategyConflictError();
+  }
+  for (const [key, value] of Object.entries(patch)) {
+    if (value === null) delete merged[key];
+    else if (value !== undefined) merged[key] = value;
+  }
+  return normalizeSlurpCreatorStrategy(merged);
 }

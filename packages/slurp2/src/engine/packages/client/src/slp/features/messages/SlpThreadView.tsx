@@ -9,6 +9,7 @@ import {
 import { CommissionRow } from "./commissions/SlpCommissions";
 import { Info, Loader2 } from "lucide-react";
 import { useCallback, useContext, useMemo, useRef, type ReactNode } from "react";
+import { slpMessageDeepDetailsId } from "../../../../../shared/src/slp/slp-deep-details.js";
 import { createPortal } from "react-dom";
 import { cn } from "../../../lib/utils";
 import { ModalPortalContext } from "../../../components/ui/Modal";
@@ -122,6 +123,8 @@ export function SlurpThreadView(props: SlurpThreadViewProps) {
   // Until the conversation has loaded there is nothing to read and no policy to send under, so the
   // composer stays away instead of offering a live input on a blank screen.
   const notLoaded = !threadQuery.data;
+  const keptDeepDetails = threadQuery.data?.deepDetailIds;
+  const deepDetailIds = useMemo(() => new Set(keptDeepDetails), [keptDeepDetails]);
   // Roleplay scenes (docs/SCENES.md): offered when this Engine runs them and the thread is free.
   const sceneHost = useSlurpUIStore((state) => state.sceneHost);
   // A stable callback lets memoized bubbles skip re-renders; the ref always calls the latest one.
@@ -278,6 +281,10 @@ export function SlurpThreadView(props: SlurpThreadViewProps) {
                             ownsCreator={ownsCreator}
                             group={slurpBubbleGroup(visibleTimeline, index, firstUnreadMessageId)}
                             fresh={Boolean(openedWith.current && !openedWith.current.has(entry.message.id))}
+                            hasDeepDetails={
+                              entry.message.role === "creator" &&
+                              deepDetailIds.has(slpMessageDeepDetailsId(entry.message.id))
+                            }
                             onOpenProfile={openProfile}
                           />
                           {/* The Support desk: an Offer sits under the line that made it (docs/SUPPORT-DESK.md). */}

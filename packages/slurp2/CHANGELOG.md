@@ -1,5 +1,15 @@
 # Slurp release notes
 
+## 0.3.28 — 2026-10-12
+
+- Added: Deep details for chat messages. Hold a Creator's reply (or right-click it) and choose "Deep details" in the Message menu to see what went into it: the chat facts the reply was built from (relationship, stance, heat, memories), the model, the full prompt and the raw answer. It opens in the same window as a post's Deep details.
+- Slurp keeps these details for the newest 50 replies of each chat. Older replies, and replies written before this update, do not offer the item. Clearing a chat removes its details.
+## 0.3.27 — 2026-10-12
+
+- Added: "Page style" in a Creator's Posting settings says in plain words how they post (for example "Polished · nearly always pictures · automatic"). The Overview's Posting tile shows the same line. It replaces "Posting strategy"; the number fields are under "Fine-tune page style".
+- Added: "Suggest from card" under Page style reads the Character card and proposes a fitting page style, with a short reason and "See exact changes". "Use this page style" applies it; "Keep current" changes nothing. A page note you wrote is never replaced, and Use is refused if a setting changed in the meantime.
+- Changed: "Posts without pictures" is now "Lean towards words", without a percent sign: it was never a share of posts. Saved values work as before.
+
 ## 0.3.26 — 2026-10-12
 
 - Added: Creators keep what is always true about them. When Slurp reads a card it also notes the few facts that must hold everywhere (how they communicate, senses and body, languages, firm limits, who runs a shared page), and every post, Story, chat and reply carries them, with no extra AI call. Before, a fact late in the card was missing from most requests.

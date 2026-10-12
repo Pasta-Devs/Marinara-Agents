@@ -443,6 +443,16 @@ export const slurpMessages = fileTable("slurp2_messages", {
   createdAt: text("created_at").notNull(),
 });
 
+/** What went into each generated Creator reply, the last few per thread. See `slp-deep-details.ts`. */
+export const slpMessageDeepDetails = fileTable("slurp2_message_deep_details", {
+  /** The id of the reply's first bubble. */
+  id: text("id").primaryKey(),
+  threadId: text("thread_id").notNull(),
+  creatorAccountId: text("creator_account_id").notNull(),
+  record: text("record").notNull(),
+  createdAt: text("created_at").notNull(),
+});
+
 /**
  * Reply claims, mirroring `slurp2_creator_reply_claims`. A thread may have at most one reply in
  * flight, so the claim keys on the thread: a scheduler pass and a live send cannot double-reply.

@@ -1,4 +1,4 @@
-import { Camera, Check, CheckCheck, Cloud, Copy, Dumbbell, Moon, Plane, WifiOff } from "lucide-react";
+import { Camera, Check, CheckCheck, Cloud, Copy, Dumbbell, Moon, Plane, ScanSearch, WifiOff } from "lucide-react";
 import { memo, useEffect, useRef, useState, type KeyboardEvent, type PointerEvent } from "react";
 import { SlpHeartGlyph } from "../../base/chrome/SlpGlyphs";
 import { useTranslation as useUiTranslation } from "react-i18next";
@@ -19,6 +19,7 @@ import type { SlurpAwayKind } from "./slp-away-kind";
 import { slpErrorText } from "../../base/ui/slp-error-text";
 import { useReactToSlurpMessage, useUnlockSlurpMessage } from "../../features/messages/slp-message-action-hooks";
 import { SlpSharedPostCard } from "./SlpSharedPostCard";
+import { SlpMessageDeepDetails } from "./SlpMessageDeepDetails";
 
 // One message in a thread, the away animation and the platform action card.
 
@@ -260,6 +261,7 @@ export const MessageBubble = memo(function MessageBubble({
   ownsCreator,
   group = "single",
   fresh = false,
+  hasDeepDetails = false,
   onOpenProfile,
 }: {
   message: SlurpMessage;
@@ -269,6 +271,8 @@ export const MessageBubble = memo(function MessageBubble({
   group?: SlurpBubbleGroup;
   /** Arrived while the conversation was open, so it lands with the entrance motion. */
   fresh?: boolean;
+  /** A Creator reply whose Deep details record is still kept: the Message menu offers it. */
+  hasDeepDetails?: boolean;
   /** A shared post opens its author's page. */
   onOpenProfile?: (accountId: string) => void;
 }) {
@@ -285,6 +289,7 @@ export const MessageBubble = memo(function MessageBubble({
   const bubbleRef = useRef<HTMLDivElement | null>(null);
   const badgeRef = useRef<HTMLSpanElement | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [deepDetailsOpen, setDeepDetailsOpen] = useState(false);
   // The veil dissolves over the picture once, right after this reader bought it.
   const [dissolving, setDissolving] = useState(false);
   useEffect(() => {
@@ -625,7 +630,31 @@ export const MessageBubble = memo(function MessageBubble({
           <Copy aria-hidden="true" />
           {localizeUi("ui.slurp.messages.copyText", { defaultValue: "Copy text" })}
         </SlpSheetItem>
+        {hasDeepDetails && personaId && (
+          <SlpSheetItem
+            tone="muted"
+            onSelect={() => {
+              setMenuOpen(false);
+              setDeepDetailsOpen(true);
+            }}
+          >
+            <ScanSearch aria-hidden="true" />
+            {localizeUi("ui.slurp.deepDetails.title", { defaultValue: "Deep details" })}
+          </SlpSheetItem>
+        )}
       </SlpSheet>
+      {/* Mounted on demand: a long thread must not carry one window per bubble. */}
+      {deepDetailsOpen && personaId && (
+        <SlpMessageDeepDetails
+          messageId={message.id}
+          personaId={personaId}
+          onClose={() => {
+            setDeepDetailsOpen(false);
+            // Back to the bubble the menu came from, so keyboard users keep their place.
+            bubbleRef.current?.focus();
+          }}
+        />
+      )}
     </div>
   );
 });

@@ -11,6 +11,7 @@ import { useSlurpProjects } from "../../projects/slp-projects-contract";
 import { useSlurpContinuity } from "../slp-continuity-hooks";
 import { useSlpPersonaBackedCreator, useSlpViewerPersonaId } from "../slp-creators-hooks";
 import { focusRing, noteClass, quietButton } from "../slp-creator-classes";
+import { slpPageStyleLine } from "../SlpPageStyleSuggest";
 import type { SlpCreatorSettingsSectionProps } from "./slp-creator-settings-contract";
 import { useSlpCreatorSettingsStore, type SlpCreatorSettingsBlock } from "./slp-creator-settings-store";
 
@@ -174,6 +175,12 @@ export function SlpCreatorOverviewSection({ creator, active }: SlpCreatorSetting
             </p>
           )}
           <p>{t("ui.slurp.settings.creators.overview.planned", { count: status?.slots.length ?? 0 })}</p>
+          <p>
+            {t("ui.slurp.settings.creators.pageStyle.overview", {
+              defaultValue: "Page style: {{style}}",
+              style: slpPageStyleLine(t, creator.strategy.effective.style, creator.strategy.effective.textOnlyRate),
+            })}
+          </p>
         </StatusTile>
         <StatusTile
           title={t("ui.slurp.settings.creators.tabs.storylines", { defaultValue: "Storylines" })}

@@ -23,6 +23,7 @@ import { trySlpOperation } from "../../base/locking/slp-operation-lock.js";
 import { tryCreatorAccountOperation } from "../../base/locking/slp-account-operation-lock.js";
 import { incrementFollowUpCount } from "../../modules/messages/slp-thread-notes.js";
 import { slurpCreatorInScene } from "./scenes/slp-roleplay-scene-lock.js";
+import { saveSlurpMessageDeepDetails } from "../../data/messages/slp-message-deep-details-storage.js";
 
 const INITIAL_DELAY_MS = 60_000; // Start after 1 minute
 const POLL_MS = 120_000; // Check every 2 minutes
@@ -263,6 +264,13 @@ export function startSlurpFollowUpScheduler(app: FastifyInstance, registerStop?:
                 await messages.cancelScheduledFollowUp(threadRow.id, followUp.id);
                 return false;
               }
+              if (reply.deepDetails)
+                await saveSlurpMessageDeepDetails(app.db, {
+                  messageId: stored.id,
+                  threadId: threadRow.id,
+                  creatorAccountId: threadRow.creatorAccountId,
+                  record: reply.deepDetails,
+                });
               await messages.recordReplyOutcome(threadRow.id, {
                 moodShift: reply.moodShift,
                 remember: reply.remember,

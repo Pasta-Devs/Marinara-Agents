@@ -10,6 +10,7 @@
  * a detail only the simulation cares about.
  */
 import { z } from "zod";
+import type { SlpMessageDeepDetailsRecord } from "../../../../../shared/src/slp/slp-deep-details.js";
 import { SLURP_MOOD_SHIFTS, type SlurpMoodShift } from "../world/slp-mood.js";
 import type { SlurpStanceLatitude } from "../world/slp-stance.js";
 import type { SlurpMediaIntent } from "../economy/slp-media-offer.js";
@@ -116,6 +117,8 @@ export type SlurpGeneratedDmReply = SlurpDmReply & {
   us?: SlurpDmUs;
   /** The player's page the "us" step is about. */
   usPageId?: string;
+  /** What went into this reply, for its owner-only Deep details record. Never sent with the message. */
+  deepDetails?: SlpMessageDeepDetailsRecord;
 };
 
 export type SlurpDmUs = { step: "closer" | "hurt" | "madeUp"; why: string };

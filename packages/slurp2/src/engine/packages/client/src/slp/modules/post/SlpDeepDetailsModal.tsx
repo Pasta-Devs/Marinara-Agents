@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { Modal } from "../../../components/ui/Modal";
 import { api } from "../../../lib/api-client";
@@ -54,23 +54,7 @@ export function SlpDeepDetailsModal({ postId, open, onClose }: { postId: string;
   const cost = slpDeepDetailsCost(details);
 
   return (
-    <Modal
-      open={open}
-      onClose={onClose}
-      title={t("ui.slurp.deepDetails.title", { defaultValue: "Deep details" })}
-      width="max-w-4xl"
-      mobileFullscreen
-      panelClassName="noodle-icon-scope"
-      // Opaque: the feed must not ghost through a full-screen panel (04 §9 f).
-      panelStyle={getSlpAccentStyle(SLP_PINK, {
-        background: "var(--slurp-surface)",
-        color: "var(--slurp-text)",
-        "--background": "var(--slurp-surface)",
-        "--foreground": "var(--slurp-text)",
-        "--muted-foreground": "var(--slurp-muted)",
-        "--accent": "color-mix(in srgb, var(--noodle-accent) 12%, transparent)",
-      })}
-    >
+    <SlpDeepDetailsFrame open={open} onClose={onClose}>
       {query.isPending ? (
         <SlpSkeleton
           shape="rows"
@@ -394,12 +378,46 @@ export function SlpDeepDetailsModal({ postId, open, onClose }: { postId: string;
           )}
         </div>
       )}
+    </SlpDeepDetailsFrame>
+  );
+}
+
+/** The Deep details window itself, shared by a post's details and a message's. */
+export function SlpDeepDetailsFrame({
+  open,
+  onClose,
+  children,
+}: {
+  open: boolean;
+  onClose: () => void;
+  children: ReactNode;
+}) {
+  const { t } = useTranslation();
+  return (
+    <Modal
+      open={open}
+      onClose={onClose}
+      title={t("ui.slurp.deepDetails.title", { defaultValue: "Deep details" })}
+      width="max-w-4xl"
+      mobileFullscreen
+      panelClassName="noodle-icon-scope"
+      // Opaque: the feed must not ghost through a full-screen panel (04 §9 f).
+      panelStyle={getSlpAccentStyle(SLP_PINK, {
+        background: "var(--slurp-surface)",
+        color: "var(--slurp-text)",
+        "--background": "var(--slurp-surface)",
+        "--foreground": "var(--slurp-text)",
+        "--muted-foreground": "var(--slurp-muted)",
+        "--accent": "color-mix(in srgb, var(--noodle-accent) 12%, transparent)",
+      })}
+    >
+      {children}
     </Modal>
   );
 }
 
 /** One chat message, split at its markdown headings so each part of the prompt reads on its own. */
-function PromptMessage({ role, content }: { role: string; content: string }) {
+export function PromptMessage({ role, content }: { role: string; content: string }) {
   const parts = content.split(/\n(?=#{1,2} )/u);
   return (
     <div className="overflow-hidden rounded-lg bg-[var(--slurp-canvas)]">
