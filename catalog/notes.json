@@ -622,6 +622,12 @@
     "slurp2": {
       "versions": [
         {
+          "version": "0.3.29",
+          "date": "2026-10-12",
+          "notes": "- Added: what is true about a Creator right now. A condition (one per part of life: body, love, family, home, work, public life) has a line for the writer, a look for pictures, outfit tags to prefer or leave out, and small moments. Posts, Story posts, chat replies and pictures all keep it true; only a share of posts is about it.\n- Added: \"Life right now\" in a Creator's ✦ sheet, to see, set and remove these conditions.\n- Added: storyline chapters can now set conditions and tags when they start.\n- Changed: a condition never shows in \"What has happened in this story world\"; it has its own place in each prompt.",
+          "highlight": false
+        },
+        {
           "version": "0.3.28",
           "date": "2026-10-12",
           "notes": "- Added: Deep details for chat messages. Hold a Creator's reply (or right-click it) and choose \"Deep details\" in the Message menu to see what went into it: the chat facts the reply was built from (relationship, stance, heat, memories), the model, the full prompt and the raw answer. It opens in the same window as a post's Deep details.\n- Slurp keeps these details for the newest 50 replies of each chat. Older replies, and replies written before this update, do not offer the item. Clearing a chat removes its details.",
@@ -733,12 +739,6 @@
           "version": "0.3.7",
           "date": "2026-09-30",
           "notes": "Two-layer economy, faster rewrites, partners in pictures.\n\n- Economy: earnings are platform dollars. A paying fan stands for \"People per paying fan\" (5) in subscribers and earnings, less a 20% fee; Collect pays 1 coin per 5 dollars, 15–60 coins a day per persona. Old balances convert once.\n- Fixes: no Slurp coins for your own Creators from the desk; milestones use shown followers.\n- Rewrites: 10 per tick, a waiting count and \"Rewrite all now\".\n- Couple and collab pictures may show the partner when the post calls for it.\n- Messaging: quote delay and your own first lines. \"Blur pictures until tapped\".",
-          "highlight": false
-        },
-        {
-          "version": "0.3.6",
-          "date": "2026-09-30",
-          "notes": "Faster (measured on a slowed phone), and your own taps never spend the AI budget.\n\n- Speed: a fast scroll no longer restyles the whole feed or shows black gaps; Hub and profiles draw a few cards at a time; fewer polls, cached server work; Settings loads only what is open; other languages load on demand; new pictures are stored as WebP.\n- AI budget: only the world's own writing counts; anything you ask for never uses it and \"Off\" never blocks it. New AI limits page and a Creator Pages connection.\n- Slurp Support: attach or order an image, link a post or Story, ask for photo verification; a staff-console menu, no Commissions, one grey console, pictures that load.\n- Fixes: Stir's Support tools no longer grey out \"Do it\"; Creator Pages keep their blocks.",
           "highlight": false
         }
       ]
