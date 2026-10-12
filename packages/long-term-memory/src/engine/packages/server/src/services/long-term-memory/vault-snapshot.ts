@@ -1,10 +1,14 @@
 import { resolve } from "node:path";
 import type { LtmNote } from "../../../../shared/src/features/agents/long-term-memory/schema.js";
 
-/** One shared vault scan: parsed notes plus the per-folder failures the scan tolerated. */
+/**
+ * One shared vault scan: parsed notes plus the failures the scan tolerated. `invalidNote` marks a
+ * file that was read but is not a valid note; other failures (folder listing, file I/O) are not
+ * content problems and must still surface.
+ */
 export interface LtmVaultScan {
   notes: LtmNote[];
-  errors: { folder: string; error: unknown }[];
+  errors: { folder: string; error: unknown; invalidNote?: boolean }[];
 }
 
 const snapshots = new Map<string, Promise<LtmVaultScan>>();

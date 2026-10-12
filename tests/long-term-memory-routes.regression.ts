@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readdir, readFile, rm, utimes, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { dirname } from "node:path";
@@ -3826,6 +3826,19 @@ async function main(routeScenario: RouteScenario) {
         .json()
         .candidates.find((candidate: any) => candidate.duplicateNoteIds.includes("char_nyra_persona_b"));
       assert.ok(personaIdentityCandidate);
+      // Issue #1328: a repair backup only serves its own rollback, so a successful identity repair
+      // keeps the newest three and always keeps its own.
+      const identityBackupsRoot = join(
+        dirname(storageService.storage.root),
+        "backups",
+        "long-term-memory-identity-repairs",
+      );
+      const staleBackupNames = ["stale-1", "stale-2", "stale-3", "stale-4"];
+      for (const [position, name] of staleBackupNames.entries()) {
+        await mkdir(join(identityBackupsRoot, name), { recursive: true });
+        const stamp = new Date(Date.UTC(2001, 0, position + 1));
+        await utimes(join(identityBackupsRoot, name), stamp, stamp);
+      }
       const personaIdentityApply = await app.inject({
         method: "POST",
         url: "/api/long-term-memory/identity-repair/apply",
@@ -3843,6 +3856,14 @@ async function main(routeScenario: RouteScenario) {
         },
       });
       assert.equal(personaIdentityApply.statusCode, 200, personaIdentityApply.body);
+      const keptIdentityBackups = await readdir(identityBackupsRoot);
+      assert.equal(keptIdentityBackups.length, 3, "an identity repair must keep only the newest three backups");
+      assert.equal(
+        keptIdentityBackups.includes(personaIdentityApply.json().backup.id),
+        true,
+        "an identity repair must keep its own backup",
+      );
+      assert.equal(keptIdentityBackups.includes(staleBackupNames[0]!), false, "the oldest backup must be pruned");
       assert.deepEqual((await storageService.storage.getNote(personaIdentityCandidate.canonicalNoteId)).scope, {
         personaId: "persona-fixture",
         personaIds: ["persona-fixture"],

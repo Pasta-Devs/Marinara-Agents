@@ -93,6 +93,7 @@ async function main() {
   const { rebuildLongTermMemoryIndexes, loadOrRebuildLongTermMemoryIndexes } = await import(`${source}/rebuild.ts`);
   const { repairLongTermMemory } = await import(`${source}/maintenance.ts`);
   const { runLongTermMemoryRetention } = await import(`${source}/retention.ts`);
+  const { previewLtmNoteForkRepair, applyLtmNoteForkRepair } = await import(`${source}/note-fork-repair.ts`);
   const { readLongTermMemoryUsage } = await import(`${source}/usage.ts`);
   const { rebuildLtmActivityIndex, readLtmActivityEvents } = await import(`${source}/activity-index.ts`);
   const { renderSectionContributions } = await import(`${source}/section-contributions.ts`);
@@ -3362,6 +3363,89 @@ async function main() {
       );
       await assert.rejects(stat(join(lenientDirs.indexes, "usage.json")), { code: "ENOENT" });
       assert.equal((await readdir(join(lenientRoot, "quarantine", "indexes"))).length, 1);
+      // Valid JSON of the wrong shape takes the same path as unparseable content.
+      await writeFile(join(lenientDirs.indexes, "usage.json"), JSON.stringify({ version: 2, chats: "not-a-record" }));
+      assert.deepEqual(
+        await readLongTermMemoryUsage(lenientRoot),
+        { version: 2, chats: {} },
+        "a schema-invalid usage file must restart from empty statistics",
+      );
+      await assert.rejects(stat(join(lenientDirs.indexes, "usage.json")), { code: "ENOENT" });
+      assert.equal((await readdir(join(lenientRoot, "quarantine", "indexes"))).length, 2);
+
+      // Issue #1328: recall skips a note it read but cannot validate; an unreadable vault folder is
+      // not a content problem and still fails the read, so recall never silently loses a note type.
+      const skipRoot = join(dataDir, "skip-invalid");
+      const skipStorage = new LongTermMemoryStorage(skipRoot);
+      await skipStorage.initializeLtmStore();
+      await skipStorage.createNote({ ...noteInput, id: "world_skip_valid", title: "Valid" });
+      const skipWorldFolder = join(getLongTermMemoryDirectories(skipRoot).vault, "world");
+      await writeFile(join(skipWorldFolder, "world_skip_broken.json"), "{");
+      invalidateLtmVaultSnapshot(skipRoot);
+      assert.deepEqual(
+        (await skipStorage.listNotes({ skipInvalid: true })).map((item: { id: string }) => item.id),
+        ["world_skip_valid"],
+        "skipInvalid must serve the valid notes around an unparseable file",
+      );
+      await assert.rejects(skipStorage.listNotes(), undefined, "a full read must still surface the invalid file");
+      await rm(skipWorldFolder, { recursive: true, force: true });
+      await writeFile(skipWorldFolder, "not a folder");
+      invalidateLtmVaultSnapshot(skipRoot);
+      await assert.rejects(
+        skipStorage.listNotes({ skipInvalid: true }),
+        { code: "ENOTDIR" },
+        "skipInvalid must not hide a vault folder that cannot be listed",
+      );
+
+      // Issue #1328: a repair backup only serves its own rollback, so a fourth fork repair keeps the
+      // newest three, and Delete all data removes every repair backup the package wrote.
+      const pruneDataDir = join(dataDir, "repair-backups");
+      const pruneRoot = join(pruneDataDir, "long-term-memory");
+      const pruneStorage = new LongTermMemoryStorage(pruneRoot);
+      await pruneStorage.initializeLtmStore();
+      const forkBackupIds: string[] = [];
+      for (const pair of ["a", "b", "c", "d"]) {
+        const ids = [`world_prune_${pair}_one`, `world_prune_${pair}_two`];
+        for (const [position, id] of ids.entries()) {
+          const createdAt = `2026-01-0${position + 1}T00:00:00.000Z`;
+          await pruneStorage.createNote({
+            id,
+            title: id,
+            type: "world",
+            status: "active",
+            modes: ["roleplay"],
+            scope: { chatId: "chat-a" },
+            tags: [],
+            keywords: ["shared"],
+            links: [],
+            sections: { facts: { text: "Shared durable fact", updatedAt: createdAt } },
+            createdAt,
+            updatedAt: createdAt,
+            version: 1,
+          });
+        }
+        const candidate = (await previewLtmNoteForkRepair({ noteIds: ids }, { root: pruneRoot })).candidates[0];
+        const applied = await applyLtmNoteForkRepair(
+          {
+            noteIds: candidate.noteIds,
+            canonicalNoteId: candidate.canonicalNoteId,
+            contentHash: candidate.contentHash,
+          },
+          { root: pruneRoot },
+        );
+        forkBackupIds.push(applied.backupId);
+      }
+      const forkBackupsRoot = join(pruneDataDir, "backups", "long-term-memory-forks");
+      assert.deepEqual(
+        (await readdir(forkBackupsRoot)).sort(),
+        forkBackupIds.slice(1).sort(),
+        "a fourth repair must keep exactly the newest three backups, including its own",
+      );
+      const identityBackupsRoot = join(pruneDataDir, "backups", "long-term-memory-identity-repairs");
+      await mkdir(join(identityBackupsRoot, randomUUID()), { recursive: true });
+      await deleteAllLongTermMemoryData(pruneRoot);
+      for (const directory of [forkBackupsRoot, identityBackupsRoot])
+        await assert.rejects(stat(directory), { code: "ENOENT" }, "Delete all data must remove repair backups");
 
       process.stdout.write(
         "Long-Term Memory storage regression: restart, recovery, self-check, cleanup, stable root ok\n",
