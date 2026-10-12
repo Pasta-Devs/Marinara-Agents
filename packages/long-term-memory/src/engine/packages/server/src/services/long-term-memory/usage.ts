@@ -1,6 +1,4 @@
 import { createHash } from "node:crypto";
-import { readdir, readFile } from "node:fs/promises";
-import { basename } from "node:path";
 import {
   ltmRecallAttemptSchema,
   ltmUsageSchema,
@@ -9,9 +7,9 @@ import {
 } from "../../../../shared/src/features/agents/long-term-memory/schema.js";
 import { readJsonFile, writeJsonAtomic } from "./atomic-json.js";
 import type { LtmBudgetedChunk } from "./budget.js";
-import { isEnoent } from "./ltm-utils.js";
+import { quarantineLtmIndexArtifact } from "./index-quarantine.js";
 import { getLongTermMemoryDirectories, getLongTermMemoryRoot, safeJoin } from "./paths.js";
-import { withKeyedLock } from "./package-runtime.js";
+import { logger, withKeyedLock } from "./package-runtime.js";
 import { withLtmVaultLock } from "./vault-lock.js";
 type Usage = LtmUsage;
 const empty = (): Usage => ({ version: 2, chats: {} });
@@ -39,25 +37,18 @@ export function parseLongTermMemoryInjectionReceipt(value: unknown) {
   return v;
 }
 export async function readLongTermMemoryUsage(root = getLongTermMemoryRoot()) {
-  return parseUsage(await readJsonFile(longTermMemoryUsagePath(root), empty()));
-}
-export async function validateLongTermMemoryUsage(root = getLongTermMemoryRoot()) {
-  return readLongTermMemoryUsage(root);
-}
-export async function validateLongTermMemoryInjectionReceipts(root = getLongTermMemoryRoot()) {
-  const dir = getLongTermMemoryDirectories(root).receipts;
-  const entries = await readdir(dir, { withFileTypes: true }).catch((e) => {
-    if (isEnoent(e)) return [];
-    throw e;
-  });
-  for (const entry of entries)
-    if (entry.isFile() && entry.name.endsWith(".json")) {
-      const receipt = parseLongTermMemoryInjectionReceipt(
-        JSON.parse(await readFile(safeJoin(dir, entry.name), "utf8")),
-      );
-      if (basename(longTermMemoryInjectionReceiptPath(receipt.chatId, root)) !== entry.name)
-        throw new Error(`Long-term memory receipt filename does not match chat ${receipt.chatId}.`);
-    }
+  const path = longTermMemoryUsagePath(root);
+  try {
+    return parseUsage(await readJsonFile(path, empty()));
+  } catch (error) {
+    // The file only holds per-chat injection stats and the receipt de-duplication list, so
+    // malformed content is set aside and restarted rather than failing recall and activation.
+    // An I/O failure is rethrown: the file may be intact.
+    if (!(error instanceof SyntaxError || (error as { name?: string } | null)?.name === "ZodError")) throw error;
+    logger.warn(error, "[ltm] Quarantined malformed usage.json; usage statistics restart from empty");
+    await quarantineLtmIndexArtifact(root, path).catch(() => {});
+    return empty();
+  }
 }
 export async function readLongTermMemoryInjectionReceipt(chatId: string, root = getLongTermMemoryRoot()) {
   return readJsonFile(longTermMemoryInjectionReceiptPath(chatId, root), null).then((value) =>

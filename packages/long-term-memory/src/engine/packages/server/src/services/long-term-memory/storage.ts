@@ -73,6 +73,8 @@ export type ListLtmNotesOptions = {
   includeGlobal?: boolean;
   offset?: number;
   limit?: number;
+  /** Skip notes that fail validation instead of throwing. Only the read-only recall index reads set it. */
+  skipInvalid?: boolean;
 };
 
 function rewriteDraftMutationNoteIds(mutation: unknown, fromId: string, toId: string) {
@@ -256,7 +258,9 @@ export class LongTermMemoryStorage {
       // note elsewhere must not fail it. Full reads still surface any failure.
       const wantedFolder = filter.type ? vaultFolderForNoteType(filter.type) : undefined;
       const failure = scan.errors.find((item) => !wantedFolder || item.folder === wantedFolder);
-      if (failure) throw failure.error;
+      if (failure && !filter.skipInvalid) throw failure.error;
+      // Vault health and maintenance report and quarantine the invalid files; recall serves the rest.
+      if (failure) logger.debug(failure.error, "[ltm] Recall skipped %d invalid vault file(s)", scan.errors.length);
       const offset = filter.offset ?? 0;
       let matched = 0;
       const notes: LtmNote[] = [];

@@ -2281,6 +2281,38 @@ async function main() {
           "recall must not serve a note quarantined by official maintenance",
         );
 
+        // #1328: a note written by a newer version (unknown field) is skipped by recall, which
+        // keeps serving the rest of the vault; full reads and writes still refuse to run over it.
+        await storage.createNote(note("world_1328_future", "chat-a", "A cobalt archive future-field entry."));
+        const futureNotePath = join(vaultRoot, "vault", "world", "world_1328_future.json");
+        const futureNote = JSON.parse(await readFile(futureNotePath, "utf8"));
+        await writeFile(futureNotePath, JSON.stringify({ ...futureNote, futureField: true }));
+        invalidateLtmVaultSnapshot(vaultRoot);
+        try {
+          const futureRecall = await retrieveLongTermMemory({
+            root: vaultRoot,
+            embeddingAdapter: null,
+            queryText: "cobalt archive lock-coordination entry",
+            scope: { chatId: "chat-a", chatIds: ["chat-a"] },
+            mode: "roleplay",
+            semanticWeight: 0,
+          });
+          assert.equal(
+            futureRecall.chunks.some((hit) => hit.chunk.noteId === "world_1178_lock"),
+            true,
+            "recall must keep serving valid notes while one note has an unknown field",
+          );
+          assert.equal(
+            futureRecall.chunks.some((hit) => hit.chunk.noteId === "world_1328_future"),
+            false,
+            "recall must not serve the note it could not validate",
+          );
+          await assert.rejects(storage.listNotes(), undefined, "full reads must still surface the invalid note");
+        } finally {
+          await rm(futureNotePath, { force: true });
+          invalidateLtmVaultSnapshot(vaultRoot);
+        }
+
         // Issue #1295: Korean short keywords and particles must survive lexical
         // recall without any embedding source.
         await storage.createNote(

@@ -93,6 +93,7 @@ async function main() {
   const { rebuildLongTermMemoryIndexes, loadOrRebuildLongTermMemoryIndexes } = await import(`${source}/rebuild.ts`);
   const { repairLongTermMemory } = await import(`${source}/maintenance.ts`);
   const { runLongTermMemoryRetention } = await import(`${source}/retention.ts`);
+  const { readLongTermMemoryUsage } = await import(`${source}/usage.ts`);
   const { rebuildLtmActivityIndex, readLtmActivityEvents } = await import(`${source}/activity-index.ts`);
   const { renderSectionContributions } = await import(`${source}/section-contributions.ts`);
   const { buildStopWordSet, extractNoteKeywords } = await import(`${source}/keyword-extract.ts`);
@@ -3343,6 +3344,24 @@ async function main() {
       );
       await writeFile(ltmRejectedSuggestionsPath(capRoot), JSON.stringify(capSuggestions(() => true)));
       await assert.rejects(addRejectedSuggestions(capDraft, capRoot), /rejected-suggestion limit reached/u);
+
+      // Issue #1328: a malformed usage file or injection receipt must not stop activation, and
+      // the malformed usage file is set aside so statistics restart instead of failing every read.
+      const lenientRoot = join(dataDir, "malformed-usage-activation");
+      await new LongTermMemoryStorage(lenientRoot).initializeLtmStore();
+      const lenientDirs = getLongTermMemoryDirectories(lenientRoot);
+      await mkdir(lenientDirs.receipts, { recursive: true });
+      await writeFile(join(lenientDirs.indexes, "usage.json"), "not json\n");
+      await writeFile(join(lenientDirs.receipts, "broken-receipt.json"), "{bad\n");
+      const lenientRuntime = await activateLongTermMemoryStorage(lenientRoot);
+      await lenientRuntime.cleanup();
+      assert.deepEqual(
+        await readLongTermMemoryUsage(lenientRoot),
+        { version: 2, chats: {} },
+        "a malformed usage file must restart from empty statistics",
+      );
+      await assert.rejects(stat(join(lenientDirs.indexes, "usage.json")), { code: "ENOENT" });
+      assert.equal((await readdir(join(lenientRoot, "quarantine", "indexes"))).length, 1);
 
       process.stdout.write(
         "Long-Term Memory storage regression: restart, recovery, self-check, cleanup, stable root ok\n",

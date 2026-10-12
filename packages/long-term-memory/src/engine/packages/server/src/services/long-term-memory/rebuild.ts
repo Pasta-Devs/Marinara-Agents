@@ -129,7 +129,7 @@ export async function rebuildLongTermMemoryIndexes(
     await markLtmIndexesBuilding(root);
     try {
       clearAutoUpgradeFailure(root, embeddingAdapter ?? null);
-      const notes = await new LongTermMemoryStorage(root).listNotes();
+      const notes = await new LongTermMemoryStorage(root).listNotes({ skipInvalid: true });
       await writeLtmNoteSummary(root, notes);
       const chunks = chunkNotes(notes, { includeSourceNotes: false, stopWords });
       const vectors = await embedLongTermMemoryTexts(
@@ -209,7 +209,7 @@ export async function loadOrRebuildLongTermMemoryIndexes(
     let stale = false;
     try {
       const index = parseLtmRecallIndex(JSON.parse(await readFile(path, "utf8")));
-      const notes = await new LongTermMemoryStorage(root).listNotes();
+      const notes = await new LongTermMemoryStorage(root).listNotes({ skipInvalid: true });
       if (
         index.sourceHash !==
         stableJsonHash(chunkNotes(notes, { includeSourceNotes: false, stopWords: resolvedStopWords }))
