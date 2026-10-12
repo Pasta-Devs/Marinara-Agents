@@ -36,6 +36,12 @@
     "conversation-calls": {
       "versions": [
         {
+          "version": "1.1.2",
+          "date": "2026-10-12",
+          "notes": "- Characters can call you on their own again. With the call command on, a character who decides to call you now rings with an incoming call. Before this, nothing happened.",
+          "highlight": true
+        },
+        {
           "version": "1.1.1",
           "date": "2026-10-09",
           "notes": "- Mic recording calls no longer lose some of your speech with \"Selected provider/model cannot receive provider-native audio input.\"\n- A call left in a background tab or behind other windows no longer cuts a sentence into pieces at short pauses. It now waits until it has heard about 3 seconds of quiet, so replies there can take a little longer.",
@@ -616,6 +622,12 @@
     "slurp2": {
       "versions": [
         {
+          "version": "0.3.29",
+          "date": "2026-10-12",
+          "notes": "- Changed: when the image prompt rewrite gives nothing, the \"Image prompt rewrite unusable\" server warning now says why: an empty answer, an answer cut off at the token limit, an answer that is not valid JSON or has no \"prompt\" field (with a short quote of it and the model name), no text connection, a failed request, or a rewrite that broke the scene's content level. Before, every case said \"the rewrite did not run or returned nothing\".",
+          "highlight": false
+        },
+        {
           "version": "0.3.28",
           "date": "2026-10-12",
           "notes": "- Added: Deep details for chat messages. Hold a Creator's reply (or right-click it) and choose \"Deep details\" in the Message menu to see what went into it: the chat facts the reply was built from (relationship, stance, heat, memories), the model, the full prompt and the raw answer. It opens in the same window as a post's Deep details.\n- Slurp keeps these details for the newest 50 replies of each chat. Older replies, and replies written before this update, do not offer the item. Clearing a chat removes its details.",
@@ -727,12 +739,6 @@
           "version": "0.3.7",
           "date": "2026-09-30",
           "notes": "Two-layer economy, faster rewrites, partners in pictures.\n\n- Economy: earnings are platform dollars. A paying fan stands for \"People per paying fan\" (5) in subscribers and earnings, less a 20% fee; Collect pays 1 coin per 5 dollars, 15–60 coins a day per persona. Old balances convert once.\n- Fixes: no Slurp coins for your own Creators from the desk; milestones use shown followers.\n- Rewrites: 10 per tick, a waiting count and \"Rewrite all now\".\n- Couple and collab pictures may show the partner when the post calls for it.\n- Messaging: quote delay and your own first lines. \"Blur pictures until tapped\".",
-          "highlight": false
-        },
-        {
-          "version": "0.3.6",
-          "date": "2026-09-30",
-          "notes": "Faster (measured on a slowed phone), and your own taps never spend the AI budget.\n\n- Speed: a fast scroll no longer restyles the whole feed or shows black gaps; Hub and profiles draw a few cards at a time; fewer polls, cached server work; Settings loads only what is open; other languages load on demand; new pictures are stored as WebP.\n- AI budget: only the world's own writing counts; anything you ask for never uses it and \"Off\" never blocks it. New AI limits page and a Creator Pages connection.\n- Slurp Support: attach or order an image, link a post or Story, ask for photo verification; a staff-console menu, no Commissions, one grey console, pictures that load.\n- Fixes: Stir's Support tools no longer grey out \"Do it\"; Creator Pages keep their blocks.",
           "highlight": false
         }
       ]

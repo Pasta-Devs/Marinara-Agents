@@ -49,6 +49,9 @@ jobs:
       - name: Test Calls mic clips and media uploads
         run: npx tsx tests/calls-mic-segments.regression.ts
 
+      - name: Test Calls character-started calls
+        run: npx tsx tests/calls-character-call.regression.ts
+
       - name: Test Calls release and SwarmUI video generation
         run: |
           node tests/conversation-calls-summary.regression.mjs

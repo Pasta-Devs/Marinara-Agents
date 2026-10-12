@@ -1,5 +1,9 @@
 # Slurp release notes
 
+## 0.3.29 — 2026-10-12
+
+- Changed: when the image prompt rewrite gives nothing, the "Image prompt rewrite unusable" server warning now says why: an empty answer, an answer cut off at the token limit, an answer that is not valid JSON or has no "prompt" field (with a short quote of it and the model name), no text connection, a failed request, or a rewrite that broke the scene's content level. Before, every case said "the rewrite did not run or returned nothing".
+
 ## 0.3.28 — 2026-10-12
 
 - Added: Deep details for chat messages. Hold a Creator's reply (or right-click it) and choose "Deep details" in the Message menu to see what went into it: the chat facts the reply was built from (relationship, stance, heat, memories), the model, the full prompt and the raw answer. It opens in the same window as a post's Deep details.

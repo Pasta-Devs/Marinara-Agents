@@ -188,6 +188,7 @@ export async function generateGarnishAdImage(
     .filter(Boolean)
     .join("\n");
   let rewriteAttempted = Boolean(imagePromptInstructions) && settings.enableImageInterpretation !== false;
+  let rewriteFailure: string | null = null;
   const prompt = selectSlpImageProviderPrompt({
     rewrittenPrompt: rewriteAttempted
       ? await rewriteSlpImagePrompt({
@@ -201,10 +202,14 @@ export async function generateGarnishAdImage(
           onBudgetSkip: () => {
             rewriteAttempted = false;
           },
+          onFailure: (reason) => {
+            rewriteFailure = reason;
+          },
         })
       : null,
     rawPrompt,
     rewriteAttempted,
+    rewriteFailure,
     onFallback: (reason) =>
       logger.warn(
         "[garnish-ads] Image prompt rewrite unusable for %s (%s); sending the capped draft",

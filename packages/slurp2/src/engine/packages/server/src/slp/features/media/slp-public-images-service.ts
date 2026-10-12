@@ -323,6 +323,7 @@ export async function generateSlpPostImage(input: {
     input.settings.enableImageInterpretation !== false &&
     !input.promptOverride,
   );
+  let rewriteFailure: string | null = null;
   const rewrittenPrompt = rewriteAttempted
     ? await rewriteSlpImagePrompt({
         db: input.db,
@@ -337,6 +338,9 @@ export async function generateSlpPostImage(input: {
         budget: input.settings.modelBudget,
         onBudgetSkip: () => {
           rewriteAttempted = false;
+        },
+        onFailure: (reason) => {
+          rewriteFailure = reason;
         },
       })
     : null;
@@ -354,10 +358,10 @@ export async function generateSlpPostImage(input: {
         imageDefaults,
       })
     : null;
-  const acceptedRewrittenPrompt =
-    input.visualBrief && rewrittenPrompt && slurpVisualBriefPromptViolatesPolicy(input.visualBrief, rewrittenPrompt)
-      ? null
-      : compiledRewrittenPrompt?.prompt || rewrittenPrompt;
+  const rewriteViolatesPolicy = Boolean(
+    input.visualBrief && rewrittenPrompt && slurpVisualBriefPromptViolatesPolicy(input.visualBrief, rewrittenPrompt),
+  );
+  const acceptedRewrittenPrompt = rewriteViolatesPolicy ? null : compiledRewrittenPrompt?.prompt || rewrittenPrompt;
   let usedRewrite = Boolean(acceptedRewrittenPrompt);
   const finalPromptBase = selectSlpImageProviderPrompt({
     rewrittenPrompt: acceptedRewrittenPrompt,
@@ -369,6 +373,7 @@ export async function generateSlpPostImage(input: {
       .filter(Boolean)
       .join("\n"),
     rewriteAttempted,
+    rewriteFailure: rewriteViolatesPolicy ? "the rewrite broke the scene's content level" : rewriteFailure,
     onFallback: (reason) => {
       usedRewrite = false;
       logger.warn("[slurp] Image prompt rewrite unusable (%s); sending the capped draft", reason);

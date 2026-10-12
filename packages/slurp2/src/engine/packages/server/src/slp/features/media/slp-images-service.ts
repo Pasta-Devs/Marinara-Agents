@@ -512,6 +512,7 @@ async function generateCreatorPostImageRun(
   // Slurp's own viewpoint phrase for this picture (PERSPECTIVE-RESEARCH.md): the rewrite keeps it, the
   // device filter never cuts it, and the image model gets it in its own words below.
   const viewpoint = slurpViewpointIn(input.visualBrief?.camera ?? "") ?? slurpViewpointIn(input.draftPrompt);
+  let rewriteFailure: string | null = null;
   const rewrittenPrompt = rewriteAttempted
     ? await rewriteSlpImagePrompt({
         db: input.db,
@@ -527,6 +528,9 @@ async function generateCreatorPostImageRun(
         budget: input.playerAsked ? undefined : input.settings.modelBudget,
         onBudgetSkip: () => {
           rewriteAttempted = false;
+        },
+        onFailure: (reason) => {
+          rewriteFailure = reason;
         },
         onRequest: ({ messages, ...model }) => {
           run.rewrite.model = model;
@@ -570,6 +574,7 @@ async function generateCreatorPostImageRun(
       // length cap, so the image model received an appearance paragraph and no picture.
       rawPrompt: rawProviderPrompt,
       rewriteAttempted,
+      rewriteFailure: rewriteViolatesPolicy ? "the rewrite broke the scene's content level" : rewriteFailure,
       onFallback: (reason) => {
         usedRewrite = false;
         if (run.rewrite.status === "accepted") run.rewrite = { ...run.rewrite, status: "rejected", reason };

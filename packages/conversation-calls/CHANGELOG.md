@@ -1,5 +1,9 @@
 # Calls release notes
 
+## 1.1.2 — 2026-10-12 [highlight]
+
+- Characters can call you on their own again. With the call command on, a character who decides to call you now rings with an incoming call. Before this, nothing happened.
+
 ## 1.1.1 — 2026-10-09 [highlight]
 
 - Mic recording calls no longer lose some of your speech with "Selected provider/model cannot receive provider-native audio input."

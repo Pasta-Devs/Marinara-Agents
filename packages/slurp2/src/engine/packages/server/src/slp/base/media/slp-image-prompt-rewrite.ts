@@ -17,21 +17,50 @@ import { claimSlurpModelBudget, type SlurpModelBudget } from "../model/slp-model
 const MAX_REWRITTEN_PROMPT_LENGTH = 12_000;
 const MAX_INSTRUCTIONS_LENGTH = 5_000;
 
-function parseRecord(value: unknown): Record<string, unknown> {
-  if (value && typeof value === "object" && !Array.isArray(value)) {
-    return value as Record<string, unknown>;
+/** The model's answer as a prompt, or why it is not one (for the fallback warning). */
+function readRewrittenPrompt(value: unknown): { prompt: string } | { failure: string } {
+  if (typeof value !== "string" || !value.trim()) {
+    return {
+      failure:
+        "the model answered with an empty response (a reasoning model may have spent its tokens thinking; raise the connection's max output tokens)",
+    };
   }
-  if (typeof value !== "string") return {};
+  // The default interpretation instruction says "return only the prompt", so a model that obeys it
+  // answers in plain text. That is a usable prompt, not a failure.
+  if (!value.includes("{")) return { prompt: value.trim().slice(0, MAX_REWRITTEN_PROMPT_LENGTH) };
   // Engine's tolerant parser, as every other Slurp model call: a strict JSON.parse dropped answers
   // with a line break inside the prompt, a trailing comma, or prose around the fenced object. A cut
   // answer stays a failure, because the repair would send half a picture.
-  if (jsonishLooksTruncated(value)) return {};
-  try {
-    const parsed = parseGameJsonish(requireModelAnswer(value, "an image prompt rewrite"));
-    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? (parsed as Record<string, unknown>) : {};
-  } catch {
-    return {};
+  if (jsonishLooksTruncated(value)) {
+    return {
+      failure: `the answer looks cut off after ${value.length} characters (raise the connection's max output tokens): ${preview(value, -120)}`,
+    };
   }
+  let parsed: unknown;
+  try {
+    parsed = parseGameJsonish(requireModelAnswer(value, "an image prompt rewrite"));
+  } catch (error) {
+    return {
+      failure: `the answer is not valid JSON (${error instanceof Error ? error.message : String(error)}): ${preview(value, 160)}`,
+    };
+  }
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+    return { failure: `the answer is JSON but not an object: ${preview(value, 160)}` };
+  }
+  const prompt = (parsed as Record<string, unknown>).prompt;
+  if (typeof prompt !== "string" || !prompt.trim()) {
+    return {
+      failure: `the JSON answer has no "prompt" text (keys: ${Object.keys(parsed).join(", ") || "none"}): ${preview(value, 160)}`,
+    };
+  }
+  return { prompt: prompt.trim().slice(0, MAX_REWRITTEN_PROMPT_LENGTH) };
+}
+
+/** A short one-line quote of the answer: the start, or with a negative length the end. */
+function preview(content: string, length: number): string {
+  const flat = content.replace(/\s+/gu, " ").trim();
+  if (flat.length <= Math.abs(length)) return JSON.stringify(flat);
+  return JSON.stringify(length < 0 ? `…${flat.slice(length)}` : `${flat.slice(0, length)}…`);
 }
 
 /** Rewrite a Noodle image prompt with connection instructions and art-style guidance. */
@@ -68,6 +97,8 @@ export async function rewriteSlpImagePrompt(input: {
    * sends the draft as with enhancing off, uncapped and without a warning.
    */
   onBudgetSkip?: () => void;
+  /** Why an attempted rewrite returned nothing, so the fallback warning can say what failed. */
+  onFailure?: (reason: string) => void;
   /** Receives the connection, model, and chat actually sent, for the Creator-private Deep details. */
   onRequest?: (request: {
     connectionId: string;
@@ -94,7 +125,12 @@ export async function rewriteSlpImagePrompt(input: {
       input.interpretationInstruction?.trim() ||
       (await loadPrompt(createPromptOverridesStorage(input.db), NOODLE_IMAGE_INTERPRET, {}));
     const textConnection = await resolveSlurpTextConnection(connections, input.connectionId);
-    if (!textConnection) return null;
+    if (!textConnection) {
+      input.onFailure?.(
+        "no text connection: the Slurp generation connection, the agent default and the default connection are all unset or not text models",
+      );
+      return null;
+    }
     if (input.budget && !(await claimSlurpModelBudget(input.db, input.budget, "image_prompt"))) {
       logger.info("[slurp] Image prompt enhancing is off or over its daily limit; sending the unenhanced draft");
       input.onBudgetSkip?.();
@@ -184,18 +220,15 @@ export async function rewriteSlpImagePrompt(input: {
       enableCaching: runtime.enableCaching,
       anthropicExtendedCacheTtl: runtime.anthropicExtendedCacheTtl,
     });
-    const parsed = parseRecord(result.content);
-    // The default interpretation instruction says "return only the prompt", so a model that obeys it
-    // answers in plain text. That is a usable prompt, not a failure.
-    const plain = typeof result.content === "string" && !result.content.includes("{") ? result.content.trim() : "";
-    const rewritten = (typeof parsed.prompt === "string" ? parsed.prompt.trim() : plain).slice(
-      0,
-      MAX_REWRITTEN_PROMPT_LENGTH,
-    );
-    if (!rewritten) logger.warn("[slurp] Image prompt rewrite returned no prompt (empty or truncated answer)");
-    return rewritten || null;
+    const answer = readRewrittenPrompt(result.content);
+    if ("failure" in answer) {
+      input.onFailure?.(`${answer.failure} [model ${String(runtime.model ?? "unknown")}]`);
+      return null;
+    }
+    return answer.prompt;
   } catch (error) {
     logger.warn(error, "[slurp] Image prompt instruction rewrite failed; using the original prompt");
+    input.onFailure?.(`the request failed: ${error instanceof Error ? error.message : String(error)}`);
     return null;
   }
 }

@@ -456,6 +456,8 @@ export function selectSlpImageProviderPrompt(input: {
   guidanceContext?: ReadonlyArray<string | null | undefined>;
   /** The rewrite was expected to run, so an empty result is a fallback rather than a deliberate skip. */
   rewriteAttempted?: boolean;
+  /** Why the attempted rewrite gave no prompt (from `rewriteSlpImagePrompt`'s `onFailure`). */
+  rewriteFailure?: string | null;
   /** Called with the reason whenever an attempted or rejected rewrite falls back to the draft. */
   onFallback?: (reason: string) => void;
 }): string {
@@ -466,7 +468,9 @@ export function selectSlpImageProviderPrompt(input: {
   const rewrittenPrompt = input.rewrittenPrompt?.trim();
   if (!rewrittenPrompt) {
     return input.rewriteAttempted
-      ? fallback("the rewrite did not run or returned nothing (check the agent text connection)")
+      ? fallback(
+          input.rewriteFailure || "the rewrite did not run or returned nothing (check the agent text connection)",
+        )
       : input.rawPrompt;
   }
 
