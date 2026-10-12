@@ -1,7 +1,8 @@
 # Slurp Storylines (design)
 
-Status: **concept** (2026-10-12). Nothing here is built. It extends `DRAMA.md` and
-`WORLD-SIMULATION.md`; it adds no third planner.
+Status: **concept, second pass** (2026-10-12). Nothing here is built. The first pass patched arcs
+and dramas side by side; this pass proposes an overhaul. It builds on `WORLD-SIMULATION.md`
+(signals, beats, brief) and `DRAMA.md` (pack-owned content, cast, stages).
 
 Paths are relative to `packages/slurp2/src/engine/packages/` unless stated.
 
@@ -9,188 +10,264 @@ Paths are relative to `packages/slurp2/src/engine/packages/` unless stated.
 
 Users want storylines with real choices, different endings, and consequences that reach other
 storylines, plus a way to see and edit them as a flowchart. The first story that needs all of it is
-a **pregnancy**: long, with a partner, with choices (tell them? announce it?), a body that changes in
-the pictures, and a result that stays after the story ends.
+a **pregnancy**.
 
-## What exists today
+## What the code has today
 
-Slurp has three story systems. Each has a part of what is asked for; none has all of it.
+### Twelve systems move a story over time
 
-|               | **Arcs** (life events)                                                                                                                           | **Dramas**                                                                                         | **Occasions** (events)                                                                       |
-| ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
-| Where         | `server/src/slp/modules/projects/slp-arc-library.ts`, `slp-arc-progress.ts`                                                                      | `shared/src/slp/slp-drama.ts`, `…/world/events/slp-drama-runtime.ts`                               | `shared/src/slp/slp-story-engine.ts`                                                         |
-| Cast          | one Creator (crossovers aside)                                                                                                                   | 1–5 roles, the player may be one                                                                   | participants                                                                                 |
-| Shape         | linear chapters; a fan poll may insert up to 4 **detour** chapters, then the line goes on (`slp-project.ts:83`)                                  | a stage **graph**: `next`, choices (`fans`/`player`/`role`) whose options lead to a stage or `end` | one event                                                                                    |
-| Length        | arc ≤ 365 days, chapter ≤ 90; pace ×1.5 / ×1 / ×0.5, real time                                                                                   | ≤ 90 days, stage ≤ 30, ≤ 10 stages                                                                 | days                                                                                         |
-| Endings       | one                                                                                                                                              | many paths, but one shared `exit` beat                                                             | —                                                                                            |
-| Writes        | stats, mood, profile proposals. Chapter `outcomes` / `opportunities` / `influences` exist in the type but are **always empty and never applied** | ties only (`tie`, `end-tie`, `temperature`)                                                        | facts + arc opportunities, applied (`server/src/slp/data/world/slp-story-engine-storage.ts`) |
-| Reads         | facts and opportunities, at arc generation (`features/projects/slp-arc-generation-service.ts:204`)                                               | `requires: { situation }` only                                                                     | —                                                                                            |
-| In-app editor | yes: chapters, pace, effects, profile, polls (`client/src/slp/features/projects/SlpArcLibraryDraftEditor.tsx`)                                   | none; pack JSON import; Stir shows running runs                                                    | pack JSON                                                                                    |
+All are pure, run on the world clock, and end in the same place: a beat that rides the Creator's
+ordinary post call (or a DM, comment, notification). Each one re-implements who fits, a stage
+machine, timing, caps, storage and Stir levers.
 
-So the trigger channel already exists — **facts** and **arc opportunities** in
-`slurp2.story.facts` / `slurp2.story.opportunities` — but only occasions write to it.
+| System               | Where (`server/src/slp/`)                                                         | Shape                                                     | Content lives in                  |
+| -------------------- | --------------------------------------------------------------------------------- | --------------------------------------------------------- | --------------------------------- |
+| Arcs ("storylines")  | `modules/projects/slp-arc-library.ts`, `slp-arc-progress.ts`                      | linear chapters, fan polls that insert a detour           | code seed + packs + model-written |
+| Dramas               | `modules/world/events/slp-drama-runtime.ts`                                       | stage graph, cast of 1–5, choices by fans / player / role | packs                             |
+| Situations           | same                                                                              | no stages; a deck of small beats                          | packs                             |
+| Occasions (events)   | `modules/world/events/slp-story-runtime.ts`, `modules/feed/slp-occasion-beats.ts` | dated moments, in order                                   | packs                             |
+| Couples              | `modules/projects/slp-creator-couples.ts`                                         | sparks → dating → together → rocky → split                | code                              |
+| Collabs, rivalries   | `modules/projects/slp-creator-ties.ts`                                            | request → answer → announce → drop; rivalry stages        | code                              |
+| Bonds                | `modules/projects/slp-creator-bonds.ts`                                           | levels and a temperature                                  | code                              |
+| Brand deals          | `features/projects/slp-brand-deal-lever.ts`                                       | offer → answer → sponsored post                           | code                              |
+| Set campaigns        | `modules/feed/slp-campaign.ts`                                                    | set → teaser → callback                                   | code                              |
+| Promises             | `features/messages/`                                                              | made in a DM → fulfil, tease or delay                     | —                                 |
+| Life moments, beats  | `modules/feed/slp-life-moments.ts`, `slp-post-beat.ts`                            | decks with fit rules, no sequence                         | code                              |
+| Feelings (modifiers) | `modules/creators/slp-creator-state.ts`                                           | a prompt line with an expiry                              | code                              |
 
-### Gaps against the request
+### State sits in five stores
 
-1. **Different endings.** Arcs have one end. Drama paths end in one shared exit.
-2. **Storylines that influence each other.** Arcs and dramas write nothing to the shared fact store,
-   and dramas read nothing from it.
-3. **Flowchart and editing.** Neither system can be seen as a graph. Dramas cannot be edited in the
-   app at all.
-4. **Pregnancy needs.** Length (arcs fit, dramas do not), a partner and player choices (dramas fit,
-   arcs do not), a lasting result (facts, which neither writes), and a body that changes in the
-   pictures (neither).
+| Store                                   | Holds                                               | Read by                       |
+| --------------------------------------- | --------------------------------------------------- | ----------------------------- |
+| Continuity ledger                       | sentences the writer may use; status, scope, source | post brief, DMs               |
+| `slurp2.story.facts` / `.opportunities` | tags with expiry; written by occasions only         | arc generation only           |
+| `slurp2.creator-ties`                   | couples, collabs, rivalries, bonds, deals           | drama casting, tie beats, map |
+| Creator state + modifiers               | energy, arousal, emotion, feelings with a clock     | DM stance                     |
+| Per-system run state                    | arc projects, drama runs, occurrences               | its own system                |
 
-## Rules
+One storyline influences another only where both happen to touch the same store. Arc chapters
+declare `outcomes`, but they are always empty and nothing applies them.
 
-1. **Two runtimes stay.** Arcs and dramas keep their own runtimes and storage. They share building
-   blocks (endings, outcomes, conditions, the flow view), not one merged model.
-2. **One trigger channel.** Every storyline influences others only through facts, opportunities and
-   ties. No storyline reads another storyline's private state.
-3. **Code decides, the model writes** (as in `DRAMA.md`). Branches, conditions and outcomes are
-   seeded pure code; the model never invents a plot step.
-4. **Old data stays valid.** A stored arc type or pack without the new fields runs as today. A poll
-   option with `chapters` is still a detour.
-5. **No new model calls** for storyline logic. A chapter adds at most one line to an existing post
-   or picture call.
-6. **Phone first.** The flow view is a vertical list on a phone; a graph canvas only on wide screens.
+### Content sits in four places
 
-## Building blocks
+Constants inside modules (the arc seed, the shared life-moment pool, couple lines, feelings),
+built-in **content packs** (`modules/world/events/slp-content-pack-library.ts`), the drama starter
+set (`slp-drama-packs.ts`), and imported **Story Pack** JSON (`shared/src/slp/slp-story-engine.ts`).
+Two different things are called "pack". The arc seed already claims the pack id
+`slurp-everyday-life` without being one.
 
-### A. Endings
+### What that means for the request
 
-- **Arcs:** a type gains `endings: [{ key, label, outcomes, lastBeat? }]`. A poll option gains
-  `next`: a chapter key, or `end:<endingKey>`. An option with `chapters` and no `next` stays a
-  detour. Chapters gain an optional `key` so `next` can name them; without keys, order is used.
-- **Dramas:** `exits: { [endingKey]: beat }` beside the current `exit`, which stays the default.
-  `next: "end"` keeps working; `next: "end:<key>"` picks an exit.
-- The settled path (chapters visited, poll results, ending) is already partly kept on the project
-  (`choices`, poll results). Keep the ending key there too, so pages and Stir can show it.
+- **Endings, branches, player choices, a cast:** only dramas, and they stop at 90 days.
+- **Length, stats, profile changes, real fan polls, an editor:** only arcs.
+- **Influence on other storylines:** a channel exists, almost nothing writes to it.
+- **A pregnancy is not mainly a storyline.** It is a **condition**: every post, every DM and every
+  picture has to know about it for weeks, not only the few posts a storyline owns. Slurp has no
+  place for a lasting condition. Feelings last hours; arc chapters reach only arc posts.
 
-### B. Outcomes (the triggers)
+## The model: four nouns
 
-One vocabulary, reusing `slpStoryOutcomeSchema` (facts with expiry, `grant-arc-opportunity`) and the
-drama tie outcomes:
+```text
+packs (content) ──► storylines ──change──► state ◄──read── moments
+                        ▲                    │
+                        └──── rules: requires, boosts, signals
+```
 
-| Outcome                            | Arcs (chapter, option, ending)                       | Dramas (stage, ending) |
-| ---------------------------------- | ---------------------------------------------------- | ---------------------- |
-| add / remove creator fact          | new: applied                                         | new                    |
-| add / remove world fact            | new: applied                                         | new                    |
-| grant arc opportunity (story tags) | new: applied                                         | new                    |
-| tie / end-tie / temperature        | new, between the Creator and a named tie (`partner`) | as today               |
-| stats, mood, profile proposal      | as today                                             | —                      |
+### 1. State — what is true now
 
-Arc outcomes apply through `applySlpStoryOutcomes` when a chapter starts, an option wins, or an
-ending is reached — the same function occasions use, so facts expire and opportunities are consumed
-in one place.
+One store per Creator and one for the world, grown from `slurp2.story.facts`. An entry is a
+**condition**:
 
-### C. Conditions (how storylines gate each other)
+```ts
+{ tag: "pregnant", stage?: "month-6", line?: "You are six months pregnant.",
+  look?: "visibly pregnant, about six months", track?: "body",
+  until?: iso, origin: { pack, storyline, run, stage } }
+```
 
-- **Start conditions** on arc types and dramas: `requires: { facts?: [tag], lacksFacts?: [tag],
-tie?: kind }`. Arc generation and drama casting already filter; they check these too. Examples:
-  "pregnancy needs a partner and no `pregnant` fact", "a custody drama needs `parent` and an `ex`".
-- **Gated edges:** a choice option or a `next` may carry one `when: { fact | lacksFact }`. A gated
-  option is hidden from the poll when it fails; a gated `next` falls through to the next listed
-  edge. One condition per edge — no expressions.
+- `line` is for the writer, `look` for the picture plan; both are optional and short. This is the
+  feelings mechanism (a line plus an expiry) made pack-defined and long-lived.
+- **Tracks** are a small fixed list: `body`, `home`, `work`, `love`, `family`, `public`. A track
+  holds one condition and one running storyline at a time. That replaces the `once` list, the
+  per-Creator arc cap and the "one main, one side drama" cap, and it is what stops "everyone moved
+  house three times".
+- **One reader.** `storyState(creatorId)` returns tags (for rules), lines and looks (for prompts).
+  Ties are not copied: the reader exposes them as tags (`partner`, `rival`, `roommate`, `deal`).
+- **Budget.** At most two standing lines in a post brief or DM and one look line in a picture,
+  newest and highest track priority first. Plot lines keep the "one line or nothing" rule.
+- **Transparent.** Every condition names what set it. A **Life panel** per Creator shows tracks and
+  tags with their reason, like the People map does for ties, and Stir can remove one.
 
-### D. Look per chapter
+### 2. Storylines — what changes state over time
 
-A chapter may carry `look` (≤ 120 characters, e.g. "visibly pregnant, about six months"). While the
-chapter runs, the Creator's picture plan gets that one line beside the card's appearance. Useful
-beyond pregnancy: a new haircut (`new_look`), a tan after a trip, a cast after an injury.
+One format and one runtime: the drama runtime grown up. A storyline has a cast (1–5 roles; one role
+is a solo story), `requires` (state), a `track`, stages and endings. A **stage** is the union of
+what an arc chapter, a drama stage and a situation hold today:
 
-### E. Story time
+| Stage part | Meaning                                                                                       | Comes from        |
+| ---------- | --------------------------------------------------------------------------------------------- | ----------------- |
+| time       | days, or story-clock units ("month")                                                          | arcs, dramas      |
+| condition  | the line, look, mood, stat effects and profile proposal while it runs                         | arc chapter reach |
+| beats      | planned: post, DM, comment, notification, money                                               | dramas            |
+| deck       | small moments drawn now and then while the stage runs                                         | situations        |
+| choice     | asked of fans (a real post poll), the player (DM chips) or a role; each option names a `next` | both              |
+| outcomes   | state that stays: conditions, ties, boosts for other storylines                               | occasions, dramas |
+| next       | a stage or an ending, optionally `when` one tag is or is not set                              | dramas            |
 
-Arcs run in real days. A nine-month story at real time is too slow. An arc type may set
-`storyClock: { unit: "month", per: <real days> }`: chapters then state their length in story months,
-and the post brief says "month 6", never a date. Pace still multiplies.
+**Endings** are named end nodes with their own last beat and outcomes.
 
-## Flow view and editor
+The four shapes that exist today become one:
 
-One client component renders both arcs and dramas from a shared node/edge list (an adapter per
-system). Plain SVG, no new dependency, like the People map.
+| Today     | As a storyline                                           |
+| --------- | -------------------------------------------------------- |
+| Arc       | one role, stages in a line, time-driven                  |
+| Drama     | several roles, branches                                  |
+| Situation | one stage with no end and a deck                         |
+| Occasion  | starts from the calendar; a solo run per Creator it fits |
 
-- **Phone — flow list.** Chapters or stages as cards top to bottom. A choice card shows its options
-  as indented branches with a color rail; branches fold. Endings are end cards. Outcomes and
-  conditions show as chips ("+ fact: parent", "opens: new parent life", "needs: partner"). Tap a
-  card to edit it in a sheet.
-- **Wide screens — graph.** The same data left to right, a column per depth.
-- **Inline checks** from the existing drama validator (unknown `next`, an option that leads
-  nowhere), plus a new unreachable-node check, shared by arcs and dramas.
-- **You are here.** On a Creator's page, the running project and Stir show the same view with the
-  current node and the path taken highlighted.
-- **Variants.** "Duplicate as variant" copies a type with a new id and `variantOf`; the library
-  groups variants under the original.
-- **Dry run.** Walks the graph with seeded picks and shows the path, the outcomes and the days it
-  takes. Pure code, no model call.
-- **Dramas become editable** in the app with the same editor. JSON import stays.
+### 3. Moments — small things that read state
 
-## Pregnancy (built-in, off by default)
+Life moments and beat decks stay as they are and gain `when` on tags, so "cravings" only fits a
+pregnant Creator and a gym session does not fit month eight. A stage deck is the same thing, scoped
+to one stage.
 
-**Kind:** an arc (length) with a `partner` from the Creator's couple tie, or the player when her
-relation to you is `partner`. **Requires:** a partner tie, no `pregnant` fact, and a Creator who can
-be pregnant (open decision 3). **Once** per Creator until its ending fact expires.
+### 4. Rules — how storylines influence each other
 
-| #   | Chapter (story month)   | Look                    | Choice (asks)                                                   |
-| --- | ----------------------- | ----------------------- | --------------------------------------------------------------- |
-| 1   | the test (0–1)          | —                       | tell the partner now or wait (Creator; the player if partner)   |
-| 2   | telling the partner (1) | —                       | —                                                               |
-| 3   | first weeks (1–3)       | —                       | announce to fans or keep it secret (fans or Creator)            |
-| 3a  | keeping it hidden (3–5) | "bump hidden by angles" | the secret comes out on its own → 4 (gated `next` after a time) |
-| 4   | the announcement (3–5)  | "small bump"            | name poll / reveal poll (fans)                                  |
-| 5   | showing (5–7)           | "visibly pregnant"      | maternity shoot or not (fans)                                   |
-| 6   | the last weeks (7–9)    | "heavily pregnant"      | —                                                               |
-| 7   | due date (9)            | —                       | —                                                               |
+Only through state, never by reading another storyline's run:
 
-**Endings:** `born` (default): facts `parent` and `baby:<name>`, profile bio proposal, opportunities
-"new parent life" and "back to content". Other endings are open decision 2.
+- **requires / lacks** on a storyline's start and on an edge.
+- **boosts:** an outcome raises the weight of storylines with matching story tags (today's arc
+  opportunities).
+- **signals** (second step): a storyline may start on a signal that already exists
+  (`modules/continuity/slp-signals.ts`): a milestone, a big tip, a saved chat moment.
 
-**Heat and content.** Slurp's rules apply as in `DRAMA.md`: the story gives posts a _why_, it does
-not tame them; spice follows the Creator's settings; no disclaimers. One hard line, as the drama
-design sets for family ties: **the child never appears in a picture and is never part of a spicy
-post** — after the birth the child is only a mention.
+The library can draw a **storyline map** from this for free: an edge from A to B where an ending of
+A writes a tag B requires.
 
-## Phases
+## Packs or modules? Both, with one rule
 
-1. Arc outcomes applied (chapters, options) through `applySlpStoryOutcomes`; dramas write facts.
-2. Endings: arc `endings` + `next`, drama `exits`; old data migrates by reading, not rewriting.
-3. Conditions: start `requires`, gated edges.
-4. `look` per chapter in the picture plan; story clock.
-5. Flow view, read-only: library, Creator page, Stir.
-6. Flow editor for arcs, then dramas; variants; dry run.
-7. Pregnancy built-in; content check on a dev box.
+**Modules hold the verbs, packs hold the nouns.** If a writer could change it without a programmer,
+it is pack content. The engine has no genre words (as `DRAMA.md` rule 4 says for dramas).
 
-Phases 1–4 are pure code with regressions; 5–6 are UI and need `marinara-design` proof.
-Versions bump by patch.
+| In packs (data)                                   | In modules (code)                                          |
+| ------------------------------------------------- | ---------------------------------------------------------- |
+| storylines, their stages, decks, choices, endings | runtime: casting, clock, choices, outcomes, tracks, budget |
+| conditions: tag, line, look                       | state store and its reader                                 |
+| shared moments and comment lines                  | fit rules, freshness, caps                                 |
+| calendar entries                                  | couples, collabs, rivalries, deals, campaigns, promises    |
 
-## Cost
+- **One pack format (v2):** `storylines` and `moments`. A v1 Story Pack (`arcs`, `events`,
+  `situations`, `dramas`) converts on import.
+- **Built-ins are packs.** The arc seed and the shared life-moment pool become the _Everyday Life_
+  pack; SlurpCon, Awards, Holidays, Seasons, Spicy Firsts and the drama starter set become v2 packs.
+  They ship in the package and pass the same validator as an imported file.
+- **Three switches:** a pack on or off (Backstage › Packs, exists), a storyline's start mode
+  (`manual`, `suggest`, `auto`, exists for arcs), and per Creator "never" (exists for dramas).
+- **Hard-coded systems stay code in this release.** Couples, ties, deals and campaigns carry money,
+  consent and fit rules and many regressions. They only _publish_ tags through the state reader.
+  Moving couple stages into a pack is a later, separate decision.
 
-| Thing                                 | Cost                                            |
-| ------------------------------------- | ----------------------------------------------- |
-| Branches, conditions, outcomes, clock | code only                                       |
-| Look line                             | ~120 characters inside an existing picture plan |
-| Story month line                      | a few words inside an existing post brief       |
-| Flow view, dry run                    | client and pure code                            |
+Source layout (see `docs/architecture/README.md`): format and validator in `shared/src/slp/`, pure
+runtime in `server/src/slp/modules/storylines/`, stores in `data/storylines/`, the world-tick
+service, routes and Stir levers in `features/storylines/`, the flow view in client `modules/`, the
+library, editor and Life panel in client `features/storylines/`. The old arc and drama runtimes are
+deleted when their content runs on the new one; no shims.
+
+## Screens
+
+- **Flow view** (one component for every storyline). Phone: stages as cards top to bottom, a choice
+  shows its options as indented branches that fold, endings are end cards, state shows as chips
+  ("sets: pregnant", "needs: partner"). Wide: the same data left to right. Plain SVG, no new
+  dependency.
+- **Editor.** Tap a card: time, condition, posts and messages, small moments, choice, afterwards.
+  Inline checks: unknown target, unreachable stage, an edge with no fallback.
+- **Draft with AI.** Today the model already writes an arc for a Creator. It writes a storyline in
+  the new format instead, the validator checks it, the player edits it in the flow view. Authoring
+  uses the model; running never does.
+- **Variants.** "Duplicate as variant" keeps a `variantOf` link; the library groups them.
+- **Dry run.** Seeded walk through the graph: path, days, state written. No model call.
+- **You are here.** A running storyline shows the same view with the path taken and the current
+  stage, on the Creator's page and in Stir.
+- **Life panel** per Creator, and the **storyline map** in the library.
+
+## Pregnancy
+
+Ships in a _Family_ pack, off by default. The player turns the pack on and picks the start mode;
+with `manual` it starts only on the Creator the player picks, so no gender rule is needed.
+
+- **Requires** `partner`, **lacks** `pregnant`. **Track** `body`. Story clock: one month ≈ 5 days at
+  normal pace, about 6 weeks in all.
+- **Stages** follow the months. Each sets the condition (line + look), so every post, DM and picture
+  knows, and carries a deck (tired, cravings, the first kick, fans guessing, the partner fussing).
+- **Planned beats:** the test, telling the partner, the announcement, the reveal, a shoot, the due
+  date. The partner role gets beats too; a player who is the partner gets DMs.
+- **Choices:** tell the partner now or wait (her, or the player as partner); announce or keep it
+  secret (fans or her) — the secret branch hides it in pictures until it comes out; the name (fans).
+- **Endings:** `born` by default, which sets `parent` on the `family` track with no expiry. Hard
+  endings exist as separate endings that are off until the player turns them on.
+- **What it opens:** a _New parent_ situation, "back in shape", and whatever a pack gates on
+  `parent`.
+- **One hard line**, as `DRAMA.md` sets for family ties: the child never appears in a picture and is
+  never part of a spicy post. After the birth the child is a mention.
+
+## Alternatives looked at
+
+| Option                                     | Why not                                                                                           |
+| ------------------------------------------ | ------------------------------------------------------------------------------------------------- |
+| Patch arcs and dramas (first pass)         | keeps two formats and two editors; the condition problem stays                                    |
+| Storylets only (state and rules, no graph) | best for emergence, but no authored endings to see or edit as a flowchart; kept as the deck layer |
+| Port couples, ties and deals too           | large rule sets with money and consent; too much risk for one release                             |
+| A model that directs the plot              | breaks "code decides, the model writes": no undo, no dry run, cost per tick                       |
+
+## Risks
+
+1. **Size.** Arcs reach far: model-written arcs, real polls, crossovers, profile proposals, pace,
+   Stir levers, project pages, post details, backup. This is the largest Slurp change since the
+   modular refactor.
+2. **Prompt weight and sameness.** `WORLD-SIMULATION.md` shows what extra prompt lines cost. The
+   budget above is a hard cap, and a pack sets how many Creators may run one storyline at once.
+3. **Pictures.** Whether image models hold a `look` line across weeks is unknown. Probe it first.
+4. **Two relationship engines** remain (code couples, pack dramas) until couples move.
+
+## One release, in slices
+
+Built on an integration branch; `staging` gets one release at the end.
+
+0. **Probe** on a dev box: one Creator with a hand-set condition line and look, about 20 posts, DMs
+   and pictures. If the condition does not carry, stop and rethink before building.
+1. Format v2, validator, converters from v1 (arcs, events, situations, dramas), dry run. Pure.
+2. State store, tracks, the reader, and its use in the post brief, DM stance, picture plan and
+   moment fit.
+3. Runtime: stages with conditions and decks, endings, `requires`, story clock, real fan polls.
+4. Arcs onto the runtime; the old arc runtime goes.
+5. Dramas, situations, occasions and built-in content onto v2 packs; the old runtimes go.
+6. Flow view, editor, AI draft, variants, dry run, Life panel, storyline map.
+7. _Family_ pack, content check on a dev box.
 
 ## Tests
 
-- **Graph regression:** the shared validator rejects unknown targets, unreachable nodes and gated
-  edges with no fallback, for both arcs and dramas; old stored types and packs read unchanged.
-- **Outcome regression:** an arc chapter's fact reaches `slurp2.story.facts`, expires, and an
-  opportunity it grants raises the matching arc type at generation.
-- **Simulation:** pregnancy over a seeded world, all choices both ways — every run reaches an
-  ending, facts land, no picture brief of the child, `look` lines match the chapter.
-- **Dry run** gives the same path for the same seed.
+- **Converters:** every built-in arc, drama, situation and event converts and runs to an end in the
+  seeded simulation; a stored install converts once and reads the same.
+- **Simulation:** 12 seeded Creators, 120 days, joins and leaves, every pack on. Every run ends, one
+  storyline per track, the line budget holds, same seed gives the same world.
+- **State:** a condition reaches the brief, the DM stance and the picture plan; it expires; removing
+  its origin removes it.
+- **Pregnancy:** every choice both ways reaches an ending; the look follows the stage; no picture
+  brief names the child.
 - **Architecture regression and typecheck** after each structural change.
+
+## Decided
+
+- A pregnancy runs about 6 weeks at normal pace.
+- `born` is the default ending; hard endings are separate and opt-in.
+- Opt-in is the pack plus the storyline's start mode; no gender rule.
+- One big release on an integration branch.
 
 ## Open decisions
 
-1. **Real length of a pregnancy** at normal pace (proposed: about 6 weeks, one story month ≈ 5 days).
-2. **Which endings ship**, and which are on by default (proposed: `born` only by default; others
-   as separate, opt-in endings).
-3. **Who can be pregnant:** from the card's gender, or a Creator setting that defaults from it
-   (proposed: the setting).
-4. **Player as partner:** choices as DM chips like drama choices (proposed: yes).
-5. **Loops in graphs** (a stage that leads back): allowed with `maxDays` as the stop, or rejected
-   (proposed: allowed for dramas, rejected for arcs).
-6. **Merging arcs and dramas** into one model later (proposed: no; revisit after phase 6).
+1. Probe first (slice 0), or go straight to slice 1.
+2. Occasions in this release, or left on their own runtime until later.
+3. The track list, and whether a pack may add a track.
+4. Names: "Storylines" in the UI; the server module `storylines` beside `projects`, or inside it.
+5. Loops in a graph: allowed with a day limit as the stop, or rejected.
+6. Whether couples move into a pack later.
+7. The release version.
