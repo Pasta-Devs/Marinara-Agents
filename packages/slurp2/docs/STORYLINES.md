@@ -321,8 +321,9 @@ Each PR goes to `staging` as a working release; nothing waits on a later PR to b
 
 0. **Probe** (no PR), on a dev box: one Creator with a hand-set condition line and look, about 20
    posts, DMs and pictures. If the condition does not carry, stop and rethink before building.
-1. **State.** The store, tracks, the reader and the line budget; its use in the post brief, DM
-   stance, picture plan and moment fit; arcs and dramas write outcomes into it; the Life panel.
+1. **State.** The store, tracks, the reader and the line budget; its use in the post brief, DMs,
+   pictures and wardrobe; condition beats; arcs write outcomes into it; the Life panel. Detail
+   below.
 2. **Format v2.** Validator, converters from v1 (arcs, events, situations, dramas), dry run. Pure;
    nothing changes for the player.
 3. **Runtime, arcs first.** Stages with conditions and decks, endings, `requires`, story clock, real
@@ -336,6 +337,117 @@ Each PR goes to `staging` as a working release; nothing waits on a later PR to b
 8. **Items.** The item store and its screen, gifts from the player, things bought with coins.
 9. **Couples, rivalries and collabs as packs.** Their stages and lines become pack data; money,
    consent and fit rules stay code. Last, because it has the most regressions to keep green.
+
+## PR 1 in detail: state
+
+Goal: a condition set on a Creator shows in her captions at a rate the pack controls, in every DM
+when it matters, and in every picture — the probe's failure fixed.
+
+### Why the probe's line did not carry (code)
+
+- Continuity facts reach the post prompt as `# What you already know` with "facts to be consistent
+  with … do not quote them" (`server/src/slp/modules/continuity/slp-continuity-prompt.ts:70`). That
+  framing is right for memory and wrong for a condition.
+- The beat brief (`slurpPostBriefSection`, `modules/feed/slp-post-brief.ts:210`) states what
+  happens, cast, place, time, callback and day, and has no slot for "what is true now".
+- The beat source order (`features/feed/slp-post-beat-service.ts:177-234`: nudge → tie → drama →
+  occasion → steered → bond → life → card) has no source that a standing condition feeds.
+- DMs already have the slot: `happeningNow` takes the feelings' lines
+  (`features/messages/slp-message-generation-service.ts:404`).
+- Pictures got the look because card image instructions go into the image prompt as "Character
+  image preferences" (`features/media/slp-public-images-service.ts:316`).
+
+### Data
+
+Grow the existing story fact (`slpStoryFactSchema`, `shared/src/slp/slp-story-engine.ts:318`,
+stored under `slurp2.story.facts`). New fields are optional, so stored facts stay valid:
+
+```ts
+{
+  // existing: id, scope, creatorId, tag, label, sourceKind, sourceId, createdAt, expiresAt
+  sourceKind: "arc" | "event" | "player",          // + "player" (Life panel); "storyline" in PR 3
+  track?: "body" | "home" | "work" | "love" | "family" | "public",
+  line?: string,     // ≤ 160, second person: "You are six months pregnant."
+  look?: string,     // ≤ 120, for pictures: "visibly pregnant, about six months"
+  wardrobe?: { prefer: string[]; avoid: string[] },   // wardrobe tags, ≤ 6 each
+  deck?: { line: string; withPartner?: boolean }[],   // ≤ 12 condition beats, ≤ 160 each
+  share?: number,    // 0–0.5: chance an ordinary slot takes a deck beat (default 0.25)
+}
+```
+
+- **One condition per track.** Writing a condition on a track that holds one ends the old one
+  (it expires now, with a note). Facts without a track behave as today (tags only).
+- No new settings key and no migration.
+
+### Reader
+
+`slurpStoryState(input)` — pure, new file `server/src/slp/modules/storylines/slp-story-state.ts`.
+Input: the facts, the Creator's ties (as from `slurp2.creator-ties`), `at`. Output:
+
+- `tags`: active fact tags, plus tie tags (`partner`, `ex`, `rival`, `roommate`, `friend`, `deal`);
+- `lines`: at most **2**, ordered by track (`body`, `love`, `family`, `home`, `work`, `public`),
+  then newest;
+- `look`: at most **1** (same order); `wardrobe`: merged prefer/avoid;
+- `deck`: the beats of the conditions that have one, with their `share`.
+
+A service in `features/storylines/` loads facts and ties once per post or reply and calls it.
+
+### Where it goes
+
+| Surface       | Change                                                                                                                                                                |
+| ------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Post brief    | `slurpPostBriefSection` gains `now?: string[]`; after `Time:` it writes `Right now: <lines>. This stays true in this post; mention it only if this post is about it.` |
+| Classic posts | (no beat) the same two lines as a short `# Right now` section before the recent posts                                                                                 |
+| DMs           | the lines join `happeningNow`, before the feelings                                                                                                                    |
+| Pictures      | `Right now: <look>` beside "Character image preferences", in public and DM pictures                                                                                   |
+| Wardrobe      | prefer/avoid filter the closet before `slurpWardrobePrompt` lists it; if nothing is left, the filter is dropped                                                       |
+| Continuity    | conditions are never written as continuity facts                                                                                                                      |
+
+### Condition beats
+
+A new beat source `condition` in `slp-post-beat-service.ts`, after `occasion` and before `steered`:
+
+- Draw with the condition's `share`, seeded by account and slot sequence (as other sources do).
+- Pick a deck line not used in this Creator's beat history; `withPartner` adds the partner from the
+  tie tags to the cast (else the plain line).
+- `anchorKind: "condition"`; free zone as for life moments (no lasting change).
+- A Creator with no deck gets no condition beats; her condition still shows through the brief.
+
+### Who writes conditions in PR 1
+
+- **Arcs:** chapter `outcomes` are applied through `applySlpStoryOutcomes` when a chapter starts
+  (today they are never applied). `add-creator-fact` gains the optional fields above.
+- **The player:** the Life panel.
+- Dramas and occasions write conditions in PR 4.
+
+### Life panel
+
+In the Creator sheet (Stir) and the Creator's settings. Phone first.
+
+- Six track rows; each shows its condition (label, line, until, "set by …") or "—".
+- **Add** on a track: label, line, look, wardrobe chips, deck lines, share slider, days or "until
+  removed". **Remove** ends it now.
+- Tags without a track below, read-only.
+- Routes: `GET /slurp/story/state/:accountId`, `POST /slurp/story/state/:accountId`,
+  `DELETE /slurp/story/state/:accountId/:factId`.
+- Strings in `en`, `de`, `ko`, `pl`.
+
+### Tests
+
+- Reader: budget (2 lines, 1 look), track order, expiry, one condition per track, tie tags.
+- Brief: `Right now` appears with a condition and is absent without one; classic section likewise.
+- Beat order: the posting-flow regression includes `condition` in the right place; share 0 never
+  draws, a used deck line is skipped.
+- Arc outcome: a chapter's `add-creator-fact` lands in `slurp2.story.facts` with its line and look.
+- **Live (cheap agent):** the probe again, with a player condition (line, look, deck of 8, share
+  0.25). Pass: 14 posts → pictures show the look in at least 11; 2–6 captions are about the
+  condition and the rest do not contradict it; 6 DMs → none contradicts it, and it comes up when the
+  fan asks how she is.
+
+### Not in PR 1
+
+Storylines (PR 3), dramas and occasions writing conditions (PR 4), moment `fit` on tags (PR 5),
+items (PR 8). Version: one patch bump.
 
 ## Tests
 
