@@ -33,6 +33,7 @@ import { checkLongTermMemoryIntegrity } from "./maintenance.js";
 import { logger } from "./package-runtime.js";
 import { getLongTermMemoryRoot } from "./paths.js";
 import { rebuildLongTermMemoryIndexes } from "./rebuild.js";
+import { getLtmRepairBackupsRoot, pruneLtmRepairBackups } from "./retention.js";
 import { LongTermMemoryStorage, type UpdateLtmNotePatch } from "./storage.js";
 import {
   analyzeTrustedLtmNoteSubjects,
@@ -131,7 +132,7 @@ export async function applyLtmIdentityRepairs(
         }
         const rebuild = await rebuildLongTermMemoryIndexes({ root }),
           integrity = await checkLongTermMemoryIntegrity(root);
-        return ltmIdentityRepairApplyResponseSchema.parse({
+        const response = ltmIdentityRepairApplyResponseSchema.parse({
           repairedAt: nowIso(),
           backup: { id: backup.id, createdAt: backup.createdAt },
           repairs: results,
@@ -144,6 +145,8 @@ export async function applyLtmIdentityRepairs(
           },
           integrity,
         });
+        await pruneLtmRepairBackups(getLtmIdentityRepairBackupsRoot(root));
+        return response;
       } catch (error) {
         try {
           await restoreLtmIdentityRepairBackup(root, backup);
@@ -162,7 +165,7 @@ export async function applyLtmIdentityRepairs(
 }
 
 export function getLtmIdentityRepairBackupsRoot(root = getLongTermMemoryRoot()) {
-  return join(dirname(root), "backups", "long-term-memory-identity-repairs");
+  return getLtmRepairBackupsRoot("identity-repairs", root);
 }
 export async function createLtmIdentityRepairBackup(root = getLongTermMemoryRoot()): Promise<LtmIdentityRepairBackup> {
   return withLtmVaultLock(root, async () => {

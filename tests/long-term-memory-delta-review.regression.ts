@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { runRegressionToCompletion } from "./regression-helpers.ts";
@@ -18,6 +18,7 @@ async function main() {
   const { renderSectionContributions } = await import(`${source}/section-contributions.ts`);
   const { canUpdateLtmScopedTarget } = await import(`${source}/scoped-targets.ts`);
   const { ltmRejectedSuggestionsPath } = await import(`${source}/paths.ts`);
+  const { deleteAllLongTermMemoryData } = await import(`${source}/backup-restore.ts`);
 
   const timestamp = "2026-09-20T00:00:00.000Z";
   const sourceHash = "a".repeat(64);
@@ -333,13 +334,34 @@ async function main() {
     const [redirected] = JSON.parse(await readFile(ltmRejectedSuggestionsPath(redirect.root), "utf8"));
     assert.equal(redirected.source.sourceNoteId, candidate.canonicalNoteId);
     assert.equal(redirected.candidate.recovery.noteId, candidate.canonicalNoteId);
+
+    // A repair backup only serves its own rollback: a fourth repair keeps the newest three,
+    // and Delete all data removes every copy of the vault the package wrote.
+    for (const pair of ["a", "b", "c"]) {
+      const ids = [`world_prune_${pair}_one`, `world_prune_${pair}_two`];
+      await redirect.storage.createNote(noteInput(ids[0]!, "world", "2026-01-03T00:00:00.000Z"));
+      await redirect.storage.createNote(noteInput(ids[1]!, "world", "2026-01-04T00:00:00.000Z"));
+      const next = (await previewLtmNoteForkRepair({ noteIds: ids }, { root: redirect.root })).candidates[0]!;
+      await applyLtmNoteForkRepair(
+        { noteIds: next.noteIds, canonicalNoteId: next.canonicalNoteId, contentHash: next.contentHash },
+        { root: redirect.root },
+      );
+    }
+    const backupsRoot = join(redirect.dataDir, "backups");
+    const forkBackups = join(backupsRoot, "long-term-memory-forks");
+    const identityBackups = join(backupsRoot, "long-term-memory-identity-repairs");
+    assert.equal((await readdir(forkBackups)).length, 3, "a fourth repair must keep only the newest three backups");
+    await mkdir(join(identityBackups, randomUUID()), { recursive: true });
+    await deleteAllLongTermMemoryData(redirect.root);
+    for (const directory of [forkBackups, identityBackups])
+      await assert.rejects(stat(directory), { code: "ENOENT" }, "Delete all data must remove repair backups");
   } finally {
     redirect.release();
     await rm(redirect.dataDir, { recursive: true, force: true });
   }
 
   console.log(
-    "Long-Term Memory delta review regression: provenance, scopes, lifecycles, namespaces, stale, rollback, and redirects ok",
+    "Long-Term Memory delta review regression: provenance, scopes, lifecycles, namespaces, stale, rollback, redirects, and repair backups ok",
   );
 }
 

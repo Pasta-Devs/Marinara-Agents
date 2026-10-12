@@ -14,6 +14,7 @@ import {
 } from "../../../../shared/src/features/agents/long-term-memory/schema.js";
 import { nowIso } from "./ltm-utils.js";
 import { getLongTermMemoryRoot } from "./paths.js";
+import { getLtmRepairBackupsRoot, pruneLtmRepairBackups } from "./retention.js";
 import { LongTermMemoryStorage } from "./storage.js";
 import { withLtmVaultLock } from "./vault-lock.js";
 import { invalidateLtmVaultSnapshot } from "./vault-snapshot.js";
@@ -214,7 +215,8 @@ export async function applyLtmNoteForkRepair(
     const reasons = blockingReasons(notes);
     if (reasons.length) throw new LtmServiceError(reasons.join(" "), 409, "ltm_fork_conflict");
     const backupId = randomUUID();
-    const backupDirectory = join(dirname(root), "backups", "long-term-memory-forks", backupId);
+    const backupsRoot = getLtmRepairBackupsRoot("forks", root);
+    const backupDirectory = join(backupsRoot, backupId);
     await mkdir(backupDirectory, { recursive: true });
     await cp(root, join(backupDirectory, basename(root)), { recursive: true, errorOnExist: true, force: false });
     try {
@@ -241,11 +243,13 @@ export async function applyLtmNoteForkRepair(
         await storage.redirectReferences(noteId, parsed.canonicalNoteId);
         await storage.updateNote(noteId, { status: "archived" });
       }
-      return ltmNoteForkApplyResponseSchema.parse({
+      const response = ltmNoteForkApplyResponseSchema.parse({
         canonicalNoteId: parsed.canonicalNoteId,
         archivedNoteIds,
         backupId,
       });
+      await pruneLtmRepairBackups(backupsRoot);
+      return response;
     } catch (error) {
       const restoreRoot = join(dirname(root), `.${basename(root)}-fork-restore-${randomUUID()}`);
       const failedRoot = join(dirname(root), `.${basename(root)}-fork-failed-${randomUUID()}`);

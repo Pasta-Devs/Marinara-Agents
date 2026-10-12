@@ -24,7 +24,7 @@ import {
 import { getLongTermMemoryDirectories, getLongTermMemoryRoot, notePathForId, safeJoin } from "./paths.js";
 import { getLtmGlobalSettings, ltmSettingsPath } from "./settings.js";
 import { ltmExtractionConfigPath } from "./extraction-config.js";
-import { longTermMemoryRetentionConfigPath } from "./retention.js";
+import { longTermMemoryRetentionConfigPath, removeLtmRepairBackups } from "./retention.js";
 import { LongTermMemoryDraftStore } from "./draft-store.js";
 import { LongTermMemoryStorage } from "./storage.js";
 import { rebuildLongTermMemoryIndexes } from "./rebuild.js";
@@ -186,7 +186,7 @@ export async function replaceLongTermMemoryData(value: unknown, root = getLongTe
 export async function deleteAllLongTermMemoryData(root = getLongTermMemoryRoot()) {
   return withLtmVaultLock(root, async () => {
     const backup = await exportLongTermMemoryData(root);
-    return replaceLongTermMemoryData(
+    const replaced = await replaceLongTermMemoryData(
       {
         ...backup,
         exportedAt: new Date().toISOString(),
@@ -196,6 +196,9 @@ export async function deleteAllLongTermMemoryData(root = getLongTermMemoryRoot()
       },
       root,
     );
+    // Identity- and fork-repair backups are whole copies of the vault; deleting the data must not keep them.
+    await removeLtmRepairBackups(root);
+    return replaced;
   });
 }
 
