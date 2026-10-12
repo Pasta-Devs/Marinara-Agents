@@ -428,8 +428,10 @@ In the Creator sheet (Stir) and the Creator's settings. Phone first.
 - **Add** on a track: label, line, look, wardrobe chips, deck lines, share slider, days or "until
   removed". **Remove** ends it now.
 - Tags without a track below, read-only.
-- Routes: `GET /slurp/story/state/:accountId`, `POST /slurp/story/state/:accountId`,
-  `DELETE /slurp/story/state/:accountId/:factId`.
+- Routes: `GET /story/state/:accountId`, `POST /story/state/:accountId`; **Remove** uses the
+  existing `DELETE /story/facts/:id`.
+- Built (0.3.29): the panel sits in the Stir creator sheet as "Life right now". Deck lines with
+  `withPartner` come from storylines only; the panel writes plain lines.
 - Strings in `en`, `de`, `ko`, `pl`.
 
 ### Tests
