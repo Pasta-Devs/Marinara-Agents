@@ -172,6 +172,69 @@ service, routes and Stir levers in `features/storylines/`, the flow view in clie
 library, editor and Life panel in client `features/storylines/`. The old arc and drama runtimes are
 deleted when their content runs on the new one; no shims.
 
+## How the rest of Slurp plugs in
+
+Everything else meets a storyline through one of three hooks, and only these three:
+
+| Hook                     | Question it answers         | Used by                                                                            |
+| ------------------------ | --------------------------- | ---------------------------------------------------------------------------------- |
+| `fit`                    | may this happen here?       | content toggles: spice level, turn-ons, hard noes, the player's tastes and "never" |
+| `requires` / `outcomes`  | what is true, what is owned | conditions, ties, wardrobe, items                                                  |
+| signals in, one line out | what happened elsewhere     | economy, messages, Support desk, ads, discovery                                    |
+
+### Content toggles are gates
+
+Spice is already a gate, not a story: a Creator's level, turn-ons and hard noes
+(`server/src/slp/modules/creators/slp-spice.ts`), the Slurp-wide limit, and the player's tastes and
+"never" list (`shared/src/slp/slp-spice.ts`). Packs already check it with one function,
+`slurpPackFits` (`modules/feed/slp-occasion-beats.ts`): a minimum level, hard-no words, a topic.
+
+- A storyline, a stage, a choice option and a deck moment each may carry one `fit` block, checked
+  by that same function. A storyline that does not fit never starts; a stage that does not fit takes
+  its fallback edge; an option that does not fit is not offered; a moment that does not fit is
+  dropped, never softened.
+- A pack lists its **topics** up front ("pregnancy", "toys"). They show as chips on the pack card;
+  switching one off is the same as putting it on the "never" list for that pack.
+- The player's tastes raise the weight of storylines and moments that carry the same topic, with
+  the taste rules that exist (`slurpTasteFit`).
+- **A storyline never moves a limit.** A hard no and the Slurp-wide limit always win. A storyline
+  that wants a Creator to go further (the "Getting bolder" drama) may only _propose_ a level change
+  for the player to accept, like an arc's profile change today.
+
+### Wardrobe and items are state a Creator owns
+
+The wardrobe is a closet of looks with tags (`shared/src/slp/slp-wardrobe.ts`); the model picks one
+per picture from the looks code lets it see. Slurp has no inventory today; the wardrobe is the
+nearest thing.
+
+- **A condition filters the closet.** A condition may name wardrobe tags to prefer and to leave out
+  (`wardrobe: { prefer: ["loose"], avoid: ["corset"] }`). Code filters the list before the model
+  sees it. The condition's `look` describes the body; the wardrobe still dresses it.
+- **An outcome adds or removes a look**, with the storyline as its source, so it shows where it came
+  from and can go again when the condition ends (maternity looks, a con cosplay, a new haircut).
+- **A beat may ask for one look** ("wear the gift").
+- **Items** are owned things that are not clothes: a toy, a prop, a gift, a brand's product. An item
+  is a state entry with no clock and no track: `{ item: "…", name, look?, origin }`. Moments and
+  stages read it through `requires` ("unboxing" needs the item; the toy moments in _Spicy Firsts_
+  need a toy instead of guessing from the level), outcomes give and take it, and the picture plan
+  may show it. Looks stay in the wardrobe store; a shared "things" store is not needed for this
+  release.
+- Later, on the same hooks: the player sends a Creator a gift (a signal) → an item → "wearing what
+  you sent".
+
+### Other features are sources and readers
+
+They do not become storylines and storylines do not reach into them.
+
+- **In:** each already emits signals (tips, subscriptions, milestones, goals, comments, saved chat
+  moments). A storyline may start or a stage may advance on one.
+- **Out:** each asks `storyState(creatorId)` for what it needs: DM stance takes the standing lines,
+  the Support desk and offers may check a tag, ads may match a condition, a tip goal may be opened
+  by a beat ("nursery fund") through the money channel.
+- **Pack options.** A pack may split its content into named options the player switches (the
+  _Family_ pack: pregnancy, hard endings). An option is a tag every entry of that part carries; it
+  is not a new mechanism.
+
 ## Screens
 
 - **Flow view** (one component for every storyline). Phone: stages as cards top to bottom, a choice
