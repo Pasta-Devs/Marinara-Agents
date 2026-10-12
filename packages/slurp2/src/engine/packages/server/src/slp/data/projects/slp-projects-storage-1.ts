@@ -37,7 +37,7 @@ import {
   SlurpCreatorArcConfig,
   SlurpResolvedArcConfig,
 } from "../../modules/projects/slp-arc-library.js";
-import { isSlurpCrossover } from "../../modules/projects/slp-project.js";
+import { isSlurpCrossover, type SlurpArcType } from "../../modules/projects/slp-project.js";
 import {
   slurpCrossoverLeave,
   slurpCrossoverStart,
@@ -428,10 +428,14 @@ export function createProjectsStorage1(context: SlurpStorageContext) {
       const settings = entered ? await this.getSettings() : null;
       const mood = settings ? slurpArcChapterMood(after, settings.arcAffectsMood) : null;
       // The chapter's outcomes from its arc type: a condition (a bump, a new flat) or a tag it leaves.
+      // Found by label, as a fans' choice inserts branch chapters (which carry none) and shifts the
+      // index; applied on entering a chapter, never again on a resume, so a removed condition stays removed.
+      const type = settings?.arcLibrary.find((entry: SlurpArcType) => entry.id === after.typeId);
       const outcomes =
-        settings?.arcLibrary.find((type: { id: string }) => type.id === after.typeId)?.chapters[after.chapter]
-          ?.outcomes ?? [];
-      if (outcomes.length)
+        type?.chapters.find(
+          (chapter: SlurpArcType["chapters"][number]) => chapter.label === after.chapters[after.chapter],
+        )?.outcomes ?? [];
+      if (outcomes.length && (after.chapter !== before.chapter || before.status !== "paused"))
         await this.applyStoryOutcomes({
           outcomes,
           participants: isSlurpCrossover(after) ? after.creatorIds : [creatorAccountId],

@@ -225,11 +225,41 @@ assert.ok(
 );
 assert.match(
   server("data/projects/slp-projects-storage-1.ts"),
-  /chapters\[after\.chapter\]\s*\?\.outcomes[\s\S]{0,200}this\.applyStoryOutcomes\(/u,
-  "a chapter that starts applies its outcomes",
+  /chapter\.label === after\.chapters\[after\.chapter\][\s\S]{0,120}\?\.outcomes[\s\S]{0,200}before\.status !== "paused"\)\)\s+await this\.applyStoryOutcomes\(/u,
+  "a chapter that starts applies its outcomes, found by label (choices shift the index), never again on a resume",
 );
 for (const path of ["features/media/slp-images-service.ts", "features/media/slp-public-images-service.ts"])
   assert.match(server(path), /withSlurpConditionLook\(/u, `${path} carries the condition look`);
 assert.match(server("features/messages/slp-message-generation-service.ts"), /happeningNow: \[\.\.\.\(input\.rightNow/u);
+
+assert.match(
+  server("features/media/slp-images-service.ts"),
+  /if \(!input\.skipCondition && !input\.suppressCharacterContext\)/u,
+  "a commission of the player never takes the Creator's condition",
+);
+assert.match(server("features/assist/slp-assist-service.ts"), /skipCondition: slot !== null/u);
+const routes = server("features/world/slp-story-routes.ts");
+assert.match(routes, /\.slice\(0, 64\)/u, "a long label still makes a valid tag");
+assert.match(routes, /slpStoryFactSchema\.safeParse\(/u, "a player condition is checked as stored");
+
+// --- Review fixes: a condition without a line reaches the writer; avoided topics leave the deck. ---
+assert.deepEqual(
+  slurpStoryState({ creatorId: "jen", at, facts: [fact({ track: "body", label: "Pregnant", look: "bump" })] }).lines,
+  ["Pregnant"],
+);
+assert.ok(
+  Array.from({ length: 100 }, (_, sequence) =>
+    slurpConditionBeat({
+      creatorAccountId: "jen",
+      sequence,
+      state,
+      history: { recentAnchors: [] },
+      intents,
+      partner: null,
+      avoid: ["KICK"],
+    }),
+  ).every((beat) => beat === null),
+  "a moment that names an avoided topic is left out",
+);
 
 console.log("slurp2 story state regression passed");

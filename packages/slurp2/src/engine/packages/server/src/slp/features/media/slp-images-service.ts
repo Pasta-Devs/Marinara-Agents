@@ -156,7 +156,7 @@ type CreatorPostImageInput = {
   admissionMode?: ConnectionAdmissionMode;
   /** The player asked for this picture: its prompt rewrite never spends the world's AI budget (0.3.6). */
   playerAsked?: boolean;
-  /** A profile picture or banner outlives a condition, so it never shows one (docs/STORYLINES.md). */
+  /** An avatar or banner outlives a condition, so it never shows one; nor does a commission (STORYLINES.md). */
   skipCondition?: boolean;
   width?: number;
   height?: number;
@@ -418,7 +418,7 @@ async function generateCreatorPostImageRun(
     : "";
   run.appearance = { source: appearanceSource, text: redactIdentity(characterDescription) };
   run.referenceImages = referenceImages?.length ?? 0;
-  if (!input.skipCondition)
+  if (!input.skipCondition && !input.suppressCharacterContext)
     characterImageInstructions = await withSlurpConditionLook(input.db, input.account.id, characterImageInstructions);
 
   const postPrompt = await loadPrompt(input.promptOverrides, NOODLE_IMAGE_POST, {

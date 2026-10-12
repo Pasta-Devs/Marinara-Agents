@@ -217,6 +217,7 @@ export async function planSlurpBeat(
           history,
           intents: input.intents,
           partner: input.context.story.partner,
+          avoid: input.context.steering?.avoid,
         })
       : null;
     if (condition) return condition;

@@ -193,6 +193,7 @@ export async function drawSlpAssistPicture(
       previewOnly: false,
       playerAsked: true,
       story: input.target === "story",
+      skipCondition: slot !== null,
       ...(PICTURE_SIZE[input.target] ?? {}),
       // A profile picture or cover keeps the artwork tool's framing guard (no banner in an avatar,
       // no second face in a cover); a post or Story picture is framed like the Creator's posts.

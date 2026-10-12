@@ -83,7 +83,8 @@ export function slurpStoryState(input: {
     .sort((a, b) => rank(a) - rank(b) || b.createdAt.localeCompare(a.createdAt));
   return {
     tags: [...new Set([...live.map((fact) => fact.tag), ...(input.tieTags ?? [])])],
-    lines: conditions.flatMap((fact) => (fact.line ? [fact.line] : [])).slice(0, SLURP_STORY_MAX_LINES),
+    // A condition with no line still reaches the writer: its label is the plainest line there is.
+    lines: conditions.map((fact) => fact.line ?? fact.label).slice(0, SLURP_STORY_MAX_LINES),
     look: conditions.find((fact) => fact.look)?.look ?? null,
     wardrobe: {
       prefer: [...new Set(conditions.flatMap((fact) => fact.wardrobe?.prefer ?? []))],
@@ -111,9 +112,17 @@ export function slurpConditionBeat(input: {
   history: Pick<SlurpBeatHistory, "recentAnchors">;
   intents: readonly SlurpContentIntent[];
   partner: string | null;
+  /** The player's avoided topics: a moment that names one is left out. */
+  avoid?: readonly string[];
 }): SlurpBeat | null {
   const recent = new Set(input.history.recentAnchors.slice(0, 8));
-  const candidates = input.state.deck.filter((beat) => !recent.has(beat.line) && (!beat.withPartner || input.partner));
+  const avoided = (line: string) =>
+    (input.avoid ?? []).some(
+      (topic) => topic.trim() && line.toLocaleLowerCase().includes(topic.trim().toLocaleLowerCase()),
+    );
+  const candidates = input.state.deck.filter(
+    (beat) => !recent.has(beat.line) && (!beat.withPartner || input.partner) && !avoided(beat.line),
+  );
   if (!candidates.length) return null;
   const share = Math.max(...candidates.map((beat) => beat.share));
   const take = slurpWeightedPick("condition", input.creatorAccountId, input.sequence, [
