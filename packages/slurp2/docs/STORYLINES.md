@@ -162,9 +162,10 @@ it is pack content. The engine has no genre words (as `DRAMA.md` rule 4 says for
   They ship in the package and pass the same validator as an imported file.
 - **Three switches:** a pack on or off (Backstage › Packs, exists), a storyline's start mode
   (`manual`, `suggest`, `auto`, exists for arcs), and per Creator "never" (exists for dramas).
-- **Hard-coded systems stay code in this release.** Couples, ties, deals and campaigns carry money,
-  consent and fit rules and many regressions. They only _publish_ tags through the state reader.
-  Moving couple stages into a pack is a later, separate decision.
+- **Hard-coded systems move last.** Couples, ties, deals and campaigns carry money, consent and fit
+  rules and many regressions. Until PR 9 they only _publish_ tags through the state reader. Then
+  the stages and lines of couples, rivalries and collabs become pack data; the money, consent and
+  fit rules stay code. Deals, campaigns and promises stay code: they are business rules, not story.
 
 Source layout (see `docs/architecture/README.md`): format and validator in `shared/src/slp/`, pure
 runtime in `server/src/slp/modules/storylines/`, stores in `data/storylines/`, the world-tick
@@ -217,8 +218,7 @@ nearest thing.
   is a state entry with no clock and no track: `{ item: "…", name, look?, origin }`. Moments and
   stages read it through `requires` ("unboxing" needs the item; the toy moments in _Spicy Firsts_
   need a toy instead of guessing from the level), outcomes give and take it, and the picture plan
-  may show it. Looks stay in the wardrobe store; a shared "things" store is not needed for this
-  release.
+  may show it. Looks stay in the wardrobe store; items get their own store and screen in PR 8.
 - Later, on the same hooks: the player sends a Creator a gift (a signal) → an item → "wearing what
   you sent".
 
@@ -278,7 +278,6 @@ with `manual` it starts only on the Creator the player picks, so no gender rule 
 | ------------------------------------------ | ------------------------------------------------------------------------------------------------- |
 | Patch arcs and dramas (first pass)         | keeps two formats and two editors; the condition problem stays                                    |
 | Storylets only (state and rules, no graph) | best for emergence, but no authored endings to see or edit as a flowchart; kept as the deck layer |
-| Port couples, ties and deals too           | large rule sets with money and consent; too much risk for one release                             |
 | A model that directs the plot              | breaks "code decides, the model writes": no undo, no dry run, cost per tick                       |
 
 ## Risks
@@ -289,22 +288,29 @@ with `manual` it starts only on the Creator the player picks, so no gender rule 
 2. **Prompt weight and sameness.** `WORLD-SIMULATION.md` shows what extra prompt lines cost. The
    budget above is a hard cap, and a pack sets how many Creators may run one storyline at once.
 3. **Pictures.** Whether image models hold a `look` line across weeks is unknown. Probe it first.
-4. **Two relationship engines** remain (code couples, pack dramas) until couples move.
+4. **Two relationship engines** remain (code couples, pack dramas) until PR 9.
 
-## One release, in slices
+## Pull requests
 
-Built on an integration branch; `staging` gets one release at the end.
+Each PR goes to `staging` as a working release; nothing waits on a later PR to be usable.
 
-0. **Probe** on a dev box: one Creator with a hand-set condition line and look, about 20 posts, DMs
-   and pictures. If the condition does not carry, stop and rethink before building.
-1. Format v2, validator, converters from v1 (arcs, events, situations, dramas), dry run. Pure.
-2. State store, tracks, the reader, and its use in the post brief, DM stance, picture plan and
-   moment fit.
-3. Runtime: stages with conditions and decks, endings, `requires`, story clock, real fan polls.
-4. Arcs onto the runtime; the old arc runtime goes.
-5. Dramas, situations, occasions and built-in content onto v2 packs; the old runtimes go.
-6. Flow view, editor, AI draft, variants, dry run, Life panel, storyline map.
-7. _Family_ pack, content check on a dev box.
+0. **Probe** (no PR), on a dev box: one Creator with a hand-set condition line and look, about 20
+   posts, DMs and pictures. If the condition does not carry, stop and rethink before building.
+1. **State.** The store, tracks, the reader and the line budget; its use in the post brief, DM
+   stance, picture plan and moment fit; arcs and dramas write outcomes into it; the Life panel.
+2. **Format v2.** Validator, converters from v1 (arcs, events, situations, dramas), dry run. Pure;
+   nothing changes for the player.
+3. **Runtime, arcs first.** Stages with conditions and decks, endings, `requires`, story clock, real
+   fan polls. Arcs run on it; the old arc runtime goes.
+4. **Everything else onto it.** Dramas, situations and occasions; built-in content becomes v2
+   packs; one Packs screen. The old runtimes go.
+5. **Gates and wardrobe.** One `fit` on every level, pack topics as chips, taste weighting; closet
+   filter, looks from outcomes.
+6. **Family pack.** Pregnancy, written by hand as pack data; content check on a dev box.
+7. **Editor.** Flow view, editing, AI draft, variants, dry run, storyline map.
+8. **Items.** The item store and its screen, gifts from the player, things bought with coins.
+9. **Couples, rivalries and collabs as packs.** Their stages and lines become pack data; money,
+   consent and fit rules stay code. Last, because it has the most regressions to keep green.
 
 ## Tests
 
@@ -318,19 +324,26 @@ Built on an integration branch; `staging` gets one release at the end.
   brief names the child.
 - **Architecture regression and typecheck** after each structural change.
 
+## Later: Basic and add-ons
+
+The player wants Slurp split into a basic part and add-ons that can be switched, so setup and
+settings get simpler. There is no plan for it yet and this document does not make one. What it
+leaves ready: the three hooks are the seam. A feature that only gates, reads and writes state, and
+sends and receives signals can be switched off without anything else noticing, and its Backstage
+panel already registers on its own (`docs/architecture/README.md`). An add-on would then be a
+switch, its panel, its packs and its tags.
+
 ## Decided
 
 - A pregnancy runs about 6 weeks at normal pace.
 - `born` is the default ending; hard endings are separate and opt-in.
 - Opt-in is the pack plus the storyline's start mode; no gender rule.
-- One big release on an integration branch.
+- All of it, including a real inventory and couples in packs, in several PRs.
+- The probe comes first.
 
 ## Open decisions
 
-1. Probe first (slice 0), or go straight to slice 1.
-2. Occasions in this release, or left on their own runtime until later.
-3. The track list, and whether a pack may add a track.
-4. Names: "Storylines" in the UI; the server module `storylines` beside `projects`, or inside it.
-5. Loops in a graph: allowed with a day limit as the stop, or rejected.
-6. Whether couples move into a pack later.
-7. The release version.
+1. The track list, and whether a pack may add a track.
+2. Names: "Storylines" in the UI; the server module `storylines` beside `projects`, or inside it.
+3. Loops in a graph: allowed with a day limit as the stop, or rejected.
+4. Items: what the player can buy or send, and what it costs.
