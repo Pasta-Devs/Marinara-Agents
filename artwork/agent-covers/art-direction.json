@@ -240,6 +240,18 @@
       "name": "Relationship Tracker",
       "concept": "Chibi Professor Mari and a friendly red orc sit across one plate of spaghetti, affectionately connected mouth-to-mouth by a single noodle in a Lady and the Tramp parody.",
       "palette": "warm red, golden pasta, navy, candlelight gold"
+    },
+    {
+      "id": "2d-avatars",
+      "name": "2D Avatars",
+      "concept": "Mari holds up a paper-cutout puppet of herself caught mid-blink and mid-word, with layered paper sheets fanning out behind her like animation layers.",
+      "palette": "pastel pink, sky blue, cream, warm gold"
+    },
+    {
+      "id": "3d-avatars",
+      "name": "3D Avatars",
+      "concept": "Mari waves at a glowing holographic figurine of herself spinning on a small turntable pedestal, drawn flat in the same cel-shaded style.",
+      "palette": "cyan, violet, navy, soft white"
     }
   ]
 }

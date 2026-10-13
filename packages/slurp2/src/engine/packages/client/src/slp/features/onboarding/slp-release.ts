@@ -1,5 +1,5 @@
 // The splash screen needs the shipped version and its public notes inside the client bundle.
-export const SLURP2_VERSION = "0.3.37";
+export const SLURP2_VERSION = "0.3.38";
 
 export interface Slurp2ReleaseEntry {
   version: string;
@@ -12,6 +12,13 @@ export interface Slurp2ReleaseEntry {
  * in-universe bullets per release (technical detail lives in CHANGELOG.md).
  */
 export const SLURP2_RELEASES: Slurp2ReleaseEntry[] = [
+  {
+    version: "0.3.38",
+    date: "2026-10-13",
+    notes: [
+      "A creator whose card has image tags switched on gets a button that uses those tags as her appearance for pictures.",
+    ],
+  },
   {
     version: "0.3.37",
     date: "2026-10-13",
@@ -774,15 +781,6 @@ export const SLURP2_RELEASES: Slurp2ReleaseEntry[] = [
     version: "0.2.2",
     date: "2026-09-21",
     notes: ["Every persona now sees every Creator."],
-  },
-  {
-    version: "0.2.1",
-    date: "2026-09-21",
-    notes: [
-      "Posts never repeat private things from your messages.",
-      "Teasers and everyday posts stay short; behind-the-scenes posts can run long.",
-      "Stories can be thank-yous and requests too.",
-    ],
   },
 ];
 

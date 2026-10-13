@@ -1,5 +1,9 @@
 # Slurp release notes
 
+## 0.3.38 — 2026-10-13
+
+- Added: in a Creator's settings, "Appearance for pictures" has a new button, "Use the card's image tags". It shows only while the linked character or persona has the Image Appearance Override switched on and filled in, and it saves those tags as the Creator's own appearance. It asks first when that replaces an appearance you wrote. "Use linked appearance" (or "Clear override") removes it again. (#1366)
+
 ## 0.3.37 — 2026-10-13
 
 - With a Claude (Subscription) connection, Slurp no longer makes a hidden second request to name each session, and a request now stops with an error if Claude Code turns on claude.ai connectors. With a Marinara Engine release after 2.5.0, Claude Code also no longer adds your account email, the date or this computer's details to the prompt. Engine 2.5.0's Claude Code still adds them, and the server log warns about it until you update Marinara. (#1313)

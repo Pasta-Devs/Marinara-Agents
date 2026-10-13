@@ -48,7 +48,7 @@ import {
   compareMinimizedCreatorSourceSnapshot,
   minimizeCreatorSourceSnapshot,
 } from "../../base/identity/slp-source.js";
-import { resolveCreatorSourceSnapshot } from "./slp-source-resolve.js";
+import { resolveCreatorImageAppearance, resolveCreatorSourceSnapshot } from "./slp-source-resolve.js";
 import { withoutHiddenAmbientAccounts } from "../audience/slp-ambient-profiles.js";
 import { isSlurpCharacterFanAccount } from "../../../../../shared/src/slp/slp-audience-characters.js";
 import { slurpViewerSettingsKey } from "../host/slp-storage-constants.js";
@@ -323,6 +323,7 @@ export function createCreatorsStorage3(context: SlurpStorageContext) {
               text: appearance.text ?? "",
               needsReview: appearance.needsReview,
               linkedAppearance: currentSource?.appearance ?? "",
+              imageAppearance: publicAccount ? await resolveCreatorImageAppearance(db, publicAccount) : "",
               profile: appearance.profile,
             },
             wardrobe: account.settings.stage?.wardrobe ?? "",
