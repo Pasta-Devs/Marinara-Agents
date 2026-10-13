@@ -95,12 +95,16 @@ export interface MemoryNagScanProgress {
   checkpointMessageId: string | null;
 }
 
-function transcriptLine(message: CapabilityMessageRecord, participants: MemoryNagParticipant[]): string {
+// Package-owned copy of capability API 1.71's `agentContent`: the vendored shared types predate it. Roleplay records
+// carry the message as Engine agents read it, whispers marked private; older Engines omit it, so read the content.
+type AgentReadableMessage = CapabilityMessageRecord & { agentContent?: string };
+
+function transcriptLine(message: AgentReadableMessage, participants: MemoryNagParticipant[]): string {
   const name =
     message.role === "user"
       ? "User"
       : (participants.find((participant) => participant.id === message.characterId)?.name ?? "Assistant");
-  return `[${message.createdAt}] ${name} (${message.characterId ?? message.role}): ${message.content}`;
+  return `[${message.createdAt}] ${name} (${message.characterId ?? message.role}): ${message.agentContent ?? message.content}`;
 }
 
 function parseScanOutput(value: unknown): { memories: unknown[]; resolvedMemoryIds: string[] } {

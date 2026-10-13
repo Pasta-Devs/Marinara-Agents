@@ -10,7 +10,7 @@
   },
   "id": "noodle",
   "name": "Noodle",
-  "version": "1.5.5",
+  "version": "1.5.6",
   "description": "A pretend social network where your characters post, share photos, and talk about your chats. Install it, restart Marinara Engine when prompted, then open Home → Noodle.",
   "localizations": {
     "de": {
@@ -93,8 +93,8 @@
     },
     {
       "path": "server.mjs",
-      "sha256": "d7e5688a5bb0d018a38e157b580b906171430109359fc03beaea85dd3165260f",
-      "bytes": 2023466
+      "sha256": "2783b9d30966183f9578b69896b2ca60cd724f9c1dc3c46ed06fcafd722c1dd6",
+      "bytes": 2025381
     },
     {
       "path": "client.js",
@@ -105,6 +105,21 @@
       "path": "noodle-klusek.png",
       "sha256": "003236ad2b83c5eb44731a48048c86b07aa8c1f9c411f881c15f7d4af3c68212",
       "bytes": 28325
+    },
+    {
+      "path": "claude-code-plugin/.claude-plugin/plugin.json",
+      "sha256": "9caabe0dc95c7e0d825533719ae3a84cccba625277ec9e39dfd69fae18880fd3",
+      "bytes": 226
+    },
+    {
+      "path": "claude-code-plugin/hooks/hooks.json",
+      "sha256": "1c169616134dd0e6b5effb616a5dd20934f0f968579e316260568e2130d9d67a",
+      "bytes": 91
+    },
+    {
+      "path": "claude-code-plugin/hooks/register.mjs",
+      "sha256": "170f85d7b4e6c96dd0ed3cca9caeb2d39e0487fabe7f40274d5e6405acd6a1af",
+      "bytes": 504
     }
   ],
   "permissions": [

@@ -1,0 +1,6 @@
+{
+  "name": "marinara-chat-context",
+  "version": "1.0.0",
+  "description": "Removes the coding-agent context Claude Code adds between Marinara Engine's system prompt and the chat",
+  "author": { "name": "Marinara Engine" }
+}

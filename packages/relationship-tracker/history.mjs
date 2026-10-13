@@ -5,7 +5,7 @@ import {
   modelRelationshipSnapshot,
   normalizeHistoryRelationshipDelta,
 } from "./tracking.mjs";
-import { RelationshipStateError, characterCardName } from "./state.mjs";
+import { RelationshipStateError, agentMessageText, characterCardName } from "./state.mjs";
 import {
   PERSONA_TRACKING_INSTRUCTIONS,
   applyPersonaDelta,
@@ -55,7 +55,7 @@ function transcriptEntry(message) {
   return {
     role: typeof message?.role === "string" ? message.role : "unknown",
     characterId: typeof message?.characterId === "string" ? message.characterId : null,
-    content: typeof message?.content === "string" ? message.content : "",
+    content: agentMessageText(message),
   };
 }
 
@@ -221,7 +221,7 @@ export function createHistoryUpdateService(repository, runtime, activity, {
         try {
           const allowedCharacters = buildAllowedCharacterReferences(snapshot.characters
             .map((character) => ({ characterId: character.id, name: characterCardName(character, "") })));
-          const evidenceText = recentMessages.map((message) => message?.content ?? "").join("\n");
+          const evidenceText = recentMessages.map(agentMessageText).join("\n");
           if (personaSnapshot?.persona) {
             requireExactKeys(parsed, ["u", "p"], "History model result");
             cardUpdates = normalizeHistoryRelationshipDelta({ u: parsed.u }, allowedCharacters, snapshot.state.relationships, { evidenceText });

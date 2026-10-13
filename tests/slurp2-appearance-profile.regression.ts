@@ -176,6 +176,13 @@ test("unsupported image providers and fallbacks receive text without avatar refe
   assert.equal(slpImageReferencesSupported({ imageService: "comfyui" }, { serviceHint: "pollinations" }), false);
   assert.equal(slpImageReferencesSupported({ imageService: "pollinations" }), false);
   assert.equal(slpImageReferencesSupported({ imageService: "nanogpt", model: "hidream" }), true);
+  // SpicyAPI (#1337): edit models get the avatar, text-to-image models do not, and a fallback must take it too.
+  const spicyEdit = { imageService: "spicyapi", model: "bytedance/seedream-5.0-pro/edit" };
+  const spicyText = { imageService: "spicyapi", model: "alibaba/z-image-spicy-pro/text-to-image" };
+  assert.equal(slpImageReferencesSupported(spicyEdit), true);
+  assert.equal(slpImageReferencesSupported(spicyText), false);
+  assert.equal(slpImageReferencesSupported({ imageService: "comfyui" }, spicyEdit), true);
+  assert.equal(slpImageReferencesSupported(spicyEdit, spicyText), false);
   assert.equal(slpImageReferencesSupported({ model: "flux-kontext", baseUrl: "https://nano-gpt.com/api/v1" }), true);
   const openRouter = "https://openrouter.ai/api/v1";
   assert.equal(slpImageReferencesSupported({ model: "google/gemini-3.1-flash-image", baseUrl: openRouter }), true);

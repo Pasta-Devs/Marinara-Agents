@@ -57,6 +57,9 @@ jobs:
           node tests/conversation-calls-summary.regression.mjs
           node tests/calls-swarmui-video.regression.mjs
 
+      - name: Test the Claude (Subscription) provider Noodle, Slurp and Calls bundle
+        run: node --experimental-transform-types tests/claude-subscription-overlay.regression.mjs
+
       - name: Test Memory Nag recall selection
         run: npx tsx tests/memory-nag-selection.regression.ts
 
@@ -64,6 +67,9 @@ jobs:
         run: |
           npx tsx tests/memory-nag-range.regression.ts
           node tests/pixelforge-weather-contract.regression.mjs
+
+      - name: Test Relationship Tracker and Memory Nag reading Roleplay whispers
+        run: npx tsx tests/roleplay-whispers.regression.ts
 
       - name: Test Pixelforge world, setup, and startup contracts
         run: |
