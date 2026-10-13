@@ -2557,7 +2557,7 @@
         },
         "id": "memory-nag",
         "name": "Memory Nag",
-        "version": "1.1.3",
+        "version": "1.2.0",
         "description": "Remembers loose ends from your roleplay, like promises and open questions, and reminds the AI when they matter. Add the Agent in Chat Settings → Agents → Tracker Agents for Roleplay mode. Once active, configure it in its standalone Memory Nag section.",
         "engine": {
           "min": "2.4.4",
@@ -2586,8 +2586,8 @@
           },
           {
             "path": "server.mjs",
-            "sha256": "c640f5855a0bd534de7e85ddbf4eaf86e3fef956d4772e2d80cb7d404460db25",
-            "bytes": 23750
+            "sha256": "6a986a58fa2e2dcb35d73211b838719e979644a8a2e99a53a6d313517a438aa5",
+            "bytes": 23766
           },
           {
             "path": "client.js",
@@ -2608,9 +2608,9 @@
       "category": "tracker",
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/memory-nag.png",
       "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/memory-nag-1.1.3.zip",
-        "sha256": "6ff3c43144b6ca6802912812ab8547f35d12b2e0a9542b10808f32d5aca8fb7b",
-        "bytes": 430713
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/memory-nag-1.2.0.zip",
+        "sha256": "4defc083fe1fd1ce86a893121e98b4995e4b273d475ab0c59134727936dff028",
+        "bytes": 430729
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents#memory-nag"
     },
@@ -3181,7 +3181,7 @@
         },
         "id": "relationship-tracker",
         "name": "Relationship Tracker",
-        "version": "0.6.4",
+        "version": "0.7.0",
         "description": "Tracks how the characters and your persona feel about each other. Add the Agent in Chat Settings → Agents → Tracker Agents for Roleplay mode.",
         "engine": {
           "min": "2.4.4",
@@ -3214,8 +3214,8 @@
           },
           {
             "path": "state.mjs",
-            "sha256": "597023170e26cdeb1e27ab1d5021c5f7d69d5610d42ff38691ce965ad5f21c1f",
-            "bytes": 27236
+            "sha256": "1e9dd277e7f6a2028f787023ff15fa571a2eee83270e76b5614a5829440f6965",
+            "bytes": 27619
           },
           {
             "path": "prompt.mjs",
@@ -3234,8 +3234,8 @@
           },
           {
             "path": "history.mjs",
-            "sha256": "eff43a4a279f159d36f7a01bdc0f5b6fb53a9db8f45dabc2c0d481f7307c4c0a",
-            "bytes": 14777
+            "sha256": "29aecc822dcb07804e530b34604317584ea0fd728b6a0e6e4f795be3be4cdb80",
+            "bytes": 14742
           },
           {
             "path": "persona-state.mjs",
@@ -3281,9 +3281,9 @@
       "category": "tracker",
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/relationship-tracker.png",
       "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/relationship-tracker-0.6.4.zip",
-        "sha256": "2b434aa0e34e744a221f70ff9bbe22570865f2650f3118e021d1142492101037",
-        "bytes": 206865
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/relationship-tracker-0.7.0.zip",
+        "sha256": "02bbae6a79b8f9df9e39283a3fe09145295abbad6d70174e73cc71408fe6c871",
+        "bytes": 207213
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents/blob/main/packages/relationship-tracker/README.md"
     },

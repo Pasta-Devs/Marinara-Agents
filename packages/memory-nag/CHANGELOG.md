@@ -1,5 +1,9 @@
 # Memory-nag release notes
 
+## 1.2.0 — 2026-10-13
+
+Scans now read Roleplay whispers the way the Engine's own agents do, marked private with who they were for, so a promise made in a whisper can become a memory. A message that is only a whisper is no longer read as empty. This needs a Marinara Engine that shares whispers with Agents; older versions keep reading public messages only.
+
 ## 1.1.3 — 2026-10-01
 
 The description now says what it does in plain words.

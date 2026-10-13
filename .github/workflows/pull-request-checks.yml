@@ -65,6 +65,9 @@ jobs:
           npx tsx tests/memory-nag-range.regression.ts
           node tests/pixelforge-weather-contract.regression.mjs
 
+      - name: Test Relationship Tracker and Memory Nag reading Roleplay whispers
+        run: npx tsx tests/roleplay-whispers.regression.ts
+
       - name: Test Pixelforge world, setup, and startup contracts
         run: |
           node packages/pixelforge/test-brief.mjs
