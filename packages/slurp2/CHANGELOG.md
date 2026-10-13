@@ -1,5 +1,10 @@
 # Slurp release notes
 
+## 0.3.37 — 2026-10-13
+
+- With a Claude (Subscription) connection, Slurp no longer makes a hidden second request to name each session, and a request now stops with an error if Claude Code turns on claude.ai connectors. With a Marinara Engine release after 2.5.0, Claude Code also no longer adds your account email, the date or this computer's details to the prompt. Engine 2.5.0's Claude Code still adds them, and the server log warns about it until you update Marinara. (#1313)
+- Changed: avatar references are allowed for SpicyAPI edit models (model IDs ending in /edit) and still left out for its text-to-image models. Slurp's bundled image code cannot call SpicyAPI yet, so SpicyAPI pictures do not work in Slurp until it can. (#1337)
+
 ## 0.3.36 — 2026-10-13
 
 - Fixed: a Creator's bio and stage voice now steer what she posts about. The post planner reads them beside the character card (hidden identities stay hidden), so a hobby named only in the bio, such as cosplay, becomes post subjects. The post prompt also says that interests named in the bio and stage voice count. (#1358)

@@ -57,6 +57,9 @@ jobs:
           node tests/conversation-calls-summary.regression.mjs
           node tests/calls-swarmui-video.regression.mjs
 
+      - name: Test the Claude (Subscription) provider Noodle, Slurp and Calls bundle
+        run: node --experimental-transform-types tests/claude-subscription-overlay.regression.mjs
+
       - name: Test Memory Nag recall selection
         run: npx tsx tests/memory-nag-selection.regression.ts
 

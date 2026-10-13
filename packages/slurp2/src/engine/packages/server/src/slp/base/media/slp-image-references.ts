@@ -26,6 +26,8 @@ export function slpImageReferencesSupported(
     if (service === "novelai") return /^nai-diffusion-4-5(?:-(?:curated|full))?$/u.test(model);
     // These Engine adapters forward reference images for every model they serve.
     if (/^(?:automatic1111|comfyui|swarmui|runpod_comfyui|gemini_image|nanogpt|xai)$/u.test(service)) return true;
+    // SpicyAPI edit models (IDs ending in /edit) take references; its text-to-image models do not.
+    if (service === "spicyapi") return /\/edit$/u.test(model);
     // OpenRouter sends references on its chat path only. These are the models the Engine routes to
     // its Images API instead (`usesOpenRouterImagesApi`), which drops them.
     // ponytail: copied list; import the Engine helper once package tests can load image-generation.

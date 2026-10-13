@@ -63,6 +63,7 @@ The root `package.json` pins libraries that feature sources import but that the 
 - `schemas/` — package schema documents
 - `scripts/` — catalog builders and validation
 - `sources/engine/` — captured generic Engine dependencies required to reproduce feature bundles
+- `sources/claude-subscription-overlay/` — package-owned Claude (Subscription) provider and its Claude Code plugin, stacked over `sources/engine/` for Noodle, Slurp and Calls. Port Engine fixes to that provider here; the vendored copy is frozen
 - `tests/` — integration proof for package behavior
 
 The catalog contains Writer, Tracker, and Misc Agents. Feature packages such as Maps, Calls, and Conversation games are still represented by Agent definitions so installation and per-chat availability use one consistent lifecycle.

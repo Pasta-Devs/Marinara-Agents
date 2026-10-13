@@ -67,6 +67,8 @@ for (const id of packages) {
   const overlay = await mkdtemp(join(tmpdir(), `marinara-typecheck-${id}-`));
   try {
     await cp(engineSources, overlay, { recursive: true, force: true });
+    // The bundler stacks the shared Claude (Subscription) overlay here for Noodle, Slurp and Calls.
+    await cp(join(repoRoot, "sources/claude-subscription-overlay"), overlay, { recursive: true, force: true });
     await cp(packageSources, overlay, { recursive: true, force: true });
 
     const files = execFileSync("find", ["packages", "-name", "*.ts", "-o", "-name", "*.tsx"], {

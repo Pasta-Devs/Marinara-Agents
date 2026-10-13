@@ -10,7 +10,7 @@
   },
   "id": "slurp2",
   "name": "Slurp",
-  "version": "0.3.36",
+  "version": "0.3.37",
   "description": "A private social app for your characters. Turn characters and personas into Creators, post public or locked photos, and watch a simulated audience follow, subscribe, unlock, comment, and message them. By default, it is tuned for an adult experience. Install it, restart Marinara Engine when prompted, then open Home → Slurp.",
   "localizations": {
     "de": {
@@ -77,13 +77,13 @@
     },
     {
       "path": "server.mjs",
-      "sha256": "bfe3238b631a18b27854ca543e2679f2bf071261c3e83301366f75eb284f7d8d",
-      "bytes": 3496532
+      "sha256": "587a9cdb577b0b074fff2dc8a44b7a3096ca60a1e27d375c0e12eecdfd8e4260",
+      "bytes": 3498470
     },
     {
       "path": "client.js",
-      "sha256": "bdb5662c9a981d1981199e2ae2b77a47b50d488bf505ebaff3413afdc467d0b9",
-      "bytes": 4499157
+      "sha256": "b0e5217c9fda2140215a7b98402bff0b74cb87bc635707b264720d33c945452e",
+      "bytes": 4690330
     },
     {
       "path": "slurp2-logo.png",
@@ -109,6 +109,21 @@
       "path": "src/engine/packages/client/src/slp/locales/pl.json",
       "sha256": "9d746a64e4b5d5caf116aed0022b301add3ee0eaed7e61e01908d8acbb4f68ec",
       "bytes": 217233
+    },
+    {
+      "path": "claude-code-plugin/.claude-plugin/plugin.json",
+      "sha256": "9caabe0dc95c7e0d825533719ae3a84cccba625277ec9e39dfd69fae18880fd3",
+      "bytes": 226
+    },
+    {
+      "path": "claude-code-plugin/hooks/hooks.json",
+      "sha256": "1c169616134dd0e6b5effb616a5dd20934f0f968579e316260568e2130d9d67a",
+      "bytes": 91
+    },
+    {
+      "path": "claude-code-plugin/hooks/register.mjs",
+      "sha256": "170f85d7b4e6c96dd0ed3cca9caeb2d39e0487fabe7f40274d5e6405acd6a1af",
+      "bytes": 504
     }
   ],
   "permissions": [
