@@ -514,8 +514,8 @@ async function main() {
         );
         assert.equal(
           listNotesCalls,
-          2,
-          "deterministic batches must use one preparation snapshot plus one rebuild scan",
+          1,
+          "deterministic batches must use one preparation snapshot and no rebuild scan when nothing was applied",
         );
         assert.equal(deterministicBatch[0]?.outcome.droppedUnits, 0);
         assert.equal(deterministicBatch[1]?.outcome.droppedUnits, 0);

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { createHash, randomUUID } from "node:crypto";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { runRegressionToCompletion } from "./regression-helpers.ts";
@@ -32,6 +32,7 @@ async function main() {
   const { configurePackageRuntime } = await import(`${source}/package-runtime.ts`);
   const { processLongTermMemorySource } = await import(`${source}/source-processing.ts`);
   const { LongTermMemoryStorage } = await import(`${source}/storage.ts`);
+  const { longTermMemoryRecallIndexPath, rebuildLongTermMemoryIndexes } = await import(`${source}/rebuild.ts`);
   const { ltmNoteIdSchema } =
     await import("../packages/long-term-memory/src/engine/packages/shared/src/features/agents/long-term-memory/schema.ts");
 
@@ -919,6 +920,13 @@ async function main() {
             sourceHash,
           },
         ];
+        const recallIndexMtime = () =>
+          stat(longTermMemoryRecallIndexPath(root)).then(
+            (file) => file.mtimeMs,
+            () => null,
+          );
+        await rebuildLongTermMemoryIndexes({ root });
+        const indexBeforeExtraction = await recallIndexMtime();
         const committed = await processLongTermMemorySource({
           sourceNote: reviewSource as never,
           languageModel: {
@@ -975,6 +983,12 @@ async function main() {
           committed.appliedMutationIds.length > 0,
           reviewSignal === "control",
           `${reviewSignal}: only the control may auto-apply`,
+        );
+        // #1364: extraction rebuilds the recall index only when it applied mutations.
+        assert.equal(
+          (await recallIndexMtime()) !== indexBeforeExtraction,
+          reviewSignal === "control",
+          `${reviewSignal}: only extraction that applied mutations may rebuild the recall index`,
         );
       } finally {
         releaseHost();
