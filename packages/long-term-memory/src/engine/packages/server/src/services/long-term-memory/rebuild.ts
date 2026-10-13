@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { readFile } from "node:fs/promises";
+import { readFile, stat } from "node:fs/promises";
 import {
   ltmBm25IndexSchema,
   ltmEmbeddingIndexSchema,
@@ -24,8 +24,11 @@ import {
   markLtmIndexesBuilding,
   markLtmIndexesClean,
   markLtmIndexesFailed,
+  markLtmIndexesVerified,
+  readLtmIndexState,
   writeLtmNoteSummary,
 } from "./index-state.js";
+import { getVerifiedLtmRecallIndex, setVerifiedLtmRecallIndex } from "./vault-snapshot.js";
 import { withLtmVaultLock } from "./vault-lock.js";
 
 const autoUpgradeFailures = new Set<string>();
@@ -231,6 +234,16 @@ export async function rebuildLongTermMemoryIndexes(
   });
 }
 
+/** Device, inode, size and times of `recall.json`; empty when it cannot be read. */
+async function recallIndexFileKey(path: string) {
+  try {
+    const file = await stat(path, { bigint: true });
+    return `${file.dev}:${file.ino}:${file.size}:${file.mtimeNs}:${file.ctimeNs}`;
+  } catch {
+    return "";
+  }
+}
+
 export async function loadOrRebuildLongTermMemoryIndexes(
   root = getLongTermMemoryRoot(),
   resolvedEmbeddingAdapter?: EmbeddingAdapter | null,
@@ -252,14 +265,44 @@ export async function loadOrRebuildLongTermMemoryIndexes(
     signal?.throwIfAborted();
     let stale = false;
     try {
-      const index = parseLtmRecallIndex(JSON.parse(await readFile(path, "utf8")));
-      const notes = await new LongTermMemoryStorage(root).listNotes({ skipInvalid: true });
+      // Read what a cached index must still match before touching the vault, so a change that lands
+      // during the check can only make the next call miss, never hide the change.
+      const state = await readLtmIndexState(root).catch(() => null);
+      const fileKey = await recallIndexFileKey(path);
+      const stopWordsKey = resolvedStopWords.join("\u0000");
+      const verified = getVerifiedLtmRecallIndex(root);
+      let index: LtmRecallIndex;
       if (
-        index.sourceHash !==
-        stableJsonHash(chunkNotes(notes, { includeSourceNotes: false, stopWords: resolvedStopWords }))
+        verified &&
+        state &&
+        !state.dirty &&
+        fileKey &&
+        verified.revision === state.revision &&
+        verified.fileKey === fileKey &&
+        verified.stopWordsKey === stopWordsKey
       ) {
-        stale = true;
-        throw new Error("Stale long-term memory recall index.");
+        // Every package mutation bumps the revision under the vault lock, so none happened since the
+        // vault was last hashed. A process's first recall has no entry and always takes the full check.
+        index = verified.index;
+      } else {
+        index = parseLtmRecallIndex(JSON.parse(await readFile(path, "utf8")));
+        const notes = await new LongTermMemoryStorage(root).listNotes({ skipInvalid: true });
+        if (
+          index.sourceHash !==
+          stableJsonHash(chunkNotes(notes, { includeSourceNotes: false, stopWords: resolvedStopWords }))
+        ) {
+          stale = true;
+          throw new Error("Stale long-term memory recall index.");
+        }
+        // The index matches the vault. A mutation of unindexed notes (sources, drafts) leaves the state
+        // dirty with a fresh index, so clear that to let the next call reuse it; cache only a state
+        // that is clean at the revision read above.
+        if (state && fileKey) {
+          const clean = state.dirty ? await markLtmIndexesVerified(root, state.revision).catch(() => null) : state;
+          if (clean && !clean.dirty && clean.revision === state.revision + (state.dirty ? 1 : 0)) {
+            setVerifiedLtmRecallIndex(root, { index, revision: clean.revision, fileKey, stopWordsKey });
+          }
+        }
       }
       const usableEmbeddings = getUsableEmbeddingState(index, embeddingAdapter);
       if (usableEmbeddings) {
@@ -277,6 +320,8 @@ export async function loadOrRebuildLongTermMemoryIndexes(
       // unreadable or malformed one is quarantined; otherwise every edit would park a full copy.
       if (!stale) await quarantineLtmIndexArtifact(root, path).catch(() => {});
       await rebuildLongTermMemoryIndexes({ root, embeddingAdapter, stopWords: resolvedStopWords, signal });
+      // ponytail: an index built here is not cached; the next call verifies it once and caches it, so a
+      // cross-process write between the build's scan and its clean mark cannot be hidden by the cache.
       if (observation) observation.outcome = "rebuilt";
       return parseLtmRecallIndex(JSON.parse(await readFile(path, "utf8")));
     }

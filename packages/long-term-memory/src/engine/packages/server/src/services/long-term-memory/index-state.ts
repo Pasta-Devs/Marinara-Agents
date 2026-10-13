@@ -193,6 +193,18 @@ export function markLtmIndexesClean(root: string) {
     error: undefined,
   }));
 }
+/**
+ * The recall index was just verified against the whole vault at `revision`: clear a dirty flag that
+ * only unindexed notes (sources, drafts) set, without recording a rebuild. A state that moved since
+ * (another mutation, a build, a failure) is left untouched.
+ */
+export function markLtmIndexesVerified(root: string, revision: number) {
+  return update(root, (state) =>
+    state.revision === revision && state.dirty && state.rebuildState === "idle"
+      ? { ...state, revision: revision + 1, dirty: false, dirtyAt: undefined }
+      : state,
+  );
+}
 export function markLtmIndexesFailed(root: string, error: unknown) {
   return update(root, (state) => ({
     ...state,

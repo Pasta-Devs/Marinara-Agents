@@ -1,5 +1,6 @@
 import { resolve } from "node:path";
 import type { LtmNote } from "../../../../shared/src/features/agents/long-term-memory/schema.js";
+import type { LtmRecallIndex } from "./rebuild.js";
 
 /**
  * One shared vault scan: parsed notes plus the failures the scan tolerated. `invalidNote` marks a
@@ -13,9 +14,35 @@ export interface LtmVaultScan {
 
 const snapshots = new Map<string, Promise<LtmVaultScan>>();
 
-/** Drop the parsed vault snapshot for a root so the next read rebuilds it from disk. */
+/**
+ * A parsed recall index that was verified fresh against the vault, with what it was verified at.
+ * It is reusable only while the index state revision, the `recall.json` file identity and the
+ * effective stop words still match.
+ */
+export interface LtmVerifiedRecallIndex {
+  index: LtmRecallIndex;
+  revision: number;
+  fileKey: string;
+  stopWordsKey: string;
+}
+
+const verifiedIndexes = new Map<string, LtmVerifiedRecallIndex>();
+
+export function getVerifiedLtmRecallIndex(root: string) {
+  return verifiedIndexes.get(resolve(root));
+}
+
+export function setVerifiedLtmRecallIndex(root: string, verified: LtmVerifiedRecallIndex) {
+  verifiedIndexes.set(resolve(root), verified);
+}
+
+/**
+ * Drop the parsed vault snapshot, and the verified recall index derived from it, for a root so the
+ * next read rebuilds them from disk. Every vault mutation and repair already calls this.
+ */
 export function invalidateLtmVaultSnapshot(root: string) {
   snapshots.delete(resolve(root));
+  verifiedIndexes.delete(resolve(root));
 }
 
 /**
