@@ -1,5 +1,9 @@
 # Long-Term Memory changelog
 
+## 1.4.31 — 2026-10-13
+
+- A character's name now keeps full keyword credit wherever the chat writes it. Until now a single keyword match counted as a name only when it was capitalised in the middle of a sentence, so a name at the start of a sentence, in lowercase, or in a script without letter case such as Korean was capped at half credit. Recall now also treats each word of a character memory's title as a name, ignoring case and common stop words. A single ordinary keyword is still capped, and nothing else changes: no new lane and no change to the threshold, text search or vector scores. Nicknames and aliases are not matched.
+
 ## 1.4.30 — 2026-10-13
 
 - Recall can now include a memory that nearly matches the chat when a recalled memory links to it with an explanatory link: an evidence link, a thread and the event that caused or triggered it, or a relationship and the event that caused it. The linked memory must match the chat on its own at least a little (relevance 0.2), and links from memories that were not recalled add nothing. Recalled memories keep their places, and the memory cap and token budget still apply. This applies in the balanced, broad and story styles. A memory reached only through a link, with no match of its own, is no longer recalled, even at a threshold of 0. A saved `custom` graph weight now turns linked recall on or off and no longer scales a score, and the Memory Settings help text says so.

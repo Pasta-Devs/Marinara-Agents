@@ -438,6 +438,119 @@ async function main() {
     "a name must keep full credit beside another capitalised word",
   );
 
+  // Issue #1363: a known character name keeps full credit on a single keyword where
+  // capitalisation cannot show it: sentence start, lowercase, or a caseless script.
+  const knownNameIndex = buildLtmKeywordIndex([
+    { ...chunk("everyday-chunk", "everyday_note"), keywords: ["half"] },
+    { ...chunk("name-chunk", "name_note"), keywords: ["mira"] },
+    { ...chunk("korean-name-chunk", "korean_name_note"), keywords: ["서래"] },
+  ]);
+  const knownNames = new Set(["mira", "서래"]);
+  const keywordCredit = (query: string, names?: ReadonlySet<string>) =>
+    (searchLtmKeywordIndex(knownNameIndex, query, { topK: 10, knownNames: names })[0]?.score ?? 0) /
+    LTM_KEYWORD_MAX_SCORE;
+  for (const query of ["Mira walked in.", "i told mira already", "Then Mira walked in.", "서래가 왔다"]) {
+    assert.ok(keywordCredit(query) > 0, `${query}: the name chunk must still match`);
+    if (!/^Then/.test(query)) {
+      assert.ok(keywordCredit(query) <= 0.5, `${query}: without a known name this stays capped`);
+    }
+    assert.ok(keywordCredit(query, knownNames) >= 0.75, `${query}: a known name must keep full credit`);
+  }
+  assert.ok(
+    keywordCredit("There's half a sandwich left", knownNames) <= 0.5,
+    "a known name set must not lift an ordinary single keyword",
+  );
+  assert.deepEqual(
+    normalizeKeywordTerms("Mira of the Ash", buildStopWordSet(["ash"])),
+    ["mira"],
+    "title words that are stop words must not become known names",
+  );
+
+  // Issue #1363: retrieval builds the known names from allowed character chunks only.
+  {
+    const lookupRoot = await mkdtemp(join(tmpdir(), "marinara-ltm-known-names-"));
+    try {
+      const { retrieveLongTermMemory } = await import(`${source}/retrieval.ts`);
+      const { buildLtmGraphIndex } = await import(`${source}/graph.ts`);
+      const recallChunks = [
+        { ...chunk("half-world", "half_world"), title: "Half", keywords: ["half"], text: "a world note" },
+        {
+          ...chunk("mira-character", "mira_character"),
+          title: "Mira",
+          noteType: "character" as const,
+          keywords: ["mira"],
+          text: "a character note",
+        },
+        {
+          ...chunk("mira-world", "mira_world"),
+          title: "Mira",
+          keywords: ["mira"],
+          scope: { chatIds: ["other-chat"] },
+          text: "a world note not in scope",
+        },
+        {
+          ...chunk("seo-character", "seo_character"),
+          title: "서래",
+          noteType: "character" as const,
+          keywords: ["서래"],
+          text: "a character note",
+        },
+      ];
+      const recallIndex = {
+        version: 1 as const,
+        generatedAt: "2026-08-14T00:00:00.000Z",
+        sourceHash: "0".repeat(64),
+        metadata: buildLtmMetadataIndex(recallChunks),
+        bm25: buildLtmBm25Index(recallChunks),
+        graph: buildLtmGraphIndex([], recallChunks),
+        keywords: buildLtmKeywordIndex(recallChunks),
+        embeddings: {
+          version: 1 as const,
+          model: "unavailable",
+          dimension: null,
+          embeddedChunkCount: 0,
+          chunks: [],
+          byChunkId: {},
+        },
+      };
+      const recallScore = async (queryText: string, chunkId: string, noteTypes?: ["character"]) =>
+        (
+          await retrieveLongTermMemory({
+            root: lookupRoot,
+            index: recallIndex,
+            embeddingAdapter: null,
+            queryText,
+            mode: "roleplay",
+            scope: { chatId: "chat-a", chatIds: ["chat-a"] },
+            semanticWeight: 0,
+            lexicalWeight: 0,
+            graphWeight: 0,
+            keywordWeight: 1,
+            noteTypes,
+            maxChunks: 5,
+            maxTokens: 4096,
+          })
+        ).chunks.find((entry: { chunk: { id: string } }) => entry.chunk.id === chunkId)?.relevanceScore ?? 0;
+      const midSentence = await recallScore("Then Mira walked in.", "mira-character");
+      assert.ok(midSentence > 0, "the character chunk must be recalled for a mid-sentence name");
+      assert.equal(await recallScore("Mira walked in.", "mira-character"), midSentence);
+      assert.equal(await recallScore("i told mira already", "mira-character"), midSentence);
+      const koreanScore = await recallScore("서래가 왔다", "seo-character");
+      assert.ok(koreanScore >= midSentence, "a Korean character name must keep full credit");
+      assert.ok(
+        (await recallScore("There's half a sandwich left", "half-world")) < midSentence,
+        "an ordinary single keyword must stay below a known name",
+      );
+      assert.equal(
+        await recallScore("i told mira already", "mira-world"),
+        0,
+        "a non-character chunk outside the chat scope must not be recalled",
+      );
+    } finally {
+      await rm(lookupRoot, { recursive: true, force: true });
+    }
+  }
+
   // Issue #1264: the BM25 reference is the eight highest-idf query terms present in
   // the index, so padding the query with lower-idf narration does not shrink a
   // matching chunk's normalized score.

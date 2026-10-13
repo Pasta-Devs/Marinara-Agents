@@ -206,6 +206,12 @@
     "long-term-memory": {
       "versions": [
         {
+          "version": "1.4.31",
+          "date": "2026-10-13",
+          "notes": "- A character's name now keeps full keyword credit wherever the chat writes it. Until now a single keyword match counted as a name only when it was capitalised in the middle of a sentence, so a name at the start of a sentence, in lowercase, or in a script without letter case such as Korean was capped at half credit. Recall now also treats each word of a character memory's title as a name, ignoring case and common stop words. A single ordinary keyword is still capped, and nothing else changes: no new lane and no change to the threshold, text search or vector scores. Nicknames and aliases are not matched.",
+          "highlight": false
+        },
+        {
           "version": "1.4.30",
           "date": "2026-10-13",
           "notes": "- Recall can now include a memory that nearly matches the chat when a recalled memory links to it with an explanatory link: an evidence link, a thread and the event that caused or triggered it, or a relationship and the event that caused it. The linked memory must match the chat on its own at least a little (relevance 0.2), and links from memories that were not recalled add nothing. Recalled memories keep their places, and the memory cap and token budget still apply. This applies in the balanced, broad and story styles. A memory reached only through a link, with no match of its own, is no longer recalled, even at a threshold of 0. A saved `custom` graph weight now turns linked recall on or off and no longer scales a score, and the Memory Settings help text says so.",
@@ -317,12 +323,6 @@
           "version": "1.4.12",
           "date": "2026-10-07",
           "notes": "- Filter the Debug tab by whole operation on the client. A phase or \"Errors only\" filter no longer queries a subset of events, so a truncated extraction cannot read \"Completed\" and a partial import cannot flip to \"Failed\".\n- Replace only whole-token memory ids in debug text. An id that is only a prefix of another id (for example `character_mara_missing`) is no longer rewritten as `Mara Quill_missing`.\n- Note when the Debug tab shows only the newest 200 events and offer \"Show up to 1,000\".\n- Keep the \"Latest recall workflow\" on the newest retrieval-phase explanation.\n- Read \"No completion recorded\" instead of \"Running\" when a started run has no completion after an hour.\n- Resolve Debug tab memory titles for the ids on screen with `requestNotesByIds` instead of downloading the whole vault, and stop refetching the lookup on window focus.\n- Render Technical details JSON only while its section is open.\n- Clear a stale export or clear error when Refresh succeeds.",
-          "highlight": false
-        },
-        {
-          "version": "1.4.11",
-          "date": "2026-10-07",
-          "notes": "- Stop losing selected memories while building the recall prompt. The budget counted only chunk text, so the framing and preamble pushed the assembled prompt past the limit and the serializer dropped its last chunks without reconsidering the smaller ones it had skipped; a high-scoring memory could be dropped while one that fit was left out. The fixed prompt overhead is now reserved in the recall budget, and a chunk that no longer fits is skipped so later chunks that still fit are kept.",
           "highlight": false
         }
       ]
