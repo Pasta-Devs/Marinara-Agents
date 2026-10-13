@@ -76,10 +76,13 @@ recent chat messages + chat settings
 Recall reuses the parsed recall index while the index-state revision, the
 `recall.json` file identity and the stop words are unchanged. Each package
 mutation bumps the revision under the vault lock and `invalidateLtmVaultSnapshot`
-drops the cached index, so a mutation or repair is never served stale. Each
-process's first recall checks the whole vault, which catches notes edited outside
-the package. A rebuild embeds only chunks whose `textHash` is new when the
-previous index shares the embedding space.
+drops the cached index, so a mutation or repair is never served stale. The cached
+index is used only while the index state is clean. Each process's first recall
+checks the whole vault, which catches notes edited outside the package before it
+started. Notes edited outside the package while it runs, or by a second process
+on the same vault, are seen after a restart or that process's next mutation. A
+rebuild embeds only chunks whose `textHash` is new when the previous index shares
+the embedding space.
 
 The retrieval entrypoint is `retrieval.ts`; ranking and budget behavior are in
 `ranking.ts` and `budget.ts`; the linked-recall lookup is in `graph.ts`; host

@@ -2053,6 +2053,32 @@ async function main() {
           assert.equal(embeddedCount(), 1, "a text edit re-embeds only that memory's chunk");
           assert.equal(edited.embeddedChunkCount, edited.chunkCount, "reused and new vectors must all be stored");
 
+          await storage.updateNote("world_1364_reuse", {
+            sections: { facts: { text: "A cobalt archive reuse entry, resized.", updatedAt: timestamp } },
+          });
+          const resized = await rebuildLongTermMemoryIndexes({
+            root: vaultRoot,
+            embeddingAdapter: {
+              spaceId: "reuse-space",
+              label: "reuse test embeddings",
+              async embed(texts: string[]) {
+                embeddedBatches.push(texts);
+                return texts.map(() => [1, 0, 0]);
+              },
+            },
+            stopWords: [],
+          });
+          assert.equal(
+            embeddedCount(),
+            1 + resized.chunkCount,
+            "a new dimension in the same space must re-embed everything",
+          );
+          assert.equal(
+            JSON.parse(await readFile(recallIndexPath, "utf8")).embeddings.dimension,
+            3,
+            "the re-embedded index must store the new dimension",
+          );
+
           await rebuild("other-reuse-space");
           assert.equal(embeddedCount(), edited.chunkCount, "another embedding space must re-embed everything");
 

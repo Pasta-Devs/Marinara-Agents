@@ -60,7 +60,7 @@ async function readReusableVectors(root: string, spaceId: string | undefined) {
     for (const entry of embeddings.chunks)
       if (entry.textHash && entry.vector) vectors.set(entry.textHash, entry.vector);
   } catch {
-    // ponytail: no previous index to reuse; the next rebuild embeds everything, as before this cache existed.
+    // ponytail: no previous index to reuse; this rebuild embeds everything, as before this cache existed.
   }
   return { vectors, dimension };
 }
@@ -283,6 +283,11 @@ export async function loadOrRebuildLongTermMemoryIndexes(
       ) {
         // Every package mutation bumps the revision under the vault lock, so none happened since the
         // vault was last hashed. A process's first recall has no entry and always takes the full check.
+        // ponytail: notes edited outside the package while this process runs, or by a second process
+        // (the vault lock is per-process), are not seen until a restart or this process's next mutation,
+        // and a hit skips listNotes, so recall alone no longer starts the daily retention run. Upgrade:
+        // bump the revision again after commitLtmMutation applies its files, and stat the note
+        // directories here.
         index = verified.index;
       } else {
         index = parseLtmRecallIndex(JSON.parse(await readFile(path, "utf8")));
@@ -320,8 +325,8 @@ export async function loadOrRebuildLongTermMemoryIndexes(
       // unreadable or malformed one is quarantined; otherwise every edit would park a full copy.
       if (!stale) await quarantineLtmIndexArtifact(root, path).catch(() => {});
       await rebuildLongTermMemoryIndexes({ root, embeddingAdapter, stopWords: resolvedStopWords, signal });
-      // ponytail: an index built here is not cached; the next call verifies it once and caches it, so a
-      // cross-process write between the build's scan and its clean mark cannot be hidden by the cache.
+      // ponytail: an index built here is not cached; the next call verifies it once before caching it,
+      // which narrows, but does not close, the window for a write from another process.
       if (observation) observation.outcome = "rebuilt";
       return parseLtmRecallIndex(JSON.parse(await readFile(path, "utf8")));
     }
