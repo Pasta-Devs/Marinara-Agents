@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import {
   ltmBm25IndexSchema,
@@ -37,6 +38,48 @@ function autoUpgradeFailureKey(root: string, spaceId: string) {
 
 function isFiniteVector(vector: number[] | undefined, dimension: number) {
   return Array.isArray(vector) && vector.length === dimension && vector.every(Number.isFinite);
+}
+
+const textHash = (text: string) => createHash("sha256").update(text).digest("hex");
+
+/**
+ * Vectors from the previous index keyed by embedded-text hash. Empty unless that index parses and was
+ * built in the same embedding space, so a missing, malformed or other-space index embeds everything.
+ */
+async function readReusableVectors(root: string, spaceId: string | undefined) {
+  const vectors = new Map<string, number[]>();
+  let dimension = 0;
+  if (!spaceId) return { vectors, dimension };
+  try {
+    const { embeddings } = parseLtmRecallIndex(JSON.parse(await readFile(longTermMemoryRecallIndexPath(root), "utf8")));
+    if (embeddings.spaceId !== spaceId || !embeddings.dimension) return { vectors, dimension };
+    dimension = embeddings.dimension;
+    for (const entry of embeddings.chunks)
+      if (entry.textHash && entry.vector) vectors.set(entry.textHash, entry.vector);
+  } catch {
+    // ponytail: no previous index to reuse; the next rebuild embeds everything, as before this cache existed.
+  }
+  return { vectors, dimension };
+}
+
+/** Embed only the texts whose hash has no reusable vector; returns one vector per text, or null. */
+async function embedWithReuse(
+  texts: string[],
+  hashes: string[],
+  reusable: { vectors: Map<string, number[]>; dimension: number },
+  embed: (texts: string[]) => Promise<number[][] | null>,
+) {
+  const pending = new Map<string, string>();
+  hashes.forEach((hash, index) => {
+    if (!reusable.vectors.has(hash)) pending.set(hash, texts[index]!);
+  });
+  const fresh = pending.size > 0 ? await embed([...pending.values()]) : [];
+  if (!fresh) return null;
+  // A source that now answers with another dimension cannot be mixed with the old vectors.
+  if (reusable.vectors.size > 0 && fresh.length > 0 && fresh[0]!.length !== reusable.dimension) return embed(texts);
+  const byHash = new Map(reusable.vectors);
+  [...pending.keys()].forEach((hash, index) => byHash.set(hash, fresh[index]!));
+  return hashes.map((hash) => byHash.get(hash)!);
 }
 
 function getUsableEmbeddingState(index: LtmRecallIndex, adapter: EmbeddingAdapter | null) {
@@ -132,12 +175,13 @@ export async function rebuildLongTermMemoryIndexes(
       const notes = await new LongTermMemoryStorage(root).listNotes({ skipInvalid: true });
       await writeLtmNoteSummary(root, notes);
       const chunks = chunkNotes(notes, { includeSourceNotes: false, stopWords });
-      const vectors = await embedLongTermMemoryTexts(
-        chunks.map((chunk) => chunk.text),
-        {
-          ...options,
-          embeddingAdapter,
-        },
+      const texts = chunks.map((chunk) => chunk.text);
+      const textHashes = texts.map(textHash);
+      const vectors = await embedWithReuse(
+        texts,
+        textHashes,
+        await readReusableVectors(root, embeddingAdapter?.spaceId),
+        (pending) => embedLongTermMemoryTexts(pending, { ...options, embeddingAdapter }),
       );
       const dimension = vectors?.[0]?.length ?? 0;
       const usableVectors =
@@ -155,7 +199,7 @@ export async function rebuildLongTermMemoryIndexes(
         chunks: chunks.map((chunk, index) => ({
           chunkId: chunk.id,
           sourceHash: chunk.sourceHash,
-          ...(usableVectors?.[index] ? { vector: usableVectors[index] } : {}),
+          ...(usableVectors?.[index] ? { textHash: textHashes[index], vector: usableVectors[index] } : {}),
         })),
         byChunkId: Object.fromEntries(chunks.map((chunk, index) => [chunk.id, index])),
       });

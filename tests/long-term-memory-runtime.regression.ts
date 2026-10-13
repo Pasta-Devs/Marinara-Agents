@@ -2019,6 +2019,51 @@ async function main() {
           "an unreadable index must still be quarantined",
         );
 
+        // #1364: a rebuild embeds only the chunks whose embedded text is new. Another embedding
+        // space, or a previous index that cannot be read, embeds everything.
+        {
+          const embeddedBatches: string[][] = [];
+          const reuseAdapter = (spaceId: string) => ({
+            spaceId,
+            label: "reuse test embeddings",
+            async embed(texts: string[]) {
+              embeddedBatches.push(texts);
+              return texts.map(() => [1, 0]);
+            },
+          });
+          const embeddedCount = () => embeddedBatches.splice(0).flat().length;
+          const rebuild = (spaceId: string) =>
+            rebuildLongTermMemoryIndexes({ root: vaultRoot, embeddingAdapter: reuseAdapter(spaceId), stopWords: [] });
+          await storage.createNote(note("world_1364_reuse", "chat-a", "A cobalt archive reuse entry."));
+          const full = await rebuild("reuse-space");
+          assert.equal(embeddedCount(), full.chunkCount, "a first rebuild embeds every chunk");
+          assert.ok(full.chunkCount > 1, "the reuse regression needs several chunks");
+
+          await rebuild("reuse-space");
+          assert.equal(embeddedCount(), 0, "an unchanged vault must reuse every vector");
+
+          await storage.updateNote("world_1364_reuse", { tags: ["reuse_tag"] });
+          await rebuild("reuse-space");
+          assert.equal(embeddedCount(), 0, "a tag edit changes no embedded text and must reuse every vector");
+
+          await storage.updateNote("world_1364_reuse", {
+            sections: { facts: { text: "A cobalt archive reuse entry with new words.", updatedAt: timestamp } },
+          });
+          const edited = await rebuild("reuse-space");
+          assert.equal(embeddedCount(), 1, "a text edit re-embeds only that memory's chunk");
+          assert.equal(edited.embeddedChunkCount, edited.chunkCount, "reused and new vectors must all be stored");
+
+          await rebuild("other-reuse-space");
+          assert.equal(embeddedCount(), edited.chunkCount, "another embedding space must re-embed everything");
+
+          await writeFile(recallIndexPath, "{");
+          await rebuild("other-reuse-space");
+          assert.equal(embeddedCount(), edited.chunkCount, "an unreadable previous index must re-embed everything");
+
+          // Leave the vector-less index the cancellation scenario below starts from.
+          await rebuildLongTermMemoryIndexes({ root: vaultRoot, embeddingAdapter: null, stopWords: [] });
+        }
+
         // Recall cancellation must reach rebuild embedding work, avoid publishing after
         // abort, and release the vault lock so a queued reader proceeds.
         await storage.createNote(note("world_1178_abort", "chat-a", "A cobalt archive cancellation entry."));

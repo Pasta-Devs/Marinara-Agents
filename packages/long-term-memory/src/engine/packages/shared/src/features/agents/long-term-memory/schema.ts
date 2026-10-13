@@ -1411,6 +1411,11 @@ export const ltmEmbeddingIndexEntrySchema = z
   .object({
     chunkId: z.string().min(1).max(240),
     sourceHash: z.string().regex(/^[a-f0-9]{64}$/),
+    /** Hash of the embedded text. A rebuild reuses the vector of a chunk whose text hash is unchanged. */
+    textHash: z
+      .string()
+      .regex(/^[a-f0-9]{64}$/)
+      .optional(),
     vector: z.array(z.number().finite()).min(1).optional(),
   })
   .strict();
