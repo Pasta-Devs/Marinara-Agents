@@ -83,6 +83,7 @@ import {
   type BrowserSpeechRecognition,
 } from "../../lib/browser-speech-recognition";
 import { useTTSConfig } from "../../hooks/use-tts";
+import { useDialogFocusScope } from "../../hooks/use-dialog-focus-scope";
 import { resolveTTSVoiceForSpeaker } from "../../lib/tts-dialogue";
 import { ttsService } from "../../lib/tts-service";
 import {
@@ -1201,6 +1202,19 @@ export function ConversationCallSurface({
   const speechRecognitionRef = useRef<BrowserSpeechRecognition | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const inputBarRef = useRef<HTMLDivElement | null>(null);
+  // The phone Call Chat sheet is a chat-local modal. It mounts only in the mobile layout, so one left open
+  // across the breakpoint cannot hide Engine's floating windows on desktop. Its Connections menu is portaled.
+  // ponytail: the frozen vendored hook predates Engine's stacked-modal guard, so Tab in an Engine dialog opened
+  // above the sheet returns to the sheet. Upgrade path: a package-owned copy of Engine's current hook.
+  const mobileChatSheetOpen = mobileChatOpen && mobileCallLayout;
+  const mobileChatSheetRef = useRef<HTMLDivElement | null>(null);
+  useDialogFocusScope(
+    mobileChatSheetOpen,
+    mobileChatSheetRef,
+    undefined,
+    undefined,
+    '[role="menu"][aria-label="Connections"]',
+  );
   const lastUserActivityAtRef = useRef(0);
   const lastIdleCheckAtRef = useRef(0);
   const playingTurnsRef = useRef(false);
@@ -3204,8 +3218,15 @@ export function ConversationCallSurface({
           {renderCallComposer()}
         </div>
       </div>
-      {mobileChatOpen && (
-        <div className="absolute inset-0 z-40 flex flex-col bg-[var(--background)] md:hidden">
+      {/* A chat-local modal: Engine hides its floating chat windows and bubbles, which otherwise cover the close button. */}
+      {mobileChatSheetOpen && (
+        <div
+          ref={mobileChatSheetRef}
+          role="dialog"
+          aria-modal="true"
+          aria-label="Call Chat"
+          className="absolute inset-0 z-40 flex flex-col bg-[var(--background)] md:hidden"
+        >
           <div className="flex shrink-0 items-center justify-between gap-3 border-b border-[var(--marinara-chat-chrome-panel-divider)] px-4 py-3">
             <div className="min-w-0">
               <div className="truncate text-sm font-semibold text-[var(--marinara-chat-chrome-panel-title)]">

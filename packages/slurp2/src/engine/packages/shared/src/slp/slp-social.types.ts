@@ -363,6 +363,8 @@ export interface SlpCreatorManagedStageProfile extends SlpCreatorStageProfile {
     text: string;
     needsReview: boolean;
     linkedAppearance: string;
+    /** Image tags of the linked card while its Image Appearance Override is on; otherwise empty. */
+    imageAppearance: string;
     profile: SlpAppearanceProfile | null;
   };
   fanActivity: SlpCreatorFanActivitySettings | null;

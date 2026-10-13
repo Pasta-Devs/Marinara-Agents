@@ -82,7 +82,7 @@ const INTENDED_DELTAS: Record<string, [string, string][]> = {
     ],
     ["sourceAccountId: string | null;", ""],
     [
-      'appearanceState: {\n    source: "override" | "linked" | "derived" | "missing";\n    text: string;\n    needsReview: boolean;\n    linkedAppearance: string;\n    profile: SlpAppearanceProfile | null;\n  };',
+      'appearanceState: {\n    source: "override" | "linked" | "derived" | "missing";\n    text: string;\n    needsReview: boolean;\n    linkedAppearance: string;\n    /** Image tags of the linked card while its Image Appearance Override is on; otherwise empty. */\n    imageAppearance: string;\n    profile: SlpAppearanceProfile | null;\n  };',
       "",
     ],
   ],

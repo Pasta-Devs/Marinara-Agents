@@ -38,7 +38,9 @@
 // into the normal lanes for a local build, so an unfiltered catalog can be
 // served to a development Engine through its MARINARA_AGENT_CATALOG_URL
 // override. Never commit a catalog generated that way — validation rejects it.
-export const INCOMPLETE_PACKAGE_IDS = new Set(["pixelforge"]);
+// The avatar agents (Marinara-Engine#7537) stay here until the Engine's avatar setup, stage, and at least
+// one renderer are on Engine `staging` (Engine docs/development/optional-agent-packages.md, Capability API 1.73).
+export const INCOMPLETE_PACKAGE_IDS = new Set(["2d-avatars", "3d-avatars", "pixelforge"]);
 
 // To graduate a package to stable users, follow "Packages that are not ready for
 // everyone" in CONTRIBUTING.md (Quartermaster and Relationship Tracker did so for

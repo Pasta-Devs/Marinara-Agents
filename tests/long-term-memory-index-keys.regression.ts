@@ -370,6 +370,50 @@ async function main() {
       LTM_LINKED_RECALL_MIN_RELEVANCE < DEFAULT_LTM_GLOBAL_SETTINGS.longTermMemoryScoreThreshold,
     "the linked recall floor must sit above 0 and below the default threshold",
   );
+  // Issue #1362: linked recall also follows a caused_by link between two events and a
+  // thread paid_off_in link to its event, from either end, and nothing wider.
+  const { findLtmLinkedNotes } = await import(`${source}/graph.ts`);
+  const linkTypes: Record<string, string> = {
+    timeline_effect: "timeline_event",
+    timeline_cause: "timeline_event",
+    timeline_payoff: "timeline_event",
+    thread_open: "thread",
+    world_lore: "world",
+  };
+  const linkedFrom = (seed: string, links: Array<[string, string, string]>) => {
+    const nodes: Record<string, { chunkIds: string[]; outgoing: any[]; incoming: any[] }> = {};
+    for (const id of Object.keys(linkTypes)) nodes[id] = { chunkIds: [], outgoing: [], incoming: [] };
+    for (const [from, relation, to] of links) {
+      const edge = { source: from, target: to, relation };
+      nodes[from]!.outgoing.push(edge);
+      nodes[to]!.incoming.push(edge);
+    }
+    return findLtmLinkedNotes({ version: 1, nodes }, [seed], (id: string) => linkTypes[id]).map(
+      (link: { noteId: string }) => link.noteId,
+    );
+  };
+  const causedBy: Array<[string, string, string]> = [["timeline_effect", "caused_by", "timeline_cause"]];
+  assert.deepEqual(linkedFrom("timeline_effect", causedBy), ["timeline_cause"]);
+  assert.deepEqual(linkedFrom("timeline_cause", causedBy), ["timeline_effect"]);
+  const paidOff: Array<[string, string, string]> = [["thread_open", "paid_off_in", "timeline_payoff"]];
+  assert.deepEqual(linkedFrom("thread_open", paidOff), ["timeline_payoff"]);
+  assert.deepEqual(linkedFrom("timeline_payoff", paidOff), ["thread_open"]);
+  for (const links of [
+    [["timeline_effect", "triggered_by", "timeline_cause"]],
+    [["timeline_effect", "planted_in", "timeline_cause"]],
+    [["timeline_effect", "involves", "timeline_cause"]],
+    [["world_lore", "paid_off_in", "timeline_payoff"]],
+    [["world_lore", "caused_by", "timeline_cause"]],
+    [["thread_open", "paid_off_in", "world_lore"]],
+  ] as Array<Array<[string, string, string]>>) {
+    for (const seed of Object.keys(linkTypes)) {
+      assert.deepEqual(
+        linkedFrom(seed, links),
+        [],
+        `${links[0]![1]} ${links[0]![0]} -> ${links[0]![2]} must stay unfollowed from ${seed}`,
+      );
+    }
+  }
   for (const [style, weights] of Object.entries(LTM_RECALL_STYLE_WEIGHTS)) {
     assert.ok(
       weights.keywordWeight * (3 / LTM_KEYWORD_MAX_SCORE) >= DEFAULT_LTM_GLOBAL_SETTINGS.longTermMemoryScoreThreshold,

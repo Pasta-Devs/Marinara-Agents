@@ -121,6 +121,11 @@ jobs:
       - name: Test ruleset package contract
         run: node scripts/tests/ruleset-package.regression.mjs
 
+      # The avatar packages are built ahead of the Engine surfaces that read them, so this holds their
+      # agent definitions and generation prompts to the Engine's Capability API 1.73 contract.
+      - name: Test avatar package contract
+        run: node scripts/tests/avatar-package.regression.mjs
+
       - name: Test World Maps UI contracts and location limit
         run: |
           node tests/world-maps-ui-contract.regression.mjs

@@ -121,6 +121,7 @@ test("installed Calls package stays responsive when browser blocks voice playbac
               sidebarOpen: false,
               rightPanelOpen: false,
               chatHelpSeenModes: ["conversation"],
+              chatWindowIntroDismissed: true,
               chibiProfessorMariEnabled: false,
             },
           }),
@@ -158,7 +159,8 @@ test("installed Calls package stays responsive when browser blocks voice playbac
     await expect(input).toHaveCount(0);
   } finally {
     await page.close();
-    await request.delete(`/api/chats/${chat.id}?force=true`);
-    await request.delete(`/api/characters/${character.id}`);
+    // A timed-out test has already closed the request context; don't let cleanup hide the step that hung.
+    await request.delete(`/api/chats/${chat.id}?force=true`).catch(() => {});
+    await request.delete(`/api/characters/${character.id}`).catch(() => {});
   }
 });

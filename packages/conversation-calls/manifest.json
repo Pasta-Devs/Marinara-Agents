@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "conversation-calls",
   "name": "Calls",
-  "version": "1.1.3",
+  "version": "1.1.4",
   "description": "Adds live audio and video calls with Conversation characters. Add as both a Command and an Agent in Chat Settings → Agents → Commands/Calls for Conversation mode.",
   "engine": {
     "min": "2.4.1",
@@ -37,8 +37,8 @@
     },
     {
       "path": "client.js",
-      "sha256": "863006fa9bc8af1c2e6c70ce4d694767eeff634a807c34b301ced46f2da6331a",
-      "bytes": 882635
+      "sha256": "21dfd46549c182b1e89804c0cbe944b4e1283ad1e45ba0e41b05f6e2cd80b605",
+      "bytes": 884196
     },
     {
       "path": "claude-code-plugin/.claude-plugin/plugin.json",
