@@ -117,7 +117,7 @@ export function applyLtmBudget(
 
   for (const candidate of candidates) {
     const comparableScore = candidate.relevanceScore;
-    if (scoreThreshold > 0 && comparableScore < scoreThreshold) {
+    if (!candidate.linked && scoreThreshold > 0 && comparableScore < scoreThreshold) {
       if (options.explain && rejected.length < rejectedLimit) {
         const chunk = chunksById.get(candidate.chunkId);
         pushRejected(rejected, rejectedLimit, candidate, chunk, "score_threshold", options.promptNormalizedEstimate);

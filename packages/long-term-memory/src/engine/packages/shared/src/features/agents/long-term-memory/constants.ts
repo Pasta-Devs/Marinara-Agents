@@ -276,11 +276,20 @@ export const DEFAULT_LTM_RECALL_STYLE = "balanced" satisfies LongTermMemoryRecal
 export const DEFAULT_LTM_RECALL_PREAMBLE = "Relevant long-term memories for this reply:";
 
 /**
+ * Own relevance a memory needs to be recalled through an explanatory link from a
+ * recalled memory. Linked memories skip the threshold, so this keeps out the ones
+ * that do not nearly match the chat themselves.
+ * ponytail: measured only at balanced and threshold 0.35; scale it with the
+ * threshold or the graph weight after measuring other presets.
+ */
+export const LTM_LINKED_RECALL_MIN_RELEVANCE = 0.2;
+
+/**
  * Per-style lane weights. A candidate's relevance is its strongest weighted lane
- * score, so a lane contributes at most `weight × lane ceiling`: 1 for vector,
- * keyword, direct and BM25, and 0.5 for graph, which is capped at
- * `1 / (distance + 1)`. Scaling a style's weights together moves only its
- * threshold scale, not its fused order.
+ * score, so a lane contributes at most `weight × lane ceiling`, which is 1 for
+ * vector, keyword, direct and BM25. Scaling a style's weights together moves only
+ * its threshold scale, not its fused order. The graph weight is not a score
+ * scale: above 0 it turns linked recall on, and 0 turns it off.
  *
  * Issue #1264 rescaled every preset by 0.7 and retuned balanced. The scaled
  * weights at the default threshold 0.35 select what the previous weights selected
@@ -288,10 +297,8 @@ export const DEFAULT_LTM_RECALL_PREAMBLE = "Relevant long-term memories for this
  * hits weaker and long-window BM25 matches stronger. Balanced uses relative
  * weights 1 / 0.6 / 0.15 / 0.8, and every style keeps a keyword weight of 0.56 so
  * a two-keyword or name match (0.75 of the lane) still clears the default
- * threshold when the semantic lane is unavailable. Graph weights stay low, so
- * graph-only neighbours (at most half the graph weight) sit under the default
- * threshold, and a saved threshold above 0.4 is read as 0.4 because the rescaled
- * ceiling leaves little above it.
+ * threshold when the semantic lane is unavailable. A saved threshold above 0.4 is
+ * read as 0.4 because the rescaled ceiling leaves little above it.
  *
  * `custom` has no preset: a custom style reads the user's own saved weights, so a
  * dead preset here only invited drift. Issue #1258.

@@ -1,6 +1,7 @@
 import type {
   LtmGraphIndex,
   LtmNote,
+  LtmNoteType,
   LtmMemoryChunk,
 } from "../../../../shared/src/features/agents/long-term-memory/schema.js";
 
@@ -45,61 +46,45 @@ export function buildLtmGraphIndex(notes: LtmNote[], chunks: LtmMemoryChunk[]): 
   };
 }
 
-export function expandLtmGraph(
-  index: LtmGraphIndex,
-  seedNoteIds: string[],
-  options: {
-    maxHops?: number;
-    topK?: number;
-    maxVisited?: number;
-    maxCandidates?: number;
-    allowedNoteIds?: Set<string>;
-  } = {},
+/**
+ * Explanatory links only: `evidenced_by` in either direction, a thread joined to its
+ * cause or trigger event, and a relationship joined to its cause event. Other links
+ * (world `planted_in`, character `caused_by`, `extracted_from`) measured as noise.
+ */
+function isExplanatoryLink(
+  seedType: LtmNoteType | undefined,
+  seedStoresLink: boolean,
+  relation: string,
+  otherType: LtmNoteType | undefined,
 ) {
-  const maxHops = options.maxHops ?? 2;
-  const maxVisited = Math.max(1, options.maxVisited ?? 256);
-  const maxCandidates = Math.max(1, options.maxCandidates ?? options.topK ?? 50);
-  const boundedSeeds = seedNoteIds
-    .filter((id) => !options.allowedNoteIds || options.allowedNoteIds.has(id))
-    .slice(0, maxVisited);
-  const visited = new Set(boundedSeeds);
-  const queue = boundedSeeds.map((noteId) => ({ noteId, distance: 0 }));
-  const scores = new Map<string, { score: number; viaNoteId: string; distance: number }>();
+  if (relation === "evidenced_by") return true;
+  const [stateType, eventType] = seedStoresLink ? [seedType, otherType] : [otherType, seedType];
+  if (eventType !== "timeline_event") return false;
+  if (stateType === "thread") return relation === "caused_by" || relation === "triggered_by";
+  return stateType === "relationship" && relation === "caused_by";
+}
 
-  while (queue.length > 0) {
-    const current = queue.shift()!;
-    if (current.distance >= maxHops) continue;
-
-    const node = index.nodes[current.noteId];
+/** One-hop explanatory neighbours of the recalled seed notes, never a seed itself, each with the seed it came from. */
+export function findLtmLinkedNotes(
+  index: LtmGraphIndex,
+  seedNoteIds: Iterable<string>,
+  noteTypeOf: (noteId: string) => LtmNoteType | undefined,
+) {
+  const seeds = new Set(seedNoteIds);
+  const linked = new Map<string, { noteId: string; seedNoteId: string; relation: string }>();
+  for (const seedNoteId of seeds) {
+    const node = index.nodes[seedNoteId];
     if (!node) continue;
-
-    const neighbors = [...node.outgoing.map((edge) => edge.target), ...node.incoming.map((edge) => edge.source)].sort(
-      (a, b) => a.localeCompare(b),
-    );
-
-    for (const neighbor of neighbors) {
-      if (options.allowedNoteIds && !options.allowedNoteIds.has(neighbor)) continue;
-      const distance = current.distance + 1;
-      if (!visited.has(neighbor) && visited.size < maxVisited) {
-        visited.add(neighbor);
-        queue.push({ noteId: neighbor, distance });
-      }
-
-      const neighborNode = index.nodes[neighbor];
-      if (!neighborNode) continue;
-      for (const chunkId of neighborNode.chunkIds) {
-        if (!scores.has(chunkId) && scores.size >= maxCandidates) continue;
-        const score = 1 / (distance + 1);
-        const existing = scores.get(chunkId);
-        if (!existing || score > existing.score) {
-          scores.set(chunkId, { score, viaNoteId: neighbor, distance });
-        }
-      }
+    const links = [
+      ...node.outgoing.map((edge) => ({ noteId: edge.target, relation: edge.relation, seedStoresLink: true })),
+      ...node.incoming.map((edge) => ({ noteId: edge.source, relation: edge.relation, seedStoresLink: false })),
+    ];
+    for (const link of links) {
+      if (seeds.has(link.noteId) || linked.has(link.noteId)) continue;
+      if (!isExplanatoryLink(noteTypeOf(seedNoteId), link.seedStoresLink, link.relation, noteTypeOf(link.noteId)))
+        continue;
+      linked.set(link.noteId, { noteId: link.noteId, seedNoteId, relation: link.relation });
     }
   }
-
-  return Array.from(scores.entries())
-    .map(([chunkId, value]) => ({ chunkId, ...value }))
-    .sort((a, b) => b.score - a.score || a.chunkId.localeCompare(b.chunkId))
-    .slice(0, maxCandidates);
+  return Array.from(linked.values());
 }

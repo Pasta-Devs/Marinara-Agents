@@ -248,7 +248,7 @@ async function main() {
   );
 
   const { reciprocalRankFuse } = await import(`${source}/ranking.ts`);
-  const { LTM_RECALL_STYLE_WEIGHTS } =
+  const { LTM_LINKED_RECALL_MIN_RELEVANCE, LTM_RECALL_STYLE_WEIGHTS } =
     await import("../packages/long-term-memory/src/engine/packages/shared/src/features/agents/long-term-memory/constants.ts");
   for (const [style, weights] of Object.entries(LTM_RECALL_STYLE_WEIGHTS)) {
     if (weights.semanticWeight <= weights.lexicalWeight) continue;
@@ -352,10 +352,9 @@ async function main() {
   );
 
   // Issue #1264: the threshold filters the same strength of match in every style
-  // while each preset's strongest lane carries the rescaled 0.7 ceiling and
-  // graph-only neighbours (at most half the graph weight) stay under the default
-  // threshold. A single ordinary keyword is now capped at half the lane, so only
-  // two distinct keywords (or a name) clear the default threshold.
+  // while each preset's strongest lane carries the rescaled 0.7 ceiling. A single
+  // ordinary keyword is now capped at half the lane, so only two distinct keywords
+  // (or a name) clear the default threshold.
   const { DEFAULT_LTM_GLOBAL_SETTINGS } =
     await import("../packages/long-term-memory/src/engine/packages/shared/src/features/agents/long-term-memory/schema.ts");
   for (const [style, weights] of Object.entries(LTM_RECALL_STYLE_WEIGHTS)) {
@@ -364,11 +363,13 @@ async function main() {
       0.7,
       `${style}: the strongest lane must carry the rescaled ceiling`,
     );
-    assert.ok(
-      weights.graphWeight * 0.5 < DEFAULT_LTM_GLOBAL_SETTINGS.longTermMemoryScoreThreshold,
-      `${style}: graph-only neighbours must stay under the default threshold`,
-    );
   }
+  // A linked memory skips the threshold but must still nearly match the chat itself.
+  assert.ok(
+    LTM_LINKED_RECALL_MIN_RELEVANCE > 0 &&
+      LTM_LINKED_RECALL_MIN_RELEVANCE < DEFAULT_LTM_GLOBAL_SETTINGS.longTermMemoryScoreThreshold,
+    "the linked recall floor must sit above 0 and below the default threshold",
+  );
   for (const [style, weights] of Object.entries(LTM_RECALL_STYLE_WEIGHTS)) {
     assert.ok(
       weights.keywordWeight * (3 / LTM_KEYWORD_MAX_SCORE) >= DEFAULT_LTM_GLOBAL_SETTINGS.longTermMemoryScoreThreshold,

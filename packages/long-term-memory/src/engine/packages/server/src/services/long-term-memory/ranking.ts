@@ -9,6 +9,8 @@ export interface LtmRankedCandidate {
   lanes: string[];
   laneScores?: Record<string, number>;
   rawLaneScores?: Record<string, number>;
+  /** Recalled through an explanatory link from a recalled memory, so it skips the score threshold. */
+  linked?: true;
 }
 
 export interface LtmRankLaneItem {

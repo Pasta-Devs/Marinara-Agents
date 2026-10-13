@@ -65,16 +65,17 @@ aligned with storage initialization and the storage and backup regression tests.
 ```text
 recent chat messages + chat settings
   -> chat mode and scope resolution
-  -> direct metadata, keyword/BM25, embedding, and graph lanes
+  -> direct metadata, keyword/BM25, and embedding lanes
   -> reciprocal-rank fusion
   -> scope/status filtering and token budgeting
+  -> linked recall: near-miss memories behind explanatory links from recalled ones
   -> serialized prompt artifact at pre-generation
   -> receipt/debug/activity accounting
 ```
 
 The retrieval entrypoint is `retrieval.ts`; ranking and budget behavior are in
-`ranking.ts` and `budget.ts`; host injection and receipts are in
-`generation-injection.ts`.
+`ranking.ts` and `budget.ts`; the linked-recall lookup is in `graph.ts`; host
+injection and receipts are in `generation-injection.ts`.
 
 ## Embedding Source
 

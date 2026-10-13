@@ -678,46 +678,67 @@ async function main() {
         updatedAt: timestamp,
         version: 1,
       });
-      await storage.createNote({
-        id: "world_graph_seed",
-        title: "world_graph_seed",
-        type: "world",
-        status: "active",
-        modes: ["roleplay"],
-        scope: { chatId: "chat-a", chatIds: ["chat-a"] },
-        tags: [],
-        keywords: ["stormvault ledger"],
-        links: [{ target: "world_graph_neighbor", relation: "caused_by" }],
-        sections: {
-          facts: {
-            text: "This note mentions the stormvault ledger keyphrase.",
-            updatedAt: timestamp,
+      // Issue: linked recall follows explanatory links from recalled memories to near-miss memories.
+      // Relevance comes from the keyword lane: two distinct keywords score 0.75, one ordinary keyword 0.5.
+      const graphNote = (
+        id: string,
+        type: "thread" | "timeline_event" | "world",
+        sectionKey: string,
+        keywords: string[],
+        links: Array<{ target: string; relation: string }> = [],
+      ) =>
+        storage.createNote({
+          id,
+          // The title and text feed generated keywords, so keep the id prefix out of them.
+          // Text must differ per note, or exact-text dedupe drops a recalled neighbour. Keep it at seven words:
+          // the persona and scope checks below share this BM25 corpus and its average length.
+          title: id.replace(/^[a-z]+_/, ""),
+          type,
+          status: "active",
+          modes: ["roleplay"],
+          scope: { chatId: "chat-a", chatIds: ["chat-a"] },
+          tags: [],
+          keywords,
+          links,
+          sections: {
+            [sectionKey]: {
+              text: `This note mentions the ${id.replace(/^[a-z]+_/, "")} fixture phrase.`,
+              updatedAt: timestamp,
+            },
           },
-        },
-        createdAt: timestamp,
-        updatedAt: timestamp,
-        version: 1,
-      });
-      await storage.createNote({
-        id: "world_graph_neighbor",
-        title: "world_graph_neighbor",
-        type: "world",
-        status: "active",
-        modes: ["roleplay"],
-        scope: { chatId: "chat-a", chatIds: ["chat-a"] },
-        tags: [],
-        keywords: [],
-        links: [],
-        sections: {
-          facts: {
-            text: "The linked continuation is stored elsewhere.",
-            updatedAt: timestamp,
-          },
-        },
-        createdAt: timestamp,
-        updatedAt: timestamp,
-        version: 1,
-      });
+          createdAt: timestamp,
+          updatedAt: timestamp,
+          version: 1,
+        });
+      await graphNote(
+        "thread_graph_seed",
+        "thread",
+        "status",
+        ["stormvault", "ledger"],
+        [
+          { target: "timeline_graph_near", relation: "caused_by" },
+          { target: "world_graph_untyped", relation: "caused_by" },
+        ],
+      );
+      await graphNote("timeline_graph_near", "timeline_event", "event", ["kindlewick"]);
+      await graphNote("world_graph_untyped", "world", "facts", ["cindermoss"]);
+      await graphNote(
+        "thread_graph_quiet",
+        "thread",
+        "status",
+        ["quietcove"],
+        [{ target: "timeline_graph_orphan", relation: "caused_by" }],
+      );
+      await graphNote("timeline_graph_orphan", "timeline_event", "event", ["ashgrove"]);
+      await graphNote("world_graph_bystander", "world", "facts", ["marrowtide", "gatekeep"]);
+      await graphNote("timeline_graph_anchor", "timeline_event", "event", ["duskfern", "ravenmoor"]);
+      await graphNote(
+        "thread_graph_follow",
+        "thread",
+        "status",
+        ["fernlight"],
+        [{ target: "timeline_graph_anchor", relation: "triggered_by" }],
+      );
       await rebuildLongTermMemoryIndexes({ root: storage.root });
       const semanticOnly = await retrieveLongTermMemory({
         root: storage.root,
@@ -832,22 +853,64 @@ async function main() {
         (fuzzyKeywordRecall.chunks[0]?.relevanceScore ?? 0) < 1,
         "a partial keyword match must not normalize to the full keyword weight",
       );
-      const graphOnly = await retrieveLongTermMemory({
-        root: storage.root,
-        queryText: "stormvault ledger",
-        scope: { chatId: "chat-a", chatIds: ["chat-a"] },
-        mode: "roleplay",
-        semanticWeight: 0,
-        lexicalWeight: 0,
-        graphWeight: 1,
-        keywordWeight: 1,
-        maxChunks: 5,
-        maxTokens: 4096,
-      });
-      assert.equal(
-        graphOnly.chunks.some((chunk: any) => chunk.chunk.noteId === "world_graph_neighbor"),
-        true,
-        "graph recall must expand from keyword-seeded notes",
+      const linkedRecall = (queryText: string, overrides: Record<string, unknown> = {}) =>
+        retrieveLongTermMemory({
+          root: storage.root,
+          queryText,
+          scope: { chatId: "chat-a", chatIds: ["chat-a"] },
+          mode: "roleplay",
+          semanticWeight: 0,
+          lexicalWeight: 0,
+          graphWeight: 1,
+          keywordWeight: 1,
+          minScore: 0.6,
+          maxChunks: 5,
+          maxTokens: 4096,
+          ...overrides,
+        });
+      const noteIdsOf = (recall: any) => recall.chunks.map((chunk: any) => chunk.chunk.noteId).sort();
+      const linkedQuery = "stormvault ledger kindlewick cindermoss ashgrove";
+      const linked = await linkedRecall(linkedQuery);
+      assert.deepEqual(
+        noteIdsOf(linked),
+        ["thread_graph_seed", "timeline_graph_near"],
+        "a typed neighbour of a recalled memory with its own relevance in [0.2, threshold) is recalled; an untyped link, and a link from a memory that was not recalled, add nothing",
+      );
+      const linkedChunk = linked.chunks.find((chunk: any) => chunk.chunk.noteId === "timeline_graph_near");
+      assert.ok(linkedChunk.lanes.includes("graph"));
+      assert.ok(
+        linkedChunk.reasons.includes("graph:caused_by:thread_graph_seed"),
+        "the reason names relation and seed",
+      );
+      assert.ok(
+        linkedChunk.relevanceScore >= 0.2 && linkedChunk.relevanceScore < 0.6,
+        "a linked memory keeps its own relevance score",
+      );
+      assert.deepEqual(
+        noteIdsOf(await linkedRecall(linkedQuery, { graphWeight: 0 })),
+        ["thread_graph_seed"],
+        "a graph weight of 0 disables linked recall",
+      );
+      assert.deepEqual(
+        noteIdsOf(await linkedRecall(linkedQuery, { keywordWeight: 0.3, minScore: 0.21 })),
+        ["thread_graph_seed"],
+        "a neighbour whose own relevance is below 0.2 is not recalled",
+      );
+      assert.deepEqual(
+        noteIdsOf(await linkedRecall("duskfern ravenmoor fernlight")),
+        ["thread_graph_follow", "timeline_graph_anchor"],
+        "a link stored by the neighbour is followed toward the recalled memory",
+      );
+      const capQuery = `${linkedQuery} marrowtide gatekeep`;
+      assert.deepEqual(
+        noteIdsOf(await linkedRecall(capQuery, { maxChunks: 2 })),
+        ["thread_graph_seed", "world_graph_bystander"],
+        "the memory cap bounds the total and recalled memories keep their places",
+      );
+      assert.deepEqual(
+        noteIdsOf(await linkedRecall(capQuery, { maxChunks: 3 })),
+        ["thread_graph_seed", "timeline_graph_near", "world_graph_bystander"],
+        "a linked memory takes a free place after the recalled memories",
       );
       const recallIndexPath = longTermMemoryRecallIndexPath(storage.root);
       const currentRecallIndex = JSON.parse(await readFile(recallIndexPath, "utf8"));
