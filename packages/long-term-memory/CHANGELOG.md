@@ -1,6 +1,6 @@
 # Long-Term Memory changelog
 
-## 1.4.33 — 2026-10-13
+## 1.4.31 — 2026-10-13
 
 - Extraction now asks for a `caused_by` link from an event to the event that directly caused it when both are in the same response, and linked recall follows that link in either direction, as well as a thread's `paid_off_in` link to the event that paid it off. The seed rule and the 0.2 own-relevance floor are unchanged, and a graph weight of 0 still turns linked recall off. Existing vaults gain these links only after a chat is extracted again; nothing is backfilled.
 
