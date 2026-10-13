@@ -498,7 +498,7 @@ export const SLURP2_SOURCE_MODULES: Record<string, readonly string[]> = {
   ],
   "packages/server/src/services/slurp/slurp-generation.service.ts": [
     "packages/server/src/slp/features/feed/slp-generation-service.ts",
-    "packages/server/src/slp/features/feed/slp-post-lore.ts",
+    "packages/server/src/slp/data/host/slp-lore-context.ts",
     "packages/server/src/slp/features/feed/slp-post-beat-service.ts",
     "packages/server/src/slp/features/feed/slp-public-identity.ts",
     "packages/server/src/slp/features/feed/slp-post-prompt.ts",
@@ -513,7 +513,7 @@ export const SLURP2_SOURCE_MODULES: Record<string, readonly string[]> = {
   // slp-automatic-post-access.ts.
   "packages/server/src/slp/features/feed/slp-generation-service.ts": [
     "packages/server/src/slp/features/feed/slp-generation-service.ts",
-    "packages/server/src/slp/features/feed/slp-post-lore.ts",
+    "packages/server/src/slp/data/host/slp-lore-context.ts",
     "packages/server/src/slp/features/feed/slp-post-prompt.ts",
     "packages/server/src/slp/features/feed/slp-post-picture-briefs.ts",
     "packages/server/src/slp/features/feed/slp-prepared-post.ts",

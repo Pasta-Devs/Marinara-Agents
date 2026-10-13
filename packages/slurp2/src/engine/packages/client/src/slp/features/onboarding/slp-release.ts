@@ -1,5 +1,5 @@
 // The splash screen needs the shipped version and its public notes inside the client bundle.
-export const SLURP2_VERSION = "0.3.33";
+export const SLURP2_VERSION = "0.3.36";
 
 export interface Slurp2ReleaseEntry {
   version: string;
@@ -12,6 +12,25 @@ export interface Slurp2ReleaseEntry {
  * in-universe bullets per release (technical detail lives in CHANGELOG.md).
  */
 export const SLURP2_RELEASES: Slurp2ReleaseEntry[] = [
+  {
+    version: "0.3.36",
+    date: "2026-10-13",
+    notes: [
+      "A creator's bio and stage voice now steer what she posts about, so a hobby in her bio shows up in her feed.",
+    ],
+  },
+  {
+    version: "0.3.35",
+    date: "2026-10-13",
+    notes: ["Adding a creator now lets you decide, up front, whether the picture model already knows the character."],
+  },
+  {
+    version: "0.3.34",
+    date: "2026-10-13",
+    notes: [
+      "In chat, a creator now remembers what is inside her own locked posts, and your lorebook entries reach her replies.",
+    ],
+  },
   {
     version: "0.3.33",
     date: "2026-10-13",
@@ -757,20 +776,6 @@ export const SLURP2_RELEASES: Slurp2ReleaseEntry[] = [
       "Teasers and everyday posts stay short; behind-the-scenes posts can run long.",
       "Stories can be thank-yous and requests too.",
     ],
-  },
-  {
-    version: "0.2.0",
-    date: "2026-09-21",
-    notes: [
-      "Creators plan their posts: teasers, photo sets of up to three pictures and Stories.",
-      "Fan requests get answered, and Creators keep their promises.",
-      "Creators remember what they said and did, and what fans share in private stays private.",
-    ],
-  },
-  {
-    version: "0.1.3",
-    date: "2026-09-20",
-    notes: ["Behind-the-scenes cleanup. Everything works as before."],
   },
 ];
 

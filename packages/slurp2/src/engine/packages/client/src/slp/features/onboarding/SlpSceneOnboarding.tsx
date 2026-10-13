@@ -20,6 +20,7 @@ import { SlpWizardFooter } from "../../modules/chrome/SlpWizardChrome";
 import { useCreatorFollowers } from "../audience/slp-audience-contract";
 import { useCreatorAccounts } from "../creators/slp-creators-contract";
 import { useSlurpSettings } from "../settings/slp-settings-contract";
+import { Toggle } from "../../modules/settings/SlpSettingsControls";
 import { useCreatorFirstPostStatus } from "./slp-first-post-hooks";
 import { SlpSceneActions } from "./SlpSceneActions";
 import { SlpSceneChat } from "./SlpSceneChat";
@@ -156,6 +157,7 @@ function SceneSetup({
   const [preset, setPreset] = useState<SlpScenePreset>(SLP_SCENE_OFFERED[0]);
   const [disclosure, setDisclosure] = useState<SlpIdentityDisclosure>(defaultDisclosure);
   const [helperId, setHelperId] = useState<string | null>(null);
+  const [imageNameKnown, setImageNameKnown] = useState(true);
   // The creator seat needs somebody already on Slurp to do the helping.
   const creators = useCreatorAccounts().data ?? [];
   const offered = SLP_SCENE_OFFERED.filter((option) => option !== "seat" || creators.length > 0);
@@ -179,7 +181,7 @@ function SceneSetup({
   };
   const start = () => {
     if (!source || reason) return;
-    const go = () => onStart({ preset, source, helper, disclosureMode: disclosure });
+    const go = () => onStart({ preset, source, helper, disclosureMode: disclosure, imageNameKnown });
     const doc = document as Document & { startViewTransition?: (update: () => void) => unknown };
     // The chosen card's picture flies into the scene's goal bar; without view transitions it just opens.
     if (doc.startViewTransition && !slpPrefersReducedMotion()) doc.startViewTransition(() => flushSync(go));
@@ -288,6 +290,11 @@ function SceneSetup({
             }))}
           />
         </div>
+        <Toggle
+          label={t("ui.slurp.settings.creators.imageName", { defaultValue: "The image model knows this character" })}
+          value={imageNameKnown}
+          onChange={setImageNameKnown}
+        />
       </div>
       <SlpWizardFooter
         back={{ label: t("ui.noodle.noodlerwizard.back"), onClick: onBack }}

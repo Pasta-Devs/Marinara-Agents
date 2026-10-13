@@ -1,6 +1,8 @@
 import type { FastifyInstance } from "fastify";
 import { resolveCreatorCharacterCanon } from "../../data/creators/slp-source-resolve.js";
 import { SLP_CANON_READING_SCALE } from "../../base/prompting/slp-prompt-safety.js";
+import { slpCreatorPublicIdentityFor } from "./slp-public-identity.js";
+import { slurpAccountPageAbout } from "./slp-post-beat-service.js";
 import { normalizeSlurpCanonAnchors } from "../../modules/feed/slp-post-brief.js";
 import type { SlpRouteDeps } from "../viewer/slp-viewer-contract.js";
 import {
@@ -21,12 +23,12 @@ export async function slpCanonAnchorRoutes(app: FastifyInstance, deps: SlpRouteD
     const account = await noodle.getNoodlerAccountById(id);
     if (!account) return null;
     const source = await noodle.resolveAccountSource(account);
-    return resolveCreatorCharacterCanon(
-      app.db,
-      source,
-      account.settings.privacy.identityDisclosure ?? "open",
-      SLP_CANON_READING_SCALE,
-    );
+    const mode = account.settings.privacy.identityDisclosure ?? "open";
+    const card = await resolveCreatorCharacterCanon(app.db, source, mode, SLP_CANON_READING_SCALE);
+    if (!card) return card;
+    // The same text a post reads and keys the cache by (bio and stage voice beside the card).
+    const identity = await slpCreatorPublicIdentityFor(app.db, source);
+    return card + slurpAccountPageAbout(account, mode, identity);
   };
 
   app.get("/slurp/accounts/:id/canon-anchors", async (req, reply) => {

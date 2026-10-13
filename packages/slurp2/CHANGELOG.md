@@ -1,5 +1,20 @@
 # Slurp release notes
 
+## 0.3.36 — 2026-10-13
+
+- Fixed: a Creator's bio and stage voice now steer what she posts about. The post planner reads them beside the character card (hidden identities stay hidden), so a hobby named only in the bio, such as cosplay, becomes post subjects. The post prompt also says that interests named in the bio and stage voice count. (#1358)
+- Changed: the no-repeat rule no longer blocks a theme that the bio, stage voice, or card names as what the Creator does. A new setting, framing, and look each time is still required, and the same outfit or wording is still a repeat. (#1358)
+
+## 0.3.35 — 2026-10-13
+
+- Added: "The image model knows this character" can be chosen while adding a Creator, in Quick setup, in the customise path, in the role-play sign-up and in the manual Create flow. It starts on, like before, and is saved with the new Creator. You can still change it later in the Creator's settings. (#1353)
+
+## 0.3.34 — 2026-10-13
+
+- Fixed: in a chat, a Creator could not see what was inside her own locked posts: the message prompt replaced the body with "[paid post, contents not repeated here]". She now gets the real text, and the existing locked and already-unlocked fields still say whether this fan has seen it. (#1351)
+- Fixed: lorebook entries never reached messages. A reply now gets matching entries from the recent conversation the way posts do (same setting, same Creator scoping), and they show in the message Deep details. A failed scan never fails the message. (#1351)
+- Changed: the fan's own Deep details view masks the body of a locked post that fan has not unlocked; the Creator's view shows it. (#1351)
+
 ## 0.3.33 — 2026-10-13
 
 - Fixed: on a reasoning model (for example GLM) the picture writer and seven other short model calls (Page design, Page style, look reading, fan voice, Stir plans, writing help) sent a small fixed output limit and ignored the max tokens set on the connection, so the model spent it all thinking and returned nothing ("Image prompt rewrite unusable"). They now use the connection's max tokens when it is larger than their small default. The warning also names the limit that was sent. (#1349)

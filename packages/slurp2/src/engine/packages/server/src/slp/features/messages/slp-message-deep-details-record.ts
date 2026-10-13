@@ -26,6 +26,8 @@ export function buildSlurpMessageDeepDetailsRecord(ctx: {
   options: object;
   /** The model's answer as received, with the Creator's identity protection applied. */
   content: string;
+  /** Locked post bodies this fan has not unlocked, as the prompt showed them: the fan seat's view masks them. */
+  paidBodies?: string[];
 }): SlpMessageDeepDetailsRecord {
   const { input } = ctx;
   const options = ctx.options as Record<string, unknown>;
@@ -46,6 +48,7 @@ export function buildSlurpMessageDeepDetailsRecord(ctx: {
       content: typeof message.content === "string" ? message.content : JSON.stringify(message.content),
     })),
     rawResponse: ctx.content,
+    paidBodies: ctx.paidBodies?.filter(Boolean),
     chat: {
       rapport: { tier: input.rapport.tier, score: input.rapport.score },
       subscribed: input.subscribed,

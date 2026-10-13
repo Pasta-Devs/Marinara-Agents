@@ -9,7 +9,8 @@ import {
   slurpAllowsUnsolicitedText,
   type ScheduledFollowUp,
 } from "../../modules/messages/slp-follow-up.js";
-import { generateSlurpMessageReply, SlurpMessageBudgetUnavailableError } from "./slp-message-generation-service.js";
+import { generateSlurpMessageReply } from "./slp-message-generation-service.js";
+import { SlurpMessageBudgetUnavailableError } from "./slp-message-budget-error.js";
 import { resolveSlurpTextConnection } from "../../base/identity/slp-connection.js";
 import { describeSlurpDayVibe } from "../world/slp-world-contract.js";
 import { createConnectionsStorage } from "../../../services/storage/connections.storage.js";

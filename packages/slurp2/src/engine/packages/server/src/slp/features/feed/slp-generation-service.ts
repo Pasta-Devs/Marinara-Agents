@@ -44,7 +44,7 @@ import { slurpPurposeMetadata } from "../../modules/feed/slp-post-purpose.js";
 import { resolveSlurpCreatorScheduleContext } from "../creators/slp-creators-contract.js";
 import { createChatsStorage } from "../../../services/storage/chats.storage.js";
 import { type SlpCreatorContentFormat } from "../../base/prompting/slp-content-format.js";
-import { resolveSlurpPostLore } from "./slp-post-lore.js";
+import { resolveSlurpLoreContext } from "../../data/host/slp-lore-context.js";
 import { createCharacterGalleryStorage } from "../../../services/storage/character-gallery.storage.js";
 import { createGalleryStorage } from "../../../services/storage/gallery.storage.js";
 import { pickGalleryAttachmentForAccount } from "./slp-generated-activity-service.js";
@@ -160,12 +160,11 @@ export async function generateCreatorPost(
     : undefined;
   // Derive the identity from the row already in hand; resolving it again would re-read it.
   const publicIdentity = await slpCreatorPublicIdentityFor(db, linkedPublicAccount);
-  // Read the card at post time (not the bio and voice frozen at setup), so a sharper character makes a
-  // sharper Creator without a migration. Concealed modes get the stage seed; disclosure limits what, not who.
+  // Read the card at post time, not the bio and voice frozen at setup. Concealed modes get the stage seed.
   const sourceCharacterContext = await resolveCreatorCharacterCanon(db, linkedPublicAccount, disclosureMode);
-  const loreContext = await resolveSlurpPostLore(db, {
+  const loreContext = await resolveSlurpLoreContext(db, {
     settings,
-    recentPosts,
+    texts: recentPosts.map((post) => post.content).reverse(),
     sourceCharacterContext,
     source: linkedPublicAccount,
   });
@@ -217,11 +216,12 @@ export async function generateCreatorPost(
   // Same slot the scheduler used to choose free access, so only its teasers read as one.
   const isTeaser =
     input.request.access === "public" && !directed && slurpTeaserPost(account.id, sequence, settings.teaserRate);
-  const { readingText, day: beatDay } = await prepareSlurpBeatRun(db, {
+  const beatRun = await prepareSlurpBeatRun(db, {
     account,
     canonText: sourceCharacterContext,
     source: linkedPublicAccount,
     disclosureMode,
+    publicIdentity,
     beats: settings.postPlanner === "beats",
     preview: input.previewOnly === true,
     model: { connection: input.connection, fallbackConnection },
@@ -259,12 +259,12 @@ export async function generateCreatorPost(
     beats:
       settings.postPlanner === "beats"
         ? {
-            canonText: sourceCharacterContext,
-            readingText,
+            canonText: beatRun.planText,
+            readingText: beatRun.readingText,
             connection: input.connection,
             fallbackConnection,
             arc: project ? slurpArcBeat(project) : null,
-            day: beatDay,
+            day: beatRun.day,
             steering,
             nudge,
             life: { account, tags: account.settings.profile.tags ?? [], rate: settings.lifeMomentRate },
@@ -417,7 +417,7 @@ export async function generateCreatorPost(
     productionInstruction: slurpStrategyInstruction(strategy),
     beat,
     beatCompany: variation?.company,
-    beatDay: beat ? beatDay : null,
+    beatDay: beat ? beatRun.day : null,
     generatedAt: input.generatedAt ?? new Date(),
     publicationTime: input.publicationTime,
   });

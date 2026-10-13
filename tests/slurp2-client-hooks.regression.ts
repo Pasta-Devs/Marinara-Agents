@@ -556,7 +556,8 @@ assert.deepEqual(
     // 0.3.28: +2 (the import and the one query of SlpMessageDeepDetails).
     useQuery: 284,
     useInfiniteQuery: 9,
-    invalidateQueries: 151,
+    // 0.3.35: +2 (adding a Creator refreshes the settings, which now hold the image name choice).
+    invalidateQueries: 153,
     setQueryData: 26,
     cancelQueries: 7,
     removeQueries: 1,

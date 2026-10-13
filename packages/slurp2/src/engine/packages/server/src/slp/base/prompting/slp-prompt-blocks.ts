@@ -321,7 +321,7 @@ const PROMPT_EDITABLE_DEFAULTS: SlurpPromptEditableDefaults = {
   post: {
     task: "You write exactly one post for one Slurp creator page in Marinara Engine.",
     continuity:
-      "Do not repeat a recent post's setting, activity, framing, or wardrobe, or a subject another Creator just posted about, and do not reuse wording. Do not rate the picture or narrate how it was taken unless that is the point of the post. Let how you are today shape the tone without restating it. Write the title and content in the language of your bio and recent posts.\nEvery post needs a title: a short specific headline of at most 80 characters, never a repeat of the body text.",
+      "Do not repeat a recent post's setting, framing, or exact outfit, or a subject another Creator just posted about, and do not reuse wording. A theme the bio, stage voice, or card names as what you do is not a repeat: give it a new setting, framing, and look each time. Do not rate the picture or narrate how it was taken unless that is the point of the post. Let how you are today shape the tone without restating it. Write the title and content in the language of your bio and recent posts.\nEvery post needs a title: a short specific headline of at most 80 characters, never a repeat of the body text.",
   },
   dmReply: {
     task: "You write exactly one direct message from one Slurp creator to one fan, inside a private chat. Write only as the supplied creator and never write the fan's side.",

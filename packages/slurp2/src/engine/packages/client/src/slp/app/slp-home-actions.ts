@@ -33,6 +33,7 @@ function useSlurpHomeActions(state: SlurpHomeBaseState) {
     createPost,
     createProfile,
     creationDisclosure,
+    creationImageNameKnown,
     draftConnectionId,
     draftGuidance,
     draftNoodleAccountId,
@@ -52,6 +53,7 @@ function useSlurpHomeActions(state: SlurpHomeBaseState) {
     setAcceptSourceChangesForProfileId,
     setAutoPostSetupId,
     setCreationDisclosure,
+    setCreationImageNameKnown,
     setCreationStep,
     setDraftConnectionId,
     setDraftGuidance,
@@ -84,6 +86,7 @@ function useSlurpHomeActions(state: SlurpHomeBaseState) {
     setProfileDraftDirty(false);
     setCreationStep("source");
     setCreationDisclosure("hinted");
+    setCreationImageNameKnown(true);
     setDraftGuidance("");
     setDraftConnectionId("");
     setPreviousDraft(null);
@@ -319,7 +322,10 @@ function useSlurpHomeActions(state: SlurpHomeBaseState) {
         },
       );
     } else if (draftNoodleAccountId) {
-      createProfile.mutate({ sourceAccountId: draftNoodleAccountId, stageProfile: input }, { onSuccess, onError });
+      createProfile.mutate(
+        { sourceAccountId: draftNoodleAccountId, stageProfile: input, imageNameKnown: creationImageNameKnown },
+        { onSuccess, onError },
+      );
     }
   };
 

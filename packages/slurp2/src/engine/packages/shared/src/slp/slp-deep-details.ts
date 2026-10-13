@@ -52,6 +52,8 @@ export type SlpDeepDetailsRecord = {
   };
   messages: { role: string; content: string }[];
   rawResponse: string;
+  /** Server-side only, never sent: locked bodies the fan seat's view masks. */
+  paidBodies?: string[];
   modelOutput: {
     title: string | null;
     content: string;

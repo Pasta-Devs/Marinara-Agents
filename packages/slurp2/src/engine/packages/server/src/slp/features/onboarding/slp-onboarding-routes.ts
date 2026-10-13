@@ -41,6 +41,8 @@ const slurpBulkCreatorAccountCreateSchema = slpBulkCreatorAccountCreateSchema.ex
       imageConnectionId: z.string().min(1).nullable().optional(),
       personaId: z.string().min(1).max(200).optional(),
       completeOnboarding: z.boolean().optional(),
+      /** false: the player turned "The image model knows this character" off for these Creators. */
+      imageNameKnown: z.boolean().optional(),
     })
     .strict()
     .optional(),
@@ -102,6 +104,8 @@ const slurpCreatorAccountCreateSchema = z
       message: SLURP_NEW_CREATOR_DISCOVERY_MESSAGE,
       path: ["tags"],
     }),
+    /** false: the player turned "The image model knows this character" off while adding. */
+    imageNameKnown: z.boolean().optional(),
   })
   .strict();
 export async function slpOnboardingRoutes(app: FastifyInstance, deps: SlpRouteDeps) {
@@ -148,6 +152,7 @@ export async function slpOnboardingRoutes(app: FastifyInstance, deps: SlpRouteDe
         artwork.bannerUrl,
       );
       if (!created) return reply.code(404).send({ error: "Noodle account not found" });
+      if (parsed.data.imageNameKnown === false) await turnImageNameOff([created.id]);
       // A character Creator designs their own Page on a later open; a persona's page is the player's to build.
       if (publicAccount.kind === "character")
         await noodle.updateAccountProfile(created.id, { profile: { pageWanted: true } }).catch(() => undefined); // a missing wish only means no automatic first Page
@@ -428,13 +433,30 @@ export async function slpOnboardingRoutes(app: FastifyInstance, deps: SlpRouteDe
     };
   }
 
+  /** The per-Creator "The image model knows this character" switch, saved with the new Creators. */
+  async function turnImageNameOff(ids: string[]) {
+    const { creatorImageNames } = await noodle.getSettings();
+    await noodle
+      .updateSettings({
+        creatorImageNames: { ...creatorImageNames, ...Object.fromEntries(ids.map((id) => [id, false])) },
+      })
+      .catch((error: unknown) => logger.warn(error, "[slurp] Sign-up could not save the image name choice"));
+  }
+
   /** After a background sign-up: the image connection, the first posts, onboarding done, and a notification. */
   async function afterSignUp(
     executionId: string,
     ids: string[],
-    then: { firstPosts?: boolean; imageConnectionId?: string | null; personaId?: string; completeOnboarding?: boolean },
+    then: {
+      firstPosts?: boolean;
+      imageConnectionId?: string | null;
+      personaId?: string;
+      completeOnboarding?: boolean;
+      imageNameKnown?: boolean;
+    },
   ) {
     if (!ids.length) return;
+    if (then.imageNameKnown === false) await turnImageNameOff(ids);
     const imageConnection = then.imageConnectionId ? await connections.getWithKey(then.imageConnectionId) : null;
     if (imageConnection?.provider === "image_generation")
       await updateCreatorImageConnections(app.db, (current) => ({

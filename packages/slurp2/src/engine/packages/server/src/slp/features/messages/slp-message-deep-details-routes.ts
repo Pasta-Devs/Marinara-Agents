@@ -1,6 +1,10 @@
 import type { FastifyInstance } from "fastify";
-import type { SlpMessageDeepDetailsResponse } from "../../../../../shared/src/slp/slp-deep-details.js";
+import type {
+  SlpMessageDeepDetailsRecord,
+  SlpMessageDeepDetailsResponse,
+} from "../../../../../shared/src/slp/slp-deep-details.js";
 import { getSlurpMessageDeepDetails } from "../../data/messages/slp-message-deep-details-storage.js";
+import { slpDeepDetailsSeatView } from "../../modules/messages/slp-deep-details-mask.js";
 import { personaQuerySchema } from "../../modules/messages/slp-messages-schemas.js";
 import type { SlpMessagesContext } from "./slp-messages-context.js";
 
@@ -24,7 +28,8 @@ export async function slpMessageDeepDetailsRoutes(app: FastifyInstance, messagin
     // A reply bubble only: a paid message or a locked post card must not show its text through here.
     if (!message || message.role !== "creator" || message.kind !== "text" || !thread)
       return reply.code(404).send({ error: "Message not found" });
-    if (!(await seatIn(viewer.id, thread))) return reply.code(404).send({ error: "Message not found" });
+    const seat = await seatIn(viewer.id, thread);
+    if (!seat) return reply.code(404).send({ error: "Message not found" });
     const creator = await slurp.getNoodlerAccountById(thread.creatorAccountId);
     if (!creator) return reply.code(404).send({ error: "Message not found" });
     const kept = await getSlurpMessageDeepDetails(app.db, message.id);
@@ -32,7 +37,7 @@ export async function slpMessageDeepDetailsRoutes(app: FastifyInstance, messagin
       message: { id: message.id, content: message.content, createdAt: message.createdAt },
       creator: { id: creator.id, displayName: creator.displayName, handle: creator.handle },
       // A record is only ever read through the thread it was written in.
-      details: kept?.threadId === thread.id ? kept.record : null,
+      details: kept?.threadId === thread.id ? slpDeepDetailsSeatView(kept.record, seat) : null,
     };
     return response;
   });

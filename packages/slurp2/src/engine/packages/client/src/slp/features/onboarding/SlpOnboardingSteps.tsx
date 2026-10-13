@@ -59,6 +59,8 @@ export function SlpOnboardingSteps({ model }: { model: SlurpOnboardingWizardMode
     setGenerateNow,
     setGenerationConnectionId,
     setImageConnectionId,
+    imageNameKnown,
+    setImageNameKnown,
     setImagesEnabled,
     setNightQuiet,
     setPostsPerDay,
@@ -110,6 +112,15 @@ export function SlpOnboardingSteps({ model }: { model: SlurpOnboardingWizardMode
           loading={connectionsQuery.isLoading}
           options={connections.filter((connection) => connection.provider === "image_generation").map(connectionOption)}
         />
+      )}
+      {imagesEnabled && (
+        <div className="px-4 py-1">
+          <Toggle
+            label={t("ui.slurp.settings.creators.imageName", { defaultValue: "The image model knows this character" })}
+            value={imageNameKnown}
+            onChange={setImageNameKnown}
+          />
+        </div>
       )}
     </>
   );

@@ -159,8 +159,8 @@ export function buildSlurpPostBlocks(input: SlurpPostPromptInput): SlurpPromptBl
       id: "character",
       kind: "context" as const,
       text: input.flavourBrief?.trim()
-        ? '"Who you are" is this Creator as a person: their temperament, voice, life, and what is going on lately. Take how they talk and what they care about from it. The stage voice describes how they perform on Slurp and how they treat the people reading, layered over that person, not a replacement for them.'
-        : "The source character is who this Creator actually is: take their temperament, register, humour, and interests from it. The stage voice describes how they perform on Slurp and how they treat the people reading, layered over that person, not a replacement for them.",
+        ? '"Who you are" is this Creator as a person: their temperament, voice, life, and what is going on lately. Take how they talk and what they care about from it. The stage voice describes how they perform on Slurp and how they treat the people reading, layered over that person, not a replacement for them. The bio and stage voice also say what this page is about, so an interest or hobby named there is something this Creator posts about.'
+        : "The source character is who this Creator actually is: take their temperament, register, humour, and interests from it. The stage voice describes how they perform on Slurp and how they treat the people reading, layered over that person, not a replacement for them. The bio and stage voice also say what this page is about, so an interest or hobby named there is something this Creator posts about.",
     },
     // Up to 20,000 characters of free-text user guidance spliced in bare, between two hard rules,
     // with nothing marking where it ends. Long guidance blurred into the disclosure instruction
@@ -237,7 +237,7 @@ export function buildSlurpPostBlocks(input: SlurpPostPromptInput): SlurpPromptBl
     {
       id: "continuity",
       kind: "editable" as const,
-      text: "Do not repeat a recent post's setting, activity, framing, or wardrobe, or a subject another Creator just posted about, and do not reuse wording. Do not rate the picture or narrate how it was taken unless that is the point of the post. Let how you are today shape the tone without restating it. Write the title and content in the language of your bio and recent posts.\nEvery post needs a title: a short specific headline of at most 80 characters, never a repeat of the body text.",
+      text: "Do not repeat a recent post's setting, framing, or exact outfit, or a subject another Creator just posted about, and do not reuse wording. A theme the bio, stage voice, or card names as what you do is not a repeat: give it a new setting, framing, and look each time. Do not rate the picture or narrate how it was taken unless that is the point of the post. Let how you are today shape the tone without restating it. Write the title and content in the language of your bio and recent posts.\nEvery post needs a title: a short specific headline of at most 80 characters, never a repeat of the body text.",
     },
     {
       id: "imageDirection",

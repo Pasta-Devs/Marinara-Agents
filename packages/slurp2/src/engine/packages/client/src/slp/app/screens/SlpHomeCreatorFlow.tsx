@@ -45,6 +45,8 @@ export function renderSlurpHomeCreatorFlow({
     createPost,
     createProfile,
     creationDisclosure,
+    creationImageNameKnown,
+    setCreationImageNameKnown,
     creationStep,
     draftConnectionId,
     draftGuidance,
@@ -149,6 +151,8 @@ export function renderSlurpHomeCreatorFlow({
             source={selectedSource}
             value={creationDisclosure}
             onChange={setCreationDisclosure}
+            imageNameKnown={creationImageNameKnown}
+            onImageNameChange={setCreationImageNameKnown}
             onBack={
               navigation.mode === "creator" && navigation.view === "create-profile"
                 ? cancelCreateProfile

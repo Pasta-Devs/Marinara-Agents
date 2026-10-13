@@ -49,7 +49,7 @@ export function formatSlurpPostHistory(
           : []),
         ...(older.length
           ? [
-              "Earlier subjects on this page. Pick a different subject, place, and activity:",
+              "Earlier subjects on this page. Pick a different setting, framing, and look; the page's own recurring theme stays welcome:",
               ...older.map((post) =>
                 withShowed(
                   `- ${post.createdAt}: ${protect(post.title || post.content.slice(0, SLURP_HISTORY_SUBJECT_LENGTH))}`,
@@ -63,7 +63,7 @@ export function formatSlurpPostHistory(
     : ["No previous posts on this Slurp page."];
   if (otherSubjects.length) {
     lines.push(
-      "Other Creators posted about these recently. Choose a different subject, outfit, and place:",
+      "Other Creators posted about these recently. Choose a different subject, outfit, and place, unless it is the theme of your own page:",
       ...otherSubjects.map((subject) => `- ${protect(subject)}`),
     );
   }
