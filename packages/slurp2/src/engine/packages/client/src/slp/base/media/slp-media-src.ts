@@ -11,7 +11,14 @@ type CachedMedia = {
 const mediaCache = new Map<string, CachedMedia>();
 const MEDIA_CACHE_RETENTION_MS = 2 * 60_000;
 
+const ENGINE_AVATAR_PREFIX = "/api/avatars/file/";
+
 function variantUrl(imageUrl: string, width?: number): string {
+  // Engine avatars are card PNGs of 1-2.5 MB; the package serves a small copy of them (0.3.41).
+  if (width && imageUrl.startsWith(ENGINE_AVATAR_PREFIX)) {
+    const fileName = imageUrl.slice(ENGINE_AVATAR_PREFIX.length).split(/[?#]/u)[0];
+    return `/api/slurp2/engine-avatars/${fileName}?width=${width}`;
+  }
   if (!width || !imageUrl.startsWith("/api/slurp2/")) return imageUrl;
   const url = new URL(imageUrl, window.location.origin);
   url.searchParams.set("width", String(width));
@@ -71,7 +78,8 @@ function releaseMedia(imageUrl: string, cached: CachedMedia): void {
  * capability-package route sits behind the Engine's X-Admin-Secret gate. A plain `<img src>`
  * cannot send that header, so the browser gets a 403 and the card falls back to showing the
  * bare image prompt. Fetch those URLs through the API client instead and hand the element an
- * object URL. Engine-native URLs (character galleries, avatars) are returned untouched.
+ * object URL. Engine-native URLs (character galleries) are returned untouched; an Engine avatar asked for at a
+ * width goes through the package's small-copy route instead.
  */
 export function useSlurpMediaSrc(
   imageUrl: string | null | undefined,
@@ -90,9 +98,9 @@ function useSlurpMediaResolution(
 ): { src: string | null; failed: boolean } {
   // `null` while the fetch is in flight; `objectUrl: null` once it failed.
   const [resolved, setResolved] = useState<{ objectUrl: string | null } | null>(null);
-  const managed = imageUrl?.startsWith("/api/slurp2/") === true;
+  const requestedUrl = imageUrl ? variantUrl(imageUrl, options.width) : imageUrl;
+  const managed = requestedUrl?.startsWith("/api/slurp2/") === true;
   const enabled = options.enabled ?? true;
-  const requestedUrl = imageUrl && managed ? variantUrl(imageUrl, options.width) : imageUrl;
 
   useEffect(() => {
     if (!requestedUrl || !managed || !enabled) {

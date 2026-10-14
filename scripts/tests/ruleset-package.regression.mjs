@@ -7,7 +7,10 @@ import { packageArtifactName } from "../catalog-path-safety.mjs";
 import { createDeterministicZip } from "../deterministic-zip.mjs";
 import {
   RULESET_ASSET_PATH,
+  RULESET_CATALOG_EARLIER_MAX_BYTES,
   RULESET_CATALOG_MAX_BYTES,
+  RULESET_EARLIER_MAX_BYTES,
+  RULESET_MAX_BYTES,
   assertRulesetApplies,
   assertRulesetAssetDocument,
   assertRulesetBattle,
@@ -20,6 +23,7 @@ import {
   isRulesetCatalogAssetPath,
   isRulesetPackage,
   rulesetCatalogAssetPaths,
+  rulesetSizeLimits,
 } from "../ruleset-package-checks.mjs";
 
 // A `ruleset` package is the only package shape in this catalog with no Agent, so
@@ -180,7 +184,7 @@ const shippedSummaries = assertRulesetCatalogs(shippedManifest, parsedAsset, shi
 assert.ok(shippedSummaries.length > 0, "the shipped ruleset must declare at least one catalog");
 for (const summary of shippedSummaries) {
   assert.ok(summary.entryCount > 0, `catalog ${summary.id} must ship entries`);
-  if (summary.bytes !== null) assert.ok(summary.bytes <= RULESET_CATALOG_MAX_BYTES);
+  if (summary.bytes !== null) assert.ok(summary.bytes <= rulesetSizeLimits(shippedManifest).catalog);
 }
 // Every declared catalog asset is hash-pinned with the bytes it actually has.
 for (const catalogPath of shippedCatalogPaths) {
@@ -234,6 +238,48 @@ assert.throws(
       withCatalogAsset({ files: [{ path: RULESET_ASSET_PATH, sha256: "b".repeat(64), bytes: 12 }] }),
     ),
   /must declare catalogs\/knacks\.json in manifest\.files/u,
+);
+
+// Size limits mirror the Engine: 256 KiB per ruleset and 1 MiB per catalog before Capability API
+// 1.340, 512 KiB and 2 MiB from it. They are pinned as literal sizes so a change to the constants
+// cannot quietly move them.
+assert.equal(RULESET_EARLIER_MAX_BYTES, 256 * 1024);
+assert.equal(RULESET_MAX_BYTES, 512 * 1024);
+assert.equal(RULESET_CATALOG_EARLIER_MAX_BYTES, 1024 * 1024);
+assert.equal(RULESET_CATALOG_MAX_BYTES, 2 * 1024 * 1024);
+const api1340 = { major: 1, minor: 340 };
+const sizedManifest = (rulesetBytes, catalogBytes, capabilityApi = { major: 1, minor: 339 }) =>
+  withCatalogAsset({
+    capabilityApi,
+    files: [
+      { path: RULESET_ASSET_PATH, sha256: "b".repeat(64), bytes: rulesetBytes },
+      { path: "catalogs/knacks.json", sha256: "d".repeat(64), bytes: catalogBytes },
+    ],
+  });
+assert.doesNotThrow(() =>
+  assertRulesetPackageContract(sizedManifest(RULESET_EARLIER_MAX_BYTES, RULESET_CATALOG_EARLIER_MAX_BYTES)),
+);
+assert.throws(
+  () => assertRulesetPackageContract(sizedManifest(RULESET_EARLIER_MAX_BYTES + 1, 40)),
+  /ruleset\.json is 262145 bytes, over the 262144-byte limit; declare capability API 1\.340 or newer for the 524288-byte limit/u,
+);
+assert.throws(
+  () => assertRulesetPackageContract(sizedManifest(12, RULESET_CATALOG_EARLIER_MAX_BYTES + 1)),
+  /catalogs\/knacks\.json is 1048577 bytes, over the 1048576-byte limit; declare capability API 1\.340 or newer for the 2097152-byte limit/u,
+);
+assert.doesNotThrow(() =>
+  assertRulesetPackageContract(sizedManifest(RULESET_MAX_BYTES, RULESET_CATALOG_MAX_BYTES, api1340)),
+);
+assert.doesNotThrow(() =>
+  assertRulesetPackageContract(sizedManifest(RULESET_MAX_BYTES, RULESET_CATALOG_MAX_BYTES, { major: 2, minor: 0 })),
+);
+assert.throws(
+  () => assertRulesetPackageContract(sizedManifest(RULESET_MAX_BYTES + 1, 40, api1340)),
+  /ruleset\.json is 524289 bytes, over the 524288-byte limit$/u,
+);
+assert.throws(
+  () => assertRulesetPackageContract(sizedManifest(12, RULESET_CATALOG_MAX_BYTES + 1, api1340)),
+  /catalogs\/knacks\.json is 2097153 bytes, over the 2097152-byte limit$/u,
 );
 
 // The document side. A tiny ruleset stands in for the shipped one so each
@@ -346,11 +392,29 @@ assert.throws(
       new Map([
         [
           "catalogs/knacks.json",
-          `{"schemaVersion":1,"catalog":"knacks","entries":[],"pad":"${"x".repeat(RULESET_CATALOG_MAX_BYTES)}"}`,
+          `{"schemaVersion":1,"catalog":"knacks","entries":[],"pad":"${"x".repeat(RULESET_CATALOG_EARLIER_MAX_BYTES)}"}`,
         ],
       ]),
     ),
-  new RegExp(`over the ${RULESET_CATALOG_MAX_BYTES}-byte limit`, "u"),
+  new RegExp(`over the ${RULESET_CATALOG_EARLIER_MAX_BYTES}-byte limit`, "u"),
+);
+// The same file fits once the package declares 1.340, and the raised limit holds there too.
+const paddedCatalog = (padBytes) =>
+  new Map([
+    [
+      "catalogs/knacks.json",
+      `{"schemaVersion":1,"catalog":"knacks","entries":[${JSON.stringify(knack)}],"pad":"${"x".repeat(padBytes)}"}`,
+    ],
+  ]);
+const assetManifest1340 = withCatalogAsset({ capabilityApi: { major: 1, minor: 340 } });
+assert.equal(
+  assertRulesetCatalogs(assetManifest1340, assetDocument, paddedCatalog(RULESET_CATALOG_EARLIER_MAX_BYTES))[0]
+    .entryCount,
+  1,
+);
+assert.throws(
+  () => assertRulesetCatalogs(assetManifest1340, assetDocument, paddedCatalog(RULESET_CATALOG_MAX_BYTES)),
+  new RegExp(`over the ${RULESET_CATALOG_MAX_BYTES}-byte limit$`, "u"),
 );
 // A declared asset no catalog names would be hashed and shipped but never read.
 assert.throws(

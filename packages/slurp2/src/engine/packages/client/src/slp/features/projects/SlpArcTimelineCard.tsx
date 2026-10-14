@@ -192,7 +192,12 @@ export function SlurpArcTimelineCard({
               className="inline-flex min-h-7 items-center gap-1.5 rounded-full bg-[var(--slurp-tint)] py-0.5 pe-2.5 ps-0.5 font-semibold text-[var(--slurp-text)]"
             >
               {partner.avatarUrl && (
-                <SlurpMediaImg src={partner.avatarUrl} alt="" className="size-6 rounded-full object-cover" />
+                <SlurpMediaImg
+                  src={partner.avatarUrl}
+                  mediaWidth={96}
+                  alt=""
+                  className="size-6 rounded-full object-cover"
+                />
               )}
               {partner.displayName}
             </button>

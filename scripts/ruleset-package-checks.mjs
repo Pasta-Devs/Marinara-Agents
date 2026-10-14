@@ -226,10 +226,17 @@ const VALUE_REF_KEYS = Object.freeze([
   "saveMod",
 ]);
 
-// The Engine refuses a catalog asset on its declared size before reading it, and
-// refuses a catalog holding more entries than this. Both are mirrored here so a
-// package that would be rejected on install never reaches the catalog.
-export const RULESET_CATALOG_MAX_BYTES = 1024 * 1024;
+// The Engine refuses a ruleset or catalog asset on its declared size before reading
+// it, and refuses a catalog holding more entries than this. Both are mirrored here so
+// a package that would be rejected on install never reaches the catalog. Since
+// Capability API 1.340 a ruleset may be 512 KiB and a catalog 2 MiB; a package
+// declaring an older API is still held to the earlier 256 KiB and 1 MiB, because an
+// older Engine refuses anything larger.
+export const RULESET_SIZE_LIMITS_MIN_CAPABILITY_API = Object.freeze({ major: 1, minor: 340 });
+export const RULESET_MAX_BYTES = 512 * 1024;
+export const RULESET_EARLIER_MAX_BYTES = 256 * 1024;
+export const RULESET_CATALOG_MAX_BYTES = 2 * 1024 * 1024;
+export const RULESET_CATALOG_EARLIER_MAX_BYTES = 1024 * 1024;
 export const RULESET_CATALOG_MAX_ENTRIES = 2000;
 const RULESET_CATALOGS_MAX = 12;
 
@@ -280,6 +287,21 @@ function meetsCapabilityApi(manifest, { major, minor }) {
   return declared.major > major || (declared.major === major && declared.minor >= minor);
 }
 
+/** The byte limits the Engine holds this package's ruleset and catalog files to. */
+export function rulesetSizeLimits(manifest) {
+  return meetsCapabilityApi(manifest, RULESET_SIZE_LIMITS_MIN_CAPABILITY_API)
+    ? { ruleset: RULESET_MAX_BYTES, catalog: RULESET_CATALOG_MAX_BYTES }
+    : { ruleset: RULESET_EARLIER_MAX_BYTES, catalog: RULESET_CATALOG_EARLIER_MAX_BYTES };
+}
+
+function sizeLimitError(id, path, bytes, limit, raisedLimit) {
+  const raise =
+    limit < raisedLimit
+      ? `; declare capability API ${RULESET_SIZE_LIMITS_MIN_CAPABILITY_API.major}.${RULESET_SIZE_LIMITS_MIN_CAPABILITY_API.minor} or newer for the ${raisedLimit}-byte limit`
+      : "";
+  return new Error(`${id} ${path} is ${bytes} bytes, over the ${limit}-byte limit${raise}`);
+}
+
 /** Assert the ruleset contract for one manifest, and report whether it is one.
  *
  *  Runs over EVERY catalogued package, not just ruleset ones, because the binding
@@ -325,6 +347,17 @@ export function assertRulesetPackageContract(manifest) {
   for (const catalogPath of catalogPaths) {
     if (!declaredFiles.some((file) => file?.path === catalogPath)) {
       throw new Error(`${id} must declare ${catalogPath} in manifest.files with its sha256 and byte size`);
+    }
+  }
+  // The Engine checks the declared size before it reads a byte, so the declared size is what counts.
+  const limits = rulesetSizeLimits(manifest);
+  for (const file of declaredFiles) {
+    if (!Number.isFinite(file?.bytes)) continue;
+    if (file.path === RULESET_ASSET_PATH && file.bytes > limits.ruleset) {
+      throw sizeLimitError(id, file.path, file.bytes, limits.ruleset, RULESET_MAX_BYTES);
+    }
+    if (isRulesetCatalogAssetPath(file.path) && file.bytes > limits.catalog) {
+      throw sizeLimitError(id, file.path, file.bytes, limits.catalog, RULESET_CATALOG_MAX_BYTES);
     }
   }
   for (const name of ["server", "client", "agents", "knowledge"]) {
@@ -502,9 +535,8 @@ export function assertRulesetCatalogs(manifest, document, catalogSources = new M
     const raw = catalogSources.get(expected);
     if (typeof raw !== "string") throw new Error(`${id} is missing the ${expected} payload`);
     const bytes = Buffer.byteLength(raw);
-    if (bytes > RULESET_CATALOG_MAX_BYTES) {
-      throw new Error(`${id} ${expected} is ${bytes} bytes, over the ${RULESET_CATALOG_MAX_BYTES}-byte limit`);
-    }
+    const catalogLimit = rulesetSizeLimits(manifest).catalog;
+    if (bytes > catalogLimit) throw sizeLimitError(id, expected, bytes, catalogLimit, RULESET_CATALOG_MAX_BYTES);
     let file;
     try {
       file = JSON.parse(raw);

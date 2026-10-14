@@ -1,5 +1,11 @@
 # Slurp release notes
 
+## 0.3.41 — 2026-10-14
+
+- Faster: Slurp shows character and persona avatars as small copies instead of the full card picture. On opening Slurp the feed downloaded about 16 MB of avatar pictures (1–2.5 MB each, shown 44 px wide), and Discover about 14 MB more; those downloads also held up the feed's other requests. The small copies are made once and kept in Slurp's own media folder.
+- Faster: the "Report" sheet of a post or a reply is built only when you open it. Before, every post card and reply built a closed copy, which made the feed and Creator pages slower to open.
+- Faster: the ambient background colour measures the pictures on screen only after the screen has drawn, so opening a screen no longer forces extra layout work.
+
 ## 0.3.40 — 2026-10-14
 
 - Changed: Slurp follows a Creator's gender instead of calling everyone "she". Drama packs use the gender of whoever plays each role ("{her:he}" tokens), and pack names and descriptions no longer assume a woman. Post, DM and scene prompts tell the model the Creator's pronouns. A Creator without a gender is "they".

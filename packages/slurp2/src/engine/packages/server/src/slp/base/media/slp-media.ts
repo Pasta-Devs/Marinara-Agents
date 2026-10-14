@@ -1,6 +1,10 @@
 import {
+  closeSync,
   existsSync,
   mkdirSync,
+  openSync,
+  readSync,
+  realpathSync,
   readFileSync,
   readdirSync,
   renameSync,
@@ -9,7 +13,7 @@ import {
   unlinkSync,
   writeFileSync,
 } from "fs";
-import { basename, dirname, join } from "path";
+import { basename, dirname, extname, join } from "path";
 import type { SlpCreatorManagedPost } from "../../../../../shared/src/slp/slp-social.types.js";
 import { logger } from "../../../lib/logger.js";
 import { DATA_DIR } from "../../../utils/data-dir.js";
@@ -137,10 +141,14 @@ const TEASER_SUFFIX = ".teaser-v4.jpg";
 // 160: a thumbnail asked for it and, not listed, got the full original (about 2 MB) instead (0.3.6).
 export const SLP_CREATOR_MEDIA_WIDTHS = [96, 160, 320, 480, 640, 960, 1280, 1600] as const;
 
-export async function resolveCreatorMediaVariant(absolutePath: string, width: number | undefined): Promise<string> {
+export async function resolveCreatorMediaVariant(
+  absolutePath: string,
+  width: number | undefined,
+  variantBase = absolutePath,
+): Promise<string> {
   if (!width || !SLP_CREATOR_MEDIA_WIDTHS.includes(width as (typeof SLP_CREATOR_MEDIA_WIDTHS)[number]))
     return absolutePath;
-  const variantPath = `${absolutePath}.w${width}.webp`;
+  const variantPath = `${variantBase}.w${width}.webp`;
   if (existsSync(variantPath)) return variantPath;
   const sharp = await getSharp();
   if (!sharp) return absolutePath;
@@ -163,6 +171,57 @@ export async function resolveCreatorMediaVariant(absolutePath: string, width: nu
   } finally {
     if (existsSync(stagingPath)) unlinkSync(stagingPath);
   }
+}
+
+const ENGINE_AVATAR_DIR = join(DATA_DIR, "avatars");
+const ENGINE_AVATAR_EXTENSION = /\.(?:png|jpe?g|webp|gif|avif)$/iu;
+
+/**
+ * The Engine avatar file behind `/api/avatars/file/<name>`, held to the checks the Engine's own route
+ * makes: a plain name, a regular file whose real path stays in the avatar folder (no symlink out), and
+ * image bytes. Null otherwise.
+ */
+function engineAvatarSource(fileName: string): string | null {
+  if (
+    !fileName ||
+    fileName.startsWith(".") ||
+    /[\\/\0]/u.test(fileName) ||
+    fileName.includes("..") ||
+    !ENGINE_AVATAR_EXTENSION.test(fileName)
+  )
+    return null;
+  try {
+    const source = assertInsideDir(ENGINE_AVATAR_DIR, join(ENGINE_AVATAR_DIR, fileName));
+    assertInsideDir(realpathSync(ENGINE_AVATAR_DIR), realpathSync(source));
+    if (!statSync(source).isFile()) return null;
+    const header = Buffer.alloc(64);
+    const fd = openSync(source, "r");
+    try {
+      readSync(fd, header, 0, header.length, 0);
+    } finally {
+      closeSync(fd);
+    }
+    return isAllowedImageBuffer(header, extname(fileName)) ? source : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * A width variant of an Engine avatar (`/api/avatars/file/<name>`). The Engine serves only the original,
+ * often a 1-2.5 MB card PNG, and a feed of 44 px avatars pulled 16 MB on open (0.3.41). The variant is
+ * cached in Slurp's own media namespace, never in the Engine's avatar folder; the `.w<width>.webp`
+ * suffix keeps it out of backups. Null when the name is not an avatar picture the Engine would serve.
+ */
+export async function resolveEngineAvatarVariant(fileName: string, width: number | undefined): Promise<string | null> {
+  const source = engineAvatarSource(fileName);
+  if (!source) return null;
+  const marker = resolveCreatorMediaAbsolutePath(`${NOODLER_MEDIA_PREFIX}engine-avatars/${fileName}`);
+  if (!marker) return null;
+  mkdirSync(dirname(marker), { recursive: true });
+  // The Engine may write a new picture under the same name, so the cache key carries its mtime.
+  // ponytail: replaced pictures leave their old variants behind (a few kB each); sweep them if that ever adds up.
+  return resolveCreatorMediaVariant(source, width, `${marker}.${Math.trunc(statSync(source).mtimeMs)}`);
 }
 
 /**

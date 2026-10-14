@@ -473,6 +473,7 @@ function ProfileBanner({
             {account.avatarUrl && (
               <SlurpMediaImg
                 src={account.avatarUrl}
+                mediaWidth={160}
                 alt=""
                 className="slp-crop-top h-full w-full scale-125 object-cover opacity-60 blur-2xl saturate-150"
               />

@@ -12,6 +12,7 @@ const PLAIN_TSX = new Set([
   "tests/slurp2-reset-activity.regression.ts",
   "tests/slurp2-anchor-edits.regression.ts",
   "tests/slurp2-message-deep-details.regression.ts",
+  "tests/slurp2-engine-avatar-variant.regression.ts",
 ]);
 const CONCURRENCY = 4;
 const TAIL_LINES = 30;

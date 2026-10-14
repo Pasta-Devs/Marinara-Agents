@@ -368,9 +368,14 @@ export function NewSinceLastVisitDivider() {
  */
 export function SlurpMediaImg({
   src,
+  mediaWidth,
   ...props
-}: { src: string | null | undefined } & Omit<React.ComponentProps<"img">, "src">) {
-  const resolved = useSlurpMediaSrc(src);
+}: {
+  src: string | null | undefined;
+  /** The width variant to ask for; without it the original is served. */
+  mediaWidth?: number;
+} & Omit<React.ComponentProps<"img">, "src">) {
+  const resolved = useSlurpMediaSrc(src, { width: mediaWidth });
   if (!resolved) return null;
   return <img key={resolved} src={resolved} {...slpImgFade} {...props} />;
 }

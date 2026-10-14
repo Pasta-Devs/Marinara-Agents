@@ -652,6 +652,12 @@
     "slurp2": {
       "versions": [
         {
+          "version": "0.3.41",
+          "date": "2026-10-14",
+          "notes": "- Faster: Slurp shows character and persona avatars as small copies instead of the full card picture. On opening Slurp the feed downloaded about 16 MB of avatar pictures (1–2.5 MB each, shown 44 px wide), and Discover about 14 MB more; those downloads also held up the feed's other requests. The small copies are made once and kept in Slurp's own media folder.\n- Faster: the \"Report\" sheet of a post or a reply is built only when you open it. Before, every post card and reply built a closed copy, which made the feed and Creator pages slower to open.\n- Faster: the ambient background colour measures the pictures on screen only after the screen has drawn, so opening a screen no longer forces extra layout work.",
+          "highlight": false
+        },
+        {
           "version": "0.3.40",
           "date": "2026-10-14",
           "notes": "- Changed: Slurp follows a Creator's gender instead of calling everyone \"she\". Drama packs use the gender of whoever plays each role (\"{her:he}\" tokens), and pack names and descriptions no longer assume a woman. Post, DM and scene prompts tell the model the Creator's pronouns. A Creator without a gender is \"they\".\n- Added: a \"Clothing style\" choice in the Creator's stage profile: Auto, Feminine, Masculine or Neutral. Auto follows gender. It decides what a \"lingerie\" spice post is: lingerie for feminine, an underwear shoot with briefs for masculine, either for neutral. Male Creators no longer get bra-and-panties shoots unless their style is Feminine. The post prompt also names the style.\n- Added: a picture of a Creator whose appearance text does not say their sex starts with \"Male.\" or \"Female.\" from their gender, so the image model stops defaulting to a woman.\n- Changed: the stage profile field hints read \"he\", \"she\" or \"they\" from the gender you picked.",
@@ -763,12 +769,6 @@
           "version": "0.3.22",
           "date": "2026-10-11",
           "notes": "- Fixed: reports are now included in backups and restores.\n- Fixed: \"Create posts now\" names the Creators it skipped or could not post for again, instead of only a count.\n- Fixed: accepting a commission twice in a row (a double tap, or a retry) no longer draws the picture twice.\n- Fixed: chat and commission responses to the fan no longer include a picture's stored file location.\n- Fixed: the settings search box in a settings section now stays reachable on a phone instead of disappearing.\n- Internal: a Slurp Support desk tick checks its throttle against the tick's own time instead of the wall clock.",
-          "highlight": false
-        },
-        {
-          "version": "0.3.21",
-          "date": "2026-10-11",
-          "notes": "- Stir's Recent plays follows a collab you suggested or pushed: waiting for an answer, agreed, coming up, turned down (with the reason), blocked, or up on both pages. A posted collab opens its joint post; a deleted post or a collab Slurp no longer keeps says so.\n- A collab request still waiting shows Make it happen, which opens the usual preview before anything changes.\n- Undo is no longer offered once the joint post is on its way or up; published posts are not taken back.",
           "highlight": false
         }
       ]
