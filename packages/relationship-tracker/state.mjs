@@ -315,6 +315,13 @@ export function characterCardName(character) {
   return dataName || topLevelName;
 }
 
+// A chat message as Engine agents read it. Since capability API 1.71, Roleplay records carry `agentContent` with the
+// message's whispers marked private; older Engines and other modes omit it, so fall back to the public content.
+export function agentMessageText(message) {
+  const text = message?.agentContent ?? message?.content;
+  return typeof text === "string" ? text : "";
+}
+
 export function toPanelResponse(snapshot) {
   const state = snapshot?.state ?? null;
   return {

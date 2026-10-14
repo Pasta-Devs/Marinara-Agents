@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { createHash, randomUUID } from "node:crypto";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { runRegressionToCompletion } from "./regression-helpers.ts";
@@ -32,6 +32,7 @@ async function main() {
   const { configurePackageRuntime } = await import(`${source}/package-runtime.ts`);
   const { processLongTermMemorySource } = await import(`${source}/source-processing.ts`);
   const { LongTermMemoryStorage } = await import(`${source}/storage.ts`);
+  const { longTermMemoryRecallIndexPath, rebuildLongTermMemoryIndexes } = await import(`${source}/rebuild.ts`);
   const { ltmNoteIdSchema } =
     await import("../packages/long-term-memory/src/engine/packages/shared/src/features/agents/long-term-memory/schema.ts");
 
@@ -292,6 +293,50 @@ async function main() {
   ]);
   assert.equal(relationshipWithEvent.accounting.keptUnits, 2);
   assert.equal(relationshipWithEvent.compiledResponse.mutations.length, 2);
+
+  // Issue #1362: an event caused by another event in the same response keeps that
+  // caused_by link next to its source link, and a bare provider target resolves to it.
+  const causeEvent = unit(chat, {
+    bucket: "timeline_event",
+    subjectId: "archive_breach",
+    sectionKey: "event",
+    text: "Mara broke into the archive.",
+    links: [{ target: chat.id, relation: "extracted_from" }],
+  });
+  const effectEvent = unit(chat, {
+    bucket: "timeline_event",
+    subjectId: "archive_alarm",
+    sectionKey: "event",
+    text: "The archive alarm sounded and the guards sealed the doors.",
+    links: [
+      { target: chat.id, relation: "extracted_from" },
+      { target: "archive_breach", relation: "caused_by" },
+    ],
+  });
+  const parsedEventCause = parseEvidenceUnitPayload(
+    { summary: "Event cause parser regression", units: [causeEvent, effectEvent] },
+    sourceHashForLtmSourceNote(chat),
+  );
+  assert.equal(parsedEventCause.parserRejections, 0);
+  assert.deepEqual(parsedEventCause.response.units[1]?.links, [
+    { target: chat.id, relation: "extracted_from" },
+    { target: "timeline_archive_breach", relation: "caused_by" },
+  ]);
+  const eventCause = compile(chat, parsedEventCause.response.units as ReturnType<typeof unit>[]);
+  assert.equal(eventCause.accounting.keptUnits, 2);
+  assert.equal(eventCause.accounting.validationRejections, 0);
+  assert.equal(eventCause.diagnostics.filter((diagnostic) => diagnostic.severity === "error").length, 0);
+  const eventNotes = eventCause.compiledResponse.mutations.flatMap((mutation) =>
+    mutation.kind === "create_note" ? [mutation.note] : [],
+  );
+  const causeNote = eventNotes.find((note) => note.id.startsWith("timeline_archive_breach"));
+  const effectNote = eventNotes.find((note) => note.id.startsWith("timeline_archive_alarm"));
+  assert.ok(causeNote && effectNote, "both events must compile to notes");
+  assert.deepEqual(
+    effectNote.links.map((link) => `${link.relation}:${link.target}`).sort(),
+    [`caused_by:${causeNote.id}`, `extracted_from:${chat.id}`],
+    "the event-to-event caused_by link must survive compilation beside extracted_from",
+  );
 
   const resolvedThread = unit(chat, {
     bucket: "thread",
@@ -919,6 +964,13 @@ async function main() {
             sourceHash,
           },
         ];
+        const recallIndexMtime = () =>
+          stat(longTermMemoryRecallIndexPath(root)).then(
+            (file) => file.mtimeMs,
+            () => null,
+          );
+        await rebuildLongTermMemoryIndexes({ root });
+        const indexBeforeExtraction = await recallIndexMtime();
         const committed = await processLongTermMemorySource({
           sourceNote: reviewSource as never,
           languageModel: {
@@ -975,6 +1027,12 @@ async function main() {
           committed.appliedMutationIds.length > 0,
           reviewSignal === "control",
           `${reviewSignal}: only the control may auto-apply`,
+        );
+        // #1364: extraction rebuilds the recall index only when it applied mutations.
+        assert.equal(
+          (await recallIndexMtime()) !== indexBeforeExtraction,
+          reviewSignal === "control",
+          `${reviewSignal}: only extraction that applied mutations may rebuild the recall index`,
         );
       } finally {
         releaseHost();
@@ -1092,6 +1150,12 @@ async function main() {
   );
   const unitFields = extractionPrompt.unitFields;
   assert.match(unitFields.title, /short memory label/i);
+  assert.ok(
+    extractionPrompt.validationRules.some((rule: string) =>
+      /timeline_event.*directly caused another.*caused_by/.test(rule),
+    ),
+    "issue #1362: the prompt must ask for caused_by between same-response events",
+  );
   for (const relation of ["planted_in", "paid_off_in"]) {
     assert.ok(
       extractionPrompt.allowedTimelineRelations.includes(relation),

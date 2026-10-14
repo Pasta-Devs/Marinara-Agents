@@ -4,6 +4,7 @@ import { readFile, readdir } from "node:fs/promises";
 import { dirname, extname, join, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import { AVATAR_PACKAGE_IDS, assertAvatarPackageContract } from "./avatar-package-checks.mjs";
 import { CATALOG_ARTWORK_SIZE, catalogArtworkRelativePath, catalogArtworkUrl } from "./catalog-artwork.mjs";
 import {
   LEGACY_CATALOG_MAJOR,
@@ -893,6 +894,22 @@ for (const entry of catalog.packages) {
 // how pixelforge shipped a manifest, artifact, and source that disagreed
 // (#544). Sweep the rest of packages/ with the same assertions.
 const uncataloguedIntegrity = await assertEveryPackageManifestIntegrity({ repoRoot, cataloguedIds: ids });
+
+// The avatar packages are checked from source whether or not they are listed yet, because they are
+// built ahead of the Engine surfaces that read them (scripts/avatar-package-checks.mjs).
+for (const id of AVATAR_PACKAGE_IDS) {
+  const packageRoot = await resolveContainedPortablePath(join(repoRoot, "packages"), id, `Package directory for ${id}`);
+  const manifest = JSON.parse(
+    await readFile(await resolveContainedPortablePath(packageRoot, "manifest.json", `Manifest for ${id}`), "utf8"),
+  );
+  const agentDefinitions = JSON.parse(
+    await readFile(
+      await resolveContainedPortablePath(packageRoot, manifest.entrypoints?.agents, `Agent entrypoint for ${id}`),
+      "utf8",
+    ),
+  );
+  assertAvatarPackageContract(manifest, agentDefinitions);
+}
 
 // Guidance may be authored ahead of listing for an incomplete package (its id
 // is absent from the catalog by design), so exempt those ids from exactness.

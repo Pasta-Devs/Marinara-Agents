@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "conversation-calls",
   "name": "Calls",
-  "version": "1.1.2",
+  "version": "1.1.4",
   "description": "Adds live audio and video calls with Conversation characters. Add as both a Command and an Agent in Chat Settings → Agents → Commands/Calls for Conversation mode.",
   "engine": {
     "min": "2.4.1",
@@ -32,13 +32,28 @@
     },
     {
       "path": "server.mjs",
-      "sha256": "972582e603c2198fe46d35c5f28e198d13579543eae49ccc88572cf7df15c530",
-      "bytes": 2521390
+      "sha256": "f6dba6f3f8e3824bbb4afb88eb7d2ef8866e74917014f2d82f15b301dfa98a26",
+      "bytes": 2523290
     },
     {
       "path": "client.js",
-      "sha256": "863006fa9bc8af1c2e6c70ce4d694767eeff634a807c34b301ced46f2da6331a",
-      "bytes": 882635
+      "sha256": "21dfd46549c182b1e89804c0cbe944b4e1283ad1e45ba0e41b05f6e2cd80b605",
+      "bytes": 884196
+    },
+    {
+      "path": "claude-code-plugin/.claude-plugin/plugin.json",
+      "sha256": "9caabe0dc95c7e0d825533719ae3a84cccba625277ec9e39dfd69fae18880fd3",
+      "bytes": 226
+    },
+    {
+      "path": "claude-code-plugin/hooks/hooks.json",
+      "sha256": "1c169616134dd0e6b5effb616a5dd20934f0f968579e316260568e2130d9d67a",
+      "bytes": 91
+    },
+    {
+      "path": "claude-code-plugin/hooks/register.mjs",
+      "sha256": "170f85d7b4e6c96dd0ed3cca9caeb2d39e0487fabe7f40274d5e6405acd6a1af",
+      "bytes": 504
     }
   ],
   "permissions": [

@@ -48,8 +48,9 @@ export function buildLtmGraphIndex(notes: LtmNote[], chunks: LtmMemoryChunk[]): 
 
 /**
  * Explanatory links only: `evidenced_by` in either direction, a thread joined to its
- * cause or trigger event, and a relationship joined to its cause event. Other links
- * (world `planted_in`, character `caused_by`, `extracted_from`) measured as noise.
+ * cause, trigger or pay-off event, a relationship joined to its cause event, and an
+ * event joined to the event that caused it. Other links (world `planted_in`, character
+ * `caused_by`, `extracted_from`) measured as noise.
  */
 function isExplanatoryLink(
   seedType: LtmNoteType | undefined,
@@ -60,8 +61,9 @@ function isExplanatoryLink(
   if (relation === "evidenced_by") return true;
   const [stateType, eventType] = seedStoresLink ? [seedType, otherType] : [otherType, seedType];
   if (eventType !== "timeline_event") return false;
-  if (stateType === "thread") return relation === "caused_by" || relation === "triggered_by";
-  return stateType === "relationship" && relation === "caused_by";
+  if (stateType === "thread")
+    return relation === "caused_by" || relation === "triggered_by" || relation === "paid_off_in";
+  return (stateType === "relationship" || stateType === "timeline_event") && relation === "caused_by";
 }
 
 /** One-hop explanatory neighbours of the recalled seed notes, never a seed itself, each with the seed it came from. */

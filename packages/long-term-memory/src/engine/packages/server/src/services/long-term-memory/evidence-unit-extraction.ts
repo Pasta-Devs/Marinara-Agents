@@ -82,6 +82,11 @@ function serverEnforcedLinkRules(allowedBuckets: readonly LtmEvidenceUnit["bucke
   return [
     "Every link target must resolve to sourceNote.id or a target note derived from a unit in the same response.",
     'Every non-timeline unit with claimKind "change" must link to a timeline_event associated with this source. Static units do not require timeline links. Every timeline_event must link to sourceNote.id with extracted_from.',
+    ...(allowedBuckets.includes("timeline_event")
+      ? [
+          "When one timeline_event in the response directly caused another, the later event also links to the earlier one with caused_by (target timeline_<earlier event subjectId>). Link only a cause the source states or clearly implies, never events that merely follow each other.",
+        ]
+      : []),
     ...(allowedBuckets.includes("relationship_state")
       ? [
           "A relationship_state that describes a change or includes dimensionChanges must include a caused_by link to a timeline_event in the same response. Same-response event targets use timeline_<subjectId>.",

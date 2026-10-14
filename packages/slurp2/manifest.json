@@ -10,7 +10,7 @@
   },
   "id": "slurp2",
   "name": "Slurp",
-  "version": "0.3.36",
+  "version": "0.3.39",
   "description": "A private social app for your characters. Turn characters and personas into Creators, post public or locked photos, and watch a simulated audience follow, subscribe, unlock, comment, and message them. By default, it is tuned for an adult experience. Install it, restart Marinara Engine when prompted, then open Home → Slurp.",
   "localizations": {
     "de": {
@@ -77,13 +77,13 @@
     },
     {
       "path": "server.mjs",
-      "sha256": "bfe3238b631a18b27854ca543e2679f2bf071261c3e83301366f75eb284f7d8d",
-      "bytes": 3496532
+      "sha256": "0312155772ac7a4a751419fd8e57522cb80d3727093b6eb32d155aa18683ab5b",
+      "bytes": 3498907
     },
     {
       "path": "client.js",
-      "sha256": "bdb5662c9a981d1981199e2ae2b77a47b50d488bf505ebaff3413afdc467d0b9",
-      "bytes": 4499157
+      "sha256": "6b0fa337f7a5680d0a2508789c105b549423034c2687e7fca0732d84f5bbd76c",
+      "bytes": 4695792
     },
     {
       "path": "slurp2-logo.png",
@@ -97,18 +97,33 @@
     },
     {
       "path": "src/engine/packages/client/src/slp/locales/de.json",
-      "sha256": "9cdd3915ea57211d64dcf6cfa1e40e7740245344af7128d4e9bd96cfd6c4a6dd",
-      "bytes": 215468
+      "sha256": "81e4991741e74dd49a9409efea06a877362f8f7f5cac223ed872182e6b5d9aff",
+      "bytes": 215701
     },
     {
       "path": "src/engine/packages/client/src/slp/locales/ko.json",
-      "sha256": "b437fa576fc84b44d7aa10d22251a8e6b21aa1968b5312a6529f6e536d72f0a0",
-      "bytes": 311689
+      "sha256": "8609d3d00f005a8636e752022246c2806f0e25dbfa3ff4ee3c4fe78c1f425e22",
+      "bytes": 311908
     },
     {
       "path": "src/engine/packages/client/src/slp/locales/pl.json",
-      "sha256": "9d746a64e4b5d5caf116aed0022b301add3ee0eaed7e61e01908d8acbb4f68ec",
-      "bytes": 217233
+      "sha256": "e8992566d3dd32176e6746ed0cff9ab674d77254347a50d7d21845bb110a3a19",
+      "bytes": 217440
+    },
+    {
+      "path": "claude-code-plugin/.claude-plugin/plugin.json",
+      "sha256": "9caabe0dc95c7e0d825533719ae3a84cccba625277ec9e39dfd69fae18880fd3",
+      "bytes": 226
+    },
+    {
+      "path": "claude-code-plugin/hooks/hooks.json",
+      "sha256": "1c169616134dd0e6b5effb616a5dd20934f0f968579e316260568e2130d9d67a",
+      "bytes": 91
+    },
+    {
+      "path": "claude-code-plugin/hooks/register.mjs",
+      "sha256": "170f85d7b4e6c96dd0ed3cca9caeb2d39e0487fabe7f40274d5e6405acd6a1af",
+      "bytes": 504
     }
   ],
   "permissions": [

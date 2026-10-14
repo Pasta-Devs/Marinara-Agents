@@ -4193,6 +4193,8 @@
   "ui.slurp.appearance.accept": "Accept appearance",
   "ui.slurp.appearance.keepOverride": "Keep as Creator override",
   "ui.slurp.appearance.useLinked": "Use linked appearance",
+  "ui.slurp.appearance.useImageTags": "Use the card's image tags",
+  "ui.slurp.appearance.useImageTagsConfirm": "This replaces the appearance you wrote for this Creator. It cannot be undone.",
   "ui.slurp.appearance.clearOverride": "Clear override",
   "ui.slurp.appearance.edit": "Edit appearance",
   "ui.slurp.appearance.saveOverride": "Save Creator override",

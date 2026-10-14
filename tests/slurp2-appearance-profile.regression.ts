@@ -7,6 +7,7 @@ import {
   parseSlpAppearanceCandidate,
   resolveSlpAppearanceProfile,
   shouldAutoAcceptSlpAppearance,
+  slpCardImageAppearance,
 } from "../packages/slurp2/src/engine/packages/server/src/slp/modules/creators/slp-appearance-profile.ts";
 import type { SlpAccount } from "../packages/slurp2/src/engine/packages/shared/src/slp/slp-social.types.ts";
 import {
@@ -156,6 +157,42 @@ test("description extraction requires a supporting quote and never invents from 
   assert.equal(parseSlpAppearanceCandidate('{"appearance":"Blue eyes","evidence":""}', "", true)?.source, "avatar");
 });
 
+test("a card's image tags are offered only while its Image Appearance Override is on", () => {
+  const tags = "1girl, solo, silver hair";
+  // A character keeps a boolean in extensions; a persona row keeps the text "true".
+  assert.equal(slpCardImageAppearance({ imageAppearanceEnabled: true, imageAppearance: `  ${tags}  ` }), tags);
+  assert.equal(slpCardImageAppearance({ imageAppearanceEnabled: "true", imageAppearance: tags }), tags);
+  for (const imageAppearanceEnabled of [false, "false", undefined, "", 1]) {
+    assert.equal(slpCardImageAppearance({ imageAppearanceEnabled, imageAppearance: tags }), "");
+  }
+  assert.equal(slpCardImageAppearance({ imageAppearanceEnabled: true, imageAppearance: "   " }), "");
+  assert.equal(slpCardImageAppearance({ imageAppearanceEnabled: true, imageAppearance: 7 }), "");
+  // A Creator appearance holds 2000 characters, so the button never offers more than can be saved.
+  assert.equal(
+    slpCardImageAppearance({ imageAppearanceEnabled: true, imageAppearance: "a".repeat(2500) }).length,
+    2000,
+  );
+  // Saving trims, so a cut that lands on a space must not leave the button showing for ever.
+  const cutOnSpace = slpCardImageAppearance({
+    imageAppearanceEnabled: true,
+    imageAppearance: `${"a".repeat(1999)} tail`,
+  });
+  assert.equal(cutOnSpace.length, 1999);
+  const storage = slurp2Source(
+    "packages/slurp2/src/engine/packages/server/src/slp/data/creators/slp-creators-storage-3.ts",
+  );
+  assert.match(
+    storage,
+    /imageAppearance: publicAccount \? await resolveCreatorImageAppearance\(db, publicAccount\) : "",/u,
+  );
+  const section = slurp2Source(
+    "packages/slurp2/src/engine/packages/client/src/slp/features/creators/settings/SlpCreatorSettingsSections.tsx",
+  );
+  assert.match(section, /appearance\.imageAppearance && appearance\.imageAppearance !== appearance\.text && \(/u);
+  assert.match(section, /runAppearanceAction\("edit_override", appearance\.imageAppearance\)/u);
+  assert.match(section, /appearance\.source === "override" &&\s+!\(await showConfirmDialog\(/u);
+});
+
 test("reviewed, rewritten, and fallback prompts all retain appearance", () => {
   for (const rewrittenPrompt of ["A portrait at a bus stop", null]) {
     const selected = selectSlpImageProviderPrompt({
@@ -176,6 +213,13 @@ test("unsupported image providers and fallbacks receive text without avatar refe
   assert.equal(slpImageReferencesSupported({ imageService: "comfyui" }, { serviceHint: "pollinations" }), false);
   assert.equal(slpImageReferencesSupported({ imageService: "pollinations" }), false);
   assert.equal(slpImageReferencesSupported({ imageService: "nanogpt", model: "hidream" }), true);
+  // SpicyAPI (#1337): edit models get the avatar, text-to-image models do not, and a fallback must take it too.
+  const spicyEdit = { imageService: "spicyapi", model: "bytedance/seedream-5.0-pro/edit" };
+  const spicyText = { imageService: "spicyapi", model: "alibaba/z-image-spicy-pro/text-to-image" };
+  assert.equal(slpImageReferencesSupported(spicyEdit), true);
+  assert.equal(slpImageReferencesSupported(spicyText), false);
+  assert.equal(slpImageReferencesSupported({ imageService: "comfyui" }, spicyEdit), true);
+  assert.equal(slpImageReferencesSupported(spicyEdit, spicyText), false);
   assert.equal(slpImageReferencesSupported({ model: "flux-kontext", baseUrl: "https://nano-gpt.com/api/v1" }), true);
   const openRouter = "https://openrouter.ai/api/v1";
   assert.equal(slpImageReferencesSupported({ model: "google/gemini-3.1-flash-image", baseUrl: openRouter }), true);

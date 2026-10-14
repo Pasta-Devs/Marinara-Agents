@@ -544,6 +544,8 @@
   "ui.slurp.appearance.accept": "Aussehen übernehmen",
   "ui.slurp.appearance.keepOverride": "Als Creator-Aussehen behalten",
   "ui.slurp.appearance.useLinked": "Verknüpftes Aussehen verwenden",
+  "ui.slurp.appearance.useImageTags": "Bild-Tags der Karte verwenden",
+  "ui.slurp.appearance.useImageTagsConfirm": "Das ersetzt das Aussehen, das du für diesen Creator geschrieben hast. Das lässt sich nicht rückgängig machen.",
   "ui.slurp.appearance.clearOverride": "Eigenes Aussehen entfernen",
   "ui.slurp.appearance.edit": "Aussehen bearbeiten",
   "ui.slurp.appearance.saveOverride": "Creator-Aussehen speichern",

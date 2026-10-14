@@ -1,5 +1,5 @@
 // The splash screen needs the shipped version and its public notes inside the client bundle.
-export const SLURP2_VERSION = "0.3.36";
+export const SLURP2_VERSION = "0.3.39";
 
 export interface Slurp2ReleaseEntry {
   version: string;
@@ -12,6 +12,23 @@ export interface Slurp2ReleaseEntry {
  * in-universe bullets per release (technical detail lives in CHANGELOG.md).
  */
 export const SLURP2_RELEASES: Slurp2ReleaseEntry[] = [
+  {
+    version: "0.3.39",
+    date: "2026-10-14",
+    notes: ["On Android, picking a post picture opens the full file browser, so every folder is reachable."],
+  },
+  {
+    version: "0.3.38",
+    date: "2026-10-13",
+    notes: ["A creator whose card has image tags gets a button that uses them as her picture appearance."],
+  },
+  {
+    version: "0.3.37",
+    date: "2026-10-13",
+    notes: [
+      "With Claude (Subscription) on Marinara newer than 2.5.0, Slurp no longer sends your account email or computer details to the model.",
+    ],
+  },
   {
     version: "0.3.36",
     date: "2026-10-13",
@@ -767,15 +784,6 @@ export const SLURP2_RELEASES: Slurp2ReleaseEntry[] = [
     version: "0.2.2",
     date: "2026-09-21",
     notes: ["Every persona now sees every Creator."],
-  },
-  {
-    version: "0.2.1",
-    date: "2026-09-21",
-    notes: [
-      "Posts never repeat private things from your messages.",
-      "Teasers and everyday posts stay short; behind-the-scenes posts can run long.",
-      "Stories can be thank-yous and requests too.",
-    ],
   },
 ];
 

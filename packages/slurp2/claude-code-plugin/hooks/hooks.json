@@ -1,0 +1,4 @@
+{
+  "description": "Marinara Engine chat-context hooks",
+  "modules": ["./register.mjs"]
+}

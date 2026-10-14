@@ -1384,6 +1384,8 @@
   "ui.slurp.appearance.accept": "외모 승인",
   "ui.slurp.appearance.keepOverride": "크리에이터 외모로 저장",
   "ui.slurp.appearance.useLinked": "연결된 외모 사용",
+  "ui.slurp.appearance.useImageTags": "카드의 이미지 태그 사용",
+  "ui.slurp.appearance.useImageTagsConfirm": "이 크리에이터를 위해 직접 쓴 외모가 대체됩니다. 되돌릴 수 없습니다.",
   "ui.slurp.appearance.clearOverride": "외모 설정 지우기",
   "ui.slurp.appearance.edit": "외모 편집",
   "ui.slurp.appearance.saveOverride": "크리에이터 외모 저장",
