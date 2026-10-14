@@ -86,6 +86,9 @@ export function searchLtmKeywordIndex(
     maxCandidates?: number;
     allowedChunks?: Set<string>;
     stopWords?: ReadonlySet<string>;
+    /** Issue #1363: normalized names the vault knows (character titles). Capitalisation
+     * cannot flag a name at a sentence start, in lowercase, or in a caseless script. */
+    knownNames?: ReadonlySet<string>;
   } = {},
 ) {
   const normalizedTerms = normalizeKeywordTerms(queryText, options.stopWords);
@@ -204,12 +207,13 @@ export function searchLtmKeywordIndex(
   }
 
   // Issue #1264: one ordinary exact keyword must not clear the threshold alone.
-  // Two or more distinct keywords, a multi-word phrase, or a name keep full credit.
+  // Two or more distinct keywords, a multi-word phrase, or a name (capitalised in
+  // the query, or a known character name, issue #1363) keep full credit.
   const nameTerms = queryNameTerms(queryText);
   for (const hit of hits.values()) {
     if (hit.exactTerms.size !== 1) continue;
     const [term] = hit.exactTerms;
-    if (term!.includes(" ") || nameTerms.has(term!)) continue;
+    if (term!.includes(" ") || nameTerms.has(term!) || options.knownNames?.has(term!)) continue;
     hit.score = Math.min(hit.score, LTM_KEYWORD_MAX_SCORE / 2);
   }
 

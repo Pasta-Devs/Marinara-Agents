@@ -11,7 +11,7 @@ import { applyLtmBudget } from "./budget.js";
 import { searchLtmBm25 } from "./bm25.js";
 import { embedLongTermMemoryTexts, type MemoryRecallEmbeddingOptions } from "./embedding-adapter.js";
 import { findLtmLinkedNotes } from "./graph.js";
-import { buildStopWordSet } from "./keyword-extract.js";
+import { buildStopWordSet, normalizeKeywordTerms } from "./keyword-extract.js";
 import { LTM_KEYWORD_MAX_SCORE, searchLtmKeywordIndex } from "./keyword-index.js";
 import { getLtmMetadataMatches } from "./metadata-index.js";
 import { resolvePackageEmbeddingAdapter } from "./package-runtime.js";
@@ -156,10 +156,17 @@ export async function retrieveLongTermMemory(input: RetrieveLongTermMemoryInput)
       })),
     });
   }
-  const keywords = searchLtmKeywordIndex(index.keywords, query, {
-    allowedChunks: allowed,
-    stopWords: buildStopWordSet(triggerStopWords),
-  });
+  const stopWords = buildStopWordSet(triggerStopWords);
+  // Issue #1363: a character's title words are names wherever they appear, so a
+  // single keyword match on one keeps full credit without relying on capitalisation.
+  const knownNames = new Set(
+    Object.values(index.metadata.chunks).flatMap((chunk) =>
+      chunk.noteType === "character" && chunk.title && allowed.has(chunk.id)
+        ? normalizeKeywordTerms(chunk.title, stopWords)
+        : [],
+    ),
+  );
+  const keywords = searchLtmKeywordIndex(index.keywords, query, { allowedChunks: allowed, stopWords, knownNames });
   if ((input.keywordWeight ?? 1) > 0 && keywords.length) {
     lanes.push({
       name: "keyword",

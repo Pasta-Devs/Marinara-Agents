@@ -2019,6 +2019,130 @@ async function main() {
           "an unreadable index must still be quarantined",
         );
 
+        // #1364: a rebuild embeds only the chunks whose embedded text is new. Another embedding
+        // space, or a previous index that cannot be read, embeds everything.
+        {
+          const embeddedBatches: string[][] = [];
+          const reuseAdapter = (spaceId: string) => ({
+            spaceId,
+            label: "reuse test embeddings",
+            async embed(texts: string[]) {
+              embeddedBatches.push(texts);
+              return texts.map(() => [1, 0]);
+            },
+          });
+          const embeddedCount = () => embeddedBatches.splice(0).flat().length;
+          const rebuild = (spaceId: string) =>
+            rebuildLongTermMemoryIndexes({ root: vaultRoot, embeddingAdapter: reuseAdapter(spaceId), stopWords: [] });
+          await storage.createNote(note("world_1364_reuse", "chat-a", "A cobalt archive reuse entry."));
+          const full = await rebuild("reuse-space");
+          assert.equal(embeddedCount(), full.chunkCount, "a first rebuild embeds every chunk");
+          assert.ok(full.chunkCount > 1, "the reuse regression needs several chunks");
+
+          await rebuild("reuse-space");
+          assert.equal(embeddedCount(), 0, "an unchanged vault must reuse every vector");
+
+          await storage.updateNote("world_1364_reuse", { tags: ["reuse_tag"] });
+          await rebuild("reuse-space");
+          assert.equal(embeddedCount(), 0, "a tag edit changes no embedded text and must reuse every vector");
+
+          await storage.updateNote("world_1364_reuse", {
+            sections: { facts: { text: "A cobalt archive reuse entry with new words.", updatedAt: timestamp } },
+          });
+          const edited = await rebuild("reuse-space");
+          assert.equal(embeddedCount(), 1, "a text edit re-embeds only that memory's chunk");
+          assert.equal(edited.embeddedChunkCount, edited.chunkCount, "reused and new vectors must all be stored");
+
+          await storage.updateNote("world_1364_reuse", {
+            sections: { facts: { text: "A cobalt archive reuse entry, resized.", updatedAt: timestamp } },
+          });
+          const resized = await rebuildLongTermMemoryIndexes({
+            root: vaultRoot,
+            embeddingAdapter: {
+              spaceId: "reuse-space",
+              label: "reuse test embeddings",
+              async embed(texts: string[]) {
+                embeddedBatches.push(texts);
+                return texts.map(() => [1, 0, 0]);
+              },
+            },
+            stopWords: [],
+          });
+          assert.equal(
+            embeddedCount(),
+            1 + resized.chunkCount,
+            "a new dimension in the same space must re-embed everything",
+          );
+          assert.equal(
+            JSON.parse(await readFile(recallIndexPath, "utf8")).embeddings.dimension,
+            3,
+            "the re-embedded index must store the new dimension",
+          );
+
+          await rebuild("other-reuse-space");
+          assert.equal(embeddedCount(), edited.chunkCount, "another embedding space must re-embed everything");
+
+          await writeFile(recallIndexPath, "{");
+          await rebuild("other-reuse-space");
+          assert.equal(embeddedCount(), edited.chunkCount, "an unreadable previous index must re-embed everything");
+
+          // Leave the vector-less index the cancellation scenario below starts from.
+          await rebuildLongTermMemoryIndexes({ root: vaultRoot, embeddingAdapter: null, stopWords: [] });
+        }
+
+        // #1364: an index verified against the vault is reused without scanning it until a mutation
+        // moves the index revision. Unindexed notes must not keep recall on the full check.
+        {
+          let scans = 0;
+          const listNotes = LongTermMemoryStorage.prototype.listNotes;
+          LongTermMemoryStorage.prototype.listNotes = async function (this: { root: string }, ...args: unknown[]) {
+            if (this.root === vaultRoot) scans += 1;
+            return listNotes.apply(this, args);
+          };
+          const load = async (stopWords: string[] = []) => {
+            scans = 0;
+            const index = await loadOrRebuildLongTermMemoryIndexes(vaultRoot, null, stopWords);
+            return { index, scans };
+          };
+          try {
+            const verified = await load();
+            assert.ok(verified.scans > 0, "the first load must verify the index against the vault");
+            const reused = await load();
+            assert.equal(reused.scans, 0, "an unchanged vault must reuse the verified index without scanning");
+            assert.equal(reused.index, verified.index, "a verified index is served from memory");
+
+            await storage.createNote({
+              id: "source_1364_unindexed",
+              title: "Unindexed source",
+              type: "source",
+              status: "active",
+              modes: ["roleplay"],
+              scope: { chatId: "chat-a", chatIds: ["chat-a"] },
+              tags: ["source_summary"],
+              keywords: [],
+              links: [],
+              provenance: { kind: "chat_summary", sourceId: "chat-a", entryId: "1364" },
+              sections: { source: { text: "An unindexed source entry.", updatedAt: timestamp } },
+            });
+            assert.ok((await load()).scans > 0, "a mutation must invalidate the verified index");
+            assert.equal((await load()).scans, 0, "unindexed notes must not keep recall on the full check");
+
+            await storage.updateNote("world_1364_reuse", {
+              sections: { facts: { text: "A cobalt archive reuse entry, edited again.", updatedAt: timestamp } },
+            });
+            const edited = await load();
+            assert.ok(edited.scans > 0, "an indexed mutation must invalidate the verified index");
+            assert.notEqual(edited.index.sourceHash, reused.index.sourceHash, "the edit must reach the loaded index");
+            assert.ok((await load()).scans > 0, "an index rebuilt by a load is verified once before it is reused");
+            assert.equal((await load()).scans, 0, "the verified rebuilt index is then reused");
+
+            assert.ok((await load(["cobalt"])).scans > 0, "other stop words must not reuse the verified index");
+          } finally {
+            LongTermMemoryStorage.prototype.listNotes = listNotes;
+          }
+          await rebuildLongTermMemoryIndexes({ root: vaultRoot, embeddingAdapter: null, stopWords: [] });
+        }
+
         // Recall cancellation must reach rebuild embedding work, avoid publishing after
         // abort, and release the vault lock so a queued reader proceeds.
         await storage.createNote(note("world_1178_abort", "chat-a", "A cobalt archive cancellation entry."));
