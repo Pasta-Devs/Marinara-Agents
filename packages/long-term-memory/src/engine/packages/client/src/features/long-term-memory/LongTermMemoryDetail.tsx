@@ -12,7 +12,7 @@ import {
   Upload,
 } from "lucide-react";
 import type { LtmStatusResponse } from "../../../../shared/src/features/agents/long-term-memory/schema.js";
-import { queryKeys, request } from "./api";
+import { errorMessage, queryKeys, request } from "./api";
 import { LongTermMemoryNavigation } from "./LongTermMemoryNavigation";
 import { Button, IconButton, InfoPopover, StatusSurface } from "./shared-controls";
 import type {
@@ -338,9 +338,7 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
       await props.onEnabledForChatChange(!props.enabledForChat);
     } catch (error) {
       setActivationError(
-        error instanceof Error
-          ? error.message
-          : localizeUi("ui.longTermMemory.longtermmemorydetail.couldNotUpdateThisChat"),
+        errorMessage(error, localizeUi("ui.longTermMemory.longtermmemorydetail.couldNotUpdateThisChat")),
       );
     } finally {
       setActivationPending(false);
@@ -387,9 +385,7 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
       setRepairMessage(localizeUi("ui.longTermMemory.longtermmemorydetail.reindexComplete"));
       await status.refetch();
     } catch (error) {
-      setRepairMessage(
-        error instanceof Error ? error.message : localizeUi("ui.longTermMemory.longtermmemorydetail.reindexFailed"),
-      );
+      setRepairMessage(errorMessage(error, localizeUi("ui.longTermMemory.longtermmemorydetail.reindexFailed")));
     } finally {
       setRepairPending(false);
     }
@@ -465,9 +461,7 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
       advanceOnboarding();
     } catch (error) {
       setActivationError(
-        error instanceof Error
-          ? error.message
-          : localizeUi("ui.longTermMemory.longtermmemorydetail.couldNotUpdateThisChat"),
+        errorMessage(error, localizeUi("ui.longTermMemory.longtermmemorydetail.couldNotUpdateThisChat")),
       );
     } finally {
       setActivationPending(false);

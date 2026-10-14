@@ -5,7 +5,7 @@ import type {
   LtmSubjectIdentityReview,
   LtmSubjectIdentityDecision,
 } from "../../../../shared/src/features/agents/long-term-memory/schema.js";
-import { invalidateLtmQueries, queryKeys, request } from "./api";
+import { errorMessage, invalidateLtmQueries, queryKeys, request } from "./api";
 import { Button, inputClass, StatusSurface } from "./shared-controls";
 import { useLtmTranslation } from "./localization";
 
@@ -76,7 +76,7 @@ export default function SubjectIdentityReview({
       onResolved(decisions.some((choice) => choice.action === "skip"));
       return true;
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : localizeUi("ui.longTermMemory.reviewqueue.requestFailed"));
+      setError(errorMessage(cause, localizeUi("ui.longTermMemory.reviewqueue.requestFailed")));
       return false;
     } finally {
       setBusy(false);

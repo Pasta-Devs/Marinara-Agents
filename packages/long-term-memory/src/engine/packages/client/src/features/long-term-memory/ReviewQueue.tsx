@@ -18,7 +18,7 @@ import {
   type LtmRejectedSuggestionsResponse,
   type LtmSavedSubjectIdentityChoice,
 } from "../../../../shared/src/features/agents/long-term-memory/schema.js";
-import { invalidateLtmQueries, queryKeys, request, requestNotesByIds } from "./api";
+import { errorMessage, invalidateLtmQueries, queryKeys, request, requestNotesByIds } from "./api";
 import { humanizeLabel, labelKeys, localizedLabel, rejectionReasonLabels } from "./display-labels";
 import { Button, IconButton, InfoPopover, inputClass, StatusSurface } from "./shared-controls";
 import type { LongTermMemoryDestinationProps } from "./types";
@@ -622,6 +622,85 @@ function isAbortError(error: unknown) {
   return error instanceof DOMException
     ? error.name === "AbortError"
     : error instanceof Error && error.name === "AbortError";
+}
+
+// Every part is a whole sentence so a translator can reorder words and punctuation inside it.
+function batchResultSentences(
+  result: BatchResult,
+  localizeUi: ReturnType<typeof useLtmTranslation>["t"],
+  locale: string,
+) {
+  const pick = (count: number, one: string, other: string) =>
+    selectLtmPluralForm(locale, count) === "one" ? one : other;
+  const endSentence = (text: string) => (/[.!?…。！？]$/u.test(text.trim()) ? text.trim() : `${text.trim()}.`);
+  const sentences = [
+    result.phase === "preflight"
+      ? localizeUi("ui.longTermMemory.reviewqueue.preflightSummary", {
+          ready: result.ready,
+          blocked: result.blockedMutationIds.length,
+        })
+      : localizeUi(
+          result.action === "accepted"
+            ? pick(
+                result.completed,
+                "ui.longTermMemory.reviewqueue.appliedSummaryOne",
+                "ui.longTermMemory.reviewqueue.appliedSummary",
+              )
+            : pick(
+                result.completed,
+                "ui.longTermMemory.reviewqueue.discardedSummaryOne",
+                "ui.longTermMemory.reviewqueue.discardedSummary",
+              ),
+          { completed: result.completed, failed: result.failed },
+        ),
+  ];
+  if (result.blockedMutationIds.length)
+    sentences.push(
+      localizeUi("ui.longTermMemory.reviewqueue.blockedBeforeApply", { count: result.blockedMutationIds.length }),
+    );
+  if (result.remaining)
+    sentences.push(
+      localizeUi(
+        pick(
+          result.remaining,
+          "ui.longTermMemory.reviewqueue.otherPendingOne",
+          "ui.longTermMemory.reviewqueue.otherPending",
+        ),
+        { count: result.remaining },
+      ),
+    );
+  if (result.autoIncluded)
+    sentences.push(
+      localizeUi(
+        pick(
+          result.autoIncluded,
+          "ui.longTermMemory.reviewqueue.dependenciesIncludedAutomaticallyOne",
+          "ui.longTermMemory.reviewqueue.dependenciesIncludedAutomatically",
+        ),
+        { count: result.autoIncluded },
+      ),
+    );
+  if (result.indexRebuildFailures.length)
+    sentences.push(
+      endSentence(
+        localizeUi("ui.longTermMemory.reviewqueue.changesWereSavedButTheIndexRebuildFailedValue1", {
+          value1: result.indexRebuildFailures.join(" "),
+        }),
+      ),
+    );
+  sentences.push(...result.messages.map(endSentence));
+  if (result.cascadeMutationLabels.length)
+    sentences.push(
+      localizeUi(
+        pick(
+          result.cascadeMutationLabels.length,
+          "ui.longTermMemory.reviewqueue.cascadeSkippedMutationsOne",
+          "ui.longTermMemory.reviewqueue.cascadeSkippedMutations",
+        ),
+        { count: result.cascadeMutationLabels.length, labels: result.cascadeMutationLabels.join(", ") },
+      ),
+    );
+  return sentences;
 }
 
 function ReviewProgress({
@@ -1996,8 +2075,7 @@ export default function ReviewQueue({
             requestBody.mutationIds.forEach((id) => failedMutationIds.add(id));
             messages.push(
               localizeUi("ui.longTermMemory.reviewqueue.draftActionFailed", {
-                message:
-                  error instanceof Error ? error.message : localizeUi("ui.longTermMemory.reviewqueue.requestFailed"),
+                message: errorMessage(error, localizeUi("ui.longTermMemory.reviewqueue.requestFailed")),
               }),
             );
           }
@@ -2119,8 +2197,7 @@ export default function ReviewQueue({
           if (failedRequestIds.size) failedDraftIds.add(draftId);
           messages.push(
             localizeUi("ui.longTermMemory.reviewqueue.draftActionFailed", {
-              message:
-                error instanceof Error ? error.message : localizeUi("ui.longTermMemory.reviewqueue.requestFailed"),
+              message: errorMessage(error, localizeUi("ui.longTermMemory.reviewqueue.requestFailed")),
             }),
           );
         }
@@ -2228,8 +2305,7 @@ export default function ReviewQueue({
               messages: [
                 ...current.messages,
                 localizeUi("ui.longTermMemory.reviewqueue.draftActionFailed", {
-                  message:
-                    error instanceof Error ? error.message : localizeUi("ui.longTermMemory.reviewqueue.requestFailed"),
+                  message: errorMessage(error, localizeUi("ui.longTermMemory.reviewqueue.requestFailed")),
                 }),
               ],
             }
@@ -2285,8 +2361,7 @@ export default function ReviewQueue({
               ? "ui.longTermMemory.reviewqueue.draftDiscardFailed"
               : "ui.longTermMemory.reviewqueue.reportDismissalFailed",
             {
-              message:
-                error instanceof Error ? error.message : localizeUi("ui.longTermMemory.reviewqueue.requestFailed"),
+              message: errorMessage(error, localizeUi("ui.longTermMemory.reviewqueue.requestFailed")),
             },
           ),
         ],
@@ -2325,9 +2400,7 @@ export default function ReviewQueue({
           : []),
       ]);
     } catch (error) {
-      setDeleteSuggestionError(
-        error instanceof Error ? error.message : localizeUi("ui.longTermMemory.reviewqueue.requestFailed"),
-      );
+      setDeleteSuggestionError(errorMessage(error, localizeUi("ui.longTermMemory.reviewqueue.requestFailed")));
     } finally {
       setDismissingId(null);
     }
@@ -2369,9 +2442,7 @@ export default function ReviewQueue({
         ),
       );
     } catch (error) {
-      setDeleteSuggestionError(
-        error instanceof Error ? error.message : localizeUi("ui.longTermMemory.reviewqueue.requestFailed"),
-      );
+      setDeleteSuggestionError(errorMessage(error, localizeUi("ui.longTermMemory.reviewqueue.requestFailed")));
     } finally {
       setClearingSourceId(null);
     }
@@ -2432,8 +2503,7 @@ export default function ReviewQueue({
     } catch (error) {
       setExtractionMessage({
         tone: "danger",
-        text:
-          error instanceof Error ? error.message : localizeUi("ui.longTermMemory.reviewqueue.sourceReextractionFailed"),
+        text: errorMessage(error, localizeUi("ui.longTermMemory.reviewqueue.sourceReextractionFailed")),
       });
     } finally {
       setExtractingSourceId(null);
@@ -2907,9 +2977,7 @@ export default function ReviewQueue({
       ) : null}
       {review.isError ? (
         <StatusSurface tone="danger">
-          {review.error instanceof Error
-            ? review.error.message
-            : localizeUi("ui.longTermMemory.reviewqueue.pendingReviewDraftsCouldNotLoad")}{" "}
+          {errorMessage(review.error, localizeUi("ui.longTermMemory.reviewqueue.pendingReviewDraftsCouldNotLoad"))}{" "}
           <Button className="shrink-0" disabled={review.isFetching} onClick={() => void review.refetch()}>
             {localizeUi("ui.longTermMemory.activityview.retry")}
           </Button>
@@ -2923,56 +2991,7 @@ export default function ReviewQueue({
               : "success"
           }
         >
-          {result.phase === "preflight"
-            ? localizeUi("ui.longTermMemory.reviewqueue.preflightSummary", {
-                ready: result.ready,
-                blocked: result.blockedMutationIds.length,
-              })
-            : localizeUi("ui.longTermMemory.reviewqueue.batchResultSummary", {
-                action:
-                  result.action === "accepted"
-                    ? localizeUi("ui.longTermMemory.reviewqueue.applied")
-                    : localizeUi("ui.longTermMemory.reviewqueue.skipped"),
-                completed: result.completed,
-                mutation:
-                  result.completed === 1
-                    ? localizeUi("ui.longTermMemory.reviewqueue.mutation")
-                    : localizeUi("ui.longTermMemory.reviewqueue.mutations"),
-                failed: result.failed,
-              })}
-          {result.blockedMutationIds.length
-            ? localizeUi("ui.longTermMemory.reviewqueue.blockedMutations", {
-                count: result.blockedMutationIds.length,
-              })
-            : ""}
-          {result.remaining
-            ? localizeUi("ui.longTermMemory.reviewqueue.otherMutationsPending", {
-                count: result.remaining,
-                mutation:
-                  result.remaining === 1
-                    ? localizeUi("ui.longTermMemory.reviewqueue.mutation")
-                    : localizeUi("ui.longTermMemory.reviewqueue.mutations"),
-              })
-            : ""}
-          {result.autoIncluded
-            ? localizeUi("ui.longTermMemory.reviewqueue.dependenciesIncludedAutomatically", {
-                count: result.autoIncluded,
-                dependency:
-                  result.autoIncluded === 1
-                    ? localizeUi("ui.longTermMemory.reviewqueue.dependency")
-                    : localizeUi("ui.longTermMemory.reviewqueue.dependencies"),
-              })
-            : ""}
-          {result.indexRebuildFailures.length
-            ? localizeUi("ui.longTermMemory.reviewqueue.changesWereSavedButTheIndexRebuildFailedValue1", {
-                value1: result.indexRebuildFailures.join(" "),
-              })
-            : ""}
-          {result.messages.length
-            ? localizeUi("ui.longTermMemory.reviewqueue.value1_5cb90a9", {
-                value1: result.messages.join(" "),
-              })
-            : ""}
+          {batchResultSentences(result, localizeUi, locale).join(" ")}
           {result.failedMutationIds.length ? (
             <Button disabled={running !== null} onClick={retryFailed}>
               {localizeUi("ui.longTermMemory.reviewqueue.retryFailed")}
@@ -2983,16 +3002,6 @@ export default function ReviewQueue({
               {localizeUi("ui.longTermMemory.reviewqueue.reviewFailed")}
             </Button>
           ) : null}
-          {result.cascadeMutationLabels.length
-            ? localizeUi("ui.longTermMemory.reviewqueue.cascadeSkippedMutations", {
-                count: result.cascadeMutationLabels.length,
-                mutation:
-                  result.cascadeMutationLabels.length === 1
-                    ? localizeUi("ui.longTermMemory.reviewqueue.mutation")
-                    : localizeUi("ui.longTermMemory.reviewqueue.mutations"),
-                labels: result.cascadeMutationLabels.join(", "),
-              })
-            : ""}
           {result.action === "accepted" && result.completed && onOpenVault ? (
             <Button
               onClick={() => {
@@ -3038,8 +3047,7 @@ export default function ReviewQueue({
       {reviewContextFailed ? (
         <StatusSurface tone="danger">
           <span className="min-w-0 break-words [overflow-wrap:anywhere]">
-            {localizeUi("ui.longTermMemory.reviewqueue.memoryContextCouldNotLoad")}{" "}
-            {notes.error instanceof Error ? notes.error.message : ""}
+            {localizeUi("ui.longTermMemory.reviewqueue.memoryContextCouldNotLoad")} {errorMessage(notes.error, "")}
           </span>
           <Button className="shrink-0" disabled={notes.isFetching} onClick={() => void notes.refetch()}>
             {localizeUi("ui.longTermMemory.activityview.retry")}

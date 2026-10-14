@@ -23,7 +23,15 @@ import type {
   LtmNote,
   LtmStatusResponse,
 } from "../../../../shared/src/features/agents/long-term-memory/schema.js";
-import { invalidateLtmQueries, ltmScopeTargetsKey, queryKeys, request, requestNotesByIds, requestRaw } from "./api";
+import {
+  errorMessage,
+  invalidateLtmQueries,
+  ltmScopeTargetsKey,
+  queryKeys,
+  request,
+  requestNotesByIds,
+  requestRaw,
+} from "./api";
 import { Button, InfoPopover, StatusSurface, inputClass } from "./shared-controls";
 import { humanizeLabel, labelKeys, localizedLabel, rejectionReasonLabels } from "./display-labels";
 import type { LongTermMemoryDestinationProps } from "./types";
@@ -279,8 +287,8 @@ function summarizeCounts(events: LtmDebugEvent[], localizeUi: LtmTranslationFunc
         }),
       ),
   );
-  // D21: one spaced middle-dot separator for operation metadata and count parts.
-  return summary.join(" · ");
+  // D21: one separator for operation metadata and count parts; the locale supplies it.
+  return summary.join(localizeUi("ui.longTermMemory.activityview.metaSeparator"));
 }
 
 // The server logs a compile-evidence warning with a count of candidates that failed checks and the
@@ -785,8 +793,7 @@ export default function ActivityView({
       setActionState({ text: localizeUi("ui.longTermMemory.activityview.clearedLog"), tone: "success" });
     } catch (error) {
       setActionState({
-        text:
-          error instanceof Error ? error.message : localizeUi("ui.longTermMemory.activityview.couldNotClearActivity"),
+        text: errorMessage(error, localizeUi("ui.longTermMemory.activityview.couldNotClearActivity")),
         tone: "danger",
       });
     } finally {
@@ -820,8 +827,7 @@ export default function ActivityView({
       setActionState({ text: localizeUi("ui.longTermMemory.activityview.exportedFullLog"), tone: "success" });
     } catch (error) {
       setActionState({
-        text:
-          error instanceof Error ? error.message : localizeUi("ui.longTermMemory.activityview.couldNotExportActivity"),
+        text: errorMessage(error, localizeUi("ui.longTermMemory.activityview.couldNotExportActivity")),
         tone: "danger",
       });
     } finally {
@@ -914,7 +920,9 @@ export default function ActivityView({
                   count: maxChunks.toLocaleString(locale),
                 })
               : localizedLabel(reasonKey, localizeUi, recallReasonLabelKeys);
-        const lanes = Array.isArray(candidate.lanes) ? candidate.lanes.join(", ") : "";
+        const lanes = Array.isArray(candidate.lanes)
+          ? candidate.lanes.join(localizeUi("ui.longTermMemory.activityview.listSeparator"))
+          : "";
         return (
           <li key={`${noteId ?? "candidate"}-${index}`} className="grid gap-1 py-2 text-[var(--muted-foreground)]">
             <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
@@ -930,8 +938,9 @@ export default function ActivityView({
                   </button>
                 ) : (
                   (title ?? noteId ?? localizeUi("ui.longTermMemory.activityview.unknownMemory"))
-                )}{" "}
-                · {String(candidate.sectionKey ?? "chunk")}
+                )}
+                {localizeUi("ui.longTermMemory.activityview.metaSeparator")}
+                {String(candidate.sectionKey ?? localizeUi("ui.longTermMemory.activityview.sectionKeyFallback"))}
               </span>
               <span className="flex items-center gap-2">
                 {score === undefined ? null : (
@@ -950,7 +959,10 @@ export default function ActivityView({
                 )}
                 <span className="tabular-nums">{relevance(score)}</span>
                 {fusedRank === undefined ? null : (
-                  <span>· {localizeUi("ui.longTermMemory.activityview.fusedRank", { rank: fusedRank })}</span>
+                  <span>
+                    {localizeUi("ui.longTermMemory.activityview.metaSeparator")}
+                    {localizeUi("ui.longTermMemory.activityview.fusedRank", { rank: fusedRank })}
+                  </span>
                 )}
               </span>
             </div>
@@ -1181,7 +1193,7 @@ export default function ActivityView({
                   Object.entries(weights)
                     .filter(([, value]) => typeof value === "number")
                     .map(([name, value]) => `${localizedLabel(name, localizeUi, weightLabelKeys)} ${value}`)
-                    .join(" · "),
+                    .join(localizeUi("ui.longTermMemory.activityview.metaSeparator")),
                 ],
               ]
             : []),
@@ -1234,7 +1246,7 @@ export default function ActivityView({
                 : "",
             ]
               .filter(Boolean)
-              .map((part) => ` · ${part}`)
+              .map((part) => `${localizeUi("ui.longTermMemory.activityview.metaSeparator")}${part}`)
               .join("")}
           </p>
           <Button
@@ -1355,7 +1367,7 @@ export default function ActivityView({
                             label: humanizeLabel(kind),
                           }),
                         )
-                        .join(" · ")}
+                        .join(localizeUi("ui.longTermMemory.activityview.metaSeparator"))}
                     </p>
                   ) : null}
                   {Array.isArray(targets) ? (
@@ -1363,7 +1375,7 @@ export default function ActivityView({
                       {targets
                         .filter((id): id is string => typeof id === "string")
                         .map((id) => noteTitles.get(id) ?? id)
-                        .join(" · ")}
+                        .join(localizeUi("ui.longTermMemory.activityview.metaSeparator"))}
                     </p>
                   ) : null}
                 </div>
@@ -1693,8 +1705,10 @@ export default function ActivityView({
       <p className="text-[0.6875rem] text-[var(--muted-foreground)]" data-ltm-debug-health>
         {localizeUi("ui.longTermMemory.activityview.healthEventsLoaded", {
           count: (activity.data?.events.length ?? 0).toLocaleString(locale),
-        })}{" "}
-        · {localizeUi("ui.longTermMemory.activityview.healthIndex", { index: healthIndexText })} ·{" "}
+        })}
+        {localizeUi("ui.longTermMemory.activityview.metaSeparator")}
+        {localizeUi("ui.longTermMemory.activityview.healthIndex", { index: healthIndexText })}
+        {localizeUi("ui.longTermMemory.activityview.metaSeparator")}
         {localizeUi("ui.longTermMemory.activityview.healthSemantic", { state: healthSemanticWithSource })}
       </p>
       {embeddingSourceChanged ? (
@@ -1883,7 +1897,8 @@ export default function ActivityView({
                                       </span>
                                       {subject ? (
                                         <span className={`min-w-0 truncate font-normal ${mutedText}`}>
-                                          · {subject.value}
+                                          {localizeUi("ui.longTermMemory.activityview.metaSeparator")}
+                                          {subject.value}
                                         </span>
                                       ) : null}
                                     </span>

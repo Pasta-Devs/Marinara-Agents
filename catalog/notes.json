@@ -218,6 +218,12 @@
     "long-term-memory": {
       "versions": [
         {
+          "version": "1.4.36",
+          "date": "2026-10-14",
+          "notes": "- Fix glued-together sentences and raw server errors in the Long-Term Memory screens. The Review summary after Apply or Discard now reads as separate complete sentences with correct spacing and punctuation, for example \"Applied 2 mutations; 1 failed. 1 blocked before Apply.\", instead of fragments run together. The Debug separators between metadata parts and the \"chunk\" label now come from the locale, so a translation can change them. When a request fails with only an HTTP status such as \"Not Found\" and no message from the server, the screens show their own localized message instead of the raw status text; a message the server does send is still shown as before. Recall, extraction and storage are unchanged.",
+          "highlight": false
+        },
+        {
           "version": "1.4.33",
           "date": "2026-10-14",
           "notes": "- A character's name now keeps full keyword credit when the chat does not capitalise it in the middle of a sentence. Until now a single keyword match counted as a name only when it was capitalised in the middle of a sentence, so a name at the start of a sentence, in lowercase, or in a script without letter case such as Korean was capped at half credit. Recall now also treats each word of a character memory's title as a name, ignoring case and common stop words. A single ordinary keyword is still capped, and nothing else changes: no new lane and no change to the threshold, text search or vector scores. Only the words of the title are matched; nicknames and aliases are not.",
@@ -329,12 +335,6 @@
           "version": "1.4.15",
           "date": "2026-10-08",
           "notes": "- Rename the Vault memory's \"View all activity\" link to \"Open debug log\" and open the Debug tab filtered to that memory, with no operation selected.\n- Match whole operations against explicit memory-id references in the loaded debug events (extraction source and produced target notes, recall selected/rejected candidates), composing with search and the existing chips. The filter is clearable and states that apply operations log change IDs, not memory IDs, so some are not shown.",
-          "highlight": false
-        },
-        {
-          "version": "1.4.14",
-          "date": "2026-10-07",
-          "notes": "- Rebuild the Debug tab as a two-pane workspace: an event navigator with search and counted All / Problems / Recall / Extraction chips, plus a details pane for the selected operation. Raw records move behind Copy JSON; the response snippet is no longer shown on screen.\n- Record every recall as an ordinary history row that names its source chat. Selected and rejected memory names continue to open the Vault memory they belong to.\n- Show each operation's status as an icon with hidden text, keep steps that share an operation in one timeline, and group rows under Today / Earlier.",
           "highlight": false
         }
       ]

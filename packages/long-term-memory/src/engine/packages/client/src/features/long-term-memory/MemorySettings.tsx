@@ -9,7 +9,7 @@ import type {
 } from "../../../../shared/src/features/agents/long-term-memory/schema.js";
 import { LTM_RECALL_STYLE_WEIGHTS } from "../../../../shared/src/features/agents/long-term-memory/constants.js";
 import { LTM_RECALL_SCORE_THRESHOLD_CEILING } from "../../../../shared/src/features/agents/long-term-memory/runtime-settings.js";
-import { invalidateLtmQueries, queryKeys, request, requestHost, requestRaw } from "./api";
+import { errorMessage, invalidateLtmQueries, queryKeys, request, requestHost, requestRaw } from "./api";
 import { Button, InfoPopover, NumberField, StatusSurface, inputClass } from "./shared-controls";
 import type { LongTermMemoryDestinationProps } from "./types";
 import ActivityView from "./ActivityView";
@@ -90,10 +90,6 @@ const repairActions: Array<{
     descriptionKey: "ui.longTermMemory.memorysettings.restoreMissingTitlesOnImportedSourceNotes",
   },
 ];
-
-function errorMessage(error: unknown, fallback: string) {
-  return error instanceof Error ? error.message : fallback;
-}
 
 function same(left: unknown, right: unknown) {
   return JSON.stringify(left) === JSON.stringify(right);

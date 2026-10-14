@@ -29,6 +29,7 @@ import {
   normalizeLtmScope,
 } from "../../../../shared/src/features/agents/long-term-memory/scope.js";
 import {
+  errorMessage,
   invalidateLtmQueries,
   ltmScopeTargetsKey,
   queryKeys,
@@ -968,9 +969,7 @@ function MemoryAvailabilityWorkbench({
     try {
       await onSave(scope, selectedModes);
     } catch (cause) {
-      setError(
-        cause instanceof Error ? cause.message : localizeUi("ui.longTermMemory.memoryvault.couldNotSaveAvailability"),
-      );
+      setError(errorMessage(cause, localizeUi("ui.longTermMemory.memoryvault.couldNotSaveAvailability")));
     } finally {
       setBusy(false);
     }
@@ -2401,7 +2400,7 @@ export default function MemoryVault({
           ),
         );
         await invalidate();
-        throw new Error("Archive undo did not restore every memory.");
+        throw new Error();
       }
       setArchiveUndo(null);
       setNotice(
@@ -2589,8 +2588,7 @@ export default function MemoryVault({
             `/rejected-suggestions/${encodeURIComponent(rejectedId)}`,
             "DELETE",
           );
-          if (typeof cleanup?.deleted !== "boolean" || cleanup.id !== rejectedId)
-            throw new Error("Rejected suggestion cleanup returned the wrong ID.");
+          if (typeof cleanup?.deleted !== "boolean" || cleanup.id !== rejectedId) throw new Error();
           setRecoverySuggestionId(null);
         } catch {
           setNotice(localizeUi("ui.longTermMemory.memoryvault.savedButRejectedSuggestionCouldNotBeRemoved"));
@@ -2608,9 +2606,7 @@ export default function MemoryVault({
     } catch (cause) {
       setSaveState("idle");
       if (session === editorSession.current)
-        setError(
-          cause instanceof Error ? cause.message : localizeUi("ui.longTermMemory.memoryvault.couldNotSaveMemory"),
-        );
+        setError(errorMessage(cause, localizeUi("ui.longTermMemory.memoryvault.couldNotSaveMemory")));
     } finally {
       if (session === editorSession.current) setBusy("");
     }
@@ -2644,9 +2640,7 @@ export default function MemoryVault({
       await invalidate();
     } catch (cause) {
       if (session === editorSession.current)
-        setError(
-          cause instanceof Error ? cause.message : localizeUi("ui.longTermMemory.memoryvault.couldNotUpdateMemories"),
-        );
+        setError(errorMessage(cause, localizeUi("ui.longTermMemory.memoryvault.couldNotUpdateMemories")));
     } finally {
       if (session === editorSession.current) setBusy("");
     }
@@ -2742,9 +2736,7 @@ export default function MemoryVault({
       await invalidate();
     } catch (cause) {
       if (session === editorSession.current)
-        setError(
-          cause instanceof Error ? cause.message : localizeUi("ui.longTermMemory.memoryvault.couldNotUpdateMemories"),
-        );
+        setError(errorMessage(cause, localizeUi("ui.longTermMemory.memoryvault.couldNotUpdateMemories")));
     } finally {
       if (session === editorSession.current) setBusy("");
     }
@@ -2921,9 +2913,7 @@ export default function MemoryVault({
       await invalidate();
     } catch (cause) {
       if (session === editorSession.current)
-        setError(
-          cause instanceof Error ? cause.message : localizeUi("ui.longTermMemory.memoryvault.couldNotUpdateMemories"),
-        );
+        setError(errorMessage(cause, localizeUi("ui.longTermMemory.memoryvault.couldNotUpdateMemories")));
     } finally {
       if (session === editorSession.current) setBusy("");
     }
@@ -3023,9 +3013,7 @@ export default function MemoryVault({
       );
       setError("");
     } catch (cause) {
-      setError(
-        cause instanceof Error ? cause.message : localizeUi("ui.longTermMemory.memoryvault.couldNotUpdateMemories"),
-      );
+      setError(errorMessage(cause, localizeUi("ui.longTermMemory.memoryvault.couldNotUpdateMemories")));
     }
   };
   const copyDiagnostics = async () => {
@@ -3097,9 +3085,7 @@ export default function MemoryVault({
       const note = notesById.get(noteId) ?? (await request<LtmNote>(`/notes/${encodeURIComponent(noteId)}`));
       await openNote(note);
     } catch (cause) {
-      setError(
-        cause instanceof Error ? cause.message : localizeUi("ui.longTermMemory.memoryvault.linkedMemoryCouldNotLoad"),
-      );
+      setError(errorMessage(cause, localizeUi("ui.longTermMemory.memoryvault.linkedMemoryCouldNotLoad")));
     }
   };
   return (

@@ -1,4 +1,5 @@
 import type { LtmScope } from "../../../../shared/src/features/agents/long-term-memory/schema.js";
+import { errorMessage, withoutUserMessage } from "./api";
 
 export type LtmSourceTaskKind = "import" | "refresh" | "re-extract";
 
@@ -265,7 +266,8 @@ export function startLtmSourceTask<T>(options: {
   sourceTitles: string[];
   run: (signal: AbortSignal) => Promise<T>;
 }) {
-  if (snapshot.active?.status === "running") throw new Error("A Long-Term Memory source task is already running.");
+  if (snapshot.active?.status === "running")
+    throw withoutUserMessage(new Error("A Long-Term Memory source task is already running."));
   const id = `ltm-source-task-${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
   const controller = new AbortController();
   const task: LtmSourceTask = {
@@ -299,7 +301,7 @@ export function startLtmSourceTask<T>(options: {
         status: cancelled ? "cancelled" : "failed",
         error: {
           code: cancelled ? "cancelled" : "source_task_failed",
-          message: cancelled ? "" : error instanceof Error ? error.message : "",
+          message: cancelled ? "" : errorMessage(error, ""),
         },
       };
       update(failed);

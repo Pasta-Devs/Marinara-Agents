@@ -43,6 +43,7 @@ import type {
   LtmGlobalSettings,
 } from "../../../../shared/src/features/agents/long-term-memory/schema.js";
 import {
+  errorMessage,
   invalidateLtmQueries,
   fetchSourceDetails,
   ltmScopeTargetsKey,
@@ -1133,9 +1134,7 @@ function SourceOperationWorkbench({
       if (operation === "delete") setPreviewLineageNoteIds([sourceNoteId, ...memories.map((memory) => memory.id)]);
       setPreviewed(true);
     } catch (error) {
-      setError(
-        error instanceof Error ? error.message : localizeUi("ui.longTermMemory.sourceoperation.previewCouldNotLoad"),
-      );
+      setError(errorMessage(error, localizeUi("ui.longTermMemory.sourceoperation.previewCouldNotLoad")));
     } finally {
       setBusy(null);
     }
@@ -1222,7 +1221,7 @@ function SourceOperationWorkbench({
       }
       await onComplete();
     } catch (error) {
-      setError(error instanceof Error ? error.message : localizeUi("ui.longTermMemory.sourceoperation.couldNotApply"));
+      setError(errorMessage(error, localizeUi("ui.longTermMemory.sourceoperation.couldNotApply")));
     } finally {
       setBusy(null);
     }
@@ -1717,9 +1716,7 @@ export default function SourcesWorkspace({
       await invalidateLtmQueries(client, [queryKeys.settings, queryKeys.chatDefaults]);
     } catch (error) {
       setCustomAvailabilityModes(null);
-      setModesError(
-        error instanceof Error ? error.message : localizeUi("ui.longTermMemory.memoryvault.couldNotSaveAvailability"),
-      );
+      setModesError(errorMessage(error, localizeUi("ui.longTermMemory.memoryvault.couldNotSaveAvailability")));
       await settingsQuery.refetch();
     } finally {
       availabilitySavingRef.current = false;
@@ -2468,15 +2465,11 @@ export default function SourcesWorkspace({
         setImportError(
           task.status === "cancelled"
             ? localizeUi("ui.longTermMemory.sourcesworkspace.importCancelledSelectionRetained")
-            : (task.error?.message ?? localizeUi("ui.longTermMemory.sourcesworkspace.sourcesCouldNotBeImported")),
+            : task.error?.message || localizeUi("ui.longTermMemory.sourcesworkspace.sourcesCouldNotBeImported"),
         );
       }
     } catch (error) {
-      setImportError(
-        error instanceof Error
-          ? error.message
-          : localizeUi("ui.longTermMemory.sourcesworkspace.sourcesCouldNotBeImported"),
-      );
+      setImportError(errorMessage(error, localizeUi("ui.longTermMemory.sourcesworkspace.sourcesCouldNotBeImported")));
     }
   };
 
@@ -2517,15 +2510,11 @@ export default function SourcesWorkspace({
         await invalidateAfterMutation();
       } else if (task.status === "failed" || task.status === "cancelled") {
         setImportError(
-          task.error?.message ?? localizeUi("ui.longTermMemory.sourcesworkspace.sourceCouldNotBeReextracted"),
+          task.error?.message || localizeUi("ui.longTermMemory.sourcesworkspace.sourceCouldNotBeReextracted"),
         );
       }
     } catch (error) {
-      setImportError(
-        error instanceof Error
-          ? error.message
-          : localizeUi("ui.longTermMemory.sourcesworkspace.sourceCouldNotBeReextracted"),
-      );
+      setImportError(errorMessage(error, localizeUi("ui.longTermMemory.sourcesworkspace.sourceCouldNotBeReextracted")));
     }
   };
 
@@ -2794,9 +2783,7 @@ export default function SourcesWorkspace({
     return (
       <section data-ltm-surface="sources" className="space-y-4">
         <StatusSurface tone="danger">
-          {scopeTargets.error instanceof Error
-            ? scopeTargets.error.message
-            : localizeUi("ui.longTermMemory.sourcesworkspace.scopeTargetsCouldNotLoad")}
+          {errorMessage(scopeTargets.error, localizeUi("ui.longTermMemory.sourcesworkspace.scopeTargetsCouldNotLoad"))}
           <Button onClick={() => void scopeTargets.refetch()}>
             <RefreshCw aria-hidden="true" size="0.75rem" />
             {localizeUi("ui.longTermMemory.activityview.retry")}
@@ -2877,9 +2864,10 @@ export default function SourcesWorkspace({
       {!availabilityReady ? (
         <StatusSurface tone={settingsQuery.isError ? "danger" : "neutral"} busy={!settingsQuery.isError}>
           {settingsQuery.isError
-            ? settingsQuery.error instanceof Error
-              ? settingsQuery.error.message
-              : localizeUi("ui.longTermMemory.sourcesworkspace.availabilitySettingsCouldNotLoad")
+            ? errorMessage(
+                settingsQuery.error,
+                localizeUi("ui.longTermMemory.sourcesworkspace.availabilitySettingsCouldNotLoad"),
+              )
             : localizeUi("ui.longTermMemory.sourcesworkspace.loadingAvailabilitySettings")}
           {settingsQuery.isError ? (
             <Button disabled={settingsQuery.isFetching} onClick={() => void settingsQuery.refetch()}>
@@ -2915,11 +2903,12 @@ export default function SourcesWorkspace({
 
       {(source === "lorebooks" ? lorebookPreview.isError : preview.isError) ? (
         <StatusSurface tone="danger">
-          {(source === "lorebooks" ? lorebookPreview.error : preview.error) instanceof Error
-            ? (source === "lorebooks" ? lorebookPreview.error : preview.error).message
-            : source === "lorebooks"
+          {errorMessage(
+            source === "lorebooks" ? lorebookPreview.error : preview.error,
+            source === "lorebooks"
               ? localizeUi("ui.longTermMemory.sourcesworkspace.lorebooksCouldNotLoad")
-              : localizeUi("ui.longTermMemory.sourcesworkspace.sourcePreviewCouldNotLoad")}
+              : localizeUi("ui.longTermMemory.sourcesworkspace.sourcePreviewCouldNotLoad"),
+          )}
         </StatusSurface>
       ) : null}
       {importError || sourceTaskError ? (
@@ -3288,9 +3277,10 @@ export default function SourcesWorkspace({
                                     />
                                   ) : lorebookDetails.isError ? (
                                     <StatusSurface tone="danger">
-                                      {lorebookDetails.error instanceof Error
-                                        ? lorebookDetails.error.message
-                                        : localizeUi("ui.longTermMemory.sourcesworkspace.sourcePreviewCouldNotLoad")}
+                                      {errorMessage(
+                                        lorebookDetails.error,
+                                        localizeUi("ui.longTermMemory.sourcesworkspace.sourcePreviewCouldNotLoad"),
+                                      )}
                                       <Button onClick={() => void lorebookDetails.refetch()}>
                                         {localizeUi("ui.longTermMemory.sourcesworkspace.refreshPreview")}
                                       </Button>
@@ -3752,9 +3742,10 @@ export default function SourcesWorkspace({
                           />
                         ) : sourceDetails.isError ? (
                           <StatusSurface tone="danger">
-                            {sourceDetails.error instanceof Error
-                              ? sourceDetails.error.message
-                              : localizeUi("ui.longTermMemory.sourcesworkspace.sourcePreviewCouldNotLoad")}
+                            {errorMessage(
+                              sourceDetails.error,
+                              localizeUi("ui.longTermMemory.sourcesworkspace.sourcePreviewCouldNotLoad"),
+                            )}
                             <Button onClick={() => void sourceDetails.refetch()}>
                               {localizeUi("ui.longTermMemory.sourcesworkspace.refreshPreview")}
                             </Button>

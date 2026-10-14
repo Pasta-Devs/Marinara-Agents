@@ -14,9 +14,11 @@ import {
   ltmImportSourceNotesRequestSchema,
 } from "../packages/long-term-memory/src/engine/packages/shared/src/features/agents/long-term-memory/schema.ts";
 import {
+  errorMessage,
   mergeSourcePreviewPages,
   mergeLorebookPreviewPages,
   fetchSourceDetails,
+  request,
 } from "../packages/long-term-memory/src/engine/packages/client/src/features/long-term-memory/api.ts";
 
 async function main() {
@@ -247,8 +249,26 @@ async function main() {
     } finally {
       globalThis.fetch = originalFetch;
     }
+    // #1375: an HTTP status line is not a message for the user; the caller's localized fallback shows instead.
+    globalThis.fetch = async (url) =>
+      String(url).endsWith("/locked")
+        ? Response.json({ error: "Memory is locked." }, { status: 409 })
+        : new Response("", { status: 404, statusText: "Not Found" });
+    try {
+      const statusOnly = await request("/missing").catch((error: unknown) => error);
+      assert.equal((statusOnly as { status?: number }).status, 404);
+      assert.equal(errorMessage(statusOnly, "Could not load."), "Could not load.");
+      assert.equal(
+        errorMessage(await request("/locked").catch((error: unknown) => error), "Could not load."),
+        "Memory is locked.",
+      );
+      assert.equal(errorMessage(new Error("Plain failure"), "Could not load."), "Plain failure");
+      assert.equal(errorMessage("not an error", "Could not load."), "Could not load.");
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
     console.log(
-      "Long-Term Memory source pagination passed: scoped cursors, mutation-safe continuation, import status, limits, empty books and split entries.",
+      "Long-Term Memory source pagination passed: scoped cursors, mutation-safe continuation, import status, limits, empty books, split entries and status-only request errors.",
     );
   } finally {
     release();

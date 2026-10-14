@@ -3928,6 +3928,11 @@ async function main() {
       await page.getByRole("button", { name: "Accept eligible (2)" }).click();
       await page.getByRole("button", { name: /^Apply preflighted \(2\)/ }).click();
       await page.getByRole("button", { name: "Retry failed review actions" }).waitFor();
+      // #1375: each part of the batch summary is its own sentence, not a fragment glued to the last.
+      assert.equal(
+        await page.getByText(/Applied \d+ mutations?; [1-9]\d* failed\. .*Draft action failed: .+\./u).count(),
+        1,
+      );
       failSecondReviewAccept = false;
       await page.getByRole("button", { name: "Retry failed review actions" }).click();
       await page.getByText("Retry preflight complete. Review the results before applying again.").waitFor();
