@@ -15,6 +15,7 @@ import {
 } from "../packages/long-term-memory/src/engine/packages/shared/src/features/agents/long-term-memory/schema.ts";
 import {
   errorMessage,
+  failedResponseError,
   mergeSourcePreviewPages,
   mergeLorebookPreviewPages,
   fetchSourceDetails,
@@ -262,13 +263,28 @@ async function main() {
         errorMessage(await request("/locked").catch((error: unknown) => error), "Could not load."),
         "Memory is locked.",
       );
+      // The raw-Response export paths read the body themselves and share the same error construction.
+      assert.equal(
+        errorMessage(
+          await failedResponseError(new Response("", { status: 500, statusText: "Internal Server Error" })),
+          "Could not export.",
+        ),
+        "Could not export.",
+      );
+      assert.equal(
+        errorMessage(
+          await failedResponseError(Response.json({ error: "Export blocked." }, { status: 409 })),
+          "Could not export.",
+        ),
+        "Export blocked.",
+      );
       assert.equal(errorMessage(new Error("Plain failure"), "Could not load."), "Plain failure");
       assert.equal(errorMessage("not an error", "Could not load."), "Could not load.");
     } finally {
       globalThis.fetch = originalFetch;
     }
     console.log(
-      "Long-Term Memory source pagination passed: scoped cursors, mutation-safe continuation, import status, limits, empty books, split entries and status-only request errors.",
+      "Long-Term Memory source pagination passed: scoped cursors, mutation-safe continuation, import status, limits, empty books, split entries, status-only request errors and export failures.",
     );
   } finally {
     release();

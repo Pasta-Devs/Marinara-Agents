@@ -128,6 +128,20 @@ export function errorMessage(error: unknown, fallback: string) {
   return (error as { noUserMessage?: boolean }).noUserMessage ? fallback : error.message;
 }
 
+// The error for an unsuccessful response, for `request` and for callers that read the raw `Response` themselves.
+export async function failedResponseError(response: Response): Promise<Error> {
+  const payload = (await response.json().catch(() => null)) as {
+    error?: unknown;
+    code?: unknown;
+  } | null;
+  const serverMessage = typeof payload?.error === "string" ? payload.error : "";
+  const error = new Error(serverMessage || response.statusText || "Long-Term Memory request failed");
+  Object.assign(error, { status: response.status });
+  if (!serverMessage) withoutUserMessage(error);
+  if (typeof payload?.code === "string") Object.assign(error, { code: payload.code });
+  return error;
+}
+
 export async function request<TResponse, TBody = unknown>(
   path: string,
   method = "GET",
@@ -144,18 +158,7 @@ export async function request<TResponse, TBody = unknown>(
     signal,
     ...(body === undefined ? {} : { body: JSON.stringify(body) }),
   });
-  if (!response.ok) {
-    const payload = (await response.json().catch(() => null)) as {
-      error?: unknown;
-      code?: unknown;
-    } | null;
-    const serverMessage = typeof payload?.error === "string" ? payload.error : "";
-    const error = new Error(serverMessage || response.statusText || "Long-Term Memory request failed");
-    Object.assign(error, { status: response.status });
-    if (!serverMessage) withoutUserMessage(error);
-    if (typeof payload?.code === "string") Object.assign(error, { code: payload.code });
-    throw error;
-  }
+  if (!response.ok) throw await failedResponseError(response);
   return response.json() as Promise<TResponse>;
 }
 

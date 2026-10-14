@@ -25,6 +25,7 @@ import type {
 } from "../../../../shared/src/features/agents/long-term-memory/schema.js";
 import {
   errorMessage,
+  failedResponseError,
   invalidateLtmQueries,
   ltmScopeTargetsKey,
   queryKeys,
@@ -807,14 +808,7 @@ export default function ActivityView({
     setActionState({ text: "", tone: "success" });
     try {
       const response = await requestRaw("/debug-log/export");
-      if (!response.ok) {
-        const payload = (await response.json().catch(() => null)) as { error?: unknown } | null;
-        throw new Error(
-          (typeof payload?.error === "string" ? payload.error : "") ||
-            response.statusText ||
-            localizeUi("ui.longTermMemory.activityview.couldNotExportActivity"),
-        );
-      }
+      if (!response.ok) throw await failedResponseError(response);
       const blob = await response.blob();
       const url = URL.createObjectURL(blob);
       const link = document.createElement("a");

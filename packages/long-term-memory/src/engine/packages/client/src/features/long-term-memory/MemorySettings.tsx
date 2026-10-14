@@ -9,7 +9,15 @@ import type {
 } from "../../../../shared/src/features/agents/long-term-memory/schema.js";
 import { LTM_RECALL_STYLE_WEIGHTS } from "../../../../shared/src/features/agents/long-term-memory/constants.js";
 import { LTM_RECALL_SCORE_THRESHOLD_CEILING } from "../../../../shared/src/features/agents/long-term-memory/runtime-settings.js";
-import { errorMessage, invalidateLtmQueries, queryKeys, request, requestHost, requestRaw } from "./api";
+import {
+  errorMessage,
+  failedResponseError,
+  invalidateLtmQueries,
+  queryKeys,
+  request,
+  requestHost,
+  requestRaw,
+} from "./api";
 import { Button, InfoPopover, NumberField, StatusSurface, inputClass } from "./shared-controls";
 import type { LongTermMemoryDestinationProps } from "./types";
 import ActivityView from "./ActivityView";
@@ -646,8 +654,7 @@ export default function MemorySettings({
     setMessage("");
     try {
       const response = await requestRaw("/backup/export");
-      if (!response.ok)
-        throw new Error(response.statusText || localizeUi("ui.longTermMemory.memorysettings.couldNotExportMemoryData"));
+      if (!response.ok) throw await failedResponseError(response);
       const blob = await response.blob();
       const url = URL.createObjectURL(blob);
       const link = document.createElement("a");
