@@ -1,5 +1,12 @@
 # Slurp release notes
 
+## 0.3.40 — 2026-10-14
+
+- Changed: Slurp follows a Creator's gender instead of calling everyone "she". Drama packs use the gender of whoever plays each role ("{her:he}" tokens), and pack names and descriptions no longer assume a woman. Post, DM and scene prompts tell the model the Creator's pronouns. A Creator without a gender is "they".
+- Added: a "Clothing style" choice in the Creator's stage profile: Auto, Feminine, Masculine or Neutral. Auto follows gender. It decides what a "lingerie" spice post is: lingerie for feminine, an underwear shoot with briefs for masculine, either for neutral. Male Creators no longer get bra-and-panties shoots unless their style is Feminine. The post prompt also names the style.
+- Added: a picture of a Creator whose appearance text does not say their sex starts with "Male." or "Female." from their gender, so the image model stops defaulting to a woman.
+- Changed: the stage profile field hints read "he", "she" or "they" from the gender you picked.
+
 ## 0.3.39 — 2026-10-14
 
 - Fixed: on Android, choosing a picture for a post (in the composer, or "replace" while editing a post) no longer opens the system photo picker, which lists only a few albums such as Camera, Screenshots and Downloads. Android now offers its full file browser, so every folder is reachable. A file that is not a picture still gets "Choose an image file.". Other platforms keep the picture-only file dialog. (#1378)

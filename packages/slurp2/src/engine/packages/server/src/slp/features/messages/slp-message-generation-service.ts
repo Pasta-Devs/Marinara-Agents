@@ -6,6 +6,7 @@
  * prompt is told — the history, the rapport, and whether the creator is even awake — so the
  * machinery around it is reused rather than rebuilt.
  */
+import { slpAccountGender, slpPronouns } from "../../../../../shared/src/slp/slp-gender.js";
 import { listSlurpContinuityFor } from "../../data/continuity/slp-continuity-storage.js";
 import { slurpContinuityInstruction } from "../../modules/continuity/slp-continuity-prompt.js";
 import { type APIProvider } from "@marinara-engine/shared";
@@ -180,7 +181,11 @@ export function buildSlurpMessageChat(input: {
     protectCreatorGeneratedIdentity(value, input.disclosureMode, input.publicIdentity) ?? "";
   const known = input.notes && input.notes.length > 0 ? notesForPrompt(input.notes) : null;
   const parties = {
-    creator: { name: protect(input.creator.displayName), handle: protect(input.creator.handle) },
+    creator: {
+      name: protect(input.creator.displayName),
+      handle: protect(input.creator.handle),
+      pronouns: slpPronouns(slpAccountGender(input.creator)),
+    },
     viewer: { name: protect(input.viewer.displayName) || SLURP_DM_UNNAMED_FAN, handle: protect(input.viewer.handle) },
   };
   // Slurp Support's own thread: the one writing is Slurp's staff, never a fan.

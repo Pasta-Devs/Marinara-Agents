@@ -11,7 +11,6 @@ import {
   slpAnswerDramaChoice,
   slpDramaCast,
   slpDramaLeadFits,
-  slpDramaText,
   slpRequestDrama,
   slpDueDramaJobs,
   SLP_DRAMA_LEVEL_RULES,
@@ -21,6 +20,7 @@ import {
   type SlpDramaState,
   type SlpDramaWorld,
 } from "../packages/slurp2/src/engine/packages/server/src/slp/modules/world/events/slp-drama-runtime.ts";
+import { slpDramaText } from "../packages/slurp2/src/engine/packages/server/src/slp/modules/world/events/slp-drama-words.ts";
 import { partner, rivals } from "./slurp2-drama-fixtures";
 import { slurp2Source } from "./slurp2-source";
 import {

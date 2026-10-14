@@ -2,6 +2,7 @@
 // Slurp social shapes. Copied from the Engine Noodle types so Slurp2 owns its own vocabulary;
 // AvatarCrop stays an Engine contract because Engine avatar rendering consumes it.
 // ──────────────────────────────────────────────
+import type { SlpClothingStyle } from "./slp-gender.js";
 import type { AvatarCrop } from "@marinara-engine/shared";
 import type { SlpCreatorPage } from "./slp-creator-page.js";
 
@@ -87,6 +88,8 @@ export interface SlpCreatorStageFacts {
   wardrobe?: string;
   /** The places she posts from, so "somewhere she usually is" has an answer. */
   locations?: string;
+  /** Lingerie or briefs: see `slpWear`. Absent is `auto`, from the page's gender. */
+  clothingStyle?: SlpClothingStyle;
 }
 
 export type SlpAppearanceProfileMode = "ask" | "high_confidence" | "always";
@@ -337,6 +340,7 @@ export interface SlpCreatorStageProfile {
   appearance: string;
   wardrobe: string;
   locations: string;
+  clothingStyle: SlpClothingStyle;
   publicIdentity: { displayName: string; handle: string } | null;
   /** The Creator's Page, or null before one is made. */
   page: SlpCreatorPage | null;

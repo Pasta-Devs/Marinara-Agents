@@ -25,7 +25,7 @@ import { slurpChatBridgeCoupleLine } from "../packages/slurp2/src/engine/package
 import {
   slpDramaPlayerWords,
   slpDramaText,
-} from "../packages/slurp2/src/engine/packages/server/src/slp/modules/world/events/slp-drama-runtime.ts";
+} from "../packages/slurp2/src/engine/packages/server/src/slp/modules/world/events/slp-drama-words.ts";
 import {
   slurpPreviewTieLever,
   slurpUndoTie,

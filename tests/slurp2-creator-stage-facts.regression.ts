@@ -76,7 +76,7 @@ assert.match(
 
 // Both the caption and the picture get the facts.
 const prompt = slurp2Source("packages/slurp2/src/engine/packages/server/src/slp/features/feed/slp-post-prompt.ts");
-for (const line of ["Appearance:", "Usual wardrobe:", "Where her life happens:"]) {
+for (const line of ["Appearance:", "Usual wardrobe:", "Where their life happens:", "Pronouns:", "Clothing style:"]) {
   assert.ok(prompt.includes(line), `the post prompt must carry "${line}"`);
 }
 

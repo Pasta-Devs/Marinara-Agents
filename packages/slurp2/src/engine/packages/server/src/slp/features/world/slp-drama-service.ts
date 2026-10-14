@@ -23,10 +23,10 @@ import {
   readSlurpDramaState,
 } from "../../data/world/slp-drama-storage.js";
 import { slpDramaCatalog, slpEnabledDrama } from "../../modules/world/events/slp-drama-library.js";
+import { slpDramaText } from "../../modules/world/events/slp-drama-words.js";
 import {
   slpAdvanceDrama,
   slpAnswerDramaChoice,
-  slpDramaText,
   slpDueDramaJobs,
   slpMarkDramaJob,
   type SlpDramaJob,

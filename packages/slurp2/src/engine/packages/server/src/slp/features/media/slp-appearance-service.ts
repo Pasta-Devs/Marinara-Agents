@@ -1,4 +1,6 @@
 import type { APIProvider } from "@marinara-engine/shared";
+import { slpAccountGender } from "../../../../../shared/src/slp/slp-gender.js";
+import { slurpImageSexWord } from "../../base/media/slp-image-prompt.js";
 import { resolveStoredMaxTokens } from "../../../services/generation/generation-parameters.js";
 import { clampGenerationMaxOutputTokens } from "../../../services/generation/output-token-limits.js";
 import type { SlpAccount } from "../../../../../shared/src/slp/slp-social.types.js";
@@ -40,7 +42,9 @@ export async function resolveImageAppearance(input: {
   const key = `${input.account.id}:${input.regenerate === true}`;
   const inFlight = appearanceFlights.get(key);
   if (inFlight) return inFlight;
-  const flight = resolveImageAppearanceOnce(input);
+  const flight = resolveImageAppearanceOnce(input).then((text) =>
+    slurpImageSexWord(text, slpAccountGender(input.account)),
+  );
   appearanceFlights.set(key, flight);
   try {
     return await flight;

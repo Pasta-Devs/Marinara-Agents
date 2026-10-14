@@ -1,4 +1,5 @@
 import { normalizeAvatarCrop, AvatarCrop } from "@marinara-engine/shared";
+import { SLP_CLOTHING_STYLES, type SlpClothingStyle } from "../../../../../shared/src/slp/slp-gender.js";
 import { normalizeSlurpCreatorStrategy } from "../creators/slp-creator-strategy.js";
 import { SLURP_STAGE_FACT_MAX_LENGTH } from "../creators/slp-stage-profile-repair.js";
 import {
@@ -443,6 +444,8 @@ export function normalizeSlpAccountSettings(value: unknown): SlurpSlpAccountSett
     ...(stageFact(rawStage.appearance) !== undefined && { appearance: stageFact(rawStage.appearance)! }),
     ...(stageFact(rawStage.wardrobe) !== undefined && { wardrobe: stageFact(rawStage.wardrobe)! }),
     ...(stageFact(rawStage.locations) !== undefined && { locations: stageFact(rawStage.locations)! }),
+    ...((SLP_CLOTHING_STYLES as readonly unknown[]).includes(rawStage.clothingStyle) &&
+      rawStage.clothingStyle !== "auto" && { clothingStyle: rawStage.clothingStyle as SlpClothingStyle }),
   };
   const appearanceProfile =
     typeof rawAppearanceProfile.text === "string" && rawAppearanceProfile.text.trim()

@@ -5,13 +5,13 @@
 import { slurpCoupleActive, slurpCoupleFor, slurpCoupleOf, type SlurpCouple } from "./slp-creator-couples.js";
 import { slurpForcedCoupleLine } from "./slp-couple-words.js";
 import { slurpCouplePartners, slurpNameList } from "./slp-couple-group.js";
+import { slpGenderWords } from "../../../../../shared/src/slp/slp-gender.js";
 
 /** An ex stays on a Creator's mind (and in their posts and chats) this long after the breakup. */
 export const SLURP_EX_DAYS = 30;
 
 /** What a Creator calls the one they are with, from that page's gender. */
-export const slurpPartnerWord = (gender: string | null | undefined) =>
-  gender === "male" ? "boyfriend" : gender === "female" ? "girlfriend" : "partner";
+export const slurpPartnerWord = (gender: string | null | undefined) => slpGenderWords(gender).boyfriend;
 
 export type SlurpRelationshipOptions = {
   withId?: string | null;
@@ -171,7 +171,7 @@ export function slurpChatBridgeCoupleLine(
   if (!couple) return "";
   const { her, you } = input;
   const since = (iso: string | null) => (iso ? ` since ${iso.slice(0, 10)}` : "");
-  const hush = couple.secret ? ", kept secret from her fans" : "";
+  const hush = couple.secret ? `, kept secret from ${slpGenderWords(input.herGender).his} fans` : "";
   const fight = [...couple.moments].reverse().find((moment) => moment.kind === "fight" || moment.kind === "jealous");
   // #1293: forgetting overrides whatever the chat's own transcript already shows, so it never stays
   // silent and lets old messages speak for themselves; it says plainly there is nothing unfinished.
