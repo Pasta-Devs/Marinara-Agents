@@ -49,7 +49,7 @@ class CapabilityClientErrorBoundary extends React.Component<
 function CapabilityClientErrorState({ onRetry }: { onRetry: () => void }) {
   const { t } = useLtmTranslation();
   return (
-    <div role="alert" className="mari-editor-panel m-4 space-y-3 p-4 text-sm">
+    <div role="alert" className="mari-editor-panel space-y-3 p-4 text-sm" style={{ margin: "1rem" }}>
       <p className="font-semibold">{t("errors.interfaceStoppedMessage")}</p>
       <button type="button" className="mari-editor-action min-h-11 px-3 font-semibold" onClick={onRetry}>
         {t("errors.tryAgain")}

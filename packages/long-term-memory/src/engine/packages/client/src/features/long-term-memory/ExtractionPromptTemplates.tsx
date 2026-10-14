@@ -214,7 +214,7 @@ export function ExtractionPromptTemplates({
           {localizeUi("ui.longTermMemory.extractionprompttemplates.noCustomTemplatesBuiltInDefaultsRemainActive")}
         </StatusSurface>
       ) : null}
-      <div className="grid gap-3 md:grid-cols-[12rem_1fr]">
+      <div data-ltm-prompt-template-grid className="grid gap-3">
         <div className="space-y-1 text-xs font-medium text-[var(--muted-foreground)]">
           <span id={promptTemplateLabelId} className="flex items-center gap-1">
             {localizeUi("ui.longTermMemory.extractionprompttemplates.promptTemplate")}

@@ -1783,7 +1783,7 @@ async function main() {
         await memoryScope.locator(`[data-ltm-vault-scope-tab="${kind}"]`).click();
         for (const query of ["", "does-not-match"]) {
           await memoryScope.locator("[data-ltm-vault-scope-search]").fill(query);
-          const rows = memoryScope.locator('[data-ltm-vault-scope-list] [role="checkbox"]');
+          const rows = memoryScope.locator('[data-ltm-vault-scope-list] [role="radiogroup"] [role="radio"]');
           assert.equal(await rows.nth(0).getAttribute("data-ltm-vault-scope-pinned"), "all");
           assert.equal(await rows.nth(1).getAttribute("data-ltm-vault-scope-pinned"), "current");
           assert.equal(await rows.nth(1).isDisabled(), kind === "branch");

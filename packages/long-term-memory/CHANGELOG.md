@@ -1,5 +1,9 @@
 # Long-Term Memory changelog
 
+## Unreleased
+
+- Long-Term Memory now uses only styles the app already provides, so its screens look the same in the app as they were designed. Sources → Manage source no longer shows the imported-source preview under the workbench, the Review and Sources action bars sit inline on wide screens, selected Review rows and Vault notes are highlighted, tab focus rings use the editor focus colour, info popovers keep their size, and checkboxes are one size in Vault, Sources and Review. Screen readers now announce the Vault place lists as single-choice.
+
 ## 1.4.31 — 2026-10-13
 
 - Extraction now asks for a `caused_by` link from an event to the event that directly caused it when both are in the same response, and linked recall follows that link in either direction, as well as a thread's `paid_off_in` link to the event that paid it off. The seed rule and the 0.2 own-relevance floor are unchanged, and a graph weight of 0 still turns linked recall off. Existing vaults gain these links only after a chat is extracted again; nothing is backfilled.

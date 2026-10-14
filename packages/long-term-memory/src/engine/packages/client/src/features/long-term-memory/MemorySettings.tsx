@@ -913,6 +913,11 @@ export default function MemorySettings({
             grid-template-columns: repeat(2, minmax(0, 1fr));
           }
         }
+        @media (min-width: 48rem) {
+          [data-ltm-prompt-template-grid] {
+            grid-template-columns: 12rem 1fr;
+          }
+        }
       `}</style>
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
@@ -962,7 +967,8 @@ export default function MemorySettings({
               document.getElementById(`settings-tab-${settingsTabs[next].id}`)?.focus();
             }}
             data-active={activeTab === tab.id}
-            className="mari-editor-tab min-h-10 rounded-md px-2 text-xs font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--marinara-editor-focus-ring)]"
+            data-ltm-tab-focus
+            className="mari-editor-tab min-h-10 rounded-md px-2 text-xs font-semibold transition-colors"
           >
             {localizeUi(tab.labelKey)}
           </button>

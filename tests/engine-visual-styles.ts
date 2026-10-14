@@ -5,15 +5,16 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 
-export async function compileEngineVisualStyles(engineRoot: string, packageClientSource: string) {
+export async function compileEngineVisualStyles(engineRoot: string, packageClientSource?: string) {
   const temporary = await mkdtemp(join(tmpdir(), "marinara-visual-styles-"));
   try {
     const input = join(temporary, "visual.css");
     const output = join(temporary, "dist");
     const engineClientRoot = join(engineRoot, "packages/client");
+    const packageSource = packageClientSource ? `@source ${JSON.stringify(packageClientSource)};\n` : "";
     await writeFile(
       input,
-      `@import ${JSON.stringify(join(engineClientRoot, "src/styles/globals.css"))};\n@source ${JSON.stringify(packageClientSource)};\n`,
+      `@import ${JSON.stringify(join(engineClientRoot, "src/styles/globals.css"))};\n${packageSource}`,
     );
 
     const vitePath = realpathSync(join(engineClientRoot, "node_modules/vite/dist/node/index.js"));

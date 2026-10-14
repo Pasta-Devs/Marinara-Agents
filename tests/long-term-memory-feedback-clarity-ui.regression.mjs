@@ -334,7 +334,8 @@ assert.match(vault, /text-\[var\(--marinara-editor-muted\)\].*focus-visible:outl
 assert.match(vault, /mari-editor-action flex min-h-11/u);
 assert.match(vault, /ScopeTargetPicker/u);
 assert.match(vault, /data-ltm-vault-scope-search/u);
-assert.match(vault, /role="checkbox"/u);
+assert.match(vault, /role="radiogroup"[\s\S]*role="radio"/u);
+assert.doesNotMatch(vault, /role="checkbox"/u);
 assert.doesNotMatch(vault, /data-ltm-vault-selected-scope/u);
 assert.doesNotMatch(vault, /mari-editor-panel min-w-0 max-w-full space-y-3 p-3/u);
 assert.doesNotMatch(vault, /<details\s+data-ltm-memory-scope\s+className="[^"]*mari-editor-panel/u);
@@ -458,8 +459,13 @@ assert.equal(locale["ui.longTermMemory.memoryvault.sortBy"], "Sort by");
 assert.equal(locale["ui.longTermMemory.memoryvault.changeAvailability"], "Change availability");
 
 assert.match(detail, /TriangleAlert/u);
-assert.match(detail, /!text-\[var\(--marinara-editor-warning\)\]/u);
 assert.doesNotMatch(detail, /CircleAlert/u);
+assert.match(
+  detail,
+  /\[data-ltm-tab-focus\]:focus-visible \{\s*outline: 2px solid var\(--marinara-editor-focus-ring\);/u,
+);
+for (const rail of [navigation, settings, vault, targetPicker, workspace]) assert.match(rail, /data-ltm-tab-focus/u);
+assert.match(detail, /paddingBottom: "var\(--mari-safe-area-inset-bottom, env\(safe-area-inset-bottom\)\)"/u);
 assert.match(detail, /health !== "healthy" && !needsHealthAttention/u);
 assert.match(detail, /howToRepairVaultHealth[\s\S]*compact/u);
 assert.match(detail, /tone=\{healthNeedsDangerTone \? "danger" : "warning"\}/u);
@@ -631,13 +637,13 @@ assert.match(workspace, /data-ltm-source-operation-preview/u);
 assert.match(workspace, /data-ltm-source-operation-excluded/u);
 assert.match(workspace, /data-ltm-source-operation-result/u);
 assert.match(workspace, /data-ltm-source-mode/u);
-assert.match(workspace, /const sourceCheckboxClass = "size-6 shrink-0 accent-/u);
+assert.match(workspace, /const sourceCheckboxClass = "h-4 w-4 shrink-0 accent-/u);
 assert.match(workspace, /linked\.isError[\s\S]*linkedMemoriesCouldNotLoad/u);
 assert.match(workspace, /!linked\.data \|\| linked\.isError \|\| !previewed/u);
 assert.match(workspace, /tone === "danger"[\s\S]*var\(--destructive\)/u);
 assert.match(workspace, /className="hidden items-start gap-1 md:flex"/u);
 assert.doesNotMatch(workspace, /group-hover:pointer-events-auto|transition-opacity/u);
-assert.match(workspace, /className="space-y-2 border-t border-\[var\(--border\)\] py-3 first:border-t-0"/u);
+assert.match(workspace, /className="space-y-2 border-t border-\[var\(--border\)\] py-3"/u);
 assert.match(workspace, /\[changeSource, onRequestedSourceHandled, requestedSource\]/u);
 assert.match(workspace, /importsAsMode/u);
 assert.equal(locale["ui.longTermMemory.sourcesworkspace.importsAsMode"], "Imports as {{mode}}");

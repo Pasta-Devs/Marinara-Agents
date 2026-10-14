@@ -408,9 +408,7 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
       </p>
       <p>{localizeUi("ui.longTermMemory.longtermmemorydetail.checkSettingsMaintenanceReindexRecallData")}</p>
       {indexHealth?.embeddingsAvailable === false && savedMemoryCount > 0 ? (
-        <p className="text-[var(--marinara-editor-warning)]">
-          {localizeUi("ui.longTermMemory.longtermmemorydetail.savedButNotSearchable")}
-        </p>
+        <p>{localizeUi("ui.longTermMemory.longtermmemorydetail.savedButNotSearchable")}</p>
       ) : null}
       {indexHealth?.rebuildState === "failed" ? (
         <p className="text-[var(--destructive)]">
@@ -427,7 +425,7 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
       {indexHealth?.embeddingSource &&
       indexHealth.indexedEmbeddingSource &&
       indexHealth.embeddingsAvailable === false ? (
-        <p className="text-[var(--marinara-editor-warning)]">
+        <p>
           {localizeUi("ui.longTermMemory.activityview.embeddingSourceChanged", {
             indexed: indexHealth.indexedEmbeddingSource,
             current: indexHealth.embeddingSource,
@@ -520,7 +518,7 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
           display: inline-flex;
           width: auto;
           height: 2.75rem;
-          flex-shrink: 0;
+          flex: none;
           align-items: center;
           justify-content: center;
           gap: 0.5rem;
@@ -563,6 +561,12 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
         }
         [data-ltm-control="activation"][aria-checked="true"] [data-ltm-activation-knob] {
           transform: translateX(1.125rem);
+        }
+        [data-ltm-destination-content] > section {
+          scroll-margin-top: 1rem;
+        }
+        [data-ltm-tab-focus]:focus-visible {
+          outline: 2px solid var(--marinara-editor-focus-ring);
         }
         [data-ltm-control="activation"]:focus-visible {
           outline: none;
@@ -639,7 +643,7 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
               first.focus();
             }
           }}
-          className="fixed inset-0 z-50 m-0 grid h-full w-full place-items-center bg-black/50 p-4"
+          className="fixed inset-0 z-50 grid h-full w-full place-items-center bg-black/50 p-4"
         >
           <section className="w-full max-w-md space-y-4 rounded-md border border-[var(--border)] bg-[var(--background)] p-5 shadow-xl">
             <h2 id="ltm-destination-unsaved-title" className="text-base font-semibold">
@@ -718,7 +722,7 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
                 },
               )}
               data-ltm-control="activation"
-              className="inline-flex h-11 shrink-0 items-center justify-center rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--marinara-editor-focus-ring)] disabled:cursor-not-allowed disabled:opacity-50"
+              className="inline-flex h-11 shrink-0 items-center justify-center rounded-md disabled:cursor-not-allowed disabled:opacity-50"
               disabled={activationPending || !props.onEnabledForChatChange}
               onClick={() => void toggleActivation()}
             >
@@ -828,7 +832,7 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
           ) : null}
         </div>
       </header>
-      <div className="mari-editor-content max-md:p-4 max-md:pb-24">
+      <div className="mari-editor-content max-md:p-4">
         <div
           className="mari-editor-content-inner mari-editor-content-inner--wide space-y-5"
           style={{ maxWidth: "90rem" }}
@@ -875,11 +879,7 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
                   className="min-h-12 justify-between px-3 py-2 text-sm font-medium"
                 >
                   <span className="flex min-w-0 items-center gap-2">
-                    <TriangleAlert
-                      aria-hidden="true"
-                      size="1rem"
-                      className="shrink-0 !text-[var(--marinara-editor-warning)]"
-                    />
+                    <TriangleAlert aria-hidden="true" size="1rem" className="shrink-0" />
                     <span className="font-semibold">{healthLabel}</span>
                     <span className="hidden truncate sm:inline">
                       {localizeUi("ui.longTermMemory.longtermmemorydetail.checkSettingsMaintenanceReindexRecallData")}
@@ -899,11 +899,7 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
                   className="min-h-12 justify-between px-3 py-2 text-sm font-medium"
                 >
                   <span className="flex min-w-0 items-center gap-2">
-                    <TriangleAlert
-                      aria-hidden="true"
-                      size="1rem"
-                      className="shrink-0 !text-[var(--marinara-editor-warning)]"
-                    />
+                    <TriangleAlert aria-hidden="true" size="1rem" className="shrink-0" />
                     <span className="font-semibold">
                       {localizeUi("ui.longTermMemory.longtermmemorydetail.savedButNotSearchable")}
                     </span>
@@ -918,7 +914,7 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
                 data-ltm-destination-content
                 role="region"
                 aria-label={destinationLabel(destination)}
-                className="min-w-0 space-y-5 [&>section]:scroll-mt-4"
+                className="min-w-0 space-y-5"
                 style={{
                   containerName: "ltm-destination",
                   containerType: "inline-size",
@@ -960,7 +956,7 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
                 [data-ltm-onboarding-sprite][data-ltm-onboarding-mobile-flip] {
                   transform: scaleX(-1);
                 }
-                [data-ltm-onboarding-sprite][data-ltm-onboarding-mobile-shift="left-40"] {
+                [data-ltm-onboarding-sprite][data-ltm-onboarding-mobile-shift="left"] {
                   transform: translateX(-40px);
                 }
                 [data-ltm-onboarding-actions] {
@@ -1145,7 +1141,7 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
                                   </>
                                 ) : props.chatMode === "roleplay" || props.chatMode === "game" ? (
                                   <>
-                                    <ol className="list-decimal list-outside space-y-1 ps-6">
+                                    <ol className="list-decimal space-y-1 ps-6">
                                       <li>
                                         {localizeUi(
                                           "ui.longTermMemory.longtermmemorydetail.promptBlockPlacementOpenEditor",
@@ -1178,7 +1174,7 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
                             ) : onboardingStep === 3 ? (
                               <>
                                 <p>{localizeUi("ui.longTermMemory.longtermmemorydetail.sourceChoiceIntro")}</p>
-                                <ul className="list-disc list-outside space-y-1 ps-6">
+                                <ul className="list-disc space-y-1 ps-6">
                                   <li>
                                     <strong className="font-semibold text-[var(--foreground)]">
                                       {localizeUi("ui.longTermMemory.longtermmemorydetail.sourceChats")}
@@ -1203,7 +1199,7 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
                             ) : onboardingStep === 4 ? (
                               <>
                                 <p>{localizeUi("ui.longTermMemory.longtermmemorydetail.reviewIntro")}</p>
-                                <ul className="list-disc list-outside space-y-1 ps-6">
+                                <ul className="list-disc space-y-1 ps-6">
                                   <li>
                                     <strong className="font-semibold text-[var(--foreground)]">
                                       {localizeUi("ui.longTermMemory.longtermmemorydetail.reviewAccept")}
@@ -1230,7 +1226,7 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
                               activeChat ? (
                                 <>
                                   <p>{localizeUi("ui.longTermMemory.longtermmemorydetail.verifyIntro")}</p>
-                                  <ol className="list-decimal list-outside space-y-1 ps-6">
+                                  <ol className="list-decimal space-y-1 ps-6">
                                     <li>
                                       {localizeUi("ui.longTermMemory.longtermmemorydetail.verifySendMessage", {
                                         value1: chatLabel,
@@ -1243,7 +1239,7 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
                               ) : (
                                 <>
                                   <p>{localizeUi("ui.longTermMemory.longtermmemorydetail.verifyPrerequisite")}</p>
-                                  <ol className="list-decimal list-outside space-y-1 ps-6">
+                                  <ol className="list-decimal space-y-1 ps-6">
                                     <li>
                                       {localizeUi(
                                         "ui.longTermMemory.longtermmemorydetail.verifyWithoutChatSendMessage",
@@ -1316,7 +1312,7 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
                                     {localizeUi("ui.longTermMemory.longtermmemorydetail.underTheHoodRecall")}
                                   </summary>
                                   <div className="mt-3 space-y-3 text-sm leading-6 text-[var(--muted-foreground)]">
-                                    <ul className="list-disc list-outside space-y-2 ps-6">
+                                    <ul className="list-disc space-y-2 ps-6">
                                       <li>
                                         <strong className="font-semibold text-[var(--foreground)]">
                                           {localizeUi(
@@ -1556,7 +1552,7 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
                             draggable={false}
                             data-ltm-onboarding-sprite={onboardingSteps[onboardingStep].mobileSprite}
                             data-ltm-onboarding-mobile-flip={onboardingSteps[onboardingStep].mobileFlip || undefined}
-                            data-ltm-onboarding-mobile-shift={onboardingStep === 4 ? "left-40" : undefined}
+                            data-ltm-onboarding-mobile-shift={onboardingStep === 4 ? "left" : undefined}
                           />
                         </picture>
                       </div>
@@ -1615,7 +1611,8 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
       </div>
       <div
         data-ltm-mobile-navigation
-        className="sticky bottom-0 z-20 border-t border-[var(--marinara-editor-divider)] bg-[var(--marinara-editor-bg)] pb-[env(safe-area-inset-bottom)]"
+        className="sticky bottom-0 z-20 border-t border-[var(--marinara-editor-divider)] bg-[var(--marinara-editor-bg)]"
+        style={{ paddingBottom: "var(--mari-safe-area-inset-bottom, env(safe-area-inset-bottom))" }}
       >
         <LongTermMemoryNavigation
           mobile

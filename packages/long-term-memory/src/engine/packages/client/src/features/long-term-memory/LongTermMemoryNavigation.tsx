@@ -129,7 +129,8 @@ export function LongTermMemoryNavigation({
         title={item.id === "sources" && sourceTaskLabel ? sourceTaskLabel : undefined}
         onClick={() => onDestinationChange(item.id)}
         data-active={active}
-        className={`mari-editor-tab relative flex items-center gap-2 rounded-lg text-xs font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--marinara-editor-focus-ring)] ${
+        data-ltm-tab-focus
+        className={`mari-editor-tab relative flex items-center gap-2 rounded-lg text-xs font-semibold transition-colors ${
           mobile
             ? "min-h-14 min-w-0 flex-1 flex-col justify-center gap-1 px-2 text-[0.625rem]"
             : "min-h-10 shrink-0 justify-start whitespace-nowrap px-3 text-left"
