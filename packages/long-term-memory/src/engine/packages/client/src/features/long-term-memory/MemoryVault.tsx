@@ -328,6 +328,13 @@ function ScopeTargetPicker({
     noMemoriesPreference.current = false;
     wasSearching.current = false;
   }
+  const radioTargets = [
+    ...options.flatMap(({ target }) => (target ? [target] : [])),
+    ...neutralTargets,
+    ...targetsWithMemories,
+    ...(noMemoriesOpen ? targetsWithoutMemories : []),
+  ];
+  const tabStopId = radioTargets.some((target) => target.id === selectedId) ? selectedId : radioTargets[0]?.id;
   const renderRegularTarget = (target: Target) => {
     const fullName = targetFullName(target, activeKind);
     const branchChatName =
@@ -343,6 +350,7 @@ function ScopeTargetPicker({
         title={fullName}
         role="radio"
         aria-checked={target.id === selectedId}
+        tabIndex={target.id === tabStopId ? 0 : -1}
         data-selected={target.id === selectedId ? "true" : "false"}
         className={`mari-editor-action flex min-h-11 w-full min-w-0 items-center gap-3 rounded-none border-t-0 px-3 py-2 text-left text-sm last:border-b-0 ${target.id === selectedId ? "bg-[var(--primary)]/10" : ""}`}
         onClick={() => onSelect(target)}
@@ -459,6 +467,19 @@ function ScopeTargetPicker({
           role="radiogroup"
           aria-labelledby={`${pickerId}-${activeKind}`}
           className="divide-y divide-[var(--border)]"
+          onKeyDown={(event) => {
+            if (!["ArrowDown", "ArrowRight", "ArrowUp", "ArrowLeft"].includes(event.key)) return;
+            const radios = Array.from(
+              event.currentTarget.querySelectorAll<HTMLButtonElement>('[role="radio"]:enabled'),
+            ).filter((radio) => !radio.closest("details:not([open])"));
+            const index = radios.indexOf(event.target as HTMLButtonElement);
+            if (index < 0 || radios.length < 2) return;
+            event.preventDefault();
+            const step = event.key === "ArrowDown" || event.key === "ArrowRight" ? 1 : -1;
+            const next = radios[(index + step + radios.length) % radios.length]!;
+            next.focus();
+            next.click();
+          }}
         >
           {options.map(({ key, target: optionTarget, label, kind }) => {
             const selected = optionTarget?.id === selectedId;
@@ -474,6 +495,7 @@ function ScopeTargetPicker({
                 title={key === "all" ? optionTarget?.label : fullName}
                 role="radio"
                 aria-checked={selected}
+                tabIndex={optionTarget && optionTarget.id === tabStopId ? 0 : -1}
                 data-selected={selected ? "true" : "false"}
                 className={`mari-editor-action flex min-h-11 w-full min-w-0 items-center gap-3 rounded-none border-t-0 px-3 py-2 text-left text-sm last:border-b-0 ${selected ? "bg-[var(--primary)]/10" : ""}`}
                 onClick={() => optionTarget && onSelect(optionTarget)}

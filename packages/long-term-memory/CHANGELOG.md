@@ -2,7 +2,7 @@
 
 ## 1.4.34 — 2026-10-14
 
-- Long-Term Memory now uses only styles the app already provides, so its screens look the same in the app as they were designed. Sources → Manage source no longer shows the imported-source preview under the workbench, the Review and Sources action bars sit inline on wide screens, selected Review rows and Vault notes are highlighted, tab focus rings use the editor focus colour, info popovers keep their size, and checkboxes are one size in Vault, Sources and Review. Screen readers now announce the Vault place lists as single-choice.
+- Long-Term Memory now uses only styles the app already provides, so its screens look the same in the app as they were designed. Sources → Manage source no longer shows the imported-source preview under the workbench, the Review and Sources action bars sit inline on wide screens, selected Review rows and Vault notes are highlighted, tab focus rings use the editor focus colour, info popovers keep their size, and checkboxes are one size in Vault, Sources and Review. Screen readers now announce the Vault place lists as single-choice, and the arrow keys move between places.
 
 ## 1.4.33 — 2026-10-14
 

@@ -912,10 +912,8 @@ export default function MemorySettings({
           [data-ltm-extraction-grid] {
             grid-template-columns: repeat(2, minmax(0, 1fr));
           }
-        }
-        @media (min-width: 48rem) {
           [data-ltm-prompt-template-grid] {
-            grid-template-columns: 12rem 1fr;
+            grid-template-columns: 12rem minmax(0, 1fr);
           }
         }
       `}</style>
