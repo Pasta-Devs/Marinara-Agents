@@ -38,14 +38,15 @@
 // into the normal lanes for a local build, so an unfiltered catalog can be
 // served to a development Engine through its MARINARA_AGENT_CATALOG_URL
 // override. Never commit a catalog generated that way — validation rejects it.
-// The avatar agents (Marinara-Engine#7537) stay here until the Engine's avatar setup, stage, and at least
-// one renderer are on Engine `staging` (Engine docs/development/optional-agent-packages.md, Capability API 1.73).
-export const INCOMPLETE_PACKAGE_IDS = new Set(["2d-avatars", "3d-avatars", "pixelforge"]);
+export const INCOMPLETE_PACKAGE_IDS = new Set(["pixelforge"]);
 
 // To graduate a package to stable users, follow "Packages that are not ready for
 // everyone" in CONTRIBUTING.md (Quartermaster and Relationship Tracker did so for
 // Marinara Engine v2.5.0).
-export const STAGING_ONLY_PACKAGE_IDS = new Set(["modern-life-sim", "ruleset-5e-2014"]);
+// The avatar agents (Marinara-Engine#7537) moved here once the Engine's avatar setup, stage, renderers,
+// live faces, and generation were on Engine `staging` (Engine docs/development/optional-agent-packages.md,
+// Capability API 1.73). Stable Engine 2.5.0 supports Capability API 1.66 and would refuse them anyway.
+export const STAGING_ONLY_PACKAGE_IDS = new Set(["2d-avatars", "3d-avatars", "modern-life-sim", "ruleset-5e-2014"]);
 
 // A package is in exactly one state. Both sets hiding the same id would make
 // the published/overlay split order-dependent, so reject it at import time.

@@ -1,5 +1,5 @@
 // The splash screen needs the shipped version and its public notes inside the client bundle.
-export const SLURP2_VERSION = "0.3.38";
+export const SLURP2_VERSION = "0.3.39";
 
 export interface Slurp2ReleaseEntry {
   version: string;
@@ -13,11 +13,14 @@ export interface Slurp2ReleaseEntry {
  */
 export const SLURP2_RELEASES: Slurp2ReleaseEntry[] = [
   {
+    version: "0.3.39",
+    date: "2026-10-14",
+    notes: ["On Android, picking a post picture opens the full file browser, so every folder is reachable."],
+  },
+  {
     version: "0.3.38",
     date: "2026-10-13",
-    notes: [
-      "A creator whose card has image tags switched on gets a button that uses those tags as her appearance for pictures.",
-    ],
+    notes: ["A creator whose card has image tags gets a button that uses them as her picture appearance."],
   },
   {
     version: "0.3.37",

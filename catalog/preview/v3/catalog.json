@@ -7,6 +7,104 @@
         "schemaVersion": 2,
         "capabilityApi": {
           "major": 1,
+          "minor": 73
+        },
+        "builtAgainst": {
+          "engineVersion": "2.5.0",
+          "engineCommit": "1cd98bc161fb12717cda5fb1f9871c3d14de36e2"
+        },
+        "id": "2d-avatars",
+        "name": "2D Avatars",
+        "version": "0.1.1",
+        "description": "Shows your characters and personas as animated 2D avatars that blink, talk, and change faces with each reply. Uses your sprites or a mesh avatar file. Set up each avatar on the agent's page in Agents, then add the Agent in Chat Settings → Agents → Misc Agents for Roleplay and Game modes.",
+        "engine": {
+          "min": "2.5.0",
+          "maxExclusive": "4.0.0"
+        },
+        "kind": [
+          "agent"
+        ],
+        "entrypoints": {
+          "agents": "agents.json"
+        },
+        "files": [
+          {
+            "path": "agents.json",
+            "sha256": "32dfe5d1e12b4c6b2e8e79dd8c718346a72e797d34c5d3931556f7695892fbc9",
+            "bytes": 3820
+          }
+        ],
+        "permissions": [
+          "agent-runtime",
+          "chat-read",
+          "storage",
+          "ui"
+        ],
+        "restartRequired": false
+      },
+      "category": "misc",
+      "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/2d-avatars.png",
+      "artifact": {
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/2d-avatars-0.1.1.zip",
+        "sha256": "4d61db1ff032ff0e42fd81423f2e6aca97f3496acdb3bbc9fdb5a7df53017277",
+        "bytes": 2176
+      },
+      "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Engine/blob/staging/docs/agents/built-in-agents.md#2d-avatars"
+    },
+    {
+      "manifest": {
+        "schemaVersion": 2,
+        "capabilityApi": {
+          "major": 1,
+          "minor": 73
+        },
+        "builtAgainst": {
+          "engineVersion": "2.5.0",
+          "engineCommit": "1cd98bc161fb12717cda5fb1f9871c3d14de36e2"
+        },
+        "id": "3d-avatars",
+        "name": "3D Avatars",
+        "version": "0.1.1",
+        "description": "Shows your characters and personas as animated 3D models that blink, talk, and change faces with each reply. Uses VRM model files. Set up each avatar on the agent's page in Agents, then add the Agent in Chat Settings → Agents → Misc Agents for Roleplay and Game modes.",
+        "engine": {
+          "min": "2.5.0",
+          "maxExclusive": "4.0.0"
+        },
+        "kind": [
+          "agent"
+        ],
+        "entrypoints": {
+          "agents": "agents.json"
+        },
+        "files": [
+          {
+            "path": "agents.json",
+            "sha256": "69f4979c0272d438ddbff9fbef7b71b7451f32fe32c58a31d6103ec9d5ac496a",
+            "bytes": 465
+          }
+        ],
+        "permissions": [
+          "agent-runtime",
+          "chat-read",
+          "storage",
+          "ui"
+        ],
+        "restartRequired": false
+      },
+      "category": "misc",
+      "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/3d-avatars.png",
+      "artifact": {
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/3d-avatars-0.1.1.zip",
+        "sha256": "11b8622eacc3dd249ecf0a25759bd36b89ea1bae122adbc689919e6064636f69",
+        "bytes": 1033
+      },
+      "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Engine/blob/staging/docs/agents/built-in-agents.md#3d-avatars"
+    },
+    {
+      "manifest": {
+        "schemaVersion": 2,
+        "capabilityApi": {
+          "major": 1,
           "minor": 46
         },
         "builtAgainst": {
