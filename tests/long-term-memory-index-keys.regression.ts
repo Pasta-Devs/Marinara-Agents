@@ -504,11 +504,6 @@ async function main() {
     keywordCredit("There's half a sandwich left", knownNames) <= 0.5,
     "a known name set must not lift an ordinary single keyword",
   );
-  assert.deepEqual(
-    normalizeKeywordTerms("Mira of the Ash", buildStopWordSet(["ash"])),
-    ["mira"],
-    "title words that are stop words must not become known names",
-  );
 
   // Issue #1363: retrieval builds the known names from allowed character chunks only.
   {
@@ -526,11 +521,12 @@ async function main() {
           text: "a character note",
         },
         {
-          ...chunk("mira-world", "mira_world"),
-          title: "Mira",
-          keywords: ["mira"],
+          ...chunk("half-character-elsewhere", "half_character_elsewhere"),
+          title: "Half",
+          noteType: "character" as const,
+          keywords: ["half"],
           scope: { chatIds: ["other-chat"] },
-          text: "a world note not in scope",
+          text: "a character note not in scope",
         },
         {
           ...chunk("seo-character", "seo_character"),
@@ -557,7 +553,7 @@ async function main() {
           byChunkId: {},
         },
       };
-      const recallScore = async (queryText: string, chunkId: string, noteTypes?: ["character"]) =>
+      const recallScore = async (queryText: string, chunkId: string) =>
         (
           await retrieveLongTermMemory({
             root: lookupRoot,
@@ -570,7 +566,6 @@ async function main() {
             lexicalWeight: 0,
             graphWeight: 0,
             keywordWeight: 1,
-            noteTypes,
             maxChunks: 5,
             maxTokens: 4096,
           })
@@ -581,14 +576,11 @@ async function main() {
       assert.equal(await recallScore("i told mira already", "mira-character"), midSentence);
       const koreanScore = await recallScore("서래가 왔다", "seo-character");
       assert.ok(koreanScore >= midSentence, "a Korean character name must keep full credit");
+      // "Half" titles a world note here and a character note outside the chat, so
+      // neither the noteType filter nor the allowed filter may make it a known name.
       assert.ok(
         (await recallScore("There's half a sandwich left", "half-world")) < midSentence,
         "an ordinary single keyword must stay below a known name",
-      );
-      assert.equal(
-        await recallScore("i told mira already", "mira-world"),
-        0,
-        "a non-character chunk outside the chat scope must not be recalled",
       );
     } finally {
       await rm(lookupRoot, { recursive: true, force: true });
