@@ -652,6 +652,12 @@
     "slurp2": {
       "versions": [
         {
+          "version": "0.3.39",
+          "date": "2026-10-14",
+          "notes": "- Fixed: on Android, choosing a picture for a post (in the composer, or \"replace\" while editing a post) no longer opens the system photo picker, which lists only a few albums such as Camera, Screenshots and Downloads. Android now offers its full file browser, so every folder is reachable. A file that is not a picture still gets \"Choose an image file.\". Other platforms keep the picture-only file dialog. (#1378)",
+          "highlight": false
+        },
+        {
           "version": "0.3.38",
           "date": "2026-10-13",
           "notes": "- Added: in a Creator's settings, \"Appearance for pictures\" has a new button, \"Use the card's image tags\". It shows only while the linked character or persona has the Image Appearance Override switched on and filled in, and it saves those tags as the Creator's own appearance. It asks first when that replaces an appearance you wrote. \"Use linked appearance\" (or \"Clear override\") removes it again. (#1366)",
@@ -763,12 +769,6 @@
           "version": "0.3.20",
           "date": "2026-10-10",
           "notes": "- Choose what a breakup leaves behind: keep the usual history, move on while remembering the relationship without ongoing pining or breakup drama, or forget the relationship in future posts and chats. Stir can also move on or forget an existing ex relationship. Published posts and messages stay; Undo restores the previous choice.",
-          "highlight": false
-        },
-        {
-          "version": "0.3.19",
-          "date": "2026-10-10",
-          "notes": "Stop a Creator from texting again after being left on read.\n\n- New Settings › Messaging toggle, off by default: \"Stop after one unanswered text.\" A Creator may write first once (an opener, a check-in, a recurring update, a drama question), then nothing more until you actually reply. Replies to your messages, and anything a Creator already owes you (a promise, a reminder, a finished commission), still arrive on schedule.",
           "highlight": false
         }
       ]
