@@ -22,6 +22,7 @@ import { SlpComposerPollSummary } from "../../modules/post/SlpPostComposerTools"
 import { SlpOpenContinuityButton } from "../../base/navigation/SlpOpenContinuityButton";
 import { SlpAnchoredPopover } from "../../base/chrome/SlpAnchoredPopover";
 import { SlpImageComposer } from "../../base/media/SlpImageComposer";
+import { slpImageFileAccept } from "../../base/media/slp-media-accept";
 import { SlpPollComposer } from "../../modules/poll/SlpPollComposer";
 import { PostImageCropEditor } from "../../base/media/SlpPostImageCropEditor";
 import {
@@ -540,7 +541,13 @@ export function NoodlerPostComposer({
       }
     >
       <div data-component="SlurpHome.NoodlerPostComposer" className="space-y-4 px-2 pb-2 pt-1">
-        <input ref={imageFileRef} type="file" accept="image/*" className="hidden" onChange={handleImageFile} />
+        <input
+          ref={imageFileRef}
+          type="file"
+          accept={slpImageFileAccept()}
+          className="hidden"
+          onChange={handleImageFile}
+        />
         <p className={cn(SLP_TYPE.meta, "flex items-center gap-2 text-[var(--slurp-muted)]")}>
           <Avatar
             account={{ displayName: profile.displayName, avatarUrl: profile.avatarUrl, avatarCrop: profile.avatarCrop }}

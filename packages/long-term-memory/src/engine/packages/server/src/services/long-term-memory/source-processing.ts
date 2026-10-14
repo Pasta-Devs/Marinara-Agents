@@ -383,7 +383,7 @@ export async function processLongTermMemorySource(options: PrepareOptions & { ap
     root: options.root,
     applyLowRisk: options.applyLowRisk,
   });
-  if (committed.draft.mutations.length) await rebuildAfterSourceExtraction(options.root);
+  if (committed.applyResult?.appliedMutationIds.length) await rebuildAfterSourceExtraction(options.root);
   return {
     operationId: prepared.operationId,
     draft: committed.draft,
@@ -519,7 +519,8 @@ export async function processLongTermMemorySourceBatch(options: {
   );
   const overlay = new Map<string, LtmNote>(),
     results: LtmImportedSourceResult[] = [];
-  let hasDraftMutations = false;
+  // Only applied mutations change indexed memories; a draft left for review or a source refresh does not.
+  let hasAppliedMutations = false;
   // Hold one vault lock across the ordered commit loop: the shared overlay carries this batch's
   // projections, so an independent write landing between items could otherwise make it stale
   // against the vault at the next item's commit-time reconciliation. The lock is reentrant, so each
@@ -539,7 +540,7 @@ export async function processLongTermMemorySourceBatch(options: {
           overlay,
           applyLowRisk: options.applyLowRisk,
         });
-        hasDraftMutations ||= committed.draft.mutations.length > 0;
+        hasAppliedMutations ||= (committed.applyResult?.appliedMutationIds.length ?? 0) > 0;
         results.push({
           sourceId: item.sourceId,
           title: item.title,
@@ -564,6 +565,6 @@ export async function processLongTermMemorySourceBatch(options: {
       }
     }
   });
-  if (hasDraftMutations) await rebuildAfterSourceExtraction(options.root);
+  if (hasAppliedMutations) await rebuildAfterSourceExtraction(options.root);
   return results;
 }

@@ -1,28 +1,14 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
+import { ltmSourcePaths } from "./long-term-memory-source-paths.mjs";
 import { runRegressionToCompletion } from "./regression-helpers.mjs";
 
 const testRun = (async () => {
-  const api = await readFile(
-    "packages/long-term-memory/src/engine/packages/client/src/features/long-term-memory/api.ts",
-    "utf8",
-  );
-  const vault = await readFile(
-    "packages/long-term-memory/src/engine/packages/client/src/features/long-term-memory/MemoryVault.tsx",
-    "utf8",
-  );
-  const sources = await readFile(
-    "packages/long-term-memory/src/engine/packages/client/src/features/long-term-memory/SourcesWorkspace.tsx",
-    "utf8",
-  );
-  const routes = await readFile(
-    "packages/long-term-memory/src/engine/packages/server/src/services/long-term-memory/routes.ts",
-    "utf8",
-  );
-  const settings = await readFile(
-    "packages/long-term-memory/src/engine/packages/client/src/features/long-term-memory/MemorySettings.tsx",
-    "utf8",
-  );
+  const api = await readFile(ltmSourcePaths.api, "utf8");
+  const vault = await readFile(ltmSourcePaths.vault, "utf8");
+  const sources = await readFile(ltmSourcePaths.sourcesWorkspace, "utf8");
+  const routes = await readFile(ltmSourcePaths.routes, "utf8");
+  const settings = await readFile(ltmSourcePaths.settings, "utf8");
 
   assert.match(api, /export const ltmScopeTargetsKey = \(chatId: string \| null \| undefined\)/u);
   assert.match(vault, /queryKey: ltmScopeTargetsKey\(props\.chatId\)/u);

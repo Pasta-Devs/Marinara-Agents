@@ -7,6 +7,7 @@ import type { SlpPostImageCrop } from "../../../../../shared/src/slp/slp-social.
 import { readSlpPostImageCrop } from "../../../../../shared/src/slp/slp-post-images.js";
 import { useTranslation as useUiTranslation } from "react-i18next";
 import { PostImageCropEditor, PostImageFrame } from "../../base/media/SlpPostImageCropEditor";
+import { slpImageFileAccept } from "../../base/media/slp-media-accept";
 import { SLP_TYPE } from "../../base/chrome/SlpChrome";
 import type { SlpPostCardModel, SlpPostImageUpdate } from "./SlpPostTypes";
 import { SlpPostImageNav } from "./SlpPostImageNav";
@@ -105,7 +106,7 @@ export function PostImageEditControls({
       <input
         ref={editing.fileInputRef}
         type="file"
-        accept="image/*"
+        accept={slpImageFileAccept()}
         className="hidden"
         onChange={editing.selectReplacement}
       />

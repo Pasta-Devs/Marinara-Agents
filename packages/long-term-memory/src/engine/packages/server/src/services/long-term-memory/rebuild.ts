@@ -1,4 +1,5 @@
-import { readFile } from "node:fs/promises";
+import { createHash } from "node:crypto";
+import { readFile, stat } from "node:fs/promises";
 import {
   ltmBm25IndexSchema,
   ltmEmbeddingIndexSchema,
@@ -23,8 +24,11 @@ import {
   markLtmIndexesBuilding,
   markLtmIndexesClean,
   markLtmIndexesFailed,
+  markLtmIndexesVerified,
+  readLtmIndexState,
   writeLtmNoteSummary,
 } from "./index-state.js";
+import { getVerifiedLtmRecallIndex, setVerifiedLtmRecallIndex } from "./vault-snapshot.js";
 import { withLtmVaultLock } from "./vault-lock.js";
 
 const autoUpgradeFailures = new Set<string>();
@@ -37,6 +41,48 @@ function autoUpgradeFailureKey(root: string, spaceId: string) {
 
 function isFiniteVector(vector: number[] | undefined, dimension: number) {
   return Array.isArray(vector) && vector.length === dimension && vector.every(Number.isFinite);
+}
+
+const textHash = (text: string) => createHash("sha256").update(text).digest("hex");
+
+/**
+ * Vectors from the previous index keyed by embedded-text hash. Empty unless that index parses and was
+ * built in the same embedding space, so a missing, malformed or other-space index embeds everything.
+ */
+async function readReusableVectors(root: string, spaceId: string | undefined) {
+  const vectors = new Map<string, number[]>();
+  let dimension = 0;
+  if (!spaceId) return { vectors, dimension };
+  try {
+    const { embeddings } = parseLtmRecallIndex(JSON.parse(await readFile(longTermMemoryRecallIndexPath(root), "utf8")));
+    if (embeddings.spaceId !== spaceId || !embeddings.dimension) return { vectors, dimension };
+    dimension = embeddings.dimension;
+    for (const entry of embeddings.chunks)
+      if (entry.textHash && entry.vector) vectors.set(entry.textHash, entry.vector);
+  } catch {
+    // ponytail: no previous index to reuse; this rebuild embeds everything, as before this cache existed.
+  }
+  return { vectors, dimension };
+}
+
+/** Embed only the texts whose hash has no reusable vector; returns one vector per text, or null. */
+async function embedWithReuse(
+  texts: string[],
+  hashes: string[],
+  reusable: { vectors: Map<string, number[]>; dimension: number },
+  embed: (texts: string[]) => Promise<number[][] | null>,
+) {
+  const pending = new Map<string, string>();
+  hashes.forEach((hash, index) => {
+    if (!reusable.vectors.has(hash)) pending.set(hash, texts[index]!);
+  });
+  const fresh = pending.size > 0 ? await embed([...pending.values()]) : [];
+  if (!fresh) return null;
+  // A source that now answers with another dimension cannot be mixed with the old vectors.
+  if (reusable.vectors.size > 0 && fresh.length > 0 && fresh[0]!.length !== reusable.dimension) return embed(texts);
+  const byHash = new Map(reusable.vectors);
+  [...pending.keys()].forEach((hash, index) => byHash.set(hash, fresh[index]!));
+  return hashes.map((hash) => byHash.get(hash)!);
 }
 
 function getUsableEmbeddingState(index: LtmRecallIndex, adapter: EmbeddingAdapter | null) {
@@ -132,12 +178,13 @@ export async function rebuildLongTermMemoryIndexes(
       const notes = await new LongTermMemoryStorage(root).listNotes({ skipInvalid: true });
       await writeLtmNoteSummary(root, notes);
       const chunks = chunkNotes(notes, { includeSourceNotes: false, stopWords });
-      const vectors = await embedLongTermMemoryTexts(
-        chunks.map((chunk) => chunk.text),
-        {
-          ...options,
-          embeddingAdapter,
-        },
+      const texts = chunks.map((chunk) => chunk.text);
+      const textHashes = texts.map(textHash);
+      const vectors = await embedWithReuse(
+        texts,
+        textHashes,
+        await readReusableVectors(root, embeddingAdapter?.spaceId),
+        (pending) => embedLongTermMemoryTexts(pending, { ...options, embeddingAdapter }),
       );
       const dimension = vectors?.[0]?.length ?? 0;
       const usableVectors =
@@ -155,7 +202,7 @@ export async function rebuildLongTermMemoryIndexes(
         chunks: chunks.map((chunk, index) => ({
           chunkId: chunk.id,
           sourceHash: chunk.sourceHash,
-          ...(usableVectors?.[index] ? { vector: usableVectors[index] } : {}),
+          ...(usableVectors?.[index] ? { textHash: textHashes[index], vector: usableVectors[index] } : {}),
         })),
         byChunkId: Object.fromEntries(chunks.map((chunk, index) => [chunk.id, index])),
       });
@@ -187,6 +234,16 @@ export async function rebuildLongTermMemoryIndexes(
   });
 }
 
+/** Device, inode, size and times of `recall.json`; empty when it cannot be read. */
+async function recallIndexFileKey(path: string) {
+  try {
+    const file = await stat(path, { bigint: true });
+    return `${file.dev}:${file.ino}:${file.size}:${file.mtimeNs}:${file.ctimeNs}`;
+  } catch {
+    return "";
+  }
+}
+
 export async function loadOrRebuildLongTermMemoryIndexes(
   root = getLongTermMemoryRoot(),
   resolvedEmbeddingAdapter?: EmbeddingAdapter | null,
@@ -208,14 +265,49 @@ export async function loadOrRebuildLongTermMemoryIndexes(
     signal?.throwIfAborted();
     let stale = false;
     try {
-      const index = parseLtmRecallIndex(JSON.parse(await readFile(path, "utf8")));
-      const notes = await new LongTermMemoryStorage(root).listNotes({ skipInvalid: true });
+      // Read what a cached index must still match before touching the vault, so a change that lands
+      // during the check can only make the next call miss, never hide the change.
+      const state = await readLtmIndexState(root).catch(() => null);
+      const fileKey = await recallIndexFileKey(path);
+      const stopWordsKey = resolvedStopWords.join("\u0000");
+      const verified = getVerifiedLtmRecallIndex(root);
+      let index: LtmRecallIndex;
       if (
-        index.sourceHash !==
-        stableJsonHash(chunkNotes(notes, { includeSourceNotes: false, stopWords: resolvedStopWords }))
+        verified &&
+        state &&
+        !state.dirty &&
+        fileKey &&
+        verified.revision === state.revision &&
+        verified.fileKey === fileKey &&
+        verified.stopWordsKey === stopWordsKey
       ) {
-        stale = true;
-        throw new Error("Stale long-term memory recall index.");
+        // Every package mutation bumps the revision under the vault lock, so none happened since the
+        // vault was last hashed. A process's first recall has no entry and always takes the full check.
+        // ponytail: notes edited outside the package while this process runs, or by a second process
+        // (the vault lock is per-process), are not seen until a restart or this process's next mutation,
+        // and a hit skips listNotes, so recall alone no longer starts the daily retention run. Upgrade:
+        // bump the revision again after commitLtmMutation applies its files, and stat the note
+        // directories here.
+        index = verified.index;
+      } else {
+        index = parseLtmRecallIndex(JSON.parse(await readFile(path, "utf8")));
+        const notes = await new LongTermMemoryStorage(root).listNotes({ skipInvalid: true });
+        if (
+          index.sourceHash !==
+          stableJsonHash(chunkNotes(notes, { includeSourceNotes: false, stopWords: resolvedStopWords }))
+        ) {
+          stale = true;
+          throw new Error("Stale long-term memory recall index.");
+        }
+        // The index matches the vault. A mutation of unindexed notes (sources, drafts) leaves the state
+        // dirty with a fresh index, so clear that to let the next call reuse it; cache only a state
+        // that is clean at the revision read above.
+        if (state && fileKey) {
+          const clean = state.dirty ? await markLtmIndexesVerified(root, state.revision).catch(() => null) : state;
+          if (clean && !clean.dirty && clean.revision === state.revision + (state.dirty ? 1 : 0)) {
+            setVerifiedLtmRecallIndex(root, { index, revision: clean.revision, fileKey, stopWordsKey });
+          }
+        }
       }
       const usableEmbeddings = getUsableEmbeddingState(index, embeddingAdapter);
       if (usableEmbeddings) {
@@ -233,6 +325,8 @@ export async function loadOrRebuildLongTermMemoryIndexes(
       // unreadable or malformed one is quarantined; otherwise every edit would park a full copy.
       if (!stale) await quarantineLtmIndexArtifact(root, path).catch(() => {});
       await rebuildLongTermMemoryIndexes({ root, embeddingAdapter, stopWords: resolvedStopWords, signal });
+      // ponytail: an index built here is not cached; the next call verifies it once before caching it,
+      // which narrows, but does not close, the window for a write from another process.
       if (observation) observation.outcome = "rebuilt";
       return parseLtmRecallIndex(JSON.parse(await readFile(path, "utf8")));
     }
