@@ -35,6 +35,11 @@ export type SlurpImprovementProfile = {
   disclosureMode: SlurpStageProfileInput["disclosureMode"] | null;
   avatarUrl?: string | null;
   autoPosting: { enabled: boolean };
+  /** Stage facts ride along so an apply or rollback does not clear them. */
+  appearance?: string;
+  wardrobe?: string;
+  locations?: string;
+  clothingStyle?: SlurpStageProfileInput["clothingStyle"];
 };
 
 export type SlurpImprovementProposalRow = {
@@ -110,6 +115,10 @@ export function slurpStageProfileInput(profile: SlurpImprovementProfile): SlurpS
     disclosureMode: profile.disclosureMode ?? "hinted",
     gender: profile.gender,
     tags: profile.tags,
+    appearance: profile.appearance,
+    wardrobe: profile.wardrobe,
+    locations: profile.locations,
+    clothingStyle: profile.clothingStyle,
   };
 }
 

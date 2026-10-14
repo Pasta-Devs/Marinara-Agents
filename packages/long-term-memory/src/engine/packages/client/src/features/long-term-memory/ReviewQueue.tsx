@@ -129,7 +129,7 @@ const freshnessLabel: Record<string, string> = {
 };
 
 function freshnessClass(freshness: string) {
-  if (freshness === "fresh") return "border-[var(--marinara-editor-accent)]/40 text-[var(--marinara-editor-accent)]";
+  if (freshness === "fresh") return "border-[var(--marinara-editor-accent)]/30 text-[var(--marinara-editor-accent)]";
   if (
     freshness === "stale" ||
     freshness === "missing" ||
@@ -138,7 +138,7 @@ function freshnessClass(freshness: string) {
     freshness === "invalidated" ||
     freshness === "not_pending"
   )
-    return "border-[var(--marinara-editor-warning)]/40 text-[var(--marinara-editor-warning)]";
+    return "";
   return "border-[var(--border)] text-[var(--muted-foreground)]";
 }
 
@@ -837,7 +837,7 @@ function SelectionCheckbox({
         data-ltm-control="review-select"
         checked={checked}
         onChange={onChange}
-        className="h-3.5 w-3.5 rounded accent-[var(--primary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--background)]"
+        className="h-4 w-4 rounded accent-[var(--primary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--background)]"
       />
       <span className={compact ? "sr-only" : undefined}>{label}</span>
     </label>
@@ -863,10 +863,7 @@ function AmbiguousLinkChoice({
   const selectedTarget = ambiguousLinkChoiceTarget(mutation, diagnostic, explicitTarget);
   if (selectedTarget === null) return null;
   return (
-    <div
-      data-ltm-review-link-choice
-      className="mari-editor-panel mari-editor-panel--soft space-y-2 border-[var(--marinara-editor-warning)]/45 p-3 text-xs"
-    >
+    <div data-ltm-review-link-choice className="mari-editor-panel mari-editor-panel--soft space-y-2 p-3 text-xs">
       <p className="font-semibold">{localizeUi("ui.longTermMemory.reviewqueue.ambiguousLinkChoiceTitle")}</p>
       <p className="text-[var(--muted-foreground)]">
         {localizeUi("ui.longTermMemory.reviewqueue.ambiguousLinkChoiceDescription", {
@@ -964,9 +961,7 @@ function MutationEditor({
           id={id}
           data-ltm-character-counter
           className={`block text-right text-[0.6875rem] font-normal ${
-            count <= NEAR_TEXT_LIMIT_THRESHOLD
-              ? "text-[var(--marinara-editor-warning)]"
-              : "text-[var(--muted-foreground)]"
+            count <= NEAR_TEXT_LIMIT_THRESHOLD ? "" : "text-[var(--muted-foreground)]"
           }`}
         >
           {localizeUi(key, { count })}
@@ -1012,7 +1007,7 @@ function MutationEditor({
           </label>
         ) : null}
         {Object.entries(mutation.note.sections).map(([sectionKey, section]) => (
-          <div key={sectionKey} className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_10rem]">
+          <div key={sectionKey} data-ltm-review-field-grid className="grid gap-2">
             <label className="space-y-1 text-xs font-medium text-[var(--muted-foreground)]">
               <span>{humanizeLabel(sectionKey)}</span>
               <textarea
@@ -1078,7 +1073,7 @@ function MutationEditor({
 
   if (mutation.kind === "append_section") {
     return (
-      <div data-ltm-mutation-editor className="grid gap-2 pt-3 sm:grid-cols-[minmax(0,1fr)_10rem]">
+      <div data-ltm-mutation-editor data-ltm-review-field-grid className="grid gap-2 pt-3">
         <label className="space-y-1 text-xs font-medium text-[var(--muted-foreground)]">
           <span>
             {humanizeLabel(mutation.sectionKey)} {localizeUi("ui.longTermMemory.mutationeditor.text")}
@@ -1115,7 +1110,7 @@ function MutationEditor({
 
   if (mutation.kind === "update_section") {
     return (
-      <div data-ltm-mutation-editor className="grid gap-2 pt-3 sm:grid-cols-[minmax(0,1fr)_10rem]">
+      <div data-ltm-mutation-editor data-ltm-review-field-grid className="grid gap-2 pt-3">
         <label className="space-y-1 text-xs font-medium text-[var(--muted-foreground)]">
           <span>
             {humanizeLabel(mutation.sectionKey)} {localizeUi("ui.longTermMemory.mutationeditor.text")}
@@ -2584,7 +2579,7 @@ export default function ReviewQueue({
       <article
         key={row.mutation.id}
         data-ltm-review-mutation={row.mutation.id}
-        className={`rounded-md border border-[var(--border)] px-1 py-3 ${selectedIds.has(row.mutation.id) ? "bg-[var(--accent)]/55" : ""}`}
+        className={`rounded-md border border-[var(--border)] px-1 py-3 ${selectedIds.has(row.mutation.id) ? "bg-[var(--accent)]/50" : ""}`}
       >
         <div className="flex min-w-0 items-start gap-2">
           <SelectionCheckbox
@@ -2608,7 +2603,7 @@ export default function ReviewQueue({
               })
             }
             aria-controls={expanded ? `ltm-review-mutation-details-${row.mutation.id}` : undefined}
-            className="relative min-w-0 flex-1 rounded-md px-2 py-1 pr-8 text-left hover:bg-[var(--accent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--marinara-editor-focus-ring)]"
+            className="relative min-w-0 flex-1 rounded-md px-2 py-1 pr-8 text-left hover:bg-[var(--accent)] focus-visible:outline-none focus-visible:ring-2 [--ring:var(--marinara-editor-focus-ring)] focus-visible:ring-[var(--ring)]"
             data-ltm-risk={row.mutation.risk}
             data-ltm-disposition={row.disposition}
           >
@@ -2697,7 +2692,7 @@ export default function ReviewQueue({
               label={rowActionLabel}
               data-ltm-review-action={preflightReady ? "apply" : preflightBlocked ? "blocked" : "review"}
               iconSize="1rem"
-              className="mari-editor-action--primary !h-11 !min-h-11 !w-11 !min-w-11"
+              className="mari-editor-action--primary"
               style={{ height: 44, minHeight: 44, width: 44, minWidth: 44 }}
               disabled={
                 !eligibleIds.has(row.mutation.id) ||
@@ -2714,7 +2709,6 @@ export default function ReviewQueue({
                 title: targetTitle,
               })}
               iconSize="1rem"
-              className="!h-11 !min-h-11 !w-11 !min-w-11"
               style={{ height: 44, minHeight: 44, width: 44, minWidth: 44 }}
               destructive
               disabled={!skippableDraftIds.has(row.draftId) || running !== null}
@@ -2726,7 +2720,7 @@ export default function ReviewQueue({
           <div
             id={`ltm-review-mutation-details-${row.mutation.id}`}
             data-ltm-review-mutation-details
-            className="ml-0 space-y-3 border-t border-[var(--border)]/70 pt-3 text-xs sm:ml-10"
+            className="space-y-3 border-t border-[var(--border)]/70 pt-3 text-xs"
           >
             {onOpenMemory && targetExists ? (
               <Button onClick={() => onOpenMemory(row.targetId)}>
@@ -2966,6 +2960,26 @@ export default function ReviewQueue({
       aria-label={localizeUi("ui.longTermMemory.reviewqueue.reviewQueue")}
       className="space-y-4"
     >
+      <style>{`
+        @media (min-width: 40rem) {
+          [data-ltm-review-field-grid] {
+            grid-template-columns: minmax(0, 1fr) 10rem;
+          }
+          [data-ltm-review-mutation-details] {
+            margin-left: 2.5rem;
+          }
+        }
+        @media (min-width: 48rem) {
+          [data-ltm-review-batch-actions] {
+            position: static;
+            z-index: auto;
+            border-width: 0;
+            background-color: transparent;
+            padding: 0;
+            box-shadow: none;
+          }
+        }
+      `}</style>
       {extractionMessage ? <StatusSurface tone={extractionMessage.tone}>{extractionMessage.text}</StatusSurface> : null}
       {reviewStateMessage ? (
         <StatusSurface tone="warning" data-ltm-review-state-warning>
@@ -3080,7 +3094,7 @@ export default function ReviewQueue({
                   return (
                     <div key={id} className="group">
                       <div
-                        className={`flex min-h-12 items-stretch border-b border-[var(--border)] text-sm ${active ? "bg-[var(--accent)]/55" : ""}`}
+                        className={`flex min-h-12 items-stretch border-b border-[var(--border)] text-sm ${active ? "bg-[var(--accent)]/50" : ""}`}
                       >
                         <button
                           type="button"
@@ -3111,7 +3125,7 @@ export default function ReviewQueue({
                           <Button
                             data-ltm-review-rejected-count={rejectedCount}
                             disabled={identityDirtyIds.size > 0}
-                            className="!min-h-11 !min-w-11 shrink-0 rounded-full border border-[var(--marinara-editor-warning)]/40 px-2 py-0.5 text-[0.625rem] font-semibold text-[var(--marinara-editor-warning)] underline underline-offset-2"
+                            className="shrink-0 rounded-full border px-2 py-0.5 text-[0.625rem] font-semibold underline underline-offset-2"
                             style={{ minHeight: 44, minWidth: 44 }}
                             onClick={() => {
                               setSelectedSourceId(id);
@@ -3216,7 +3230,7 @@ export default function ReviewQueue({
                         setDetailsOpen(next);
                         setMobilePaneAndFocus(next ? "inspector" : "workbench");
                       }}
-                      className="aria-pressed:bg-[var(--accent)]"
+                      className={detailsOpen ? "bg-[var(--accent)]" : undefined}
                     >
                       {localizeUi("ui.longTermMemory.reviewqueue.details")}
                     </Button>
@@ -3285,7 +3299,6 @@ export default function ReviewQueue({
                           <Button
                             destructive
                             data-ltm-clear-rejected-suggestions
-                            className="min-h-[2.75rem]"
                             disabled={dismissingId !== null || clearingSourceId !== null || identityDirtyIds.size > 0}
                             onClick={() => void clearRejectedSuggestions()}
                           >
@@ -3477,7 +3490,7 @@ export default function ReviewQueue({
                   data-ltm-review-batch-actions
                   role="group"
                   aria-label={localizeUi("ui.longTermMemory.reviewqueue.batchActions")}
-                  className="sticky bottom-2 z-10 flex flex-wrap items-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--background)] p-2 shadow-md md:static md:z-auto md:border-0 md:bg-transparent md:p-0 md:shadow-none"
+                  className="sticky bottom-2 z-10 flex flex-wrap items-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--background)] p-2 shadow-md"
                 >
                   <Button
                     primary

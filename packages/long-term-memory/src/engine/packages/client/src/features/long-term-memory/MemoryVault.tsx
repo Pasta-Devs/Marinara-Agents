@@ -329,6 +329,13 @@ function ScopeTargetPicker({
     noMemoriesPreference.current = false;
     wasSearching.current = false;
   }
+  const radioTargets = [
+    ...options.flatMap(({ target }) => (target ? [target] : [])),
+    ...neutralTargets,
+    ...targetsWithMemories,
+    ...(noMemoriesOpen ? targetsWithoutMemories : []),
+  ];
+  const tabStopId = radioTargets.some((target) => target.id === selectedId) ? selectedId : radioTargets[0]?.id;
   const renderRegularTarget = (target: Target) => {
     const fullName = targetFullName(target, activeKind);
     const branchChatName =
@@ -342,10 +349,11 @@ function ScopeTargetPicker({
         type="button"
         data-ltm-vault-scope-target={target.id}
         title={fullName}
-        role="checkbox"
+        role="radio"
         aria-checked={target.id === selectedId}
+        tabIndex={target.id === tabStopId ? 0 : -1}
         data-selected={target.id === selectedId ? "true" : "false"}
-        className="mari-editor-action flex min-h-11 w-full min-w-0 items-center gap-3 rounded-none border-x-0 border-t-0 px-3 py-2 text-left text-sm last:border-b-0 data-[selected=true]:bg-[var(--primary)]/10"
+        className={`mari-editor-action flex min-h-11 w-full min-w-0 items-center gap-3 rounded-none border-t-0 px-3 py-2 text-left text-sm last:border-b-0 ${target.id === selectedId ? "bg-[var(--primary)]/10" : ""}`}
         onClick={() => onSelect(target)}
       >
         <Check
@@ -428,7 +436,8 @@ function ScopeTargetPicker({
             aria-selected={activeKind === kind}
             data-ltm-vault-scope-tab={kind}
             data-active={activeKind === kind}
-            className="mari-editor-tab min-h-11 min-w-0 rounded-md px-1 text-xs font-semibold focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--marinara-editor-focus-ring)]"
+            data-ltm-tab-focus
+            className="mari-editor-tab min-h-11 min-w-0 rounded-md px-1 text-xs font-semibold"
             onClick={() => selectKind(kind)}
             onKeyDown={(event) => {
               if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
@@ -455,66 +464,86 @@ function ScopeTargetPicker({
         aria-labelledby={`${pickerId}-${activeKind}`}
         className="min-w-0 max-h-52 overflow-y-auto overscroll-contain divide-y divide-[var(--border)] border-y border-[var(--border)]"
       >
-        {options.map(({ key, target: optionTarget, label, kind }) => {
-          const selected = optionTarget?.id === selectedId;
-          const fullName = optionTarget ? targetFullName(optionTarget, kind) : label;
-          return (
-            <button
-              key={key}
-              type="button"
-              data-ltm-vault-scope-target={optionTarget?.id}
-              data-ltm-vault-scope-current={key === "current" ? activeKind : undefined}
-              data-ltm-vault-scope-pinned={key === "all" || key === "current" ? key : undefined}
-              disabled={!optionTarget}
-              title={key === "all" ? optionTarget?.label : fullName}
-              role="checkbox"
-              aria-checked={selected}
-              data-selected={selected ? "true" : "false"}
-              className="mari-editor-action flex min-h-11 w-full min-w-0 items-center gap-3 rounded-none border-x-0 border-t-0 px-3 py-2 text-left text-sm last:border-b-0 data-[selected=true]:bg-[var(--primary)]/10"
-              onClick={() => optionTarget && onSelect(optionTarget)}
+        <div
+          role="radiogroup"
+          aria-labelledby={`${pickerId}-${activeKind}`}
+          className="divide-y divide-[var(--border)]"
+          onKeyDown={(event) => {
+            if (!["ArrowDown", "ArrowRight", "ArrowUp", "ArrowLeft"].includes(event.key)) return;
+            const radios = Array.from(
+              event.currentTarget.querySelectorAll<HTMLButtonElement>('[role="radio"]:enabled'),
+            ).filter((radio) => !radio.closest("details:not([open])"));
+            const index = radios.indexOf(event.target as HTMLButtonElement);
+            if (index < 0 || radios.length < 2) return;
+            event.preventDefault();
+            const step = event.key === "ArrowDown" || event.key === "ArrowRight" ? 1 : -1;
+            const next = radios[(index + step + radios.length) % radios.length]!;
+            next.focus();
+            next.click();
+          }}
+        >
+          {options.map(({ key, target: optionTarget, label, kind }) => {
+            const selected = optionTarget?.id === selectedId;
+            const fullName = optionTarget ? targetFullName(optionTarget, kind) : label;
+            return (
+              <button
+                key={key}
+                type="button"
+                data-ltm-vault-scope-target={optionTarget?.id}
+                data-ltm-vault-scope-current={key === "current" ? activeKind : undefined}
+                data-ltm-vault-scope-pinned={key === "all" || key === "current" ? key : undefined}
+                disabled={!optionTarget}
+                title={key === "all" ? optionTarget?.label : fullName}
+                role="radio"
+                aria-checked={selected}
+                tabIndex={optionTarget && optionTarget.id === tabStopId ? 0 : -1}
+                data-selected={selected ? "true" : "false"}
+                className={`mari-editor-action flex min-h-11 w-full min-w-0 items-center gap-3 rounded-none border-t-0 px-3 py-2 text-left text-sm last:border-b-0 ${selected ? "bg-[var(--primary)]/10" : ""}`}
+                onClick={() => optionTarget && onSelect(optionTarget)}
+              >
+                <Check
+                  aria-hidden="true"
+                  size="0.875rem"
+                  className={selected ? "shrink-0 text-[var(--marinara-editor-accent)]" : "shrink-0 opacity-0"}
+                />
+                <span className="min-w-0 flex-1 truncate">
+                  {key === "all" ? label : fullName}
+                  {key === "current" && optionTarget ? (
+                    <span className="block truncate text-xs text-[var(--marinara-editor-muted)]">
+                      {optionTarget.label}
+                    </span>
+                  ) : null}
+                </span>
+              </button>
+            );
+          })}
+          {neutralTargets.map(renderRegularTarget)}
+          {targetsWithMemories.length ? (
+            <div data-ltm-vault-scope-presence="with-memories">
+              <p className="border-b border-[var(--border)] bg-[var(--secondary)] px-3 py-1 text-xs font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">
+                {localizeUi("ui.longTermMemory.memoryvault.withMemories")}
+              </p>
+              {targetsWithMemories.map(renderRegularTarget)}
+            </div>
+          ) : null}
+          {targetsWithoutMemories.length ? (
+            <details
+              open={noMemoriesOpen}
+              onToggle={(event) => setNoMemoriesOpen(event.currentTarget.open)}
+              data-ltm-vault-scope-presence="no-memories"
             >
-              <Check
-                aria-hidden="true"
-                size="0.875rem"
-                className={selected ? "shrink-0 text-[var(--marinara-editor-accent)]" : "shrink-0 opacity-0"}
-              />
-              <span className="min-w-0 flex-1 truncate">
-                {key === "all" ? label : fullName}
-                {key === "current" && optionTarget ? (
-                  <span className="block truncate text-xs text-[var(--marinara-editor-muted)]">
-                    {optionTarget.label}
-                  </span>
-                ) : null}
-              </span>
-            </button>
-          );
-        })}
-        {neutralTargets.map(renderRegularTarget)}
-        {targetsWithMemories.length ? (
-          <div data-ltm-vault-scope-presence="with-memories">
-            <p className="border-b border-[var(--border)] bg-[var(--secondary)] px-3 py-1 text-xs font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">
-              {localizeUi("ui.longTermMemory.memoryvault.withMemories")}
-            </p>
-            {targetsWithMemories.map(renderRegularTarget)}
-          </div>
-        ) : null}
-        {targetsWithoutMemories.length ? (
-          <details
-            open={noMemoriesOpen}
-            onToggle={(event) => setNoMemoriesOpen(event.currentTarget.open)}
-            data-ltm-vault-scope-presence="no-memories"
-          >
-            <summary
-              onClick={() => {
-                noMemoriesPreference.current = !noMemoriesOpen;
-              }}
-              className="flex min-h-11 cursor-pointer list-none items-center border-b border-[var(--border)] px-3 py-2 text-xs font-semibold uppercase tracking-wide text-[var(--muted-foreground)] [&::-webkit-details-marker]:hidden"
-            >
-              {localizeUi("ui.longTermMemory.memoryvault.noMemories")}
-            </summary>
-            {targetsWithoutMemories.map(renderRegularTarget)}
-          </details>
-        ) : null}
+              <summary
+                onClick={() => {
+                  noMemoriesPreference.current = !noMemoriesOpen;
+                }}
+                className="flex min-h-11 cursor-pointer list-none items-center border-b border-[var(--border)] px-3 py-2 text-xs font-semibold uppercase tracking-wide text-[var(--muted-foreground)] [&::-webkit-details-marker]:hidden"
+              >
+                {localizeUi("ui.longTermMemory.memoryvault.noMemories")}
+              </summary>
+              {targetsWithoutMemories.map(renderRegularTarget)}
+            </details>
+          ) : null}
+        </div>
         {!filteredTargets.length && activeKind !== "all" ? (
           <p className="px-3 py-4 text-xs text-[var(--muted-foreground)]">
             {localizeUi("ui.longTermMemory.memoryvault.noScopeTargets")}
@@ -1002,7 +1031,12 @@ function MemoryAvailabilityWorkbench({
         <div className="flex flex-wrap gap-3">
           {modes.map((mode) => (
             <label key={mode} className="flex min-h-11 items-center gap-2 text-sm">
-              <input type="checkbox" checked={selectedModes.includes(mode)} onChange={() => toggleMode(mode)} />
+              <input
+                type="checkbox"
+                className="h-4 w-4"
+                checked={selectedModes.includes(mode)}
+                onChange={() => toggleMode(mode)}
+              />
               {modeLabel(mode)}
             </label>
           ))}
@@ -1280,6 +1314,7 @@ function BulkAvailabilityWorkbench({
             <label key={mode} className="flex min-h-11 items-center gap-2 text-sm">
               <input
                 type="checkbox"
+                className="h-4 w-4"
                 checked={selectedModes.includes(mode)}
                 onChange={() =>
                   onModesChange(
@@ -3283,6 +3318,7 @@ export default function MemoryVault({
                       <label key={mode} className="flex min-h-11 items-center gap-2 text-xs">
                         <input
                           type="checkbox"
+                          className="h-4 w-4"
                           checked={filterModes.includes(mode)}
                           onChange={() => toggleFilterMode(mode)}
                         />
@@ -3291,7 +3327,7 @@ export default function MemoryVault({
                     ))}
                   </div>
                 </fieldset>
-                <label className="col-span-1 min-w-0 space-y-1 text-xs font-medium">
+                <label className="min-w-0 space-y-1 text-xs font-medium">
                   <span className="block text-[var(--marinara-editor-muted)]">
                     {localizeUi("ui.longTermMemory.memoryvault.showMemories")}
                   </span>
@@ -3308,7 +3344,7 @@ export default function MemoryVault({
                     ))}
                   </select>
                 </label>
-                <label className="col-span-1 min-w-0 space-y-1 text-xs font-medium">
+                <label className="min-w-0 space-y-1 text-xs font-medium">
                   <span className="block text-[var(--marinara-editor-muted)]">
                     {localizeUi("ui.longTermMemory.memoryvault.sortBy")}
                   </span>
@@ -3351,6 +3387,7 @@ export default function MemoryVault({
                     <label className="flex min-h-11 items-center gap-2 text-xs">
                       <input
                         type="checkbox"
+                        className="h-4 w-4"
                         checked={
                           visible.filter((note) => note.type !== "source").length > 0 &&
                           visible.filter((note) => note.type !== "source").every((note) => checked.has(note.id))
@@ -3402,6 +3439,7 @@ export default function MemoryVault({
                         <label key={mode} className="flex min-h-11 items-center gap-1 text-xs">
                           <input
                             type="checkbox"
+                            className="h-4 w-4"
                             checked={bulkModes.includes(mode)}
                             onChange={() =>
                               setBulkModes((current) =>
@@ -3467,7 +3505,7 @@ export default function MemoryVault({
                       first.focus();
                     }
                   }}
-                  className="fixed inset-0 z-50 m-0 grid h-full w-full place-items-center bg-black/50 p-4"
+                  className="fixed inset-0 z-50 grid h-full w-full place-items-center bg-black/50 p-4"
                 >
                   <section className="mari-editor-panel w-full max-w-md space-y-3 p-3 shadow-xl">
                     <h3 id="ltm-unsaved-title" className="text-base font-semibold">
@@ -3501,7 +3539,7 @@ export default function MemoryVault({
                     setRenamedSectionKey("");
                     setRenamePreview(null);
                   }}
-                  className="fixed inset-0 z-50 m-0 grid h-full w-full place-items-center bg-black/50 p-4"
+                  className="fixed inset-0 z-50 grid h-full w-full place-items-center bg-black/50 p-4"
                 >
                   <section className="mari-editor-panel w-full max-w-md space-y-3 p-3 shadow-xl">
                     <h3 id="ltm-rename-detail-title" className="text-base font-semibold">
@@ -3620,13 +3658,14 @@ export default function MemoryVault({
                             data-ltm-note-type={note.type}
                             data-ltm-note-source={note.type === "source" || undefined}
                             data-ltm-note-actions-open={openActionNoteId === note.id || undefined}
-                            className={`group border-b border-[var(--border)]/70 p-2 ${draft?.id === note.id ? "bg-[var(--accent)]/55" : ""}`}
+                            className={`group border-b border-[var(--border)]/70 p-2 ${draft?.id === note.id ? "bg-[var(--accent)]/50" : ""}`}
                           >
                             <div className="flex min-w-0 gap-2">
                               {selectMode && note.type !== "source" ? (
                                 <label className="flex min-h-11 min-w-8 items-center justify-center">
                                   <input
                                     type="checkbox"
+                                    className="h-4 w-4"
                                     checked={checked.has(note.id)}
                                     onChange={() =>
                                       setChecked((current) => {
@@ -3707,7 +3746,7 @@ export default function MemoryVault({
                               ) : null}
                             </div>
                             {note.type !== "source" && openActionNoteId === note.id ? (
-                              <div id={`ltm-note-actions-${note.id}`} className="flex gap-2 pl-10 pt-2 md:hidden">
+                              <div id={`ltm-note-actions-${note.id}`} className="ml-10 flex gap-2 pt-2 md:hidden">
                                 <Button
                                   className="flex-1"
                                   disabled={Boolean(busy)}
@@ -3810,8 +3849,9 @@ export default function MemoryVault({
                 ref={detailRef}
                 tabIndex={-1}
                 data-ltm-note-workbench
-                className="mari-editor-panel min-w-0 scroll-mt-20 p-3"
+                className="mari-editor-panel min-w-0 p-3"
                 style={{
+                  scrollMarginTop: "5rem",
                   containerName: "ltm-note-workbench",
                   containerType: "inline-size",
                 }}
@@ -3908,7 +3948,7 @@ export default function MemoryVault({
                         )}
                         <div className="mt-2 flex flex-wrap gap-1.5 text-xs">
                           {!hasExplicitScope(draft.scope) ? (
-                            <span className="rounded-full border border-[var(--marinara-editor-warning)]/40 px-2 py-1">
+                            <span className="rounded-full border px-2 py-1">
                               {localizeUi("ui.longTermMemory.memoryvault.availableEverywhere")}
                             </span>
                           ) : null}
@@ -3918,14 +3958,14 @@ export default function MemoryVault({
                             </span>
                           ) : null}
                           {draft.status === "archived" ? (
-                            <span className="rounded-full border border-[var(--marinara-editor-warning)]/40 px-2 py-1">
+                            <span className="rounded-full border px-2 py-1">
                               {localizeUi("ui.longTermMemory.memoryvault.archived")}
                             </span>
                           ) : null}
                           {Object.values(draft.sections).some((section) =>
                             section.contributions?.some((contribution) => contribution.owner === "manual"),
                           ) ? (
-                            <span className="rounded-full border border-[var(--marinara-editor-accent)]/40 px-2 py-1">
+                            <span className="rounded-full border border-[var(--marinara-editor-accent)]/30 px-2 py-1">
                               {localizeUi("ui.longTermMemory.memoryvault.editedManually")}
                             </span>
                           ) : null}
@@ -3945,7 +3985,7 @@ export default function MemoryVault({
                           }}
                           aria-pressed={detailsOpen}
                           data-ltm-details-toggle
-                          className="inline-flex min-h-11 items-center gap-2 aria-pressed:bg-[var(--accent)]"
+                          className={`inline-flex min-h-11 items-center gap-2 ${detailsOpen ? "bg-[var(--accent)]" : ""}`}
                         >
                           {localizeUi("ui.longTermMemory.memoryvault.memoryOptions")}
                         </Button>
@@ -4282,7 +4322,7 @@ export default function MemoryVault({
                                   </div>
                                   <div className="flex flex-wrap gap-2">
                                     <input
-                                      className={`${inputClass} min-w-0 flex-1 basis-40`}
+                                      className={`${inputClass} min-w-0 flex-1 basis-[min(100%,10rem)]`}
                                       value={keywordInput}
                                       onChange={(event) => setKeywordInput(event.target.value)}
                                       onKeyDown={(event) => {
@@ -4306,6 +4346,7 @@ export default function MemoryVault({
                                       <label className="flex min-h-11 items-center gap-2 text-sm">
                                         <input
                                           type="checkbox"
+                                          className="h-4 w-4"
                                           checked={draft.tags.includes("quest")}
                                           onChange={(event) =>
                                             update(
@@ -4323,6 +4364,7 @@ export default function MemoryVault({
                                       <label className="flex min-h-11 items-center gap-2 text-sm">
                                         <input
                                           type="checkbox"
+                                          className="h-4 w-4"
                                           checked={draft.tags.includes("anchor")}
                                           onChange={(event) =>
                                             update(

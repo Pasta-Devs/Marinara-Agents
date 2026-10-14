@@ -1,114 +1,23 @@
 import assert from "node:assert/strict";
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { fileURLToPath } from "node:url";
+import { ltmClientRoot, ltmSourcePaths } from "./long-term-memory-source-paths.mjs";
 
-const workspace = readFileSync(
-  new URL(
-    "../packages/long-term-memory/src/engine/packages/client/src/features/long-term-memory/SourcesWorkspace.tsx",
-    import.meta.url,
-  ),
-  "utf8",
-);
-const navigation = readFileSync(
-  new URL(
-    "../packages/long-term-memory/src/engine/packages/client/src/features/long-term-memory/LongTermMemoryNavigation.tsx",
-    import.meta.url,
-  ),
-  "utf8",
-);
-const interop = readFileSync(
-  new URL(
-    "../packages/long-term-memory/src/engine/packages/server/src/services/long-term-memory/interop.ts",
-    import.meta.url,
-  ),
-  "utf8",
-);
-const detail = readFileSync(
-  new URL(
-    "../packages/long-term-memory/src/engine/packages/client/src/features/long-term-memory/LongTermMemoryDetail.tsx",
-    import.meta.url,
-  ),
-  "utf8",
-);
-const activity = readFileSync(
-  new URL(
-    "../packages/long-term-memory/src/engine/packages/client/src/features/long-term-memory/ActivityView.tsx",
-    import.meta.url,
-  ),
-  "utf8",
-);
-const lastInjectionSummary = readFileSync(
-  new URL(
-    "../packages/long-term-memory/src/engine/packages/client/src/features/long-term-memory/LastInjectionSummary.tsx",
-    import.meta.url,
-  ),
-  "utf8",
-);
-const settings = readFileSync(
-  new URL(
-    "../packages/long-term-memory/src/engine/packages/client/src/features/long-term-memory/MemorySettings.tsx",
-    import.meta.url,
-  ),
-  "utf8",
-);
-const vault = readFileSync(
-  new URL(
-    "../packages/long-term-memory/src/engine/packages/client/src/features/long-term-memory/MemoryVault.tsx",
-    import.meta.url,
-  ),
-  "utf8",
-);
-const targetPicker = readFileSync(
-  new URL(
-    "../packages/long-term-memory/src/engine/packages/client/src/features/long-term-memory/TargetPicker.tsx",
-    import.meta.url,
-  ),
-  "utf8",
-);
-const reviewQueue = readFileSync(
-  new URL(
-    "../packages/long-term-memory/src/engine/packages/client/src/features/long-term-memory/ReviewQueue.tsx",
-    import.meta.url,
-  ),
-  "utf8",
-);
-const api = readFileSync(
-  new URL(
-    "../packages/long-term-memory/src/engine/packages/client/src/features/long-term-memory/api.ts",
-    import.meta.url,
-  ),
-  "utf8",
-);
-const workspaceLayout = readFileSync(
-  new URL(
-    "../packages/long-term-memory/src/engine/packages/client/src/features/long-term-memory/LtmWorkspace.tsx",
-    import.meta.url,
-  ),
-  "utf8",
-);
-const sharedControls = readFileSync(
-  new URL(
-    "../packages/long-term-memory/src/engine/packages/client/src/features/long-term-memory/shared-controls.tsx",
-    import.meta.url,
-  ),
-  "utf8",
-);
-const types = readFileSync(
-  new URL(
-    "../packages/long-term-memory/src/engine/packages/client/src/features/long-term-memory/types.ts",
-    import.meta.url,
-  ),
-  "utf8",
-);
-const locale = JSON.parse(
-  readFileSync(
-    new URL(
-      "../packages/long-term-memory/src/engine/packages/client/src/features/long-term-memory/locales/en.json",
-      import.meta.url,
-    ),
-  ),
-);
+const workspace = readFileSync(ltmSourcePaths.sourcesWorkspace, "utf8");
+const navigation = readFileSync(ltmSourcePaths.navigation, "utf8");
+const interop = readFileSync(ltmSourcePaths.interop, "utf8");
+const detail = readFileSync(ltmSourcePaths.detail, "utf8");
+const activity = readFileSync(ltmSourcePaths.activity, "utf8");
+const lastInjectionSummary = readFileSync(ltmSourcePaths.lastInjectionSummary, "utf8");
+const settings = readFileSync(ltmSourcePaths.settings, "utf8");
+const vault = readFileSync(ltmSourcePaths.vault, "utf8");
+const targetPicker = readFileSync(ltmSourcePaths.targetPicker, "utf8");
+const reviewQueue = readFileSync(ltmSourcePaths.reviewQueue, "utf8");
+const api = readFileSync(ltmSourcePaths.api, "utf8");
+const workspaceLayout = readFileSync(ltmSourcePaths.workspaceLayout, "utf8");
+const sharedControls = readFileSync(ltmSourcePaths.sharedControls, "utf8");
+const types = readFileSync(ltmSourcePaths.types, "utf8");
+const locale = JSON.parse(readFileSync(ltmSourcePaths.locale));
 
 assert.match(workspace, /const effectiveAction = retryContract\?\.action \?\? action/u);
 assert.match(workspace, /extract: contract\.action !== "refresh"/u);
@@ -334,7 +243,8 @@ assert.match(vault, /text-\[var\(--marinara-editor-muted\)\].*focus-visible:outl
 assert.match(vault, /mari-editor-action flex min-h-11/u);
 assert.match(vault, /ScopeTargetPicker/u);
 assert.match(vault, /data-ltm-vault-scope-search/u);
-assert.match(vault, /role="checkbox"/u);
+assert.match(vault, /role="radiogroup"[\s\S]*role="radio"/u);
+assert.doesNotMatch(vault, /role="checkbox"/u);
 assert.doesNotMatch(vault, /data-ltm-vault-selected-scope/u);
 assert.doesNotMatch(vault, /mari-editor-panel min-w-0 max-w-full space-y-3 p-3/u);
 assert.doesNotMatch(vault, /<details\s+data-ltm-memory-scope\s+className="[^"]*mari-editor-panel/u);
@@ -458,8 +368,17 @@ assert.equal(locale["ui.longTermMemory.memoryvault.sortBy"], "Sort by");
 assert.equal(locale["ui.longTermMemory.memoryvault.changeAvailability"], "Change availability");
 
 assert.match(detail, /TriangleAlert/u);
-assert.match(detail, /!text-\[var\(--marinara-editor-warning\)\]/u);
 assert.doesNotMatch(detail, /CircleAlert/u);
+assert.match(
+  detail,
+  /\[data-ltm-tab-focus\]:focus-visible \{\s*outline: 2px solid var\(--marinara-editor-focus-ring\);/u,
+);
+for (const rail of [navigation, settings, vault, targetPicker, workspace]) assert.match(rail, /data-ltm-tab-focus/u);
+assert.match(detail, /paddingBottom: "var\(--mari-safe-area-inset-bottom, env\(safe-area-inset-bottom\)\)"/u);
+assert.match(
+  settings,
+  /@container ltm-memory-settings \(min-width: 40rem\) \{[^}]*\}\s*\[data-ltm-prompt-template-grid\] \{\s*grid-template-columns: 12rem minmax\(0, 1fr\);/u,
+);
 assert.match(detail, /health !== "healthy" && !needsHealthAttention/u);
 assert.match(detail, /howToRepairVaultHealth[\s\S]*compact/u);
 assert.match(detail, /tone=\{healthNeedsDangerTone \? "danger" : "warning"\}/u);
@@ -594,9 +513,7 @@ assert.match(detail, /finishNavigationPrompt\("save"\)/u);
 assert.match(detail, /aria-modal="true"/u);
 assert.match(detail, /event\.key !== "Tab"/u);
 
-const localeRoot = fileURLToPath(
-  new URL("../packages/long-term-memory/src/engine/packages/client/src/features/long-term-memory/", import.meta.url),
-);
+const localeRoot = ltmClientRoot;
 const sourceFiles = [];
 const usedKeys = new Set();
 function collectSourceFiles(directory) {
@@ -631,13 +548,13 @@ assert.match(workspace, /data-ltm-source-operation-preview/u);
 assert.match(workspace, /data-ltm-source-operation-excluded/u);
 assert.match(workspace, /data-ltm-source-operation-result/u);
 assert.match(workspace, /data-ltm-source-mode/u);
-assert.match(workspace, /const sourceCheckboxClass = "size-6 shrink-0 accent-/u);
+assert.match(workspace, /const sourceCheckboxClass = "h-4 w-4 shrink-0 accent-/u);
 assert.match(workspace, /linked\.isError[\s\S]*linkedMemoriesCouldNotLoad/u);
 assert.match(workspace, /!linked\.data \|\| linked\.isError \|\| !previewed/u);
 assert.match(workspace, /tone === "danger"[\s\S]*var\(--destructive\)/u);
 assert.match(workspace, /className="hidden items-start gap-1 md:flex"/u);
 assert.doesNotMatch(workspace, /group-hover:pointer-events-auto|transition-opacity/u);
-assert.match(workspace, /className="space-y-2 border-t border-\[var\(--border\)\] py-3 first:border-t-0"/u);
+assert.match(workspace, /className="space-y-2 border-t border-\[var\(--border\)\] py-3"/u);
 assert.match(workspace, /\[changeSource, onRequestedSourceHandled, requestedSource\]/u);
 assert.match(workspace, /importsAsMode/u);
 assert.equal(locale["ui.longTermMemory.sourcesworkspace.importsAsMode"], "Imports as {{mode}}");

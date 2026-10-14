@@ -29,6 +29,8 @@ export type SlurpDmParty = {
   concealed?: boolean;
   /** The one writing is the player: the answer may say what the talk did to the two of them ("us"). */
   us?: boolean;
+  /** "he/him", from the page's gender (`slpPronouns`). */
+  pronouns?: string;
 };
 
 /** The message fields the transcript reads. A subset of `SlurpMessage`. */
@@ -147,7 +149,7 @@ export function slurpDmRoleHeader(input: SlurpDmRoleInput & { history: readonly 
   } else if (input.writer === "creator") {
     const page = input.viewerPage;
     lines.push(
-      `You are ${at(input.creator)}, a Creator on Slurp. This is your private chat with ${at(input.viewer)}.`,
+      `You are ${at(input.creator)}, a Creator on Slurp${input.creator.pronouns ? ` (${input.creator.pronouns})` : ""}. This is your private chat with ${at(input.viewer)}.`,
       // Her partner is neither a fan nor a customer: nothing here is for sale to them (Drama, "your relationship").
       page?.partner
         ? `${viewer} is your ${page.partnerWord ?? "partner"}${page.concealed ? "" : ` and runs a Creator page on Slurp too (${at(page)})`}. This chat is just the two of you: talk to ${viewer} the way you talk to the person you are with, never as a fan or a customer. Nothing you send ${viewer} is for sale; what you share here is yours to give.`
@@ -175,7 +177,7 @@ export function slurpDmRoleHeader(input: SlurpDmRoleInput & { history: readonly 
       );
   } else {
     lines.push(
-      `You are ${at(input.viewer)}, a fan on Slurp. This is your private chat with ${at(input.creator)}, a Creator on Slurp.`,
+      `You are ${at(input.viewer)}, a fan on Slurp. This is your private chat with ${at(input.creator)}, a Creator on Slurp${input.creator.pronouns ? ` (${input.creator.pronouns})` : ""}.`,
     );
   }
 

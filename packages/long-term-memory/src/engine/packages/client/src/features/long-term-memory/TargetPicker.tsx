@@ -109,8 +109,8 @@ export function AvailabilityTabRail({
   return (
     <div
       data-ltm-availability-tabs
-      className="overflow-hidden border-y border-[var(--marinara-editor-divider)] bg-[var(--marinara-editor-control-bg)]"
-      style={{ containerType: "inline-size" }}
+      className="overflow-hidden border-y border-[var(--marinara-editor-divider)]"
+      style={{ containerType: "inline-size", backgroundColor: "var(--marinara-editor-control-bg)" }}
     >
       <style>{`
         [data-ltm-availability-tablist] {
@@ -184,7 +184,8 @@ export function AvailabilityTabRail({
               tabIndex={active ? 0 : -1}
               data-ltm-availability-tab={kind}
               data-active={active}
-              className="mari-editor-tab flex min-h-11 min-w-0 items-center justify-center rounded-md border border-[var(--marinara-editor-divider)] px-1 text-[0.6875rem] font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--marinara-editor-focus-ring)]"
+              data-ltm-tab-focus
+              className="mari-editor-tab flex min-h-11 min-w-0 items-center justify-center rounded-md border border-[var(--marinara-editor-divider)] px-1 text-[0.6875rem] font-semibold transition-colors"
               onClick={() => setActiveSection(kind)}
               onKeyDown={(event) => handleTabKey(event, index)}
             >
@@ -229,7 +230,7 @@ export function AvailabilityTabRail({
                   data-ltm-availability-target={`${activeKind}:${target.id}`}
                   data-selected={selected ? "true" : "false"}
                   aria-pressed={selected}
-                  className="mari-editor-action mari-editor-action--compact flex min-h-11 w-full items-center gap-2 rounded-none border-x-0 border-t-0 px-3 py-2 text-left text-sm last:border-b-0 data-[selected=true]:bg-[var(--primary)]/10"
+                  className={`mari-editor-action mari-editor-action--compact flex min-h-11 w-full items-center gap-2 rounded-none border-t-0 px-3 py-2 text-left text-sm last:border-b-0 ${selected ? "bg-[var(--primary)]/10" : ""}`}
                   onClick={() => onToggle(activeKind, target.id)}
                 >
                   <Check
@@ -328,7 +329,8 @@ export function TargetPicker({
       <div
         id={listId}
         role="list"
-        className="max-h-52 overflow-y-auto rounded-md border border-[var(--marinara-editor-divider)] bg-[var(--marinara-editor-control-bg)]"
+        className="max-h-52 overflow-y-auto rounded-md border border-[var(--marinara-editor-divider)]"
+        style={{ backgroundColor: "var(--marinara-editor-control-bg)" }}
       >
         {filtered.length ? (
           filtered.map((target, index) => (
@@ -341,7 +343,7 @@ export function TargetPicker({
               <button
                 id={`${listId}-${target.kind}-${target.id}`}
                 type="button"
-                className="mari-editor-action mari-editor-action--compact flex min-h-11 w-full items-center border-x-0 border-t-0 px-3 py-2 text-left last:border-b-0"
+                className="mari-editor-action mari-editor-action--compact flex min-h-11 w-full items-center border-t-0 px-3 py-2 text-left last:border-b-0"
                 onMouseDown={(event) => event.preventDefault()}
                 onClick={() => select(target)}
               >

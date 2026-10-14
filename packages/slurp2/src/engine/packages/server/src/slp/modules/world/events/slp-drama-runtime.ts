@@ -17,6 +17,7 @@
  */
 import { slpRomancePairAllowed } from "../../../../../../shared/src/slp/slp-creator-steering.js";
 import { hash } from "../../projects/slp-project.js";
+import { slpDramaPlayerWords, slpDramaRoleWords, slpDramaText } from "./slp-drama-words.js";
 import {
   slpDramaCouplePairs,
   type SlpDrama,
@@ -189,28 +190,6 @@ const active = <T extends { endedAt: string | null }>(entry: T) => entry.endedAt
 const pairKey = (kind: string, a: string, b: string) => `${kind}:${[a, b].sort().join("|")}`;
 const iso = (ms: number) => new Date(ms).toISOString();
 
-/**
- * Words about the player in pack text, from their page's gender: "{you-bf}" is bf, gf or partner,
- * "{you-man}" man, girl or one, "{you-him}", "{you-he}", "{you-boy}". None: the neutral words.
- */
-export function slpDramaPlayerWords(player: Pick<SlpDramaCreator, "gender"> | undefined): Record<string, string> {
-  const gender = player?.gender;
-  const pick = (male: string, female: string, other: string) =>
-    gender === "male" ? male : gender === "female" ? female : other;
-  return {
-    "you-bf": pick("bf", "gf", "partner"),
-    "you-man": pick("man", "girl", "one"),
-    "you-boy": pick("boy", "girl", "one"),
-    "you-him": pick("him", "her", "them"),
-    "you-he": pick("he", "she", "they"),
-  };
-}
-
-/** `{role}` in pack text becomes that role's name. Unknown roles stay as they are. */
-export function slpDramaText(text: string, names: Readonly<Record<string, string>>): string {
-  return text.replace(/\{([a-z][a-z0-9-]*)\}/gu, (whole, role: string) => names[role] ?? whole);
-}
-
 // ─── Casting ────────────────────────────────────────────────────────────────────────────────────
 
 function fits(
@@ -379,8 +358,12 @@ export function slpAdvanceDrama(
   let jobs = [...state.jobs];
   const ended = { ...state.ended };
   const names = (cast: Readonly<Record<string, string>>) => ({
+    // Each role's name, and their he/she/they words ("{her:he}").
     ...Object.fromEntries(
-      Object.entries(cast).flatMap(([key, id]) => (live.get(id) ? [[key, live.get(id)!.name]] : [])),
+      Object.entries(cast).flatMap(([key, id]) => {
+        const creator = live.get(id);
+        return creator ? [[key, creator.name], ...Object.entries(slpDramaRoleWords(key, creator))] : [];
+      }),
     ),
     ...slpDramaPlayerWords(
       Object.values(cast)

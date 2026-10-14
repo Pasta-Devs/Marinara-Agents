@@ -91,6 +91,8 @@ const INTENDED_DELTAS: Record<string, [string, string][]> = {
     ["appearance: string;", ""],
     ["wardrobe: string;", ""],
     ["locations: string;", ""],
+    // 0.3.40: lingerie or briefs, from gender unless overridden.
+    ["clothingStyle: SlpClothingStyle;", ""],
     ["page: SlpCreatorPage | null;", ""],
   ],
   // Stage and profile schemas: the same Slurp-only fields, plus the Creator Page.
@@ -98,6 +100,7 @@ const INTENDED_DELTAS: Record<string, [string, string][]> = {
     ['appearance: z.string().trim().max(2000).default(""),', ""],
     ['wardrobe: z.string().trim().max(2000).default(""),', ""],
     ['locations: z.string().trim().max(2000).default(""),', ""],
+    ['clothingStyle: z.enum(SLP_CLOTHING_STYLES).default("auto"),', ""],
   ],
   slpStageProfileDraftRequestSchema: [["z.object(noodleStageProfileShape)", "noodleStageProfileSchema"]],
   slpAccountProfileSettingsSchema: [

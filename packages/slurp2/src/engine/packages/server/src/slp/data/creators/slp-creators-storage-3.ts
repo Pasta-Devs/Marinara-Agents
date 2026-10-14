@@ -328,6 +328,7 @@ export function createCreatorsStorage3(context: SlurpStorageContext) {
             },
             wardrobe: account.settings.stage?.wardrobe ?? "",
             locations: account.settings.stage?.locations ?? "",
+            clothingStyle: account.settings.stage?.clothingStyle ?? "auto",
             access: account.settings.privacy.access,
             autoPosting:
               currentSource && !(account.kind === "persona" && account.sourceKind === "persona")

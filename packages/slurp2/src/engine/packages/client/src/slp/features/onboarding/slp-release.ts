@@ -1,5 +1,5 @@
 // The splash screen needs the shipped version and its public notes inside the client bundle.
-export const SLURP2_VERSION = "0.3.39";
+export const SLURP2_VERSION = "0.3.40";
 
 export interface Slurp2ReleaseEntry {
   version: string;
@@ -12,6 +12,14 @@ export interface Slurp2ReleaseEntry {
  * in-universe bullets per release (technical detail lives in CHANGELOG.md).
  */
 export const SLURP2_RELEASES: Slurp2ReleaseEntry[] = [
+  {
+    version: "0.3.40",
+    date: "2026-10-14",
+    notes: [
+      "Creators are he, she or they from their gender, in dramas, chats and scenes.",
+      "A new clothing style decides whether a spicy shoot is lingerie or briefs. Auto follows gender.",
+    ],
+  },
   {
     version: "0.3.39",
     date: "2026-10-14",
@@ -774,16 +782,6 @@ export const SLURP2_RELEASES: Slurp2ReleaseEntry[] = [
       "New conversations start as strangers, not friends.",
       "Creators reply to new messages within the hour.",
     ],
-  },
-  {
-    version: "0.2.3",
-    date: "2026-09-21",
-    notes: ["New Deep details in every post's menu: see the plan and everything behind a post."],
-  },
-  {
-    version: "0.2.2",
-    date: "2026-09-21",
-    notes: ["Every persona now sees every Creator."],
   },
 ];
 

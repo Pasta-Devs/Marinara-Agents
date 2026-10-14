@@ -5,6 +5,7 @@
  * budget, like the sign-up scene. Nothing is locked here: the Engine claims the thread only when the
  * player starts the planned scene.
  */
+import { slpAccountGender, slpPronouns } from "../../../../../../shared/src/slp/slp-gender.js";
 import type { APIProvider } from "@marinara-engine/shared";
 import { jsonrepair } from "jsonrepair";
 import type { SlpAccount } from "../../../../../../shared/src/slp/slp-social.types.js";
@@ -110,6 +111,7 @@ export async function planSlpRoleplayScene(
       handle: creator.handle,
       bio: creator.bio ?? "",
       stageVoice: creator.settings.privacy.stagePersonality ?? "",
+      pronouns: slpPronouns(slpAccountGender(creator)),
     },
     contentMenu: await resolveSlurpCreatorMenu(db, creator.id).catch(() => ""),
     flavourBrief: await resolveSlurpCreatorFlavour(db, {

@@ -3,6 +3,7 @@ import {
   SLP_LOCKED_TEASER_MAX_LENGTH,
   type SlpCreatorGenerationRequest,
 } from "../../../../../shared/src/slp/slp-social-generation.schema.js";
+import { slpAccountGender, slpPronouns, slpWear } from "../../../../../shared/src/slp/slp-gender.js";
 import {
   type SlpAccount,
   type SlpCreatorManagedPost,
@@ -64,7 +65,8 @@ const NOODLER_FORMAT_PROMPTS: Record<SlpCreatorContentFormat, string> = {
 };
 
 export type SlurpPostPromptInput = {
-  account: Pick<SlpAccount, "displayName" | "handle" | "bio">;
+  /** `settings` carries the page's gender: pronouns, and what the clothing style `auto` means. */
+  account: Pick<SlpAccount, "displayName" | "handle" | "bio"> & { settings?: unknown };
   stagePersonality: string;
   /** The Creator's private content menu. See `slurp-post-guidance.ts`. */
   contentMenu?: string;
@@ -314,13 +316,17 @@ export function buildNoodlerPostMessages(input: SlurpPostPromptInput): ChatMessa
     `Handle: @${protect(input.account.handle)}`,
     `Bio: ${protect(input.account.bio) || "No bio provided."}`,
     `Stage voice: ${protect(input.stagePersonality) || "No additional stage voice provided."}`,
+    `Pronouns: ${slpPronouns(slpAccountGender(input.account))}`,
+    `Clothing style: ${slpWear(slpAccountGender(input.account), input.stageFacts?.clothingStyle)}`,
     // Stage facts, not a character card. These are what this page is actually made of: the same
     // body in every picture, clothes that are hers, and places she is repeatedly in. Without them
     // the model reinvents an average person each post, which is what made every Creator read the
     // same way.
     ...(input.stageFacts?.appearance?.trim() ? [`Appearance: ${protect(input.stageFacts.appearance)}`] : []),
     ...(input.stageFacts?.wardrobe?.trim() ? [`Usual wardrobe: ${protect(input.stageFacts.wardrobe)}`] : []),
-    ...(input.stageFacts?.locations?.trim() ? [`Where her life happens: ${protect(input.stageFacts.locations)}`] : []),
+    ...(input.stageFacts?.locations?.trim()
+      ? [`Where their life happens: ${protect(input.stageFacts.locations)}`]
+      : []),
     ...(input.contentMenu?.trim()
       ? [
           `Content menu (private; what this Creator offers and will not do, never quoted): ${protect(input.contentMenu)}`,

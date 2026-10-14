@@ -28,6 +28,7 @@ import {
 import type { SlurpCanonAnchors } from "../feed/slp-post-beat.js";
 import { SLURP_NEVER_PATTERN } from "../feed/slp-life-moments.js";
 import { slurpWeightedPick } from "../feed/slp-weighted.js";
+import type { SlpWear } from "../../../../../shared/src/slp/slp-gender.js";
 
 /** What is known about one Creator for spice decisions. */
 export type SlurpSpiceCreator = {
@@ -37,6 +38,8 @@ export type SlurpSpiceCreator = {
   turnOns: readonly string[];
   hardNoes: readonly string[];
   anchors?: SlurpCanonAnchors | null;
+  /** What they wear (`slpWear`): a masculine Creator's "lingerie" is briefs. Absent: feminine, as before. */
+  wear?: SlpWear;
 };
 
 // --- Words ---------------------------------------------------------------------------------------
@@ -145,6 +148,33 @@ const KINDS: readonly SpiceKind[] = [
     moment: "having sex with {partner}",
   },
 ];
+
+/**
+ * The lingerie kind for a Creator who does not wear lingerie (user, 2026-10-14: male Creators kept
+ * getting bra-and-panties shoots). The id and label stay, so the player's learned taste still counts.
+ */
+const WEAR_KINDS: Record<Exclude<SlpWear, "feminine">, Record<string, Partial<SpiceKind>>> = {
+  masculine: {
+    lingerie: {
+      words: ["underwear", "briefs", "boxers", "jockstrap", "lingerie"],
+      line: "an underwear shoot, something new on and shown off properly",
+      tease: "the underwear set you have not shown yet",
+      moment: "posing in underwear, briefs",
+    },
+  },
+  neutral: {
+    lingerie: {
+      words: ["lingerie", "underwear", "lace", "briefs"],
+      line: "an underwear shoot, lingerie or briefs, whatever is yours, shown off properly",
+      tease: "the underwear set you have not shown yet",
+      moment: "posing in underwear",
+    },
+  },
+};
+
+/** A kind as this Creator wears it. */
+const worn = (kind: SpiceKind, wear: SlpWear | undefined): SpiceKind =>
+  wear && wear !== "feminine" ? { ...kind, ...WEAR_KINDS[wear][kind.id] } : kind;
 
 export const SLURP_SPICE_KIND_IDS = KINDS.map((kind) => kind.id);
 
@@ -266,11 +296,13 @@ export function slurpSpiceAngle(input: {
   // What the post is about: the post's level when locked, the Creator's ceiling when teased.
   const about = locked ? input.level : input.ceiling;
   const top = LEVEL_INDEX(about);
-  const kinds = KINDS.filter((kind) => LEVEL_INDEX(kind.min) <= top).filter(
-    (kind) =>
-      !kind.words.some((word) => blocked(word, input.creator, input.spice.never)) &&
-      !(kind.partnered && input.madeWith === null),
-  );
+  const kinds = KINDS.map((kind) => worn(kind, input.creator.wear))
+    .filter((kind) => LEVEL_INDEX(kind.min) <= top)
+    .filter(
+      (kind) =>
+        !kind.words.some((word) => blocked(word, input.creator, input.spice.never)) &&
+        !(kind.partnered && input.madeWith === null),
+    );
   if (!kinds.length) return null;
   const seed = input.creator.accountId;
   const lastKinds = input.recent.slice(0, 3).map((entry) => entry.kind);

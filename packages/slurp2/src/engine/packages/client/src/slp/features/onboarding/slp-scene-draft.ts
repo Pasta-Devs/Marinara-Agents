@@ -303,6 +303,8 @@ export function slpSceneStageProfile(draft: SlpSceneDraft, disclosureMode: SlpId
     appearance: draft.appearance.trim(),
     wardrobe: draft.wardrobe.trim(),
     locations: draft.locations.trim(),
+    // The sign-up scene does not ask; the profile editor sets it later.
+    clothingStyle: "auto" as const,
     disclosureMode,
     gender: draft.gender,
     tags: draft.tags,

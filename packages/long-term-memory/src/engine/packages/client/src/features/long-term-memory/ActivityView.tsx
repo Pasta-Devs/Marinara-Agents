@@ -951,7 +951,7 @@ export default function ActivityView({
                     />
                     {typeof threshold === "number" && Number.isFinite(threshold) ? (
                       <span
-                        className="absolute -inset-y-0.5 w-0.5 -translate-x-1/2 bg-[var(--foreground)]"
+                        className="absolute -top-0.5 -bottom-0.5 w-0.5 -translate-x-1/2 bg-[var(--foreground)]"
                         style={{ left: percent(threshold) }}
                       />
                     ) : null}
@@ -1517,7 +1517,8 @@ export default function ActivityView({
               return (
                 <li
                   key={event.id}
-                  className="grid grid-cols-[4.5rem_minmax(0,1fr)] gap-x-3 border-l-2 border-[var(--border)] pl-3"
+                  className="grid gap-x-3 border-l-2 border-[var(--border)] pl-3"
+                  style={{ gridTemplateColumns: "4.5rem minmax(0, 1fr)" }}
                 >
                   <time
                     dateTime={event.ts}
