@@ -6,8 +6,9 @@ import type {
 } from "../../../../../shared/src/features/agents/long-term-memory/schema.js";
 import { LTM_RECALL_STYLE_WEIGHTS } from "../../../../../shared/src/features/agents/long-term-memory/constants.js";
 import { LTM_RECALL_SCORE_THRESHOLD_CEILING } from "../../../../../shared/src/features/agents/long-term-memory/runtime-settings.js";
-import { errorMessage, invalidateLtmQueries, queryKeys, request, requestHost } from "../api";
+import { errorMessage, invalidateLtmQueries, queryKeys, request, requestHost, settingsQueryOptions } from "../api";
 import { Button, InfoPopover, NumberField, StatusSurface, inputClass } from "../shared-controls";
+import { nextTabIndex } from "../tab-keys";
 import type { LongTermMemoryDestinationProps } from "../types";
 import ActivityView from "./ActivityView";
 import { ExtractionPromptTemplates } from "./ExtractionPromptTemplates";
@@ -192,10 +193,7 @@ export default function MemorySettings({
   const verbosityLabelId = useId();
   const extractionConnectionLabelId = useId();
   const queryClient = useQueryClient();
-  const global = useQuery({
-    queryKey: queryKeys.settings,
-    queryFn: () => request<LtmGlobalSettings>("/settings"),
-  });
+  const global = useQuery(settingsQueryOptions);
   const extraction = useQuery({
     queryKey: queryKeys.extractionSettings,
     queryFn: () => request<LtmExtractionSettingsPatch>("/extraction-settings"),
@@ -349,7 +347,6 @@ export default function MemorySettings({
       setExtractionFormState(null);
       setSavedExtraction(null);
     },
-    refetch: () => Promise.all([global.refetch(), extraction.refetch()]),
     apply: (nextGlobalSettings: LtmGlobalSettings, nextExtractionSettings: LtmExtractionSettingsPatch) => {
       const nextGlobal = settingsForm(nextGlobalSettings);
       setGlobalForm(nextGlobal);
@@ -474,12 +471,8 @@ export default function MemorySettings({
             tabIndex={activeTab === tab.id ? 0 : -1}
             onClick={() => setActiveTab(tab.id)}
             onKeyDown={(event) => {
-              let next: number;
-              if (event.key === "ArrowRight") next = (index + 1) % settingsTabs.length;
-              else if (event.key === "ArrowLeft") next = (index - 1 + settingsTabs.length) % settingsTabs.length;
-              else if (event.key === "Home") next = 0;
-              else if (event.key === "End") next = settingsTabs.length - 1;
-              else return;
+              const next = nextTabIndex(event.key, index, settingsTabs.length);
+              if (next === null) return;
               event.preventDefault();
               setActiveTab(settingsTabs[next].id);
               document.getElementById(`settings-tab-${settingsTabs[next].id}`)?.focus();

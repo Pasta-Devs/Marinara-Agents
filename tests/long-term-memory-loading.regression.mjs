@@ -11,10 +11,12 @@ const testRun = (async () => {
   const maintenance = await readFile(ltmSourcePaths.maintenance, "utf8");
 
   assert.match(api, /export const ltmScopeTargetsKey = \(chatId: string \| null \| undefined\)/u);
-  assert.match(vault, /queryKey: ltmScopeTargetsKey\(props\.chatId\)/u);
-  assert.match(sources, /queryKey: ltmScopeTargetsKey\(props\.chatId\)/u);
-  assert.match(vault, /staleTime: 30_000/u);
-  assert.match(sources, /staleTime: 30_000/u);
+  assert.match(
+    api,
+    /export const scopeTargetsQueryOptions = \(chatId: string \| null \| undefined\) => \(\{\s+queryKey: ltmScopeTargetsKey\(chatId\),\s+staleTime: 30_000,/u,
+  );
+  assert.match(vault, /useQuery\(scopeTargetsQueryOptions\(props\.chatId\)\)/u);
+  assert.match(sources, /useQuery\(scopeTargetsQueryOptions\(props\.chatId\)\)/u);
 
   const previewBlock = sources.slice(
     sources.indexOf("const preview = useInfiniteQuery({"),

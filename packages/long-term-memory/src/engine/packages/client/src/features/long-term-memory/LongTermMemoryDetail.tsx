@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
   ArrowLeft,
@@ -24,12 +24,17 @@ import type {
 } from "./types";
 import { useLtmTranslation } from "./localization";
 import { Onboarding } from "./Onboarding";
+import MemoryVault from "./vault/MemoryVault";
+import ReviewQueue from "./review/ReviewQueue";
+import SourcesWorkspace from "./sources/SourcesWorkspace";
+import MemorySettings from "./settings/MemorySettings";
+import { confirm } from "./settings/settings-shared";
 
 const destinations = {
-  vault: lazy(() => import("./vault/MemoryVault")),
-  review: lazy(() => import("./review/ReviewQueue")),
-  sources: lazy(() => import("./sources/SourcesWorkspace")),
-  settings: lazy(() => import("./settings/MemorySettings")),
+  vault: MemoryVault,
+  review: ReviewQueue,
+  sources: SourcesWorkspace,
+  settings: MemorySettings,
 } as const;
 const destinationLabelKeys: Record<LongTermMemoryDestination, string> = {
   vault: "ui.longTermMemory.longtermmemorynavigation.memoryVault",
@@ -124,22 +129,13 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
         setNavigationPrompt(next);
       });
     }
-    const options = {
-      title: localizeUi("ui.longTermMemory.longtermmemorydetail.discardUnsavedChanges"),
-      message: localizeUi("ui.longTermMemory.longtermmemorydetail.unsavedChangesLostBeforeOpening", {
-        destination: next,
-      }),
-      confirmLabel: localizeUi("ui.longTermMemory.longtermmemorydetail.discardChanges"),
-      tone: "destructive" as const,
-    };
-    return props.confirmAction
-      ? await props.confirmAction(options)
-      : window.confirm(
-          localizeUi("ui.longTermMemory.longtermmemorydetail.confirmationWithMessage", {
-            title: options.title,
-            message: options.message,
-          }),
-        );
+    return confirm(
+      props,
+      localizeUi("ui.longTermMemory.longtermmemorydetail.discardUnsavedChanges"),
+      localizeUi("ui.longTermMemory.longtermmemorydetail.unsavedChangesLostBeforeOpening", { destination: next }),
+      localizeUi("ui.longTermMemory.longtermmemorydetail.discardChanges"),
+      true,
+    );
   };
   const finishNavigationPrompt = async (decision: "save" | "discard" | "stay") => {
     if (decision === "save") {
@@ -819,43 +815,33 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
                     openOnboardingRef.current = open;
                   }}
                 />
-                <Suspense
-                  fallback={
-                    <StatusSurface busy>
-                      {localizeUi("ui.longTermMemory.longtermmemorydetail.loadingDestination", {
-                        destination: destinationLabel(destination),
-                      })}
-                    </StatusSurface>
+                <Destination
+                  props={props}
+                  onDirtyChange={setDestinationDirty}
+                  onSaveRequest={(save) => {
+                    destinationSaveRef.current = save;
+                  }}
+                  onOpenMemory={openMemory}
+                  onOpenSources={openSources}
+                  onOpenVault={() => void selectDestination("vault")}
+                  onOpenReview={openReview}
+                  onOpenActivity={
+                    destination === "vault" ? (memoryId: string) => void openActivity(memoryId) : undefined
                   }
-                >
-                  <Destination
-                    props={props}
-                    onDirtyChange={setDestinationDirty}
-                    onSaveRequest={(save) => {
-                      destinationSaveRef.current = save;
-                    }}
-                    onOpenMemory={openMemory}
-                    onOpenSources={openSources}
-                    onOpenVault={() => void selectDestination("vault")}
-                    onOpenReview={openReview}
-                    onOpenActivity={
-                      destination === "vault" ? (memoryId: string) => void openActivity(memoryId) : undefined
-                    }
-                    openActivityRequest={openActivityRequest}
-                    openActivityMemoryId={openActivityMemoryId}
-                    onOpenActivityHandled={() => setOpenActivityRequest(0)}
-                    onRecoverCandidate={recoverCandidate}
-                    openedNoteId={openedNoteId}
-                    createMemoryRequest={createMemoryRequest}
-                    onCreateMemoryRequestHandled={() => setCreateMemoryRequest(null)}
-                    reviewSourceNoteId={reviewSourceNoteId}
-                    recoveryHandoff={recoveryHandoff}
-                    requestedSource={requestedSource}
-                    onRequestedSourceHandled={() => setRequestedSource(null)}
-                    selectedSource={selectedSource}
-                    onSourceChange={setSelectedSource}
-                  />
-                </Suspense>
+                  openActivityRequest={openActivityRequest}
+                  openActivityMemoryId={openActivityMemoryId}
+                  onOpenActivityHandled={() => setOpenActivityRequest(0)}
+                  onRecoverCandidate={recoverCandidate}
+                  openedNoteId={openedNoteId}
+                  createMemoryRequest={createMemoryRequest}
+                  onCreateMemoryRequestHandled={() => setCreateMemoryRequest(null)}
+                  reviewSourceNoteId={reviewSourceNoteId}
+                  recoveryHandoff={recoveryHandoff}
+                  requestedSource={requestedSource}
+                  onRequestedSourceHandled={() => setRequestedSource(null)}
+                  selectedSource={selectedSource}
+                  onSourceChange={setSelectedSource}
+                />
               </div>
             </div>
           </div>

@@ -1,5 +1,6 @@
 import type { LtmMode, LtmScope } from "../../../../../shared/src/features/agents/long-term-memory/schema.js";
 import type { SourceTab } from "../types";
+import { labelKeys, localizedLabel } from "../display-labels";
 import { type LtmTranslationFunction } from "../localization";
 import {
   normalizeLtmScope,
@@ -64,28 +65,10 @@ export type DestinationCategoryKind = "all" | Exclude<ScopeTargetKind, "all">;
 
 export const ALL_LTM_MODES: LtmMode[] = ["conversation", "roleplay", "game"];
 
-export function chatModeLabel(mode: LtmMode, localizeUi: LtmTranslationFunction) {
-  const labels: Record<LtmMode, string> = {
-    conversation: "ui.longTermMemory.sourcesworkspace.conversation",
-    roleplay: "ui.longTermMemory.sourcesworkspace.roleplay",
-    game: "ui.longTermMemory.sourcesworkspace.game",
-  };
-  return localizeUi(labels[mode]);
-}
-
 export const sourceCheckboxClass = "h-4 w-4 shrink-0 accent-[var(--primary)] [--primary:var(--marinara-editor-accent)]";
-
-export function modeName(mode: LtmMode, localizeUi: LtmTranslationFunction) {
-  const labels: Record<LtmMode, string> = {
-    conversation: "ui.longTermMemory.sourcesworkspace.conversation",
-    roleplay: "ui.longTermMemory.sourcesworkspace.roleplay",
-    game: "ui.longTermMemory.sourcesworkspace.game",
-  };
-  return localizeUi(labels[mode]);
-}
 
 export function sourceModeLabel(mode: LtmMode, localizeUi: LtmTranslationFunction) {
   return localizeUi("ui.longTermMemory.sourcesworkspace.importsAsMode", {
-    mode: modeName(mode, localizeUi),
+    mode: localizedLabel(mode, localizeUi, labelKeys.mode),
   });
 }

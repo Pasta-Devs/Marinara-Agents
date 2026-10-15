@@ -3524,6 +3524,12 @@ async function main() {
         const settingsRefetch = resetPage.waitForRequest(
           (request) => request.method() === "GET" && new URL(request.url()).pathname.endsWith("/settings"),
         );
+        // #1377: the invalidation already refetches the active settings query, so a reset reads them once.
+        let settingsReads = 0;
+        resetPage.on("request", (request) => {
+          if (request.method() === "GET" && new URL(request.url()).pathname.endsWith("/long-term-memory/settings"))
+            settingsReads += 1;
+        });
         await resetButton.click();
         await settingsRefetch;
         // Let the cleared forms re-render while the refetch is still held.
@@ -3538,6 +3544,7 @@ async function main() {
           })
           .waitFor({ timeout: 5000 });
         assert.equal(await resetButton.isDisabled(), false, "Reset is available again once the refetch resolves");
+        assert.equal(settingsReads, 1, "Reset reads the settings once");
         await resetPage.locator("#settings-tab-recall").click();
         assert.equal(
           await maxChunks.inputValue(),

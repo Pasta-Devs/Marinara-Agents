@@ -1,5 +1,9 @@
 # Long-Term Memory changelog
 
+## Unreleased
+
+- Switching between the Vault, Review, Sources and Settings screens no longer shows a brief "Loading" panel, because the screens ship in the one bundle the package already loads. Importing a backup, resetting memory settings and deleting all memory data now read each setting and the integrity report once instead of two or three times. Nothing else changes in what the screens show or how they behave. Internally the duplicated tab-key handling, scope labels, confirm dialog, availability copy and shared queries are now one copy each, and 155 unused interface strings were removed.
+
 ## 1.4.37 — 2026-10-15
 
 - Reorganised the Long-Term Memory screens without changing how they work. The Vault, Review queue, Sources and Settings screens each live in their own folder, and the setup guide and the Maintenance tab are components of their own. One visible difference is that the result of a Maintenance action now appears at the top of the Maintenance tab instead of below the tab bar, so it no longer shows on the other tabs and saving settings no longer replaces it.

@@ -10,7 +10,7 @@ import {
 import { errorMessage } from "../api";
 import { Button, StatusSurface } from "../shared-controls";
 import { type LtmTranslationFunction } from "../localization";
-import { AvailabilityTabRail, type PickerTarget } from "./TargetPicker";
+import { AvailabilityTabRail, availabilitySectionCopy, type PickerTarget } from "./TargetPicker";
 import { availabilityEntries, hasExplicitScope, modes, sameModes, sameScope } from "./vault-shared";
 import type { AvailabilityTargets } from "./vault-shared";
 import { Pill } from "./Pill";
@@ -291,52 +291,7 @@ export function MemoryAvailabilityWorkbench({
               branches={visibleAvailabilityTargets.branches}
               selectedIds={selectedIds}
               tablistLabel={localizeUi("ui.longTermMemory.memoryvault.memoryAvailability")}
-              sectionCopy={{
-                character: {
-                  label: localizeUi("ui.longTermMemory.memoryvault.character"),
-                  allLabel: localizeUi("ui.longTermMemory.memoryvault.allCharacters"),
-                  searchPlaceholder: localizeUi("ui.longTermMemory.memoryvault.searchCharacters"),
-                  emptyLabel: localizeUi("ui.longTermMemory.memoryvault.noMatchingCharacters"),
-                  accessibleLabel: (count) =>
-                    localizeUi("ui.longTermMemory.memoryvault.availabilitySectionSelected", {
-                      label: localizeUi("ui.longTermMemory.memoryvault.character"),
-                      count,
-                    }),
-                },
-                persona: {
-                  label: localizeUi("ui.longTermMemory.memoryvault.persona"),
-                  allLabel: localizeUi("ui.longTermMemory.memoryvault.allPersonas"),
-                  searchPlaceholder: localizeUi("ui.longTermMemory.memoryvault.searchPersonas"),
-                  emptyLabel: localizeUi("ui.longTermMemory.memoryvault.noMatchingPersonas"),
-                  accessibleLabel: (count) =>
-                    localizeUi("ui.longTermMemory.memoryvault.availabilitySectionSelected", {
-                      label: localizeUi("ui.longTermMemory.memoryvault.persona"),
-                      count,
-                    }),
-                },
-                chat: {
-                  label: localizeUi("ui.longTermMemory.memoryvault.chat"),
-                  allLabel: localizeUi("ui.longTermMemory.memoryvault.allChats"),
-                  searchPlaceholder: localizeUi("ui.longTermMemory.memoryvault.searchChats"),
-                  emptyLabel: localizeUi("ui.longTermMemory.memoryvault.noMatchingChats"),
-                  accessibleLabel: (count) =>
-                    localizeUi("ui.longTermMemory.memoryvault.availabilitySectionSelected", {
-                      label: localizeUi("ui.longTermMemory.memoryvault.chat"),
-                      count,
-                    }),
-                },
-                branch: {
-                  label: localizeUi("ui.longTermMemory.memoryvault.branch"),
-                  allLabel: localizeUi("ui.longTermMemory.memoryvault.allBranches"),
-                  searchPlaceholder: localizeUi("ui.longTermMemory.memoryvault.searchBranches"),
-                  emptyLabel: localizeUi("ui.longTermMemory.memoryvault.noMatchingBranches"),
-                  accessibleLabel: (count) =>
-                    localizeUi("ui.longTermMemory.memoryvault.availabilitySectionSelected", {
-                      label: localizeUi("ui.longTermMemory.memoryvault.branch"),
-                      count,
-                    }),
-                },
-              }}
+              sectionCopy={availabilitySectionCopy(localizeUi)}
               onToggle={toggle}
             />
           </div>

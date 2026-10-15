@@ -41,6 +41,13 @@ export const labelKeys = {
     roleplay: "ui.longTermMemory.sourcesworkspace.roleplay",
     game: "ui.longTermMemory.sourcesworkspace.game",
   },
+  scopeKind: {
+    all: "ui.longTermMemory.sourcesworkspace.all",
+    chat: "ui.longTermMemory.sourcesworkspace.chats",
+    branch: "ui.longTermMemory.sourcesworkspace.branches",
+    character: "ui.longTermMemory.sourcesworkspace.characters",
+    persona: "ui.longTermMemory.sourcesworkspace.personas",
+  },
   importance: {
     critical: "ui.longTermMemory.memoryvault.critical",
     major: "ui.longTermMemory.memoryvault.major",
@@ -129,6 +136,13 @@ export const labelKeys = {
 export function localizedLabel(value: string, localizeUi: LabelLocalizer, keys: Readonly<Record<string, string>>) {
   const key = keys[value];
   return key ? localizeUi(key) : humanizeLabel(value);
+}
+
+export type ScopeKind = keyof typeof labelKeys.scopeKind;
+
+/** The scope-picker tab rail: every kind in display order with its localized label. */
+export function scopeKindCategories(localizeUi: LabelLocalizer): Array<[ScopeKind, string]> {
+  return (Object.keys(labelKeys.scopeKind) as ScopeKind[]).map((kind) => [kind, localizeUi(labelKeys.scopeKind[kind])]);
 }
 
 export function memoryLabel(note: Pick<LtmNote, "title"> | null | undefined, untitledMemory: string) {

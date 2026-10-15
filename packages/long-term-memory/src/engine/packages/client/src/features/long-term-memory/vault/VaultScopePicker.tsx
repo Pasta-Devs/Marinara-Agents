@@ -2,8 +2,10 @@ import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { Check, Search } from "lucide-react";
 import { inputClass } from "../shared-controls";
 import { type LtmTranslationFunction } from "../localization";
-import { buildScopeMemoryPresence, uniqueById } from "../scope-targets";
-import type { Target, VaultScopeTargets } from "./vault-shared";
+import { scopeKindCategories } from "../display-labels";
+import { buildScopeMemoryPresence, uniqueById, type ScopeTargets } from "../scope-targets";
+import { nextTabIndex } from "../tab-keys";
+import type { Target } from "./vault-shared";
 
 export function VaultScopePicker({
   targets,
@@ -24,19 +26,13 @@ export function VaultScopePicker({
   };
   selectedId: string;
   currentIds: { chat?: string; branch?: string; character?: string; persona?: string };
-  scopeTargets?: VaultScopeTargets;
+  scopeTargets?: ScopeTargets;
   localizeUi: LtmTranslationFunction;
   onSelect: (target: Target) => void;
   variant?: "primary" | "secondary";
   allOptionLabel?: string;
 }) {
-  const categories = [
-    ["all", localizeUi("ui.longTermMemory.sourcesworkspace.all")],
-    ["chat", localizeUi("ui.longTermMemory.sourcesworkspace.chats")],
-    ["branch", localizeUi("ui.longTermMemory.sourcesworkspace.branches")],
-    ["character", localizeUi("ui.longTermMemory.sourcesworkspace.characters")],
-    ["persona", localizeUi("ui.longTermMemory.memoryvault.personas")],
-  ] as const;
+  const categories = scopeKindCategories(localizeUi);
   const [query, setQuery] = useState("");
   const [activeKind, setActiveKind] = useState<(typeof categories)[number][0]>("all");
   const flatTargets = uniqueById([
@@ -237,14 +233,9 @@ export function VaultScopePicker({
             className="mari-editor-tab min-h-11 min-w-0 rounded-md px-1 text-xs font-semibold"
             onClick={() => selectKind(kind)}
             onKeyDown={(event) => {
-              if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
+              const nextIndex = nextTabIndex(event.key, index, categories.length);
+              if (nextIndex === null) return;
               event.preventDefault();
-              const nextIndex =
-                event.key === "Home"
-                  ? 0
-                  : event.key === "End"
-                    ? categories.length - 1
-                    : (index + (event.key === "ArrowRight" ? 1 : -1) + categories.length) % categories.length;
               const nextKind = categories[nextIndex]![0];
               selectKind(nextKind);
               document.getElementById(`${pickerId}-${nextKind}`)?.focus();

@@ -3,14 +3,12 @@ import { createPortal } from "react-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Archive, ChevronRight, Ellipsis, FileText, Link2, Plus, Search, Trash2, X } from "lucide-react";
 import type {
-  LtmGlobalSettings,
   LtmBulkNoteResult,
   LtmLink,
   LtmMode,
   LtmNote,
   LtmNoteType,
   LtmScope,
-  LtmSourceDerivedMemoriesResponse,
   LtmStatus,
   LtmSubject,
   LtmRenameNoteSectionPreviewResponse,
@@ -30,11 +28,13 @@ import {
 import {
   errorMessage,
   invalidateLtmQueries,
-  ltmScopeTargetsKey,
+  derivedNotesQueryOptions,
   queryKeys,
   request,
   requestAllNotes,
   requestNotesByIds,
+  scopeTargetsQueryOptions,
+  settingsQueryOptions,
 } from "../api";
 import { Button, ClickSurface, IconButton, InfoPopover, inputClass, StatusSurface } from "../shared-controls";
 import type { LongTermMemoryDestinationProps } from "../types";
@@ -59,7 +59,7 @@ import { TargetPicker, type AvailabilityChatTarget, type PickerTarget } from "./
 import type { ScopeTargetLocalCharacter } from "../scope-targets";
 import { normalizeDetailName } from "./detail-name";
 import { availabilityEntries, hasExplicitScope, modes, sameScope, splitBulkAvailabilityTarget } from "./vault-shared";
-import type { AvailabilityTargets, Target, VaultScopeTargets } from "./vault-shared";
+import type { AvailabilityTargets, Target } from "./vault-shared";
 import { VaultScopePicker } from "./VaultScopePicker";
 import { MemoryAvailabilityWorkbench } from "./MemoryAvailabilityWorkbench";
 import { BulkAvailabilityWorkbench } from "./BulkAvailabilityWorkbench";
@@ -549,14 +549,7 @@ export default function MemoryVault({
     return () => onSaveRequest?.(null);
   });
 
-  const scopeTargets = useQuery({
-    queryKey: ltmScopeTargetsKey(props.chatId),
-    staleTime: 30_000,
-    queryFn: () =>
-      request<VaultScopeTargets>(
-        `/scope-targets?includeAllChats=true${props.chatId ? `&chatId=${encodeURIComponent(props.chatId)}` : ""}`,
-      ),
-  });
+  const scopeTargets = useQuery(scopeTargetsQueryOptions(props.chatId));
   useEffect(() => {
     if (!target && scopeTargets.isSuccess) {
       const currentChat = scopeTargets.data?.chats.find((chat) => chat.id === props.chatId);
@@ -666,10 +659,7 @@ export default function MemoryVault({
       return { displayed: primary.filter((note) => secondaryIds.has(note.id)), linkContext: primary };
     },
   });
-  const settings = useQuery({
-    queryKey: queryKeys.settings,
-    queryFn: () => request<LtmGlobalSettings>("/settings"),
-  });
+  const settings = useQuery(settingsQueryOptions);
   const noteEvents = useQuery({
     queryKey: [...queryKeys.activity, "note", draft?.id],
     enabled: Boolean(draft && !isNew),
@@ -746,9 +736,8 @@ export default function MemoryVault({
     });
   const dirty = Boolean(draft) && fingerprint(draft) !== saved;
   const sourceDerivedQuery = useQuery({
-    queryKey: [...queryKeys.notes, "source-derived", draft?.id],
+    ...derivedNotesQueryOptions(draft?.id ?? ""),
     enabled: draft?.type === "source" && !isNew,
-    queryFn: () => request<LtmSourceDerivedMemoriesResponse>(`/notes/${encodeURIComponent(draft!.id)}/derived`),
   });
   const sourceDerived = sourceDerivedQuery.data?.memories ?? [];
   const incomingLinks = draft

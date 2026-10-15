@@ -27,18 +27,18 @@ import {
   errorMessage,
   failedResponseError,
   invalidateLtmQueries,
-  ltmScopeTargetsKey,
   queryKeys,
   request,
   requestNotesByIds,
   requestRaw,
+  scopeTargetsQueryOptions,
 } from "../api";
 import { Button, InfoPopover, StatusSurface, inputClass } from "../shared-controls";
 import { humanizeLabel, labelKeys, localizedLabel, rejectionReasonLabels } from "../display-labels";
 import type { LongTermMemoryDestinationProps } from "../types";
+import { confirm } from "./settings-shared";
 import { selectLtmPluralForm, useLtmTranslation, type LtmTranslationFunction } from "../localization";
 import { LtmWorkspace, type LtmWorkspacePane } from "../LtmWorkspace";
-import type { ScopeTargets } from "../scope-targets";
 import {
   collectDebugNoteIds,
   deriveOperationStatus,
@@ -599,22 +599,6 @@ function isToday(timestamp: string) {
   );
 }
 
-async function confirm(
-  props: LongTermMemoryDestinationProps["props"],
-  title: string,
-  message: string,
-  confirmLabel: string,
-) {
-  if (props.confirmAction)
-    return props.confirmAction({
-      title,
-      message,
-      confirmLabel,
-      tone: "destructive",
-    });
-  return window.confirm(`${title}\n\n${message}`);
-}
-
 export default function ActivityView({
   props,
   onOpenMemory,
@@ -709,14 +693,7 @@ export default function ActivityView({
   const operations = useMemo(() => groupOperations(activity.data?.events ?? []), [activity.data]);
   // Reuse the same scope-targets lookup the Vault uses so a recall row can name its
   // source chat; the raw id remains the fallback for unknown or absent chats.
-  const scopeTargets = useQuery({
-    queryKey: ltmScopeTargetsKey(props.chatId),
-    staleTime: 30_000,
-    queryFn: () =>
-      request<ScopeTargets>(
-        `/scope-targets?includeAllChats=true${props.chatId ? `&chatId=${encodeURIComponent(props.chatId)}` : ""}`,
-      ),
-  });
+  const scopeTargets = useQuery(scopeTargetsQueryOptions(props.chatId));
   const chatLabel = useMemo(() => {
     const labels = new Map((scopeTargets.data?.chats ?? []).map((chat) => [chat.id, chat.label]));
     return (chatId: string) => labels.get(chatId) ?? chatId;
@@ -785,6 +762,7 @@ export default function ActivityView({
           localizeUi("ui.longTermMemory.activityview.clearActivityLog"),
           localizeUi("ui.longTermMemory.activityview.clearActivityLogDescription"),
           localizeUi("ui.longTermMemory.activityview.clearLog"),
+          true,
         ))
       )
         return;

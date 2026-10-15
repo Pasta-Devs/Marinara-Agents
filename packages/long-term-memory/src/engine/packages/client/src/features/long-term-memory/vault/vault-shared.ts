@@ -5,17 +5,12 @@ import {
   getLtmScopePersonaIds,
 } from "../../../../../shared/src/features/agents/long-term-memory/scope.js";
 import { humanizeLabel } from "../display-labels";
-import { type ScopeTargets } from "../scope-targets";
 import { type AvailabilityChatTarget, type AvailabilityTarget, type PickerTarget } from "./TargetPicker";
 
 export const modes: readonly LtmMode[] = ["conversation", "roleplay", "game"];
 
 export type Target = { id: string; label: string; scope?: LtmScope; comment?: string; chatName?: string | null };
 
-export type VaultScopeTargets = Omit<ScopeTargets, "chats"> & {
-  chats: Array<ScopeTargets["chats"][number] & { chatName?: string | null }>;
-  memoryPresence?: LtmScope[] | null;
-};
 export type AvailabilityTargets = {
   characters: AvailabilityTarget[];
   personas: AvailabilityTarget[];

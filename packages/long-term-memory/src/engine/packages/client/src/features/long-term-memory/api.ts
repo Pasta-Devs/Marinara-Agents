@@ -1,10 +1,13 @@
 import type { QueryClient, QueryKey } from "@tanstack/react-query";
 import type {
+  LtmGlobalSettings,
   LtmInteropPreviewResponse,
   LtmLorebookPreviewResponse,
+  LtmSourceDerivedMemoriesResponse,
   LtmSourceDetailsRequest,
   LtmSourceDetailsResponse,
 } from "../../../../shared/src/features/agents/long-term-memory/schema.js";
+import type { ScopeTargets } from "./scope-targets";
 
 export function mergeSourcePreviewPages(pages: LtmInteropPreviewResponse[] | undefined) {
   const last = pages?.at(-1);
@@ -94,6 +97,26 @@ export const queryKeys = {
 
 export const ltmScopeTargetsKey = (chatId: string | null | undefined) =>
   [...queryKeys.scopeTargets(chatId), "all-chats"] as const;
+
+/** One definition per shared query, so every screen reads and invalidates the same cache entry. */
+export const settingsQueryOptions = {
+  queryKey: queryKeys.settings,
+  queryFn: () => request<LtmGlobalSettings>("/settings"),
+};
+
+export const scopeTargetsQueryOptions = (chatId: string | null | undefined) => ({
+  queryKey: ltmScopeTargetsKey(chatId),
+  staleTime: 30_000,
+  queryFn: () =>
+    request<ScopeTargets>(
+      `/scope-targets?includeAllChats=true${chatId ? `&chatId=${encodeURIComponent(chatId)}` : ""}`,
+    ),
+});
+
+export const derivedNotesQueryOptions = (sourceNoteId: string) => ({
+  queryKey: [...queryKeys.notes, "source-derived", sourceNoteId] as const,
+  queryFn: () => request<LtmSourceDerivedMemoriesResponse>(`/notes/${encodeURIComponent(sourceNoteId)}/derived`),
+});
 
 function getAdminSecretHeader(): Record<string, string> {
   if (typeof window === "undefined") return {};
@@ -241,7 +264,12 @@ export async function fetchSourceDetails(
   return result;
 }
 
-/** Invalidations must name each affected resource rather than clearing the package cache. */
+/**
+ * Invalidations must name each affected resource rather than clearing the package cache, except
+ * where the whole vault is replaced (backup import, delete all): those pass `queryKeys.root` alone.
+ * The returned promise resolves once the active queries have refetched, so callers read the result
+ * from the cache instead of fetching again.
+ */
 export async function invalidateLtmQueries(client: QueryClient, keys: readonly QueryKey[]): Promise<void> {
   await Promise.all(keys.map((queryKey) => client.invalidateQueries({ queryKey })));
 }

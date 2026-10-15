@@ -1,6 +1,8 @@
 import { useId, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import { Check, Search, X } from "lucide-react";
 import { IconButton, inputClass } from "../shared-controls";
+import type { LtmTranslationFunction } from "../localization";
+import { nextTabIndex } from "../tab-keys";
 
 export type PickerTarget = {
   id: string;
@@ -22,6 +24,56 @@ export type AvailabilityChatTarget = AvailabilityTarget & {
   chatIds?: string[];
   members?: AvailabilityChatTarget[];
 };
+
+/** Section copy shared by the per-memory and bulk availability tab rails. */
+export function availabilitySectionCopy(localizeUi: LtmTranslationFunction) {
+  return {
+    character: {
+      label: localizeUi("ui.longTermMemory.memoryvault.character"),
+      allLabel: localizeUi("ui.longTermMemory.memoryvault.allCharacters"),
+      searchPlaceholder: localizeUi("ui.longTermMemory.memoryvault.searchCharacters"),
+      emptyLabel: localizeUi("ui.longTermMemory.memoryvault.noMatchingCharacters"),
+      accessibleLabel: (count: number) =>
+        localizeUi("ui.longTermMemory.memoryvault.availabilitySectionSelected", {
+          label: localizeUi("ui.longTermMemory.memoryvault.character"),
+          count,
+        }),
+    },
+    persona: {
+      label: localizeUi("ui.longTermMemory.memoryvault.persona"),
+      allLabel: localizeUi("ui.longTermMemory.memoryvault.allPersonas"),
+      searchPlaceholder: localizeUi("ui.longTermMemory.memoryvault.searchPersonas"),
+      emptyLabel: localizeUi("ui.longTermMemory.memoryvault.noMatchingPersonas"),
+      accessibleLabel: (count: number) =>
+        localizeUi("ui.longTermMemory.memoryvault.availabilitySectionSelected", {
+          label: localizeUi("ui.longTermMemory.memoryvault.persona"),
+          count,
+        }),
+    },
+    chat: {
+      label: localizeUi("ui.longTermMemory.memoryvault.chat"),
+      allLabel: localizeUi("ui.longTermMemory.memoryvault.allChats"),
+      searchPlaceholder: localizeUi("ui.longTermMemory.memoryvault.searchChats"),
+      emptyLabel: localizeUi("ui.longTermMemory.memoryvault.noMatchingChats"),
+      accessibleLabel: (count: number) =>
+        localizeUi("ui.longTermMemory.memoryvault.availabilitySectionSelected", {
+          label: localizeUi("ui.longTermMemory.memoryvault.chat"),
+          count,
+        }),
+    },
+    branch: {
+      label: localizeUi("ui.longTermMemory.memoryvault.branch"),
+      allLabel: localizeUi("ui.longTermMemory.memoryvault.allBranches"),
+      searchPlaceholder: localizeUi("ui.longTermMemory.memoryvault.searchBranches"),
+      emptyLabel: localizeUi("ui.longTermMemory.memoryvault.noMatchingBranches"),
+      accessibleLabel: (count: number) =>
+        localizeUi("ui.longTermMemory.memoryvault.availabilitySectionSelected", {
+          label: localizeUi("ui.longTermMemory.memoryvault.branch"),
+          count,
+        }),
+    },
+  };
+}
 
 export function AvailabilityTabRail({
   characters,
@@ -93,14 +145,9 @@ export function AvailabilityTabRail({
   );
   const panelId = `${railId}-panel`;
   const handleTabKey = (event: KeyboardEvent<HTMLButtonElement>, index: number) => {
-    if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
+    const nextIndex = nextTabIndex(event.key, index, sections.length);
+    if (nextIndex === null) return;
     event.preventDefault();
-    const nextIndex =
-      event.key === "Home"
-        ? 0
-        : event.key === "End"
-          ? sections.length - 1
-          : (index + (event.key === "ArrowRight" ? 1 : -1) + sections.length) % sections.length;
     const nextKind = sections[nextIndex]![0];
     setActiveSection(nextKind);
     requestAnimationFrame(() => document.getElementById(`${railId}-${nextKind}-tab`)?.focus({ preventScroll: true }));

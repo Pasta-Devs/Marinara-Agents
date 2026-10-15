@@ -1,4 +1,5 @@
 import { useEffect, useId, useLayoutEffect, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
+import { nextTabIndex } from "./tab-keys";
 
 export type LtmWorkspacePane = "navigator" | "workbench" | "inspector";
 
@@ -79,15 +80,9 @@ export function LtmWorkspace({
   }, [nextAvailablePane, onMobilePaneChange, tabPanes.length]);
 
   const handleTabKey = (event: KeyboardEvent<HTMLButtonElement>, pane: LtmWorkspacePane) => {
-    if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
+    const nextIndex = nextTabIndex(event.key, availablePanes.indexOf(pane), availablePanes.length);
+    if (nextIndex === null) return;
     event.preventDefault();
-    const index = availablePanes.indexOf(pane);
-    const nextIndex =
-      event.key === "Home"
-        ? 0
-        : event.key === "End"
-          ? availablePanes.length - 1
-          : (index + (event.key === "ArrowRight" ? 1 : -1) + availablePanes.length) % availablePanes.length;
     const next = availablePanes[nextIndex];
     if (!next) return;
     onMobilePaneChange(next);

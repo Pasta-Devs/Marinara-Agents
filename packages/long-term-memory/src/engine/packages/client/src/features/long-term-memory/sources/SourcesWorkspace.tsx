@@ -40,14 +40,16 @@ import {
   errorMessage,
   invalidateLtmQueries,
   fetchSourceDetails,
-  ltmScopeTargetsKey,
   mergeSourcePreviewPages,
   mergeLorebookPreviewPages,
   queryKeys,
   request,
+  scopeTargetsQueryOptions,
+  settingsQueryOptions,
 } from "../api";
 import { Button, ClickSurface, IconButton, InfoPopover, StatusSurface, inputClass } from "../shared-controls";
-import { humanizeLabel } from "../display-labels";
+import { humanizeLabel, labelKeys, localizedLabel } from "../display-labels";
+import { nextTabIndex } from "../tab-keys";
 import type { LongTermMemoryDestinationProps } from "../types";
 import { useLtmTranslation, type LtmTranslationFunction } from "../localization";
 import { LtmWorkspace } from "../LtmWorkspace";
@@ -60,7 +62,7 @@ import {
   subscribeLtmSourceTask,
   type LtmSourceTaskContract,
 } from "../source-task";
-import { buildScopeIndexes, type ScopeTargetChat, type ScopeTargets } from "../scope-targets";
+import { buildScopeIndexes, type ScopeTargetChat } from "../scope-targets";
 import {
   chatOnlyLtmScope,
   ltmModeForChatMode,
@@ -69,7 +71,6 @@ import { DEFAULT_LTM_IMPORTED_SOURCE_MODE } from "../../../../../shared/src/feat
 import {
   hasDestinationScopeCapacity,
   mergedDestinationScope,
-  modeName,
   sourceCheckboxClass,
   sourceModeLabel,
   targetDisplayLabel,
@@ -173,7 +174,7 @@ function sourceStatusLabel(row: PreviewRow, localizeUi: LtmTranslationFunction) 
 }
 
 function modeList(modes: readonly LtmMode[], localizeUi: LtmTranslationFunction) {
-  return modes.map((mode) => modeName(mode, localizeUi)).join(", ");
+  return modes.map((mode) => localizedLabel(mode, localizeUi, labelKeys.mode)).join(", ");
 }
 
 function entryStatusLabel(entry: LtmLorebookPreviewEntry, localizeUi: LtmTranslationFunction) {
@@ -220,14 +221,9 @@ function handleTabKey<T extends string>(
   selector: string,
 ) {
   const index = ids.indexOf(current);
-  if (index < 0 || !["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
+  const nextIndex = index < 0 ? null : nextTabIndex(event.key, index, ids.length);
+  if (nextIndex === null) return;
   event.preventDefault();
-  const nextIndex =
-    event.key === "Home"
-      ? 0
-      : event.key === "End"
-        ? ids.length - 1
-        : (index + (event.key === "ArrowRight" ? 1 : -1) + ids.length) % ids.length;
   const next = ids[nextIndex];
   void Promise.resolve(onChange(next)).then((changed) => {
     if (changed !== false)
@@ -352,18 +348,8 @@ export default function SourcesWorkspace({
           ? localizeUi("ui.longTermMemory.sourcesworkspace.sourceTaskFailed")
           : "";
 
-  const scopeTargets = useQuery({
-    queryKey: ltmScopeTargetsKey(props.chatId),
-    staleTime: 30_000,
-    queryFn: () =>
-      request<ScopeTargets>(
-        `/scope-targets?includeAllChats=true${props.chatId ? `&chatId=${encodeURIComponent(props.chatId)}` : ""}`,
-      ),
-  });
-  const settingsQuery = useQuery({
-    queryKey: queryKeys.settings,
-    queryFn: () => request<LtmGlobalSettings>("/settings"),
-  });
+  const scopeTargets = useQuery(scopeTargetsQueryOptions(props.chatId));
+  const settingsQuery = useQuery(settingsQueryOptions);
 
   const defaultAvailabilityMode: LtmMode =
     modeFilter !== "all"

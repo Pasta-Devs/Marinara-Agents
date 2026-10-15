@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { useQuery, useQueryClient, type QueryObserverResult } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Download, RotateCcw, Trash2, Upload } from "lucide-react";
 import type {
   LtmExtractionSettingsPatch,
@@ -42,7 +42,6 @@ const repairActions: Array<{
 type SettingsChannel = {
   /** Drops the loaded forms so the next load repopulates them. */
   clear: () => void;
-  refetch: () => Promise<[QueryObserverResult<LtmGlobalSettings>, QueryObserverResult<LtmExtractionSettingsPatch>]>;
   /** Loads freshly fetched settings into the forms as the saved baseline. */
   apply: (global: LtmGlobalSettings, extraction: LtmExtractionSettingsPatch) => void;
 };
@@ -91,6 +90,19 @@ export function MaintenancePanel({
     current: { notes: number; drafts: number; rejectedSuggestions: number };
   } | null>(null);
   const backupInput = useRef<HTMLInputElement>(null);
+
+  /** True when `key` was refetched at or after `since`; a failed or paused refetch leaves the old data in the cache. */
+  const refetchedSince = (key: readonly unknown[], since: number) => {
+    const state = queryClient.getQueryState(key);
+    return state?.status === "success" && state.dataUpdatedAt >= since;
+  };
+  /** The settings the awaited invalidation just refetched, or null when either refetch did not complete. */
+  const refreshedSettings = (since: number) => {
+    const succeeded = [queryKeys.settings, queryKeys.extractionSettings].every((key) => refetchedSince(key, since));
+    const global = queryClient.getQueryData<LtmGlobalSettings>(queryKeys.settings);
+    const extraction = queryClient.getQueryData<LtmExtractionSettingsPatch>(queryKeys.extractionSettings);
+    return succeeded && global && extraction ? { global, extraction } : null;
+  };
 
   const runRepair = async () => {
     if (!selectedActions.length) return;
@@ -381,29 +393,17 @@ export function MaintenancePanel({
     try {
       await request("/backup/import", "POST", backupPreview.backup);
       setBackupPreview(null);
-      await invalidateLtmQueries(queryClient, [
-        queryKeys.root,
-        queryKeys.settings,
-        queryKeys.extractionSettings,
-        queryKeys.notes,
-        queryKeys.review,
-        queryKeys.pendingDrafts,
-        queryKeys.rejectedSuggestions,
-        queryKeys.integrity,
-        queryKeys.status,
-        queryKeys.activity,
-        ...(props.chatId ? [queryKeys.lastInjection(props.chatId)] : []),
-      ]);
+      // The import replaces the whole vault, so everything cached is stale. The call waits for the
+      // active queries to refetch; the forms and the integrity report read that result below.
+      const startedAt = Date.now();
+      await invalidateLtmQueries(queryClient, [queryKeys.root]);
       setMessage(localizeUi("ui.longTermMemory.memorysettings.memoryBackupImported"));
-      const [[globalResult, extractionResult], integrityResult] = await Promise.all([
-        settings.refetch(),
-        integrity.refetch(),
-      ]);
-      if (!globalResult.isSuccess || !extractionResult.isSuccess || !integrityResult.isSuccess) {
+      const refreshed = refreshedSettings(startedAt);
+      if (!refreshed || !refetchedSince(queryKeys.integrity, startedAt)) {
         settings.clear();
         setMessage(localizeUi("ui.longTermMemory.memorysettings.backupImportedSettingsNotRefreshed"));
       } else {
-        settings.apply(globalResult.data, extractionResult.data);
+        settings.apply(refreshed.global, refreshed.extraction);
       }
     } catch (error) {
       setMessage(
@@ -431,16 +431,17 @@ export function MaintenancePanel({
     try {
       const response = await request<{ rebuild?: SettingsRebuildOutcome | null }>("/settings/reset", "POST");
       settings.clear();
+      const startedAt = Date.now();
       await invalidateLtmQueries(queryClient, [
         queryKeys.settings,
         queryKeys.extractionSettings,
         queryKeys.chatDefaults,
         queryKeys.status,
       ]);
-      // The cleared forms refill from the cached pre-reset settings while the refetch runs.
-      const [globalResult, extractionResult] = await settings.refetch();
-      if (globalResult.isSuccess && extractionResult.isSuccess)
-        settings.apply(globalResult.data, extractionResult.data);
+      // The cleared forms refill from the cached pre-reset settings while the invalidation's
+      // refetch runs; the forms then load what that refetch read.
+      const refreshed = refreshedSettings(startedAt);
+      if (refreshed) settings.apply(refreshed.global, refreshed.extraction);
       else settings.clear();
       if (response.rebuild?.status === "deferred") {
         setMessage(
@@ -478,18 +479,7 @@ export function MaintenancePanel({
     try {
       await request("/data", "DELETE");
       setBackupPreview(null);
-      await invalidateLtmQueries(queryClient, [
-        queryKeys.root,
-        queryKeys.notes,
-        queryKeys.review,
-        queryKeys.pendingDrafts,
-        queryKeys.rejectedSuggestions,
-        queryKeys.integrity,
-        queryKeys.status,
-        queryKeys.activity,
-        ...(props.chatId ? [queryKeys.lastInjection(props.chatId)] : []),
-      ]);
-      await integrity.refetch();
+      await invalidateLtmQueries(queryClient, [queryKeys.root]);
       setMessage(localizeUi("ui.longTermMemory.memorysettings.allMemoryDataDeleted"));
     } catch (error) {
       setMessage(

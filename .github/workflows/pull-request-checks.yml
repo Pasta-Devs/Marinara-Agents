@@ -144,6 +144,7 @@ jobs:
         run: |
           npx tsx tests/long-term-memory-scope-targets.regression.ts
           npx tsx tests/long-term-memory-scope-fallback-labels.regression.ts
+          npx tsx tests/long-term-memory-tab-keys.regression.ts
           npx tsx tests/long-term-memory-review-queue-ambiguous-link.regression.ts
           npx tsx tests/long-term-memory-source-task.regression.ts
           npx tsx tests/long-term-memory-source-pagination.regression.ts

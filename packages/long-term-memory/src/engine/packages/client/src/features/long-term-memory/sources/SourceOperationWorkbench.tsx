@@ -5,9 +5,8 @@ import type {
   LtmBulkNoteResult,
   LtmNoteTransferApplyResponse,
   LtmNoteTransferPreviewResponse,
-  LtmSourceDerivedMemoriesResponse,
 } from "../../../../../shared/src/features/agents/long-term-memory/schema.js";
-import { errorMessage, queryKeys, request } from "../api";
+import { derivedNotesQueryOptions, errorMessage, request } from "../api";
 import { Button, InfoPopover, StatusSurface, inputClass } from "../shared-controls";
 import { labelKeys, localizedLabel, noteTypeLabel } from "../display-labels";
 import type { LongTermMemoryDestinationProps } from "../types";
@@ -51,10 +50,7 @@ export function SourceOperationWorkbench({
   } | null>(null);
   const [busy, setBusy] = useState<"preview" | "apply" | null>(null);
   const [error, setError] = useState("");
-  const linked = useQuery({
-    queryKey: [...queryKeys.notes, "source-operation", sourceNoteId],
-    queryFn: () => request<LtmSourceDerivedMemoriesResponse>(`/notes/${encodeURIComponent(sourceNoteId)}/derived`),
-  });
+  const linked = useQuery(derivedNotesQueryOptions(sourceNoteId));
   const memories = linked.data?.memories ?? [];
   const selected = new Set(selectedLinkedIds);
   const selectedMemories = memories.filter((memory) => selected.has(memory.id));
@@ -64,10 +60,12 @@ export function SourceOperationWorkbench({
     id === sourceNoteId ? sourceTitle : (memories.find((memory) => memory.id === id)?.title ?? id);
 
   useEffect(() => {
-    if (!linked.data || initializedFor === sourceNoteId) return;
+    // The derived list is cached per source and shared with the Vault, so wait for this mount's
+    // read instead of seeding the selection from a list a later extraction may have changed.
+    if (!linked.data || initializedFor === sourceNoteId || !(linked.isFetchedAfterMount || linked.isError)) return;
     setSelectedLinkedIds(linked.data.memories.map((memory) => memory.id));
     setInitializedFor(sourceNoteId);
-  }, [initializedFor, linked.data, sourceNoteId]);
+  }, [initializedFor, linked.data, linked.isError, linked.isFetchedAfterMount, sourceNoteId]);
 
   const resetPreview = () => {
     setPreview(null);

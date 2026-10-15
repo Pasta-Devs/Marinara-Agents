@@ -1,7 +1,9 @@
 import { type KeyboardEvent, useEffect, useId, useRef, useState } from "react";
 import { Check, ChevronDown, Search } from "lucide-react";
 import { inputClass } from "../shared-controls";
+import { scopeKindCategories } from "../display-labels";
 import { useLtmTranslation } from "../localization";
+import { nextTabIndex } from "../tab-keys";
 import { targetDisplayLabel } from "./source-shared";
 import type { ScopeTarget, ScopeTargetKind } from "./source-shared";
 
@@ -36,13 +38,7 @@ export function SourceScopeCombobox({
   const listId = useId();
   const panelId = useId();
   const tablistId = useId();
-  const categories: Array<[ScopeTargetKind, string]> = [
-    ["all", localizeUi("ui.longTermMemory.sourcesworkspace.all")],
-    ["chat", localizeUi("ui.longTermMemory.sourcesworkspace.chats")],
-    ["branch", localizeUi("ui.longTermMemory.sourcesworkspace.branches")],
-    ["character", localizeUi("ui.longTermMemory.sourcesworkspace.characters")],
-    ["persona", localizeUi("ui.longTermMemory.sourcesworkspace.personas")],
-  ];
+  const categories = scopeKindCategories(localizeUi);
   const selectedTarget = targets.find((target) => target.id === value);
   const needle = query.trim().toLocaleLowerCase();
   const matches = (target: ScopeTarget) =>
@@ -106,14 +102,9 @@ export function SourceScopeCombobox({
     setHighlightedId(optionTargets[nextIndex]!.id);
   };
   const handleTabKey = (event: KeyboardEvent<HTMLButtonElement>, index: number) => {
-    if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
+    const nextIndex = nextTabIndex(event.key, index, categories.length);
+    if (nextIndex === null) return;
     event.preventDefault();
-    const nextIndex =
-      event.key === "Home"
-        ? 0
-        : event.key === "End"
-          ? categories.length - 1
-          : (index + (event.key === "ArrowRight" ? 1 : -1) + categories.length) % categories.length;
     selectKind(categories[nextIndex]![0], true);
   };
   const option = (target: ScopeTarget) => (

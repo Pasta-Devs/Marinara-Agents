@@ -2,10 +2,11 @@ import { type KeyboardEvent, useId, useMemo, useState } from "react";
 import { ChevronRight, Search, X } from "lucide-react";
 import type { LtmMode } from "../../../../../shared/src/features/agents/long-term-memory/schema.js";
 import { InfoPopover, inputClass } from "../shared-controls";
+import { labelKeys, localizedLabel, scopeKindCategories } from "../display-labels";
 import { useLtmTranslation } from "../localization";
+import { nextTabIndex } from "../tab-keys";
 import {
   ALL_LTM_MODES,
-  chatModeLabel,
   mergedDestinationScope,
   sourceCheckboxClass,
   sourceModeLabel,
@@ -43,20 +44,8 @@ export function DestinationScopePanel({
   const labelId = useId();
   const [activeKind, setActiveKind] = useState<DestinationCategoryKind>("all");
   const [query, setQuery] = useState("");
-  const categoryLabels: Record<DestinationCategoryKind, string> = {
-    all: localizeUi("ui.longTermMemory.sourcesworkspace.all"),
-    chat: localizeUi("ui.longTermMemory.sourcesworkspace.chats"),
-    branch: localizeUi("ui.longTermMemory.sourcesworkspace.branches"),
-    character: localizeUi("ui.longTermMemory.sourcesworkspace.characters"),
-    persona: localizeUi("ui.longTermMemory.sourcesworkspace.personas"),
-  };
-  const categories: Array<[DestinationCategoryKind, string]> = [
-    ["all", categoryLabels.all],
-    ["chat", categoryLabels.chat],
-    ["branch", categoryLabels.branch],
-    ["character", categoryLabels.character],
-    ["persona", categoryLabels.persona],
-  ];
+  const categories = scopeKindCategories(localizeUi);
+  const categoryLabels = Object.fromEntries(categories) as Record<DestinationCategoryKind, string>;
   const sortedTargets = useMemo(
     () => [...targets].sort((left, right) => left.label.localeCompare(right.label)),
     [targets],
@@ -86,14 +75,9 @@ export function DestinationScopePanel({
     if (target && !targetExceedsLimit(target)) onChange([...selectedIds, id]);
   };
   const handleCategoryKey = (event: KeyboardEvent<HTMLButtonElement>, index: number) => {
-    if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
+    const nextIndex = nextTabIndex(event.key, index, categories.length);
+    if (nextIndex === null) return;
     event.preventDefault();
-    const nextIndex =
-      event.key === "Home"
-        ? 0
-        : event.key === "End"
-          ? categories.length - 1
-          : (index + (event.key === "ArrowRight" ? 1 : -1) + categories.length) % categories.length;
     const nextKind = categories[nextIndex]![0];
     setActiveKind(nextKind);
     requestAnimationFrame(() =>
@@ -275,7 +259,7 @@ export function DestinationScopePanel({
                     }
                   }}
                 />
-                <span>{chatModeLabel(chatMode, localizeUi)}</span>
+                <span>{localizedLabel(chatMode, localizeUi, labelKeys.mode)}</span>
               </label>
             );
           })}
@@ -425,7 +409,7 @@ export function DestinationScopePanel({
       <p className="shrink-0 text-xs text-[var(--muted-foreground)]" data-ltm-import-mode-summary>
         {availabilityModes.length > 1
           ? `${localizeUi("ui.longTermMemory.memoryvault.availableIn")}: ${availabilityModes
-              .map((m) => chatModeLabel(m, localizeUi))
+              .map((m) => localizedLabel(m, localizeUi, labelKeys.mode))
               .join(", ")}`
           : mode === "all"
             ? source === "chats"
