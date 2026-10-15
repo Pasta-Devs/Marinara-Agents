@@ -5,7 +5,7 @@ import {
   ambiguousLinkChoiceTarget as display,
   ambiguousLinkDetails,
   replaceAmbiguousLinkTarget,
-} from "../packages/long-term-memory/src/engine/packages/client/src/features/long-term-memory/review-queue-ambiguous-link.ts";
+} from "../packages/long-term-memory/src/engine/packages/client/src/features/long-term-memory/review/review-queue-ambiguous-link.ts";
 
 const diagnostic = {
   code: "ambiguous_subject_link_target",

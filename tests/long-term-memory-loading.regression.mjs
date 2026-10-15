@@ -8,7 +8,7 @@ const testRun = (async () => {
   const vault = await readFile(ltmSourcePaths.vault, "utf8");
   const sources = await readFile(ltmSourcePaths.sourcesWorkspace, "utf8");
   const routes = await readFile(ltmSourcePaths.routes, "utf8");
-  const settings = await readFile(ltmSourcePaths.settings, "utf8");
+  const maintenance = await readFile(ltmSourcePaths.maintenance, "utf8");
 
   assert.match(api, /export const ltmScopeTargetsKey = \(chatId: string \| null \| undefined\)/u);
   assert.match(vault, /queryKey: ltmScopeTargetsKey\(props\.chatId\)/u);
@@ -60,7 +60,7 @@ const testRun = (async () => {
   assert.match(vault, /localCharacters\.isLoading && !localCharacters\.data/u);
   assert.match(vault, /localCharacters\.isError && !localCharacters\.data/u);
   assert.match(vault, /localCharacters\.refetch\(\)/u);
-  assert.equal((settings.match(/queryKeys\.localCharactersRoot/g) ?? []).length, 2);
+  assert.equal((maintenance.match(/queryKeys\.localCharactersRoot/g) ?? []).length, 2);
 
   console.log(
     "Long-Term Memory loading regression passed: scope loading stays separate from local-character discovery.",

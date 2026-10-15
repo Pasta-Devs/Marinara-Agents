@@ -1,7 +1,7 @@
 import type {
   LtmDraftMutation,
   LtmDraftReviewMutation,
-} from "../../../../shared/src/features/agents/long-term-memory/schema.js";
+} from "../../../../../shared/src/features/agents/long-term-memory/schema.js";
 
 export type AmbiguousLinkDiagnostic = LtmDraftReviewMutation["diagnostics"][number];
 export type AmbiguousLinkDetails = NonNullable<ReturnType<typeof ambiguousLinkDetails>>;

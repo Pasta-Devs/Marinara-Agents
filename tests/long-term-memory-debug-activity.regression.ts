@@ -9,7 +9,7 @@ import {
   groupOperations,
   humanizeDebugText,
   LTM_DEBUG_STALE_OPERATION_MS,
-} from "../packages/long-term-memory/src/engine/packages/client/src/features/long-term-memory/debug-activity.js";
+} from "../packages/long-term-memory/src/engine/packages/client/src/features/long-term-memory/settings/debug-activity.js";
 import english from "../packages/long-term-memory/src/engine/packages/client/src/features/long-term-memory/locales/en.json" with { type: "json" };
 import type { LtmDebugEvent } from "../packages/long-term-memory/src/engine/packages/shared/src/features/agents/long-term-memory/schema.js";
 

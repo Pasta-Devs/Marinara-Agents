@@ -1,0 +1,328 @@
+import { ChevronRight } from "lucide-react";
+import type { LtmMode, LtmNote } from "../../../../../shared/src/features/agents/long-term-memory/schema.js";
+import { Button, StatusSurface } from "../shared-controls";
+import { type LtmTranslationFunction } from "../localization";
+import { AvailabilityTabRail, type PickerTarget } from "./TargetPicker";
+import { availabilityEntries, modes, splitBulkAvailabilityTarget } from "./vault-shared";
+import type { AvailabilityTargets } from "./vault-shared";
+import { Pill } from "./Pill";
+
+function bulkAvailabilityTargetMatchesEntry(target: string, entry: Pick<PickerTarget, "kind" | "id">) {
+  const [kind, id] = splitBulkAvailabilityTarget(target);
+  return id === entry.id && (kind === "branch" ? entry.kind === "chat" : kind === entry.kind);
+}
+
+export function BulkAvailabilityWorkbench({
+  notes,
+  action,
+  selectedTargets,
+  modes: selectedModes,
+  availabilityTargets,
+  localizeUi,
+  modeLabel,
+  onActionChange,
+  onModesChange,
+  onTargetsChange,
+  onApply,
+  onCancel,
+}: {
+  notes: LtmNote[];
+  action: "add" | "remove";
+  selectedTargets: string[];
+  modes: LtmMode[];
+  availabilityTargets: AvailabilityTargets;
+  localizeUi: LtmTranslationFunction;
+  modeLabel: (mode: string) => string;
+  onActionChange: (action: "add" | "remove") => void;
+  onModesChange: (modes: LtmMode[]) => void;
+  onTargetsChange: (targets: string[]) => void;
+  onApply: () => void;
+  onCancel: () => void;
+}) {
+  const selectedIds = new Set(
+    selectedTargets.map((target) => {
+      const [kind, id] = splitBulkAvailabilityTarget(target);
+      return `${kind === "group" ? "chat" : kind}:${id}`;
+    }),
+  );
+  const hasChatRestriction = selectedTargets.some((target) => {
+    const [kind] = splitBulkAvailabilityTarget(target);
+    return kind === "group" || kind === "chat" || kind === "branch";
+  });
+  const hasBranchRestriction = selectedTargets.some((target) => splitBulkAvailabilityTarget(target)[0] === "branch");
+  if (!hasChatRestriction) selectedIds.add("chat:all");
+  if (!hasBranchRestriction) selectedIds.add("branch:all");
+  const selectTarget = (nextKind: "character" | "persona" | "chat" | "branch", nextId: string) => {
+    if (nextId === "all") {
+      const next = new Set(selectedTargets);
+      for (const selected of next) {
+        const [kind] = splitBulkAvailabilityTarget(selected);
+        if (nextKind === "chat" && (kind === "group" || kind === "chat" || kind === "branch")) next.delete(selected);
+        if (nextKind === "branch" && kind === "branch") next.delete(selected);
+      }
+      onTargetsChange([...next]);
+      return;
+    }
+    const chatTarget =
+      nextKind === "chat" ? availabilityTargets.chats.find((candidate) => candidate.id === nextId) : undefined;
+    const branchTarget =
+      nextKind === "branch" ? availabilityTargets.branches.find((candidate) => candidate.id === nextId) : undefined;
+    const selection =
+      nextKind === "chat" && chatTarget?.groupId ? `group:${chatTarget.groupId}` : `${nextKind}:${nextId}`;
+    const next = new Set(selectedTargets);
+    if (next.has(selection)) {
+      next.delete(selection);
+    } else {
+      const groupId = nextKind === "branch" ? branchTarget?.groupId : chatTarget?.groupId;
+      if (nextKind === "branch" && groupId) next.delete(`group:${groupId}`);
+      if (nextKind === "chat" && groupId) {
+        for (const selected of next) {
+          const [kind, id] = splitBulkAvailabilityTarget(selected);
+          if (
+            kind === "branch" &&
+            availabilityTargets.branches.some((branch) => branch.id === id && branch.groupId === groupId)
+          ) {
+            next.delete(selected);
+          }
+        }
+      }
+      next.add(selection);
+    }
+    onTargetsChange([...next]);
+  };
+  const selectedPlaceLabels = selectedTargets.map((target) => {
+    const [kind, id] = splitBulkAvailabilityTarget(target);
+    const candidate =
+      kind === "character"
+        ? availabilityTargets.characters.find((item) => item.id === id)
+        : kind === "persona"
+          ? availabilityTargets.personas.find((item) => item.id === id)
+          : kind === "branch"
+            ? availabilityTargets.branches.find((item) => item.id === id)
+            : availabilityTargets.chats.find((item) => item.id === id);
+    return { target, label: candidate?.label ?? id };
+  });
+  const outcomes = notes.map((note) => {
+    const places = availabilityEntries(note.scope, [], {
+      chat: localizeUi("ui.longTermMemory.memoryvault.unavailableChat"),
+      group: localizeUi("ui.longTermMemory.memoryvault.unavailableChat"),
+      character: localizeUi("ui.longTermMemory.memoryvault.unavailableCharacter"),
+      persona: localizeUi("ui.longTermMemory.memoryvault.unavailablePersona"),
+    });
+    const hasPlace = selectedTargets.some((target) =>
+      places.some((entry) => bulkAvailabilityTargetMatchesEntry(target, entry)),
+    );
+    const addsPlace = selectedTargets.some(
+      (target) => !places.some((entry) => bulkAvailabilityTargetMatchesEntry(target, entry)),
+    );
+    const remainingPlaces = places.filter(
+      (entry) => !selectedTargets.some((target) => bulkAvailabilityTargetMatchesEntry(target, entry)),
+    );
+    const matchingModes = selectedModes.filter((mode) => note.modes.includes(mode));
+    const changes =
+      action === "add"
+        ? Boolean(addsPlace || selectedModes.some((mode) => !note.modes.includes(mode)))
+        : Boolean(hasPlace || matchingModes.length);
+    const removesLastPlace = action === "remove" && hasPlace && remainingPlaces.length === 0;
+    const removesLastMode = action === "remove" && matchingModes.length === note.modes.length;
+    return {
+      note,
+      state: removesLastPlace || removesLastMode ? "invalid" : changes ? "ready" : "unchanged",
+    };
+  });
+  const ready = outcomes.some((outcome) => outcome.state === "ready");
+  return (
+    <section className="mari-editor-panel min-w-0 space-y-4 p-4" data-ltm-bulk-availability-workbench>
+      <header className="flex flex-wrap items-start justify-between gap-3 border-b border-[var(--border)] pb-3">
+        <div>
+          <h2 className="text-base font-semibold">
+            {localizeUi("ui.longTermMemory.memoryvault.bulkMemoryAvailability")}
+          </h2>
+          <p className="mt-1 text-xs text-[var(--muted-foreground)]">
+            {localizeUi("ui.longTermMemory.memoryvault.bulkAvailabilitySelected", {
+              count: notes.length,
+            })}
+          </p>
+        </div>
+        <div className="flex gap-2">
+          <Button onClick={onCancel}>{localizeUi("ui.longTermMemory.memoryvault.cancel")}</Button>
+          <Button primary disabled={!ready} onClick={onApply}>
+            {localizeUi("ui.longTermMemory.memoryvault.apply")}
+          </Button>
+        </div>
+      </header>
+      <fieldset className="space-y-2 border-b border-[var(--border)] pb-4">
+        <legend className="text-sm font-semibold">
+          {localizeUi("ui.longTermMemory.memoryvault.availabilityChange")}
+        </legend>
+        <div
+          className="flex flex-wrap gap-2"
+          role="group"
+          aria-label={localizeUi("ui.longTermMemory.memoryvault.availabilityChange")}
+          data-ltm-bulk-availability-action
+        >
+          <Button
+            aria-pressed={action === "add"}
+            onClick={() => onActionChange("add")}
+            className={action === "add" ? "bg-[var(--accent)]" : ""}
+          >
+            {localizeUi("ui.longTermMemory.memoryvault.addAvailability")}
+          </Button>
+          <Button
+            aria-pressed={action === "remove"}
+            onClick={() => onActionChange("remove")}
+            className={action === "remove" ? "bg-[var(--accent)]" : ""}
+          >
+            {localizeUi("ui.longTermMemory.memoryvault.removeAvailability")}
+          </Button>
+        </div>
+      </fieldset>
+      <fieldset className="space-y-2 border-b border-[var(--border)] pb-4">
+        <legend className="text-sm font-semibold">{localizeUi("ui.longTermMemory.memoryvault.chatModes")}</legend>
+        <p className="text-xs text-[var(--muted-foreground)]">
+          {localizeUi("ui.longTermMemory.memoryvault.modesEligibilityHelp")}
+        </p>
+        <div className="flex flex-wrap gap-3">
+          {modes.map((mode) => (
+            <label key={mode} className="flex min-h-11 items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                className="h-4 w-4"
+                checked={selectedModes.includes(mode)}
+                onChange={() =>
+                  onModesChange(
+                    selectedModes.includes(mode)
+                      ? selectedModes.filter((value) => value !== mode)
+                      : [...selectedModes, mode],
+                  )
+                }
+              />
+              {modeLabel(mode)}
+            </label>
+          ))}
+        </div>
+      </fieldset>
+      <section className="space-y-3">
+        <div>
+          <h3 className="text-sm font-semibold">{localizeUi("ui.longTermMemory.memoryvault.availableIn")}</h3>
+          <p className="text-xs text-[var(--muted-foreground)]">
+            {localizeUi("ui.longTermMemory.memoryvault.bulkAvailabilityHelp")}
+          </p>
+        </div>
+        {selectedPlaceLabels.length ? (
+          <div className="flex flex-wrap gap-1.5" data-ltm-availability-pills>
+            {selectedPlaceLabels.map(({ target, label }) => (
+              <Pill
+                key={target}
+                label={label}
+                onRemove={() => onTargetsChange(selectedTargets.filter((item) => item !== target))}
+              >
+                {label}
+              </Pill>
+            ))}
+          </div>
+        ) : (
+          <StatusSurface>
+            {localizeUi(
+              action === "add"
+                ? "ui.longTermMemory.memoryvault.bulkImplicitAllPlaces"
+                : "ui.longTermMemory.memoryvault.bulkNoPlacesSelected",
+            )}
+          </StatusSurface>
+        )}
+        <details data-ltm-availability-picker className="group">
+          <summary className="mari-editor-action inline-flex min-h-11 cursor-pointer list-none items-center gap-2 px-3 py-2 text-left text-sm font-semibold text-[var(--marinara-editor-text)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--ring)] [&::-webkit-details-marker]:hidden">
+            <span className="min-w-0 flex-1">
+              {localizeUi(
+                action === "add"
+                  ? "ui.longTermMemory.memoryvault.bulkAddMemoriesTo"
+                  : "ui.longTermMemory.memoryvault.bulkRemoveMemoriesFrom",
+              )}
+            </span>
+            <ChevronRight
+              aria-hidden="true"
+              size="0.875rem"
+              data-ltm-availability-chevron
+              className="shrink-0 transition-transform"
+            />
+          </summary>
+          <div className="border-t border-[var(--border)] p-3">
+            <AvailabilityTabRail
+              characters={availabilityTargets.characters}
+              personas={availabilityTargets.personas}
+              chats={availabilityTargets.chats}
+              branches={availabilityTargets.branches}
+              selectedIds={selectedIds}
+              tablistLabel={localizeUi("ui.longTermMemory.memoryvault.bulkMemoryAvailability")}
+              sectionCopy={{
+                character: {
+                  label: localizeUi("ui.longTermMemory.memoryvault.character"),
+                  allLabel: localizeUi("ui.longTermMemory.memoryvault.allCharacters"),
+                  searchPlaceholder: localizeUi("ui.longTermMemory.memoryvault.searchCharacters"),
+                  emptyLabel: localizeUi("ui.longTermMemory.memoryvault.noMatchingCharacters"),
+                  accessibleLabel: (count) =>
+                    localizeUi("ui.longTermMemory.memoryvault.availabilitySectionSelected", {
+                      label: localizeUi("ui.longTermMemory.memoryvault.character"),
+                      count,
+                    }),
+                },
+                persona: {
+                  label: localizeUi("ui.longTermMemory.memoryvault.persona"),
+                  allLabel: localizeUi("ui.longTermMemory.memoryvault.allPersonas"),
+                  searchPlaceholder: localizeUi("ui.longTermMemory.memoryvault.searchPersonas"),
+                  emptyLabel: localizeUi("ui.longTermMemory.memoryvault.noMatchingPersonas"),
+                  accessibleLabel: (count) =>
+                    localizeUi("ui.longTermMemory.memoryvault.availabilitySectionSelected", {
+                      label: localizeUi("ui.longTermMemory.memoryvault.persona"),
+                      count,
+                    }),
+                },
+                chat: {
+                  label: localizeUi("ui.longTermMemory.memoryvault.chat"),
+                  allLabel: localizeUi("ui.longTermMemory.memoryvault.allChats"),
+                  searchPlaceholder: localizeUi("ui.longTermMemory.memoryvault.searchChats"),
+                  emptyLabel: localizeUi("ui.longTermMemory.memoryvault.noMatchingChats"),
+                  accessibleLabel: (count) =>
+                    localizeUi("ui.longTermMemory.memoryvault.availabilitySectionSelected", {
+                      label: localizeUi("ui.longTermMemory.memoryvault.chat"),
+                      count,
+                    }),
+                },
+                branch: {
+                  label: localizeUi("ui.longTermMemory.memoryvault.branch"),
+                  allLabel: localizeUi("ui.longTermMemory.memoryvault.allBranches"),
+                  searchPlaceholder: localizeUi("ui.longTermMemory.memoryvault.searchBranches"),
+                  emptyLabel: localizeUi("ui.longTermMemory.memoryvault.noMatchingBranches"),
+                  accessibleLabel: (count) =>
+                    localizeUi("ui.longTermMemory.memoryvault.availabilitySectionSelected", {
+                      label: localizeUi("ui.longTermMemory.memoryvault.branch"),
+                      count,
+                    }),
+                },
+              }}
+              onToggle={selectTarget}
+            />
+          </div>
+        </details>
+      </section>
+      <div className="divide-y divide-[var(--border)] border-y border-[var(--border)]">
+        {outcomes.map(({ note, state }) => (
+          <div key={note.id} className="flex min-h-11 items-center justify-between gap-3 py-2 text-sm">
+            <span className="min-w-0 truncate">{note.title}</span>
+            <span
+              className={
+                state === "invalid" ? "text-xs text-[var(--destructive)]" : "text-xs text-[var(--muted-foreground)]"
+              }
+            >
+              {state === "ready"
+                ? localizeUi("ui.longTermMemory.memoryvault.ready")
+                : state === "unchanged"
+                  ? localizeUi("ui.longTermMemory.memoryvault.unchanged")
+                  : localizeUi("ui.longTermMemory.memoryvault.wouldRemoveFinalAvailability")}
+            </span>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}

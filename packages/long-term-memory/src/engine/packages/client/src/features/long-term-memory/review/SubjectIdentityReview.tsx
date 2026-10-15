@@ -4,10 +4,10 @@ import type {
   LtmExtractionDraft,
   LtmSubjectIdentityReview,
   LtmSubjectIdentityDecision,
-} from "../../../../shared/src/features/agents/long-term-memory/schema.js";
-import { errorMessage, invalidateLtmQueries, queryKeys, request } from "./api";
-import { Button, inputClass, StatusSurface } from "./shared-controls";
-import { useLtmTranslation } from "./localization";
+} from "../../../../../shared/src/features/agents/long-term-memory/schema.js";
+import { errorMessage, invalidateLtmQueries, queryKeys, request } from "../api";
+import { Button, inputClass, StatusSurface } from "../shared-controls";
+import { useLtmTranslation } from "../localization";
 
 type IdentityChoice = { name: string; action: "" } | LtmSubjectIdentityDecision;
 

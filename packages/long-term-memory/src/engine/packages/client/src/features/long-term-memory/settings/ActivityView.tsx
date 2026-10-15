@@ -22,7 +22,7 @@ import type {
   LtmExtractionDropReason,
   LtmNote,
   LtmStatusResponse,
-} from "../../../../shared/src/features/agents/long-term-memory/schema.js";
+} from "../../../../../shared/src/features/agents/long-term-memory/schema.js";
 import {
   errorMessage,
   failedResponseError,
@@ -32,13 +32,13 @@ import {
   request,
   requestNotesByIds,
   requestRaw,
-} from "./api";
-import { Button, InfoPopover, StatusSurface, inputClass } from "./shared-controls";
-import { humanizeLabel, labelKeys, localizedLabel, rejectionReasonLabels } from "./display-labels";
-import type { LongTermMemoryDestinationProps } from "./types";
-import { selectLtmPluralForm, useLtmTranslation, type LtmTranslationFunction } from "./localization";
-import { LtmWorkspace, type LtmWorkspacePane } from "./LtmWorkspace";
-import type { ScopeTargets } from "./scope-targets";
+} from "../api";
+import { Button, InfoPopover, StatusSurface, inputClass } from "../shared-controls";
+import { humanizeLabel, labelKeys, localizedLabel, rejectionReasonLabels } from "../display-labels";
+import type { LongTermMemoryDestinationProps } from "../types";
+import { selectLtmPluralForm, useLtmTranslation, type LtmTranslationFunction } from "../localization";
+import { LtmWorkspace, type LtmWorkspacePane } from "../LtmWorkspace";
+import type { ScopeTargets } from "../scope-targets";
 import {
   collectDebugNoteIds,
   deriveOperationStatus,

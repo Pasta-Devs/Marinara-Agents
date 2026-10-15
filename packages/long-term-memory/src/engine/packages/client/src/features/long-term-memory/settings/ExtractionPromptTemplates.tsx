@@ -1,11 +1,11 @@
 import { useEffect, useId, useState } from "react";
-import { DEFAULT_LTM_EXTRACTION_PROMPTS_BY_MODE } from "../../../../shared/src/features/agents/long-term-memory/constants.js";
+import { DEFAULT_LTM_EXTRACTION_PROMPTS_BY_MODE } from "../../../../../shared/src/features/agents/long-term-memory/constants.js";
 import type {
   LtmExtractionSettingsPatch,
   LtmMode,
-} from "../../../../shared/src/features/agents/long-term-memory/schema.js";
-import { Button, InfoPopover, StatusSurface, inputClass } from "./shared-controls";
-import { useLtmTranslation, type LtmTranslationFunction } from "./localization";
+} from "../../../../../shared/src/features/agents/long-term-memory/schema.js";
+import { Button, InfoPopover, StatusSurface, inputClass } from "../shared-controls";
+import { useLtmTranslation, type LtmTranslationFunction } from "../localization";
 
 type ExtractionForm = Omit<Required<LtmExtractionSettingsPatch>, "systemPrompt" | "activePromptTemplateId">;
 type Mode = LtmMode;

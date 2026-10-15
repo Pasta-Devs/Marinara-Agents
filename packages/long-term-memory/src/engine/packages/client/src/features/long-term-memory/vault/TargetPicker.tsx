@@ -1,6 +1,6 @@
 import { useId, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import { Check, Search, X } from "lucide-react";
-import { IconButton, inputClass } from "./shared-controls";
+import { IconButton, inputClass } from "../shared-controls";
 
 export type PickerTarget = {
   id: string;

@@ -7,19 +7,23 @@ visual and accessibility rules, and `ARCHITECTURE.md` for server and data flow.
 ## Surface Map
 
 `LongTermMemoryDetail.tsx` owns the capability shell, destination changes,
-onboarding, activation, vault-health feedback, recovery handoffs, and dirty
-navigation guards. Its destinations are lazy-loaded:
+activation, vault-health feedback, recovery handoffs, and dirty navigation
+guards; `Onboarding.tsx` owns the setup guide. The shell's destinations are lazy-loaded:
 
 | Surface | Owner | User task |
 | --- | --- | --- |
-| Memory Vault | `MemoryVault.tsx` | Browse, search, filter, edit, link, archive, restore, and manage memory availability. |
-| Review Queue | `ReviewQueue.tsx` | Inspect evidence, edit or preflight proposed mutations, then accept or skip them. |
-| Sources | `SourcesWorkspace.tsx` | Select source and destination scopes; import, refresh, re-extract, cancel, and inspect source results. |
-| Memory Settings | `MemorySettings.tsx` | Configure extraction and retention, repair indexes or identities, and inspect activity. |
+| Memory Vault | `vault/MemoryVault.tsx` | Browse, search, filter, edit, link, archive, restore, and manage memory availability. |
+| Review Queue | `review/ReviewQueue.tsx` | Inspect evidence, edit or preflight proposed mutations, then accept or skip them. |
+| Sources | `sources/SourcesWorkspace.tsx` | Select source and destination scopes; import, refresh, re-extract, cancel, and inspect source results. |
+| Memory Settings | `settings/MemorySettings.tsx` | Configure extraction and retention, repair indexes or identities, and inspect activity. |
 | Chat Settings | `ChatSettings.tsx` | Set per-chat recall style, token budget, and maximum memories; inspect the last injection. |
 
+Each screen lives in its own folder (`vault/`, `review/`, `sources/`, `settings/`)
+with the components cut out of it; modules shared across screens stay at the
+feature root.
+
 `LongTermMemoryNavigation.tsx` owns the four destination buttons and their
-memory, review, and source-task status badges. `ActivityView.tsx` is opened
+memory, review, and source-task status badges. `settings/ActivityView.tsx` is opened
 from Memory Settings rather than being a fifth destination.
 
 ## Navigation Contract
@@ -124,12 +128,13 @@ motion follow `DESIGN.md`; do not create a second UI policy here.
 
 Start with the narrowest owner:
 
-- Shell, navigation, onboarding, dirty state: `LongTermMemoryDetail.tsx`, `LongTermMemoryNavigation.tsx`
+- Shell, navigation, dirty state: `LongTermMemoryDetail.tsx`, `LongTermMemoryNavigation.tsx`
+- Setup guide: `Onboarding.tsx`
 - Workspace layout or pane behavior: `LtmWorkspace.tsx`, then `DESIGN.md`
-- Vault behavior: `MemoryVault.tsx`
-- Review behavior: `ReviewQueue.tsx`
-- Source import and task behavior: `SourcesWorkspace.tsx`, `source-task.ts`
-- Settings or activity: `MemorySettings.tsx`, `ActivityView.tsx`, `ChatSettings.tsx`
+- Vault behavior: `vault/MemoryVault.tsx`
+- Review behavior: `review/ReviewQueue.tsx`, `review/review-state.ts`
+- Source import and task behavior: `sources/SourcesWorkspace.tsx`, `source-task.ts`
+- Settings, maintenance or activity: `settings/MemorySettings.tsx`, `settings/MaintenancePanel.tsx`, `settings/ActivityView.tsx`, `ChatSettings.tsx`
 - Shared controls or feedback: `shared-controls.tsx`
 
 Use the narrowest matching regression from `tests/README.md`: loading for

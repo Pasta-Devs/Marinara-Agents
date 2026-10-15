@@ -218,6 +218,12 @@
     "long-term-memory": {
       "versions": [
         {
+          "version": "1.4.37",
+          "date": "2026-10-14",
+          "notes": "- Reorganised the Long-Term Memory screens without changing how they work. The Vault, Review queue, Sources and Settings screens each live in their own folder, and the setup guide and the Maintenance tab are components of their own. The one visible difference is that the result of a Maintenance action now appears at the top of the Maintenance tab instead of below the tab bar, so it no longer shows on the other tabs and saving settings no longer replaces it.",
+          "highlight": false
+        },
+        {
           "version": "1.4.36",
           "date": "2026-10-14",
           "notes": "- Fix glued-together sentences and raw server errors in the Long-Term Memory screens. The Review summary after Apply or Discard now reads as separate complete sentences with correct spacing and punctuation, for example \"Applied 2 mutations; 1 failed. 1 blocked before Apply.\", instead of fragments run together. The Debug separators between metadata parts and the \"chunk\" label now come from the locale, so a translation can change them. When a request fails with only an HTTP status such as \"Not Found\" and no message from the server, the screens show their own localized message instead of the raw status text; a message the server does send is still shown as before. Recall, extraction and storage are unchanged.",
@@ -330,12 +336,6 @@
           "date": "2026-10-08",
           "notes": "- Make `/search` resolve the scoped chat's recall settings and prompt budget like generation, while preserving explicit request overrides.\n- Show fused rank beside relevance in Debug and remove unused cooldown behavior.",
           "highlight": false
-        },
-        {
-          "version": "1.4.16",
-          "date": "2026-10-08",
-          "notes": "- Stop one everyday word from deciding recall alone. A single exact keyword counts for half the keyword lane unless the chat uses it as a name; two distinct keywords or a phrase still count in full.\n- Make BM25 count on real chat windows: normalize against the query's eight highest-idf indexed terms instead of every term, so narration padding no longer drives a matching memory toward zero.\n- Choose the bounded fuzzy keyword catalog by query overlap, not alphabetically, so a keyword past the first 512 in a vault can still match.\n- Rescale the recall presets by 0.7 and retune balanced so the default 0.35 threshold keeps the previous 0.5 selection. A saved threshold above 0.4 now reads as 0.4; re-check custom weights.",
-          "highlight": true
         }
       ]
     },

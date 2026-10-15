@@ -1,18 +1,32 @@
 import assert from "node:assert/strict";
 import { readdirSync, readFileSync } from "node:fs";
-import { join } from "node:path";
+import { basename, dirname, join } from "node:path";
 import { ltmClientRoot, ltmSourcePaths } from "./long-term-memory-source-paths.mjs";
 
+// A screen folder holds the screen plus the components cut out of it. `workspace` is the screen
+// file alone; `workspaceScreen` adds its siblings for assertions about the cut-out components.
+const readScreen = (main) => {
+  const folder = dirname(main);
+  const siblings = readdirSync(folder)
+    .filter((name) => /\.tsx?$/u.test(name) && name !== basename(main))
+    .sort();
+  return [main, ...siblings.map((name) => join(folder, name))].map((path) => readFileSync(path, "utf8")).join("\n");
+};
+
 const workspace = readFileSync(ltmSourcePaths.sourcesWorkspace, "utf8");
+const workspaceScreen = readScreen(ltmSourcePaths.sourcesWorkspace);
 const navigation = readFileSync(ltmSourcePaths.navigation, "utf8");
 const interop = readFileSync(ltmSourcePaths.interop, "utf8");
 const detail = readFileSync(ltmSourcePaths.detail, "utf8");
 const activity = readFileSync(ltmSourcePaths.activity, "utf8");
 const lastInjectionSummary = readFileSync(ltmSourcePaths.lastInjectionSummary, "utf8");
 const settings = readFileSync(ltmSourcePaths.settings, "utf8");
+const settingsScreen = readScreen(ltmSourcePaths.settings);
 const vault = readFileSync(ltmSourcePaths.vault, "utf8");
+const vaultScreen = readScreen(ltmSourcePaths.vault);
 const targetPicker = readFileSync(ltmSourcePaths.targetPicker, "utf8");
 const reviewQueue = readFileSync(ltmSourcePaths.reviewQueue, "utf8");
+const reviewQueueScreen = readScreen(ltmSourcePaths.reviewQueue);
 const api = readFileSync(ltmSourcePaths.api, "utf8");
 const workspaceLayout = readFileSync(ltmSourcePaths.workspaceLayout, "utf8");
 const sharedControls = readFileSync(ltmSourcePaths.sharedControls, "utf8");
@@ -62,18 +76,18 @@ assert.doesNotMatch(workspace, /\[&>svg\]:animate-spin/u);
 assert.match(workspace, /restoredImportResult\.writeFailures\?\.filter\(\(item\) => item\.retryable\)/u);
 assert.match(workspace, /restoredImportResult\.writeFailures\?\.map\(\(failure\) =>/u);
 assert.match(
-  workspace,
+  workspaceScreen,
   /<div\s+id="ltm-destination-scope-control"[^>]*className="mari-editor-panel flex min-h-0 flex-col gap-3 p-3"[^>]*style=\{\{ maxHeight: "calc\(100vh - 12rem\)" \}\}[^>]*>/u,
 );
 assert.match(
-  workspace,
+  workspaceScreen,
   /<div\s+id="ltm-bulk-destination-list"[^>]*className="min-h-0 flex-1 overflow-y-auto overscroll-contain"[^>]*>/u,
 );
 assert.match(
-  workspace,
+  workspaceScreen,
   /<details\s+data-ltm-destination-scope[^>]*className="group flex min-h-0 flex-col gap-3"[^>]*>/u,
 );
-assert.match(workspace, /data-ltm-destination-scope-summary/u);
+assert.match(workspaceScreen, /data-ltm-destination-scope-summary/u);
 assert.doesNotMatch(
   workspace,
   /<StatusSurface busy>\s*<Loader2 aria-hidden="true" size="0\.875rem" className="animate-spin" \/>/u,
@@ -99,10 +113,10 @@ assert.equal(locale["ui.longTermMemory.activityview.settingMinimumRelevance"], "
 assert.match(settings, /reasoningEffort: resolved\.reasoningEffort \?\? "low"/u);
 assert.match(settings, /memorySettingsSavedIndexRebuilt/u);
 assert.match(settings, /memorySettingsSavedIndexRebuildFailed/u);
-assert.match(settings, /memorySettingsResetIndexRebuildFailed/u);
+assert.match(settingsScreen, /memorySettingsResetIndexRebuildFailed/u);
 assert.match(settings, /rebuild\?\.status === "deferred"/u);
 // #1275 repair: the Debug panel's save surface shows only save feedback started on the
-// Debug tab; unrelated action feedback (e.g. a backup export) stays in the shared surface.
+// Debug tab; saves started on the other tabs stay in the shared surface.
 assert.match(settings, /messageState\.surface === "debug"/u);
 assert.match(settings, /surface: "shared" \| "debug" = "shared"/u);
 // #1193 repair: extraction edits made while the awaited global rebuild is in flight must
@@ -145,35 +159,35 @@ assert.equal(
   locale["ui.longTermMemory.longtermmemorydetail.savedButNotSearchable"],
   "Saved with lexical recall only: semantic embeddings are unavailable.",
 );
-assert.match(vault, /function MemoryAvailabilityWorkbench/u);
-assert.match(vault, /data-ltm-availability-workbench/u);
+assert.match(vaultScreen, /function MemoryAvailabilityWorkbench/u);
+assert.match(vaultScreen, /data-ltm-availability-workbench/u);
 assert.ok(vault.lastIndexOf("data-ltm-availability-summary") < vault.lastIndexOf("data-ltm-details"));
 assert.ok(vault.lastIndexOf("data-ltm-availability-summary") < vault.lastIndexOf("data-ltm-note-layout"));
 assert.match(vault, /availabilityStaged/u);
-assert.match(vault, /lastPlaceRequired/u);
-assert.match(vault, /lastModeRequired/u);
-assert.match(vault, /function BulkAvailabilityWorkbench/u);
+assert.match(vaultScreen, /lastPlaceRequired/u);
+assert.match(vaultScreen, /lastModeRequired/u);
+assert.match(vaultScreen, /function BulkAvailabilityWorkbench/u);
 assert.match(vault, /data-ltm-bulk-availability/u);
-assert.match(vault, /data-ltm-bulk-availability-action/u);
+assert.match(vaultScreen, /data-ltm-bulk-availability-action/u);
 assert.match(vault, /onActionChange=/u);
-assert.match(vault, /data-ltm-availability-picker/u);
+assert.match(vaultScreen, /data-ltm-availability-picker/u);
 assert.match(vault, /data-ltm-availability-chevron/u);
 assert.match(vault, /details\[open\] > summary \[data-ltm-availability-chevron\]/u);
-assert.match(vault, /memoryvault\.addMemoryTo/u);
-assert.match(vault, /memoryvault\.bulkAddMemoriesTo/u);
-assert.match(vault, /memoryvault\.bulkRemoveMemoriesFrom/u);
-assert.match(vault, /memoryvault\.modesEligibilityHelp/u);
-assert.match(vault, /memoryvault\.availabilityScopeHelp/u);
-assert.match(vault, /memoryvault\.bulkImplicitAllPlaces/u);
-assert.match(vault, /memoryvault\.availableIn/u);
+assert.match(vaultScreen, /memoryvault\.addMemoryTo/u);
+assert.match(vaultScreen, /memoryvault\.bulkAddMemoriesTo/u);
+assert.match(vaultScreen, /memoryvault\.bulkRemoveMemoriesFrom/u);
+assert.match(vaultScreen, /memoryvault\.modesEligibilityHelp/u);
+assert.match(vaultScreen, /memoryvault\.availabilityScopeHelp/u);
+assert.match(vaultScreen, /memoryvault\.bulkImplicitAllPlaces/u);
+assert.match(vaultScreen, /memoryvault\.availableIn/u);
 assert.match(
-  vault,
+  vaultScreen,
   /function BulkAvailabilityWorkbench[\s\S]*?<details\s+data-ltm-availability-picker\s+className="group"/u,
 );
-assert.match(vault, /<details\s+data-ltm-availability-picker\s+className="group"/u);
-assert.match(vault, /<summary className="mari-editor-action inline-flex/u);
-assert.match(vault, /data-ltm-availability-pills[\s\S]*?data-ltm-availability-picker/u);
-assert.doesNotMatch(vault, /<details\s+data-ltm-availability-picker[^>]*\bopen\b/u);
+assert.match(vaultScreen, /<details\s+data-ltm-availability-picker\s+className="group"/u);
+assert.match(vaultScreen, /<summary className="mari-editor-action inline-flex/u);
+assert.match(vaultScreen, /data-ltm-availability-pills[\s\S]*?data-ltm-availability-picker/u);
+assert.doesNotMatch(vaultScreen, /<details\s+data-ltm-availability-picker[^>]*\bopen\b/u);
 assert.doesNotMatch(vault, /selectScopeTarget|scopeSelectionIds|removeScopeGroup/u);
 assert.match(targetPicker, /groupLabels\?/u);
 assert.equal(locale["ui.longTermMemory.memoryvault.chooseWhereUsed"], "Choose where used");
@@ -241,23 +255,30 @@ assert.match(vault, /noMemoriesInCombinedScope/u);
 assert.match(vault, /data-ltm-vault-scope-control/u);
 assert.match(vault, /text-\[var\(--marinara-editor-muted\)\].*focus-visible:outline/u);
 assert.match(vault, /mari-editor-action flex min-h-11/u);
-assert.match(vault, /ScopeTargetPicker/u);
-assert.match(vault, /data-ltm-vault-scope-search/u);
-assert.match(vault, /role="radiogroup"[\s\S]*role="radio"/u);
-assert.doesNotMatch(vault, /role="checkbox"/u);
+assert.match(vaultScreen, /function VaultScopePicker/u);
+// #1376: no two components share a name.
+assert.doesNotMatch(
+  [vaultScreen, workspaceScreen, reviewQueueScreen, settingsScreen].join("\n"),
+  /function ScopeTargetPicker\b/u,
+);
+assert.match(workspaceScreen, /function SourceScopeCombobox\b/u);
+assert.match(detail, /<Onboarding\b/u);
+assert.match(vaultScreen, /data-ltm-vault-scope-search/u);
+assert.match(vaultScreen, /role="radiogroup"[\s\S]*role="radio"/u);
+assert.doesNotMatch(vaultScreen, /role="checkbox"/u);
 assert.doesNotMatch(vault, /data-ltm-vault-selected-scope/u);
 assert.doesNotMatch(vault, /mari-editor-panel min-w-0 max-w-full space-y-3 p-3/u);
 assert.doesNotMatch(vault, /<details\s+data-ltm-memory-scope\s+className="[^"]*mari-editor-panel/u);
-assert.match(vault, /data-ltm-vault-scope-tablist/u);
-assert.match(vault, /@container \(min-width: 16rem\)[\s\S]*repeat\(5, minmax\(0, 1fr\)\)/u);
-assert.match(vault, /border-y border-\[var\(--border\)\]/u);
+assert.match(vaultScreen, /data-ltm-vault-scope-tablist/u);
+assert.match(vaultScreen, /@container \(min-width: 16rem\)[\s\S]*repeat\(5, minmax\(0, 1fr\)\)/u);
+assert.match(vaultScreen, /border-y border-\[var\(--border\)\]/u);
 assert.match(vault, /data-ltm-mode-filter/u);
 assert.match(vault, /filterModes/u);
 assert.match(vault, /toggleFilterMode/u);
 assert.doesNotMatch(vault, /scopeModes/u);
 assert.match(vault, /scopeChats/u);
 assert.doesNotMatch(vault, /toggleScopeMode/u);
-assert.match(vault, /chatModes/u);
+assert.match(vaultScreen, /chatModes/u);
 assert.doesNotMatch(vault, /scopeModes\.includes\(mode\)/u);
 assert.doesNotMatch(vault, /kind="mode"/u);
 assert.match(vault, /statusFilter/u);
@@ -295,27 +316,27 @@ assert.match(vault, /scope-targets\?includeAllChats=true/u);
 assert.doesNotMatch(workspace, /id: `branch:\$\{chat\.id\}`/u);
 assert.match(workspace, /destinationScopeLimitReached/u);
 assert.match(workspace, /hasDestinationScopeCapacity\(target\.destinationScope\)/u);
-assert.match(workspace, /data-ltm-availability-target/u);
-assert.match(workspace, /data-ltm-scope-picker-popup/u);
-assert.match(workspace, /data-ltm-scope-tablist/u);
-assert.match(workspace, /data-ltm-scope-tab=\{kind\}/u);
-assert.match(workspace, /data-ltm-scope-tabpanel=\{activeKind\}/u);
+assert.match(workspaceScreen, /data-ltm-availability-target/u);
+assert.match(workspaceScreen, /data-ltm-scope-picker-popup/u);
+assert.match(workspaceScreen, /data-ltm-scope-tablist/u);
+assert.match(workspaceScreen, /data-ltm-scope-tab=\{kind\}/u);
+assert.match(workspaceScreen, /data-ltm-scope-tabpanel=\{activeKind\}/u);
 assert.match(workspace, /role="tabpanel"/u);
-assert.match(workspace, /aria-controls=\{panelId\}/u);
-assert.match(workspace, /selectKind\(kind, true\)/u);
+assert.match(workspaceScreen, /aria-controls=\{panelId\}/u);
+assert.match(workspaceScreen, /selectKind\(kind, true\)/u);
 assert.match(workspace, /ArrowLeft/u);
 assert.match(workspace, /ArrowRight/u);
 assert.doesNotMatch(vault, /matchesFilters/u);
-assert.match(vault, /data-ltm-vault-scope-target/u);
+assert.match(vaultScreen, /data-ltm-vault-scope-target/u);
 assert.match(vault, /characterScopeTargets/u);
 assert.match(vault, /conversationScopeTargets/u);
 assert.match(vault, /branchScopeTargets/u);
-assert.match(vault, /data-ltm-vault-scope-tab/u);
-assert.match(vault, /data-selected=/u);
+assert.match(vaultScreen, /data-ltm-vault-scope-tab/u);
+assert.match(vaultScreen, /function VaultScopePicker[\s\S]*data-selected=/u);
 assert.match(vault, /bulkAvailabilityScope/u);
-assert.match(vault, /bulkAvailabilitySelected/u);
-assert.match(vault, /chat:all/u);
-assert.match(vault, /branch:all/u);
+assert.match(vaultScreen, /bulkAvailabilitySelected/u);
+assert.match(vaultScreen, /chat:all/u);
+assert.match(vaultScreen, /branch:all/u);
 assert.doesNotMatch(vault, /chooseOneAvailabilityPlace/u);
 assert.match(vault, /line-clamp-2 break-words text-xs leading-5/u);
 assert.doesNotMatch(vault, /line-clamp-2 block/u);
@@ -373,7 +394,11 @@ assert.match(
   detail,
   /\[data-ltm-tab-focus\]:focus-visible \{\s*outline: 2px solid var\(--marinara-editor-focus-ring\);/u,
 );
-for (const rail of [navigation, settings, vault, targetPicker, workspace]) assert.match(rail, /data-ltm-tab-focus/u);
+for (const rail of [navigation, settings, targetPicker]) assert.match(rail, /data-ltm-tab-focus/u);
+// The Vault and Sources place-picker rails were cut into their own files; the folder read also holds
+// TargetPicker, so anchor each match to its component.
+assert.match(vaultScreen, /function VaultScopePicker[\s\S]*data-ltm-tab-focus/u);
+assert.match(workspaceScreen, /function SourceScopeCombobox[\s\S]*data-ltm-tab-focus/u);
 assert.match(detail, /paddingBottom: "var\(--mari-safe-area-inset-bottom, env\(safe-area-inset-bottom\)\)"/u);
 assert.match(
   settings,
@@ -475,7 +500,7 @@ assert.match(sharedControls, /<div\s+role=\{tone === "danger" \? "alert" : "stat
 assert.doesNotMatch(vault, /<div role="alert"><StatusSurface tone="danger">/u);
 assert.match(vault, /data-ltm-memory-group=\{type\}[\s\S]*min-h-11[\s\S]*focus-visible:outline/u);
 assert.match(vault, /min-h-11 w-full[\s\S]*focus-visible:outline[\s\S]*moreLinkTypes/u);
-assert.match(vault, /inline-flex min-h-11 max-w-full[\s\S]*h-11 w-11/u);
+assert.match(vaultScreen, /inline-flex min-h-11 max-w-full[\s\S]*h-11 w-11/u);
 assert.match(vault, /clearMemorySearch[\s\S]*h-11 w-11/u);
 assert.match(vault, /data-ltm-mode-filter[\s\S]*min-h-11/u);
 assert.match(vault, /bulkModes[\s\S]*min-h-11/u);
@@ -493,7 +518,7 @@ assert.match(vault, /maxHeight: "16rem"/u);
 assert.match(vault, /onInput=\{\(event\) =>/u);
 assert.match(sharedControls, /aria-live="polite"/u);
 assert.match(targetPicker, /<button[\s\S]*type="button"/u);
-assert.match(workspace, /aria-controls=\{listId\}/u);
+assert.match(workspaceScreen, /aria-controls=\{listId\}/u);
 assert.doesNotMatch(targetPicker, /role="listbox"|role="option"|aria-activedescendant|ArrowDown|ArrowUp/u);
 assert.doesNotMatch(targetPicker, /className="mari-editor-tab-rail grid w-full grid-cols-4"/u);
 assert.match(targetPicker, /id=\{listId\}\s+role="list"/u);
@@ -535,28 +560,28 @@ const vaultLocaleValues = Object.entries(locale)
   .map(([, value]) => value)
   .join(" ");
 assert.doesNotMatch(vaultLocaleValues, /\b(?:Metadata|Scope|Derived memories|Connections)\b/u);
-assert.match(workspace, /function SourceOperationWorkbench/u);
-assert.match(workspace, /!previewed \|\| busy \|\| result/u);
-assert.match(workspace, /disabled=\{\s*disabled \|\|\s*Boolean\(result\)/u);
+assert.match(workspaceScreen, /function SourceOperationWorkbench/u);
+assert.match(workspaceScreen, /!previewed \|\| busy \|\| result/u);
+assert.match(workspaceScreen, /disabled=\{\s*disabled \|\|\s*Boolean\(result\)/u);
 assert.match(workspace, /confirmAction=\{props\.confirmAction\}/u);
 assert.match(workspace, /key=\{`\$\{sourceOperation\.id\}:\$\{sourceOperation\.operation/u);
-assert.match(workspace, /data-ltm-linked-memory-selection/u);
-assert.match(workspace, /derivedNoteIds: selectedLinkedIds/u);
-assert.match(workspace, /archive: "notes_only"/u);
-assert.match(workspace, /excludedNoteIds: excludedMemories/u);
-assert.match(workspace, /data-ltm-source-operation-preview/u);
-assert.match(workspace, /data-ltm-source-operation-excluded/u);
-assert.match(workspace, /data-ltm-source-operation-result/u);
+assert.match(workspaceScreen, /data-ltm-linked-memory-selection/u);
+assert.match(workspaceScreen, /derivedNoteIds: selectedLinkedIds/u);
+assert.match(workspaceScreen, /archive: "notes_only"/u);
+assert.match(workspaceScreen, /excludedNoteIds: excludedMemories/u);
+assert.match(workspaceScreen, /data-ltm-source-operation-preview/u);
+assert.match(workspaceScreen, /data-ltm-source-operation-excluded/u);
+assert.match(workspaceScreen, /data-ltm-source-operation-result/u);
 assert.match(workspace, /data-ltm-source-mode/u);
-assert.match(workspace, /const sourceCheckboxClass = "h-4 w-4 shrink-0 accent-/u);
-assert.match(workspace, /linked\.isError[\s\S]*linkedMemoriesCouldNotLoad/u);
-assert.match(workspace, /!linked\.data \|\| linked\.isError \|\| !previewed/u);
+assert.match(workspaceScreen, /const sourceCheckboxClass = "h-4 w-4 shrink-0 accent-/u);
+assert.match(workspaceScreen, /linked\.isError[\s\S]*linkedMemoriesCouldNotLoad/u);
+assert.match(workspaceScreen, /!linked\.data \|\| linked\.isError \|\| !previewed/u);
 assert.match(workspace, /tone === "danger"[\s\S]*var\(--destructive\)/u);
 assert.match(workspace, /className="hidden items-start gap-1 md:flex"/u);
 assert.doesNotMatch(workspace, /group-hover:pointer-events-auto|transition-opacity/u);
 assert.match(workspace, /className="space-y-2 border-t border-\[var\(--border\)\] py-3"/u);
 assert.match(workspace, /\[changeSource, onRequestedSourceHandled, requestedSource\]/u);
-assert.match(workspace, /importsAsMode/u);
+assert.match(workspaceScreen, /importsAsMode/u);
 assert.equal(locale["ui.longTermMemory.sourcesworkspace.importsAsMode"], "Imports as {{mode}}");
 assert.match(workspace, /data-ltm-import-result-mode=\{item\.extractionMode\}/u);
 assert.match(workspace, /data-ltm-import-result-modes=/u);
@@ -616,7 +641,7 @@ assert.match(reviewQueue, /pagehide/);
 assert.match(reviewQueue, /onBlur=\{\(\) => queueMicrotask/);
 assert.match(reviewQueue, /item\.draft\.status === "pending"/u);
 assert.match(reviewQueue, /skippableSelectedRows/u);
-assert.match(reviewQueue, /REVIEW_STATE_STORAGE_KEY/u);
+assert.match(reviewQueueScreen, /REVIEW_STATE_STORAGE_KEY/u);
 assert.match(reviewQueue, /draftReviewFingerprint/u);
 assert.match(reviewQueue, /savedReviewStateDiscarded/u);
 assert.match(reviewQueue, /failedMutationIds/u);
@@ -629,9 +654,9 @@ assert.match(reviewQueue, /appliedMutationIds/u);
 assert.match(reviewQueue, /setResult\(null\)/u);
 assert.match(reviewQueue, /reviewFailed/u);
 assert.match(reviewQueue, /reviewProgress/u);
-assert.match(reviewQueue, /MAX_APPEND_TEXT_LENGTH = 20_000/u);
-assert.match(reviewQueue, /MAX_SECTION_TEXT_LENGTH = 24_000/u);
-assert.match(reviewQueue, /charactersRemaining(?:One|Other)/u);
+assert.match(reviewQueueScreen, /MAX_APPEND_TEXT_LENGTH = 20_000/u);
+assert.match(reviewQueueScreen, /MAX_SECTION_TEXT_LENGTH = 24_000/u);
+assert.match(reviewQueueScreen, /charactersRemaining(?:One|Other)/u);
 assert.match(reviewQueue, /textExceedsLimit/u);
 assert.match(reviewQueue, /preflight/u);
 assert.match(reviewQueue, /data-ltm-review-preflight/u);
@@ -646,7 +671,7 @@ assert.match(reviewQueue, /applyPreflighted/u);
 assert.match(reviewQueue, /data-ltm-review-action/u);
 assert.match(reviewQueue, /reviewChangeForTitle/u);
 assert.match(reviewQueue, /applyChangeForTitle/u);
-assert.match(reviewQueue, /noteById\.get\(mutation\.link\.target\)\?\.title/u);
+assert.match(reviewQueueScreen, /noteById\.get\(mutation\.link\.target\)\?\.title/u);
 assert.match(reviewQueue, /data-ltm-review-summary/u);
 assert.match(reviewQueue, /data-ltm-review-evidence-summary/u);
 assert.match(reviewQueue, /confirmDiscard/u);

@@ -1,5 +1,9 @@
 # Long-Term Memory changelog
 
+## 1.4.37 — 2026-10-14
+
+- Reorganised the Long-Term Memory screens without changing how they work. The Vault, Review queue, Sources and Settings screens each live in their own folder, and the setup guide and the Maintenance tab are components of their own. The one visible difference is that the result of a Maintenance action now appears at the top of the Maintenance tab instead of below the tab bar, so it no longer shows on the other tabs and saving settings no longer replaces it.
+
 ## 1.4.36 — 2026-10-14
 
 - Fix glued-together sentences and raw server errors in the Long-Term Memory screens. The Review summary after Apply or Discard now reads as separate complete sentences with correct spacing and punctuation, for example "Applied 2 mutations; 1 failed. 1 blocked before Apply.", instead of fragments run together. The Debug separators between metadata parts and the "chunk" label now come from the locale, so a translation can change them. When a request fails with only an HTTP status such as "Not Found" and no message from the server, the screens show their own localized message instead of the raw status text; a message the server does send is still shown as before. Recall, extraction and storage are unchanged.

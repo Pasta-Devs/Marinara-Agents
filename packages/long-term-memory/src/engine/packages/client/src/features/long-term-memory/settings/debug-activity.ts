@@ -1,5 +1,5 @@
-import type { LtmDebugEvent } from "../../../../shared/src/features/agents/long-term-memory/schema.js";
-import type { LtmTranslationFunction } from "./localization";
+import type { LtmDebugEvent } from "../../../../../shared/src/features/agents/long-term-memory/schema.js";
+import type { LtmTranslationFunction } from "../localization";
 
 export type DebugOperation = { operationId: string; events: LtmDebugEvent[] };
 export type DebugActivityFilter = "all" | "errors" | LtmDebugEvent["phase"];

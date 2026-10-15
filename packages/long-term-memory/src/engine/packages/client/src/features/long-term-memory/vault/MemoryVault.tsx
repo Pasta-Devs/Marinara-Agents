@@ -1,7 +1,7 @@
-import { useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Archive, Check, ChevronRight, Ellipsis, FileText, Link2, Plus, Search, Trash2, X } from "lucide-react";
+import { Archive, ChevronRight, Ellipsis, FileText, Link2, Plus, Search, Trash2, X } from "lucide-react";
 import type {
   LtmGlobalSettings,
   LtmBulkNoteResult,
@@ -14,20 +14,19 @@ import type {
   LtmStatus,
   LtmSubject,
   LtmRenameNoteSectionPreviewResponse,
-} from "../../../../shared/src/features/agents/long-term-memory/schema.js";
+} from "../../../../../shared/src/features/agents/long-term-memory/schema.js";
 import {
   getLtmKeywordIntent,
   ltmKeywordKey,
   removeLtmKeyword,
   setLtmManualKeywords,
-} from "../../../../shared/src/features/agents/long-term-memory/keywords.js";
+} from "../../../../../shared/src/features/agents/long-term-memory/keywords.js";
 import {
   chatOnlyLtmScope,
   getLtmScopeChatIds,
   getLtmScopeGroupIds,
   getLtmScopePersonaIds,
-  normalizeLtmScope,
-} from "../../../../shared/src/features/agents/long-term-memory/scope.js";
+} from "../../../../../shared/src/features/agents/long-term-memory/scope.js";
 import {
   errorMessage,
   invalidateLtmQueries,
@@ -36,9 +35,9 @@ import {
   request,
   requestAllNotes,
   requestNotesByIds,
-} from "./api";
-import { Button, ClickSurface, IconButton, InfoPopover, inputClass, StatusSurface } from "./shared-controls";
-import type { LongTermMemoryDestinationProps } from "./types";
+} from "../api";
+import { Button, ClickSurface, IconButton, InfoPopover, inputClass, StatusSurface } from "../shared-controls";
+import type { LongTermMemoryDestinationProps } from "../types";
 import {
   humanizeLabel,
   labelKeys,
@@ -46,27 +45,25 @@ import {
   memoryLabel as formatMemoryLabel,
   noteTypeLabel as formatNoteTypeLabel,
   scopeTargetLabel as formatScopeTargetLabel,
-} from "./display-labels";
-import { selectLtmPluralForm, useLtmTranslation, type LtmTranslationFunction } from "./localization";
-import { LtmWorkspace, type LtmWorkspacePane } from "./LtmWorkspace";
+} from "../display-labels";
+import { selectLtmPluralForm, useLtmTranslation, type LtmTranslationFunction } from "../localization";
+import { LtmWorkspace, type LtmWorkspacePane } from "../LtmWorkspace";
 import {
   buildScopeIndexes,
-  buildScopeMemoryPresence,
   deriveScopeBranchChats,
   deriveScopeBranches,
   deriveScopeConversations,
-  type ScopeTargets,
   uniqueById,
-} from "./scope-targets";
-import {
-  AvailabilityTabRail,
-  TargetPicker,
-  type AvailabilityChatTarget,
-  type AvailabilityTarget,
-  type PickerTarget,
-} from "./TargetPicker";
-import type { ScopeTargetLocalCharacter } from "./scope-targets";
+} from "../scope-targets";
+import { TargetPicker, type AvailabilityChatTarget, type PickerTarget } from "./TargetPicker";
+import type { ScopeTargetLocalCharacter } from "../scope-targets";
 import { normalizeDetailName } from "./detail-name";
+import { availabilityEntries, hasExplicitScope, modes, sameScope, splitBulkAvailabilityTarget } from "./vault-shared";
+import type { AvailabilityTargets, Target, VaultScopeTargets } from "./vault-shared";
+import { VaultScopePicker } from "./VaultScopePicker";
+import { MemoryAvailabilityWorkbench } from "./MemoryAvailabilityWorkbench";
+import { BulkAvailabilityWorkbench } from "./BulkAvailabilityWorkbench";
+import { Pill } from "./Pill";
 
 const noteTypes: readonly LtmNoteType[] = [
   "timeline_event",
@@ -119,7 +116,7 @@ function detailScrollBehavior(): ScrollBehavior {
   return window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth";
 }
 const statuses: readonly LtmStatus[] = ["active", "resolved", "archived"];
-const modes: readonly LtmMode[] = ["conversation", "roleplay", "game"];
+
 const relations: LtmLink["relation"][] = [
   "occurred_in",
   "triggered_by",
@@ -155,37 +152,16 @@ const prefixes: Record<LtmNoteType, string> = {
   tone: "tone",
 };
 
-type Target = { id: string; label: string; scope?: LtmScope; comment?: string; chatName?: string | null };
 function targetDisplayLabel(target: Target | null | undefined) {
   if (!target) return "";
   const comment = target.comment?.trim();
   if (comment) return `${target.label} - ${comment}`;
   return target.chatName?.trim() ? `${target.chatName.trim()} - ${target.label}` : target.label;
 }
-type VaultScopeTargets = Omit<ScopeTargets, "chats"> & {
-  chats: Array<ScopeTargets["chats"][number] & { chatName?: string | null }>;
-  memoryPresence?: LtmScope[] | null;
-};
-type AvailabilityTargets = {
-  characters: AvailabilityTarget[];
-  personas: AvailabilityTarget[];
-  chats: AvailabilityChatTarget[];
-  branches: AvailabilityChatTarget[];
-};
-type BulkAvailabilityTargetKind = "group" | "chat" | "branch" | "character" | "persona";
+
 type ArchiveUndoState = {
   notes: Array<{ id: string; status: LtmStatus }>;
 };
-
-function splitBulkAvailabilityTarget(target: string): [BulkAvailabilityTargetKind, string] {
-  const [kind, ...parts] = target.split(":");
-  return [kind as BulkAvailabilityTargetKind, parts.join(":")];
-}
-
-function bulkAvailabilityTargetMatchesEntry(target: string, entry: Pick<PickerTarget, "kind" | "id">) {
-  const [kind, id] = splitBulkAvailabilityTarget(target);
-  return id === entry.id && (kind === "branch" ? entry.kind === "chat" : kind === entry.kind);
-}
 
 function bulkAvailabilityScope(targets: readonly string[]): Partial<LtmScope> | undefined {
   const chatIds: string[] = [];
@@ -208,351 +184,6 @@ function bulkAvailabilityScope(targets: readonly string[]): Partial<LtmScope> | 
   };
 }
 
-function ScopeTargetPicker({
-  targets,
-  selectedId,
-  currentIds,
-  scopeTargets,
-  localizeUi,
-  onSelect,
-  variant = "primary",
-  allOptionLabel,
-}: {
-  targets: {
-    all: Target;
-    chat: Target[];
-    branch: Target[];
-    character: Target[];
-    persona: Target[];
-  };
-  selectedId: string;
-  currentIds: { chat?: string; branch?: string; character?: string; persona?: string };
-  scopeTargets?: VaultScopeTargets;
-  localizeUi: LtmTranslationFunction;
-  onSelect: (target: Target) => void;
-  variant?: "primary" | "secondary";
-  allOptionLabel?: string;
-}) {
-  const categories = [
-    ["all", localizeUi("ui.longTermMemory.sourcesworkspace.all")],
-    ["chat", localizeUi("ui.longTermMemory.sourcesworkspace.chats")],
-    ["branch", localizeUi("ui.longTermMemory.sourcesworkspace.branches")],
-    ["character", localizeUi("ui.longTermMemory.sourcesworkspace.characters")],
-    ["persona", localizeUi("ui.longTermMemory.memoryvault.personas")],
-  ] as const;
-  const [query, setQuery] = useState("");
-  const [activeKind, setActiveKind] = useState<(typeof categories)[number][0]>("all");
-  const flatTargets = uniqueById([
-    targets.all,
-    ...targets.chat,
-    ...targets.branch,
-    ...targets.character,
-    ...targets.persona,
-  ]);
-  const activeTargets =
-    activeKind === "all"
-      ? flatTargets.filter((target) => target.id !== "all")
-      : activeKind === "chat"
-        ? targets.chat
-        : activeKind === "branch"
-          ? targets.branch
-          : activeKind === "character"
-            ? targets.character
-            : targets.persona;
-  const needle = query.trim().toLocaleLowerCase();
-  const branchTargetIds = new Set(targets.branch.map((target) => target.id));
-  const chatTargetIds = new Set(targets.chat.map((target) => target.id));
-  const characterTargetIds = new Set(targets.character.map((target) => target.id));
-  const targetKind = (target: Target, kind: (typeof categories)[number][0]) => {
-    if (kind !== "all") return kind;
-    if (branchTargetIds.has(target.id)) return "branch" as const;
-    if (chatTargetIds.has(target.id)) return "chat" as const;
-    if (characterTargetIds.has(target.id)) return "character" as const;
-    return "persona" as const;
-  };
-  const targetFullName = (target: Target, kind: (typeof categories)[number][0]) => {
-    const resolvedKind = targetKind(target, kind);
-    const comment = target.comment?.trim();
-    if (resolvedKind === "branch") {
-      const chatName =
-        target.chatName?.trim() ||
-        scopeTargets?.chats.find((candidate) => candidate.id === target.scope?.chatIds?.[0])?.chatName?.trim();
-      return chatName ? `${chatName} - ${target.label}` : target.label;
-    }
-    return resolvedKind === "persona" && comment ? `${target.label} - ${comment}` : target.label;
-  };
-  const targetSearchText = (target: Target, kind: (typeof categories)[number][0]) =>
-    `${targetFullName(target, kind)} ${target.label} ${target.comment ?? ""}`.toLocaleLowerCase();
-  const filteredTargets = activeTargets.filter((target) => targetSearchText(target, activeKind).includes(needle));
-  const pickerId = useId();
-  const currentTarget =
-    activeKind === "all" ? undefined : activeTargets.find((target) => target.id === currentIds[activeKind]);
-  const displayedTargets = filteredTargets.filter((target) => target.id !== currentTarget?.id);
-  const options = [
-    {
-      key: "all",
-      target: targets.all,
-      label: allOptionLabel ?? localizeUi("ui.longTermMemory.sourcesworkspace.all"),
-      kind: "all" as const,
-    },
-    ...(activeKind === "all"
-      ? []
-      : [
-          {
-            key: "current",
-            target: currentTarget,
-            label: localizeUi("ui.longTermMemory.memoryvault.current"),
-            kind: activeKind,
-          },
-        ]),
-  ];
-  const regularTargets = displayedTargets;
-  const memoryPresence = scopeTargets?.memoryPresence;
-  const hasMemories = useMemo(
-    () => (memoryPresence ? buildScopeMemoryPresence(memoryPresence) : null),
-    [memoryPresence],
-  );
-  const targetsWithMemories = hasMemories ? regularTargets.filter((target) => hasMemories(target.scope)) : [];
-  const targetsWithoutMemories = hasMemories ? regularTargets.filter((target) => !hasMemories(target.scope)) : [];
-  const neutralTargets = hasMemories ? [] : regularTargets;
-  const [noMemoriesOpen, setNoMemoriesOpen] = useState(false);
-  const noMemoriesPreference = useRef(false);
-  const wasSearching = useRef(false);
-  useEffect(() => {
-    if (needle) setNoMemoriesOpen(true);
-    else if (wasSearching.current) setNoMemoriesOpen(noMemoriesPreference.current);
-    wasSearching.current = Boolean(needle);
-  }, [needle]);
-  function selectKind(kind: (typeof categories)[number][0]) {
-    setActiveKind(kind);
-    setNoMemoriesOpen(false);
-    noMemoriesPreference.current = false;
-    wasSearching.current = false;
-  }
-  const radioTargets = [
-    ...options.flatMap(({ target }) => (target ? [target] : [])),
-    ...neutralTargets,
-    ...targetsWithMemories,
-    ...(noMemoriesOpen ? targetsWithoutMemories : []),
-  ];
-  const tabStopId = radioTargets.some((target) => target.id === selectedId) ? selectedId : radioTargets[0]?.id;
-  const renderRegularTarget = (target: Target) => {
-    const fullName = targetFullName(target, activeKind);
-    const branchChatName =
-      targetKind(target, activeKind) === "branch"
-        ? target.chatName?.trim() ||
-          scopeTargets?.chats.find((candidate) => candidate.id === target.scope?.chatIds?.[0])?.chatName?.trim()
-        : undefined;
-    return (
-      <button
-        key={target.id}
-        type="button"
-        data-ltm-vault-scope-target={target.id}
-        title={fullName}
-        role="radio"
-        aria-checked={target.id === selectedId}
-        tabIndex={target.id === tabStopId ? 0 : -1}
-        data-selected={target.id === selectedId ? "true" : "false"}
-        className={`mari-editor-action flex min-h-11 w-full min-w-0 items-center gap-3 rounded-none border-t-0 px-3 py-2 text-left text-sm last:border-b-0 ${target.id === selectedId ? "bg-[var(--primary)]/10" : ""}`}
-        onClick={() => onSelect(target)}
-      >
-        <Check
-          aria-hidden="true"
-          size="0.875rem"
-          className={target.id === selectedId ? "shrink-0 text-[var(--marinara-editor-accent)]" : "shrink-0 opacity-0"}
-        />
-        <span className="flex min-w-0 flex-1">
-          {branchChatName ? (
-            <>
-              <span className="min-w-0 flex-1 truncate">{branchChatName}</span>
-              <span className="shrink-0"> - </span>
-              <span className="min-w-0 max-w-full shrink truncate">{target.label}</span>
-            </>
-          ) : (
-            <span className="min-w-0 flex-1 truncate">{fullName}</span>
-          )}
-        </span>
-      </button>
-    );
-  };
-  return (
-    <div
-      id={variant === "secondary" ? `${pickerId}-secondary-control` : "ltm-vault-scope-control"}
-      data-ltm-vault-scope-control={variant === "primary" ? true : undefined}
-      data-ltm-vault-scope-secondary-control={variant === "secondary" ? true : undefined}
-      className="min-w-0 max-w-full space-y-3 p-3"
-      style={{ containerType: "inline-size" }}
-    >
-      <div className="flex min-w-0 items-center gap-2 text-xs font-semibold">
-        <span className="min-w-0 truncate">{localizeUi("ui.longTermMemory.memoryvault.chooseScope")}</span>
-      </div>
-      <label className="relative block min-w-0">
-        <Search
-          aria-hidden="true"
-          size="0.875rem"
-          className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[var(--muted-foreground)]"
-        />
-        <input
-          className={`${inputClass} min-w-0 max-w-full pl-9`}
-          value={query}
-          placeholder={localizeUi("ui.longTermMemory.sourcesworkspace.searchScopes")}
-          aria-label={localizeUi("ui.longTermMemory.sourcesworkspace.searchScopes")}
-          data-ltm-vault-scope-search
-          onChange={(event) => setQuery(event.target.value)}
-        />
-      </label>
-      <div
-        role="tablist"
-        aria-label={localizeUi("ui.longTermMemory.memoryvault.chooseScope")}
-        data-ltm-vault-scope-tablist
-        className="mari-editor-tab-rail grid w-full min-w-0 gap-1 rounded-lg border p-1"
-      >
-        <style>{`
-          [data-ltm-vault-scope-tablist] {
-            grid-template-columns: repeat(2, minmax(0, 1fr));
-          }
-          [data-ltm-vault-scope-tab]:not([data-active="true"]):not(:hover) {
-            background: var(--marinara-editor-control-bg);
-          }
-          @container (min-width: 16rem) {
-            [data-ltm-vault-scope-tablist] {
-              grid-template-columns: repeat(5, minmax(0, 1fr));
-            }
-          }
-          @container (max-width: 15rem) {
-            [data-ltm-vault-scope-tablist] {
-              grid-template-columns: minmax(0, 1fr);
-            }
-          }
-        `}</style>
-        {categories.map(([kind, label], index) => (
-          <button
-            key={kind}
-            type="button"
-            role="tab"
-            id={`${pickerId}-${kind}`}
-            aria-controls={`${pickerId}-panel`}
-            tabIndex={activeKind === kind ? 0 : -1}
-            aria-selected={activeKind === kind}
-            data-ltm-vault-scope-tab={kind}
-            data-active={activeKind === kind}
-            data-ltm-tab-focus
-            className="mari-editor-tab min-h-11 min-w-0 rounded-md px-1 text-xs font-semibold"
-            onClick={() => selectKind(kind)}
-            onKeyDown={(event) => {
-              if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
-              event.preventDefault();
-              const nextIndex =
-                event.key === "Home"
-                  ? 0
-                  : event.key === "End"
-                    ? categories.length - 1
-                    : (index + (event.key === "ArrowRight" ? 1 : -1) + categories.length) % categories.length;
-              const nextKind = categories[nextIndex]![0];
-              selectKind(nextKind);
-              document.getElementById(`${pickerId}-${nextKind}`)?.focus();
-            }}
-          >
-            <span className="block truncate">{label}</span>
-          </button>
-        ))}
-      </div>
-      <div
-        data-ltm-vault-scope-list
-        id={`${pickerId}-panel`}
-        role="tabpanel"
-        aria-labelledby={`${pickerId}-${activeKind}`}
-        className="min-w-0 max-h-52 overflow-y-auto overscroll-contain divide-y divide-[var(--border)] border-y border-[var(--border)]"
-      >
-        <div
-          role="radiogroup"
-          aria-labelledby={`${pickerId}-${activeKind}`}
-          className="divide-y divide-[var(--border)]"
-          onKeyDown={(event) => {
-            if (!["ArrowDown", "ArrowRight", "ArrowUp", "ArrowLeft"].includes(event.key)) return;
-            const radios = Array.from(
-              event.currentTarget.querySelectorAll<HTMLButtonElement>('[role="radio"]:enabled'),
-            ).filter((radio) => !radio.closest("details:not([open])"));
-            const index = radios.indexOf(event.target as HTMLButtonElement);
-            if (index < 0 || radios.length < 2) return;
-            event.preventDefault();
-            const step = event.key === "ArrowDown" || event.key === "ArrowRight" ? 1 : -1;
-            const next = radios[(index + step + radios.length) % radios.length]!;
-            next.focus();
-            next.click();
-          }}
-        >
-          {options.map(({ key, target: optionTarget, label, kind }) => {
-            const selected = optionTarget?.id === selectedId;
-            const fullName = optionTarget ? targetFullName(optionTarget, kind) : label;
-            return (
-              <button
-                key={key}
-                type="button"
-                data-ltm-vault-scope-target={optionTarget?.id}
-                data-ltm-vault-scope-current={key === "current" ? activeKind : undefined}
-                data-ltm-vault-scope-pinned={key === "all" || key === "current" ? key : undefined}
-                disabled={!optionTarget}
-                title={key === "all" ? optionTarget?.label : fullName}
-                role="radio"
-                aria-checked={selected}
-                tabIndex={optionTarget && optionTarget.id === tabStopId ? 0 : -1}
-                data-selected={selected ? "true" : "false"}
-                className={`mari-editor-action flex min-h-11 w-full min-w-0 items-center gap-3 rounded-none border-t-0 px-3 py-2 text-left text-sm last:border-b-0 ${selected ? "bg-[var(--primary)]/10" : ""}`}
-                onClick={() => optionTarget && onSelect(optionTarget)}
-              >
-                <Check
-                  aria-hidden="true"
-                  size="0.875rem"
-                  className={selected ? "shrink-0 text-[var(--marinara-editor-accent)]" : "shrink-0 opacity-0"}
-                />
-                <span className="min-w-0 flex-1 truncate">
-                  {key === "all" ? label : fullName}
-                  {key === "current" && optionTarget ? (
-                    <span className="block truncate text-xs text-[var(--marinara-editor-muted)]">
-                      {optionTarget.label}
-                    </span>
-                  ) : null}
-                </span>
-              </button>
-            );
-          })}
-          {neutralTargets.map(renderRegularTarget)}
-          {targetsWithMemories.length ? (
-            <div data-ltm-vault-scope-presence="with-memories">
-              <p className="border-b border-[var(--border)] bg-[var(--secondary)] px-3 py-1 text-xs font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">
-                {localizeUi("ui.longTermMemory.memoryvault.withMemories")}
-              </p>
-              {targetsWithMemories.map(renderRegularTarget)}
-            </div>
-          ) : null}
-          {targetsWithoutMemories.length ? (
-            <details
-              open={noMemoriesOpen}
-              onToggle={(event) => setNoMemoriesOpen(event.currentTarget.open)}
-              data-ltm-vault-scope-presence="no-memories"
-            >
-              <summary
-                onClick={() => {
-                  noMemoriesPreference.current = !noMemoriesOpen;
-                }}
-                className="flex min-h-11 cursor-pointer list-none items-center border-b border-[var(--border)] px-3 py-2 text-xs font-semibold uppercase tracking-wide text-[var(--muted-foreground)] [&::-webkit-details-marker]:hidden"
-              >
-                {localizeUi("ui.longTermMemory.memoryvault.noMemories")}
-              </summary>
-              {targetsWithoutMemories.map(renderRegularTarget)}
-            </details>
-          ) : null}
-        </div>
-        {!filteredTargets.length && activeKind !== "all" ? (
-          <p className="px-3 py-4 text-xs text-[var(--muted-foreground)]">
-            {localizeUi("ui.longTermMemory.memoryvault.noScopeTargets")}
-          </p>
-        ) : null}
-      </div>
-    </div>
-  );
-}
 type NoteResponse = { note: LtmNote };
 type EditorMutationResponse = NoteResponse & {
   rebuild?: { status: "complete" | "deferred"; error?: string };
@@ -583,26 +214,7 @@ const navigatorStates = new Map<string, NavigatorState>();
 function fingerprint(note: LtmNote | null) {
   return note ? JSON.stringify(note) : "";
 }
-function hasExplicitScope(scope: LtmScope) {
-  return Boolean(
-    getLtmScopeChatIds(scope).length ||
-    getLtmScopeGroupIds(scope).length ||
-    scope.characterIds?.length ||
-    getLtmScopePersonaIds(scope).length,
-  );
-}
-function sameScope(left: LtmScope, right: LtmScope) {
-  const normalize = (scope: LtmScope) => ({
-    chatIds: getLtmScopeChatIds(scope).sort(),
-    groupIds: getLtmScopeGroupIds(scope).sort(),
-    characterIds: [...(scope.characterIds ?? [])].sort(),
-    personaIds: getLtmScopePersonaIds(scope).sort(),
-  });
-  return JSON.stringify(normalize(left)) === JSON.stringify(normalize(right));
-}
-function sameModes(left: readonly LtmMode[], right: readonly LtmMode[]) {
-  return left.length === right.length && left.every((mode) => right.includes(mode));
-}
+
 function notesRequestPath(scope: LtmScope | undefined) {
   return `/notes?${new URLSearchParams({
     ...(scope?.chatIds?.length ? { scopeChatIds: scope.chatIds.join(",") } : {}),
@@ -612,25 +224,7 @@ function notesRequestPath(scope: LtmScope | undefined) {
     ...(scope ? { includeGlobal: "false" } : {}),
   })}`;
 }
-function availabilityEntries(
-  scope: LtmScope,
-  targets: ReadonlyArray<PickerTarget>,
-  fallbackLabels: Partial<Record<PickerTarget["kind"], string>> = {},
-) {
-  const find = (kind: PickerTarget["kind"], id: string) =>
-    targets.find((target) => target.kind === kind && target.id === id)?.label ??
-    fallbackLabels[kind] ??
-    humanizeLabel(kind);
-  const chatIds = new Set(getLtmScopeChatIds(scope));
-  const groupIds = getLtmScopeGroupIds(scope);
-  const personaIds = getLtmScopePersonaIds(scope);
-  return [
-    ...[...chatIds].map((id) => ({ kind: "chat" as const, id, label: find("chat", id) })),
-    ...groupIds.map((id) => ({ kind: "group" as const, id, label: find("group", id) })),
-    ...(scope.characterIds ?? []).map((id) => ({ kind: "character" as const, id, label: find("character", id) })),
-    ...personaIds.map((id) => ({ kind: "persona" as const, id, label: find("persona", id) })),
-  ];
-}
+
 function subjectSearchValues(note: LtmNote, subjectLabels: (subject: LtmSubject) => string) {
   return (note.subjects ?? []).flatMap((subject) => [subject.key, subject.ref?.id, subjectLabels(subject)]);
 }
@@ -785,673 +379,6 @@ function recoveredNote(
       },
     },
   };
-}
-
-function Pill({ children, label, onRemove }: { children: ReactNode; label?: string; onRemove: () => void }) {
-  const { t: localizeUi } = useLtmTranslation();
-  const removeLabel = localizeUi("ui.longTermMemory.pill.removeValue1", {
-    value1: label ?? String(children),
-  });
-  return (
-    <span className="inline-flex min-h-11 max-w-full items-center gap-1 rounded-md border border-[var(--border)] bg-[var(--secondary)] px-2 text-xs text-[var(--foreground)]">
-      <span className="truncate">{children}</span>
-      <button
-        type="button"
-        onClick={onRemove}
-        aria-label={removeLabel}
-        title={removeLabel}
-        className="flex h-11 w-11 shrink-0 items-center justify-center rounded leading-none hover:bg-[var(--accent)]"
-      >
-        <X aria-hidden="true" size="0.75rem" />
-      </button>
-    </span>
-  );
-}
-
-function MemoryAvailabilityWorkbench({
-  note,
-  originalNote,
-  isNew,
-  targets,
-  availabilityTargets,
-  localizeUi,
-  modeLabel,
-  onSave,
-  onCancel,
-}: {
-  note: LtmNote;
-  originalNote: LtmNote | null;
-  isNew: boolean;
-  targets: PickerTarget[];
-  availabilityTargets: AvailabilityTargets;
-  localizeUi: LtmTranslationFunction;
-  modeLabel: (mode: string) => string;
-  onSave: (scope: LtmScope, modes: LtmMode[]) => Promise<void>;
-  onCancel: () => void;
-}) {
-  const [scope, setScope] = useState<LtmScope>(() => structuredClone(note.scope));
-  const [selectedModes, setSelectedModes] = useState<LtmMode[]>(() => [...note.modes]);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState("");
-  const selectedCharacterIds = scope.characterIds ?? [];
-  const selectedPersonaIds = getLtmScopePersonaIds(scope);
-  const selectedGroupIds = getLtmScopeGroupIds(scope);
-  const selectedChatIds = getLtmScopeChatIds(scope);
-  const selectedBranchIds = selectedChatIds.filter((id) =>
-    availabilityTargets.branches.some((target) => target.id === id),
-  );
-  const unavailableLabels = {
-    chat: localizeUi("ui.longTermMemory.memoryvault.unavailableChat"),
-    group: localizeUi("ui.longTermMemory.memoryvault.unavailableChat"),
-    character: localizeUi("ui.longTermMemory.memoryvault.unavailableCharacter"),
-    persona: localizeUi("ui.longTermMemory.memoryvault.unavailablePersona"),
-  };
-  const visibleAvailabilityTargets: AvailabilityTargets = {
-    characters: [
-      ...availabilityTargets.characters,
-      ...selectedCharacterIds
-        .filter((id) => !availabilityTargets.characters.some((target) => target.id === id))
-        .map((id) => ({ id, label: unavailableLabels.character })),
-    ],
-    personas: [
-      ...availabilityTargets.personas,
-      ...selectedPersonaIds
-        .filter((id) => !availabilityTargets.personas.some((target) => target.id === id))
-        .map((id) => ({ id, label: unavailableLabels.persona })),
-    ],
-    chats: [
-      ...availabilityTargets.chats,
-      ...selectedGroupIds
-        .filter((id) => !availabilityTargets.chats.some((target) => target.groupId === id))
-        .map((id) => ({ id, label: unavailableLabels.chat, groupId: id, chatIds: [] })),
-      ...selectedChatIds
-        .filter(
-          (id) =>
-            !availabilityTargets.chats.some((target) => target.id === id) &&
-            !availabilityTargets.branches.some((target) => target.id === id),
-        )
-        .map((id) => ({ id, label: unavailableLabels.chat })),
-    ],
-    branches: [...availabilityTargets.branches],
-  };
-  const entries = availabilityEntries(scope, targets, unavailableLabels);
-  const baseline = originalNote ?? note;
-  const scopeChanged = !sameScope(scope, baseline.scope);
-  const modesChanged = !sameModes(selectedModes, baseline.modes);
-  const legacyGlobalModeOnly = Boolean(
-    !isNew &&
-    originalNote &&
-    !hasExplicitScope(originalNote.scope) &&
-    !scopeChanged &&
-    !hasExplicitScope(scope) &&
-    modesChanged,
-  );
-  const selectedIds = new Set([
-    ...getLtmScopePersonaIds(scope).map((id) => `persona:${id}`),
-    ...(scope.characterIds ?? []).map((id) => `character:${id}`),
-    ...getLtmScopeGroupIds(scope).map((id) => `chat:${id}`),
-    ...selectedChatIds.map((id) => {
-      const branch = availabilityTargets.branches.find((target) => target.id === id);
-      return `${branch ? "branch" : "chat"}:${id}`;
-    }),
-  ]);
-  if (!selectedGroupIds.length && !selectedChatIds.length) selectedIds.add("chat:all");
-  if (!selectedBranchIds.length) selectedIds.add("branch:all");
-  const remove = (kind: PickerTarget["kind"], id: string) => {
-    if (entries.length <= 1) {
-      setError(localizeUi("ui.longTermMemory.memoryvault.lastPlaceRequired"));
-      return;
-    }
-    if (kind === "chat" || kind === "group") {
-      const groupIds = getLtmScopeGroupIds(scope).filter((value) => value !== id);
-      const chatIds = getLtmScopeChatIds(scope).filter((value) => value !== id);
-      setScope(normalizeLtmScope({ ...scope, groupIds, chatIds }));
-    } else if (kind === "character") {
-      const characterIds = (scope.characterIds ?? []).filter((value) => value !== id);
-      setScope(normalizeLtmScope({ ...scope, characterIds }));
-    } else {
-      setScope(
-        normalizeLtmScope({
-          ...scope,
-          personaIds: getLtmScopePersonaIds(scope).filter((value) => value !== id),
-        }),
-      );
-    }
-    setError("");
-  };
-  const toggle = (kind: "character" | "persona" | "chat" | "branch", id: string) => {
-    const next = normalizeLtmScope(scope);
-    if (kind === "character") {
-      const values = new Set(next.characterIds ?? []);
-      if (values.has(id)) values.delete(id);
-      else values.add(id);
-      next.characterIds = [...values];
-    } else if (kind === "persona") {
-      const values = new Set(getLtmScopePersonaIds(next));
-      if (values.has(id)) values.delete(id);
-      else values.add(id);
-      next.personaIds = [...values];
-    } else if (kind === "chat") {
-      if (id === "all") {
-        next.chatIds = [];
-        next.groupIds = [];
-      } else {
-        const target = availabilityTargets.chats.find((item) => item.id === id);
-        if (target?.groupId) {
-          const groupIds = new Set(getLtmScopeGroupIds(next));
-          if (groupIds.has(target.groupId)) groupIds.delete(target.groupId);
-          else {
-            groupIds.add(target.groupId);
-            next.chatIds = getLtmScopeChatIds(next).filter(
-              (chatId) =>
-                !availabilityTargets.branches.some(
-                  (branch) => branch.id === chatId && branch.groupId === target.groupId,
-                ),
-            );
-          }
-          next.groupIds = [...groupIds];
-        } else {
-          const chatIds = new Set(getLtmScopeChatIds(next));
-          if (chatIds.has(id)) chatIds.delete(id);
-          else chatIds.add(id);
-          next.chatIds = [...chatIds];
-        }
-      }
-    } else if (id === "all") {
-      next.chatIds = getLtmScopeChatIds(next).filter(
-        (chatId) => !availabilityTargets.branches.some((branch) => branch.id === chatId),
-      );
-    } else {
-      const target = availabilityTargets.branches.find((item) => item.id === id);
-      const chatIds = new Set(getLtmScopeChatIds(next));
-      if (chatIds.has(id)) chatIds.delete(id);
-      else chatIds.add(id);
-      next.chatIds = [...chatIds];
-      if (target?.groupId) {
-        next.groupIds = getLtmScopeGroupIds(next).filter((groupId) => groupId !== target.groupId);
-      }
-    }
-    setScope(normalizeLtmScope(next));
-    setError("");
-  };
-  const toggleMode = (mode: LtmMode) => {
-    if (selectedModes.includes(mode)) {
-      if (selectedModes.length === 1) {
-        setError(localizeUi("ui.longTermMemory.memoryvault.lastModeRequired"));
-        return;
-      }
-      setSelectedModes(selectedModes.filter((value) => value !== mode));
-    } else setSelectedModes([...selectedModes, mode]);
-    setError("");
-  };
-  const save = async () => {
-    if (!entries.length && !legacyGlobalModeOnly) {
-      setError(localizeUi("ui.longTermMemory.memoryvault.availabilityPlaceRequired"));
-      return;
-    }
-    if (!selectedModes.length) {
-      setError(localizeUi("ui.longTermMemory.memoryvault.availabilityModeRequired"));
-      return;
-    }
-    setBusy(true);
-    setError("");
-    try {
-      await onSave(scope, selectedModes);
-    } catch (cause) {
-      setError(errorMessage(cause, localizeUi("ui.longTermMemory.memoryvault.couldNotSaveAvailability")));
-    } finally {
-      setBusy(false);
-    }
-  };
-  return (
-    <section className="mari-editor-panel min-w-0 space-y-4 p-4" data-ltm-availability-workbench>
-      <header className="flex flex-wrap items-start justify-between gap-3 border-b border-[var(--border)] pb-3">
-        <div>
-          <h2 className="text-base font-semibold">{localizeUi("ui.longTermMemory.memoryvault.memoryAvailability")}</h2>
-          <p className="mt-1 text-xs text-[var(--muted-foreground)]">{note.title}</p>
-        </div>
-        <div className="flex gap-2">
-          <Button disabled={busy} onClick={onCancel}>
-            {localizeUi("ui.longTermMemory.memoryvault.cancel")}
-          </Button>
-          <Button primary disabled={busy} onClick={() => void save()}>
-            <Check aria-hidden="true" size="1rem" className="shrink-0" />
-            {busy
-              ? localizeUi("ui.longTermMemory.memoryvault.saving")
-              : localizeUi("ui.longTermMemory.memoryvault.saveAvailability")}
-          </Button>
-        </div>
-      </header>
-      {error ? <StatusSurface tone="danger">{error}</StatusSurface> : null}
-      <fieldset className="space-y-2 border-b border-[var(--border)] pb-4">
-        <legend className="text-sm font-semibold">{localizeUi("ui.longTermMemory.memoryvault.chatModes")}</legend>
-        <p className="text-xs text-[var(--muted-foreground)]">
-          {localizeUi("ui.longTermMemory.memoryvault.modesEligibilityHelp")}
-        </p>
-        <div className="flex flex-wrap gap-3">
-          {modes.map((mode) => (
-            <label key={mode} className="flex min-h-11 items-center gap-2 text-sm">
-              <input
-                type="checkbox"
-                className="h-4 w-4"
-                checked={selectedModes.includes(mode)}
-                onChange={() => toggleMode(mode)}
-              />
-              {modeLabel(mode)}
-            </label>
-          ))}
-        </div>
-      </fieldset>
-      <section className="space-y-3">
-        <div>
-          <h3 className="text-sm font-semibold">{localizeUi("ui.longTermMemory.memoryvault.availableIn")}</h3>
-          <p className="text-xs text-[var(--muted-foreground)]">
-            {isNew
-              ? localizeUi("ui.longTermMemory.memoryvault.newMemoryAvailabilityHelp")
-              : localizeUi("ui.longTermMemory.memoryvault.availabilityScopeHelp")}
-          </p>
-        </div>
-        {!entries.length ? (
-          <StatusSurface>
-            {isNew
-              ? localizeUi("ui.longTermMemory.memoryvault.availabilityPlaceRequired")
-              : localizeUi("ui.longTermMemory.memoryvault.availableEverywhere")}
-          </StatusSurface>
-        ) : (
-          <div className="flex flex-wrap gap-1.5" data-ltm-availability-pills>
-            {entries.map((entry) => (
-              <Pill key={`${entry.kind}:${entry.id}`} label={entry.label} onRemove={() => remove(entry.kind, entry.id)}>
-                {entry.label}
-              </Pill>
-            ))}
-          </div>
-        )}
-        <details data-ltm-availability-picker className="group">
-          <summary className="mari-editor-action inline-flex min-h-11 cursor-pointer list-none items-center gap-2 px-3 py-2 text-left text-sm font-semibold text-[var(--marinara-editor-text)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--ring)] [&::-webkit-details-marker]:hidden">
-            <span className="min-w-0 flex-1">{localizeUi("ui.longTermMemory.memoryvault.addMemoryTo")}</span>
-            <ChevronRight
-              aria-hidden="true"
-              size="0.875rem"
-              data-ltm-availability-chevron
-              className="shrink-0 transition-transform"
-            />
-          </summary>
-          <div className="border-t border-[var(--border)] p-3">
-            <AvailabilityTabRail
-              characters={visibleAvailabilityTargets.characters}
-              personas={visibleAvailabilityTargets.personas}
-              chats={visibleAvailabilityTargets.chats}
-              branches={visibleAvailabilityTargets.branches}
-              selectedIds={selectedIds}
-              tablistLabel={localizeUi("ui.longTermMemory.memoryvault.memoryAvailability")}
-              sectionCopy={{
-                character: {
-                  label: localizeUi("ui.longTermMemory.memoryvault.character"),
-                  allLabel: localizeUi("ui.longTermMemory.memoryvault.allCharacters"),
-                  searchPlaceholder: localizeUi("ui.longTermMemory.memoryvault.searchCharacters"),
-                  emptyLabel: localizeUi("ui.longTermMemory.memoryvault.noMatchingCharacters"),
-                  accessibleLabel: (count) =>
-                    localizeUi("ui.longTermMemory.memoryvault.availabilitySectionSelected", {
-                      label: localizeUi("ui.longTermMemory.memoryvault.character"),
-                      count,
-                    }),
-                },
-                persona: {
-                  label: localizeUi("ui.longTermMemory.memoryvault.persona"),
-                  allLabel: localizeUi("ui.longTermMemory.memoryvault.allPersonas"),
-                  searchPlaceholder: localizeUi("ui.longTermMemory.memoryvault.searchPersonas"),
-                  emptyLabel: localizeUi("ui.longTermMemory.memoryvault.noMatchingPersonas"),
-                  accessibleLabel: (count) =>
-                    localizeUi("ui.longTermMemory.memoryvault.availabilitySectionSelected", {
-                      label: localizeUi("ui.longTermMemory.memoryvault.persona"),
-                      count,
-                    }),
-                },
-                chat: {
-                  label: localizeUi("ui.longTermMemory.memoryvault.chat"),
-                  allLabel: localizeUi("ui.longTermMemory.memoryvault.allChats"),
-                  searchPlaceholder: localizeUi("ui.longTermMemory.memoryvault.searchChats"),
-                  emptyLabel: localizeUi("ui.longTermMemory.memoryvault.noMatchingChats"),
-                  accessibleLabel: (count) =>
-                    localizeUi("ui.longTermMemory.memoryvault.availabilitySectionSelected", {
-                      label: localizeUi("ui.longTermMemory.memoryvault.chat"),
-                      count,
-                    }),
-                },
-                branch: {
-                  label: localizeUi("ui.longTermMemory.memoryvault.branch"),
-                  allLabel: localizeUi("ui.longTermMemory.memoryvault.allBranches"),
-                  searchPlaceholder: localizeUi("ui.longTermMemory.memoryvault.searchBranches"),
-                  emptyLabel: localizeUi("ui.longTermMemory.memoryvault.noMatchingBranches"),
-                  accessibleLabel: (count) =>
-                    localizeUi("ui.longTermMemory.memoryvault.availabilitySectionSelected", {
-                      label: localizeUi("ui.longTermMemory.memoryvault.branch"),
-                      count,
-                    }),
-                },
-              }}
-              onToggle={toggle}
-            />
-          </div>
-        </details>
-      </section>
-    </section>
-  );
-}
-
-function BulkAvailabilityWorkbench({
-  notes,
-  action,
-  selectedTargets,
-  modes: selectedModes,
-  availabilityTargets,
-  localizeUi,
-  modeLabel,
-  onActionChange,
-  onModesChange,
-  onTargetsChange,
-  onApply,
-  onCancel,
-}: {
-  notes: LtmNote[];
-  action: "add" | "remove";
-  selectedTargets: string[];
-  modes: LtmMode[];
-  availabilityTargets: AvailabilityTargets;
-  localizeUi: LtmTranslationFunction;
-  modeLabel: (mode: string) => string;
-  onActionChange: (action: "add" | "remove") => void;
-  onModesChange: (modes: LtmMode[]) => void;
-  onTargetsChange: (targets: string[]) => void;
-  onApply: () => void;
-  onCancel: () => void;
-}) {
-  const selectedIds = new Set(
-    selectedTargets.map((target) => {
-      const [kind, id] = splitBulkAvailabilityTarget(target);
-      return `${kind === "group" ? "chat" : kind}:${id}`;
-    }),
-  );
-  const hasChatRestriction = selectedTargets.some((target) => {
-    const [kind] = splitBulkAvailabilityTarget(target);
-    return kind === "group" || kind === "chat" || kind === "branch";
-  });
-  const hasBranchRestriction = selectedTargets.some((target) => splitBulkAvailabilityTarget(target)[0] === "branch");
-  if (!hasChatRestriction) selectedIds.add("chat:all");
-  if (!hasBranchRestriction) selectedIds.add("branch:all");
-  const selectTarget = (nextKind: "character" | "persona" | "chat" | "branch", nextId: string) => {
-    if (nextId === "all") {
-      const next = new Set(selectedTargets);
-      for (const selected of next) {
-        const [kind] = splitBulkAvailabilityTarget(selected);
-        if (nextKind === "chat" && (kind === "group" || kind === "chat" || kind === "branch")) next.delete(selected);
-        if (nextKind === "branch" && kind === "branch") next.delete(selected);
-      }
-      onTargetsChange([...next]);
-      return;
-    }
-    const chatTarget =
-      nextKind === "chat" ? availabilityTargets.chats.find((candidate) => candidate.id === nextId) : undefined;
-    const branchTarget =
-      nextKind === "branch" ? availabilityTargets.branches.find((candidate) => candidate.id === nextId) : undefined;
-    const selection =
-      nextKind === "chat" && chatTarget?.groupId ? `group:${chatTarget.groupId}` : `${nextKind}:${nextId}`;
-    const next = new Set(selectedTargets);
-    if (next.has(selection)) {
-      next.delete(selection);
-    } else {
-      const groupId = nextKind === "branch" ? branchTarget?.groupId : chatTarget?.groupId;
-      if (nextKind === "branch" && groupId) next.delete(`group:${groupId}`);
-      if (nextKind === "chat" && groupId) {
-        for (const selected of next) {
-          const [kind, id] = splitBulkAvailabilityTarget(selected);
-          if (
-            kind === "branch" &&
-            availabilityTargets.branches.some((branch) => branch.id === id && branch.groupId === groupId)
-          ) {
-            next.delete(selected);
-          }
-        }
-      }
-      next.add(selection);
-    }
-    onTargetsChange([...next]);
-  };
-  const selectedPlaceLabels = selectedTargets.map((target) => {
-    const [kind, id] = splitBulkAvailabilityTarget(target);
-    const candidate =
-      kind === "character"
-        ? availabilityTargets.characters.find((item) => item.id === id)
-        : kind === "persona"
-          ? availabilityTargets.personas.find((item) => item.id === id)
-          : kind === "branch"
-            ? availabilityTargets.branches.find((item) => item.id === id)
-            : availabilityTargets.chats.find((item) => item.id === id);
-    return { target, label: candidate?.label ?? id };
-  });
-  const outcomes = notes.map((note) => {
-    const places = availabilityEntries(note.scope, [], {
-      chat: localizeUi("ui.longTermMemory.memoryvault.unavailableChat"),
-      group: localizeUi("ui.longTermMemory.memoryvault.unavailableChat"),
-      character: localizeUi("ui.longTermMemory.memoryvault.unavailableCharacter"),
-      persona: localizeUi("ui.longTermMemory.memoryvault.unavailablePersona"),
-    });
-    const hasPlace = selectedTargets.some((target) =>
-      places.some((entry) => bulkAvailabilityTargetMatchesEntry(target, entry)),
-    );
-    const addsPlace = selectedTargets.some(
-      (target) => !places.some((entry) => bulkAvailabilityTargetMatchesEntry(target, entry)),
-    );
-    const remainingPlaces = places.filter(
-      (entry) => !selectedTargets.some((target) => bulkAvailabilityTargetMatchesEntry(target, entry)),
-    );
-    const matchingModes = selectedModes.filter((mode) => note.modes.includes(mode));
-    const changes =
-      action === "add"
-        ? Boolean(addsPlace || selectedModes.some((mode) => !note.modes.includes(mode)))
-        : Boolean(hasPlace || matchingModes.length);
-    const removesLastPlace = action === "remove" && hasPlace && remainingPlaces.length === 0;
-    const removesLastMode = action === "remove" && matchingModes.length === note.modes.length;
-    return {
-      note,
-      state: removesLastPlace || removesLastMode ? "invalid" : changes ? "ready" : "unchanged",
-    };
-  });
-  const ready = outcomes.some((outcome) => outcome.state === "ready");
-  return (
-    <section className="mari-editor-panel min-w-0 space-y-4 p-4" data-ltm-bulk-availability-workbench>
-      <header className="flex flex-wrap items-start justify-between gap-3 border-b border-[var(--border)] pb-3">
-        <div>
-          <h2 className="text-base font-semibold">
-            {localizeUi("ui.longTermMemory.memoryvault.bulkMemoryAvailability")}
-          </h2>
-          <p className="mt-1 text-xs text-[var(--muted-foreground)]">
-            {localizeUi("ui.longTermMemory.memoryvault.bulkAvailabilitySelected", {
-              count: notes.length,
-            })}
-          </p>
-        </div>
-        <div className="flex gap-2">
-          <Button onClick={onCancel}>{localizeUi("ui.longTermMemory.memoryvault.cancel")}</Button>
-          <Button primary disabled={!ready} onClick={onApply}>
-            {localizeUi("ui.longTermMemory.memoryvault.apply")}
-          </Button>
-        </div>
-      </header>
-      <fieldset className="space-y-2 border-b border-[var(--border)] pb-4">
-        <legend className="text-sm font-semibold">
-          {localizeUi("ui.longTermMemory.memoryvault.availabilityChange")}
-        </legend>
-        <div
-          className="flex flex-wrap gap-2"
-          role="group"
-          aria-label={localizeUi("ui.longTermMemory.memoryvault.availabilityChange")}
-          data-ltm-bulk-availability-action
-        >
-          <Button
-            aria-pressed={action === "add"}
-            onClick={() => onActionChange("add")}
-            className={action === "add" ? "bg-[var(--accent)]" : ""}
-          >
-            {localizeUi("ui.longTermMemory.memoryvault.addAvailability")}
-          </Button>
-          <Button
-            aria-pressed={action === "remove"}
-            onClick={() => onActionChange("remove")}
-            className={action === "remove" ? "bg-[var(--accent)]" : ""}
-          >
-            {localizeUi("ui.longTermMemory.memoryvault.removeAvailability")}
-          </Button>
-        </div>
-      </fieldset>
-      <fieldset className="space-y-2 border-b border-[var(--border)] pb-4">
-        <legend className="text-sm font-semibold">{localizeUi("ui.longTermMemory.memoryvault.chatModes")}</legend>
-        <p className="text-xs text-[var(--muted-foreground)]">
-          {localizeUi("ui.longTermMemory.memoryvault.modesEligibilityHelp")}
-        </p>
-        <div className="flex flex-wrap gap-3">
-          {modes.map((mode) => (
-            <label key={mode} className="flex min-h-11 items-center gap-2 text-sm">
-              <input
-                type="checkbox"
-                className="h-4 w-4"
-                checked={selectedModes.includes(mode)}
-                onChange={() =>
-                  onModesChange(
-                    selectedModes.includes(mode)
-                      ? selectedModes.filter((value) => value !== mode)
-                      : [...selectedModes, mode],
-                  )
-                }
-              />
-              {modeLabel(mode)}
-            </label>
-          ))}
-        </div>
-      </fieldset>
-      <section className="space-y-3">
-        <div>
-          <h3 className="text-sm font-semibold">{localizeUi("ui.longTermMemory.memoryvault.availableIn")}</h3>
-          <p className="text-xs text-[var(--muted-foreground)]">
-            {localizeUi("ui.longTermMemory.memoryvault.bulkAvailabilityHelp")}
-          </p>
-        </div>
-        {selectedPlaceLabels.length ? (
-          <div className="flex flex-wrap gap-1.5" data-ltm-availability-pills>
-            {selectedPlaceLabels.map(({ target, label }) => (
-              <Pill
-                key={target}
-                label={label}
-                onRemove={() => onTargetsChange(selectedTargets.filter((item) => item !== target))}
-              >
-                {label}
-              </Pill>
-            ))}
-          </div>
-        ) : (
-          <StatusSurface>
-            {localizeUi(
-              action === "add"
-                ? "ui.longTermMemory.memoryvault.bulkImplicitAllPlaces"
-                : "ui.longTermMemory.memoryvault.bulkNoPlacesSelected",
-            )}
-          </StatusSurface>
-        )}
-        <details data-ltm-availability-picker className="group">
-          <summary className="mari-editor-action inline-flex min-h-11 cursor-pointer list-none items-center gap-2 px-3 py-2 text-left text-sm font-semibold text-[var(--marinara-editor-text)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--ring)] [&::-webkit-details-marker]:hidden">
-            <span className="min-w-0 flex-1">
-              {localizeUi(
-                action === "add"
-                  ? "ui.longTermMemory.memoryvault.bulkAddMemoriesTo"
-                  : "ui.longTermMemory.memoryvault.bulkRemoveMemoriesFrom",
-              )}
-            </span>
-            <ChevronRight
-              aria-hidden="true"
-              size="0.875rem"
-              data-ltm-availability-chevron
-              className="shrink-0 transition-transform"
-            />
-          </summary>
-          <div className="border-t border-[var(--border)] p-3">
-            <AvailabilityTabRail
-              characters={availabilityTargets.characters}
-              personas={availabilityTargets.personas}
-              chats={availabilityTargets.chats}
-              branches={availabilityTargets.branches}
-              selectedIds={selectedIds}
-              tablistLabel={localizeUi("ui.longTermMemory.memoryvault.bulkMemoryAvailability")}
-              sectionCopy={{
-                character: {
-                  label: localizeUi("ui.longTermMemory.memoryvault.character"),
-                  allLabel: localizeUi("ui.longTermMemory.memoryvault.allCharacters"),
-                  searchPlaceholder: localizeUi("ui.longTermMemory.memoryvault.searchCharacters"),
-                  emptyLabel: localizeUi("ui.longTermMemory.memoryvault.noMatchingCharacters"),
-                  accessibleLabel: (count) =>
-                    localizeUi("ui.longTermMemory.memoryvault.availabilitySectionSelected", {
-                      label: localizeUi("ui.longTermMemory.memoryvault.character"),
-                      count,
-                    }),
-                },
-                persona: {
-                  label: localizeUi("ui.longTermMemory.memoryvault.persona"),
-                  allLabel: localizeUi("ui.longTermMemory.memoryvault.allPersonas"),
-                  searchPlaceholder: localizeUi("ui.longTermMemory.memoryvault.searchPersonas"),
-                  emptyLabel: localizeUi("ui.longTermMemory.memoryvault.noMatchingPersonas"),
-                  accessibleLabel: (count) =>
-                    localizeUi("ui.longTermMemory.memoryvault.availabilitySectionSelected", {
-                      label: localizeUi("ui.longTermMemory.memoryvault.persona"),
-                      count,
-                    }),
-                },
-                chat: {
-                  label: localizeUi("ui.longTermMemory.memoryvault.chat"),
-                  allLabel: localizeUi("ui.longTermMemory.memoryvault.allChats"),
-                  searchPlaceholder: localizeUi("ui.longTermMemory.memoryvault.searchChats"),
-                  emptyLabel: localizeUi("ui.longTermMemory.memoryvault.noMatchingChats"),
-                  accessibleLabel: (count) =>
-                    localizeUi("ui.longTermMemory.memoryvault.availabilitySectionSelected", {
-                      label: localizeUi("ui.longTermMemory.memoryvault.chat"),
-                      count,
-                    }),
-                },
-                branch: {
-                  label: localizeUi("ui.longTermMemory.memoryvault.branch"),
-                  allLabel: localizeUi("ui.longTermMemory.memoryvault.allBranches"),
-                  searchPlaceholder: localizeUi("ui.longTermMemory.memoryvault.searchBranches"),
-                  emptyLabel: localizeUi("ui.longTermMemory.memoryvault.noMatchingBranches"),
-                  accessibleLabel: (count) =>
-                    localizeUi("ui.longTermMemory.memoryvault.availabilitySectionSelected", {
-                      label: localizeUi("ui.longTermMemory.memoryvault.branch"),
-                      count,
-                    }),
-                },
-              }}
-              onToggle={selectTarget}
-            />
-          </div>
-        </details>
-      </section>
-      <div className="divide-y divide-[var(--border)] border-y border-[var(--border)]">
-        {outcomes.map(({ note, state }) => (
-          <div key={note.id} className="flex min-h-11 items-center justify-between gap-3 py-2 text-sm">
-            <span className="min-w-0 truncate">{note.title}</span>
-            <span
-              className={
-                state === "invalid" ? "text-xs text-[var(--destructive)]" : "text-xs text-[var(--muted-foreground)]"
-              }
-            >
-              {state === "ready"
-                ? localizeUi("ui.longTermMemory.memoryvault.ready")
-                : state === "unchanged"
-                  ? localizeUi("ui.longTermMemory.memoryvault.unchanged")
-                  : localizeUi("ui.longTermMemory.memoryvault.wouldRemoveFinalAvailability")}
-            </span>
-          </div>
-        ))}
-      </div>
-    </section>
-  );
 }
 
 export default function MemoryVault({
@@ -3207,7 +2134,7 @@ export default function MemoryVault({
                     />
                   </summary>
                   <div className="min-w-0 max-w-full border-t border-[var(--border)]">
-                    <ScopeTargetPicker
+                    <VaultScopePicker
                       targets={{
                         all: targets[0]!,
                         chat: pickerConversationScopeTargets,
@@ -3256,7 +2183,7 @@ export default function MemoryVault({
                     />
                   </summary>
                   <div className="min-w-0 max-w-full border-t border-[var(--border)]">
-                    <ScopeTargetPicker
+                    <VaultScopePicker
                       variant="secondary"
                       allOptionLabel={localizeUi("ui.longTermMemory.memoryvault.noSecondPlace")}
                       targets={{

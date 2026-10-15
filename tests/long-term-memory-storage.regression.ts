@@ -104,7 +104,7 @@ async function main() {
   const { ltmScopesOverlap, validateLtmExplicitAvailability } =
     await import("../packages/long-term-memory/src/engine/packages/shared/src/features/agents/long-term-memory/scope.ts");
   const { normalizeDetailName } =
-    await import("../packages/long-term-memory/src/engine/packages/client/src/features/long-term-memory/detail-name.ts");
+    await import("../packages/long-term-memory/src/engine/packages/client/src/features/long-term-memory/vault/detail-name.ts");
   const {
     exportLongTermMemoryData,
     replaceLongTermMemoryData,

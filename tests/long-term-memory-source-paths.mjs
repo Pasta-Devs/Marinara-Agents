@@ -8,20 +8,21 @@ const at = (path) => fileURLToPath(new URL(path, import.meta.url));
 export const ltmClientRoot = at(client);
 
 export const ltmSourcePaths = {
-  activity: at(`${client}ActivityView.tsx`),
+  activity: at(`${client}settings/ActivityView.tsx`),
   api: at(`${client}api.ts`),
   detail: at(`${client}LongTermMemoryDetail.tsx`),
   interop: at(`${server}interop.ts`),
   lastInjectionSummary: at(`${client}LastInjectionSummary.tsx`),
   locale: at(`${client}locales/en.json`),
+  maintenance: at(`${client}settings/MaintenancePanel.tsx`),
   navigation: at(`${client}LongTermMemoryNavigation.tsx`),
-  reviewQueue: at(`${client}ReviewQueue.tsx`),
+  reviewQueue: at(`${client}review/ReviewQueue.tsx`),
   routes: at(`${server}routes.ts`),
-  settings: at(`${client}MemorySettings.tsx`),
+  settings: at(`${client}settings/MemorySettings.tsx`),
   sharedControls: at(`${client}shared-controls.tsx`),
-  sourcesWorkspace: at(`${client}SourcesWorkspace.tsx`),
-  targetPicker: at(`${client}TargetPicker.tsx`),
+  sourcesWorkspace: at(`${client}sources/SourcesWorkspace.tsx`),
+  targetPicker: at(`${client}vault/TargetPicker.tsx`),
   types: at(`${client}types.ts`),
-  vault: at(`${client}MemoryVault.tsx`),
+  vault: at(`${client}vault/MemoryVault.tsx`),
   workspaceLayout: at(`${client}LtmWorkspace.tsx`),
 };
