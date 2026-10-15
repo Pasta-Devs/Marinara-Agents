@@ -167,23 +167,30 @@ export async function planSlpRoleplayScene(
       category: "main",
     }),
   );
-  const response = await provider.chatComplete(planMessages, {
-    model: input.connection.model,
-    maxTokens: clampGenerationMaxOutputTokens({
-      provider: input.connection.provider as APIProvider,
+  const complete = () =>
+    provider.chatComplete(planMessages, {
       model: input.connection.model,
-      maxTokens: resolveStoredMaxTokens(input.connection.defaultParameters, 4000),
-      maxTokensOverride: input.connection.maxTokensOverride,
-    }),
-    ...slpSamplingOptions(
-      resolveStoredChatOptions(input.connection.defaultParameters, input.connection.provider, input.connection.model),
-      { temperature: 0.9, topP: 0.95 },
-    ),
-    stream: false,
-    debugMode,
-  });
-  // ponytail: no retry on an unusable answer; the player presses Rewrite. Add one if it fails often.
-  const plan = readSlpScenePlan(readAnswer(requireModelAnswer(response.content ?? "", "the scene plan")));
+      maxTokens: clampGenerationMaxOutputTokens({
+        provider: input.connection.provider as APIProvider,
+        model: input.connection.model,
+        maxTokens: resolveStoredMaxTokens(input.connection.defaultParameters, 4000),
+        maxTokensOverride: input.connection.maxTokensOverride,
+      }),
+      ...slpSamplingOptions(
+        resolveStoredChatOptions(input.connection.defaultParameters, input.connection.provider, input.connection.model),
+        { temperature: 0.9, topP: 0.95 },
+      ),
+      stream: false,
+      debugMode,
+    });
+  // One silent retry on an answer that is there but cannot be read, so a first plan that comes back
+  // as loose prose does not fail the scene until the player presses Rewrite. An empty answer is not
+  // retried; it is a connection problem (output budget, filter) that a second call repeats.
+  let plan: ReturnType<typeof readSlpScenePlan> = null;
+  for (let attempt = 0; attempt < 2 && !plan; attempt += 1) {
+    const response = await complete();
+    plan = readSlpScenePlan(readAnswer(requireModelAnswer(response.content ?? "", "the scene plan")));
+  }
   if (!plan) throw new Error("The scene plan got lost. Try again.");
   const { reach, lock, ...enginePlan } = plan;
   return {

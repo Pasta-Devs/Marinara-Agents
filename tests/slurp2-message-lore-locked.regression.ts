@@ -24,10 +24,21 @@ assert.match(
   /resolveSlurpLoreContext\(input\.db, \{\s+settings,\s+texts: input\.history\.slice\(-HISTORY_TURNS\)/u,
 );
 assert.match(dm, /worldLore: protect\(input\.loreContext\)/u);
-assert.match(dm, /^\s+loreContext,$/mu);
+assert.match(dm, /^\s+loreContext: lore\.text,$/mu);
 const lore = read("data/host/slp-lore-context.ts");
-assert.match(lore, /settings\.enableLorebookContext\s+\? await processLorebooks/u);
-assert.match(lore, /\.catch\(\(error: unknown\) => \{[^}]*return "";/u, "a failed scan never fails the message");
+assert.match(lore, /if \(!settings\.enableLorebookContext\) return empty;/u);
+assert.match(lore, /catch \(error\) \{[^}]*return \{ \.\.\.empty,/u, "a failed scan never fails the message");
+// "At Depth" entries have no chat to go into, so they join the text instead of vanishing.
+assert.match(lore, /\.\.\.result\.depthEntries\.map\(\(entry\) => entry\.content\)/u);
+// What the scan used and what had no room reach the reply's Deep details record.
+assert.match(lore, /included: await nameEntries\(db, result\.activatedEntryIds\)/u);
+assert.match(lore, /skipped: result\.budgetSkippedEntries\.map/u);
+assert.match(dm, /lore: lore\.report,/u);
+assert.match(dm, /content: raw,\s+lore,/u);
+assert.match(
+  read("features/messages/slp-message-deep-details-record.ts"),
+  /\.\.\.\(ctx\.lore \? \{ lore: ctx\.lore \} : \{\}\)/u,
+);
 assert.match(
   read("features/feed/slp-generation-service.ts"),
   /resolveSlurpLoreContext\(db, \{/u,

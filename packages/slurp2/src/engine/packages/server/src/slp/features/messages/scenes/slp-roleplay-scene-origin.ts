@@ -9,6 +9,8 @@ import type { SceneOriginEnd, SceneOriginProvider } from "@marinara-engine/share
 import type { DB } from "../../../../db/connection.js";
 import { logger } from "../../../../lib/logger.js";
 import { createChatsStorage } from "../../../../services/storage/chats.storage.js";
+import { createConnectionsStorage } from "../../../../services/storage/connections.storage.js";
+import { resolveSlurpTextConnection } from "../../../base/identity/slp-connection.js";
 import {
   createSlurpContinuityFact,
   recordSlurpContinuityEvent,
@@ -48,7 +50,11 @@ export function createSlpSceneOriginProvider(db: DB): SceneOriginProvider {
       return {
         characterIds: [source.entityId],
         personaId: viewer.entityId,
-        connectionId: settings.generationConnectionId ?? null,
+        // The connection the plan was written on, resolved the same way. The raw setting is often
+        // null, and the Engine then falls back to its plain default, which can be unset; the first
+        // reply of the scene then has no connection to run on.
+        connectionId:
+          (await resolveSlurpTextConnection(createConnectionsStorage(db), settings.generationConnectionId))?.id ?? null,
         transcript: slpSceneTranscript(await messages.listMessages(thread.id, 40), {
           creator: creator.displayName,
           fan: viewer.displayName,

@@ -162,7 +162,7 @@ export async function generateCreatorPost(
   const publicIdentity = await slpCreatorPublicIdentityFor(db, linkedPublicAccount);
   // Read the card at post time, not the bio and voice frozen at setup. Concealed modes get the stage seed.
   const sourceCharacterContext = await resolveCreatorCharacterCanon(db, linkedPublicAccount, disclosureMode);
-  const loreContext = await resolveSlurpLoreContext(db, {
+  const { text: loreContext } = await resolveSlurpLoreContext(db, {
     settings,
     texts: recentPosts.map((post) => post.content).reverse(),
     sourceCharacterContext,

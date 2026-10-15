@@ -80,12 +80,9 @@ async function main() {
   const generation = slurp2Source(
     "packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-generation.service.ts",
   );
-  assert.match(generation, /settings\.enableLorebookContext\s*\?\s*await processLorebooks\(/u);
+  assert.match(generation, /if \(!settings\.enableLorebookContext\) return empty;[\s\S]*?await processLorebooks\(/u);
   assert.match(generation, /generationTriggers: \["slurp"\],\s*previewOnly: true,/u);
-  assert.match(
-    generation,
-    /\.catch\(\(error: unknown\) => \{\s*logger\.warn\(error, "\[slurp\] Lorebook context failed/u,
-  );
+  assert.match(generation, /\} catch \(error\) \{\s*logger\.warn\(error, "\[slurp\] Lorebook context failed/u);
   assert.match(generation, /"# World lore", protect\(input\.loreContext\)/u);
   // Carryover to chats is controlled from Slurp itself.
   assert.match(settings, /ui\.slurp\.settings\.carryover\.title/u);

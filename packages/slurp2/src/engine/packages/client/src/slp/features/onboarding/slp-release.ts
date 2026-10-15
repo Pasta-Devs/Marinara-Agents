@@ -1,5 +1,5 @@
 // The splash screen needs the shipped version and its public notes inside the client bundle.
-export const SLURP2_VERSION = "0.3.41";
+export const SLURP2_VERSION = "0.3.42";
 
 export interface Slurp2ReleaseEntry {
   version: string;
@@ -12,6 +12,15 @@ export interface Slurp2ReleaseEntry {
  * in-universe bullets per release (technical detail lives in CHANGELOG.md).
  */
 export const SLURP2_RELEASES: Slurp2ReleaseEntry[] = [
+  {
+    version: "0.3.42",
+    date: "2026-10-15",
+    notes: [
+      "Chats with your Creators can now hear about their storylines, love life and how well they know you on Slurp.",
+      "Lorebook entries set to At Depth now reach Slurp DMs, and a message's Deep details lists the lore it used.",
+      "Scenes started from a DM begin on the first try more often.",
+    ],
+  },
   {
     version: "0.3.41",
     date: "2026-10-14",
@@ -769,14 +778,6 @@ export const SLURP2_RELEASES: Slurp2ReleaseEntry[] = [
     notes: [
       "The feed opens faster and loads older posts as you scroll.",
       "Edits and deletes show at once, with no reload.",
-    ],
-  },
-  {
-    version: "0.2.5",
-    date: "2026-09-21",
-    notes: [
-      "Locked posts no longer tease what you already own.",
-      "The composer offers only the post purposes that fit the audience.",
     ],
   },
 ];

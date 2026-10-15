@@ -113,7 +113,35 @@ export function SlpMessageDeepDetails({
                 )}
               </Section>
 
-              <Section title="Writing model" step={3}>
+              {chat.lore && (
+                <Section title="Lore" step={3}>
+                  {!chat.lore.enabled ? (
+                    <p className="text-xs text-[var(--muted-foreground)]">
+                      Lorebook context is off in Settings, so no lorebook was read.
+                    </p>
+                  ) : chat.lore.included.length + chat.lore.skipped.length === 0 ? (
+                    <p className="text-xs text-[var(--muted-foreground)]">
+                      No entry matched. Entries need the Slurp generation trigger, and a book bound to this Creator's
+                      character or persona, or a global one.
+                    </p>
+                  ) : (
+                    <Rows
+                      rows={[
+                        ...chat.lore.included.map((entry, index): [string, string] => [
+                          `${index + 1} · used`,
+                          entry.book ? `${entry.name} · ${entry.book}` : entry.name,
+                        ]),
+                        ...chat.lore.skipped.map((entry, index): [string, string] => [
+                          `${index + 1} · no room`,
+                          entry.book ? `${entry.name} · ${entry.book}` : entry.name,
+                        ]),
+                      ]}
+                    />
+                  )}
+                </Section>
+              )}
+
+              <Section title="Writing model" step={chat.lore ? 4 : 3}>
                 <Rows
                   rows={[
                     ["Provider", details.model.provider],
@@ -128,7 +156,7 @@ export function SlpMessageDeepDetails({
 
               <Section
                 title="Writing prompt"
-                step={4}
+                step={chat.lore ? 5 : 4}
                 action={
                   <CopyButton
                     value={details.messages.map((m) => `# ${m.role}\n${m.content}`).join("\n\n")}
@@ -143,7 +171,7 @@ export function SlpMessageDeepDetails({
                 </div>
               </Section>
 
-              <Section title="The answer" step={5}>
+              <Section title="The answer" step={chat.lore ? 6 : 5}>
                 <Block label="Raw response" text={details.rawResponse} />
               </Section>
             </>

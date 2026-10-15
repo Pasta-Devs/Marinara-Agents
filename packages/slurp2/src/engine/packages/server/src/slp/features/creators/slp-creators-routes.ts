@@ -4,6 +4,7 @@ import {
   slpStageProfileUpdateSchema,
 } from "../../../../../shared/src/slp/slp-social.schema.js";
 import { slpContinuityRoutes } from "./slp-continuity-routes.js";
+import { readSlurpCarryoverReach } from "./slp-chat-context.js";
 import {
   slurpDiscoveryProfileSchema,
   SLURP_DISCOVERY_TAG_LIMIT,
@@ -49,6 +50,8 @@ export async function slpCreatorsRoutes(app: FastifyInstance, deps: SlpRouteDeps
   await slpContinuityRoutes(app);
   await slpWardrobeRoutes(app, deps);
   const { characters, connections, noodle, resolveNoodlerPublicIdentity, resolveViewerPersona } = deps;
+  // Settings → Carryover to chats: how many chats with a Creator have their own switch on.
+  app.get("/settings/carryover-reach", async () => readSlurpCarryoverReach(app.db));
   // One edit for many Creators, also used for a single Creator's quick edit. Capped so one request stays bounded.
   app.post("/slurp/accounts/bulk-update", async (req, reply) => {
     const tagList = z.array(slurpDiscoveryTagNameSchema).max(SLURP_DISCOVERY_TAG_LIMIT);

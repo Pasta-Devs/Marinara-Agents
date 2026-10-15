@@ -530,7 +530,7 @@ export async function buildSlurpMessagePrompt(input: SlurpMessagePromptInput): P
     (await slurp.listPostUnlocksForViewer(input.viewer.id).catch(() => [])).map((unlock) => unlock.postId),
   );
   const recentPosts = slurpDmRecentPosts(recentPostRows, unlockedPostIds, RECENT_POSTS);
-  const loreContext = await resolveSlurpLoreContext(input.db, {
+  const lore = await resolveSlurpLoreContext(input.db, {
     settings,
     texts: input.history.slice(-HISTORY_TURNS).map((message) => message.content),
     sourceCharacterContext: characterCanon,
@@ -614,7 +614,7 @@ export async function buildSlurpMessagePrompt(input: SlurpMessagePromptInput): P
     promptInstructions: prompts.instructions,
     scheduleContext,
     characterCanon,
-    loreContext,
+    loreContext: lore.text,
     // Their own chat lines first: a thread shows how they text, and where they repeat themselves.
     flavourBrief: await resolveSlurpCreatorFlavour(input.db, {
       account: input.creator,
@@ -646,12 +646,22 @@ export async function buildSlurpMessagePrompt(input: SlurpMessagePromptInput): P
   // A concealed page offers no collab: the header does not name it. "us": the player's own page.
   const viewerPageId = viewerPage && !viewerPage.concealed ? viewerPageAccount?.id : undefined;
   const usPageId = viewerPage?.us ? viewerPageAccount?.id : undefined;
-  return { messages, stance, disclosureMode, publicIdentity, recentPosts, viewerPageId, usPageId, sceneInvite };
+  return {
+    messages,
+    stance,
+    disclosureMode,
+    publicIdentity,
+    recentPosts,
+    viewerPageId,
+    usPageId,
+    sceneInvite,
+    lore: lore.report,
+  };
 }
 
 export async function generateSlurpMessageReply(input: SlurpMessagePromptInput): Promise<SlurpGeneratedDmReply> {
   const built = await buildSlurpMessagePrompt(input);
-  const { messages, stance, disclosureMode, publicIdentity, recentPosts, usPageId, sceneInvite } = built;
+  const { messages, stance, disclosureMode, publicIdentity, recentPosts, usPageId, sceneInvite, lore } = built;
   const pageId = built.viewerPageId;
   const support = input.viewer.id === SLURP_SUPPORT_ACCOUNT_ID;
   const budget = (await createSlurpStorage(input.db).getSettings()).modelBudget;
@@ -761,6 +771,7 @@ export async function generateSlurpMessageReply(input: SlurpMessagePromptInput):
       messages,
       options,
       content: raw,
+      lore,
       paidBodies: recentPosts
         .filter((post) => post.access === "locked" && !post.unlockedByFan)
         .map((post) => protectCreatorGeneratedIdentity(post.content, disclosureMode, publicIdentity) ?? ""),

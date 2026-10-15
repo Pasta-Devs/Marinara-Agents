@@ -1,5 +1,15 @@
 # Slurp release notes
 
+## 0.3.42 — 2026-10-15
+
+- Added: chats with "Carryover to chats" on also learn the character's Slurp storyline, love life, how well they know you, and the Slurp memories a chat with you may read.
+- Added: Carryover settings show in how many chats with your Creators "Include Slurp activity" is on.
+- Fixed: a scene started from a DM runs on the connection Slurp planned it with, not the Engine's plain default.
+- Fixed: an unreadable scene plan is asked for once more before "The scene plan got lost" shows.
+- Fixed: "Start the scene" shows an error when the Engine's scene host is missing.
+- Fixed: lorebook entries set to "At Depth" reach Slurp DMs and posts.
+- Added: Deep details has a "Lore" section with the entries a reply used or had no room for.
+
 ## 0.3.41 — 2026-10-14
 
 - Faster: Slurp shows character and persona avatars as small copies instead of the full card picture. On opening Slurp the feed downloaded about 16 MB of avatar pictures (1–2.5 MB each, shown 44 px wide), and Discover about 14 MB more; those downloads also held up the feed's other requests. The small copies are made once and kept in Slurp's own media folder.

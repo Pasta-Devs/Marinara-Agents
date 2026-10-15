@@ -289,7 +289,21 @@ export type SlpMessageDeepDetailsRecord = {
     creator: { emotion: string; intent: string } | null;
     /** What the Creator remembered about this fan, as the prompt carried it. */
     memories: { tier: string; text: string }[];
+    /** The lorebook scan behind the reply. Absent on records made before 0.3.42. */
+    lore?: SlpLoreReport;
   };
+};
+
+/**
+ * What one lorebook scan put into a prompt, in words a player can check against their lorebooks:
+ * whether the scan ran at all, the entries it used, and the entries it found but had no room for.
+ */
+export type SlpLoreReport = {
+  /** Settings → Lorebook context. Off: nothing was scanned. */
+  enabled: boolean;
+  included: { name: string; book: string }[];
+  /** Matched, then left out because the lore budget was full. */
+  skipped: { name: string; book: string }[];
 };
 
 /**
