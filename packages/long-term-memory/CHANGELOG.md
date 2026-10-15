@@ -2,7 +2,8 @@
 
 ## 1.4.37 — 2026-10-15
 
-- Reorganised the Long-Term Memory screens without changing how they work. The Vault, Review queue, Sources and Settings screens each live in their own folder, and the setup guide and the Maintenance tab are components of their own. The one visible difference is that the result of a Maintenance action now appears at the top of the Maintenance tab instead of below the tab bar, so it no longer shows on the other tabs and saving settings no longer replaces it.
+- Reorganised the Long-Term Memory screens without changing how they work. The Vault, Review queue, Sources and Settings screens each live in their own folder, and the setup guide and the Maintenance tab are components of their own. One visible difference is that the result of a Maintenance action now appears at the top of the Maintenance tab instead of below the tab bar, so it no longer shows on the other tabs and saving settings no longer replaces it.
+- Reset settings now shows the reset values in the settings forms straight away. Before, the forms kept the values from before the reset until Memory Settings was opened again.
 
 ## 1.4.36 — 2026-10-14
 

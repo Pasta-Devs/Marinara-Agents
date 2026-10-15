@@ -3489,12 +3489,19 @@ async function main() {
         const resetPage = await browserContext.newPage();
         let settingsGate: Promise<void> | null = null;
         let releaseSettings = () => {};
+        let resetMaxChunks: number | null = null;
         await resetPage.route("**/api/long-term-memory/settings/reset", (route) =>
           route.fulfill({ json: { rebuild: { status: "deferred", error: "Fixture rebuild failed." } } }),
         );
+        // Settings read after the reset serve a changed value, which the forms must show instead of the cache.
         await resetPage.route("**/api/long-term-memory/settings", async (route) => {
-          if (settingsGate && route.request().method() === "GET") await settingsGate;
-          await route.continue();
+          if (resetMaxChunks === null || route.request().method() !== "GET") return route.continue();
+          if (settingsGate) await settingsGate;
+          const response = await route.fetch();
+          await route.fulfill({
+            response,
+            json: { ...(await response.json()), longTermMemoryMaxChunks: resetMaxChunks },
+          });
         });
         await resetPage.goto(`http://127.0.0.1:${address.port}/`);
         await resetPage.evaluate(() => customElements.whenDefined("marinara-capability-long-term-memory"));
@@ -3505,12 +3512,15 @@ async function main() {
           document.body.append(element);
         })()`);
         await resetPage.locator('[data-ltm-navigation="desktop"] [data-ltm-destination="settings"]').click();
+        const maxChunks = resetPage.getByRole("spinbutton", { name: "Maximum recalled memories", exact: true });
+        const cachedMaxChunks = Number(await maxChunks.inputValue());
         await resetPage.locator("#settings-tab-maintenance").click();
         const maintenancePanel = resetPage.locator("#settings-panel-maintenance");
         const resetButton = maintenancePanel.getByRole("button", { name: "Reset settings" });
         settingsGate = new Promise<void>((resolve) => {
           releaseSettings = () => resolve();
         });
+        resetMaxChunks = cachedMaxChunks === 37 ? 38 : 37;
         const settingsRefetch = resetPage.waitForRequest(
           (request) => request.method() === "GET" && new URL(request.url()).pathname.endsWith("/settings"),
         );
@@ -3528,6 +3538,12 @@ async function main() {
           })
           .waitFor({ timeout: 5000 });
         assert.equal(await resetButton.isDisabled(), false, "Reset is available again once the refetch resolves");
+        await resetPage.locator("#settings-tab-recall").click();
+        assert.equal(
+          await maxChunks.inputValue(),
+          String(resetMaxChunks),
+          "the forms show the settings read after the reset",
+        );
         await resetPage.close();
       }
       await page.locator('[data-ltm-navigation="desktop"] [data-ltm-destination="vault"]').click();

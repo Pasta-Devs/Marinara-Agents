@@ -437,7 +437,11 @@ export function MaintenancePanel({
         queryKeys.chatDefaults,
         queryKeys.status,
       ]);
-      await settings.refetch();
+      // The cleared forms refill from the cached pre-reset settings while the refetch runs.
+      const [globalResult, extractionResult] = await settings.refetch();
+      if (globalResult.isSuccess && extractionResult.isSuccess)
+        settings.apply(globalResult.data, extractionResult.data);
+      else settings.clear();
       if (response.rebuild?.status === "deferred") {
         setMessage(
           localizeUi("ui.longTermMemory.memorysettings.memorySettingsResetIndexRebuildFailed", {

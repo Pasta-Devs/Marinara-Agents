@@ -4,7 +4,8 @@ import { basename, dirname, join } from "node:path";
 import { ltmClientRoot, ltmSourcePaths } from "./long-term-memory-source-paths.mjs";
 
 // A screen folder holds the screen plus the components cut out of it. `workspace` is the screen
-// file alone; `workspaceScreen` adds its siblings for assertions about the cut-out components.
+// file alone; `workspaceScreen` adds its siblings, so a match there may span two files. A pattern
+// that ties two places in one component reads that component's own file instead.
 const readScreen = (main) => {
   const folder = dirname(main);
   const siblings = readdirSync(folder)
@@ -24,6 +25,9 @@ const settings = readFileSync(ltmSourcePaths.settings, "utf8");
 const settingsScreen = readScreen(ltmSourcePaths.settings);
 const vault = readFileSync(ltmSourcePaths.vault, "utf8");
 const vaultScreen = readScreen(ltmSourcePaths.vault);
+const bulkAvailability = readFileSync(ltmSourcePaths.bulkAvailability, "utf8");
+const vaultScopePicker = readFileSync(ltmSourcePaths.vaultScopePicker, "utf8");
+const sourceScopeCombobox = readFileSync(ltmSourcePaths.sourceScopeCombobox, "utf8");
 const targetPicker = readFileSync(ltmSourcePaths.targetPicker, "utf8");
 const reviewQueue = readFileSync(ltmSourcePaths.reviewQueue, "utf8");
 const reviewQueueScreen = readScreen(ltmSourcePaths.reviewQueue);
@@ -181,7 +185,7 @@ assert.match(vaultScreen, /memoryvault\.availabilityScopeHelp/u);
 assert.match(vaultScreen, /memoryvault\.bulkImplicitAllPlaces/u);
 assert.match(vaultScreen, /memoryvault\.availableIn/u);
 assert.match(
-  vaultScreen,
+  bulkAvailability,
   /function BulkAvailabilityWorkbench[\s\S]*?<details\s+data-ltm-availability-picker\s+className="group"/u,
 );
 assert.match(vaultScreen, /<details\s+data-ltm-availability-picker\s+className="group"/u);
@@ -332,7 +336,7 @@ assert.match(vault, /characterScopeTargets/u);
 assert.match(vault, /conversationScopeTargets/u);
 assert.match(vault, /branchScopeTargets/u);
 assert.match(vaultScreen, /data-ltm-vault-scope-tab/u);
-assert.match(vaultScreen, /function VaultScopePicker[\s\S]*data-selected=/u);
+assert.match(vaultScopePicker, /function VaultScopePicker[\s\S]*data-selected=/u);
 assert.match(vault, /bulkAvailabilityScope/u);
 assert.match(vaultScreen, /bulkAvailabilitySelected/u);
 assert.match(vaultScreen, /chat:all/u);
@@ -395,10 +399,10 @@ assert.match(
   /\[data-ltm-tab-focus\]:focus-visible \{\s*outline: 2px solid var\(--marinara-editor-focus-ring\);/u,
 );
 for (const rail of [navigation, settings, targetPicker]) assert.match(rail, /data-ltm-tab-focus/u);
-// The Vault and Sources place-picker rails were cut into their own files; the folder read also holds
-// TargetPicker, so anchor each match to its component.
-assert.match(vaultScreen, /function VaultScopePicker[\s\S]*data-ltm-tab-focus/u);
-assert.match(workspaceScreen, /function SourceScopeCombobox[\s\S]*data-ltm-tab-focus/u);
+// The Vault and Sources place-picker rails were cut into their own files; read each one alone so
+// TargetPicker or another sibling cannot satisfy the match.
+assert.match(vaultScopePicker, /function VaultScopePicker[\s\S]*data-ltm-tab-focus/u);
+assert.match(sourceScopeCombobox, /function SourceScopeCombobox[\s\S]*data-ltm-tab-focus/u);
 assert.match(detail, /paddingBottom: "var\(--mari-safe-area-inset-bottom, env\(safe-area-inset-bottom\)\)"/u);
 assert.match(
   settings,
