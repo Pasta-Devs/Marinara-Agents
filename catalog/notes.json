@@ -218,6 +218,12 @@
     "long-term-memory": {
       "versions": [
         {
+          "version": "1.4.38",
+          "date": "2026-10-15",
+          "notes": "- Switching between the Vault, Review, Sources and Settings screens no longer shows a brief \"Loading\" panel, because the screens ship in the one bundle the package already loads. Importing a backup, resetting memory settings and deleting all memory data now read each setting and the integrity report once instead of two or three times. Nothing else changes in what the screens show or how they behave. Internally the duplicated tab-key handling, scope labels, confirm dialog, availability copy and shared queries are now one copy each, and 155 unused interface strings were removed.",
+          "highlight": false
+        },
+        {
           "version": "1.4.37",
           "date": "2026-10-15",
           "notes": "- Reorganised the Long-Term Memory screens without changing how they work. The Vault, Review queue, Sources and Settings screens each live in their own folder, and the setup guide and the Maintenance tab are components of their own. One visible difference is that the result of a Maintenance action now appears at the top of the Maintenance tab instead of below the tab bar, so it no longer shows on the other tabs and saving settings no longer replaces it.\n- Reset settings now shows the reset values in the settings forms straight away. Before, the forms kept the values from before the reset until Memory Settings was opened again.",
@@ -329,12 +335,6 @@
           "version": "1.4.18",
           "date": "2026-10-08",
           "notes": "- Open the Memory Vault and switch back to it quickly in large libraries. The place pickers worked out which chats, branches, characters and personas have memories by comparing every place with every memory on each redraw; they now look places up in an index built once, so a library of about 800 places and 180 memories redraws in milliseconds instead of most of a second.",
-          "highlight": false
-        },
-        {
-          "version": "1.4.17",
-          "date": "2026-10-08",
-          "notes": "- Make `/search` resolve the scoped chat's recall settings and prompt budget like generation, while preserving explicit request overrides.\n- Show fused rank beside relevance in Debug and remove unused cooldown behavior.",
           "highlight": false
         }
       ]
