@@ -17,7 +17,7 @@ import {
   getLtmScopeGroupIds,
   getLtmScopePersonaIds,
 } from "../../../../shared/src/features/agents/long-term-memory/scope.js";
-import { subjectsEqual } from "./subject-identity.js";
+import { subjectsEqual } from "./subject-equality.js";
 
 type ScopedTargetStorage = {
   getNotesByIds(ids: string[]): Promise<Map<string, LtmNote>>;

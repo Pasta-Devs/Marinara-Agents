@@ -21,9 +21,9 @@ async function main() {
     buildTrustedLtmSubjectCatalog,
     prepareLtmSubjectIdentityContext,
     resolveLtmSubjectIdentities,
-    subjectsEqual,
     trustedLtmIdentityNotesForSource,
   } = await import(`${source}/subject-identity.ts`);
+  const { subjectsEqual } = await import(`${source}/subject-equality.ts`);
   const { projectLtmDraftMutationGroup } = await import(`${source}/draft-projector.ts`);
   const { sourceHashForLtmSourceNote } = await import(`${source}/source-hash.ts`);
   const { normalizeStructuredSummaryEvidenceUnits } = await import(`${source}/structured-summary-normalizer.ts`);
