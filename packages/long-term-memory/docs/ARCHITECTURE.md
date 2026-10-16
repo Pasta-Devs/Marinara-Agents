@@ -12,8 +12,10 @@ client  -> vault, review queue, sources, settings, and injection summary
 
 The server registers `long-term-memory:storage` and
 `long-term-memory:runtime` with the Engine and mounts privileged routes under
-`/api/long-term-memory`. Registration is in `server-entry.ts`; route behavior is
-in `routes.ts`.
+`/api/long-term-memory`. Registration is in `server-entry.ts`; `routes.ts`
+composes one file per area under `routes/` (notes, drafts, imports, maintenance,
+settings), with shared limits, errors and the post-mutation rebuild in
+`routes/shared.ts`.
 
 ## Durable State
 

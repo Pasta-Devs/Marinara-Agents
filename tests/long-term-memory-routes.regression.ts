@@ -9,6 +9,66 @@ import { runRegressionToCompletion } from "./regression-helpers.ts";
 
 export type RouteScenario = "all" | "notes" | "imports" | "drafts" | "scope-identity" | "backup";
 
+// Every route the package registers, so a change to the route files cannot add, drop or rename one unnoticed.
+const EXPECTED_ROUTES = [
+  "DELETE /api/long-term-memory/data",
+  "DELETE /api/long-term-memory/debug-log",
+  "DELETE /api/long-term-memory/drafts/:id",
+  "DELETE /api/long-term-memory/notes/:id",
+  "DELETE /api/long-term-memory/notes/:id/scope",
+  "DELETE /api/long-term-memory/notes/:id/scope/current-chat",
+  "DELETE /api/long-term-memory/rejected-suggestions",
+  "DELETE /api/long-term-memory/rejected-suggestions/:id",
+  "GET /api/long-term-memory/backup/export",
+  "GET /api/long-term-memory/debug-log",
+  "GET /api/long-term-memory/debug-log/export",
+  "GET /api/long-term-memory/drafts",
+  "GET /api/long-term-memory/drafts/pending-count",
+  "GET /api/long-term-memory/drafts/review",
+  "GET /api/long-term-memory/events",
+  "GET /api/long-term-memory/extraction-settings",
+  "GET /api/long-term-memory/integrity",
+  "GET /api/long-term-memory/last-injection/:chatId",
+  "GET /api/long-term-memory/local-characters",
+  "GET /api/long-term-memory/notes",
+  "GET /api/long-term-memory/notes/:id",
+  "GET /api/long-term-memory/notes/:id/derived",
+  "GET /api/long-term-memory/rejected-suggestions",
+  "GET /api/long-term-memory/scope-targets",
+  "GET /api/long-term-memory/settings",
+  "GET /api/long-term-memory/status",
+  "PATCH /api/long-term-memory/notes/:id",
+  "POST /api/long-term-memory/backup/import",
+  "POST /api/long-term-memory/backup/preview",
+  "POST /api/long-term-memory/drafts/:id/accept",
+  "POST /api/long-term-memory/drafts/:id/preflight",
+  "POST /api/long-term-memory/drafts/:id/skip",
+  "POST /api/long-term-memory/fork-repair/apply",
+  "POST /api/long-term-memory/fork-repair/preview",
+  "POST /api/long-term-memory/identity-repair/apply",
+  "POST /api/long-term-memory/identity-repair/preview",
+  "POST /api/long-term-memory/import/lorebooks/preview",
+  "POST /api/long-term-memory/import/preview",
+  "POST /api/long-term-memory/import/source-details",
+  "POST /api/long-term-memory/import/source-notes",
+  "POST /api/long-term-memory/notes",
+  "POST /api/long-term-memory/notes/:id/extract",
+  "POST /api/long-term-memory/notes/:id/scope/apply-to-derived",
+  "POST /api/long-term-memory/notes/:id/sections/rename",
+  "POST /api/long-term-memory/notes/:id/sections/rename-preview",
+  "POST /api/long-term-memory/notes/batch",
+  "POST /api/long-term-memory/notes/permanent-delete",
+  "POST /api/long-term-memory/notes/transfer",
+  "POST /api/long-term-memory/notes/transfer-preview",
+  "POST /api/long-term-memory/rebuild",
+  "POST /api/long-term-memory/rejected-suggestions/:id/resolve-identity",
+  "POST /api/long-term-memory/repair",
+  "POST /api/long-term-memory/search",
+  "POST /api/long-term-memory/settings/reset",
+  "PUT /api/long-term-memory/extraction-settings",
+  "PUT /api/long-term-memory/settings",
+];
+
 async function main(routeScenario: RouteScenario) {
   const engineRoot =
     process.env.MARINARA_ENGINE_ROOT ?? join(dirname(fileURLToPath(import.meta.url)), "../../Marinara-Engine");
@@ -46,6 +106,12 @@ async function main(routeScenario: RouteScenario) {
   const { prepareGenerationLongTermMemory } =
     await import("../packages/long-term-memory/src/engine/packages/server/src/services/long-term-memory/generation-injection.ts");
   const app = Fastify();
+  const registeredRoutes: string[] = [];
+  app.addHook("onRoute", (route: { method: string | string[]; url: string }) => {
+    for (const method of [route.method].flat())
+      if (method !== "HEAD" && route.url.startsWith("/api/long-term-memory/"))
+        registeredRoutes.push(`${method} ${route.url}`);
+  });
   app.setErrorHandler((error: any, request: any, reply: any) => {
     if (error && (error.name === "ZodError" || Array.isArray(error.issues) || Array.isArray(error.errors))) {
       return reply.status(400).send({
@@ -442,6 +508,7 @@ async function main(routeScenario: RouteScenario) {
       },
     });
     await app.ready();
+    assert.deepEqual(registeredRoutes.sort(), EXPECTED_ROUTES);
     const headers = { "x-admin-secret": "ltm-route-secret" };
     const routeNoteFixture = {
       id: "world_route_fixture",

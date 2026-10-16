@@ -18,7 +18,7 @@ export const ltmSourcePaths = {
   maintenance: at(`${client}settings/MaintenancePanel.tsx`),
   navigation: at(`${client}LongTermMemoryNavigation.tsx`),
   reviewQueue: at(`${client}review/ReviewQueue.tsx`),
-  routes: at(`${server}routes.ts`),
+  routes: at(`${server}routes/notes.ts`),
   settings: at(`${client}settings/MemorySettings.tsx`),
   sharedControls: at(`${client}shared-controls.tsx`),
   sourceScopeCombobox: at(`${client}sources/SourceScopeCombobox.tsx`),
