@@ -218,6 +218,12 @@
     "long-term-memory": {
       "versions": [
         {
+          "version": "1.4.42",
+          "date": "2026-10-16",
+          "notes": "- Long-Term Memory no longer keeps finished extraction drafts forever. The daily cleanup now deletes accepted, auto-applied and superseded drafts once they are older than the audit window (30 days by default). Pending and invalidated drafts stay, so Review and Activity show the same items as before. Opening the Long-Term Memory screen and creating a new draft read fewer files as a result.\n- A reply that injects memories no longer rewrites per-memory usage counters in `usage.json`, because nothing read them. The next such reply removes the counters already stored there. Duplicate replies are still recorded only once.",
+          "highlight": false
+        },
+        {
           "version": "1.4.41",
           "date": "2026-10-16",
           "notes": "- The memory extraction instructions no longer use real-looking character names in their example timeline ids, so the model can no longer mix those example names up with characters in your chat who share them. Nothing else about extraction changes.",
@@ -329,12 +335,6 @@
           "version": "1.4.22",
           "date": "2026-10-10",
           "notes": "- Resolve Korean character names written with a particle. A Hangul name followed directly by a whole particle such as `은`, `가`, `를`, `에게` or `한테` now counts as present in the source, a returned name with a trailing particle binds to the known name before the particle, and a 2-syllable name that is the tail of a known 3-syllable name goes to Review Queue instead of becoming a separate character.",
-          "highlight": false
-        },
-        {
-          "version": "1.4.21",
-          "date": "2026-10-09",
-          "notes": "- Keep extraction results that should be kept. An explicitly empty `subjectKeys` array now behaves like an omitted field instead of falling back to name matching, and a relationship change whose dimension deltas are all zero is no longer treated as a change. A nameless candidate can also borrow the identity a named sibling in the same batch resolved for the same subjectId, so it lands on the right memory instead of being rejected; borrowed identities stay in Review Queue.",
           "highlight": false
         }
       ]
