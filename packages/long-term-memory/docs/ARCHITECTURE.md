@@ -15,6 +15,26 @@ The server registers `long-term-memory:storage` and
 `/api/long-term-memory`. Registration is in `server-entry.ts`; route behavior is
 in `routes.ts`.
 
+### Engine fields read directly
+
+The package reads these Engine-owned values without a declared Engine API, so
+`engine-boundary.json` cannot list them.
+`tests/long-term-memory-engine-fields.regression.ts` checks them against an
+Engine checkout and fails when one is renamed or removed. A failure means Sources
+quietly stops finding those summaries, or the built-in assistant starts appearing
+as a source and place.
+
+| Field or constant | Feeds | Engine definition |
+| --- | --- | --- |
+| `ChatMetadata.daySummaries`, `weekSummaries` | day and week conversation summaries | `packages/shared/src/types/chat.ts` |
+| `ChatMetadata.summaryEntries` | agent summary entries | `packages/shared/src/types/chat.ts` |
+| `ChatMetadata.summary` | the single legacy summary | `packages/shared/src/types/chat.ts` |
+| `ChatMetadata.gamePreviousSessionSummaries` | game session summaries | `packages/shared/src/types/chat.ts` |
+| `PROFESSOR_MARI_ID` (`__professor_mari__`) | excludes the built-in assistant from sources and places | `packages/shared/src/constants/defaults.ts` |
+
+The reads are in `interop.ts`. The long-term fix is an Engine API for chat
+summaries, which needs a higher minimum Engine version.
+
 ## Durable State
 
 The package data root is `long-term-memory/`:
