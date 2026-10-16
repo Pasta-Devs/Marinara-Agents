@@ -116,26 +116,10 @@ export async function recordLongTermMemoryInjection(
       const usage = await readLongTermMemoryUsage(root);
       const acceptedReceipts = new Map(Object.entries(usage.acceptedReceipts ?? {}));
       if (input.accountingId && acceptedReceipts.has(input.accountingId)) return null;
-      const chats = new Map(Object.entries(usage.chats));
-      const chat = chats.get(chatId) ?? { chunks: {} };
-      const chatChunks = new Map(Object.entries(chat.chunks));
       const now = new Date().toISOString();
-      for (const item of chunks) {
-        const previous = chatChunks.get(item.chunk.id);
-        chatChunks.set(item.chunk.id, {
-          chunkId: item.chunk.id,
-          noteId: item.chunk.noteId,
-          sectionKey: item.chunk.sectionKey,
-          lastRetrievedAt: now,
-          lastInjectedAt: now,
-          retrievalCount: (previous?.retrievalCount ?? 0) + 1,
-          injectionCount: (previous?.injectionCount ?? 0) + 1,
-          totalInjectedTokens: (previous?.totalInjectedTokens ?? 0) + Math.max(0, Math.floor(item.estimatedTokens)),
-        });
-      }
-      chat.chunks = Object.fromEntries(chatChunks);
-      chats.set(chatId, chat);
-      usage.chats = Object.fromEntries(chats);
+      // Nothing reads per-memory counters, so none are kept. The empty record drops older ones and
+      // still satisfies the schema older versions read.
+      usage.chats = {};
       if (input.accountingId) {
         acceptedReceipts.set(input.accountingId, now);
         usage.acceptedReceipts = Object.fromEntries(acceptedReceipts);

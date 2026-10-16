@@ -16,6 +16,8 @@ import { pruneLtmActivityIndex } from "./activity-index.js";
 
 const lastRetentionRun = new Map<string, number>();
 const RETENTION_INTERVAL_MS = 24 * 60 * 60 * 1000;
+// Review and Activity show only pending and invalidated drafts, so drafts in these states have no reader.
+const FINISHED_DRAFT_STATUSES = new Set(["accepted", "auto_applied", "superseded"]);
 
 async function pruneEventLog(path: string, cutoff: number) {
   const tmp = `${path}.tmp-${process.pid}-${Date.now()}-${randomUUID()}`;
@@ -124,12 +126,14 @@ async function runLongTermMemoryRetentionUnsafe({
   const receiptCutoff = now.getTime() - config.receiptRetentionDays * DAY_MS;
   const eventCutoff = now.getTime() - config.eventRetentionDays * DAY_MS;
   const incompleteGenCutoff = now.getTime() - config.incompleteGenerationRetentionDays * DAY_MS;
+  const finishedDraftCutoff = now.getTime() - config.auditWindowDays * DAY_MS;
 
   let quarantineArtifacts = 0;
   let usageChatsPruned = 0;
   let receiptsRemoved = 0;
   let eventsRemoved = 0;
   let incompleteReceiptsRemoved = 0;
+  let draftsRemoved = 0;
 
   // 1. Quarantine cleanup
   const quarantine = join(root, "quarantine");
@@ -226,6 +230,26 @@ async function runLongTermMemoryRetentionUnsafe({
     }
   }
 
+  // 6. Finished draft cleanup. Every draft write holds the vault lock, which retention holds too.
+  for (const entry of await readdir(dirs.drafts, { withFileTypes: true }).catch((e) => {
+    if (isEnoent(e)) return [];
+    throw e;
+  })) {
+    if (!entry.isFile() || !entry.name.endsWith(".json")) continue;
+    const path = safeJoin(dirs.drafts, entry.name);
+    let draft;
+    try {
+      draft = JSON.parse(await readFile(path, "utf8"));
+    } catch {
+      // skip malformed draft files
+      continue;
+    }
+    if (FINISHED_DRAFT_STATUSES.has(draft?.status) && new Date(draft.updatedAt).getTime() < finishedDraftCutoff) {
+      await rm(path, { force: true });
+      draftsRemoved++;
+    }
+  }
+
   lastRetentionRun.set(key, now.getTime());
   return {
     ran: true,
@@ -235,6 +259,7 @@ async function runLongTermMemoryRetentionUnsafe({
     receiptsRemoved,
     eventsRemoved,
     incompleteReceiptsRemoved,
+    draftsRemoved,
   };
 }
 

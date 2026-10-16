@@ -463,6 +463,31 @@ async function main() {
         `malformed event\n${JSON.stringify({ ts: "2026-07-17T00:00:00.000Z", type: "new.event" })}\n`,
       );
 
+      // #1404: finished drafts older than the audit window are removed. Pending and invalidated
+      // drafts stay because Review and Activity show them.
+      const retentionDrafts = {
+        "retention-old-accepted": ["accepted", "2026-06-01T00:00:00.000Z"],
+        "retention-old-auto-applied": ["auto_applied", "2026-06-01T00:00:00.000Z"],
+        "retention-old-superseded": ["superseded", "2026-06-01T00:00:00.000Z"],
+        "retention-recent-accepted": ["accepted", "2026-07-01T00:00:00.000Z"],
+        "retention-old-pending": ["pending", "2026-06-01T00:00:00.000Z"],
+        "retention-old-invalidated": ["invalidated", "2026-06-01T00:00:00.000Z"],
+      };
+      for (const [id, [status, updatedAt]] of Object.entries(retentionDrafts))
+        await writeFile(join(dirs.drafts, `${id}.json`), JSON.stringify({ id, status, updatedAt }));
+      const draftRetention = await runLongTermMemoryRetention({
+        root,
+        now: new Date("2026-07-18T00:00:00Z"),
+        force: true,
+      });
+      assert.equal(draftRetention.draftsRemoved, 3);
+      assert.deepEqual(
+        (await readdir(dirs.drafts)).filter((name) => name.startsWith("retention-")).sort(),
+        ["retention-old-invalidated.json", "retention-old-pending.json", "retention-recent-accepted.json"],
+        "retention must remove only finished drafts older than the audit window",
+      );
+      for (const id of Object.keys(retentionDrafts)) await rm(join(dirs.drafts, `${id}.json`), { force: true });
+
       const activityBackup = `${dirs.activityIndex}.retention-proof`;
       await rename(dirs.activityIndex, activityBackup);
       await writeFile(dirs.activityIndex, "unavailable derived index");

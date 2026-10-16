@@ -708,11 +708,9 @@ async function main() {
     }
 
     const usage = await readLongTermMemoryUsage(root);
-    assertOwnKeys(usage.chats, "usage must retain reserved chat IDs");
     assertOwnKeys(usage.acceptedReceipts ?? {}, "usage must retain reserved accounting IDs");
-    for (const key of reservedKeys) {
-      assert.equal(Object.hasOwn(usage.chats[key]!.chunks, key), true);
-    }
+    // #1404: nothing reads per-memory counters, so injections no longer write them.
+    assert.deepEqual(usage.chats, {}, "usage must not keep per-memory counters");
   } finally {
     await rm(root, { recursive: true, force: true });
   }

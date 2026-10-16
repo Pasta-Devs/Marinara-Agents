@@ -1697,8 +1697,11 @@ async function main() {
         regenerated.receipt.id,
         "a null-receipt regeneration must confirm the pending recall attempt",
       );
-      const usage = await readLongTermMemoryUsage(storage.root);
-      assert.equal(usage.chats["chat-a"].chunks["world_visible::facts"].injectionCount, 2);
+      const { acceptedReceipts = {} } = await readLongTermMemoryUsage(storage.root);
+      assert.ok(
+        [first.receipt.id, regenerated.receipt.id].every((id) => Object.hasOwn(acceptedReceipts, id)),
+        "both accepted prompts must be accounted",
+      );
 
       assert.equal(await runtime.recall({ ...input, messages: [] }), null, "empty prompts must not recall");
       const emptyQueryAttempt = await readLongTermMemoryAttempt("chat-a", storage.root);
