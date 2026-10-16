@@ -16,7 +16,7 @@ on:
       review_mode:
         description: Review mode for the requested pass.
         type: choice
-        options: [auto, full, incremental]
+        options: [auto, full, incremental, autofix]
         default: auto
       requested_by:
         description: GitHub login that requested the dispatch.
@@ -26,7 +26,8 @@ on:
         default: ""
 
 # contents: write is only for the engine's resolve job, which closes threads a later push repaired:
-# GitHub refuses resolveReviewThread without it. The engine keeps its review job at contents: read.
+# GitHub refuses resolveReviewThread without it. The engine keeps its review and fix jobs at contents: read;
+# repairs are pushed with the Dottore App's token, not this one.
 permissions:
   contents: write
   pull-requests: write
@@ -35,13 +36,13 @@ permissions:
 
 # Distinct from the engine's own group, which would otherwise cancel this caller.
 concurrency:
-  group: dottore-review-caller-${{ github.repository }}-${{ inputs.pr_number }}
+  group: dottore-review-caller-${{ github.repository }}-${{ inputs.pr_number }}${{ inputs.review_mode == 'autofix' && '-autofix' || '' }}
   cancel-in-progress: true
 
 jobs:
   review:
     # Fork lab: the Promansis Engine build. Switch to Pasta-Devs/Marinara-Engine@<sha> once the engine lands upstream.
-    uses: Promansis/Marinara-Engine/.github/workflows/dottore-review.yml@8ebe95ac01a33339b9f6d2c582e9a017d281a7fc
+    uses: Promansis/Marinara-Engine/.github/workflows/dottore-review.yml@c190e961723e59901c6c2207d22d9a7e952e2979
     with:
       pr_number: ${{ inputs.pr_number }}
       comment_body: ${{ inputs.comment_body }}
@@ -53,3 +54,5 @@ jobs:
       LLM_BASE_URL: ${{ secrets.LLM_BASE_URL }}
       ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
       ANTHROPIC_BASE_URL: ${{ secrets.ANTHROPIC_BASE_URL }}
+      DOTTORE_APP_ID: ${{ secrets.DOTTORE_APP_ID }}
+      DOTTORE_APP_PRIVATE_KEY: ${{ secrets.DOTTORE_APP_PRIVATE_KEY }}
