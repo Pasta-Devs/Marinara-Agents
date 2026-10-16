@@ -6,9 +6,10 @@ import { createInterface } from "node:readline";
 import { dirname, join, resolve } from "node:path";
 import { ltmRetentionConfigSchema } from "../../../../shared/src/features/agents/long-term-memory/schema.js";
 import { DEFAULT_LTM_RETENTION_CONFIG } from "./default-config.js";
-import { fsyncPath, readJsonFile, renameWithRetry, writeJsonAtomic } from "./atomic-json.js";
+import { fsyncPath, renameWithRetry, writeJsonAtomic } from "./atomic-json.js";
 import { isEnoent } from "./ltm-utils.js";
 import { getLongTermMemoryDirectories, getLongTermMemoryRoot, safeJoin } from "./paths.js";
+import { readLtmSettingsFile } from "./settings.js";
 import { readLongTermMemoryUsage, longTermMemoryUsagePath } from "./usage.js";
 import { withLtmVaultLock } from "./vault-lock.js";
 import { pruneLtmActivityIndex } from "./activity-index.js";
@@ -111,8 +112,10 @@ async function runLongTermMemoryRetentionUnsafe({
     return { ran: false, skippedPendingRecovery: true, quarantineArtifacts: 0 };
   }
 
-  const config = ltmRetentionConfigSchema.parse(
-    await readJsonFile(longTermMemoryRetentionConfigPath(root), DEFAULT_LTM_RETENTION_CONFIG),
+  const { settings: config } = await readLtmSettingsFile(
+    longTermMemoryRetentionConfigPath(root),
+    ltmRetentionConfigSchema,
+    DEFAULT_LTM_RETENTION_CONFIG,
   );
 
   const DAY_MS = 86400000;

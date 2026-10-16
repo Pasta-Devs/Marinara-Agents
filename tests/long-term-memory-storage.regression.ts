@@ -95,7 +95,9 @@ async function main() {
   const { readLtmNoteSummary, writeLtmNoteSummary, rebuildLtmNoteSummary } = await import(`${source}/index-state.ts`);
   const { rebuildLongTermMemoryIndexes, loadOrRebuildLongTermMemoryIndexes } = await import(`${source}/rebuild.ts`);
   const { repairLongTermMemory } = await import(`${source}/maintenance.ts`);
-  const { pruneLtmRepairBackups, runLongTermMemoryRetention } = await import(`${source}/retention.ts`);
+  const { longTermMemoryRetentionConfigPath, pruneLtmRepairBackups, runLongTermMemoryRetention } = await import(
+    `${source}/retention.ts`
+  );
   const { previewLtmNoteForkRepair, applyLtmNoteForkRepair } = await import(`${source}/note-fork-repair.ts`);
   const { readLongTermMemoryUsage } = await import(`${source}/usage.ts`);
   const { rebuildLtmActivityIndex, readLtmActivityEvents } = await import(`${source}/activity-index.ts`);
@@ -295,11 +297,17 @@ async function main() {
         join(getLongTermMemoryDirectories(root).config, "agent-settings.json"),
         '{"someNewAgentSetting":1}\n',
       );
+      await writeFile(longTermMemoryRetentionConfigPath(root), '{"version":1,"someNewRetentionSetting":true}\n');
       await restarted.cleanup();
       const warningsBeforeUnknownSettings = warnings.length;
       restarted = await activateLongTermMemoryStorage(root);
       const unknownSettingWarnings = warnings.slice(warningsBeforeUnknownSettings).map((args) => args.join(" "));
-      for (const key of ["someNewSetting", "someNewExtractionSetting", "someNewAgentSetting"]) {
+      for (const key of [
+        "someNewSetting",
+        "someNewExtractionSetting",
+        "someNewAgentSetting",
+        "someNewRetentionSetting",
+      ]) {
         assert.ok(
           unknownSettingWarnings.some((line) => line.includes(key)),
           `activation must log ${key} by name`,
@@ -315,6 +323,11 @@ async function main() {
         JSON.parse(await readFile(ltmSettingsPath(root), "utf8")),
         { version: 1, someNewSetting: "newer-value" },
         "startup keeps a newer settings field and still drops removed legacy fields",
+      );
+      assert.equal(
+        JSON.parse(await readFile(longTermMemoryRetentionConfigPath(root), "utf8")).someNewRetentionSetting,
+        true,
+        "startup keeps a newer retention field",
       );
       assert.equal("someNewSetting" in (await getLtmGlobalSettings(root)), false);
       assert.equal("someNewExtractionSetting" in (await getLtmExtractionConfig(root)), false);
@@ -407,6 +420,8 @@ async function main() {
       await mkdir(quarantine, { recursive: true });
       await writeFile(join(quarantine, "artifact.json"), "{}\n");
       await utimes(quarantine, new Date(0), new Date(0));
+      // retention.json still holds the newer field from the #1415 block above, so this run
+      // also proves retention reads it leniently.
       const cleanup = await runLongTermMemoryRetention({
         root,
         now: new Date("2026-07-17T00:00:00Z"),

@@ -240,15 +240,15 @@ export class LongTermMemoryStorage {
       await ensureLtmActivityIndex(this.root);
       await quarantineLegacyCapturedTurnSources(this.root);
       await readLtmNoteSummary(this.root);
-      const retentionPath = longTermMemoryRetentionConfigPath(this.root);
-      await writeJsonAtomic(
-        retentionPath,
-        ltmRetentionConfigSchema.parse(await readJsonFile(retentionPath, DEFAULT_LTM_RETENTION_CONFIG)),
-      );
       // Settings fields from a newer version are ignored here and kept in the file.
-      const settingsPath = ltmSettingsPath(this.root);
-      const { settings, unknown } = await readLtmSettingsFile(settingsPath, ltmGlobalSettingsSchema, { version: 1 });
-      await writeJsonAtomic(settingsPath, { ...unknown, ...settings });
+      const configs = [
+        [longTermMemoryRetentionConfigPath(this.root), ltmRetentionConfigSchema, DEFAULT_LTM_RETENTION_CONFIG],
+        [ltmSettingsPath(this.root), ltmGlobalSettingsSchema, { version: 1 }],
+      ] as const;
+      for (const [path, schema, fallback] of configs) {
+        const { settings, unknown } = await readLtmSettingsFile<object>(path, schema, fallback);
+        await writeJsonAtomic(path, { ...unknown, ...settings });
+      }
       initialized.add(rootKey);
       await runLongTermMemoryRetention({ root: this.root }).catch((error) =>
         logger.warn(error, "[ltm] Deferred retention run failed"),
