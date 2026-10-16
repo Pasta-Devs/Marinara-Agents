@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { rename, rm, stat } from "node:fs/promises";
+import type { z } from "zod";
 import {
   DEFAULT_LTM_GLOBAL_SETTINGS,
   ltmAgentSettingsSchema,
@@ -12,7 +13,7 @@ import {
 } from "../../../../shared/src/features/agents/long-term-memory/schema.js";
 import { DEFAULT_LTM_EXTRACTION_CONFIG } from "./extraction-config.js";
 import { DEFAULT_LTM_RETENTION_CONFIG } from "./default-config.js";
-import { readJsonFile, writeJsonAtomic } from "./atomic-json.js";
+import { writeJsonAtomic } from "./atomic-json.js";
 import {
   createLtmBackupRestoreJournal,
   ltmBackupRestoreWorkspacePath,
@@ -22,7 +23,7 @@ import {
   writeLtmBackupRestoreJournal,
 } from "./restore-recovery.js";
 import { getLongTermMemoryDirectories, getLongTermMemoryRoot, notePathForId, safeJoin } from "./paths.js";
-import { getLtmGlobalSettings, ltmSettingsPath } from "./settings.js";
+import { getLtmGlobalSettings, ltmSettingsPath, readLtmSettingsFile } from "./settings.js";
 import { ltmExtractionConfigPath } from "./extraction-config.js";
 import { longTermMemoryRetentionConfigPath, removeLtmRepairBackups } from "./retention.js";
 import { LongTermMemoryDraftStore } from "./draft-store.js";
@@ -34,8 +35,9 @@ import { readAllRejectedSuggestions, writeRejectedSuggestions } from "./rejected
 
 const backupFormat = "marinara-long-term-memory" as const;
 
-async function readConfig<T>(path: string, schema: { parse(value: unknown): T }, fallback: unknown) {
-  return schema.parse(await readJsonFile(path, fallback));
+async function readConfig<T>(path: string, schema: z.ZodType<T, z.ZodTypeDef, unknown>, fallback: unknown) {
+  // A field written by a newer version is left out of the backup instead of failing the export.
+  return (await readLtmSettingsFile(path, schema, fallback)).settings;
 }
 
 export async function exportLongTermMemoryData(root = getLongTermMemoryRoot()): Promise<LtmBackup> {
