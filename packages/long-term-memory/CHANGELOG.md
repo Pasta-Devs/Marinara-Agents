@@ -1,8 +1,12 @@
 # Long-Term Memory changelog
 
-## Unreleased
+## 1.4.40 — 2026-10-16
 
 - The Long-Term Memory server modules no longer import each other in a loop. The helper that compares two lists of memory subjects moved to its own module. Recall, extraction and storage behave exactly as before.
+
+## 1.4.39 — 2026-10-16
+
+- Long-Term Memory now starts when its settings files contain a field from a newer version, for example after a failed update rolls the package back. Until now such a field stopped the package from activating, so no chat had recall or extraction, and backup export failed too. The field is now ignored and named in one warning in the server log, and saving settings keeps it in the file, so updating again restores it. This applies to the memory, extraction, agent and retention settings. Settings sent from the app are still checked strictly, a known setting with an invalid value still fails, and settings fields from older versions are still removed.
 
 ## 1.4.38 — 2026-10-15
 

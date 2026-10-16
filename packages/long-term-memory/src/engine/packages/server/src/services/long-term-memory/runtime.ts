@@ -1,10 +1,9 @@
 import { LongTermMemoryDraftStore } from "./draft-store.js";
 import { getLtmExtractionConfig } from "./extraction-config.js";
-import { getLtmGlobalSettings } from "./settings.js";
+import { getLtmGlobalSettings, readLtmSettingsFile } from "./settings.js";
 import { LongTermMemoryStorage } from "./storage.js";
 import { withLtmVaultLock } from "./vault-lock.js";
 import { ltmAgentSettingsSchema } from "../../../../shared/src/features/agents/long-term-memory/schema.js";
-import { readJsonFile } from "./atomic-json.js";
 import { getLongTermMemoryDirectories, safeJoin } from "./paths.js";
 export async function activateLongTermMemoryStorage(root: string) {
   const storage = new LongTermMemoryStorage(root);
@@ -18,8 +17,10 @@ export async function activateLongTermMemoryStorage(root: string) {
       await Promise.all([
         getLtmGlobalSettings(root),
         getLtmExtractionConfig(root),
-        readJsonFile<unknown>(safeJoin(getLongTermMemoryDirectories(root).config, "agent-settings.json"), {}).then(
-          (value) => ltmAgentSettingsSchema.parse(value),
+        readLtmSettingsFile(
+          safeJoin(getLongTermMemoryDirectories(root).config, "agent-settings.json"),
+          ltmAgentSettingsSchema,
+          {},
         ),
       ]);
     },

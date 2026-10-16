@@ -48,6 +48,7 @@ import {
 } from "./paths.js";
 import { isLtmBackupRestoreActive, recoverInterruptedLtmBackupRestore } from "./restore-recovery.js";
 import { readLtmNoteSummary } from "./index-state.js";
+import { ltmSettingsPath, readLtmSettingsFile } from "./settings.js";
 import { longTermMemoryRetentionConfigPath, runLongTermMemoryRetention } from "./retention.js";
 import { longTermMemoryUsagePath, readLongTermMemoryUsage } from "./usage.js";
 import { parseStoredLtmNote } from "./stored-note.js";
@@ -239,13 +240,14 @@ export class LongTermMemoryStorage {
       await ensureLtmActivityIndex(this.root);
       await quarantineLegacyCapturedTurnSources(this.root);
       await readLtmNoteSummary(this.root);
+      // Settings fields from a newer version are ignored here and kept in the file.
       const configs = [
         [longTermMemoryRetentionConfigPath(this.root), ltmRetentionConfigSchema, DEFAULT_LTM_RETENTION_CONFIG],
-        [safeJoin(dirs.config, "settings.json"), ltmGlobalSettingsSchema, { version: 1 }],
+        [ltmSettingsPath(this.root), ltmGlobalSettingsSchema, { version: 1 }],
       ] as const;
       for (const [path, schema, fallback] of configs) {
-        const parsed = schema.parse(await readJsonFile(path, fallback));
-        await writeJsonAtomic(path, parsed);
+        const { settings, unknown } = await readLtmSettingsFile<object>(path, schema, fallback);
+        await writeJsonAtomic(path, { ...unknown, ...settings });
       }
       initialized.add(rootKey);
       await runLongTermMemoryRetention({ root: this.root }).catch((error) =>

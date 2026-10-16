@@ -62,3 +62,20 @@ jobs:
         env:
           MARINARA_ENGINE_ROOT: ${{ github.workspace }}/engine
         run: pnpm --dir engine --filter @marinara-engine/server exec tsx "$GITHUB_WORKSPACE/tests/long-term-memory-browser.regression.ts"
+
+      # routes and installation import the Engine server, which loads the built shared package (dist/ is not committed).
+      - name: Build Engine shared package
+        run: pnpm --dir engine --filter @marinara-engine/shared build
+
+      # These run through the Engine checkout's tsx, like the browser regression. lifecycle only chains browser and
+      # installation, and routes-notes is a prefix of routes, so neither is listed. routes-imports, -drafts, -scope-identity
+      # and -backup start from their own seed or have scenario-only assertions, so they run beside routes.
+      - name: Run Long-Term Memory regressions
+        env:
+          MARINARA_ENGINE_ROOT: ${{ github.workspace }}/engine
+        run: |
+          for test in candidate-reconciliation conversation-summary-import debug-log delta-review extraction-graph \
+            extraction-reliability index-keys local-characters reconciliation-recall storage routes routes-imports routes-drafts routes-scope-identity routes-backup runtime installation host-styles; do
+            pnpm --dir engine --filter @marinara-engine/server exec tsx "$GITHUB_WORKSPACE/tests/long-term-memory-$test.regression.ts"
+          done
+          node tests/long-term-memory-loading.regression.mjs

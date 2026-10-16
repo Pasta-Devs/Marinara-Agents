@@ -88,11 +88,16 @@ async function main() {
   const { projectLongTermMemoryDraftReview } = await import(`${source}/draft-review.ts`);
   const { activateLongTermMemoryStorage } = await import(`${source}/runtime.ts`);
   const { getLtmGlobalSettings, ltmSettingsPath, updateLtmGlobalSettings } = await import(`${source}/settings.ts`);
+  const { getLtmExtractionConfig, ltmExtractionConfigPath, updateLtmExtractionConfig } = await import(
+    `${source}/extraction-config.ts`
+  );
   const { ltmMutationTransactionSchema, recoverLtmMutations } = await import(`${source}/mutation-transaction.ts`);
   const { readLtmNoteSummary, writeLtmNoteSummary, rebuildLtmNoteSummary } = await import(`${source}/index-state.ts`);
   const { rebuildLongTermMemoryIndexes, loadOrRebuildLongTermMemoryIndexes } = await import(`${source}/rebuild.ts`);
   const { repairLongTermMemory } = await import(`${source}/maintenance.ts`);
-  const { pruneLtmRepairBackups, runLongTermMemoryRetention } = await import(`${source}/retention.ts`);
+  const { longTermMemoryRetentionConfigPath, pruneLtmRepairBackups, runLongTermMemoryRetention } = await import(
+    `${source}/retention.ts`
+  );
   const { previewLtmNoteForkRepair, applyLtmNoteForkRepair } = await import(`${source}/note-fork-repair.ts`);
   const { readLongTermMemoryUsage } = await import(`${source}/usage.ts`);
   const { rebuildLtmActivityIndex, readLtmActivityEvents } = await import(`${source}/activity-index.ts`);
@@ -118,7 +123,7 @@ async function main() {
     deleteRejectedSuggestionsForSource,
     listRejectedSuggestions,
   } = await import(`${source}/rejected-suggestions.ts`);
-  const { DEFAULT_LTM_GLOBAL_SETTINGS } =
+  const { DEFAULT_LTM_GLOBAL_SETTINGS, ltmGlobalSettingsSchema } =
     await import("../packages/long-term-memory/src/engine/packages/shared/src/features/agents/long-term-memory/schema.ts");
 
   const dataDir = await mkdtemp(join(tmpdir(), "marinara-ltm-storage-"));
@@ -284,20 +289,78 @@ async function main() {
         "{not-json\n",
       );
 
-      await writeFile(ltmSettingsPath(root), '{"version":1,"unknown":true}\n');
+      // #1415: a settings field written by a newer version (for example before an update
+      // rolled back) is ignored and logged by name, and saving keeps it in the file.
+      await writeFile(ltmSettingsPath(root), '{"version":1,"someNewSetting":"newer-value","extractionMode":"auto"}\n');
+      await writeFile(ltmExtractionConfigPath(root), '{"version":1,"someNewExtractionSetting":true}\n');
+      await writeFile(
+        join(getLongTermMemoryDirectories(root).config, "agent-settings.json"),
+        '{"someNewAgentSetting":1}\n',
+      );
+      await writeFile(longTermMemoryRetentionConfigPath(root), '{"version":1,"someNewRetentionSetting":true}\n');
+      await restarted.cleanup();
+      const warningsBeforeUnknownSettings = warnings.length;
+      restarted = await activateLongTermMemoryStorage(root);
+      const unknownSettingWarnings = warnings.slice(warningsBeforeUnknownSettings).map((args) => args.join(" "));
+      for (const key of [
+        "someNewSetting",
+        "someNewExtractionSetting",
+        "someNewAgentSetting",
+        "someNewRetentionSetting",
+      ]) {
+        assert.ok(
+          unknownSettingWarnings.some((line) => line.includes(key)),
+          `activation must log ${key} by name`,
+        );
+      }
+      assert.ok(
+        unknownSettingWarnings.every((line) => !line.includes("newer-value") && !line.includes("extractionMode")),
+        "the warning names unknown fields without values and does not report removed legacy fields",
+      );
       await restarted.cleanup();
       restarted = null;
-      await assert.rejects(
-        activateLongTermMemoryStorage(root),
-        /unrecognized|unknown/i,
-        "self-check must reject malformed settings",
+      assert.deepEqual(
+        JSON.parse(await readFile(ltmSettingsPath(root), "utf8")),
+        { version: 1, someNewSetting: "newer-value" },
+        "startup keeps a newer settings field and still drops removed legacy fields",
       );
-      await writeFile(ltmSettingsPath(root), '{"version":1}\n');
+      assert.equal(
+        JSON.parse(await readFile(longTermMemoryRetentionConfigPath(root), "utf8")).someNewRetentionSetting,
+        true,
+        "startup keeps a newer retention field",
+      );
+      assert.equal("someNewSetting" in (await getLtmGlobalSettings(root)), false);
+      assert.equal("someNewExtractionSetting" in (await getLtmExtractionConfig(root)), false);
+      assert.throws(() => ltmGlobalSettingsSchema.parse({ someNewSetting: true }), /unrecognized/i);
+      await assert.rejects(
+        updateLtmGlobalSettings({ someNewSetting: true }, root),
+        /unrecognized/i,
+        "a settings request with a field this version does not know must still be rejected",
+      );
+      assert.equal(
+        JSON.stringify((await exportLongTermMemoryData(root)).settings).includes("someNew"),
+        false,
+        "backup export must succeed and leave out fields this version does not know",
+      );
+      await updateLtmExtractionConfig({ aiKeywordExtraction: true }, root);
+      assert.equal(
+        JSON.parse(await readFile(ltmExtractionConfigPath(root), "utf8")).someNewExtractionSetting,
+        true,
+        "saving extraction settings must keep a newer field",
+      );
+      await writeFile(ltmSettingsPath(root), '{"version":1,"someNewSetting":true,"longTermMemoryBudgetTokens":"x"}\n');
+      await assert.rejects(getLtmGlobalSettings(root), /expected number/i, "an invalid known field must still fail");
+      await writeFile(ltmSettingsPath(root), '{"version":1,"someNewSetting":"newer-value"}\n');
       const stopWordSettings = await updateLtmGlobalSettings({ longTermMemoryStopWords: ["Cobalt-Moon"] }, root);
       assert.deepEqual(
         stopWordSettings.longTermMemoryStopWords,
         ["Cobalt-Moon"],
         "global settings must persist a custom stop-word list",
+      );
+      assert.equal(
+        JSON.parse(await readFile(ltmSettingsPath(root), "utf8")).someNewSetting,
+        "newer-value",
+        "saving settings must keep a newer field so upgrading again restores it",
       );
       assert.deepEqual(
         (await getLtmGlobalSettings(root)).longTermMemoryStopWords,
@@ -357,6 +420,8 @@ async function main() {
       await mkdir(quarantine, { recursive: true });
       await writeFile(join(quarantine, "artifact.json"), "{}\n");
       await utimes(quarantine, new Date(0), new Date(0));
+      // retention.json still holds the newer field from the #1415 block above, so this run
+      // also proves retention reads it leniently.
       const cleanup = await runLongTermMemoryRetention({
         root,
         now: new Date("2026-07-17T00:00:00Z"),
