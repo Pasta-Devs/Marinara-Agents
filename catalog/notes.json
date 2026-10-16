@@ -218,6 +218,12 @@
     "long-term-memory": {
       "versions": [
         {
+          "version": "1.4.43",
+          "date": "2026-10-17",
+          "notes": "- The Long-Term Memory server routes now live in one file per area (notes, drafts, imports, maintenance and settings) instead of one 1,600-line file. Every endpoint keeps its path, size limit and response, so nothing changes in the app.",
+          "highlight": false
+        },
+        {
           "version": "1.4.42",
           "date": "2026-10-16",
           "notes": "- Long-Term Memory no longer keeps finished extraction drafts forever. The daily cleanup now deletes accepted, auto-applied and superseded drafts once they are older than the audit window (30 days by default). Pending and invalidated drafts stay, so Review and Activity show the same items as before. Opening the Long-Term Memory screen and creating a new draft read fewer files as a result.\n- A reply that injects memories no longer rewrites per-memory usage counters in `usage.json`, because nothing read them. The next such reply removes the counters already stored there. Duplicate replies are still recorded only once.",
@@ -329,12 +335,6 @@
           "version": "1.4.23",
           "date": "2026-10-10",
           "notes": "- Recall Korean memories that use short words or particles. Two-syllable Korean nouns such as `반지`, `서래` or `선물` are no longer dropped from keyword extraction, a query written with a particle (`반지를`) now matches the stored noun (`반지`) in both the keyword and lexical lanes, and a compound written with or without a space (`그림 선물` and `그림선물`) matches either way. Existing vaults rebuild their recall indexes once after the update.",
-          "highlight": false
-        },
-        {
-          "version": "1.4.22",
-          "date": "2026-10-10",
-          "notes": "- Resolve Korean character names written with a particle. A Hangul name followed directly by a whole particle such as `은`, `가`, `를`, `에게` or `한테` now counts as present in the source, a returned name with a trailing particle binds to the known name before the particle, and a 2-syllable name that is the tail of a known 3-syllable name goes to Review Queue instead of becoming a separate character.",
           "highlight": false
         }
       ]

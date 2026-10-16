@@ -1,6 +1,6 @@
 # Long-Term Memory changelog
 
-## Unreleased
+## 1.4.43 — 2026-10-17
 
 - The Long-Term Memory server routes now live in one file per area (notes, drafts, imports, maintenance and settings) instead of one 1,600-line file. Every endpoint keeps its path, size limit and response, so nothing changes in the app.
 
