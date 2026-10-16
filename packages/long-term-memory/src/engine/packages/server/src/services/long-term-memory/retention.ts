@@ -4,7 +4,10 @@ import { createReadStream } from "node:fs";
 import { open, readdir, readFile, rm, stat, unlink } from "node:fs/promises";
 import { createInterface } from "node:readline";
 import { dirname, join, resolve } from "node:path";
-import { ltmRetentionConfigSchema } from "../../../../shared/src/features/agents/long-term-memory/schema.js";
+import {
+  ltmIsoTimestampSchema,
+  ltmRetentionConfigSchema,
+} from "../../../../shared/src/features/agents/long-term-memory/schema.js";
 import { DEFAULT_LTM_RETENTION_CONFIG } from "./default-config.js";
 import { fsyncPath, renameWithRetry, writeJsonAtomic } from "./atomic-json.js";
 import { isEnoent } from "./ltm-utils.js";
@@ -244,7 +247,13 @@ async function runLongTermMemoryRetentionUnsafe({
       // skip malformed draft files
       continue;
     }
-    if (FINISHED_DRAFT_STATUSES.has(draft?.status) && new Date(draft.updatedAt).getTime() < finishedDraftCutoff) {
+    // An invalid updatedAt keeps the draft: new Date(null) would read as 1970 and delete it.
+    const updatedAt = ltmIsoTimestampSchema.safeParse(draft?.updatedAt);
+    if (
+      FINISHED_DRAFT_STATUSES.has(draft?.status) &&
+      updatedAt.success &&
+      Date.parse(updatedAt.data) < finishedDraftCutoff
+    ) {
       await rm(path, { force: true });
       draftsRemoved++;
     }

@@ -472,6 +472,7 @@ async function main() {
         "retention-recent-accepted": ["accepted", "2026-07-01T00:00:00.000Z"],
         "retention-old-pending": ["pending", "2026-06-01T00:00:00.000Z"],
         "retention-old-invalidated": ["invalidated", "2026-06-01T00:00:00.000Z"],
+        "retention-null-updated-accepted": ["accepted", null],
       };
       for (const [id, [status, updatedAt]] of Object.entries(retentionDrafts))
         await writeFile(join(dirs.drafts, `${id}.json`), JSON.stringify({ id, status, updatedAt }));
@@ -483,8 +484,13 @@ async function main() {
       assert.equal(draftRetention.draftsRemoved, 3);
       assert.deepEqual(
         (await readdir(dirs.drafts)).filter((name) => name.startsWith("retention-")).sort(),
-        ["retention-old-invalidated.json", "retention-old-pending.json", "retention-recent-accepted.json"],
-        "retention must remove only finished drafts older than the audit window",
+        [
+          "retention-null-updated-accepted.json",
+          "retention-old-invalidated.json",
+          "retention-old-pending.json",
+          "retention-recent-accepted.json",
+        ],
+        "retention must remove only finished drafts with a valid updatedAt older than the audit window",
       );
       for (const id of Object.keys(retentionDrafts)) await rm(join(dirs.drafts, `${id}.json`), { force: true });
 
