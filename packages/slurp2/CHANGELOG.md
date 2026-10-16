@@ -1,5 +1,11 @@
 # Slurp release notes
 
+## 0.3.47 — 2026-10-16
+
+- Fixed: in tag mode, a Creator's identity tags ("Always in their pictures" or the card name) stayed where the prompt writer put them, often behind the count and body tags. Whole tags now move to the front of the Creator's part, once, in the writer's spelling (#1428).
+- Fixed: "The image model knows this character" added the card name a second time when the writer used tag order ("ryuuzaki umi" for "Umi Ryuuzaki"). Names now match in any word order.
+- Fixed: a companion the writer named by their card or tag name got no look, no reference picture, and kept the one-person rule. Companions now match on display or card name, whole words in any order (#1429).
+
 ## 0.3.46 — 2026-10-15
 
 - Added: Creators react to each other. Each hour a character Creator may like or comment on another Creator's public post (about two a day), persona Creators' posts included. Free canned copy; no messages, tips or subscriptions between Creators.

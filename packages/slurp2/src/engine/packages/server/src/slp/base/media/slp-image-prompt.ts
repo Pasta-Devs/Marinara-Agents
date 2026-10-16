@@ -247,15 +247,104 @@ export function ensureSlpImageAppearance(prompt: string, appearance: string): st
 export function slurpApplyImageSubject(prompt: string, name: string, family: SlurpPromptFamily = "natural"): string {
   const who = name.replace(/\s+/gu, " ").trim();
   if (!who) return prompt;
+  // A name tag behind other tags (the look Slurp inserted, a writer's line) moves to the front, once
+  // (0.3.47, player report and review).
+  const [rest, written] = slurpWithoutImageSubject(prompt, who, family);
+  if (rest !== prompt) return [written.toLocaleLowerCase(), rest].filter(Boolean).join(", ");
   // Danbooru-style Appearance fields write the name as a tag ("asuka_langley_soryu", "\(eva\)"):
-  // that counts as present too, so a tag prompt never gets the name twice (player report 0.3.5).
-  const plain = (text: string) =>
-    text
-      .toLocaleLowerCase()
-      .replace(/\\([()])/gu, "$1")
-      .replace(/[_\s]+/gu, " ");
-  if (plain(prompt).includes(plain(who))) return prompt;
+  // that counts as present too, so a tag prompt never gets the name twice (player report 0.3.5),
+  // and so does the family name first ("ryuuzaki umi" for "Umi Ryuuzaki", 0.3.47).
+  if (plainTag(prompt).includes(plainTag(who)) || slurpImageNamesPerson(prompt, [who])) return prompt;
   return family === "natural" ? `${who}\n${prompt}` : `${who.toLocaleLowerCase()}, ${prompt}`;
+}
+
+const plainTag = (text: string) =>
+  text
+    .toLocaleLowerCase()
+    .replace(/\\([()])/gu, "$1")
+    .replace(/[_\s]+/gu, " ")
+    .trim();
+
+/**
+ * A tag prompt without the name's own tags, and the name as the prompt spelled it, so
+ * `slurpApplyImageSubject` puts it in front (0.3.47, player report): the writer wrote "1girl, blue
+ * hair, ryuuzaki umi, magic knight rayearth", the name and "Always in their pictures" counted as
+ * present, and the identity tags stayed behind the body tags. A tag in another word order
+ * ("ryuuzaki umi" for the card's "Umi Ryuuzaki") keeps the writer's order, the one a tag model
+ * learned. Only whole tags move; a name inside a longer tag, a weight group or a sentence, and natural
+ * prompts, stay.
+ */
+export function slurpWithoutImageSubject(
+  prompt: string,
+  name: string,
+  family: SlurpPromptFamily,
+): [prompt: string, name: string] {
+  const wanted = name
+    .split(",")
+    .map((tag) => tag.replace(/\s+/gu, " ").trim())
+    .filter(Boolean);
+  if (family === "natural" || wanted.length === 0) return [prompt, name];
+  const keys = new Set(wanted.map(nameKey));
+  const written = new Map<string, string>();
+  const lines = prompt.split("\n").map((line) => {
+    const parts = line.split(",");
+    const kept = parts.filter((part) => {
+      const tag = part.trim().replace(/[.;]+$/u, "");
+      const key = nameKey(tag);
+      // A tag inside a weight group ("(1girl, umi)") stays: moving it would break the brackets.
+      if (!keys.has(key) || /[()[\]{}]/u.test(tag.replace(/\\[()]/gu, ""))) return true;
+      if (!written.has(key)) written.set(key, tag);
+      return false;
+    });
+    return kept.length === parts.length
+      ? line
+      : kept
+          .map((part) => part.trim())
+          .filter(Boolean)
+          .join(", ") || null;
+  });
+  if (written.size === 0) return [prompt, name];
+  return [
+    // Only a line the move emptied goes; the prompt's own blank lines stay, so it still ends the same.
+    lines.filter((line) => line !== null).join("\n"),
+    wanted.map((tag) => written.get(nameKey(tag)) ?? tag).join(", "),
+  ];
+}
+
+const nameWords = (text: string) =>
+  text
+    .normalize("NFKD")
+    .replace(/[̀-ͯ]/gu, "")
+    .toLocaleLowerCase()
+    .split(/[^\p{L}\p{N}]+/u)
+    .filter(Boolean);
+const nameKey = (text: string) => nameWords(text).sort().join(" ");
+
+/**
+ * Whether a picture prompt names a person (0.3.47, player report): a tag prompt writes the card name
+ * as a tag, often family name first ("ryuuzaki_umi" for "Umi Ryuuzaki"), so a plain substring check
+ * missed a companion the writer did put in the picture. Whole words, in any order, next to each other
+ * inside one tag or line: "summer, rain" is not "Summer Rain".
+ */
+export function slurpImageNamesPerson(prompt: string, names: readonly string[]): boolean {
+  const tags = prompt.split(/[,;|\n]/u).map(nameWords);
+  return names.some((name) => {
+    const want = nameKey(name);
+    const size = want ? want.split(" ").length : 0;
+    if (!size) return false;
+    return tags.some((tag) => {
+      for (let start = 0; start + size <= tag.length; start++) {
+        if (
+          tag
+            .slice(start, start + size)
+            .sort()
+            .join(" ") === want
+        )
+          return true;
+      }
+      return false;
+    });
+  });
 }
 
 /**
@@ -356,20 +445,16 @@ export function slurpImageCompanionBlocks(
   usedRewrite: boolean,
   own = "",
 ): string {
-  const scene = prompt.toLocaleLowerCase();
   const has = (text: string, part: string) => text.toLocaleLowerCase().includes(part.toLocaleLowerCase());
   const blocks = companions
-    .filter((companion) => companion.name.trim() && scene.includes(companion.name.toLocaleLowerCase()))
+    .filter((companion) => slurpImageNamesPerson(prompt, [companion.name, companion.known]))
     .map(({ name, known, look }) => {
       // ponytail: after a rewrite, a trait the Creator shares ("blue eyes") counts as present for
       // the companion too. Match traits per person if rewritten collab pictures still mix them.
       const added = usedRewrite ? ensureSlpImageAppearance(prompt, look) : `${slurpImageLook(look)}\n${prompt}`;
       const traits = usedRewrite && mode === "writer" ? "" : added.slice(0, added.length - prompt.length).trim();
       if (family !== "natural") {
-        const tag =
-          known && slurpApplyImageSubject(own + prompt, known, family) !== own + prompt
-            ? known.toLocaleLowerCase()
-            : "";
+        const tag = known && !slurpImageNamesPerson(own + prompt, [known]) ? known.toLocaleLowerCase() : "";
         return [tag, traits].filter(Boolean).join(", ");
       }
       const label = has(known, name) ? known : has(name, known) ? name : `${name} (${known})`;

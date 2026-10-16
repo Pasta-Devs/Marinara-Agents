@@ -202,7 +202,11 @@ assert.match(
 assert.doesNotMatch(slurpImageNegativePrompt("none", true) ?? "", /second person|extra people/u);
 // The writer gets their looks with the choice; a reference picture only for somebody the final prompt names.
 assert.match(images, /Put one in the picture only when the post or the scene calls for them/u);
-assert.match(images, /promptText: finalPrompt,/u);
+assert.match(images, /slurpCompanionReferenceImages\([^)]*finalPrompt,/u);
+assert.match(
+  slurp2Source("packages/slurp2/src/engine/packages/server/src/slp/features/media/slp-image-companions.ts"),
+  /promptText: prompt,/u,
+);
 // Two people only when the writer named a companion; left out, the one-person rule stands.
 assert.match(
   images,

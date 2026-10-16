@@ -658,6 +658,12 @@
     "slurp2": {
       "versions": [
         {
+          "version": "0.3.47",
+          "date": "2026-10-16",
+          "notes": "- Fixed: in tag mode, a Creator's identity tags (\"Always in their pictures\" or the card name) stayed where the prompt writer put them, often behind the count and body tags. Whole tags now move to the front of the Creator's part, once, in the writer's spelling (#1428).\n- Fixed: \"The image model knows this character\" added the card name a second time when the writer used tag order (\"ryuuzaki umi\" for \"Umi Ryuuzaki\"). Names now match in any word order.\n- Fixed: a companion the writer named by their card or tag name got no look, no reference picture, and kept the one-person rule. Companions now match on display or card name, whole words in any order (#1429).",
+          "highlight": false
+        },
+        {
           "version": "0.3.46",
           "date": "2026-10-15",
           "notes": "- Added: Creators react to each other. Each hour a character Creator may like or comment on another Creator's public post (about two a day), persona Creators' posts included. Free canned copy; no messages, tips or subscriptions between Creators.\n- Fixed: the browsing persona was saved per browser, so one install could show an empty Inbox on one device and 87 unread on another. The pick is now a Slurp setting shared by every device; an older per-browser pick is saved once.\n- Fixed: the custom tag field greyed out with no reason when a draft had filled all eight tags. It now says so.\n- Fixed: Hinted profiles checked tags joined with the bio, so words from separate fields could add up to a copied source detail. Tags are checked one at a time, and the save error names the tag that leaks.",
@@ -769,12 +775,6 @@
           "version": "0.3.28",
           "date": "2026-10-12",
           "notes": "- Added: Deep details for chat messages. Hold a Creator's reply (or right-click it) and choose \"Deep details\" in the Message menu to see what went into it: the chat facts the reply was built from (relationship, stance, heat, memories), the model, the full prompt and the raw answer. It opens in the same window as a post's Deep details.\n- Slurp keeps these details for the newest 50 replies of each chat. Older replies, and replies written before this update, do not offer the item. Clearing a chat removes its details.",
-          "highlight": false
-        },
-        {
-          "version": "0.3.27",
-          "date": "2026-10-12",
-          "notes": "- Added: \"Page style\" in a Creator's Posting settings says in plain words how they post (for example \"Polished · nearly always pictures · automatic\"). The Overview's Posting tile shows the same line. It replaces \"Posting strategy\"; the number fields are under \"Fine-tune page style\".\n- Added: \"Suggest from card\" under Page style reads the Character card and proposes a fitting page style, with a short reason and \"See exact changes\". \"Use this page style\" applies it; \"Keep current\" changes nothing. A page note you wrote is never replaced, and Use is refused if a setting changed in the meantime.\n- Changed: \"Posts without pictures\" is now \"Lean towards words\", without a percent sign: it was never a share of posts. Saved values work as before.",
           "highlight": false
         }
       ]

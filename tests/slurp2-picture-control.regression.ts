@@ -64,7 +64,9 @@ assert.match(
   /const ownWords =\s*!input\.suppressCreatorDetails &&\s*!input\.suppressCharacterContext &&\s*input\.disclosureMode === "open";/u,
 );
 assert.match(images, /\(ownWords && input\.settings\.creatorImagePrefixes/u);
-assert.match(images, /slurpApplyImageSubject\(finalPromptLook, imagePrefix \|\| subjectName, promptFamily\)/u);
+// The prefix wins over the card name; the writer's copy of it moves to the front (0.3.47).
+assert.match(images, /slurpWithoutImageSubject\(writtenBody, imagePrefix \|\| subjectName, promptFamily\)/u);
+assert.match(images, /slurpApplyImageSubject\(finalPromptLook, subject, promptFamily\)/u);
 
 // --- outfits are not rags unless the card says so (#41) ------------------------------------------
 assert.match(read("server/src/slp/features/feed/slp-post-prompt.ts"), /never worn-out, faded or shabby/u);
