@@ -1263,7 +1263,7 @@ export function evidenceUnitMessages(options: RunLongTermMemoryEvidenceUnitExtra
             ? "The server derives character_fact and relationship_state subjects and target note ids from subjectNames. Never choose or invent database subject keys or character/relationship target ids."
             : "Preserve the character_fact and relationship_state subjectId values from the supplied candidate units.",
           "For other streams, the compiler derives the target note id from bucket + subjectId: timeline_event -> timeline_<subjectId>, world_fact or anchor -> world_<subjectId> unless anchor sectionKey starts with tone, thread -> thread_<subjectId>, tone -> tone_<subjectId>.",
-          "For timeline_event, subjectId must name the specific event or beat, not just a person, character, place, or broad entity. Use gate_arrival or hiding_the_injury instead of a bare person or pair of names.",
+          "For timeline_event, subjectId must name the specific event or beat, not just a person, character, place, or broad entity. Use gate_arrival or hiding_the_injury instead of a bare name or pair of names.",
           "Use a source-specific subjectId derived from the source text; never target or invent an existing note id. The server resolves subject and link hints against the vault after extraction.",
           ...validationRules,
           "relationship_state dimension keys must come only from allowedRelationshipDimensions. Put professional curiosity, reputation, gossip, or attention as text/thread/world/timeline facts, not dimensions.",

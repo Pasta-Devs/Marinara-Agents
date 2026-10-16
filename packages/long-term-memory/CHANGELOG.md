@@ -2,7 +2,7 @@
 
 ## Unreleased
 
-- The extraction prompt's example timeline ids no longer use character names from the package's own test fixtures, so a chat that has a character with one of those names no longer sees them mixed into the instructions. The examples now only show the id shape. Nothing else about extraction changes.
+- The memory extraction instructions no longer use real-looking character names in their example timeline ids, so the model can no longer mix those example names up with characters in your chat who share them. Nothing else about extraction changes.
 
 ## 1.4.38 — 2026-10-15
 
