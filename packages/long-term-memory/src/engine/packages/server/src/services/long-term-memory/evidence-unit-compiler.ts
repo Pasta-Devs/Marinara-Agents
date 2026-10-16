@@ -18,7 +18,7 @@ import { uniqueLinks } from "../../../../shared/src/features/agents/long-term-me
 import { mergeKeywords } from "./keyword-extract.js";
 import { noteIdForEvidenceUnit, riskForEvidenceUnit } from "./evidence-unit-validation.js";
 import { uniqueStrings } from "./ltm-utils.js";
-import { subjectsEqual } from "./subject-identity.js";
+import { subjectsEqual } from "./subject-equality.js";
 import { isLocalCharacterSubject } from "./chat-scope.js";
 
 export interface CompileLtmEvidenceUnitsOptions {

@@ -36,11 +36,11 @@ import { LongTermMemoryStorage } from "./storage.js";
 import { normalizeStructuredSummaryEvidenceUnits } from "./structured-summary-normalizer.js";
 import {
   prepareLtmSubjectIdentityContext,
-  subjectsEqual,
   trustedLtmIdentityNotesForSource,
   trustedLtmCharacterAliasIdentifiers,
   type TrustedLtmSubjectCatalog,
 } from "./subject-identity.js";
+import { subjectsEqual } from "./subject-equality.js";
 import { noteIdForLtmDraftMutation, projectLtmDraftOntoNotes } from "./draft-projector.js";
 import { stableJsonHash } from "./chunking.js";
 import { extractionFingerprintForLtmSourceNote, extractionFingerprintsEqual } from "./source-hash.js";

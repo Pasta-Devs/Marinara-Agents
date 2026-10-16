@@ -162,6 +162,72 @@
       .find((edge) => pairKey(edge.characterAId, edge.characterBId) === key) ?? null;
   }
 
+  const COLOR_CATEGORY_NAMES = ["positive", "neutral", "negative", "complicated"];
+  const reviewString = (value) => typeof value === "string" ? value : "";
+
+  function normalizeReviewChange(change) {
+    const common = {
+      state: change?.state === "undefined" ? "undefined" : "defined",
+      label: reviewString(change?.label),
+      colorCategory: reviewString(change?.colorCategory),
+      issue: reviewString(change?.issue),
+      note: reviewString(change?.note),
+    };
+    if (change?.kind === "card") {
+      return {
+        kind: "card",
+        aliasA: reviewString(change.aliasA),
+        aliasB: reviewString(change.aliasB),
+        perspectiveA: reviewString(change.perspectiveA),
+        perspectiveB: reviewString(change.perspectiveB),
+        ...common,
+      };
+    }
+    if (change?.kind === "persona") return { kind: "persona", alias: reviewString(change.alias), perception: reviewString(change.perception), ...common };
+    return null;
+  }
+
+  // The server's editable copy of a History answer it rejected; malformed parts are left out.
+  function normalizeHistoryReview(value, reason) {
+    if (!value || typeof value !== "object" || typeof value.id !== "string" || !value.id) return null;
+    const changes = (Array.isArray(value.changes) ? value.changes : []).map(normalizeReviewChange).filter(Boolean);
+    return {
+      id: value.id,
+      reason: reviewString(reason),
+      modelResponse: reviewString(value.modelResponse),
+      characters: (Array.isArray(value.characters) ? value.characters : [])
+        .filter((character) => typeof character?.alias === "string" && typeof character?.name === "string")
+        .map(({ alias, name }) => ({ alias, name })),
+      persona: typeof value.persona?.name === "string" ? { name: value.persona.name } : null,
+      changes,
+      initialCount: changes.length,
+      saving: null,
+      error: "",
+      savedAny: false,
+      detailsOpen: false,
+    };
+  }
+
+  function reviewRequestChange(change) {
+    const defined = change.state === "defined";
+    const prose = (value) => defined ? value.trim() : "";
+    const colorCategory = defined && change.colorCategory ? change.colorCategory : null;
+    return change.kind === "card"
+      ? {
+        kind: "card",
+        aliasA: change.aliasA,
+        aliasB: change.aliasB,
+        state: change.state,
+        label: prose(change.label),
+        perspectiveA: prose(change.perspectiveA),
+        perspectiveB: prose(change.perspectiveB),
+        colorCategory,
+      }
+      : { kind: "persona", alias: change.alias, state: change.state, label: prose(change.label), perception: prose(change.perception), colorCategory };
+  }
+
+  const countOf = (count, noun) => `${count} ${noun}${count === 1 ? "" : "s"}`;
+
   class RelationshipTrackerElement extends HTMLElement {
     static get observedAttributes() {
       return ["view"];
@@ -253,6 +319,7 @@
         status: "idle",
         error: "",
         result: null,
+        review: null,
       };
     }
 
@@ -336,7 +403,7 @@
 
     isEditing() {
       const active = this.shadowRoot.activeElement;
-      return Boolean(active?.closest?.("[data-relationship-editor], [data-persona-editor]") &&
+      return Boolean(active?.closest?.("[data-relationship-editor], [data-persona-editor], [data-history-review]") &&
         /^(INPUT|TEXTAREA|SELECT)$/u.test(active.tagName));
     }
 
@@ -509,12 +576,13 @@
           status: "error",
           error: `Choose an integer from ${MIN_HISTORY_MESSAGES} through ${MAX_HISTORY_MESSAGES}.`,
           result: null,
+          review: null,
         };
         this.render();
         return;
       }
       const token = ++this._historyRequestToken;
-      this._history = { chatId, messageCount, status: "updating", error: "", result: null };
+      this._history = { chatId, messageCount, status: "updating", error: "", result: null, review: null };
       this.render();
       try {
         const response = await apiFetch(`/api/relationship-tracker/v1/chats/${encodeURIComponent(chatId)}/history-update`, {
@@ -522,9 +590,13 @@
           body: { messageCount },
         });
         const body = await response.json().catch(() => ({}));
-        if (!response.ok) throw new Error(responseError(response, body, "History update failed"));
+        if (!response.ok) {
+          throw Object.assign(new Error(responseError(response, body, "History update failed")), {
+            review: normalizeHistoryReview(body?.review, body?.error),
+          });
+        }
         if (token !== this._historyRequestToken || chatId !== this.currentChatId()) return;
-        this._history = { chatId, messageCount, status: "success", error: "", result: body };
+        this._history = { chatId, messageCount, status: "success", error: "", result: body, review: null };
         await this.loadPanel(chatId);
       } catch (error) {
         if (token !== this._historyRequestToken || chatId !== this.currentChatId()) return;
@@ -534,9 +606,91 @@
           status: "error",
           error: error instanceof Error ? error.message : String(error),
           result: null,
+          review: error?.review ?? null,
         };
         this.render();
       }
+    }
+
+    // Saves one kind of reviewed change; the server checks it against the rejected run's messages and state.
+    async saveReviewedChanges(kind) {
+      const chatId = this.currentChatId();
+      const review = this._history.review;
+      if (!chatId || !review || review.saving || this._history.chatId !== chatId ||
+          this._panel.status === "saving" || this._history.status === "updating") return;
+      const sent = review.changes.filter((change) => change.kind === kind);
+      if (sent.length === 0) return;
+      const token = ++this._historyRequestToken;
+      this._history = { ...this._history, review: { ...review, saving: kind, error: "" } };
+      this.render();
+      try {
+        const response = await apiFetch(`/api/relationship-tracker/v1/chats/${encodeURIComponent(chatId)}/history-update/review`, {
+          method: "POST",
+          body: { reviewId: review.id, changes: sent.map(reviewRequestChange) },
+        });
+        const body = await response.json().catch(() => ({}));
+        if (!response.ok) {
+          throw Object.assign(new Error(responseError(response, body, "Saving the reviewed changes failed")), {
+            code: typeof body?.code === "string" ? body.code : "",
+            review: normalizeHistoryReview(body?.review, body?.error),
+          });
+        }
+        if (token !== this._historyRequestToken || chatId !== this.currentChatId()) return;
+        const remaining = review.changes.filter((change) => change.kind !== kind);
+        this._history = {
+          ...this._history,
+          status: "success",
+          error: "",
+          result: body,
+          review: remaining.length > 0 ? { ...review, changes: remaining, saving: null, error: "", savedAny: true } : null,
+        };
+        await this.loadPanel(chatId);
+      } catch (error) {
+        if (token !== this._historyRequestToken || chatId !== this.currentChatId()) return;
+        const message = error instanceof Error ? error.message : String(error);
+        if (error?.review) {
+          // Show the server's check of what was sent in place, keeping the notes and the other kind's changes.
+          let position = 0;
+          const changes = review.changes.map((change) => {
+            if (change.kind !== kind) return change;
+            const checked = error.review.changes[position++];
+            return checked ? { ...checked, note: change.note } : change;
+          });
+          this._history = { ...this._history, review: { ...review, changes, saving: null, error: message } };
+        } else if (["history_review_expired", "history_review_stale", "history_state_changed"].includes(error?.code)) {
+          this._history = { ...this._history, status: "error", error: message, result: null, review: null };
+        } else {
+          this._history = { ...this._history, review: { ...review, saving: null, error: message } };
+        }
+        this.render();
+      }
+    }
+
+    // Edits are kept on the review itself so a re-render never loses them.
+    updateReviewChange(index, field, value, rerender) {
+      const review = this._history.review;
+      const change = review?.changes?.[index];
+      if (!change || review.saving || !Object.hasOwn(change, field) || field === "kind" || field === "issue" || field === "note") return;
+      change[field] = value;
+      change.issue = "";
+      if (rerender) this.render();
+    }
+
+    removeReviewChange(index) {
+      const review = this._history.review;
+      if (!review || review.saving) return;
+      review.changes = review.changes.filter((_, position) => position !== index);
+      this.render();
+    }
+
+    dismissReview() {
+      if (!this._history.review || this._history.review.saving) return;
+      this._history = {
+        ...this._history,
+        review: null,
+        ...(this._history.status === "error" ? { status: "idle", error: "" } : {}),
+      };
+      this.render();
     }
 
     bindControls() {
@@ -649,6 +803,25 @@
         if (Number.isInteger(messageCount) && messageCount >= MIN_HISTORY_MESSAGES && messageCount <= MAX_HISTORY_MESSAGES) {
           this._history.messageCount = messageCount;
         }
+      });
+      for (const row of this.shadowRoot.querySelectorAll?.("[data-review-change]") ?? []) {
+        const index = Number(row.dataset.reviewChange);
+        for (const control of row.querySelectorAll?.("[data-review-field]") ?? []) {
+          // Choices change the row's wording and fields, so they re-render; typing only updates the draft.
+          const choice = control.tagName === "SELECT";
+          control.addEventListener(choice ? "change" : "input", () => {
+            this.updateReviewChange(index, control.dataset.reviewField, control.value, choice);
+          });
+        }
+        row.querySelector?.("[data-review-remove]")?.addEventListener("click", () => this.removeReviewChange(index));
+      }
+      for (const button of this.shadowRoot.querySelectorAll?.("[data-review-save]") ?? []) {
+        button.addEventListener("click", () => void this.saveReviewedChanges(button.dataset.reviewSave));
+      }
+      this.shadowRoot.querySelector?.("[data-review-dismiss]")?.addEventListener("click", () => this.dismissReview());
+      const reviewDetails = this.shadowRoot.querySelector?.("[data-review-details]");
+      reviewDetails?.addEventListener("toggle", () => {
+        if (this._history.review) this._history.review.detailsOpen = reviewDetails.open;
       });
       for (const hitTarget of this.shadowRoot.querySelectorAll?.("[data-line-key]") ?? []) {
         hitTarget.addEventListener("pointerup", (event) => {
@@ -896,14 +1069,22 @@
       const messageCount = Number.isInteger(history.messageCount) ? history.messageCount : DEFAULT_HISTORY_MESSAGES;
       const updating = history.status === "updating";
       const unavailable = busy || value?.configured !== true;
+      const review = history.review ?? null;
       let feedback = "";
       if (history.status === "success" && history.result) {
         const processed = Number.isInteger(history.result.processedMessageCount) ? history.result.processedMessageCount : messageCount;
         const saved = Number.isInteger(history.result.diagnostics?.savedUpdates) ? history.result.diagnostics.savedUpdates : 0;
+        const perceptions = Number.isInteger(history.result.diagnostics?.personaUpdates) ? history.result.diagnostics.personaUpdates : 0;
         const ignored = Number.isInteger(history.result.diagnostics?.ignoredLockedUpdates)
           ? history.result.diagnostics.ignoredLockedUpdates
           : 0;
-        feedback = `<p class="history-success" role="status">Processed ${processed} recent message${processed === 1 ? "" : "s"}; saved ${saved} relationship change${saved === 1 ? "" : "s"}${ignored > 0 ? `; preserved ${ignored} manually locked update${ignored === 1 ? "" : "s"}` : ""}.</p>`;
+        const savedParts = [
+          ...(saved > 0 || perceptions === 0 ? [countOf(saved, "relationship change")] : []),
+          ...(perceptions > 0 ? [countOf(perceptions, "persona perception")] : []),
+        ];
+        feedback = `<p class="history-success" role="status">Processed ${processed} recent message${processed === 1 ? "" : "s"}; saved ${savedParts.join(" and ")}${ignored > 0 ? `; preserved ${ignored} manually locked update${ignored === 1 ? "" : "s"}` : ""}.</p>`;
+      } else if (history.status === "error" && review) {
+        feedback = "";
       } else if (history.status === "error") {
         feedback = `<p class="error" role="alert">${escapeHtml(history.error)}</p>`;
       } else if (updating) {
@@ -923,7 +1104,86 @@
             ? "Check the latest recent messages and updates all lines in the web that aren't locked."
             : "Select an injection mode below to initialize this chat before updating from history."}</p>
           ${feedback}
+          ${review ? this.renderHistoryReview(review, busy) : ""}
         </section>
+      `;
+    }
+
+    renderReviewChange(change, index, review, names, disabled) {
+      const characterOptions = (selected) => `${names.has(selected) ? "" : `<option value="" selected disabled>Choose a character…</option>`}${review.characters.map((character) => `<option value="${escapeHtml(character.alias)}" ${character.alias === selected ? "selected" : ""}>${escapeHtml(character.name)}</option>`).join("")}`;
+      const defined = change.state === "defined";
+      const off = defined ? "" : "disabled";
+      const stateField = `<label>State<select data-review-field="state"><option value="defined" ${defined ? "selected" : ""}>Defined</option><option value="undefined" ${defined ? "" : "selected"}>Undefined</option></select></label>`;
+      const colorField = `<label>Color category<select data-review-field="colorCategory" ${off}>${COLOR_CATEGORY_NAMES.includes(change.colorCategory) ? "" : `<option value="" selected disabled>Choose a color…</option>`}${COLOR_CATEGORY_NAMES.map((category) => `<option value="${category}" ${change.colorCategory === category ? "selected" : ""}>${category[0].toUpperCase()}${category.slice(1)}</option>`).join("")}</select></label>`;
+      const footer = `${defined ? "" : `<p class="wide-field">Undefined removes this line from the web.</p>`}${change.note ? `<p class="review-note wide-field">${escapeHtml(change.note)}</p>` : ""}${change.issue ? `<p class="error wide-field">${escapeHtml(change.issue)}</p>` : ""}<div class="editor-actions wide-field"><button type="button" class="secondary" data-review-remove>Remove this change</button></div>`;
+      const open = `<fieldset class="review-change${change.issue ? " needs-fix" : ""}" data-review-change="${index}" ${disabled ? "disabled" : ""}>`;
+      if (change.kind === "card") {
+        const nameA = escapeHtml(names.get(change.aliasA) ?? "Character A");
+        const nameB = escapeHtml(names.get(change.aliasB) ?? "Character B");
+        return `${open}
+          <legend>${nameA} and ${nameB}</legend>
+          <label>Character A<select data-review-field="aliasA">${characterOptions(change.aliasA)}</select></label>
+          <label>Character B<select data-review-field="aliasB">${characterOptions(change.aliasB)}</select></label>
+          ${stateField}${colorField}
+          <label class="wide-field">Label<input data-review-field="label" type="text" maxlength="48" value="${escapeHtml(change.label)}" ${off}></label>
+          <label class="wide-field">How ${nameA} sees ${nameB}<input data-review-field="perspectiveA" type="text" maxlength="80" placeholder="For example: trusts ${nameB}" value="${escapeHtml(change.perspectiveA)}" ${off}></label>
+          <label class="wide-field">How ${nameB} sees ${nameA}<input data-review-field="perspectiveB" type="text" maxlength="80" placeholder="For example: trusts ${nameA}" value="${escapeHtml(change.perspectiveB)}" ${off}></label>
+          ${footer}
+        </fieldset>`;
+      }
+      const name = escapeHtml(names.get(change.alias) ?? "This character");
+      const persona = escapeHtml(review.persona?.name ?? "the persona");
+      return `${open}
+        <legend>${name}'s view of ${persona}</legend>
+        <label>Character<select data-review-field="alias">${characterOptions(change.alias)}</select></label>
+        ${stateField}${colorField}
+        <label class="wide-field">Label<input data-review-field="label" type="text" maxlength="80" value="${escapeHtml(change.label)}" ${off}></label>
+        <label class="wide-field">Character's Perception<textarea data-review-field="perception" maxlength="240" rows="2" placeholder="For example: ${name} sees ${persona} as a trusted friend" ${off}>${escapeHtml(change.perception)}</textarea></label>
+        ${footer}
+      </fieldset>`;
+    }
+
+    // A rejected History answer shown as plain editable changes, so nobody has to read the model's JSON.
+    renderHistoryReview(review, busy) {
+      const names = new Map(review.characters.map((character) => [character.alias, character.name]));
+      const persona = escapeHtml(review.persona?.name ?? "the persona");
+      const cardCount = review.changes.filter((change) => change.kind === "card").length;
+      const personaCount = review.changes.length - cardCount;
+      const disabled = busy || review.saving !== null;
+      let headline;
+      let guidance = "";
+      if (review.initialCount === 0) {
+        headline = "The model's answer couldn't be used, so nothing was saved.";
+        guidance = "Run the update again; choosing fewer messages or a different model connection often helps. You can also set relationships yourself in the editors below.";
+      } else if (review.changes.length === 0) {
+        headline = "No suggested changes are left to save.";
+      } else if (review.savedAny) {
+        headline = "The model also suggested these changes.";
+      } else {
+        headline = "Update from History couldn't save the model's suggestions on its own. Nothing has been saved yet.";
+        guidance = "Check the changes below, fix anything marked, then save them. You can also run the update again; choosing fewer messages or a different model connection often helps.";
+      }
+      const saveButton = (kind, count, text) => count > 0
+        ? `<button type="button" data-review-save="${kind}" ${disabled ? "disabled" : ""}>${review.saving === kind ? "Saving…" : text}</button>`
+        : "";
+      return `
+        <div class="history-review" data-history-review>
+          <p class="${review.savedAny ? "" : "error"}" role="${review.savedAny ? "status" : "alert"}">${headline}</p>
+          ${guidance ? `<p>${guidance}</p>` : ""}
+          ${review.changes.map((change, index) => this.renderReviewChange(change, index, review, names, disabled)).join("")}
+          ${cardCount > 0 && personaCount > 0 ? `<p>Relationship changes and perceptions of ${persona} are saved separately.</p>` : ""}
+          ${review.error ? `<p class="error" role="alert">${escapeHtml(review.error)}</p>` : ""}
+          <div class="editor-actions">
+            ${saveButton("card", cardCount, `Save ${countOf(cardCount, "relationship change")}`)}
+            ${saveButton("persona", personaCount, `Save ${countOf(personaCount, "perception")} of ${persona}`)}
+            <button type="button" class="secondary" data-review-dismiss ${review.saving ? "disabled" : ""}>Dismiss</button>
+          </div>
+          <details class="review-details" data-review-details ${review.detailsOpen ? "open" : ""}>
+            <summary>Details for bug reports</summary>
+            ${review.reason ? `<p>${escapeHtml(review.reason)}</p>` : ""}
+            <pre>${escapeHtml(review.modelResponse || "(The model's answer was empty.)")}</pre>
+          </details>
+        </div>
       `;
     }
 
@@ -1018,7 +1278,7 @@
         content = `<p class="error">${escapeHtml(state.error)}</p><button type="button" data-retry>Retry</button>`;
       } else {
         const saving = state.status === "saving";
-        const busy = saving || this._history.status === "updating";
+        const busy = saving || this._history.status === "updating" || Boolean(this._history.review?.saving);
         // One error slot for every action (settings, relationship, persona), visible even with fewer than two cards.
         const actionError = state.error ? `<p class="error" role="alert">${escapeHtml(state.error)}</p>` : "";
         content = `${actionError}${this.renderGraph(state.value)}${this.renderHistory(state.value, busy)}${this.renderEditor(state.value, busy)}${this.renderPersonaEditor(state.value, busy)}${this.renderSettings(state.value, busy)}`;
@@ -1086,6 +1346,15 @@
           .history-form label { display: grid; gap: 0.3rem; }
           .history-form input { width: 6rem; }
           .history-success { color: color-mix(in srgb, #10b981 65%, var(--foreground, #f5f5f5)); }
+          .history-review { display: grid; gap: 0.55rem; }
+          .review-change { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 0.5rem; margin: 0; border: 1px solid color-mix(in srgb, var(--border, #64748b) 72%, transparent); border-radius: 0.55rem; padding: 0.55rem; }
+          .review-change.needs-fix { border-color: color-mix(in srgb, #ef4444 60%, var(--border, #64748b)); }
+          .review-change legend { padding: 0 0.25rem; color: var(--foreground, #f5f5f5); font-size: 0.78rem; font-weight: 650; }
+          .review-change label { display: grid; align-content: start; gap: 0.3rem; }
+          .review-note { color: color-mix(in srgb, #f59e0b 65%, var(--foreground, #f5f5f5)); }
+          .review-change .editor-actions { justify-content: flex-end; }
+          .review-change .editor-actions button { flex: 0 0 auto; padding: 0.3rem 0.55rem; font-size: 0.75rem; }
+          .review-details pre { max-height: 14rem; margin: 0.4rem 0 0; padding: 0.45rem; overflow: auto; border-radius: 0.45rem; background: color-mix(in srgb, var(--border, #64748b) 18%, transparent); font-size: 0.72rem; white-space: pre-wrap; overflow-wrap: anywhere; }
           .section-heading { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 0.4rem; }
           .lock-status, .automatic-status { border-radius: 999px; padding: 0.16rem 0.45rem; font-size: 0.68rem; font-weight: 700; }
           .lock-status { color: color-mix(in srgb, #f59e0b 65%, var(--foreground, #f5f5f5)); background: rgba(245, 158, 11, .16); }
@@ -1116,6 +1385,7 @@
             .section-body { padding: 0.45rem; }
             .history-form, .editor fieldset, .settings fieldset { grid-template-columns: 1fr; }
             .editor label, .wide-field { grid-column: 1; }
+            .review-change { grid-template-columns: 1fr; }
             .relationship-web { min-height: 12rem; }
             .edge-label, .character-name { font-size: 13px; }
           }

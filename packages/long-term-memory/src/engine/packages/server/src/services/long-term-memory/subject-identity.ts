@@ -28,6 +28,7 @@ import {
 } from "./chat-scope.js";
 import type { LtmExtractionDiagnostic } from "../../../../shared/src/features/agents/long-term-memory/schema.js";
 import { noteIdForEvidenceUnit } from "./evidence-unit-validation.js";
+import { subjectsEqual } from "./subject-equality.js";
 import { safeSnippet, uniqueStrings, normalizeSubjectName } from "./ltm-utils.js";
 import { LongTermMemoryStorage } from "./storage.js";
 import { getPackagePersistence, getPackageResources } from "./package-runtime.js";
@@ -2134,11 +2135,6 @@ function isDominatedUnboundNpcEntry(
   if (entry.subject.ref || !isLocalCharacterSubject(entry.subject)) return false;
   const primaryTokens = uniqueStrings([normalizeSubjectName(entry.name), entry.canonicalSlug]);
   return primaryTokens.some((token) => refBackedIdentityTokens.has(token));
-}
-
-export function subjectsEqual(left: readonly LtmSubject[] | undefined, right: readonly LtmSubject[] | undefined) {
-  if (!left || !right || left.length !== right.length) return false;
-  return left.every((subject, index) => subject.key === right[index]?.key);
 }
 
 function buildCatalogIndex(catalog: TrustedLtmSubjectCatalog): CatalogIndex {

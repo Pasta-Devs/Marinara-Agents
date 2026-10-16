@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.7.1 — 2026-10-14 [highlight]
+
+- When Update from History can't use the model's answer, it now shows the changes the model suggested instead of only an error. Each change uses character names, says in plain words what needs fixing, and can be edited, removed or saved. Relationship changes and persona perceptions are saved separately, and the model's original answer is under Details for bug reports.
+- Fewer "unknown character alias" errors: the tracker now tells the model to keep your persona out of character pairs, and a pair it still files with your persona is offered as that character's view of you. The error now names the alias the model used.
+- Update from History no longer fails when the model leaves out an empty list.
+- After saving only persona perceptions, the panel says how many it saved.
+
 ## 0.7.0 — 2026-10-13
 
 - In Roleplay, Update from History now reads whispers the way the Engine's own agents do, marked private with who they were for. A message that is only a whisper is no longer read as empty.

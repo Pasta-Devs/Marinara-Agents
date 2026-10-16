@@ -23,7 +23,7 @@ import { uniqueLinks } from "../../../../shared/src/features/agents/long-term-me
 import { stableStringify } from "./chunking.js";
 import { uniqueStrings } from "./ltm-utils.js";
 import { canUpdateLtmScopedTarget } from "./scoped-targets.js";
-import { subjectsEqual } from "./subject-identity.js";
+import { subjectsEqual } from "./subject-equality.js";
 import { LtmServiceError } from "./service-error.js";
 import { renderSectionContributions, sectionContributions, sourceContribution } from "./section-contributions.js";
 
