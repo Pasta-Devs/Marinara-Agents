@@ -1,5 +1,9 @@
 # Long-Term Memory changelog
 
+## Unreleased
+
+- The extraction prompt's example timeline ids no longer use character names from the package's own test fixtures, so a chat that has a character with one of those names no longer sees them mixed into the instructions. The examples now only show the id shape. Nothing else about extraction changes.
+
 ## 1.4.38 — 2026-10-15
 
 - Switching between the Vault, Review, Sources and Settings screens no longer shows a brief "Loading" panel, because the screens ship in the one bundle the package already loads. Importing a backup, resetting memory settings and deleting all memory data now read each setting and the integrity report once instead of two or three times. Nothing else changes in what the screens show or how they behave. Internally the duplicated tab-key handling, scope labels, confirm dialog, availability copy and shared queries are now one copy each, and 155 unused interface strings were removed.
