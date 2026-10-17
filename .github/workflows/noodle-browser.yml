@@ -11,10 +11,11 @@ on:
       - "artwork/agent-covers/slurp2.png"
       - "artwork/sources/noodle-*"
       - "artwork/sources/slurp-*"
-      # NOTE: intentionally NOT triggering on catalog/*.json, package.json, or
-      # package-lock.json. Those are shared across every package — each release
-      # regenerates the catalog and can touch the lockfile — so triggering on them
-      # ran this Noodle/Slurp browser suite on unrelated package PRs. Noodle/Slurp
+      # NOTE: intentionally NOT triggering on catalog/*.json, package.json,
+      # package-lock.json, or scripts/build-feature-packages.mjs. Those are shared
+      # across every package — each release regenerates the catalog, can touch the
+      # lockfile and bumps its version line in the build script — so triggering on
+      # them ran this Noodle/Slurp browser suite on unrelated package PRs. Noodle/Slurp
       # changes are already covered by packages/noodle|slurp2/**, the noodle/slurp2
       # artifacts, the harness scripts, and sources/engine below.
       - "packages/noodle/**"
@@ -24,7 +25,6 @@ on:
       - "tests/slurp2-source.ts"
       - "tests/tsconfig.regressions.json"
       - "scripts/run-slurp-regressions.mjs"
-      - "scripts/build-feature-packages.mjs"
       - "scripts/install-package-browser-fixture.mjs"
       - "scripts/run-package-browser-tests.mjs"
       - "scripts/start-package-browser-servers.mjs"
