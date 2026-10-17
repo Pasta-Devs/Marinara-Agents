@@ -1805,16 +1805,25 @@ async function main() {
       await page.keyboard.press("Escape");
       await memoryScopePopup.waitFor({ state: "detached" });
       // Every place kind is chosen by keyboard, and the list follows the choice (#1420).
+      const allPlaceQueryStart = noteQueries.length;
       await choosePlaceByKeyboard("vault", "all", "all");
       assert.equal((await memoryScopeTrigger.innerText()).trim(), "All");
       await openWorldGroup();
       await page.getByText("Memory outside current chat").waitFor();
-      assert.ok(noteQueries.some((query) => !query.includes("scopeChatIds")));
+      assert.ok(
+        noteQueries.slice(allPlaceQueryStart).some((query) => !query.includes("scopeChatIds")),
+        "choosing All loads notes without a chat scope",
+      );
       // With no character folded into the places, chats split by whether they hold memories.
       await memoryScopeTrigger.click();
       await memoryScope.locator('[data-ltm-scope-tab="chat"]').click();
       const withMemories = memoryScope.locator('[data-ltm-scope-presence="with-memories"]');
       const noMemories = memoryScope.locator('[data-ltm-scope-presence="no-memories"]');
+      const showNoMemories = memoryScope.locator("[data-ltm-scope-show-no-memories]");
+      const listboxRoles = () =>
+        memoryScope
+          .locator('[role="listbox"]')
+          .evaluate((list) => [...new Set([...list.children].map((child) => child.getAttribute("role")))].sort());
       assert.equal(await withMemories.getAttribute("aria-label"), "With memories");
       assert.match(
         await withMemories.locator('[data-ltm-scope-option="group:conversation-a"]').innerText(),
@@ -1822,22 +1831,44 @@ async function main() {
         "a chat with branches is one Chats entry",
       );
       assert.equal(await memoryScope.locator('[data-ltm-scope-option="chat:memory-chat"]').count(), 0);
-      assert.equal(await noMemories.getAttribute("open"), null, "places without memories start collapsed");
-      assert.equal(await noMemories.locator('[data-ltm-scope-option="chat:bulk-chat-0"]').count(), 1);
+      // While collapsed, places without memories are one "Show N places" option, so the listbox holds
+      // only options and groups (#1442).
+      assert.equal(await noMemories.count(), 0, "places without memories start collapsed");
+      assert.match(await showNoMemories.innerText(), /^Show \d+ places with no memories$/u);
+      assert.equal(await showNoMemories.getAttribute("role"), "option");
+      assert.deepEqual(await listboxRoles(), ["group", "option"]);
       await memoryScopeSearch.fill("Bulk chat 1");
-      await memoryScope.locator('[data-ltm-scope-presence="no-memories"][open]').waitFor();
-      await noMemories.locator(":scope > summary").click();
-      await memoryScope.locator('[data-ltm-scope-presence="no-memories"]:not([open])').waitFor();
-      // Check the user's collapsed preference after clearing the search, without
-      // batching an immediate clear/refill back to the same controlled value.
+      await noMemories.waitFor();
+      // A tab change during a search keeps the group open (#1442).
+      await memoryScope.locator('[data-ltm-scope-tab="all"]').click();
+      await memoryScope.locator('[data-ltm-scope-tab="chat"]').click();
+      assert.equal(await noMemories.locator('[data-ltm-scope-option="chat:bulk-chat-1"]').count(), 1);
+      assert.equal(await showNoMemories.count(), 0);
+      // Clearing the search returns to the collapsed choice, without batching an immediate
+      // clear/refill back to the same controlled value.
       await memoryScopeSearch.fill("");
-      await memoryScope.locator('[data-ltm-scope-presence="no-memories"]:not([open])').waitFor();
+      await showNoMemories.waitFor();
+      assert.equal(await noMemories.count(), 0);
+      // ArrowDown from the search box reaches the "Show" option, and Enter opens the group in place.
+      await memoryScopeSearch.focus();
+      for (let step = 0; step < 20 && (await showNoMemories.getAttribute("data-highlighted")) !== "true"; step += 1)
+        await page.keyboard.press("ArrowDown");
+      assert.equal(await showNoMemories.getAttribute("data-highlighted"), "true", "ArrowDown reaches the Show option");
+      await page.keyboard.press("Enter");
+      await noMemories.waitFor();
+      assert.equal(await noMemories.getAttribute("role"), "group");
+      assert.equal(await noMemories.getAttribute("aria-label"), "No memories");
+      assert.equal(await showNoMemories.count(), 0);
+      assert.deepEqual(await listboxRoles(), ["group", "option"]);
+      assert.equal(await memoryScopeTrigger.getAttribute("aria-expanded"), "true", "opening the group is not a choice");
       await memoryScopeSearch.fill("Member Final Branch");
       assert.equal(
         await memoryScope.locator('[data-ltm-scope-option="group:conversation-a"]').count(),
         1,
         "a chat is searchable by a branch name",
       );
+      await memoryScopeSearch.fill("");
+      await noMemories.waitFor();
       await page.keyboard.press("Escape");
       await memoryScopePopup.waitFor({ state: "detached" });
       const wholeChatRequest = notesRequest((params) => params.get("scopeGroupId") === "conversation-a");
@@ -1874,7 +1905,7 @@ async function main() {
       await memoryScopeTrigger.click();
       await memoryScopeSearch.fill("Private detective");
       await memoryScope
-        .locator('[data-ltm-scope-presence="no-memories"][open] [data-ltm-scope-option="persona:persona-b"]')
+        .locator('[data-ltm-scope-presence="no-memories"] [data-ltm-scope-option="persona:persona-b"]')
         .click();
       await hiddenPersonaRequest;
       assert.match(await memoryScopeTrigger.innerText(), /Private detective/u);
@@ -1926,11 +1957,33 @@ async function main() {
       await secondaryScopeTrigger.click();
       await secondaryScope.locator("[data-ltm-scope-picker-popup] input").fill("Private detective");
       await secondaryScope
-        .locator('[data-ltm-scope-presence="no-memories"][open] [data-ltm-scope-option="persona:persona-b"]')
+        .locator('[data-ltm-scope-presence="no-memories"] [data-ltm-scope-option="persona:persona-b"]')
         .click();
       await page.getByText(/No memories are available in .*AND/u).waitFor();
       await choosePlaceBySearch("vault-secondary", "does-not-match", "all");
       assert.match(await secondaryScopeTrigger.innerText(), /No second place/u);
+      await openWorldGroup();
+      await page.getByText("Memory outside current chat").waitFor();
+      // Unsaved edits: Keep editing and Discard both return focus to the place button (#1442).
+      await page
+        .locator('[data-ltm-note-type="world"]')
+        .filter({ hasText: /^Second mobile review memory/u })
+        .locator("button")
+        .first()
+        .click();
+      await page.locator('[data-ltm-field="title"]').fill("Second mobile review memory, edited");
+      const focusedPlaceButton = memoryScope.locator("[data-ltm-scope-picker-trigger]:focus");
+      await choosePlaceByKeyboard("vault", "character", "character:character-a");
+      await page.locator("[data-ltm-unsaved-stay]:focus").waitFor();
+      await page.keyboard.press("Enter");
+      await focusedPlaceButton.waitFor();
+      assert.equal((await memoryScopeTrigger.innerText()).trim(), "All", "Keep editing stays in the place");
+      const discardPlaceRequest = notesRequest((params) => params.get("scopeCharacterIds") === "character-a");
+      await choosePlaceByKeyboard("vault", "character", "character:character-a");
+      await page.getByRole("button", { name: "Discard and continue", exact: true }).click();
+      await discardPlaceRequest;
+      await focusedPlaceButton.waitFor();
+      await choosePlaceBySearch("vault", "does-not-match", "all");
       await openWorldGroup();
       await page.getByText("Memory outside current chat").waitFor();
       await page.evaluate(() => {
@@ -2126,11 +2179,13 @@ async function main() {
       await page.keyboard.press("Space");
       await branchRail.locator('[data-ltm-availability-target="character:character-a"][aria-pressed="true"]').waitFor();
       await branchRail.locator('[data-ltm-availability-tab="chat"]').click();
-      await branchRail.locator('[data-ltm-availability-target="chat:conversation-a"]').click();
-      await branchRail.locator('[data-ltm-availability-target="chat:conversation-a"][aria-pressed="true"]').waitFor();
       await branchRail.locator('[data-ltm-availability-target="chat:bulk-chat-7"]').click();
       await branchRail.locator('[data-ltm-availability-target="chat:bulk-chat-7"][aria-pressed="true"]').waitFor();
       assert.equal(await branchPill.count(), 1, "adding places keeps the branch chip");
+      // Choosing the branch's whole chat covers it (#1442): the chat's chip stands for the branch.
+      await branchRail.locator('[data-ltm-availability-target="chat:conversation-a"]').click();
+      await branchRail.locator('[data-ltm-availability-target="chat:conversation-a"][aria-pressed="true"]').waitFor();
+      assert.equal(await branchPill.count(), 0, "a selected whole chat covers its branch chip");
       await branchAvailability.getByRole("button", { name: "Save availability" }).click();
       await page.waitForFunction(() => document.querySelector("[data-ltm-availability-workbench]") === null);
       type SavedScope = { chatIds?: string[]; groupIds?: string[]; characterIds?: string[]; personaIds?: string[] };
@@ -2165,22 +2220,80 @@ async function main() {
       const bulkBranchRequest = page.waitForRequest(
         (request) => request.method() === "POST" && request.url().includes("/api/long-term-memory/notes/batch"),
       );
+      // The memory now also names a chat deleted since it was assigned; the refresh after Apply loads it.
+      outsideChatNote = {
+        ...outsideChatNote,
+        scope: { ...keptBranchScope, chatIds: [...(keptBranchScope.chatIds ?? []), "deleted-chat"] },
+      };
       await bulkBranchRemoval.getByRole("button", { name: "Apply", exact: true }).click();
       assert.deepEqual((await bulkBranchRequest).postDataJSON().removeScope, { chatIds: ["memory-chat"] });
       await bulkBranchRemoval.waitFor({ state: "detached" });
       if ((await page.locator("[data-ltm-select-mode]").innerText()).trim() === "Done")
         await page.locator("[data-ltm-select-mode]").click();
-      // The single editor removes the branch chip like any other place.
+      // Bulk Remove lists a place that no longer exists, with the single editor's fallback label (#1442).
+      await page.locator("[data-ltm-select-mode]").click();
+      await branchCard.locator('input[type="checkbox"]').check();
+      await page.locator("[data-ltm-bulk-availability]").click();
+      await bulkBranchRemoval.waitFor();
+      await bulkBranchRemoval.getByRole("button", { name: "Remove availability", exact: true }).click();
+      await bulkBranchRemoval.locator("[data-ltm-availability-picker] > summary").click();
+      await bulkBranchRail.locator('[data-ltm-availability-tab="chat"]').click();
+      const deletedChatRow = bulkBranchRail.locator('[data-ltm-availability-target="chat:deleted-chat"]');
+      assert.match(await deletedChatRow.innerText(), /Unavailable chat/u);
+      await deletedChatRow.click();
+      assert.equal(await deletedChatRow.getAttribute("aria-pressed"), "true");
+      // Removing a whole chat in bulk also removes its branch ids (#1442).
+      await bulkBranchRail.locator('[data-ltm-availability-target="chat:conversation-a"]').click();
+      // Sources' "All branches" import saves the chat's group id with every branch id; the refresh loads it.
+      outsideChatNote = {
+        ...outsideChatNote,
+        scope: {
+          groupId: "conversation-a",
+          groupIds: ["conversation-a"],
+          chatId: "memory-chat",
+          chatIds: ["memory-chat", "memory-conversation-branch", "bulk-chat-7"],
+          characterIds: ["character-a"],
+          personaId: "persona-a",
+          personaIds: ["persona-a"],
+        },
+      };
+      const deletedChatRequest = page.waitForRequest(
+        (request) => request.method() === "POST" && request.url().includes("/api/long-term-memory/notes/batch"),
+      );
+      await bulkBranchRemoval.getByRole("button", { name: "Apply", exact: true }).click();
+      assert.deepEqual((await deletedChatRequest).postDataJSON().removeScope, {
+        chatIds: ["deleted-chat", "memory-chat", "memory-conversation-branch"],
+        groupIds: ["conversation-a"],
+      });
+      await bulkBranchRemoval.waitFor({ state: "detached" });
+      if ((await page.locator("[data-ltm-select-mode]").innerText()).trim() === "Done")
+        await page.locator("[data-ltm-select-mode]").click();
+      // An imported whole chat shows one chip, and removing or unticking it removes its branches too (#1442).
+      const branchPills = branchAvailability.getByRole("button", { name: /^Remove Memory Conversation - /u });
+      const wholeChatPill = branchAvailability.getByRole("button", { name: "Remove Conversation A", exact: true });
       await branchCard.locator("button").first().click();
       await page.getByRole("button", { name: "Edit availability" }).click();
       await branchAvailability.waitFor();
-      await branchPill.click();
-      assert.equal(await branchPill.count(), 0);
+      assert.equal(await wholeChatPill.count(), 1);
+      assert.equal(await branchPills.count(), 0, "the whole chat's chip covers its branches");
+      assert.equal(await branchAvailability.locator("[data-ltm-availability-pills] button").count(), 4);
+      await wholeChatPill.click();
+      assert.equal(await wholeChatPill.count(), 0);
+      assert.equal(await branchPills.count(), 0, "removing the whole chat removes its branches");
+      await branchAvailability.getByRole("button", { name: "Cancel", exact: true }).click();
+      await page.getByRole("button", { name: "Edit availability" }).click();
+      await branchAvailability.waitFor();
+      await branchAvailability.locator("[data-ltm-availability-picker] > summary").click();
+      await branchRail.locator('[data-ltm-availability-tab="chat"]').click();
+      await branchRail.locator('[data-ltm-availability-target="chat:conversation-a"]').click();
+      await branchRail.locator('[data-ltm-availability-target="chat:conversation-a"][aria-pressed="false"]').waitFor();
+      assert.equal(await branchPills.count(), 0, "unticking the whole chat removes its branches");
       await branchAvailability.getByRole("button", { name: "Save availability" }).click();
       await page.waitForFunction(() => document.querySelector("[data-ltm-availability-workbench]") === null);
-      const removedBranchScope = branchAvailabilityPatches.at(-1)?.scope as SavedScope;
+      const removedBranchScope = branchAvailabilityPatches.at(-1)?.scope as SavedScope & { groupId?: string };
       assert.deepEqual(removedBranchScope.chatIds, ["bulk-chat-7"], JSON.stringify(removedBranchScope));
-      assert.deepEqual(removedBranchScope.groupIds, ["conversation-a"], JSON.stringify(removedBranchScope));
+      assert.equal(removedBranchScope.groupIds, undefined, JSON.stringify(removedBranchScope));
+      assert.equal(removedBranchScope.groupId, undefined, JSON.stringify(removedBranchScope));
       assert.equal(branchAvailabilityPatches.length, 2);
       await memorySearch.fill("Scoped desktop memory");
       await page.locator('[data-ltm-navigation="desktop"] [data-ltm-destination="review"]').click();

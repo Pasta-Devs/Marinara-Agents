@@ -29,6 +29,7 @@ import {
   ltmSubjectsSchema,
 } from "../../../../../shared/src/features/agents/long-term-memory/schema.js";
 import { getLtmExtractionConfig } from "../extraction-config.js";
+import { branchInheritedNoteIds } from "../generation-injection.js";
 import { applyLtmNoteTransfer, previewLtmNoteTransfer } from "../note-transfer.js";
 import { getPackageLanguageModels, getPackagePersistence, getPackageResources, logger } from "../package-runtime.js";
 import { retrieveLongTermMemory } from "../retrieval.js";
@@ -920,15 +921,18 @@ export function registerNotesRoutes(app: FastifyInstance, runtime: LtmRouteRunti
       graphWeight: body.graphWeight ?? recall.weights.graphWeight,
       keywordWeight: body.keywordWeight ?? recall.weights.keywordWeight,
     };
+    // A scope that only names the chat resolves like a turn, adding the chat's group and persona and the
+    // memories a branch shares with the other branches of its conversation.
+    const turnChat =
+      chat && Object.keys(body.scope ?? {}).every((key) => key === "chatId" || key === "chatIds") ? chat : null;
     const result = await retrieveLongTermMemory({
       ...body,
       root,
       mode,
-      // A scope that only names the chat resolves like a turn, adding the chat's group and persona.
-      scope:
-        chat && Object.keys(body.scope ?? {}).every((key) => key === "chatId" || key === "chatIds")
-          ? resolveChatLtmScope(chat)
-          : body.scope,
+      scope: turnChat ? resolveChatLtmScope(turnChat) : body.scope,
+      inheritedNoteIds: turnChat
+        ? await branchInheritedNoteIds(root, turnChat, mode ?? ltmModeForChatMode(turnChat.mode))
+        : undefined,
       characterIds:
         body.characterIds ??
         (body.scope?.characterIds !== undefined

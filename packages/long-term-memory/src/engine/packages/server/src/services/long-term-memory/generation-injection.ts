@@ -61,11 +61,13 @@ function metadataRecord(value: unknown): Record<string, unknown> {
 // Issue #1433: the memories a branch shares with the other branches of its conversation through
 // copied summary entries. Day, week and game-session ids are date or sequence keys that two branches
 // can each write after the split, so only rolling summary entries, which Engine copies by id, count.
-// Unbranched chats and chats without such summaries do no extra work.
-async function branchInheritedNoteIds(
+// Unbranched chats and chats without such summaries do no extra work. A failed lookup (#1442) falls
+// back to the branch's own memories instead of failing the recall, unless the request was aborted.
+export async function branchInheritedNoteIds(
   root: string,
   chat: { id: string; groupId: string | null; metadata: unknown },
   mode: LtmMode,
+  signal?: AbortSignal,
 ) {
   if (!chat.groupId) return undefined;
   const summaryEntryIds = new Set(
@@ -74,12 +76,20 @@ async function branchInheritedNoteIds(
       .map((entry) => entry.id),
   );
   if (!summaryEntryIds.size) return undefined;
-  const branchChatIds = (await getPackagePersistence().listChats())
-    .filter((other) => other.groupId === chat.groupId && other.id !== chat.id)
-    .map((other) => other.id);
-  if (!branchChatIds.length) return undefined;
-  const notes = await new LongTermMemoryStorage(root).listNotes({ skipInvalid: true });
-  return inheritedBranchLtmNoteIds({ chatId: chat.id, branchChatIds, summaryEntryIds, notes });
+  try {
+    // ponytail: every reply in a branched chat with summaries lists all chats and reads every note.
+    // Upgrade path: an Engine lookup of one group's chats, and reusing the cached vault notes snapshot.
+    const branchChatIds = (await getPackagePersistence().listChats())
+      .filter((other) => other.groupId === chat.groupId && other.id !== chat.id)
+      .map((other) => other.id);
+    if (!branchChatIds.length) return undefined;
+    const notes = await new LongTermMemoryStorage(root).listNotes({ skipInvalid: true });
+    return inheritedBranchLtmNoteIds({ chatId: chat.id, branchChatIds, summaryEntryIds, notes });
+  } catch (error) {
+    if (signal?.aborted) throw error;
+    logger.warn(error, "[ltm] Shared-history lookup failed for chat %s; recalling its own memories", chat.id);
+    return undefined;
+  }
 }
 
 // Invocation-order timestamps, strictly increasing per chat, so two recalls
@@ -186,7 +196,7 @@ export async function prepareGenerationLongTermMemory(input: {
     budgetTokens > promptOverheadTokens ? budgetTokens - promptOverheadTokens : budgetTokens;
   let retrieval;
   try {
-    const inheritedNoteIds = await branchInheritedNoteIds(input.root, chat, mode);
+    const inheritedNoteIds = await branchInheritedNoteIds(input.root, chat, mode, input.signal);
     retrieval = await retrieveLongTermMemory({
       root: input.root,
       mode,
