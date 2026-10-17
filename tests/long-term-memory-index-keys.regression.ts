@@ -535,6 +535,14 @@ async function main() {
           keywords: ["서래"],
           text: "a character note",
         },
+        {
+          ...chunk("rin-character", "rin_character"),
+          title: "린",
+          noteType: "character" as const,
+          keywords: ["린"],
+          text: "a character note",
+        },
+        { ...chunk("rin-laugh", "rin_laugh"), keywords: [], text: "린이 웃었다" },
       ];
       const recallIndex = {
         version: 1 as const,
@@ -581,6 +589,27 @@ async function main() {
       assert.ok(
         (await recallScore("There's half a sandwich left", "half-world")) < midSentence,
         "an ordinary single keyword must stay below a known name",
+      );
+      // Issue #1438 wiring: retrieval passes the character names to BM25, so a one-syllable
+      // name with a different particle still reaches the memory through the bm25 lane.
+      const rinRecall = await retrieveLongTermMemory({
+        root: lookupRoot,
+        index: recallIndex,
+        embeddingAdapter: null,
+        queryText: "린은 뭐 했지?",
+        mode: "roleplay",
+        scope: { chatId: "chat-a", chatIds: ["chat-a"] },
+        semanticWeight: 0,
+        lexicalWeight: 1,
+        graphWeight: 0,
+        keywordWeight: 0,
+        maxChunks: 5,
+        maxTokens: 4096,
+      });
+      assert.deepEqual(
+        rinRecall.chunks.find((entry: { chunk: { id: string } }) => entry.chunk.id === "rin-laugh")?.lanes,
+        ["bm25"],
+        "린은 must recall 린이 웃었다 through the bm25 lane",
       );
     } finally {
       await rm(lookupRoot, { recursive: true, force: true });
@@ -755,7 +784,7 @@ async function main() {
       "an unrelated Korean memory must not match a particle query",
     );
 
-    // Issue #1438: a one-syllable character name folds with any particle, but
+    // Issue #1438: a one-syllable character name folds with one allowed particle, but
     // only when a character note carries that name.
     const rinMemories = [
       { ...chunk("rin-laugh", "rin_laugh_note"), text: "린이 웃었다" },

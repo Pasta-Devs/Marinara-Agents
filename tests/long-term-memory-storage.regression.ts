@@ -463,8 +463,8 @@ async function main() {
         `malformed event\n${JSON.stringify({ ts: "2026-07-17T00:00:00.000Z", type: "new.event" })}\n`,
       );
 
-      // #1404: finished drafts older than the audit window are removed. Pending and invalidated
-      // drafts stay because Review and Activity show them.
+      // #1404: finished drafts older than the audit window are removed. Pending drafts stay.
+      // #1443: invalidated drafts follow the same window, counted from the invalidation.
       const retentionDrafts = {
         "retention-old-accepted": ["accepted", "2026-06-01T00:00:00.000Z"],
         "retention-old-auto-applied": ["auto_applied", "2026-06-01T00:00:00.000Z"],
@@ -472,6 +472,7 @@ async function main() {
         "retention-recent-accepted": ["accepted", "2026-07-01T00:00:00.000Z"],
         "retention-old-pending": ["pending", "2026-06-01T00:00:00.000Z"],
         "retention-old-invalidated": ["invalidated", "2026-06-01T00:00:00.000Z"],
+        "retention-recent-invalidated": ["invalidated", "2026-07-01T00:00:00.000Z"],
         "retention-null-updated-accepted": ["accepted", null],
       };
       for (const [id, [status, updatedAt]] of Object.entries(retentionDrafts))
@@ -481,18 +482,53 @@ async function main() {
         now: new Date("2026-07-18T00:00:00Z"),
         force: true,
       });
-      assert.equal(draftRetention.draftsRemoved, 3);
+      assert.equal(draftRetention.draftsRemoved, 4);
       assert.deepEqual(
         (await readdir(dirs.drafts)).filter((name) => name.startsWith("retention-")).sort(),
         [
           "retention-null-updated-accepted.json",
-          "retention-old-invalidated.json",
           "retention-old-pending.json",
           "retention-recent-accepted.json",
+          "retention-recent-invalidated.json",
         ],
-        "retention must remove only finished drafts with a valid updatedAt older than the audit window",
+        "retention must remove only finished or invalidated drafts with a valid updatedAt older than the audit window",
       );
       for (const id of Object.keys(retentionDrafts)) await rm(join(dirs.drafts, `${id}.json`), { force: true });
+
+      // #1443: retention clears leftover per-memory counters, however recent, and keeps accepted
+      // receipt ids for one day.
+      const usagePath = join(dirs.indexes, "usage.json");
+      const usageCounter = (noteId: string, at: string) => ({
+        chunkId: `${noteId}:facts`,
+        noteId,
+        sectionKey: "facts",
+        lastRetrievedAt: at,
+        lastInjectedAt: at,
+        retrievalCount: 1,
+        injectionCount: 1,
+        totalInjectedTokens: 3,
+      });
+      await writeFile(
+        usagePath,
+        JSON.stringify({
+          version: 2,
+          chats: {
+            "chat-a": { chunks: { [`${noteInput.id}:facts`]: usageCounter(noteInput.id, "2026-07-17T12:00:00.000Z") } },
+          },
+          acceptedReceipts: {
+            "receipt-yesterday": "2026-07-16T23:59:59.000Z",
+            "receipt-today": "2026-07-17T12:00:00.000Z",
+            "receipt-legacy": true,
+          },
+        }),
+      );
+      await runLongTermMemoryRetention({ root, now: new Date("2026-07-18T00:00:00Z"), force: true });
+      assert.deepEqual(
+        await readLongTermMemoryUsage(root),
+        { version: 2, chats: {}, acceptedReceipts: { "receipt-today": "2026-07-17T12:00:00.000Z" } },
+        "retention must clear usage counters and keep only accepted receipt ids from the last day",
+      );
+      await rm(usagePath, { force: true });
 
       const activityBackup = `${dirs.activityIndex}.retention-proof`;
       await rename(dirs.activityIndex, activityBackup);
@@ -3092,8 +3128,23 @@ async function main() {
           ],
         },
       });
+      // #1443: nothing reads usage counters, so a permanent delete leaves usage.json alone. The delete's
+      // own retention run is throttled by the earlier real-clock runs, so it can't clear the counter.
+      const deleteUsage = JSON.stringify({
+        version: 2,
+        chats: {
+          "chat-a": {
+            chunks: {
+              [`${permanentlyDeletedTarget.id}:facts`]: usageCounter(permanentlyDeletedTarget.id, timestamp),
+            },
+          },
+        },
+      });
+      await writeFile(usagePath, deleteUsage);
       await storage.deleteNotesPermanently([permanentlyDeletedTarget.id]);
       assert.equal(await storage.getNote(permanentlyDeletedTarget.id), null);
+      assert.equal(await readFile(usagePath, "utf8"), deleteUsage, "permanent delete must not rewrite usage.json");
+      await rm(usagePath, { force: true });
       const permanentlyDeletedReview = await projectLongTermMemoryDraftReview({
         root,
         includeInvalidated: true,

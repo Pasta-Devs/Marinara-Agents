@@ -1,4 +1,4 @@
-// Quartermaster 0.1.25 — Marinara Engine roleplay-tracker capability (single-file client bundle)
+// Quartermaster 0.1.28 — Marinara Engine roleplay-tracker capability (single-file client bundle)
 // Built from packages/quartermaster/src (10 modules) by scripts/build-quartermaster-package.mjs. Do not edit; edit src/ and rebuild.
 (() => {
 "use strict";
@@ -426,6 +426,8 @@ QM.compressImageFile = function compressImageFile(file) {
 // detailed art — they render at ~32px, and fill="currentColor" so they
 // inherit whatever color the box's own text is using rather than carrying
 // their own.
+const QM_EXTRA_WEARABLE_ICON_PATH =
+  '<circle cx="12" cy="14.5" r="5.3" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M12 3.5 14.6 6.8 12 9.4 9.4 6.8Z"/>';
 const QM_SLOT_ICON_PATHS = {
   head: '<path d="M12 3a7 7 0 0 0-7 7v3.5A1.5 1.5 0 0 0 6.5 15H8v2h8v-2h1.5a1.5 1.5 0 0 0 1.5-1.5V10a7 7 0 0 0-7-7Z"/><rect x="9" y="10.5" width="6" height="1.4" rx="0.7"/>',
   neck: '<path d="M6 4 L12 12 L18 4" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/><circle cx="12" cy="15" r="2.6"/>',
@@ -435,7 +437,12 @@ const QM_SLOT_ICON_PATHS = {
     '<path d="M7.2 9.2a4.8 4.8 0 0 1 9.6 0v5.6a4.8 4.8 0 0 1-9.6 0Z"/><path d="M6 10.5a2 2 0 0 1 2.8-1.8L8 12.5H6Z"/>',
   back: '<rect x="6" y="7" width="12" height="14" rx="3"/><path d="M9 7V5.2a3 3 0 0 1 6 0V7" fill="none" stroke="currentColor" stroke-width="1.4"/><rect x="9" y="13" width="6" height="4" rx="1" fill-opacity="0.35"/>',
   armor_torso: '<path d="M12 2.5 6.5 5.5v5c0 6 2.7 10 5.5 10s5.5-4 5.5-10v-5Z"/>',
+  outerwear_torso:
+    '<path d="M8.4 3.5 3.5 6.6 5.2 11l2.1-.8v10.3h4.1V10.3L9.6 4.2Z"/><path d="M15.6 3.5l4.9 3.1-1.7 4.4-2.1-.8v10.3h-4.1V10.3l1.8-6.1Z"/>',
+  midlayer_torso: '<path d="M8.4 3.6 5.6 5.2v15.3h5.5L12 10l.9 10.5h5.5V5.2l-2.8-1.6L12 10Z"/>',
   clothing_torso: '<path d="M8.3 3.8 4 6.8l2 3.2 2-1V20h8V9l2 1 2-3.2-4.3-3-1.7 1.6h-3Z"/>',
+  outerwear_legs: '<path d="M8.2 3h7.6l3.7 17.5H4.5Z"/>',
+  midlayer_legs: '<path d="M5.8 4h12.4l1.1 9.6h-5.4L12 9.3l-1.9 4.3H4.7Z"/>',
   armor_legs:
     '<rect x="6.5" y="4" width="4.2" height="16" rx="1.8"/><rect x="13.3" y="4" width="4.2" height="16" rx="1.8"/>',
   clothing_legs: '<path d="M7 3h10l1 8.5-1.3 9.5h-2.9l-1.3-10-1.3 10H8.3L7 11.5Z"/>',
@@ -448,6 +455,11 @@ const QM_SLOT_ICON_PATHS = {
     '<path d="M11.3 2 12.7 2 12.7 14 11.3 14Z"/><rect x="8.3" y="14" width="7.4" height="1.8" rx="0.9"/><rect x="11.1" y="15.8" width="1.8" height="5.7" rx="0.9"/>',
   belt: '<rect x="2" y="10" width="20" height="4" rx="1.2"/><rect x="9.3" y="8.3" width="5.4" height="7.4" rx="1" fill-opacity="0.35"/>',
   feet: '<path d="M9 3h4v9.3l4.4 3.1c1.4 1 .7 3.1-1 3.1H7.4C6.6 18.5 6 17.8 6 17V8.5C6 5.5 7.2 3 9 3Z"/>',
+  socks:
+    '<path d="M8.5 6.5h5v6.6l3.6 2.5c1.3.9.7 2.9-.9 2.9H9.8c-.7 0-1.3-.6-1.3-1.3Z"/><rect x="8.5" y="3" width="5" height="2.6" rx="0.6" fill-opacity="0.45"/>',
+  extra_wearable_1: QM_EXTRA_WEARABLE_ICON_PATH,
+  extra_wearable_2: QM_EXTRA_WEARABLE_ICON_PATH,
+  extra_wearable_3: QM_EXTRA_WEARABLE_ICON_PATH,
 };
 
 // <svg fill="currentColor"> wrapper around a slot's path markup — sizePx is
@@ -504,6 +516,10 @@ const QM_EQUIP_SLOTS = [
   "ears",
   "armor_torso",
   "armor_legs",
+  "outerwear_torso",
+  "outerwear_legs",
+  "midlayer_torso",
+  "midlayer_legs",
   "clothing_torso",
   "clothing_legs",
   "underwear_top",
@@ -513,7 +529,11 @@ const QM_EQUIP_SLOTS = [
   "weapon_left_hand",
   "weapon_right_hand",
   "feet",
+  "socks",
   "belt",
+  "extra_wearable_1",
+  "extra_wearable_2",
+  "extra_wearable_3",
 ];
 // Mirrors server.mjs's DEFAULT_ITEM_IMAGE_PROMPT_TEMPLATE/
 // DEFAULT_OUTFIT_PORTRAIT_PROMPT_TEMPLATE exactly -- client and server are
@@ -540,8 +560,12 @@ const QM_SLOT_LABELS = {
   ears: "Ears",
   armor_torso: "Armor (Torso)",
   armor_legs: "Armor (Legs)",
-  clothing_torso: "Clothing (Torso)",
-  clothing_legs: "Clothing (Legs)",
+  outerwear_torso: "Outer Clothing (Torso)",
+  outerwear_legs: "Outer Clothing (Legs)",
+  midlayer_torso: "Mid Clothing (Torso)",
+  midlayer_legs: "Mid Clothing (Legs)",
+  clothing_torso: "Inner Clothing (Torso)",
+  clothing_legs: "Inner Clothing (Legs)",
   underwear_top: "Underwear (Top)",
   underwear_bottom: "Underwear (Bottom)",
   back: "Back",
@@ -549,7 +573,11 @@ const QM_SLOT_LABELS = {
   weapon_left_hand: "Weapon (Left Hand)",
   weapon_right_hand: "Weapon (Right Hand)",
   feet: "Feet",
+  socks: "Socks",
   belt: "Belt",
+  extra_wearable_1: "Extra Wearable 1",
+  extra_wearable_2: "Extra Wearable 2",
+  extra_wearable_3: "Extra Wearable 3",
 };
 
 // A raw location string ("bag", "equipped:head", "stored:closet") into
@@ -562,7 +590,8 @@ function qmLocationLabel(location) {
   return location;
 }
 // The dock's equipment overlay. Head/Eyes/Ears/Neck sit in a row above the
-// portrait, Belt/Feet below it; the remaining 5 pairs sit in columns beside
+// portrait, Belt/Socks/Feet below it and the three extras in a row under
+// that; the remaining 5 pairs sit in columns beside
 // it, stretched to the portrait's own real rendered height and spread
 // evenly across it (10-dock.js's middleRow/space-between) — there's no way
 // to pin a slot to a real anatomical pixel position without image
@@ -573,7 +602,8 @@ function qmLocationLabel(location) {
 // group-visibility only needs one check per row; QM.state.slotVisible on
 // either slot in a pair always agrees with the other.
 const QM_OVERLAY_TOP_SLOTS = ["head", "eyes", "ears", "neck"];
-const QM_OVERLAY_BOTTOM_SLOTS = ["belt", "feet"];
+const QM_OVERLAY_BOTTOM_SLOTS = ["belt", "socks", "feet"];
+const QM_OVERLAY_EXTRA_SLOTS = ["extra_wearable_1", "extra_wearable_2", "extra_wearable_3"];
 const QM_OVERLAY_SLOT_PAIRS = [
   ["hands", "back"],
   ["armor_torso", "armor_legs"],
@@ -581,6 +611,14 @@ const QM_OVERLAY_SLOT_PAIRS = [
   ["underwear_top", "underwear_bottom"],
   ["weapon_left_hand", "weapon_right_hand"],
 ];
+// The clothing layers worn over an inner clothing slot, in order outward
+// from it. On the ring the three share one stack of cards (10-dock.js's
+// _buildClothingLayerStack): one in front, the others as spines, always in
+// this inside-out order away from the portrait.
+const QM_OVERLAY_SLOT_LAYERS = {
+  clothing_torso: ["midlayer_torso", "outerwear_torso"],
+  clothing_legs: ["midlayer_legs", "outerwear_legs"],
+};
 // Fuller than QM_SLOT_LABELS would need to be for a grouped layout with a
 // heading nearby (the old ring's short labels) — this overlay has no
 // heading to disambiguate armor vs. clothing between rows, so every label
@@ -594,8 +632,12 @@ const QM_OVERLAY_SLOT_LABELS = {
   ears: "Ears",
   armor_torso: "Torso Armor",
   armor_legs: "Legs Armor",
-  clothing_torso: "Torso Clothing",
-  clothing_legs: "Legs Clothing",
+  outerwear_torso: "Outer Torso Clothing",
+  outerwear_legs: "Outer Legs Clothing",
+  midlayer_torso: "Mid Torso Clothing",
+  midlayer_legs: "Mid Legs Clothing",
+  clothing_torso: "Inner Torso Clothing",
+  clothing_legs: "Inner Legs Clothing",
   underwear_top: "Top Underwear",
   underwear_bottom: "Bottom Underwear",
   back: "Back Accessory",
@@ -603,7 +645,11 @@ const QM_OVERLAY_SLOT_LABELS = {
   weapon_left_hand: "Left Hand Weapon",
   weapon_right_hand: "Right Hand Weapon",
   feet: "Feet",
+  socks: "Socks",
   belt: "Belt",
+  extra_wearable_1: "Extra Wearable 1",
+  extra_wearable_2: "Extra Wearable 2",
+  extra_wearable_3: "Extra Wearable 3",
 };
 // The visible box label, pre-split into explicit lines rather than left to
 // natural CSS wrapping — at a fixed box width, "Torso Clothing" wrapped
@@ -618,8 +664,12 @@ const QM_OVERLAY_SLOT_LABEL_LINES = {
   ears: ["Ears"],
   armor_torso: ["Torso", "Armor"],
   armor_legs: ["Legs", "Armor"],
-  clothing_torso: ["Torso", "Clothing"],
-  clothing_legs: ["Legs", "Clothing"],
+  outerwear_torso: ["Outer Torso", "Clothing"],
+  outerwear_legs: ["Outer Legs", "Clothing"],
+  midlayer_torso: ["Mid Torso", "Clothing"],
+  midlayer_legs: ["Mid Legs", "Clothing"],
+  clothing_torso: ["Inner Torso", "Clothing"],
+  clothing_legs: ["Inner Legs", "Clothing"],
   underwear_top: ["Top", "Underwear"],
   underwear_bottom: ["Bottom", "Underwear"],
   back: ["Back", "Accessory"],
@@ -627,7 +677,11 @@ const QM_OVERLAY_SLOT_LABEL_LINES = {
   weapon_left_hand: ["Left Hand", "Weapon"],
   weapon_right_hand: ["Right Hand", "Weapon"],
   feet: ["Feet"],
+  socks: ["Socks"],
   belt: ["Belt"],
+  extra_wearable_1: ["Extra", "Wearable 1"],
+  extra_wearable_2: ["Extra", "Wearable 2"],
+  extra_wearable_3: ["Extra", "Wearable 3"],
 };
 const QM_APPEARANCE_FEED_OPTIONS = [
   { value: "off", label: "Off" },
@@ -1741,6 +1795,10 @@ const QM_ADD_ITEM_FRAME_STYLE = {
 // — a plain fixed cap is simpler and, with the action column gone, no
 // longer trading anything away.
 const QM_DESC_LINE_HEIGHT_PX = 14;
+// A clothing layer stack's back layers (_buildClothingLayerStack): narrow
+// spines tucked partly under the front card or the spine nearer it.
+const QM_LAYER_SPINE_WIDTH = 26;
+const QM_LAYER_SPINE_OVERLAP = 6;
 const QM_CARD_DESC_MAX_HEIGHT_PX = QM_DESC_LINE_HEIGHT_PX * 5;
 
 function qmBuildCardCornerDot(corner) {
@@ -1989,6 +2047,11 @@ QM.dock = {
   portraitFrame: null,
   connectorSvg: null,
   equippedSlotBoxRefs: null,
+  // Inner clothing slot -> the layer the user brought to the front of its
+  // stack; until then it defaults per _clothingFrontSlot. Cleared on close.
+  _clothingFront: {},
+  // The pending front-card switch to animate on the next build, if any.
+  _clothingFrontMove: null,
   geometry: qmReadWindowGeometry(),
   bodyWidth: QM_WINDOW_DEFAULT_WIDTH,
   uiSize: qmReadUiSize(),
@@ -2119,6 +2182,8 @@ QM.dock = {
   close() {
     this.isOpenFlag = false;
     this.selectedSlot = null;
+    this._clothingFront = {};
+    this._clothingFrontMove = null;
     this._closeItemEditor();
     this._closeOutfitEditor();
     this._closeSaveOutfitModal();
@@ -3675,8 +3740,10 @@ QM.dock = {
     return wrapper;
   },
 
-  // Head/Eyes/Ears/Neck sit in a row above the portrait, Belt/Feet below —
-  // beside it. The remaining 5 pairs (QM_OVERLAY_SLOT_PAIRS) sit in columns
+  // Head/Eyes/Ears/Neck sit in a row above the portrait, Belt/Socks/Feet below,
+  // and the three extras in a row under that. The inner clothing slots are
+  // layer stacks (_buildClothingLayerStack). The remaining 5 pairs
+  // (QM_OVERLAY_SLOT_PAIRS) sit in columns
   // to either side, stretched (alignItems: "stretch" on middleRow) to match
   // whatever the portrait's own real rendered height turns out to be, then
   // spread evenly across that matched height (space-between) — there's no
@@ -3743,21 +3810,29 @@ QM.dock = {
       width: "100%",
     });
 
+    // Aligned toward the portrait, so the clothing stacks (wider than one box)
+    // stay in line with the rest of their column and extend outward.
     const leftColumn = document.createElement("div");
-    Object.assign(leftColumn.style, { display: "flex", flexDirection: "column", justifyContent: "space-between" });
+    Object.assign(leftColumn.style, {
+      display: "flex",
+      flexDirection: "column",
+      justifyContent: "space-between",
+      alignItems: "flex-end",
+    });
     const rightColumn = document.createElement("div");
-    Object.assign(rightColumn.style, { display: "flex", flexDirection: "column", justifyContent: "space-between" });
+    Object.assign(rightColumn.style, {
+      display: "flex",
+      flexDirection: "column",
+      justifyContent: "space-between",
+      alignItems: "flex-start",
+    });
     for (const [leftSlot, rightSlot] of QM_OVERLAY_SLOT_PAIRS) {
       // A pair always shares one group (or neither has one) — see
       // QM_OVERLAY_SLOT_PAIRS's own comment — so checking the left slot
       // alone is enough to decide the whole row.
       if (!QM.state.slotVisible(leftSlot)) continue;
-      const leftBox = this._buildOverlaySlotBox(leftSlot);
-      const rightBox = this._buildOverlaySlotBox(rightSlot);
-      this.equippedSlotBoxRefs.set(leftSlot, { element: leftBox, side: "left" });
-      this.equippedSlotBoxRefs.set(rightSlot, { element: rightBox, side: "right" });
-      leftColumn.appendChild(leftBox);
-      rightColumn.appendChild(rightBox);
+      leftColumn.appendChild(this._buildSideEntry(leftSlot, "left"));
+      rightColumn.appendChild(this._buildSideEntry(rightSlot, "right"));
     }
 
     middleRow.append(leftColumn, this.portraitWrapper, rightColumn);
@@ -3771,6 +3846,13 @@ QM.dock = {
       bottomRow.appendChild(box);
     }
     wrapper.appendChild(bottomRow);
+
+    // Below the bottom row and not wired to the portrait: a connector line
+    // from here would have to cross the boxes above it.
+    const extrasRow = document.createElement("div");
+    Object.assign(extrasRow.style, { display: "flex", gap: "4px", justifyContent: "center", flexWrap: "wrap" });
+    for (const slot of QM_OVERLAY_EXTRA_SLOTS) extrasRow.appendChild(this._buildOverlaySlotBox(slot));
+    wrapper.appendChild(extrasRow);
 
     // Moved here from the Outfits column header (Save) and the Equipped
     // column header (Unequip All) — both act on the current equip state,
@@ -3795,6 +3877,157 @@ QM.dock = {
     return wrapper;
   },
 
+  // One side-column entry, registered for its connector line: a slot box, or
+  // for an inner clothing slot its whole layer stack, so the line never moves
+  // and lights up for whichever of the stack's layers is selected.
+  _buildSideEntry(slot, side) {
+    const layers = QM_OVERLAY_SLOT_LAYERS[slot];
+    const element = layers ? this._buildClothingLayerStack(slot, side) : this._buildOverlaySlotBox(slot);
+    this.equippedSlotBoxRefs.set(slot, { element, side, slots: layers ? [slot, ...layers] : [slot] });
+    return element;
+  },
+
+  // The layer shown in front: the one the user picked, else the outermost
+  // one worn (what others actually see), else the inner one.
+  _clothingFrontSlot(innerSlot) {
+    const outerFirst = [innerSlot, ...QM_OVERLAY_SLOT_LAYERS[innerSlot]].reverse();
+    return this._clothingFront[innerSlot] ?? outerFirst.find((slot) => QM.state.itemInSlot(slot)) ?? innerSlot;
+  },
+
+  // An inner clothing slot and its QM_OVERLAY_SLOT_LAYERS as stacked cards: the
+  // front layer is a full slot box, the others narrow spines. Order is fixed
+  // inside out from the portrait (inner nearest), so the stack's footprint
+  // and the inner layer's connector edge stay put whichever card is in front.
+  _buildClothingLayerStack(innerSlot, side) {
+    const insideOut = [innerSlot, ...QM_OVERLAY_SLOT_LAYERS[innerSlot]];
+    const onScreen = side === "left" ? [...insideOut].reverse() : insideOut;
+    const front = this._clothingFrontSlot(innerSlot);
+    const frontIndex = onScreen.indexOf(front);
+    const stack = document.createElement("div");
+    Object.assign(stack.style, { display: "flex", alignItems: "stretch" });
+    onScreen.forEach((slot, index) => {
+      const element =
+        index === frontIndex
+          ? this._buildClothingLayerCard(slot, innerSlot, side, onScreen[index - 1], onScreen[index + 1])
+          : this._buildClothingLayerSpine(slot, innerSlot, index < frontIndex ? "right" : "left");
+      // Each element overlaps the one before it; nearer the front card sits on top.
+      Object.assign(element.style, {
+        position: "relative",
+        zIndex: String(onScreen.length - Math.abs(index - frontIndex)),
+        marginLeft: index > 0 ? `-${QM_LAYER_SPINE_OVERLAP}px` : "0",
+      });
+      stack.appendChild(element);
+    });
+    return stack;
+  },
+
+  _buildClothingLayerCard(slot, innerSlot, side, leftSlot, rightSlot) {
+    const card = this._buildOverlaySlotBox(slot);
+    if (leftSlot) card.appendChild(this._buildClothingLayerArrow(innerSlot, leftSlot, "left"));
+    if (rightSlot) card.appendChild(this._buildClothingLayerArrow(innerSlot, rightSlot, "right"));
+    const move = this._clothingFrontMove;
+    if (move && move.slot === slot) {
+      this._clothingFrontMove = null;
+      // Slides in from where its spine was: outward from the portrait or back toward it.
+      const offset = (move.outward ? 1 : -1) * (side === "right" ? 1 : -1) * 10;
+      card.animate(
+        [
+          { transform: `translateX(${offset}px)`, opacity: 0.6 },
+          { transform: "translateX(0)", opacity: 1 },
+        ],
+        { duration: 150, easing: "ease-out" },
+      );
+    }
+    return card;
+  },
+
+  _buildClothingLayerArrow(innerSlot, targetSlot, direction) {
+    const arrow = document.createElement("button");
+    arrow.type = "button";
+    arrow.textContent = direction === "left" ? "‹" : "›";
+    arrow.title = `Show ${QM_OVERLAY_SLOT_LABELS[targetSlot]}`;
+    arrow.setAttribute("aria-label", arrow.title);
+    Object.assign(arrow.style, {
+      position: "absolute",
+      top: "46px", // the middle of the 92px image area
+      [direction]: "2px",
+      transform: "translateY(-50%)",
+      zIndex: "2",
+      width: "18px",
+      height: "30px",
+      padding: "0",
+      border: "none",
+      borderRadius: "var(--radius, 4px)",
+      background: "var(--primary, #444)",
+      color: "var(--primary-foreground, #fff)",
+      fontFamily: "inherit",
+      fontSize: "18px",
+      lineHeight: "28px",
+      opacity: "0.9",
+      cursor: "pointer",
+    });
+    arrow.addEventListener("click", (event) => {
+      event.stopPropagation(); // not a click on the card itself, which selects it
+      this._showClothingLayer(innerSlot, targetSlot);
+    });
+    return arrow;
+  },
+
+  // A back layer: its short name written vertically, outlined like a slot box
+  // (accent when something's worn there). Clicking brings it to the front.
+  // `coveredSide` is the edge tucked under its neighbour, padded so the text
+  // centres in the part that shows.
+  _buildClothingLayerSpine(slot, innerSlot, coveredSide) {
+    const item = QM.state.itemInSlot(slot);
+    const spine = document.createElement("button");
+    spine.type = "button";
+    spine.title = `${QM_OVERLAY_SLOT_LABELS[slot]}: ${item ? item.name : "empty"}`;
+    spine.setAttribute("aria-label", `Show ${spine.title}`);
+    Object.assign(spine.style, {
+      width: `${QM_LAYER_SPINE_WIDTH}px`,
+      padding: "0",
+      [coveredSide === "left" ? "paddingLeft" : "paddingRight"]: `${QM_LAYER_SPINE_OVERLAP}px`,
+      boxSizing: "border-box",
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+      borderRadius: "var(--radius, 4px)",
+      background: "#000",
+      color: "#f2f2f2",
+      border: item ? "1px solid var(--primary, #444)" : "1px solid rgba(255, 255, 255, 0.22)",
+      fontFamily: "inherit",
+      fontSize: "9px",
+      textTransform: "uppercase",
+      letterSpacing: "0.02em",
+      lineHeight: "1.2",
+      cursor: "pointer",
+    });
+    const text = document.createElement("span");
+    text.textContent = QM_OVERLAY_SLOT_LABEL_LINES[slot][0];
+    Object.assign(text.style, { writingMode: "vertical-rl", transform: "rotate(180deg)", whiteSpace: "nowrap" });
+    spine.appendChild(text);
+    spine.addEventListener("click", () => this._showClothingLayer(innerSlot, slot));
+    return spine;
+  },
+
+  // Brings a layer to the front. A selection inside this stack is cleared
+  // (with its Bag slot search) so a selected card is never hidden behind another.
+  _showClothingLayer(innerSlot, slot) {
+    const insideOut = [innerSlot, ...QM_OVERLAY_SLOT_LAYERS[innerSlot]];
+    const previous = this._clothingFrontSlot(innerSlot);
+    if (slot === previous) return;
+    this._clothingFront[innerSlot] = slot;
+    this._clothingFrontMove = { slot, outward: insideOut.indexOf(slot) > insideOut.indexOf(previous) };
+    if (insideOut.includes(this.selectedSlot)) {
+      this.selectedSlot = null;
+      if (this.bagSearchMode === "slot") {
+        this.bagSearchMode = "name";
+        this.bagSearchQuery = "";
+      }
+    }
+    this._paint();
+  },
+
   // Called (via requestAnimationFrame, so real layout exists) after every
   // _buildEquippedSection() attach, after a Thumbnail Size change, and after
   // the portrait image itself finishes loading (the one case that changes
@@ -3802,7 +4035,8 @@ QM.dock = {
   // rebuild). Fully rebuilds the connector SVG's contents every time rather
   // than trying to incrementally patch it — geometry can change for enough
   // different reasons (selection, equip state, resize, image load) that a
-  // full recompute is simpler and cheap enough at this scale (≤16 slots).
+  // full recompute is simpler and cheap enough at this scale (a couple dozen
+  // slots).
   _updateConnectorLines() {
     const svg = this.connectorSvg;
     const frame = this.portraitFrame;
@@ -3851,8 +4085,7 @@ QM.dock = {
     const leftPoints = qmFrameSpread(bySide.left, frameTop + 6, frameBottom - 6);
     const rightPoints = qmFrameSpread(bySide.right, frameTop + 6, frameBottom - 6);
 
-    const qmDrawConnector = (slot, side, boxX, boxY, frameX, frameY) => {
-      const selected = this.selectedSlot === slot;
+    const qmDrawConnector = (selected, side, boxX, boxY, frameX, frameY) => {
       const opacity = selected ? 0.85 : 0.32;
       const midX = (boxX + frameX) / 2;
       const midY = (boxY + frameY) / 2;
@@ -3897,18 +4130,20 @@ QM.dock = {
       const box = ref.element.getBoundingClientRect();
       const boxX = box.left - containerRect.left + box.width / 2;
       const boxY = box.top - containerRect.top + box.height / 2;
+      // A clothing stack lights up for whichever of its layers is selected.
+      const selected = (ref.slots ?? [slot]).includes(this.selectedSlot);
       if (ref.side === "top") {
         const index = bySide.top.findIndex((entry) => entry.slot === slot);
-        qmDrawConnector(slot, "top", boxX, box.bottom - containerRect.top, topPoints[index], frameTop);
+        qmDrawConnector(selected, "top", boxX, box.bottom - containerRect.top, topPoints[index], frameTop);
       } else if (ref.side === "bottom") {
         const index = bySide.bottom.findIndex((entry) => entry.slot === slot);
-        qmDrawConnector(slot, "bottom", boxX, box.top - containerRect.top, bottomPoints[index], frameBottom);
+        qmDrawConnector(selected, "bottom", boxX, box.top - containerRect.top, bottomPoints[index], frameBottom);
       } else if (ref.side === "left") {
         const index = bySide.left.findIndex((entry) => entry.slot === slot);
-        qmDrawConnector(slot, "left", box.right - containerRect.left, boxY, frameLeft, leftPoints[index]);
+        qmDrawConnector(selected, "left", box.right - containerRect.left, boxY, frameLeft, leftPoints[index]);
       } else if (ref.side === "right") {
         const index = bySide.right.findIndex((entry) => entry.slot === slot);
-        qmDrawConnector(slot, "right", box.left - containerRect.left, boxY, frameRight, rightPoints[index]);
+        qmDrawConnector(selected, "right", box.left - containerRect.left, boxY, frameRight, rightPoints[index]);
       }
     }
   },

@@ -12,7 +12,7 @@ import { Button, StatusSurface } from "../shared-controls";
 import { type LtmTranslationFunction } from "../localization";
 import { AvailabilityTabRail, type AvailabilityPlaceKind } from "../AvailabilityTabRail";
 import type { PickerTarget } from "./TargetPicker";
-import { availabilityEntries, hasExplicitScope, modes, sameModes, sameScope } from "./vault-shared";
+import { availabilityEntries, hasExplicitScope, modes, sameModes, sameScope, wholeChatBranchIds } from "./vault-shared";
 import type { AvailabilityTargets } from "./vault-shared";
 import { Pill } from "./Pill";
 
@@ -79,7 +79,7 @@ export function MemoryAvailabilityWorkbench({
     ],
     branches: [...availabilityTargets.branches],
   };
-  const entries = availabilityEntries(scope, targets, unavailableLabels);
+  const entries = availabilityEntries(scope, targets, unavailableLabels, availabilityTargets.chats);
   const baseline = originalNote ?? note;
   const scopeChanged = !sameScope(scope, baseline.scope);
   const modesChanged = !sameModes(selectedModes, baseline.modes);
@@ -104,8 +104,9 @@ export function MemoryAvailabilityWorkbench({
       return;
     }
     if (kind === "chat" || kind === "group") {
+      const coveredChatIds = kind === "group" ? wholeChatBranchIds([id], availabilityTargets.chats) : new Set<string>();
       const groupIds = getLtmScopeGroupIds(scope).filter((value) => value !== id);
-      const chatIds = getLtmScopeChatIds(scope).filter((value) => value !== id);
+      const chatIds = getLtmScopeChatIds(scope).filter((value) => value !== id && !coveredChatIds.has(value));
       setScope(normalizeLtmScope({ ...scope, groupIds, chatIds }));
     } else if (kind === "character") {
       const characterIds = (scope.characterIds ?? []).filter((value) => value !== id);
@@ -120,7 +121,8 @@ export function MemoryAvailabilityWorkbench({
     }
     setError("");
   };
-  // An existing branch assignment has no row here. It stays a chip until that chip is removed or All chats is chosen.
+  // An existing branch assignment has no row here. It stays a chip until that chip is removed or All chats is chosen,
+  // unless its whole chat is selected: then it is part of that chat and is removed with it.
   const toggle = (kind: AvailabilityPlaceKind, id: string) => {
     const next = normalizeLtmScope(scope);
     if (kind === "character") {
@@ -140,8 +142,10 @@ export function MemoryAvailabilityWorkbench({
       const target = visibleAvailabilityTargets.chats.find((item) => item.id === id);
       if (target?.groupId) {
         const groupIds = new Set(getLtmScopeGroupIds(next));
-        if (groupIds.has(target.groupId)) groupIds.delete(target.groupId);
-        else groupIds.add(target.groupId);
+        if (groupIds.has(target.groupId)) {
+          groupIds.delete(target.groupId);
+          next.chatIds = getLtmScopeChatIds(next).filter((chatId) => !target.chatIds?.includes(chatId));
+        } else groupIds.add(target.groupId);
         next.groupIds = [...groupIds];
       } else {
         const chatIds = new Set(getLtmScopeChatIds(next));

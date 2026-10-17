@@ -121,9 +121,3 @@ export function deriveScopeConversations(
       conversation.chatIds.some((id) => indexes.characterIdsByChatId.get(id)?.has(selectedCharacterId)),
   );
 }
-
-export function deriveScopeBranches(conversation: { chatIds: string[] } | undefined, indexes: ScopeIndexes) {
-  return (conversation?.chatIds ?? [])
-    .map((id) => indexes.chatsById.get(id))
-    .filter((chat): chat is ScopeTargetChat => Boolean(chat?.groupId));
-}

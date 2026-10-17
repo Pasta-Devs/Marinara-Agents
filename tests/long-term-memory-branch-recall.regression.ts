@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import { mkdtemp, readFile, readdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { runRegressionToCompletion } from "./regression-helpers.ts";
 
 // Issue #1433 proof: Engine copies the summary entries a branch shares with its parent, ids included.
@@ -13,6 +14,12 @@ async function main() {
   const { configurePackageRuntime } = await import(`${source}/package-runtime.ts`);
   const { prepareGenerationLongTermMemory } = await import(`${source}/generation-injection.ts`);
   const { inheritedBranchLtmNoteIds } = await import(`${source}/chat-scope.ts`);
+  const { registerNotesRoutes } = await import(`${source}/routes/notes.ts`);
+  const engineRoot =
+    process.env.MARINARA_ENGINE_ROOT ?? join(dirname(fileURLToPath(import.meta.url)), "../../Marinara-Engine");
+  const Fastify = (
+    await import(pathToFileURL(join(engineRoot, "packages/server/node_modules/fastify/fastify.js")).href)
+  ).default;
 
   const timestamp = "2026-10-17T00:00:00.000Z";
   const recallMetadata = {
@@ -66,10 +73,12 @@ async function main() {
     chat("chat-unsummarized", "group-g", []),
   ];
   let listChatsCalls = 0;
+  let failListChats = false;
+  const warnings: unknown[][] = [];
   const dataDir = await mkdtemp(join(tmpdir(), "marinara-ltm-branch-recall-"));
   const releaseHost = configurePackageRuntime({
     isDebugAgentsEnabled: () => false,
-    logger: { debug() {}, info() {}, warn() {}, error() {} },
+    logger: { debug() {}, info() {}, warn: (...args: unknown[]) => warnings.push(args), error() {} },
     dataDir,
     resources: {
       listCharacters: async () => [],
@@ -80,6 +89,7 @@ async function main() {
       getChat: async (chatId: string) => chats.find((item) => item.id === chatId) ?? null,
       listChats: async () => {
         listChatsCalls += 1;
+        if (failListChats) throw new Error("listChats unavailable");
         return chats;
       },
       updateChatMetadata: async () => {},
@@ -148,6 +158,11 @@ async function main() {
     ])
       await storage.createNote(input as never);
 
+    const memoryIds = (chunks: Array<{ chunk: { noteId: string } }>) =>
+      chunks
+        .map((candidate) => candidate.chunk.noteId)
+        .filter((noteId) => noteId.startsWith("world_m"))
+        .sort();
     const recalled = async (chatId: string) => {
       const result = await prepareGenerationLongTermMemory({
         root,
@@ -156,10 +171,7 @@ async function main() {
         characterIds: [],
         messages: [{ role: "user", content: "Is the lanternfall vow kept?" }],
       });
-      return (result?.receipt.artifact.chunks ?? [])
-        .map((candidate: any) => candidate.chunk.noteId as string)
-        .filter((noteId: string) => noteId.startsWith("world_m"))
-        .sort();
+      return memoryIds(result?.receipt.artifact.chunks ?? []);
     };
 
     // The first recall builds the index; the snapshot after it must survive every later recall.
@@ -190,6 +202,35 @@ async function main() {
     );
     assert.deepEqual(await recalled("chat-c"), ["world_m7"], "a reused entry id never crosses conversations");
     assert.deepEqual(await vaultFiles(), before, "recall must not change note files or recall.json");
+
+    // Issue #1442: the search route resolves a chat-only scope like a reply, shared history included.
+    const app = Fastify();
+    registerNotesRoutes(app, { root, storage, draftStore: undefined as never });
+    try {
+      const searched = await app.inject({
+        method: "POST",
+        url: "/search",
+        payload: { queryText: "Is the lanternfall vow kept?", scope: chatOnly("chat-b") },
+      });
+      assert.equal(searched.statusCode, 200, searched.body);
+      assert.deepEqual(
+        memoryIds(searched.json().chunks),
+        ["world_m1", "world_m4", "world_m5", "world_m6"],
+        "search in branch B returns what a reply in branch B recalls",
+      );
+    } finally {
+      await app.close();
+    }
+
+    // Issue #1442: a failed shared-history lookup still recalls the branch's own memories, with a warning.
+    failListChats = true;
+    warnings.length = 0;
+    assert.deepEqual(await recalled("chat-b"), ["world_m4", "world_m5", "world_m6"]);
+    assert.ok(
+      warnings.some((args) => String(args[0]).includes("Shared-history lookup failed")),
+      JSON.stringify(warnings.map((args) => args[0])),
+    );
+    failListChats = false;
 
     // An unbranched chat, and a branch without summaries, never look up the other branches.
     listChatsCalls = 0;

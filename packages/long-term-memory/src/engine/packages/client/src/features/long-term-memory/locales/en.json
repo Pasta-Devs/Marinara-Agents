@@ -566,6 +566,8 @@
   "ui.longTermMemory.memoryvault.noMatchingPersonas": "No matching personas.",
   "ui.longTermMemory.memoryvault.withMemories": "With memories",
   "ui.longTermMemory.memoryvault.noMemories": "No memories",
+  "ui.longTermMemory.memoryvault.showNoMemories": "Show {{count}} places with no memories",
+  "ui.longTermMemory.memoryvault.showNoMemoriesOne": "Show {{count}} place with no memories",
   "ui.longTermMemory.memoryvault.noSavedMemoriesLinkToThisSourceYet": "No saved memories link to this source yet.",
   "ui.longTermMemory.memoryvault.noSubjectTargets": "No matching characters, personas, or local characters.",
   "ui.longTermMemory.memoryvault.notSet": "Not set",
