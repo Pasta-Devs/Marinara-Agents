@@ -1,3 +1,4 @@
+import { useSlurpUIStore } from "../../base/state/slp-package-store";
 import { DISCLOSURES, disclosureLabel, DisclosureChoice, StepHeading } from "./SlpOnboardingPanel";
 import { useId, useState } from "react";
 import { Check, ChevronRight, RefreshCw, SlidersHorizontal, Users } from "lucide-react";
@@ -92,6 +93,7 @@ export function SlpOnboardingSteps({ model }: { model: SlurpOnboardingWizardMode
   const connectionPickers = (
     <>
       <ConnectionPicker
+        kind="chat"
         label={t("ui.slurp.onboarding.generationConnection")}
         help={t("ui.slurp.onboarding.generationConnectionHelp")}
         placeholder={t("ui.slurp.onboarding.generationConnectionPlaceholder")}
@@ -102,6 +104,7 @@ export function SlpOnboardingSteps({ model }: { model: SlurpOnboardingWizardMode
       />
       {imagesEnabled && (
         <ConnectionPicker
+          kind="image"
           label={t("ui.slurp.onboarding.imageConnection")}
           help={t("ui.slurp.onboarding.imageConnectionHelp")}
           placeholder={t("ui.slurp.onboarding.imageConnectionDefault")}
@@ -587,6 +590,7 @@ export function SlpOnboardingSteps({ model }: { model: SlurpOnboardingWizardMode
  * native select. `emptyOption` adds the placeholder as a real choice (the Slurp default).
  */
 function ConnectionPicker({
+  kind,
   label,
   help,
   placeholder,
@@ -596,6 +600,7 @@ function ConnectionPicker({
   loading,
   emptyOption = false,
 }: {
+  kind: "chat" | "image";
   label: string;
   help: string;
   placeholder: string;
@@ -607,6 +612,7 @@ function ConnectionPicker({
 }) {
   const [open, setOpen] = useState(false);
   const name = useId();
+  const pickConnection = useSlurpUIStore((state) => state.pickConnection);
   const current = options.find((option) => option.id === value)?.label ?? placeholder;
   const rows = emptyOption ? [{ id: "", label: placeholder }, ...options] : options;
   return (
@@ -614,7 +620,19 @@ function ConnectionPicker({
       <button
         type="button"
         disabled={loading}
-        onClick={() => setOpen(true)}
+        onClick={() =>
+          pickConnection
+            ? void pickConnection({
+                kind,
+                value: value || null,
+                title: label,
+                defaultLabel: placeholder,
+                includeDefault: emptyOption,
+              }).then((result) => {
+                if (result.status === "selected") onChange(result.value ?? "");
+              })
+            : setOpen(true)
+        }
         aria-haspopup="dialog"
         className="flex min-h-14 w-full items-center gap-3 px-4 py-2.5 text-start transition-colors duration-[var(--slurp-motion-fast)] hover:bg-[var(--accent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--slurp-focus)] disabled:opacity-60"
       >

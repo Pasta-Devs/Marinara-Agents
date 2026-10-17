@@ -658,6 +658,12 @@
     "slurp2": {
       "versions": [
         {
+          "version": "0.3.48",
+          "date": "2026-10-17",
+          "notes": "- Changed: model choices in setup, Connections, image settings, ads, Creator settings, profile generation and messages open the Engine’s shared searchable picker when available. Text jobs show chat models and picture jobs show image models. Cancelling or confirming the current choice leaves settings unchanged; each default keeps its existing inheritance. Older Engines retain the existing controls.",
+          "highlight": false
+        },
+        {
           "version": "0.3.47",
           "date": "2026-10-16",
           "notes": "- Fixed: in tag mode, a Creator's identity tags (\"Always in their pictures\" or the card name) stayed where the prompt writer put them, often behind the count and body tags. Whole tags now move to the front of the Creator's part, once, in the writer's spelling (#1428).\n- Fixed: \"The image model knows this character\" added the card name a second time when the writer used tag order (\"ryuuzaki umi\" for \"Umi Ryuuzaki\"). Names now match in any word order.\n- Fixed: a companion the writer named by their card or tag name got no look, no reference picture, and kept the one-person rule. Companions now match on display or card name, whole words in any order (#1429).",
@@ -769,12 +775,6 @@
           "version": "0.3.29",
           "date": "2026-10-12",
           "notes": "- Changed: when the image prompt rewrite gives nothing, the \"Image prompt rewrite unusable\" server warning now says why: an empty answer, an answer cut off at the token limit, an answer that is not valid JSON or has no \"prompt\" field (with a short quote of it and the model name), no text connection, a failed request, or a rewrite that broke the scene's content level. Before, every case said \"the rewrite did not run or returned nothing\".",
-          "highlight": false
-        },
-        {
-          "version": "0.3.28",
-          "date": "2026-10-12",
-          "notes": "- Added: Deep details for chat messages. Hold a Creator's reply (or right-click it) and choose \"Deep details\" in the Message menu to see what went into it: the chat facts the reply was built from (relationship, stance, heat, memories), the model, the full prompt and the raw answer. It opens in the same window as a post's Deep details.\n- Slurp keeps these details for the newest 50 replies of each chat. Older replies, and replies written before this update, do not offer the item. Clearing a chat removes its details.",
           "highlight": false
         }
       ]

@@ -92,6 +92,125 @@ test.beforeEach(async ({ page }) => {
 });
 
 test.describe("standalone Slurp package", () => {
+  test("text and image jobs use the Engine picker and preserve default scope", async ({ page }, testInfo) => {
+    test.setTimeout(120_000);
+    const settings = await (await getSlurpSettings(page)).json();
+    const personaResponse = await page.request.post("/api/characters/personas", { data: { name: "Picker viewer" } });
+    expect(personaResponse.ok()).toBe(true);
+    const persona = await personaResponse.json();
+    const accountResponse = await page.request.post("/api/connection-accounts", {
+      data: {
+        name: "Slurp picker studio",
+        provider: "openai",
+        baseUrl: "http://127.0.0.1:9/v1",
+        apiKey: "fixture-only",
+      },
+    });
+    expect(accountResponse.ok()).toBe(true);
+    const account = await accountResponse.json();
+    const chatId = account.connectionId;
+    const ids = [chatId];
+    try {
+      expect(
+        (
+          await page.request.patch(`/api/connections/${chatId}`, {
+            data: { name: "Slurp text fixture", model: "vendor/text" },
+          })
+        ).ok(),
+      ).toBe(true);
+      const imageResponse = await page.request.post("/api/connections", {
+        data: {
+          name: "Slurp image fixture",
+          provider: "image_generation",
+          imageGenerationSource: "openai",
+          accountId: account.account.id,
+          model: "gpt-image-1",
+        },
+      });
+      expect(imageResponse.ok()).toBe(true);
+      const imageId = (await imageResponse.json()).id;
+      ids.push(imageId);
+      const mainIds = (rows: Array<{ id: string; isDefault: unknown }>) =>
+        rows
+          .filter((row) => row.isDefault === true || row.isDefault === 1 || row.isDefault === "1")
+          .map((row) => row.id)
+          .sort();
+      const mainBefore = mainIds(await (await page.request.get("/api/connections")).json());
+      expect(
+        (
+          await page.request.patch("/api/slurp2/settings", {
+            data: {
+              onboarding: "completed",
+              viewerPersonaId: persona.id,
+              generationConnectionId: null,
+              inlineAdsImageConnectionId: null,
+            },
+          })
+        ).ok(),
+      ).toBe(true);
+      await page.addInitScript(() =>
+        localStorage.setItem(
+          "marinara:slurp2:package-ui",
+          JSON.stringify({
+            navigation: { mode: "creator-settings", section: "models", target: "connections" },
+            onboardingState: "completed",
+          }),
+        ),
+      );
+      await page.goto("/");
+      await openSlurp(page);
+      const posts = page.getByRole("button", { name: /^Posts:/u });
+      await expect(posts).toBeVisible();
+      await posts.click();
+      const textDialog = page.getByRole("dialog", { name: "Posts", exact: true });
+      await expect(textDialog.locator(`[data-picker-value="${chatId}"]`)).toBeVisible();
+      await expect(textDialog.locator(`[data-picker-value="${imageId}"]`)).toHaveCount(0);
+      await page.keyboard.press("Escape");
+      await expect(posts).toBeFocused();
+      expect((await (await getSlurpSettings(page)).json()).generationConnectionId).toBeNull();
+      await posts.click();
+      await textDialog.locator(`[data-picker-value="${chatId}"]`).click();
+      await expect(posts).toContainText("Slurp text fixture");
+      const ads = page.getByRole("button", { name: /^Ad pictures:/u });
+      await ads.click();
+      const imageDialog = page.getByRole("dialog", { name: "Ad pictures", exact: true });
+      await expect(imageDialog.locator(`[data-picker-value="${imageId}"]`)).toBeVisible();
+      await expect(imageDialog.locator(`[data-picker-value="${chatId}"]`)).toHaveCount(0);
+      const viewport = page.viewportSize()!;
+      for (const width of [390, 768, 1440]) {
+        await page.setViewportSize({ width, height: 960 });
+        await expect(imageDialog).toBeVisible();
+        expect(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth)).toBe(false);
+        await page.screenshot({ path: testInfo.outputPath(`slurp-shared-image-picker-${width}.png`) });
+      }
+      await page.setViewportSize(viewport);
+      await imageDialog.locator(`[data-picker-value="${imageId}"]`).click();
+      await page.getByRole("button", { name: "Apply changes", exact: true }).click();
+      await expect.poll(async () => (await (await getSlurpSettings(page)).json()).generationConnectionId).toBe(chatId);
+      await expect
+        .poll(async () => (await (await getSlurpSettings(page)).json()).inlineAdsImageConnectionId)
+        .toBe(imageId);
+      await posts.click();
+      await textDialog.locator('[data-picker-value="default"]').click();
+      await page.getByRole("button", { name: "Apply changes", exact: true }).click();
+      await expect.poll(async () => (await (await getSlurpSettings(page)).json()).generationConnectionId).toBeNull();
+      const after = await (await page.request.get("/api/connections")).json();
+      expect(mainIds(after)).toEqual(mainBefore);
+    } finally {
+      await page.request.patch("/api/slurp2/settings", {
+        data: {
+          onboarding: settings.onboarding,
+          viewerPersonaId: settings.viewerPersonaId,
+          generationConnectionId: settings.generationConnectionId,
+          inlineAdsImageConnectionId: settings.inlineAdsImageConnectionId,
+        },
+      });
+      for (const id of ids) await page.request.delete(`/api/connections/${id}`);
+      await page.request.delete(`/api/connection-accounts/${account.account.id}`);
+      await page.request.delete(`/api/characters/personas/${persona.id}`);
+    }
+  });
+
   test("a missing Admin Secret tells remote readers how to set it", async ({ page }) => {
     // Package routes are privileged, so another device without the secret gets this 403 (#1136).
     await page.route(
@@ -697,9 +816,13 @@ test.describe("standalone Slurp package", () => {
       await expect(profileName).toHaveValue(`${originalProfileName} draft`);
       await profileName.fill(originalProfileName);
       await creatorSettings.getByRole("tab", { name: "Posting", exact: true }).click();
-      const imageConnectionSelect = creatorSettings.getByRole("combobox", { name: /^Image connection/u });
+      const imageConnectionSelect = creatorSettings.getByRole("button", { name: /^Image connection:/u });
       await expect(imageConnectionSelect).toBeEnabled({ timeout: 30_000 });
-      await imageConnectionSelect.selectOption(imageConnectionIds[1]);
+      await imageConnectionSelect.click();
+      await page
+        .getByRole("dialog", { name: "Image connection", exact: true })
+        .locator(`[data-picker-value="${imageConnectionIds[1]}"]`)
+        .click();
       await expect
         .poll(async () => {
           const response = await page.request.get("/api/slurp2/slurp/image-connections");

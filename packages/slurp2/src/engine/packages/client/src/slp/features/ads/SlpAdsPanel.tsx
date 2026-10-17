@@ -1,3 +1,4 @@
+import { SlpConnectionField } from "../../modules/settings/SlpConnectionField";
 import { SlpCoinText } from "../../modules/coin/SlpCoin";
 import { RotateCcw } from "lucide-react";
 import { BackstagePageHeader } from "../../modules/settings/SlpSettingsKit";
@@ -180,19 +181,15 @@ export function SlpAdsPanel(page: SlpBackstagePageProps) {
           label={t("ui.slurp.settings.ads.imageConnection")}
           detail={t("ui.slurp.settings.ads.imageConnectionDetail")}
         >
-          <select
-            value={settings.inlineAdsImageConnectionId ?? ""}
+          <SlpConnectionField
+            kind="image"
+            value={settings.inlineAdsImageConnectionId}
+            connections={imageConnections}
+            defaultLabel={t("ui.slurp.settings.ads.imageConnectionDefault")}
+            title={t("ui.slurp.settings.ads.imageConnection")}
             disabled={updateSettings.isPending || connectionsQuery.isLoading}
-            onChange={(event) => void update("inlineAdsImageConnectionId", event.target.value || null)}
-            className="min-h-11 w-full rounded-lg border border-[var(--slurp-outline)] bg-[var(--slurp-canvas)] px-3 text-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] disabled:opacity-50 sm:text-sm"
-          >
-            <option value="">{t("ui.slurp.settings.ads.imageConnectionDefault")}</option>
-            {imageConnections.map((connection) => (
-              <option key={connection.id} value={connection.id}>
-                {connection.name ?? connection.model ?? connection.id}
-              </option>
-            ))}
-          </select>
+            onChange={(id) => void update("inlineAdsImageConnectionId", id)}
+          />
         </Field>
         <Field
           settingKey="inlineAdsLorebookId"

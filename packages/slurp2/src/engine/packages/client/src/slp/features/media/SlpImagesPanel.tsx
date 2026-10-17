@@ -1,3 +1,4 @@
+import { SlpConnectionField } from "../../modules/settings/SlpConnectionField";
 import { AlertTriangle, CheckCircle2, ChevronRight, Image } from "lucide-react";
 import { SlpSparkleGlyph } from "../../base/chrome/SlpGlyphs";
 import { ShapeSetting } from "../../modules/settings/SlpShapeSetting";
@@ -245,21 +246,17 @@ export function SlpImagesPanel(page: SlpBackstagePageProps) {
             label={t("ui.slurp.settings.images.promptModel")}
             detail={t("ui.slurp.settings.images.promptModelDetail")}
           >
-            <select
-              value={settings.imagePromptConnectionId ?? ""}
+            <SlpConnectionField
+              kind="chat"
+              value={settings.imagePromptConnectionId}
+              connections={(connectionsQuery.data ?? []).filter(
+                (connection) => connection.provider !== "image_generation",
+              )}
+              defaultLabel={t("ui.slurp.settings.images.promptModelDefault")}
+              title={t("ui.slurp.settings.images.promptModel")}
               disabled={connectionsQuery.isLoading || connectionsQuery.isError || updateSettings.isPending}
-              onChange={(event) => void update("imagePromptConnectionId", event.target.value || null)}
-              className="min-h-11 w-full rounded-lg border border-[var(--slurp-outline)] bg-[var(--slurp-canvas)] px-3 text-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] disabled:opacity-50 sm:text-sm"
-            >
-              <option value="">{t("ui.slurp.settings.images.promptModelDefault")}</option>
-              {(connectionsQuery.data ?? [])
-                .filter((connection) => connection.provider !== "image_generation")
-                .map((connection) => (
-                  <option key={connection.id} value={connection.id}>
-                    {connection.name ?? connection.model ?? connection.id}
-                  </option>
-                ))}
-            </select>
+              onChange={(id) => void update("imagePromptConnectionId", id)}
+            />
           </Field>
         )}
         <SettingAnchor settingKey="imageWidth">
@@ -331,21 +328,17 @@ export function SlpImagesPanel(page: SlpBackstagePageProps) {
             label={t("ui.slurp.settings.images.contextConnection")}
             detail={t("ui.slurp.settings.images.contextConnectionDetail")}
           >
-            <select
-              value={settings.imageContextConnectionId ?? ""}
+            <SlpConnectionField
+              kind="chat"
+              value={settings.imageContextConnectionId}
+              connections={(connectionsQuery.data ?? []).filter(
+                (connection) => connection.provider !== "image_generation",
+              )}
+              defaultLabel={t("ui.slurp.settings.images.contextConnectionText")}
+              title={t("ui.slurp.settings.images.contextConnection")}
               disabled={connectionsQuery.isLoading || connectionsQuery.isError || updateSettings.isPending}
-              onChange={(event) => void update("imageContextConnectionId", event.target.value || null)}
-              className="min-h-11 w-full rounded-lg border border-[var(--slurp-outline)] bg-[var(--slurp-canvas)] px-3 text-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] disabled:opacity-50 sm:text-sm"
-            >
-              <option value="">{t("ui.slurp.settings.images.contextConnectionText")}</option>
-              {(connectionsQuery.data ?? [])
-                .filter((connection) => connection.provider !== "image_generation")
-                .map((connection) => (
-                  <option key={connection.id} value={connection.id}>
-                    {connection.name ?? connection.model ?? connection.id}
-                  </option>
-                ))}
-            </select>
+              onChange={(id) => void update("imageContextConnectionId", id)}
+            />
           </Field>
         )}
         {settings.imageContextMode !== "imagePrompt" && (

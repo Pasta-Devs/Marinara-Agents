@@ -1,3 +1,4 @@
+import { useSlurpUIStore } from "../../base/state/slp-package-store";
 import { Check, Link, X } from "lucide-react";
 import { useRef } from "react";
 import { useTranslation as useUiTranslation } from "react-i18next";
@@ -22,6 +23,8 @@ export function SlurpConnectionSwitcher({
   onChange: (connectionId: string | null) => void;
 }) {
   const anchorRef = useRef<HTMLButtonElement | null>(null);
+  const { t: localizeUi } = useUiTranslation();
+  const pickConnection = useSlurpUIStore((state) => state.pickConnection);
   const active = connections.find((connection) => connection.id === activeConnectionId);
   const label = active?.name ?? active?.model ?? "Default connection";
 
@@ -31,9 +34,20 @@ export function SlurpConnectionSwitcher({
         ref={anchorRef}
         type="button"
         disabled={pending}
-        onClick={() => onOpenChange(!open)}
-        aria-expanded={open}
-        aria-haspopup="listbox"
+        onClick={() =>
+          pickConnection
+            ? void pickConnection({
+                kind: "chat",
+                value: activeConnectionId,
+                title: "Text connection",
+                defaultLabel: localizeUi("ui.noodle.connection.default"),
+              }).then((result) => {
+                if (result.status === "selected" && result.value !== activeConnectionId) onChange(result.value);
+              })
+            : onOpenChange(!open)
+        }
+        aria-expanded={pickConnection ? undefined : open}
+        aria-haspopup={pickConnection ? "dialog" : "listbox"}
         aria-label={`Text connection: ${label}`}
         title={`Text connection: ${label}`}
         className={cn(

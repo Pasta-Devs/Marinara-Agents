@@ -1,8 +1,9 @@
+import { SlpConnectionField } from "../../modules/settings/SlpConnectionField";
 import { createPortal } from "react-dom";
 import { useContext, useEffect, useRef, useState, type ReactNode } from "react";
 import { ModalPortalContext } from "../../../components/ui/Modal";
 import { useTranslation as useUiTranslation } from "react-i18next";
-import { ArrowLeft, ArrowRight, Check, ChevronDown, Link, Loader2, Trash2, Upload, UserRound } from "lucide-react";
+import { ArrowLeft, ArrowRight, Check, ChevronDown, Loader2, Trash2, Upload, UserRound } from "lucide-react";
 import { SlpSparkleGlyph } from "../../base/chrome/SlpGlyphs";
 import { SLP_MOTION } from "../../base/chrome/slp-motion";
 import type { SlpCreatorStageProfile, SlpIdentityDisclosure } from "../../../../../shared/src/slp/slp-social.types.js";
@@ -289,13 +290,11 @@ export function StageProfileForm({
   const disclosureChoices = disclosureOptions(localizeUi);
   const accent = profileAccent(accentId);
   const portalContainer = useContext(ModalPortalContext);
-  const [connectionPickerOpen, setConnectionPickerOpen] = useState(false);
   const [relationshipPickerOpen, setRelationshipPickerOpen] = useState(false);
   const [relationshipPickerPosition, setRelationshipPickerPosition] = useState<{
     left: number;
     top: number;
   } | null>(null);
-  const connectionPickerRef = useRef<HTMLDivElement>(null);
   const avatarFileRef = useRef<HTMLInputElement>(null);
   const relationshipPickerRef = useRef<HTMLDivElement>(null);
   const relationshipPickerMenuRef = useRef<HTMLDivElement>(null);
@@ -305,20 +304,8 @@ export function StageProfileForm({
     (isEditing || !isSlurpDiscoveryProfileIncomplete(draft)) &&
     !isPending &&
     !isGenerating;
-  const selectedConnection = connections.find((connection) => connection.id === connectionId) ?? null;
   const selectedDisclosure =
     disclosureChoices.find((option) => option.value === disclosureMode) ?? disclosureChoices[0];
-
-  useEffect(() => {
-    if (!connectionPickerOpen) return;
-    const handleOutsidePointer = (event: PointerEvent) => {
-      if (!connectionPickerRef.current?.contains(event.target as Node)) {
-        setConnectionPickerOpen(false);
-      }
-    };
-    document.addEventListener("pointerdown", handleOutsidePointer);
-    return () => document.removeEventListener("pointerdown", handleOutsidePointer);
-  }, [connectionPickerOpen]);
 
   useEffect(() => {
     if (!relationshipPickerOpen) return;
@@ -649,94 +636,16 @@ export function StageProfileForm({
                 )}
                 <div className="mt-3 flex items-center justify-end gap-2">
                   {connections.length > 0 && (
-                    <div ref={connectionPickerRef} className="relative shrink-0">
-                      <button
-                        type="button"
+                    <div className="min-w-0 flex-1 sm:max-w-64">
+                      <SlpConnectionField
+                        kind="chat"
+                        value={connectionId || null}
+                        connections={connections}
+                        title={localizeUi("ui.noodle.stageprofileform.generationConnections")}
+                        defaultLabel={localizeUi("ui.noodle.connection.default")}
                         disabled={isGenerating || isPending}
-                        onClick={() => setConnectionPickerOpen((open) => !open)}
-                        aria-label={localizeUi("ui.noodle.connection.generationLabel", {
-                          name: selectedConnection?.name ?? localizeUi("ui.noodle.connection.default"),
-                        })}
-                        aria-haspopup="listbox"
-                        aria-expanded={connectionPickerOpen}
-                        title={localizeUi("ui.noodle.connection.title", {
-                          name: selectedConnection?.name ?? localizeUi("ui.noodle.connection.default"),
-                        })}
-                        className={cn(
-                          "flex h-11 max-w-[calc(100%-10.5rem)] items-center justify-center gap-2 rounded-lg border border-[var(--noodle-divider)] px-3 transition-colors hover:bg-[var(--accent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)] sm:max-w-64",
-                          connectionPickerOpen && "border-[var(--noodle-accent)] bg-[var(--noodle-accent)]/10",
-                          (isGenerating || isPending) && "cursor-not-allowed opacity-50",
-                        )}
-                      >
-                        <Link size={18} className="shrink-0 !text-[var(--noodle-accent-foreground)]" />
-                        <span className="truncate text-xs font-semibold">
-                          {selectedConnection?.name ?? "Default connection"}
-                        </span>
-                      </button>
-                      {connectionPickerOpen && (
-                        <div
-                          role="listbox"
-                          aria-label={localizeUi("ui.noodle.stageprofileform.generationConnections")}
-                          onKeyDown={(event) => {
-                            if (event.key === "Escape") {
-                              event.stopPropagation();
-                              setConnectionPickerOpen(false);
-                            }
-                          }}
-                          className="absolute bottom-full left-0 z-50 mb-2 flex w-64 max-w-[calc(100vw-2rem)] flex-col overflow-hidden rounded-xl border border-foreground/10 bg-[var(--card)] shadow-2xl"
-                        >
-                          <div className="border-b border-foreground/10 px-3 py-2 text-[0.6875rem] font-semibold">
-                            {localizeUi("navigation.topbar.connections")}
-                          </div>
-                          <div className="max-h-60 overflow-y-auto p-1">
-                            <button
-                              type="button"
-                              role="option"
-                              aria-selected={!connectionId}
-                              onClick={() => {
-                                onConnectionChange("");
-                                setConnectionPickerOpen(false);
-                              }}
-                              className={cn(
-                                "flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-xs transition-colors hover:bg-foreground/10",
-                                !connectionId && "bg-foreground/5 font-semibold",
-                              )}
-                            >
-                              <span className="flex-1 truncate">{localizeUi("ui.noodle.connection.default")}</span>
-                              {!connectionId && <Check size={14} />}
-                            </button>
-                            {connections.map((connection) => {
-                              const isSelected = connection.id === connectionId;
-                              return (
-                                <button
-                                  type="button"
-                                  role="option"
-                                  aria-selected={isSelected}
-                                  key={connection.id}
-                                  onClick={() => {
-                                    onConnectionChange(connection.id);
-                                    setConnectionPickerOpen(false);
-                                  }}
-                                  className={cn(
-                                    "flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-xs transition-colors hover:bg-foreground/10",
-                                    isSelected && "bg-foreground/5 font-semibold",
-                                  )}
-                                >
-                                  <span className="min-w-0 flex-1">
-                                    <span className="block truncate">{connection.name}</span>
-                                    {connection.model && (
-                                      <span className="block truncate text-[0.6875rem] font-normal text-[var(--muted-foreground)]">
-                                        {connection.model}
-                                      </span>
-                                    )}
-                                  </span>
-                                  {isSelected && <Check size={14} className="shrink-0" />}
-                                </button>
-                              );
-                            })}
-                          </div>
-                        </div>
-                      )}
+                        onChange={(id) => onConnectionChange(id ?? "")}
+                      />
                     </div>
                   )}
                   <button

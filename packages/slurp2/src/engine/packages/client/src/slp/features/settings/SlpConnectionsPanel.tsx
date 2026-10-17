@@ -2,6 +2,7 @@ import { AlertTriangle, CheckCircle2 } from "lucide-react";
 import { toast } from "sonner";
 
 import { BackstagePageHeader, SettingAnchor } from "../../modules/settings/SlpSettingsKit";
+import { SlpConnectionField } from "../../modules/settings/SlpConnectionField";
 import { Field, NumberSetting, SettingsGroup, Toggle } from "../../modules/settings/SlpSettingsControls";
 import { errorMessage } from "../../modules/settings/slp-backstage-format";
 import type { SlpBackstagePageProps } from "../backstage/slp-backstage-contract";
@@ -26,8 +27,9 @@ export function SlpConnectionsPanel({
   const connections = (connectionsQuery.data ?? []) as Connection[];
   const textConnections = connections.filter((connection) => connection.provider !== "image_generation");
   const imageConnections = connections.filter((connection) => connection.provider === "image_generation");
-  const label = (connection: Connection) => connection.name ?? connection.model ?? connection.id;
   const picker = ({
+    kind,
+    title,
     value,
     available,
     fallback,
@@ -35,6 +37,8 @@ export function SlpConnectionsPanel({
     disabled = false,
     onChange,
   }: {
+    kind: "chat" | "image";
+    title: string;
     value: string | null | undefined;
     available: Connection[];
     fallback: string;
@@ -50,24 +54,16 @@ export function SlpConnectionsPanel({
         : null;
     return (
       <>
-        <select
-          value={value ?? ""}
+        <SlpConnectionField
+          kind={kind}
+          value={value}
+          connections={available}
+          defaultLabel={emptyLabel}
+          title={title}
+          unavailableLabel={missing ? t("ui.slurp.settings.connections.unavailableOption", { id: value }) : undefined}
           disabled={disabled || connectionsQuery.isLoading || connectionsQuery.isError}
-          onChange={(event) => onChange(event.target.value || null)}
-          className="min-h-11 w-full rounded-lg border border-[var(--slurp-outline)] bg-[var(--slurp-canvas)] px-3 text-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] disabled:opacity-50 sm:text-sm"
-        >
-          <option value="">{emptyLabel}</option>
-          {missing && (
-            <option value={value!} disabled>
-              {t("ui.slurp.settings.connections.unavailableOption", { id: value })}
-            </option>
-          )}
-          {available.map((connection) => (
-            <option key={connection.id} value={connection.id}>
-              {label(connection)}
-            </option>
-          ))}
-        </select>
+          onChange={onChange}
+        />
         <span
           className={`mt-1.5 inline-flex items-center gap-1 text-xs font-normal ${note ? (missing ? "text-[var(--slurp-warning)]" : "text-[var(--slurp-muted)]") : "text-[var(--slurp-success)]"}`}
         >
@@ -107,6 +103,8 @@ export function SlpConnectionsPanel({
           detail={t("ui.slurp.settings.connections.textGenerationUse")}
         >
           {picker({
+            kind: "chat",
+            title: t("ui.slurp.settings.connections.textGeneration"),
             value: settings.generationConnectionId,
             available: textConnections,
             fallback: t("ui.slurp.settings.connections.defaultText"),
@@ -119,6 +117,8 @@ export function SlpConnectionsPanel({
           detail={t("ui.slurp.settings.connections.aiWritingUse")}
         >
           {picker({
+            kind: "chat",
+            title: t("ui.slurp.settings.connections.aiWriting"),
             value: settings.modelBudget.connectionId,
             available: textConnections,
             // The server falls back to the text generation connection, not the Engine default.
@@ -133,6 +133,8 @@ export function SlpConnectionsPanel({
           detail={t("ui.slurp.settings.connections.creatorPagesUse")}
         >
           {picker({
+            kind: "chat",
+            title: t("ui.slurp.settings.connections.creatorPages"),
             value: settings.pageConnectionId,
             available: textConnections,
             fallback: t("ui.slurp.settings.connections.aiWritingFallback"),
@@ -145,6 +147,8 @@ export function SlpConnectionsPanel({
           detail={t("ui.slurp.settings.connections.imageContextUse")}
         >
           {picker({
+            kind: "chat",
+            title: t("ui.slurp.settings.connections.imageContext"),
             value: settings.imageContextConnectionId,
             available: textConnections,
             fallback: t("ui.slurp.settings.connections.defaultText"),
@@ -159,6 +163,8 @@ export function SlpConnectionsPanel({
           detail={t("ui.slurp.settings.images.globalConnectionDetail")}
         >
           {picker({
+            kind: "image",
+            title: t("ui.slurp.settings.connections.imageGeneration"),
             value: imageSettings?.defaultConnectionId,
             available: imageConnections,
             fallback: t("ui.slurp.settings.connections.defaultImage"),
@@ -176,6 +182,8 @@ export function SlpConnectionsPanel({
           detail={t("ui.slurp.settings.connections.adImagesUse")}
         >
           {picker({
+            kind: "image",
+            title: t("ui.slurp.settings.connections.adImages"),
             value: settings.inlineAdsImageConnectionId,
             available: imageConnections,
             fallback: t("ui.slurp.settings.connections.imageGeneration"),

@@ -1,5 +1,9 @@
 # Slurp release notes
 
+## 0.3.48 — 2026-10-17
+
+- Changed: model choices in setup, Connections, image settings, ads, Creator settings, profile generation and messages open the Engine’s shared searchable picker when available. Text jobs show chat models and picture jobs show image models. Cancelling or confirming the current choice leaves settings unchanged; each default keeps its existing inheritance. Older Engines retain the existing controls.
+
 ## 0.3.47 — 2026-10-16
 
 - Fixed: in tag mode, a Creator's identity tags ("Always in their pictures" or the card name) stayed where the prompt writer put them, often behind the count and body tags. Whole tags now move to the front of the Creator's part, once, in the writer's spelling (#1428).

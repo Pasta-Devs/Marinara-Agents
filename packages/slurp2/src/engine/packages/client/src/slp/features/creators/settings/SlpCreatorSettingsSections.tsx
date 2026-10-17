@@ -13,6 +13,7 @@ import {
   useSlurpImageStyleProfiles,
   useUpdateSlurpImageConnections,
 } from "../../media/slp-media-contract";
+import { SlpConnectionField } from "../../../modules/settings/SlpConnectionField";
 import { useSlurpConnections } from "../../../base/state/slp-host-connections";
 import { CreatorMessagingGroup, useSetSlurpCreatorMessaging } from "../../messages/slp-messages-contract";
 import { useSetSlurpCreatorPrice } from "../../economy/slp-economy-contract";
@@ -451,7 +452,12 @@ export function SlpCreatorImagesSection({ creator, active }: SlpCreatorSettingsS
         label={t("ui.slurp.settings.creators.imageConnection")}
         detail={t("ui.slurp.settings.creators.imageConnectionDetail")}
       >
-        <select
+        <SlpConnectionField
+          kind="image"
+          value={imageSettingsQuery.data?.creatorConnectionIds[creator.id]}
+          connections={imageConnections}
+          defaultLabel={t("ui.slurp.settings.creators.inheritImageConnection")}
+          title={t("ui.slurp.settings.creators.imageConnection")}
           disabled={
             imageSettingsQuery.isLoading ||
             imageSettingsQuery.isError ||
@@ -459,22 +465,13 @@ export function SlpCreatorImagesSection({ creator, active }: SlpCreatorSettingsS
             connectionsQuery.isError ||
             updateImages.isPending
           }
-          value={imageSettingsQuery.data?.creatorConnectionIds[creator.id] ?? ""}
-          onChange={(event) =>
+          onChange={(id) =>
             updateImages.mutate(
-              { creatorId: creator.id, connectionId: event.target.value || null },
+              { creatorId: creator.id, connectionId: id },
               { onError: (error) => toast.error(errorMessage(error)) },
             )
           }
-          className={selectClass}
-        >
-          <option value="">{t("ui.slurp.settings.creators.inheritImageConnection")}</option>
-          {imageConnections.map((connection) => (
-            <option key={connection.id} value={connection.id}>
-              {connection.name ?? connection.model ?? connection.id}
-            </option>
-          ))}
-        </select>
+        />
       </Field>
       <Field
         label={t("ui.slurp.settings.creators.imageStyle", { defaultValue: "Image style" })}

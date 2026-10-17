@@ -34,8 +34,18 @@ export type SlpSceneHost = {
   openChat: (chatId: string) => void;
 };
 
+/** The Engine's shared model picker (capabilityProps.ui.pickConnection). Absent on an older Engine. */
+export type SlpPickConnection = (options: {
+  kind: "chat" | "image";
+  value: string | null;
+  title?: string;
+  defaultLabel?: string;
+  includeDefault?: boolean;
+}) => Promise<{ status: "selected"; value: string | null } | { status: "cancelled" }>;
+
 type SlurpPackageState = {
   conversationTimeZone: string;
+  pickConnection: SlpPickConnection | null;
   sceneHost: SlpSceneHost | null;
   /** The thread a scene came back to; Slurp opens it, then tells the host. Never persisted. */
   sceneFocusThreadId: string | null;
@@ -178,6 +188,7 @@ const initialState = typeof window === "undefined" ? {} : readInitialState();
 
 export const useSlurpUIStore = create<SlurpPackageState>((set, get) => ({
   conversationTimeZone: "",
+  pickConnection: null,
   sceneHost: null,
   sceneFocusThreadId: null,
   sceneFocusHandled: null,
@@ -223,6 +234,10 @@ export const useSlurpUIStore = create<SlurpPackageState>((set, get) => ({
 export function configureSlurpPackageState(props: Record<string, unknown>) {
   useSlurpUIStore.setState({
     conversationTimeZone: typeof props.conversationTimeZone === "string" ? props.conversationTimeZone : "",
+    pickConnection:
+      typeof (props.ui as { pickConnection?: unknown } | undefined)?.pickConnection === "function"
+        ? (props.ui as { pickConnection: SlpPickConnection }).pickConnection
+        : null,
     debugMode: props.debugMode === true,
     reviewImagePromptsBeforeSend: props.reviewImagePromptsBeforeSend === true,
     sceneHost:
