@@ -488,6 +488,24 @@
     "quartermaster": {
       "versions": [
         {
+          "version": "0.1.28",
+          "date": "2026-10-17",
+          "notes": "- Build Wardrobe layers clothing properly: when two pieces of an outfit share a layer (tights and a\n  skirt over them), the outer one moves up a layer instead of being left out.\n- New artwork for the clothing layers, socks and Extra Wearable slots; the inner torso and legs\n  icons are now a shirt and leggings.",
+          "highlight": false
+        },
+        {
+          "version": "0.1.27",
+          "date": "2026-10-16",
+          "notes": "- Clothing layers on the portrait ring are now a stack of cards, so the dock stays about as wide as\n  before. Use the arrows on the card or tap a layer's tab to switch; worn layers keep their\n  highlighted outline.",
+          "highlight": false
+        },
+        {
+          "version": "0.1.26",
+          "date": "2026-10-12",
+          "notes": "- Layered clothing: torso and legs each have Inner, Mid and Outer clothing slots, so a shirt,\n  waistcoat and jacket (or tights under shorts) can be worn together. Existing clothing becomes the\n  Inner layer.\n- New Socks slot, plus three Extra Wearable slots for anything no other slot fits.\n- The tracker agent and Build Wardrobe use the new slots. If you customized the tracker prompt,\n  reset it to the default to pick them up.",
+          "highlight": true
+        },
+        {
           "version": "0.1.25",
           "date": "2026-10-11",
           "notes": "- With an Admin Secret saved, each image now loads once and is reused, instead of reloading after\n  every change in the dock.\n- An image that failed to load for a reason other than having no image tries again when the dock is\n  reopened, and changing the saved Admin Secret retries every image.",
@@ -588,24 +606,6 @@
           "date": "2026-09-11",
           "notes": "- Fixed equip-slot quick-fill only searching the Wearables tab, missing stashed wearable items.",
           "highlight": false
-        },
-        {
-          "version": "0.1.8",
-          "date": "2026-09-11",
-          "notes": "- Confirmed fix: Generate Image no longer shows a person in item images.\n- Bag column now splits into Items, Wearables, and Stored tabs.",
-          "highlight": false
-        },
-        {
-          "version": "0.1.7",
-          "date": "2026-09-09",
-          "notes": "- Attempted fix for Generate Image sending the persona's appearance into item/outfit image\n  requests instead of a clean product shot.\n- Build script now refuses to silently overwrite an already-released version's artifact.",
-          "highlight": false
-        },
-        {
-          "version": "0.1.6",
-          "date": "2026-09-08",
-          "notes": "- Added Generate Image: an AI-generated alternative to uploading, for both item images and\n  outfit portraits.\n- New Settings section to pick the image connection and edit the two prompt templates.\n- Fixed the portrait prompt leaking a raw appearance-macro token into the image request.\n- Export/import now carry the two prompt templates.",
-          "highlight": true
         }
       ]
     },
