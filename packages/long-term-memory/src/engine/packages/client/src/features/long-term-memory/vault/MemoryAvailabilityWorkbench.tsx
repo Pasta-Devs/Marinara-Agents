@@ -137,7 +137,7 @@ export function MemoryAvailabilityWorkbench({
       next.chatIds = [];
       next.groupIds = [];
     } else {
-      const target = availabilityTargets.chats.find((item) => item.id === id);
+      const target = visibleAvailabilityTargets.chats.find((item) => item.id === id);
       if (target?.groupId) {
         const groupIds = new Set(getLtmScopeGroupIds(next));
         if (groupIds.has(target.groupId)) groupIds.delete(target.groupId);
