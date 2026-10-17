@@ -16,7 +16,7 @@ on:
       review_mode:
         description: Review mode for the requested pass.
         type: choice
-        options: [auto, full, incremental, autofix]
+        options: [auto, full, incremental, autofix, approve]
         default: auto
       requested_by:
         description: GitHub login that requested the dispatch.
@@ -36,13 +36,13 @@ permissions:
 
 # Distinct from the engine's own group, which would otherwise cancel this caller.
 concurrency:
-  group: dottore-review-caller-${{ github.repository }}-${{ inputs.pr_number }}${{ inputs.review_mode == 'autofix' && '-autofix' || '' }}
+  group: dottore-review-caller-${{ github.repository }}-${{ inputs.pr_number }}${{ contains(fromJSON('["autofix","approve"]'), inputs.review_mode) && format('-{0}', inputs.review_mode) || '' }}
   cancel-in-progress: true
 
 jobs:
   review:
     # Fork lab: the Promansis Engine build. Switch to Pasta-Devs/Marinara-Engine@<sha> once the engine lands upstream.
-    uses: Promansis/Marinara-Engine/.github/workflows/dottore-review.yml@86fcd8317d39da8d2b6bb49e4c63954cdeebcd70
+    uses: Promansis/Marinara-Engine/.github/workflows/dottore-review.yml@826b01b6e17dd2f519418302c034b553ea23414b
     with:
       pr_number: ${{ inputs.pr_number }}
       comment_body: ${{ inputs.comment_body }}
