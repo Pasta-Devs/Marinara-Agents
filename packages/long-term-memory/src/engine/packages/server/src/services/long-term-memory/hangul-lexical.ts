@@ -46,3 +46,16 @@ export function stripHangulParticle(token: string) {
   }
   return value;
 }
+
+/**
+ * Issue #1438: returns the one-syllable name a Hangul token spells, alone or
+ * followed by one particle the name's final consonant allows (`린이`, `린에게`),
+ * otherwise null. Only known names fold to one syllable; every other word keeps
+ * the two-syllable floor above (`나는` stays `나는`).
+ */
+export function hangulNameSyllable(token: string, names: ReadonlySet<string>) {
+  const value = token.normalize("NFC");
+  const name = value.charAt(0);
+  if (!names.has(name) || !isHangulToken(value)) return null;
+  return value.length === 1 || isHangulParticle(name, value.slice(1)) ? name : null;
+}

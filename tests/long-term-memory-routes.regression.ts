@@ -1075,7 +1075,7 @@ async function main(routeScenario: RouteScenario) {
         url: "/api/long-term-memory/status",
         headers,
       });
-      assert.equal(rebuiltStatus.json().indexes.chunkFormatVersion, 5);
+      assert.equal(rebuiltStatus.json().indexes.chunkFormatVersion, 6);
       {
         // Stored vectors only count while they belong to the source recall embeds with now (#1304).
         const { configurePackageRuntime, getPackageRuntime } =

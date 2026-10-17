@@ -16,8 +16,9 @@ import { buildStopWordSet, extractNoteKeywords } from "./keyword-extract.js";
 // Issue #1295: bump when the chunk representation changes in a way that must
 // invalidate stored recall indexes (here, keyword extraction and BM25
 // tokenization). The value is folded into every chunk sourceHash, so existing
-// vaults rebuild once through the normal locked freshness check.
-export const CURRENT_LTM_CHUNK_FORMAT_VERSION = 5;
+// vaults rebuild once through the normal locked freshness check. Issue #1438
+// bumped it for one-syllable name aliases in BM25.
+export const CURRENT_LTM_CHUNK_FORMAT_VERSION = 6;
 
 export interface ChunkLtmNotesOptions {
   includeSourceNotes?: boolean;

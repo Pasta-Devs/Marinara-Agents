@@ -45,7 +45,7 @@ function assertOwnKeys(record: object, message: string) {
 }
 
 async function main() {
-  const { buildLtmBm25Index, searchLtmBm25 } = await import(`${source}/bm25.ts`);
+  const { buildLtmBm25Index, ltmHangulNameSyllables, searchLtmBm25 } = await import(`${source}/bm25.ts`);
   const { buildLtmKeywordIndex, LTM_KEYWORD_MAX_SCORE, searchLtmKeywordIndex } = await import(
     `${source}/keyword-index.ts`
   );
@@ -753,6 +753,54 @@ async function main() {
       bm25Hit("반지를").includes("korean-other"),
       false,
       "an unrelated Korean memory must not match a particle query",
+    );
+
+    // Issue #1438: a one-syllable character name folds with any particle, but
+    // only when a character note carries that name.
+    const rinMemories = [
+      { ...chunk("rin-laugh", "rin_laugh_note"), text: "린이 웃었다" },
+      { ...chunk("rin-ring", "rin_ring_note"), text: "린에게 반지를 줬다" },
+      { ...chunk("rin-call", "rin_call_note"), text: "린, 괜찮아?" },
+      { ...chunk("rin-other", "rin_other_note"), text: "나는 시장에 갔다" },
+    ];
+    const rinProfile = { ...chunk("rin-profile", "char_rin"), noteType: "character" as const, title: "린" };
+    const withName = buildLtmBm25Index([rinProfile, ...rinMemories]);
+    const withoutName = buildLtmBm25Index(rinMemories);
+    const rinHit = (index: ReturnType<typeof buildLtmBm25Index>, names: Set<string>, query: string) =>
+      searchLtmBm25(index, query, { topK: 10, nameSyllables: names }).map(
+        ({ chunkId }: { chunkId: string }) => chunkId,
+      );
+    const names = ltmHangulNameSyllables([rinProfile, ...rinMemories]);
+    for (const query of ["린은 뭐 했지?", "린을", "린"]) {
+      assert.deepEqual(
+        rinHit(withName, names, query).sort(),
+        ["rin-call", "rin-laugh", "rin-ring"],
+        `${query} must find every memory written with the one-syllable name`,
+      );
+    }
+    assert.deepEqual(
+      rinHit(withName, names, "린는"),
+      [],
+      "a particle the name's final consonant forbids must not fold",
+    );
+    assert.deepEqual(rinHit(withName, names, "나를"), [], "a one-syllable word that is not a name must not fold");
+    assert.deepEqual(
+      rinHit(withoutName, ltmHangulNameSyllables(rinMemories), "린은 뭐 했지?"),
+      [],
+      "without a character note the one-syllable word must not fold",
+    );
+    for (const { id } of rinMemories) {
+      assert.equal(
+        withName.documents[id]!.length,
+        withoutName.documents[id]!.length,
+        "a name alias must not change BM25 document length",
+      );
+    }
+    const bareName = buildLtmBm25Index([{ ...rinProfile, text: "린" }]);
+    assert.deepEqual(
+      rinHit(bareName, names, "린"),
+      ["rin-profile"],
+      "an index of bare names alone must still be searchable",
     );
   }
 
