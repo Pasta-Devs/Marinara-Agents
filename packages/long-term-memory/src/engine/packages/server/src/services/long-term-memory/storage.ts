@@ -50,7 +50,6 @@ import { isLtmBackupRestoreActive, recoverInterruptedLtmBackupRestore } from "./
 import { readLtmNoteSummary } from "./index-state.js";
 import { ltmSettingsPath, readLtmSettingsFile } from "./settings.js";
 import { longTermMemoryRetentionConfigPath, runLongTermMemoryRetention } from "./retention.js";
-import { longTermMemoryUsagePath, readLongTermMemoryUsage } from "./usage.js";
 import { parseStoredLtmNote } from "./stored-note.js";
 import { withLtmVaultLock } from "./vault-lock.js";
 import { invalidateLtmVaultSnapshot, readLtmVaultSnapshot, type LtmVaultScan } from "./vault-snapshot.js";
@@ -1298,22 +1297,6 @@ export class LongTermMemoryStorage {
           ),
         ],
       });
-      try {
-        const usage = await readLongTermMemoryUsage(this.root);
-        let usageChanged = false;
-        for (const [chatId, chat] of Object.entries(usage.chats)) {
-          for (const chunkId of Object.keys(chat.chunks)) {
-            if (deleted.has(chat.chunks[chunkId].noteId)) {
-              delete chat.chunks[chunkId];
-              usageChanged = true;
-            }
-          }
-          if (Object.keys(chat.chunks).length === 0) delete usage.chats[chatId];
-        }
-        if (usageChanged) await writeJsonAtomic(longTermMemoryUsagePath(this.root), usage);
-      } catch (e) {
-        if (!isEnoent(e)) throw e;
-      }
       const receiptsDir = getLongTermMemoryDirectories(this.root).receipts;
       for (const entry of await readdir(receiptsDir, {
         withFileTypes: true,

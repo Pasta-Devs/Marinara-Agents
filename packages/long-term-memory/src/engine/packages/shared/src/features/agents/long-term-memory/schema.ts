@@ -1357,6 +1357,8 @@ export const ltmRetentionConfigSchema = z
   .object({
     version: z.literal(1).default(1),
     auditWindowDays: z.number().int().min(1).max(3_650).default(30),
+    // No cleanup uses it since per-memory usage counters were dropped. Kept so older settings files
+    // and backups still parse.
     usageRetentionDays: z.number().int().min(1).max(3_650).default(180),
     receiptRetentionDays: z.number().int().min(1).max(3_650).default(180),
     eventRetentionDays: z.number().int().min(1).max(3_650).default(180),

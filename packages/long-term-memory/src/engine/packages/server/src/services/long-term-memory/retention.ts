@@ -19,8 +19,13 @@ import { pruneLtmActivityIndex } from "./activity-index.js";
 
 const lastRetentionRun = new Map<string, number>();
 const RETENTION_INTERVAL_MS = 24 * 60 * 60 * 1000;
-// Review and Activity show only pending and invalidated drafts, so drafts in these states have no reader.
-const FINISHED_DRAFT_STATUSES = new Set(["accepted", "auto_applied", "superseded"]);
+// An accepted id only stops a repeat of the same dispatch from being recorded twice, which
+// arrives within moments. Retention runs at most daily, so an id lives one to two days.
+const ACCEPTED_RECEIPT_RETENTION_MS = 24 * 60 * 60 * 1000;
+// Review and Activity show only pending and invalidated drafts, so drafts in the first three states
+// have no reader. An invalidated draft can't be applied, and invalidation sets its updatedAt, so it
+// leaves Review one audit window after it was invalidated. Pending drafts are always kept.
+const EXPIRING_DRAFT_STATUSES = new Set(["accepted", "auto_applied", "superseded", "invalidated"]);
 
 async function pruneEventLog(path: string, cutoff: number) {
   const tmp = `${path}.tmp-${process.pid}-${Date.now()}-${randomUUID()}`;
@@ -125,14 +130,13 @@ async function runLongTermMemoryRetentionUnsafe({
 
   const DAY_MS = 86400000;
   const quarantineCutoff = now.getTime() - config.quarantineRetentionDays * DAY_MS;
-  const usageCutoff = now.getTime() - config.usageRetentionDays * DAY_MS;
+  const acceptedReceiptCutoff = now.getTime() - ACCEPTED_RECEIPT_RETENTION_MS;
   const receiptCutoff = now.getTime() - config.receiptRetentionDays * DAY_MS;
   const eventCutoff = now.getTime() - config.eventRetentionDays * DAY_MS;
   const incompleteGenCutoff = now.getTime() - config.incompleteGenerationRetentionDays * DAY_MS;
-  const finishedDraftCutoff = now.getTime() - config.auditWindowDays * DAY_MS;
+  const draftCutoff = now.getTime() - config.auditWindowDays * DAY_MS;
 
   let quarantineArtifacts = 0;
-  let usageChatsPruned = 0;
   let receiptsRemoved = 0;
   let eventsRemoved = 0;
   let incompleteReceiptsRemoved = 0;
@@ -151,31 +155,17 @@ async function runLongTermMemoryRetentionUnsafe({
     }
   }
 
-  // 2. Usage pruning
+  // 2. Usage pruning. Nothing writes per-memory counters any more, so clear any that an older version left.
   try {
     const usage = await readLongTermMemoryUsage(root);
     let usageChanged = false;
-    for (const [chatId, chat] of Object.entries(usage.chats)) {
-      for (const chunkId of Object.keys(chat.chunks)) {
-        const chunk = chat.chunks[chunkId];
-        const lastActivity = Math.max(
-          new Date(chunk.lastRetrievedAt).getTime(),
-          new Date(chunk.lastInjectedAt).getTime(),
-        );
-        if (lastActivity < usageCutoff) {
-          delete chat.chunks[chunkId];
-          usageChanged = true;
-          usageChatsPruned++;
-        }
-      }
-      if (Object.keys(chat.chunks).length === 0) {
-        delete usage.chats[chatId];
-        usageChanged = true;
-      }
+    if (Object.keys(usage.chats).length) {
+      usage.chats = {};
+      usageChanged = true;
     }
     if (usage.acceptedReceipts) {
       for (const [receiptId, acceptedAt] of Object.entries(usage.acceptedReceipts)) {
-        if (acceptedAt === true || new Date(acceptedAt).getTime() < receiptCutoff) {
+        if (acceptedAt === true || new Date(acceptedAt).getTime() < acceptedReceiptCutoff) {
           delete usage.acceptedReceipts[receiptId];
           usageChanged = true;
         }
@@ -233,7 +223,7 @@ async function runLongTermMemoryRetentionUnsafe({
     }
   }
 
-  // 6. Finished draft cleanup. Every draft write holds the vault lock, which retention holds too.
+  // 6. Finished and invalidated draft cleanup. Every draft write holds the vault lock, which retention holds too.
   for (const entry of await readdir(dirs.drafts, { withFileTypes: true }).catch((e) => {
     if (isEnoent(e)) return [];
     throw e;
@@ -249,11 +239,7 @@ async function runLongTermMemoryRetentionUnsafe({
     }
     // An invalid updatedAt keeps the draft: new Date(null) would read as 1970 and delete it.
     const updatedAt = ltmIsoTimestampSchema.safeParse(draft?.updatedAt);
-    if (
-      FINISHED_DRAFT_STATUSES.has(draft?.status) &&
-      updatedAt.success &&
-      Date.parse(updatedAt.data) < finishedDraftCutoff
-    ) {
+    if (EXPIRING_DRAFT_STATUSES.has(draft?.status) && updatedAt.success && Date.parse(updatedAt.data) < draftCutoff) {
       await rm(path, { force: true });
       draftsRemoved++;
     }
@@ -264,7 +250,6 @@ async function runLongTermMemoryRetentionUnsafe({
     ran: true,
     skippedPendingRecovery: false,
     quarantineArtifacts,
-    usageChatsPruned,
     receiptsRemoved,
     eventsRemoved,
     incompleteReceiptsRemoved,
