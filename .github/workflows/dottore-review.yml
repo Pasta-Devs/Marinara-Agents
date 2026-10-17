@@ -42,17 +42,17 @@ concurrency:
 jobs:
   review:
     # Fork lab: the Promansis Engine build. Switch to Pasta-Devs/Marinara-Engine@<sha> once the engine lands upstream.
-    uses: Promansis/Marinara-Engine/.github/workflows/dottore-review.yml@826b01b6e17dd2f519418302c034b553ea23414b
+    uses: Promansis/Marinara-Engine/.github/workflows/dottore-review.yml@3720655e7c3e2bfc4bac3575c4320a4c1f7920ee
     with:
       pr_number: ${{ inputs.pr_number }}
       comment_body: ${{ inputs.comment_body }}
       review_mode: ${{ inputs.review_mode }}
       requested_by: ${{ inputs.requested_by }}
       last_reviewed_sha: ${{ inputs.last_reviewed_sha }}
+    # The two models come from this repository's DOTTORE_{SMALL,LARGE}_{MODEL,API,BASE_URL,EFFORT} variables;
+    # each model's key is the secret of the same name.
     secrets:
-      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-      LLM_BASE_URL: ${{ secrets.LLM_BASE_URL }}
-      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-      ANTHROPIC_BASE_URL: ${{ secrets.ANTHROPIC_BASE_URL }}
+      DOTTORE_SMALL_API_KEY: ${{ secrets.DOTTORE_SMALL_API_KEY }}
+      DOTTORE_LARGE_API_KEY: ${{ secrets.DOTTORE_LARGE_API_KEY }}
       DOTTORE_APP_ID: ${{ secrets.DOTTORE_APP_ID }}
       DOTTORE_APP_PRIVATE_KEY: ${{ secrets.DOTTORE_APP_PRIVATE_KEY }}
