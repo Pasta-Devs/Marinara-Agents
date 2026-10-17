@@ -1,8 +1,8 @@
 # Long-Term Memory changelog
 
-## Unreleased
+## 1.4.46 — 2026-10-17
 
-- Recall now finds memories about a character or persona with a one-syllable Korean name, such as 린, whatever particle follows the name. A memory that says 린이 웃었다 now comes up when you ask 린은 뭐 했지?, and 린에게, 린을 and 린 on its own all match too. This works when the vault has a Long-Term Memory profile under that name, and only in text search. Other one-syllable words still don't fold, so 나는 doesn't match 나를. Existing vaults rebuild their recall index once.
+- Recall now finds memories about a character or persona with a one-syllable Korean name, such as 린, when a particle such as 이, 은, 을 or 에게 follows the name. A memory that says 린이 웃었다 now comes up when you ask 린은 뭐 했지?, and 린에게, 린을 and 린 on its own match too. Other endings, such as 린아 or 린이가, still don't. This works when the vault has a character memory with that name in its title, and only in text search. Other one-syllable words still don't match across particles, so 나는 doesn't match 나를. Existing vaults rebuild their recall index once.
 
 ## 1.4.45 — 2026-10-17
 
