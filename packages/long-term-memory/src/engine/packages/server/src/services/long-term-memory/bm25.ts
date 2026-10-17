@@ -3,11 +3,30 @@ import type {
   LtmBm25Posting,
   LtmMemoryChunk,
 } from "../../../../shared/src/features/agents/long-term-memory/schema.js";
-import { isHangulToken, stripHangulParticle } from "./hangul-lexical.js";
+import { hangulNameSyllable, isHangulToken, stripHangulParticle } from "./hangul-lexical.js";
 
 const TOKEN_PATTERN = /[\p{L}\p{N}_]+/gu;
 const K1 = 1.2;
 const B = 0.75;
+
+/**
+ * Issue #1438: the one-syllable Hangul words in character titles, the only
+ * words BM25 folds to one syllable. Persona profiles are character notes too.
+ *
+ * ponytail: a name that exists only in Engine (no Long-Term Memory profile yet)
+ * is missed, because recall does not read the Engine roster. Upgrade by passing
+ * roster names to both the index build and the query.
+ */
+export function ltmHangulNameSyllables(chunks: Iterable<{ noteType?: string; title?: string }>) {
+  const names = new Set<string>();
+  for (const chunk of chunks) {
+    if (chunk.noteType !== "character" || !chunk.title) continue;
+    for (const [word] of chunk.title.normalize("NFC").toLocaleLowerCase().matchAll(TOKEN_PATTERN)) {
+      if (word.length === 1 && isHangulToken(word)) names.add(word);
+    }
+  }
+  return names;
+}
 
 /**
  * Tokenizes recall text for BM25.
@@ -21,8 +40,12 @@ const B = 0.75;
  * `tokens` carries the aliases for matching, while `originalCount` counts only
  * the tokens actually written in the text, so synthetic aliases cannot inflate
  * BM25 length normalization (which would also perturb alias-free languages).
+ *
+ * Issue #1438: `names` are one-syllable character names. A token that is one of
+ * them, bare or with a particle, also emits the name, before the one-character
+ * skip so a bare `린` counts too.
  */
-export function tokenizeLtmText(text: string) {
+export function tokenizeLtmText(text: string, names?: ReadonlySet<string>) {
   const lowered = text.toLocaleLowerCase();
   const matches = Array.from(lowered.matchAll(TOKEN_PATTERN));
   const tokens: string[] = [];
@@ -30,6 +53,8 @@ export function tokenizeLtmText(text: string) {
   for (let index = 0; index < matches.length; index += 1) {
     const match = matches[index]!;
     const token = match[0];
+    const name = names?.size ? hangulNameSyllable(token, names) : null;
+    if (name) tokens.push(name);
     if (token.length <= 1) continue;
     tokens.push(token);
     originalCount += 1;
@@ -50,9 +75,10 @@ export function buildLtmBm25Index(chunks: LtmMemoryChunk[]): LtmBm25Index {
   const documents = new Map<string, LtmBm25Index["documents"][string]>();
   const termBuckets = new Map<string, LtmBm25Posting[]>();
   let totalLength = 0;
+  const names = ltmHangulNameSyllables(chunks);
 
   for (const chunk of chunks) {
-    const { tokens, originalCount } = tokenizeLtmText(chunk.text);
+    const { tokens, originalCount } = tokenizeLtmText(chunk.text, names);
     totalLength += originalCount;
     documents.set(chunk.id, { length: originalCount });
 
@@ -93,12 +119,18 @@ export function buildLtmBm25Index(chunks: LtmMemoryChunk[]): LtmBm25Index {
 export function searchLtmBm25(
   index: LtmBm25Index,
   query: string,
-  options: { topK?: number; maxPostingsPerTerm?: number; maxCandidates?: number; allowedChunks?: Set<string> } = {},
+  options: {
+    topK?: number;
+    maxPostingsPerTerm?: number;
+    maxCandidates?: number;
+    allowedChunks?: Set<string>;
+    nameSyllables?: ReadonlySet<string>;
+  } = {},
 ) {
   if (index.chunkCount === 0 || index.avgDocLength === 0) return [];
 
   const scores = new Map<string, number>();
-  const queryTerms = new Set(tokenizeLtmText(query).tokens);
+  const queryTerms = new Set(tokenizeLtmText(query, options.nameSyllables).tokens);
   const maxCandidates = Math.max(1, options.maxCandidates ?? options.topK ?? 50);
   // Issue #1258: an unbounded idf sum made `score / (score + 1)` saturate near 1
   // for almost every hit, so the score threshold behaved as a cliff. Scaling by the
