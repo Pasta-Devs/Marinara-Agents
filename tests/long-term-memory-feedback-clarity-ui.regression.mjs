@@ -26,7 +26,7 @@ const settingsScreen = readScreen(ltmSourcePaths.settings);
 const vault = readFileSync(ltmSourcePaths.vault, "utf8");
 const vaultScreen = readScreen(ltmSourcePaths.vault);
 const bulkAvailability = readFileSync(ltmSourcePaths.bulkAvailability, "utf8");
-const vaultScopePicker = readFileSync(ltmSourcePaths.vaultScopePicker, "utf8");
+const availabilityTabRail = readFileSync(ltmSourcePaths.availabilityTabRail, "utf8");
 const sourceScopeCombobox = readFileSync(ltmSourcePaths.sourceScopeCombobox, "utf8");
 const targetPicker = readFileSync(ltmSourcePaths.targetPicker, "utf8");
 const reviewQueue = readFileSync(ltmSourcePaths.reviewQueue, "utf8");
@@ -83,10 +83,9 @@ assert.match(
   workspaceScreen,
   /<div\s+id="ltm-destination-scope-control"[^>]*className="mari-editor-panel flex min-h-0 flex-col gap-3 p-3"[^>]*style=\{\{ maxHeight: "calc\(100vh - 12rem\)" \}\}[^>]*>/u,
 );
-assert.match(
-  workspaceScreen,
-  /<div\s+id="ltm-bulk-destination-list"[^>]*className="min-h-0 flex-1 overflow-y-auto overscroll-contain"[^>]*>/u,
-);
+// #1420: the destination place list is the shared availability rail.
+assert.match(workspaceScreen, /<AvailabilityTabRail[\s\S]*disabled=\{disabled\}[\s\S]*onToggle=\{toggleRail\}/u);
+assert.doesNotMatch(workspaceScreen, /ltm-bulk-destination-list|data-ltm-availability-action/u);
 assert.match(
   workspaceScreen,
   /<details\s+data-ltm-destination-scope[^>]*className="group flex min-h-0 flex-col gap-3"[^>]*>/u,
@@ -203,7 +202,14 @@ assert.equal(
   "Select which chat modes may recall these memories. This does not make a memory available in every chat for that mode; places below control scope.",
 );
 assert.equal(locale["ui.longTermMemory.memoryvault.bulkAddMemoriesTo"], "Add selected memories to:");
-assert.match(locale["ui.longTermMemory.memoryvault.bulkAvailabilityHelp"], /existing chat and branch scope/u);
+assert.match(locale["ui.longTermMemory.memoryvault.bulkAvailabilityHelp"], /existing chat scope/u);
+for (const key of [
+  "memoryvault.availabilityScopeHelp",
+  "memoryvault.bulkAvailabilityHelp",
+  "memoryvault.bulkImplicitAllPlaces",
+  "sourcesworkspace.searchEveryAvailableCharacterLorebookAndChat",
+])
+  assert.doesNotMatch(locale[`ui.longTermMemory.${key}`], /branch/iu, key);
 assert.doesNotMatch(locale["ui.longTermMemory.memoryvault.bulkAvailabilityHelp"], /All chats or All branches/u);
 assert.match(locale["ui.longTermMemory.memoryvault.bulkImplicitAllPlaces"], /scope unchanged/u);
 assert.doesNotMatch(locale["ui.longTermMemory.memoryvault.bulkImplicitAllPlaces"], /keeps All chats/u);
@@ -254,27 +260,36 @@ assert.match(vault, /secondaryNotesScope/u);
 assert.match(vault, /const secondaryNotesScope = secondaryTarget\?\.scope;/u);
 assert.match(vault, /chatOnlyLtmScope/u);
 assert.match(vault, /secondaryCurrentConversationScopeTarget/u);
-assert.match(vault, /secondaryCurrentBranchScopeTarget/u);
+assert.doesNotMatch(vault, /secondaryCurrentBranchScopeTarget/u);
 assert.match(vault, /noMemoriesInCombinedScope/u);
-assert.match(vault, /data-ltm-vault-scope-control/u);
-assert.match(vault, /text-\[var\(--marinara-editor-muted\)\].*focus-visible:outline/u);
-assert.match(vault, /mari-editor-action flex min-h-11/u);
-assert.match(vaultScreen, /function VaultScopePicker/u);
+// #1420: both Vault filters are the shared single-place combobox.
+assert.match(
+  vault,
+  /<SourceScopeCombobox[\s\S]*testId="vault"[\s\S]*memoryGroups=\{placeMemoryGroups\}[\s\S]*<SourceScopeCombobox[\s\S]*testId="vault-secondary"/u,
+);
+assert.doesNotMatch(vault, /<details\s+data-ltm-memory-scope/u);
+assert.doesNotMatch(vaultScreen, /VaultScopePicker|data-ltm-vault-scope/u);
 // #1376: no two components share a name.
 assert.doesNotMatch(
   [vaultScreen, workspaceScreen, reviewQueueScreen, settingsScreen].join("\n"),
   /function ScopeTargetPicker\b/u,
 );
-assert.match(workspaceScreen, /function SourceScopeCombobox\b/u);
+assert.match(sourceScopeCombobox, /function SourceScopeCombobox\b/u);
 assert.match(detail, /<Onboarding\b/u);
-assert.match(vaultScreen, /data-ltm-vault-scope-search/u);
-assert.match(vaultScreen, /role="radiogroup"[\s\S]*role="radio"/u);
+assert.match(sourceScopeCombobox, /role="listbox"/u);
+assert.match(sourceScopeCombobox, /role="option"/u);
 assert.doesNotMatch(vaultScreen, /role="checkbox"/u);
 assert.doesNotMatch(vault, /data-ltm-vault-selected-scope/u);
 assert.doesNotMatch(vault, /mari-editor-panel min-w-0 max-w-full space-y-3 p-3/u);
-assert.doesNotMatch(vault, /<details\s+data-ltm-memory-scope\s+className="[^"]*mari-editor-panel/u);
-assert.match(vaultScreen, /data-ltm-vault-scope-tablist/u);
-assert.match(vaultScreen, /@container \(min-width: 16rem\)[\s\S]*repeat\(5, minmax\(0, 1fr\)\)/u);
+assert.match(sourceScopeCombobox, /data-ltm-scope-tablist/u);
+assert.match(sourceScopeCombobox, /@container \(min-width: 16rem\)[\s\S]*repeat\(4, minmax\(0, 1fr\)\)/u);
+assert.match(
+  sourceScopeCombobox,
+  /data-ltm-scope-presence="with-memories"[\s\S]*data-ltm-scope-presence="no-memories"/u,
+);
+// #1420: the dropdown paints a solid layer, so the page behind it no longer shows through.
+assert.match(sourceScopeCombobox, /backgroundColor: "var\(--background\)"/u);
+assert.doesNotMatch(sourceScopeCombobox, /bg-\[var\(--card\)\] shadow-xl/u);
 assert.match(vaultScreen, /border-y border-\[var\(--border\)\]/u);
 assert.match(vault, /data-ltm-mode-filter/u);
 assert.match(vault, /filterModes/u);
@@ -289,56 +304,60 @@ assert.match(vault, /statusFilter/u);
 assert.match(vault, /sortScopeTargets/u);
 assert.match(vault, /showMemories/u);
 assert.match(vault, /sortBy/u);
-assert.match(targetPicker, /AvailabilityTabRail/u);
-assert.match(targetPicker, /displayedTargets/u);
-assert.match(targetPicker, /const displayedTargetsFor/u);
-assert.match(targetPicker, /displayedTargetsFor\(activeKind, activeTargets, activeCopy\.allLabel\)/u);
-assert.match(targetPicker, /displayedTargetsFor\(kind, targets, copy\.allLabel\)/u);
-assert.match(targetPicker, /role="tablist"/u);
-assert.match(targetPicker, /role="tab"/u);
-assert.match(targetPicker, /aria-selected=\{active\}/u);
-assert.match(targetPicker, /data-ltm-availability-count/u);
-assert.match(targetPicker, /data-ltm-availability-search=\{activeKind\}/u);
-assert.match(targetPicker, /border-bottom: 1px solid var\(--marinara-editor-divider\)/u);
-assert.match(targetPicker, /data-ltm-availability-count\][\s\S]*flex: 0 0 auto/u);
-assert.match(targetPicker, /className="overflow-hidden border-y border-\[var\(--marinara-editor-divider\)\]/u);
-assert.match(targetPicker, /containerType: "inline-size"/u);
-assert.match(targetPicker, /grid-template-columns: repeat\(2, minmax\(0, 1fr\)\)/u);
-assert.match(targetPicker, /@container \(min-width: 34rem\)/u);
-assert.match(targetPicker, /border-radius: 0/u);
-assert.match(targetPicker, /data-ltm-availability-panel=\{activeKind\}[\s\S]*className="space-y-3 p-3"/u);
-assert.match(targetPicker, /<div className="max-h-52 overflow-y-auto">/u);
-assert.doesNotMatch(targetPicker, /border-t border-\[var\(--marinara-editor-divider\)\]/u);
-assert.match(targetPicker, /nextTabIndex\(event\.key/u);
-assert.doesNotMatch(targetPicker, /aria-expanded/u);
-assert.doesNotMatch(targetPicker, /group-open:rotate-90/u);
-assert.match(vault, /currentIds=\{\{/u);
+// #1420: the multi-place rail lives at the feature root with All / Chats / Characters / Personas tabs.
+assert.doesNotMatch(targetPicker, /AvailabilityTabRail/u);
+assert.match(availabilityTabRail, /\["all", \[\.\.\.chatRows, \.\.\.characterRows, \.\.\.personaRows\]\]/u);
+assert.match(availabilityTabRail, /useState<SectionKind>\("all"\)/u);
+assert.doesNotMatch(availabilityTabRail, /branch/iu);
+assert.match(availabilityTabRail, /role="tablist"/u);
+assert.match(availabilityTabRail, /role="tab"/u);
+assert.match(availabilityTabRail, /aria-selected=\{active\}/u);
+assert.match(availabilityTabRail, /data-ltm-availability-count/u);
+assert.match(availabilityTabRail, /data-ltm-availability-search=\{activeKind\}/u);
+assert.match(availabilityTabRail, /border-bottom: 1px solid var\(--marinara-editor-divider\)/u);
+assert.match(availabilityTabRail, /data-ltm-availability-count\][\s\S]*flex: 0 0 auto/u);
+assert.match(availabilityTabRail, /className="overflow-hidden border-y border-\[var\(--marinara-editor-divider\)\]/u);
+assert.match(availabilityTabRail, /containerType: "inline-size"/u);
+assert.match(availabilityTabRail, /grid-template-columns: repeat\(2, minmax\(0, 1fr\)\)/u);
+assert.match(availabilityTabRail, /@container \(min-width: 22rem\)[\s\S]*repeat\(4, minmax\(0, 1fr\)\)/u);
+assert.doesNotMatch(availabilityTabRail, /grid-template-columns: minmax\(0, 1fr\)/u);
+assert.match(availabilityTabRail, /border-radius: 0/u);
+assert.match(availabilityTabRail, /data-ltm-availability-panel=\{activeKind\}[\s\S]*className="space-y-3 p-3"/u);
+assert.match(availabilityTabRail, /<div data-ltm-availability-list className="max-h-52 overflow-y-auto">/u);
+assert.doesNotMatch(availabilityTabRail, /border-t border-\[var\(--marinara-editor-divider\)\]/u);
+assert.match(availabilityTabRail, /nextTabIndex\(event\.key/u);
+assert.doesNotMatch(availabilityTabRail, /aria-expanded/u);
+assert.doesNotMatch(availabilityTabRail, /group-open:rotate-90/u);
+assert.doesNotMatch([vault, workspaceScreen].join("\n"), /currentIds=/u);
 assert.match(vault, /filterModes/u);
 assert.doesNotMatch(vault, /scopeModes/u);
 assert.match(vault, /useQuery\(scopeTargetsQueryOptions\(props\.chatId\)\)/u);
 assert.doesNotMatch(workspace, /id: `branch:\$\{chat\.id\}`/u);
 assert.match(workspace, /destinationScopeLimitReached/u);
 assert.match(workspace, /hasDestinationScopeCapacity\(target\.destinationScope\)/u);
-assert.match(workspaceScreen, /data-ltm-availability-target/u);
-assert.match(workspaceScreen, /data-ltm-scope-picker-popup/u);
-assert.match(workspaceScreen, /data-ltm-scope-tablist/u);
-assert.match(workspaceScreen, /data-ltm-scope-tab=\{kind\}/u);
-assert.match(workspaceScreen, /data-ltm-scope-tabpanel=\{activeKind\}/u);
+assert.match(availabilityTabRail, /data-ltm-availability-target/u);
+assert.match(sourceScopeCombobox, /data-ltm-scope-picker-popup/u);
+assert.match(sourceScopeCombobox, /data-ltm-scope-tablist/u);
+assert.match(sourceScopeCombobox, /data-ltm-scope-tab=\{kind\}/u);
+assert.match(sourceScopeCombobox, /data-ltm-scope-tabpanel=\{activeKind\}/u);
 assert.match(workspace, /role="tabpanel"/u);
-assert.match(workspaceScreen, /aria-controls=\{panelId\}/u);
-assert.match(workspaceScreen, /selectKind\(kind, true\)/u);
+assert.match(sourceScopeCombobox, /aria-controls=\{panelId\}/u);
+assert.match(sourceScopeCombobox, /selectKind\(kind, true\)/u);
+// #1420: a chat with branches is one Chats entry that keeps the whole-chat scope.
+assert.match(
+  workspace,
+  /label: group\.label,\s*comment: localizeUi\("ui\.longTermMemory\.sourcesworkspace\.allBranches"\),\s*kind: "chat" as const,\s*sourceScope: \{ groupId: group\.id, groupIds: \[group\.id\], chatIds: group\.chatIds \}/u,
+);
+assert.doesNotMatch(workspace, /kind: "branch"/u);
 assert.match(workspace, /nextTabIndex\(event\.key/u);
 assert.doesNotMatch(vault, /matchesFilters/u);
-assert.match(vaultScreen, /data-ltm-vault-scope-target/u);
 assert.match(vault, /characterScopeTargets/u);
 assert.match(vault, /conversationScopeTargets/u);
-assert.match(vault, /branchScopeTargets/u);
-assert.match(vaultScreen, /data-ltm-vault-scope-tab/u);
-assert.match(vaultScopePicker, /function VaultScopePicker[\s\S]*data-selected=/u);
+assert.doesNotMatch(vault, /branchScopeTargets|deriveScopeBranches\b/u);
 assert.match(vault, /bulkAvailabilityScope/u);
 assert.match(vaultScreen, /bulkAvailabilitySelected/u);
 assert.match(vaultScreen, /chat:all/u);
-assert.match(vaultScreen, /branch:all/u);
+assert.doesNotMatch(vaultScreen, /branch:all|"branch"/u);
 assert.doesNotMatch(vault, /chooseOneAvailabilityPlace/u);
 assert.match(vault, /line-clamp-2 break-words text-xs leading-5/u);
 assert.doesNotMatch(vault, /line-clamp-2 block/u);
@@ -385,7 +404,7 @@ assert.equal(
 );
 assert.equal(locale["ui.longTermMemory.memoryvault.searchCharacters"], "Search characters");
 assert.equal(locale["ui.longTermMemory.memoryvault.searchChats"], "Search chats");
-assert.equal(locale["ui.longTermMemory.memoryvault.searchBranches"], "Search branches");
+assert.equal(locale["ui.longTermMemory.memoryvault.searchBranches"], undefined);
 assert.equal(locale["ui.longTermMemory.memoryvault.showMemories"], "Show");
 assert.equal(locale["ui.longTermMemory.memoryvault.sortBy"], "Sort by");
 assert.equal(locale["ui.longTermMemory.memoryvault.changeAvailability"], "Change availability");
@@ -396,10 +415,9 @@ assert.match(
   detail,
   /\[data-ltm-tab-focus\]:focus-visible \{\s*outline: 2px solid var\(--marinara-editor-focus-ring\);/u,
 );
-for (const rail of [navigation, settings, targetPicker]) assert.match(rail, /data-ltm-tab-focus/u);
+for (const rail of [navigation, settings, availabilityTabRail]) assert.match(rail, /data-ltm-tab-focus/u);
 // The Vault and Sources place-picker rails were cut into their own files; read each one alone so
 // TargetPicker or another sibling cannot satisfy the match.
-assert.match(vaultScopePicker, /function VaultScopePicker[\s\S]*data-ltm-tab-focus/u);
 assert.match(sourceScopeCombobox, /function SourceScopeCombobox[\s\S]*data-ltm-tab-focus/u);
 assert.match(detail, /paddingBottom: "var\(--mari-safe-area-inset-bottom, env\(safe-area-inset-bottom\)\)"/u);
 assert.match(
@@ -506,7 +524,7 @@ assert.match(vaultScreen, /inline-flex min-h-11 max-w-full[\s\S]*h-11 w-11/u);
 assert.match(vault, /clearMemorySearch[\s\S]*h-11 w-11/u);
 assert.match(vault, /data-ltm-mode-filter[\s\S]*min-h-11/u);
 assert.match(vault, /bulkModes[\s\S]*min-h-11/u);
-assert.match(vault, /data-ltm-vault-scope-control/u);
+assert.match(vault, /data-ltm-memory-scope-secondary/u);
 assert.match(vault, /data-ltm-note-inspector/u);
 assert.match(vault, /mari-editor-panel min-w-0 space-y-4 p-3/u);
 assert.match(vault, /copyDiagnostics/u);
@@ -520,7 +538,7 @@ assert.match(vault, /maxHeight: "16rem"/u);
 assert.match(vault, /onInput=\{\(event\) =>/u);
 assert.match(sharedControls, /aria-live="polite"/u);
 assert.match(targetPicker, /<button[\s\S]*type="button"/u);
-assert.match(workspaceScreen, /aria-controls=\{listId\}/u);
+assert.match(sourceScopeCombobox, /aria-controls=\{listId\}/u);
 assert.doesNotMatch(targetPicker, /role="listbox"|role="option"|aria-activedescendant|ArrowDown|ArrowUp/u);
 assert.doesNotMatch(targetPicker, /className="mari-editor-tab-rail grid w-full grid-cols-4"/u);
 assert.match(targetPicker, /id=\{listId\}\s+role="list"/u);

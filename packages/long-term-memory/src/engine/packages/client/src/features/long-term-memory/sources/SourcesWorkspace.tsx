@@ -77,7 +77,7 @@ import {
 } from "./source-shared";
 import type { ScopeTarget, Source, SourceOperation } from "./source-shared";
 import { SourceOperationWorkbench } from "./SourceOperationWorkbench";
-import { SourceScopeCombobox } from "./SourceScopeCombobox";
+import { SourceScopeCombobox } from "../SourceScopeCombobox";
 import { EntrySelect } from "./EntrySelect";
 import { DestinationScopePanel } from "./DestinationScopePanel";
 import { ImportedSourceInspector } from "./ImportedSourceInspector";
@@ -430,8 +430,9 @@ export default function SourcesWorkspace({
         const memberDisplayNames = group.chatIds.map((id) => scopeIndexes.chatsById.get(id)?.label).filter(Boolean);
         return {
           id: `group:${group.id}`,
-          label: `${localizeUi("ui.longTermMemory.sourcesworkspace.allBranches")}: ${group.label}`,
-          kind: "branch" as const,
+          label: group.label,
+          comment: localizeUi("ui.longTermMemory.sourcesworkspace.allBranches"),
+          kind: "chat" as const,
           sourceScope: { groupId: group.id, groupIds: [group.id], chatIds: group.chatIds },
           destinationScope: { groupId: group.id, groupIds: [group.id], chatIds: group.chatIds },
           searchText: [group.label, ...memberDisplayNames, ...group.chatIds].join(" "),
@@ -482,28 +483,6 @@ export default function SourcesWorkspace({
   const currentDestinationLabel = selectedDestinationTargets.length
     ? selectedDestinationTargets.map((target) => targetDisplayLabel(target, true)).join(", ")
     : localizeUi("ui.longTermMemory.sourcesworkspace.chooseDestination");
-  const currentDestinationIds = useMemo(() => {
-    const currentChatId = props.chatId ?? scopeTargets.data?.currentScope?.chatId;
-    const currentChatRecord = currentChatId ? scopeIndexes.chatsById.get(currentChatId) : undefined;
-    const branchId = currentChatRecord?.groupId ?? null;
-    const characterIds = currentChatRecord?.characterIds ?? [];
-    const personaId = currentChatRecord?.personaId ?? null;
-    return {
-      chat: currentChatId ? `chat:${currentChatId}` : undefined,
-      branch:
-        branchId && destinationTargets.some((target) => target.id === `group:${branchId}`)
-          ? `group:${branchId}`
-          : undefined,
-      character:
-        characterIds.length === 1 && destinationTargets.some((target) => target.id === `character:${characterIds[0]}`)
-          ? `character:${characterIds[0]}`
-          : undefined,
-      persona:
-        personaId && destinationTargets.some((target) => target.id === `persona:${personaId}`)
-          ? `persona:${personaId}`
-          : undefined,
-    };
-  }, [destinationTargets, props.chatId, scopeIndexes.chatsById, scopeTargets.data?.currentScope?.chatId]);
   const sourceScope = sourceTarget?.sourceScope;
   const previewScope = source === "chats" ? sourceScope : undefined;
   const effectiveImportScope = `${sourceTargetId}:${[...selectedDestinationTargetIds].sort().join(",")}`;
@@ -1524,7 +1503,7 @@ export default function SourcesWorkspace({
               label={localizeUi("ui.longTermMemory.sourcesworkspace.findSourcesIn")}
               content={
                 sourceTargetId === "all"
-                  ? localizeUi("ui.longTermMemory.sourcesworkspace.searchEveryAvailableCharacterLorebookChatAndBranch")
+                  ? localizeUi("ui.longTermMemory.sourcesworkspace.searchEveryAvailableCharacterLorebookAndChat")
                   : localizeUi("ui.longTermMemory.sourcesworkspace.limitImportsToThisChatAndItsRelatedScope")
               }
             />
@@ -2054,7 +2033,6 @@ export default function SourcesWorkspace({
                   <DestinationScopePanel
                     targets={destinationTargets}
                     selectedIds={selectedDestinationTargetIds}
-                    currentIds={currentDestinationIds}
                     onChange={changeDestinationIds}
                     mode={modeFilter}
                     source={source}
@@ -2528,7 +2506,6 @@ export default function SourcesWorkspace({
                   <DestinationScopePanel
                     targets={destinationTargets}
                     selectedIds={selectedDestinationTargetIds}
-                    currentIds={currentDestinationIds}
                     onChange={changeDestinationIds}
                     mode={modeFilter}
                     source={source}

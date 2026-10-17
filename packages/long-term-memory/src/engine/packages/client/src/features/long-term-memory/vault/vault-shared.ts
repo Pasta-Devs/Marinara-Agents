@@ -5,7 +5,8 @@ import {
   getLtmScopePersonaIds,
 } from "../../../../../shared/src/features/agents/long-term-memory/scope.js";
 import { humanizeLabel } from "../display-labels";
-import { type AvailabilityChatTarget, type AvailabilityTarget, type PickerTarget } from "./TargetPicker";
+import type { AvailabilityChatTarget, AvailabilityTarget } from "../AvailabilityTabRail";
+import type { PickerTarget } from "./TargetPicker";
 
 export const modes: readonly LtmMode[] = ["conversation", "roleplay", "game"];
 
@@ -17,7 +18,7 @@ export type AvailabilityTargets = {
   chats: AvailabilityChatTarget[];
   branches: AvailabilityChatTarget[];
 };
-type BulkAvailabilityTargetKind = "group" | "chat" | "branch" | "character" | "persona";
+type BulkAvailabilityTargetKind = "group" | "chat" | "character" | "persona";
 
 export function splitBulkAvailabilityTarget(target: string): [BulkAvailabilityTargetKind, string] {
   const [kind, ...parts] = target.split(":");

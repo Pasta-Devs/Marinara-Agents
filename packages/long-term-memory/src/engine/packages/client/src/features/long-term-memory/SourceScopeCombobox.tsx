@@ -1,11 +1,16 @@
 import { type KeyboardEvent, useEffect, useId, useRef, useState } from "react";
 import { Check, ChevronDown, Search } from "lucide-react";
-import { inputClass } from "../shared-controls";
-import { scopeKindCategories } from "../display-labels";
-import { useLtmTranslation } from "../localization";
-import { nextTabIndex } from "../tab-keys";
-import { targetDisplayLabel } from "./source-shared";
-import type { ScopeTarget, ScopeTargetKind } from "./source-shared";
+import { inputClass } from "./shared-controls";
+import { scopeKindCategories } from "./display-labels";
+import { useLtmTranslation } from "./localization";
+import { nextTabIndex } from "./tab-keys";
+import { targetDisplayLabel } from "./sources/source-shared";
+import type { ScopeTarget, ScopeTargetKind } from "./sources/source-shared";
+
+/**
+ * The single-place picker for Sources and the Memory Vault filters. `memoryGroups` splits the list into places
+ * with memories and a collapsed group without them; searching opens that group.
+ */
 
 export function SourceScopeCombobox({
   targets,
@@ -17,6 +22,7 @@ export function SourceScopeCombobox({
   required = false,
   invalid = false,
   disabled = false,
+  memoryGroups,
 }: {
   targets: ScopeTarget[];
   value: string;
@@ -27,6 +33,7 @@ export function SourceScopeCombobox({
   required?: boolean;
   invalid?: boolean;
   disabled?: boolean;
+  memoryGroups?: { has: (target: ScopeTarget) => boolean; withLabel: string; withoutLabel: string };
 }) {
   const { t: localizeUi } = useLtmTranslation();
   const [open, setOpen] = useState(false);
@@ -54,18 +61,37 @@ export function SourceScopeCombobox({
     (target) =>
       !target.pinned && matches(target) && (activeKind === "all" ? target.kind !== "all" : target.kind === activeKind),
   );
-  const optionTargets = [...pinnedTargets, ...regularTargets];
+  const targetsWithMemories = memoryGroups ? regularTargets.filter(memoryGroups.has) : [];
+  const targetsWithoutMemories = memoryGroups ? regularTargets.filter((target) => !memoryGroups.has(target)) : [];
+  const [noMemoriesOpen, setNoMemoriesOpen] = useState(false);
+  const noMemoriesPreference = useRef(false);
+  const wasSearching = useRef(false);
+  useEffect(() => {
+    if (needle) setNoMemoriesOpen(true);
+    else if (wasSearching.current) setNoMemoriesOpen(noMemoriesPreference.current);
+    wasSearching.current = Boolean(needle);
+  }, [needle]);
+  const resetNoMemories = () => {
+    setNoMemoriesOpen(false);
+    noMemoriesPreference.current = false;
+    wasSearching.current = false;
+  };
+  const optionTargets = memoryGroups
+    ? [...pinnedTargets, ...targetsWithMemories, ...(noMemoriesOpen ? targetsWithoutMemories : [])]
+    : [...pinnedTargets, ...regularTargets];
   const [highlightedId, setHighlightedId] = useState(value);
   useEffect(() => setHighlightedId(value), [value]);
   const close = () => {
     setOpen(false);
     setQuery("");
     setActiveKind("all");
+    resetNoMemories();
     requestAnimationFrame(() => triggerRef.current?.focus({ preventScroll: true }));
   };
   const selectKind = (kind: ScopeTargetKind, focusTab = false) => {
     setActiveKind(kind);
     setHighlightedId("");
+    resetNoMemories();
     if (focusTab) document.getElementById(`${tablistId}-${kind}`)?.focus({ preventScroll: true });
   };
 
@@ -178,9 +204,15 @@ export function SourceScopeCombobox({
       </button>
       {open ? (
         <div
-          className="absolute left-0 top-full z-30 mt-2 w-full overflow-hidden rounded-md border border-[var(--marinara-editor-divider)] bg-[var(--card)] shadow-xl"
+          className="absolute left-0 top-full z-30 mt-2 w-full overflow-hidden rounded-md border border-[var(--marinara-editor-divider)] shadow-xl"
           data-ltm-scope-picker-popup
-          style={{ containerType: "inline-size", minWidth: "min(20rem, calc(100vw - 2rem))" }}
+          style={{
+            containerType: "inline-size",
+            minWidth: "min(20rem, calc(100vw - 2rem))",
+            // --card can be translucent; layering it over --background keeps the list readable over the page.
+            backgroundColor: "var(--background)",
+            backgroundImage: "linear-gradient(var(--card), var(--card))",
+          }}
         >
           <label className="relative block border-b border-[var(--marinara-editor-divider)] p-2">
             <Search
@@ -233,7 +265,7 @@ export function SourceScopeCombobox({
               }
               @container (min-width: 16rem) {
                 [data-ltm-scope-tablist] {
-                  grid-template-columns: repeat(5, minmax(0, 1fr));
+                  grid-template-columns: repeat(4, minmax(0, 1fr));
                 }
               }
               @container (max-width: 15rem) {
@@ -270,8 +302,38 @@ export function SourceScopeCombobox({
           >
             <div id={listId} role="listbox" aria-label={ariaLabel} className="max-h-72 overflow-y-auto">
               {pinnedTargets.map(option)}
-              {regularTargets.map(option)}
-              {!optionTargets.length ? (
+              {memoryGroups ? (
+                <>
+                  {targetsWithMemories.length ? (
+                    <div role="group" aria-label={memoryGroups.withLabel} data-ltm-scope-presence="with-memories">
+                      <p className="border-b border-[var(--marinara-editor-divider)] bg-[var(--secondary)] px-3 py-1 text-xs font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">
+                        {memoryGroups.withLabel}
+                      </p>
+                      {targetsWithMemories.map(option)}
+                    </div>
+                  ) : null}
+                  {targetsWithoutMemories.length ? (
+                    <details
+                      open={noMemoriesOpen}
+                      onToggle={(event) => setNoMemoriesOpen(event.currentTarget.open)}
+                      data-ltm-scope-presence="no-memories"
+                    >
+                      <summary
+                        onClick={() => {
+                          noMemoriesPreference.current = !noMemoriesOpen;
+                        }}
+                        className="flex min-h-11 cursor-pointer list-none items-center border-b border-[var(--marinara-editor-divider)] px-3 py-2 text-xs font-semibold uppercase tracking-wide text-[var(--muted-foreground)] [&::-webkit-details-marker]:hidden"
+                      >
+                        {memoryGroups.withoutLabel}
+                      </summary>
+                      {targetsWithoutMemories.map(option)}
+                    </details>
+                  ) : null}
+                </>
+              ) : (
+                regularTargets.map(option)
+              )}
+              {!pinnedTargets.length && !regularTargets.length ? (
                 <p className="px-3 py-4 text-xs text-[var(--muted-foreground)]">
                   {localizeUi("ui.longTermMemory.sourcesworkspace.noMatchingScopes")}
                 </p>

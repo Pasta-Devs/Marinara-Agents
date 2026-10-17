@@ -11,7 +11,7 @@ export type Source = SourceTab;
 
 export type SourceOperation = "copy" | "move" | "archive" | "delete";
 
-export type ScopeTargetKind = "all" | "chat" | "branch" | "character" | "persona";
+export type ScopeTargetKind = "all" | "chat" | "character" | "persona";
 export type ScopeTarget = {
   id: string;
   label: string;
@@ -60,8 +60,6 @@ export function targetFitsDestinationScope(scope: LtmScope | undefined, target: 
     return additionalIds.length <= MAX_DESTINATION_SCOPE_IDS - current[key].length;
   });
 }
-
-export type DestinationCategoryKind = "all" | Exclude<ScopeTargetKind, "all">;
 
 export const ALL_LTM_MODES: LtmMode[] = ["conversation", "roleplay", "game"];
 

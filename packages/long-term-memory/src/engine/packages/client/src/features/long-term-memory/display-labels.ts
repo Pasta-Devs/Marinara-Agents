@@ -44,7 +44,6 @@ export const labelKeys = {
   scopeKind: {
     all: "ui.longTermMemory.sourcesworkspace.all",
     chat: "ui.longTermMemory.sourcesworkspace.chats",
-    branch: "ui.longTermMemory.sourcesworkspace.branches",
     character: "ui.longTermMemory.sourcesworkspace.characters",
     persona: "ui.longTermMemory.sourcesworkspace.personas",
   },

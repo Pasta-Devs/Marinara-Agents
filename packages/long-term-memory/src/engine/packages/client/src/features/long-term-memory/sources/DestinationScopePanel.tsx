@@ -1,10 +1,10 @@
-import { type KeyboardEvent, useId, useMemo, useState } from "react";
-import { ChevronRight, Search, X } from "lucide-react";
+import { useId, useMemo } from "react";
+import { ChevronRight, X } from "lucide-react";
 import type { LtmMode } from "../../../../../shared/src/features/agents/long-term-memory/schema.js";
-import { InfoPopover, inputClass } from "../shared-controls";
-import { labelKeys, localizedLabel, scopeKindCategories } from "../display-labels";
+import { AvailabilityTabRail, type AvailabilityPlaceKind } from "../AvailabilityTabRail";
+import { InfoPopover } from "../shared-controls";
+import { labelKeys, localizedLabel } from "../display-labels";
 import { useLtmTranslation } from "../localization";
-import { nextTabIndex } from "../tab-keys";
 import {
   ALL_LTM_MODES,
   mergedDestinationScope,
@@ -13,12 +13,13 @@ import {
   targetDisplayLabel,
   targetFitsDestinationScope,
 } from "./source-shared";
-import type { DestinationCategoryKind, ScopeTarget, ScopeTargetKind, Source } from "./source-shared";
+import type { ScopeTarget, Source } from "./source-shared";
+
+const placeId = (target: ScopeTarget) => target.id.split(":").slice(1).join(":");
 
 export function DestinationScopePanel({
   targets,
   selectedIds,
-  currentIds,
   onChange,
   mode,
   source,
@@ -30,7 +31,6 @@ export function DestinationScopePanel({
 }: {
   targets: ScopeTarget[];
   selectedIds: string[];
-  currentIds: { chat?: string; branch?: string; character?: string; persona?: string };
   onChange: (ids: string[]) => void;
   mode: LtmMode | "all";
   source: Source;
@@ -42,22 +42,14 @@ export function DestinationScopePanel({
 }) {
   const { t: localizeUi } = useLtmTranslation();
   const labelId = useId();
-  const [activeKind, setActiveKind] = useState<DestinationCategoryKind>("all");
-  const [query, setQuery] = useState("");
-  const categories = scopeKindCategories(localizeUi);
-  const categoryLabels = Object.fromEntries(categories) as Record<DestinationCategoryKind, string>;
   const sortedTargets = useMemo(
-    () => [...targets].sort((left, right) => left.label.localeCompare(right.label)),
+    () =>
+      [...targets].sort(
+        (left, right) =>
+          Number(Boolean(right.pinned)) - Number(Boolean(left.pinned)) || left.label.localeCompare(right.label),
+      ),
     [targets],
   );
-  const activeTargets =
-    activeKind === "all" ? sortedTargets : sortedTargets.filter((target) => target.kind === activeKind);
-  const needle = query.trim().toLocaleLowerCase();
-  const matches = (target: ScopeTarget) =>
-    `${target.label} ${target.comment ?? ""} ${target.destinationLabel ?? ""} ${target.searchText ?? ""}`
-      .toLocaleLowerCase()
-      .includes(needle);
-  const filteredTargets = activeTargets.filter(matches);
   const selectedTargets = sortedTargets.filter((target) => selectedIds.includes(target.id));
   const destinationSummary = selectedTargets.length
     ? selectedTargets.map((target) => targetDisplayLabel(target, true)).join(", ")
@@ -65,7 +57,6 @@ export function DestinationScopePanel({
   const currentDestinationScope = mergedDestinationScope(selectedTargets);
   const targetExceedsLimit = (target: ScopeTarget) =>
     !selectedIds.includes(target.id) && !targetFitsDestinationScope(currentDestinationScope, target);
-  const blockedTargetCount = filteredTargets.filter(targetExceedsLimit).length;
   const toggle = (id: string) => {
     if (selectedIds.includes(id)) {
       onChange(selectedIds.filter((value) => value !== id));
@@ -74,144 +65,43 @@ export function DestinationScopePanel({
     const target = sortedTargets.find((item) => item.id === id);
     if (target && !targetExceedsLimit(target)) onChange([...selectedIds, id]);
   };
-  const handleCategoryKey = (event: KeyboardEvent<HTMLButtonElement>, index: number) => {
-    const nextIndex = nextTabIndex(event.key, index, categories.length);
-    if (nextIndex === null) return;
-    event.preventDefault();
-    const nextKind = categories[nextIndex]![0];
-    setActiveKind(nextKind);
-    requestAnimationFrame(() =>
-      document.querySelector<HTMLElement>(`[data-ltm-availability-tab="${nextKind}"]`)?.focus(),
-    );
+  const placeRows = (kind: AvailabilityPlaceKind) =>
+    sortedTargets
+      .filter((target) => target.kind === kind)
+      .map((target) => ({
+        id: placeId(target),
+        label: target.label,
+        comment: target.comment,
+        searchText: [target.destinationLabel, target.searchText].filter(Boolean).join(" "),
+      }));
+  const chatTargets = sortedTargets.filter((target) => target.kind === "chat");
+  // "All chats" is on once no further chat fits: choosing it adds every chat within the limits, choosing it again
+  // clears them.
+  const allChatsSelected =
+    chatTargets.some((target) => selectedIds.includes(target.id)) &&
+    chatTargets.every((target) => selectedIds.includes(target.id) || targetExceedsLimit(target));
+  const railSelectedIds = new Set(selectedTargets.map((target) => `${target.kind}:${placeId(target)}`));
+  if (allChatsSelected) railSelectedIds.add("chat:all");
+  const toggleRail = (kind: AvailabilityPlaceKind, id: string) => {
+    if (kind === "chat" && id === "all") {
+      if (allChatsSelected) {
+        onChange(selectedIds.filter((value) => !chatTargets.some((target) => target.id === value)));
+        return;
+      }
+      const nextIds = [...selectedIds];
+      const nextTargets = [...selectedTargets];
+      for (const target of chatTargets) {
+        if (nextIds.includes(target.id) || !targetFitsDestinationScope(mergedDestinationScope(nextTargets), target))
+          continue;
+        nextIds.push(target.id);
+        nextTargets.push(target);
+      }
+      onChange(nextIds);
+      return;
+    }
+    const target = sortedTargets.find((item) => item.kind === kind && placeId(item) === id);
+    if (target) toggle(target.id);
   };
-  const currentTargetByKind: Record<Exclude<ScopeTargetKind, "all">, ScopeTarget | undefined> = {
-    chat: currentIds.chat ? sortedTargets.find((target) => target.id === currentIds.chat) : undefined,
-    branch: currentIds.branch ? sortedTargets.find((target) => target.id === currentIds.branch) : undefined,
-    character: currentIds.character ? sortedTargets.find((target) => target.id === currentIds.character) : undefined,
-    persona: currentIds.persona ? sortedTargets.find((target) => target.id === currentIds.persona) : undefined,
-  };
-  const renderCategoryActionRow = (kind: Exclude<ScopeTargetKind, "all">) => {
-    const currentTarget = currentTargetByKind[kind];
-    const categoryTargets = sortedTargets.filter((target) => target.kind === kind);
-    const allLabel =
-      kind === "chat"
-        ? localizeUi("ui.longTermMemory.sourcesworkspace.allChats")
-        : kind === "branch"
-          ? localizeUi("ui.longTermMemory.sourcesworkspace.allBranches")
-          : kind === "character"
-            ? localizeUi("ui.longTermMemory.sourcesworkspace.allCharacters")
-            : localizeUi("ui.longTermMemory.memoryvault.allPersonas");
-    return (
-      <div className="mb-2 divide-y divide-[var(--border)] rounded-md border border-[var(--border)]">
-        {currentTarget ? (
-          <button
-            type="button"
-            data-ltm-availability-action={`${kind}:current`}
-            aria-pressed={selectedIds.includes(currentTarget.id)}
-            disabled={disabled}
-            className="flex min-h-11 w-full items-center gap-3 px-3 py-2 text-left text-sm hover:bg-[var(--secondary)]/30"
-            onClick={() => toggle(currentTarget.id)}
-          >
-            <span className="min-w-0 flex-1 truncate font-semibold">
-              {localizeUi("ui.longTermMemory.sourcesworkspace.current")}
-            </span>
-            <span className="truncate text-xs text-[var(--muted-foreground)]">{currentTarget.label}</span>
-          </button>
-        ) : null}
-        <button
-          type="button"
-          data-ltm-availability-action={`${kind}:all`}
-          aria-pressed={
-            categoryTargets.length > 0 && categoryTargets.every((target) => selectedIds.includes(target.id))
-          }
-          disabled={disabled}
-          className="flex min-h-11 w-full items-center gap-3 px-3 py-2 text-left text-sm font-semibold hover:bg-[var(--secondary)]/30"
-          onClick={() => {
-            const nextIds = [...selectedIds];
-            const nextTargets = [...selectedTargets];
-            for (const target of categoryTargets) {
-              if (
-                nextIds.includes(target.id) ||
-                !targetFitsDestinationScope(mergedDestinationScope(nextTargets), target)
-              )
-                continue;
-              nextIds.push(target.id);
-              nextTargets.push(target);
-            }
-            onChange(nextIds);
-            setQuery("");
-          }}
-        >
-          <span className="min-w-0 flex-1 truncate">{allLabel}</span>
-        </button>
-      </div>
-    );
-  };
-  const renderTarget = (target: ScopeTarget) => (
-    <label
-      key={target.id}
-      data-ltm-availability-target={`${target.kind}:${target.id.split(":").slice(1).join(":")}`}
-      className="flex min-h-11 cursor-pointer items-center gap-3 px-3 py-2 text-sm hover:bg-[var(--secondary)]/30"
-    >
-      <input
-        type="checkbox"
-        className={sourceCheckboxClass}
-        checked={selectedIds.includes(target.id)}
-        disabled={disabled || targetExceedsLimit(target)}
-        title={
-          targetExceedsLimit(target)
-            ? localizeUi("ui.longTermMemory.sourcesworkspace.destinationScopeLimitReached")
-            : undefined
-        }
-        onChange={() => toggle(target.id)}
-        aria-label={targetDisplayLabel(target, true)}
-      />
-      <span className="min-w-0 flex-1">
-        <span className="block truncate font-normal">{target.label}</span>
-        {target.comment ? (
-          <span className="block truncate text-xs text-[var(--muted-foreground)]">{target.comment}</span>
-        ) : null}
-      </span>
-    </label>
-  );
-  const groupedKinds: Array<Exclude<ScopeTargetKind, "all">> = ["chat", "branch", "character", "persona"];
-  const destinationPickerList =
-    activeKind === "all" ? (
-      <div className="space-y-3">
-        {groupedKinds.map((kind) => {
-          const kindTargets = filteredTargets.filter((target) => target.kind === kind);
-          if (!kindTargets.length) return null;
-          return (
-            <section key={kind}>
-              <p className="mb-1 px-1 text-xs font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">
-                {categoryLabels[kind]}
-              </p>
-              <div className="divide-y divide-[var(--border)] rounded-md border border-[var(--border)]">
-                {kindTargets.map(renderTarget)}
-              </div>
-            </section>
-          );
-        })}
-        {!filteredTargets.length ? (
-          <p className="rounded-md border border-[var(--border)] px-3 py-4 text-xs text-[var(--muted-foreground)]">
-            {localizeUi("ui.longTermMemory.sourcesworkspace.noMatchingScopes")}
-          </p>
-        ) : null}
-      </div>
-    ) : (
-      <>
-        {renderCategoryActionRow(activeKind)}
-        {filteredTargets.length ? (
-          <div className="divide-y divide-[var(--border)] rounded-md border border-[var(--border)]">
-            {filteredTargets.map(renderTarget)}
-          </div>
-        ) : (
-          <p className="rounded-md border border-[var(--border)] px-3 py-4 text-xs text-[var(--muted-foreground)]">
-            {localizeUi("ui.longTermMemory.sourcesworkspace.noMatchingScopes")}
-          </p>
-        )}
-      </>
-    );
   return (
     <div
       id="ltm-destination-scope-control"
@@ -339,67 +229,20 @@ export function DestinationScopePanel({
           </span>
           <ChevronRight aria-hidden="true" size="0.875rem" data-ltm-destination-scope-chevron className="shrink-0" />
         </summary>
-        <label className="relative block shrink-0">
-          <Search
-            aria-hidden="true"
-            size="0.875rem"
-            className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[var(--muted-foreground)]"
-          />
-          <input
-            className={`${inputClass} pl-9`}
-            value={query}
-            placeholder={localizeUi("ui.longTermMemory.sourcesworkspace.searchScopes")}
-            aria-label={localizeUi("ui.longTermMemory.sourcesworkspace.searchScopes")}
-            aria-controls="ltm-bulk-destination-list"
-            data-ltm-availability-search={activeKind}
-            disabled={disabled}
-            onChange={(event) => setQuery(event.target.value)}
-          />
-        </label>
-        <div
-          role="tablist"
-          aria-label={localizeUi("ui.longTermMemory.sourcesworkspace.makeMemoriesAvailableIn")}
-          className="grid shrink-0 grid-cols-2 gap-1 sm:grid-cols-5"
-        >
-          {categories.map(([kind, label], index) => {
-            const count =
-              kind === "all"
-                ? selectedIds.length
-                : selectedIds.filter((id) => sortedTargets.some((target) => target.id === id && target.kind === kind))
-                    .length;
-            return (
-              <button
-                key={kind}
-                type="button"
-                role="tab"
-                aria-selected={activeKind === kind}
-                aria-controls="ltm-bulk-destination-list"
-                tabIndex={activeKind === kind ? 0 : -1}
-                data-ltm-availability-tab={kind}
-                data-active={activeKind === kind}
-                className="mari-editor-tab min-h-11 min-w-0 rounded-md border px-2 text-xs font-semibold"
-                onClick={() => setActiveKind(kind)}
-                onKeyDown={(event) => handleCategoryKey(event, index)}
-              >
-                <span className="block truncate">{label}</span>
-                <span className="text-xs text-[var(--muted-foreground)]">{count}</span>
-              </button>
-            );
-          })}
-        </div>
-        {blockedTargetCount ? (
+        {sortedTargets.some(targetExceedsLimit) ? (
           <p role="note" className="shrink-0 text-xs text-[var(--muted-foreground)]">
             {localizeUi("ui.longTermMemory.sourcesworkspace.destinationScopeLimitReached")}
           </p>
         ) : null}
-        <div
-          id="ltm-bulk-destination-list"
-          role="tabpanel"
-          aria-label={categoryLabels[activeKind]}
-          className="min-h-0 flex-1 overflow-y-auto overscroll-contain"
-        >
-          {destinationPickerList}
-        </div>
+        <AvailabilityTabRail
+          chats={placeRows("chat")}
+          characters={placeRows("character")}
+          personas={placeRows("persona")}
+          selectedIds={railSelectedIds}
+          tablistLabel={localizeUi("ui.longTermMemory.sourcesworkspace.makeMemoriesAvailableIn")}
+          disabled={disabled}
+          onToggle={toggleRail}
+        />
       </details>
       {!selectedTargets.length ? (
         <span role="alert" className="block shrink-0 text-xs">

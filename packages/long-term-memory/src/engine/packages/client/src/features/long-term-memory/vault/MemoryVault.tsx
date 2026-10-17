@@ -50,17 +50,19 @@ import { selectLtmPluralForm, useLtmTranslation, type LtmTranslationFunction } f
 import { LtmWorkspace, type LtmWorkspacePane } from "../LtmWorkspace";
 import {
   buildScopeIndexes,
+  buildScopeMemoryPresence,
   deriveScopeBranchChats,
-  deriveScopeBranches,
   deriveScopeConversations,
   uniqueById,
 } from "../scope-targets";
-import { TargetPicker, type AvailabilityChatTarget, type PickerTarget } from "./TargetPicker";
+import type { AvailabilityChatTarget } from "../AvailabilityTabRail";
+import { SourceScopeCombobox } from "../SourceScopeCombobox";
+import type { ScopeTarget } from "../sources/source-shared";
+import { TargetPicker, type PickerTarget } from "./TargetPicker";
 import type { ScopeTargetLocalCharacter } from "../scope-targets";
 import { normalizeDetailName } from "./detail-name";
 import { availabilityEntries, hasExplicitScope, modes, sameScope, splitBulkAvailabilityTarget } from "./vault-shared";
 import type { AvailabilityTargets, Target } from "./vault-shared";
-import { VaultScopePicker } from "./VaultScopePicker";
 import { MemoryAvailabilityWorkbench } from "./MemoryAvailabilityWorkbench";
 import { BulkAvailabilityWorkbench } from "./BulkAvailabilityWorkbench";
 import { Pill } from "./Pill";
@@ -152,6 +154,11 @@ const prefixes: Record<LtmNoteType, string> = {
   tone: "tone",
 };
 
+/** A branch reads "Chat - Branch" wherever an existing branch assignment is named. */
+function branchChatLabel(chat: { label: string; chatName?: string | null; groupId?: string | null }) {
+  return chat.groupId && chat.chatName?.trim() ? `${chat.chatName.trim()} - ${chat.label}` : chat.label;
+}
+
 function targetDisplayLabel(target: Target | null | undefined) {
   if (!target) return "";
   const comment = target.comment?.trim();
@@ -170,7 +177,7 @@ function bulkAvailabilityScope(targets: readonly string[]): Partial<LtmScope> | 
   const personaIds: string[] = [];
   for (const target of targets) {
     const [kind, id] = splitBulkAvailabilityTarget(target);
-    if (kind === "chat" || kind === "branch") chatIds.push(id);
+    if (kind === "chat") chatIds.push(id);
     if (kind === "group") groupIds.push(id);
     if (kind === "character") characterIds.push(id);
     if (kind === "persona") personaIds.push(id);
@@ -801,17 +808,15 @@ export default function MemoryVault({
       }))
       .filter((group) => group.chatIds.length);
   }, [scopeChats, scopeTargets.data?.groups]);
-  const { conversations, branches } = useMemo(() => {
-    const conversations = deriveScopeConversations(scopeChats, scopeGroups, "", scopeIndexes, (group) =>
-      localizeUi("ui.longTermMemory.memoryvault.groupBranches", {
-        group: group.label,
-      }),
-    );
-    return {
-      conversations,
-      branches: deriveScopeBranches({ chatIds: scopeChats.map((chat) => chat.id) }, scopeIndexes),
-    };
-  }, [localizeUi, scopeIndexes, scopeTargets.data?.chats, scopeChats, scopeGroups]);
+  const conversations = useMemo(
+    () =>
+      deriveScopeConversations(scopeChats, scopeGroups, "", scopeIndexes, (group) =>
+        localizeUi("ui.longTermMemory.memoryvault.groupBranches", {
+          group: group.label,
+        }),
+      ),
+    [localizeUi, scopeIndexes, scopeChats, scopeGroups],
+  );
   const characterScopeTargets = (scopeTargets.data?.characters ?? []).map((character) =>
     targets.find((candidate) => candidate.id === `character:${character.id}`)!,
   );
@@ -864,10 +869,6 @@ export default function MemoryVault({
         scope: scopeTargets.data?.currentScope ?? { chatId: currentChat.id, chatIds: [currentChat.id] },
       }
     : null;
-  const pickerConversationScopeTargets = uniqueById([
-    ...(currentConversationScopeTarget ? [currentConversationScopeTarget] : []),
-    ...conversationScopeTargets,
-  ]);
   // The secondary place stays literal for the current chat too. Reusing currentScope
   // here would fold the primary character (and persona) into the second place, so
   // "A AND (B OR A)" collapses back to A.
@@ -881,55 +882,77 @@ export default function MemoryVault({
         scope: chatOnlyLtmScope(currentChat.id),
       }
     : null;
-  const pickerSecondaryConversationScopeTargets = uniqueById([
-    ...(secondaryCurrentConversationScopeTarget ? [secondaryCurrentConversationScopeTarget] : []),
-    ...secondaryConversationScopeTargets,
-  ]);
-  const branchScopeTargetsFor = (characterId: string) =>
-    branches.map((branch) => ({
-      id: `chat:${branch.id}`,
-      label: branch.label,
-      chatName: branch.chatName,
-      scope: {
-        chatId: branch.id,
-        chatIds: [branch.id],
-        ...(branch.groupId ? { groupId: branch.groupId } : {}),
-        ...(characterId ? { characterIds: [characterId] } : {}),
-      },
-    }));
-  const branchScopeTargets = branchScopeTargetsFor(selectedCharacterId);
-  const secondaryBranchScopeTargets = branchScopeTargetsFor("");
-  const currentBranchTarget: Target | null = currentChat?.groupId
+  const personaScopeTargets = targets.filter((candidate) => candidate.id.startsWith("persona:"));
+  const characterComments = new Map(
+    (scopeTargets.data?.characters ?? []).map((character) => [`character:${character.id}`, character.comment]),
+  );
+  // One place list for both Vault filters. A chat with branches is one entry whose scope already covers every
+  // branch, so memories assigned to a single branch still show under it.
+  const vaultPlaceOptions = (secondary: boolean) => {
+    type VaultPlaceOption = ScopeTarget & { target: Target | null };
+    const place = (kind: ScopeTarget["kind"], candidate: Target, extra: Partial<VaultPlaceOption> = {}) =>
+      ({
+        id: candidate.id,
+        label: candidate.label,
+        comment: candidate.comment,
+        kind,
+        sourceScope: candidate.scope,
+        target: candidate,
+        ...extra,
+      }) satisfies VaultPlaceOption;
+    const current = secondary ? secondaryCurrentConversationScopeTarget : currentConversationScopeTarget;
+    const selected = secondary ? secondaryTarget : target;
+    const kindOf = (id: string) =>
+      id.startsWith("character:") ? "character" : id.startsWith("persona:") ? "persona" : "chat";
+    return uniqueById<VaultPlaceOption>([
+      secondary
+        ? {
+            id: "all",
+            label: localizeUi("ui.longTermMemory.memoryvault.noSecondPlace"),
+            kind: "all",
+            pinned: "all",
+            target: null,
+          }
+        : { ...place("all", targets[0]!), label: localizeUi("ui.longTermMemory.sourcesworkspace.all"), pinned: "all" },
+      ...(current
+        ? [
+            place("chat", current, {
+              label: localizeUi("ui.longTermMemory.memoryvault.current"),
+              comment: current.label,
+              pinned: "current",
+            }),
+          ]
+        : []),
+      ...(secondary ? secondaryConversationScopeTargets : conversationScopeTargets).map((candidate) =>
+        candidate.id.startsWith("group:")
+          ? place("chat", candidate, {
+              comment: localizeUi("ui.longTermMemory.sourcesworkspace.allBranches"),
+              searchText: candidate.scope.chatIds.map((id) => scopeIndexes.chatsById.get(id)?.label ?? id).join(" "),
+            })
+          : place("chat", candidate),
+      ),
+      ...pickerCharacterScopeTargets.map((candidate) =>
+        place("character", candidate, { comment: characterComments.get(candidate.id) }),
+      ),
+      ...personaScopeTargets.map((candidate) => place("persona", candidate)),
+      // A place that has since been deleted stays selectable under its last label.
+      ...(selected && selected.id !== "all" ? [place(kindOf(selected.id), selected)] : []),
+    ]);
+  };
+  const primaryPlaceOptions = vaultPlaceOptions(false);
+  const secondaryPlaceOptions = vaultPlaceOptions(true);
+  const memoryPresence = scopeTargets.data?.memoryPresence;
+  const hasMemories = useMemo(
+    () => (memoryPresence ? buildScopeMemoryPresence(memoryPresence) : null),
+    [memoryPresence],
+  );
+  const placeMemoryGroups = hasMemories
     ? {
-        id: `chat:${currentChat.id}`,
-        label:
-          branchScopeTargets.find((candidate) => candidate.id === `chat:${currentChat.id}`)?.label ??
-          props.chatName ??
-          localizeUi("ui.longTermMemory.memoryvault.currentChat"),
-        chatName: scopeTargets.data?.chats.find((chat) => chat.id === currentChat.id)?.chatName,
-        scope: scopeTargets.data?.currentScope ?? { chatId: currentChat.id, chatIds: [currentChat.id] },
+        has: (option: ScopeTarget) => hasMemories(option.sourceScope),
+        withLabel: localizeUi("ui.longTermMemory.memoryvault.withMemories"),
+        withoutLabel: localizeUi("ui.longTermMemory.memoryvault.noMemories"),
       }
-    : null;
-  const pickerBranchScopeTargets = uniqueById([
-    ...(currentBranchTarget ? [currentBranchTarget] : []),
-    ...branchScopeTargets,
-  ]);
-  const secondaryCurrentBranchScopeTarget: Target | null =
-    currentChat?.groupId && currentBranchTarget
-      ? {
-          id: `chat:${currentChat.id}`,
-          label: currentBranchTarget.label,
-          chatName: currentBranchTarget.chatName,
-          scope: {
-            ...chatOnlyLtmScope(currentChat.id),
-            groupId: currentChat.groupId,
-          },
-        }
-      : null;
-  const pickerSecondaryBranchScopeTargets = uniqueById([
-    ...(secondaryCurrentBranchScopeTarget ? [secondaryCurrentBranchScopeTarget] : []),
-    ...secondaryBranchScopeTargets,
-  ]);
+    : undefined;
   const statusScopeTargets: Target[] = statuses.map((status) => ({
     id: status,
     label: statusLabel(status),
@@ -973,7 +996,7 @@ export default function MemoryVault({
       ...(scopeTargets.data?.chats ?? []).map((chat) => ({
         kind: "chat" as const,
         id: chat.id,
-        label: chat.label,
+        label: branchChatLabel(chat),
       })),
       ...(scopeTargets.data?.groups ?? []).map((group) => ({
         kind: "group" as const,
@@ -1031,6 +1054,8 @@ export default function MemoryVault({
       return {
         id: group.id,
         label: group.label,
+        comment: localizeUi("ui.longTermMemory.sourcesworkspace.allBranches"),
+        searchText: members.map((member) => member.label).join(" "),
         groupId: group.id,
         chatIds: group.chatIds,
         members,
@@ -1064,7 +1089,7 @@ export default function MemoryVault({
         (chat) =>
           ({
             id: chat.id,
-            label: chat.label,
+            label: branchChatLabel(chat),
             mode: chat.mode,
             groupId: chat.groupId ?? undefined,
             characterIds: chat.characterIds,
@@ -1072,7 +1097,13 @@ export default function MemoryVault({
           }) satisfies AvailabilityChatTarget,
       ),
     };
-  }, [scopeTargets.data?.chats, scopeTargets.data?.characters, scopeTargets.data?.groups, scopeTargets.data?.personas]);
+  }, [
+    localizeUi,
+    scopeTargets.data?.chats,
+    scopeTargets.data?.characters,
+    scopeTargets.data?.groups,
+    scopeTargets.data?.personas,
+  ]);
   const subjectLabel = (subject: LtmSubject) => {
     if (subject.ref)
       return scopeTargetLabel(subject.ref.kind, subject.ref.id, pickerTargets, {
@@ -2047,27 +2078,6 @@ export default function MemoryVault({
       aria-label={localizeUi("ui.longTermMemory.memoryvault.memoryVault")}
     >
       <style>{`
-        [data-ltm-surface="vault"] [data-ltm-memory-scope] > summary {
-          display: flex;
-          font-family: inherit;
-        }
-        [data-ltm-surface="vault"] [data-ltm-vault-scope-control],
-        [data-ltm-surface="vault"] [data-ltm-vault-scope-control] * {
-          min-width: 0;
-          max-width: 100%;
-          box-sizing: border-box;
-        }
-        [data-ltm-surface="vault"] [data-ltm-vault-scope-list] {
-          overflow-x: hidden;
-        }
-        [data-ltm-surface="vault"] [data-ltm-memory-scope-target] {
-          display: flex;
-          align-items: center;
-          justify-content: flex-start;
-        }
-        [data-ltm-surface="vault"] details[open] > summary [data-ltm-memory-scope-chevron] {
-          transform: rotate(90deg);
-        }
         [data-ltm-surface="vault"] details[open] > summary [data-ltm-availability-chevron] {
           transform: rotate(90deg);
         }
@@ -2105,101 +2115,37 @@ export default function MemoryVault({
                     {visible.length} {localizeUi("ui.longTermMemory.memoryvault.shown")}
                   </span>
                 </div>
-                <details data-ltm-memory-scope className="group col-span-2 min-w-0 max-w-full">
-                  <summary className="mari-editor-action flex min-h-11 cursor-pointer list-none items-center gap-2 px-3 py-2 text-left text-[var(--marinara-editor-muted)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--ring)] [&::-webkit-details-marker]:hidden">
-                    <span className="min-w-0 flex-1">
-                      <span className="block text-[0.625rem] font-medium text-[var(--marinara-editor-muted)]">
-                        {localizeUi("ui.longTermMemory.memoryvault.currentlyViewingMemoriesIn")}
-                      </span>
-                      <span className="block truncate text-xs font-semibold text-[var(--marinara-editor-text)]">
-                        {targetDisplayLabel(target) || localizeUi("ui.longTermMemory.memoryvault.allMemories")}
-                      </span>
-                    </span>
-                    <ChevronRight
-                      aria-hidden="true"
-                      size="0.875rem"
-                      data-ltm-memory-scope-chevron
-                      className="shrink-0 transition-transform"
-                    />
-                  </summary>
-                  <div className="min-w-0 max-w-full border-t border-[var(--border)]">
-                    <VaultScopePicker
-                      targets={{
-                        all: targets[0]!,
-                        chat: pickerConversationScopeTargets,
-                        branch: pickerBranchScopeTargets,
-                        character: pickerCharacterScopeTargets,
-                        persona: (scopeTargets.data?.personas ?? []).map((persona) => ({
-                          id: `persona:${persona.id}`,
-                          label: persona.label,
-                          comment: persona.comment,
-                          scope: { personaId: persona.id },
-                        })),
-                      }}
-                      selectedId={target?.id ?? "all"}
-                      currentIds={{
-                        chat: currentConversationScopeTarget?.id,
-                        branch: currentBranchTarget?.id,
-                        character: currentCharacterTarget?.id,
-                        persona: currentChat?.personaId ? `persona:${currentChat.personaId}` : undefined,
-                      }}
-                      scopeTargets={scopeTargets.data}
-                      localizeUi={localizeUi}
-                      onSelect={(candidate) => void selectTarget(candidate)}
-                    />
-                  </div>
-                </details>
-                <details
-                  data-ltm-memory-scope-secondary
-                  className="group col-span-2 min-w-0 max-w-full border-t border-[var(--border)]"
-                >
-                  <summary className="mari-editor-action flex min-h-11 cursor-pointer list-none items-center gap-2 px-3 py-2 text-left text-[var(--marinara-editor-muted)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--ring)] [&::-webkit-details-marker]:hidden">
-                    <span className="min-w-0 flex-1">
-                      <span className="block text-[0.625rem] font-medium text-[var(--marinara-editor-muted)]">
-                        {localizeUi("ui.longTermMemory.memoryvault.combineWithPlace")}
-                      </span>
-                      <span className="block truncate text-xs font-semibold text-[var(--marinara-editor-text)]">
-                        {secondaryTarget
-                          ? targetDisplayLabel(secondaryTarget)
-                          : localizeUi("ui.longTermMemory.memoryvault.noSecondPlace")}
-                      </span>
-                    </span>
-                    <ChevronRight
-                      aria-hidden="true"
-                      size="0.875rem"
-                      data-ltm-memory-scope-chevron
-                      className="shrink-0 transition-transform"
-                    />
-                  </summary>
-                  <div className="min-w-0 max-w-full border-t border-[var(--border)]">
-                    <VaultScopePicker
-                      variant="secondary"
-                      allOptionLabel={localizeUi("ui.longTermMemory.memoryvault.noSecondPlace")}
-                      targets={{
-                        all: targets[0]!,
-                        chat: pickerSecondaryConversationScopeTargets,
-                        branch: pickerSecondaryBranchScopeTargets,
-                        character: pickerCharacterScopeTargets,
-                        persona: (scopeTargets.data?.personas ?? []).map((persona) => ({
-                          id: `persona:${persona.id}`,
-                          label: persona.label,
-                          comment: persona.comment,
-                          scope: { personaId: persona.id },
-                        })),
-                      }}
-                      selectedId={secondaryTarget?.id ?? "all"}
-                      currentIds={{
-                        chat: currentConversationScopeTarget?.id,
-                        branch: currentBranchTarget?.id,
-                        character: currentCharacterTarget?.id,
-                        persona: currentChat?.personaId ? `persona:${currentChat.personaId}` : undefined,
-                      }}
-                      scopeTargets={scopeTargets.data}
-                      localizeUi={localizeUi}
-                      onSelect={(candidate) => selectSecondaryTarget(candidate.id === "all" ? null : candidate)}
-                    />
-                  </div>
-                </details>
+                <div data-ltm-memory-scope className="col-span-2 grid min-w-0 max-w-full gap-1">
+                  <span className="text-[0.625rem] font-medium text-[var(--marinara-editor-muted)]">
+                    {localizeUi("ui.longTermMemory.memoryvault.currentlyViewingMemoriesIn")}
+                  </span>
+                  <SourceScopeCombobox
+                    targets={primaryPlaceOptions}
+                    value={target?.id ?? "all"}
+                    ariaLabel={localizeUi("ui.longTermMemory.memoryvault.currentlyViewingMemoriesIn")}
+                    testId="vault"
+                    memoryGroups={placeMemoryGroups}
+                    onChange={(id) => {
+                      const next = primaryPlaceOptions.find((option) => option.id === id)?.target;
+                      if (next) void selectTarget(next);
+                    }}
+                  />
+                </div>
+                <div data-ltm-memory-scope-secondary className="col-span-2 grid min-w-0 max-w-full gap-1">
+                  <span className="text-[0.625rem] font-medium text-[var(--marinara-editor-muted)]">
+                    {localizeUi("ui.longTermMemory.memoryvault.combineWithPlace")}
+                  </span>
+                  <SourceScopeCombobox
+                    targets={secondaryPlaceOptions}
+                    value={secondaryTarget?.id ?? "all"}
+                    ariaLabel={localizeUi("ui.longTermMemory.memoryvault.combineWithPlace")}
+                    testId="vault-secondary"
+                    memoryGroups={placeMemoryGroups}
+                    onChange={(id) =>
+                      selectSecondaryTarget(secondaryPlaceOptions.find((option) => option.id === id)?.target ?? null)
+                    }
+                  />
+                </div>
                 <label className="relative col-span-2 block">
                   <Search
                     aria-hidden="true"

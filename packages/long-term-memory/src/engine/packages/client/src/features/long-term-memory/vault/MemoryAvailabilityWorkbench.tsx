@@ -10,7 +10,8 @@ import {
 import { errorMessage } from "../api";
 import { Button, StatusSurface } from "../shared-controls";
 import { type LtmTranslationFunction } from "../localization";
-import { AvailabilityTabRail, availabilitySectionCopy, type PickerTarget } from "./TargetPicker";
+import { AvailabilityTabRail, type AvailabilityPlaceKind } from "../AvailabilityTabRail";
+import type { PickerTarget } from "./TargetPicker";
 import { availabilityEntries, hasExplicitScope, modes, sameModes, sameScope } from "./vault-shared";
 import type { AvailabilityTargets } from "./vault-shared";
 import { Pill } from "./Pill";
@@ -44,9 +45,6 @@ export function MemoryAvailabilityWorkbench({
   const selectedPersonaIds = getLtmScopePersonaIds(scope);
   const selectedGroupIds = getLtmScopeGroupIds(scope);
   const selectedChatIds = getLtmScopeChatIds(scope);
-  const selectedBranchIds = selectedChatIds.filter((id) =>
-    availabilityTargets.branches.some((target) => target.id === id),
-  );
   const unavailableLabels = {
     chat: localizeUi("ui.longTermMemory.memoryvault.unavailableChat"),
     group: localizeUi("ui.longTermMemory.memoryvault.unavailableChat"),
@@ -97,13 +95,9 @@ export function MemoryAvailabilityWorkbench({
     ...getLtmScopePersonaIds(scope).map((id) => `persona:${id}`),
     ...(scope.characterIds ?? []).map((id) => `character:${id}`),
     ...getLtmScopeGroupIds(scope).map((id) => `chat:${id}`),
-    ...selectedChatIds.map((id) => {
-      const branch = availabilityTargets.branches.find((target) => target.id === id);
-      return `${branch ? "branch" : "chat"}:${id}`;
-    }),
+    ...selectedChatIds.map((id) => `chat:${id}`),
   ]);
   if (!selectedGroupIds.length && !selectedChatIds.length) selectedIds.add("chat:all");
-  if (!selectedBranchIds.length) selectedIds.add("branch:all");
   const remove = (kind: PickerTarget["kind"], id: string) => {
     if (entries.length <= 1) {
       setError(localizeUi("ui.longTermMemory.memoryvault.lastPlaceRequired"));
@@ -126,7 +120,8 @@ export function MemoryAvailabilityWorkbench({
     }
     setError("");
   };
-  const toggle = (kind: "character" | "persona" | "chat" | "branch", id: string) => {
+  // An existing branch assignment has no row here. It stays a chip until that chip is removed or All chats is chosen.
+  const toggle = (kind: AvailabilityPlaceKind, id: string) => {
     const next = normalizeLtmScope(scope);
     if (kind === "character") {
       const values = new Set(next.characterIds ?? []);
@@ -138,44 +133,21 @@ export function MemoryAvailabilityWorkbench({
       if (values.has(id)) values.delete(id);
       else values.add(id);
       next.personaIds = [...values];
-    } else if (kind === "chat") {
-      if (id === "all") {
-        next.chatIds = [];
-        next.groupIds = [];
-      } else {
-        const target = availabilityTargets.chats.find((item) => item.id === id);
-        if (target?.groupId) {
-          const groupIds = new Set(getLtmScopeGroupIds(next));
-          if (groupIds.has(target.groupId)) groupIds.delete(target.groupId);
-          else {
-            groupIds.add(target.groupId);
-            next.chatIds = getLtmScopeChatIds(next).filter(
-              (chatId) =>
-                !availabilityTargets.branches.some(
-                  (branch) => branch.id === chatId && branch.groupId === target.groupId,
-                ),
-            );
-          }
-          next.groupIds = [...groupIds];
-        } else {
-          const chatIds = new Set(getLtmScopeChatIds(next));
-          if (chatIds.has(id)) chatIds.delete(id);
-          else chatIds.add(id);
-          next.chatIds = [...chatIds];
-        }
-      }
     } else if (id === "all") {
-      next.chatIds = getLtmScopeChatIds(next).filter(
-        (chatId) => !availabilityTargets.branches.some((branch) => branch.id === chatId),
-      );
+      next.chatIds = [];
+      next.groupIds = [];
     } else {
-      const target = availabilityTargets.branches.find((item) => item.id === id);
-      const chatIds = new Set(getLtmScopeChatIds(next));
-      if (chatIds.has(id)) chatIds.delete(id);
-      else chatIds.add(id);
-      next.chatIds = [...chatIds];
+      const target = availabilityTargets.chats.find((item) => item.id === id);
       if (target?.groupId) {
-        next.groupIds = getLtmScopeGroupIds(next).filter((groupId) => groupId !== target.groupId);
+        const groupIds = new Set(getLtmScopeGroupIds(next));
+        if (groupIds.has(target.groupId)) groupIds.delete(target.groupId);
+        else groupIds.add(target.groupId);
+        next.groupIds = [...groupIds];
+      } else {
+        const chatIds = new Set(getLtmScopeChatIds(next));
+        if (chatIds.has(id)) chatIds.delete(id);
+        else chatIds.add(id);
+        next.chatIds = [...chatIds];
       }
     }
     setScope(normalizeLtmScope(next));
@@ -288,10 +260,8 @@ export function MemoryAvailabilityWorkbench({
               characters={visibleAvailabilityTargets.characters}
               personas={visibleAvailabilityTargets.personas}
               chats={visibleAvailabilityTargets.chats}
-              branches={visibleAvailabilityTargets.branches}
               selectedIds={selectedIds}
               tablistLabel={localizeUi("ui.longTermMemory.memoryvault.memoryAvailability")}
-              sectionCopy={availabilitySectionCopy(localizeUi)}
               onToggle={toggle}
             />
           </div>

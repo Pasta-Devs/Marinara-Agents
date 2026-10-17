@@ -1,15 +1,17 @@
 import { ChevronRight } from "lucide-react";
 import type { LtmMode, LtmNote } from "../../../../../shared/src/features/agents/long-term-memory/schema.js";
+import { getLtmScopeChatIds } from "../../../../../shared/src/features/agents/long-term-memory/scope.js";
 import { Button, StatusSurface } from "../shared-controls";
 import { type LtmTranslationFunction } from "../localization";
-import { AvailabilityTabRail, availabilitySectionCopy, type PickerTarget } from "./TargetPicker";
+import { AvailabilityTabRail, type AvailabilityPlaceKind } from "../AvailabilityTabRail";
+import type { PickerTarget } from "./TargetPicker";
 import { availabilityEntries, modes, splitBulkAvailabilityTarget } from "./vault-shared";
 import type { AvailabilityTargets } from "./vault-shared";
 import { Pill } from "./Pill";
 
 function bulkAvailabilityTargetMatchesEntry(target: string, entry: Pick<PickerTarget, "kind" | "id">) {
   const [kind, id] = splitBulkAvailabilityTarget(target);
-  return id === entry.id && (kind === "branch" ? entry.kind === "chat" : kind === entry.kind);
+  return id === entry.id && kind === entry.kind;
 }
 
 export function BulkAvailabilityWorkbench({
@@ -47,47 +49,41 @@ export function BulkAvailabilityWorkbench({
   );
   const hasChatRestriction = selectedTargets.some((target) => {
     const [kind] = splitBulkAvailabilityTarget(target);
-    return kind === "group" || kind === "chat" || kind === "branch";
+    return kind === "group" || kind === "chat";
   });
-  const hasBranchRestriction = selectedTargets.some((target) => splitBulkAvailabilityTarget(target)[0] === "branch");
   if (!hasChatRestriction) selectedIds.add("chat:all");
-  if (!hasBranchRestriction) selectedIds.add("branch:all");
-  const selectTarget = (nextKind: "character" | "persona" | "chat" | "branch", nextId: string) => {
+  // Branches are not places to add any more, but branch assignments the selected memories already have stay
+  // removable: they are listed under Chats as plain `chat:<branchId>` selections.
+  const branchAssignments = availabilityTargets.branches.filter((branch) =>
+    notes.some((note) => getLtmScopeChatIds(note.scope).includes(branch.id)),
+  );
+  const isBranchSelection = (target: string) => {
+    const [kind, id] = splitBulkAvailabilityTarget(target);
+    return kind === "chat" && availabilityTargets.branches.some((branch) => branch.id === id);
+  };
+  const chats = action === "remove" ? [...availabilityTargets.chats, ...branchAssignments] : availabilityTargets.chats;
+  const changeAction = (nextAction: "add" | "remove") => {
+    if (nextAction === "add" && selectedTargets.some(isBranchSelection))
+      onTargetsChange(selectedTargets.filter((target) => !isBranchSelection(target)));
+    onActionChange(nextAction);
+  };
+  const selectTarget = (nextKind: AvailabilityPlaceKind, nextId: string) => {
     if (nextId === "all") {
       const next = new Set(selectedTargets);
       for (const selected of next) {
         const [kind] = splitBulkAvailabilityTarget(selected);
-        if (nextKind === "chat" && (kind === "group" || kind === "chat" || kind === "branch")) next.delete(selected);
-        if (nextKind === "branch" && kind === "branch") next.delete(selected);
+        if (nextKind === "chat" && (kind === "group" || kind === "chat")) next.delete(selected);
       }
       onTargetsChange([...next]);
       return;
     }
     const chatTarget =
       nextKind === "chat" ? availabilityTargets.chats.find((candidate) => candidate.id === nextId) : undefined;
-    const branchTarget =
-      nextKind === "branch" ? availabilityTargets.branches.find((candidate) => candidate.id === nextId) : undefined;
     const selection =
       nextKind === "chat" && chatTarget?.groupId ? `group:${chatTarget.groupId}` : `${nextKind}:${nextId}`;
     const next = new Set(selectedTargets);
-    if (next.has(selection)) {
-      next.delete(selection);
-    } else {
-      const groupId = nextKind === "branch" ? branchTarget?.groupId : chatTarget?.groupId;
-      if (nextKind === "branch" && groupId) next.delete(`group:${groupId}`);
-      if (nextKind === "chat" && groupId) {
-        for (const selected of next) {
-          const [kind, id] = splitBulkAvailabilityTarget(selected);
-          if (
-            kind === "branch" &&
-            availabilityTargets.branches.some((branch) => branch.id === id && branch.groupId === groupId)
-          ) {
-            next.delete(selected);
-          }
-        }
-      }
-      next.add(selection);
-    }
+    if (next.has(selection)) next.delete(selection);
+    else next.add(selection);
     onTargetsChange([...next]);
   };
   const selectedPlaceLabels = selectedTargets.map((target) => {
@@ -97,9 +93,7 @@ export function BulkAvailabilityWorkbench({
         ? availabilityTargets.characters.find((item) => item.id === id)
         : kind === "persona"
           ? availabilityTargets.personas.find((item) => item.id === id)
-          : kind === "branch"
-            ? availabilityTargets.branches.find((item) => item.id === id)
-            : availabilityTargets.chats.find((item) => item.id === id);
+          : chats.find((item) => item.id === id);
     return { target, label: candidate?.label ?? id };
   });
   const outcomes = notes.map((note) => {
@@ -163,14 +157,14 @@ export function BulkAvailabilityWorkbench({
         >
           <Button
             aria-pressed={action === "add"}
-            onClick={() => onActionChange("add")}
+            onClick={() => changeAction("add")}
             className={action === "add" ? "bg-[var(--accent)]" : ""}
           >
             {localizeUi("ui.longTermMemory.memoryvault.addAvailability")}
           </Button>
           <Button
             aria-pressed={action === "remove"}
-            onClick={() => onActionChange("remove")}
+            onClick={() => changeAction("remove")}
             className={action === "remove" ? "bg-[var(--accent)]" : ""}
           >
             {localizeUi("ui.longTermMemory.memoryvault.removeAvailability")}
@@ -250,11 +244,9 @@ export function BulkAvailabilityWorkbench({
             <AvailabilityTabRail
               characters={availabilityTargets.characters}
               personas={availabilityTargets.personas}
-              chats={availabilityTargets.chats}
-              branches={availabilityTargets.branches}
+              chats={chats}
               selectedIds={selectedIds}
               tablistLabel={localizeUi("ui.longTermMemory.memoryvault.bulkMemoryAvailability")}
-              sectionCopy={availabilitySectionCopy(localizeUi)}
               onToggle={selectTarget}
             />
           </div>

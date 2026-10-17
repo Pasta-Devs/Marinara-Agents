@@ -10,6 +10,7 @@ export const ltmClientRoot = at(client);
 export const ltmSourcePaths = {
   activity: at(`${client}settings/ActivityView.tsx`),
   api: at(`${client}api.ts`),
+  availabilityTabRail: at(`${client}AvailabilityTabRail.tsx`),
   bulkAvailability: at(`${client}vault/BulkAvailabilityWorkbench.tsx`),
   detail: at(`${client}LongTermMemoryDetail.tsx`),
   interop: at(`${server}interop.ts`),
@@ -21,11 +22,10 @@ export const ltmSourcePaths = {
   routes: at(`${server}routes/notes.ts`),
   settings: at(`${client}settings/MemorySettings.tsx`),
   sharedControls: at(`${client}shared-controls.tsx`),
-  sourceScopeCombobox: at(`${client}sources/SourceScopeCombobox.tsx`),
+  sourceScopeCombobox: at(`${client}SourceScopeCombobox.tsx`),
   sourcesWorkspace: at(`${client}sources/SourcesWorkspace.tsx`),
   targetPicker: at(`${client}vault/TargetPicker.tsx`),
   types: at(`${client}types.ts`),
   vault: at(`${client}vault/MemoryVault.tsx`),
-  vaultScopePicker: at(`${client}vault/VaultScopePicker.tsx`),
   workspaceLayout: at(`${client}LtmWorkspace.tsx`),
 };
