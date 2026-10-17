@@ -23,17 +23,6 @@
     "low": "A small but actionable correctness, proof, or maintainability risk tied to changed behavior.",
     "nitpick": "Optional changed-line polish with no behavior risk, such as readability, naming, tiny duplication, stale comments, dead code, type clarity, or local consistency."
   },
-  "nitpick_policy": {
-    "max_count": 2,
-    "line_scope": "changed-line only",
-    "risk": "No behavior-risk requirement; use for optional polish only.",
-    "side": "RIGHT only"
-  },
-  "control_warn_types": {
-    "Proof Gap": "Important changed behavior lacks focused proof.",
-    "Review Limitation": "Dottore lacked full packet/context to prove a suspected issue.",
-    "Non-blocking Coverage": "Useful coverage or context note that should not block merge by itself."
-  },
   "repo_concerns": [
     "Package logic, default prompts, package-owned runtime code, metadata, artwork, manifests, artifacts, and catalog entries belong in this repository. Package loading, capability APIs and shared contracts, Engine UI and settings, storage, provider and model routing, orchestration, and compatibility handling belong in Marinara-Engine; a package change that patches or reimplements host behavior crosses that boundary.",
     "Bundles (packages/**/client.js, packages/**/server.mjs), artifacts, catalogs, file hashes, checksums, and catalog sizes are generated. Their source or build scripts change and they are rebuilt; they are never hand-edited.",
