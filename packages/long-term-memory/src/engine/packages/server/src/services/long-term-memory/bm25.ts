@@ -127,7 +127,11 @@ export function searchLtmBm25(
     nameSyllables?: ReadonlySet<string>;
   } = {},
 ) {
-  if (index.chunkCount === 0 || index.avgDocLength === 0) return [];
+  if (index.chunkCount === 0) return [];
+  // Issue #1438 (CodeRabbit): name aliases are not counted in document length, so an
+  // index whose chunks hold only bare one-syllable names has postings at zero average
+  // length. Normalize against 1 there; every other index keeps its own average.
+  const avgDocLength = index.avgDocLength || 1;
 
   const scores = new Map<string, number>();
   const queryTerms = new Set(tokenizeLtmText(query, options.nameSyllables).tokens);
@@ -173,7 +177,7 @@ export function searchLtmBm25(
       : postings) {
       const document = Object.hasOwn(index.documents, posting.chunkId) ? index.documents[posting.chunkId] : undefined;
       if (!document) continue;
-      const denominator = posting.count + K1 * (1 - B + B * (document.length / index.avgDocLength));
+      const denominator = posting.count + K1 * (1 - B + B * (document.length / avgDocLength));
       const score = idf * ((posting.count * (K1 + 1)) / denominator);
       const list = contributions.get(posting.chunkId) ?? [];
       list.push(score);

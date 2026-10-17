@@ -796,6 +796,12 @@ async function main() {
         "a name alias must not change BM25 document length",
       );
     }
+    const bareName = buildLtmBm25Index([{ ...rinProfile, text: "린" }]);
+    assert.deepEqual(
+      rinHit(bareName, names, "린"),
+      ["rin-profile"],
+      "an index of bare names alone must still be searchable",
+    );
   }
 
   // Issue #1295 (review): Hangul aliases must not inflate BM25 document length.
