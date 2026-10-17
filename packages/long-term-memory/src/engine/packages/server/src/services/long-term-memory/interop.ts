@@ -191,7 +191,7 @@ function conversationSummaries(metadata: Record<string, unknown>) {
     ...conversationSummaryEntries(metadata.weekSummaries, "week"),
   ].sort((left, right) => conversationDate(left.range)!.getTime() - conversationDate(right.range)!.getTime());
 }
-function summaries(metadata: Record<string, unknown>, chatMode: LtmMode) {
+export function summaries(metadata: Record<string, unknown>, chatMode: LtmMode) {
   if (chatMode === "conversation") return conversationSummaries(metadata);
   const raw = Array.isArray(metadata.summaryEntries) ? metadata.summaryEntries.map(object) : [],
     entries = raw.flatMap((entry, index) => {

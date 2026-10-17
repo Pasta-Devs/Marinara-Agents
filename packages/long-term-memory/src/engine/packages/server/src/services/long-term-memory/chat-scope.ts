@@ -1,7 +1,13 @@
 import { createHash } from "node:crypto";
-import type { LtmMode, LtmScope, LtmSubject } from "../../../../shared/src/features/agents/long-term-memory/schema.js";
+import type {
+  LtmMode,
+  LtmNote,
+  LtmScope,
+  LtmSubject,
+} from "../../../../shared/src/features/agents/long-term-memory/schema.js";
 import {
   chatOnlyLtmScope,
+  getLtmScopeChatIds,
   ltmModeForChatMode as sharedLtmModeForChatMode,
   withMergedLtmScopeLinks,
 } from "../../../../shared/src/features/agents/long-term-memory/scope.js";
@@ -67,6 +73,40 @@ export function resolveChatLtmScope(chat: {
 
 export function resolveChatLtmWriteScope(chat: { id: string; groupId?: string | null }) {
   return chatOnlyLtmScope(chat.id);
+}
+
+/**
+ * Issue #1433: Engine copies the summary entries a branch shares with its parent, ids included.
+ * A branch therefore also recalls a memory saved to another branch of its conversation when every
+ * chat summary the memory was extracted from is one of the branch's own. Recall only: the stored
+ * scope, saving and editing are unchanged.
+ */
+export function inheritedBranchLtmNoteIds(input: {
+  chatId: string;
+  branchChatIds: readonly string[];
+  summaryEntryIds: ReadonlySet<string>;
+  notes: readonly LtmNote[];
+}) {
+  const branchChatIds = new Set(input.branchChatIds.filter((id) => id !== input.chatId));
+  const conversationChatIds = new Set([input.chatId, ...branchChatIds]);
+  const notesById = new Map(input.notes.map((note) => [note.id, note]));
+  // A link to a missing note, or to a source that is not a shared chat summary, fails the test.
+  const sharedSummary = (noteId: string) => {
+    const provenance = notesById.get(noteId)?.provenance;
+    return (
+      provenance?.kind === "chat_summary" &&
+      conversationChatIds.has(provenance.sourceId) &&
+      provenance.entryId !== undefined &&
+      input.summaryEntryIds.has(provenance.entryId)
+    );
+  };
+  const inherited = new Set<string>();
+  for (const note of input.notes) {
+    if (!getLtmScopeChatIds(note.scope).some((id) => branchChatIds.has(id))) continue;
+    const sources = note.links.filter((link) => link.relation === "extracted_from");
+    if (sources.length && sources.every((link) => sharedSummary(link.target))) inherited.add(note.id);
+  }
+  return inherited;
 }
 
 export function ltmScopeFamilyId(scope: Pick<LtmScope, "chatId" | "chatIds" | "groupId" | "groupIds">) {

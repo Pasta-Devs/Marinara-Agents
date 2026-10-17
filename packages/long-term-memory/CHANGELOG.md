@@ -1,5 +1,9 @@
 # Long-Term Memory changelog
 
+## Unreleased
+
+- A new branch now recalls the memories made from the history it shares with the chat it came from. When Marinara Engine creates a branch, it copies the rolling summaries whose messages all come before the branch point. A memory saved to another branch of the same chat is now recalled in the branch too, as long as every chat summary it was made from is one of the branch's own. Memories made or updated from a summary written after the branch point, and memories from lorebooks, characters or typed in by hand, stay in the branch they were saved to. Memories never cross into another conversation. This changes recall only: where memories are saved, how they are edited and what the availability editor shows stay the same, and no stored data changes.
+
 ## 1.4.43 — 2026-10-17
 
 - The Long-Term Memory server routes now live in one file per area (notes, drafts, imports, maintenance and settings) instead of one 1,600-line file. Every endpoint keeps its path, size limit and response, so nothing changes in the app.

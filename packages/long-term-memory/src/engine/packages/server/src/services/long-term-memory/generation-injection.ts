@@ -5,7 +5,12 @@ import type {
   LtmRecallAttemptOutcome,
 } from "../../../../shared/src/features/agents/long-term-memory/schema.js";
 import { resolveLongTermMemoryRecallSettings } from "../../../../shared/src/features/agents/long-term-memory/runtime-settings.js";
-import { resolveChatLtmScope, ltmModeForChatMode } from "./chat-scope.js";
+import {
+  inheritedBranchLtmNoteIds,
+  ltmModeForChatMode,
+  parseLtmChatMetadata,
+  resolveChatLtmScope,
+} from "./chat-scope.js";
 import { readJsonFile, writeJsonAtomic } from "./atomic-json.js";
 import {
   estimateLongTermMemoryPromptOverhead,
@@ -20,6 +25,8 @@ import { uniqueStrings } from "./ltm-utils.js";
 import { recordLongTermMemoryAttempt, recordLongTermMemoryInjection, recordLongTermMemoryZeroMatch } from "./usage.js";
 import { recordLtmDebugEvent } from "./debug-log.js";
 import { getPackagePersistence, logger, withKeyedLock } from "./package-runtime.js";
+import { summaries } from "./interop.js";
+import { LongTermMemoryStorage } from "./storage.js";
 
 export type LongTermMemoryRecallReceipt = {
   version: 1;
@@ -49,6 +56,30 @@ function parseReceipt(value: unknown): LongTermMemoryRecallReceipt | null {
 
 function metadataRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : {};
+}
+
+// Issue #1433: the memories a branch shares with the other branches of its conversation through
+// copied summary entries. Day, week and game-session ids are date or sequence keys that two branches
+// can each write after the split, so only rolling summary entries, which Engine copies by id, count.
+// Unbranched chats and chats without such summaries do no extra work.
+async function branchInheritedNoteIds(
+  root: string,
+  chat: { id: string; groupId: string | null; metadata: unknown },
+  mode: LtmMode,
+) {
+  if (!chat.groupId) return undefined;
+  const summaryEntryIds = new Set(
+    summaries(parseLtmChatMetadata(chat.metadata), mode)
+      .filter((entry) => entry.origin !== "conversation_summary" && entry.origin !== "game_session")
+      .map((entry) => entry.id),
+  );
+  if (!summaryEntryIds.size) return undefined;
+  const branchChatIds = (await getPackagePersistence().listChats())
+    .filter((other) => other.groupId === chat.groupId && other.id !== chat.id)
+    .map((other) => other.id);
+  if (!branchChatIds.length) return undefined;
+  const notes = await new LongTermMemoryStorage(root).listNotes({ skipInvalid: true });
+  return inheritedBranchLtmNoteIds({ chatId: chat.id, branchChatIds, summaryEntryIds, notes });
 }
 
 // Invocation-order timestamps, strictly increasing per chat, so two recalls
@@ -155,6 +186,7 @@ export async function prepareGenerationLongTermMemory(input: {
     budgetTokens > promptOverheadTokens ? budgetTokens - promptOverheadTokens : budgetTokens;
   let retrieval;
   try {
+    const inheritedNoteIds = await branchInheritedNoteIds(input.root, chat, mode);
     retrieval = await retrieveLongTermMemory({
       root: input.root,
       mode,
@@ -173,6 +205,7 @@ export async function prepareGenerationLongTermMemory(input: {
       keywordWeight: recall.weights.keywordWeight,
       explain: recall.debugEnabled,
       rejectedLimit,
+      inheritedNoteIds,
       signal: input.signal,
     });
   } catch (error) {

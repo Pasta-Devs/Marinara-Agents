@@ -49,6 +49,8 @@ export type RetrieveLongTermMemoryInput = MemoryRecallEmbeddingOptions & {
   dedupeExactText?: boolean;
   /** Preloaded recall index so callers can run several bounded queries without reloading the vault. */
   index?: LtmRecallIndex;
+  /** Notes recalled in addition to the scope match, such as a sibling branch's memories from shared summaries. */
+  inheritedNoteIds?: ReadonlySet<string>;
 };
 
 function cosine(a: number[], b: number[]) {
@@ -113,9 +115,11 @@ export async function retrieveLongTermMemory(input: RetrieveLongTermMemoryInput)
           return noteCharacterIds.length > 0 && noteCharacterIds.every((id) => exclusiveCharacterIds.includes(id));
         }
         const hasScope = !isGlobalLtmScope(input.scope) || characterIds.length > 0;
-        return matchesLtmScope(
-          { id: chunk.noteId, type: chunk.noteType, scope: chunk.scope },
-          hasScope ? { scope: input.scope, characterIds, includeGlobal: true } : { scope: {}, includeGlobal: true },
+        return (
+          matchesLtmScope(
+            { id: chunk.noteId, type: chunk.noteType, scope: chunk.scope },
+            hasScope ? { scope: input.scope, characterIds, includeGlobal: true } : { scope: {}, includeGlobal: true },
+          ) || input.inheritedNoteIds?.has(chunk.noteId)
         );
       })
       .map((chunk) => chunk.id),
