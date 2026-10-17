@@ -61,7 +61,14 @@ import type { ScopeTarget } from "../sources/source-shared";
 import { TargetPicker, type PickerTarget } from "./TargetPicker";
 import type { ScopeTargetLocalCharacter } from "../scope-targets";
 import { normalizeDetailName } from "./detail-name";
-import { availabilityEntries, hasExplicitScope, modes, sameScope, splitBulkAvailabilityTarget } from "./vault-shared";
+import {
+  availabilityEntries,
+  hasExplicitScope,
+  modes,
+  sameScope,
+  splitBulkAvailabilityTarget,
+  withWholeChatBranches,
+} from "./vault-shared";
 import type { AvailabilityTargets, Target } from "./vault-shared";
 import { MemoryAvailabilityWorkbench } from "./MemoryAvailabilityWorkbench";
 import { BulkAvailabilityWorkbench } from "./BulkAvailabilityWorkbench";
@@ -1817,7 +1824,11 @@ export default function MemoryVault({
     );
     setBusy(action);
     try {
-      const availabilityScope = bulkAvailabilityScope(bulkAvailabilityTargets);
+      const availabilityScope = bulkAvailabilityScope(
+        action === "remove-availability"
+          ? withWholeChatBranches(bulkAvailabilityTargets, availabilityTargets.chats)
+          : bulkAvailabilityTargets,
+      );
       const result = await request<LtmBulkNoteResult>("/notes/batch", "POST", {
         noteIds: ids,
         ...(action === "archive" ? { archive: "notes_only" } : {}),
@@ -2874,12 +2885,17 @@ export default function MemoryVault({
                         <p className="mt-1 text-xs text-[var(--muted-foreground)]">
                           {hasExplicitScope(draft.scope)
                             ? localizeUi("ui.longTermMemory.memoryvault.availabilitySummary", {
-                                places: availabilityEntries(draft.scope, pickerTargets, {
-                                  chat: localizeUi("ui.longTermMemory.memoryvault.unavailableChat"),
-                                  group: localizeUi("ui.longTermMemory.memoryvault.unavailableChat"),
-                                  character: localizeUi("ui.longTermMemory.memoryvault.unavailableCharacter"),
-                                  persona: localizeUi("ui.longTermMemory.memoryvault.unavailablePersona"),
-                                }).length,
+                                places: availabilityEntries(
+                                  draft.scope,
+                                  pickerTargets,
+                                  {
+                                    chat: localizeUi("ui.longTermMemory.memoryvault.unavailableChat"),
+                                    group: localizeUi("ui.longTermMemory.memoryvault.unavailableChat"),
+                                    character: localizeUi("ui.longTermMemory.memoryvault.unavailableCharacter"),
+                                    persona: localizeUi("ui.longTermMemory.memoryvault.unavailablePersona"),
+                                  },
+                                  availabilityTargets.chats,
+                                ).length,
                                 modes: draft.modes.length,
                               })
                             : localizeUi("ui.longTermMemory.memoryvault.availableEverywhere")}

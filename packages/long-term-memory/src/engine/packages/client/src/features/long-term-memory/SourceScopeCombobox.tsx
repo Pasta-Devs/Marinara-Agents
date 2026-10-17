@@ -2,16 +2,18 @@ import { type KeyboardEvent, useEffect, useId, useRef, useState } from "react";
 import { Check, ChevronDown, Search } from "lucide-react";
 import { inputClass } from "./shared-controls";
 import { scopeKindCategories } from "./display-labels";
-import { useLtmTranslation } from "./localization";
+import { selectLtmPluralForm, useLtmTranslation } from "./localization";
 import { nextTabIndex } from "./tab-keys";
 import { targetDisplayLabel } from "./sources/source-shared";
 import type { ScopeTarget, ScopeTargetKind } from "./sources/source-shared";
 
+const showNoMemoriesId = "no-memories:show";
+
 /**
  * The single-place picker for Sources and the Memory Vault filters. `memoryGroups` splits the list into places
- * with memories and a collapsed group without them; searching opens that group.
+ * with memories and a collapsed group without them; searching opens that group. While collapsed, the group is a
+ * "Show N places" option, so the listbox holds only options and groups.
  */
-
 export function SourceScopeCombobox({
   targets,
   value,
@@ -35,7 +37,7 @@ export function SourceScopeCombobox({
   disabled?: boolean;
   memoryGroups?: { has: (target: ScopeTarget) => boolean; withLabel: string; withoutLabel: string };
 }) {
-  const { t: localizeUi } = useLtmTranslation();
+  const { locale, t: localizeUi } = useLtmTranslation();
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [activeKind, setActiveKind] = useState<ScopeTargetKind>("all");
@@ -79,6 +81,8 @@ export function SourceScopeCombobox({
   const optionTargets = memoryGroups
     ? [...pinnedTargets, ...targetsWithMemories, ...(noMemoriesOpen ? targetsWithoutMemories : [])]
     : [...pinnedTargets, ...regularTargets];
+  const showNoMemories = Boolean(memoryGroups && !noMemoriesOpen && targetsWithoutMemories.length);
+  const optionIds = [...optionTargets.map((target) => target.id), ...(showNoMemories ? [showNoMemoriesId] : [])];
   const [highlightedId, setHighlightedId] = useState(value);
   useEffect(() => setHighlightedId(value), [value]);
   const close = () => {
@@ -91,7 +95,7 @@ export function SourceScopeCombobox({
   const selectKind = (kind: ScopeTargetKind, focusTab = false) => {
     setActiveKind(kind);
     setHighlightedId("");
-    resetNoMemories();
+    if (!needle) resetNoMemories();
     if (focusTab) document.getElementById(`${tablistId}-${kind}`)?.focus({ preventScroll: true });
   };
 
@@ -112,20 +116,29 @@ export function SourceScopeCombobox({
     };
   }, [open]);
 
-  const choose = (target: ScopeTarget) => {
-    onChange(target.id);
+  // The "Show N places" row opens its group without choosing a place. A place moves focus to the place button
+  // before onChange, so an unsaved-changes prompt records the button, not an option the close removes.
+  const choose = (id: string) => {
+    if (id === showNoMemoriesId) {
+      noMemoriesPreference.current = true;
+      setNoMemoriesOpen(true);
+      setHighlightedId(targetsWithoutMemories[0]?.id ?? "");
+      return;
+    }
+    triggerRef.current?.focus({ preventScroll: true });
     close();
+    onChange(id);
   };
   const moveHighlight = (direction: 1 | -1) => {
-    if (!optionTargets.length) return;
-    const currentIndex = optionTargets.findIndex((target) => target.id === highlightedId);
+    if (!optionIds.length) return;
+    const currentIndex = optionIds.indexOf(highlightedId);
     const nextIndex =
       currentIndex < 0
         ? direction === 1
           ? 0
-          : optionTargets.length - 1
-        : (currentIndex + direction + optionTargets.length) % optionTargets.length;
-    setHighlightedId(optionTargets[nextIndex]!.id);
+          : optionIds.length - 1
+        : (currentIndex + direction + optionIds.length) % optionIds.length;
+    setHighlightedId(optionIds[nextIndex]!);
   };
   const handleTabKey = (event: KeyboardEvent<HTMLButtonElement>, index: number) => {
     const nextIndex = nextTabIndex(event.key, index, categories.length);
@@ -145,7 +158,7 @@ export function SourceScopeCombobox({
       className={`mari-editor-action mari-editor-action--compact flex min-h-11 w-full items-center gap-2 rounded-none border-t-0 px-3 py-2 text-left text-xs last:border-b-0 ${target.id === highlightedId ? "bg-[var(--secondary)]" : target.id === value ? "bg-[var(--primary)]/10" : ""}`}
       onMouseDown={(event) => event.preventDefault()}
       onMouseEnter={() => setHighlightedId(target.id)}
-      onClick={() => choose(target)}
+      onClick={() => choose(target.id)}
     >
       <Check
         aria-hidden="true"
@@ -228,9 +241,7 @@ export function SourceScopeCombobox({
               aria-label={localizeUi("ui.longTermMemory.sourcesworkspace.searchScopes")}
               aria-controls={listId}
               aria-activedescendant={
-                highlightedId && optionTargets.some((target) => target.id === highlightedId)
-                  ? `${listId}-option-${highlightedId}`
-                  : undefined
+                highlightedId && optionIds.includes(highlightedId) ? `${listId}-option-${highlightedId}` : undefined
               }
               onChange={(event) => {
                 setQuery(event.target.value);
@@ -240,12 +251,9 @@ export function SourceScopeCombobox({
                 if (event.key === "ArrowDown" || event.key === "ArrowUp") {
                   event.preventDefault();
                   moveHighlight(event.key === "ArrowDown" ? 1 : -1);
-                } else if (event.key === "Enter") {
-                  const target = optionTargets.find((item) => item.id === highlightedId);
-                  if (target) {
-                    event.preventDefault();
-                    choose(target);
-                  }
+                } else if (event.key === "Enter" && optionIds.includes(highlightedId)) {
+                  event.preventDefault();
+                  choose(highlightedId);
                 }
               }}
             />
@@ -312,22 +320,34 @@ export function SourceScopeCombobox({
                       {targetsWithMemories.map(option)}
                     </div>
                   ) : null}
-                  {targetsWithoutMemories.length ? (
-                    <details
-                      open={noMemoriesOpen}
-                      onToggle={(event) => setNoMemoriesOpen(event.currentTarget.open)}
-                      data-ltm-scope-presence="no-memories"
-                    >
-                      <summary
-                        onClick={() => {
-                          noMemoriesPreference.current = !noMemoriesOpen;
-                        }}
-                        className="flex min-h-11 cursor-pointer list-none items-center border-b border-[var(--marinara-editor-divider)] px-3 py-2 text-xs font-semibold uppercase tracking-wide text-[var(--muted-foreground)] [&::-webkit-details-marker]:hidden"
-                      >
+                  {targetsWithoutMemories.length && noMemoriesOpen ? (
+                    <div role="group" aria-label={memoryGroups.withoutLabel} data-ltm-scope-presence="no-memories">
+                      <p className="border-b border-[var(--marinara-editor-divider)] bg-[var(--secondary)] px-3 py-1 text-xs font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">
                         {memoryGroups.withoutLabel}
-                      </summary>
+                      </p>
                       {targetsWithoutMemories.map(option)}
-                    </details>
+                    </div>
+                  ) : null}
+                  {showNoMemories ? (
+                    <button
+                      type="button"
+                      role="option"
+                      id={`${listId}-option-${showNoMemoriesId}`}
+                      aria-selected={false}
+                      data-highlighted={highlightedId === showNoMemoriesId}
+                      data-ltm-scope-show-no-memories
+                      className={`mari-editor-action mari-editor-action--compact flex min-h-11 w-full items-center rounded-none border-t-0 px-3 py-2 text-left text-xs font-semibold text-[var(--muted-foreground)] last:border-b-0 ${highlightedId === showNoMemoriesId ? "bg-[var(--secondary)]" : ""}`}
+                      onMouseDown={(event) => event.preventDefault()}
+                      onMouseEnter={() => setHighlightedId(showNoMemoriesId)}
+                      onClick={() => choose(showNoMemoriesId)}
+                    >
+                      {localizeUi(
+                        selectLtmPluralForm(locale, targetsWithoutMemories.length) === "one"
+                          ? "ui.longTermMemory.memoryvault.showNoMemoriesOne"
+                          : "ui.longTermMemory.memoryvault.showNoMemories",
+                        { count: targetsWithoutMemories.length.toLocaleString(locale) },
+                      )}
+                    </button>
                   ) : null}
                 </>
               ) : (

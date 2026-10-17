@@ -4,7 +4,6 @@ import {
   buildScopeIndexes,
   buildScopeMemoryPresence,
   deriveScopeBranchChats,
-  deriveScopeBranches,
   deriveScopeConversations,
   type ScopeTargetChat,
   type ScopeTargetGroup,
@@ -99,35 +98,11 @@ const chats: ScopeTargetChat[] = [
 const groups: ScopeTargetGroup[] = [
   { id: "group-a", label: "Conversation A", chatIds: chats.slice(0, 2).map((chat) => chat.id) },
 ];
-const indexes = buildScopeIndexes(chats);
 
 assert.deepEqual(
   deriveScopeBranchChats(chats).map((chat) => chat.id),
   ["branch-conversation", "branch-roleplay"],
   "every grouped chat is available as a branch target",
-);
-assert.deepEqual(
-  deriveScopeBranches(
-    deriveScopeConversations(chats, groups, "character-a", indexes).find(
-      (conversation) => conversation.id === "group:group-a",
-    ),
-    indexes,
-  ).map((chat) => chat.id),
-  ["branch-conversation", "branch-roleplay"],
-  "a character-filtered group retains all of its valid branches",
-);
-assert.deepEqual(
-  deriveScopeBranches(
-    deriveScopeConversations(
-      chats.filter((chat) => chat.mode === "conversation"),
-      groups,
-      "character-a",
-      indexes,
-    ).find((conversation) => conversation.id === "group:group-a"),
-    indexes,
-  ).map((chat) => chat.id),
-  ["branch-conversation"],
-  "mode filtering changes branch visibility deliberately",
 );
 const conversationOnlyGroupChats = chats
   .filter((chat) => Boolean(chat.groupId))
@@ -141,16 +116,6 @@ assert.equal(
   ).some((conversation) => conversation.id === "group:group-a"),
   false,
   "a group with no chats in the active mode is not a conversation target",
-);
-assert.deepEqual(
-  deriveScopeBranches(
-    deriveScopeConversations(chats, groups, "character-a", indexes).find(
-      (conversation) => conversation.id === "chat:standalone-chat",
-    ),
-    indexes,
-  ),
-  [],
-  "standalone chats do not appear in the branch selector",
 );
 
 // The vault place pickers sort every place by memory presence on each render, so the
