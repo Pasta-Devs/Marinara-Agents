@@ -42,7 +42,7 @@ concurrency:
 jobs:
   review:
     # Fork lab: the Promansis Engine build. Switch to Pasta-Devs/Marinara-Engine@<sha> once the engine lands upstream.
-    uses: Promansis/Marinara-Engine/.github/workflows/dottore-review.yml@43c62784ddbf441f8dbaee85b130775dd0741b0f
+    uses: Promansis/Marinara-Engine/.github/workflows/dottore-review.yml@082d50d14c2e7d72a35a152b04c4399ca472bd4a
     with:
       pr_number: ${{ inputs.pr_number }}
       comment_body: ${{ inputs.comment_body }}
