@@ -218,6 +218,18 @@
     "long-term-memory": {
       "versions": [
         {
+          "version": "1.4.53",
+          "date": "2026-10-18",
+          "notes": "- When the settings fail to reload after Reset settings or a backup import, Retry on the Memory Settings load error now loads the new settings. Before, Retry brought back the settings from before the reset or import, so a later Save could write them back. Reset settings also shows the loading message while it reloads the settings, instead of the old ones.",
+          "highlight": false
+        },
+        {
+          "version": "1.4.52",
+          "date": "2026-10-18",
+          "notes": "- A suggestion that extraction leaves out because it links to a memory the extraction could not find or did not keep now says so. Before, it said the suggestion \"used the wrong memory stream\". The low-overlap warning now checks the whole source, not only its start, and is no longer added to a suggestion that validation leaves out straight away.\n- A relationship memory whose text starts with \"Summary:\" now keeps that sentence in the chat prompt. Before, the relationship scores line pushed it out.\n- After a reload, Retry failed on a finished import retries the same sources as before the reload. Before, it also retried sources that were not found, which are still not found.",
+          "highlight": false
+        },
+        {
           "version": "1.4.51",
           "date": "2026-10-18",
           "notes": "- The debug log now records a \"Candidate reconciliation\" entry for every extracted source, even when nothing matched. It counts the target memories (other than characters and relationships) that reused an existing memory, matched no other existing memory, were ambiguous, or were left for review because the search window was incomplete. Copy JSON shows the counts. Before, the entry was recorded only when a candidate matched or warned, so a source whose candidates all became new memories left no entry.",
@@ -323,18 +335,6 @@
           "version": "1.4.33",
           "date": "2026-10-14",
           "notes": "- A character's name now keeps full keyword credit when the chat does not capitalise it in the middle of a sentence. Until now a single keyword match counted as a name only when it was capitalised in the middle of a sentence, so a name at the start of a sentence, in lowercase, or in a script without letter case such as Korean was capped at half credit. Recall now also treats each word of a character memory's title as a name, ignoring case and common stop words. A single ordinary keyword is still capped, and nothing else changes: no new lane and no change to the threshold, text search or vector scores. Only the words of the title are matched; nicknames and aliases are not.",
-          "highlight": false
-        },
-        {
-          "version": "1.4.32",
-          "date": "2026-10-13",
-          "notes": "- Make recall do less work on a large vault. A turn no longer re-reads and re-hashes every memory when nothing in the vault has changed since the last recall; the first recall after a restart still checks the whole vault, so memories you edit outside Marinara are picked up after a restart. Editing a memory re-embeds only the memories whose text changed instead of the whole vault, and the first rebuild after this update still re-embeds everything once. Extraction that applied no changes no longer rebuilds the recall index.",
-          "highlight": false
-        },
-        {
-          "version": "1.4.31",
-          "date": "2026-10-13",
-          "notes": "- Extraction now asks for a `caused_by` link from an event to the event that directly caused it when both are in the same response, and linked recall follows that link in either direction, as well as a thread's `paid_off_in` link to the event that paid it off. The seed rule and the 0.2 own-relevance floor are unchanged, and a graph weight of 0 still turns linked recall off. Existing vaults gain these links only after a chat is extracted again; nothing is backfilled.",
           "highlight": false
         }
       ]

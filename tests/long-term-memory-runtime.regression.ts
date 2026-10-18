@@ -435,6 +435,23 @@ async function main() {
         { maxTokens: 2048 },
       );
       assert.match(relationshipScores?.content ?? "", /- Relationship scores: trust 75\/100 \(\+5\)\n  Trust fact/);
+      const labelledRelationship = serializeLongTermMemoryPrompt(
+        [
+          makeChunk(
+            "relationship",
+            "rel_labelled",
+            "Summary: Ash trusts Damo after the gate incident.\nDamo keeps her secret.",
+            "Ash & Damo",
+            { dimensions: { trust: 62 } },
+          ),
+        ],
+        { maxTokens: 2048 },
+      );
+      assert.match(
+        labelledRelationship?.content ?? "",
+        /- Relationship scores: trust 62\/100\n  Ash trusts Damo after the gate incident\.\n  Damo keeps her secret\./,
+        "the scores line must not push a leading summary label out of the prompt",
+      );
 
       const legacyBullets = serializeLongTermMemoryPrompt(
         [

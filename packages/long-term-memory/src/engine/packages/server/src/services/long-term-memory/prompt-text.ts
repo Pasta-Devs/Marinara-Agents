@@ -67,7 +67,8 @@ export function formatLtmChunkPromptText(chunk: LtmMemoryChunk) {
 
   if (chunk.noteType === "relationship") {
     const scoresLine = formatLtmRelationshipScoresLine(chunk.dimensions, chunk.dimensionChanges);
-    return scoresLine ? `${scoresLine}\n${text}` : text;
+    // The serializer keeps a `text:`/`summary:` line only when it comes first, so strip the label before the scores line.
+    return scoresLine ? `${scoresLine}\n${text.replace(/^(?:[-*]\s+)?(?:text|summary):[ \t]*/i, "")}` : text;
   }
 
   if (chunk.noteType === "thread") {

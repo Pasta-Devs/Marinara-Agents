@@ -1,8 +1,14 @@
 # Long-Term Memory changelog
 
-## Unreleased
+## 1.4.53 — 2026-10-18
 
 - When the settings fail to reload after Reset settings or a backup import, Retry on the Memory Settings load error now loads the new settings. Before, Retry brought back the settings from before the reset or import, so a later Save could write them back. Reset settings also shows the loading message while it reloads the settings, instead of the old ones.
+
+## 1.4.52 — 2026-10-18
+
+- A suggestion that extraction leaves out because it links to a memory the extraction could not find or did not keep now says so. Before, it said the suggestion "used the wrong memory stream". The low-overlap warning now checks the whole source, not only its start, and is no longer added to a suggestion that validation leaves out straight away.
+- A relationship memory whose text starts with "Summary:" now keeps that sentence in the chat prompt. Before, the relationship scores line pushed it out.
+- After a reload, Retry failed on a finished import retries the same sources as before the reload. Before, it also retried sources that were not found, which are still not found.
 
 ## 1.4.51 — 2026-10-18
 

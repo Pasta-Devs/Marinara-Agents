@@ -349,6 +349,45 @@ async function main() {
       /quota exceeded/u,
     );
     assert.equal(calls.length, 1, "permanent quota errors do not trigger compatibility fallback");
+
+    const { validateLtmEvidenceUnits } = await import(`${source}/evidence-unit-validation.ts`);
+    const longSourceText = `${Array.from({ length: 600 }, (_, index) => `filler${index}`).join(" ")} ${sourceNote.sections.source.text}`;
+    const keptUnit = { ...validUnit, id: randomUUID() };
+    const unknownLinkUnit = {
+      ...validUnit,
+      id: randomUUID(),
+      subjectId: "brass_lamp_lit",
+      text: "Quentin lit the brass lamp.",
+      links: [...validUnit.links, { target: "char_missing_ally", relation: "involves" }],
+    };
+    const unrelatedUnit = {
+      ...validUnit,
+      id: randomUUID(),
+      subjectId: "harbor_bell_rang",
+      text: "The harbor bell rang twice.",
+    };
+    const lexical = validateLtmEvidenceUnits({
+      units: [keptUnit, unknownLinkUnit, unrelatedUnit],
+      sourceText: longSourceText,
+      sourceNote,
+      existingNotes: [],
+      expectedSourceHash: sourceHash,
+      allowedBuckets: ["timeline_event"],
+    });
+    assert.deepEqual(
+      lexical.keptUnits.map((unit: any) => unit.subjectId),
+      ["observatory_gate_sealed", "harbor_bell_rang"],
+    );
+    assert.equal(lexical.droppedCandidates.length, 1);
+    assert.match(lexical.droppedCandidates[0]!.message, /linked to a memory this extraction could not find/u);
+    assert.doesNotMatch(lexical.droppedCandidates[0]!.message, /wrong memory stream|char_missing_ally/u);
+    assert.deepEqual(
+      lexical.diagnostics
+        .filter((diagnostic: any) => diagnostic.code === "low_lexical_evidence")
+        .map((diagnostic: any) => diagnostic.candidateIndex),
+      [2],
+      "past the 500th source token still overlaps, and a dropped unit carries no warning",
+    );
     const { processLongTermMemorySource, processLongTermMemorySourceBatch } = await import(
       `${source}/source-processing.ts`
     );

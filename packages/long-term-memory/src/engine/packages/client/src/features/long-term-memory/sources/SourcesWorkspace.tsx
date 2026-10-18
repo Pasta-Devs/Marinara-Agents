@@ -58,6 +58,7 @@ import {
   cancelLtmSourceTask,
   getLtmSourceTaskSnapshot,
   markLtmSourceTaskViewed,
+  retryableSourceIds,
   startLtmSourceTask,
   subscribeLtmSourceTask,
   type LtmSourceTaskContract,
@@ -570,12 +571,7 @@ export default function SourcesWorkspace({
   const selectedIds = new Set(selections[selectionKey] ?? []);
   const importedSelectionKey = `${selectionKey}:imported`;
   const selectedImportedIds = new Set(selections[importedSelectionKey] ?? []);
-  const retryableIds = importResult
-    ? [
-        ...importResult.imported.filter((item) => item.retryable).map((item) => item.sourceId),
-        ...importResult.writeFailures.filter((item) => item.retryable).map((item) => item.sourceId),
-      ]
-    : [];
+  const retryableIds = importResult ? retryableSourceIds(importResult) : [];
   const retryableIdSet = new Set(retryableIds);
   const selectableRows = rows.filter((row) => row.status === "pending" || retryableIdSet.has(row.sourceId));
   const lorebookImportSelectionKey = `${selectionKey}:lorebook-import`;
@@ -1085,13 +1081,9 @@ export default function SourcesWorkspace({
       });
       if (task.status === "completed") {
         const result = task.result as LtmImportSourceNotesResponse;
-        const failedIds = [
-          ...result.imported.filter((item) => item.retryable).map((item) => item.sourceId),
-          ...result.writeFailures.filter((item) => item.retryable).map((item) => item.sourceId),
-        ];
         setSelections((current) => ({
           ...current,
-          [contract.selectionKey]: failedIds,
+          [contract.selectionKey]: retryableSourceIds(result),
         }));
         void invalidateAfterMutation().catch(() => undefined);
         void (contract.source === "lorebooks" ? lorebookPreview.refetch() : preview.refetch()).catch(() => undefined);
@@ -1336,15 +1328,7 @@ export default function SourcesWorkspace({
     latestSourceTask.safeResult
       ? latestSourceTask.safeResult
       : null;
-  const restoredRetryIds = restoredImportResult
-    ? Array.from(
-        new Set([
-          ...(restoredImportResult.items?.filter((item) => item.retryable).map((item) => item.sourceId) ?? []),
-          ...(restoredImportResult.writeFailures?.filter((item) => item.retryable).map((item) => item.sourceId) ?? []),
-          ...(restoredImportResult.missingSourceIds ?? []),
-        ]),
-      )
-    : [];
+  const restoredRetryIds = restoredImportResult ? retryableSourceIds(restoredImportResult) : [];
   const restoredImportResultPanel = restoredImportResult ? (
     <section
       ref={importResultRef}

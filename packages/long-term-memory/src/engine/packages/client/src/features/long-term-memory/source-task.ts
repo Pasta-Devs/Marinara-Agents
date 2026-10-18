@@ -260,6 +260,19 @@ export function markLtmSourceTaskViewed(id: string) {
   notify();
 }
 
+type RetryableSourceRow = { sourceId: string; retryable?: boolean };
+
+// One retry set for a live response (`imported`) and a restored safe result (`items`). Missing ids
+// are not retryable: retrying one re-requests the same id and gets the same result.
+export function retryableSourceIds(result: {
+  imported?: readonly RetryableSourceRow[];
+  items?: readonly RetryableSourceRow[];
+  writeFailures?: readonly RetryableSourceRow[];
+}) {
+  const rows = [...(result.imported ?? result.items ?? []), ...(result.writeFailures ?? [])];
+  return Array.from(new Set(rows.filter((row) => row.retryable).map((row) => row.sourceId)));
+}
+
 export function startLtmSourceTask<T>(options: {
   kind: LtmSourceTaskKind;
   contract: LtmSourceTaskContract;
