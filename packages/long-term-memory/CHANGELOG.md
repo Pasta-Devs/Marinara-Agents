@@ -1,5 +1,9 @@
 # Long-Term Memory changelog
 
+## Unreleased
+
+- The Vault and Activity rows now show the Marinara focus ring when you tab to them, and the Review freshness chip and the Vault "Edited manually" chip show their soft accent border, on every supported Marinara Engine version. Before, Engine 2.4.0 to 2.4.4 showed the browser's default focus ring on those rows and a full-strength border on those chips.
+
 ## 1.4.48 — 2026-10-17
 
 - The daily cleanup now also deletes invalidated drafts that nobody discarded once they are older than the audit window (30 days by default), counted from when they were invalidated. A draft is invalidated when the memory or detail it targets is deleted, so Review can only discard it. Pending drafts still stay until you review them.
