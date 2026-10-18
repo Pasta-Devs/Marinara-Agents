@@ -641,24 +641,20 @@ async function extractLongTermMemoryFromSourceNoteInner(
   // The recall index is the preparation snapshot. The commit path recompiles against fresh
   // candidates rather than re-scanning here.
   const { reconciliation, targetResolution, compiled } = await compileExtraction({ index: recallIndex });
-  if (reconciliation.remaps.size > 0 || reconciliation.diagnostics.length > 0) {
-    await recordLtmDebugEvent({
-      operationId: options.operationId,
-      root: options.root,
-      phase: "retrieval",
-      action: "candidate_reconciliation",
-      status: reconciliation.diagnostics.length > 0 ? "warning" : "ok",
-      sourceNoteId: sourceNote.id,
-      counts: {
-        reconciledNotes: reconciliation.remaps.size,
-        ambiguousCandidates: reconciliation.diagnostics.length,
-      },
-      details: {
-        matches: reconciliation.matches,
-        remaps: Object.fromEntries(reconciliation.remaps),
-      },
-    });
-  }
+  // Always recorded, so the create rate (groups matching no other existing note) can be read from the log.
+  await recordLtmDebugEvent({
+    operationId: options.operationId,
+    root: options.root,
+    phase: "retrieval",
+    action: "candidate_reconciliation",
+    status: reconciliation.counts.ambiguous + reconciliation.counts.incomplete > 0 ? "warning" : "ok",
+    sourceNoteId: sourceNote.id,
+    counts: reconciliation.counts,
+    details: {
+      matches: reconciliation.matches,
+      remaps: Object.fromEntries(reconciliation.remaps),
+    },
+  });
   const compilerExistingNotes = targetResolution.existingNotes;
   if (compilerExistingNotes.length !== existingNotes.length || targetResolution.remaps.size > 0) {
     await recordLtmDebugEvent({

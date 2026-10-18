@@ -34,6 +34,20 @@ type ReconciliationStorage = {
 export type CandidateReconciliationMatch = {
   derivedNoteId: string;
   noteId: string;
+  matchKind: "identity" | "content";
+};
+
+/**
+ * Every candidate group ends in exactly one bucket, so `groups` is the sum of the other four.
+ * `created` means no other existing note matched; a group whose derived id already exists is
+ * counted there too, because that note is excluded here and updated downstream.
+ */
+export type CandidateReconciliationCounts = {
+  groups: number;
+  matched: number;
+  created: number;
+  ambiguous: number;
+  incomplete: number;
 };
 
 export type CandidateReconciliationResult = {
@@ -41,6 +55,7 @@ export type CandidateReconciliationResult = {
   diagnostics: LtmExtractionDiagnostic[];
   remaps: Map<string, string>;
   matches: CandidateReconciliationMatch[];
+  counts: CandidateReconciliationCounts;
 };
 
 /**
@@ -87,6 +102,13 @@ export async function reconcileEvidenceUnitCandidates(options: {
   const remaps = new Map<string, string>();
   const diagnostics: LtmExtractionDiagnostic[] = [];
   const matches: CandidateReconciliationMatch[] = [];
+  const counts: CandidateReconciliationCounts = {
+    groups: groups.size,
+    matched: 0,
+    created: 0,
+    ambiguous: 0,
+    incomplete: 0,
+  };
   for (const [derivedNoteId, groupUnits] of groups) {
     const candidateIndex = targetIndexes.get(derivedNoteId)!;
     const noteType = targetNoteTypeForUnit(groupUnits[0]!);
@@ -130,7 +152,10 @@ export async function reconcileEvidenceUnitCandidates(options: {
       // A singleton is only safe to reuse when no ranked note was dropped and the note cap kept every
       // ranked note; otherwise a compatible note can sit past the budget.
       complete = !retrieval.truncated && rankedNoteIds.length <= maxCandidates;
-      if (candidateNoteIds.length === 0) continue;
+      if (candidateNoteIds.length === 0) {
+        counts.created += 1;
+        continue;
+      }
       const notesById = await options.storage.getNotesByIds(candidateNoteIds);
       candidates = candidateNoteIds
         .map((noteId) => notesById.get(noteId))
@@ -145,13 +170,17 @@ export async function reconcileEvidenceUnitCandidates(options: {
       ? identityMatches
       : candidates.filter((note) => contentMatchesGroup(groupUnits, note));
 
+    const matchKind = identityMatches.length ? "identity" : "content";
+
     if (plausible.length === 1) {
       if (complete) {
         const resolvedNoteId = plausible[0]!.id;
         remaps.set(derivedNoteId, resolvedNoteId);
-        matches.push({ derivedNoteId, noteId: resolvedNoteId });
+        matches.push({ derivedNoteId, noteId: resolvedNoteId, matchKind });
+        counts.matched += 1;
         continue;
       }
+      counts.incomplete += 1;
       diagnostics.push({
         severity: "warning",
         code: "candidate_reconciliation_incomplete",
@@ -160,13 +189,14 @@ export async function reconcileEvidenceUnitCandidates(options: {
         noteId: derivedNoteId,
         message: `Candidate target ${derivedNoteId} matched ${plausible[0]!.id}, but the bounded candidate window may be incomplete; leaving it unattached for review.`,
         details: {
-          matchKind: identityMatches.length ? "identity" : "content",
+          matchKind,
           candidateTargetNoteIds: plausible.map((note) => note.id),
         },
       });
       continue;
     }
     if (plausible.length > 1) {
+      counts.ambiguous += 1;
       diagnostics.push({
         severity: "warning",
         code: "candidate_reconciliation_ambiguous",
@@ -175,7 +205,7 @@ export async function reconcileEvidenceUnitCandidates(options: {
         noteId: derivedNoteId,
         message: `Candidate target ${derivedNoteId} matches ${plausible.length} existing notes; leaving it unattached for review.`,
         details: {
-          matchKind: identityMatches.length ? "identity" : "content",
+          matchKind,
           candidateTargetNoteIds: plausible
             .map((note) => note.id)
             .slice(0, maxCandidates)
@@ -187,6 +217,7 @@ export async function reconcileEvidenceUnitCandidates(options: {
     // An incomplete window cannot confirm "no match": a dropped note may hold the target, so a
     // likely create still warns instead of compiling a new note blind.
     if (candidates.length > 0 && !complete) {
+      counts.incomplete += 1;
       diagnostics.push({
         severity: "warning",
         code: "candidate_reconciliation_incomplete",
@@ -199,8 +230,10 @@ export async function reconcileEvidenceUnitCandidates(options: {
           candidateTargetNoteIds: [],
         },
       });
+      continue;
     }
     // Zero plausible targets in a complete window is a likely create: no remap and no diagnostic.
+    counts.created += 1;
   }
 
   return {
@@ -208,6 +241,7 @@ export async function reconcileEvidenceUnitCandidates(options: {
     diagnostics,
     remaps,
     matches,
+    counts,
   };
 }
 
