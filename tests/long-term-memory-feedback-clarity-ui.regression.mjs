@@ -77,7 +77,11 @@ assert.match(navigation, /sourceTaskImporting[\s\S]*sourceTaskRefreshing[\s\S]*s
 assert.doesNotMatch(navigation, /sourcesworkspace\.importingSources|sourcesworkspace\.refreshingSources/u);
 assert.equal((workspace.match(/importingSourceIds/gu) ?? []).length, 0, "row spinners defer to the task surface");
 assert.doesNotMatch(workspace, /\[&>svg\]:animate-spin/u);
-assert.match(workspace, /restoredImportResult\.writeFailures\?\.filter\(\(item\) => item\.retryable\)/u);
+assert.equal(
+  (workspace.match(/retryableSourceIds\((?:importResult|result|restoredImportResult)\)/gu) ?? []).length,
+  3,
+  "live and restored results derive one retry set",
+);
 assert.match(workspace, /restoredImportResult\.writeFailures\?\.map\(\(failure\) =>/u);
 assert.match(
   workspaceScreen,

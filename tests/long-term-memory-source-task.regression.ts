@@ -27,6 +27,7 @@ async function main() {
     cancelLtmSourceTask,
     getLtmSourceTaskSnapshot,
     markLtmSourceTaskViewed,
+    retryableSourceIds,
     startLtmSourceTask,
     subscribeLtmSourceTask,
   } =
@@ -97,6 +98,25 @@ async function main() {
   });
   assert.deepEqual(partial.safeResult?.writeFailures, [writeFailure]);
   assert.deepEqual(JSON.parse(session.values().next().value ?? "{}").safeResult.writeFailures, [writeFailure]);
+
+  // A restored result must offer the live retry set: missing ids are listed, never retried.
+  const missingOnly = { items: [], writeFailures: [], missingSourceIds: ["chat-a:gone"] };
+  assert.deepEqual(retryableSourceIds(missingOnly), []);
+  const mixed = {
+    imported: [
+      { sourceId: "chat-a:summary-a", retryable: false },
+      { sourceId: "chat-a:summary-c", retryable: true },
+    ],
+    writeFailures: [writeFailure],
+    missingSourceIds: ["chat-a:gone"],
+  };
+  assert.deepEqual(retryableSourceIds(mixed), ["chat-a:summary-c", "chat-a:summary-b"]);
+  const restored = {
+    items: mixed.imported,
+    writeFailures: mixed.writeFailures,
+    missingSourceIds: mixed.missingSourceIds,
+  };
+  assert.deepEqual(retryableSourceIds(restored), retryableSourceIds(mixed));
 
   let release: (() => void) | undefined;
   const cancelled = startLtmSourceTask({

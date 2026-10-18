@@ -1,5 +1,11 @@
 # Long-Term Memory changelog
 
+## Unreleased
+
+- A suggestion that extraction leaves out because it links to a memory the extraction could not find or did not keep now says so. Before, it said the suggestion "used the wrong memory stream". The low-overlap warning now checks the whole source, not only its start, and is no longer added to a suggestion that validation leaves out straight away.
+- A relationship memory whose text starts with "Summary:" now keeps that sentence in the chat prompt. Before, the relationship scores line pushed it out.
+- After a reload, Retry failed on a finished import retries the same sources as before the reload. Before, it also retried sources that were not found, which are still not found.
+
 ## 1.4.51 — 2026-10-18
 
 - The debug log now records a "Candidate reconciliation" entry for every extracted source, even when nothing matched. It counts the target memories (other than characters and relationships) that reused an existing memory, matched no other existing memory, were ambiguous, or were left for review because the search window was incomplete. Copy JSON shows the counts. Before, the entry was recorded only when a candidate matched or warned, so a source whose candidates all became new memories left no entry.

@@ -38,8 +38,17 @@ function relationshipDescribesChange(unit: LtmEvidenceUnit): boolean {
   return unit.claimKind === "change" || hasNonZeroRelationshipChange(unit);
 }
 
-function lexicalOverlap(sourceText: string, proposedText: string) {
-  const sourceTokens = tokenize(sourceText);
+// `tokenize` keeps only the first 500 tokens; a unit drawn from later in a long source must still overlap.
+function sourceTokenSet(sourceText: string) {
+  return new Set(
+    sourceText
+      .toLowerCase()
+      .match(/[a-z0-9]+/g)
+      ?.filter((token) => token.length >= 4),
+  );
+}
+
+function lexicalOverlap(sourceTokens: Set<string>, proposedText: string) {
   const proposedTokens = tokenize(proposedText);
   if (sourceTokens.size === 0 || proposedTokens.size === 0) return 0;
   let shared = 0;
@@ -144,6 +153,7 @@ export function validateLtmEvidenceUnits({
     });
   }
 
+  const sourceTokens = sourceTokenSet(sourceText);
   for (const [candidateIndex, unit] of units.entries()) {
     const noteId = noteIdForEvidenceUnit(unit);
     const unitDiagnostics: LtmExtractionDiagnostic[] = [];
@@ -331,8 +341,8 @@ export function validateLtmEvidenceUnits({
       }
     }
 
-    if (lexicalOverlap(sourceText, unit.text) < 0.08) {
-      diagnostics.push({
+    if (lexicalOverlap(sourceTokens, unit.text) < 0.08) {
+      unitDiagnostics.push({
         severity: "warning",
         code: "low_lexical_evidence",
         candidateIndex,
@@ -882,6 +892,9 @@ function dropReasonDiagnosticCode(reason: LtmExtractionDropReason) {
 function userFacingDropMessageForCode(code: string, reason: LtmExtractionDropReason): string {
   if (code === "relationship_state_missing_caused_by") {
     return "Dropped a relationship_state change missing a caused_by link to a timeline event or existing note.";
+  }
+  if (code === "unknown_link_target") {
+    return "Dropped a candidate that linked to a memory this extraction could not find or did not keep.";
   }
   return userFacingDropMessage(reason);
 }
