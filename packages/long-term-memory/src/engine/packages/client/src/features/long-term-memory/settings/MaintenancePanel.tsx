@@ -40,8 +40,8 @@ const repairActions: Array<{
 
 /** What the Maintenance tab needs from the settings forms its backup and reset actions replace. */
 type SettingsChannel = {
-  /** Drops the loaded forms so the next load repopulates them. */
-  clear: () => void;
+  /** Drops the loaded forms; they refill only from settings fetched at or after `since`. */
+  clear: (since: number) => void;
   /** Loads freshly fetched settings into the forms as the saved baseline. */
   apply: (global: LtmGlobalSettings, extraction: LtmExtractionSettingsPatch) => void;
 };
@@ -400,7 +400,7 @@ export function MaintenancePanel({
       setMessage(localizeUi("ui.longTermMemory.memorysettings.memoryBackupImported"));
       const refreshed = refreshedSettings(startedAt);
       if (!refreshed || !refetchedSince(queryKeys.integrity, startedAt)) {
-        settings.clear();
+        settings.clear(startedAt);
         setMessage(localizeUi("ui.longTermMemory.memorysettings.backupImportedSettingsNotRefreshed"));
       } else {
         settings.apply(refreshed.global, refreshed.extraction);
@@ -430,19 +430,16 @@ export function MaintenancePanel({
     setMessage("");
     try {
       const response = await request<{ rebuild?: SettingsRebuildOutcome | null }>("/settings/reset", "POST");
-      settings.clear();
       const startedAt = Date.now();
+      settings.clear(startedAt);
       await invalidateLtmQueries(queryClient, [
         queryKeys.settings,
         queryKeys.extractionSettings,
         queryKeys.chatDefaults,
         queryKeys.status,
       ]);
-      // The cleared forms refill from the cached pre-reset settings while the invalidation's
-      // refetch runs; the forms then load what that refetch read.
       const refreshed = refreshedSettings(startedAt);
       if (refreshed) settings.apply(refreshed.global, refreshed.extraction);
-      else settings.clear();
       if (response.rebuild?.status === "deferred") {
         setMessage(
           localizeUi("ui.longTermMemory.memorysettings.memorySettingsResetIndexRebuildFailed", {

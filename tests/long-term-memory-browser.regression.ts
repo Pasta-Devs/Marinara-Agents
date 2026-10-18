@@ -3734,7 +3734,8 @@ async function main() {
         const cachedMaxChunks = Number(await maxChunks.inputValue());
         await resetPage.locator("#settings-tab-maintenance").click();
         const maintenancePanel = resetPage.locator("#settings-panel-maintenance");
-        const resetButton = maintenancePanel.getByRole("button", { name: "Reset settings" });
+        // The panel is hidden while the cleared forms reload, so find its button there too.
+        const resetButton = maintenancePanel.getByRole("button", { name: "Reset settings", includeHidden: true });
         settingsGate = new Promise<void>((resolve) => {
           releaseSettings = () => resolve();
         });
@@ -3752,6 +3753,8 @@ async function main() {
         await settingsRefetch;
         // Let the cleared forms re-render while the refetch is still held.
         await resetPage.waitForTimeout(300);
+        // #1452: the cleared forms wait for the refetch instead of refilling from the cached settings.
+        await resetPage.getByText("Loading memory settings.").waitFor();
         assert.equal(await resetButton.isDisabled(), true, "Reset stays disabled until the settings refetch resolves");
         settingsGate = null;
         releaseSettings();
@@ -3770,6 +3773,81 @@ async function main() {
           "the forms show the settings read after the reset",
         );
         await resetPage.close();
+      }
+      // #1452: when the settings read after Reset or Import fails, Retry on the error surface loads the
+      // new settings instead of the cached ones the action replaced. An import whose integrity read
+      // alone fails still shows the settings it refetched.
+      for (const failure of ["reset", "import", "import-integrity"] as const) {
+        const failPage = await browserContext.newPage();
+        const counts = { notes: 0, drafts: 0, rejectedSuggestions: 0 };
+        let nextMaxChunks: number | null = null;
+        let failSettings = false;
+        let failIntegrity = false;
+        await failPage.route("**/api/long-term-memory/settings/reset", (route) => route.fulfill({ json: {} }));
+        await failPage.route("**/api/long-term-memory/backup/preview", (route) =>
+          route.fulfill({ json: { incoming: counts, current: counts } }),
+        );
+        await failPage.route("**/api/long-term-memory/backup/import", (route) => route.fulfill({ json: {} }));
+        await failPage.route("**/api/long-term-memory/integrity", (route) =>
+          failIntegrity
+            ? route.fulfill({ status: 500, json: { error: "Fixture integrity read failed." } })
+            : route.continue(),
+        );
+        await failPage.route("**/api/long-term-memory/settings", async (route) => {
+          if (nextMaxChunks === null || route.request().method() !== "GET") return route.continue();
+          if (failSettings) return route.fulfill({ status: 500, json: { error: "Fixture settings read failed." } });
+          const response = await route.fetch();
+          await route.fulfill({
+            response,
+            json: { ...(await response.json()), longTermMemoryMaxChunks: nextMaxChunks },
+          });
+        });
+        await failPage.goto(`http://127.0.0.1:${address.port}/`);
+        await failPage.evaluate(() => customElements.whenDefined("marinara-capability-long-term-memory"));
+        await failPage.evaluate(`(() => {
+          const element = document.createElement("marinara-capability-long-term-memory");
+          element.setAttribute("view", "detail");
+          element.capabilityProps = { confirmAction: () => true };
+          document.body.append(element);
+        })()`);
+        await failPage.locator('[data-ltm-navigation="desktop"] [data-ltm-destination="settings"]').click();
+        const maxChunks = failPage.getByRole("spinbutton", { name: "Maximum recalled memories", exact: true });
+        const cachedMaxChunks = Number(await maxChunks.inputValue());
+        await failPage.locator("#settings-tab-maintenance").click();
+        const maintenancePanel = failPage.locator("#settings-panel-maintenance");
+        nextMaxChunks = cachedMaxChunks === 37 ? 38 : 37;
+        failSettings = failure !== "import-integrity";
+        failIntegrity = failure === "import-integrity";
+        if (failure === "reset") {
+          await maintenancePanel.getByRole("button", { name: "Reset settings" }).click();
+        } else {
+          await maintenancePanel
+            .getByLabel("Choose backup", { exact: true })
+            .setInputFiles({ name: "backup.json", mimeType: "application/json", buffer: Buffer.from("{}") });
+          await maintenancePanel.getByRole("button", { name: "Replace with this backup" }).click();
+        }
+        if (failSettings) {
+          const loadError = failPage
+            .locator('[data-ltm-status="danger"]')
+            .filter({ hasText: "Could not load memory settings." });
+          await loadError.waitFor({ timeout: 5000 });
+          failSettings = false;
+          await loadError.getByRole("button", { name: "Retry" }).click();
+        }
+        await maintenancePanel
+          .getByText(
+            failure === "reset"
+              ? "Memory settings reset to defaults."
+              : "Memory backup imported, but settings could not be refreshed.",
+          )
+          .waitFor({ timeout: 5000 });
+        await failPage.locator("#settings-tab-recall").click();
+        assert.equal(
+          await maxChunks.inputValue(),
+          String(nextMaxChunks),
+          `${failure}: the forms show the settings read after the action`,
+        );
+        await failPage.close();
       }
       await page.locator('[data-ltm-navigation="desktop"] [data-ltm-destination="vault"]').click();
       await page.evaluate((version) => {

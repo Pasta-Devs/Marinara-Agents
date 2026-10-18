@@ -209,6 +209,9 @@ export default function MemorySettings({
   const [savedGlobal, setSavedGlobal] = useState<GlobalForm | null>(null);
   const [extractionFormState, setExtractionFormState] = useState<ExtractionForm | null>(null);
   const [savedExtraction, setSavedExtraction] = useState<ExtractionForm | null>(null);
+  // Reset and backup import clear the forms, which then refill only from settings fetched since
+  // the action started, so a failed reload shows the error surface instead of the cached settings.
+  const [refillSince, setRefillSince] = useState(0);
   const [pending, setPending] = useState("");
   const [messageState, setMessageState] = useState<{
     text: string;
@@ -238,17 +241,17 @@ export default function MemorySettings({
   }, [maintenanceBusy]);
 
   useEffect(() => {
-    if (!global.data || globalForm) return;
+    if (!global.data || globalForm || global.dataUpdatedAt < refillSince) return;
     const next = settingsForm(global.data);
     setGlobalForm(next);
     setSavedGlobal(next);
-  }, [global.data, globalForm]);
+  }, [global.data, global.dataUpdatedAt, globalForm, refillSince]);
   useEffect(() => {
-    if (!extraction.data || extractionFormState) return;
+    if (!extraction.data || extractionFormState || extraction.dataUpdatedAt < refillSince) return;
     const next = extractionForm(extraction.data);
     setExtractionFormState(next);
     setSavedExtraction(next);
-  }, [extraction.data, extractionFormState]);
+  }, [extraction.data, extraction.dataUpdatedAt, extractionFormState, refillSince]);
 
   const globalDirty = Boolean(globalForm && savedGlobal && !same(globalForm, savedGlobal));
   const extractionDirty = Boolean(
@@ -341,7 +344,8 @@ export default function MemorySettings({
   };
 
   const settingsChannel = {
-    clear: () => {
+    clear: (since: number) => {
+      setRefillSince(since);
       setGlobalForm(null);
       setSavedGlobal(null);
       setExtractionFormState(null);
