@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { existsSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { compileEngineVisualStyles } from "./engine-visual-styles.ts";
 
@@ -8,6 +8,15 @@ import { compileEngineVisualStyles } from "./engine-visual-styles.ts";
 const repoRoot = resolve(dirname(process.argv[1] ?? process.cwd()), "..");
 const engineRoot = resolve(process.env.MARINARA_ENGINE_ROOT || join(repoRoot, "../Marinara-Engine"));
 const packageClientSource = join(repoRoot, "packages/long-term-memory/src/engine/packages/client/src/**/*.{ts,tsx}");
+
+// Class strings the Engine at `engine.min` (2.4.1) does not generate, though the local Engine does. The
+// compile in `main` only sees one Engine checkout, so these are kept out of the client source by name; the
+// screen's `<style>` block supplies the same rules (`data-ltm-tab-focus`, `data-ltm-accent-border`).
+const absentAtEngineMin = [
+  "focus-visible:outline-2",
+  "focus-visible:outline-[var(--ring)]",
+  "border-[var(--marinara-editor-accent)]/30",
+];
 
 function classSelectors(css: string) {
   const classes = new Set<string>();
@@ -31,6 +40,15 @@ async function main() {
     [],
     `${missing.length} Long-Term Memory classes are not served by the Engine stylesheet:\n${missing.join("\n")}`,
   );
+  const clientSource = join(repoRoot, "packages/long-term-memory/src/engine/packages/client/src");
+  const offenders = readdirSync(clientSource, { recursive: true })
+    .map(String)
+    .filter((file) => /\.tsx?$/u.test(file))
+    .flatMap((file) => {
+      const source = readFileSync(join(clientSource, file), "utf8");
+      return absentAtEngineMin.filter((name) => source.includes(name)).map((name) => `${file}: ${name}`);
+    });
+  assert.deepEqual(offenders, [], `classes missing from the engine.min Engine are in use:\n${offenders.join("\n")}`);
   console.log(`Long-Term Memory host styles ok: ${hostClasses.size} host classes, 0 missing`);
 }
 

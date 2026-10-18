@@ -250,7 +250,10 @@ export function MemoryAvailabilityWorkbench({
           </div>
         )}
         <details data-ltm-availability-picker className="group">
-          <summary className="mari-editor-action inline-flex min-h-11 cursor-pointer list-none items-center gap-2 px-3 py-2 text-left text-sm font-semibold text-[var(--marinara-editor-text)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--ring)] [&::-webkit-details-marker]:hidden">
+          <summary
+            data-ltm-tab-focus
+            className="mari-editor-action inline-flex min-h-11 cursor-pointer list-none items-center gap-2 px-3 py-2 text-left text-sm font-semibold text-[var(--marinara-editor-text)] [&::-webkit-details-marker]:hidden"
+          >
             <span className="min-w-0 flex-1">{localizeUi("ui.longTermMemory.memoryvault.addMemoryTo")}</span>
             <ChevronRight
               aria-hidden="true"

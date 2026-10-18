@@ -186,6 +186,19 @@ async function main() {
     ...(input.subjectNames ? { subjectNames: input.subjectNames } : {}),
   });
 
+  // Every group ends in exactly one bucket, so `groups` is the sum of the other four.
+  const assertCounts = (
+    result: { counts: Record<string, number> },
+    expected: Partial<Record<"groups" | "matched" | "created" | "ambiguous" | "incomplete", number>>,
+  ) => {
+    const { groups, matched, created, ambiguous, incomplete } = result.counts;
+    assert.deepEqual(
+      { groups: 0, matched: 0, created: 0, ambiguous: 0, incomplete: 0, ...expected },
+      { groups, matched, created, ambiguous, incomplete },
+    );
+    assert.equal(groups, matched + created + ambiguous + incomplete, "every group must land in one bucket");
+  };
+
   const reconcile = (units: unknown[], overrides: Record<string, unknown> = {}) =>
     reconcileEvidenceUnitCandidates({
       units: units as never,
@@ -227,7 +240,10 @@ async function main() {
         "world_cobalt_archive",
         "an identity match must reuse the existing note id",
       );
-      assert.deepEqual(result.matches, [{ derivedNoteId: "world_cobalt_vault", noteId: "world_cobalt_archive" }]);
+      assert.deepEqual(result.matches, [
+        { derivedNoteId: "world_cobalt_vault", noteId: "world_cobalt_archive", matchKind: "identity" },
+      ]);
+      assertCounts(result, { groups: 1, matched: 1 });
     }
 
     // Content match: no usable identity, but the indexed section text is the same claim.
@@ -245,6 +261,7 @@ async function main() {
         "world_obsidian_gate",
         "a content match must reuse the existing note id",
       );
+      assert.equal(result.matches[0]!.matchKind, "content");
     }
 
     // No compatible target is a likely create with no diagnostic.
@@ -260,6 +277,7 @@ async function main() {
       ]);
       assert.equal(result.remaps.size, 0, "a genuinely new candidate must create");
       assert.equal(result.diagnostics.length, 0, "a single create is not ambiguous");
+      assertCounts(result, { groups: 1, created: 1 });
     }
 
     // Same subject reaching two existing notes stays unattached and warns.
@@ -279,6 +297,7 @@ async function main() {
       );
       assert.ok(diagnostic, "an ambiguous candidate must warn");
       assert.deepEqual(diagnostic!.details?.candidateTargetNoteIds, ["world_twin_moons_a", "world_twin_moons_b"]);
+      assertCounts(result, { groups: 1, ambiguous: 1 });
     }
 
     // Scope-incompatible notes are never selected.
@@ -691,6 +710,7 @@ async function main() {
       );
       assert.ok(diagnostic, "an incomplete window without a match must warn for review");
       assert.deepEqual(diagnostic!.details?.candidateTargetNoteIds, []);
+      assertCounts(result, { groups: 1, incomplete: 1 });
     }
 
     // A singleton decision is only safe when the candidate set is complete; a window that
@@ -736,6 +756,7 @@ async function main() {
         (candidate) => candidate.code === "candidate_reconciliation_incomplete",
       );
       assert.ok(diagnostic, "an incomplete candidate set must warn for review");
+      assertCounts(result, { groups: 1, incomplete: 1 });
     }
 
     process.stdout.write(
