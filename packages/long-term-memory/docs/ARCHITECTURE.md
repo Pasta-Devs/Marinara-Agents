@@ -34,8 +34,34 @@ as a source and place.
 | `ChatMetadata.gamePreviousSessionSummaries` | game session summaries | `packages/shared/src/types/chat.ts` |
 | `PROFESSOR_MARI_ID` (`__professor_mari__`) | excludes the built-in assistant from sources and places | `packages/shared/src/constants/defaults.ts` |
 
-The reads are in `interop.ts`. The long-term fix is an Engine API for chat
+The reads are in `sources/interop.ts`. The long-term fix is an Engine API for chat
 summaries, which needs a higher minimum Engine version.
+
+## Server Modules
+
+Server source is in `src/engine/packages/server/src/services/long-term-memory/`.
+The top level holds the Engine entry points and helpers used everywhere; each
+folder owns one area.
+
+| Folder | Owns | Files (`.ts`) |
+| --- | --- | --- |
+| top level | Engine registration, runtime services, settings, route composition, shared errors and helpers | `server-entry`, `runtime`, `package-runtime`, `routes`, `settings`, `default-config`, `service-error`, `ltm-utils` |
+| `routes/` | HTTP handlers, one file per area, and the helpers they share (`shared`) | `notes`, `drafts`, `imports`, `maintenance`, `settings`, `shared` |
+| `persistence/` | vault storage, atomic writes, the vault lock, mutation journals, index state, the activity index, per-section source contributions, retention, backup and restore | `storage`, `mutation-transaction`, `atomic-json`, `paths`, `vault-lock`, `vault-snapshot`, `stored-note`, `index-state`, `index-quarantine`, `retention`, `backup-restore`, `restore-recovery`, `activity-index`, `section-contributions` |
+| `recall/` | chunking, keyword, BM25, graph and embedding indexes, ranking, budget, the recall prompt, generation injection, injection receipts and usage | `chunking`, `bm25`, `keyword-extract`, `keyword-index`, `hangul-lexical`, `graph`, `metadata-index`, `ranking`, `budget`, `prompt`, `prompt-text`, `retrieval`, `rebuild`, `embedding-adapter`, `generation-injection`, `usage` |
+| `extraction/` | evidence-unit extraction, validation and compilation, source processing and hashes, candidate reconciliation, extraction settings | `evidence-unit-extraction`, `evidence-unit-validation`, `evidence-unit-compiler`, `structured-summary-normalizer`, `source-extraction`, `source-processing`, `source-hash`, `dedup`, `candidate-reconciliation`, `scoped-targets`, `extraction-config` |
+| `identity/` | subject identity, chat scope and scope links, identity and fork repair | `subject-identity`, `subject-choice-review`, `subject-equality`, `identity-repair`, `note-fork-repair`, `chat-scope`, `scope-links` |
+| `drafts/` | the draft store, projection and review, applying drafts to notes, rejected suggestions | `draft-store`, `draft-projector`, `draft-review`, `reconciliation`, `rejected-suggestions` |
+| `maintenance/` | integrity checks and repair, note transfer, legacy adoption and quarantine, the debug log | `maintenance`, `note-transfer`, `legacy-adoption`, `legacy-source-quarantine`, `debug-log` |
+| `sources/` | Engine chats and summaries read as sources | `interop`, `source-identity` |
+
+The folders are areas, not enforced layers. `persistence/` still imports from
+the areas above it: `storage.ts` uses `drafts/draft-projector`,
+`extraction/source-hash`, `identity/chat-scope` and
+`maintenance/legacy-source-quarantine`; `backup-restore.ts` uses the draft
+store, rejected suggestions, extraction settings, maintenance and the index
+rebuild; `retention.ts` and `vault-snapshot.ts` use `recall/`. No lint rule
+checks import direction.
 
 ## Durable State
 
@@ -136,8 +162,8 @@ label.
 
 Scope resolution is shared between chat context and server retrieval. Changes
 must preserve isolation between chat, character, lorebook, persona, universe,
-and global targets. Inspect `scope.ts`, `chat-scope.ts`, and `scoped-targets.ts`
-before changing identity or visibility behavior.
+and global targets. Inspect shared `scope.ts`, `identity/chat-scope.ts`, and
+`extraction/scoped-targets.ts` before changing identity or visibility behavior.
 
 For storage or recovery changes, inspect `paths.ts`, `atomic-json.ts`,
 `mutation-transaction.ts`, `vault-lock.ts`, `restore-recovery.ts`, and the

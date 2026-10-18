@@ -13,7 +13,7 @@ import {
   previewPackageInterop,
   previewPackageLorebooks,
   sourcePackageDetails,
-} from "../interop.js";
+} from "../sources/interop.js";
 import type { FastifyInstance } from "fastify";
 import { DRAFT_BODY_LIMIT_BYTES, MAINTENANCE_BODY_LIMIT_BYTES, routeError, type LtmRouteRuntime } from "./shared.js";
 

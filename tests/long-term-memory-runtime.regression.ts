@@ -30,23 +30,23 @@ async function main() {
     parseLtmRecallIndex,
     rebuildLongTermMemoryIndexes,
     loadOrRebuildLongTermMemoryIndexes,
-  } = await import(`${source}/rebuild.ts`);
-  const { withLtmVaultLock } = await import(`${source}/vault-lock.ts`);
-  const { LongTermMemoryStorage } = await import(`${source}/storage.ts`);
-  const { notePathForId } = await import(`${source}/paths.ts`);
-  const { invalidateLtmVaultSnapshot } = await import(`${source}/vault-snapshot.ts`);
-  const { ltmIndexStatePath, readLtmIndexState } = await import(`${source}/index-state.ts`);
-  const { repairLongTermMemory } = await import(`${source}/maintenance.ts`);
-  const { retrieveLongTermMemory } = await import(`${source}/retrieval.ts`);
-  const { applyLtmBudget } = await import(`${source}/budget.ts`);
-  const { serializeLongTermMemoryPrompt } = await import(`${source}/prompt.ts`);
+  } = await import(`${source}/recall/rebuild.ts`);
+  const { withLtmVaultLock } = await import(`${source}/persistence/vault-lock.ts`);
+  const { LongTermMemoryStorage } = await import(`${source}/persistence/storage.ts`);
+  const { notePathForId } = await import(`${source}/persistence/paths.ts`);
+  const { invalidateLtmVaultSnapshot } = await import(`${source}/persistence/vault-snapshot.ts`);
+  const { ltmIndexStatePath, readLtmIndexState } = await import(`${source}/persistence/index-state.ts`);
+  const { repairLongTermMemory } = await import(`${source}/maintenance/maintenance.ts`);
+  const { retrieveLongTermMemory } = await import(`${source}/recall/retrieval.ts`);
+  const { applyLtmBudget } = await import(`${source}/recall/budget.ts`);
+  const { serializeLongTermMemoryPrompt } = await import(`${source}/recall/prompt.ts`);
   const {
     readLongTermMemoryUsage,
     readLongTermMemoryInjectionReceipt,
     readLongTermMemoryAttempt,
     recordLongTermMemoryAttempt,
-  } = await import(`${source}/usage.ts`);
-  const { readLtmDebugLog } = await import(`${source}/debug-log.ts`);
+  } = await import(`${source}/recall/usage.ts`);
+  const { readLtmDebugLog } = await import(`${source}/maintenance/debug-log.ts`);
   const { resolveLongTermMemoryRecallSettings, LTM_RECALL_SCORE_THRESHOLD_CEILING } =
     await import("../packages/long-term-memory/src/engine/packages/shared/src/features/agents/long-term-memory/runtime-settings.ts");
   const { DEFAULT_LTM_GLOBAL_SETTINGS } =
@@ -74,7 +74,7 @@ async function main() {
   const { configurePackageRuntime, getPackageEmbeddingAdapter, resolvePackageEmbeddingAdapter } = await import(
     `${source}/package-runtime.ts`
   );
-  const { embedLongTermMemoryTexts } = await import(`${source}/embedding-adapter.ts`);
+  const { embedLongTermMemoryTexts } = await import(`${source}/recall/embedding-adapter.ts`);
   const timestamp = "2026-07-17T00:00:00.000Z";
   const makeChunk = (
     noteType: any,
@@ -2296,7 +2296,7 @@ async function main() {
         const vaultRoot = storage.root;
         const recallIndexPath = longTermMemoryRecallIndexPath(vaultRoot);
         const { getLtmGlobalSettings, updateLtmGlobalSettings } = await import(`${source}/settings.ts`);
-        const { chunkNotes, stableJsonHash } = await import(`${source}/chunking.ts`);
+        const { chunkNotes, stableJsonHash } = await import(`${source}/recall/chunking.ts`);
         const deferred = () => {
           let resolve!: () => void;
           const promise = new Promise<void>((next) => (resolve = next));

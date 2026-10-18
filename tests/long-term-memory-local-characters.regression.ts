@@ -29,23 +29,25 @@ function unit(input: {
 }
 
 async function main() {
-  const { compileLtmEvidenceUnits } = await import(`${source}/evidence-unit-compiler.ts`);
-  const { projectLtmDraftMutationGroup } = await import(`${source}/draft-projector.ts`);
+  const { compileLtmEvidenceUnits } = await import(`${source}/extraction/evidence-unit-compiler.ts`);
+  const { projectLtmDraftMutationGroup } = await import(`${source}/drafts/draft-projector.ts`);
   const { ltmDraftMutationSchema, ltmDraftReviewChangeSchema } =
     await import("../packages/long-term-memory/src/engine/packages/shared/src/features/agents/long-term-memory/schema.ts");
   const { compileEvidenceUnitExtraction, parseEvidenceUnitPayload } = await import(
-    `${source}/evidence-unit-extraction.ts`
+    `${source}/extraction/evidence-unit-extraction.ts`
   );
-  const { sourceHashForLtmSourceNote } = await import(`${source}/source-hash.ts`);
-  const { normalizeStructuredSummaryEvidenceUnits } = await import(`${source}/structured-summary-normalizer.ts`);
+  const { sourceHashForLtmSourceNote } = await import(`${source}/extraction/source-hash.ts`);
+  const { normalizeStructuredSummaryEvidenceUnits } = await import(
+    `${source}/extraction/structured-summary-normalizer.ts`
+  );
   const { isLocalCharacterSubject, localCharacterScopeError, localCharacterSubjectForName, ltmScopeFamilyId } =
-    await import(`${source}/chat-scope.ts`);
+    await import(`${source}/identity/chat-scope.ts`);
   const {
     analyzeTrustedLtmNoteSubjects,
     buildTrustedLtmSubjectCatalog,
     prepareLtmSubjectIdentityContext,
     trustedLtmIdentityNotesForSource,
-  } = await import(`${source}/subject-identity.ts`);
+  } = await import(`${source}/identity/subject-identity.ts`);
 
   const sourceNote = {
     id: "roleplay-source",
@@ -342,7 +344,7 @@ async function main() {
     namedCollision.diagnostics.some((item) => item.code === "ambiguous_subject_link_target"),
     "an exact name must not override conflicting batch link targets",
   );
-  const { ambiguousLtmDraftLinkChoiceError } = await import(`${source}/reconciliation.ts`);
+  const { ambiguousLtmDraftLinkChoiceError } = await import(`${source}/drafts/reconciliation.ts`);
   const originalLinkMutation = {
     id: "link-choice",
     kind: "add_link" as const,
@@ -652,7 +654,7 @@ async function main() {
     gameCatalog.entries.some((entry) => entry.name === "Vela"),
     false,
   );
-  const { evidenceUnitMessages } = await import(`${source}/evidence-unit-extraction.ts`);
+  const { evidenceUnitMessages } = await import(`${source}/extraction/evidence-unit-extraction.ts`);
   const messages = evidenceUnitMessages({
     sourceNote: { ...sourceNote, modes: ["game"] } as any,
     sourceText: "Mara visits the party.",

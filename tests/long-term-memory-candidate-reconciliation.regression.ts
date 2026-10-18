@@ -10,14 +10,14 @@ import { runRegressionToCompletion } from "./regression-helpers.ts";
 // subjectId. Character/relationship resolution stays in subject-identity.ts.
 async function main() {
   const source = "../packages/long-term-memory/src/engine/packages/server/src/services/long-term-memory";
-  const { reconcileEvidenceUnitCandidates } = await import(`${source}/candidate-reconciliation.ts`);
-  const { compileEvidenceUnitExtraction } = await import(`${source}/evidence-unit-extraction.ts`);
-  const { sourceHashForLtmSourceNote } = await import(`${source}/source-hash.ts`);
-  const { chunkNotes } = await import(`${source}/chunking.ts`);
-  const { buildLtmMetadataIndex } = await import(`${source}/metadata-index.ts`);
-  const { buildLtmBm25Index } = await import(`${source}/bm25.ts`);
-  const { buildLtmKeywordIndex } = await import(`${source}/keyword-index.ts`);
-  const { buildLtmGraphIndex } = await import(`${source}/graph.ts`);
+  const { reconcileEvidenceUnitCandidates } = await import(`${source}/extraction/candidate-reconciliation.ts`);
+  const { compileEvidenceUnitExtraction } = await import(`${source}/extraction/evidence-unit-extraction.ts`);
+  const { sourceHashForLtmSourceNote } = await import(`${source}/extraction/source-hash.ts`);
+  const { chunkNotes } = await import(`${source}/recall/chunking.ts`);
+  const { buildLtmMetadataIndex } = await import(`${source}/recall/metadata-index.ts`);
+  const { buildLtmBm25Index } = await import(`${source}/recall/bm25.ts`);
+  const { buildLtmKeywordIndex } = await import(`${source}/recall/keyword-index.ts`);
+  const { buildLtmGraphIndex } = await import(`${source}/recall/graph.ts`);
   const { configurePackageRuntime, logger } = await import(`${source}/package-runtime.ts`);
 
   const timestamp = "2026-07-21T00:00:00.000Z";

@@ -3,11 +3,11 @@ import {
   ltmGlobalSettingsSchema,
   type LtmResolvedGlobalSettings,
 } from "../../../../../shared/src/features/agents/long-term-memory/schema.js";
-import { getLtmExtractionConfig, updateLtmExtractionConfig } from "../extraction-config.js";
+import { getLtmExtractionConfig, updateLtmExtractionConfig } from "../extraction/extraction-config.js";
 import { getLtmGlobalSettings, ltmGeneratedStopWords, updateLtmGlobalSettings } from "../settings.js";
-import { buildStopWordSet } from "../keyword-extract.js";
-import { withLtmVaultLock } from "../vault-lock.js";
-import { resetLongTermMemorySettings } from "../backup-restore.js";
+import { buildStopWordSet } from "../recall/keyword-extract.js";
+import { withLtmVaultLock } from "../persistence/vault-lock.js";
+import { resetLongTermMemorySettings } from "../persistence/backup-restore.js";
 import type { FastifyInstance } from "fastify";
 import {
   MAINTENANCE_BODY_LIMIT_BYTES,

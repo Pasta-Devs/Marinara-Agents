@@ -13,27 +13,33 @@ async function main() {
     evidenceUnitMessages,
     evidenceUnitResponseFormat,
     parseEvidenceUnitPayload,
-  } = await import(`${source}/evidence-unit-extraction.ts`);
-  const { compileLtmEvidenceUnits } = await import(`${source}/evidence-unit-compiler.ts`);
-  const { deduplicateUnits } = await import(`${source}/dedup.ts`);
+  } = await import(`${source}/extraction/evidence-unit-extraction.ts`);
+  const { compileLtmEvidenceUnits } = await import(`${source}/extraction/evidence-unit-compiler.ts`);
+  const { deduplicateUnits } = await import(`${source}/extraction/dedup.ts`);
   const {
     analyzeTrustedLtmNoteSubjects,
     buildTrustedLtmSubjectCatalog,
     prepareLtmSubjectIdentityContext,
     resolveLtmSubjectIdentities,
     trustedLtmIdentityNotesForSource,
-  } = await import(`${source}/subject-identity.ts`);
-  const { subjectsEqual } = await import(`${source}/subject-equality.ts`);
-  const { projectLtmDraftMutationGroup } = await import(`${source}/draft-projector.ts`);
-  const { sourceHashForLtmSourceNote } = await import(`${source}/source-hash.ts`);
-  const { normalizeStructuredSummaryEvidenceUnits } = await import(`${source}/structured-summary-normalizer.ts`);
-  const { validateLtmEvidenceUnits } = await import(`${source}/evidence-unit-validation.ts`);
-  const { resolveScopedEvidenceUnitTargets, scopedVariantNoteId } = await import(`${source}/scoped-targets.ts`);
+  } = await import(`${source}/identity/subject-identity.ts`);
+  const { subjectsEqual } = await import(`${source}/identity/subject-equality.ts`);
+  const { projectLtmDraftMutationGroup } = await import(`${source}/drafts/draft-projector.ts`);
+  const { sourceHashForLtmSourceNote } = await import(`${source}/extraction/source-hash.ts`);
+  const { normalizeStructuredSummaryEvidenceUnits } = await import(
+    `${source}/extraction/structured-summary-normalizer.ts`
+  );
+  const { validateLtmEvidenceUnits } = await import(`${source}/extraction/evidence-unit-validation.ts`);
+  const { resolveScopedEvidenceUnitTargets, scopedVariantNoteId } = await import(
+    `${source}/extraction/scoped-targets.ts`
+  );
   const { configurePackageRuntime } = await import(`${source}/package-runtime.ts`);
-  const { processLongTermMemorySource } = await import(`${source}/source-processing.ts`);
-  const { LongTermMemoryStorage } = await import(`${source}/storage.ts`);
-  const { longTermMemoryRecallIndexPath, rebuildLongTermMemoryIndexes } = await import(`${source}/rebuild.ts`);
-  const { getLtmExtractionConfig, updateLtmExtractionConfig } = await import(`${source}/extraction-config.ts`);
+  const { processLongTermMemorySource } = await import(`${source}/extraction/source-processing.ts`);
+  const { LongTermMemoryStorage } = await import(`${source}/persistence/storage.ts`);
+  const { longTermMemoryRecallIndexPath, rebuildLongTermMemoryIndexes } = await import(`${source}/recall/rebuild.ts`);
+  const { getLtmExtractionConfig, updateLtmExtractionConfig } = await import(
+    `${source}/extraction/extraction-config.ts`
+  );
   const { ltmNoteIdSchema } =
     await import("../packages/long-term-memory/src/engine/packages/shared/src/features/agents/long-term-memory/schema.ts");
   const { DEFAULT_LTM_EXTRACTION_PROMPT_CONVERSATION } =
@@ -1995,7 +2001,7 @@ async function main() {
   );
   assert.equal(diagnosticsRequireExtractionReview(borrowedIdentityResolution.diagnostics), true);
 
-  const { ltmScopeFamilyId, localCharacterSubjectForName } = await import(`${source}/chat-scope.ts`);
+  const { ltmScopeFamilyId, localCharacterSubjectForName } = await import(`${source}/identity/chat-scope.ts`);
   const borrowingCatalog = buildTrustedLtmSubjectCatalog({
     roster: [
       { kind: "character", id: "seo", name: "서무진", aliases: ["서 선생"] },

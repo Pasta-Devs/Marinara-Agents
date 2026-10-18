@@ -9,7 +9,7 @@ import {
   type ScopeTargetGroup,
   uniqueById,
 } from "../packages/long-term-memory/src/engine/packages/client/src/features/long-term-memory/scope-targets.js";
-import { getLtmChatDisplayName } from "../packages/long-term-memory/src/engine/packages/server/src/services/long-term-memory/chat-scope.js";
+import { getLtmChatDisplayName } from "../packages/long-term-memory/src/engine/packages/server/src/services/long-term-memory/identity/chat-scope.js";
 import {
   chatOnlyLtmScope,
   ltmScopesOverlap,

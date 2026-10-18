@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
-import { PROFESSOR_MARI_CHARACTER_ID } from "../packages/long-term-memory/src/engine/packages/server/src/services/long-term-memory/interop.ts";
+import { PROFESSOR_MARI_CHARACTER_ID } from "../packages/long-term-memory/src/engine/packages/server/src/services/long-term-memory/sources/interop.ts";
 
 // Long-Term Memory reads these Engine-owned chat metadata fields and the built-in assistant id directly.
 // The list is documented in packages/long-term-memory/docs/ARCHITECTURE.md (Boundaries); keep both in step.

@@ -28,12 +28,12 @@ import {
   ltmSourceDerivedMemoriesResponseSchema,
   ltmSubjectsSchema,
 } from "../../../../../shared/src/features/agents/long-term-memory/schema.js";
-import { getLtmExtractionConfig } from "../extraction-config.js";
-import { branchInheritedNoteIds } from "../generation-injection.js";
-import { applyLtmNoteTransfer, previewLtmNoteTransfer } from "../note-transfer.js";
+import { getLtmExtractionConfig } from "../extraction/extraction-config.js";
+import { branchInheritedNoteIds } from "../recall/generation-injection.js";
+import { applyLtmNoteTransfer, previewLtmNoteTransfer } from "../maintenance/note-transfer.js";
 import { getPackageLanguageModels, getPackagePersistence, getPackageResources, logger } from "../package-runtime.js";
-import { retrieveLongTermMemory } from "../retrieval.js";
-import { applyLtmScopeLinksToDerivedNotes } from "../scope-links.js";
+import { retrieveLongTermMemory } from "../recall/retrieval.js";
+import { applyLtmScopeLinksToDerivedNotes } from "../identity/scope-links.js";
 import { getLtmGlobalSettings } from "../settings.js";
 import {
   ltmModeForChatMode,
@@ -42,19 +42,19 @@ import {
   resolveChatLtmScope,
   resolveChatLtmWriteScope,
   getLtmChatDisplayName,
-} from "../chat-scope.js";
-import { estimateLongTermMemoryPromptOverhead } from "../prompt.js";
+} from "../identity/chat-scope.js";
+import { estimateLongTermMemoryPromptOverhead } from "../recall/prompt.js";
 import { resolveLongTermMemoryRecallSettings } from "../../../../../shared/src/features/agents/long-term-memory/runtime-settings.js";
-import { isLtmSourceNote } from "../source-extraction.js";
-import { processLongTermMemorySource } from "../source-processing.js";
-import { PROFESSOR_MARI_CHARACTER_ID } from "../interop.js";
+import { isLtmSourceNote } from "../extraction/source-extraction.js";
+import { processLongTermMemorySource } from "../extraction/source-processing.js";
+import { PROFESSOR_MARI_CHARACTER_ID } from "../sources/interop.js";
 import {
   getLtmScopeChatIds,
   getLtmScopeGroupIds,
   getLtmScopePersonaIds,
   isGlobalLtmScope,
 } from "../../../../../shared/src/features/agents/long-term-memory/scope.js";
-import { loadTrustedLtmSubjectCatalog } from "../subject-identity.js";
+import { loadTrustedLtmSubjectCatalog } from "../identity/subject-identity.js";
 import { LtmServiceError } from "../service-error.js";
 import type { FastifyInstance } from "fastify";
 import {

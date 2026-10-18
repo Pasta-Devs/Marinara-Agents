@@ -11,14 +11,16 @@ import { runRegressionToCompletion } from "./regression-helpers.ts";
 // notes, and proves per-candidate bounded retrieval still reconciles every one.
 async function main() {
   const source = "../packages/long-term-memory/src/engine/packages/server/src/services/long-term-memory";
-  const { reconcileEvidenceUnitCandidates } = await import(`${source}/candidate-reconciliation.ts`);
-  const { LongTermMemoryStorage } = await import(`${source}/storage.ts`);
-  const { rebuildLongTermMemoryIndexes, loadOrRebuildLongTermMemoryIndexes } = await import(`${source}/rebuild.ts`);
-  const { retrieveLongTermMemory } = await import(`${source}/retrieval.ts`);
-  const { sourceHashForLtmSourceNote } = await import(`${source}/source-hash.ts`);
+  const { reconcileEvidenceUnitCandidates } = await import(`${source}/extraction/candidate-reconciliation.ts`);
+  const { LongTermMemoryStorage } = await import(`${source}/persistence/storage.ts`);
+  const { rebuildLongTermMemoryIndexes, loadOrRebuildLongTermMemoryIndexes } = await import(
+    `${source}/recall/rebuild.ts`
+  );
+  const { retrieveLongTermMemory } = await import(`${source}/recall/retrieval.ts`);
+  const { sourceHashForLtmSourceNote } = await import(`${source}/extraction/source-hash.ts`);
   const { configurePackageRuntime } = await import(`${source}/package-runtime.ts`);
-  const { prepareLongTermMemorySource } = await import(`${source}/source-processing.ts`);
-  const { readLtmDebugLog } = await import(`${source}/debug-log.ts`);
+  const { prepareLongTermMemorySource } = await import(`${source}/extraction/source-processing.ts`);
+  const { readLtmDebugLog } = await import(`${source}/maintenance/debug-log.ts`);
 
   const timestamp = "2026-07-21T00:00:00.000Z";
   const scope = { chatId: "chat-a", chatIds: ["chat-a"] };

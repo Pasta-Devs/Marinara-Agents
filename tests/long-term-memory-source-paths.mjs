@@ -13,7 +13,7 @@ export const ltmSourcePaths = {
   availabilityTabRail: at(`${client}AvailabilityTabRail.tsx`),
   bulkAvailability: at(`${client}vault/BulkAvailabilityWorkbench.tsx`),
   detail: at(`${client}LongTermMemoryDetail.tsx`),
-  interop: at(`${server}interop.ts`),
+  interop: at(`${server}sources/interop.ts`),
   lastInjectionSummary: at(`${client}LastInjectionSummary.tsx`),
   locale: at(`${client}locales/en.json`),
   maintenance: at(`${client}settings/MaintenancePanel.tsx`),

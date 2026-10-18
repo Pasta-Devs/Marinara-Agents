@@ -17,26 +17,30 @@ import {
   ltmRepairResponseSchema,
   ltmStatusResponseSchema,
 } from "../../../../../shared/src/features/agents/long-term-memory/schema.js";
-import { clearLtmDebugLog, exportLtmDebugLog, readLtmDebugLog } from "../debug-log.js";
+import { clearLtmDebugLog, exportLtmDebugLog, readLtmDebugLog } from "../maintenance/debug-log.js";
 import { isEnoent } from "../ltm-utils.js";
-import { checkLongTermMemoryIntegrity, repairLongTermMemory } from "../maintenance.js";
-import { applyLtmNoteForkRepair, previewLtmNoteForkRepair } from "../note-fork-repair.js";
+import { checkLongTermMemoryIntegrity, repairLongTermMemory } from "../maintenance/maintenance.js";
+import { applyLtmNoteForkRepair, previewLtmNoteForkRepair } from "../identity/note-fork-repair.js";
 import { resolvePackageEmbeddingAdapter } from "../package-runtime.js";
-import { getLongTermMemoryDirectories, LTM_DIR_NAME } from "../paths.js";
-import { longTermMemoryRecallIndexPath, parseLtmRecallIndex, rebuildLongTermMemoryIndexes } from "../rebuild.js";
-import { readLtmIndexState, readLtmNoteSummary } from "../index-state.js";
-import { readLtmActivityEvents } from "../activity-index.js";
-import { CURRENT_LTM_CHUNK_FORMAT_VERSION } from "../chunking.js";
-import { readLongTermMemoryAttempt, readLongTermMemoryInjectionReceipt } from "../usage.js";
-import { applyLtmIdentityRepairs, LtmIdentityRepairError, previewLtmIdentityRepairs } from "../identity-repair.js";
-import { loadTrustedLtmSubjectCatalog } from "../subject-identity.js";
+import { getLongTermMemoryDirectories, LTM_DIR_NAME } from "../persistence/paths.js";
+import { longTermMemoryRecallIndexPath, parseLtmRecallIndex, rebuildLongTermMemoryIndexes } from "../recall/rebuild.js";
+import { readLtmIndexState, readLtmNoteSummary } from "../persistence/index-state.js";
+import { readLtmActivityEvents } from "../persistence/activity-index.js";
+import { CURRENT_LTM_CHUNK_FORMAT_VERSION } from "../recall/chunking.js";
+import { readLongTermMemoryAttempt, readLongTermMemoryInjectionReceipt } from "../recall/usage.js";
+import {
+  applyLtmIdentityRepairs,
+  LtmIdentityRepairError,
+  previewLtmIdentityRepairs,
+} from "../identity/identity-repair.js";
+import { loadTrustedLtmSubjectCatalog } from "../identity/subject-identity.js";
 import {
   deleteAllLongTermMemoryData,
   exportLongTermMemoryData,
   parseLongTermMemoryBackup,
   previewLongTermMemoryBackup,
   replaceLongTermMemoryData,
-} from "../backup-restore.js";
+} from "../persistence/backup-restore.js";
 import type { FastifyInstance } from "fastify";
 import {
   MAINTENANCE_BODY_LIMIT_BYTES,

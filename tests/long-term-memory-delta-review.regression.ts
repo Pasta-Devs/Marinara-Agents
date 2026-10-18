@@ -13,11 +13,11 @@ import type {
 async function main() {
   const source = "../packages/long-term-memory/src/engine/packages/server/src/services/long-term-memory";
   const { configurePackageRuntime } = await import(`${source}/package-runtime.ts`);
-  const { LongTermMemoryStorage } = await import(`${source}/storage.ts`);
-  const { previewLtmNoteForkRepair, applyLtmNoteForkRepair } = await import(`${source}/note-fork-repair.ts`);
-  const { renderSectionContributions } = await import(`${source}/section-contributions.ts`);
-  const { canUpdateLtmScopedTarget } = await import(`${source}/scoped-targets.ts`);
-  const { ltmRejectedSuggestionsPath } = await import(`${source}/paths.ts`);
+  const { LongTermMemoryStorage } = await import(`${source}/persistence/storage.ts`);
+  const { previewLtmNoteForkRepair, applyLtmNoteForkRepair } = await import(`${source}/identity/note-fork-repair.ts`);
+  const { renderSectionContributions } = await import(`${source}/persistence/section-contributions.ts`);
+  const { canUpdateLtmScopedTarget } = await import(`${source}/extraction/scoped-targets.ts`);
+  const { ltmRejectedSuggestionsPath } = await import(`${source}/persistence/paths.ts`);
 
   const timestamp = "2026-09-20T00:00:00.000Z";
   const sourceHash = "a".repeat(64);

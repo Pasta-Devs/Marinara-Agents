@@ -8,9 +8,9 @@ import { runRegressionToCompletion } from "./regression-helpers.ts";
 async function main() {
   const source = "../packages/long-term-memory/src/engine/packages/server/src/services/long-term-memory";
   const { configurePackageRuntime } = await import(`${source}/package-runtime.ts`);
-  const { runLongTermMemoryEvidenceUnitExtraction } = await import(`${source}/evidence-unit-extraction.ts`);
-  const { readLtmDebugLog } = await import(`${source}/debug-log.ts`);
-  const { sourceHashForLtmSourceNote } = await import(`${source}/source-hash.ts`);
+  const { runLongTermMemoryEvidenceUnitExtraction } = await import(`${source}/extraction/evidence-unit-extraction.ts`);
+  const { readLtmDebugLog } = await import(`${source}/maintenance/debug-log.ts`);
+  const { sourceHashForLtmSourceNote } = await import(`${source}/extraction/source-hash.ts`);
   const root = await mkdtemp(join(tmpdir(), "marinara-ltm-extraction-reliability-"));
   const timestamp = "2026-08-09T00:00:00.000Z";
   const sourceNote = {
@@ -350,7 +350,7 @@ async function main() {
     );
     assert.equal(calls.length, 1, "permanent quota errors do not trigger compatibility fallback");
 
-    const { validateLtmEvidenceUnits } = await import(`${source}/evidence-unit-validation.ts`);
+    const { validateLtmEvidenceUnits } = await import(`${source}/extraction/evidence-unit-validation.ts`);
     const longSourceText = `${Array.from({ length: 600 }, (_, index) => `filler${index}`).join(" ")} ${sourceNote.sections.source.text}`;
     const keptUnit = { ...validUnit, id: randomUUID() };
     const unknownLinkUnit = {
@@ -389,11 +389,11 @@ async function main() {
       "past the 500th source token still overlaps, and a dropped unit carries no warning",
     );
     const { processLongTermMemorySource, processLongTermMemorySourceBatch } = await import(
-      `${source}/source-processing.ts`
+      `${source}/extraction/source-processing.ts`
     );
-    const { LongTermMemoryStorage } = await import(`${source}/storage.ts`);
-    const { LongTermMemoryDraftStore } = await import(`${source}/draft-store.ts`);
-    const { withLtmVaultLock } = await import(`${source}/vault-lock.ts`);
+    const { LongTermMemoryStorage } = await import(`${source}/persistence/storage.ts`);
+    const { LongTermMemoryDraftStore } = await import(`${source}/drafts/draft-store.ts`);
+    const { withLtmVaultLock } = await import(`${source}/persistence/vault-lock.ts`);
     const commitRoot = await mkdtemp(join(tmpdir(), "marinara-ltm-source-commit-"));
     try {
       const storage = new LongTermMemoryStorage(commitRoot);

@@ -7,10 +7,10 @@ import {
   type LtmGlobalSettings,
   type LtmResolvedGlobalSettings,
 } from "../../../../shared/src/features/agents/long-term-memory/schema.js";
-import { readJsonFile, writeJsonAtomic } from "./atomic-json.js";
+import { readJsonFile, writeJsonAtomic } from "./persistence/atomic-json.js";
 import { logger } from "./package-runtime.js";
-import { getLongTermMemoryDirectories, getLongTermMemoryRoot, safeJoin } from "./paths.js";
-import { withLtmVaultLock } from "./vault-lock.js";
+import { getLongTermMemoryDirectories, getLongTermMemoryRoot, safeJoin } from "./persistence/paths.js";
+import { withLtmVaultLock } from "./persistence/vault-lock.js";
 export const ltmSettingsPath = (root = getLongTermMemoryRoot()) =>
   safeJoin(getLongTermMemoryDirectories(root).config, "settings.json");
 const loggedUnknownSettings = new Set<string>();

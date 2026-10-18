@@ -94,17 +94,17 @@ async function main(routeScenario: RouteScenario) {
   } =
     await import("../packages/long-term-memory/src/engine/packages/shared/src/features/agents/long-term-memory/schema.ts");
   const { addRejectedSuggestions, readAllRejectedSuggestions, listRejectedSuggestions } =
-    await import("../packages/long-term-memory/src/engine/packages/server/src/services/long-term-memory/rejected-suggestions.ts");
+    await import("../packages/long-term-memory/src/engine/packages/server/src/services/long-term-memory/drafts/rejected-suggestions.ts");
   const { extractionFingerprintForLtmSourceNote, sourceHashForLtmSourceNote } =
-    await import("../packages/long-term-memory/src/engine/packages/server/src/services/long-term-memory/source-hash.ts");
+    await import("../packages/long-term-memory/src/engine/packages/server/src/services/long-term-memory/extraction/source-hash.ts");
   const { buildTrustedLtmSubjectCatalog, loadTrustedLtmSubjectCatalog, prepareLtmSubjectIdentityContext } =
-    await import("../packages/long-term-memory/src/engine/packages/server/src/services/long-term-memory/subject-identity.ts");
+    await import("../packages/long-term-memory/src/engine/packages/server/src/services/long-term-memory/identity/subject-identity.ts");
   const { compileEvidenceUnitExtraction } =
-    await import("../packages/long-term-memory/src/engine/packages/server/src/services/long-term-memory/evidence-unit-extraction.ts");
+    await import("../packages/long-term-memory/src/engine/packages/server/src/services/long-term-memory/extraction/evidence-unit-extraction.ts");
   const { longTermMemoryAttemptPath, longTermMemoryInjectionReceiptPath, recordLongTermMemoryZeroMatch } =
-    await import("../packages/long-term-memory/src/engine/packages/server/src/services/long-term-memory/usage.ts");
+    await import("../packages/long-term-memory/src/engine/packages/server/src/services/long-term-memory/recall/usage.ts");
   const { prepareGenerationLongTermMemory } =
-    await import("../packages/long-term-memory/src/engine/packages/server/src/services/long-term-memory/generation-injection.ts");
+    await import("../packages/long-term-memory/src/engine/packages/server/src/services/long-term-memory/recall/generation-injection.ts");
   const app = Fastify();
   const registeredRoutes: string[] = [];
   app.addHook("onRoute", (route: { method: string | string[]; url: string }) => {
@@ -1953,7 +1953,7 @@ async function main(routeScenario: RouteScenario) {
         const isolatedRoot = await mkdtemp(join(tmpdir(), "marinara-ltm-identity-backup-"));
         try {
           const { replaceLongTermMemoryData } =
-            await import("../packages/long-term-memory/src/engine/packages/server/src/services/long-term-memory/backup-restore.ts");
+            await import("../packages/long-term-memory/src/engine/packages/server/src/services/long-term-memory/persistence/backup-restore.ts");
           await replaceLongTermMemoryData(backup.json(), isolatedRoot);
           assert.equal((await listRejectedSuggestions({}, isolatedRoot)).length, 0);
           const restoredChoices = await readAllRejectedSuggestions(isolatedRoot);
@@ -4950,7 +4950,7 @@ async function main(routeScenario: RouteScenario) {
         ["chat-a:summary-order-b", "chat-a:summary-order-a"],
       );
       const { importPackageInterop } =
-        await import("../packages/long-term-memory/src/engine/packages/server/src/services/long-term-memory/interop.ts");
+        await import("../packages/long-term-memory/src/engine/packages/server/src/services/long-term-memory/sources/interop.ts");
       chats[0].metadata.summaryEntries.push({
         id: "summary-aborted-new",
         content: "This source must never be persisted.",

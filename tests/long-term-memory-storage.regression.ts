@@ -71,39 +71,45 @@ async function main() {
     else globalThis.window = originalWindow;
   }
   const { configurePackageRuntime } = await import(`${source}/package-runtime.ts`);
-  const { readLtmDebugLog } = await import(`${source}/debug-log.ts`);
+  const { readLtmDebugLog } = await import(`${source}/maintenance/debug-log.ts`);
   const { getLongTermMemoryDirectories, getLongTermMemoryRoot, ltmRejectedSuggestionsPath, notePathForId } =
-    await import(`${source}/paths.ts`);
-  const { LongTermMemoryStorage } = await import(`${source}/storage.ts`);
-  const { invalidateLtmVaultSnapshot, readLtmVaultSnapshot } = await import(`${source}/vault-snapshot.ts`);
-  const { LongTermMemoryDraftStore } = await import(`${source}/draft-store.ts`);
+    await import(`${source}/persistence/paths.ts`);
+  const { LongTermMemoryStorage } = await import(`${source}/persistence/storage.ts`);
+  const { invalidateLtmVaultSnapshot, readLtmVaultSnapshot } = await import(`${source}/persistence/vault-snapshot.ts`);
+  const { LongTermMemoryDraftStore } = await import(`${source}/drafts/draft-store.ts`);
   const { applyLongTermMemoryDraft, preflightLongTermMemoryDraft, LtmDraftApplyError } = await import(
-    `${source}/reconciliation.ts`
+    `${source}/drafts/reconciliation.ts`
   );
   const { compileEvidenceUnitExtraction, sourceMetadataForEvidenceUnitDraft } = await import(
-    `${source}/evidence-unit-extraction.ts`
+    `${source}/extraction/evidence-unit-extraction.ts`
   );
   const { extractionFingerprintForLtmSourceNote, isLtmSourceExtractionFingerprintCurrent, sourceHashForLtmSourceNote } =
-    await import(`${source}/source-hash.ts`);
-  const { projectLongTermMemoryDraftReview } = await import(`${source}/draft-review.ts`);
+    await import(`${source}/extraction/source-hash.ts`);
+  const { projectLongTermMemoryDraftReview } = await import(`${source}/drafts/draft-review.ts`);
   const { activateLongTermMemoryStorage } = await import(`${source}/runtime.ts`);
   const { getLtmGlobalSettings, ltmSettingsPath, updateLtmGlobalSettings } = await import(`${source}/settings.ts`);
   const { getLtmExtractionConfig, ltmExtractionConfigPath, updateLtmExtractionConfig } = await import(
-    `${source}/extraction-config.ts`
+    `${source}/extraction/extraction-config.ts`
   );
-  const { ltmMutationTransactionSchema, recoverLtmMutations } = await import(`${source}/mutation-transaction.ts`);
-  const { readLtmNoteSummary, writeLtmNoteSummary, rebuildLtmNoteSummary } = await import(`${source}/index-state.ts`);
-  const { rebuildLongTermMemoryIndexes, loadOrRebuildLongTermMemoryIndexes } = await import(`${source}/rebuild.ts`);
-  const { repairLongTermMemory } = await import(`${source}/maintenance.ts`);
+  const { ltmMutationTransactionSchema, recoverLtmMutations } = await import(
+    `${source}/persistence/mutation-transaction.ts`
+  );
+  const { readLtmNoteSummary, writeLtmNoteSummary, rebuildLtmNoteSummary } = await import(
+    `${source}/persistence/index-state.ts`
+  );
+  const { rebuildLongTermMemoryIndexes, loadOrRebuildLongTermMemoryIndexes } = await import(
+    `${source}/recall/rebuild.ts`
+  );
+  const { repairLongTermMemory } = await import(`${source}/maintenance/maintenance.ts`);
   const { longTermMemoryRetentionConfigPath, pruneLtmRepairBackups, runLongTermMemoryRetention } = await import(
-    `${source}/retention.ts`
+    `${source}/persistence/retention.ts`
   );
-  const { previewLtmNoteForkRepair, applyLtmNoteForkRepair } = await import(`${source}/note-fork-repair.ts`);
-  const { readLongTermMemoryUsage } = await import(`${source}/usage.ts`);
-  const { rebuildLtmActivityIndex, readLtmActivityEvents } = await import(`${source}/activity-index.ts`);
-  const { renderSectionContributions } = await import(`${source}/section-contributions.ts`);
-  const { buildStopWordSet, extractNoteKeywords } = await import(`${source}/keyword-extract.ts`);
-  const { mergeKeywords } = await import(`${source}/keyword-extract.ts`);
+  const { previewLtmNoteForkRepair, applyLtmNoteForkRepair } = await import(`${source}/identity/note-fork-repair.ts`);
+  const { readLongTermMemoryUsage } = await import(`${source}/recall/usage.ts`);
+  const { rebuildLtmActivityIndex, readLtmActivityEvents } = await import(`${source}/persistence/activity-index.ts`);
+  const { renderSectionContributions } = await import(`${source}/persistence/section-contributions.ts`);
+  const { buildStopWordSet, extractNoteKeywords } = await import(`${source}/recall/keyword-extract.ts`);
+  const { mergeKeywords } = await import(`${source}/recall/keyword-extract.ts`);
   const { getLtmActiveKeywords, ltmKeywordKey, normalizeLtmKeywordIntent } =
     await import("../packages/long-term-memory/src/engine/packages/shared/src/features/agents/long-term-memory/keywords.ts");
   const { ltmScopesOverlap, validateLtmExplicitAvailability } =
@@ -116,13 +122,13 @@ async function main() {
     deleteAllLongTermMemoryData,
     resetLongTermMemorySettings,
     parseLongTermMemoryBackup,
-  } = await import(`${source}/backup-restore.ts`);
+  } = await import(`${source}/persistence/backup-restore.ts`);
   const {
     addRejectedSuggestions,
     deleteRejectedSuggestion,
     deleteRejectedSuggestionsForSource,
     listRejectedSuggestions,
-  } = await import(`${source}/rejected-suggestions.ts`);
+  } = await import(`${source}/drafts/rejected-suggestions.ts`);
   const { DEFAULT_LTM_GLOBAL_SETTINGS, ltmGlobalSettingsSchema } =
     await import("../packages/long-term-memory/src/engine/packages/shared/src/features/agents/long-term-memory/schema.ts");
 

@@ -12,14 +12,14 @@ import {
   ltmRejectedSuggestionsResponseSchema,
   ltmResolveSubjectIdentityResponseSchema,
 } from "../../../../../shared/src/features/agents/long-term-memory/schema.js";
-import { projectLongTermMemoryDraftReview } from "../draft-review.js";
-import { applyLongTermMemoryDraft, preflightLongTermMemoryDraft } from "../reconciliation.js";
-import { resolveLtmSubjectIdentityReview } from "../subject-choice-review.js";
+import { projectLongTermMemoryDraftReview } from "../drafts/draft-review.js";
+import { applyLongTermMemoryDraft, preflightLongTermMemoryDraft } from "../drafts/reconciliation.js";
+import { resolveLtmSubjectIdentityReview } from "../identity/subject-choice-review.js";
 import {
   deleteRejectedSuggestion,
   deleteRejectedSuggestionsForSource,
   listRejectedSuggestions,
-} from "../rejected-suggestions.js";
+} from "../drafts/rejected-suggestions.js";
 import type { FastifyInstance } from "fastify";
 import {
   DRAFT_BODY_LIMIT_BYTES,

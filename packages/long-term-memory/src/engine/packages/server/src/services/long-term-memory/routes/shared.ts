@@ -1,8 +1,8 @@
 import { z } from "zod";
 import { logger } from "../package-runtime.js";
-import { rebuildLongTermMemoryIndexes } from "../rebuild.js";
-import type { LongTermMemoryDraftStore } from "../draft-store.js";
-import type { LongTermMemoryStorage } from "../storage.js";
+import { rebuildLongTermMemoryIndexes } from "../recall/rebuild.js";
+import type { LongTermMemoryDraftStore } from "../drafts/draft-store.js";
+import type { LongTermMemoryStorage } from "../persistence/storage.js";
 import { LtmServiceError, ltmErrorResponse } from "../service-error.js";
 
 export const NOTE_BODY_LIMIT_BYTES = 512 * 1024;

@@ -7,7 +7,7 @@ import {
   previewPackageInterop,
   previewPackageLorebooks,
   importPackageInterop,
-} from "../packages/long-term-memory/src/engine/packages/server/src/services/long-term-memory/interop.ts";
+} from "../packages/long-term-memory/src/engine/packages/server/src/services/long-term-memory/sources/interop.ts";
 import {
   ltmInteropPreviewResponseSchema,
   ltmLorebookPreviewResponseSchema,

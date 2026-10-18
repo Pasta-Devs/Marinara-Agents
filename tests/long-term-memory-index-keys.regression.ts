@@ -3,7 +3,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { runRegressionToCompletion } from "./regression-helpers.ts";
-import type { LtmBudgetedChunk } from "../packages/long-term-memory/src/engine/packages/server/src/services/long-term-memory/budget.ts";
+import type { LtmBudgetedChunk } from "../packages/long-term-memory/src/engine/packages/server/src/services/long-term-memory/recall/budget.ts";
 import type { LtmMemoryChunk } from "../packages/long-term-memory/src/engine/packages/shared/src/features/agents/long-term-memory/schema.ts";
 
 const source = "../packages/long-term-memory/src/engine/packages/server/src/services/long-term-memory";
@@ -45,14 +45,14 @@ function assertOwnKeys(record: object, message: string) {
 }
 
 async function main() {
-  const { buildLtmBm25Index, ltmHangulNameSyllables, searchLtmBm25 } = await import(`${source}/bm25.ts`);
+  const { buildLtmBm25Index, ltmHangulNameSyllables, searchLtmBm25 } = await import(`${source}/recall/bm25.ts`);
   const { buildLtmKeywordIndex, LTM_KEYWORD_MAX_SCORE, searchLtmKeywordIndex } = await import(
-    `${source}/keyword-index.ts`
+    `${source}/recall/keyword-index.ts`
   );
-  const { buildStopWordSet, normalizeKeywordTerms } = await import(`${source}/keyword-extract.ts`);
-  const { buildLtmMetadataIndex, getLtmMetadataMatches } = await import(`${source}/metadata-index.ts`);
-  const { parseLtmRecallIndex } = await import(`${source}/rebuild.ts`);
-  const { readLongTermMemoryUsage, recordLongTermMemoryInjection } = await import(`${source}/usage.ts`);
+  const { buildStopWordSet, normalizeKeywordTerms } = await import(`${source}/recall/keyword-extract.ts`);
+  const { buildLtmMetadataIndex, getLtmMetadataMatches } = await import(`${source}/recall/metadata-index.ts`);
+  const { parseLtmRecallIndex } = await import(`${source}/recall/rebuild.ts`);
+  const { readLongTermMemoryUsage, recordLongTermMemoryInjection } = await import(`${source}/recall/usage.ts`);
 
   const chunks = [
     chunk("constructor", "constructor"),
@@ -247,7 +247,7 @@ async function main() {
     "a late-alphabet in-scope keyword must survive the fuzzy catalog cap",
   );
 
-  const { reciprocalRankFuse } = await import(`${source}/ranking.ts`);
+  const { reciprocalRankFuse } = await import(`${source}/recall/ranking.ts`);
   const { LTM_LINKED_RECALL_MIN_RELEVANCE, LTM_RECALL_STYLE_WEIGHTS } =
     await import("../packages/long-term-memory/src/engine/packages/shared/src/features/agents/long-term-memory/constants.ts");
   for (const [style, weights] of Object.entries(LTM_RECALL_STYLE_WEIGHTS)) {
@@ -372,7 +372,7 @@ async function main() {
   );
   // Issue #1362: linked recall also follows a caused_by link between two events and a
   // thread paid_off_in link to its event, from either end, and nothing wider.
-  const { findLtmLinkedNotes } = await import(`${source}/graph.ts`);
+  const { findLtmLinkedNotes } = await import(`${source}/recall/graph.ts`);
   const linkTypes: Record<string, string> = {
     timeline_effect: "timeline_event",
     timeline_cause: "timeline_event",
@@ -509,8 +509,8 @@ async function main() {
   {
     const lookupRoot = await mkdtemp(join(tmpdir(), "marinara-ltm-known-names-"));
     try {
-      const { retrieveLongTermMemory } = await import(`${source}/retrieval.ts`);
-      const { buildLtmGraphIndex } = await import(`${source}/graph.ts`);
+      const { retrieveLongTermMemory } = await import(`${source}/recall/retrieval.ts`);
+      const { buildLtmGraphIndex } = await import(`${source}/recall/graph.ts`);
       const recallChunks = [
         { ...chunk("half-world", "half_world"), title: "Half", keywords: ["half"], text: "a world note" },
         {

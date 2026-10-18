@@ -1,10 +1,10 @@
-import { LongTermMemoryDraftStore } from "./draft-store.js";
-import { getLtmExtractionConfig } from "./extraction-config.js";
+import { LongTermMemoryDraftStore } from "./drafts/draft-store.js";
+import { getLtmExtractionConfig } from "./extraction/extraction-config.js";
 import { getLtmGlobalSettings, readLtmSettingsFile } from "./settings.js";
-import { LongTermMemoryStorage } from "./storage.js";
-import { withLtmVaultLock } from "./vault-lock.js";
+import { LongTermMemoryStorage } from "./persistence/storage.js";
+import { withLtmVaultLock } from "./persistence/vault-lock.js";
 import { ltmAgentSettingsSchema } from "../../../../shared/src/features/agents/long-term-memory/schema.js";
-import { getLongTermMemoryDirectories, safeJoin } from "./paths.js";
+import { getLongTermMemoryDirectories, safeJoin } from "./persistence/paths.js";
 export async function activateLongTermMemoryStorage(root: string) {
   const storage = new LongTermMemoryStorage(root);
   const draftStore = new LongTermMemoryDraftStore(root);

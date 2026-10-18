@@ -98,8 +98,8 @@ async function main() {
     },
   ] = await Promise.all([
     import("../packages/long-term-memory/src/engine/packages/server/src/services/long-term-memory/package-runtime.ts"),
-    import("../packages/long-term-memory/src/engine/packages/server/src/services/long-term-memory/interop.ts"),
-    import("../packages/long-term-memory/src/engine/packages/server/src/services/long-term-memory/storage.ts"),
+    import("../packages/long-term-memory/src/engine/packages/server/src/services/long-term-memory/sources/interop.ts"),
+    import("../packages/long-term-memory/src/engine/packages/server/src/services/long-term-memory/persistence/storage.ts"),
     import("../packages/long-term-memory/src/engine/packages/shared/src/features/agents/long-term-memory/schema.ts"),
   ]);
   const dataDir = await mkdtemp(join(tmpdir(), "marinara-ltm-conversation-summary-"));

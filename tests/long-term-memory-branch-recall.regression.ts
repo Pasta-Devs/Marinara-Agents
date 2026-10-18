@@ -10,10 +10,10 @@ import { runRegressionToCompletion } from "./regression-helpers.ts";
 // chat summary the memory was extracted from is one of the branch's own. Recall only: nothing is written.
 async function main() {
   const source = "../packages/long-term-memory/src/engine/packages/server/src/services/long-term-memory";
-  const { LongTermMemoryStorage } = await import(`${source}/storage.ts`);
+  const { LongTermMemoryStorage } = await import(`${source}/persistence/storage.ts`);
   const { configurePackageRuntime } = await import(`${source}/package-runtime.ts`);
-  const { prepareGenerationLongTermMemory } = await import(`${source}/generation-injection.ts`);
-  const { inheritedBranchLtmNoteIds } = await import(`${source}/chat-scope.ts`);
+  const { prepareGenerationLongTermMemory } = await import(`${source}/recall/generation-injection.ts`);
+  const { inheritedBranchLtmNoteIds } = await import(`${source}/identity/chat-scope.ts`);
   const { registerNotesRoutes } = await import(`${source}/routes/notes.ts`);
   const engineRoot =
     process.env.MARINARA_ENGINE_ROOT ?? join(dirname(fileURLToPath(import.meta.url)), "../../Marinara-Engine");
