@@ -1,6 +1,6 @@
 # Long-Term Memory changelog
 
-## Unreleased
+## 1.4.52 — 2026-10-18
 
 - A suggestion that extraction leaves out because it links to a memory the extraction could not find or did not keep now says so. Before, it said the suggestion "used the wrong memory stream". The low-overlap warning now checks the whole source, not only its start, and is no longer added to a suggestion that validation leaves out straight away.
 - A relationship memory whose text starts with "Summary:" now keeps that sentence in the chat prompt. Before, the relationship scores line pushed it out.
