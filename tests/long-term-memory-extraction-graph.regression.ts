@@ -33,8 +33,11 @@ async function main() {
   const { processLongTermMemorySource } = await import(`${source}/source-processing.ts`);
   const { LongTermMemoryStorage } = await import(`${source}/storage.ts`);
   const { longTermMemoryRecallIndexPath, rebuildLongTermMemoryIndexes } = await import(`${source}/rebuild.ts`);
+  const { getLtmExtractionConfig, updateLtmExtractionConfig } = await import(`${source}/extraction-config.ts`);
   const { ltmNoteIdSchema } =
     await import("../packages/long-term-memory/src/engine/packages/shared/src/features/agents/long-term-memory/schema.ts");
+  const { DEFAULT_LTM_EXTRACTION_PROMPT_CONVERSATION } =
+    await import("../packages/long-term-memory/src/engine/packages/shared/src/features/agents/long-term-memory/constants.ts");
 
   const timestamp = "2026-07-21T00:00:00.000Z";
   const sourceNote = (
@@ -232,6 +235,126 @@ async function main() {
     )?.details?.validationStage,
     "closure",
   );
+  // Issue #1448: a unit dropped after validation must not leave a dangling link in the compiled draft.
+  const lateDropSource = sourceNote(
+    "source_late_drop_links",
+    { kind: "chat_summary", sourceId: "chat-a", entryId: "summary-late-drop" },
+    "Mara told the coffee story at the cafe. The cafe serves only coffee. Mara swore off coffee for good.",
+  );
+  const lateDrop = compile(lateDropSource, [
+    unit(lateDropSource, {
+      bucket: "timeline_event",
+      subjectId: "coffee_story_told",
+      sectionKey: "event",
+      text: "Mara told the coffee story at the cafe.",
+      claimKind: "change",
+      links: [
+        { target: lateDropSource.id, relation: "extracted_from" },
+        { target: "char_mara", relation: "affects_character" },
+      ],
+    }),
+    unit(lateDropSource, {
+      bucket: "thread",
+      subjectId: "coffee_story",
+      sectionKey: "summary",
+      text: "Whether the coffee story is true stays open.",
+      claimKind: "change",
+    }),
+    unit(lateDropSource, {
+      bucket: "world_fact",
+      subjectId: "cafe_menu",
+      sectionKey: "facts",
+      text: "The cafe serves only coffee.",
+      claimKind: "static",
+      links: [{ target: "thread_coffee_story", relation: "involves" }],
+    }),
+    unit(lateDropSource, {
+      bucket: "character_fact",
+      subjectId: "mara",
+      sectionKey: "developments",
+      text: "Mara swore off coffee for good.",
+      claimKind: "change",
+      subjectNames: ["Mara"],
+    }),
+  ]);
+  const lateDropCreated = lateDrop.compiledResponse.mutations.flatMap((mutation) =>
+    mutation.kind === "create_note" ? [mutation.note] : [],
+  );
+  assert.deepEqual(lateDropCreated.map((note) => note.type).sort(), ["timeline_event", "world"]);
+  const lateDropTargets = new Set([lateDropSource.id, ...lateDropCreated.map((note) => note.id)]);
+  for (const mutation of lateDrop.compiledResponse.mutations)
+    for (const link of mutation.kind === "create_note"
+      ? mutation.note.links
+      : mutation.kind === "add_link"
+        ? [mutation.link]
+        : [])
+      assert.ok(lateDropTargets.has(link.target), `draft link target must exist: ${link.target}`);
+  assert.equal(lateDrop.accounting.keptUnits, 2);
+  assert.equal(lateDrop.accounting.validationRejections, 2);
+  assert.deepEqual(
+    lateDrop.diagnostics
+      .filter((diagnostic) => diagnostic.code === "unknown_link_target")
+      .map((diagnostic) => [diagnostic.severity, diagnostic.details?.linkTarget])
+      .sort(),
+    [
+      ["warning", "char_mara"],
+      ["warning", "thread_coffee_story"],
+    ],
+    "a non-structural link to a dropped unit is stripped with a warning",
+  );
+  assert.equal(lateDrop.requiresReview, false);
+  // Without provenance no extracted_from link is added, so the event graph drops the cause of a relationship
+  // change that another event still grounds.
+  const lateCauseSource = {
+    ...sourceNote(
+      "source_late_cause",
+      { kind: "chat_summary", sourceId: "chat-a", entryId: "summary-late-cause" },
+      "Mara told the coffee story at the cafe. Alice and Rowan's trust changed after the coffee story.",
+    ),
+    provenance: undefined,
+  } as any;
+  const lateCause = compile(lateCauseSource, [
+    unit(lateCauseSource, {
+      bucket: "timeline_event",
+      subjectId: "coffee_spilled",
+      sectionKey: "event",
+      text: "Mara told the coffee story at the cafe.",
+      claimKind: "change",
+    }),
+    unit(lateCauseSource, {
+      bucket: "timeline_event",
+      subjectId: "cafe_visit",
+      sectionKey: "event",
+      text: "Mara told the coffee story at the cafe.",
+      claimKind: "change",
+      links: [{ target: lateCauseSource.id, relation: "extracted_from" }],
+    }),
+    unit(lateCauseSource, {
+      bucket: "relationship_state",
+      subjectId: "alice_rowan",
+      sectionKey: "state",
+      text: "Alice and Rowan's trust changed after the coffee story.",
+      claimKind: "change",
+      subjectNames: ["Alice", "Rowan"],
+      dimensionChanges: { trust: -12 },
+      links: [
+        { target: "timeline_coffee_spilled", relation: "caused_by" },
+        { target: "timeline_cafe_visit", relation: "evidenced_by" },
+      ],
+    }),
+  ]);
+  assert.deepEqual(
+    lateCause.compiledResponse.mutations.flatMap((mutation) =>
+      mutation.kind === "create_note" ? [mutation.note.type] : [],
+    ),
+    ["timeline_event"],
+  );
+  const lateCauseDrop = lateCause.diagnostics.find(
+    (diagnostic) => diagnostic.details?.validatorCode === "relationship_state_missing_caused_by",
+  );
+  assert.equal(lateCauseDrop?.details?.validationStage, "closure");
+  assert.equal(lateCause.accounting.keptUnits, 1);
+  assert.equal(lateCause.accounting.validationRejections, 2, "the late relationship drop is counted");
   const sourceHashMismatch = compile(chat, [
     {
       ...unit(chat, {
@@ -1169,6 +1292,42 @@ async function main() {
     }).json_schema.schema.properties.units.items.properties.title.maxLength,
     80,
   );
+  assert.equal(
+    "subjectKeys" in
+      evidenceUnitResponseFormat({ allowedBuckets: ["character_fact"], sourceHash }).json_schema.schema.properties.units
+        .items.properties,
+    false,
+    "issue #1448: the provider schema must not offer subjectKeys",
+  );
+  // Issue #1448: a whitespace-only prompt template falls back to the mode's default prompt.
+  assert.ok(
+    String(
+      evidenceUnitMessages({
+        sourceNote: chat,
+        sourceText: chat.sections.source.text,
+        scope: {},
+        modes: ["conversation"],
+        sourceHash,
+        mode: "conversation",
+        systemPrompt: "   ",
+      } as any)[0]?.content,
+    ).startsWith(DEFAULT_LTM_EXTRACTION_PROMPT_CONVERSATION),
+  );
+  const blankTemplateRoot = await mkdtemp(join(tmpdir(), "marinara-ltm-blank-template-"));
+  try {
+    await updateLtmExtractionConfig(
+      {
+        promptTemplates: [{ id: "blank", name: "Blank", prompt: "   " }],
+        activePromptTemplateIdsByMode: { conversation: "blank" },
+      },
+      blankTemplateRoot,
+    );
+    const blankConfig = await getLtmExtractionConfig(blankTemplateRoot, "conversation");
+    assert.equal(blankConfig.systemPrompt, DEFAULT_LTM_EXTRACTION_PROMPT_CONVERSATION);
+    assert.equal(blankConfig.activePromptTemplateId, null);
+  } finally {
+    await rm(blankTemplateRoot, { recursive: true, force: true });
+  }
 
   const parsedSourcePrefixedLink = parseEvidenceUnitPayload(
     {

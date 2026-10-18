@@ -667,6 +667,23 @@ async function main() {
   });
   const promptBody = JSON.stringify(messages);
   assert.equal(promptBody.includes("local_character:"), false);
+  const roleplayMessages = evidenceUnitMessages({
+    sourceNote: sourceNote as any,
+    sourceText: "Mara visits the party.",
+    sourceHash: "a".repeat(64),
+    modes: ["roleplay"],
+    mode: "roleplay",
+    trustedSubjectCatalog: {
+      entries: [{ subject: validSubject, name: "Mara", aliases: [], canonicalSlug: "mara", familyId: "chat_chat_a" }],
+      notes: [],
+    },
+    languageModel: {} as any,
+  });
+  assert.deepEqual(
+    JSON.parse(String(roleplayMessages[1]!.content)).trustedSubjects,
+    [{ name: "Mara", aliases: [] }],
+    "issue #1448: the prompt catalog carries names and aliases, never subject keys or refs",
+  );
 
   // --- I01: Ambiguity diagnostics & competing records with provenance ---
   const duplicateDisplayNameCatalog = buildTrustedLtmSubjectCatalog({
@@ -914,6 +931,29 @@ async function main() {
       scope,
     }).resolve({ units: malformedRelationship.response.units, existingNotes: [] }).units[0]?.subjectKeys,
     ["character:char_maria", "character:char_marie"],
+  );
+  // Issue #1448: a provider-supplied subject key never overrides the named subject.
+  const wrongKeyInput = parseEvidenceUnitPayload(
+    {
+      units: [
+        unit({
+          bucket: "character_fact",
+          subjectId: "marie",
+          subjectNames: ["Marie"],
+          subjectKeys: ["character:char_ming"],
+          text: "Marie prefers tea over coffee.",
+        }),
+      ],
+    },
+    "a".repeat(64),
+  ).response.units;
+  assert.equal(wrongKeyInput[0]?.subjectKeys, undefined);
+  assert.deepEqual(
+    prepareLtmSubjectIdentityContext({ units: wrongKeyInput, catalog: identityCatalog, scope }).resolve({
+      units: wrongKeyInput,
+      existingNotes: [],
+    }).units[0]?.subjectKeys,
+    ["character:char_marie"],
   );
   assert.equal(resolveIdentity("Mariya").units.length, 0, "fuzzy neighbors must not assign a subject");
   const ambiguousAlias = resolveIdentity("Sam");
@@ -2341,6 +2381,7 @@ async function main() {
       ...unit({ bucket: "character_fact", subjectId: "mara", subjectNames: ["Mara"], text: "Mara keeps the map." }),
       subjects: [mara.subject],
       claimKind: "static" as const,
+      links: [{ target: "char_jordan_the_innkeeper", relation: "involves" as const }],
       sourceHash: innHash,
     },
     {
@@ -2409,6 +2450,14 @@ async function main() {
   assert.equal(dropped.outcome.droppedCandidates[0]?.validatorCode, "local_character_requires_roleplay");
   assert.equal(dropped.accounting.validationRejections, 1);
   assert.equal(dropped.outcome.state, "partial_success");
+  const maraLinks = (result: ReturnType<typeof compileInn>) =>
+    result.compiledResponse.mutations.flatMap((mutation) =>
+      mutation.kind === "create_note" && mutation.note.id === "char_mara"
+        ? mutation.note.links.map((link) => link.target)
+        : [],
+    );
+  assert.deepEqual(maraLinks(restricted), ["char_jordan_the_innkeeper"]);
+  assert.deepEqual(maraLinks(dropped), [], "issue #1448: a link to the dropped local character is stripped");
 
   process.stdout.write(
     "Long-Term Memory local-character regression: scoped identity, review risk, safeguards, and isolation passed\n",

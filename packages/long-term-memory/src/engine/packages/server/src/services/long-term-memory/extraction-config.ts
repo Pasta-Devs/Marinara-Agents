@@ -51,7 +51,8 @@ export async function getLtmExtractionConfig(root = getLongTermMemoryRoot(), mod
     resolved.activePromptTemplateIdsByMode[mode as keyof typeof resolved.activePromptTemplateIdsByMode];
   if (templateId) {
     const template = resolved.promptTemplates.find((t) => t.id === templateId);
-    if (template)
+    // A blank template falls back to the mode default like a missing one.
+    if (template?.prompt.trim())
       return {
         ...resolved,
         systemPrompt: template.prompt,

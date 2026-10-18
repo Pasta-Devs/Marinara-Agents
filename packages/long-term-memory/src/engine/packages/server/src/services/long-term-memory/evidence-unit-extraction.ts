@@ -26,7 +26,7 @@ import type { PackageLanguageModel, PackageLanguageModelError } from "./package-
 import { logger } from "./package-runtime.js";
 import { isPackageDebugAgentsEnabled } from "./package-runtime.js";
 import { countBy, safeSnippet } from "./ltm-utils.js";
-import { DEFAULT_LTM_EXTRACTION_PROMPT } from "../../../../shared/src/features/agents/long-term-memory/constants.js";
+import { DEFAULT_LTM_EXTRACTION_PROMPTS_BY_MODE } from "../../../../shared/src/features/agents/long-term-memory/constants.js";
 import { stableJsonHash } from "./chunking.js";
 import { LtmServiceError } from "./service-error.js";
 import { extractionFingerprintForLtmSourceNote, sourceHashForLtmSourceNote } from "./source-hash.js";
@@ -34,7 +34,11 @@ import { recordLtmDebugEvent } from "./debug-log.js";
 import type { LtmExtractionDiagnostic } from "../../../../shared/src/features/agents/long-term-memory/schema.js";
 import { deduplicateUnits } from "./dedup.js";
 import { compileLtmEvidenceUnits } from "./evidence-unit-compiler.js";
-import { noteIdForEvidenceUnit, validateLtmEvidenceUnits } from "./evidence-unit-validation.js";
+import {
+  closeLtmEvidenceUnitLinks,
+  noteIdForEvidenceUnit,
+  validateLtmEvidenceUnits,
+} from "./evidence-unit-validation.js";
 import { normalizeStructuredSummaryEvidenceUnits } from "./structured-summary-normalizer.js";
 import { isLocalCharacterSubject } from "./chat-scope.js";
 import { trustedLtmSubjectPromptCatalog, type TrustedLtmSubjectCatalog } from "./subject-identity.js";
@@ -503,11 +507,15 @@ export function evidenceUnitResponseFormat(options: {
                   maxItems: 2,
                   items: { type: "string", minLength: 1, maxLength: 240 },
                 },
-                subjectKeys: {
-                  type: "array",
-                  maxItems: 3,
-                  items: { type: "string", minLength: 1, maxLength: 240 },
-                },
+                ...(resolveSubjectNames
+                  ? {}
+                  : {
+                      subjectKeys: {
+                        type: "array",
+                        maxItems: 3,
+                        items: { type: "string", minLength: 1, maxLength: 240 },
+                      },
+                    }),
                 dimensions: relationshipDimensionSchema(0, 100),
                 dimensionChanges: relationshipDimensionSchema(-100, 100),
               },
@@ -606,14 +614,22 @@ function deterministicEvidenceUnitId(record: Record<string, unknown>, expectedSo
   return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-4${hex.slice(13, 16)}-${variant}${hex.slice(17, 20)}-${hex.slice(20, 32)}`;
 }
 
-function normalizedEvidenceUnitRecord(unit: unknown, expectedSourceHash: string, trustedEvidence: string[]): unknown {
+function normalizedEvidenceUnitRecord(
+  unit: unknown,
+  expectedSourceHash: string,
+  trustedEvidence: string[],
+  resolveSubjectNames: boolean,
+): unknown {
   if (!unit || typeof unit !== "object" || Array.isArray(unit)) return unit;
   const record = unit as Record<string, unknown>;
-  // An explicitly empty subjectKeys array must behave like an omitted field so it
+  // Name resolution drops provider keys, which could bind a fact to another character. Otherwise
+  // an explicitly empty subjectKeys array must behave like an omitted field so it
   // cannot suppress trusted name-based resolution. The internal resolver stays strict.
   const { subjectKeys: rawSubjectKeys, ...recordWithoutSubjectKeys } = record;
   const normalizedRecord =
-    Array.isArray(rawSubjectKeys) && rawSubjectKeys.length === 0 ? recordWithoutSubjectKeys : record;
+    resolveSubjectNames || (Array.isArray(rawSubjectKeys) && rawSubjectKeys.length === 0)
+      ? recordWithoutSubjectKeys
+      : record;
   const names = Array.isArray(record.subjectNames) ? record.subjectNames : [];
   const expectedNames = record.bucket === "character_fact" ? 1 : record.bucket === "relationship_state" ? 2 : 0;
   const recoverableNames =
@@ -655,11 +671,18 @@ function normalizedEvidenceUnitRecord(unit: unknown, expectedSourceHash: string,
   };
 }
 
-function normalizeEvidenceUnitResponse(raw: unknown, expectedSourceHash: string, trustedEvidence: string[]): unknown {
+function normalizeEvidenceUnitResponse(
+  raw: unknown,
+  expectedSourceHash: string,
+  trustedEvidence: string[],
+  resolveSubjectNames: boolean,
+): unknown {
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) return raw;
   const parsed = raw as Record<string, unknown>;
   const units = Array.isArray(parsed.units) ? parsed.units : [];
-  const normalizedUnits = units.map((unit) => normalizedEvidenceUnitRecord(unit, expectedSourceHash, trustedEvidence));
+  const normalizedUnits = units.map((unit) =>
+    normalizedEvidenceUnitRecord(unit, expectedSourceHash, trustedEvidence, resolveSubjectNames),
+  );
   const targetHints = rawEvidenceUnitTargetHints(normalizedUnits);
   for (const [index, original] of units.entries()) {
     if (!original || typeof original !== "object" || Array.isArray(original)) continue;
@@ -973,6 +996,7 @@ export function parseEvidenceUnitPayload(
   raw: unknown,
   expectedSourceHash: string,
   trustedEvidence: string[] = [],
+  resolveSubjectNames = true,
 ): ParsedEvidenceUnitPayload {
   const input = raw && typeof raw === "object" && !Array.isArray(raw) ? (raw as Record<string, unknown>) : {};
   const allInputUnits = Array.isArray(input.units) ? input.units : [];
@@ -986,6 +1010,7 @@ export function parseEvidenceUnitPayload(
     },
     expectedSourceHash,
     trustedEvidence,
+    resolveSubjectNames,
   );
   const record =
     normalized && typeof normalized === "object" && !Array.isArray(normalized)
@@ -1158,7 +1183,8 @@ export function evidenceUnitMessages(options: RunLongTermMemoryEvidenceUnitExtra
   const filteredBucketDescriptions: Record<string, string> = {};
   const resolveSubjectNames = options.resolveSubjectNames !== false;
   const configuredSystemPrompt = options.systemPrompt?.trim();
-  const baseSystemPrompt = configuredSystemPrompt || DEFAULT_LTM_EXTRACTION_PROMPT;
+  const baseSystemPrompt =
+    configuredSystemPrompt || DEFAULT_LTM_EXTRACTION_PROMPTS_BY_MODE[options.mode ?? options.modes[0] ?? "roleplay"];
   const validationRules = serverEnforcedLinkRules(allowedBuckets);
   const sourceTrustRule =
     options.sourceNote.provenance?.kind === "character" || options.sourceNote.provenance?.kind === "lorebook"
@@ -1420,6 +1446,7 @@ export async function runLongTermMemoryEvidenceUnitExtraction(
         rawPayload,
         options.sourceHash,
         evidenceFromSourceNote(options.sourceNote),
+        options.resolveSubjectNames !== false,
       );
       if (incomplete && parsed.response.units.length === 0) {
         throw new LtmServiceError(
@@ -1537,12 +1564,20 @@ export function compileEvidenceUnitExtraction(options: {
     options.existingNotes,
   );
   const closed = closeSourceEventGraph(roleplayOnly.units, options.sourceNote, options.existingNotes);
+  // The late drops above can leave links to notes this draft no longer creates. Stripping them and dropping a
+  // relationship change whose cause was dropped never removes a timeline event, so the event graph stays closed.
+  const linked = closeLtmEvidenceUnitLinks({
+    units: closed.units,
+    sourceNote: options.sourceNote,
+    existingNotes: options.existingNotes,
+    stripDanglingLinks: true,
+  });
   const parserDroppedCandidates = options.parserDroppedCandidates ?? [];
   const parserRejectionCount = options.parserRejectionCount ?? parserDroppedCandidates.length;
   const preValidationDroppedCandidates = options.preValidationDroppedCandidates ?? [];
-  const compiled = closed.units.length
+  const compiled = linked.keptUnits.length
     ? compileLtmEvidenceUnits({
-        units: closed.units,
+        units: linked.keptUnits,
         existingNotes: options.existingNotes,
         aliasChoices: options.aliasChoices,
         scope: options.scope,
@@ -1561,7 +1596,7 @@ export function compileEvidenceUnitExtraction(options: {
     duplicateAliasUnits,
     options.sourceNote,
     options.existingNotes,
-    closed.units,
+    linked.keptUnits,
   );
   const rejectedAliasIds = new Set(duplicateAliasClosure.diagnostics.map((diagnostic) => diagnostic.mutationId));
   const allDroppedCandidates = [
@@ -1570,6 +1605,7 @@ export function compileEvidenceUnitExtraction(options: {
     ...validated.droppedCandidates,
     ...roleplayOnly.droppedCandidates,
     ...closed.droppedCandidates,
+    ...linked.droppedCandidates,
     ...duplicateAliasClosure.droppedCandidates,
   ];
   const droppedCandidates = allDroppedCandidates.slice(0, LTM_EXTRACTION_MAX_REJECTION_DETAILS);
@@ -1579,6 +1615,7 @@ export function compileEvidenceUnitExtraction(options: {
     validated.droppedCandidates.length +
     roleplayOnly.droppedCandidates.length +
     closed.droppedCandidates.length +
+    linked.droppedCandidates.length +
     duplicateAliasClosure.droppedCandidates.length;
   const duplicateTitles = duplicateAliasClosure.units.length
     ? compileLtmEvidenceUnits({
@@ -1600,6 +1637,7 @@ export function compileEvidenceUnitExtraction(options: {
     ...dedupResult.diagnostics.filter((diagnostic) => !rejectedAliasIds.has(diagnostic.mutationId)),
     ...roleplayOnly.diagnostics,
     ...closed.diagnostics,
+    ...linked.diagnostics,
     ...duplicateAliasClosure.diagnostics,
     // The compiler narrows a new local character note to Roleplay when other modes were also selected.
     ...compiled.mutations.flatMap((mutation): LtmExtractionDiagnostic[] =>
@@ -1642,16 +1680,17 @@ export function compileEvidenceUnitExtraction(options: {
       validated.droppedCandidates.length +
       roleplayOnly.droppedCandidates.length +
       closed.droppedCandidates.length +
+      linked.droppedCandidates.length +
       duplicateAliasClosure.droppedCandidates.length,
     deduplications:
       validated.keptUnits.length - dedupResult.deduplicated.length - duplicateAliasClosure.droppedCandidates.length,
-    keptUnits: closed.units.length,
+    keptUnits: linked.keptUnits.length,
     ...(options.userSkippedUnits ? { userSkips: options.userSkippedUnits } : {}),
   });
   const totalCandidates = accounting.providerCandidates + accounting.normalizedAdditions;
   const outcome = summarizeExtractionOutcome({
     totalCandidates,
-    keptUnits: closed.units.length,
+    keptUnits: linked.keptUnits.length,
     mutations: compiledResponse.mutations.length,
     droppedCandidates,
     droppedCandidateCount,
