@@ -55,9 +55,10 @@ jobs:
             echo "Base ref $TARGET_REF is not reviewed by Dottore."
             exit 0
           fi
-          # Only a head Dottore discharged can be approved; skip the dispatch for every other run.
+          # Only a head Dottore discharged can be approved; skip the dispatch for every other run. The markers are read
+          # from the walkthrough's leading marker lines only; the rest is model-written text.
           WALKTHROUGH=$(gh api "repos/${{ github.repository }}/issues/$PR_NUM/comments?per_page=100" --paginate \
-            --jq '.[] | select(.user.login == "github-actions[bot]") | select(.body | contains("<!-- dottore:walkthrough -->")) | .body' )
+            --jq '.[] | select(.user.login == "github-actions[bot]") | select(.body | contains("<!-- dottore:walkthrough -->")) | (.body | split("\n")) as $l | $l[:($l | map(startswith("<!-- dottore:") | not) | index(true) // length)] | .[]' )
           if ! grep -q "<!-- dottore:last-reviewed-sha=$HEAD_SHA -->" <<<"$WALKTHROUGH" || ! grep -q "<!-- dottore:discharge -->" <<<"$WALKTHROUGH"; then
             echo "Dottore has not discharged $HEAD_SHA."
             exit 0

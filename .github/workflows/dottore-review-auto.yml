@@ -66,11 +66,13 @@ jobs:
             echo "Specimen released for full examination, even if inspected while draft."
             REVIEW_MODE=full
           elif [ "$EVENT_ACTION" = "edited" ] && [ -n "$PREVIOUS_BASE_REF" ]; then
-            echo "Base ref changed from $PREVIOUS_BASE_REF to $PR_BASE_REF; dispatching Dottore for the new diff base."
+            echo "Base ref changed from $PREVIOUS_BASE_REF to $PR_BASE_REF; dispatching a full examination against the new base."
+            REVIEW_MODE=full
           else
+            # Markers are read from the walkthrough's leading marker lines only; the rest is model-written text.
             LAST_REVIEWED_SHA="$(gh api "repos/${{ github.repository }}/issues/$PR_NUM/comments?per_page=100" \
               --paginate \
-              --jq '.[] | select(.user.login == "github-actions[bot]") | select(.body | contains("<!-- dottore:walkthrough -->")) | .body' \
+              --jq '.[] | select(.user.login == "github-actions[bot]") | select(.body | contains("<!-- dottore:walkthrough -->")) | (.body | split("\n")) as $l | $l[:($l | map(startswith("<!-- dottore:") | not) | index(true) // length)] | .[]' \
               | sed -n 's/.*<!-- dottore:last-reviewed-sha=\([0-9a-f]\{40\}\) -->.*/\1/p' \
               | tail -n 1)"
             if [ -n "$LAST_REVIEWED_SHA" ] && [ "$LAST_REVIEWED_SHA" = "$PR_HEAD_SHA" ]; then
