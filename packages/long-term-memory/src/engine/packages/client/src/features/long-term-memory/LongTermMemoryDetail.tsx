@@ -443,6 +443,11 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
         [data-ltm-tab-focus]:focus-visible {
           outline: 2px solid var(--marinara-editor-focus-ring);
         }
+        [data-ltm-accent-border],
+        [data-ltm-status="success"]:not(.mari-editor-panel),
+        [data-ltm-freshness="fresh"] {
+          border-color: color-mix(in srgb, var(--marinara-editor-accent) 30%, transparent);
+        }
         [data-ltm-control="activation"]:focus-visible {
           outline: none;
           box-shadow: 0 0 0 0.125rem var(--marinara-editor-focus-ring);

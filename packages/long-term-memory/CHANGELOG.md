@@ -1,8 +1,18 @@
 # Long-Term Memory changelog
 
-## Unreleased
+## 1.4.51 — 2026-10-18
 
 - The debug log now records a "Candidate reconciliation" entry for every extracted source, even when nothing matched. It counts the target memories (other than characters and relationships) that reused an existing memory, matched no other existing memory, were ambiguous, or were left for review because the search window was incomplete. Copy JSON shows the counts. Before, the entry was recorded only when a candidate matched or warned, so a source whose candidates all became new memories left no entry.
+
+## 1.4.50 — 2026-10-18
+
+- The Vault and Activity rows now show the Marinara focus ring when you tab to them, and the Review freshness chip and the Vault "Edited manually" chip show their soft accent border, on every supported Marinara Engine version. Before, Engine 2.4.1 to 2.4.6 showed the browser's default focus ring on those rows, and Engine 2.4.1 to 2.4.4 showed a full-strength border on those chips.
+
+## 1.4.49 — 2026-10-18
+
+- Extraction now saves a fact to the character it names. The extraction model was also shown each character's stored key, and a key it returned won over the name, so a fact about Alice could be saved to Bob with only a warning and be applied automatically. The model no longer sees stored keys, and any key it returns is ignored.
+- An extraction no longer fails, and Review no longer blocks a suggestion with an error, when a memory links to another memory from the same source that extraction then leaves out. The link is removed, with a warning in the extraction details, and the memory is kept. A relationship change whose cause was left out is left out too. Before, a source whose suggestions were applied automatically failed every time it was retried.
+- A prompt template that contains only spaces now falls back to the mode's default prompt. Before, a blank template active for Conversation or Game extracted with the Roleplay prompt.
 
 ## 1.4.48 — 2026-10-17
 

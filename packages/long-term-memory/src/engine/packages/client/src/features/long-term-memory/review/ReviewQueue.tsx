@@ -109,7 +109,7 @@ const freshnessLabel: Record<string, string> = {
 };
 
 function freshnessClass(freshness: string) {
-  if (freshness === "fresh") return "border-[var(--marinara-editor-accent)]/30 text-[var(--marinara-editor-accent)]";
+  if (freshness === "fresh") return "text-[var(--marinara-editor-accent)]";
   if (
     freshness === "stale" ||
     freshness === "missing" ||

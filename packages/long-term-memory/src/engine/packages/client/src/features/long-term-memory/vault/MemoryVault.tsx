@@ -2513,7 +2513,8 @@ export default function MemoryVault({
                     >
                       <summary
                         style={{ minHeight: "2.75rem" }}
-                        className="flex min-h-11 cursor-pointer items-center gap-2 border-b border-[var(--border)] bg-[var(--secondary)]/35 px-3 text-xs font-semibold focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--ring)]"
+                        data-ltm-tab-focus
+                        className="flex min-h-11 cursor-pointer items-center gap-2 border-b border-[var(--border)] bg-[var(--secondary)]/35 px-3 text-xs font-semibold"
                       >
                         <ChevronRight
                           aria-hidden="true"
@@ -2838,7 +2839,7 @@ export default function MemoryVault({
                           {Object.values(draft.sections).some((section) =>
                             section.contributions?.some((contribution) => contribution.owner === "manual"),
                           ) ? (
-                            <span className="rounded-full border border-[var(--marinara-editor-accent)]/30 px-2 py-1">
+                            <span data-ltm-accent-border className="rounded-full border px-2 py-1">
                               {localizeUi("ui.longTermMemory.memoryvault.editedManually")}
                             </span>
                           ) : null}
@@ -3158,7 +3159,10 @@ export default function MemoryVault({
                                 data-ltm-memory-options
                                 className="group rounded-md border border-[var(--border)]"
                               >
-                                <summary className="flex min-h-11 cursor-pointer list-none items-center gap-2 px-3 text-sm font-semibold focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--ring)] [&::-webkit-details-marker]:hidden">
+                                <summary
+                                  data-ltm-tab-focus
+                                  className="flex min-h-11 cursor-pointer list-none items-center gap-2 px-3 text-sm font-semibold [&::-webkit-details-marker]:hidden"
+                                >
                                   <ChevronRight
                                     aria-hidden="true"
                                     size="0.875rem"
@@ -3259,7 +3263,10 @@ export default function MemoryVault({
                                   </section>
                                 ) : null}
                                 <details className="group space-y-2 border-t border-[var(--border)] px-3 py-3">
-                                  <summary className="flex min-h-11 cursor-pointer list-none items-center gap-2 text-xs font-medium focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--ring)] [&::-webkit-details-marker]:hidden">
+                                  <summary
+                                    data-ltm-tab-focus
+                                    className="flex min-h-11 cursor-pointer list-none items-center gap-2 text-xs font-medium [&::-webkit-details-marker]:hidden"
+                                  >
                                     <ChevronRight
                                       aria-hidden="true"
                                       size="0.875rem"
@@ -3283,7 +3290,10 @@ export default function MemoryVault({
                                   className="group space-y-2 border-t border-[var(--border)] px-3 py-3"
                                   data-ltm-linked-memories
                                 >
-                                  <summary className="flex min-h-11 cursor-pointer list-none items-center gap-1 text-xs font-medium focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--ring)] [&::-webkit-details-marker]:hidden">
+                                  <summary
+                                    data-ltm-tab-focus
+                                    className="flex min-h-11 cursor-pointer list-none items-center gap-1 text-xs font-medium [&::-webkit-details-marker]:hidden"
+                                  >
                                     <ChevronRight
                                       aria-hidden="true"
                                       size="0.875rem"
@@ -3391,7 +3401,10 @@ export default function MemoryVault({
                                       ))}
                                     </select>
                                     <details className="group">
-                                      <summary className="flex min-h-11 w-full cursor-pointer list-none items-center gap-1 text-xs underline underline-offset-2 focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--ring)] [&::-webkit-details-marker]:hidden">
+                                      <summary
+                                        data-ltm-tab-focus
+                                        className="flex min-h-11 w-full cursor-pointer list-none items-center gap-1 text-xs underline underline-offset-2 [&::-webkit-details-marker]:hidden"
+                                      >
                                         <ChevronRight
                                           aria-hidden="true"
                                           size="0.875rem"
@@ -3429,7 +3442,10 @@ export default function MemoryVault({
                                 </details>
                               </details>
                               <details className="group rounded-md border border-[var(--border)]" data-ltm-record-info>
-                                <summary className="flex min-h-11 cursor-pointer list-none items-center gap-2 px-3 text-sm font-semibold focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--ring)] [&::-webkit-details-marker]:hidden">
+                                <summary
+                                  data-ltm-tab-focus
+                                  className="flex min-h-11 cursor-pointer list-none items-center gap-2 px-3 text-sm font-semibold [&::-webkit-details-marker]:hidden"
+                                >
                                   <ChevronRight
                                     aria-hidden="true"
                                     size="0.875rem"

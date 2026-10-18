@@ -322,7 +322,7 @@ export function StatusSurface({
 } & HTMLAttributes<HTMLDivElement>) {
   const toneClass = {
     neutral: "text-[var(--marinara-editor-muted)]",
-    success: "border-[var(--marinara-editor-accent)]/30 text-[var(--marinara-editor-accent)]",
+    success: "text-[var(--marinara-editor-accent)]",
     warning: "",
     danger: "border-[var(--destructive)]/35 text-[var(--destructive)]",
   }[tone];

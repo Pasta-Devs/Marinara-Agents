@@ -188,7 +188,7 @@ assert.match(
   /function BulkAvailabilityWorkbench[\s\S]*?<details\s+data-ltm-availability-picker\s+className="group"/u,
 );
 assert.match(vaultScreen, /<details\s+data-ltm-availability-picker\s+className="group"/u);
-assert.match(vaultScreen, /<summary className="mari-editor-action inline-flex/u);
+assert.match(vaultScreen, /<summary\s+data-ltm-tab-focus\s+className="mari-editor-action inline-flex/u);
 assert.match(vaultScreen, /data-ltm-availability-pills[\s\S]*?data-ltm-availability-picker/u);
 assert.doesNotMatch(vaultScreen, /<details\s+data-ltm-availability-picker[^>]*\bopen\b/u);
 assert.doesNotMatch(vault, /selectScopeTarget|scopeSelectionIds|removeScopeGroup/u);
@@ -518,8 +518,16 @@ assert.ok(
 assert.match(sharedControls, /HTMLAttributes<HTMLDivElement>/u);
 assert.match(sharedControls, /<div\s+role=\{tone === "danger" \? "alert" : "status"\}/u);
 assert.doesNotMatch(vault, /<div role="alert"><StatusSurface tone="danger">/u);
-assert.match(vault, /data-ltm-memory-group=\{type\}[\s\S]*min-h-11[\s\S]*focus-visible:outline/u);
-assert.match(vault, /min-h-11 w-full[\s\S]*focus-visible:outline[\s\S]*moreLinkTypes/u);
+assert.match(
+  vault,
+  /data-ltm-memory-group=\{type\}\s*>\s*<summary\s+style=\{\{ minHeight: "2\.75rem" \}\}\s+data-ltm-tab-focus/u,
+);
+assert.match(vault, /data-ltm-tab-focus\s+className="flex min-h-11 w-full[\s\S]*moreLinkTypes/u);
+assert.match(
+  detail,
+  /\[data-ltm-accent-border\],\s*\[data-ltm-status="success"\]:not\(\.mari-editor-panel\),\s*\[data-ltm-freshness="fresh"\] \{\s*border-color: color-mix\(in srgb, var\(--marinara-editor-accent\) 30%, transparent\);/u,
+);
+assert.match(vault, /<span data-ltm-accent-border className="rounded-full border px-2 py-1">/u);
 assert.match(vaultScreen, /inline-flex min-h-11 max-w-full[\s\S]*h-11 w-11/u);
 assert.match(vault, /clearMemorySearch[\s\S]*h-11 w-11/u);
 assert.match(vault, /data-ltm-mode-filter[\s\S]*min-h-11/u);
