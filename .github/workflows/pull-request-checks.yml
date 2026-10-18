@@ -97,6 +97,15 @@ jobs:
       - name: Test Slurp unanswered follow-up control
         run: npx tsx --tsconfig tests/tsconfig.regressions.json tests/slurp2-pause-follow-ups-until-reply.regression.ts
 
+      # These read scripts/build-feature-packages.mjs, which the Noodle and Slurp browser workflow
+      # no longer triggers on. None of them needs an Engine checkout (the PR-checks job has none).
+      - name: Test Slurp builder text assertions
+        run: |
+          npx tsx --tsconfig tests/tsconfig.regressions.json tests/slurp-generation-integrations.regression.ts
+          npx tsx --tsconfig tests/tsconfig.regressions.json tests/slurp2-architecture.regression.ts
+          npx tsx --tsconfig tests/tsconfig.regressions.json tests/slurp2-slice-i.regression.ts
+          npx tsx --tsconfig tests/tsconfig.regressions.json tests/slurp2-step1-shell.regression.ts
+
       - name: Validate package localization catalogs
         run: |
           node scripts/tests/ui-translation-retention.regression.mjs

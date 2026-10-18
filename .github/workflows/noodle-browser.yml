@@ -17,7 +17,7 @@ on:
       # lockfile and bumps its version line in the build script — so triggering on
       # them ran this Noodle/Slurp browser suite on unrelated package PRs. Noodle/Slurp
       # changes are already covered by packages/noodle|slurp2/**, the noodle/slurp2
-      # artifacts, the harness scripts, and sources/engine below.
+      # artifacts above, and the harness scripts and sources/engine below.
       - "packages/noodle/**"
       - "packages/slurp2/**"
       - "tests/slurp-*.regression.ts"
