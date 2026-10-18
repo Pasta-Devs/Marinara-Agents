@@ -702,14 +702,13 @@ export function buildTrustedLtmSubjectCatalog({
 
 export function trustedLtmSubjectPromptCatalog(catalog: TrustedLtmSubjectCatalog) {
   const index = buildCatalogIndex(catalog);
+  // The model copies names only; subject keys stay server-side so a provider cannot choose a character by key.
   return index.entries.map((entry) => ({
-    key: entry.subject.key,
     name: entry.name,
     aliases: entry.aliases.filter((alias) => {
       const match = matchDirect(index, normalizeSubjectName(alias));
       return match.status === "matched" && match.entries[0]?.subject.key === entry.subject.key;
     }),
-    ...(entry.subject.ref ? { ref: entry.subject.ref } : {}),
   }));
 }
 
