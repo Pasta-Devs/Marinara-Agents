@@ -41,6 +41,12 @@ jobs:
             REVIEW_MODE=full
           elif [[ "$COMMENT_BODY" =~ ^/dottore[[:space:]]+autofix[[:space:]]*$ ]]; then
             REVIEW_MODE=autofix
+            # The same bar as the tick box: COLLABORATOR also covers read and triage access, and a repair pushes code.
+            PERMISSION=$(gh api "repos/${{ github.repository }}/collaborators/$COMMENT_AUTHOR/permission" --jq .permission || true)
+            case "$PERMISSION" in
+              admin|maintain|write) ;;
+              *) echo "$COMMENT_AUTHOR lacks write access ($PERMISSION); not dispatching."; exit 0 ;;
+            esac
           elif [[ "$COMMENT_BODY" =~ ^/dottore[[:space:]]+approve[[:space:]]*$ ]]; then
             REVIEW_MODE=approve
           fi
