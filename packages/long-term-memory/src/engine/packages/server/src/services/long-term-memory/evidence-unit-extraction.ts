@@ -1570,6 +1570,7 @@ export function compileEvidenceUnitExtraction(options: {
     units: closed.units,
     sourceNote: options.sourceNote,
     existingNotes: options.existingNotes,
+    candidateIndexes: validated.candidateIndexes,
     stripDanglingLinks: true,
   });
   const parserDroppedCandidates = options.parserDroppedCandidates ?? [];

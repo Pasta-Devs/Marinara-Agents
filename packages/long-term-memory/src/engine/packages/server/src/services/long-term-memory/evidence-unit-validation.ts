@@ -89,6 +89,8 @@ export type LtmEvidenceUnitValidationResult = {
   keptUnits: LtmEvidenceUnit[];
   diagnostics: LtmExtractionDiagnostic[];
   droppedCandidates: LtmExtractionDroppedCandidate[];
+  /** Each kept unit's index in the validated input, so later passes report the same candidate. */
+  candidateIndexes?: ReadonlyMap<LtmEvidenceUnit, number>;
 };
 
 type DroppedCandidateInput = {
@@ -392,7 +394,7 @@ export function validateLtmEvidenceUnits({
     }
   }
 
-  return { keptUnits: finalKeptUnits, diagnostics, droppedCandidates };
+  return { keptUnits: finalKeptUnits, diagnostics, droppedCandidates, candidateIndexes: keptCandidateIndexes };
 }
 
 /**

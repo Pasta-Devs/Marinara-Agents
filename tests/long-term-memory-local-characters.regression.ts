@@ -2458,6 +2458,13 @@ async function main() {
     );
   assert.deepEqual(maraLinks(restricted), ["char_jordan_the_innkeeper"]);
   assert.deepEqual(maraLinks(dropped), [], "issue #1448: a link to the dropped local character is stripped");
+  assert.deepEqual(
+    dropped.diagnostics
+      .filter((diagnostic) => diagnostic.code === "unknown_link_target")
+      .map((diagnostic) => [diagnostic.noteId, diagnostic.candidateIndex]),
+    [["char_mara", 1]],
+    "issue #1448: the stripped-link warning keeps Mara's candidate index after Jordan is dropped",
+  );
 
   process.stdout.write(
     "Long-Term Memory local-character regression: scoped identity, review risk, safeguards, and isolation passed\n",
