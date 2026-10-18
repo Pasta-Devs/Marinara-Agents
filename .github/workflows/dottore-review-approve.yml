@@ -38,7 +38,7 @@ jobs:
           if [ -z "$PR_NUM" ]; then
             # A fork PR's run lists no pull requests, and the base repository's commit lookup does not know a fork's
             # commit either; find the open PR from the run's head repository and branch. Its head is checked below.
-            PR_NUM=$(gh api "repos/${{ github.repository }}/pulls?state=open&head=$HEAD_OWNER:$HEAD_BRANCH" \
+            PR_NUM=$(gh api --method GET "repos/${{ github.repository }}/pulls" -f state=open -f head="$HEAD_OWNER:$HEAD_BRANCH" \
               --jq '.[0].number // empty')
           fi
           if [ -z "$PR_NUM" ]; then
