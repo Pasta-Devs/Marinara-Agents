@@ -1,3 +1,4 @@
+import type { SlurpStoryNow } from "../../modules/world/events/slp-story-state.js";
 import {
   slpGeneratedCreatorPostSchema,
   SLP_LOCKED_TEASER_MAX_LENGTH,
@@ -131,7 +132,7 @@ export type SlurpPostPromptInput = {
   /** Where the Creator's day stands at publication. See `resolveSlurpBeatDay`. */
   beatDay?: SlurpDayMoment | null;
   /** Standing conditions (story state): in the brief, or a short section without a beat. */
-  storyNow?: readonly string[];
+  storyNow?: SlurpStoryNow;
 };
 
 /**
@@ -357,11 +358,11 @@ export function buildNoodlerPostMessages(input: SlurpPostPromptInput): ChatMessa
             protect,
             input.beatCompany,
             input.beatDay,
-            input.storyNow,
+            input.storyNow?.lines,
           ),
         ]
-      : input.storyNow?.length
-        ? ["", "# Right now", slurpRightNowLine(input.storyNow, protect)]
+      : input.storyNow?.lines.length
+        ? ["", "# Right now", slurpRightNowLine(input.storyNow.lines, protect, input.storyNow.moment)]
         : []),
     ...(input.castContext?.trim() ? ["", "# Who else is in this post", protect(input.castContext)] : []),
     ...(input.project

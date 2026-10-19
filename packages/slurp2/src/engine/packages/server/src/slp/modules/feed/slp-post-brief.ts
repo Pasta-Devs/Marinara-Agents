@@ -208,8 +208,16 @@ export function slurpCompanyAllowsOthers(company: string | null | undefined): bo
 }
 
 /** Standing conditions for a post: always true, mentioned only when the post is about them. */
-export function slurpRightNowLine(now: readonly string[], protect: (value: string) => string): string {
-  return `Right now: ${now.map(protect).join(" ")} This stays true in this post; mention it only if this post is about it.`;
+export function slurpRightNowLine(
+  now: readonly string[],
+  protect: (value: string) => string,
+  /** A small moment of it that this post is about (a post with no beat). */
+  moment?: string | null,
+): string {
+  const lines = now.map(protect).join(" ");
+  return moment
+    ? `Right now: ${lines} This post is about one small moment of it, in your own words: ${protect(moment)}.`
+    : `Right now: ${lines} This stays true in this post; mention it only if this post is about it.`;
 }
 
 export function slurpPostBriefSection(

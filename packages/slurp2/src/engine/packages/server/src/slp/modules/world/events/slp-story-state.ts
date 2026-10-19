@@ -100,6 +100,38 @@ export function slurpStoryState(input: {
   };
 }
 
+/** One deck moment for this slot at the condition's share, or null. Seeded by Creator and slot. */
+function pickConditionMoment(input: {
+  creatorAccountId: string;
+  sequence: number;
+  state: SlurpStoryState;
+  recent: readonly string[];
+  partner: string | null;
+  avoid?: readonly string[];
+}): SlurpStoryDeckBeat | null {
+  const recent = new Set(input.recent);
+  const avoided = (line: string) =>
+    (input.avoid ?? []).some(
+      (topic) => topic.trim() && line.toLocaleLowerCase().includes(topic.trim().toLocaleLowerCase()),
+    );
+  const candidates = input.state.deck.filter(
+    (beat) => !recent.has(beat.line) && (!beat.withPartner || input.partner) && !avoided(beat.line),
+  );
+  if (!candidates.length) return null;
+  const share = Math.max(...candidates.map((beat) => beat.share));
+  const take = slurpWeightedPick("condition", input.creatorAccountId, input.sequence, [
+    { value: true, weight: share },
+    { value: false, weight: 1 - share },
+  ]);
+  if (!take) return null;
+  return slurpWeightedPick(
+    "conditionBeat",
+    input.creatorAccountId,
+    input.sequence,
+    candidates.map((value) => ({ value, weight: 1 })),
+  );
+}
+
 /**
  * A small moment of a standing condition as this slot's beat, at the condition's share; null
  * otherwise. A line this Creator used lately is skipped. `partner` is the partner's name, used only
@@ -115,27 +147,8 @@ export function slurpConditionBeat(input: {
   /** The player's avoided topics: a moment that names one is left out. */
   avoid?: readonly string[];
 }): SlurpBeat | null {
-  const recent = new Set(input.history.recentAnchors.slice(0, 8));
-  const avoided = (line: string) =>
-    (input.avoid ?? []).some(
-      (topic) => topic.trim() && line.toLocaleLowerCase().includes(topic.trim().toLocaleLowerCase()),
-    );
-  const candidates = input.state.deck.filter(
-    (beat) => !recent.has(beat.line) && (!beat.withPartner || input.partner) && !avoided(beat.line),
-  );
-  if (!candidates.length) return null;
-  const share = Math.max(...candidates.map((beat) => beat.share));
-  const take = slurpWeightedPick("condition", input.creatorAccountId, input.sequence, [
-    { value: true, weight: share },
-    { value: false, weight: 1 - share },
-  ]);
-  if (!take) return null;
-  const beat = slurpWeightedPick(
-    "conditionBeat",
-    input.creatorAccountId,
-    input.sequence,
-    candidates.map((value) => ({ value, weight: 1 })),
-  );
+  const beat = pickConditionMoment({ ...input, recent: input.history.recentAnchors.slice(0, 8) });
+  if (!beat) return null;
   const type = beat.withPartner ? "relationship_moment" : "sensory_mood";
   if (!slurpBeatIntents(type).some((intent) => input.intents.includes(intent))) return null;
   return {
@@ -146,6 +159,27 @@ export function slurpConditionBeat(input: {
     cast: beat.withPartner && input.partner ? [input.partner] : [],
     place: null,
   };
+}
+
+/** What a post prompt gets of the state: the standing lines, and for a post with no beat a moment. */
+export type SlurpStoryNow = { lines: readonly string[]; moment: string | null };
+
+/**
+ * The state for one post prompt. A post with a beat has its subject. A plain post without one (the
+ * classic planner; a beats slot that found nothing) may be about a deck moment, at the same share.
+ * ponytail: no memory of used moments here, so one can repeat; the beats planner skips recent ones.
+ */
+export function slurpStoryNow(
+  state: SlurpStoryState,
+  creatorAccountId: string,
+  sequence: number,
+  avoid: readonly string[] | undefined,
+  plain: boolean,
+): SlurpStoryNow {
+  const moment = plain
+    ? pickConditionMoment({ creatorAccountId, sequence, state, recent: [], partner: null, avoid })
+    : null;
+  return { lines: state.lines, moment: moment?.line ?? null };
 }
 
 /**

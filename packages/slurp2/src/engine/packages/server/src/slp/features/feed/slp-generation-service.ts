@@ -53,7 +53,7 @@ import { resolveCreatorCharacterCanon } from "../../data/creators/slp-source-res
 import { readSlurpCreatorSteering, removeSlurpCreatorNudge } from "../../data/creators/slp-steering-storage.js";
 import { resolveSlurpCreatorFlavour } from "../../data/creators/slp-flavour-source.js";
 import { loadSlurpStoryState, resolveSlurpEventInstruction } from "../world/slp-world-contract.js";
-import { slurpConditionCloset } from "../../modules/world/events/slp-story-state.js";
+import { slurpConditionCloset, slurpStoryNow } from "../../modules/world/events/slp-story-state.js";
 import { slpCreatorPublicIdentityFor, protectBoundedCreatorGeneratedText } from "./slp-public-identity.js";
 import {
   FormattedCreatorGenerationRequest,
@@ -417,7 +417,7 @@ export async function generateCreatorPost(
     beat,
     beatCompany: variation?.company,
     beatDay: beat ? beatDay : null,
-    storyNow: story.state.lines,
+    storyNow: slurpStoryNow(story.state, account.id, sequence, steering?.avoid, !(beat || directed || project)),
     generatedAt: input.generatedAt ?? new Date(),
     publicationTime: input.publicationTime,
   });

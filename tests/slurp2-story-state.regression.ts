@@ -9,10 +9,14 @@ import { applySlpStoryOutcomes } from "../packages/slurp2/src/engine/packages/se
 import {
   slurpConditionBeat,
   slurpConditionCloset,
+  slurpStoryNow,
   slurpStoryState,
   slurpTieTags,
 } from "../packages/slurp2/src/engine/packages/server/src/slp/modules/world/events/slp-story-state.ts";
-import { slurpPostBriefSection } from "../packages/slurp2/src/engine/packages/server/src/slp/modules/feed/slp-post-brief.ts";
+import {
+  slurpPostBriefSection,
+  slurpRightNowLine,
+} from "../packages/slurp2/src/engine/packages/server/src/slp/modules/feed/slp-post-brief.ts";
 import type { SlpStoryFact } from "../packages/slurp2/src/engine/packages/shared/src/slp/slp-story-engine.js";
 
 const at = new Date("2026-10-12T12:00:00.000Z");
@@ -260,6 +264,31 @@ assert.ok(
     }),
   ).every((beat) => beat === null),
   "a moment that names an avoided topic is left out",
+);
+
+// --- A post with no beat (the classic planner) is about a deck moment at the same share; never a partner one. ---
+const plain = Array.from({ length: 400 }, (_, sequence) => slurpStoryNow(state, "jen", sequence, [], true));
+const moments = plain.filter((now) => now.moment);
+assert.ok(moments.length > 120 && moments.length < 280, `share 0.5 takes about half: ${moments.length}/400`);
+assert.ok(moments.every((now) => now.moment === "Feeling a kick."));
+assert.ok(plain.every((now) => now.lines.length === 2));
+assert.equal(
+  slurpStoryNow(state, "jen", 1, [], false).moment,
+  null,
+  "a post with a beat or a direction has its subject",
+);
+assert.ok(
+  Array.from({ length: 50 }, (_, sequence) => slurpStoryNow(state, "jen", sequence, ["kick"], true)).every(
+    (now) => !now.moment,
+  ),
+);
+assert.match(
+  slurpRightNowLine(["You are pregnant."], (value) => value, "Feeling a kick"),
+  /^Right now: You are pregnant\. This post is about one small moment of it, in your own words: Feeling a kick\.$/,
+);
+assert.match(
+  server("features/feed/slp-generation-service.ts"),
+  /storyNow: slurpStoryNow\(story\.state, account\.id, sequence, steering\?\.avoid, !\(beat \|\| directed \|\| project\)\)/u,
 );
 
 console.log("slurp2 story state regression passed");
