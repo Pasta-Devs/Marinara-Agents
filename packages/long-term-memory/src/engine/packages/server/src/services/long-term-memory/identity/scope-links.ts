@@ -14,7 +14,7 @@ import { rebuildLongTermMemoryIndexes } from "../recall/rebuild.js";
 import { LongTermMemoryStorage } from "../persistence/storage.js";
 import { withLtmVaultLock } from "../persistence/vault-lock.js";
 import { localCharacterScopeError } from "./chat-scope.js";
-import { LtmServiceError } from "../service-error.js";
+import { isLtmServiceError, LtmServiceError } from "../service-error.js";
 
 export async function applyLtmScopeLinksToDerivedNotes(
   sourceNoteId: string,
@@ -57,7 +57,7 @@ export async function applyLtmScopeLinksToDerivedNotes(
         logger.warn(error, "[ltm] Deferred index rebuild after scope-link mutation");
         rebuild = {
           status: "deferred" as const,
-          error: error instanceof Error ? error.message : "Index rebuild failed",
+          error: isLtmServiceError(error) ? error.message : "Index rebuild failed",
         };
       }
     return { sourceNoteId, count: affectedNoteIds.length, affectedNoteIds, rebuild };

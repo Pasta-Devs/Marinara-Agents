@@ -1324,6 +1324,8 @@ const ltmPoliciesConfigSchema = z
   })
   .strict();
 
+// Legacy backup input: nothing reads it. Older backups carry it, and restore validates and ignores it. Keep every
+// field, because the shape is strict and removing one fails those backups.
 const ltmRetrievalConfigShape = z
   .object({
     version: z.literal(1).default(1),

@@ -1,5 +1,9 @@
 # Long-Term Memory changelog
 
+## Unreleased
+
+- When something unexpected goes wrong on the server, the message now names what you were doing, such as "Could not reset memory settings.", instead of the raw server error. Before, it could show a file path or a library error, or just "Internal Server Error". The full error is written to the server log. Messages written for you, such as "Every memory detail needs text.", show as before. The help text for the existing-note token budget in Memory Settings now says those memories are used to match and merge extracted details; they are not sent to the model.
+
 ## 1.4.57 — 2026-10-20
 
 - Professor Mari's setup guide shows its pictures again. Marinara Engine renamed them, and the guide still asked for the old files.
