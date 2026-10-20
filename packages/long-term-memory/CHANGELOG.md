@@ -1,5 +1,9 @@
 # Long-Term Memory changelog
 
+## Unreleased
+
+- Saving several imported or re-extracted sources into a large memory vault is faster, and recall and other memory actions wait less while it happens. Each source used to re-read and re-check every memory in the vault while it saved; now a batch reads the vault once and re-reads only the memories that changed. The same memories are matched as before.
+
 ## 1.4.57 — 2026-10-20
 
 - Professor Mari's setup guide shows its pictures again. Marinara Engine renamed them, and the guide still asked for the old files.
