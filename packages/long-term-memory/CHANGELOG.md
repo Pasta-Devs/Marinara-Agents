@@ -1,6 +1,6 @@
 # Long-Term Memory changelog
 
-## Unreleased
+## 1.4.58 — 2026-10-21
 
 - Long-Term Memory warnings in the server log now include the error that caused them. Before, the Engine's log dropped that error, so a warning such as a failed index rebuild gave no cause, and a warning that names a chat, draft or file showed the error's message in place of that name.
 
