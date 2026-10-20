@@ -550,10 +550,7 @@ async function main() {
         assert.ok(
           warnings
             .slice(previousWarnings)
-            .some(
-              (args) =>
-                args[1] instanceof Error && args[0] === "[ltm] Deferred activity index pruning during retention",
-            ),
+            .some((args) => String(args[0]).startsWith("[ltm] Deferred activity index pruning during retention: ")),
           "a failed derived-index prune logs a recoverable warning rather than a missing-logger exception",
         );
         assert.equal((await new LongTermMemoryStorage(root).getNote(noteInput.id))?.id, noteInput.id);

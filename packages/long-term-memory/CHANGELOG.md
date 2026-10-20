@@ -1,5 +1,9 @@
 # Long-Term Memory changelog
 
+## Unreleased
+
+- Long-Term Memory warnings in the server log now include the error that caused them. Before, the Engine's log dropped that error, so a warning such as a failed index rebuild gave no cause, and a warning that names a chat, draft or file showed the error's message in place of that name.
+
 ## 1.4.57 — 2026-10-20
 
 - Professor Mari's setup guide shows its pictures again. Marinara Engine renamed them, and the guide still asked for the old files.

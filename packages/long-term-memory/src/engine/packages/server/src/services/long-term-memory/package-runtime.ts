@@ -174,15 +174,14 @@ export function isPackageDebugAgentsEnabled() {
 export const logger = {
   debug: (message: string, ...args: RuntimeLogArgument[]) => host?.logger.debug(message, ...args),
   info: (message: string, ...args: RuntimeLogArgument[]) => host?.logger.info(message, ...args),
-  warn: (first: unknown, second?: RuntimeLogArgument, ...args: RuntimeLogArgument[]) =>
-    host &&
-    (typeof first === "string"
-      ? host.logger.warn(first, second, ...args)
-      : host.logger.warn(
-          typeof second === "string" ? second : "Long-Term Memory warning",
-          first as RuntimeLogArgument,
-          ...args,
-        )),
+  warn: (first: unknown, second?: RuntimeLogArgument, ...args: RuntimeLogArgument[]) => {
+    if (!host) return;
+    if (typeof first === "string") return host.logger.warn(first, second, ...args);
+    // The host's warn takes the message first, and pino (the Engine's logger) drops an argument the message
+    // has no placeholder for, so an error passed first goes into the message.
+    const cause = first instanceof Error ? (first.stack ?? first.message) : String(first);
+    host.logger.warn(`${typeof second === "string" ? second : "Long-Term Memory warning"}: ${cause}`, ...args);
+  },
   error: (error: unknown, message: string, ...args: RuntimeLogArgument[]) =>
     host?.logger.error(error, message, ...args),
   debugOverride: (overrideEnabled: boolean, message: string, ...args: RuntimeLogArgument[]) => {
