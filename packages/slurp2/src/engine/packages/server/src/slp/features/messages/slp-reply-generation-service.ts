@@ -246,7 +246,12 @@ export async function generateCreatorReply(input: {
   const imageContexts = await prepareSlurpPostImageContexts({
     posts: [input.post],
     mode: settings.imageContextMode,
-    captioning: await slurpImageCaptioning(input.db, settings.imageContextConnectionId, input.connection),
+    captioning: await slurpImageCaptioning(
+      input.db,
+      settings.imageContextConnectionId,
+      input.connection,
+      settings.imageCaptionPrompt,
+    ),
     onDescribed: (post, description, source) =>
       createSlurpStorage(input.db).setNoodlerPostImageDescription(post.id, description, source),
     allowLocked: input.allowLockedImageContext === true,

@@ -1,33 +1,49 @@
 import assert from "node:assert/strict";
 import { createHash, randomUUID } from "node:crypto";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { runRegressionToCompletion } from "./regression-helpers.ts";
 
 async function main() {
   const source = "../packages/long-term-memory/src/engine/packages/server/src/services/long-term-memory";
-  const { compileEvidenceUnitExtraction, evidenceUnitMessages, evidenceUnitResponseFormat, parseEvidenceUnitPayload } =
-    await import(`${source}/evidence-unit-extraction.ts`);
-  const { compileLtmEvidenceUnits } = await import(`${source}/evidence-unit-compiler.ts`);
-  const { deduplicateUnits } = await import(`${source}/dedup.ts`);
+  const {
+    compileEvidenceUnitExtraction,
+    diagnosticsRequireExtractionReview,
+    evidenceUnitMessages,
+    evidenceUnitResponseFormat,
+    parseEvidenceUnitPayload,
+  } = await import(`${source}/extraction/evidence-unit-extraction.ts`);
+  const { compileLtmEvidenceUnits } = await import(`${source}/extraction/evidence-unit-compiler.ts`);
+  const { deduplicateUnits } = await import(`${source}/extraction/dedup.ts`);
   const {
     analyzeTrustedLtmNoteSubjects,
     buildTrustedLtmSubjectCatalog,
+    prepareLtmSubjectIdentityContext,
     resolveLtmSubjectIdentities,
-    subjectsEqual,
     trustedLtmIdentityNotesForSource,
-  } = await import(`${source}/subject-identity.ts`);
-  const { projectLtmDraftMutationGroup } = await import(`${source}/draft-projector.ts`);
-  const { sourceHashForLtmSourceNote } = await import(`${source}/source-hash.ts`);
-  const { normalizeStructuredSummaryEvidenceUnits } = await import(`${source}/structured-summary-normalizer.ts`);
-  const { validateLtmEvidenceUnits } = await import(`${source}/evidence-unit-validation.ts`);
-  const { resolveScopedEvidenceUnitTargets, scopedVariantNoteId } = await import(`${source}/scoped-targets.ts`);
+  } = await import(`${source}/identity/subject-identity.ts`);
+  const { subjectsEqual } = await import(`${source}/identity/subject-equality.ts`);
+  const { projectLtmDraftMutationGroup } = await import(`${source}/drafts/draft-projector.ts`);
+  const { sourceHashForLtmSourceNote } = await import(`${source}/extraction/source-hash.ts`);
+  const { normalizeStructuredSummaryEvidenceUnits } = await import(
+    `${source}/extraction/structured-summary-normalizer.ts`
+  );
+  const { validateLtmEvidenceUnits } = await import(`${source}/extraction/evidence-unit-validation.ts`);
+  const { resolveScopedEvidenceUnitTargets, scopedVariantNoteId } = await import(
+    `${source}/extraction/scoped-targets.ts`
+  );
   const { configurePackageRuntime } = await import(`${source}/package-runtime.ts`);
-  const { processLongTermMemorySource } = await import(`${source}/source-processing.ts`);
-  const { LongTermMemoryStorage } = await import(`${source}/storage.ts`);
+  const { processLongTermMemorySource } = await import(`${source}/extraction/source-processing.ts`);
+  const { LongTermMemoryStorage } = await import(`${source}/persistence/storage.ts`);
+  const { longTermMemoryRecallIndexPath, rebuildLongTermMemoryIndexes } = await import(`${source}/recall/rebuild.ts`);
+  const { getLtmExtractionConfig, updateLtmExtractionConfig } = await import(
+    `${source}/extraction/extraction-config.ts`
+  );
   const { ltmNoteIdSchema } =
     await import("../packages/long-term-memory/src/engine/packages/shared/src/features/agents/long-term-memory/schema.ts");
+  const { DEFAULT_LTM_EXTRACTION_PROMPT_CONVERSATION } =
+    await import("../packages/long-term-memory/src/engine/packages/shared/src/features/agents/long-term-memory/constants.ts");
 
   const timestamp = "2026-07-21T00:00:00.000Z";
   const sourceNote = (
@@ -225,6 +241,126 @@ async function main() {
     )?.details?.validationStage,
     "closure",
   );
+  // Issue #1448: a unit dropped after validation must not leave a dangling link in the compiled draft.
+  const lateDropSource = sourceNote(
+    "source_late_drop_links",
+    { kind: "chat_summary", sourceId: "chat-a", entryId: "summary-late-drop" },
+    "Mara told the coffee story at the cafe. The cafe serves only coffee. Mara swore off coffee for good.",
+  );
+  const lateDrop = compile(lateDropSource, [
+    unit(lateDropSource, {
+      bucket: "timeline_event",
+      subjectId: "coffee_story_told",
+      sectionKey: "event",
+      text: "Mara told the coffee story at the cafe.",
+      claimKind: "change",
+      links: [
+        { target: lateDropSource.id, relation: "extracted_from" },
+        { target: "char_mara", relation: "affects_character" },
+      ],
+    }),
+    unit(lateDropSource, {
+      bucket: "thread",
+      subjectId: "coffee_story",
+      sectionKey: "summary",
+      text: "Whether the coffee story is true stays open.",
+      claimKind: "change",
+    }),
+    unit(lateDropSource, {
+      bucket: "world_fact",
+      subjectId: "cafe_menu",
+      sectionKey: "facts",
+      text: "The cafe serves only coffee.",
+      claimKind: "static",
+      links: [{ target: "thread_coffee_story", relation: "involves" }],
+    }),
+    unit(lateDropSource, {
+      bucket: "character_fact",
+      subjectId: "mara",
+      sectionKey: "developments",
+      text: "Mara swore off coffee for good.",
+      claimKind: "change",
+      subjectNames: ["Mara"],
+    }),
+  ]);
+  const lateDropCreated = lateDrop.compiledResponse.mutations.flatMap((mutation) =>
+    mutation.kind === "create_note" ? [mutation.note] : [],
+  );
+  assert.deepEqual(lateDropCreated.map((note) => note.type).sort(), ["timeline_event", "world"]);
+  const lateDropTargets = new Set([lateDropSource.id, ...lateDropCreated.map((note) => note.id)]);
+  for (const mutation of lateDrop.compiledResponse.mutations)
+    for (const link of mutation.kind === "create_note"
+      ? mutation.note.links
+      : mutation.kind === "add_link"
+        ? [mutation.link]
+        : [])
+      assert.ok(lateDropTargets.has(link.target), `draft link target must exist: ${link.target}`);
+  assert.equal(lateDrop.accounting.keptUnits, 2);
+  assert.equal(lateDrop.accounting.validationRejections, 2);
+  assert.deepEqual(
+    lateDrop.diagnostics
+      .filter((diagnostic) => diagnostic.code === "unknown_link_target")
+      .map((diagnostic) => [diagnostic.severity, diagnostic.details?.linkTarget])
+      .sort(),
+    [
+      ["warning", "char_mara"],
+      ["warning", "thread_coffee_story"],
+    ],
+    "a non-structural link to a dropped unit is stripped with a warning",
+  );
+  assert.equal(lateDrop.requiresReview, false);
+  // Without provenance no extracted_from link is added, so the event graph drops the cause of a relationship
+  // change that another event still grounds.
+  const lateCauseSource = {
+    ...sourceNote(
+      "source_late_cause",
+      { kind: "chat_summary", sourceId: "chat-a", entryId: "summary-late-cause" },
+      "Mara told the coffee story at the cafe. Alice and Rowan's trust changed after the coffee story.",
+    ),
+    provenance: undefined,
+  } as any;
+  const lateCause = compile(lateCauseSource, [
+    unit(lateCauseSource, {
+      bucket: "timeline_event",
+      subjectId: "coffee_spilled",
+      sectionKey: "event",
+      text: "Mara told the coffee story at the cafe.",
+      claimKind: "change",
+    }),
+    unit(lateCauseSource, {
+      bucket: "timeline_event",
+      subjectId: "cafe_visit",
+      sectionKey: "event",
+      text: "Mara told the coffee story at the cafe.",
+      claimKind: "change",
+      links: [{ target: lateCauseSource.id, relation: "extracted_from" }],
+    }),
+    unit(lateCauseSource, {
+      bucket: "relationship_state",
+      subjectId: "alice_rowan",
+      sectionKey: "state",
+      text: "Alice and Rowan's trust changed after the coffee story.",
+      claimKind: "change",
+      subjectNames: ["Alice", "Rowan"],
+      dimensionChanges: { trust: -12 },
+      links: [
+        { target: "timeline_coffee_spilled", relation: "caused_by" },
+        { target: "timeline_cafe_visit", relation: "evidenced_by" },
+      ],
+    }),
+  ]);
+  assert.deepEqual(
+    lateCause.compiledResponse.mutations.flatMap((mutation) =>
+      mutation.kind === "create_note" ? [mutation.note.type] : [],
+    ),
+    ["timeline_event"],
+  );
+  const lateCauseDrop = lateCause.diagnostics.find(
+    (diagnostic) => diagnostic.details?.validatorCode === "relationship_state_missing_caused_by",
+  );
+  assert.equal(lateCauseDrop?.details?.validationStage, "closure");
+  assert.equal(lateCause.accounting.keptUnits, 1);
+  assert.equal(lateCause.accounting.validationRejections, 2, "the late relationship drop is counted");
   const sourceHashMismatch = compile(chat, [
     {
       ...unit(chat, {
@@ -286,6 +422,50 @@ async function main() {
   ]);
   assert.equal(relationshipWithEvent.accounting.keptUnits, 2);
   assert.equal(relationshipWithEvent.compiledResponse.mutations.length, 2);
+
+  // Issue #1362: an event caused by another event in the same response keeps that
+  // caused_by link next to its source link, and a bare provider target resolves to it.
+  const causeEvent = unit(chat, {
+    bucket: "timeline_event",
+    subjectId: "archive_breach",
+    sectionKey: "event",
+    text: "Mara broke into the archive.",
+    links: [{ target: chat.id, relation: "extracted_from" }],
+  });
+  const effectEvent = unit(chat, {
+    bucket: "timeline_event",
+    subjectId: "archive_alarm",
+    sectionKey: "event",
+    text: "The archive alarm sounded and the guards sealed the doors.",
+    links: [
+      { target: chat.id, relation: "extracted_from" },
+      { target: "archive_breach", relation: "caused_by" },
+    ],
+  });
+  const parsedEventCause = parseEvidenceUnitPayload(
+    { summary: "Event cause parser regression", units: [causeEvent, effectEvent] },
+    sourceHashForLtmSourceNote(chat),
+  );
+  assert.equal(parsedEventCause.parserRejections, 0);
+  assert.deepEqual(parsedEventCause.response.units[1]?.links, [
+    { target: chat.id, relation: "extracted_from" },
+    { target: "timeline_archive_breach", relation: "caused_by" },
+  ]);
+  const eventCause = compile(chat, parsedEventCause.response.units as ReturnType<typeof unit>[]);
+  assert.equal(eventCause.accounting.keptUnits, 2);
+  assert.equal(eventCause.accounting.validationRejections, 0);
+  assert.equal(eventCause.diagnostics.filter((diagnostic) => diagnostic.severity === "error").length, 0);
+  const eventNotes = eventCause.compiledResponse.mutations.flatMap((mutation) =>
+    mutation.kind === "create_note" ? [mutation.note] : [],
+  );
+  const causeNote = eventNotes.find((note) => note.id.startsWith("timeline_archive_breach"));
+  const effectNote = eventNotes.find((note) => note.id.startsWith("timeline_archive_alarm"));
+  assert.ok(causeNote && effectNote, "both events must compile to notes");
+  assert.deepEqual(
+    effectNote.links.map((link) => `${link.relation}:${link.target}`).sort(),
+    [`caused_by:${causeNote.id}`, `extracted_from:${chat.id}`],
+    "the event-to-event caused_by link must survive compilation beside extracted_from",
+  );
 
   const resolvedThread = unit(chat, {
     bucket: "thread",
@@ -814,135 +994,179 @@ async function main() {
       "requiresReview must be computed from full diagnostics before truncation",
     );
 
-    const dataDir = await mkdtemp(join(tmpdir(), "marinara-ltm-event-shaped-truncated-review-"));
-    const releaseHost = configurePackageRuntime({
-      isDebugAgentsEnabled: () => false,
-      logger: { debug() {}, info() {}, warn() {}, error() {} },
-      dataDir,
-      resources: {
-        listCharacters: async () => [{ id: "mara", data: { name: "Mara" }, comment: "" }],
-        listPersonas: async () => [],
-        listLorebooks: async () => [],
-      },
-      persistence: {
-        getChat: async () => null,
-        listChats: async () => [],
-        updateChatMetadata: async () => {},
-      },
-    });
-    const root = join(dataDir, "long-term-memory");
-    const reviewScope = { characterIds: ["mara"] };
-    try {
-      const storage = new LongTermMemoryStorage(root);
-      const durableFact = "The observatory archive keeps a cobalt ledger.";
-      const eventShapedText = "Mara learned to read the observatory script.";
-      const sourceText = `${durableFact} ${eventShapedText}`;
-      await storage.createNote({
-        ...chat,
-        id: "source_event_shaped_truncated_review",
-        title: "Truncated event-shaped review source",
-        scope: reviewScope,
-        sections: { source: { text: sourceText, updatedAt: timestamp } },
-      } as never);
-      const reviewSource = (await storage.getNote("source_event_shaped_truncated_review"))!;
-      const sourceHash = sourceHashForLtmSourceNote(reviewSource);
-      const fixtureUnits = [
-        ...Array.from({ length: 520 }, (_, index) => ({
-          bucket: "world_fact" as const,
-          subjectId: `pad_diag_${index}`,
-          sectionKey: "facts",
-          text: `Unrelated token salad ${index} xyzzy quux plugh.`,
-          claimKind: "static" as const,
-          importance: "minor" as const,
-          evidence: [`source_note:${reviewSource.id}`],
-          confidence: 0.9,
-          salience: 0.5,
-          status: "active" as const,
-          links: [] as [],
-          sourceHash,
-        })),
-        {
-          bucket: "character_fact" as const,
-          subjectId: "mara",
-          sectionKey: "facts",
-          text: eventShapedText,
-          claimKind: "static" as const,
-          importance: "major" as const,
-          evidence: [`source_note:${reviewSource.id}`],
-          confidence: 0.9,
-          salience: 0.8,
-          status: "active" as const,
-          links: [] as [],
-          subjectNames: ["Mara"],
-          sourceHash,
+    for (const reviewSignal of ["event", "borrowed", "borrowed-truncated", "control"] as const) {
+      const dataDir = await mkdtemp(join(tmpdir(), "marinara-ltm-truncated-review-"));
+      const releaseHost = configurePackageRuntime({
+        isDebugAgentsEnabled: () => false,
+        logger: { debug() {}, info() {}, warn() {}, error() {} },
+        dataDir,
+        resources: {
+          listCharacters: async () => [
+            { id: "mara", data: { name: "Mara" }, comment: "" },
+            { id: "seo", data: { name: "서무진" }, comment: "" },
+          ],
+          listPersonas: async () => [],
+          listLorebooks: async () => [],
         },
-        {
-          bucket: "world_fact" as const,
-          subjectId: "cobalt_ledger",
-          sectionKey: "facts",
-          text: durableFact,
-          claimKind: "static" as const,
-          importance: "major" as const,
-          evidence: [`source_note:${reviewSource.id}`],
-          confidence: 0.95,
-          salience: 0.8,
-          status: "active" as const,
-          links: [] as [],
-          sourceHash,
+        persistence: {
+          getChat: async () => null,
+          listChats: async () => [],
+          updateChatMetadata: async () => {},
         },
-      ];
-      const committed = await processLongTermMemorySource({
-        sourceNote: reviewSource as never,
-        languageModel: {
-          name: "FixtureModel",
-          model: "fixture-model",
-          maxContext: null,
-          maxOutputTokens: null,
-          fitContext(messages: unknown[], fitOptions: { maxTokens: number }) {
-            return {
-              messages,
-              maxTokens: fitOptions.maxTokens,
-              estimatedTokensBefore: 20,
-              estimatedTokensAfter: 20,
-              trimmed: false,
-            };
-          },
-          async chatComplete() {
-            return {
-              content: JSON.stringify({
-                summary: "Durable world fact with a truncated event-shaped warning.",
-                units: fixtureUnits,
-              }),
-              finishReason: "stop",
-            };
-          },
-        } as never,
-        scope: reviewScope,
-        modes: ["roleplay"],
-        mode: "roleplay",
-        extractionMode: "roleplay",
-        operationId: randomUUID(),
-        root,
-        applyLowRisk: true,
       });
-      assert.equal(committed.draft.reviewRequired, true, "truncated event-shaped warnings must still require review");
-      assert.equal(
-        committed.diagnostics.some((diagnostic) => diagnostic.code === "event_shaped_character_fact"),
-        false,
-        "bounded diagnostics must omit the truncated event-shaped warning",
-      );
-      assert.ok(
-        committed.draft.mutations.some((mutation) => mutation.risk === "low"),
-        "fixture must still produce an otherwise low-risk mutation",
-      );
-      assert.equal(
-        committed.appliedMutationIds.length,
-        0,
-        "truncated event-shaped warnings must block low-risk auto-apply",
-      );
-    } finally {
-      releaseHost();
-      await rm(dataDir, { recursive: true, force: true });
+      const root = join(dataDir, "long-term-memory");
+      const reviewScope = { characterIds: ["mara", "seo"] };
+      try {
+        const storage = new LongTermMemoryStorage(root);
+        const durableFact = "The observatory archive keeps a cobalt ledger.";
+        const eventShapedText =
+          reviewSignal === "event"
+            ? "Mara learned to read the observatory script."
+            : "서무진 can read the observatory script.";
+        const borrowedText = "The observatory script is legible.";
+        const sourceText = `${durableFact} ${eventShapedText} ${borrowedText}`;
+        await storage.createNote({
+          ...chat,
+          id: "source_event_shaped_truncated_review",
+          title: "Truncated event-shaped review source",
+          scope: reviewScope,
+          sections: { source: { text: sourceText, updatedAt: timestamp } },
+        } as never);
+        const reviewSource = (await storage.getNote("source_event_shaped_truncated_review"))!;
+        const sourceHash = sourceHashForLtmSourceNote(reviewSource);
+        const fixtureUnits = [
+          ...Array.from(
+            { length: reviewSignal === "event" || reviewSignal === "borrowed-truncated" ? 520 : 0 },
+            (_, index) => ({
+              bucket: "world_fact" as const,
+              subjectId: `pad_diag_${index}`,
+              sectionKey: "facts",
+              text: `Unrelated token salad ${index} xyzzy quux plugh.`,
+              claimKind: "static" as const,
+              importance: "minor" as const,
+              evidence: [`source_note:${reviewSource.id}`],
+              confidence: 0.9,
+              salience: 0.5,
+              status: "active" as const,
+              links: [] as [],
+              sourceHash,
+            }),
+          ),
+          {
+            bucket: "character_fact" as const,
+            subjectId: reviewSignal === "event" ? "mara" : "seo_mujin",
+            sectionKey: reviewSignal === "event" ? "facts" : "abilities",
+            text: eventShapedText,
+            claimKind: "static" as const,
+            importance: "major" as const,
+            evidence: [`source_note:${reviewSource.id}`],
+            confidence: 0.9,
+            salience: 0.8,
+            status: "active" as const,
+            links: [] as [],
+            subjectNames: [reviewSignal === "event" ? "Mara" : "서무진"],
+            sourceHash,
+          },
+          ...(reviewSignal.startsWith("borrowed")
+            ? [
+                unit(reviewSource, {
+                  bucket: "character_fact",
+                  subjectId: "seo_mujin",
+                  sectionKey: "abilities",
+                  text: borrowedText,
+                  claimKind: "static",
+                }),
+              ]
+            : []),
+          {
+            bucket: "world_fact" as const,
+            subjectId: "cobalt_ledger",
+            sectionKey: "facts",
+            text: durableFact,
+            claimKind: "static" as const,
+            importance: "major" as const,
+            evidence: [`source_note:${reviewSource.id}`],
+            confidence: 0.95,
+            salience: 0.8,
+            status: "active" as const,
+            links: [] as [],
+            sourceHash,
+          },
+        ];
+        const recallIndexMtime = () =>
+          stat(longTermMemoryRecallIndexPath(root)).then(
+            (file) => file.mtimeMs,
+            () => null,
+          );
+        await rebuildLongTermMemoryIndexes({ root });
+        const indexBeforeExtraction = await recallIndexMtime();
+        const committed = await processLongTermMemorySource({
+          sourceNote: reviewSource as never,
+          languageModel: {
+            name: "FixtureModel",
+            model: "fixture-model",
+            maxContext: null,
+            maxOutputTokens: null,
+            fitContext(messages: unknown[], fitOptions: { maxTokens: number }) {
+              return {
+                messages,
+                maxTokens: fitOptions.maxTokens,
+                estimatedTokensBefore: 20,
+                estimatedTokensAfter: 20,
+                trimmed: false,
+              };
+            },
+            async chatComplete() {
+              return {
+                content: JSON.stringify({
+                  summary: "Durable world fact with a truncated event-shaped warning.",
+                  units: fixtureUnits,
+                }),
+                finishReason: "stop",
+              };
+            },
+          } as never,
+          scope: reviewScope,
+          modes: ["roleplay"],
+          mode: "roleplay",
+          extractionMode: "roleplay",
+          operationId: randomUUID(),
+          root,
+          applyLowRisk: true,
+        });
+        assert.equal(
+          committed.draft.reviewRequired,
+          reviewSignal !== "control",
+          `${reviewSignal}: required review must block auto-apply`,
+        );
+        assert.equal(
+          committed.diagnostics.some(
+            (diagnostic) =>
+              diagnostic.code ===
+              (reviewSignal === "event" ? "event_shaped_character_fact" : "borrowed_subject_identity"),
+          ),
+          reviewSignal === "borrowed",
+          `${reviewSignal}: review signal must survive even when the diagnostic is truncated`,
+        );
+        assert.ok(
+          committed.draft.mutations.some((mutation) => mutation.risk === "low"),
+          "fixture must still produce an otherwise low-risk mutation",
+        );
+        assert.equal(
+          committed.appliedMutationIds.length > 0,
+          reviewSignal === "control",
+          `${reviewSignal}: only the control may auto-apply`,
+        );
+        // #1364: extraction rebuilds the recall index only when it applied mutations.
+        assert.equal(
+          (await recallIndexMtime()) !== indexBeforeExtraction,
+          reviewSignal === "control",
+          `${reviewSignal}: only extraction that applied mutations may rebuild the recall index`,
+        );
+      } finally {
+        releaseHost();
+        await rm(dataDir, { recursive: true, force: true });
+      }
     }
   }
 
@@ -1055,6 +1279,12 @@ async function main() {
   );
   const unitFields = extractionPrompt.unitFields;
   assert.match(unitFields.title, /short memory label/i);
+  assert.ok(
+    extractionPrompt.validationRules.some((rule: string) =>
+      /timeline_event.*directly caused another.*caused_by/.test(rule),
+    ),
+    "issue #1362: the prompt must ask for caused_by between same-response events",
+  );
   for (const relation of ["planted_in", "paid_off_in"]) {
     assert.ok(
       extractionPrompt.allowedTimelineRelations.includes(relation),
@@ -1068,6 +1298,42 @@ async function main() {
     }).json_schema.schema.properties.units.items.properties.title.maxLength,
     80,
   );
+  assert.equal(
+    "subjectKeys" in
+      evidenceUnitResponseFormat({ allowedBuckets: ["character_fact"], sourceHash }).json_schema.schema.properties.units
+        .items.properties,
+    false,
+    "issue #1448: the provider schema must not offer subjectKeys",
+  );
+  // Issue #1448: a whitespace-only prompt template falls back to the mode's default prompt.
+  assert.ok(
+    String(
+      evidenceUnitMessages({
+        sourceNote: chat,
+        sourceText: chat.sections.source.text,
+        scope: {},
+        modes: ["conversation"],
+        sourceHash,
+        mode: "conversation",
+        systemPrompt: "   ",
+      } as any)[0]?.content,
+    ).startsWith(DEFAULT_LTM_EXTRACTION_PROMPT_CONVERSATION),
+  );
+  const blankTemplateRoot = await mkdtemp(join(tmpdir(), "marinara-ltm-blank-template-"));
+  try {
+    await updateLtmExtractionConfig(
+      {
+        promptTemplates: [{ id: "blank", name: "Blank", prompt: "   " }],
+        activePromptTemplateIdsByMode: { conversation: "blank" },
+      },
+      blankTemplateRoot,
+    );
+    const blankConfig = await getLtmExtractionConfig(blankTemplateRoot, "conversation");
+    assert.equal(blankConfig.systemPrompt, DEFAULT_LTM_EXTRACTION_PROMPT_CONVERSATION);
+    assert.equal(blankConfig.activePromptTemplateId, null);
+  } finally {
+    await rm(blankTemplateRoot, { recursive: true, force: true });
+  }
 
   const parsedSourcePrefixedLink = parseEvidenceUnitPayload(
     {
@@ -1655,6 +1921,362 @@ async function main() {
     ),
     true,
   );
+
+  // #1277: zero-valued deltas are "no change", an empty subjectKeys array is an omitted
+  // field, and a nameless candidate borrows a solidly named sibling with the same subjectId.
+  const staticRelationshipZeroDelta = compile(chat, [
+    unit(chat, {
+      bucket: "relationship_state",
+      subjectId: "alice_rowan_static_zero",
+      sectionKey: "state",
+      text: "Alice and Rowan trust each other.",
+      claimKind: "static",
+      subjectNames: ["Alice", "Rowan"],
+      dimensionChanges: { trust: 0 },
+    }),
+  ]);
+  assert.equal(staticRelationshipZeroDelta.accounting.keptUnits, 1);
+  assert.equal(
+    staticRelationshipZeroDelta.diagnostics.some(
+      (diagnostic) => diagnostic.details?.validatorCode === "static_relationship_dimension_change",
+    ),
+    false,
+  );
+
+  const koreanSubject = {
+    subject: { key: "character:seo_mujin", ref: { kind: "character" as const, id: "seo_mujin" } },
+    name: "서무진",
+    aliases: [],
+    canonicalSlug: "seo-mujin",
+  };
+  const parsedEmptyKeys = parseEvidenceUnitPayload(
+    {
+      summary: "Extraction graph regression",
+      units: [
+        {
+          bucket: "character_fact",
+          subjectId: "seo_mujin",
+          sectionKey: "abilities",
+          text: "서무진 can read the observatory script.",
+          claimKind: "static",
+          importance: "major",
+          keywords: [],
+          evidence: ["source_note:source_chat_graph_regression"],
+          confidence: 0.9,
+          salience: 0.8,
+          status: "active",
+          links: [],
+          subjectNames: ["서무진"],
+          subjectKeys: [],
+        },
+      ],
+    },
+    sourceHashForLtmSourceNote(chat),
+    [],
+  );
+  const namedSubjectUnit = parsedEmptyKeys.response.units[0]!;
+  assert.equal(namedSubjectUnit.subjectKeys, undefined, "empty subjectKeys must normalize to an omitted field");
+  const namelessSubjectUnit = unit(chat, {
+    bucket: "character_fact",
+    subjectId: "seo_mujin",
+    sectionKey: "abilities",
+    text: "서무진 can read the observatory script with ease.",
+    claimKind: "static",
+  });
+  const borrowedIdentityResolution = resolveLtmSubjectIdentities({
+    units: [namedSubjectUnit, namelessSubjectUnit],
+    catalog: { entries: [koreanSubject], notes: [] },
+    existingNotes: [],
+    scope: {},
+  });
+  assert.equal(borrowedIdentityResolution.units.length, 2);
+  assert.equal(
+    borrowedIdentityResolution.units[0]!.subjectId,
+    borrowedIdentityResolution.units[1]!.subjectId,
+    "a nameless candidate must borrow its named sibling's identity",
+  );
+  assert.equal(
+    borrowedIdentityResolution.diagnostics.some((diagnostic) => diagnostic.code === "borrowed_subject_identity"),
+    true,
+  );
+  assert.equal(diagnosticsRequireExtractionReview(borrowedIdentityResolution.diagnostics), true);
+
+  const { ltmScopeFamilyId, localCharacterSubjectForName } = await import(`${source}/identity/chat-scope.ts`);
+  const borrowingCatalog = buildTrustedLtmSubjectCatalog({
+    roster: [
+      { kind: "character", id: "seo", name: "서무진", aliases: ["서 선생"] },
+      { kind: "character", id: "mara", name: "Mara", aliases: ["Guard"] },
+      { kind: "character", id: "rowan", name: "Rowan", aliases: ["Guard"] },
+      { kind: "character", id: "alex", name: "Alex Morgan", aliases: [] },
+    ],
+    notes: [],
+  });
+  const borrowingOptions = { catalog: borrowingCatalog, scope: scopedChat.scope, mode: "roleplay" as const };
+  const skippedCatalog = (name: string) => ({
+    ...borrowingCatalog,
+    identityChoices: [{ name, action: "skip" as const, familyId: ltmScopeFamilyId(scopedChat.scope)! }],
+  });
+  const pairDonor = { ...namedSubjectUnit, bucket: "relationship_state" as const, subjectNames: ["서무진", "Rowan"] };
+  const relationshipRecipient = { ...namelessSubjectUnit, bucket: "relationship_state" as const };
+
+  // Failed identities may not be rescued by a superficially similar ID, another
+  // bucket, or a donor whose identity is unavailable/contested/skipped.
+  for (const { label, donors, recipient, catalog = borrowingCatalog, sourceText, donorBasis } of [
+    {
+      label: "exact ID, not a stripped prefix",
+      donors: [namedSubjectUnit],
+      recipient: { ...namelessSubjectUnit, subjectId: "char_seo_mujin" },
+    },
+    {
+      label: "ambiguous alias",
+      donors: [{ ...namedSubjectUnit, subjectId: "guard" }],
+      recipient: { ...namelessSubjectUnit, subjectId: "guard" },
+    },
+    {
+      label: "fuzzy recipient",
+      donors: [{ ...namedSubjectUnit, subjectId: "rowen" }],
+      recipient: { ...namelessSubjectUnit, subjectId: "rowen" },
+    },
+    {
+      label: "relationship cardinality",
+      donors: [{ ...pairDonor, subjectId: "mara" }],
+      recipient: { ...relationshipRecipient, subjectId: "mara" },
+    },
+    { label: "same bucket required", donors: [namedSubjectUnit], recipient: relationshipRecipient },
+    {
+      label: "reversed relationship ID",
+      donors: [{ ...pairDonor, subjectId: "seo_mujin_rowan" }],
+      recipient: { ...relationshipRecipient, subjectId: "rowan_seo_mujin" },
+    },
+    {
+      label: "invalid explicit key",
+      donors: [namedSubjectUnit],
+      recipient: { ...namelessSubjectUnit, subjectKeys: ["character:missing"] },
+    },
+    {
+      label: "internal empty keys stay strict",
+      donors: [namedSubjectUnit],
+      recipient: { ...namelessSubjectUnit, subjectKeys: [] },
+    },
+    {
+      label: "explicit unknown name",
+      donors: [namedSubjectUnit],
+      recipient: { ...namelessSubjectUnit, subjectNames: ["없는사람"] },
+    },
+    {
+      label: "conflicting named siblings",
+      donors: [namedSubjectUnit, { ...namedSubjectUnit, subjectNames: ["Rowan"] }],
+      recipient: namelessSubjectUnit,
+    },
+    {
+      label: "ambiguous donor",
+      donors: [{ ...namedSubjectUnit, subjectNames: ["Guard"] }],
+      recipient: namelessSubjectUnit,
+    },
+    {
+      label: "fuzzy donor",
+      donors: [{ ...namedSubjectUnit, subjectNames: ["Rowen"] }],
+      recipient: namelessSubjectUnit,
+      donorBasis: "spelling_variation",
+    },
+    {
+      label: "partial donor",
+      donors: [{ ...namedSubjectUnit, subjectNames: ["Alex"] }],
+      recipient: namelessSubjectUnit,
+      sourceText: "Alex speaks.",
+      donorBasis: "partial_name_requires_review",
+    },
+    {
+      label: "out-of-scope local donor",
+      donors: [namedSubjectUnit],
+      recipient: namelessSubjectUnit,
+      catalog: {
+        entries: [
+          {
+            ...koreanSubject,
+            subject: localCharacterSubjectForName({ chatId: "other-chat" }, "서무진")!,
+            familyId: ltmScopeFamilyId({ chatId: "other-chat" })!,
+          },
+        ],
+        notes: [],
+      },
+    },
+    {
+      label: "untrusted donor",
+      donors: [{ ...namedSubjectUnit, subjectNames: ["없는사람"] }],
+      recipient: namelessSubjectUnit,
+    },
+    {
+      label: "skipped donor",
+      donors: [namedSubjectUnit],
+      recipient: namelessSubjectUnit,
+      catalog: skippedCatalog("서무진"),
+    },
+    {
+      label: "skipped recipient",
+      donors: [namedSubjectUnit],
+      recipient: namelessSubjectUnit,
+      catalog: skippedCatalog("seo_mujin"),
+    },
+    {
+      label: "contested explicit keys stay closed",
+      donors: [
+        namedSubjectUnit,
+        { ...namelessSubjectUnit, subjectKeys: ["character:seo"] },
+        { ...namelessSubjectUnit, subjectKeys: ["character:rowan"] },
+      ],
+      recipient: namelessSubjectUnit,
+    },
+  ]) {
+    const options = { ...borrowingOptions, catalog, sourceBackedNpcSourceText: sourceText };
+    const baselineContext = prepareLtmSubjectIdentityContext({ ...options, units: [recipient] });
+    const baseline = baselineContext.resolve({ units: [recipient], existingNotes: [] });
+    assert.equal(baseline.units.length, 0, `${label}: fixture must fail or skip without a donor`);
+    const context = prepareLtmSubjectIdentityContext({ ...options, units: [...donors, recipient] });
+    if (donorBasis) {
+      assert.equal(
+        context.resolve({ units: donors, existingNotes: [] }).diagnostics[0]?.details?.matchBasis,
+        donorBasis,
+        `${label}: exercise the intended rejection`,
+      );
+    }
+    const result = context.resolve({ units: [recipient], existingNotes: [] });
+    assert.deepEqual(result, baseline, `${label}: preserve rejection or skip`);
+    assert.equal(
+      context.identityKeyForUnit(recipient),
+      baselineContext.identityKeyForUnit(recipient),
+      `${label}: prediction must also stay unchanged`,
+    );
+  }
+
+  // Known, uniquely aliased, saved-choice, and newly source-backed identities all
+  // use a full-batch preparation pass; prediction and actual resolution must agree.
+  for (const reverse of [false, true]) {
+    const pairUnits = reverse ? [relationshipRecipient, pairDonor] : [pairDonor, relationshipRecipient];
+    const pairContext = prepareLtmSubjectIdentityContext({ ...borrowingOptions, units: pairUnits });
+    const pairResult = pairContext.resolve({ units: pairUnits, existingNotes: [] });
+    assert.equal(pairResult.units.length, 2);
+    assert.equal(pairResult.units[0]!.subjectKeys!.length, 2);
+    assert.deepEqual(pairResult.units[0]!.subjectKeys, pairResult.units[1]!.subjectKeys);
+    assert.equal(pairContext.identityKeyForUnit(pairDonor), pairContext.identityKeyForUnit(relationshipRecipient));
+    assert.equal(diagnosticsRequireExtractionReview(pairResult.diagnostics), true);
+    for (const { catalog, name, sourceText } of [
+      { catalog: borrowingCatalog, name: "서무진", sourceText: undefined },
+      { catalog: borrowingCatalog, name: "서 선생", sourceText: undefined },
+      {
+        catalog: {
+          ...borrowingCatalog,
+          identityChoices: [
+            {
+              name: "Guard",
+              action: "bind" as const,
+              subject: borrowingCatalog.entries[0]!.subject,
+              familyId: ltmScopeFamilyId(scopedChat.scope)!,
+            },
+          ],
+        },
+        name: "Guard",
+        sourceText: undefined,
+      },
+      { catalog: { entries: [], notes: [] }, name: "서무진", sourceText: "서무진 can read the observatory script." },
+    ]) {
+      const donor = { ...namedSubjectUnit, subjectNames: [name] };
+      const units = reverse ? [namelessSubjectUnit, donor] : [donor, namelessSubjectUnit];
+      const context = prepareLtmSubjectIdentityContext({
+        ...borrowingOptions,
+        catalog,
+        units,
+        sourceBackedNpcSourceText: sourceText,
+      });
+      const result = context.resolve({ units, existingNotes: [] });
+      assert.equal(result.units.length, 2);
+      assert.equal(result.droppedCandidates.length, 0);
+      assert.deepEqual(result.units[0]!.subjectKeys, result.units[1]!.subjectKeys);
+      assert.equal(context.identityKeyForUnit(donor), context.identityKeyForUnit(namelessSubjectUnit));
+      assert.equal(diagnosticsRequireExtractionReview(result.diagnostics), true);
+      if (sourceText) assert.ok(result.units[0]!.subjectKeys![0]!.startsWith("local_character:"));
+
+      const backfill = normalizeStructuredSummaryEvidenceUnits({
+        units,
+        sourceText:
+          "## Character Facts\n- character: 서무진 | abilities: 서무진 can read the observatory script with ease.",
+        sourceNote: scopedChat,
+        sourceHash: sourceHashForLtmSourceNote(scopedChat),
+        allowedBuckets: ["character_fact"],
+        mode: "roleplay",
+        characterIdentityKey: context.identityKeyForUnit,
+      });
+      assert.equal(backfill.addedUnits, 0, "backfill must not duplicate the borrowed character fact");
+    }
+  }
+  const englishRecipient = { ...namelessSubjectUnit, subjectId: "mara" };
+  const englishBaseline = prepareLtmSubjectIdentityContext({ ...borrowingOptions, units: [englishRecipient] });
+  const englishWithDonor = prepareLtmSubjectIdentityContext({
+    ...borrowingOptions,
+    units: [{ ...namedSubjectUnit, subjectId: "mara" }, englishRecipient],
+  });
+  assert.deepEqual(
+    englishWithDonor.resolve({ units: [englishRecipient], existingNotes: [] }),
+    englishBaseline.resolve({ units: [englishRecipient], existingNotes: [] }),
+    "successful English resolution must not borrow even from a differently named sibling",
+  );
+  assert.equal(
+    englishWithDonor.identityKeyForUnit(englishRecipient),
+    englishBaseline.identityKeyForUnit(englishRecipient),
+  );
+
+  // Korean particles and short names (#1291): a whole particle is a name boundary, a stripped particle
+  // only binds to a known name, and a 2-syllable tail of a known 3-syllable name goes to review.
+  for (const { label, roster, name, sourceText, keys, basis } of [
+    {
+      label: "particle after a new name",
+      roster: [],
+      name: "서무진",
+      sourceText: "서무진은 서가를 읽었다.",
+      keys: "local",
+    },
+    { label: "name inside a longer name", roster: [], name: "이수", sourceText: "이수이가 서가를 읽었다.", keys: [] },
+    { label: "final ㄹ rejects 으로", roster: [], name: "한별", sourceText: "한별으로 서가를 읽었다.", keys: [] },
+    { label: "returned particle binds to known", roster: ["서무진"], name: "서무진은", keys: ["character:seo"] },
+    {
+      label: "short tail needs review",
+      roster: ["도진욱"],
+      name: "진욱",
+      sourceText: "진욱이 웃었다.",
+      keys: [],
+      basis: "partial_name_requires_review",
+    },
+    { label: "exact short name wins", roster: ["도진욱", "진욱"], name: "진욱", keys: ["character:jin"] },
+  ] as Array<{
+    label: string;
+    roster: string[];
+    name: string;
+    sourceText?: string;
+    keys: "local" | string[];
+    basis?: string;
+  }>) {
+    const catalog = buildTrustedLtmSubjectCatalog({
+      roster: roster.map((rosterName) => ({
+        kind: "character" as const,
+        id: rosterName === "진욱" ? "jin" : rosterName === "서무진" ? "seo" : "do",
+        name: rosterName,
+        aliases: [],
+      })),
+      notes: [],
+    });
+    const donor = { ...namedSubjectUnit, subjectNames: [name] };
+    const result = prepareLtmSubjectIdentityContext({
+      ...borrowingOptions,
+      catalog,
+      units: [donor],
+      sourceBackedNpcSourceText: sourceText,
+    }).resolve({ units: [donor], existingNotes: [] });
+    const resolved = result.units[0]?.subjectKeys ?? [];
+    if (keys === "local") assert.ok(resolved[0]?.startsWith("local_character:"), label);
+    else assert.deepEqual(resolved, keys, label);
+    assert.equal(result.droppedCandidates.length, keys !== "local" && keys.length === 0 ? 1 : 0, label);
+    if (basis) assert.equal(result.diagnostics[0]?.details?.matchBasis, basis, label);
+  }
 
   const dedupUnit = (text: string, subjectId = "dedup_subject", sectionKey = "facts") =>
     unit(chat, {

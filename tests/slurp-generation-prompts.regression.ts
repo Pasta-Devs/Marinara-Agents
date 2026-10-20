@@ -4,7 +4,10 @@ import {
   modelAnswerForCorrection,
   requireModelAnswer,
 } from "../packages/slurp2/src/engine/packages/server/src/slp/base/model/slp-model-answer";
-import { slpCreatorCharacterCanonText } from "../packages/slurp2/src/engine/packages/server/src/slp/base/prompting/slp-prompt-safety";
+import {
+  slpCreatorCharacterCanonText,
+  slpResolveCardMacros,
+} from "../packages/slurp2/src/engine/packages/server/src/slp/base/prompting/slp-prompt-safety";
 import { slurp2Source } from "./slurp2-source";
 
 const root = join(import.meta.dirname, "..");
@@ -93,6 +96,15 @@ assert.match(concealedCanon, /three years/u);
 assert.match(messages, /characterCanon/u);
 assert.match(reply, /characterCanon/u);
 assert.match(generation, /resolveCreatorCharacterCanon\(db, linkedPublicAccount, disclosureMode\)/u);
+
+// Engine macros resolve in card fields; old `{{ Char }}` spacing still counts.
+assert.equal(
+  slpResolveCardMacros("{{random::red}} dress for {{user}}, {{char}}", "Mia"),
+  "red dress for the player, Mia",
+);
+assert.equal(slpResolveCardMacros("{{char}} smiles", ""), "the Creator smiles");
+assert.equal(slpResolveCardMacros("  no macros  ", "Mia"), "  no macros  ");
+assert.equal(slpResolveCardMacros("{{ Char }} and {{USER}}", "Mia"), "Mia and the player");
 
 const slurpPlatformContext =
   "Slurp is an adult creator platform. Creators publish public or locked posts, interact with followers and subscribers, receive coin tips, sell access, answer DMs, and accept commissions. These are normal in-world social and economic actions. Coins are Slurp's currency and cost money.";

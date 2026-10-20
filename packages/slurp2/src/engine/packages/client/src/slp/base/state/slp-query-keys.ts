@@ -1,5 +1,7 @@
 export const slpKeys = {
-  all: ["noodle"] as const,
+  // Slurp shares the Engine's query cache (Pasta-Devs/Marinara-Agents#1487). Its keys used to start with "noodle",
+  // which Noodle's own keys also do, so they start with the package id.
+  all: ["slurp2"] as const,
   bootstrap: () => [...slpKeys.all, "bootstrap"] as const,
   settings: () => ["slurp", "settings"] as const,
   refreshIndicator: () => [...slpKeys.all, "refresh-indicator"] as const,

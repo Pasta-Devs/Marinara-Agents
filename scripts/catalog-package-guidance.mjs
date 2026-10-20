@@ -116,6 +116,16 @@ export const OFFICIAL_PACKAGE_GUIDANCE = Object.freeze({
     modes: ["roleplay", "game"],
     activation: "Add the Agent in Chat Settings → Agents → Misc Agents/Storyboard for Roleplay and Game modes.",
   },
+  "2d-avatars": {
+    modes: ["roleplay", "game"],
+    activation:
+      "Set up each avatar on the agent's page in Agents, then add the Agent in Chat Settings → Agents → Misc Agents for Roleplay and Game modes.",
+  },
+  "3d-avatars": {
+    modes: ["roleplay", "game"],
+    activation:
+      "Set up each avatar on the agent's page in Agents, then add the Agent in Chat Settings → Agents → Misc Agents for Roleplay and Game modes.",
+  },
   html: {
     modes: ["roleplay"],
     activation: "Add the Agent in Chat Settings → Agents → Misc Agents for Roleplay mode.",

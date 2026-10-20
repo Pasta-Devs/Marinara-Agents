@@ -184,6 +184,15 @@ export function SlurpDiscoveryProfileEditor({
             {localizeUi("ui.slurp.discover.addTag", { defaultValue: "Add" })}
           </button>
         </div>
+        {/* AI drafts can fill every slot, and the greyed-out field gave no reason (#73). */}
+        {!disabled && tags.length >= SLURP_DISCOVERY_TAG_LIMIT && (
+          <p className="text-xs text-[var(--muted-foreground)]">
+            {localizeUi("ui.slurp.discover.tagLimitReached", {
+              count: SLURP_DISCOVERY_TAG_LIMIT,
+              defaultValue: "A Creator can have {{count}} tags. Remove one to add your own.",
+            })}
+          </p>
+        )}
       </div>
     </section>
   );

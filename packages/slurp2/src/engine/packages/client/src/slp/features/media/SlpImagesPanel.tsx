@@ -199,6 +199,13 @@ export function SlpImagesPanel(page: SlpBackstagePageProps) {
           onChange={(value) => update("autoPostingImagesEnabled", value)}
         />
         <Toggle
+          settingKey="autoCreatorArtworkEnabled"
+          label={t("ui.slurp.settings.images.autoArtwork")}
+          detail={t("ui.slurp.settings.images.autoArtworkDetail")}
+          value={settings.autoCreatorArtworkEnabled}
+          onChange={(value) => update("autoCreatorArtworkEnabled", value)}
+        />
+        <Toggle
           settingKey="allowGalleryImageAttachments"
           label={t("ui.slurp.settings.images.galleryFallback")}
           detail={t("ui.slurp.settings.images.galleryFallbackDetail")}
@@ -339,6 +346,28 @@ export function SlpImagesPanel(page: SlpBackstagePageProps) {
                   </option>
                 ))}
             </select>
+          </Field>
+        )}
+        {settings.imageContextMode !== "imagePrompt" && (
+          <Field
+            settingKey="imageCaptionPrompt"
+            label={t("ui.slurp.settings.images.captionPrompt")}
+            detail={t("ui.slurp.settings.images.captionPromptDetail")}
+          >
+            {/* Saved on leaving the field, so typing never writes settings per keystroke. */}
+            <textarea
+              key={settings.imageCaptionPrompt}
+              rows={3}
+              maxLength={4000}
+              defaultValue={settings.imageCaptionPrompt}
+              disabled={updateSettings.isPending}
+              placeholder={t("ui.slurp.settings.images.captionPromptPlaceholder")}
+              onBlur={(event) => {
+                const value = event.target.value.trim();
+                if (value !== settings.imageCaptionPrompt) void update("imageCaptionPrompt", value);
+              }}
+              className="min-h-24 w-full rounded-lg border border-[var(--slurp-outline)] bg-[var(--slurp-canvas)] p-3 text-base leading-relaxed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] disabled:opacity-50 sm:text-sm"
+            />
           </Field>
         )}
       </SettingsGroup>

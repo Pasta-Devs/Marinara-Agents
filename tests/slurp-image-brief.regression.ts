@@ -12,6 +12,7 @@ import {
   selectSlpImageProviderPrompt,
   slurpImageLook,
 } from "../packages/slurp2/src/engine/packages/server/src/slp/base/media/slp-image-prompt.ts";
+import { slurpVisualBriefPromptViolatesPolicy } from "../packages/slurp2/src/engine/packages/server/src/slp/base/media/slp-visual-brief.ts";
 import { slurp2Source } from "./slurp2-source";
 
 const variation = slurpPostVariation("creator-a", 2);
@@ -77,6 +78,56 @@ assert.doesNotMatch(look, /sword|corset|pastel dresses/u);
 // A failed rewrite falls back to the rendered template, not a card paragraph that pushes the scene out.
 const raw = `${brief}\n\n${look}`;
 assert.equal(selectSlpImageProviderPrompt({ rewrittenPrompt: null, rawPrompt: raw, rewriteAttempted: true }), raw);
+
+// A fallback that overflows the cap keeps the scene: a long look must not push it out.
+const longLook = "Appearance: tall, silver hair, freckles. ".repeat(60);
+const sceneText = "She sits on a park bench at night under an orange street lamp.";
+const capped = selectSlpImageProviderPrompt({
+  rewrittenPrompt: null,
+  rawPrompt: sceneText,
+  fallbackPrefix: longLook,
+  rewriteAttempted: true,
+});
+assert.match(capped, /park bench at night/u);
+// The Creator path: the scene survives an over-cap template that leads with a long look.
+const creator = selectSlpImageProviderPrompt({
+  rewrittenPrompt: null,
+  rawPrompt: `${longLook}\n${sceneText}`,
+  fallbackPrefix: longLook,
+  fallbackScene: sceneText,
+  rewriteAttempted: true,
+});
+assert.match(creator, /park bench at night/u);
+assert.ok(creator.length <= 1_500);
+// A short brief after a long look in the prefix keeps its level line.
+const briefAfterLook = selectSlpImageProviderPrompt({
+  rewrittenPrompt: null,
+  rawPrompt: sceneText,
+  fallbackPrefix: `${longLook.slice(0, 500)}\nSexual level: none.`,
+  rewriteAttempted: true,
+});
+assert.match(briefAfterLook, /Sexual level: none/u);
+assert.ok(capped.length <= 1_500);
+
+// A word the rewrite was handed (card look, content policy) is carried over, not an escalation.
+const clothed = { sexualLevel: "none" } as Parameters<typeof slurpVisualBriefPromptViolatesPolicy>[0];
+const rewritten = "A woman with large breasts on a park bench, explicit content allowed by policy.";
+assert.equal(slurpVisualBriefPromptViolatesPolicy(clothed, rewritten), true);
+assert.equal(
+  slurpVisualBriefPromptViolatesPolicy(
+    clothed,
+    rewritten,
+    "Appearance: large breasts. Policy: explicit content allowed.",
+  ),
+  false,
+);
+assert.equal(slurpVisualBriefPromptViolatesPolicy(clothed, "She is naked on a bench", "large breasts"), true);
+assert.equal(slurpVisualBriefPromptViolatesPolicy(clothed, "A nude portrait", "She wants not a nude portrait"), true);
+// Limits are not permissions: "not nude" in the handed text does not allow "nude" in the rewrite.
+assert.equal(
+  slurpVisualBriefPromptViolatesPolicy(clothed, "A sexual pose, nude", "Keep it non-sexual, not nude"),
+  true,
+);
 
 // The rewrite runs on Slurp's own generation connection, with reasoning headroom.
 const rewrite = slurp2Source(
@@ -151,7 +202,11 @@ assert.match(
 assert.doesNotMatch(slurpImageNegativePrompt("none", true) ?? "", /second person|extra people/u);
 // The writer gets their looks with the choice; a reference picture only for somebody the final prompt names.
 assert.match(images, /Put one in the picture only when the post or the scene calls for them/u);
-assert.match(images, /promptText: finalPrompt,/u);
+assert.match(images, /slurpCompanionReferenceImages\([^)]*finalPrompt,/u);
+assert.match(
+  slurp2Source("packages/slurp2/src/engine/packages/server/src/slp/features/media/slp-image-companions.ts"),
+  /promptText: prompt,/u,
+);
 // Two people only when the writer named a companion; left out, the one-person rule stands.
 assert.match(
   images,

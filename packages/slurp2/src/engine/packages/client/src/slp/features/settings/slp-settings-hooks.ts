@@ -18,6 +18,15 @@ export function useSlurpSettings() {
     staleTime: 10_000,
   });
 }
+/** How many chats with a Creator have "Include Slurp activity" on (Settings → Carryover to chats). */
+export function useSlurpCarryoverReach(enabled: boolean) {
+  return useQuery({
+    queryKey: [...slpKeys.settings(), "carryover-reach"] as const,
+    queryFn: () => api.get<{ on: number; off: number }>("/slurp2/settings/carryover-reach"),
+    enabled,
+    staleTime: 30_000,
+  });
+}
 export function useSlurpSettingsDefaults() {
   return useQuery({
     queryKey: [...slpKeys.settings(), "defaults"] as const,

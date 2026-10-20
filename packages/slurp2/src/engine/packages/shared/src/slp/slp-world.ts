@@ -435,6 +435,48 @@ export function slurpCreatorReplyChance(tie: { stage: string; spent: number; int
 /** Replies a creator writes in one tick. A wall of answers at once reads as a script, not a person. */
 export const SLURP_MAX_CREATOR_REPLIES_PER_TICK = 3;
 
+/** Chance a Creator reacts to a fellow Creator's post in a given hour: about two a day. */
+const SLURP_CREATOR_PEER_CHANCE_PER_HOUR = 0.08;
+/** Share of those reactions that are a comment rather than a like. */
+const SLURP_CREATOR_PEER_COMMENT_SHARE = 0.3;
+
+export type SlurpCreatorPeerReaction = {
+  actorAccountId: string;
+  postId: string;
+  creatorAccountId: string;
+  kind: "like" | "comment";
+};
+
+/**
+ * Creators noticing each other (#1). Only the audience used to react, so several Creators read as
+ * strangers posting side by side, and a persona Creator heard from nobody but the crowd. Likes and
+ * short comments only: no messages, tips or subscriptions between Creators.
+ *
+ * About one reaction per Creator per hour, on the post the hour's seed picks. Ticks run every few
+ * minutes, so a pick that already happened (`reacted` holds `actor:post`) is skipped, not replaced.
+ * ponytail: the pick is not stored, so a post published (or aging out) mid-hour can move it and
+ * allow a second reaction that hour; store the hour's pick if that ever reads as spam.
+ */
+export function planSlurpCreatorPeerReactions(input: {
+  actorAccountIds: readonly string[];
+  posts: readonly { postId: string; creatorAccountId: string }[];
+  reacted: ReadonlySet<string>;
+  hourSeed: string;
+}): SlurpCreatorPeerReaction[] {
+  const unit = (value: string) => hashSeed(value) / 4294967296;
+  return input.actorAccountIds.flatMap((actorAccountId): SlurpCreatorPeerReaction[] => {
+    const roll = unit(`${input.hourSeed}:${actorAccountId}:peer`);
+    if (roll >= SLURP_CREATOR_PEER_CHANCE_PER_HOUR) return [];
+    const others = input.posts.filter((post) => post.creatorAccountId !== actorAccountId);
+    const post = others
+      .map((entry) => ({ entry, pick: unit(`${input.hourSeed}:${actorAccountId}:${entry.postId}`) }))
+      .sort((left, right) => left.pick - right.pick)[0]?.entry;
+    if (!post || input.reacted.has(`${actorAccountId}:${post.postId}`)) return [];
+    const kind = roll < SLURP_CREATOR_PEER_CHANCE_PER_HOUR * SLURP_CREATOR_PEER_COMMENT_SHARE ? "comment" : "like";
+    return [{ actorAccountId, postId: post.postId, creatorAccountId: post.creatorAccountId, kind }];
+  });
+}
+
 /**
  * Whether a creator writes to somebody who did not write first, and what kind of message it is.
  *

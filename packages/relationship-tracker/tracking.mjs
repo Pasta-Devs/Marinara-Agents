@@ -1,5 +1,5 @@
 import { canonicalizePair, characterCardName, relationshipDescriptionIssue } from "./state.mjs";
-import { PERSONA_TRACKING_INSTRUCTIONS, applyPersonaDelta, personaPreparedContext } from "./persona-tracking.mjs";
+import { PERSONA_TRACKING_INSTRUCTIONS, applyPersonaDelta, describeModelValue, personaPreparedContext } from "./persona-tracking.mjs";
 
 export const MAX_RELATIONSHIP_LABEL_LENGTH = 80;
 export const MAX_RELATIONSHIP_DESCRIPTION_LENGTH = 240;
@@ -159,7 +159,10 @@ function decodeCompactDeltaEntry(input, identity, label) {
   const [aliasA, aliasB, state, relationshipLabel, perspectiveA, perspectiveB, colorCategory] = input;
   const left = identity.byAlias.get(aliasA);
   const right = identity.byAlias.get(aliasB);
-  if (!left || !right) fail(`${label} references an unknown character alias.`);
+  if (!left || !right) {
+    const unknown = [aliasA, aliasB].filter((alias) => !identity.byAlias.has(alias)).map(describeModelValue);
+    fail(`${label} uses an unknown character alias (${unknown.join(", ")}); allowed aliases are ${[...identity.byAlias.keys()].join(", ") || "none"}.`);
+  }
   return {
     characterARef: left.characterRef,
     characterBRef: right.characterRef,
@@ -448,8 +451,8 @@ export function normalizeHistoryRelationshipDelta(input, allowedCharacters, exis
   const pairs = new Set();
   const updates = [];
 
-  for (const inputRelationship of entries) {
-    const decoded = decodeDeltaEntry(inputRelationship, identity, compact, "Each history update");
+  for (const [index, inputRelationship] of entries.entries()) {
+    const decoded = decodeDeltaEntry(inputRelationship, identity, compact, `History update ${index + 1}`);
     const { relationship, prose } = normalizeAutomaticDeltaEntry(decoded, identity);
     const key = pairKey(relationship);
     if (pairs.has(key)) fail("Relationship Tracker history result contains a duplicate character pair.");
@@ -489,9 +492,9 @@ export function normalizeAutomaticRelationshipDelta(input, allowedCharacters, ex
   const evidenceParticipants = mentionedCharacterIds(completedEvidence, identity);
   const candidatesByPair = new Map();
 
-  for (const inputRelationship of entries) {
+  for (const [index, inputRelationship] of entries.entries()) {
     try {
-      const decoded = decodeDeltaEntry(inputRelationship, identity, compact, "Each automatic update");
+      const decoded = decodeDeltaEntry(inputRelationship, identity, compact, `Automatic update ${index + 1}`);
       const candidate = normalizeAutomaticDeltaEntry(decoded, identity);
       const key = pairKey(candidate.relationship);
       const candidates = candidatesByPair.get(key) ?? [];

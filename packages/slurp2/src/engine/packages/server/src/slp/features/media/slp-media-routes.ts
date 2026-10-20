@@ -6,10 +6,14 @@ import {
   stageCreatorBanner,
   unlinkCreatorBanner,
 } from "../../base/identity/slp-avatar.js";
-import { basename, dirname } from "path";
+import { basename } from "path";
 import { existsSync } from "fs";
 import { z } from "zod";
-import { resolveCreatorMediaVariant } from "../../base/media/slp-media.js";
+import {
+  resolveCreatorMediaVariant,
+  resolveEngineAvatarVariant,
+  sendSlurpImageFile,
+} from "../../base/media/slp-media.js";
 import { tryCreatorAccountOperation } from "../../base/locking/slp-account-operation-lock.js";
 import { generateCreatorArtwork } from "../creators/slp-creators-contract.js";
 import type { FastifyInstance } from "fastify";
@@ -40,9 +44,20 @@ export async function slpMediaRoutes(app: FastifyInstance, deps: SlpRouteDeps) {
       .optional()
       .safeParse((req.query as { width?: string }).width);
     const served = await resolveCreatorMediaVariant(absolute, width.success ? width.data : undefined);
-    return reply
-      .header("Cache-Control", "private, max-age=31536000, immutable")
-      .sendFile(basename(served), dirname(served));
+    return sendSlurpImageFile(reply.header("Cache-Control", "private, max-age=31536000, immutable"), served);
+  });
+
+  // Small copies of Engine avatars: the feed shows them at 44 px, the Engine serves only the original.
+  app.get("/engine-avatars/:fileName", async (req, reply) => {
+    const { fileName } = req.params as { fileName: string };
+    const width = z.coerce
+      .number()
+      .int()
+      .optional()
+      .safeParse((req.query as { width?: string }).width);
+    const served = await resolveEngineAvatarVariant(fileName, width.success ? width.data : undefined);
+    if (!served) return reply.code(404).send({ error: "Not Found" });
+    return sendSlurpImageFile(reply.header("Cache-Control", "private, max-age=31536000, immutable"), served);
   });
 
   app.get("/noodler/accounts/:id/banner/:fileName", async (req, reply) => {
@@ -58,9 +73,7 @@ export async function slpMediaRoutes(app: FastifyInstance, deps: SlpRouteDeps) {
       .optional()
       .safeParse((req.query as { width?: string }).width);
     const served = await resolveCreatorMediaVariant(absolute, width.success ? width.data : undefined);
-    return reply
-      .header("Cache-Control", "private, max-age=31536000, immutable")
-      .sendFile(basename(served), dirname(served));
+    return sendSlurpImageFile(reply.header("Cache-Control", "private, max-age=31536000, immutable"), served);
   });
 
   app.post("/slurp/accounts/:id/avatar", async (req, reply) => {

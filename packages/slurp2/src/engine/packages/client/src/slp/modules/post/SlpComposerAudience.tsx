@@ -47,7 +47,7 @@ export function SlpComposerAudience({
         });
   return (
     <section aria-labelledby="slurp-composer-audience" className="space-y-2">
-      <h3 id="slurp-composer-audience" className={cn(SLP_TYPE.meta, "text-[var(--slurp-muted)]")}>
+      <h3 id="slurp-composer-audience" className="sr-only">
         {localizeUi("ui.noodle.noodlerpostcomposer.whoCanSeeThisPost")}
       </h3>
       <div className="flex flex-wrap gap-2" role="group" aria-labelledby="slurp-composer-audience">

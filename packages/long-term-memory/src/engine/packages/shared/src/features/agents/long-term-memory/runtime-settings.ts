@@ -1,11 +1,10 @@
 import {
-  DEFAULT_LTM_RECALL_STYLE_BY_MODE,
+  DEFAULT_LTM_RECALL_STYLE,
   LTM_RECALL_STYLE_WEIGHTS,
   parseLongTermMemoryRecallStyle,
   type LongTermMemoryRecallStyle,
   type LtmRecallWeights,
 } from "./constants.js";
-import { ltmModeForChatMode } from "./scope.js";
 import type { LtmResolvedGlobalSettings } from "./schema.js";
 
 export interface ResolvedLongTermMemoryRecallSettings {
@@ -35,8 +34,13 @@ function parseMaxChunks(value: unknown) {
   return parseSparseNumber(value, 1, 100, true);
 }
 
+/** Issue #1264: the rescaled weights cap realistic matches near 0.5, so a saved
+ * threshold above 0.4 would otherwise inject almost nothing. Read it as 0.4. */
+export const LTM_RECALL_SCORE_THRESHOLD_CEILING = 0.4;
+
 function parseScoreThreshold(value: unknown) {
-  return parseSparseNumber(value, 0, 1);
+  const parsed = parseSparseNumber(value, 0, 1);
+  return parsed === undefined ? undefined : Math.min(parsed, LTM_RECALL_SCORE_THRESHOLD_CEILING);
 }
 
 function parseContextMessages(value: unknown) {
@@ -97,13 +101,15 @@ export function resolveLongTermMemoryRecallSettings(input: {
   requestDebug?: boolean;
 }): ResolvedLongTermMemoryRecallSettings {
   const { chatMetadata, globalSettings } = input;
-  const modeFallback = DEFAULT_LTM_RECALL_STYLE_BY_MODE[ltmModeForChatMode(input.chatMode)];
   const chatRecallStyle = readRecallStyle(chatMetadata.longTermMemoryRecallStyle);
+  // Issue #1258: a per-mode style map never applied because resolved global
+  // settings always carry a style; the balanced default is now the single fallback.
   const globalRecallStyle = globalSettings
     ? parseLongTermMemoryRecallStyle(globalSettings.longTermMemoryRecallStyle)
-    : modeFallback;
+    : DEFAULT_LTM_RECALL_STYLE;
   const recallStyle = chatRecallStyle ?? globalRecallStyle;
-  const styleWeights = LTM_RECALL_STYLE_WEIGHTS[recallStyle];
+  const styleWeights =
+    recallStyle === "custom" ? LTM_RECALL_STYLE_WEIGHTS.balanced : LTM_RECALL_STYLE_WEIGHTS[recallStyle];
   const globalWeights =
     globalRecallStyle === "custom"
       ? resolveGlobalWeights(globalSettings, LTM_RECALL_STYLE_WEIGHTS.balanced)

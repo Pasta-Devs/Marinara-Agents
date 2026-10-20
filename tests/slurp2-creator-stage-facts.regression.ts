@@ -48,8 +48,10 @@ assert.doesNotMatch(
   /oversized shirts/u,
 );
 
-// The Creator's own appearance is applied whatever the description toggle says: that toggle
-// governs extra source context, not whether the picture knows who it is of.
+// The Creator's own appearance still starts the prompt in both image paths; the description
+// toggle ("Use the Creator's look") is what decides whether it, or a linked character's
+// appearance, reaches the picture at all — off, a picture uses only the post, image habits and
+// avatar references, in the DM path and the public path alike.
 for (const path of [
   "packages/slurp2/src/engine/packages/server/src/slp/features/media/slp-images-service.ts",
   "packages/slurp2/src/engine/packages/server/src/slp/features/media/slp-public-images-service.ts",
@@ -68,13 +70,13 @@ const publicImages = slurp2Source(
 );
 assert.match(
   publicImages,
-  /if \(!stageAppearance\) characterDescription = characterAppearanceFromRow\(character\);/u,
-  "public image prompts must keep a linked character's appearance when the stage field is empty",
+  /if \(input\.settings\.imageGenerationIncludeDescriptions && !stageAppearance\)\s*\n?\s*characterDescription = ownLook = characterAppearanceFromRow\(character\);/u,
+  "a linked character's appearance reaches a public picture only when the toggle is on, same contract as the DM path",
 );
 
 // Both the caption and the picture get the facts.
 const prompt = slurp2Source("packages/slurp2/src/engine/packages/server/src/slp/features/feed/slp-post-prompt.ts");
-for (const line of ["Appearance:", "Usual wardrobe:", "Where her life happens:"]) {
+for (const line of ["Appearance:", "Usual wardrobe:", "Where their life happens:", "Pronouns:", "Clothing style:"]) {
   assert.ok(prompt.includes(line), `the post prompt must carry "${line}"`);
 }
 

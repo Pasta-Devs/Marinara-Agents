@@ -84,37 +84,8 @@ assert.equal(
   false,
 );
 
-function bundledFunction(bundle: string, marker: string): { name: string; source: string } {
-  const markerIndex = bundle.indexOf(marker);
-  const startIndex = bundle.lastIndexOf("function ", markerIndex);
-  const endIndex = bundle.indexOf("}", markerIndex);
-  assert.ok(markerIndex >= 0 && startIndex >= 0 && endIndex > markerIndex, `expected bundled function for ${marker}`);
-  const source = bundle.slice(startIndex, endIndex + 1);
-  const name = /^function ([\w$]+)/.exec(source)?.[1];
-  assert.ok(name, `expected bundled function name for ${marker}`);
-  return { name, source };
-}
-
-for (const packageId of ["noodle"]) {
-  const bundle = readFileSync(`packages/${packageId}/server.mjs`, "utf8");
-  assert.match(bundle, /NovelAI V5 prompts support up to 1471 tokens/);
-  const v4 = bundledFunction(bundle, "return/^nai-diffusion-(?:4");
-  const v5 = bundledFunction(bundle, "return/^nai-diffusion-5");
-  const preciseReference = bundledFunction(bundle, "return/^nai-diffusion-4-5");
-  const sanitizePrompt = bundledFunction(bundle, '.normalize(t?"NFC":"NFKD")');
-  const bundleRuntime = runInNewContext(`
-${v4.source}
-${v5.source}
-${preciseReference.source}
-${sanitizePrompt.source}
-({
-  isNovelAiV4Model: ${v4.name},
-  isNovelAiV5Model: ${v5.name},
-  isNovelAiPreciseReferenceModel: ${preciseReference.name},
-  sanitizeNovelAiV4Prompt: ${sanitizePrompt.name},
-});
-`) as NovelAiRuntime;
-  assertNovelAiV5Runtime(bundleRuntime);
-}
+// Noodle generates images through the Engine's image service (api.runtime, Pasta-Devs/Marinara-Agents#1487), so the
+// NovelAI V5 runtime that runs is the Engine's. Noodle's server must not carry its own copy of it.
+assert.doesNotMatch(readFileSync("packages/noodle/server.mjs", "utf8"), /NovelAI V5 prompts support up to \d+ tokens/);
 
 console.log("Noodle and Slurp NovelAI V5 runtime regressions passed.");

@@ -206,6 +206,7 @@ export function useStageProfileViewModel(props: StageProfileViewProps) {
     appearance: profile.appearance,
     wardrobe: profile.wardrobe,
     locations: profile.locations,
+    clothingStyle: profile.clothingStyle ?? "auto",
     disclosureMode: profile.disclosureMode ?? "hinted",
     gender: profile.gender,
     tags: profile.tags,

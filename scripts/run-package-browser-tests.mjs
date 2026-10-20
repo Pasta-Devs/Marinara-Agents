@@ -11,9 +11,17 @@ if (!packageId || !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(packageId)) {
 if (!testFile) throw new Error("A package Playwright test file is required");
 
 const engineRoot = resolve(process.env.MARINARA_ENGINE_ROOT || resolve(agentsRoot, "../Marinara-Engine"));
+// Optional MARINARA_PACKAGE_IDS (a comma list): more packages installed beside <package-id>.
+const extraPackageIds = String(process.env.MARINARA_PACKAGE_IDS ?? "")
+  .split(",")
+  .map((id) => id.trim())
+  .filter(Boolean);
+for (const id of extraPackageIds) {
+  if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(id)) throw new Error(`Invalid MARINARA_PACKAGE_IDS entry: ${id}`);
+}
 for (const required of [
   resolve(engineRoot, "package.json"),
-  resolve(agentsRoot, "packages", packageId, "manifest.json"),
+  ...[packageId, ...extraPackageIds].map((id) => resolve(agentsRoot, "packages", id, "manifest.json")),
   resolve(agentsRoot, testFile),
 ]) {
   if (!existsSync(required)) throw new Error(`Required package-browser input is missing: ${required}`);

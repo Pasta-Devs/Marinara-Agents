@@ -1,0 +1,18 @@
+[
+  {
+    "id": "3d-avatars",
+    "name": "3D Avatars",
+    "description": "Shows your characters and personas as animated 3D models that blink, talk, and change faces with each reply. Uses VRM model files.",
+    "phase": "parallel",
+    "enabledByDefault": false,
+    "category": "misc",
+    "execution": "host",
+    "modeAllowlist": [
+      "roleplay",
+      "game"
+    ],
+    "defaultTools": [],
+    "author": "Pasta Devs",
+    "defaultPromptTemplate": ""
+  }
+]

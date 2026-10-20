@@ -187,6 +187,9 @@ async function backfillCreatorArtwork(
       return "inherited" as const;
     }
 
+    // Copying a card's pictures costs nothing; drawing new ones waits for the player's switch
+    // (player report: banners appeared "or not, sometimes" with no way to stop them).
+    if (!settings.autoCreatorArtworkEnabled) return "idle" as const;
     const connections = createConnectionsStorage(db);
     const mappedId = await resolveCreatorImageConnectionId(db, target.id);
     const imageConnection =

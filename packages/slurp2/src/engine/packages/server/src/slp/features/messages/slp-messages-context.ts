@@ -69,22 +69,31 @@ export function createSlpMessagesContext(
    * hiding it in the client would still hand the text to anyone reading the response. Every
    * fan-facing response that carries a message, including a fresh reply, goes through here.
    */
+  // The stored media path is server storage: it is dropped from every fan-facing message (undefined
+  // keys do not survive JSON), while storage keeps it for the server's own file handling.
   const maskForViewer = <T extends SlurpMessage | null>(message: T): T =>
     message?.kind === "ppv" && !message.unlockedAt
       ? {
           ...message,
           content: "",
           imageUrl: null,
-          metadata: { ...message.metadata, imagePrompt: undefined, imageDescription: undefined },
+          metadata: {
+            ...message.metadata,
+            imagePrompt: undefined,
+            imageDescription: undefined,
+            noodlerMediaPath: undefined,
+          },
         }
       : message?.kind === "post_preview" && message.metadata.previewLocked === true
         ? {
             ...message,
             content: "",
             imageUrl: null,
-            metadata: { ...message.metadata, content: "", imageUrl: null },
+            metadata: { ...message.metadata, content: "", imageUrl: null, noodlerMediaPath: undefined },
           }
-        : message;
+        : message
+          ? { ...message, metadata: { ...message.metadata, noodlerMediaPath: undefined } }
+          : message;
 
   /** The messages of a thread as this side is allowed to see them. The Creator side sees what they wrote. */
   const visibleMessages = async (threadId: string, side: "viewer" | "creator") =>

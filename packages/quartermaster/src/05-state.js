@@ -16,6 +16,10 @@ const QM_EQUIP_SLOTS = [
   "ears",
   "armor_torso",
   "armor_legs",
+  "outerwear_torso",
+  "outerwear_legs",
+  "midlayer_torso",
+  "midlayer_legs",
   "clothing_torso",
   "clothing_legs",
   "underwear_top",
@@ -25,7 +29,11 @@ const QM_EQUIP_SLOTS = [
   "weapon_left_hand",
   "weapon_right_hand",
   "feet",
+  "socks",
   "belt",
+  "extra_wearable_1",
+  "extra_wearable_2",
+  "extra_wearable_3",
 ];
 // Mirrors server.mjs's DEFAULT_ITEM_IMAGE_PROMPT_TEMPLATE/
 // DEFAULT_OUTFIT_PORTRAIT_PROMPT_TEMPLATE exactly -- client and server are
@@ -52,8 +60,12 @@ const QM_SLOT_LABELS = {
   ears: "Ears",
   armor_torso: "Armor (Torso)",
   armor_legs: "Armor (Legs)",
-  clothing_torso: "Clothing (Torso)",
-  clothing_legs: "Clothing (Legs)",
+  outerwear_torso: "Outer Clothing (Torso)",
+  outerwear_legs: "Outer Clothing (Legs)",
+  midlayer_torso: "Mid Clothing (Torso)",
+  midlayer_legs: "Mid Clothing (Legs)",
+  clothing_torso: "Inner Clothing (Torso)",
+  clothing_legs: "Inner Clothing (Legs)",
   underwear_top: "Underwear (Top)",
   underwear_bottom: "Underwear (Bottom)",
   back: "Back",
@@ -61,7 +73,11 @@ const QM_SLOT_LABELS = {
   weapon_left_hand: "Weapon (Left Hand)",
   weapon_right_hand: "Weapon (Right Hand)",
   feet: "Feet",
+  socks: "Socks",
   belt: "Belt",
+  extra_wearable_1: "Extra Wearable 1",
+  extra_wearable_2: "Extra Wearable 2",
+  extra_wearable_3: "Extra Wearable 3",
 };
 
 // A raw location string ("bag", "equipped:head", "stored:closet") into
@@ -74,7 +90,8 @@ function qmLocationLabel(location) {
   return location;
 }
 // The dock's equipment overlay. Head/Eyes/Ears/Neck sit in a row above the
-// portrait, Belt/Feet below it; the remaining 5 pairs sit in columns beside
+// portrait, Belt/Socks/Feet below it and the three extras in a row under
+// that; the remaining 5 pairs sit in columns beside
 // it, stretched to the portrait's own real rendered height and spread
 // evenly across it (10-dock.js's middleRow/space-between) — there's no way
 // to pin a slot to a real anatomical pixel position without image
@@ -85,7 +102,8 @@ function qmLocationLabel(location) {
 // group-visibility only needs one check per row; QM.state.slotVisible on
 // either slot in a pair always agrees with the other.
 const QM_OVERLAY_TOP_SLOTS = ["head", "eyes", "ears", "neck"];
-const QM_OVERLAY_BOTTOM_SLOTS = ["belt", "feet"];
+const QM_OVERLAY_BOTTOM_SLOTS = ["belt", "socks", "feet"];
+const QM_OVERLAY_EXTRA_SLOTS = ["extra_wearable_1", "extra_wearable_2", "extra_wearable_3"];
 const QM_OVERLAY_SLOT_PAIRS = [
   ["hands", "back"],
   ["armor_torso", "armor_legs"],
@@ -93,6 +111,14 @@ const QM_OVERLAY_SLOT_PAIRS = [
   ["underwear_top", "underwear_bottom"],
   ["weapon_left_hand", "weapon_right_hand"],
 ];
+// The clothing layers worn over an inner clothing slot, in order outward
+// from it. On the ring the three share one stack of cards (10-dock.js's
+// _buildClothingLayerStack): one in front, the others as spines, always in
+// this inside-out order away from the portrait.
+const QM_OVERLAY_SLOT_LAYERS = {
+  clothing_torso: ["midlayer_torso", "outerwear_torso"],
+  clothing_legs: ["midlayer_legs", "outerwear_legs"],
+};
 // Fuller than QM_SLOT_LABELS would need to be for a grouped layout with a
 // heading nearby (the old ring's short labels) — this overlay has no
 // heading to disambiguate armor vs. clothing between rows, so every label
@@ -106,8 +132,12 @@ const QM_OVERLAY_SLOT_LABELS = {
   ears: "Ears",
   armor_torso: "Torso Armor",
   armor_legs: "Legs Armor",
-  clothing_torso: "Torso Clothing",
-  clothing_legs: "Legs Clothing",
+  outerwear_torso: "Outer Torso Clothing",
+  outerwear_legs: "Outer Legs Clothing",
+  midlayer_torso: "Mid Torso Clothing",
+  midlayer_legs: "Mid Legs Clothing",
+  clothing_torso: "Inner Torso Clothing",
+  clothing_legs: "Inner Legs Clothing",
   underwear_top: "Top Underwear",
   underwear_bottom: "Bottom Underwear",
   back: "Back Accessory",
@@ -115,7 +145,11 @@ const QM_OVERLAY_SLOT_LABELS = {
   weapon_left_hand: "Left Hand Weapon",
   weapon_right_hand: "Right Hand Weapon",
   feet: "Feet",
+  socks: "Socks",
   belt: "Belt",
+  extra_wearable_1: "Extra Wearable 1",
+  extra_wearable_2: "Extra Wearable 2",
+  extra_wearable_3: "Extra Wearable 3",
 };
 // The visible box label, pre-split into explicit lines rather than left to
 // natural CSS wrapping — at a fixed box width, "Torso Clothing" wrapped
@@ -130,8 +164,12 @@ const QM_OVERLAY_SLOT_LABEL_LINES = {
   ears: ["Ears"],
   armor_torso: ["Torso", "Armor"],
   armor_legs: ["Legs", "Armor"],
-  clothing_torso: ["Torso", "Clothing"],
-  clothing_legs: ["Legs", "Clothing"],
+  outerwear_torso: ["Outer Torso", "Clothing"],
+  outerwear_legs: ["Outer Legs", "Clothing"],
+  midlayer_torso: ["Mid Torso", "Clothing"],
+  midlayer_legs: ["Mid Legs", "Clothing"],
+  clothing_torso: ["Inner Torso", "Clothing"],
+  clothing_legs: ["Inner Legs", "Clothing"],
   underwear_top: ["Top", "Underwear"],
   underwear_bottom: ["Bottom", "Underwear"],
   back: ["Back", "Accessory"],
@@ -139,7 +177,11 @@ const QM_OVERLAY_SLOT_LABEL_LINES = {
   weapon_left_hand: ["Left Hand", "Weapon"],
   weapon_right_hand: ["Right Hand", "Weapon"],
   feet: ["Feet"],
+  socks: ["Socks"],
   belt: ["Belt"],
+  extra_wearable_1: ["Extra", "Wearable 1"],
+  extra_wearable_2: ["Extra", "Wearable 2"],
+  extra_wearable_3: ["Extra", "Wearable 3"],
 };
 const QM_APPEARANCE_FEED_OPTIONS = [
   { value: "off", label: "Off" },
@@ -585,15 +627,25 @@ QM.state = {
   deleteItem(itemId) {
     return this._mutate(QM.deleteItem(this.chatId, QM_OWNER_ID, itemId));
   },
+  // Each image change drops that image from QM.setImageSrc's cache once it
+  // succeeds, before _mutate repaints, so the next render fetches the new one.
   uploadItemImage(itemId, imageDataUrl) {
     QM._missingItemImageIds.delete(itemId);
-    return this._mutate(QM.uploadItemImage(this.chatId, QM_OWNER_ID, itemId, imageDataUrl));
+    const chatId = this.chatId;
+    return this._mutate(
+      QM.uploadItemImage(chatId, QM_OWNER_ID, itemId, imageDataUrl).then((result) => {
+        QM.forgetImage(QM.itemImageUrl(chatId, QM_OWNER_ID, itemId));
+        return result;
+      }),
+    );
   },
   deleteItemImage(itemId) {
+    const chatId = this.chatId;
     return this._mutate(
-      QM.deleteItemImage(this.chatId, QM_OWNER_ID, itemId).then((result) => {
+      QM.deleteItemImage(chatId, QM_OWNER_ID, itemId).then((result) => {
         // Suppress image lookups only after this delete succeeds.
         QM._missingItemImageIds.add(itemId);
+        QM.forgetImage(QM.itemImageUrl(chatId, QM_OWNER_ID, itemId));
         return result;
       }),
     );
@@ -643,10 +695,22 @@ QM.state = {
     return request;
   },
   uploadOutfitPortrait(outfitId, imageDataUrl) {
-    return this._mutate(QM.uploadOutfitPortrait(this.chatId, QM_OWNER_ID, outfitId, imageDataUrl));
+    const chatId = this.chatId;
+    return this._mutate(
+      QM.uploadOutfitPortrait(chatId, QM_OWNER_ID, outfitId, imageDataUrl).then((result) => {
+        QM.forgetImage(QM.outfitPortraitUrl(chatId, QM_OWNER_ID, outfitId));
+        return result;
+      }),
+    );
   },
   deleteOutfitPortrait(outfitId) {
-    return this._mutate(QM.deleteOutfitPortrait(this.chatId, QM_OWNER_ID, outfitId));
+    const chatId = this.chatId;
+    return this._mutate(
+      QM.deleteOutfitPortrait(chatId, QM_OWNER_ID, outfitId).then((result) => {
+        QM.forgetImage(QM.outfitPortraitUrl(chatId, QM_OWNER_ID, outfitId));
+        return result;
+      }),
+    );
   },
   updateAppearanceFeedMode(mode) {
     return this._mutate(QM.updateSettings(this.chatId, QM_OWNER_ID, { appearanceFeedMode: mode }));

@@ -73,7 +73,10 @@ const generation = read("services/slurp/slurp-generation.service.ts");
 // The model could not see what it had already depicted, so it reinvented the same picture.
 assert.match(generation, /showed\(post, length\) \? `\$\{line\}\\n  \(showed: /u);
 // "Do not reuse their exact wording" is satisfied by eight captions about one desk.
-assert.match(generation, /Do not repeat a recent post's setting, activity, framing, or wardrobe/u);
+assert.match(
+  generation,
+  /Do not repeat a recent post's setting, framing, or exact outfit.*is not a repeat: give it a new setting, framing, and look each time/u,
+);
 assert.match(
   generation,
   /slurpPostVariation\(account\.id, sequence, settings\.storyImagesEnabled \? settings\.storyRate : "off"\)/u,

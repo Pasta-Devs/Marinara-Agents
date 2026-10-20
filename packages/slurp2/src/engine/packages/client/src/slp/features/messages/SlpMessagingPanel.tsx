@@ -238,6 +238,13 @@ export function SlpMessagingPanel(page: SlpBackstagePageProps) {
             onSave={(value) => update("messagesReplyBubbleLimit", value)}
           />
         </Field>
+        <Toggle
+          settingKey="messagesPauseFollowUpsUntilReply"
+          label={t("ui.slurp.settings.messaging.pauseFollowUpsUntilReply")}
+          detail={t("ui.slurp.settings.messaging.pauseFollowUpsUntilReplyDetail")}
+          value={settings.messagesPauseFollowUpsUntilReply}
+          onChange={(value) => update("messagesPauseFollowUpsUntilReply", value)}
+        />
       </SettingsGroup>
       <SettingsGroup title={t("ui.slurp.settings.messaging.delaysTitle")}>
         <p className="text-xs leading-5 text-[var(--muted-foreground)]">

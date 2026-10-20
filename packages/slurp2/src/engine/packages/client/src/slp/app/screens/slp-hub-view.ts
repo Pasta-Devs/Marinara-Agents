@@ -52,6 +52,10 @@ export function deriveSlurpHubView({
     !searchTerm ||
     (post.title ?? "").toLowerCase().includes(searchTerm) ||
     (post.content ?? "").toLowerCase().includes(searchTerm) ||
+    // A trend's label finds the posts that joined it (docs/TRENDS.md).
+    String((post.metadata?.slurpTrend as { label?: unknown } | undefined)?.label ?? "")
+      .toLowerCase()
+      .includes(searchTerm) ||
     searchable(creator.profile.handle).includes(searchTerm) ||
     searchable(creator.profile.displayName).includes(searchTerm);
   const newestFirst = (left: (typeof allPosts)[number], right: (typeof allPosts)[number]) =>

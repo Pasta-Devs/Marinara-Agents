@@ -444,7 +444,6 @@ export async function slpMessagesSendRoutes(app: FastifyInstance, messaging: Slp
     if (sent.status === "closed") return reply.code(403).send({ error: slurpClosedThreadText(sent) });
     if (sent.status === "insufficient_funds")
       return reply.code(402).send({ error: "Not enough coins.", required: sent.required });
-    recordSlurpTasteSignal(app.db, { creatorId: parsed.data.creatorAccountId }, "tip");
     // A tip is worth answering, and a thanks that arrives an hour later is not a thanks.
     const outcome = await replyToSlurpMessage(app.db, {
       threadId: sent.thread.id,

@@ -2,15 +2,15 @@
   "schemaVersion": 2,
   "capabilityApi": {
     "major": 1,
-    "minor": 14
+    "minor": 341
   },
   "builtAgainst": {
-    "engineVersion": "2.4.4",
-    "engineCommit": "3bf9781975a7a172e19784f6be2596fb8a86d4c1"
+    "engineVersion": "2.5.0",
+    "engineCommit": "25f8df7b0a388fe36f657d69c6fcaa9f27e066ed"
   },
   "id": "memory-nag",
   "name": "Memory Nag",
-  "version": "1.1.3",
+  "version": "1.2.1",
   "description": "Remembers loose ends from your roleplay, like promises and open questions, and reminds the AI when they matter. Add the Agent in Chat Settings → Agents → Tracker Agents for Roleplay mode. Once active, configure it in its standalone Memory Nag section.",
   "engine": {
     "min": "2.4.4",
@@ -39,13 +39,13 @@
     },
     {
       "path": "server.mjs",
-      "sha256": "c640f5855a0bd534de7e85ddbf4eaf86e3fef956d4772e2d80cb7d404460db25",
-      "bytes": 23750
+      "sha256": "6a986a58fa2e2dcb35d73211b838719e979644a8a2e99a53a6d313517a438aa5",
+      "bytes": 23766
     },
     {
       "path": "client.js",
-      "sha256": "3008eb409c1f8af690909be7e067a218c0154b5e58c2d271c7b896f3ed0e56ef",
-      "bytes": 403418
+      "sha256": "e2c08f6a23476667ba4882f84590f4246b96aea71ce72dd8d54e2dcd8042c72c",
+      "bytes": 144056
     }
   ],
   "permissions": [

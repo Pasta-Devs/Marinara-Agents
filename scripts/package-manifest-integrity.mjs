@@ -40,6 +40,61 @@ export function readZip(args, { packageId, artifactPath, member = null, purpose 
   return result;
 }
 
+// Browser storage the Engine owns (Engine marinara-host-contract.ts, MARINARA_HOST_ENGINE_STORAGE_KEYS). Package
+// clients bundled copies of Engine stores persisted under these keys; each load wrote the copy's older state back, so
+// the Engine reset every setting it keeps only in the browser (#1478), reopened the wrong chat, lost drafts and brought
+// cleared map moves back (#1487). Package code may read these keys. No client may register a persisted store under one,
+// set or remove one, or open the Engine's audio cache database.
+export const ENGINE_STORAGE_KEYS = [
+  "marinara-engine-ui",
+  "marinara-engine-ui:host",
+  "marinara-active-chat-id",
+  "marinara-input-drafts",
+  "marinara-pending-spatial-transitions",
+  "marinara-pinned-gallery-images",
+  "marinara_sidecar_prompted",
+];
+export const ENGINE_INDEXED_DB = "marinara-tts-audio-cache";
+
+const escapeRegExp = (value) => value.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
+
+/**
+ * A pattern for one key as a literal, or as any identifier bound to that literal (`n="marinara-input-drafts"` in a
+ * minified bundle, then `localStorage.setItem(n, ...)`).
+ * ponytail: a binding is matched by name, not by scope. A minifier reusing that short name for something else next to
+ * a write would read as a write; no published client does today. A key built at runtime slips past; the build is the
+ * real guard (sources/host-client-overlay, scripts/client-host-gates.mjs).
+ */
+function keyReference(source, key) {
+  const literal = `(?:"${escapeRegExp(key)}"|'${escapeRegExp(key)}'|\`${escapeRegExp(key)}\`)`;
+  const binding = new RegExp(`(?<![\\w$.])([A-Za-z_$][\\w$]*)\\s*=\\s*${literal}`, "gu");
+  const names = [...new Set([...source.matchAll(binding)].map((match) => match[1]))];
+  const identifiers = names.map((name) => `(?<![\\w$.])${escapeRegExp(name)}(?![\\w$])`);
+  return `(?:${[literal, ...identifiers].join("|")})`;
+}
+
+export function assertClientLeavesEngineStorageAlone(packageId, source) {
+  const problems = [];
+  for (const key of ENGINE_STORAGE_KEYS) {
+    const reference = keyReference(source, key);
+    for (const [action, pattern] of [
+      ["registers a persisted store under", `\\bname\\s*:\\s*${reference}`],
+      ["writes", `\\bsetItem\\s*\\(\\s*${reference}`],
+      ["removes", `\\bremoveItem\\s*\\(\\s*${reference}`],
+    ]) {
+      if (new RegExp(pattern, "u").test(source)) problems.push(`${action} "${key}"`);
+    }
+  }
+  if (
+    new RegExp(`\\bindexedDB\\s*\\.\\s*open\\s*\\(\\s*${keyReference(source, ENGINE_INDEXED_DB)}`, "u").test(source)
+  ) {
+    problems.push(`opens the "${ENGINE_INDEXED_DB}" database`);
+  }
+  if (problems.length) {
+    throw new Error(`${packageId} client ${problems.join(", ")}, which only the Engine may (#1478, #1487)`);
+  }
+}
+
 // The #544 invariant: every file the manifest declares must weigh and hash
 // exactly what the manifest says, both as the source file on disk and as the
 // member committed inside the artifact, and those two must be byte-identical.
@@ -73,6 +128,9 @@ export async function assertDeclaredFilesMatchManifest({ manifest, packageRoot, 
     }
     if (archivedPayload && !sourcePayload.equals(archivedPayload)) {
       throw new Error(`${manifest.id} ${declared.path} differs between package source and artifact`);
+    }
+    if (declared.path === manifest.entrypoints?.client) {
+      assertClientLeavesEngineStorageAlone(manifest.id, (archivedPayload ?? sourcePayload).toString("utf8"));
     }
   }
 }

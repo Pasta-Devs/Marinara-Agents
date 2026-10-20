@@ -443,6 +443,26 @@ export function slurpCreatorReaction(seed: string): string {
   return CREATOR_REPLIES[pickIndex(seed, "creator-reply", CREATOR_REPLIES.length)]!;
 }
 
+/** A Creator commenting under a fellow Creator's post (#1): a peer, not a fan. */
+const CREATOR_PEER_COMMENTS = [
+  "ok you ate this",
+  "obsessed",
+  "the way you always do this",
+  "save some for the rest of us",
+  "🔥🔥",
+  "unfair honestly",
+  "needed this today",
+  "this one's my favorite",
+  "teach me your ways",
+  "😮‍💨",
+  "the light in this?? 😍",
+  "stop being so good at this",
+] as const;
+
+export function slurpCreatorPeerComment(seed: string): string {
+  return CREATOR_PEER_COMMENTS[pickIndex(seed, "creator-peer", CREATOR_PEER_COMMENTS.length)]!;
+}
+
 /**
  * A creator writing to a fan who did not write first.
  *

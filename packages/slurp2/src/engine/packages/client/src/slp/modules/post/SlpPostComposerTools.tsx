@@ -1,7 +1,8 @@
-import { ImageIcon, ListChecks, Smile, X } from "lucide-react";
+import { ImageIcon, ListChecks, Pencil, Smile, Trash2, X } from "lucide-react";
 import type { RefObject } from "react";
 import { cn } from "../../../lib/utils";
 import { SlpAnchoredPopover } from "../../base/chrome/SlpAnchoredPopover";
+import { SLP_TYPE } from "../../base/chrome/SlpChrome";
 import { useTranslation as useUiTranslation } from "react-i18next";
 
 export function SlpToolButton({
@@ -133,5 +134,52 @@ export function SlurpToolPopover({
         <div className="min-h-0 flex-1 overflow-y-auto p-3">{children}</div>
       </div>
     </SlpAnchoredPopover>
+  );
+}
+
+/** The poll attached to a draft, as one row: its question and answers, with Edit and Remove. */
+export function SlpComposerPollSummary({
+  poll,
+  disabled,
+  onEdit,
+  onRemove,
+}: {
+  poll: { question: string; options: string[] };
+  disabled: boolean;
+  onEdit: () => void;
+  onRemove: () => void;
+}) {
+  const { t: localizeUi } = useUiTranslation();
+  const iconButton =
+    "grid size-10 place-items-center rounded-full hover:bg-[var(--accent)] disabled:opacity-50 [&_svg]:!text-current";
+  return (
+    <div className="flex items-start justify-between gap-3 rounded-2xl bg-[var(--slurp-surface-raised)] p-3 shadow-[var(--slurp-highlight)]">
+      <div className="min-w-0 flex-1">
+        <p className={cn(SLP_TYPE.body, "font-semibold")}>{poll.question}</p>
+        <p className={cn(SLP_TYPE.meta, "mt-1 truncate text-[var(--slurp-muted)]")}>{poll.options.join(" · ")}</p>
+      </div>
+      <div className="flex shrink-0 items-center gap-1">
+        <button
+          type="button"
+          onClick={onEdit}
+          disabled={disabled}
+          className={cn(iconButton, "text-[var(--slurp-ink)]")}
+          aria-label={localizeUi("ui.noodle.noodlehome.editDraftPoll")}
+          title={localizeUi("ui.noodle.noodlehome.editPoll")}
+        >
+          <Pencil size={16} />
+        </button>
+        <button
+          type="button"
+          onClick={onRemove}
+          disabled={disabled}
+          className={cn(iconButton, "text-[var(--slurp-danger)]")}
+          aria-label={localizeUi("ui.noodle.noodlehome.removeDraftPoll")}
+          title={localizeUi("ui.noodle.noodlehome.removePoll")}
+        >
+          <Trash2 size={16} />
+        </button>
+      </div>
+    </div>
   );
 }

@@ -1,4 +1,4 @@
-// Quartermaster 0.1.23 — Marinara Engine roleplay-tracker capability (single-file client bundle)
+// Quartermaster 0.1.28 — Marinara Engine roleplay-tracker capability (single-file client bundle)
 // Built from packages/quartermaster/src (10 modules) by scripts/build-quartermaster-package.mjs. Do not edit; edit src/ and rebuild.
 (() => {
 "use strict";
@@ -9,16 +9,54 @@
 
 const QM = {};
 
+const QM_UNSAFE_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"]);
+
+// ponytail: every package route sits behind the Engine's privileged gate, so a
+// session from another device needs the admin secret the Engine's own client
+// keeps under this localStorage key (loopback is exempt, which is why this went
+// unnoticed). Same approach as Memory Nag and Relationship Tracker; replace
+// with a host-provided fetch if the Engine ever adds one.
+function qmAdminSecret() {
+  try {
+    return localStorage.getItem("marinara_admin_secret")?.trim() || "";
+  } catch {
+    return "";
+  }
+}
+
+// CSRF marker sent explicitly rather than relying on the Engine's global fetch shim.
+function qmAuthHeaders(method) {
+  const headers = {};
+  if (QM_UNSAFE_METHODS.has(method)) headers["x-marinara-csrf"] = "1";
+  const secret = qmAdminSecret();
+  if (secret) headers["X-Admin-Secret"] = secret;
+  return headers;
+}
+
+// Turns the gate's refusal into a step the user can take on this device.
+// Wording matches Relationship Tracker, Noodle and Slurp (#1136).
+function qmResponseError(response, body) {
+  const message = body && typeof body.error === "string" ? body.error : "";
+  if (response.status === 403 && /admin.secret/i.test(message)) {
+    return /X-Admin-Secret/.test(message) && qmAdminSecret()
+      ? "The Admin Secret saved on this device does not match the Engine's ADMIN_SECRET. Enter the same value in Settings → Advanced → Admin Access."
+      : "Marinara Engine blocked Quartermaster because this device has no Admin Secret. Set ADMIN_SECRET in the Engine's .env file if it is not set yet, then enter the same value in Settings → Advanced → Admin Access.";
+  }
+  return message || `Request failed (${response.status})`;
+}
+
 async function qmRequest(path, options) {
+  const method = (options && options.method) || "GET";
   // Only set Content-Type when there's actually a JSON body — Fastify's body
   // parser rejects a bodyless request (GET/DELETE) that still declares
   // application/json with "Body cannot be empty when content-type is set to
   // 'application/json'".
-  const headers = options && options.body ? { "Content-Type": "application/json" } : {};
-  const response = await fetch(`/api/quartermaster${path}`, { ...options, headers });
+  const headers = qmAuthHeaders(method);
+  if (options && options.body) headers["Content-Type"] = "application/json";
+  const response = await fetch(`/api/quartermaster${path}`, { ...options, headers, credentials: "same-origin" });
   const body = await response.json().catch(() => null);
   if (!response.ok) {
-    throw new Error((body && body.error) || `Request failed (${response.status})`);
+    throw new Error(qmResponseError(response, body));
   }
   return body;
 }
@@ -178,7 +216,10 @@ QM.generateOutfitPortrait = (chatId, ownerId, outfitId, prompt) =>
 // so this needs no package permission. Filtered client-side the same way
 // server.mjs's own resolveImageConnection filters server-side.
 QM.listImageConnections = async () => {
-  const response = await fetch("/api/connections", { headers: { Accept: "application/json" } });
+  const response = await fetch("/api/connections", {
+    headers: { ...qmAuthHeaders("GET"), Accept: "application/json" },
+    credentials: "same-origin",
+  });
   if (!response.ok) throw new Error(`Could not load connections (${response.status})`);
   const connections = await response.json();
   return Array.isArray(connections) ? connections.filter((c) => c && c.provider === "image_generation") : [];
@@ -202,7 +243,8 @@ QM.itemImageUrl = (chatId, ownerId, itemId) =>
 // just once — don't keep re-requesting (and re-404ing/re-logging) a URL
 // already known to fail. Session-lifetime only, not persisted: a page
 // reload re-checks everything once, which is fine. Cleared for a specific
-// item by uploadItemImage/deleteItemImage below; a rename that happens to
+// item by uploadItemImage/deleteItemImage below, and entirely by Refresh
+// Images or an Admin Secret change (qmSyncImageSecret); a rename that happens to
 // newly match a pack image is the one case this can go stale on, until the
 // next reload — rare enough not to warrant duplicating the server's
 // name-matching logic here just to key this more precisely.
@@ -232,6 +274,104 @@ QM.deleteOutfitPortrait = (chatId, ownerId, outfitId) =>
 // so plain is fine) only if they need to force a reload of the SAME filename.
 QM.outfitPortraitUrl = (chatId, ownerId, outfitId) =>
   `/api/quartermaster/inventory/${encodeURIComponent(chatId)}/${encodeURIComponent(ownerId)}/outfits/${encodeURIComponent(outfitId)}/portrait`;
+
+// An <img src> can't send X-Admin-Secret, so with a secret saved on this device
+// our own (gated) image URLs load through fetch into a session cache of object
+// URLs, shared by every element showing that image: the dock rebuilds its lists
+// on every repaint, so loading per element would refetch everything each time.
+// Without a saved secret nothing changes: a plain src, as before.
+//
+// Entry status: "loading", "ok", "missing" (a confirmed 404, like
+// _missingItemImageIds) or "failed" (refused secret, server or network error).
+// Both failures stay cached so repaints don't refetch them; reopening the dock
+// retries "failed" ones, and Refresh Images or a secret change retries all.
+// The cache is our only cache (no-store), so a cleared entry never comes back
+// from the browser's HTTP cache, where portraits are marked immutable.
+const qmImageCache = new Map();
+// img -> the cache entry it last asked for, so only its latest request applies.
+const qmImageTargets = new WeakMap();
+let qmImageCacheSecret = null;
+
+// ponytail: a retired object URL is revoked after a delay instead of tracking
+// every element using it. An image already on screen keeps its decoded
+// picture; the delay covers one that was still loading it.
+function qmRetireImage(entry) {
+  const objectUrl = entry.objectUrl;
+  if (objectUrl) setTimeout(() => URL.revokeObjectURL(objectUrl), 30000);
+}
+
+QM.forgetImage = (url) => {
+  const entry = qmImageCache.get(url);
+  if (!entry) return;
+  qmImageCache.delete(url);
+  qmRetireImage(entry);
+};
+
+QM.clearImageCache = () => {
+  for (const entry of qmImageCache.values()) qmRetireImage(entry);
+  qmImageCache.clear();
+};
+
+// A new or removed secret can fix (or cause) refused requests, so everything,
+// including items remembered as having no image, gets a fresh try.
+function qmSyncImageSecret(secret) {
+  if (qmImageCacheSecret === null) qmImageCacheSecret = secret;
+  if (secret === qmImageCacheSecret) return;
+  qmImageCacheSecret = secret;
+  QM.clearImageCache();
+  QM._missingItemImageIds.clear();
+}
+
+QM.retryFailedImages = () => {
+  qmSyncImageSecret(qmAdminSecret());
+  for (const [url, entry] of qmImageCache) {
+    if (entry.status === "failed") qmImageCache.delete(url);
+  }
+};
+
+function qmLoadImage(url) {
+  const entry = { status: "loading", objectUrl: null, ready: null };
+  qmImageCache.set(url, entry);
+  entry.ready = fetch(url, { headers: qmAuthHeaders("GET"), credentials: "same-origin", cache: "no-store" })
+    .then(async (response) => {
+      if (!response.ok) return response.status === 404 ? "missing" : "failed";
+      const blob = await response.blob();
+      // Forgotten while loading: discard without creating an object URL.
+      if (qmImageCache.get(url) !== entry) return "stale";
+      entry.objectUrl = URL.createObjectURL(blob);
+      return "ok";
+    })
+    .catch(() => "failed")
+    .then((status) => {
+      entry.status = status;
+    });
+  return entry;
+}
+
+// A failed load fires the img's "error" event, which every caller already uses
+// for its fallback; event.qmRetryable marks a failure that isn't a real "no image".
+QM.setImageSrc = (img, url) => {
+  const secret = qmAdminSecret();
+  qmSyncImageSecret(secret);
+  if (!secret || !url.startsWith("/api/quartermaster/")) {
+    qmImageTargets.delete(img);
+    img.src = url;
+    return;
+  }
+  const entry = qmImageCache.get(url) || qmLoadImage(url);
+  if (qmImageTargets.get(img) === entry) return;
+  qmImageTargets.set(img, entry);
+  entry.ready.then(() => {
+    if (qmImageTargets.get(img) !== entry || qmImageCache.get(url) !== entry) return;
+    if (entry.status === "ok") {
+      img.src = entry.objectUrl;
+      return;
+    }
+    const event = new Event("error");
+    event.qmRetryable = entry.status === "failed";
+    img.dispatchEvent(event);
+  });
+};
 
 QM.exportInventory = (chatId, ownerId) =>
   qmRequest(`/inventory/${encodeURIComponent(chatId)}/${encodeURIComponent(ownerId)}/export`, { method: "GET" });
@@ -286,6 +426,8 @@ QM.compressImageFile = function compressImageFile(file) {
 // detailed art — they render at ~32px, and fill="currentColor" so they
 // inherit whatever color the box's own text is using rather than carrying
 // their own.
+const QM_EXTRA_WEARABLE_ICON_PATH =
+  '<circle cx="12" cy="14.5" r="5.3" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M12 3.5 14.6 6.8 12 9.4 9.4 6.8Z"/>';
 const QM_SLOT_ICON_PATHS = {
   head: '<path d="M12 3a7 7 0 0 0-7 7v3.5A1.5 1.5 0 0 0 6.5 15H8v2h8v-2h1.5a1.5 1.5 0 0 0 1.5-1.5V10a7 7 0 0 0-7-7Z"/><rect x="9" y="10.5" width="6" height="1.4" rx="0.7"/>',
   neck: '<path d="M6 4 L12 12 L18 4" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/><circle cx="12" cy="15" r="2.6"/>',
@@ -295,7 +437,12 @@ const QM_SLOT_ICON_PATHS = {
     '<path d="M7.2 9.2a4.8 4.8 0 0 1 9.6 0v5.6a4.8 4.8 0 0 1-9.6 0Z"/><path d="M6 10.5a2 2 0 0 1 2.8-1.8L8 12.5H6Z"/>',
   back: '<rect x="6" y="7" width="12" height="14" rx="3"/><path d="M9 7V5.2a3 3 0 0 1 6 0V7" fill="none" stroke="currentColor" stroke-width="1.4"/><rect x="9" y="13" width="6" height="4" rx="1" fill-opacity="0.35"/>',
   armor_torso: '<path d="M12 2.5 6.5 5.5v5c0 6 2.7 10 5.5 10s5.5-4 5.5-10v-5Z"/>',
+  outerwear_torso:
+    '<path d="M8.4 3.5 3.5 6.6 5.2 11l2.1-.8v10.3h4.1V10.3L9.6 4.2Z"/><path d="M15.6 3.5l4.9 3.1-1.7 4.4-2.1-.8v10.3h-4.1V10.3l1.8-6.1Z"/>',
+  midlayer_torso: '<path d="M8.4 3.6 5.6 5.2v15.3h5.5L12 10l.9 10.5h5.5V5.2l-2.8-1.6L12 10Z"/>',
   clothing_torso: '<path d="M8.3 3.8 4 6.8l2 3.2 2-1V20h8V9l2 1 2-3.2-4.3-3-1.7 1.6h-3Z"/>',
+  outerwear_legs: '<path d="M8.2 3h7.6l3.7 17.5H4.5Z"/>',
+  midlayer_legs: '<path d="M5.8 4h12.4l1.1 9.6h-5.4L12 9.3l-1.9 4.3H4.7Z"/>',
   armor_legs:
     '<rect x="6.5" y="4" width="4.2" height="16" rx="1.8"/><rect x="13.3" y="4" width="4.2" height="16" rx="1.8"/>',
   clothing_legs: '<path d="M7 3h10l1 8.5-1.3 9.5h-2.9l-1.3-10-1.3 10H8.3L7 11.5Z"/>',
@@ -308,6 +455,11 @@ const QM_SLOT_ICON_PATHS = {
     '<path d="M11.3 2 12.7 2 12.7 14 11.3 14Z"/><rect x="8.3" y="14" width="7.4" height="1.8" rx="0.9"/><rect x="11.1" y="15.8" width="1.8" height="5.7" rx="0.9"/>',
   belt: '<rect x="2" y="10" width="20" height="4" rx="1.2"/><rect x="9.3" y="8.3" width="5.4" height="7.4" rx="1" fill-opacity="0.35"/>',
   feet: '<path d="M9 3h4v9.3l4.4 3.1c1.4 1 .7 3.1-1 3.1H7.4C6.6 18.5 6 17.8 6 17V8.5C6 5.5 7.2 3 9 3Z"/>',
+  socks:
+    '<path d="M8.5 6.5h5v6.6l3.6 2.5c1.3.9.7 2.9-.9 2.9H9.8c-.7 0-1.3-.6-1.3-1.3Z"/><rect x="8.5" y="3" width="5" height="2.6" rx="0.6" fill-opacity="0.45"/>',
+  extra_wearable_1: QM_EXTRA_WEARABLE_ICON_PATH,
+  extra_wearable_2: QM_EXTRA_WEARABLE_ICON_PATH,
+  extra_wearable_3: QM_EXTRA_WEARABLE_ICON_PATH,
 };
 
 // <svg fill="currentColor"> wrapper around a slot's path markup — sizePx is
@@ -341,7 +493,7 @@ QM.buildSlotIconRaster = function buildSlotIconRaster(slot, sizePx) {
   img.addEventListener("error", () => {
     img.replaceWith(QM.buildSlotIcon(slot, sizePx));
   });
-  img.src = QM.slotIconUrl(slot);
+  QM.setImageSrc(img, QM.slotIconUrl(slot));
   return img;
 };
 
@@ -364,6 +516,10 @@ const QM_EQUIP_SLOTS = [
   "ears",
   "armor_torso",
   "armor_legs",
+  "outerwear_torso",
+  "outerwear_legs",
+  "midlayer_torso",
+  "midlayer_legs",
   "clothing_torso",
   "clothing_legs",
   "underwear_top",
@@ -373,7 +529,11 @@ const QM_EQUIP_SLOTS = [
   "weapon_left_hand",
   "weapon_right_hand",
   "feet",
+  "socks",
   "belt",
+  "extra_wearable_1",
+  "extra_wearable_2",
+  "extra_wearable_3",
 ];
 // Mirrors server.mjs's DEFAULT_ITEM_IMAGE_PROMPT_TEMPLATE/
 // DEFAULT_OUTFIT_PORTRAIT_PROMPT_TEMPLATE exactly -- client and server are
@@ -400,8 +560,12 @@ const QM_SLOT_LABELS = {
   ears: "Ears",
   armor_torso: "Armor (Torso)",
   armor_legs: "Armor (Legs)",
-  clothing_torso: "Clothing (Torso)",
-  clothing_legs: "Clothing (Legs)",
+  outerwear_torso: "Outer Clothing (Torso)",
+  outerwear_legs: "Outer Clothing (Legs)",
+  midlayer_torso: "Mid Clothing (Torso)",
+  midlayer_legs: "Mid Clothing (Legs)",
+  clothing_torso: "Inner Clothing (Torso)",
+  clothing_legs: "Inner Clothing (Legs)",
   underwear_top: "Underwear (Top)",
   underwear_bottom: "Underwear (Bottom)",
   back: "Back",
@@ -409,7 +573,11 @@ const QM_SLOT_LABELS = {
   weapon_left_hand: "Weapon (Left Hand)",
   weapon_right_hand: "Weapon (Right Hand)",
   feet: "Feet",
+  socks: "Socks",
   belt: "Belt",
+  extra_wearable_1: "Extra Wearable 1",
+  extra_wearable_2: "Extra Wearable 2",
+  extra_wearable_3: "Extra Wearable 3",
 };
 
 // A raw location string ("bag", "equipped:head", "stored:closet") into
@@ -422,7 +590,8 @@ function qmLocationLabel(location) {
   return location;
 }
 // The dock's equipment overlay. Head/Eyes/Ears/Neck sit in a row above the
-// portrait, Belt/Feet below it; the remaining 5 pairs sit in columns beside
+// portrait, Belt/Socks/Feet below it and the three extras in a row under
+// that; the remaining 5 pairs sit in columns beside
 // it, stretched to the portrait's own real rendered height and spread
 // evenly across it (10-dock.js's middleRow/space-between) — there's no way
 // to pin a slot to a real anatomical pixel position without image
@@ -433,7 +602,8 @@ function qmLocationLabel(location) {
 // group-visibility only needs one check per row; QM.state.slotVisible on
 // either slot in a pair always agrees with the other.
 const QM_OVERLAY_TOP_SLOTS = ["head", "eyes", "ears", "neck"];
-const QM_OVERLAY_BOTTOM_SLOTS = ["belt", "feet"];
+const QM_OVERLAY_BOTTOM_SLOTS = ["belt", "socks", "feet"];
+const QM_OVERLAY_EXTRA_SLOTS = ["extra_wearable_1", "extra_wearable_2", "extra_wearable_3"];
 const QM_OVERLAY_SLOT_PAIRS = [
   ["hands", "back"],
   ["armor_torso", "armor_legs"],
@@ -441,6 +611,14 @@ const QM_OVERLAY_SLOT_PAIRS = [
   ["underwear_top", "underwear_bottom"],
   ["weapon_left_hand", "weapon_right_hand"],
 ];
+// The clothing layers worn over an inner clothing slot, in order outward
+// from it. On the ring the three share one stack of cards (10-dock.js's
+// _buildClothingLayerStack): one in front, the others as spines, always in
+// this inside-out order away from the portrait.
+const QM_OVERLAY_SLOT_LAYERS = {
+  clothing_torso: ["midlayer_torso", "outerwear_torso"],
+  clothing_legs: ["midlayer_legs", "outerwear_legs"],
+};
 // Fuller than QM_SLOT_LABELS would need to be for a grouped layout with a
 // heading nearby (the old ring's short labels) — this overlay has no
 // heading to disambiguate armor vs. clothing between rows, so every label
@@ -454,8 +632,12 @@ const QM_OVERLAY_SLOT_LABELS = {
   ears: "Ears",
   armor_torso: "Torso Armor",
   armor_legs: "Legs Armor",
-  clothing_torso: "Torso Clothing",
-  clothing_legs: "Legs Clothing",
+  outerwear_torso: "Outer Torso Clothing",
+  outerwear_legs: "Outer Legs Clothing",
+  midlayer_torso: "Mid Torso Clothing",
+  midlayer_legs: "Mid Legs Clothing",
+  clothing_torso: "Inner Torso Clothing",
+  clothing_legs: "Inner Legs Clothing",
   underwear_top: "Top Underwear",
   underwear_bottom: "Bottom Underwear",
   back: "Back Accessory",
@@ -463,7 +645,11 @@ const QM_OVERLAY_SLOT_LABELS = {
   weapon_left_hand: "Left Hand Weapon",
   weapon_right_hand: "Right Hand Weapon",
   feet: "Feet",
+  socks: "Socks",
   belt: "Belt",
+  extra_wearable_1: "Extra Wearable 1",
+  extra_wearable_2: "Extra Wearable 2",
+  extra_wearable_3: "Extra Wearable 3",
 };
 // The visible box label, pre-split into explicit lines rather than left to
 // natural CSS wrapping — at a fixed box width, "Torso Clothing" wrapped
@@ -478,8 +664,12 @@ const QM_OVERLAY_SLOT_LABEL_LINES = {
   ears: ["Ears"],
   armor_torso: ["Torso", "Armor"],
   armor_legs: ["Legs", "Armor"],
-  clothing_torso: ["Torso", "Clothing"],
-  clothing_legs: ["Legs", "Clothing"],
+  outerwear_torso: ["Outer Torso", "Clothing"],
+  outerwear_legs: ["Outer Legs", "Clothing"],
+  midlayer_torso: ["Mid Torso", "Clothing"],
+  midlayer_legs: ["Mid Legs", "Clothing"],
+  clothing_torso: ["Inner Torso", "Clothing"],
+  clothing_legs: ["Inner Legs", "Clothing"],
   underwear_top: ["Top", "Underwear"],
   underwear_bottom: ["Bottom", "Underwear"],
   back: ["Back", "Accessory"],
@@ -487,7 +677,11 @@ const QM_OVERLAY_SLOT_LABEL_LINES = {
   weapon_left_hand: ["Left Hand", "Weapon"],
   weapon_right_hand: ["Right Hand", "Weapon"],
   feet: ["Feet"],
+  socks: ["Socks"],
   belt: ["Belt"],
+  extra_wearable_1: ["Extra", "Wearable 1"],
+  extra_wearable_2: ["Extra", "Wearable 2"],
+  extra_wearable_3: ["Extra", "Wearable 3"],
 };
 const QM_APPEARANCE_FEED_OPTIONS = [
   { value: "off", label: "Off" },
@@ -933,15 +1127,25 @@ QM.state = {
   deleteItem(itemId) {
     return this._mutate(QM.deleteItem(this.chatId, QM_OWNER_ID, itemId));
   },
+  // Each image change drops that image from QM.setImageSrc's cache once it
+  // succeeds, before _mutate repaints, so the next render fetches the new one.
   uploadItemImage(itemId, imageDataUrl) {
     QM._missingItemImageIds.delete(itemId);
-    return this._mutate(QM.uploadItemImage(this.chatId, QM_OWNER_ID, itemId, imageDataUrl));
+    const chatId = this.chatId;
+    return this._mutate(
+      QM.uploadItemImage(chatId, QM_OWNER_ID, itemId, imageDataUrl).then((result) => {
+        QM.forgetImage(QM.itemImageUrl(chatId, QM_OWNER_ID, itemId));
+        return result;
+      }),
+    );
   },
   deleteItemImage(itemId) {
+    const chatId = this.chatId;
     return this._mutate(
-      QM.deleteItemImage(this.chatId, QM_OWNER_ID, itemId).then((result) => {
+      QM.deleteItemImage(chatId, QM_OWNER_ID, itemId).then((result) => {
         // Suppress image lookups only after this delete succeeds.
         QM._missingItemImageIds.add(itemId);
+        QM.forgetImage(QM.itemImageUrl(chatId, QM_OWNER_ID, itemId));
         return result;
       }),
     );
@@ -991,10 +1195,22 @@ QM.state = {
     return request;
   },
   uploadOutfitPortrait(outfitId, imageDataUrl) {
-    return this._mutate(QM.uploadOutfitPortrait(this.chatId, QM_OWNER_ID, outfitId, imageDataUrl));
+    const chatId = this.chatId;
+    return this._mutate(
+      QM.uploadOutfitPortrait(chatId, QM_OWNER_ID, outfitId, imageDataUrl).then((result) => {
+        QM.forgetImage(QM.outfitPortraitUrl(chatId, QM_OWNER_ID, outfitId));
+        return result;
+      }),
+    );
   },
   deleteOutfitPortrait(outfitId) {
-    return this._mutate(QM.deleteOutfitPortrait(this.chatId, QM_OWNER_ID, outfitId));
+    const chatId = this.chatId;
+    return this._mutate(
+      QM.deleteOutfitPortrait(chatId, QM_OWNER_ID, outfitId).then((result) => {
+        QM.forgetImage(QM.outfitPortraitUrl(chatId, QM_OWNER_ID, outfitId));
+        return result;
+      }),
+    );
   },
   updateAppearanceFeedMode(mode) {
     return this._mutate(QM.updateSettings(this.chatId, QM_OWNER_ID, { appearanceFeedMode: mode }));
@@ -1579,6 +1795,10 @@ const QM_ADD_ITEM_FRAME_STYLE = {
 // — a plain fixed cap is simpler and, with the action column gone, no
 // longer trading anything away.
 const QM_DESC_LINE_HEIGHT_PX = 14;
+// A clothing layer stack's back layers (_buildClothingLayerStack): narrow
+// spines tucked partly under the front card or the spine nearer it.
+const QM_LAYER_SPINE_WIDTH = 26;
+const QM_LAYER_SPINE_OVERLAP = 6;
 const QM_CARD_DESC_MAX_HEIGHT_PX = QM_DESC_LINE_HEIGHT_PX * 5;
 
 function qmBuildCardCornerDot(corner) {
@@ -1827,6 +2047,11 @@ QM.dock = {
   portraitFrame: null,
   connectorSvg: null,
   equippedSlotBoxRefs: null,
+  // Inner clothing slot -> the layer the user brought to the front of its
+  // stack; until then it defaults per _clothingFrontSlot. Cleared on close.
+  _clothingFront: {},
+  // The pending front-card switch to animate on the next build, if any.
+  _clothingFrontMove: null,
   geometry: qmReadWindowGeometry(),
   bodyWidth: QM_WINDOW_DEFAULT_WIDTH,
   uiSize: qmReadUiSize(),
@@ -1938,6 +2163,7 @@ QM.dock = {
 
   openPanel() {
     this.isOpenFlag = true;
+    QM.retryFailedImages();
     this._ensureRoot();
     this.root.classList.remove("qm-dock-collapsed");
     this._syncToggles();
@@ -1956,6 +2182,8 @@ QM.dock = {
   close() {
     this.isOpenFlag = false;
     this.selectedSlot = null;
+    this._clothingFront = {};
+    this._clothingFrontMove = null;
     this._closeItemEditor();
     this._closeOutfitEditor();
     this._closeSaveOutfitModal();
@@ -2482,7 +2710,7 @@ QM.dock = {
     if (this.portraitImage && this.portraitPlaceholder) {
       this.portraitImage.style.display = portraitUrl ? "block" : "none";
       this.portraitPlaceholder.style.display = portraitUrl ? "none" : "flex";
-      if (portraitUrl) this.portraitImage.src = portraitUrl;
+      if (portraitUrl) QM.setImageSrc(this.portraitImage, portraitUrl);
       // Scales with Thumbnail Size same as item/outfit thumbnails, relative
       // to the 160x200 / 120x120 box _buildPortrait() sized at "M" — live
       // here (not just at _buildPortrait()'s one-time construction) since a
@@ -3059,10 +3287,10 @@ QM.dock = {
   // re-404ing) it on every repaint. That's the right default, but it means
   // a pack image dropped straight into the gallery folder mid-session, or a
   // just-uploaded image that should now show everywhere it's cached as
-  // missing, doesn't appear until something clears that cache. Closing and
-  // reopening the dock would also work (_resetCachedNodes runs on the next
-  // open regardless), but isn't obvious as the fix — this does the same
-  // rebuild on demand, from a control that's actually about images.
+  // missing, doesn't appear until something clears that cache. Reopening the
+  // dock only retries images that failed for another reason (see
+  // QM.retryFailedImages); this clears everything, including the loaded-image
+  // cache QM.setImageSrc keeps when an Admin Secret is saved.
   _buildRefreshImagesRow() {
     const row = document.createElement("div");
     Object.assign(row.style, { display: "flex", alignItems: "center", gap: "10px" });
@@ -3078,6 +3306,7 @@ QM.dock = {
     });
     refreshButton.addEventListener("click", () => {
       QM._missingItemImageIds.clear();
+      QM.clearImageCache();
       this._resetCachedNodes();
       this._paint();
     });
@@ -3511,8 +3740,10 @@ QM.dock = {
     return wrapper;
   },
 
-  // Head/Eyes/Ears/Neck sit in a row above the portrait, Belt/Feet below —
-  // beside it. The remaining 5 pairs (QM_OVERLAY_SLOT_PAIRS) sit in columns
+  // Head/Eyes/Ears/Neck sit in a row above the portrait, Belt/Socks/Feet below,
+  // and the three extras in a row under that. The inner clothing slots are
+  // layer stacks (_buildClothingLayerStack). The remaining 5 pairs
+  // (QM_OVERLAY_SLOT_PAIRS) sit in columns
   // to either side, stretched (alignItems: "stretch" on middleRow) to match
   // whatever the portrait's own real rendered height turns out to be, then
   // spread evenly across that matched height (space-between) — there's no
@@ -3579,21 +3810,29 @@ QM.dock = {
       width: "100%",
     });
 
+    // Aligned toward the portrait, so the clothing stacks (wider than one box)
+    // stay in line with the rest of their column and extend outward.
     const leftColumn = document.createElement("div");
-    Object.assign(leftColumn.style, { display: "flex", flexDirection: "column", justifyContent: "space-between" });
+    Object.assign(leftColumn.style, {
+      display: "flex",
+      flexDirection: "column",
+      justifyContent: "space-between",
+      alignItems: "flex-end",
+    });
     const rightColumn = document.createElement("div");
-    Object.assign(rightColumn.style, { display: "flex", flexDirection: "column", justifyContent: "space-between" });
+    Object.assign(rightColumn.style, {
+      display: "flex",
+      flexDirection: "column",
+      justifyContent: "space-between",
+      alignItems: "flex-start",
+    });
     for (const [leftSlot, rightSlot] of QM_OVERLAY_SLOT_PAIRS) {
       // A pair always shares one group (or neither has one) — see
       // QM_OVERLAY_SLOT_PAIRS's own comment — so checking the left slot
       // alone is enough to decide the whole row.
       if (!QM.state.slotVisible(leftSlot)) continue;
-      const leftBox = this._buildOverlaySlotBox(leftSlot);
-      const rightBox = this._buildOverlaySlotBox(rightSlot);
-      this.equippedSlotBoxRefs.set(leftSlot, { element: leftBox, side: "left" });
-      this.equippedSlotBoxRefs.set(rightSlot, { element: rightBox, side: "right" });
-      leftColumn.appendChild(leftBox);
-      rightColumn.appendChild(rightBox);
+      leftColumn.appendChild(this._buildSideEntry(leftSlot, "left"));
+      rightColumn.appendChild(this._buildSideEntry(rightSlot, "right"));
     }
 
     middleRow.append(leftColumn, this.portraitWrapper, rightColumn);
@@ -3607,6 +3846,13 @@ QM.dock = {
       bottomRow.appendChild(box);
     }
     wrapper.appendChild(bottomRow);
+
+    // Below the bottom row and not wired to the portrait: a connector line
+    // from here would have to cross the boxes above it.
+    const extrasRow = document.createElement("div");
+    Object.assign(extrasRow.style, { display: "flex", gap: "4px", justifyContent: "center", flexWrap: "wrap" });
+    for (const slot of QM_OVERLAY_EXTRA_SLOTS) extrasRow.appendChild(this._buildOverlaySlotBox(slot));
+    wrapper.appendChild(extrasRow);
 
     // Moved here from the Outfits column header (Save) and the Equipped
     // column header (Unequip All) — both act on the current equip state,
@@ -3631,6 +3877,157 @@ QM.dock = {
     return wrapper;
   },
 
+  // One side-column entry, registered for its connector line: a slot box, or
+  // for an inner clothing slot its whole layer stack, so the line never moves
+  // and lights up for whichever of the stack's layers is selected.
+  _buildSideEntry(slot, side) {
+    const layers = QM_OVERLAY_SLOT_LAYERS[slot];
+    const element = layers ? this._buildClothingLayerStack(slot, side) : this._buildOverlaySlotBox(slot);
+    this.equippedSlotBoxRefs.set(slot, { element, side, slots: layers ? [slot, ...layers] : [slot] });
+    return element;
+  },
+
+  // The layer shown in front: the one the user picked, else the outermost
+  // one worn (what others actually see), else the inner one.
+  _clothingFrontSlot(innerSlot) {
+    const outerFirst = [innerSlot, ...QM_OVERLAY_SLOT_LAYERS[innerSlot]].reverse();
+    return this._clothingFront[innerSlot] ?? outerFirst.find((slot) => QM.state.itemInSlot(slot)) ?? innerSlot;
+  },
+
+  // An inner clothing slot and its QM_OVERLAY_SLOT_LAYERS as stacked cards: the
+  // front layer is a full slot box, the others narrow spines. Order is fixed
+  // inside out from the portrait (inner nearest), so the stack's footprint
+  // and the inner layer's connector edge stay put whichever card is in front.
+  _buildClothingLayerStack(innerSlot, side) {
+    const insideOut = [innerSlot, ...QM_OVERLAY_SLOT_LAYERS[innerSlot]];
+    const onScreen = side === "left" ? [...insideOut].reverse() : insideOut;
+    const front = this._clothingFrontSlot(innerSlot);
+    const frontIndex = onScreen.indexOf(front);
+    const stack = document.createElement("div");
+    Object.assign(stack.style, { display: "flex", alignItems: "stretch" });
+    onScreen.forEach((slot, index) => {
+      const element =
+        index === frontIndex
+          ? this._buildClothingLayerCard(slot, innerSlot, side, onScreen[index - 1], onScreen[index + 1])
+          : this._buildClothingLayerSpine(slot, innerSlot, index < frontIndex ? "right" : "left");
+      // Each element overlaps the one before it; nearer the front card sits on top.
+      Object.assign(element.style, {
+        position: "relative",
+        zIndex: String(onScreen.length - Math.abs(index - frontIndex)),
+        marginLeft: index > 0 ? `-${QM_LAYER_SPINE_OVERLAP}px` : "0",
+      });
+      stack.appendChild(element);
+    });
+    return stack;
+  },
+
+  _buildClothingLayerCard(slot, innerSlot, side, leftSlot, rightSlot) {
+    const card = this._buildOverlaySlotBox(slot);
+    if (leftSlot) card.appendChild(this._buildClothingLayerArrow(innerSlot, leftSlot, "left"));
+    if (rightSlot) card.appendChild(this._buildClothingLayerArrow(innerSlot, rightSlot, "right"));
+    const move = this._clothingFrontMove;
+    if (move && move.slot === slot) {
+      this._clothingFrontMove = null;
+      // Slides in from where its spine was: outward from the portrait or back toward it.
+      const offset = (move.outward ? 1 : -1) * (side === "right" ? 1 : -1) * 10;
+      card.animate(
+        [
+          { transform: `translateX(${offset}px)`, opacity: 0.6 },
+          { transform: "translateX(0)", opacity: 1 },
+        ],
+        { duration: 150, easing: "ease-out" },
+      );
+    }
+    return card;
+  },
+
+  _buildClothingLayerArrow(innerSlot, targetSlot, direction) {
+    const arrow = document.createElement("button");
+    arrow.type = "button";
+    arrow.textContent = direction === "left" ? "‹" : "›";
+    arrow.title = `Show ${QM_OVERLAY_SLOT_LABELS[targetSlot]}`;
+    arrow.setAttribute("aria-label", arrow.title);
+    Object.assign(arrow.style, {
+      position: "absolute",
+      top: "46px", // the middle of the 92px image area
+      [direction]: "2px",
+      transform: "translateY(-50%)",
+      zIndex: "2",
+      width: "18px",
+      height: "30px",
+      padding: "0",
+      border: "none",
+      borderRadius: "var(--radius, 4px)",
+      background: "var(--primary, #444)",
+      color: "var(--primary-foreground, #fff)",
+      fontFamily: "inherit",
+      fontSize: "18px",
+      lineHeight: "28px",
+      opacity: "0.9",
+      cursor: "pointer",
+    });
+    arrow.addEventListener("click", (event) => {
+      event.stopPropagation(); // not a click on the card itself, which selects it
+      this._showClothingLayer(innerSlot, targetSlot);
+    });
+    return arrow;
+  },
+
+  // A back layer: its short name written vertically, outlined like a slot box
+  // (accent when something's worn there). Clicking brings it to the front.
+  // `coveredSide` is the edge tucked under its neighbour, padded so the text
+  // centres in the part that shows.
+  _buildClothingLayerSpine(slot, innerSlot, coveredSide) {
+    const item = QM.state.itemInSlot(slot);
+    const spine = document.createElement("button");
+    spine.type = "button";
+    spine.title = `${QM_OVERLAY_SLOT_LABELS[slot]}: ${item ? item.name : "empty"}`;
+    spine.setAttribute("aria-label", `Show ${spine.title}`);
+    Object.assign(spine.style, {
+      width: `${QM_LAYER_SPINE_WIDTH}px`,
+      padding: "0",
+      [coveredSide === "left" ? "paddingLeft" : "paddingRight"]: `${QM_LAYER_SPINE_OVERLAP}px`,
+      boxSizing: "border-box",
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+      borderRadius: "var(--radius, 4px)",
+      background: "#000",
+      color: "#f2f2f2",
+      border: item ? "1px solid var(--primary, #444)" : "1px solid rgba(255, 255, 255, 0.22)",
+      fontFamily: "inherit",
+      fontSize: "9px",
+      textTransform: "uppercase",
+      letterSpacing: "0.02em",
+      lineHeight: "1.2",
+      cursor: "pointer",
+    });
+    const text = document.createElement("span");
+    text.textContent = QM_OVERLAY_SLOT_LABEL_LINES[slot][0];
+    Object.assign(text.style, { writingMode: "vertical-rl", transform: "rotate(180deg)", whiteSpace: "nowrap" });
+    spine.appendChild(text);
+    spine.addEventListener("click", () => this._showClothingLayer(innerSlot, slot));
+    return spine;
+  },
+
+  // Brings a layer to the front. A selection inside this stack is cleared
+  // (with its Bag slot search) so a selected card is never hidden behind another.
+  _showClothingLayer(innerSlot, slot) {
+    const insideOut = [innerSlot, ...QM_OVERLAY_SLOT_LAYERS[innerSlot]];
+    const previous = this._clothingFrontSlot(innerSlot);
+    if (slot === previous) return;
+    this._clothingFront[innerSlot] = slot;
+    this._clothingFrontMove = { slot, outward: insideOut.indexOf(slot) > insideOut.indexOf(previous) };
+    if (insideOut.includes(this.selectedSlot)) {
+      this.selectedSlot = null;
+      if (this.bagSearchMode === "slot") {
+        this.bagSearchMode = "name";
+        this.bagSearchQuery = "";
+      }
+    }
+    this._paint();
+  },
+
   // Called (via requestAnimationFrame, so real layout exists) after every
   // _buildEquippedSection() attach, after a Thumbnail Size change, and after
   // the portrait image itself finishes loading (the one case that changes
@@ -3638,7 +4035,8 @@ QM.dock = {
   // rebuild). Fully rebuilds the connector SVG's contents every time rather
   // than trying to incrementally patch it — geometry can change for enough
   // different reasons (selection, equip state, resize, image load) that a
-  // full recompute is simpler and cheap enough at this scale (≤16 slots).
+  // full recompute is simpler and cheap enough at this scale (a couple dozen
+  // slots).
   _updateConnectorLines() {
     const svg = this.connectorSvg;
     const frame = this.portraitFrame;
@@ -3687,8 +4085,7 @@ QM.dock = {
     const leftPoints = qmFrameSpread(bySide.left, frameTop + 6, frameBottom - 6);
     const rightPoints = qmFrameSpread(bySide.right, frameTop + 6, frameBottom - 6);
 
-    const qmDrawConnector = (slot, side, boxX, boxY, frameX, frameY) => {
-      const selected = this.selectedSlot === slot;
+    const qmDrawConnector = (selected, side, boxX, boxY, frameX, frameY) => {
       const opacity = selected ? 0.85 : 0.32;
       const midX = (boxX + frameX) / 2;
       const midY = (boxY + frameY) / 2;
@@ -3733,18 +4130,20 @@ QM.dock = {
       const box = ref.element.getBoundingClientRect();
       const boxX = box.left - containerRect.left + box.width / 2;
       const boxY = box.top - containerRect.top + box.height / 2;
+      // A clothing stack lights up for whichever of its layers is selected.
+      const selected = (ref.slots ?? [slot]).includes(this.selectedSlot);
       if (ref.side === "top") {
         const index = bySide.top.findIndex((entry) => entry.slot === slot);
-        qmDrawConnector(slot, "top", boxX, box.bottom - containerRect.top, topPoints[index], frameTop);
+        qmDrawConnector(selected, "top", boxX, box.bottom - containerRect.top, topPoints[index], frameTop);
       } else if (ref.side === "bottom") {
         const index = bySide.bottom.findIndex((entry) => entry.slot === slot);
-        qmDrawConnector(slot, "bottom", boxX, box.top - containerRect.top, bottomPoints[index], frameBottom);
+        qmDrawConnector(selected, "bottom", boxX, box.top - containerRect.top, bottomPoints[index], frameBottom);
       } else if (ref.side === "left") {
         const index = bySide.left.findIndex((entry) => entry.slot === slot);
-        qmDrawConnector(slot, "left", box.right - containerRect.left, boxY, frameLeft, leftPoints[index]);
+        qmDrawConnector(selected, "left", box.right - containerRect.left, boxY, frameLeft, leftPoints[index]);
       } else if (ref.side === "right") {
         const index = bySide.right.findIndex((entry) => entry.slot === slot);
-        qmDrawConnector(slot, "right", box.left - containerRect.left, boxY, frameRight, rightPoints[index]);
+        qmDrawConnector(selected, "right", box.left - containerRect.left, boxY, frameRight, rightPoints[index]);
       }
     }
   },
@@ -3875,12 +4274,12 @@ QM.dock = {
         objectFit: "cover",
         display: "block",
       });
-      img.addEventListener("error", () => {
-        QM._missingItemImageIds.add(equippedItem.id);
+      img.addEventListener("error", (event) => {
+        if (!event.qmRetryable) QM._missingItemImageIds.add(equippedItem.id);
         img.remove();
         qmCenterFallbackIcon();
       });
-      img.src = QM.itemImageUrl(QM.state.chatId, QM_OWNER_ID, equippedItem.id);
+      QM.setImageSrc(img, QM.itemImageUrl(QM.state.chatId, QM_OWNER_ID, equippedItem.id));
       imageArea.appendChild(img);
     } else {
       qmCenterFallbackIcon();
@@ -4150,7 +4549,7 @@ QM.dock = {
     if (outfit.portraitFile) {
       const thumb = document.createElement("img");
       thumb.alt = `${outfit.name} portrait`;
-      thumb.src = QM.outfitPortraitUrl(QM.state.chatId, QM_OWNER_ID, outfit.id);
+      QM.setImageSrc(thumb, QM.outfitPortraitUrl(QM.state.chatId, QM_OWNER_ID, outfit.id));
       Object.assign(thumb.style, { width: "100%", height: "100%", objectFit: "cover", display: "block" });
       thumbButton.appendChild(thumb);
     } else {
@@ -4321,12 +4720,12 @@ QM.dock = {
         img.style.display = "block";
         removeButton.style.display = "block";
       });
-      img.addEventListener("error", () => {
-        QM._missingItemImageIds.add(item.id);
+      img.addEventListener("error", (event) => {
+        if (!event.qmRetryable) QM._missingItemImageIds.add(item.id);
         img.remove();
         applyMissingImageFallback();
       });
-      img.src = QM.itemImageUrl(QM.state.chatId, QM_OWNER_ID, item.id);
+      QM.setImageSrc(img, QM.itemImageUrl(QM.state.chatId, QM_OWNER_ID, item.id));
       thumbButton.appendChild(img);
     }
 

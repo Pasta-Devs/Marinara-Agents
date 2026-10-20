@@ -11,16 +11,11 @@ import { SLURP2_SOURCE_MODULES, slurp2Source } from "./slurp2-source";
 const repoRoot = join(import.meta.dirname, "..");
 const engineRoot = join(repoRoot, "packages/slurp2/src/engine");
 const ROOTS = ["packages/client/src/slp", "packages/server/src/slp", "packages/shared/src/slp"];
-const EXCEPTIONS = [
-  "packages/client/src/lib/api-client.ts",
-  "packages/server/src/services/garnish-ads",
-  "packages/server/src/db/schema/slurp.ts",
-];
+const EXCEPTIONS = ["packages/server/src/services/garnish-ads", "packages/server/src/db/schema/slurp.ts"];
 const EXPECTED_OWNERSHIP = [
   "packages/client/src/slp",
   "packages/server/src/slp",
   "packages/shared/src/slp",
-  "packages/client/src/lib/api-client.ts",
   "packages/server/src/services/garnish-ads",
   "packages/server/src/db/schema/slurp.ts",
 ];
@@ -122,7 +117,7 @@ const ownershipBlock = /const slurp2OwnedSourcePaths = \[([\s\S]*?)\n\];/u.exec(
 const slurp2Owned = [...ownershipBlock.matchAll(/"([^"]+)"/gu)].map((match) => match[1]);
 assert.ok(slurp2Owned.length > 0, "slurp2OwnedSourcePaths must be readable from the builder");
 assert.doesNotMatch(ownershipBlock, /\.\.\./u, "Slurp2 ownership must not spread legacy Slurp's list");
-assert.deepEqual(slurp2Owned, EXPECTED_OWNERSHIP, "Slurp2 ownership must be exactly the six approved entries");
+assert.deepEqual(slurp2Owned, EXPECTED_OWNERSHIP, "Slurp2 ownership must be exactly the five approved entries");
 const legacyBlock = /const slurpOwnedSourcePaths = \[([\s\S]*?)\n\];/u.exec(builder)?.[1] ?? "";
 for (const root of ROOTS) assert.ok(!legacyBlock.includes(root), `legacy Slurp must not own ${root}`);
 
@@ -188,7 +183,6 @@ const valid: Record<string, string> = {
     'import "../../economy/slp-economy-contract";\n',
   "packages/server/src/slp/base/host/slp-db.ts": 'import { db } from "../../../db/connection.js";\n',
   "packages/server/src/slp/base/modifiers/slp-modifier.types.ts": "// line\n".repeat(MAX_LINES),
-  "packages/client/src/lib/api-client.ts": "export {};\n",
 };
 const cases: Array<[string, Record<string, string>, readonly string[], RegExp]> = [
   [

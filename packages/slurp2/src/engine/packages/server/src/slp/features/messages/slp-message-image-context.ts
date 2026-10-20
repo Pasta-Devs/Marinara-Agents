@@ -17,7 +17,7 @@ export function slurpDmImageContexts(
     debugMode?: boolean;
     history: readonly SlurpMessage[];
   },
-  settings: Pick<SlurpSettings, "imageContextConnectionId" | "imageContextMode">,
+  settings: Pick<SlurpSettings, "imageContextConnectionId" | "imageContextMode" | "imageCaptionPrompt">,
   recentPostRows: PostRows,
   limits: { historyTurns: number; recentPosts: number },
 ): Promise<Map<string, string>> {
@@ -26,7 +26,12 @@ export function slurpDmImageContexts(
   // so a locked picture in it is theirs to see. Recent posts use stored prompts and saved
   // descriptions only, so a reply never pays for vision across the whole feed, and a locked post
   // stays out like its text does. A failed description costs the picture its context, never the reply.
-  return slurpImageCaptioning(input.db, settings.imageContextConnectionId, input.connection)
+  return slurpImageCaptioning(
+    input.db,
+    settings.imageContextConnectionId,
+    input.connection,
+    settings.imageCaptionPrompt,
+  )
     .then(async (captioning) => {
       const messageStore = createSlurpMessagesStorage(input.db);
       const [threadImages, postImages] = await Promise.all([

@@ -26,10 +26,12 @@ const slurpFanActivity = slurp2Source(
 const slurpServerEntry = slurp2Source(
   join(root, "packages/slurp2/src/engine/packages/server/src/services/slurp/server-entry.ts"),
 );
-assert.match(
+// Creator and post confirmations open in the Engine's own dialog renderer (its topmost layer), so Slurp renders none of
+// its own (Pasta-Devs/Marinara-Agents#1487).
+assert.doesNotMatch(
   slurpEntry,
-  /AppDialogRenderer/u,
-  "Slurp must render the dialog host used by creator and post confirmation actions",
+  /<AppDialogRenderer\b/u,
+  "Slurp must leave its confirmation dialogs to the Engine's one renderer",
 );
 assert.match(
   slurpFanActivity,
@@ -38,28 +40,28 @@ assert.match(
 );
 assert.match(
   slurpServerEntry,
-  /import \{ startNoodleRefreshScheduler \} from "\.\/features\/feed\/slp-refresh-scheduler-service\.js"/u,
+  /import \{ startSlpRefreshScheduler \} from "\.\/features\/feed\/slp-refresh-scheduler-service\.js"/u,
   "Slurp must import the automatic timeline refresh scheduler",
 );
 assert.match(
   slurpServerEntry,
-  /startNoodleRefreshScheduler\(app, addTeardown[,)]/u,
+  /startSlpRefreshScheduler\(app, addTeardown[,)]/u,
   "Slurp must start the automatic timeline refresh scheduler",
 );
 assert.match(
   slurpServerEntry,
-  /startNoodleAutoPostScheduler\(app, addTeardown\)/u,
+  /startSlpAutoPostScheduler\(app, addTeardown\)/u,
   "Slurp must register automatic posting teardown before scheduler startup",
 );
 assert.match(
   slurpServerEntry,
-  /startNoodlerFanActivityScheduler\(app, addTeardown\)/u,
+  /startCreatorFanActivityScheduler\(app, addTeardown\)/u,
   "Slurp must register fan activity teardown before scheduler startup",
 );
 assert.match(
   slurpRoutes,
-  /app\.delete\("\/noodler\/posts\/:id"[\s\S]*?accountId is required[\s\S]*?existing\.authorAccountId !== accountId/u,
-  "NoodleR post deletion must require and verify the owning account",
+  /app\.delete\("\/slurp\/posts\/:id"[\s\S]*?accountId is required[\s\S]*?existing\.authorAccountId !== accountId/u,
+  "Slurp post deletion must require and verify the owning account",
 );
 
 const slurpImages = slurp2Source(
@@ -134,7 +136,10 @@ assert.doesNotMatch(
   /scenario|backstory|source\.name/u,
   "concealed Slurp profile prompts must withhold the lookupable canon",
 );
-const slurpHomeSource = slurp2Source("packages/slurp2/src/engine/packages/client/src/components/slurp/SlurpHome.tsx");
+// The presets moved out of the Home screen into the stage profile form.
+const slurpHomeSource = slurp2Source(
+  join(root, "packages/slurp2/src/engine/packages/client/src/slp/features/creators/SlpStageProfileForm.tsx"),
+);
 // A character card says nothing about how its Creator treats an audience, so without a nudge every
 // Creator lands in the same register. The presets seed the existing free-text stage voice: the
 // privacy settings shape is defined in the Engine's shared schema and cannot gain a field here.
@@ -157,7 +162,7 @@ const slurpGeneration = slurp2Source(
 // and existing Creators improve without a migration.
 assert.match(
   slurpGeneration,
-  /const sourceCharacterContext = await resolveNoodlerCharacterCanon\(db, linkedPublicAccount, disclosureMode\)/u,
+  /const sourceCharacterContext = await resolveCreatorCharacterCanon\(db, linkedPublicAccount, disclosureMode\)/u,
   "Slurp posts must read the source card at post time, not only the stage profile frozen at setup",
 );
 assert.match(
@@ -169,14 +174,14 @@ assert.match(
 // with only the lookupable canon withheld.
 assert.match(
   slurpGeneration,
-  /resolveNoodlerCharacterCanon\(db, linkedPublicAccount, disclosureMode\)/u,
+  /resolveCreatorCharacterCanon\(db, linkedPublicAccount, disclosureMode\)/u,
   "concealed Slurp Creators must still receive the source card, minus the lookupable canon",
 );
 
 // A hinted creator still posts their body — it is the page — so every mode sends the same appearance.
 assert.match(
   slurpImages,
-  /imageGenerationIncludeDescriptions\) \{\s*characterDescription = sourceAppearance;/u,
+  /includeAppearance && !stageAppearance && !input\.suppressCharacterContext && sourceAppearance\) \{\s*characterDescription = sourceAppearance;/u,
   "Slurp image prompts must describe the same body in every disclosure mode",
 );
 assert.match(

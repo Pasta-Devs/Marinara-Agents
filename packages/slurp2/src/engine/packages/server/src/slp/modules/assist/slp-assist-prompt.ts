@@ -16,6 +16,9 @@ export type SlpAssistTextRequest = {
   name?: string;
   /** Their flavour brief (7b0), already protected. Only for fields written in their voice or about them. */
   brief?: string;
+  /** Their page's bio and stage voice, already protected. Same fields as the brief. */
+  bio?: string;
+  stageVoice?: string;
 };
 
 /** One-line fields lose their line breaks; the rest keep them (captions, bios, briefs). */
@@ -47,7 +50,18 @@ export function buildSlpAssistTextMessages(input: SlpAssistTextRequest) {
   ]
     .filter(Boolean)
     .join(" ");
+  // The page as a post sees it. The field being written is left out: it is the current text, not context.
+  const page =
+    field.voice === "player"
+      ? ""
+      : [
+          input.field !== "bio" && input.bio?.trim() ? `Bio: ${input.bio.trim()}` : "",
+          input.field !== "voice" && input.stageVoice?.trim() ? `Stage voice: ${input.stageVoice.trim()}` : "",
+        ]
+          .filter(Boolean)
+          .join("\n");
   const user = [
+    page ? `# ${name}'s page\n${page}` : "",
     input.brief && field.voice !== "player" ? `# Who ${name} is\n${input.brief}` : "",
     input.context?.trim() ? `# Nearby\n${input.context.trim()}` : "",
     input.mode === "improve" && input.text?.trim() ? `# Current text\n${input.text.trim()}` : "",

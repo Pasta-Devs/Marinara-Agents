@@ -38,6 +38,17 @@ import type { SlurpPostGuidanceEntry } from "../../modules/feed/slp-post-guidanc
 import type { SlpActionParsed, SlpStirWorld } from "../../../../../shared/src/slp/slp-actions.js";
 import type { SlpCreatorSteering } from "../../../../../shared/src/slp/slp-creator-steering.js";
 import type { SlpAssistOutcome } from "./slp-assist-service.js";
+import {
+  listSlurpTrendViews,
+  readSlurpTrendList,
+  slurpMayStartTrend,
+  startSlurpTrend,
+  steerSlurpTrend,
+  undoSlurpTrend,
+} from "../discovery/slp-discovery-contract.js";
+import type { SlpStirTrends } from "../../../../../shared/src/slp/slp-action-results.js";
+import { SLP_TREND_LEAN_MAX } from "../../../../../shared/src/slp/slp-trend-actions.js";
+import { slurpTrendClean } from "../../modules/discovery/slp-trends.js";
 import { undoSlpDeskLever, type SlpDeskUndo } from "./slp-desk-levers.js";
 import { readSlurpStirDramas, undoSlurpDramaLever, type SlurpDramaUndo } from "../world/slp-world-contract.js";
 
@@ -60,6 +71,8 @@ export type SlpActionUndo =
   | { kind: "goal"; accountId: string; before: unknown; set: unknown }
   | { kind: "look"; accountId: string; before: string | null; set: string }
   | { kind: "customEvent"; eventId: string; occurrenceId: string }
+  | { kind: "trend"; id: string }
+  | { kind: "trendLean"; id: string; before: string | null; set: string | null }
   | {
       kind: "storyline";
       accountId: string;
@@ -75,7 +88,7 @@ const running = (occurrence: { status: string; endsAt: string }, at: Date) =>
   occurrence.status === "active" && occurrence.endsAt > at.toISOString();
 
 /** The ids and names every world lever takes. Reads only. */
-export async function readSlpStirWorld(db: DB, at = new Date()): Promise<SlpStirWorld> {
+export async function readSlpStirWorld(db: DB, at = new Date()): Promise<SlpStirWorld & SlpStirTrends> {
   const storage = createSlurpStorage(db);
   const [ties, settings, occurrences, accounts] = await Promise.all([
     readSlurpStirTies(db),
@@ -109,6 +122,7 @@ export async function readSlpStirWorld(db: DB, at = new Date()): Promise<SlpStir
   return {
     ...ties,
     ...(await readSlurpStirDramas(db)),
+    trends: (await listSlurpTrendViews(db, at)).map(({ id, label, lean, stage }) => ({ id, label, lean, stage })),
     events: settings.platformEvents
       .filter((event: { enabled: boolean }) => event.enabled)
       .map((event: { id: string; name: string }) => ({ id: event.id, name: event.name, running: live.has(event.id) })),
@@ -356,6 +370,37 @@ export async function runSlpInventEvent(
   };
 }
 
+/** A trend the player starts (docs/TRENDS.md): the right Creators join over the next days. Undo works until one has. */
+export async function runSlpStartTrend(
+  db: DB,
+  input: SlpActionParsed<"start-trend">,
+): Promise<SlpAssistOutcome<{ trendId: string }> | LeverDone<{ trendId: string }>> {
+  if (input.accountId && !(await slurpMayStartTrend(db, input.accountId)))
+    return { ok: false, status: 404, error: "Creator not found." };
+  const trend = await startSlurpTrend(
+    db,
+    { label: input.label, source: "stir", starterId: input.accountId ?? null, lean: input.lean },
+    new Date(),
+  );
+  if (!trend) return { ok: false, status: 409, error: "Slurp has enough trends going, or that one already is." };
+  return { ok: true, value: { trendId: trend.id }, undo: { kind: "trend", id: trend.id } };
+}
+
+/** What a running trend leans into. Undo puts the old words back while nobody changed them since. */
+export async function runSlpSteerTrend(
+  db: DB,
+  input: SlpActionParsed<"steer-trend">,
+): Promise<SlpAssistOutcome<{ trendId: string }> | LeverDone<{ trendId: string }>> {
+  const lean = slurpTrendClean(input.lean, SLP_TREND_LEAN_MAX) || null;
+  const done = await steerSlurpTrend(db, input.trendId, lean);
+  if (!done) return { ok: false, status: 404, error: "That trend is not going any more." };
+  return {
+    ok: true,
+    value: { trendId: input.trendId },
+    undo: { kind: "trendLean", id: input.trendId, before: done.before, set: lean },
+  };
+}
+
 /**
  * Take one play step back. The world may have moved on: what is gone stays gone, and a step that
  * would undo a later change answers false and stays as it is.
@@ -413,6 +458,13 @@ export async function undoSlpAction(db: DB, undo: SlpActionUndo): Promise<boolea
           ? await storage.updateNoodlerAppearanceChoice(undo.accountId, "edit_override", undo.before)
           : await storage.updateNoodlerAppearanceChoice(undo.accountId, "clear_override"),
       );
+    }
+    case "trend":
+      return undoSlurpTrend(db, undo.id);
+    case "trendLean": {
+      const current = (await readSlurpTrendList(db)).find((entry) => entry.id === undo.id);
+      if (!current || current.lean !== undo.set) return false;
+      return Boolean(await steerSlurpTrend(db, undo.id, undo.before));
     }
     case "customEvent": {
       const storage = createSlurpStorage(db);

@@ -16,6 +16,7 @@ import {
 } from "../packages/slurp2/src/engine/packages/server/src/slp/modules/messages/slp-roleplay-scene-rules";
 import { readSlpScenePlan } from "../packages/slurp2/src/engine/packages/server/src/slp/modules/messages/slp-roleplay-scene-prompt";
 import { slurp2Source } from "./slurp2-source";
+import { resolveSlurpTextConnection } from "../packages/slurp2/src/engine/packages/server/src/slp/base/identity/slp-connection";
 import { slurpDmTranscript } from "../packages/slurp2/src/engine/packages/server/src/slp/modules/messages/slp-dm-roles";
 
 // ── What the scene reads: paid content is named, never quoted; scene lines are not conversation ──
@@ -192,8 +193,18 @@ const origin = runInNewContext(
         id === "mina"
           ? { id, displayName: "Mina", handle: "mina", settings: { privacy: { identityDisclosure: "open" } } }
           : null,
-      getViewer: async () => null,
+      getViewer: async (id: string) => (id === "alex" ? { id, displayName: "Alex", entityId: "persona-alex" } : null),
+      resolveAccountSource: async () => ({ kind: "character", entityId: "char-mina" }),
+      getSettings: async () => ({ generationConnectionId: null }),
     }),
+    // Slurp ships no generation connection; the Engine's plain default is unset; only the
+    // "Default for Agents" connection exists. The scene must run on the one the plan was written on.
+    createConnectionsStorage: () => ({
+      getWithKey: async () => null,
+      getDefaultForAgents: async () => ({ id: "agents-default", provider: "openai" }),
+      getDefault: async () => null,
+    }),
+    resolveSlurpTextConnection,
     createChatsStorage: () => ({ getById: async () => ({ name: "Scene: The Shoot" }) }),
     resolveNoodlerPublicIdentity: async () => null,
     protectCreatorGeneratedIdentity: (value: string) => value,
@@ -229,6 +240,11 @@ const concluded = (sceneChatId: string, data: Record<string, unknown> | null) =>
 });
 
 async function main() {
+  reset();
+  const context = await provider.getContext("t1");
+  assert.equal(context?.connectionId, "agents-default", "The scene gets the resolved connection, not the raw setting");
+  assert.equal(context?.characterIds.join(), "char-mina");
+
   // A locking scene: one claim wins; the release brings the recap in once and then unlocks.
   reset();
   assert.equal(await provider.claim!("t1", { sceneChatId: "s1", characterIds: [], data: { lock: true } }), true);

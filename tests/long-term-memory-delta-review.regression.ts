@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
-import { mkdtemp, rm } from "node:fs/promises";
+import { randomUUID } from "node:crypto";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { runRegressionToCompletion } from "./regression-helpers.ts";
@@ -12,10 +13,11 @@ import type {
 async function main() {
   const source = "../packages/long-term-memory/src/engine/packages/server/src/services/long-term-memory";
   const { configurePackageRuntime } = await import(`${source}/package-runtime.ts`);
-  const { LongTermMemoryStorage } = await import(`${source}/storage.ts`);
-  const { previewLtmNoteForkRepair, applyLtmNoteForkRepair } = await import(`${source}/note-fork-repair.ts`);
-  const { renderSectionContributions } = await import(`${source}/section-contributions.ts`);
-  const { canUpdateLtmScopedTarget } = await import(`${source}/scoped-targets.ts`);
+  const { LongTermMemoryStorage } = await import(`${source}/persistence/storage.ts`);
+  const { previewLtmNoteForkRepair, applyLtmNoteForkRepair } = await import(`${source}/identity/note-fork-repair.ts`);
+  const { renderSectionContributions } = await import(`${source}/persistence/section-contributions.ts`);
+  const { canUpdateLtmScopedTarget } = await import(`${source}/extraction/scoped-targets.ts`);
+  const { ltmRejectedSuggestionsPath } = await import(`${source}/persistence/paths.ts`);
 
   const timestamp = "2026-09-20T00:00:00.000Z";
   const sourceHash = "a".repeat(64);
@@ -293,8 +295,51 @@ async function main() {
     await rm(rollback.dataDir, { recursive: true, force: true });
   }
 
+  // Issue #1328: a fork repair redirects rejected suggestions to the surviving note, as a rename does.
+  const redirect = await createRoot("redirect");
+  try {
+    await redirect.storage.createNote(noteInput("world_redirect_one", "world", "2026-01-01T00:00:00.000Z"));
+    await redirect.storage.createNote(noteInput("world_redirect_two", "world", "2026-01-02T00:00:00.000Z"));
+    const preview = await previewLtmNoteForkRepair(
+      { noteIds: ["world_redirect_one", "world_redirect_two"] },
+      { root: redirect.root },
+    );
+    const candidate = preview.candidates[0]!;
+    const archivedNoteId = candidate.noteIds.find((id: string) => id !== candidate.canonicalNoteId)!;
+    await writeFile(
+      ltmRejectedSuggestionsPath(redirect.root),
+      JSON.stringify([
+        {
+          id: randomUUID(),
+          fingerprint: "b".repeat(64),
+          source: { sourceNoteId: archivedNoteId, chatId: "chat-a" },
+          scope: { chatId: "chat-a" },
+          modes: ["roleplay"],
+          candidate: {
+            index: 0,
+            reason: "invalid_format",
+            message: "Rejected candidate.",
+            recovery: { noteId: archivedNoteId },
+          },
+          createdAt: timestamp,
+          lastSeenAt: timestamp,
+        },
+      ]),
+    );
+    await applyLtmNoteForkRepair(
+      { noteIds: candidate.noteIds, canonicalNoteId: candidate.canonicalNoteId, contentHash: candidate.contentHash },
+      { root: redirect.root },
+    );
+    const [redirected] = JSON.parse(await readFile(ltmRejectedSuggestionsPath(redirect.root), "utf8"));
+    assert.equal(redirected.source.sourceNoteId, candidate.canonicalNoteId);
+    assert.equal(redirected.candidate.recovery.noteId, candidate.canonicalNoteId);
+  } finally {
+    redirect.release();
+    await rm(redirect.dataDir, { recursive: true, force: true });
+  }
+
   console.log(
-    "Long-Term Memory delta review regression: provenance, scopes, lifecycles, namespaces, stale, and rollback ok",
+    "Long-Term Memory delta review regression: provenance, scopes, lifecycles, namespaces, stale, rollback, and redirects ok",
   );
 }
 

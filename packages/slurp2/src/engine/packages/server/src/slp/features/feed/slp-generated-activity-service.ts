@@ -16,6 +16,7 @@ import { canCreateGeneratedSlpInteraction } from "../../modules/feed/slp-interac
 import { type ConnectionAdmissionMode } from "../../../services/generation/connection-admission.js";
 import { normalizeSlpHandle } from "../../base/identity/slp-handle.js";
 import { normalizeSlpImagePrompt } from "../../base/media/slp-image-prompt.js";
+import { slurpLeastRecentGalleryImage } from "../../base/media/slp-generated-media-policy.js";
 import { canGenerateSlpActivityForAccountKind } from "../../modules/prompting/slp-prompt.js";
 import {
   generateSlpPostImage,
@@ -50,14 +51,18 @@ export type PreparedGeneratedSlpMedia = {
 };
 
 export async function pickGalleryAttachmentForAccount(input: {
+  db: DB;
   account: SlpAccount;
-  chats: ReturnType<typeof createChatsStorage>;
-  gallery: ReturnType<typeof createGalleryStorage>;
-  characterGallery: ReturnType<typeof createCharacterGalleryStorage>;
+  /** The posting account's own recent posts tell which gallery pictures it already showed. */
+  postingAccountId: string;
+  /** Pictures this batch already attached, newest first: those posts are not saved yet. */
+  batchUsed?: readonly unknown[];
 }) {
   if (input.account.kind !== "character") return null;
-  const characterImages = await input.characterGallery.listByCharacterId(input.account.entityId);
-  const characterImage = characterImages[0];
+  const recentPosts = await createSlurpStorage(input.db).listNoodlerPostsByAccount(input.postingAccountId, 50);
+  const used = [...(input.batchUsed ?? []), ...recentPosts.map((post) => post.metadata?.galleryAttachmentId)];
+  const characterImages = await createCharacterGalleryStorage(input.db).listByCharacterId(input.account.entityId);
+  const characterImage = slurpLeastRecentGalleryImage(characterImages, used);
   if (characterImage) {
     return {
       imageUrl: characterGalleryImageUrl(input.account.entityId, characterImage.filePath),
@@ -67,13 +72,13 @@ export async function pickGalleryAttachmentForAccount(input: {
       },
     };
   }
-  const chats = await input.chats.list();
+  const chats = await createChatsStorage(input.db).list();
   const chatIds = chats
     .filter((chat) => parseStringArray(chat.characterIds).includes(input.account.entityId))
     .map((chat) => chat.id)
     .slice(0, 20);
-  const chatImages = await input.gallery.listByChatIds(chatIds);
-  const chatImage = chatImages[0];
+  const chatImages = await createGalleryStorage(input.db).listByChatIds(chatIds);
+  const chatImage = slurpLeastRecentGalleryImage(chatImages, used);
   if (!chatImage) return null;
   return {
     imageUrl: galleryImageUrl(chatImage.filePath, chatImage.chatId),
@@ -106,6 +111,7 @@ export async function prepareGeneratedSlpMedia(input: {
   const activeCharacterReferenceAccounts = activeAccounts.filter((account) => account.kind === "character");
   const posts = new Map<SlpGeneratedRefresh["posts"][number], PreparedPostMedia>();
   const stagedMedia: StagedSlpPostMedia[] = [];
+  const galleryUsed: unknown[] = [];
   let remainingImagePrompts = input.settings.enableImagePrompts ? input.settings.maxImagesPerRefresh : 0;
 
   for (const generatedPost of input.generated.posts.slice(0, input.settings.maxGeneratedPostsPerRefresh)) {
@@ -165,12 +171,13 @@ export async function prepareGeneratedSlpMedia(input: {
     ) {
       try {
         const attachment = await pickGalleryAttachmentForAccount({
+          db: input.db,
           account,
-          chats: input.chats,
-          gallery: input.gallery,
-          characterGallery: input.characterGallery,
+          postingAccountId: account.id,
+          batchUsed: galleryUsed,
         });
         if (attachment) {
+          galleryUsed.unshift(attachment.metadata.galleryAttachmentId);
           prepared.imageUrl = attachment.imageUrl;
           Object.assign(prepared.metadata, attachment.metadata);
         }

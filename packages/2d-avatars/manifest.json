@@ -1,0 +1,39 @@
+{
+  "schemaVersion": 2,
+  "capabilityApi": {
+    "major": 1,
+    "minor": 73
+  },
+  "builtAgainst": {
+    "engineVersion": "2.5.0",
+    "engineCommit": "1cd98bc161fb12717cda5fb1f9871c3d14de36e2"
+  },
+  "id": "2d-avatars",
+  "name": "2D Avatars",
+  "version": "0.1.2",
+  "description": "Shows your characters and personas as animated 2D avatars that blink, talk, and change faces with each reply. Uses your sprites or a mesh avatar file. Set up each avatar on the agent's page in Agents, then add the Agent in Chat Settings → Agents → Misc Agents for Roleplay and Game modes.",
+  "engine": {
+    "min": "2.5.0",
+    "maxExclusive": "4.0.0"
+  },
+  "kind": [
+    "agent"
+  ],
+  "entrypoints": {
+    "agents": "agents.json"
+  },
+  "files": [
+    {
+      "path": "agents.json",
+      "sha256": "e561462342f6e9f2cb5b41ef90d6ddbf480bb3445d7e7cd6ea5e5165febff947",
+      "bytes": 3678
+    }
+  ],
+  "permissions": [
+    "agent-runtime",
+    "chat-read",
+    "storage",
+    "ui"
+  ],
+  "restartRequired": false
+}

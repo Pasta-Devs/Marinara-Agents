@@ -1,6 +1,7 @@
 import React, { useEffect, useState, type ReactNode } from "react";
 import { createRoot } from "react-dom/client";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { QueryClientProvider } from "@tanstack/react-query";
+import { queryClient } from "marinara:host";
 import { MemoryNagLocalizationProvider, translateMemoryNag, useMemoryNagTranslation } from "./localization";
 import { MemoryNagSettings } from "./MemoryNagSettings";
 import { MemoryNagToolbar } from "./MemoryNagToolbar";
@@ -8,9 +9,9 @@ import { MemoryNagTrackerPanel } from "./MemoryNagTrackerPanel";
 import { MEMORY_NAG_STYLES } from "./styles";
 import type { CapabilityElement } from "./types";
 
-const queryClient = new QueryClient({
-  defaultOptions: { queries: { retry: false, staleTime: 1000 } },
-});
+// Memory Nag's queries live in the Engine's cache (Pasta-Devs/Marinara-Agents#1487), under keys that start with
+// "memory-nag", and keep the defaults they had.
+queryClient.setQueryDefaults(["memory-nag"], { retry: false, staleTime: 1000 });
 
 class MemoryNagErrorBoundary extends React.Component<
   { element: CapabilityElement; children: ReactNode },

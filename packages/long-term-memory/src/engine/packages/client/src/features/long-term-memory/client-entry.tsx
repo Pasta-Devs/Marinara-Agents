@@ -1,14 +1,16 @@
 import React, { useEffect, useState, type ReactNode } from "react";
 import { createRoot } from "react-dom/client";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { QueryClientProvider } from "@tanstack/react-query";
+import { queryClient } from "marinara:host";
 import { ChatSettings } from "./ChatSettings";
 import { LongTermMemoryDetail } from "./LongTermMemoryDetail";
 import { LtmLocalizationProvider, translateLtm, useLtmTranslation } from "./localization";
 import type { CapabilityElement } from "./types";
 
-const queryClient = new QueryClient({
-  defaultOptions: { queries: { retry: false } },
-});
+// Long-Term Memory's queries live in the Engine's cache (Pasta-Devs/Marinara-Agents#1487), under keys that start with
+// "long-term-memory", and keep the defaults they had: no retry, and stale at once (the Engine's cache keeps a query
+// fresh for 30 s, so returning to a memory place would show its old list instead of asking again).
+queryClient.setQueryDefaults(["long-term-memory"], { retry: false, staleTime: 0 });
 
 class CapabilityClientErrorBoundary extends React.Component<
   { element: CapabilityElement; children: ReactNode },
@@ -49,7 +51,7 @@ class CapabilityClientErrorBoundary extends React.Component<
 function CapabilityClientErrorState({ onRetry }: { onRetry: () => void }) {
   const { t } = useLtmTranslation();
   return (
-    <div role="alert" className="mari-editor-panel m-4 space-y-3 p-4 text-sm">
+    <div role="alert" className="mari-editor-panel space-y-3 p-4 text-sm" style={{ margin: "1rem" }}>
       <p className="font-semibold">{t("errors.interfaceStoppedMessage")}</p>
       <button type="button" className="mari-editor-action min-h-11 px-3 font-semibold" onClick={onRetry}>
         {t("errors.tryAgain")}

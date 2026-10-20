@@ -16,7 +16,11 @@ const rewrite = slurp2Source(join(root, server, "services/slurp/slurp-image-prom
 // NOODLE_IMAGE_POST documents itself as terminal ("no LLM pass runs after it") and emits bare
 // unlabelled values for that reason. Handing the rendered template to the rewriter sent the
 // character context twice and asked it to preserve a personality trait list as a "visual fact".
-assert.match(images, /prompt: rawRewriteInput,/u, "the rewriter receives the draft, not the template");
+assert.match(images, /prompt: rewriteInput,/u, "the rewriter receives the draft, not the template");
+// ...and the bare draft, not the styled one: the style is passed as styleGuidance and compiled onto the
+// output, so a styled draft came back reworded and the picture carried its tags twice.
+assert.match(images, /const rewriteInput = redactIdentity\(draftPrompt\) \|\| rawRewriteInput;/u);
+
 assert.match(
   images,
   /const rawRewriteInput = redactIdentity\(reviewedOverride\?\.prompt \|\| compiledDraft\?\.prompt \|\| draftPrompt\);/u,
@@ -68,7 +72,7 @@ assert.match(images, /retryStoredPrompt\?: boolean;/u);
 assert.match(images, /const characterContext = redactIdentity\(/u);
 assert.match(images, /instructions: redactIdentity\(imagePromptInstructions\),/u);
 assert.match(images, /interpretationInstruction: input\.settings\.imagePromptInterpretation,/u);
-assert.match(images, /prompt: rawRewriteInput,/u);
+assert.match(images, /prompt: rewriteInput,/u);
 assert.match(
   images,
   /\(imagePromptInstructions \|\| characterContext \|\| styleGuidance\) &&\s*input\.settings\.enableImageInterpretation !== false &&\s*!skipInterpretation/u,

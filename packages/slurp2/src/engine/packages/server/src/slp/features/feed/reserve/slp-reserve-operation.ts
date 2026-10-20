@@ -28,9 +28,6 @@ import {
   type SlurpReservePollOutcome,
 } from "../../../modules/feed/slp-autopost-poll.js";
 import { logger } from "../../../../lib/logger.js";
-import { createCharacterGalleryStorage } from "../../../../services/storage/character-gallery.storage.js";
-import { createChatsStorage } from "../../../../services/storage/chats.storage.js";
-import { createGalleryStorage } from "../../../../services/storage/gallery.storage.js";
 import { pickGalleryAttachmentForAccount } from "../slp-generated-activity-service.js";
 import { slurpPlanSlot } from "../../../modules/feed/slp-planner.js";
 import { slurpCreatorStrategy } from "../../../modules/creators/slp-creator-strategy.js";
@@ -349,10 +346,14 @@ export async function prepareNextCreatorReservePost(db: DB, at = new Date()): Pr
         const attachment =
           source?.kind === "character"
             ? await pickGalleryAttachmentForAccount({
+                db,
                 account: source,
-                chats: createChatsStorage(db),
-                gallery: createGalleryStorage(db),
-                characterGallery: createCharacterGalleryStorage(db),
+                postingAccountId: selectedAccount.id,
+                // Prepared slots are not posts yet, so their pictures count as used here.
+                batchUsed: active
+                  .filter((item) => item.creatorAccountId === selectedAccount.id && item.state === "prepared")
+                  .map((item) => item.payload.metadata?.galleryAttachmentId)
+                  .reverse(),
               }).catch((error: unknown) => {
                 logger.warn(error, "[slurp] Could not attach a gallery image for %s", selectedAccount.displayName);
                 return null;

@@ -9,8 +9,17 @@ const agentsRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const engineRoot = resolve(process.env.MARINARA_ENGINE_ROOT || resolve(agentsRoot, "../Marinara-Engine"));
 const packageId = process.env.MARINARA_PACKAGE_ID;
 if (!packageId) throw new Error("MARINARA_PACKAGE_ID is required");
-if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(packageId)) {
-  throw new Error(`Invalid MARINARA_PACKAGE_ID: ${packageId}`);
+// MARINARA_PACKAGE_IDS (a comma list) installs more packages beside it, into the same installed.json.
+const packageIds = [
+  ...new Set([
+    packageId,
+    ...String(process.env.MARINARA_PACKAGE_IDS ?? "")
+      .split(",")
+      .map((id) => id.trim()),
+  ]),
+].filter(Boolean);
+for (const id of packageIds) {
+  if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(id)) throw new Error(`Invalid package ID: ${id}`);
 }
 if (!existsSync(resolve(engineRoot, "package.json"))) {
   throw new Error(`Compatible Marinara Engine checkout not found at ${engineRoot}`);
@@ -22,7 +31,14 @@ if (!existsSync(resolve(engineRoot, "package.json"))) {
 // shortly after boot; with the data dir outside `./data` (the previous `.tmp/...` location) that
 // re-snapshot unlinked the imported `server.mjs`, so `tsx watch` restarted the backend mid-suite and
 // tests raced an ECONNREFUSED window. `packages/server/data` is gitignored in the engine checkout.
-const dataRoot = resolve(engineRoot, "packages", "server", "data", "package-browser", packageId);
+const dataRoot = resolve(
+  engineRoot,
+  "packages",
+  "server",
+  "data",
+  "package-browser",
+  packageIds.length > 1 ? `${packageId}-and-${packageIds.length - 1}-more` : packageId,
+);
 const children = new Set();
 let shuttingDown = false;
 
@@ -100,7 +116,7 @@ async function startProject(name, clientPort, serverPort) {
     agentsRoot,
     engineRoot,
     dataDir,
-    packageId,
+    packageIds,
   });
   const child = spawnChild(process.execPath, [resolve(engineRoot, "scripts/dev.mjs")], {
     env: {

@@ -1,5 +1,208 @@
 # Slurp release notes
 
+## 0.3.52 — 2026-10-20
+
+- Fixed: an automatic post no longer reads a Creator's card or refreshes shared ideas with the AI while one of your chats on the same connection is replying, and an automatic post no longer makes your other automatic work (Noodle's too) wait 30 seconds. A new Creator's first automatic post no longer refuses itself.
+- Fixed: Write, Improve, Draft voice, Generate schedule, the page style and "Let <Creator> design it", a plan you ask for, an appearance you generate and picture descriptions for replies now take their turn on your connection like your chats, so automatic work waits for them.
+
+## 0.3.51 — 2026-10-20
+
+- Changed: Slurp now uses Marinara Engine's own settings, dialogs, notifications, Local Model and connection queue instead of carrying copies of them. It no longer resets your Engine settings or starts a second Local Model, its background work waits while a chat on the same connection is replying, and its notifications appear where you put yours. The download is smaller. It needs a Marinara Engine release after 2.5.0. On 2.5.0 and older, the version you already have keeps working. (#1478, #1487)
+- Changed: the sticker and emoji pickers no longer show the chat emoji-selection settings. Those belong to a chat, and Slurp has none.
+
+## 0.3.49 — 2026-10-19
+
+- Fixed: restoring a backup checks each media file more closely. Only PNG, JPEG, WebP, GIF and AVIF pictures whose file extension matches their contents come back; anything else is skipped and listed with the skipped entries (#1476).
+- Fixed: AVIF pictures in a backup were dropped on restore. They now come back like the other formats.
+- Changed: Slurp sends every stored picture (posts, messages, avatars, banners, ads) as the image type its contents show (#1476).
+
+## 0.3.48 — 2026-10-19 [highlight]
+
+- Changed: Creators whose character has a Conversation Schedule now follow it. Slurp only read a bare "06:00" and the Engine stores ranges ("06:00-08:00"), so every block was dropped and availability was guessed from the last post. Ranges, including ones past midnight, are now read as the Engine reads them. Time between blocks is free time, online; a block's status decides (offline and dnd are away, online and idle answer); a block without one falls back to its activity words. The post brief's day plan reads the same ranges (#1436).
+- Fixed: a promised follow-up could be postponed forever while the Creator read as away. More than 12 hours past its first due time, it now goes out at its next check even if they are away. A fan waiting for a reply, a cool-off and night quiet still hold it (#1436).
+- Fixed: a name only matches inside one tag or line ("summer, rain" is not "Summer Rain"), and companion reference pictures come only from the companions found in the scene.
+
+## 0.3.47 — 2026-10-16
+
+- Fixed: in tag mode, a Creator's identity tags ("Always in their pictures" or the card name) stayed where the prompt writer put them, often behind the count and body tags. Whole tags now move to the front of the Creator's part, once, in the writer's spelling (#1428).
+- Fixed: "The image model knows this character" added the card name a second time when the writer used tag order ("ryuuzaki umi" for "Umi Ryuuzaki"). Names now match in any word order.
+- Fixed: a companion the writer named by their card or tag name got no look, no reference picture, and kept the one-person rule. Companions now match on display or card name, whole words in any order (#1429).
+
+## 0.3.46 — 2026-10-15
+
+- Added: Creators react to each other. Each hour a character Creator may like or comment on another Creator's public post (about two a day), persona Creators' posts included. Free canned copy; no messages, tips or subscriptions between Creators.
+- Fixed: the browsing persona was saved per browser, so one install could show an empty Inbox on one device and 87 unread on another. The pick is now a Slurp setting shared by every device; an older per-browser pick is saved once.
+- Fixed: the custom tag field greyed out with no reason when a draft had filled all eight tags. It now says so.
+- Fixed: Hinted profiles checked tags joined with the bio, so words from separate fields could add up to a copied source detail. Tags are checked one at a time, and the save error names the tag that leaks.
+
+## 0.3.45 — 2026-10-15
+
+- Fixed: picture prompts carried the style profile's tags twice. The prompt writer now gets the bare draft; the style is compiled onto its result once.
+- Fixed: the gallery fallback picked the first gallery image every time. It now picks the image this Creator showed least recently.
+- Added: "Draw missing avatars and banners" in Settings › Images. Off stops background drawing; Open Creators still copy their card's pictures. On for existing installs; first-run setup sets it from its images choice.
+- Added: "Caption instructions" in Settings › Images. Blank uses a Slurp default that describes people, clothes, pose, place and text, and leaves out the art style.
+- Added: "Always in their pictures" per Creator. The text opens the Creator's part of every picture prompt, after the style tags, in place of the card name.
+- Fixed: the post writer no longer dresses Creators in worn-out, faded or shabby clothes unless the card or caption asks for it.
+
+## 0.3.44 — 2026-10-15
+
+- Added: trends. A post that takes off (shown likes; your likes, unlocks and tips count most), your own page's hits, a platform trend, or Stir "Start a trend" (ready-made trends, a starter, what to lean into) starts one. Stir "Steer a trend" changes what it leans into. The right Creators join, each at their own spice level and limits, quote the origin post, peak, then cool; some roast it, some never join. The starter gains followers.
+- Added: Discover "Trending on Slurp" row, a trend chip on posts, and trend search.
+- Changed: the invented "silly trend" daily-life moment is gone; trend posts skip the feed spice damping.
+
+## 0.3.43 — 2026-10-15
+
+- Fixed: long DMs end at a sentence or word (up to 2400 characters), and commission quotes use the Creator's own prices.
+- Fixed: Cancel ends a subscription to a removed Creator at once.
+- Fixed: fans react to what a picture shows, not its art style.
+- Fixed: post drift. Tips no longer teach a guessed taste, and a spicy kind or taste that other Creators posted that day steps aside, so the whole feed is not in the shower at once. Spice level is unchanged.
+- Changed: family is never paired up on its own. Cards that say they are lovers, or the player in Stir, still can.
+- Fixed: clearer "monogamous" message in Stir, with the Relationships switch on the Creator sheet.
+- Fixed: work mode no longer blurs the coin and G's face; Couples pages are not a missing source; the sign-up scene names an unreachable connection.
+- Fixed: a scheduled post goes up once, and a shared-page post waits its turn.
+
+## 0.3.42 — 2026-10-15
+
+- Added: chats with "Carryover to chats" on also learn the character's Slurp storyline, love life, how well they know you, and the Slurp memories a chat with you may read.
+- Added: Carryover settings show in how many chats with your Creators "Include Slurp activity" is on.
+- Fixed: a scene started from a DM runs on the connection Slurp planned it with, not the Engine's plain default.
+- Fixed: an unreadable scene plan is asked for once more before "The scene plan got lost" shows.
+- Fixed: "Start the scene" shows an error when the Engine's scene host is missing.
+- Fixed: lorebook entries set to "At Depth" reach Slurp DMs and posts.
+- Added: Deep details has a "Lore" section with the entries a reply used or had no room for.
+
+## 0.3.41 — 2026-10-14
+
+- Faster: Slurp shows character and persona avatars as small copies instead of the full card picture. On opening Slurp the feed downloaded about 16 MB of avatar pictures (1–2.5 MB each, shown 44 px wide), and Discover about 14 MB more; those downloads also held up the feed's other requests. The small copies are made once and kept in Slurp's own media folder.
+- Faster: the "Report" sheet of a post or a reply is built only when you open it. Before, every post card and reply built a closed copy, which made the feed and Creator pages slower to open.
+- Faster: the ambient background colour measures the pictures on screen only after the screen has drawn, so opening a screen no longer forces extra layout work.
+
+## 0.3.40 — 2026-10-14
+
+- Changed: Slurp follows a Creator's gender instead of calling everyone "she". Drama packs use the gender of whoever plays each role ("{her:he}" tokens), and pack names and descriptions no longer assume a woman. Post, DM and scene prompts tell the model the Creator's pronouns. A Creator without a gender is "they".
+- Added: a "Clothing style" choice in the Creator's stage profile: Auto, Feminine, Masculine or Neutral. Auto follows gender. It decides what a "lingerie" spice post is: lingerie for feminine, an underwear shoot with briefs for masculine, either for neutral. Male Creators no longer get bra-and-panties shoots unless their style is Feminine. The post prompt also names the style.
+- Added: a picture of a Creator whose appearance text does not say their sex starts with "Male." or "Female." from their gender, so the image model stops defaulting to a woman.
+- Changed: the stage profile field hints read "he", "she" or "they" from the gender you picked.
+
+## 0.3.39 — 2026-10-14
+
+- Fixed: on Android, choosing a picture for a post (in the composer, or "replace" while editing a post) no longer opens the system photo picker, which lists only a few albums such as Camera, Screenshots and Downloads. Android now offers its full file browser, so every folder is reachable. A file that is not a picture still gets "Choose an image file.". Other platforms keep the picture-only file dialog. (#1378)
+
+## 0.3.38 — 2026-10-13
+
+- Added: in a Creator's settings, "Appearance for pictures" has a new button, "Use the card's image tags". It shows only while the linked character or persona has the Image Appearance Override switched on and filled in, and it saves those tags as the Creator's own appearance. It asks first when that replaces an appearance you wrote. "Use linked appearance" (or "Clear override") removes it again. (#1366)
+
+## 0.3.37 — 2026-10-13
+
+- With a Claude (Subscription) connection, Slurp no longer makes a hidden second request to name each session, and a request now stops with an error if Claude Code turns on claude.ai connectors. With a Marinara Engine release after 2.5.0, Claude Code also no longer adds your account email, the date or this computer's details to the prompt. Engine 2.5.0's Claude Code still adds them, and the server log warns about it until you update Marinara. (#1313)
+- Changed: avatar references are allowed for SpicyAPI edit models (model IDs ending in /edit) and still left out for its text-to-image models. Slurp's bundled image code cannot call SpicyAPI yet, so SpicyAPI pictures do not work in Slurp until it can. (#1337)
+
+## 0.3.36 — 2026-10-13
+
+- Fixed: a Creator's bio and stage voice now steer what she posts about. The post planner reads them beside the character card (hidden identities stay hidden), so a hobby named only in the bio, such as cosplay, becomes post subjects. The post prompt also says that interests named in the bio and stage voice count. (#1358)
+- Changed: the no-repeat rule no longer blocks a theme that the bio, stage voice, or card names as what the Creator does. A new setting, framing, and look each time is still required, and the same outfit or wording is still a repeat. (#1358)
+
+## 0.3.35 — 2026-10-13
+
+- Added: "The image model knows this character" can be chosen while adding a Creator, in Quick setup, in the customise path, in the role-play sign-up and in the manual Create flow. It starts on, like before, and is saved with the new Creator. You can still change it later in the Creator's settings. (#1353)
+
+## 0.3.34 — 2026-10-13
+
+- Fixed: in a chat, a Creator could not see what was inside her own locked posts: the message prompt replaced the body with "[paid post, contents not repeated here]". She now gets the real text, and the existing locked and already-unlocked fields still say whether this fan has seen it. (#1351)
+- Fixed: lorebook entries never reached messages. A reply now gets matching entries from the recent conversation the way posts do (same setting, same Creator scoping), and they show in the message Deep details. A failed scan never fails the message. (#1351)
+- Changed: the fan's own Deep details view masks the body of a locked post that fan has not unlocked; the Creator's view shows it. (#1351)
+
+## 0.3.33 — 2026-10-13
+
+- Fixed: on a reasoning model (for example GLM) the picture writer and seven other short model calls (Page design, Page style, look reading, fan voice, Stir plans, writing help) sent a small fixed output limit and ignored the max tokens set on the connection, so the model spent it all thinking and returned nothing ("Image prompt rewrite unusable"). They now use the connection's max tokens when it is larger than their small default. The warning also names the limit that was sent. (#1349)
+
+## 0.3.32 — 2026-10-13
+
+- Fixed: the picture writer's result was thrown away as "broke the scene's content level" when it only repeated a word from the Creator's own look or the draft (for example "breasts") on a clothed scene. A word the writer was handed in those two no longer counts as an escalation; limits and the content policy do not count as a source. (#1347)
+- Fixed: when the writer's result was unusable, a long look filled the whole length cap of the fallback prompt, so the picture got an appearance and no scene. The look now keeps a bounded share and the scene keeps the rest.
+
+## 0.3.31 — 2026-10-13
+
+- Changed: the guided post (New post, and Stir's "Draft post") is now written by the same generator as the page's own posts, with your wish as the direction. The draft gets the bio, stage voice, brief, spice level, image directions and live events, and comes back as a title, a text and a picture of its own. Before, your wish went word for word into the picture.
+- Changed: one composer. The picture is on top, then who sees the post, then one switch for the text: "Write it myself" or "Guided". A guided draft fills the normal title, text and picture; the separate preview and its "Edit" step are gone. A photo you add stays, and the text is written to go with it.
+- Added: "Add from Slurp" on Guided: a storyline of the page, a saved idea (posting the draft uses it up) and a wardrobe look for the picture. Brand deals and collabs stay.
+- Known limit: posting a draft written for a storyline does not move the storyline to its next chapter.
+
+## 0.3.30 — 2026-10-12
+
+- Fixed: Write, Improve, the guided post and "Draw" gave a Creator with a hidden or hinted identity no brief at all, so the text was written "in their voice" with nothing about them. They now get the same brief as an open Creator, read at their own disclosure level (no backstory) and with the real name and handle replaced before it reaches the model.
+- Changed: Write, Improve and the guided post now also read the page's bio and stage voice, the way a normal post does.
+
+## 0.3.29 — 2026-10-12
+
+- Changed: when the image prompt rewrite gives nothing, the "Image prompt rewrite unusable" server warning now says why: an empty answer, an answer cut off at the token limit, an answer that is not valid JSON or has no "prompt" field (with a short quote of it and the model name), no text connection, a failed request, or a rewrite that broke the scene's content level. Before, every case said "the rewrite did not run or returned nothing".
+
+## 0.3.28 — 2026-10-12
+
+- Added: Deep details for chat messages. Hold a Creator's reply (or right-click it) and choose "Deep details" in the Message menu to see what went into it: the chat facts the reply was built from (relationship, stance, heat, memories), the model, the full prompt and the raw answer. It opens in the same window as a post's Deep details.
+- Slurp keeps these details for the newest 50 replies of each chat. Older replies, and replies written before this update, do not offer the item. Clearing a chat removes its details.
+
+## 0.3.27 — 2026-10-12
+
+- Added: "Page style" in a Creator's Posting settings says in plain words how they post (for example "Polished · nearly always pictures · automatic"). The Overview's Posting tile shows the same line. It replaces "Posting strategy"; the number fields are under "Fine-tune page style".
+- Added: "Suggest from card" under Page style reads the Character card and proposes a fitting page style, with a short reason and "See exact changes". "Use this page style" applies it; "Keep current" changes nothing. A page note you wrote is never replaced, and Use is refused if a setting changed in the meantime.
+- Changed: "Posts without pictures" is now "Lean towards words", without a percent sign: it was never a share of posts. Saved values work as before.
+
+## 0.3.26 — 2026-10-12
+
+- Added: Creators keep what is always true about them. When Slurp reads a card it also notes the few facts that must hold everywhere (how they communicate, senses and body, languages, firm limits, who runs a shared page), and every post, Story, chat and reply carries them, with no extra AI call. Before, a fact late in the card was missing from most requests.
+- Added: "Always true" in a Creator's Life details, to see and correct those facts. Life details also show with "Model's choice" post ideas.
+- Changed: your Life details edits stay when the card changes: what you added stays, what you removed stays out, the rest follows the card. "Read card again" still clears them.
+- Changed: the card reading covers more of a long card, and cards with 。！？ sentence ends or long one-line attribute lists are no longer cut off.
+- Fixed: a failed read of stored Life details could erase every Creator's details; saving now reports the error.
+
+## 0.3.25 — 2026-10-12
+
+- Fixed: "Enhance image prompts" no longer drops a usable answer from the prompt model. An answer with a line break inside the prompt, a trailing comma, or text around the JSON object was read as "no prompt", and the picture went out with the capped draft. An answer that is cut off still falls back.
+- Fixed: when the AI budget is Off, the "Enhance image prompts" row is off, or its daily limit is reached, the picture now goes out with the full draft, as with enhancing switched off. Before, each such picture logged "Image prompt rewrite unusable" and its draft was cut to 1,500 characters (player report).
+
+## 0.3.24 — 2026-10-11
+
+- Changed: in a picture with a second Creator (a partner, a collab), that person now gets their own look in the picture prompt, labelled with their name and placed after the posting Creator's look. Before, their look reached only "Enhance image prompts", so with it off the image model had nothing to draw them from.
+- Changed: the second Creator's "The image model knows this character" switch now applies to pictures on somebody else's page too: their card name goes along (as a tag for tag models) when their identity is open.
+
+## 0.3.23 — 2026-10-11
+
+- Changed: with "The image model knows this character" on, the name now comes after your style profile's tags and in front of the character's look, instead of at the very start of the picture prompt. The inserted look follows the style tags too.
+
+## 0.3.22 — 2026-10-11
+
+- Fixed: reports are now included in backups and restores.
+- Fixed: "Create posts now" names the Creators it skipped or could not post for again, instead of only a count.
+- Fixed: accepting a commission twice in a row (a double tap, or a retry) no longer draws the picture twice.
+- Fixed: chat and commission responses to the fan no longer include a picture's stored file location.
+- Fixed: the settings search box in a settings section now stays reachable on a phone instead of disappearing.
+- Internal: a Slurp Support desk tick checks its throttle against the tick's own time instead of the wall clock.
+
+## 0.3.21 — 2026-10-11
+
+- Stir's Recent plays follows a collab you suggested or pushed: waiting for an answer, agreed, coming up, turned down (with the reason), blocked, or up on both pages. A posted collab opens its joint post; a deleted post or a collab Slurp no longer keeps says so.
+- A collab request still waiting shows Make it happen, which opens the usual preview before anything changes.
+- Undo is no longer offered once the joint post is on its way or up; published posts are not taken back.
+
+## 0.3.20 — 2026-10-10
+
+- Choose what a breakup leaves behind: keep the usual history, move on while remembering the relationship without ongoing pining or breakup drama, or forget the relationship in future posts and chats. Stir can also move on or forget an existing ex relationship. Published posts and messages stay; Undo restores the previous choice.
+
+## 0.3.19 — 2026-10-10
+
+Stop a Creator from texting again after being left on read.
+
+- New Settings › Messaging toggle, off by default: "Stop after one unanswered text." A Creator may write first once (an opener, a check-in, a recurring update, a drama question), then nothing more until you actually reply. Replies to your messages, and anything a Creator already owes you (a promise, a reminder, a finished commission), still arrive on schedule.
+
+## 0.3.18 — 2026-10-08
+
+Engine macros in Slurp, fewer recycled pictures.
+
+- Character cards and wardrobe looks resolve Engine macros such as `{{random::red::green::blue}}`, `{{char}}`, `{{user}}` and `{{#if}}`. A wardrobe look rolls again for each post.
+- Macros that need a chat, such as `{{input}}` or chat variables, resolve to nothing in Slurp.
+- Picture reuse: each earlier picture goes up again at most once, and a repost is never the source of another repost. New setting in Settings › Publishing: Off, Rare or Regular (the old behavior). Off stops automatic reuse; a reuse the player picks still works.
+
 ## 0.3.17 — 2026-10-06
 
 Spice in one place, user reports, speed.

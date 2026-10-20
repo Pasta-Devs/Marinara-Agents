@@ -47,6 +47,7 @@ import type { SlpActionParsed, SlpStirWorld } from "../../../../../shared/src/sl
 export { isSlurpTieLever, type SlurpTieUndo } from "../../modules/projects/slp-stir-tie-preview.js";
 import {
   slurpEndBond,
+  slurpSyncExBonds,
   slurpSetBond,
   type SlurpBond,
   type SlurpBondError,
@@ -72,10 +73,14 @@ const WHY: Record<
   notInto: [409, "Neither romance nor dating is something they are looking for."],
   noDating: [409, "One of them does not date, and would not start for this."],
   orientation: [409, "They are not each other's type."],
+  family: [409, "Their cards say they are family, so it does not happen on its own."],
   romance: [409, "Their romance settings keep these two apart."],
   pageOpen: [409, "Their shared page is already open."],
   polyOff: [409, "Polyamory is off in Settings › Stir."],
-  mono: [409, "One of them is monogamous and already with someone."],
+  mono: [
+    409,
+    "One of them is monogamous and already with someone. Set Relationships to Polyamorous in Stir for each of them, your own page too.",
+  ],
   notTogether: [409, "They are not dating yet."],
   full: [409, "There is no room for that: the couple is four people, or they have enough close friends."],
 };
@@ -242,10 +247,15 @@ export async function runSlurpTieLever(
       return { ok: true, value: { coupleId: id }, undo: { kind: "removeCouple", id } };
     }
     case "steer-couple": {
-      const { coupleId, steer } = input as SlpActionParsed<"steer-couple">;
+      const { coupleId, steer, aftermath } = input as SlpActionParsed<"steer-couple">;
       const before = (await readSlurpCreatorTiesDocument(db)).couples;
       const previous = before.find((entry) => entry.id === coupleId);
-      const next = await onCouples((couples) => slurpSteerCouple(couples, coupleId, steer, { at, creators }));
+      const next = await mutateSlurpCreatorTies<SlurpCouple[] | SlurpCoupleError>(db, (document) => {
+        const result = slurpSteerCouple(document.couples, coupleId, steer, { at, creators, aftermath });
+        return typeof result === "string"
+          ? { document, result }
+          : { document: { ...document, couples: result, bonds: slurpSyncExBonds(document.bonds, result, at) }, result };
+      });
       if (!next || typeof next === "string") return fail(next ?? "notFound");
       // A breakup closes their shared page too (the Studio route did the same); that is not undone.
       if (steer === "breakUp") await closeSlurpCouplePages(db, before, next);
@@ -321,7 +331,16 @@ export async function readSlurpStirTies(
         couples
           .filter((couple) => !slurpCoupleActive(couple))
           .slice(-6)
-          .map((couple) => ({ id: couple.id, aId: couple.aId, bId: couple.bId, stage: couple.stage, page: null })),
+          .map((couple) => ({
+            id: couple.id,
+            aId: couple.aId,
+            bId: couple.bId,
+            ...(couple.moreIds?.length ? { moreIds: couple.moreIds } : {}),
+            stage: couple.stage,
+            page: null,
+            // #1293: the Stir "Nudge a couple" sheet needs this to offer only the unused choice.
+            ...(couple.aftermath ? { aftermath: couple.aftermath } : {}),
+          })),
       ),
     collabs: ties.collabs
       .filter(slurpCollabOpen)

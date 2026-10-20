@@ -24,7 +24,6 @@ const generation = read(`${server}/services/slurp/slurp-garnish-generation.servi
 const garnishContext = read(`${server}/services/slurp/slurp-garnish-context.ts`);
 const world = read(`${server}/services/slurp/slurp-world.operation.ts`);
 const followUps = read(`${server}/services/slurp/slurp-follow-up-scheduler.service.ts`);
-const messages = read(`${server}/services/slurp/slurp-message.operation.ts`);
 const messageRoutes = read(`${server}/routes/slurp-messages.routes.ts`);
 const storage = read(`${server}/services/storage/slurp.storage.ts`);
 const postCard = read(`${client}/components/slurp/SlurpPostCard.tsx`);
@@ -33,16 +32,19 @@ const coin = read(`${client}/components/slurp/SlurpCoin.tsx`);
 const english = read(`${client}/localization/locales/en.json`);
 
 assert.match(home, /items\[Math\.floor\(index \/ inlineAdEvery\) % items\.length\]/u);
-assert.match(home, /const emptyWallAd = adForIndex\?\.\(0\)[\s\S]*?<SlurpInlineAdTile/u);
-assert.match(home, /side=\{<SlurpCreatorPostCard[\s\S]*?imageUrl: null[\s\S]*?surface="profile"/u);
+assert.match(home, /const emptyWallAd = inlineAdsQuery\.data\?\.items\?\.\[0\] \?\? null;[\s\S]*?<SlurpInlineAdTile/u);
+// The dialog's side card hides the picture with `hideImage`; it must not blank `imageUrl`, because
+// "Download post card" in the card's own menu still reads it.
+assert.match(home, /side=\{<SlpPostCard post=\{post\} ctx=\{ctx\} surface="dialog" hideImage \/>\}/u);
 assert.match(postCard, /export function createSlpLightboxImage\(id: string, url: string, prompt = ""\)/u);
 assert.match(postCard, /chatId: "noodle",[\s\S]{0,120}prompt,/u);
 assert.doesNotMatch(inlineAd, /if \(!promotion\.imageUrl\) return null/u);
 assert.match(coin, /DEFAULT_SLURP_SUBSCRIPTION_PRICE = 12/u);
-assert.match(english, /ui\.slurp\.settings\.backstage\.landing\.stories": "Stories"/u);
+// The Stories landing tile became the storylines tile (planAutomation); the label must stay defined.
+assert.match(english, /ui\.slurp\.settings\.backstage\.landing\.planAutomation": "Storylines"/u);
 assert.match(garnishContext, /contentCeiling: input\.contentCeiling/u);
 assert.match(generation, /z\.enum\(\["tame", "suggestive", "explicit"\]\)\.catch\("tame"\)/u);
-assert.match(shell, /import \{ SLURP_LOGO_SRC \} from "\.\/slurp-logo"/u);
+assert.match(shell, /import \{ SLURP_LOGO_SRC \} from "\.\/slp-logo"/u);
 
 assert.match(ads, /async canAct[\s\S]*?state\.recentAdIds\.includes\(adId\)[\s\S]*?active\.some/u);
 assert.match(routes, /if \(!\(await ads\.canAct[\s\S]*?return reply\.code\(404\)[\s\S]*?earnCoins/u);
@@ -50,12 +52,26 @@ assert.match(home, /const feedIsOnScreen = Boolean\(scope\)[\s\S]*?if \(feedIsOn
 // A set tip goal must not take the composer's place: the goal bar and the creator tools share
 // `preTabsContent`, and a ternary between them left Create post and Add story opening nothing.
 assert.doesNotMatch(home, /\) : managedCreator && !editing \? \(/u);
-assert.match(home, /\{goalForViewer && !editing && \(/u);
-assert.match(home, /\{managedCreator && !editing && \(\s*<section data-slurp-creator-tools/u);
+assert.match(home, /editing \? null : \([\s\S]*?\{goalForViewer && \(/u);
+// Creator tools no longer couple to `!editing` through their own ternary (the line above), but
+// the coupling must still exist: they must stay nested inside the same `editing ? null : (...)`
+// block as the goal bar, so editing still hides them, not just unconditionally render them.
+// Slice the guarded block (up to the next prop), so a tools card rendered after the block closes
+// cannot satisfy the check.
+const guardStart = home.search(/afterTabsContent=\{\s*editing \? null : \(/u);
+assert.ok(guardStart >= 0, "the editing guard around the profile's after-tabs content must exist");
+const guardedBlock = home.slice(guardStart, home.indexOf("postList={cards}", guardStart));
+assert.match(
+  guardedBlock,
+  /\{managedCreator && <SlpCreatorToolsCard model=\{model\} \/>\}/u,
+  "creator tools must stay inside the editing-hides-everything block",
+);
+assert.match(home, /data-slurp-creator-tools/u);
 
 assert.doesNotMatch(splash, /initialFocusRef|hideCloseButton/u);
 assert.match(splash, /topRef\.current\?\.focus\(\{ preventScroll: true \}\)/u);
-assert.match(splash, /panelClassName="\[&>div:first-child>button\]:hidden"/u);
+// The close button is disabled, not hidden, when there is no onLeave to return to.
+assert.match(splash, /closeDisabled=\{!onLeave\}/u);
 
 assert.match(world, /MAINTENANCE_KEY = "slurp2\.world\.maintenance"/u);
 assert.match(world, /const maintenanceSince = maintenanceMark \?\? since/u);
@@ -73,7 +89,9 @@ assert.match(
 // Availability reads the newest *published* post. The filter belongs in the query: a caller that
 // fetches one row and filters drafts out afterwards gets nothing when the newest post is a draft,
 // which reads as a Creator who has never posted.
-for (const source of [followUps, messages, messageRoutes]) {
+// The availability read moved from the message operation into slp-thread-stance.ts.
+const availability = read(`${server}/slp/features/messages/slp-thread-stance.ts`);
+for (const source of [followUps, availability, messageRoutes]) {
   assert.match(source, /getNoodlerLatestPublishedPost\(creator\.id\)/u);
   assert.match(source, /latestPost\?\.createdAt \?\? null/u);
   assert.doesNotMatch(source, /listNoodlerPostsByAccount\(creator\.id, 1\)/u);

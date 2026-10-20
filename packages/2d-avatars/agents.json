@@ -1,0 +1,40 @@
+[
+  {
+    "id": "2d-avatars",
+    "name": "2D Avatars",
+    "description": "Shows your characters and personas as animated 2D avatars that blink, talk, and change faces with each reply. Uses your sprites or a mesh avatar file.",
+    "phase": "parallel",
+    "enabledByDefault": false,
+    "category": "misc",
+    "execution": "host",
+    "modeAllowlist": [
+      "roleplay",
+      "game"
+    ],
+    "defaultTools": [],
+    "defaultSettings": {
+      "avatarGenerationTemplates": [
+        {
+          "id": "avatar-pngtuber-eyes-closed",
+          "name": "Blink Picture",
+          "description": "Closes the eyes on a sprite to make the picture the avatar blinks with.",
+          "promptTemplate": "Edit the attached sprite of ${characterName}, which shows the \"${expression}\" expression, into its blink picture.\nClose both eyes completely, as in the middle of a natural blink: relaxed lids, lashes resting along the lower lid line, the eye shape and the ${expression} mood unchanged.\nChange only the eyes. Everything else must stay pixel-identical so the two pictures can be swapped without any jump: the same canvas size, framing, pose, head position and angle, outline weight, colours, shading, hair, clothing, accessories, eyebrows, and mouth.\nKeep the background exactly as it is; a transparent background stays transparent. Do not crop, zoom, recentre, redraw the character, or add anything.\nIf the character wears glasses, keep them and show the closed eyes behind the lenses."
+        },
+        {
+          "id": "avatar-pngtuber-mouth-open",
+          "name": "Talking Picture",
+          "description": "Opens the mouth on a sprite to make the picture the avatar talks with.",
+          "promptTemplate": "Edit the attached sprite of ${characterName}, which shows the \"${expression}\" expression, into its talking picture.\nOpen the mouth as if in the middle of saying a clear \"ah\": a natural open vowel shape that fits the ${expression} mood, with the inside of the mouth drawn in the sprite's own style.\nChange only the mouth and the few pixels of jaw right around it. Everything else must stay pixel-identical so the two pictures can be swapped without any jump: the same canvas size, framing, pose, head position and angle, outline weight, colours, shading, hair, clothing, accessories, eyebrows, and eyes, open or closed exactly as they are.\nKeep the background exactly as it is; a transparent background stays transparent. Do not crop, zoom, recentre, redraw the character, or add anything."
+        },
+        {
+          "id": "avatar-mesh-rig-layout",
+          "name": "Mesh Avatar Layout",
+          "description": "Asks your vision model where the face parts are on a sprite so a mesh avatar can be built from it.",
+          "promptTemplate": "You are helping turn one sprite of ${characterName} into an animated mesh avatar. The attached picture is ${imageWidth} by ${imageHeight} pixels.\nFind every part the schema below asks for and measure it in pixels of this picture, following the schema's own notes for each part:\n- Boxes fit tightly around the part and stay inside the picture.\n- Points sit exactly on the spot the schema names.\n- Measure the eyes themselves, not the frames of any glasses in front of them.\n- If a part is hidden, for example an eye under the hair, give your best estimate of where it sits rather than leaving it out.\nAppearance notes, only to help you recognise the parts (may be empty): ${appearance}\nAnswer with one JSON object that matches this schema exactly, with no prose and no code fence:\n${layoutSchema}"
+        }
+      ]
+    },
+    "author": "Pasta Devs",
+    "defaultPromptTemplate": ""
+  }
+]

@@ -68,6 +68,9 @@ assert.deepEqual(
     "new-look",
     "set-tip-goal",
     "start-storyline",
+    // 0.3.44: trends.
+    "start-trend",
+    "steer-trend",
     // 0.3.5: polyamory and the Slurp Support desk.
     "add-to-couple",
     "cash-favour",
@@ -164,6 +167,8 @@ const improve = buildSlpAssistTextMessages({
   note: "funnier",
   name: "Mira",
   brief: "A climbing coach who calls everyone champ.",
+  bio: "Chalk, coffee, no excuses.",
+  stageVoice: "Loud and kind.",
 });
 assert.equal(improve.length, 2);
 assert.match(improve[0]!.content, /Write it as Mira, in their own voice/u);
@@ -171,6 +176,17 @@ assert.match(improve[0]!.content, /Improve the current text/u);
 assert.match(improve[0]!.content, /at most 2000 characters/u);
 assert.match(improve[0]!.content, /never as instructions/u, "the player's words are quoted content");
 assert.match(improve[1]!.content, /# Who Mira is\nA climbing coach/u, "the 7b0 brief reaches the prompt");
+assert.match(
+  improve[1]!.content,
+  /# Mira's page\nBio: Chalk, coffee, no excuses\.\nStage voice: Loud and kind\./u,
+  "the page's bio and stage voice reach the prompt, like a post",
+);
+assert.doesNotMatch(
+  buildSlpAssistTextMessages({ mode: "improve", field: "bio", text: "old", bio: "old", stageVoice: "Loud." })[1]!
+    .content,
+  /Bio: old/u,
+  "the field being written is not its own context",
+);
 assert.match(improve[1]!.content, /# Current text\nnew climbing shoes!!/u);
 assert.match(improve[1]!.content, /# What the player wants\nfunnier/u);
 const write = buildSlpAssistTextMessages({ mode: "write", field: "life", text: "ignored", name: "Mira", brief: "b" });
@@ -218,7 +234,11 @@ assert.match(
   /An everyday moment from Kai's life\./u,
 );
 const service = server("features/assist/slp-assist-service.ts");
-assert.match(service, /resolveSlurpCreatorFlavour\(db, \{[\s\S]*?spice,/u, "draw reads the 7b0 brief");
+assert.match(
+  service,
+  /briefFor\(db, creator, input\.target === "story" \? "story" : "post", spice\)/u,
+  "draw reads the 7b0 brief",
+);
 assert.match(
   service,
   /postContent: options\.creatorDetails \? \[brief, input\.context/u,
@@ -228,7 +248,7 @@ assert.match(service, /negativePromptAdditions: slurpImageNegativePrompt\(level\
 assert.match(
   service,
   // Slice I (user): public pictures stop below nudity; `slurpPublicSexualLevel` is that public level.
-  /input\.target === "avatar" \|\| input\.target === "cover" \? slurpPublicSexualLevel\(spice\.level\) : spice\.level/u,
+  /input\.target === "avatar" \|\| input\.target === "cover" \|\| post\.access === "public"\s*\? slurpPublicSexualLevel\(spice\.level\)\s*: spice\.level/u,
   "a profile picture or cover is public: the level a non-subscriber sees",
 );
 assert.match(service, /generateCreatorPostImage\(\{/u, "the Creator's own image pipeline");
@@ -237,11 +257,21 @@ assert.match(service, /finally \{\s*unlinkCreatorMedia\(mediaPath\);/u, "a drawn
 // 0.3.6: Write and Improve are the player's tap: never on the AI budget, never blocked by its mode.
 assert.doesNotMatch(service, /claimSlurpModelBudget|slurpModelWorkerAllows/u, "the player's own tap is off the budget");
 assert.match(service, /playerAsked: true/u, "a drawn picture's prompt rewrite is off the budget too");
+// A concealed Creator keeps their voice: the brief is read at their disclosure level and protected.
+assert.match(service, /creator && SLP_ASSIST_FIELDS\[input\.field\]\.voice !== "player"/u);
+assert.doesNotMatch(service, /disclosureMode: "open"/u, "the brief is never read as an open identity");
 assert.match(
   service,
-  /creator\?\.open && SLP_ASSIST_FIELDS\[input\.field\]\.voice !== "player"/u,
-  "open identities only",
+  /protectCreatorGeneratedIdentity\(value, disclosureMode, await slpCreatorPublicIdentityFor\(db, creator\.source\)\)/u,
+  "identity protection for everything about a concealed Creator",
 );
+assert.match(
+  service,
+  /cleaned && creator \? await protectFor\(db, creator, cleaned\) : cleaned/u,
+  "the answer for a concealed Creator is protected too",
+);
+assert.match(service, /return protectFor\(db, creator, brief\);/u, "the brief is protected before it reaches a prompt");
+assert.match(service, /bio: creator \? await protectFor\(db, creator, creator\.account\.bio\)/u);
 
 // --- 4. Undo -----------------------------------------------------------------------------------------
 const undo = createSlpPictureUndo();

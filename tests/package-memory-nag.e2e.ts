@@ -95,6 +95,8 @@ test("installed Memory Nag exposes and validates message ranges", async ({ page,
               sidebarOpen: false,
               rightPanelOpen: false,
               chatHelpSeenModes: ["roleplay"],
+              // The redesigned chat window opens with a "Make this chat your own" introduction otherwise.
+              chatWindowIntroDismissed: true,
               chibiProfessorMariEnabled: false,
             },
             version: 96,
@@ -109,7 +111,11 @@ test("installed Memory Nag exposes and validates message ranges", async ({ page,
       const { useChatStore } = await import("/src/stores/chat.store.ts" as string);
       useChatStore.getState().setShouldOpenSettings(true);
     });
-    await page.getByRole("button", { name: /^Agents(?: \d+)? Show help$/ }).click();
+    // The "Agents" section of the chat settings window, not the top bar's Agents panel button.
+    await page
+      .getByRole("dialog", { name: "Chat Settings" })
+      .getByRole("button", { name: "Agents", exact: true })
+      .click();
     const settings = page.locator('marinara-capability-memory-nag[view="settings"]');
     await expect(settings).toBeVisible();
     await settings.getByLabel("Messages to process").selectOption("range");

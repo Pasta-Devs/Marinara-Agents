@@ -22,9 +22,11 @@ const MIN_GUIDANCE_BLOCK_LENGTH = 40;
 export const MAX_FALLBACK_IMAGE_PROMPT_LENGTH = 1_500;
 
 /** Cut to the ceiling on a sentence, then a word boundary — a mid-word cut reads as a typo. */
-export function capFallbackImagePrompt(value: string): string {
-  if (value.length <= MAX_FALLBACK_IMAGE_PROMPT_LENGTH) return value;
-  const head = value.slice(0, MAX_FALLBACK_IMAGE_PROMPT_LENGTH);
+const squash = (value: string) => value.replace(/\s+/gu, " ");
+
+export function capFallbackImagePrompt(value: string, max = MAX_FALLBACK_IMAGE_PROMPT_LENGTH): string {
+  if (value.length <= max) return value;
+  const head = value.slice(0, max);
   const sentenceEnd = Math.max(
     head.lastIndexOf("."),
     head.lastIndexOf("!"),
@@ -33,7 +35,7 @@ export function capFallbackImagePrompt(value: string): string {
   );
   // Only honour a boundary in the last quarter, so a prompt with one early full stop is not
   // truncated down to that sentence.
-  const floor = Math.floor(MAX_FALLBACK_IMAGE_PROMPT_LENGTH * 0.75);
+  const floor = Math.floor(max * 0.75);
   if (sentenceEnd >= floor) return head.slice(0, sentenceEnd + 1).trim();
   const wordEnd = head.lastIndexOf(" ");
   return (wordEnd >= floor ? head.slice(0, wordEnd) : head).trim();
@@ -95,6 +97,21 @@ function withoutClothes(sentence: string): string {
     if (clause) kept += kept ? `${parts[index - 1] ?? " "}${clause}` : clause;
   }
   return kept ? `${kept[0]!.toUpperCase()}${kept.slice(1)}${end}` : "";
+}
+
+/** Words that already say who is drawn; the look then needs no "Male." or "Female." of its own. */
+const SEX_WORD =
+  /\b(?:male|female|man|woman|men|women|boy|girl|guy|lady|gentleman|femboy|tomboy|futa\w*|trans(?:gender|woman|man|girl|guy)?|androgynous|non-binary|nonbinary|enby|1girl|1boy|he|she|his|her|him)\b/iu;
+
+/**
+ * "Male." or "Female." in front of a look that does not say it (user, 2026-10-14): without it an
+ * image model mostly draws a woman, whatever the page's gender. Other, no gender, or an empty look:
+ * as written.
+ */
+export function slurpImageSexWord(appearance: string, gender: string | null | undefined): string {
+  if (!appearance.trim() || (gender !== "male" && gender !== "female") || SEX_WORD.test(appearance)) return appearance;
+  // The label goes first, or "Male. Appearance: …" keeps a label stripAppearanceLabel cannot reach.
+  return `${gender === "male" ? "Male" : "Female"}. ${stripAppearanceLabel(appearance)}`;
 }
 
 export function slurpImageLook(appearance: string): string {
@@ -230,15 +247,118 @@ export function ensureSlpImageAppearance(prompt: string, appearance: string): st
 export function slurpApplyImageSubject(prompt: string, name: string, family: SlurpPromptFamily = "natural"): string {
   const who = name.replace(/\s+/gu, " ").trim();
   if (!who) return prompt;
+  // A name tag behind other tags (the look Slurp inserted, a writer's line) moves to the front, once
+  // (0.3.47, player report and review).
+  const [rest, written] = slurpWithoutImageSubject(prompt, who, family);
+  if (rest !== prompt) return [written.toLocaleLowerCase(), rest].filter(Boolean).join(", ");
   // Danbooru-style Appearance fields write the name as a tag ("asuka_langley_soryu", "\(eva\)"):
-  // that counts as present too, so a tag prompt never gets the name twice (player report 0.3.5).
-  const plain = (text: string) =>
-    text
-      .toLocaleLowerCase()
-      .replace(/\\([()])/gu, "$1")
-      .replace(/[_\s]+/gu, " ");
-  if (plain(prompt).includes(plain(who))) return prompt;
+  // that counts as present too, so a tag prompt never gets the name twice (player report 0.3.5),
+  // and so does the family name first ("ryuuzaki umi" for "Umi Ryuuzaki", 0.3.47).
+  if (plainTag(prompt).includes(plainTag(who)) || slurpImageNamesPerson(prompt, [who])) return prompt;
   return family === "natural" ? `${who}\n${prompt}` : `${who.toLocaleLowerCase()}, ${prompt}`;
+}
+
+const plainTag = (text: string) =>
+  text
+    .toLocaleLowerCase()
+    .replace(/\\([()])/gu, "$1")
+    .replace(/[_\s]+/gu, " ")
+    .trim();
+
+/**
+ * A tag prompt without the name's own tags, and the name as the prompt spelled it, so
+ * `slurpApplyImageSubject` puts it in front (0.3.47, player report): the writer wrote "1girl, blue
+ * hair, ryuuzaki umi, magic knight rayearth", the name and "Always in their pictures" counted as
+ * present, and the identity tags stayed behind the body tags. A tag in another word order
+ * ("ryuuzaki umi" for the card's "Umi Ryuuzaki") keeps the writer's order, the one a tag model
+ * learned. Only whole tags move; a name inside a longer tag, a weight group or a sentence, and natural
+ * prompts, stay.
+ */
+export function slurpWithoutImageSubject(
+  prompt: string,
+  name: string,
+  family: SlurpPromptFamily,
+): [prompt: string, name: string] {
+  const wanted = name
+    .split(",")
+    .map((tag) => tag.replace(/\s+/gu, " ").trim())
+    .filter(Boolean);
+  if (family === "natural" || wanted.length === 0) return [prompt, name];
+  const keys = new Set(wanted.map(nameKey));
+  const written = new Map<string, string>();
+  const lines = prompt.split("\n").map((line) => {
+    const parts = line.split(",");
+    const kept = parts.filter((part) => {
+      const tag = part.trim().replace(/[.;]+$/u, "");
+      const key = nameKey(tag);
+      // A tag inside a weight group ("(1girl, umi)") stays: moving it would break the brackets.
+      if (!keys.has(key) || /[()[\]{}]/u.test(tag.replace(/\\[()]/gu, ""))) return true;
+      if (!written.has(key)) written.set(key, tag);
+      return false;
+    });
+    return kept.length === parts.length
+      ? line
+      : kept
+          .map((part) => part.trim())
+          .filter(Boolean)
+          .join(", ") || null;
+  });
+  if (written.size === 0) return [prompt, name];
+  return [
+    // Only a line the move emptied goes; the prompt's own blank lines stay, so it still ends the same.
+    lines.filter((line) => line !== null).join("\n"),
+    wanted.map((tag) => written.get(nameKey(tag)) ?? tag).join(", "),
+  ];
+}
+
+const nameWords = (text: string) =>
+  text
+    .normalize("NFKD")
+    .replace(/[̀-ͯ]/gu, "")
+    .toLocaleLowerCase()
+    .split(/[^\p{L}\p{N}]+/u)
+    .filter(Boolean);
+const nameKey = (text: string) => nameWords(text).sort().join(" ");
+
+/**
+ * Whether a picture prompt names a person (0.3.47, player report): a tag prompt writes the card name
+ * as a tag, often family name first ("ryuuzaki_umi" for "Umi Ryuuzaki"), so a plain substring check
+ * missed a companion the writer did put in the picture. Whole words, in any order, next to each other
+ * inside one tag or line: "summer, rain" is not "Summer Rain".
+ */
+export function slurpImageNamesPerson(prompt: string, names: readonly string[]): boolean {
+  const tags = prompt.split(/[,;|\n]/u).map(nameWords);
+  return names.some((name) => {
+    const want = nameKey(name);
+    const size = want ? want.split(" ").length : 0;
+    if (!size) return false;
+    return tags.some((tag) => {
+      for (let start = 0; start + size <= tag.length; start++) {
+        if (
+          tag
+            .slice(start, start + size)
+            .sort()
+            .join(" ") === want
+        )
+          return true;
+      }
+      return false;
+    });
+  });
+}
+
+/**
+ * A final prompt cut behind its style lead (0.3.23, player report): the style profile's tags open
+ * the compiled prompt, and the name and the look belong after them, in front of the scene. A name
+ * ahead of the style tags read as style, and in a picture of two people the model mixed their
+ * features. `lead` is the same profile compiled around an empty prompt; a prompt that no longer
+ * starts with it (a reviewed prompt, a style part the device filter removed) has no lead.
+ */
+export function slurpSplitStyleLead(prompt: string, lead: string): [lead: string, scene: string] {
+  const style = lead.trim();
+  if (!style || !prompt.startsWith(style)) return ["", prompt];
+  const gap = /^[ \t]*[,;.\n][\s,;.]*/u.exec(prompt.slice(style.length))?.[0];
+  return gap ? [style + gap, prompt.slice(style.length + gap.length)] : ["", prompt];
 }
 
 /**
@@ -306,6 +426,42 @@ export function slurpApplyImageLook(
   usedRewrite: boolean,
 ): string {
   return mode === "writer" && usedRewrite ? prompt : ensureSlpImageAppearance(prompt, look);
+}
+
+/**
+ * One block per other person the scene names (0.3.24, player report): their look reached only the
+ * enhancer, so without it a collab picture had a second person with no look, and the image model
+ * gave them the Creator's features. Each gets a labelled look, to go in front of the scene; a tag model
+ * gets their known name as a tag, since it reads no labels. The look follows the Creator's rule
+ * (`slurpApplyImageLook`): none after a used rewrite in `writer` mode, the missing traits after any
+ * other used rewrite, all of it when no rewrite was used. `own` is the Creator's own block: a
+ * companion page of the same character is not tagged a second time.
+ */
+export function slurpImageCompanionBlocks(
+  prompt: string,
+  companions: readonly { name: string; known: string; look: string }[],
+  family: SlurpPromptFamily,
+  mode: SlurpImageAppearanceMode,
+  usedRewrite: boolean,
+  own = "",
+): string {
+  const has = (text: string, part: string) => text.toLocaleLowerCase().includes(part.toLocaleLowerCase());
+  const blocks = companions
+    .filter((companion) => slurpImageNamesPerson(prompt, [companion.name, companion.known]))
+    .map(({ name, known, look }) => {
+      // ponytail: after a rewrite, a trait the Creator shares ("blue eyes") counts as present for
+      // the companion too. Match traits per person if rewritten collab pictures still mix them.
+      const added = usedRewrite ? ensureSlpImageAppearance(prompt, look) : `${slurpImageLook(look)}\n${prompt}`;
+      const traits = usedRewrite && mode === "writer" ? "" : added.slice(0, added.length - prompt.length).trim();
+      if (family !== "natural") {
+        const tag = known && !slurpImageNamesPerson(own + prompt, [known]) ? known.toLocaleLowerCase() : "";
+        return [tag, traits].filter(Boolean).join(", ");
+      }
+      const label = has(known, name) ? known : has(name, known) ? name : `${name} (${known})`;
+      return traits ? `${label}: ${traits}` : "";
+    })
+    .filter(Boolean);
+  return blocks.length ? `${blocks.join("\n")}\n` : "";
 }
 
 /**
@@ -396,23 +552,43 @@ export function selectSlpImageProviderPrompt(input: {
   rawPrompt: string;
   /** Visual facts that must survive a capped fallback when the rewrite is unavailable. */
   fallbackPrefix?: string;
+  /** The post's own scene. When the fallback overflows the cap it leads, so the look cannot push it out. */
+  fallbackScene?: string;
   /** Never belongs in a visual prompt at any length, so it is matched whole. */
   privateContext?: ReadonlyArray<string | null | undefined>;
   /** Authored to steer the image, so only a copied block counts as a leak. */
   guidanceContext?: ReadonlyArray<string | null | undefined>;
   /** The rewrite was expected to run, so an empty result is a fallback rather than a deliberate skip. */
   rewriteAttempted?: boolean;
+  /** Why the attempted rewrite gave no prompt (from `rewriteSlpImagePrompt`'s `onFailure`). */
+  rewriteFailure?: string | null;
   /** Called with the reason whenever an attempted or rejected rewrite falls back to the draft. */
   onFallback?: (reason: string) => void;
 }): string {
   const fallback = (reason: string) => {
     input.onFallback?.(reason);
-    return capFallbackImagePrompt([input.fallbackPrefix?.trim(), input.rawPrompt].filter(Boolean).join("\n\n"));
+    const prefix = input.fallbackPrefix?.trim() ?? "";
+    const full = [prefix && !squash(input.rawPrompt).includes(squash(prefix)) ? prefix : "", input.rawPrompt]
+      .filter(Boolean)
+      .join("\n\n");
+    if (full.length <= MAX_FALLBACK_IMAGE_PROMPT_LENGTH || (!prefix && !input.fallbackScene)) {
+      return capFallbackImagePrompt(full);
+    }
+    // Over the cap a long look led and used all of it, so the picture was an appearance and no
+    // scene. The look keeps a bounded share and the scene gets the rest.
+    const head = capFallbackImagePrompt(prefix, 900);
+    const scene = capFallbackImagePrompt(
+      input.fallbackScene?.trim() || input.rawPrompt,
+      MAX_FALLBACK_IMAGE_PROMPT_LENGTH - head.length - 2,
+    );
+    return [head, scene].filter(Boolean).join("\n\n");
   };
   const rewrittenPrompt = input.rewrittenPrompt?.trim();
   if (!rewrittenPrompt) {
     return input.rewriteAttempted
-      ? fallback("the rewrite did not run or returned nothing (check the agent text connection)")
+      ? fallback(
+          input.rewriteFailure || "the rewrite did not run or returned nothing (check the agent text connection)",
+        )
       : input.rawPrompt;
   }
 

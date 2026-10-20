@@ -12,6 +12,7 @@ import {
   SLP_TYPE,
 } from "../../base/chrome/SlpChrome";
 import { SlpCreatorAvatar, SlurpCreatorProfileCard } from "../../modules/creator/SlpCreatorProfileCard";
+import { SlpTrendingRow } from "../../features/discovery/SlpTrendingRow";
 import { SlurpDiscoverToolbar } from "../../features/discovery/SlpDiscoverToolbar";
 import { cn } from "../../../lib/utils";
 import { SLP_CARD_STACK_CLASS } from "../../modules/post/SlpPostHelpers";
@@ -304,6 +305,7 @@ export function SlpHubDiscover({
       );
     body = (
       <div className="@container px-3 pb-6 sm:px-4">
+        {!discover.active && <SlpTrendingRow onPick={onSearchChange} />}
         {!discover.active && discover.featured.length > 1 && (
           <FeaturedCarousel
             creators={discover.featured}

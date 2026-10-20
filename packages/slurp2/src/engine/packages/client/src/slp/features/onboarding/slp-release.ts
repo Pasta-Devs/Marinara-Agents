@@ -1,5 +1,5 @@
 // The splash screen needs the shipped version and its public notes inside the client bundle.
-export const SLURP2_VERSION = "0.3.17";
+export const SLURP2_VERSION = "0.3.52";
 
 export interface Slurp2ReleaseEntry {
   version: string;
@@ -12,6 +12,258 @@ export interface Slurp2ReleaseEntry {
  * in-universe bullets per release (technical detail lives in CHANGELOG.md).
  */
 export const SLURP2_RELEASES: Slurp2ReleaseEntry[] = [
+  {
+    version: "0.3.52",
+    date: "2026-10-20",
+    notes: [
+      "Slurp's automatic posts no longer talk to your AI while your own chat is replying, and no longer hold up your other automatic work afterwards.",
+      "Write, Improve, voice drafts, schedules and page designs you ask for now take their turn on your connection like your chats do.",
+    ],
+  },
+  {
+    version: "0.3.51",
+    date: "2026-10-20",
+    notes: [
+      "Slurp now runs on Marinara's own settings, dialogs and notifications, so it no longer resets your other settings.",
+      "Its notifications show where you put Marinara's, and the download is smaller.",
+    ],
+  },
+  {
+    version: "0.3.49",
+    date: "2026-10-19",
+    notes: ["Restoring a backup brings back its pictures, AVIF ones too, and skips any file that is not one."],
+  },
+  {
+    version: "0.3.48",
+    date: "2026-10-19",
+    notes: [
+      "A Creator whose character has a Conversation Schedule now lives by it: around when it says online, away when it says busy or offline.",
+      "A message a Creator promised you no longer waits forever. Half a day late, being away no longer holds it back.",
+    ],
+  },
+  {
+    version: "0.3.47",
+    date: "2026-10-16",
+    notes: [
+      "Known characters keep their name and series at the front of their pictures, written once.",
+      "A friend in the picture is recognised by their tag name too, so they get their own look and picture.",
+    ],
+  },
+  {
+    version: "0.3.46",
+    date: "2026-10-15",
+    notes: [
+      "Creators notice each other now: a like or a quick comment on another Creator's post, your persona's posts too.",
+      "Your phone, your PC and any other browser open Slurp as the same persona, so the Inbox matches everywhere.",
+      "Custom tags tell you when all eight slots are full, and a save that a tag blocks names that tag.",
+    ],
+  },
+  {
+    version: "0.3.45",
+    date: "2026-10-15",
+    notes: [
+      "Pictures carry their style once, a fallback gallery photo changes from post to post, and outfits are no longer worn out.",
+      "You choose whether Slurp draws missing avatars and banners on its own. Each Creator can have words that always go into their pictures.",
+      "You can write how pictures are described to the writer. By default, the description leaves out the art style.",
+    ],
+  },
+  {
+    version: "0.3.44",
+    date: "2026-10-15",
+    notes: [
+      "Trends: a post takes off, the right Creators join in their own way, it peaks, then it fades. Not everyone joins.",
+      "Discover has a Trending on Slurp row, and trend posts carry a chip. Start or steer your own trend in Stir, or pick a ready-made one.",
+      "A Creator who starts a trend picks up followers as others join.",
+    ],
+  },
+  {
+    version: "0.3.43",
+    date: "2026-10-15",
+    notes: [
+      "Long DMs no longer stop mid-word, and Creators quote commission prices that match their price list.",
+      "Posts stay varied: no more whole-feed shower evenings, and no Creator slides into one kind of post.",
+      "Family is never paired up on its own, but you can still do it in Stir. Each feed slot posts once.",
+    ],
+  },
+  {
+    version: "0.3.42",
+    date: "2026-10-15",
+    notes: [
+      "Chats with your Creators can now hear about their storylines, love life and how well they know you on Slurp.",
+      "Lorebook entries set to At Depth now reach Slurp DMs, and a message's Deep details lists the lore it used.",
+      "Scenes started from a DM begin on the first try more often.",
+    ],
+  },
+  {
+    version: "0.3.41",
+    date: "2026-10-14",
+    notes: ["Slurp opens faster: avatars load as small pictures instead of full-size cards."],
+  },
+  {
+    version: "0.3.40",
+    date: "2026-10-14",
+    notes: [
+      "Creators are he, she or they from their gender, in dramas, chats and scenes.",
+      "A new clothing style decides whether a spicy shoot is lingerie or briefs. Auto follows gender.",
+    ],
+  },
+  {
+    version: "0.3.39",
+    date: "2026-10-14",
+    notes: ["On Android, picking a post picture opens the full file browser, so every folder is reachable."],
+  },
+  {
+    version: "0.3.38",
+    date: "2026-10-13",
+    notes: ["A creator whose card has image tags gets a button that uses them as her picture appearance."],
+  },
+  {
+    version: "0.3.37",
+    date: "2026-10-13",
+    notes: [
+      "With Claude (Subscription) on Marinara newer than 2.5.0, Slurp no longer sends your account email or computer details to the model.",
+    ],
+  },
+  {
+    version: "0.3.36",
+    date: "2026-10-13",
+    notes: [
+      "A creator's bio and stage voice now steer what she posts about, so a hobby in her bio shows up in her feed.",
+    ],
+  },
+  {
+    version: "0.3.35",
+    date: "2026-10-13",
+    notes: ["Adding a creator now lets you decide, up front, whether the picture model already knows the character."],
+  },
+  {
+    version: "0.3.34",
+    date: "2026-10-13",
+    notes: [
+      "In chat, a creator now remembers what is inside her own locked posts, and your lorebook entries reach her replies.",
+    ],
+  },
+  {
+    version: "0.3.33",
+    date: "2026-10-13",
+    notes: [
+      "Pictures and helpers now respect the max tokens you set on your connection, so thinking models no longer run dry before they answer.",
+    ],
+  },
+  {
+    version: "0.3.32",
+    date: "2026-10-13",
+    notes: [
+      "A long look on a page no longer pushes the scene out of its picture, and a look's own words no longer get a picture's wording thrown away.",
+    ],
+  },
+  {
+    version: "0.3.31",
+    date: "2026-10-13",
+    notes: [
+      "New post has one switch: “Write it myself” or “Guided”. Guided writes a real post for the page: title, text and a picture of its own, in the page's voice.",
+      "Add your own photo on top and Guided writes the text to go with it. You can also add a storyline, a saved idea or a wardrobe look from Slurp.",
+      "The draft lands straight in the post, where you can change anything before you post.",
+    ],
+  },
+  {
+    version: "0.3.30",
+    date: "2026-10-12",
+    notes: [
+      "Write, Improve and the guided post now sound like the Creator even when their identity is hidden or hinted. Their real name still stays out.",
+      "They also read the page's bio and stage voice, the way a normal post does.",
+    ],
+  },
+  {
+    version: "0.3.29",
+    date: "2026-10-12",
+    notes: [
+      "When a picture's description can't be polished, the server log now names the reason, so connection trouble is easier to spot.",
+    ],
+  },
+  {
+    version: "0.3.28",
+    date: "2026-10-12",
+    notes: [
+      "Hold a Creator's chat message and pick “Deep details” to see what went into that reply: where the two of you stand, what they remembered, and everything they were told.",
+      "Slurp keeps this for the newest 50 replies of each chat.",
+    ],
+  },
+  {
+    version: "0.3.27",
+    date: "2026-10-12",
+    notes: [
+      "Each Creator's Posting settings now show their Page style in plain words. Not sure it fits? “Suggest from card” proposes one; nothing changes until you choose Use.",
+    ],
+  },
+  {
+    version: "0.3.26",
+    date: "2026-10-12",
+    notes: [
+      "Creators stay themselves: what is always true about them (how they talk, what they can and cannot do, their firm limits) is now in every post, Story and chat, not just some.",
+      "Your fixes to a Creator's Life details now stay when their card changes. There is a new “Always true” list there too.",
+    ],
+  },
+  {
+    version: "0.3.25",
+    date: "2026-10-12",
+    notes: [
+      "Enhance image prompts now understands more of the answers it gets, so fewer pictures fall back to the plain draft.",
+      "With the AI budget off or used up for the day, pictures go out with their full draft and the log stays quiet.",
+    ],
+  },
+  {
+    version: "0.3.24",
+    date: "2026-10-11",
+    notes: [
+      "In a picture with two Creators, each one is now described on their own, by name, so the second person stops borrowing the first one's features.",
+    ],
+  },
+  {
+    version: "0.3.23",
+    date: "2026-10-11",
+    notes: [
+      "A known character's name now sits after your style tags and in front of their look in picture prompts, so pictures with two people mix them up less.",
+    ],
+  },
+  {
+    version: "0.3.22",
+    date: "2026-10-11",
+    notes: [
+      "Backups now include reports.",
+      "Create posts now says which Creators it skipped or could not post for, not just how many.",
+      "The settings search box now stays reachable on a phone inside a settings section.",
+    ],
+  },
+  {
+    version: "0.3.21",
+    date: "2026-10-11",
+    notes: [
+      "Stir follows a collab you start: Recent plays shows whether they are still talking it over, agreed, said no, or posted, and opens the joint post once it is up.",
+    ],
+  },
+  {
+    version: "0.3.20",
+    date: "2026-10-10",
+    notes: [
+      "Choose what a breakup leaves behind: the usual history, Move on while remembering, or Forget the relationship. Stir can also help existing exes move on or forget. Old posts and messages stay.",
+    ],
+  },
+  {
+    version: "0.3.19",
+    date: "2026-10-10",
+    notes: [
+      "New in Settings › Messaging: Stop after one unanswered text. A Creator writes first once, then waits for you to actually reply before writing first again.",
+    ],
+  },
+  {
+    version: "0.3.18",
+    date: "2026-10-08",
+    notes: [
+      "Wardrobe looks and character cards understand Marinara macros: write {{random::red::green::blue}} dress and each post picks one.",
+      "Creators recycle a photo at most once now. Settings › Publishing › Picture reuse turns it down or off.",
+    ],
+  },
   {
     version: "0.3.17",
     date: "2026-10-06",
@@ -527,155 +779,6 @@ export const SLURP2_RELEASES: Slurp2ReleaseEntry[] = [
       "Restore a deleted post while the countdown runs.",
       "Share asks which chat to send a post to, with search and New chat.",
       "Creators look like themselves in pictures by default.",
-    ],
-  },
-  {
-    version: "0.2.22",
-    date: "2026-09-22",
-    notes: [
-      "Slurp screens open faster and load only what they show.",
-      "Follows, subscriptions and unlocks show up at once.",
-    ],
-  },
-  {
-    version: "0.2.20",
-    date: "2026-09-22",
-    notes: [
-      "Creators have a wardrobe of full looks and rarely wear the same outfit twice.",
-      "Picture posts match their captions better.",
-      "Random posts no longer make Creators sad or broke for no reason.",
-    ],
-  },
-  {
-    version: "0.2.19",
-    date: "2026-09-22",
-    notes: [
-      "Each Creator has their own look, wardrobe and regular places on their profile.",
-      "Creators look like the same person in every post.",
-    ],
-  },
-  {
-    version: "0.2.18",
-    date: "2026-09-22",
-    notes: [
-      "New setting for how far a Creator's pictures go; locked posts show the most.",
-      "Pictures are no longer muddy or badly lit.",
-      "Fewer arm's-length selfies, and far fewer posts without a picture.",
-    ],
-  },
-  {
-    version: "0.2.17",
-    date: "2026-09-22",
-    notes: [
-      "Posts with several pictures have arrows and previews, and the feed shows the count.",
-      "Every writing block in Settings can be turned off or rewritten in your words.",
-    ],
-  },
-  {
-    version: "0.2.16",
-    date: "2026-09-21",
-    notes: [
-      "Restoring a deleted post brings it back at once.",
-      "Share cards show the Creator's name, title and caption again.",
-      "Opening a post no longer shows its picture twice.",
-    ],
-  },
-  {
-    version: "0.2.15",
-    date: "2026-09-21",
-    notes: [
-      "Deleted posts leave a sparkly Restore slot for 60 seconds.",
-      "Pictures stick closer to the planned scene.",
-    ],
-  },
-  {
-    version: "0.2.8",
-    date: "2026-09-21",
-    notes: ["The feed has a softer loading animation, and deleted posts fade out gently."],
-  },
-  {
-    version: "0.2.7",
-    date: "2026-09-21",
-    notes: [
-      "The feed opens faster and loads older posts as you scroll.",
-      "Edits and deletes show at once, with no reload.",
-    ],
-  },
-  {
-    version: "0.2.5",
-    date: "2026-09-21",
-    notes: [
-      "Locked posts no longer tease what you already own.",
-      "The composer offers only the post purposes that fit the audience.",
-    ],
-  },
-  {
-    version: "0.2.4",
-    date: "2026-09-21",
-    notes: [
-      "Selfies fit the moment: planned shoots are rarely selfies, ordinary days often are.",
-      "New conversations start as strangers, not friends.",
-      "Creators reply to new messages within the hour.",
-    ],
-  },
-  {
-    version: "0.2.3",
-    date: "2026-09-21",
-    notes: ["New Deep details in every post's menu: see the plan and everything behind a post."],
-  },
-  {
-    version: "0.2.2",
-    date: "2026-09-21",
-    notes: ["Every persona now sees every Creator."],
-  },
-  {
-    version: "0.2.1",
-    date: "2026-09-21",
-    notes: [
-      "Posts never repeat private things from your messages.",
-      "Teasers and everyday posts stay short; behind-the-scenes posts can run long.",
-      "Stories can be thank-yous and requests too.",
-    ],
-  },
-  {
-    version: "0.2.0",
-    date: "2026-09-21",
-    notes: [
-      "Creators plan their posts: teasers, photo sets of up to three pictures and Stories.",
-      "Fan requests get answered, and Creators keep their promises.",
-      "Creators remember what they said and did, and what fans share in private stays private.",
-    ],
-  },
-  {
-    version: "0.1.3",
-    date: "2026-09-20",
-    notes: ["Behind-the-scenes cleanup. Everything works as before."],
-  },
-  {
-    version: "0.1.2",
-    date: "2026-09-19",
-    notes: ["Creator filters, profile expansion and settings tabs respond again."],
-  },
-  {
-    version: "0.1.1",
-    date: "2026-09-19",
-    notes: [
-      "SwarmUI pictures work again when you do not use a custom workflow.",
-      "Fixed a wording slip in the setup wizard.",
-    ],
-  },
-  {
-    version: "0.1.0",
-    date: "2026-09-19",
-    notes: ["Behind-the-scenes cleanup. Everything works as before."],
-  },
-  {
-    version: "0.0.22",
-    date: "2026-09-17",
-    notes: [
-      "Invite your characters into the audience: they comment, follow, subscribe and tip.",
-      "New picture Stories, message actions and a New Chat picker.",
-      "New limits keep costs on your AI connection in check.",
     ],
   },
 ];

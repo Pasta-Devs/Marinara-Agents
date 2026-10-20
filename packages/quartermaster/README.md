@@ -44,9 +44,20 @@ mobile, though this hasn't actually been tested yet.
 
 ## Equip Slots & Outfits
 
-**16 equip slots** arranged around the portrait: head, neck, eyes, ears, armor & clothing
-(torso/legs), underwear (top/bottom), back, hands, a weapon slot for each hand, feet, and belt.
-Each slot shows the equipped item's own image, or built-in art if it doesn't have one.
+**24 equip slots** arranged around the portrait: head, neck, eyes, ears, armor (torso/legs),
+three clothing layers each for torso and legs, underwear (top/bottom), back, hands, a weapon slot
+for each hand, belt, socks, feet (footwear), and three Extra Wearable slots. Each slot shows the
+equipped item's own image, or built-in art if it doesn't have one.
+
+**Layered clothing** goes inside out, one item per layer: **Inner** clothing is the first layer
+over underwear, **Mid** goes over it, and **Outer** over that. A suit is a dress shirt (inner), a
+waistcoat (mid), and a jacket (outer); shorts over tights put the tights in inner and the shorts in
+mid. Something worn on its own just uses the inner slot. On the portrait ring each region's three
+layers share one stack of cards: the front layer shows in full, the others as narrow tabs beside it
+(outlined like any slot when something's worn there). Use the arrows on the card, or tap a tab, to
+bring another layer to the front. The outermost worn layer is in front when the dock opens.
+The **Extra Wearable** slots are for anything worn that no other slot fits — a second necklace,
+rings, a coat over a suit jacket.
 
 **Saved outfits** snapshot your current equip state under a name, and can carry their own
 description text too (the whole-look description — this feeds both outfit-portrait generation and
@@ -111,7 +122,8 @@ pictures, click Refresh Images and they'll pick up the new files.
 An agent that reads each turn's narration and keeps your inventory in sync on its own — adding and
 removing items, equipping and unequipping them (individually or as a full saved outfit) as the
 story calls for it. Its prompt is fully editable from the Agents menu, within the constraints of
-the JSON output it needs to produce. It targets specific changes each turn rather than re-stating
+the JSON output it needs to produce. (A customized prompt keeps your version after updates, so
+reset it to the default to pick up new slots or rules from a newer version.) It targets specific changes each turn rather than re-stating
 the whole inventory, so an item it doesn't mention is never at risk of being dropped, no matter how
 large your inventory gets.
 
@@ -204,6 +216,43 @@ and every bundled icon, and writes `artifacts/quartermaster-<version>.zip` — r
 overwrite an already-released version's artifact file if you forget to bump `VERSION` first.
 
 ## Changelog
+
+### 0.1.28
+- **Build Wardrobe layering**: the model now just gives each garment its usual slot and lists an
+  outfit from innermost to outermost; when two pieces of one outfit share a clothing layer (tights
+  and a pencil skirt over them), the later one is moved up to the next free layer instead of being
+  dropped. Each item keeps its own default slot, so the skirt still goes to the inner layer when
+  worn alone. The prompt's layering rule got shorter, which should help less capable models.
+- **New slot artwork**: the clothing layers read as one outfit — shirt, waistcoat and coat for the
+  torso; leggings, shorts and chaps for the legs — plus socks and a ring shared by the three Extra
+  Wearable slots. All gender-neutral, in the same style as the original icons.
+
+### 0.1.27
+- The clothing layers on the portrait ring are now a stack of cards instead of three boxes side by
+  side, so the dock stays about as wide as before. The front layer shows in full and the others as
+  narrow tabs, outlined when something's worn there; the arrows on the card or a tap on a tab switch
+  layers. The outermost worn layer is in front by default.
+
+### 0.1.26
+- **Layered clothing**: torso and legs each get three clothing layers — Inner, Mid and Outer — so a
+  shirt, waistcoat and jacket (or tights under shorts) can all be worn at once. The existing
+  clothing slots become the Inner layer, so nothing already equipped or saved changes.
+- New **Socks** slot beside Feet, and three **Extra Wearable** slots for anything that doesn't fit
+  elsewhere.
+- The tracker agent and Build Wardrobe know about the new slots and how to layer clothing. If you
+  customized the tracker prompt, reset it to the default to pick these up.
+
+### 0.1.25
+- With an Admin Secret saved, each image now loads once and is reused, instead of reloading after
+  every change in the dock.
+- An image that failed to load for a reason other than having no image tries again when the dock is
+  reopened, and changing the saved Admin Secret retries every image.
+
+### 0.1.24
+- Works from other devices and remote access: Quartermaster now sends the Admin Secret saved in
+  Settings → Advanced → Admin Access, fixing "Invalid or missing X-Admin-Secret header".
+- Item images, outfit portraits and slot icons also load from other devices.
+- A missing or mismatched Admin Secret now explains how to fix it.
 
 ### 0.1.23
 - The description now says what it does in plain words.

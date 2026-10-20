@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { chmod, mkdir, mkdtemp, readFile, readdir, rename, rm, stat, utimes, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { runRegressionToCompletion, runWithSafeCleanup } from "./regression-helpers.ts";
 
 async function main() {
@@ -71,51 +71,66 @@ async function main() {
     else globalThis.window = originalWindow;
   }
   const { configurePackageRuntime } = await import(`${source}/package-runtime.ts`);
-  const { readLtmDebugLog } = await import(`${source}/debug-log.ts`);
+  const { readLtmDebugLog } = await import(`${source}/maintenance/debug-log.ts`);
   const { getLongTermMemoryDirectories, getLongTermMemoryRoot, ltmRejectedSuggestionsPath, notePathForId } =
-    await import(`${source}/paths.ts`);
-  const { LongTermMemoryStorage } = await import(`${source}/storage.ts`);
-  const { invalidateLtmVaultSnapshot, readLtmVaultSnapshot } = await import(`${source}/vault-snapshot.ts`);
-  const { LongTermMemoryDraftStore } = await import(`${source}/draft-store.ts`);
+    await import(`${source}/persistence/paths.ts`);
+  const { LongTermMemoryStorage } = await import(`${source}/persistence/storage.ts`);
+  const { invalidateLtmVaultSnapshot, readLtmVaultSnapshot } = await import(`${source}/persistence/vault-snapshot.ts`);
+  const { LongTermMemoryDraftStore } = await import(`${source}/drafts/draft-store.ts`);
   const { applyLongTermMemoryDraft, preflightLongTermMemoryDraft, LtmDraftApplyError } = await import(
-    `${source}/reconciliation.ts`
+    `${source}/drafts/reconciliation.ts`
   );
   const { compileEvidenceUnitExtraction, sourceMetadataForEvidenceUnitDraft } = await import(
-    `${source}/evidence-unit-extraction.ts`
+    `${source}/extraction/evidence-unit-extraction.ts`
   );
   const { extractionFingerprintForLtmSourceNote, isLtmSourceExtractionFingerprintCurrent, sourceHashForLtmSourceNote } =
-    await import(`${source}/source-hash.ts`);
-  const { projectLongTermMemoryDraftReview } = await import(`${source}/draft-review.ts`);
+    await import(`${source}/extraction/source-hash.ts`);
+  const { projectLongTermMemoryDraftReview } = await import(`${source}/drafts/draft-review.ts`);
   const { activateLongTermMemoryStorage } = await import(`${source}/runtime.ts`);
   const { getLtmGlobalSettings, ltmSettingsPath, updateLtmGlobalSettings } = await import(`${source}/settings.ts`);
-  const { ltmMutationTransactionSchema, recoverLtmMutations } = await import(`${source}/mutation-transaction.ts`);
-  const { readLtmNoteSummary, writeLtmNoteSummary, rebuildLtmNoteSummary } = await import(`${source}/index-state.ts`);
-  const { rebuildLongTermMemoryIndexes, loadOrRebuildLongTermMemoryIndexes } = await import(`${source}/rebuild.ts`);
-  const { repairLongTermMemory } = await import(`${source}/maintenance.ts`);
-  const { runLongTermMemoryRetention } = await import(`${source}/retention.ts`);
-  const { rebuildLtmActivityIndex, readLtmActivityEvents } = await import(`${source}/activity-index.ts`);
-  const { renderSectionContributions } = await import(`${source}/section-contributions.ts`);
-  const { buildStopWordSet, extractNoteKeywords } = await import(`${source}/keyword-extract.ts`);
-  const { mergeKeywords } = await import(`${source}/keyword-extract.ts`);
+  const { getLtmExtractionConfig, ltmExtractionConfigPath, updateLtmExtractionConfig } = await import(
+    `${source}/extraction/extraction-config.ts`
+  );
+  const { ltmMutationTransactionSchema, recoverLtmMutations } = await import(
+    `${source}/persistence/mutation-transaction.ts`
+  );
+  const { readLtmNoteSummary, writeLtmNoteSummary, rebuildLtmNoteSummary } = await import(
+    `${source}/persistence/index-state.ts`
+  );
+  const { rebuildLongTermMemoryIndexes, loadOrRebuildLongTermMemoryIndexes } = await import(
+    `${source}/recall/rebuild.ts`
+  );
+  const { repairLongTermMemory } = await import(`${source}/maintenance/maintenance.ts`);
+  const { longTermMemoryRetentionConfigPath, pruneLtmRepairBackups, runLongTermMemoryRetention } = await import(
+    `${source}/persistence/retention.ts`
+  );
+  const { previewLtmNoteForkRepair, applyLtmNoteForkRepair } = await import(`${source}/identity/note-fork-repair.ts`);
+  const { readLongTermMemoryUsage } = await import(`${source}/recall/usage.ts`);
+  const { rebuildLtmActivityIndex, readLtmActivityEvents } = await import(`${source}/persistence/activity-index.ts`);
+  const { renderSectionContributions } = await import(`${source}/persistence/section-contributions.ts`);
+  const { buildStopWordSet, extractNoteKeywords } = await import(`${source}/recall/keyword-extract.ts`);
+  const { mergeKeywords } = await import(`${source}/recall/keyword-extract.ts`);
   const { getLtmActiveKeywords, ltmKeywordKey, normalizeLtmKeywordIntent } =
     await import("../packages/long-term-memory/src/engine/packages/shared/src/features/agents/long-term-memory/keywords.ts");
   const { ltmScopesOverlap, validateLtmExplicitAvailability } =
     await import("../packages/long-term-memory/src/engine/packages/shared/src/features/agents/long-term-memory/scope.ts");
   const { normalizeDetailName } =
-    await import("../packages/long-term-memory/src/engine/packages/client/src/features/long-term-memory/detail-name.ts");
+    await import("../packages/long-term-memory/src/engine/packages/client/src/features/long-term-memory/vault/detail-name.ts");
   const {
     exportLongTermMemoryData,
     replaceLongTermMemoryData,
     deleteAllLongTermMemoryData,
     resetLongTermMemorySettings,
     parseLongTermMemoryBackup,
-  } = await import(`${source}/backup-restore.ts`);
+  } = await import(`${source}/persistence/backup-restore.ts`);
   const {
     addRejectedSuggestions,
     deleteRejectedSuggestion,
     deleteRejectedSuggestionsForSource,
     listRejectedSuggestions,
-  } = await import(`${source}/rejected-suggestions.ts`);
+  } = await import(`${source}/drafts/rejected-suggestions.ts`);
+  const { DEFAULT_LTM_GLOBAL_SETTINGS, ltmGlobalSettingsSchema } =
+    await import("../packages/long-term-memory/src/engine/packages/shared/src/features/agents/long-term-memory/schema.ts");
 
   const dataDir = await mkdtemp(join(tmpdir(), "marinara-ltm-storage-"));
   const warnings: unknown[][] = [];
@@ -280,20 +295,78 @@ async function main() {
         "{not-json\n",
       );
 
-      await writeFile(ltmSettingsPath(root), '{"version":1,"unknown":true}\n');
+      // #1415: a settings field written by a newer version (for example before an update
+      // rolled back) is ignored and logged by name, and saving keeps it in the file.
+      await writeFile(ltmSettingsPath(root), '{"version":1,"someNewSetting":"newer-value","extractionMode":"auto"}\n');
+      await writeFile(ltmExtractionConfigPath(root), '{"version":1,"someNewExtractionSetting":true}\n');
+      await writeFile(
+        join(getLongTermMemoryDirectories(root).config, "agent-settings.json"),
+        '{"someNewAgentSetting":1}\n',
+      );
+      await writeFile(longTermMemoryRetentionConfigPath(root), '{"version":1,"someNewRetentionSetting":true}\n');
+      await restarted.cleanup();
+      const warningsBeforeUnknownSettings = warnings.length;
+      restarted = await activateLongTermMemoryStorage(root);
+      const unknownSettingWarnings = warnings.slice(warningsBeforeUnknownSettings).map((args) => args.join(" "));
+      for (const key of [
+        "someNewSetting",
+        "someNewExtractionSetting",
+        "someNewAgentSetting",
+        "someNewRetentionSetting",
+      ]) {
+        assert.ok(
+          unknownSettingWarnings.some((line) => line.includes(key)),
+          `activation must log ${key} by name`,
+        );
+      }
+      assert.ok(
+        unknownSettingWarnings.every((line) => !line.includes("newer-value") && !line.includes("extractionMode")),
+        "the warning names unknown fields without values and does not report removed legacy fields",
+      );
       await restarted.cleanup();
       restarted = null;
-      await assert.rejects(
-        activateLongTermMemoryStorage(root),
-        /unrecognized|unknown/i,
-        "self-check must reject malformed settings",
+      assert.deepEqual(
+        JSON.parse(await readFile(ltmSettingsPath(root), "utf8")),
+        { version: 1, someNewSetting: "newer-value" },
+        "startup keeps a newer settings field and still drops removed legacy fields",
       );
-      await writeFile(ltmSettingsPath(root), '{"version":1}\n');
+      assert.equal(
+        JSON.parse(await readFile(longTermMemoryRetentionConfigPath(root), "utf8")).someNewRetentionSetting,
+        true,
+        "startup keeps a newer retention field",
+      );
+      assert.equal("someNewSetting" in (await getLtmGlobalSettings(root)), false);
+      assert.equal("someNewExtractionSetting" in (await getLtmExtractionConfig(root)), false);
+      assert.throws(() => ltmGlobalSettingsSchema.parse({ someNewSetting: true }), /unrecognized/i);
+      await assert.rejects(
+        updateLtmGlobalSettings({ someNewSetting: true }, root),
+        /unrecognized/i,
+        "a settings request with a field this version does not know must still be rejected",
+      );
+      assert.equal(
+        JSON.stringify((await exportLongTermMemoryData(root)).settings).includes("someNew"),
+        false,
+        "backup export must succeed and leave out fields this version does not know",
+      );
+      await updateLtmExtractionConfig({ aiKeywordExtraction: true }, root);
+      assert.equal(
+        JSON.parse(await readFile(ltmExtractionConfigPath(root), "utf8")).someNewExtractionSetting,
+        true,
+        "saving extraction settings must keep a newer field",
+      );
+      await writeFile(ltmSettingsPath(root), '{"version":1,"someNewSetting":true,"longTermMemoryBudgetTokens":"x"}\n');
+      await assert.rejects(getLtmGlobalSettings(root), /expected number/i, "an invalid known field must still fail");
+      await writeFile(ltmSettingsPath(root), '{"version":1,"someNewSetting":"newer-value"}\n');
       const stopWordSettings = await updateLtmGlobalSettings({ longTermMemoryStopWords: ["Cobalt-Moon"] }, root);
       assert.deepEqual(
         stopWordSettings.longTermMemoryStopWords,
         ["Cobalt-Moon"],
         "global settings must persist a custom stop-word list",
+      );
+      assert.equal(
+        JSON.parse(await readFile(ltmSettingsPath(root), "utf8")).someNewSetting,
+        "newer-value",
+        "saving settings must keep a newer field so upgrading again restores it",
       );
       assert.deepEqual(
         (await getLtmGlobalSettings(root)).longTermMemoryStopWords,
@@ -318,10 +391,43 @@ async function main() {
       );
       await updateLtmGlobalSettings({ longTermMemoryStopWordsFilterGenerated: true }, root);
 
+      // #1246: an invalid persisted setting must load its default instead of
+      // making every settings read (and recall) throw.
+      await writeFile(ltmSettingsPath(root), '{"version":1,"longTermMemorySemanticWeight":null}\n');
+      assert.equal(
+        (await getLtmGlobalSettings(root)).longTermMemorySemanticWeight,
+        DEFAULT_LTM_GLOBAL_SETTINGS.longTermMemorySemanticWeight,
+        "a null persisted weight must load its default instead of throwing",
+      );
+      await writeFile(ltmSettingsPath(root), '{"version":1,"longTermMemoryRecallStyle":"legacy-unknown"}\n');
+      assert.equal(
+        (await getLtmGlobalSettings(root)).longTermMemoryRecallStyle,
+        DEFAULT_LTM_GLOBAL_SETTINGS.longTermMemoryRecallStyle,
+        "an unknown persisted recall style must load the default instead of throwing",
+      );
+      const recoveredWeight = await updateLtmGlobalSettings({ longTermMemorySemanticWeight: null }, root);
+      assert.equal(
+        recoveredWeight.longTermMemorySemanticWeight,
+        DEFAULT_LTM_GLOBAL_SETTINGS.longTermMemorySemanticWeight,
+        "saving a null weight must recover to the default",
+      );
+      assert.equal(
+        "longTermMemorySemanticWeight" in JSON.parse(await readFile(ltmSettingsPath(root), "utf8")),
+        false,
+        "an invalid null weight must not be persisted",
+      );
+      assert.equal(
+        (await updateLtmGlobalSettings({ longTermMemorySemanticWeight: 0.42 }, root)).longTermMemorySemanticWeight,
+        0.42,
+        "a valid weight must still persist",
+      );
+
       const quarantine = join(root, "quarantine", "expired");
       await mkdir(quarantine, { recursive: true });
       await writeFile(join(quarantine, "artifact.json"), "{}\n");
       await utimes(quarantine, new Date(0), new Date(0));
+      // retention.json still holds the newer field from the #1415 block above, so this run
+      // also proves retention reads it leniently.
       const cleanup = await runLongTermMemoryRetention({
         root,
         now: new Date("2026-07-17T00:00:00Z"),
@@ -362,6 +468,73 @@ async function main() {
         await readFile(dirs.eventLog, "utf8"),
         `malformed event\n${JSON.stringify({ ts: "2026-07-17T00:00:00.000Z", type: "new.event" })}\n`,
       );
+
+      // #1404: finished drafts older than the audit window are removed. Pending drafts stay.
+      // #1443: invalidated drafts follow the same window, counted from the invalidation.
+      const retentionDrafts = {
+        "retention-old-accepted": ["accepted", "2026-06-01T00:00:00.000Z"],
+        "retention-old-auto-applied": ["auto_applied", "2026-06-01T00:00:00.000Z"],
+        "retention-old-superseded": ["superseded", "2026-06-01T00:00:00.000Z"],
+        "retention-recent-accepted": ["accepted", "2026-07-01T00:00:00.000Z"],
+        "retention-old-pending": ["pending", "2026-06-01T00:00:00.000Z"],
+        "retention-old-invalidated": ["invalidated", "2026-06-01T00:00:00.000Z"],
+        "retention-recent-invalidated": ["invalidated", "2026-07-01T00:00:00.000Z"],
+        "retention-null-updated-accepted": ["accepted", null],
+      };
+      for (const [id, [status, updatedAt]] of Object.entries(retentionDrafts))
+        await writeFile(join(dirs.drafts, `${id}.json`), JSON.stringify({ id, status, updatedAt }));
+      const draftRetention = await runLongTermMemoryRetention({
+        root,
+        now: new Date("2026-07-18T00:00:00Z"),
+        force: true,
+      });
+      assert.equal(draftRetention.draftsRemoved, 4);
+      assert.deepEqual(
+        (await readdir(dirs.drafts)).filter((name) => name.startsWith("retention-")).sort(),
+        [
+          "retention-null-updated-accepted.json",
+          "retention-old-pending.json",
+          "retention-recent-accepted.json",
+          "retention-recent-invalidated.json",
+        ],
+        "retention must remove only finished or invalidated drafts with a valid updatedAt older than the audit window",
+      );
+      for (const id of Object.keys(retentionDrafts)) await rm(join(dirs.drafts, `${id}.json`), { force: true });
+
+      // #1443: retention clears leftover per-memory counters, however recent, and keeps accepted
+      // receipt ids for one day.
+      const usagePath = join(dirs.indexes, "usage.json");
+      const usageCounter = (noteId: string, at: string) => ({
+        chunkId: `${noteId}:facts`,
+        noteId,
+        sectionKey: "facts",
+        lastRetrievedAt: at,
+        lastInjectedAt: at,
+        retrievalCount: 1,
+        injectionCount: 1,
+        totalInjectedTokens: 3,
+      });
+      await writeFile(
+        usagePath,
+        JSON.stringify({
+          version: 2,
+          chats: {
+            "chat-a": { chunks: { [`${noteInput.id}:facts`]: usageCounter(noteInput.id, "2026-07-17T12:00:00.000Z") } },
+          },
+          acceptedReceipts: {
+            "receipt-yesterday": "2026-07-16T23:59:59.000Z",
+            "receipt-today": "2026-07-17T12:00:00.000Z",
+            "receipt-legacy": true,
+          },
+        }),
+      );
+      await runLongTermMemoryRetention({ root, now: new Date("2026-07-18T00:00:00Z"), force: true });
+      assert.deepEqual(
+        await readLongTermMemoryUsage(root),
+        { version: 2, chats: {}, acceptedReceipts: { "receipt-today": "2026-07-17T12:00:00.000Z" } },
+        "retention must clear usage counters and keep only accepted receipt ids from the last day",
+      );
+      await rm(usagePath, { force: true });
 
       const activityBackup = `${dirs.activityIndex}.retention-proof`;
       await rename(dirs.activityIndex, activityBackup);
@@ -619,6 +792,11 @@ async function main() {
         ...exported,
         settings: {
           ...exported.settings,
+          global: {
+            ...exported.settings.global,
+            longTermMemorySemanticWeight: null,
+            longTermMemoryRecallStyle: "legacy-unknown",
+          },
           policies: { version: 1, policies: [] },
           retrieval: {
             version: 1,
@@ -653,6 +831,17 @@ async function main() {
         "backups must reject contradictory scalar and array scope aliases",
       );
       await replaceLongTermMemoryData(legacyBackup, freshRoot);
+      const restoredGlobal = await getLtmGlobalSettings(freshRoot);
+      assert.equal(
+        restoredGlobal.longTermMemorySemanticWeight,
+        DEFAULT_LTM_GLOBAL_SETTINGS.longTermMemorySemanticWeight,
+        "a restored null weight must fall back to its default",
+      );
+      assert.equal(
+        restoredGlobal.longTermMemoryRecallStyle,
+        DEFAULT_LTM_GLOBAL_SETTINGS.longTermMemoryRecallStyle,
+        "a restored unknown recall style must fall back to the default",
+      );
       const reexportedLegacy = await exportLongTermMemoryData(freshRoot);
       assert.equal("policies" in reexportedLegacy.settings, false);
       assert.equal("retrieval" in reexportedLegacy.settings, false);
@@ -2945,8 +3134,23 @@ async function main() {
           ],
         },
       });
+      // #1443: nothing reads usage counters, so a permanent delete leaves usage.json alone. The delete's
+      // own retention run is throttled by the earlier real-clock runs, so it can't clear the counter.
+      const deleteUsage = JSON.stringify({
+        version: 2,
+        chats: {
+          "chat-a": {
+            chunks: {
+              [`${permanentlyDeletedTarget.id}:facts`]: usageCounter(permanentlyDeletedTarget.id, timestamp),
+            },
+          },
+        },
+      });
+      await writeFile(usagePath, deleteUsage);
       await storage.deleteNotesPermanently([permanentlyDeletedTarget.id]);
       assert.equal(await storage.getNote(permanentlyDeletedTarget.id), null);
+      assert.equal(await readFile(usagePath, "utf8"), deleteUsage, "permanent delete must not rewrite usage.json");
+      await rm(usagePath, { force: true });
       const permanentlyDeletedReview = await projectLongTermMemoryDraftReview({
         root,
         includeInvalidated: true,
@@ -3249,6 +3453,182 @@ async function main() {
         "the recall index must not retain the quarantined note text",
       );
       await quarantineStorage.cleanup();
+
+      // Issue #1328: at the rejected-suggestion cap the least recently seen unresolved
+      // suggestion makes room; a saved identity decision is never evicted.
+      const capRoot = join(dataDir, "rejected-suggestion-cap");
+      await new LongTermMemoryStorage(capRoot).initializeLtmStore();
+      const capFingerprint = (index: number) => createHash("sha256").update(`cap-${index}`).digest("hex");
+      const capSuggestions = (resolved: (index: number) => boolean) =>
+        Array.from({ length: 10_000 }, (_, index) => ({
+          id: randomUUID(),
+          fingerprint: capFingerprint(index),
+          source: { sourceNoteId: `source_cap_${index}`, chatId: "chat-a" },
+          scope: { chatId: "chat-a" },
+          modes: ["roleplay"],
+          candidate: { index: 0, reason: "invalid_format", message: "Rejected candidate.", snippet: "candidate" },
+          createdAt: timestamp,
+          lastSeenAt: new Date(Date.parse(timestamp) + index * 1000).toISOString(),
+          ...(resolved(index)
+            ? { identityResolution: { choices: [{ name: "Sam", action: "skip" }], resolvedAt: timestamp } }
+            : {}),
+        }));
+      const capDraft = { ...rejectionDraft, source: { sourceNoteId: "source_cap_new", chatId: "chat-a" } } as any;
+      await writeFile(ltmRejectedSuggestionsPath(capRoot), JSON.stringify(capSuggestions((index) => index === 0)));
+      assert.equal((await addRejectedSuggestions(capDraft, capRoot)).length, 1);
+      const capped = JSON.parse(await readFile(ltmRejectedSuggestionsPath(capRoot), "utf8")) as Array<{
+        fingerprint: string;
+        source: { sourceNoteId: string };
+      }>;
+      assert.equal(capped.length, 10_000, "the cap must hold after eviction");
+      assert.equal(
+        capped.some((item) => item.source.sourceNoteId === "source_cap_new"),
+        true,
+        "the new suggestion must be stored at the cap",
+      );
+      assert.equal(
+        capped.some((item) => item.fingerprint === capFingerprint(0)),
+        true,
+        "a saved identity decision must survive eviction even when it is the oldest",
+      );
+      assert.equal(
+        capped.some((item) => item.fingerprint === capFingerprint(1)),
+        false,
+        "the least recently seen unresolved suggestion must make room",
+      );
+      await writeFile(ltmRejectedSuggestionsPath(capRoot), JSON.stringify(capSuggestions(() => true)));
+      await assert.rejects(addRejectedSuggestions(capDraft, capRoot), /rejected-suggestion limit reached/u);
+
+      // Issue #1328: a malformed usage file or injection receipt must not stop activation, and
+      // the malformed usage file is set aside so statistics restart instead of failing every read.
+      const lenientRoot = join(dataDir, "malformed-usage-activation");
+      await new LongTermMemoryStorage(lenientRoot).initializeLtmStore();
+      const lenientDirs = getLongTermMemoryDirectories(lenientRoot);
+      await mkdir(lenientDirs.receipts, { recursive: true });
+      await writeFile(join(lenientDirs.indexes, "usage.json"), "not json\n");
+      await writeFile(join(lenientDirs.receipts, "broken-receipt.json"), "{bad\n");
+      const lenientRuntime = await activateLongTermMemoryStorage(lenientRoot);
+      await lenientRuntime.cleanup();
+      assert.deepEqual(
+        await readLongTermMemoryUsage(lenientRoot),
+        { version: 2, chats: {} },
+        "a malformed usage file must restart from empty statistics",
+      );
+      await assert.rejects(stat(join(lenientDirs.indexes, "usage.json")), { code: "ENOENT" });
+      assert.equal((await readdir(join(lenientRoot, "quarantine", "indexes"))).length, 1);
+      // Valid JSON of the wrong shape takes the same path as unparseable content.
+      await writeFile(join(lenientDirs.indexes, "usage.json"), JSON.stringify({ version: 2, chats: "not-a-record" }));
+      assert.deepEqual(
+        await readLongTermMemoryUsage(lenientRoot),
+        { version: 2, chats: {} },
+        "a schema-invalid usage file must restart from empty statistics",
+      );
+      await assert.rejects(stat(join(lenientDirs.indexes, "usage.json")), { code: "ENOENT" });
+      assert.equal((await readdir(join(lenientRoot, "quarantine", "indexes"))).length, 2);
+
+      // A malformed usage file that cannot be set aside must not be replaced by empty statistics:
+      // the original stays on disk and the read fails instead of letting the next write overwrite it.
+      const stuckRoot = join(dataDir, "usage-quarantine-failure");
+      await new LongTermMemoryStorage(stuckRoot).initializeLtmStore();
+      const stuckUsagePath = join(getLongTermMemoryDirectories(stuckRoot).indexes, "usage.json");
+      await writeFile(stuckUsagePath, "not json\n");
+      await rm(join(stuckRoot, "quarantine"), { recursive: true, force: true });
+      await writeFile(join(stuckRoot, "quarantine"), "not a folder");
+      await assert.rejects(readLongTermMemoryUsage(stuckRoot), undefined, "a failed quarantine must surface");
+      assert.equal(
+        await readFile(stuckUsagePath, "utf8"),
+        "not json\n",
+        "the malformed usage file must stay in place when it cannot be set aside",
+      );
+
+      // Issue #1328: recall skips a note it read but cannot validate; an unreadable vault folder is
+      // not a content problem and still fails the read, so recall never silently loses a note type.
+      const skipRoot = join(dataDir, "skip-invalid");
+      const skipStorage = new LongTermMemoryStorage(skipRoot);
+      await skipStorage.initializeLtmStore();
+      await skipStorage.createNote({ ...noteInput, id: "world_skip_valid", title: "Valid" });
+      const skipWorldFolder = join(getLongTermMemoryDirectories(skipRoot).vault, "world");
+      await writeFile(join(skipWorldFolder, "world_skip_broken.json"), "{");
+      invalidateLtmVaultSnapshot(skipRoot);
+      assert.deepEqual(
+        (await skipStorage.listNotes({ skipInvalid: true })).map((item: { id: string }) => item.id),
+        ["world_skip_valid"],
+        "skipInvalid must serve the valid notes around an unparseable file",
+      );
+      await assert.rejects(skipStorage.listNotes(), undefined, "a full read must still surface the invalid file");
+      await rm(skipWorldFolder, { recursive: true, force: true });
+      await writeFile(skipWorldFolder, "not a folder");
+      invalidateLtmVaultSnapshot(skipRoot);
+      await assert.rejects(
+        skipStorage.listNotes({ skipInvalid: true }),
+        { code: "ENOTDIR" },
+        "skipInvalid must not hide a vault folder that cannot be listed",
+      );
+
+      // Issue #1328: a repair backup only serves its own rollback, so a fourth fork repair keeps the
+      // newest three, and Delete all data removes every repair backup the package wrote.
+      const pruneDataDir = join(dataDir, "repair-backups");
+      const pruneRoot = join(pruneDataDir, "long-term-memory");
+      const pruneStorage = new LongTermMemoryStorage(pruneRoot);
+      await pruneStorage.initializeLtmStore();
+      const forkBackupIds: string[] = [];
+      for (const pair of ["a", "b", "c", "d"]) {
+        const ids = [`world_prune_${pair}_one`, `world_prune_${pair}_two`];
+        for (const [position, id] of ids.entries()) {
+          const createdAt = `2026-01-0${position + 1}T00:00:00.000Z`;
+          await pruneStorage.createNote({
+            id,
+            title: id,
+            type: "world",
+            status: "active",
+            modes: ["roleplay"],
+            scope: { chatId: "chat-a" },
+            tags: [],
+            keywords: ["shared"],
+            links: [],
+            sections: { facts: { text: "Shared durable fact", updatedAt: createdAt } },
+            createdAt,
+            updatedAt: createdAt,
+            version: 1,
+          });
+        }
+        const candidate = (await previewLtmNoteForkRepair({ noteIds: ids }, { root: pruneRoot })).candidates[0];
+        const applied = await applyLtmNoteForkRepair(
+          {
+            noteIds: candidate.noteIds,
+            canonicalNoteId: candidate.canonicalNoteId,
+            contentHash: candidate.contentHash,
+          },
+          { root: pruneRoot },
+        );
+        forkBackupIds.push(applied.backupId);
+      }
+      const forkBackupsRoot = join(pruneDataDir, "backups", "long-term-memory-forks");
+      assert.deepEqual(
+        (await readdir(forkBackupsRoot)).sort(),
+        forkBackupIds.slice(1).sort(),
+        "a fourth repair must keep exactly the newest three backups, including its own",
+      );
+      // Equal modification times must not let a prune remove the backup the repair just made.
+      const tiedBackups = join(pruneDataDir, "tied-backups");
+      const tiedStamp = new Date("2026-01-01T00:00:00.000Z");
+      const tiedNames = ["t0", "t1", "t2", "t3", "t4"];
+      for (const current of tiedNames) {
+        for (const name of tiedNames) {
+          await mkdir(join(tiedBackups, name), { recursive: true });
+          await utimes(join(tiedBackups, name), tiedStamp, tiedStamp);
+        }
+        await pruneLtmRepairBackups(tiedBackups, { keepPath: join(tiedBackups, current) });
+        const survivors = await readdir(tiedBackups);
+        assert.equal(survivors.length, 3, "a prune over tied backups must still keep three");
+        assert.equal(survivors.includes(current), true, `the current backup ${current} must survive a timestamp tie`);
+        await rm(tiedBackups, { recursive: true, force: true });
+      }
+      const identityBackupsRoot = join(pruneDataDir, "backups", "long-term-memory-identity-repairs");
+      await mkdir(join(identityBackupsRoot, randomUUID()), { recursive: true });
+      await deleteAllLongTermMemoryData(pruneRoot);
+      for (const directory of [forkBackupsRoot, identityBackupsRoot])
+        await assert.rejects(stat(directory), { code: "ENOENT" }, "Delete all data must remove repair backups");
 
       process.stdout.write(
         "Long-Term Memory storage regression: restart, recovery, self-check, cleanup, stable root ok\n",

@@ -1,11 +1,13 @@
 import type { DB } from "../../../db/connection.js";
 import { logger } from "../../../lib/logger.js";
+import { slpIsAdmissionFailure } from "../../base/host/slp-admission.js";
 import { createAppSettingsStorage } from "../../../services/storage/app-settings.storage.js";
 import { createSlurpStorage } from "../../data/slp-storage.js";
 import type { SlurpPlatformEvent } from "../../../../../shared/src/slp/slp-platform-events.js";
 import {
   normalizeSlurpSharedIdeas,
   normalizeSlurpSharedWorldEvent,
+  normalizeSlurpSharedWorldTrend,
   SLURP_NICHE_REFRESH_MS,
   slurpNichePatternsPrompt,
   slurpTopicalTags,
@@ -13,6 +15,7 @@ import {
   type SlurpSharedIdea,
   type SlurpSharedWorldEvent,
 } from "../../modules/feed/slp-shared-preseed.js";
+import { startSlurpTrend } from "../discovery/slp-discovery-contract.js";
 import { completeSlurpBeatJson, type SlurpBeatContext } from "./slp-post-beat-service.js";
 
 const SHARED_KEY = "slurp2.shared-preseed";
@@ -59,6 +62,8 @@ function refresh(key: string, at: Date, run: () => Promise<void>): void {
   void run()
     .then(() => failedUntil.delete(key))
     .catch((error: unknown) => {
+      // A busy connection sent nothing: the next post tries again.
+      if (slpIsAdmissionFailure(error)) return;
       failedUntil.set(key, at.getTime() + FAILED_WAIT_MS);
       logger.warn(error, "[slurp] Shared idea refresh failed (%s); beats use the Creator's own decks", key);
     })
@@ -128,6 +133,9 @@ export async function slurpSharedIdeasFor(
         });
         const event = input.worldEvents ? normalizeSlurpSharedWorldEvent(answer) : null;
         if (event) await startSlurpWideEvent(db, event, input.at);
+        // A platform trend (docs/TRENDS.md): it starts only while fewer than three trends are live.
+        const trend = normalizeSlurpSharedWorldTrend(answer);
+        if (trend) await startSlurpTrend(db, { label: trend.label, line: trend.line, source: "world" }, input.at);
       });
     }
     for (const topic of topics) {

@@ -1,5 +1,28 @@
 # Changelog
 
+## 0.7.1 — 2026-10-14 [highlight]
+
+- When Update from History can't use the model's answer, it now shows the changes the model suggested instead of only an error. Each change uses character names, says in plain words what needs fixing, and can be edited, removed or saved. Relationship changes and persona perceptions are saved separately, and the model's original answer is under Details for bug reports.
+- Fewer "unknown character alias" errors: the tracker now tells the model to keep your persona out of character pairs, and a pair it still files with your persona is offered as that character's view of you. The error now names the alias the model used.
+- Update from History no longer fails when the model leaves out an empty list.
+- After saving only persona perceptions, the panel says how many it saved.
+
+## 0.7.0 — 2026-10-13
+
+- In Roleplay, Update from History now reads whispers the way the Engine's own agents do, marked private with who they were for. A message that is only a whisper is no longer read as empty.
+- This needs a Marinara Engine that shares whispers with Agents. On older versions, the tracker keeps reading public messages only.
+
+## 0.6.4 — 2026-10-09 [highlight]
+
+- Fixed Update from History failing with "Persona update 1 must contain exactly five values" when a persona is active. The tracker now tells the model the exact shape of a persona perception, so it stops copying the lock flag into its answer.
+- The same fix helps automatic updates, which were quietly skipping those persona perception changes.
+- If a model still returns the wrong shape, the error now says how many values it sent.
+
+## 0.6.3 — 2026-10-06
+
+- In the Tracker Panel, Relationship Tracker now has the same collapsible header as World, Persona and the other trackers instead of its own card, and remembers whether you collapsed it. While it runs, the header shows a small spinner.
+- In the desktop Trackers window, the drawer's own header is used, and Relationship Tracker's button now matches the other trackers' buttons.
+
 ## 0.6.2 — 2026-10-02 [highlight]
 
 - Fixed "Invalid or missing X-Admin-Secret header" when Marinara is opened from another device (LAN, phone, or proxy). The panel now sends the admin secret saved on that device and explains where to save it.

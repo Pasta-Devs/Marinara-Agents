@@ -5,7 +5,7 @@
  * what the Stir tab shows ("In play", suggestions). See docs/architecture/README.md ("Stir").
  */
 import { z } from "zod";
-import type { SlpActionName, SlpStirWorld } from "./slp-actions.js";
+import type { SlpActionName, SlpBreakupAftermath, SlpStirWorld } from "./slp-actions.js";
 
 /** The player's own page and a Creator as a couple (Details › You two, Stir's "Your relationship"). */
 export type SlpPlayerCouple = {
@@ -16,6 +16,8 @@ export type SlpPlayerCouple = {
   togetherAt: string | null;
   stageAt: string;
   secret: boolean;
+  /** A breakup closes this shared page and cannot be undone. */
+  pageOpen?: boolean;
   lastDate: { at: string; detail: string } | null;
   lastFight: { at: string; detail: string } | null;
   /** Days since they got together at that mark: 30, 90, 180, then every 365. */
@@ -23,6 +25,8 @@ export type SlpPlayerCouple = {
   /** Her public side: how far her posts go, and what she posted this week (paid = subscribers only). */
   herSpice?: "flirty" | "suggestive" | "explicit" | null;
   herWeek?: { posts: number; paid: number };
+  /** #1293: how an ex handles the breakup; absent is the usual memory and fallout. */
+  aftermath?: Exclude<SlpBreakupAftermath, "keep"> | null;
 };
 
 /** When a play shows in the world. */
@@ -37,6 +41,7 @@ export type SlpStirNote = {
     | "awkward"
     | "reluctant"
     | "complicated"
+    | "family"
     | "mayDecline"
     | "noCollabs"
     | "notDramatic"
@@ -171,11 +176,26 @@ export type SlpStirSuggestion = {
   step: SlpStirStep | null;
 };
 
+/**
+ * A collab a recent play suggested or pushed, as it stands now: "Recent plays" follows it from the
+ * request to the joint post. `postId` is set only while that post still exists.
+ */
+export type SlpStirPlayedCollab = {
+  id: string;
+  hostId: string;
+  partnerId: string;
+  status: "asked" | "agreed" | "planned" | "posted" | "declined" | "blocked";
+  decline: "busy" | "offBrand" | "noCollabs" | "noAnswer" | "player" | null;
+  postId: string | null;
+};
+
 /** What the Stir tab reads in one request. */
 export type SlpStirView = {
   live: SlpStirLive[];
   suggestions: SlpStirSuggestion[];
   plays: SlpStirPlay[];
+  /** The collabs those plays started or pushed, finished ones too; a removed one is absent. */
+  playedCollabs?: SlpStirPlayedCollab[];
   creators: {
     id: string;
     name: string;
@@ -197,6 +217,8 @@ export type SlpStirView = {
     page: "open" | "closed" | null;
     /** A couple with the player's own page, kept out of public. */
     secret?: boolean;
+    /** #1293: how an ex handles the breakup; absent is the usual memory and fallout. */
+    aftermath?: Exclude<SlpBreakupAftermath, "keep"> | null;
   }[];
   collabs: { id: string; hostId: string; partnerId: string; status: string }[];
   rivalries: { id: string; fromId: string; toId: string; stage: string }[];

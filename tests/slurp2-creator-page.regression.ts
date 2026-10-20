@@ -147,7 +147,7 @@ test("a model's own spelling, a named pick and a made-up style still make a Page
   // Everything up to the last closing tag goes, with or without an opening tag.
   assert.match(service, /replace\(\/\^\[\\s\\S\]\*<\\\/think>\/iu/u, "a thinking model's notes never hide the answer");
   assert.doesNotMatch(service, /answerStart/u, "the log never carries the Creator's words");
-  assert.match(service, /maxTokens: 4000/u);
+  assert.match(service, /resolveStoredMaxTokens\(connection\.defaultParameters, 4000\)/u);
 });
 
 test("a model's other field names still make blocks (0.3.6)", () => {

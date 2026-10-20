@@ -12,11 +12,13 @@ The Tracker Panel's routes are privileged. When Marinara is opened from another 
 
 ## Use
 
+- In the Tracker Panel, Relationship Tracker is a collapsible section with the same header as the built-in trackers, and it remembers whether you collapsed it. In the desktop Trackers window, the window's own drawer collapses it instead.
 - Every assigned character card appears in the web, whether or not that character is currently in the scene. Defined lines use the four fixed color categories: positive, neutral, negative, complicated.
 - On desktop, hover or keyboard-focus a line to reveal its label. On touch and pen devices, press a line to reveal its label; press elsewhere in the web to dismiss it. This works for character-to-character lines and character-to-persona spokes.
 - The editor uses separate Character A and Character B selectors. Setting a relationship to **Undefined** and saving removes its line. Manual locks stay protected until **Resume automatic updates** is used.
 - The active persona renders as a distinct central node with directed spokes for each character's subjective view. Persona headings and accessible labels always use the current active persona name. **Show/Hide Persona** changes only the graphic.
 - **Update from History** re-checks a bounded recent window (1-100 messages) through the tracker's selected connection (or, when none is chosen, the default agent connection and then the chat's connection) and updates every line that is not locked.
+- If Update from History can't use the model's answer, nothing is saved and the panel lists the suggested changes in plain words, with anything that needs fixing marked. Fix or remove them, then save; relationship changes and persona perceptions are saved separately. The model's original answer is under **Details for bug reports**. If the characters or relationships change after that run, or 30 minutes pass, run Update from History again.
 - Prompt injection has two modes. **All relationships** injects every eligible defined line; **Scene-only relationships** injects only lines whose participants qualify as present in the bounded recent-message window (lookback defaults to 15 messages). Undefined relationships are never injected.
 
 The automatic tracker's **Context Size** (recent chat history supplied to the tracker model, default 5 messages), the **Presence lookback** (Scene-only eligibility, default 15 messages), and the **Update from History** message count are three separate controls with separate jobs.

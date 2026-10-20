@@ -1,0 +1,39 @@
+{
+  "schemaVersion": 2,
+  "capabilityApi": {
+    "major": 1,
+    "minor": 73
+  },
+  "builtAgainst": {
+    "engineVersion": "2.5.0",
+    "engineCommit": "1cd98bc161fb12717cda5fb1f9871c3d14de36e2"
+  },
+  "id": "3d-avatars",
+  "name": "3D Avatars",
+  "version": "0.1.1",
+  "description": "Shows your characters and personas as animated 3D models that blink, talk, and change faces with each reply. Uses VRM model files. Set up each avatar on the agent's page in Agents, then add the Agent in Chat Settings → Agents → Misc Agents for Roleplay and Game modes.",
+  "engine": {
+    "min": "2.5.0",
+    "maxExclusive": "4.0.0"
+  },
+  "kind": [
+    "agent"
+  ],
+  "entrypoints": {
+    "agents": "agents.json"
+  },
+  "files": [
+    {
+      "path": "agents.json",
+      "sha256": "69f4979c0272d438ddbff9fbef7b71b7451f32fe32c58a31d6103ec9d5ac496a",
+      "bytes": 465
+    }
+  ],
+  "permissions": [
+    "agent-runtime",
+    "chat-read",
+    "storage",
+    "ui"
+  ],
+  "restartRequired": false
+}

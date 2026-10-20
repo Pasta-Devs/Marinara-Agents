@@ -1,4 +1,5 @@
 import type { LtmScope } from "../../../../shared/src/features/agents/long-term-memory/schema.js";
+import { errorMessage, withoutUserMessage } from "./api";
 
 export type LtmSourceTaskKind = "import" | "refresh" | "re-extract";
 
@@ -259,13 +260,27 @@ export function markLtmSourceTaskViewed(id: string) {
   notify();
 }
 
+type RetryableSourceRow = { sourceId: string; retryable?: boolean };
+
+// One retry set for a live response (`imported`) and a restored safe result (`items`). Missing ids
+// are not retryable: retrying one re-requests the same id and gets the same result.
+export function retryableSourceIds(result: {
+  imported?: readonly RetryableSourceRow[];
+  items?: readonly RetryableSourceRow[];
+  writeFailures?: readonly RetryableSourceRow[];
+}) {
+  const rows = [...(result.imported ?? result.items ?? []), ...(result.writeFailures ?? [])];
+  return Array.from(new Set(rows.filter((row) => row.retryable).map((row) => row.sourceId)));
+}
+
 export function startLtmSourceTask<T>(options: {
   kind: LtmSourceTaskKind;
   contract: LtmSourceTaskContract;
   sourceTitles: string[];
   run: (signal: AbortSignal) => Promise<T>;
 }) {
-  if (snapshot.active?.status === "running") throw new Error("A Long-Term Memory source task is already running.");
+  if (snapshot.active?.status === "running")
+    throw withoutUserMessage(new Error("A Long-Term Memory source task is already running."));
   const id = `ltm-source-task-${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
   const controller = new AbortController();
   const task: LtmSourceTask = {
@@ -299,7 +314,7 @@ export function startLtmSourceTask<T>(options: {
         status: cancelled ? "cancelled" : "failed",
         error: {
           code: cancelled ? "cancelled" : "source_task_failed",
-          message: cancelled ? "" : error instanceof Error ? error.message : "",
+          message: cancelled ? "" : errorMessage(error, ""),
         },
       };
       update(failed);

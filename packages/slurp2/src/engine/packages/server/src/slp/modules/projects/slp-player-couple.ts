@@ -71,6 +71,8 @@ export function slurpPlayerCoupleView(couple: SlurpCouple, at: Date): SlurpPlaye
     togetherAt: couple.togetherAt,
     stageAt: couple.stageAt,
     secret: Boolean(couple.secret),
+    pageOpen: Boolean(couple.page && !couple.page.closedAt),
+    aftermath: couple.stage === "split" ? (couple.aftermath ?? null) : null,
     lastDate: last(["date"]),
     lastFight: last(["fight", "jealous"]),
     nextAnniversary: official && couple.togetherAt ? slurpNextAnniversary(couple.togetherAt, at) : null,

@@ -180,23 +180,72 @@ BH.dock = {
   _interaction: null,
   _boundsObserver: null,
   _detachedResize: null,
+  _hostlessWatch: null,
 
+  /**
+   * Every host element counts, wherever it sits. Since Engine 2.5.0 the shortcut's
+   * window and the Tracker Panel launcher are both outside the chat area; counting only
+   * elements inside it meant releasing either one closed Beholder while the other was
+   * still mounted. Only an element inside the area says where the panel belongs.
+   */
   registerHost(element) {
+    this.hostElements.add(element);
+    this.unwatchHostless();
     const area = element.closest?.(".rpg-chat-area");
     if (!area) return;
-    this.hostElements.add(element);
     this.hostArea = area;
     if (this.panel && !this.isDetached() && this.panel.parentElement !== area) area.appendChild(this.panel);
     this.observeBounds();
     this.syncGeometry();
   },
 
+  /**
+   * The Engine unmounts the shortcut's window content whenever that window minimizes,
+   * and any click elsewhere in the chat minimizes it. An open panel outlives its host:
+   * it stays until the user closes it, or until its chat is no longer on screen.
+   */
   releaseHost(element) {
     this.hostElements.delete(element);
     requestAnimationFrame(() => {
       for (const host of this.hostElements) if (!host.isConnected) this.hostElements.delete(host);
-      if (this.hostElements.size === 0 && !this.isDetached()) this.close();
+      if (this.hostElements.size > 0 || this.isDetached()) return;
+      if (this.isOpen() && this.showsOwnChat()) this.watchHostless();
+      else this.close();
     });
+  },
+
+  /**
+   * Is the panel still on the page, beside the chat it shows? Without a host nothing
+   * tells the dock that the chat changed, so this reads the chat the composer in the
+   * panel's own chat area names (Engine 2.5.0 and later). An Engine that does not name
+   * it gets false, so there the panel closes with its host as before.
+   */
+  showsOwnChat() {
+    const area = this.panel?.isConnected ? this.panel.closest(".rpg-chat-area") : null;
+    const shown = area?.querySelector("[data-chat-composer][data-chat-id]")?.getAttribute("data-chat-id");
+    return !!this.chatId && shown === this.chatId;
+  },
+
+  /**
+   * While no host is mounted, close once the chat changes or the chat view goes away;
+   * otherwise the panel would go on showing, and writing to, a chat nobody is looking at.
+   */
+  watchHostless() {
+    if (this._hostlessWatch) return;
+    this._hostlessWatch = new MutationObserver(() => {
+      if (!this.isOpen() || !this.showsOwnChat()) this.close();
+    });
+    this._hostlessWatch.observe(document.body, {
+      childList: true,
+      subtree: true,
+      attributes: true,
+      attributeFilter: ["data-chat-id"],
+    });
+  },
+
+  unwatchHostless() {
+    this._hostlessWatch?.disconnect();
+    this._hostlessWatch = null;
   },
 
   findChatArea() {
@@ -396,6 +445,7 @@ BH.dock = {
   },
 
   close() {
+    this.unwatchHostless();
     if (this.isDetached()) {
       const popup = this.detachedWindow;
       this.restoreFromDetached();
@@ -414,7 +464,7 @@ BH.dock = {
     BH.views.close();
     BH.editor.close();
     BH.sheet.close?.();
-    document.querySelector(".beholder-onboard")?.remove();
+    BH.onboard.hide();
     this.syncHostLayer();
     BH.syncToggles();
   },

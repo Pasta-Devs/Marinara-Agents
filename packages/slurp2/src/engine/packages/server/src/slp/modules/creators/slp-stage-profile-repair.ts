@@ -140,6 +140,7 @@ export function slurpStageFacts(input: {
   appearance?: string;
   wardrobe?: string;
   locations?: string;
+  clothingStyle?: SlpCreatorStageFacts["clothingStyle"];
 }): SlpCreatorStageFacts | undefined {
   const fact = (value: string | undefined) => value?.trim().slice(0, SLURP_STAGE_FACT_MAX_LENGTH) || undefined;
   const facts: SlpCreatorStageFacts = {
@@ -148,6 +149,7 @@ export function slurpStageFacts(input: {
     }),
     ...(fact(input.wardrobe) !== undefined && { wardrobe: fact(input.wardrobe)! }),
     ...(fact(input.locations) !== undefined && { locations: fact(input.locations)! }),
+    ...(input.clothingStyle && input.clothingStyle !== "auto" && { clothingStyle: input.clothingStyle }),
   };
   return Object.keys(facts).length > 0 ? facts : undefined;
 }

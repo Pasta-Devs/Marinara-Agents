@@ -74,6 +74,13 @@ import { SLURP_DEFAULT_CREATOR_MESSAGING, SLURP_DM_POLICIES } from "../messages/
 import { SLURP_DEFAULT_REPLY_DELAYS } from "../messages/slp-messaging.js";
 import { NOODLER_CONTENT_HARD_MAX_LENGTH } from "../../base/prompting/slp-content-format.js";
 import { parseRecord, type SlurpAccount } from "../records/slp-storage-model.js";
+import {
+  LEGACY_GRAPHIC_SLP_CREATOR_DEFAULT_IMAGE_GENERATION_PROMPT,
+  LEGACY_SLP_CREATOR_DEFAULT_IMAGE_GENERATION_PROMPT,
+  LEGACY_SLP_CREATOR_DEFAULT_IMAGE_PROMPT_INTERPRETATION,
+  SLP_CREATOR_DEFAULT_IMAGE_GENERATION_PROMPT,
+  SLP_CREATOR_DEFAULT_IMAGE_PROMPT_INTERPRETATION,
+} from "./slp-settings-image-prompts.js";
 export const slpCreatorFanArchetypeWeightsSchema = z
   .object({
     ordinary: z.number().finite().min(0),
@@ -120,6 +127,8 @@ export const slurpSettingsSchema = z.object({
   storyLifetimeHours: z.number().int().min(1).max(168),
   /** How often an automatic post goes out free as a teaser. See `slurpTeaserPost`. */
   teaserRate: z.enum(SLURP_TEASER_RATE),
+  /** How often posts reuse an earlier picture. See `slurpReuseDelivery`. */
+  pictureReuse: z.enum(["off", "rare", "regular"]),
   /** Share of a Creator's automatic posts that continue a project rather than standing alone. */
   projectRate: z.enum(SLURP_PROJECT_RATE),
   /** Multiplies every arc chapter's day range. */
@@ -180,6 +189,7 @@ export const slurpSettingsSchema = z.object({
   imageContextMode: z.enum(["auto", "imagePrompt", "vision"]),
   /** Describes pictures for image context. Null uses the Creator text connection. */
   imageContextConnectionId: z.string().nullable(),
+  imageCaptionPrompt: z.string().max(4000),
   /** Builds Creator Pages (a long structured answer); null = the AI writing connection. */
   pageConnectionId: z.string().nullable().default(null),
   /** The LLM connection that enhances picture prompts; null = Slurp's text connection. */
@@ -199,6 +209,7 @@ export const slurpSettingsSchema = z.object({
   imageAppearanceMode: z.enum(["writer", "insert", "both"]),
   appearanceProfileMode: z.enum(["ask", "high_confidence", "always"]),
   autoPostingImagesEnabled: z.boolean(),
+  autoCreatorArtworkEnabled: z.boolean(),
   allowRandomUsers: z.boolean(),
   /** Ambient roster entity ids the user deleted; the seeder never recreates these. */
   dismissedAmbientProfileIds: z.array(z.string()),
@@ -237,6 +248,7 @@ export const slurpSettingsSchema = z.object({
   characterImageInstructions: z.record(z.string(), z.boolean()),
   /** Per Creator: false turns off "The image model knows this character" (the card name in picture prompts). */
   creatorImageNames: z.record(z.string(), z.boolean()),
+  creatorImagePrefixes: z.record(z.string(), z.string().max(300)),
   /** Saved sets of generation guidance and image prompt, switched from Settings. */
   promptPresets: z
     .array(
@@ -304,11 +316,7 @@ export const slurpSettingsSchema = z.object({
   previewWholePictures: z.boolean(),
   /** Every Slurp picture and video stays blurred until it is tapped (for using Slurp in public). */
   blurPictures: z.boolean(),
-  /**
-   * Posts a day across the whole Creator cast, and now actually that number: the reserve used to
-   * lay down twice as many slots as this asked for. The ceiling is well above the old 24 so a
-   * player who liked the accidental rate can ask for it outright.
-   */
+  /** Posts a day across the whole Creator cast, and now actually that number (the reserve used to lay down twice as many slots). The ceiling is well above the old 24 for a player who liked that accidental rate. */
   postsPerDay: z.number().int().min(1).max(96),
   /** The player set "Posts per day" by hand. Otherwise it grows with the active Creators (F). */
   postsPerDayCustom: z.boolean(),
@@ -347,6 +355,8 @@ export const slurpSettingsSchema = z.object({
    * Commissions and the later bubbles of a reply already sent still arrive — those are owed.
    */
   messagesAwayRepliesEnabled: z.boolean(),
+  /** One unsolicited text, then none until a real reply. See `slurpAllowsUnsolicitedText`. */
+  messagesPauseFollowUpsUntilReply: z.boolean(),
   /** Messages one reply is broken into. One keeps a reply in a single bubble. */
   messagesReplyBubbleLimit: z.number().int().min(1).max(4),
   /** Where a creator nobody has configured by hand starts. */
@@ -409,6 +419,7 @@ export const slurpSettingsSchema = z.object({
   paused: z.boolean(),
   nightQuiet: z.boolean(),
   onboarding: z.enum(["not_started", "in_progress", "completed"]),
+  viewerPersonaId: z.string().max(200).nullable(), // Who browses Slurp, the same on every device (#103).
 });
 
 export type SlurpSettings = z.infer<typeof slurpSettingsSchema>;
@@ -457,21 +468,6 @@ export const LEGACY_STEAMY_SLURP_DEFAULT_GENERATION_GUIDANCE =
 export const LEGACY_EXPLICIT_SLURP_DEFAULT_GENERATION_GUIDANCE =
   "All Slurp creators and viewers are adults (18+). This is an explicit adult creator page. Sexual content is the norm here rather than the exception, and creators describe it directly and in detail when it suits them. Tease the locked posts hard and answer flirty comments in kind. Keep each creator's personality intact: a shy creator is explicit shyly, a blunt one is explicit bluntly. Ordinary posts about their day, work, and mood still appear and keep the feed believable.";
 
-export const LEGACY_SLP_CREATOR_DEFAULT_IMAGE_GENERATION_PROMPT =
-  "Create a polished social-media image for an adult Creator post. Match the creator's identity, personality, body, clothing, and established visual details. Follow the post's mood and subject. Describe the pose, expression, setting, lighting, camera angle, composition, and visible details clearly. Flirty, suggestive, sensual, or explicit imagery is allowed when it fits the post and creator, but do not force sexual content into ordinary updates. Keep the image coherent, intentional, and suitable for a public or locked Creator feed.";
-
-export const LEGACY_GRAPHIC_SLP_CREATOR_DEFAULT_IMAGE_GENERATION_PROMPT =
-  "Create a polished social-media image for an adult Creator post. Match the creator's identity, personality, body, clothing, and established visual details. Follow the post's mood and subject. Describe the pose, expression, setting, lighting, camera angle, composition, and visible details clearly. Flirty, suggestive, sensual, or explicit imagery is allowed when it fits the post and creator, but do not force sexual content into ordinary updates. When the image shows nudity or sex, always use thorough, graphic descriptions. Name the body in dirty everyday words, not clinical ones: tits, nipples, ass, pussy, clit, cock, balls, cum, wet, dripping, hard, leaking. Describe how it looks, how it sits, how it catches the light. Keep the image coherent, intentional, and suitable for a public or locked Creator feed.";
-
-export const SLP_CREATOR_DEFAULT_IMAGE_GENERATION_PROMPT =
-  "Create a provider-ready image prompt for the supplied adult Creator post. Preserve the post's subject, action, setting, mood, clothing, and established appearance. Use the Creator's personality to shape expression and presentation, not to invent a new event or sexualize an ordinary moment. Add nudity, explicit anatomy, or sexual activity only when the post or an explicit trusted instruction already requires it. Keep the image coherent, believable, and suitable for the post's public or locked access level. Use only the visual details needed for this scene.";
-
-export const LEGACY_SLP_CREATOR_DEFAULT_IMAGE_PROMPT_INTERPRETATION =
-  "Edit this image prompt into a provider-ready image prompt. Preserve the original subject, action, setting, composition, and visual style. Preserve any explicit style in the original prompt, character context, image instructions, or style guidance. Do not add realistic, photorealistic, photographic, camera, lens, or natural-lighting language unless the supplied context clearly requests that style. Do not convert an anime, cartoon, game, manga, comic, illustration, painterly, fantasy, or stylized character into a realistic image. When no style is specified, keep the prompt style-neutral. Do not invent an art style. Treat image instructions as guidance, not text to copy into the result. Return only the provider-ready image prompt.";
-
-export const SLP_CREATOR_DEFAULT_IMAGE_PROMPT_INTERPRETATION =
-  "Edit this image prompt into a concise provider-ready image prompt. Preserve the original subject, action, setting, clothing, composition, visual style, and sexual intensity. Preserve explicit style from the original prompt, character context, image instructions, or style guidance. Do not add a new event, person, pose, outfit, viewpoint, nudity, explicit anatomy, or sexual activity. Do not turn an ordinary update into a fashion shoot or erotic image. Do not add realistic, photographic, camera, lens, or natural-lighting language unless the supplied context requests it. Do not convert a stylized character into a realistic image. Treat image instructions as guidance, not text to copy. Return only the provider-ready image prompt.";
-
 /**
  * The LEGACY_* guidance constants above are every previously shipped default. An install that
  * never edited the guidance stored one of them verbatim, so it is migrated to the current default
@@ -513,6 +509,7 @@ export const DEFAULT_SLURP_SETTINGS: SlurpSettings = {
   storyImagesEnabled: true,
   storyLifetimeHours: 72,
   teaserRate: SLURP_DEFAULT_TEASER_RATE,
+  pictureReuse: "regular",
   projectRate: SLURP_DEFAULT_PROJECT_RATE,
   arcPace: SLURP_DEFAULT_ARC_PACE,
   discoveryTags: SLURP_DISCOVERY_TAG_SEED.map((entry) => ({ ...entry })),
@@ -542,6 +539,7 @@ export const DEFAULT_SLURP_SETTINGS: SlurpSettings = {
   generationConnectionId: null,
   imageContextMode: "auto",
   imageContextConnectionId: null,
+  imageCaptionPrompt: "",
   pageConnectionId: null,
   imagePromptConnectionId: null,
   imageStyleProfileId: null,
@@ -558,6 +556,7 @@ export const DEFAULT_SLURP_SETTINGS: SlurpSettings = {
   imageAppearanceMode: "writer",
   appearanceProfileMode: "high_confidence",
   autoPostingImagesEnabled: false,
+  autoCreatorArtworkEnabled: false,
   allowRandomUsers: false,
   dismissedAmbientProfileIds: [],
   allowProfessorMari: false,
@@ -571,6 +570,7 @@ export const DEFAULT_SLURP_SETTINGS: SlurpSettings = {
   postShowMoreLength: 300,
   characterImageInstructions: {},
   creatorImageNames: {},
+  creatorImagePrefixes: {},
   promptPresets: [],
   promptBlocks: {} satisfies SlurpPromptBlockOverrides,
   classicPromptBlocks: {} satisfies SlurpPromptBlockOverrides,
@@ -625,6 +625,7 @@ export const DEFAULT_SLURP_SETTINGS: SlurpSettings = {
     freeResource: 1,
   },
   messagesAwayRepliesEnabled: true,
+  messagesPauseFollowUpsUntilReply: false,
   messagesReplyBubbleLimit: 3,
   messagesDefaultDmPolicy: SLURP_DEFAULT_CREATOR_MESSAGING.dmPolicy,
   messagesDefaultRequestFee: SLURP_DEFAULT_CREATOR_MESSAGING.requestFee,
@@ -653,6 +654,7 @@ export const DEFAULT_SLURP_SETTINGS: SlurpSettings = {
   paused: false,
   nightQuiet: false,
   onboarding: "not_started",
+  viewerPersonaId: null,
 };
 
 /**
@@ -756,6 +758,8 @@ function normalizeSlurpSettingsUncached(raw: unknown): SlurpSettings {
     rawRecord.classicPromptBlocks ?? slurpLegacyClassicPromptBlocks(rawRecord.promptBlocks);
   candidate.nightQuiet = rawRecord.nightQuiet ?? DEFAULT_SLURP_SETTINGS.nightQuiet;
   candidate.paused = rawRecord.paused === true;
+  // Settings saved before the switch existed keep their artwork; a new install starts with it off.
+  candidate.autoCreatorArtworkEnabled = rawRecord.autoCreatorArtworkEnabled ?? Object.keys(rawRecord).length > 0;
   // Repaired rather than replaced: a player who edited one type must not lose the other seven
   // because a single field went out of range. An all-disabled list re-enables built-in Regular,
   // which is the one state the tick cannot run in — there would be nobody to pick.
@@ -777,7 +781,6 @@ function normalizeSlurpSettingsUncached(raw: unknown): SlurpSettings {
     maxArcs: SLURP_ARC_LIBRARY_MAX,
     maxEvents: SLURP_PLATFORM_EVENTS_MAX,
   }));
-  candidate.onboarding = rawRecord.onboarding ?? DEFAULT_SLURP_SETTINGS.onboarding;
   candidate.postsPerDayCustom = slurpPostsPerDayIsCustom(rawRecord);
   // A partial or older value keeps the balanced weight for every job it does not name.
   candidate.storyJobs = { ...DEFAULT_SLURP_SETTINGS.storyJobs, ...parseRecord(rawRecord.storyJobs) };

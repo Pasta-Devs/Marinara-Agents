@@ -19,6 +19,7 @@ import {
 } from "lucide-react";
 import {
   Fragment,
+  useContext,
   useEffect,
   useLayoutEffect,
   useMemo,
@@ -28,6 +29,7 @@ import {
   type RefObject,
 } from "react";
 import { createPortal } from "react-dom";
+import { ModalPortalContext } from "../ui/Modal";
 import {
   findNoodleTextMentions,
   noodlePollInputSchema,
@@ -767,6 +769,10 @@ export function NoodleAnchoredPopover({
     top: number;
   } | null>(null);
   const accent = useNoodleAccent();
+  // Portalled into Noodle's own element (or the layer of the dialog it sits in), like Slurp's popovers. Noodle's
+  // stylesheet and its rule hiding the chat-only emoji settings are scoped to that element: on document.body the
+  // popover lost its classes (see-through) and kept the chat's "Selection preferences" button.
+  const portalContainer = useContext(ModalPortalContext);
 
   useLayoutEffect(() => {
     const updatePosition = () => {
@@ -807,10 +813,11 @@ export function NoodleAnchoredPopover({
       ref={panelRef}
       data-noodle-compose-focus-portal={modalOwned ? "true" : undefined}
       className={cn(
-        "fixed max-h-[calc(100dvh-2rem)] max-w-[calc(100vw-2rem)] overflow-y-auto",
+        "pointer-events-auto fixed max-h-[calc(100dvh-2rem)] max-w-[calc(100vw-2rem)] overflow-y-auto",
         modalOwned ? "z-[10001]" : "z-[80]",
         NOODLE_ICON_SCOPE_CLASS,
-        wide ? "w-[18rem] sm:w-[24rem]" : "w-[19rem]",
+        // As wide as the Engine's own media picker: on a phone 18rem clipped the emoji picker's category row.
+        wide ? "w-[min(24rem,calc(100vw-2rem))]" : "w-[19rem]",
       )}
       style={getNoodleAccentStyle(accent, {
         left: position?.left ?? -9999,
@@ -820,7 +827,7 @@ export function NoodleAnchoredPopover({
     >
       {children}
     </div>,
-    document.body,
+    portalContainer ?? document.body,
   );
 }
 

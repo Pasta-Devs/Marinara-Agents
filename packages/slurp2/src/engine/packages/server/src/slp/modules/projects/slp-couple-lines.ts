@@ -5,13 +5,13 @@
 import { slurpCoupleActive, slurpCoupleFor, slurpCoupleOf, type SlurpCouple } from "./slp-creator-couples.js";
 import { slurpForcedCoupleLine } from "./slp-couple-words.js";
 import { slurpCouplePartners, slurpNameList } from "./slp-couple-group.js";
+import { slpGenderWords } from "../../../../../shared/src/slp/slp-gender.js";
 
 /** An ex stays on a Creator's mind (and in their posts and chats) this long after the breakup. */
 export const SLURP_EX_DAYS = 30;
 
 /** What a Creator calls the one they are with, from that page's gender. */
-export const slurpPartnerWord = (gender: string | null | undefined) =>
-  gender === "male" ? "boyfriend" : gender === "female" ? "girlfriend" : "partner";
+export const slurpPartnerWord = (gender: string | null | undefined) => slpGenderWords(gender).boyfriend;
 
 export type SlurpRelationshipOptions = {
   withId?: string | null;
@@ -91,20 +91,37 @@ function oneRelationshipLine(
       return colored(
         `${partner} is your partner, but things are rocky between you right now${trouble?.detail ? ` (${trouble.detail})` : ""}.`,
       );
-    return couple.ending === "fizzled"
-      ? `You and ${partner} flirted for a while, and it went nowhere.`
-      : `${partner} is your ex. You broke up ${days <= 1 ? "just now" : `${days} days ago`}.`;
+    return slurpExLine(couple, partner, days, true);
   }
   if (couple.stage === "sparks")
     return colored(`You have a crush on ${partner}, another Creator on Slurp. Nothing is official.`);
-  if (couple.stage === "split")
-    return `${partner} is your ex: you broke up ${days <= 1 ? "just now" : `${days} days ago`}. It still comes up now and then, and fans may ask. Say as much or as little as you would.`;
+  if (couple.stage === "split") return slurpExLine(couple, partner, days, false);
   const what =
     couple.stage === "dating"
       ? `You are dating ${partner}, another Creator on Slurp; it is still new.`
       : `You are with ${partner}, another Creator on Slurp.`;
   const rocky = couple.stage === "rocky" ? " Things are rocky between you two right now." : "";
   return colored(`${what}${rocky}`) + " They are part of your life, not the topic of everything you write.";
+}
+
+/**
+ * An ex's line, by what the breakup leaves behind (#1293). "forget" overrides whatever the chat's own
+ * history already shows: there is no deleting old messages, so the line says plainly it is over and
+ * nothing is unfinished, rather than staying silent and letting the old transcript speak for itself.
+ */
+function slurpExLine(couple: SlurpCouple, name: string, days: number, inChat: boolean, player = false): string {
+  // Forgetting wins over everything else, including a fizzle: there is nothing left to recall at all.
+  if (couple.aftermath === "forget")
+    return `You have no memory of a romantic relationship with ${name}. Whatever older messages or posts between you show are historical records only: you do not reconstruct that relationship from them, bring it up, or act like any romance is unfinished.`;
+  if (couple.ending === "fizzled") return `You and ${name} flirted for a while, and it went nowhere.`;
+  const ago = days <= 1 ? "just now" : `${days} days ago`;
+  if (couple.aftermath === "moveOn")
+    return `${name} is your ex. You broke up ${ago}. You have moved on: you do not dwell on it or bring up the breakup.`;
+  return inChat
+    ? `${name} is your ex. You broke up ${ago}.`
+    : player
+      ? `${name} is your ex: you broke up ${ago}. It still comes up now and then.`
+      : `${name} is your ex: you broke up ${ago}. It still comes up now and then, and fans may ask. Say as much or as little as you would.`;
 }
 
 /**
@@ -140,10 +157,7 @@ function slurpPlayerLine(
     const known = couple.secret ? "" : inChat ? ", and your fans know" : "";
     return colored(`${name} is your ${word}: you two are together${known}.${rocky}${hush}`);
   }
-  if (couple.ending === "fizzled") return `You and ${name} flirted for a while, and it went nowhere.`;
-  return inChat
-    ? `${name} is your ex. You broke up ${days <= 1 ? "just now" : `${days} days ago`}.`
-    : `${name} is your ex: you broke up ${days <= 1 ? "just now" : `${days} days ago`}. It still comes up now and then.`;
+  return slurpExLine(couple, name, days, inChat, true);
 }
 
 /**
@@ -157,8 +171,12 @@ export function slurpChatBridgeCoupleLine(
   if (!couple) return "";
   const { her, you } = input;
   const since = (iso: string | null) => (iso ? ` since ${iso.slice(0, 10)}` : "");
-  const hush = couple.secret ? ", kept secret from her fans" : "";
+  const hush = couple.secret ? `, kept secret from ${slpGenderWords(input.herGender).his} fans` : "";
   const fight = [...couple.moments].reverse().find((moment) => moment.kind === "fight" || moment.kind === "jealous");
+  // #1293: forgetting overrides whatever the chat's own transcript already shows, so it never stays
+  // silent and lets old messages speak for themselves; it says plainly there is nothing unfinished.
+  if (couple.aftermath === "forget")
+    return `${her} has no memory of a romantic relationship with ${you} on Slurp. Older messages between them are historical records only: ${her} does not reconstruct a relationship from them or act like any romance is unfinished.`;
   if (couple.stage === "sparks")
     return `${her} and ${you} have a crush on each other on Slurp; nothing is official yet.`;
   if (couple.stage === "dating") return `${her} and ${you} are dating on Slurp${since(couple.stageAt)}${hush}.`;
@@ -167,20 +185,49 @@ export function slurpChatBridgeCoupleLine(
       couple.stage === "rocky" ? ` Things are rocky right now${fight?.detail ? ` (${fight.detail})` : ""}.` : ""
     }`;
   const days = Math.round((input.at.getTime() - Date.parse(couple.stageAt)) / 86_400_000);
-  return couple.ending === "breakup" && days <= SLURP_EX_DAYS
-    ? `${her} and ${you} broke up on Slurp ${days <= 1 ? "just now" : `${days} days ago`}.`
-    : "";
+  if (couple.ending !== "breakup" || days > SLURP_EX_DAYS) return "";
+  const ago = days <= 1 ? "just now" : `${days} days ago`;
+  return couple.aftermath === "moveOn"
+    ? `${her} and ${you} broke up on Slurp ${ago}. ${her} has moved on and does not dwell on it.`
+    : `${her} and ${you} broke up on Slurp ${ago}.`;
+}
+
+/**
+ * A character's love life with other Creators, for the chat bridge: one third-person line per
+ * running couple, or none. Couples with the player's own pages are left out; the caller says those
+ * with `slurpChatBridgeCoupleLine`. Secret couples stay secret, and a partner without a known name
+ * is not mentioned.
+ */
+export function slurpChatBridgeLoveLines(
+  couples: readonly SlurpCouple[],
+  creatorId: string,
+  input: { her: string; names: ReadonlyMap<string, string>; playerIds: ReadonlySet<string> },
+): string[] {
+  return couples
+    .filter((couple) => slurpCoupleActive(couple) && !couple.secret)
+    .flatMap((couple) => {
+      const partners = slurpCouplePartners(couple, creatorId);
+      if (partners.length === 0 || partners.some((id) => input.playerIds.has(id))) return [];
+      const who = slurpNameList(partners.flatMap((id) => (input.names.has(id) ? [input.names.get(id)!] : [])));
+      if (!who) return [];
+      if (couple.stage === "sparks") return [`${input.her} is flirting with ${who} on Slurp.`];
+      if (couple.stage === "dating") return [`${input.her} is dating ${who} on Slurp.`];
+      return [`${input.her} is together with ${who} on Slurp${couple.stage === "rocky" ? "; things are rocky" : ""}.`];
+    });
 }
 
 /** The newest breakup of this Creator in the last `SLURP_EX_DAYS` days, or null. */
 function slurpRecentEx(couples: readonly SlurpCouple[], creatorId: string, at: Date): SlurpCouple | null {
   return (
     [...couples]
-      .reverse()
+      .sort((left, right) => Date.parse(right.stageAt) - Date.parse(left.stageAt))
       .find(
         (couple) =>
           couple.ending === "breakup" &&
           !slurpCoupleActive(couple) &&
+          // #1293: a forgotten ex never surfaces unasked, in a post or anywhere else ambient.
+          couple.aftermath !== "forget" &&
+          slurpCoupleOf(couples, couple.aId, couple.bId) === couple &&
           slurpCouplePartners(couple, creatorId).length > 0 &&
           at.getTime() - Date.parse(couple.stageAt) >= 0 &&
           at.getTime() - Date.parse(couple.stageAt) < SLURP_EX_DAYS * 86_400_000,
@@ -190,8 +237,13 @@ function slurpRecentEx(couples: readonly SlurpCouple[], creatorId: string, at: D
 
 /** A couple of three or four, from one member's side. */
 function slurpGroupLine(couple: SlurpCouple, partners: string, inChat: boolean): string {
-  if (couple.stage === "split")
-    return `${partners} are your exes: the relationship you had together is over. It still comes up now and then.`;
+  if (couple.stage === "split") {
+    if (couple.aftermath === "forget")
+      return `You have no memory of a romantic relationship with ${partners}. Whatever older messages or posts between you show are historical records only: you do not reconstruct that relationship from them or act like any romance is unfinished.`;
+    const on =
+      couple.aftermath === "moveOn" ? " You have moved on and do not dwell on it." : " It still comes up now and then.";
+    return `${partners} are your exes: the relationship you had together is over.${on}`;
+  }
   const rocky = couple.stage === "rocky" ? " Things are rocky between you right now." : "";
   const what =
     couple.stage === "together"

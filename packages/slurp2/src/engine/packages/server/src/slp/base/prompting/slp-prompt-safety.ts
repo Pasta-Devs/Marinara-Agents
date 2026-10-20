@@ -1,3 +1,5 @@
+import { resolveMacros } from "@marinara-engine/shared";
+
 function promptRecord(value: unknown): Record<string, unknown> {
   if (!value) return {};
   if (typeof value === "string") {
@@ -52,14 +54,21 @@ function promptField(primary: unknown, fallback?: unknown): string {
 }
 
 /**
- * Card macros for a Slurp prompt. Cards are written for roleplay chats, so `{{char}}` is the Creator
- * and `{{user}}` the player; unresolved, the model saw template syntax where the person should be.
- * An empty name (the concealed brief) keeps the source name out of the prompt.
+ * Engine macros for Slurp text (card fields, wardrobe looks). Cards are written for roleplay chats,
+ * so `{{char}}` is the Creator and `{{user}}` the player; unresolved, the model saw template syntax
+ * where the person should be. An empty name (the concealed brief) keeps the source name out of the
+ * prompt. Slurp has no chat, so chat-only macros (`{{input}}`, chat variables) resolve to nothing;
+ * `{{random::…}}` rolls again on every call.
  */
 export function slpResolveCardMacros(text: string, name: string): string {
-  return text
-    .replace(/\{\{\s*char\s*\}\}/giu, name.trim() || "the Creator")
-    .replace(/\{\{\s*user\s*\}\}/giu, "the player");
+  if (!text.includes("{{")) return text;
+  // Cards write `{{ Char }}` too; the Engine resolver only knows the tight form.
+  const tight = text.replace(/\{\{\s*(char|user)\s*\}\}/giu, (_, macro: string) => `{{${macro.toLowerCase()}}}`);
+  return resolveMacros(
+    tight,
+    { char: name.trim() || "the Creator", user: "the player", characters: [], variables: {} },
+    { trimResult: false },
+  );
 }
 
 export function noodlerConcealedSourceText(data: unknown): string {
@@ -93,11 +102,18 @@ function canonField(value: string, name: string, max: number): string {
   return `${(end > max * 0.6 ? cut.slice(0, end + 1) : cut).trim()} …`;
 }
 
-export function slpCreatorCharacterCanonText(data: unknown, includeName: boolean): string {
+/**
+ * How much more of each card field the one cached card reading (canon anchors) gets than a post
+ * does. A fact past a post's cut (a character who cannot speak, named in the last paragraph) is
+ * read once there instead of riding in every prompt. Still bounded: about 19,000 characters at most.
+ */
+export const SLP_CANON_READING_SCALE = 4;
+
+export function slpCreatorCharacterCanonText(data: unknown, includeName: boolean, scale = 1): string {
   const source = promptRecord(data);
   const extensions = promptRecord(source.extensions);
   const name = promptField(source.name).trim();
-  const field = (value: string, max: number) => canonField(value, name, max);
+  const field = (value: string, max: number) => canonField(value, name, max * scale);
   return [
     ...(includeName ? [`Name: ${name}`] : []),
     `Description: ${field(promptField(source.description), 1600)}`,
@@ -126,4 +142,21 @@ export function slpCreatorSourceText(data: unknown): string {
   ]
     .filter((line) => line.trim().split(": ").slice(1).join(": ").trim())
     .join("\n");
+}
+
+/**
+ * Shortens over-long model text to at most `maxLength` without ending mid-word ("…QUESTI", #101):
+ * at the last sentence end when that keeps most of the text, else at the last space. A hard cut
+ * only when there is no space at all, and never inside a surrogate pair.
+ */
+export function slpCutAtBoundary(text: string, maxLength: number): string {
+  if (text.length <= maxLength) return text;
+  const lastCodeUnit = text.charCodeAt(maxLength - 1);
+  const head = text.slice(0, lastCodeUnit >= 0xd800 && lastCodeUnit <= 0xdbff ? maxLength - 1 : maxLength);
+  // The character after the cut decides whether the head already ends on a whole word.
+  if (/\s/u.test(text.charAt(head.length))) return head.trimEnd();
+  const sentenceEnd = Math.max(...[...head.matchAll(/[.!?…]["')\]]?(?=\s)/gu)].map((m) => m.index + m[0].length), -1);
+  if (sentenceEnd >= maxLength * 0.6) return head.slice(0, sentenceEnd);
+  const space = head.search(/\s\S*$/u);
+  return space > 0 ? head.slice(0, space).trimEnd() : head.trimEnd();
 }

@@ -225,23 +225,34 @@ export function ChipListInput({
   onChange,
   placeholder,
   disabled = false,
+  max,
+  maxLength,
+  wrap = false,
 }: {
   label: string;
   values: readonly string[];
   onChange: (values: string[]) => void;
   placeholder?: string;
   disabled?: boolean;
+  /** The most entries the list keeps: at the limit the input stops taking more, so none is dropped on save. */
+  max?: number;
+  /** The longest entry the list keeps. */
+  maxLength?: number;
+  /** Long entries wrap inside their chip instead of being cut to one line: for sentences, not names. */
+  wrap?: boolean;
 }) {
   const { t } = useTranslation();
   const [draft, setDraft] = useState("");
   const inputId = useId();
+  const full = max !== undefined && values.length >= max;
   const add = () => {
     const next = draft.trim();
-    if (next && !values.includes(next)) onChange([...values, next]);
+    if (next && !full && !values.includes(next)) onChange([...values, next]);
     setDraft("");
   };
   return (
-    <div className="space-y-2">
+    // min-w-0: in a grid the list is as wide as its longest chip otherwise, and the pane scrolls sideways.
+    <div className="min-w-0 space-y-2">
       <label htmlFor={inputId} className="block text-xs font-semibold">
         {label}
       </label>
@@ -253,7 +264,9 @@ export function ChipListInput({
             key={value}
             className="inline-flex max-w-full items-center rounded-full bg-[var(--slurp-surface-raised,var(--accent))] ps-3 text-sm ring-1 ring-inset ring-[var(--slurp-outline,var(--border))]"
           >
-            <span className="min-w-0 truncate">{value}</span>
+            <span className={wrap ? "min-w-0 break-words py-1.5" : "min-w-0 truncate"} title={value}>
+              {value}
+            </span>
             <button
               type="button"
               disabled={disabled}
@@ -269,7 +282,10 @@ export function ChipListInput({
           id={inputId}
           value={draft}
           disabled={disabled}
-          placeholder={placeholder}
+          // Read-only, not disabled, at the limit: focus stays, and Backspace still removes the last chip.
+          readOnly={full}
+          maxLength={maxLength}
+          placeholder={full ? undefined : placeholder}
           onChange={(event) => setDraft(event.target.value)}
           onKeyDown={(event) => {
             if (event.key === "Enter") {

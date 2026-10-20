@@ -1,6 +1,24 @@
-import type { LtmNote } from "../../../../shared/src/features/agents/long-term-memory/schema.js";
+import type {
+  LtmExtractionDropReason,
+  LtmNote,
+} from "../../../../shared/src/features/agents/long-term-memory/schema.js";
 
 export type LabelLocalizer = (key: string) => string;
+
+export const rejectionReasonLabels: Partial<Record<LtmExtractionDropReason, string>> = {
+  invalid_format: "ui.longTermMemory.reviewqueue.rejectionReasonInvalidFormat",
+  candidate_overflow: "ui.longTermMemory.reviewqueue.rejectionReasonCandidateOverflow",
+  placeholder_output: "ui.longTermMemory.reviewqueue.rejectionReasonPlaceholderOutput",
+  quote_not_found_in_source: "ui.longTermMemory.reviewqueue.rejectionReasonQuoteNotFound",
+  missing_source_evidence: "ui.longTermMemory.reviewqueue.rejectionReasonMissingEvidence",
+  source_summary_payload: "ui.longTermMemory.reviewqueue.rejectionReasonSourceSummary",
+  unsupported_bucket: "ui.longTermMemory.reviewqueue.rejectionReasonUnsupportedBucket",
+  target_note_outside_scope: "ui.longTermMemory.reviewqueue.rejectionReasonOutsideScope",
+  ambiguous_subject: "ui.longTermMemory.reviewqueue.rejectionReasonAmbiguousSubject",
+  untrusted_subject: "ui.longTermMemory.reviewqueue.rejectionReasonUntrustedSubject",
+  invalid_subject_cardinality: "ui.longTermMemory.reviewqueue.rejectionReasonInvalidSubjectCardinality",
+  too_long_to_keep_safely: "ui.longTermMemory.reviewqueue.rejectionReasonTooLong",
+};
 
 export const labelKeys = {
   noteType: {
@@ -22,6 +40,12 @@ export const labelKeys = {
     conversation: "ui.longTermMemory.sourcesworkspace.conversation",
     roleplay: "ui.longTermMemory.sourcesworkspace.roleplay",
     game: "ui.longTermMemory.sourcesworkspace.game",
+  },
+  scopeKind: {
+    all: "ui.longTermMemory.sourcesworkspace.all",
+    chat: "ui.longTermMemory.sourcesworkspace.chats",
+    character: "ui.longTermMemory.sourcesworkspace.characters",
+    persona: "ui.longTermMemory.sourcesworkspace.personas",
   },
   importance: {
     critical: "ui.longTermMemory.memoryvault.critical",
@@ -111,6 +135,13 @@ export const labelKeys = {
 export function localizedLabel(value: string, localizeUi: LabelLocalizer, keys: Readonly<Record<string, string>>) {
   const key = keys[value];
   return key ? localizeUi(key) : humanizeLabel(value);
+}
+
+export type ScopeKind = keyof typeof labelKeys.scopeKind;
+
+/** The scope-picker tab rail: every kind in display order with its localized label. */
+export function scopeKindCategories(localizeUi: LabelLocalizer): Array<[ScopeKind, string]> {
+  return (Object.keys(labelKeys.scopeKind) as ScopeKind[]).map((kind) => [kind, localizeUi(labelKeys.scopeKind[kind])]);
 }
 
 export function memoryLabel(note: Pick<LtmNote, "title"> | null | undefined, untitledMemory: string) {

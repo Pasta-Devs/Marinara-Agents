@@ -11,13 +11,16 @@ import { runRegressionToCompletion } from "./regression-helpers.ts";
 // notes, and proves per-candidate bounded retrieval still reconciles every one.
 async function main() {
   const source = "../packages/long-term-memory/src/engine/packages/server/src/services/long-term-memory";
-  const { reconcileEvidenceUnitCandidates } = await import(`${source}/candidate-reconciliation.ts`);
-  const { LongTermMemoryStorage } = await import(`${source}/storage.ts`);
-  const { rebuildLongTermMemoryIndexes, loadOrRebuildLongTermMemoryIndexes } = await import(`${source}/rebuild.ts`);
-  const { retrieveLongTermMemory } = await import(`${source}/retrieval.ts`);
-  const { sourceHashForLtmSourceNote } = await import(`${source}/source-hash.ts`);
+  const { reconcileEvidenceUnitCandidates } = await import(`${source}/extraction/candidate-reconciliation.ts`);
+  const { LongTermMemoryStorage } = await import(`${source}/persistence/storage.ts`);
+  const { rebuildLongTermMemoryIndexes, loadOrRebuildLongTermMemoryIndexes } = await import(
+    `${source}/recall/rebuild.ts`
+  );
+  const { retrieveLongTermMemory } = await import(`${source}/recall/retrieval.ts`);
+  const { sourceHashForLtmSourceNote } = await import(`${source}/extraction/source-hash.ts`);
   const { configurePackageRuntime } = await import(`${source}/package-runtime.ts`);
-  const { prepareLongTermMemorySource } = await import(`${source}/source-processing.ts`);
+  const { prepareLongTermMemorySource } = await import(`${source}/extraction/source-processing.ts`);
+  const { readLtmDebugLog } = await import(`${source}/maintenance/debug-log.ts`);
 
   const timestamp = "2026-07-21T00:00:00.000Z";
   const scope = { chatId: "chat-a", chatIds: ["chat-a"] };
@@ -274,6 +277,55 @@ async function main() {
       prepared.diagnostics.some((diagnostic) => diagnostic.code === "candidate_reconciliation_ambiguous"),
       "the ambiguity diagnostic must reach the draft",
     );
+
+    // Issue #1449 proof: a create-only preparation still records the outcome counts. The vault holds
+    // no timeline notes, so this candidate has nothing to match in a complete window.
+    const createOnlyOperationId = randomUUID();
+    const createOnlyContent = JSON.stringify({
+      summary: "One new claim.",
+      units: [
+        {
+          bucket: "timeline_event",
+          subjectId: "brand_new_beacon",
+          sectionKey: "event",
+          title: "Brand New Beacon",
+          text: "The brand new beacon burns green at dusk.",
+          claimKind: "static",
+          importance: "major",
+          evidence: [`source_note:${sourceNote.id}`],
+          confidence: 0.95,
+          salience: 0.8,
+          status: "active",
+          links: [],
+          sourceHash: sourceHashForLtmSourceNote(sourceNote as never),
+        },
+      ],
+    });
+    await prepareLongTermMemorySource({
+      sourceNote: sourceNote as never,
+      languageModel: {
+        ...languageModel,
+        chatComplete: async () => ({ content: createOnlyContent, finishReason: "stop" }),
+      } as never,
+      scope,
+      modes: ["roleplay"],
+      mode: "roleplay",
+      extractionMode: "roleplay",
+      operationId: createOnlyOperationId,
+      root,
+    });
+    const reconciliationEvents = (await readLtmDebugLog({ operationId: createOnlyOperationId }, root)).filter(
+      (event) => event.action === "candidate_reconciliation",
+    );
+    assert.equal(reconciliationEvents.length, 1, "a create-only run must still record one reconciliation event");
+    assert.equal(reconciliationEvents[0]!.status, "ok");
+    assert.deepEqual(reconciliationEvents[0]!.counts, {
+      groups: 1,
+      matched: 0,
+      created: 1,
+      ambiguous: 0,
+      incomplete: 0,
+    });
 
     // Issue #1086 proof: the prompt must not serialize the broad existing-note
     // collection. This vault is larger than the prompt window, so the removed

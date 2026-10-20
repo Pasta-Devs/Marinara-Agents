@@ -13,7 +13,9 @@ const packageId = process.env.MARINARA_PACKAGE_ID ?? "noodle";
 
 export default defineConfig({
   testDir: ".",
-  testMatch: "**/package-*.e2e.ts",
+  // spatial-context.e2e.ts is the World Maps suite (node scripts/run-package-browser-tests.mjs hierarchical-maps ...).
+  testMatch: ["**/package-*.e2e.ts", "**/spatial-context.e2e.ts"],
+  globalSetup: "./package-browser-warmup.ts",
   timeout: 60_000,
   expect: { timeout: 10_000 },
   fullyParallel: false,

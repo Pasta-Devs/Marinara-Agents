@@ -1,4 +1,7 @@
 import type { DB } from "../../../db/connection.js";
+import { logger } from "../../../lib/logger.js";
+import type { SlpAccount } from "../../../../../shared/src/slp/slp-social.types.js";
+import { isSlurpCharacterFanAccount } from "../../../../../shared/src/slp/slp-audience-characters.js";
 import { createSlurpStorage } from "../../data/slp-storage.js";
 import { createSlurpMessagesStorage } from "../../data/slp-storage.js";
 import { createSlurpPopulationStorage } from "../../data/audience/slp-audience-storage-funnel.js";
@@ -19,6 +22,7 @@ import {
   slurpCoupleReactionBodies,
   SLURP_SHIPPED_TYPE_REACTIONS,
   slurpCommissionBrief,
+  slurpCreatorPeerComment,
 } from "../../modules/world/slp-world-copy.js";
 import { slurpReactionBodiesForType, type SlurpReactionBanks } from "../../modules/world/slp-reaction-bank.js";
 import { enqueueSlurpPendingText } from "./slp-pending-text-service.js";
@@ -26,7 +30,7 @@ import { createSlurpEventsStorage } from "../../data/notifications/slp-notificat
 import { readSlurpCouplePartnerOf } from "../../data/projects/slp-creator-ties-storage.js";
 import { readSlurpTieStamp } from "../../modules/projects/slp-tie-stamp.js";
 import { hash } from "../../modules/projects/slp-project.js";
-import { type SlurpWorldAction } from "../../../../../shared/src/slp/slp-world.js";
+import { planSlurpCreatorPeerReactions, type SlurpWorldAction } from "../../../../../shared/src/slp/slp-world.js";
 import type { SlurpSettings } from "../../modules/settings/slp-settings.js";
 import { slurpPulseTieAdvance, type SlurpPulseAction } from "../../../../../shared/src/slp/slp-world-pulse.js";
 
@@ -369,4 +373,52 @@ async function rivalrySides(
     rival: stamp.secret ? "mystery bae" : rival.displayName,
     ...(stamp.kind === "couple" ? { moment: stamp.moment ?? "" } : {}),
   };
+}
+
+/**
+ * Creators noticing each other (#1): now and then a like or a short comment on another Creator's
+ * public post, persona Creators' posts included. Tier 1 copy, so it stays free like the replies.
+ */
+export async function applySlurpCreatorPeerReactions(
+  db: DB,
+  input: {
+    accounts: readonly SlpAccount[];
+    automaticCreators: readonly SlpAccount[];
+    postsByAccount: ReadonlyMap<string, readonly { id: string; access: string; createdAt: string }[]>;
+    cutoff: string;
+    until: Date;
+  },
+): Promise<void> {
+  const noodle = createSlurpStorage(db);
+  const posts = input.accounts
+    .filter((account) => !isSlurpCharacterFanAccount(account))
+    .flatMap((account) =>
+      (input.postsByAccount.get(account.id) ?? [])
+        .filter((post) => post.access === "public" && post.createdAt >= input.cutoff)
+        .map((post) => ({ postId: post.id, creatorAccountId: account.id })),
+    );
+  const existing = await noodle.listNoodlerInteractions(posts.map((post) => post.postId)).catch((error) => {
+    logger.warn(error, "[slurp-world] Could not read Creator peer reactions");
+    return null;
+  });
+  if (!existing) return;
+  const reactions = planSlurpCreatorPeerReactions({
+    actorAccountIds: input.automaticCreators.map((account) => account.id),
+    posts,
+    reacted: new Set(
+      existing.filter((entry) => !entry.parentInteractionId).map((entry) => `${entry.actorAccountId}:${entry.postId}`),
+    ),
+    hourSeed: input.until.toISOString().slice(0, 13),
+  });
+  for (const reaction of reactions) {
+    await noodle
+      .createInteraction(reaction.postId, {
+        actorAccountId: reaction.actorAccountId,
+        type: reaction.kind === "comment" ? "reply" : "like",
+        ...(reaction.kind === "comment"
+          ? { content: slurpCreatorPeerComment(`${reaction.actorAccountId}:${reaction.postId}`) }
+          : {}),
+      })
+      .catch((error) => logger.warn(error, "[slurp-world] Could not add a Creator peer %s", reaction.kind));
+  }
 }

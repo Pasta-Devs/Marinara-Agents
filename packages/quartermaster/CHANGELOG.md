@@ -1,5 +1,36 @@
 # Quartermaster changelog
 
+## 0.1.28 — 2026-10-17
+- Build Wardrobe layers clothing properly: when two pieces of an outfit share a layer (tights and a
+  skirt over them), the outer one moves up a layer instead of being left out.
+- New artwork for the clothing layers, socks and Extra Wearable slots; the inner torso and legs
+  icons are now a shirt and leggings.
+
+## 0.1.27 — 2026-10-16
+- Clothing layers on the portrait ring are now a stack of cards, so the dock stays about as wide as
+  before. Use the arrows on the card or tap a layer's tab to switch; worn layers keep their
+  highlighted outline.
+
+## 0.1.26 — 2026-10-12 [highlight]
+- Layered clothing: torso and legs each have Inner, Mid and Outer clothing slots, so a shirt,
+  waistcoat and jacket (or tights under shorts) can be worn together. Existing clothing becomes the
+  Inner layer.
+- New Socks slot, plus three Extra Wearable slots for anything no other slot fits.
+- The tracker agent and Build Wardrobe use the new slots. If you customized the tracker prompt,
+  reset it to the default to pick them up.
+
+## 0.1.25 — 2026-10-11
+- With an Admin Secret saved, each image now loads once and is reused, instead of reloading after
+  every change in the dock.
+- An image that failed to load for a reason other than having no image tries again when the dock is
+  reopened, and changing the saved Admin Secret retries every image.
+
+## 0.1.24 — 2026-10-10 [highlight]
+- Works from other devices and remote access: Quartermaster now sends the Admin Secret saved in
+  Settings → Advanced → Admin Access, fixing "Invalid or missing X-Admin-Secret header".
+- Item images, outfit portraits and slot icons also load from other devices.
+- A missing or mismatched Admin Secret now explains how to fix it.
+
 ## 0.1.23 — 2026-10-01
 - The description now says what it does in plain words.
 

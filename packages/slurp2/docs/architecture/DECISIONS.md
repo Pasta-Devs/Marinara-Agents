@@ -724,3 +724,24 @@ modules, rejected alternative, and migration consequence.
 - **Rejected alternatives:** a second composer for the player's page; letting Stir post for the
   player's page unattended (it is the player's voice).
 - **Migration consequence:** none.
+
+## The card reading has its own store (2026-10-12)
+
+- **Problem:** the canon anchor cache lived inside `features/feed/slp-post-beat-service.ts`, next to
+  the model call. A card change replaced the player's edits, a failed read of the blob could erase
+  every Creator's entry, and nothing but a source match could test it.
+- **Decision:**
+  - `data/creators/slp-canon-anchor-storage.ts` owns the stored reading: the key, the one write
+    queue, when a card is read again, and the merge of the player's edits into a new reading
+    (`mergeSlurpCanonAnchors`, a pure rule in `modules/feed/slp-post-brief.ts`). The model call is
+    passed in, so the store has no model, route, or planner import.
+  - The anchors gain `essentials`: what must always hold about a Creator. The flavour brief carries
+    them in every use, outside the rotation.
+  - The reading sees the card with wider field limits (`SLP_CANON_READING_SCALE`) and is keyed by
+    that text; `prepareSlurpBeatRun` starts it for every post, in both planner modes.
+- **Rejected alternatives:** a per-Creator table (the blob is small; see the `ponytail:` note); a
+  second "user corrections" store beside the cache (one entry with its base reading is enough);
+  keyword rules for essential facts (they would cover a few languages and claim more).
+- **Migration consequence:** reading version v3: every card is read once more. An entry the player
+  edited before 0.3.26 has no base reading, so it is kept as it is on that first reading and merges
+  normally afterwards.

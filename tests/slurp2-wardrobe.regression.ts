@@ -44,6 +44,7 @@ assert.equal(
     looks,
     access: "public",
     scene: { wardrobeId: "both-new", setting: "x", action: "x", expression: "x", visualDirection: "x" },
+    creatorName: "Mia",
   }).look?.id,
   "both-new",
 );
@@ -53,18 +54,32 @@ const incompatible = resolveSlurpWardrobeSelection({
   access: "public",
   scene: { wardrobeId: "locked", setting: "x", action: "x", expression: "x", visualDirection: "x" },
   recentIds: ["public-old"],
+  creatorName: "Mia",
 });
 assert.equal(incompatible.look?.id, "both-new", "an incompatible choice falls back to the least-recent suitable look");
 assert.equal(incompatible.requestedId, "locked");
 assert.equal(incompatible.fallback, true);
 
 assert.equal(
-  resolveSlurpWardrobeSelection({ looks, access: "locked", recentIds: ["both-new"] }).look?.id,
+  resolveSlurpWardrobeSelection({ looks, access: "locked", recentIds: ["both-new"], creatorName: "Mia" }).look?.id,
   "locked",
   "a missing choice also avoids a recently used compatible look",
 );
 assert.doesNotMatch(formatSlpWardrobeCloset(looks), /disabled/u);
-assert.match(slurpWardrobePrompt(looks, "public", ["both-new"]) ?? "", /public-old[\s\S]*both-new/u);
+assert.match(slurpWardrobePrompt(looks, "public", ["both-new"], "Mia") ?? "", /public-old[\s\S]*both-new/u);
+
+// Engine macros in a look resolve for the post; the stored look keeps its template.
+const macroLook = {
+  ...look("macro", "both", "2026-05-01T00:00:00.000Z"),
+  summary: "{{random::red}} dress",
+  description: "{{char}} wears a {{random::red}} dress",
+};
+assert.match(slurpWardrobePrompt([macroLook], "public", [], "Mia") ?? "", /\| red dress/u);
+assert.equal(
+  resolveSlurpWardrobeSelection({ looks: [macroLook], access: "public", creatorName: "Mia" }).look?.description,
+  "Mia wears a red dress",
+);
+assert.match(macroLook.description, /\{\{char\}\}/u);
 
 assert.equal(
   readSlpWardrobeLooks(JSON.stringify([...looks, looks[0]])).length,

@@ -13,6 +13,8 @@ type NoodlePackageState = {
   conversationTimeZone: string;
   debugMode: boolean;
   reviewImagePromptsBeforeSend: boolean;
+  /** Host prop since capability API 1.67; null on an older Engine. */
+  openCharacter: ((characterId: string, options?: { tab?: string }) => void) | null;
   noodleNavigation: NoodleNavigationState;
   noodleSelectedPersonaId: string | null;
   setNoodleNavigation: (navigation: NoodleNavigationState) => void;
@@ -69,6 +71,7 @@ export const useUIStore = create<NoodlePackageState>((set, get) => ({
   conversationTimeZone: "",
   debugMode: false,
   reviewImagePromptsBeforeSend: false,
+  openCharacter: null,
   noodleNavigation: initialState.noodleNavigation ?? {
     mode: "public",
     view: "home",
@@ -95,5 +98,9 @@ export function configureNoodlePackageState(props: Record<string, unknown>) {
     conversationTimeZone: typeof props.conversationTimeZone === "string" ? props.conversationTimeZone : "",
     debugMode: props.debugMode === true,
     reviewImagePromptsBeforeSend: props.reviewImagePromptsBeforeSend === true,
+    openCharacter:
+      typeof props.openCharacter === "function"
+        ? (props.openCharacter as (characterId: string, options?: { tab?: string }) => void)
+        : null,
   });
 }

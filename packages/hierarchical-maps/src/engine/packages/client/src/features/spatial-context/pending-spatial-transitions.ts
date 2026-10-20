@@ -7,6 +7,10 @@ import type {
 } from "@marinara-engine/shared";
 import { generateClientId } from "./package-utils";
 
+// A pending move lives in the Engine's chat store (`__MARINARA_HOST__.stores.chat`, capability API 1.341), which the
+// Engine's composer reads and saves under "marinara-pending-spatial-transitions". This package used to keep a copy of
+// that map and write the same key, so a move the Engine had cleared came back on the next save
+// (Pasta-Devs/Marinara-Agents#1487). It reads and changes the Engine's map now, and never writes the key itself.
 const STORAGE_KEY = "marinara-pending-spatial-transitions";
 
 export type PendingSpatialTransitionDraft = {
@@ -18,9 +22,32 @@ export type PendingSpatialTransitionDraft = {
   reviewMessage?: string;
 };
 
-const listeners = new Set<() => void>();
+type PendingSpatialTransitions = Map<string, PendingSpatialTransitionDraft>;
 
-function loadPendingTransitions(): Map<string, PendingSpatialTransitionDraft> {
+/** The part of the Engine's chat store World Maps uses. */
+type ChatSpatialSlice = {
+  pendingSpatialTransitions: PendingSpatialTransitions;
+  setPendingSpatialTransition: (chatId: string, draft: PendingSpatialTransitionDraft) => void;
+  clearPendingSpatialTransition: (chatId: string, commandId?: string) => void;
+};
+
+type SliceStore = {
+  getState: () => ChatSpatialSlice;
+  subscribe: (listener: () => void) => () => void;
+};
+
+function hostChatStore(): SliceStore | null {
+  const host = (globalThis as { __MARINARA_HOST__?: { version?: unknown; stores?: { chat?: unknown } } })
+    .__MARINARA_HOST__;
+  const store = host?.version === 1 ? (host.stores?.chat as Partial<SliceStore> | undefined) : undefined;
+  if (typeof store?.getState !== "function" || typeof store.subscribe !== "function") return null;
+  const state = store.getState() as Partial<ChatSpatialSlice> | undefined;
+  return state?.pendingSpatialTransitions instanceof Map && typeof state.setPendingSpatialTransition === "function"
+    ? (store as SliceStore)
+    : null;
+}
+
+function savedTransitions(): PendingSpatialTransitions {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return new Map();
@@ -43,48 +70,38 @@ function loadPendingTransitions(): Map<string, PendingSpatialTransitionDraft> {
   }
 }
 
-let pendingTransitions = loadPendingTransitions();
-
-function publish(next: Map<string, PendingSpatialTransitionDraft>): void {
-  pendingTransitions = next;
-  try {
-    if (next.size === 0) localStorage.removeItem(STORAGE_KEY);
-    else localStorage.setItem(STORAGE_KEY, JSON.stringify([...next]));
-  } catch {
-    // Persistence is best-effort; the current tab still keeps the pending move.
-  }
-  for (const listener of listeners) listener();
+// An Engine without the namespace: the saved moves show, and nothing here changes them or writes the key.
+function readOnlySlice(): SliceStore {
+  const state: ChatSpatialSlice = {
+    pendingSpatialTransitions: savedTransitions(),
+    setPendingSpatialTransition: () => undefined,
+    clearPendingSpatialTransition: () => undefined,
+  };
+  return { getState: () => state, subscribe: () => () => undefined };
 }
 
-function subscribe(listener: () => void): () => void {
-  listeners.add(listener);
-  return () => listeners.delete(listener);
-}
+const chatStore = hostChatStore() ?? readOnlySlice();
 
 export function getPendingSpatialTransition(chatId: string): PendingSpatialTransitionDraft | null {
-  return pendingTransitions.get(chatId) ?? null;
+  return chatStore.getState().pendingSpatialTransitions.get(chatId) ?? null;
 }
 
 export function usePendingSpatialTransition(chatId: string | null): PendingSpatialTransitionDraft | null {
   return useSyncExternalStore(
-    subscribe,
+    chatStore.subscribe,
     () => (chatId ? getPendingSpatialTransition(chatId) : null),
     () => null,
   );
 }
 
 export function setPendingSpatialTransition(chatId: string, draft: PendingSpatialTransitionDraft): void {
-  const next = new Map(pendingTransitions);
-  next.set(chatId, draft);
-  publish(next);
+  // The Engine hands the same draft back as a prop; storing it again would only save it again.
+  if (getPendingSpatialTransition(chatId) === draft) return;
+  chatStore.getState().setPendingSpatialTransition(chatId, draft);
 }
 
 export function clearPendingSpatialTransition(chatId: string, commandId?: string): void {
-  const current = pendingTransitions.get(chatId);
-  if (!current || (commandId && current.transition.commandId !== commandId)) return;
-  const next = new Map(pendingTransitions);
-  next.delete(chatId);
-  publish(next);
+  chatStore.getState().clearPendingSpatialTransition(chatId, commandId);
 }
 
 export function setPendingSpatialTransitionStatus(
@@ -92,8 +109,9 @@ export function setPendingSpatialTransitionStatus(
   status: PendingSpatialTransitionDraft["status"],
   reviewMessage?: string,
 ): void {
-  const current = pendingTransitions.get(chatId);
+  const current = getPendingSpatialTransition(chatId);
   if (!current) return;
+  // The Engine's own status setter has no review note, so the whole draft goes back through the setter.
   const normalizedReviewMessage = reviewMessage?.trim() || undefined;
   if (
     current.status === status &&

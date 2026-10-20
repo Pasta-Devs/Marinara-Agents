@@ -11,15 +11,20 @@ on:
       - "artwork/agent-covers/slurp2.png"
       - "artwork/sources/noodle-*"
       - "artwork/sources/slurp-*"
-      # NOTE: intentionally NOT triggering on catalog/*.json, package.json, or
-      # package-lock.json. Those are shared across every package — each release
-      # regenerates the catalog and can touch the lockfile — so triggering on them
-      # ran this Noodle/Slurp browser suite on unrelated package PRs. Noodle/Slurp
+      # NOTE: intentionally NOT triggering on catalog/*.json, package.json,
+      # package-lock.json, or scripts/build-feature-packages.mjs. Those are shared
+      # across every package — each release regenerates the catalog, can touch the
+      # lockfile and bumps its version line in the build script — so triggering on
+      # them ran this Noodle/Slurp browser suite on unrelated package PRs. Noodle/Slurp
       # changes are already covered by packages/noodle|slurp2/**, the noodle/slurp2
-      # artifacts, the harness scripts, and sources/engine below.
+      # artifacts above, and the harness scripts and sources/engine below.
       - "packages/noodle/**"
       - "packages/slurp2/**"
-      - "scripts/build-feature-packages.mjs"
+      - "tests/slurp-*.regression.ts"
+      - "tests/slurp2-*.regression.ts"
+      - "tests/slurp2-source.ts"
+      - "tests/tsconfig.regressions.json"
+      - "scripts/run-slurp-regressions.mjs"
       - "scripts/install-package-browser-fixture.mjs"
       - "scripts/run-package-browser-tests.mjs"
       - "scripts/start-package-browser-servers.mjs"
@@ -28,6 +33,7 @@ on:
       - "scripts/vendored-engine-baseline.json"
       - "scripts/tests/vendored-engine.regression.mjs"
       - "tests/package-noodle.e2e.ts"
+      - "tests/package-noodle-picker-scope.e2e.ts"
       - "tests/package-slurp2.e2e.ts"
       - "tests/playwright.package.config.ts"
 
@@ -68,7 +74,7 @@ jobs:
           run_install: false
 
       - name: Set up Node.js
-        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 24
 
@@ -131,7 +137,7 @@ jobs:
           run_install: false
 
       - name: Set up Node.js
-        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 24
 
@@ -140,6 +146,14 @@ jobs:
 
       - name: Install Engine dependencies
         run: pnpm --dir engine install --frozen-lockfile
+
+      - name: Build Engine shared package
+        run: pnpm --dir engine --filter @marinara-engine/shared build
+
+      - name: Slurp regressions
+        env:
+          MARINARA_ENGINE_ROOT: ${{ github.workspace }}/engine
+        run: npm run test:slurp:regressions
 
       - name: Install Playwright Chromium
         run: npx playwright install --with-deps chromium

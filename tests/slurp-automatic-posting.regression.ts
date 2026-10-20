@@ -110,7 +110,7 @@ assert.match(
 );
 assert.match(
   storage,
-  /latestCreatorPost\.createdAt\) \+\s*slurpCreatorPostingIntervalMs\(\s*slurpPacedPostsPerDay\(settings\.postsPerDay, await readSlurpCreatorPaceFactor\(db, account\.id\)\),?\s*\) >\s*at\.getTime\(\)/u,
+  /latestCreatorPost\.createdAt\) \+\s*slurpCreatorPostingIntervalMs\(\s*slurpPacedPostsPerDay\(settings\.postsPerDay, await readSlurpCreatorPaceFactor\(db, author\.id\)\),?\s*\)[\s\S]{0,700}if \(nextFree > at\.getTime\(\)\) \{\s*discardedMediaPaths/u,
 );
 const postingInterval = (24 * 60 * 60 * 1000) / 8;
 const candidateAt = Date.parse("2026-08-27T12:00:00.000Z");
@@ -203,7 +203,7 @@ assert.match(reserve, /Date\.parse\(item\.publishAt\) > at\.getTime\(\) - DAY_MS
 // has to stay for the widened grace to be safe.
 assert.match(
   storage,
-  /latestCreatorPost\.createdAt\) \+\s*slurpCreatorPostingIntervalMs\(\s*slurpPacedPostsPerDay\(settings\.postsPerDay, await readSlurpCreatorPaceFactor\(db, account\.id\)\),?\s*\) >\s*at\.getTime\(\)/u,
+  /latestCreatorPost\.createdAt\) \+\s*slurpCreatorPostingIntervalMs\(\s*slurpPacedPostsPerDay\(settings\.postsPerDay, await readSlurpCreatorPaceFactor\(db, author\.id\)\),?\s*\)[\s\S]{0,700}if \(nextFree > at\.getTime\(\)\) \{\s*discardedMediaPaths/u,
 );
 // A slot is publishable right up to its interval and retired past it, at every pace.
 for (const postsPerDay of [4, 24, 96]) {

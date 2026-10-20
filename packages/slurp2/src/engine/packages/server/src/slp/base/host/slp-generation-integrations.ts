@@ -8,7 +8,10 @@ import type {
 import { createLLMProvider } from "../../../services/llm/provider-registry.js";
 import { withConnectionFallbackProvider } from "../../../services/llm/connection-fallback-provider.js";
 import { resolveBaseUrl } from "../../../services/generation/connection-base-url.js";
-import { withConnectionAdmissionProvider } from "../../../services/generation/connection-admission.js";
+import {
+  tryBackgroundConnection,
+  withConnectionAdmissionProvider,
+} from "../../../services/generation/connection-admission.js";
 import { slpWithProviderRetry } from "../model/slp-provider-retry.js";
 
 let host: CapabilityIntegrationHost | null = null;
@@ -84,8 +87,10 @@ export function createSlurpPostProvider(input: {
       maxTokensOverride: input.connection.maxTokensOverride,
       claudeFastMode: input.connection.claudeFastMode === "true",
       treatAsLocalEndpoint: input.connection.treatAsLocalEndpoint === "true",
+      // No connection id here: the fallback wrapper below books the call with the run's own admission mode. An id
+      // on the primary booked every post as foreground work as well, even an automatic one, so it ran while the
+      // player's chat streamed and kept other automatic work waiting for 30 s afterwards.
       defaultParameters: input.connection.defaultParameters,
-      connectionId: input.connection.id,
     }) ??
     createLLMProvider(
       input.connection.provider,
@@ -121,6 +126,21 @@ export function createSlurpPostProvider(input: {
       input.admissionMode ?? { kind: "foreground" },
     ),
   );
+}
+
+/**
+ * Background work that books nothing runs only while background work may use the connection (no chat
+ * streaming, none for 30 s). It holds no slot: it runs beside a post or a run that holds one. Busy throws
+ * the Engine's error by name, so callers treat it as a deferral (`slpIsAdmissionFailure`).
+ */
+export function slpRequireBackgroundIdle(connectionId: string): void {
+  const free = tryBackgroundConnection(connectionId, new Date());
+  if (!free.acquired) {
+    const error = new Error(`Connection ${connectionId} is busy with other work; this waits for a later run.`);
+    error.name = "BackgroundConnectionBusyError";
+    throw error;
+  }
+  free.release();
 }
 
 export function completeSlurpWithHost(

@@ -83,6 +83,8 @@ export function SlpSceneStartSheet({ personaId, creatorName }: { personaId: stri
       // The Engine opens the scene chat; Slurp leaves the screen with it.
       const started = await startSlpScene({ threadId: sheet.threadId, planned, settings });
       if (started) setSheet(null);
+      // No scene host means the Engine never connected one; say so instead of doing nothing.
+      else if (!useSlurpUIStore.getState().sceneHost) setError(t("ui.slurp.rpScene.startFailed"));
     } catch (cause) {
       setError(getApiErrorMessage(cause, t("ui.slurp.rpScene.startFailed")));
     } finally {

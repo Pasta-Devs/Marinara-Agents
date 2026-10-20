@@ -10,7 +10,7 @@
   },
   "id": "quartermaster",
   "name": "Quartermaster",
-  "version": "0.1.23",
+  "version": "0.1.28",
   "description": "An RPG character sheet and inventory for Roleplay: equip gear around your persona's portrait, save outfits, get AI art for items, and let it keep everything in step with the story. Add the Agent in Chat Settings → Agents → Tracker Agents for Roleplay mode.",
   "engine": {
     "min": "2.4.6",
@@ -33,18 +33,18 @@
   "files": [
     {
       "path": "agents.json",
-      "sha256": "fcd8b64b649650c5635ff28ab6071647a67695bb6ff4a2cbbe65bfd465b7ae93",
-      "bytes": 5197
+      "sha256": "d34b7423cf36f935d8aab1bd76355a6d6bc14a97eca058fe5b4755322a0e42da",
+      "bytes": 6277
     },
     {
       "path": "client.js",
-      "sha256": "051624c751f6354ecc30bd89b21d01d1d05a24b392ac60e2ef04eeb860fe27ed",
-      "bytes": 289382
+      "sha256": "acc3b1778a802799f9822aecb2077e138f8e04f5ca4a9d7802587450c1b8e43a",
+      "bytes": 306535
     },
     {
       "path": "server.mjs",
-      "sha256": "a11b890e47422ff5ba7f4b6d10a0a18d1f7695b52b0dbaebda95d4717eb2f8e5",
-      "bytes": 129363
+      "sha256": "8a6b260e52068d0654723a75f98e95c84053491c3d9e3b812a5ab97ef3f073b1",
+      "bytes": 131685
     },
     {
       "path": "icons/armor_legs.webp",
@@ -68,18 +68,23 @@
     },
     {
       "path": "icons/clothing_legs.webp",
-      "sha256": "ebad0f719c4d0ed7efdf0b69b01076eed74c4561c64d2e94683b3d5892e326c8",
-      "bytes": 1246
+      "sha256": "090e970a6026a114013ca30464a85fe09097621a45b255f40e66413442e83fa5",
+      "bytes": 1004
     },
     {
       "path": "icons/clothing_torso.webp",
-      "sha256": "aff20911dcb06507c87a9f6e5387d72b6e5aa67a27e8c3397da152dea1cea799",
-      "bytes": 1542
+      "sha256": "bca1d91c3beb44e70686566596476f30c3613eba766c4e8e10b40717a925cbd1",
+      "bytes": 1424
     },
     {
       "path": "icons/ears.webp",
       "sha256": "071253ea4c8f8a0b6e6e412ca3276a41d9ddd7a39fc02402d09c51493a952c30",
       "bytes": 1314
+    },
+    {
+      "path": "icons/extra_wearable.webp",
+      "sha256": "54f8ee6beacff3f9e9774a2fe0cf76d6c870de3d7f3cd51f62502a59a7214409",
+      "bytes": 1834
     },
     {
       "path": "icons/eyes.webp",
@@ -102,9 +107,34 @@
       "bytes": 822
     },
     {
+      "path": "icons/midlayer_legs.webp",
+      "sha256": "549c87da174d8edea1b552ecdde92b4405e12b45be290f063313e9b41e8fa1c3",
+      "bytes": 1360
+    },
+    {
+      "path": "icons/midlayer_torso.webp",
+      "sha256": "bcc2327091aaf34a071cb6218c8a4d795db585bc6724abfa6b95be4a93a1e14b",
+      "bytes": 1250
+    },
+    {
       "path": "icons/neck.webp",
       "sha256": "bfbc19de3fb432c6b6eb045309daf8fcc42a5fc741aa77b189f5a93dcc600853",
       "bytes": 1592
+    },
+    {
+      "path": "icons/outerwear_legs.webp",
+      "sha256": "b3681825e6407ce785576dcd2221c231c063437b0f744ddbd34eede280a39a57",
+      "bytes": 2672
+    },
+    {
+      "path": "icons/outerwear_torso.webp",
+      "sha256": "5754dad27bf23eccbdc79ff2eee4219b0e875f4120b8af957fd95493c8425ad8",
+      "bytes": 1478
+    },
+    {
+      "path": "icons/socks.webp",
+      "sha256": "b19dd2a31e53988aad93af103baad0dd5fd39081fd84e2591d40d92de7682f8c",
+      "bytes": 1172
     },
     {
       "path": "icons/underwear_bottom.webp",

@@ -3,6 +3,7 @@ import { MessageSquarePlus, Search } from "lucide-react";
 import { useTranslation as useUiTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { Modal } from "../../../components/ui/Modal";
+import { SlurpMediaImg } from "../../base/chrome/SlpChrome";
 import { errorMessage } from "../../modules/settings/slp-backstage-format";
 import { useSlurpComposeTargets, useSlurpThreads } from "./slp-messages-hooks";
 import { useShareSlpPost } from "../../modules/post/slp-post-action-hooks";
@@ -113,7 +114,12 @@ export function SlpSharePostModal({
                 className="flex min-h-12 w-full items-center gap-3 rounded-lg px-3 text-start hover:bg-[var(--accent)] disabled:opacity-50"
               >
                 {target.avatarUrl ? (
-                  <img src={target.avatarUrl} alt="" className="h-8 w-8 rounded-full object-cover" />
+                  <SlurpMediaImg
+                    src={target.avatarUrl}
+                    mediaWidth={96}
+                    alt=""
+                    className="h-8 w-8 rounded-full object-cover"
+                  />
                 ) : (
                   <span className="h-8 w-8 rounded-full bg-[var(--slurp-surface-raised)]" aria-hidden="true" />
                 )}

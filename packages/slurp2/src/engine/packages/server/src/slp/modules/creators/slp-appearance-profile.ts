@@ -44,6 +44,19 @@ export function appearanceEvidenceFromSource(
   };
 }
 
+/**
+ * The image tags a card keeps for image models (the Engine's "Image Appearance Override"), or "" when
+ * the card has it switched off or empty. A character stores the flag as a boolean in `extensions`; a
+ * persona row stores it as the text "true". Cut to the length a Creator appearance can hold, and
+ * trimmed again after the cut: saving trims too, and the button hides only when both texts are equal.
+ */
+export function slpCardImageAppearance(card: { imageAppearanceEnabled?: unknown; imageAppearance?: unknown }): string {
+  const enabled = card.imageAppearanceEnabled === true || card.imageAppearanceEnabled === "true";
+  return enabled && typeof card.imageAppearance === "string"
+    ? card.imageAppearance.trim().slice(0, 2000).trimEnd()
+    : "";
+}
+
 /** Persisted cache keys must survive Engine restarts, unlike stage-draft HMAC tokens. */
 export function appearanceSourceFingerprint(sourceEntityId: string, source: SlpCreatorSourceSnapshot): string {
   return createHash("sha256")

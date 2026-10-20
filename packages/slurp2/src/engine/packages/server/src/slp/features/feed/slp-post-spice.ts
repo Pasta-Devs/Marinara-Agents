@@ -10,6 +10,7 @@ import { logger } from "../../../lib/logger.js";
 import type { SlpAccount, SlpIdentityDisclosure } from "../../../../../shared/src/slp/slp-social.types.js";
 import { resolveSlurpSpiceCreator } from "../../data/creators/slp-flavour-source.js";
 import { slurpSpicyCollabNames } from "../../data/creators/slp-spice-storage.js";
+import { listSlurpFeedSpice } from "../../data/feed/slp-feed-subjects-storage.js";
 import { resolveSlurpExplicitLevel } from "../../data/settings/slp-post-guidance-storage.js";
 import { readSlurpCreatorTiesDocument } from "../../data/projects/slp-creator-ties-storage.js";
 import { slurpSpiceAngle } from "../../modules/creators/slp-spice.js";
@@ -106,6 +107,8 @@ export async function planSlurpPostSpice(
     beat: SlurpBeat | null;
     /** A drop delivers the kind its tease hinted at (3b). */
     teasedKind?: string | null;
+    /** When the post is written for; other Creators' spice is read around it. */
+    at?: Date;
   },
 ) {
   const spiceRead = await resolveSlurpSpiceCreator(db, input).catch((error: unknown) => {
@@ -135,6 +138,12 @@ export async function planSlurpPostSpice(
           spice: spiceRead.spice.spice,
           ...partners,
           recent: recentSpice(input.recentPosts),
+          // Read only when the angle can be spicy; it scans other Creators' posts.
+          feed:
+            // A trend adoption skips the damping: being alike is its point (docs/TRENDS.md).
+            postLevel !== "none" && (locked || input.teaser) && input.beat?.anchorKind !== "trend"
+              ? await listSlurpFeedSpice(db, input.account.id, input.at ?? new Date())
+              : [],
           sequence: input.sequence,
           teasedKind: input.teasedKind,
         })

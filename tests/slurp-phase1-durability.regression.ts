@@ -81,6 +81,13 @@ async function main() {
     // Slurp2's schema uses the package-relative slurp.ts name. Keep the host's
     // legacy schema in its barrel; package tables are registered explicitly below.
     const schemaRoot = join(overlayRoot, "packages/server/src/db/schema");
+    // Server modules import the shared package by relative path, so the overlay needs it too.
+    await cp(join(engineRoot, "packages/shared/src"), join(overlayRoot, "packages/shared/src"), { recursive: true });
+    await cp(
+      join(repoRoot, "packages/slurp2/src/engine/packages/shared/src"),
+      join(overlayRoot, "packages/shared/src"),
+      { recursive: true, force: true },
+    );
     await cp(join(engineRoot, "packages/server/src/db/schema/slurp.ts"), join(schemaRoot, "host-slurp.ts"));
     const hostSchema = await readFile(join(schemaRoot, "index.ts"), "utf8");
     assert.ok(hostSchema.includes('export * from "./slurp.js";'));
@@ -94,47 +101,70 @@ async function main() {
       join(overlayRoot, "packages/server/node_modules"),
       "dir",
     );
+    // The shared sources resolve their packages (zod) from the server's install.
+    await symlink(
+      join(engineRoot, "packages/server/node_modules"),
+      join(overlayRoot, "packages/shared/node_modules"),
+      "dir",
+    );
 
-    const [{ createFileNativeDB }, slurpSchema, messagesModule, storageModule, queryModule, schedulerModule] =
-      await Promise.all([
-        importOverlay<{ createFileNativeDB: () => Promise<FileDb> }>("packages/server/src/db/file-backed-store.ts"),
-        importOverlay<Record<string, unknown>>("packages/server/src/db/schema/slurp.ts"),
-        importOverlay<{
-          claimSlurpPaymentIntentForDatabase: (db: FileDb, payment: Payment, id: string) => Promise<string>;
-          compensateSlurpPaymentForDatabase: (
-            db: FileDb,
-            payment: Payment,
-            error: unknown,
-            id: string,
-          ) => Promise<void>;
-          createSlurpMessagesStorage: (db: FileDb) => MessagesStorage;
-          settleSlurpPaymentIntentForDatabase: (
-            db: FileDb,
-            id: string,
-            creatorId: string,
-            creditId: string,
-          ) => Promise<void>;
-        }>("packages/server/src/services/storage/slurp-messages.storage.ts"),
-        importOverlay<{ createSlurpStorage: (db: FileDb) => SlurpStorage }>(
-          "packages/server/src/services/storage/slurp.storage.ts",
-        ),
-        importOverlay<{ eq: (column: unknown, value: unknown) => unknown }>("packages/server/src/db/file-query.ts"),
-        importOverlay<{
-          startSlurpPaymentRecoveryScheduler: (app: {
-            db: FileDb;
-            addHook: (name: string, hook: () => Promise<void>) => void;
-          }) => { pollNow: () => Promise<void>; stop: () => Promise<void> };
-        }>("packages/server/src/services/slurp/slurp-payment-recovery-scheduler.service.ts"),
-      ]);
+    const [
+      { createFileNativeDB },
+      slurpSchema,
+      messagesStorageFile,
+      messagesContextFile,
+      storageModule,
+      queryModule,
+      schedulerModule,
+    ] = await Promise.all([
+      importOverlay<{ createFileNativeDB: () => Promise<FileDb> }>("packages/server/src/db/file-backed-store.ts"),
+      importOverlay<Record<string, unknown>>("packages/server/src/db/schema/slurp.ts"),
+      importOverlay<{
+        claimSlurpPaymentIntentForDatabase: (db: FileDb, payment: Payment, id: string) => Promise<string>;
+        compensateSlurpPaymentForDatabase: (db: FileDb, payment: Payment, error: unknown, id: string) => Promise<void>;
+        createSlurpMessagesStorage: (db: FileDb) => MessagesStorage;
+        settleSlurpPaymentIntentForDatabase: (
+          db: FileDb,
+          id: string,
+          creatorId: string,
+          creditId: string,
+        ) => Promise<void>;
+      }>("packages/server/src/slp/data/messages/slp-messages-storage.ts"),
+      importOverlay<{
+        claimSlurpPaymentIntentForDatabase: (db: FileDb, payment: Payment, id: string) => Promise<string>;
+        compensateSlurpPaymentForDatabase: (db: FileDb, payment: Payment, error: unknown, id: string) => Promise<void>;
+        settleSlurpPaymentIntentForDatabase: (
+          db: FileDb,
+          id: string,
+          creatorId: string,
+          creditId: string,
+        ) => Promise<void>;
+      }>("packages/server/src/slp/data/messages/slp-messages-storage-context.ts"),
+      importOverlay<{
+        createSlurpStorage: (db: FileDb) => SlurpStorage;
+        createSlurpMessagesStorage: (db: FileDb) => MessagesStorage;
+      }>("packages/server/src/slp/data/slp-storage.ts"),
+      importOverlay<{ eq: (column: unknown, value: unknown) => unknown }>("packages/server/src/db/file-query.ts"),
+      importOverlay<{
+        startSlurpPaymentRecoveryScheduler: (app: {
+          db: FileDb;
+          addHook: (name: string, hook: () => Promise<void>) => void;
+        }) => { pollNow: () => Promise<void>; stop: () => Promise<void> };
+      }>("packages/server/src/slp/features/economy/slp-payment-recovery-scheduler-service.ts"),
+    ]);
+    // The default core lives in the slp storage barrel; the messages file needs one passed in.
+    const messagesModule = {
+      ...messagesStorageFile,
+      ...messagesContextFile,
+      createSlurpMessagesStorage: storageModule.createSlurpMessagesStorage,
+    };
     assert.match(
-      await slurp2Source(
-        join(repoRoot, "packages/slurp2/src/engine/packages/server/src/services/slurp/server-entry.ts"),
-      ),
+      await slurp2Source(join(repoRoot, "packages/slurp2/src/engine/packages/server/src/slp/slp-server-entry.ts")),
       /startSlurpPaymentRecoveryScheduler\(app, addTeardown\)/u,
     );
     const { eq } = queryModule;
     const paymentTable = slurpSchema.slurpPaymentCompensations as any;
-    const accountTable = slurpSchema.noodleAccounts as any;
+    const accountTable = slurpSchema.slpAccounts as any;
     const commissionTable = slurpSchema.slurpCommissions as any;
     const messageTable = slurpSchema.slurpMessages as any;
     const threadTable = slurpSchema.slurpThreads as any;
@@ -325,22 +355,25 @@ async function main() {
     await slurp.updateSettings({ walletCreatorRevenueSharePercent: 90 });
     await messagesModule.compensateSlurpPaymentForDatabase(db, exact, new Error("fixture"), exact.creditOperationId);
     assert.equal((await slurp.getEarnings("creator")).coins, 0);
+    // 0.3.7 made every non-sponsor credit stand for the crowd, less Slurp's fee: floor(99 * 37%) =
+    // 36 revenue-share dollars, then floor(36 * crowdWeight(5) * (100 - 20%) / 100) = 144. The
+    // reversal still exactly undoes the persisted 37% credit; it is just no longer a 1:1 dollar.
     assert.equal(
       (await slurp.getEarnings("creator")).ledger.find((entry) => entry.id === `${exact.creditOperationId}:reverse`)
         ?.amount,
-      -36,
+      -144,
     );
     for (let index = 0; index < 65; index += 1)
       await slurp.creditCreatorIncome("creator", 2, "commission", `later-income:${index}`);
     for (let index = 0; index < 65; index += 1)
       await slurp.refundCoins("viewer", 1, "later activity", `later-wallet-credit:${index}`);
-    assert.equal(await slurp.getCreatorIncomeOperationAmount("creator", exact.creditOperationId), 36);
+    assert.equal(await slurp.getCreatorIncomeOperationAmount("creator", exact.creditOperationId), 144);
     assert.equal(
       (await slurp.getWallet("viewer")).ledger.some((entry) => entry.id === exact.creditOperationId),
       false,
     );
     assert.equal(await slurp.hasWalletSpendOperation("viewer", exact.creditOperationId), true);
-    assert.equal(await slurp.reverseCreatorIncome("creator", 36, "retry", `${exact.creditOperationId}:reverse`), true);
+    assert.equal(await slurp.reverseCreatorIncome("creator", 144, "retry", `${exact.creditOperationId}:reverse`), true);
     const coinsBeforeRetry = (await slurp.getWallet("viewer")).coins;
     await messagesModule.compensateSlurpPaymentForDatabase(db, exact, new Error("retry"), exact.creditOperationId);
     const walletAfterRetry = await slurp.getWallet("viewer");
@@ -433,6 +466,12 @@ async function main() {
     ]) {
       const paymentId = `commission:${fixture.id}:accept`;
       await db.insert(paymentTable).values(paymentRow(paymentId, "commission", "charged"));
+      // A fresh `charged` row is left alone (still between debit and its message write); back it
+      // off past the 5-minute window so recovery actually evaluates it.
+      await db
+        .update(paymentTable)
+        .set({ updatedAt: new Date(Date.now() - 6 * 60 * 1_000).toISOString() })
+        .where(eq(paymentTable.id, paymentId));
       await db
         .insert(commissionTable)
         .values(commissionRow(fixture.id, fixture.state, fixture.cancellationId, null, null));
@@ -441,6 +480,10 @@ async function main() {
     for (const id of ["accepted", "delivered", "cancelled"])
       assert.equal((await rowById<any>(paymentTable, `commission:${id}:accept`)).status, "settled");
     await db.insert(paymentTable).values(paymentRow("commission:failed:accept", "commission", "charged"));
+    await db
+      .update(paymentTable)
+      .set({ updatedAt: new Date(Date.now() - 6 * 60 * 1_000).toISOString() })
+      .where(eq(paymentTable.id, "commission:failed:accept"));
     await db
       .insert(commissionTable)
       .values(commissionRow("failed", "cancellation_pending", "commission:failed:accept", null, null));

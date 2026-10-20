@@ -2,6 +2,7 @@ import { Check, ChevronRight, Loader2, Search } from "lucide-react";
 import { useTranslation as useUiTranslation } from "react-i18next";
 import type { SlpIdentityDisclosure } from "../../../../../shared/src/slp/slp-social.types.js";
 import { disclosureOptions, WizardFooter } from "../../features/creators/SlpStageProfileForm";
+import { Toggle } from "../../modules/settings/SlpSettingsControls";
 import { fieldClass, SourceAccountAvatar } from "./SlpHomeHelpers";
 
 export function StageProfileSourcePicker({
@@ -173,12 +174,16 @@ export function DisclosureStep({
   source,
   value,
   onChange,
+  imageNameKnown,
+  onImageNameChange,
   onBack,
   onContinue,
 }: {
   source: { displayName: string; handle: string } | null;
   value: SlpIdentityDisclosure;
   onChange: (value: SlpIdentityDisclosure) => void;
+  imageNameKnown: boolean;
+  onImageNameChange: (value: boolean) => void;
   onBack: () => void;
   onContinue: () => void;
 }) {
@@ -218,6 +223,15 @@ export function DisclosureStep({
               </span>
             </button>
           ))}
+        </div>
+        <div className="mt-4">
+          <Toggle
+            label={localizeUi("ui.slurp.settings.creators.imageName", {
+              defaultValue: "The image model knows this character",
+            })}
+            value={imageNameKnown}
+            onChange={onImageNameChange}
+          />
         </div>
       </div>
       <WizardFooter step={1} onBack={onBack} onNext={onContinue} />

@@ -1,0 +1,57 @@
+name: Dottore Review
+
+# The reviewer lives in Marinara-Engine. This wrapper runs it against this repository:
+# the status, comments, token and secrets belong here, and .github/dottore-review/rules.json
+# is read from the PR base branch. When the engine changes, bump the pinned SHA in a small PR.
+
+on:
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: Pull request number to review.
+        required: true
+      comment_body:
+        description: Slash command body that requested the review.
+        default: ""
+      review_mode:
+        description: Review mode for the requested pass.
+        type: choice
+        options: [auto, full, incremental, autofix, approve]
+        default: auto
+      requested_by:
+        description: GitHub login that requested the dispatch.
+        default: ""
+      last_reviewed_sha:
+        description: Explicit Dottore-reviewed head SHA from the dispatcher, when known.
+        default: ""
+
+# contents: write is only for the engine's resolve job, which closes threads a later push repaired:
+# GitHub refuses resolveReviewThread without it. The engine keeps its review and fix jobs at contents: read;
+# repairs are pushed with the Dottore App's token, not this one.
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+  statuses: write
+
+# Distinct from the engine's own group, which would otherwise cancel this caller.
+concurrency:
+  group: dottore-review-caller-${{ github.repository }}-${{ inputs.pr_number }}${{ contains(fromJSON('["autofix","approve"]'), inputs.review_mode) && format('-{0}', inputs.review_mode) || '' }}
+  cancel-in-progress: true
+
+jobs:
+  review:
+    uses: Pasta-Devs/Marinara-Engine/.github/workflows/dottore-review.yml@e10a92638b337c10a4a88059a1ab2306cf075876
+    with:
+      pr_number: ${{ inputs.pr_number }}
+      comment_body: ${{ inputs.comment_body }}
+      review_mode: ${{ inputs.review_mode }}
+      requested_by: ${{ inputs.requested_by }}
+      last_reviewed_sha: ${{ inputs.last_reviewed_sha }}
+    # The two models come from this repository's DOTTORE_{SMALL,LARGE}_{MODEL,API,BASE_URL,EFFORT} variables;
+    # each model's key is the secret of the same name.
+    secrets:
+      DOTTORE_SMALL_API_KEY: ${{ secrets.DOTTORE_SMALL_API_KEY }}
+      DOTTORE_LARGE_API_KEY: ${{ secrets.DOTTORE_LARGE_API_KEY }}
+      DOTTORE_APP_ID: ${{ secrets.DOTTORE_APP_ID }}
+      DOTTORE_APP_PRIVATE_KEY: ${{ secrets.DOTTORE_APP_PRIVATE_KEY }}

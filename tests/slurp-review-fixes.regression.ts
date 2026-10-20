@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import { join } from "node:path";
 import { slurp2BackstageSource } from "./slurp2-backstage-source";
-import { slurp2Source } from "./slurp2-source";
+import { readFileSync } from "node:fs";
+import { SLURP2_SOURCE_MODULES, slurp2Source } from "./slurp2-source";
 
 const root = join(import.meta.dirname, "..");
 const server = join(root, "packages/slurp2/src/engine/packages/server/src");
@@ -44,8 +45,13 @@ assert.match(
   "compensation must persist the refund before it attempts creator-income reversal",
 );
 // Compensation reverses the amount that was actually credited, never a share recomputed from the
-// current setting, which can have changed since the payment.
-assert.match(messagesStorage, /reversal = Number\(current\.creditedAmount\)/u);
+// current setting, which can have changed since the payment. It now re-reads the live ledger
+// receipt first (self-healing if the persisted creditedAmount snapshot is missing), falling back
+// to the snapshot — never to a settings-based recalculation.
+assert.match(
+  messagesStorage,
+  /reversal =\s*\n\s*\(await slurp\.getCreatorIncomeOperationAmount\(payment\.creatorAccountId, payment\.creditOperationId\)\) \?\?\s*\n\s*Number\(current\.creditedAmount\)/u,
+);
 assert.doesNotMatch(messagesStorage, /slurpCreatorRevenueShare\(payment\.price/u);
 assert.match(messagesStorage, /db\.transaction\(async \(tx\) => \{[\s\S]{0,500}?current\.state !== "accepted"/u);
 assert.match(messagesStorage, /const paymentId = `commission:\$\{id\}:accept`/u);
@@ -67,7 +73,12 @@ assert.match(
 
 // Missing-table fallbacks must return the declared shape. `[]` and `null` crashed the callers they
 // were meant to protect.
-assert.match(messagesStorage, /rapportFactsFor: \(\) => emptySlurpRapportFacts\(\)/u);
+// rapportFactsFor grew from a one-line arrow into a full function (whale-history, handle-prefix
+// collision and double-counted-tip fixes), but still starts from the shared empty facts value.
+assert.match(
+  messagesStorage,
+  /async rapportFactsFor\(viewerAccountId: string, creatorAccountId: string\): Promise<SlurpRapportFacts> \{\s*\n\s*const facts = emptySlurpRapportFacts\(\);/u,
+);
 assert.match(messagesStorage, /claimReply: \(\) => \(\{ status: "busy" as const \}\)/u);
 
 const routes = read(join(server, "routes/slurp.routes.ts"));
@@ -78,7 +89,7 @@ const messageScheduler = read(join(server, "services/slurp/slurp-message-schedul
 // `replyToSlurpMessage` reports a provider failure instead of rejecting, so discarding its result
 // left `consecutiveFailures` at zero and the backoff never engaged.
 assert.match(messageScheduler, /const outcome = await replyToSlurpMessage\(/u);
-assert.match(messageScheduler, /if \(outcome\.status === "failed"\) failed = true;/u);
+assert.match(messageScheduler, /if \(outcome\.status === "failed"\) \{\s*failed = true;/u);
 assert.match(messageScheduler, /if \(failed\) throw new Error\(/u);
 
 // ── Client state ─────────────────────────────────────────
@@ -108,16 +119,16 @@ assert.match(mediaSrc, /observerRef\.current\?\.disconnect\(\);\s*observerRef\.c
 assert.match(mediaSrc, /mediaCache\.delete\(imageUrl\);[\s\S]{0,200}?cached\.promise\.then\(\(objectUrl\) => \{/u);
 assert.match(mediaSrc, /if \(!response\.ok\) \{\s*mediaCache\.delete\(imageUrl\);/u);
 
-const apiClient = read(join(client, "lib/api-client.ts"));
-// A bare `null` or an array error body made `body.error` throw and hid the real HTTP status.
-assert.match(apiClient, /const body = isRecord\(parsed\) \? parsed : \{ error: res\.statusText \}/u);
+// Slurp's requests go through the Engine's API client (sources/host-client-overlay), so its error handling is the
+// Engine's (#1487).
 
 // ── Controls ─────────────────────────────────────────────
 
 const onboarding = read(join(client, "components/slurp/SlurpOnboardingPanel.tsx"));
 assert.match(
   onboarding,
-  /completion === "settingsFailed" && \(\s*<button\s*type="button"\s*disabled=\{pending\}/u,
+  // The hand-rolled <button> became the shared SlpButton component.
+  /completion === "settingsFailed" && \(\s*<SlpButton\s*className="mt-5"\s*disabled=\{pending\}/u,
   "the settings retry button needs the same in-flight guard as its siblings",
 );
 
@@ -126,40 +137,52 @@ const messagesView = read(join(client, "components/slurp/SlurpMessages.tsx"));
 assert.match(messagesView, /\{unlock\.isError && \(/u);
 
 const settings = slurp2BackstageSource();
-assert.match(settings, /\.download\("\/slurp2\/noodler\/ads\/export"[\s\S]{0,120}?\.catch\(/u);
+// Slice 12 moved this operation route from /noodler/* to /slurp/*.
+assert.match(settings, /\.download\("\/slurp2\/slurp\/ads\/export"[\s\S]{0,120}?\.catch\(/u);
 
 const shell = read(join(client, "components/slurp/SlurpShell.tsx"));
 // The active persona was signalled by background colour alone.
 assert.match(shell, /aria-current=\{selected \? "true" : undefined\}/u);
 
 const profileSurface = read(join(client, "components/slurp/SlurpProfileSurface.tsx"));
+// The upload button itself now only renders when avatarUpload.canEdit (step 3's hero redesign),
+// so the aria-label on it no longer needs its own canEdit ternary.
 assert.match(
   profileSurface,
-  /aria-label=\{avatarUpload\.canEdit \? localizeUi\("editor\.avatar\.upload"\) : undefined\}/u,
+  /avatarUpload\?\.canEdit \? \([\s\S]{0,600}?aria-label=\{localizeUi\("editor\.avatar\.upload"\)\}/u,
 );
 
 // ── Stories ──────────────────────────────────────────────
 
 const generation = read(join(server, "services/slurp/slurp-generation.service.ts"));
-// Automatic posting only ever produced feed posts, so the Story shelf could only be filled by hand.
+// Automatic posting only ever produced feed posts, so the Story shelf could only be filled by
+// hand. The condition grew a storyImagesEnabled gate, an explicit allowStory opt-out and a Stir
+// nudge path, but still requires imagesEnabled either way.
 assert.match(
   generation,
-  /const storyVariation = \(variation\?\.story === true \|\| input\.request\.postType === "story"\) && imagesEnabled;/u,
+  /const storyVariation =\s*\n\s*\(\(input\.allowStory !== false && variation\?\.story === true && settings\.storyImagesEnabled\) \|\|\s*\n\s*input\.request\.postType === "story" \|\|\s*\n\s*nudge\?\.story === true\) &&\s*\n\s*imagesEnabled;/u,
 );
 // A Story is a picture with a line under it, so only the path that commits an image may mark one.
+// This split across two functions (slp-post-media-operation.ts, part of this mapping): the caller
+// builds the story-conditional metadata, and persistSlurpGeneratedImageSet commits the image URL
+// together with that same metadata in one persist call — renamed noodlerPostMediaUrl ->
+// slpCreatorPostMediaUrl (Slice 12).
 assert.match(
   generation,
-  /imageUrl: noodlerPostMediaUrl\(postId\),\s*metadata: \{ \.\.\.image\.metadata, \.\.\.\(storyVariation \? \{ noodlerPostType: "story" \} : \{\}\) \},/u,
+  /primary: \{ \.\.\.image, metadata: \{ \.\.\.image\.metadata, \.\.\.\(input\.story \? \{ noodlerPostType: "story" \} : \{\}\) \} \}/u,
 );
+assert.match(generation, /imageUrl: slpCreatorPostMediaUrl\(input\.postId\),\s*metadata: input\.primary\.metadata,/u);
 // The scheduled path returns at prepareOnly, before the committed-image branch, so it carries the
 // story intent in the prepared payload instead — otherwise every scheduled Story silently published
 // as an ordinary post. publishDueNoodlerPreparedPosts drops the flag again when no image attached,
 // which is what keeps "a Story is a picture with a line under it" true.
 const storyMarks = [...generation.matchAll(/noodlerPostType: "story"/gu)];
 assert.equal(storyMarks.length, 2, "the committed-image path and the prepared payload both mark a Story");
+// The prepared-post builder (slp-prepared-post.ts) takes `story` as a plain input field, which the
+// generation service passes storyVariation into at every call site.
 assert.match(
   generation,
-  /metadata: \{ \.\.\.baseInput\.metadata, \.\.\.\(storyVariation \? \{ noodlerPostType: "story" \} : \{\}\) \},/u,
+  /metadata: \{\s*\n\s*\.\.\.input\.metadata,\s*\n\s*\.\.\.\(stagedMedia \? \{ noodlerMediaPath: stagedMedia\.filePath \} : \{\}\),\s*\n\s*\.\.\.\(input\.story \? \{ noodlerPostType: "story" \} : \{\}\),/u,
   "the prepareOnly return must carry the story flag",
 );
 const storage = read("packages/slurp2/src/engine/packages/server/src/services/storage/slurp.storage.ts");
@@ -177,7 +200,7 @@ const cropEditor = read(join(client, "components/slurp/PostImageCropEditor.tsx")
 assert.match(cropEditor, /lockedRatio\?: number;/u);
 assert.match(cropEditor, /lockedRatio && Number\.isFinite\(lockedRatio\) && lockedRatio > 0\s*\? lockedRatio/u);
 const home = read(join(client, "components/slurp/SlurpHome.tsx"));
-assert.match(home, /lockedRatio=\{postType === "story" \? storyAspectRatio : undefined\}/u);
+assert.match(home, /lockedRatio=\{story \? storyAspectRatio : undefined\}/u);
 assert.match(home, /composerSettings\.storyImageWidth \/ composerSettings\.storyImageHeight/u);
 
 // ── Profile editor ───────────────────────────────────────
@@ -203,19 +226,24 @@ assert.match(
     join(server, "routes/slurp-messages.routes.ts"),
     join(server, "services/slurp/slurp-generation.service.ts"),
   ];
+  // Each module keeps its own import scope, so a logical source is scanned file by file.
+  const engineRoot = join(root, "packages/slurp2/src/engine");
   for (const path of sources) {
-    const text = read(path);
-    const bound = new Map<string, number>();
-    for (const match of text.matchAll(/^import\s*\{([^}]*)\}\s*from\s*"[^"]+";/gmu)) {
-      for (const clause of match[1]!.split(",")) {
-        const name = clause.trim().replace(/^type\s+/u, "");
-        if (!name) continue;
-        const local = name.includes(" as ") ? name.split(" as ")[1]!.trim() : name;
-        bound.set(local, (bound.get(local) ?? 0) + 1);
+    const key = path.slice(engineRoot.length + 1);
+    for (const file of SLURP2_SOURCE_MODULES[key] ?? [key]) {
+      const text = readFileSync(join(engineRoot, file), "utf8");
+      const bound = new Map<string, number>();
+      for (const match of text.matchAll(/^import\s*\{([^}]*)\}\s*from\s*"[^"]+";/gmu)) {
+        for (const clause of match[1]!.split(",")) {
+          const name = clause.trim().replace(/^type\s+/u, "");
+          if (!name) continue;
+          const local = name.includes(" as ") ? name.split(" as ")[1]!.trim() : name;
+          bound.set(local, (bound.get(local) ?? 0) + 1);
+        }
       }
+      const duplicates = [...bound].filter(([, count]) => count > 1).map(([name]) => name);
+      assert.deepEqual(duplicates, [], `${file} binds the same import name twice: ${duplicates.join(", ")}`);
     }
-    const duplicates = [...bound].filter(([, count]) => count > 1).map(([name]) => name);
-    assert.deepEqual(duplicates, [], `${path} binds the same import name twice: ${duplicates.join(", ")}`);
   }
 }
 
@@ -229,16 +257,27 @@ assert.match(
   postOperation,
   /input\.unlockPrice \?\?[\s\S]{0,160}?\.unlockPrice \?\?\s*\(await noodle\.getSettings\(\)\)\.walletUnlockCost;/u,
 );
-assert.doesNotMatch(postOperation, /noodlerUnlockPriceMetadata\(\)/u, "a locked post must be stamped with the setting");
-assert.doesNotMatch(generation, /noodlerUnlockPriceMetadata\(\)/u);
-assert.match(generation, /noodlerUnlockPriceMetadata\([\s\S]{0,160}?\.unlockPrice \?\?\s*settings\.walletUnlockCost/u);
+// Renamed noodlerUnlockPriceMetadata -> slpCreatorUnlockPriceMetadata (Slice 12); the generation
+// path also gained a Creator-messaging fallback tier before the global setting.
+assert.doesNotMatch(
+  postOperation,
+  /slpCreatorUnlockPriceMetadata\(\)/u,
+  "a locked post must be stamped with the setting",
+);
+assert.doesNotMatch(generation, /slpCreatorUnlockPriceMetadata\(\)/u);
+assert.match(
+  generation,
+  /slpCreatorUnlockPriceMetadata\([\s\S]{0,260}?\.unlockPrice \?\?\s*settings\.walletUnlockCost/u,
+);
 
 // ── Subscribe ────────────────────────────────────────────
 
 const slurpStorage = read(join(server, "services/storage/slurp.storage.ts"));
 // `now()` returns an ISO string; every use in `subscribe` wants a Date, so the first subscribe for
 // a viewer threw "toISOString is not a function" and returned a 500.
-assert.match(slurpStorage, /const at = new Date\(\);\s*const existingWallet = settings\.walletEnabled/u);
+// The Creator's own subscription price is now read into `basePrice` between `at` and
+// `existingWallet` (platform-event pricing), so the two declarations are no longer adjacent.
+assert.match(slurpStorage, /const at = new Date\(\);[\s\S]*?const existingWallet = settings\.walletEnabled/u);
 // The persona switcher read the Engine's own wallet field, which defaults to 999_999.
 assert.match(slurpStorage, /listViewerWallets[\s\S]{0,700}?coins: \(await getWalletNow\(personaId\)\)\.coins/u);
 
@@ -247,12 +286,17 @@ assert.match(slurpStorage, /listViewerWallets[\s\S]{0,700}?coins: \(await getWal
 // A persona's own Slurp identity is provisioned the first time it likes or replies. It was then
 // listed in Creator profiles as "Setup Needed" and shown in every other viewer's Discover.
 assert.match(slurpStorage, /export function isSlurpViewerActorAccount\(/u);
+// listNoodlerStageProfiles grew a 15s cache (0.3.6) in front of the real builder, which also
+// gained a fan-account exclusion (0.3.0 report B) alongside the original viewer-actor filter.
 assert.match(
   slurpStorage,
-  /listNoodlerStageProfiles[\s\S]{0,200}?\.filter\(\(account\) => !isSlurpViewerActorAccount\(account\)\)/u,
+  /buildNoodlerStageProfiles[\s\S]{0,300}?\.filter\(\s*\(account\) => !isSlurpViewerActorAccount\(account\) && !isSlurpCharacterFanAccount\(account\),/u,
 );
-const viewerActorFilters = [...routes.matchAll(/!isSlurpViewerActorAccount\(account\) &&/gu)];
-assert.equal(viewerActorFilters.length, 2, "both visible-account filters must exclude viewer actors");
+// A third account-list surface (Studio, in addition to Discover/feed-viewer and the viewer
+// context) has grown its own viewer-actor filter since; not all of them chain a second condition
+// with "&&", so count the filter call itself rather than that one syntactic shape.
+const viewerActorFilters = [...routes.matchAll(/!isSlurpViewerActorAccount\(account\)/gu)];
+assert.equal(viewerActorFilters.length, 3, "every visible-account filter must exclude viewer actors");
 
 // ── Repeated likes ───────────────────────────────────────
 
@@ -273,13 +317,19 @@ assert.match(slurpStorage, /storyRate: SLURP_DEFAULT_STORY_RATE/u);
 // The shipped default stays 4:5, so an install that never opens Settings is unchanged.
 assert.match(slurpStorage, /storyImageWidth: 1024,\s*storyImageHeight: 1280,/u);
 
+// Separate width/height raw fields became one shape-picker control, like the main post shape
+// above it ("varied pretty controls, few raw inputs"); the reachable keys are storyShape and its
+// detail line, anchored by the storyImageWidth/storyImageHeight settingKeys.
 const settingsUi = slurp2BackstageSource();
 for (const key of [
   "ui.slurp.settings.storyRate",
-  "ui.slurp.settings.images.storyWidth",
-  "ui.slurp.settings.images.storyHeight",
+  "ui.slurp.settings.images.storyShape",
+  "ui.slurp.settings.images.storyWidthDetail",
 ]) {
   assert.ok(settingsUi.includes(key), `${key} must be reachable in Settings`);
+}
+for (const settingKey of ["storyImageWidth", "storyImageHeight"]) {
+  assert.ok(settingsUi.includes(`settingKey="${settingKey}"`), `${settingKey} must be reachable via search/deep link`);
 }
 const englishUi = JSON.parse(read(join(client, "localization/locales/en.json"))) as Record<string, string>;
 for (const key of [
@@ -352,9 +402,11 @@ assert.doesNotMatch(messagesView2, /slurp-ppv-image|slurp-deliver-image|imageUrl
 assert.doesNotMatch(useSlurpSource, /useSendSlurpCreatorPpv[\s\S]*imageUrl\?: string \| null/u);
 assert.doesNotMatch(useSlurpSource, /useDeliverSlurpCommission[\s\S]*imageUrl\?: string \| null/u);
 // The paywall has to cover the picture, or the thing being sold travels over the wire unpaid.
+// maskForViewer (shared by visibleMessages and both paginated routes) also strips the image
+// prompt/description from metadata now, so content/imageUrl is no longer the whole masked shape.
 assert.match(
   messageRoutes,
-  /message\.kind === "ppv" && !message\.unlockedAt\s*\?\s*\{\s*\.\.\.message,\s*content: "",\s*imageUrl: null,/u,
+  /message\?\.kind === "ppv" && !message\.unlockedAt\s*\?\s*\{\s*\.\.\.message,\s*content: "",\s*imageUrl: null,\s*metadata: \{\s*\.\.\.message\.metadata,\s*imagePrompt: undefined,\s*imageDescription: undefined,/u,
 );
 assert.match(messagesStorage, /kind: "commission_delivery",\s*imageUrl,/u);
 assert.match(messagesView2, /const messageImage = useSlurpMediaSrc\(\s*message\.imageUrl\s*\?/u);
@@ -366,7 +418,8 @@ assert.match(messagesView2, /const commissionTimeline = useMemo\(\s*\(\) =>\s*co
 assert.match(messagesView2, /const at = latestMessage[\s\S]{0,180}?commission\.updatedAt/u);
 assert.match(messagesView2, /const timeline = useMemo\(/u);
 assert.match(messagesView2, /commissionTimelineKey/u);
-assert.match(messagesView2, /\[commissionTimelineKey, messages\.length, typing, pending\]/u);
+// Gained a hiddenReplyIds dependency since.
+assert.match(messagesView2, /\[commissionTimelineKey, messages\.length, typing, pending, hiddenReplyIds\]/u);
 assert.doesNotMatch(messagesView2, /commissions\.map\(\(commission\) => \(\s*<CommissionRow/u);
 assert.match(messagesView2, /commissionAcceptPending/u);
 assert.match(messagesView2, /getApiErrorMessage\(raw, fallback\)/u);
@@ -393,7 +446,9 @@ assert.match(
 // Creator was stuck on the shipped defaults and the paid DM policy could never be chosen.
 assert.match(useSlurpSource, /export function useSlurpCreatorMessagingSettings\(/u);
 assert.match(settingsUi, /function CreatorMessagingGroup\(/u);
-assert.match(settingsUi, /personaCreator\(selectedCreator\) && selectedCreator\.sourceAccountId && \(/u);
+// The persona-backed-only gate is gone: every Creator's policy and prices are the player's to
+// set, world-run ones included (a dedicated settings tab calls CreatorMessagingGroup unconditionally).
+assert.match(settingsUi, /export function SlpCreatorMessagesSection\([\s\S]{0,900}?<CreatorMessagingGroup/u);
 for (const hook of ["useSetSlurpCreatorMessaging", "useSetSlurpCreatorPrice"]) {
   assert.ok(settingsUi.includes(hook), `${hook} must be reachable from Settings`);
 }
@@ -414,17 +469,26 @@ console.log("slurp review fixes regression passed");
 
 // The send route generates the reply before it answers, so the fan's own words and the typing
 // indicator have to appear at send time. Without this the chat sat empty for the whole wait.
-assert.match(messagesView2, /setPending\(\{ content, id: null \}\)/u);
-assert.match(messagesView2, /if \(!ownsCreator\) setTyping\(true\)/u);
+// setPending gained a startedAt timestamp; the typing indicator now also checks the Creator isn't
+// known offline before showing.
+assert.match(messagesView2, /setPending\(\{ content, id: null, startedAt: optimisticStartedAt \}\)/u);
+assert.match(messagesView2, /if \(!ownsCreator && availability\?\.online !== false\) setTyping\(true\)/u);
 assert.match(messagesView2, /holdTyping\(result\.reply \? \(result\.typingMs \?\? 0\) : 0, result\.reply\?\.id\)/u);
-assert.match(messagesView2, /pending && !messages\.some\(\(message\) => message\.id === pending\.id\)/u);
+// The echo-drop condition inverted to a positive match (setPending(null) once found) and gained a
+// content+timestamp fallback match, so a real message landing under a different id still clears
+// the optimistic echo instead of leaving it to blink.
+assert.match(
+  messagesView2,
+  /pending &&\s*\n\s*messages\.some\(\s*\n\s*\(message\) =>\s*\n\s*\(pending\.id !== null && message\.id === pending\.id\) \|\|\s*\(message\.role === "viewer" &&\s*message\.content === pending\.content &&\s*Date\.parse\(message\.createdAt\) >= pending\.startedAt\)/u,
+);
 
 const slurpHooks = slurp2Source("packages/slurp2/src/engine/packages/client/src/hooks/use-slurp.ts");
 // A chat opened from a profile polls like one opened from the inbox, or the queued off-hours
 // reply never arrives on that screen.
+// Gained a "peek" preview mode since, which must not poll like an opened chat.
 assert.match(
   slurpHooks,
-  /messages\/compose[\s\S]{0,400}?refetchInterval: creatorAccountId && personaId \? 30_000 : false/u,
+  /messages\/compose[\s\S]{0,500}?refetchInterval: creatorAccountId && personaId && !peek \? 30_000 : false/u,
 );
 // One DM used to invalidate the whole Slurp root, which re-paged the entire feed.
 assert.match(slurpHooks, /const invalidateSlurpMessages =/u);

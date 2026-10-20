@@ -223,8 +223,9 @@ test.describe("package-owned Noodle interface", () => {
 
   test("Latest Posts can be added, read, hidden, and opened on desktop and mobile", async ({ page }) => {
     const openWidgetManager = async () => {
-      const mobileBookmarks = page.locator('[data-component="HomeBrowserHub.MobileBookmarksTrigger"]');
-      if (await mobileBookmarks.isVisible()) {
+      if (page.viewportSize()!.width < 768) {
+        const mobileBookmarks = page.locator('[data-component="HomeBrowserHub.MobileBookmarksTrigger"]');
+        await expect(mobileBookmarks).toBeVisible();
         await mobileBookmarks.click();
         const menu = page.locator('[data-component="HomeBrowserHub.MobileBookmarksMenu"]');
         await expect(menu).toBeVisible();
@@ -232,6 +233,12 @@ test.describe("package-owned Noodle interface", () => {
       } else {
         await page.getByRole("button", { name: "Widgets", exact: true }).click();
       }
+      // A package with several widgets opens from one group button. Its rows show only after that.
+      // Once the group is open, the button is gone, so a second visit skips the click.
+      const manager = page.getByRole("dialog", { name: "Home Widgets" });
+      await expect(manager).toBeVisible();
+      const group = manager.getByRole("button", { name: /^Noodle\b/u });
+      if ((await group.count()) > 0) await group.click();
     };
     const bootstrap = await page.request.get("/api/noodle");
     expect(bootstrap.ok()).toBe(true);
@@ -260,10 +267,14 @@ test.describe("package-owned Noodle interface", () => {
     const manager = page.getByRole("dialog", { name: "Home Widgets" });
     await manager.getByRole("switch", { name: /Show Noodle.*Latest Posts/ }).click();
     await page.keyboard.press("Escape");
+    // Closing the dialog hands focus back to its opener on the next animation frame. That runs only
+    // once the dialog has left the DOM, so wait for it. Focusing the widget earlier loses the race.
+    await expect(manager).toBeHidden();
     await expect(widget).toBeVisible();
     await expect(widget).toHaveAttribute("data-home-widget-size", "large");
     const scrollRegion = widget.getByRole("region", { name: "Latest Noodle posts" });
     await expect(scrollRegion).toContainText(content);
+    await scrollRegion.scrollIntoViewIfNeeded();
     await scrollRegion.focus();
     await expect(scrollRegion).toBeFocused();
     await page.keyboard.press("ArrowDown");
@@ -273,6 +284,16 @@ test.describe("package-owned Noodle interface", () => {
       .first()
       .click();
     await expect(page.locator(`[data-noodle-post-id="${post.id}"]`)).toBeVisible();
+    // The first Noodle visit shows its welcome card. Opening a post from a widget does not dismiss it.
+    const welcomeDialog = page.getByRole("dialog", { name: "Welcome to Noodle" });
+    if (
+      await welcomeDialog.waitFor({ state: "visible", timeout: 2_000 }).then(
+        () => true,
+        () => false,
+      )
+    ) {
+      await welcomeDialog.getByRole("button", { name: "Start reading" }).click();
+    }
 
     await page.getByRole("tab", { name: "Home" }).click();
     await widget
@@ -582,6 +603,8 @@ test.describe("package-owned Noodle interface", () => {
   test("automatic translation translates other accounts once and keeps a hidden translation hidden", async ({
     page,
   }) => {
+    // About 50 s locally: two reloads and two Noodle opens. CI runners are slower, so allow more room.
+    test.setTimeout(120_000);
     const errors = collectUnexpectedErrors(page);
     const personaId = await prepareNoodlePersona(page, "Noodle Translation Persona");
     const translated: Array<{ text: string; targetLanguage: unknown }> = [];

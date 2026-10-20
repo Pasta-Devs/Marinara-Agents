@@ -72,17 +72,10 @@ assert.match(src("modules/chrome/SlpSheet.tsx"), /closeOpenOverlay\?\.\(\);\s*cl
 assert.match(hub, /<SlpWordmark \/>/u);
 assert.doesNotMatch(hub, /onRefresh|headerMenuRef/u);
 
-// Toasts: the Engine's position and theme, token accents (no richColors), scoped CSS, above the pill.
-assert.doesNotMatch(entry, /richColors/u);
-assert.match(entry, /localStorage\.getItem\("marinara-engine-ui"\)/u);
-assert.match(entry, /position=\{position === "bottom" \? "bottom-center" : "top-center"\}/u);
-assert.match(entry, /theme=\{theme\}/u);
-assert.match(entry, /\[data-slp-toaster\] \[data-sonner-toaster\]\[data-y-position="bottom"\]/u);
-assert.doesNotMatch(
-  entry,
-  /\n {2}\[data-sonner-toaster\]\[data-x-position/u,
-  "no unscoped rule that moves the Engine's toaster",
-);
+// Toasts: Slurp's toasts are the Engine's (one toast stack at the user's position, Pasta-Devs/Marinara-Agents#1487), so
+// Slurp renders no toaster and no dialog renderer of its own, and never restyles the Engine's toaster.
+assert.doesNotMatch(entry, /<Toaster\b|<AppDialogRenderer\b|richColors/u);
+assert.doesNotMatch(entry, /\[data-sonner-toaster\]/u, "no rule that moves or restyles the Engine's toaster");
 
 // Report bug: a small sheet with Discord (the splash's link) and the prefilled GitHub issue.
 const splash = src("features/onboarding/SlpSplash.tsx");

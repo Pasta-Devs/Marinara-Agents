@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readdir, readFile, rm, utimes, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { dirname } from "node:path";
@@ -8,6 +8,66 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { runRegressionToCompletion } from "./regression-helpers.ts";
 
 export type RouteScenario = "all" | "notes" | "imports" | "drafts" | "scope-identity" | "backup";
+
+// Every route the package registers, so a change to the route files cannot add, drop or rename one unnoticed.
+const EXPECTED_ROUTES = [
+  "DELETE /api/long-term-memory/data",
+  "DELETE /api/long-term-memory/debug-log",
+  "DELETE /api/long-term-memory/drafts/:id",
+  "DELETE /api/long-term-memory/notes/:id",
+  "DELETE /api/long-term-memory/notes/:id/scope",
+  "DELETE /api/long-term-memory/notes/:id/scope/current-chat",
+  "DELETE /api/long-term-memory/rejected-suggestions",
+  "DELETE /api/long-term-memory/rejected-suggestions/:id",
+  "GET /api/long-term-memory/backup/export",
+  "GET /api/long-term-memory/debug-log",
+  "GET /api/long-term-memory/debug-log/export",
+  "GET /api/long-term-memory/drafts",
+  "GET /api/long-term-memory/drafts/pending-count",
+  "GET /api/long-term-memory/drafts/review",
+  "GET /api/long-term-memory/events",
+  "GET /api/long-term-memory/extraction-settings",
+  "GET /api/long-term-memory/integrity",
+  "GET /api/long-term-memory/last-injection/:chatId",
+  "GET /api/long-term-memory/local-characters",
+  "GET /api/long-term-memory/notes",
+  "GET /api/long-term-memory/notes/:id",
+  "GET /api/long-term-memory/notes/:id/derived",
+  "GET /api/long-term-memory/rejected-suggestions",
+  "GET /api/long-term-memory/scope-targets",
+  "GET /api/long-term-memory/settings",
+  "GET /api/long-term-memory/status",
+  "PATCH /api/long-term-memory/notes/:id",
+  "POST /api/long-term-memory/backup/import",
+  "POST /api/long-term-memory/backup/preview",
+  "POST /api/long-term-memory/drafts/:id/accept",
+  "POST /api/long-term-memory/drafts/:id/preflight",
+  "POST /api/long-term-memory/drafts/:id/skip",
+  "POST /api/long-term-memory/fork-repair/apply",
+  "POST /api/long-term-memory/fork-repair/preview",
+  "POST /api/long-term-memory/identity-repair/apply",
+  "POST /api/long-term-memory/identity-repair/preview",
+  "POST /api/long-term-memory/import/lorebooks/preview",
+  "POST /api/long-term-memory/import/preview",
+  "POST /api/long-term-memory/import/source-details",
+  "POST /api/long-term-memory/import/source-notes",
+  "POST /api/long-term-memory/notes",
+  "POST /api/long-term-memory/notes/:id/extract",
+  "POST /api/long-term-memory/notes/:id/scope/apply-to-derived",
+  "POST /api/long-term-memory/notes/:id/sections/rename",
+  "POST /api/long-term-memory/notes/:id/sections/rename-preview",
+  "POST /api/long-term-memory/notes/batch",
+  "POST /api/long-term-memory/notes/permanent-delete",
+  "POST /api/long-term-memory/notes/transfer",
+  "POST /api/long-term-memory/notes/transfer-preview",
+  "POST /api/long-term-memory/rebuild",
+  "POST /api/long-term-memory/rejected-suggestions/:id/resolve-identity",
+  "POST /api/long-term-memory/repair",
+  "POST /api/long-term-memory/search",
+  "POST /api/long-term-memory/settings/reset",
+  "PUT /api/long-term-memory/extraction-settings",
+  "PUT /api/long-term-memory/settings",
+];
 
 async function main(routeScenario: RouteScenario) {
   const engineRoot =
@@ -34,18 +94,24 @@ async function main(routeScenario: RouteScenario) {
   } =
     await import("../packages/long-term-memory/src/engine/packages/shared/src/features/agents/long-term-memory/schema.ts");
   const { addRejectedSuggestions, readAllRejectedSuggestions, listRejectedSuggestions } =
-    await import("../packages/long-term-memory/src/engine/packages/server/src/services/long-term-memory/rejected-suggestions.ts");
+    await import("../packages/long-term-memory/src/engine/packages/server/src/services/long-term-memory/drafts/rejected-suggestions.ts");
   const { extractionFingerprintForLtmSourceNote, sourceHashForLtmSourceNote } =
-    await import("../packages/long-term-memory/src/engine/packages/server/src/services/long-term-memory/source-hash.ts");
+    await import("../packages/long-term-memory/src/engine/packages/server/src/services/long-term-memory/extraction/source-hash.ts");
   const { buildTrustedLtmSubjectCatalog, loadTrustedLtmSubjectCatalog, prepareLtmSubjectIdentityContext } =
-    await import("../packages/long-term-memory/src/engine/packages/server/src/services/long-term-memory/subject-identity.ts");
+    await import("../packages/long-term-memory/src/engine/packages/server/src/services/long-term-memory/identity/subject-identity.ts");
   const { compileEvidenceUnitExtraction } =
-    await import("../packages/long-term-memory/src/engine/packages/server/src/services/long-term-memory/evidence-unit-extraction.ts");
+    await import("../packages/long-term-memory/src/engine/packages/server/src/services/long-term-memory/extraction/evidence-unit-extraction.ts");
   const { longTermMemoryAttemptPath, longTermMemoryInjectionReceiptPath, recordLongTermMemoryZeroMatch } =
-    await import("../packages/long-term-memory/src/engine/packages/server/src/services/long-term-memory/usage.ts");
+    await import("../packages/long-term-memory/src/engine/packages/server/src/services/long-term-memory/recall/usage.ts");
   const { prepareGenerationLongTermMemory } =
-    await import("../packages/long-term-memory/src/engine/packages/server/src/services/long-term-memory/generation-injection.ts");
+    await import("../packages/long-term-memory/src/engine/packages/server/src/services/long-term-memory/recall/generation-injection.ts");
   const app = Fastify();
+  const registeredRoutes: string[] = [];
+  app.addHook("onRoute", (route: { method: string | string[]; url: string }) => {
+    for (const method of [route.method].flat())
+      if (method !== "HEAD" && route.url.startsWith("/api/long-term-memory/"))
+        registeredRoutes.push(`${method} ${route.url}`);
+  });
   app.setErrorHandler((error: any, request: any, reply: any) => {
     if (error && (error.name === "ZodError" || Array.isArray(error.issues) || Array.isArray(error.errors))) {
       return reply.status(400).send({
@@ -442,6 +508,7 @@ async function main(routeScenario: RouteScenario) {
       },
     });
     await app.ready();
+    assert.deepEqual(registeredRoutes.sort(), EXPECTED_ROUTES);
     const headers = { "x-admin-secret": "ltm-route-secret" };
     const routeNoteFixture = {
       id: "world_route_fixture",
@@ -638,10 +705,12 @@ async function main(routeScenario: RouteScenario) {
         "chunkFormatVersion",
         "dirty",
         "embeddedChunkCount",
+        "embeddingSource",
         "embeddingsAvailable",
         "errors",
         "generatedAt",
         "health",
+        "indexedEmbeddingSource",
         "noteCount",
         "rebuildState",
         "sourceHash",
@@ -1006,7 +1075,45 @@ async function main(routeScenario: RouteScenario) {
         url: "/api/long-term-memory/status",
         headers,
       });
-      assert.equal(rebuiltStatus.json().indexes.chunkFormatVersion, 4);
+      assert.equal(rebuiltStatus.json().indexes.chunkFormatVersion, 6);
+      {
+        // Stored vectors only count while they belong to the source recall embeds with now (#1304).
+        const { configurePackageRuntime, getPackageRuntime } =
+          await import("../packages/long-term-memory/src/engine/packages/server/src/services/long-term-memory/package-runtime.ts");
+        const originalHost = getPackageRuntime();
+        const fixtureSource = (spaceId: string, label: string) => ({
+          spaceId,
+          label,
+          async embed(texts: string[]) {
+            return texts.map(() => [1, 0]);
+          },
+        });
+        const useSource = (source: ReturnType<typeof fixtureSource>) =>
+          configurePackageRuntime({ ...originalHost, embeddings: source, resolveEmbeddings: async () => source });
+        const embeddingStatus = async () =>
+          (await app.inject({ method: "GET", url: "/api/long-term-memory/status", headers })).json().indexes;
+        let restored: Awaited<ReturnType<typeof app.inject>> | undefined;
+        try {
+          useSource(fixtureSource("source-fixture-a", "Source fixture A"));
+          const built = await app.inject({ method: "POST", url: "/api/long-term-memory/rebuild", headers });
+          assert.equal(built.statusCode, 200, built.body);
+          const matching = await embeddingStatus();
+          assert.equal(matching.embeddingsAvailable, true);
+          assert.equal(matching.embeddingSource, "Source fixture A");
+          assert.equal(matching.indexedEmbeddingSource, "Source fixture A");
+          useSource(fixtureSource("source-fixture-b", "Source fixture B"));
+          const switched = await embeddingStatus();
+          assert.equal(switched.embeddingsAvailable, false, "a switched source must not read as available");
+          assert.equal(switched.embeddingSource, "Source fixture B");
+          assert.equal(switched.indexedEmbeddingSource, "Source fixture A");
+          assert.equal(switched.embeddedChunkCount > 0, true);
+        } finally {
+          configurePackageRuntime(originalHost);
+          // Asserted after the block so a restore failure cannot replace the case's own assertion error.
+          restored = await app.inject({ method: "POST", url: "/api/long-term-memory/rebuild", headers });
+        }
+        assert.equal(restored.statusCode, 200, restored.body);
+      }
       const batch = await app.inject({
         method: "POST",
         url: "/api/long-term-memory/notes/batch",
@@ -1846,7 +1953,7 @@ async function main(routeScenario: RouteScenario) {
         const isolatedRoot = await mkdtemp(join(tmpdir(), "marinara-ltm-identity-backup-"));
         try {
           const { replaceLongTermMemoryData } =
-            await import("../packages/long-term-memory/src/engine/packages/server/src/services/long-term-memory/backup-restore.ts");
+            await import("../packages/long-term-memory/src/engine/packages/server/src/services/long-term-memory/persistence/backup-restore.ts");
           await replaceLongTermMemoryData(backup.json(), isolatedRoot);
           assert.equal((await listRejectedSuggestions({}, isolatedRoot)).length, 0);
           const restoredChoices = await readAllRejectedSuggestions(isolatedRoot);
@@ -2602,17 +2709,180 @@ async function main(routeScenario: RouteScenario) {
         ].sort(),
       );
       await storageService.storage.deleteNotesPermanently(["char_mara"]);
-      const searched = await app.inject({
-        method: "POST",
-        url: "/api/long-term-memory/search",
-        headers,
-        payload: {
-          queryText: "cobalt observatory",
-          scope: { chatId: "chat-a", chatIds: ["chat-a"] },
+      const previousChatMetadata = chats[0].metadata;
+      const previousChatCharacterIds = chats[0].characterIds;
+      const characterScopeSentinel = "world_search_character_scope_sentinel";
+      const groupScopeSentinel = "world_search_group_scope_sentinel";
+      await storageService.storage.createNote({
+        id: characterScopeSentinel,
+        type: "world",
+        status: "active",
+        modes: ["roleplay"],
+        scope: { characterIds: ["character-nyra"] },
+        tags: [],
+        keywords: ["nyra-scope-sentinel"],
+        links: [],
+        sections: {
+          facts: {
+            text: "Nyra-only scope sentinel must not enter Mara search results.",
+            updatedAt: "2026-07-17T00:00:00.000Z",
+          },
         },
       });
-      assert.equal(searched.statusCode, 200, searched.body);
-      assert.equal(searched.json().chunks[0]?.chunk.noteId, "world_route_fixture");
+      try {
+        chats[0].characterIds = ["character-mara", "character-nyra"];
+        chats[0].metadata = {
+          ...previousChatMetadata,
+          longTermMemoryRecallStyle: "custom",
+          longTermMemoryBudgetTokens: 512,
+          longTermMemoryMaxChunks: 1,
+          longTermMemoryScoreThreshold: 0,
+          longTermMemoryIncludeResolved: true,
+          longTermMemoryRecallPreamble: "Recall test preview",
+          longTermMemorySemanticWeight: 0,
+          longTermMemoryLexicalWeight: 0.6,
+          longTermMemoryGraphWeight: 0,
+          longTermMemoryKeywordWeight: 0.4,
+        };
+        const recallQuery = "cobalt observatory";
+        const recallScope = {
+          chatId: "chat-a",
+          chatIds: ["chat-a"],
+          groupId: "observatory-branches",
+          groupIds: ["observatory-branches"],
+          characterIds: ["character-mara"],
+        };
+        const searched = await app.inject({
+          method: "POST",
+          url: "/api/long-term-memory/search",
+          headers,
+          payload: { queryText: recallQuery, scope: recallScope },
+        });
+        assert.equal(searched.statusCode, 200, searched.body);
+        const searchResult = searched.json();
+        assert.equal(searchResult.chunks[0]?.chunk.noteId, "world_route_fixture");
+        const characterScopedSearch = await app.inject({
+          method: "POST",
+          url: "/api/long-term-memory/search",
+          headers,
+          payload: {
+            queryText: "nyra-scope-sentinel",
+            scope: {
+              chatId: "chat-a",
+              chatIds: ["chat-a"],
+              characterIds: ["character-mara"],
+            },
+          },
+        });
+        assert.equal(characterScopedSearch.statusCode, 200, characterScopedSearch.body);
+        assert.equal(
+          characterScopedSearch
+            .json()
+            .chunks.some((candidate: any) => candidate.chunk.noteId === characterScopeSentinel),
+          false,
+          "chat characters must not widen an explicit character scope",
+        );
+        chats[0].characterIds = previousChatCharacterIds;
+        const turnRecall = await prepareGenerationLongTermMemory({
+          root: storageService.storage.root,
+          chatId: "chat-a",
+          chatMode: "roleplay",
+          characterIds: ["character-mara"],
+          messages: [{ role: "user", content: recallQuery }],
+          debugMode: true,
+        });
+        assert.ok(turnRecall, "the same chat query and scope must produce a turn recall");
+        assert.deepEqual(
+          searchResult.chunks.map((candidate: any) => candidate.chunk.noteId),
+          turnRecall?.receipt.artifact.chunks.map((candidate: any) => candidate.chunk.noteId),
+          "search defaults must select the memories the same chat turn injects",
+        );
+        assert.deepEqual(searchResult.recallSettings, {
+          mode: "roleplay",
+          recallStyle: "custom",
+          maxChunks: 1,
+          maxTokens: 512,
+          scoreThreshold: 0,
+          includeResolved: true,
+          weights: { semanticWeight: 0, lexicalWeight: 0.6, graphWeight: 0, keywordWeight: 0.4 },
+        });
+        assert.equal(searchResult.maxTokens, 512 - searchResult.promptOverheadTokens);
+        assert.equal(searchResult.promptBudgetTokens, 512);
+        assert.ok(searchResult.promptOverheadTokens > 0);
+        assert.ok(searchResult.chunks.every((candidate: any) => typeof candidate.estimatedTokens === "number"));
+
+        // A scope that only names the chat must recall the chat's group memories like a turn does.
+        await storageService.storage.createNote({
+          id: groupScopeSentinel,
+          type: "world",
+          status: "active",
+          modes: ["roleplay"],
+          scope: { groupId: "observatory-branches" },
+          tags: [],
+          keywords: ["branchwide-sentinel"],
+          links: [],
+          sections: {
+            facts: {
+              text: "Branchwide sentinel shared by every chat in the group.",
+              updatedAt: "2026-07-17T00:00:00.000Z",
+            },
+          },
+        });
+        const chatOnlySearch = await app.inject({
+          method: "POST",
+          url: "/api/long-term-memory/search",
+          headers,
+          payload: { queryText: "branchwide-sentinel", scope: { chatId: "chat-a" } },
+        });
+        assert.equal(chatOnlySearch.statusCode, 200, chatOnlySearch.body);
+        const chatOnlyTurn = await prepareGenerationLongTermMemory({
+          root: storageService.storage.root,
+          chatId: "chat-a",
+          chatMode: "roleplay",
+          characterIds: ["character-mara"],
+          messages: [{ role: "user", content: "branchwide-sentinel" }],
+          debugMode: true,
+        });
+        assert.deepEqual(
+          chatOnlySearch.json().chunks.map((candidate: any) => candidate.chunk.noteId),
+          [groupScopeSentinel],
+          "a chat-only search scope must include the chat's group memories",
+        );
+        assert.deepEqual(
+          chatOnlySearch.json().chunks.map((candidate: any) => candidate.chunk.noteId),
+          chatOnlyTurn?.receipt.artifact.chunks.map((candidate: any) => candidate.chunk.noteId),
+          "a chat-only search scope must select what the chat's turn injects",
+        );
+
+        const explicitOverrides = await app.inject({
+          method: "POST",
+          url: "/api/long-term-memory/search",
+          headers,
+          payload: {
+            queryText: recallQuery,
+            scope: recallScope,
+            maxChunks: 2,
+            maxTokens: 256,
+            minScore: 0,
+            includeResolved: false,
+            semanticWeight: 0.25,
+          },
+        });
+        assert.equal(explicitOverrides.statusCode, 200, explicitOverrides.body);
+        assert.deepEqual(explicitOverrides.json().recallSettings, {
+          mode: "roleplay",
+          recallStyle: "custom",
+          maxChunks: 2,
+          maxTokens: 256,
+          scoreThreshold: 0,
+          includeResolved: false,
+          weights: { semanticWeight: 0.25, lexicalWeight: 0.6, graphWeight: 0, keywordWeight: 0.4 },
+        });
+      } finally {
+        chats[0].metadata = previousChatMetadata;
+        chats[0].characterIds = previousChatCharacterIds;
+        await storageService.storage.deleteNotesPermanently([characterScopeSentinel, groupScopeSentinel]);
+      }
       const transferPreview = await app.inject({
         method: "POST",
         url: "/api/long-term-memory/notes/transfer-preview",
@@ -3623,6 +3893,19 @@ async function main(routeScenario: RouteScenario) {
         .json()
         .candidates.find((candidate: any) => candidate.duplicateNoteIds.includes("char_nyra_persona_b"));
       assert.ok(personaIdentityCandidate);
+      // Issue #1328: a repair backup only serves its own rollback, so a successful identity repair
+      // keeps the newest three and always keeps its own.
+      const identityBackupsRoot = join(
+        dirname(storageService.storage.root),
+        "backups",
+        "long-term-memory-identity-repairs",
+      );
+      const staleBackupNames = ["stale-1", "stale-2", "stale-3", "stale-4"];
+      for (const [position, name] of staleBackupNames.entries()) {
+        await mkdir(join(identityBackupsRoot, name), { recursive: true });
+        const stamp = new Date(Date.UTC(2001, 0, position + 1));
+        await utimes(join(identityBackupsRoot, name), stamp, stamp);
+      }
       const personaIdentityApply = await app.inject({
         method: "POST",
         url: "/api/long-term-memory/identity-repair/apply",
@@ -3640,6 +3923,14 @@ async function main(routeScenario: RouteScenario) {
         },
       });
       assert.equal(personaIdentityApply.statusCode, 200, personaIdentityApply.body);
+      const keptIdentityBackups = await readdir(identityBackupsRoot);
+      assert.equal(keptIdentityBackups.length, 3, "an identity repair must keep only the newest three backups");
+      assert.equal(
+        keptIdentityBackups.includes(personaIdentityApply.json().backup.id),
+        true,
+        "an identity repair must keep its own backup",
+      );
+      assert.equal(keptIdentityBackups.includes(staleBackupNames[0]!), false, "the oldest backup must be pruned");
       assert.deepEqual((await storageService.storage.getNote(personaIdentityCandidate.canonicalNoteId)).scope, {
         personaId: "persona-fixture",
         personaIds: ["persona-fixture"],
@@ -4659,7 +4950,7 @@ async function main(routeScenario: RouteScenario) {
         ["chat-a:summary-order-b", "chat-a:summary-order-a"],
       );
       const { importPackageInterop } =
-        await import("../packages/long-term-memory/src/engine/packages/server/src/services/long-term-memory/interop.ts");
+        await import("../packages/long-term-memory/src/engine/packages/server/src/services/long-term-memory/sources/interop.ts");
       chats[0].metadata.summaryEntries.push({
         id: "summary-aborted-new",
         content: "This source must never be persisted.",

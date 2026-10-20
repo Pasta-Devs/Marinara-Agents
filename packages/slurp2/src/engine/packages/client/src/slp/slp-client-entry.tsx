@@ -1,41 +1,41 @@
-import { Component, useContext, useEffect, useState, type CSSProperties, type ErrorInfo, type ReactNode } from "react";
-import { createPortal } from "react-dom";
+import { Component, useEffect, useState, type CSSProperties, type ErrorInfo, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { QueryClientProvider } from "@tanstack/react-query";
 import i18next from "i18next";
-import { Toaster } from "sonner";
-import { I18nextProvider, initReactI18next } from "react-i18next";
+import { I18nextProvider } from "react-i18next";
+import { queryClient } from "marinara:host";
 import english from "./locales/en.json";
 import { SlpApp } from "./app/SlpApp";
 import { api, ApiError } from "../lib/api-client";
 import { useSlurpUIStore } from "./base/state/slp-package-store";
 import { configureSlurpPackageState } from "./base/state/slp-package-store";
 import { ModalPortalContext } from "../components/ui/Modal";
-import { AppDialogRenderer } from "../components/ui/AppDialogRenderer";
 import { SLP_DISPLAY_FONT_STYLES } from "./base/chrome/slp-display-font";
 import { SLP_SPARKLE_STYLES } from "./modules/sparkle/slp-sparkle-styles";
 import { SLP_CREATOR_PAGE_STYLES } from "./modules/creator/slp-creator-page-styles";
-import { BOTTOM_SAFE_INSET, getSlpAccentStyle, SLP_PINK, SlpAccentContext } from "./base/chrome/SlpChrome";
+import { getSlpAccentStyle, SLP_PINK, SlpAccentContext } from "./base/chrome/SlpChrome";
+import { slpKeys } from "./base/state/slp-query-keys";
 import { SlpErrorState } from "./modules/chrome/SlpStateKit";
 
 const SLURP_ELEMENT_TAG = "marinara-capability-slurp2";
 const SLURP_STYLE_ID = "marinara-capability-slurp2-styles";
+// Slurp's queries live in the Engine's cache, under Slurp's own keys (slp-query-keys.ts), with these defaults.
 // An Engine restart drops every request for a few seconds. With no retry, one poll landing in that
 // window left the Hub on "Slurp could not be loaded." Network failures and 5xx retry with backoff
 // (about 30s in total); a 4xx is a real answer and fails at once.
-const client = new QueryClient({
-  defaultOptions: {
-    queries: {
-      retry: (failures, error) => failures < 5 && !(error instanceof ApiError && error.status < 500),
-      // Without a floor every remount and window focus refetches; returning to the app on a phone
-      // fired 10-15 requests at once. Invalidations and polls still refetch immediately.
-      staleTime: 15_000,
-    },
-  },
-});
+const slurpQueryDefaults = {
+  retry: (failures: number, error: unknown) => failures < 5 && !(error instanceof ApiError && error.status < 500),
+  // Without a floor every remount and window focus refetches; returning to the app on a phone
+  // fired 10-15 requests at once. Invalidations and polls still refetch immediately.
+  staleTime: 15_000,
+};
+for (const root of [slpKeys.all, slpKeys.settings().slice(0, 1)])
+  queryClient.setQueryDefaults(root, slurpQueryDefaults);
+// Slurp's own instance, inside <I18nextProvider>. Never `.use(initReactI18next)`: that would make it the Engine's
+// global instance.
 const localization = i18next.createInstance();
 
-void localization.use(initReactI18next).init({
+void localization.init({
   fallbackLng: "en",
   interpolation: { escapeValue: false },
   lng: "en",
@@ -85,60 +85,9 @@ const SLURP_ICON_COLOR_FIX =
   // their control's white instead.
   ':is(marinara-capability-slurp2,[data-marinara-capability-scope="slurp2"]) .text-white svg:not([class*="text-"]){color:inherit;}';
 
-// Scoped to Slurp's own toaster: the Engine's toaster lives in the same document.
-const SLURP_TOAST_STYLES = `
-  [data-slp-toaster] [data-sonner-toaster] {
-    --width: min(380px, calc(100vw - 32px));
-    /* The toaster renders in the package portal next to Slurp's sheets (10000) and their popovers
-       (10001), and above them: an Undo toast raised inside a full-screen sheet must be seen and tapped. */
-    z-index: 10002;
-    /* Sonner sets its own system font stack; Slurp toasts use the Engine font like the rest of Slurp. */
-    font-family: inherit;
-  }
-  [data-sonner-toast].slp-toast {
-    /* The package portal does not take pointer events itself; its sheets and toasts opt back in. */
-    pointer-events: auto;
-    width: var(--width);
-    min-height: 52px;
-    padding: 12px 14px;
-    border: 1px solid color-mix(in srgb, var(--slurp-outline, currentColor) 72%, transparent);
-    border-radius: 16px;
-    background: var(--slurp-surface-raised, var(--background));
-    color: var(--slurp-text, var(--foreground));
-    box-shadow: 0 16px 40px color-mix(in srgb, #000 24%, transparent), 0 0 0 1px color-mix(in srgb, #fff 5%, transparent) inset;
-    backdrop-filter: blur(16px);
-  }
-  [data-sonner-toast].slp-toast [data-title] { font-weight: 700; line-height: 1.25; }
-  [data-sonner-toast].slp-toast [data-description] { color: var(--slurp-muted, var(--muted-foreground)); line-height: 1.35; }
-  [data-sonner-toast].slp-toast [data-button] {
-    border-radius: 999px;
-    background: var(--noodle-accent, var(--slurp-accent, currentColor));
-    color: var(--slurp-on-accent, var(--slurp-surface, var(--background)));
-    font-weight: 700;
-  }
-  /* Token accents instead of Sonner's rich colours: a soft tint of the tone and a tinted icon, no
-     stripe. Success is the good moment, so it gets the pink tint. */
-  [data-sonner-toast].slp-toast[data-type="success"] {
-    background: color-mix(in srgb, var(--noodle-accent) 14%, var(--slurp-surface-raised));
-  }
-  [data-sonner-toast].slp-toast[data-type="success"] [data-icon] { color: var(--slurp-ink); }
-  [data-sonner-toast].slp-toast[data-type="error"] { background: color-mix(in srgb, var(--slurp-danger) 10%, var(--slurp-surface-raised)); }
-  [data-sonner-toast].slp-toast[data-type="error"] [data-icon] { color: var(--slurp-danger); }
-  [data-sonner-toast].slp-toast[data-type="warning"] { background: color-mix(in srgb, var(--slurp-warning) 10%, var(--slurp-surface-raised)); }
-  [data-sonner-toast].slp-toast[data-type="warning"] [data-icon] { color: var(--slurp-warning); }
-  [data-sonner-toast].slp-toast[data-type="info"] { background: color-mix(in srgb, var(--slurp-violet) 10%, var(--slurp-surface-raised)); }
-  [data-sonner-toast].slp-toast[data-type="info"] [data-icon] { color: var(--slurp-violet); }
-  /* Below 1024 px the floating nav owns the bottom edge: bottom toasts sit above it
-     (56 px pill + 10 px gap + 10 px air), above the home indicator on iOS. */
-  @media (max-width: 1023px) {
-    [data-slp-toaster] [data-sonner-toaster][data-y-position="bottom"] {
-      bottom: calc(76px + var(--slurp-bottom-safe-inset, 0px)) !important;
-    }
-  }
-  @media (prefers-reduced-motion: reduce) {
-    [data-sonner-toast].slp-toast { transition: none; }
-  }
-`;
+// Slurp has no chat, so the sticker and emoji pickers' per-chat selection preferences do not apply here.
+const SLURP_HIDDEN_CHAT_SETTINGS =
+  ':is(marinara-capability-slurp2,[data-marinara-capability-scope="slurp2"]) :is(button[aria-label="Selection preferences"],button[title="Selection preferences"]){display:none !important;}';
 
 /**
  * Shell polish (step 3.1). Screens scroll behind the floating nav, so only the end of the innermost
@@ -187,8 +136,9 @@ const SLURP_SHELL_STYLES = `
   .slp-crop, .slp-crop-top { object-position: top center; }
   [data-slp-whole] .slp-crop { object-fit: contain; }
   /* "Blur pictures until tapped" (data-slp-blur on <html>, SlpHomeHost): every picture and video in
-     Slurp and its sheets stays blurred until it is tapped. */
-  [data-slp-blur] :is(marinara-capability-slurp2, [data-marinara-capability-scope="slurp2"]) :is(img, video):not([data-slp-revealed]) {
+     Slurp and its sheets stays blurred until it is tapped. Inline SVG art (the coin, G's face) is
+     interface, not a picture, and stays sharp. */
+  [data-slp-blur] :is(marinara-capability-slurp2, [data-marinara-capability-scope="slurp2"]) :is(img:not([src^="data:image/svg"]), video):not([data-slp-revealed]) {
     filter: blur(22px); cursor: pointer;
   }
   :has(> img.slp-crop[data-slp-cut])::after {
@@ -220,7 +170,7 @@ function syncSlurpPackageStyles() {
 
   const style = existing ?? document.createElement("style");
   style.id = SLURP_STYLE_ID;
-  style.textContent = `${slurpPackageStyles}\n${SLURP_ICON_COLOR_FIX}\n${SLURP_TOAST_STYLES}\n${SLURP_SHELL_STYLES}\n${SLP_SPARKLE_STYLES}\n${SLP_DISPLAY_FONT_STYLES}\n${SLP_CREATOR_PAGE_STYLES}`;
+  style.textContent = `${slurpPackageStyles}\n${SLURP_ICON_COLOR_FIX}\n${SLURP_HIDDEN_CHAT_SETTINGS}\n${SLURP_SHELL_STYLES}\n${SLP_SPARKLE_STYLES}\n${SLP_DISPLAY_FONT_STYLES}\n${SLP_CREATOR_PAGE_STYLES}`;
   if (!existing) document.head.appendChild(style);
 }
 
@@ -282,62 +232,6 @@ class SlurpErrorBoundary extends Component<{ children: ReactNode }, { error: Err
   }
 }
 
-/**
- * The Engine's toast position ("top" | "bottom") from its persisted UI settings; read only, never written.
- * Engines older than the setting do not store it and always show toasts at the top, which is the default here.
- */
-function engineToastPosition(): "top" | "bottom" {
-  try {
-    const stored = JSON.parse(localStorage.getItem("marinara-engine-ui") ?? "null") as {
-      state?: { notificationPosition?: unknown };
-    } | null;
-    return stored?.state?.notificationPosition === "bottom" ? "bottom" : "top";
-  } catch {
-    return "top";
-  }
-}
-
-const engineTheme = () => (document.documentElement.dataset.theme === "light" ? "light" : "dark");
-
-/**
- * Slurp's toaster, placed and themed like the Engine's (App.tsx), so a Slurp toast shows where the
- * user put their notifications. ponytail: the position is read from the Engine's persisted settings
- * when Slurp mounts, so a change made while Slurp is open applies on the next open; a host
- * capability prop would make it live.
- */
-function SlpToaster() {
-  // The package portal, where the sheets render: the app root is a fixed stacking context below it,
-  // so a toaster left in the app could never show above a sheet.
-  const portal = useContext(ModalPortalContext);
-  const [position] = useState(engineToastPosition);
-  const [theme, setTheme] = useState(engineTheme);
-  useEffect(() => {
-    const observer = new MutationObserver(() => setTheme(engineTheme()));
-    observer.observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
-    return () => observer.disconnect();
-  }, []);
-  const toaster = (
-    <div
-      data-slp-toaster=""
-      className="contents"
-      style={getSlpAccentStyle(SLP_PINK, { "--slurp-bottom-safe-inset": BOTTOM_SAFE_INSET } as CSSProperties)}
-    >
-      <Toaster
-        position={position === "bottom" ? "bottom-center" : "top-center"}
-        swipeDirections={["left", "right", position]}
-        offset="4rem"
-        theme={theme}
-        closeButton
-        toastOptions={{
-          duration: 4000,
-          classNames: { toast: "slp-toast" },
-        }}
-      />
-    </div>
-  );
-  return portal ? createPortal(toaster, portal) : toaster;
-}
-
 function SlurpPackageRoot({ element }: { element: CapabilityElement }) {
   const [revision, redraw] = useState(0);
   const navigation = useSlurpUIStore((state) => state.navigation);
@@ -364,7 +258,7 @@ function SlurpPackageRoot({ element }: { element: CapabilityElement }) {
 
   return (
     <I18nextProvider i18n={localization}>
-      <QueryClientProvider client={client}>
+      <QueryClientProvider client={queryClient}>
         <ModalPortalContext.Provider value={element.__portal ?? element}>
           <div
             className="h-full min-h-0 overflow-hidden bg-[var(--background)] text-[var(--foreground)]"
@@ -373,8 +267,7 @@ function SlurpPackageRoot({ element }: { element: CapabilityElement }) {
           >
             <SlurpErrorBoundary>
               <SlpApp navigation={navigation} onNavigate={setNavigation} onLeave={onLeave} />
-              <AppDialogRenderer />
-              <SlpToaster />
+              {/* Dialogs and toasts are the Engine's: its one renderer and toast stack (sources/host-client-overlay). */}
             </SlurpErrorBoundary>
           </div>
         </ModalPortalContext.Provider>
@@ -397,7 +290,9 @@ class MarinaraSlurpElement extends HTMLElement {
         inset: "0",
         pointerEvents: "none",
         position: "fixed",
-        zIndex: "2147483000",
+        // The Engine's Modal layer: a dialog or Modal the Engine opens for Slurp (it portals to the page body, after
+        // this) stacks above an open sheet, and its app dialogs and toasts sit higher still.
+        zIndex: "10000",
       });
       this.__portal.style.setProperty("--accent", "rgba(255, 126, 193, 0.14)");
       this.__portal.style.setProperty("--background", "#17121b");

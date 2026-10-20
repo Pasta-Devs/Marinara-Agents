@@ -18,10 +18,11 @@ import {
   resolveCreatorMediaAbsolutePath,
   readCreatorLockedTeaser,
   resolveCreatorMediaVariant,
+  sendSlurpImageFile,
   unlinkCreatorMedia,
 } from "../../base/media/slp-media.js";
 import { existsSync } from "fs";
-import { extname, basename, dirname } from "path";
+import { extname, basename } from "path";
 import { slpInteractions, slpReports } from "../../../db/schema/slurp.js";
 import { and, eq } from "../../../db/file-query.js";
 import { newId, now } from "../../../utils/id-generator.js";
@@ -282,18 +283,16 @@ export async function slpFeedPostRoutes(app: FastifyInstance, deps: SlpRouteDeps
       .optional()
       .safeParse((req.query as { width?: string }).width);
     const served = await resolveCreatorMediaVariant(absolute, width.success ? width.data : undefined);
-    return (
-      reply
-        // The post-owned URL is stable across ordinary feed refreshes, but an owner can replace
-        // its bytes in place. Audience URLs include distinct locked/original variants, so an
-        // unlock changes the browser cache key instead of retaining a cached teaser.
-        .header("Cache-Control", "private, max-age=300")
-        // This URL ends in `/media`, so saving a post image produced a file with no extension, or
-        // one the browser guessed. `inline` keeps it displaying in the feed and only names it on
-        // the way to disk, with the extension the bytes actually have.
-        .header("Content-Disposition", `inline; filename="slurp-${id}${extname(basename(served)).toLowerCase()}"`)
-        .sendFile(basename(served), dirname(served))
-    );
+    reply
+      // The post-owned URL is stable across ordinary feed refreshes, but an owner can replace
+      // its bytes in place. Audience URLs include distinct locked/original variants, so an
+      // unlock changes the browser cache key instead of retaining a cached teaser.
+      .header("Cache-Control", "private, max-age=300")
+      // This URL ends in `/media`, so saving a post image produced a file with no extension, or
+      // one the browser guessed. `inline` keeps it displaying in the feed and only names it on
+      // the way to disk, with the extension the bytes actually have.
+      .header("Content-Disposition", `inline; filename="slurp-${id}${extname(basename(served)).toLowerCase()}"`);
+    return sendSlurpImageFile(reply, served);
   });
   app.get("/noodler/posts/:id/media/:position", async (req, reply) => {
     const { id, position: rawPosition } = req.params as { id: string; position: string };
@@ -317,7 +316,7 @@ export async function slpFeedPostRoutes(app: FastifyInstance, deps: SlpRouteDeps
       .optional()
       .safeParse((req.query as { width?: string }).width);
     const served = await resolveCreatorMediaVariant(absolute, width.success ? width.data : undefined);
-    return reply.header("Cache-Control", "private, max-age=300").sendFile(basename(served), dirname(served));
+    return sendSlurpImageFile(reply.header("Cache-Control", "private, max-age=300"), served);
   });
   app.post("/slurp/posts/:id/interactions", async (req, reply) => {
     const parsed = slpCreatorCreateInteractionSchema.safeParse(req.body);

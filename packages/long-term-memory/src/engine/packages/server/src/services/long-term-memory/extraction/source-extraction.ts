@@ -1,0 +1,736 @@
+import {
+  isLtmSourceLikeNote,
+  DEFAULT_LTM_ALLOWED_STREAMS_BY_MODE,
+  DEFAULT_LTM_EXTRACTION_PROMPTS_BY_MODE,
+  type LtmExtractionAccounting,
+  type LtmDraftMutation,
+  type LtmExtractionFingerprint,
+  type LtmExtractionOutcome,
+  type LtmExtractionResponse,
+  type LtmExtractionDraft,
+  type LtmMode,
+  type LtmNote,
+  type LtmScope,
+} from "../../../../../shared/src/features/agents/long-term-memory/index.js";
+import { DEFAULT_LTM_IMPORTED_SOURCE_MODE } from "../../../../../shared/src/features/agents/long-term-memory/constants.js";
+import { logger, type PackageLanguageModel } from "../package-runtime.js";
+import {
+  boundLtmExtractionDiagnostics,
+  compileEvidenceUnitExtraction,
+  diagnosticsRequireExtractionReview,
+  runLongTermMemoryEvidenceUnitExtraction,
+  sourceHashForEvidenceUnitExtraction,
+  summarizeCompiledEvidenceUnitExtraction,
+  sourceMetadataForEvidenceUnitDraft,
+} from "./evidence-unit-extraction.js";
+import { getLtmExtractionConfig } from "./extraction-config.js";
+import { recordLtmDebugEvent, withLtmDebugOperation } from "../maintenance/debug-log.js";
+import type { LtmExtractionDiagnostic } from "../../../../../shared/src/features/agents/long-term-memory/schema.js";
+import { LongTermMemoryDraftStore } from "../drafts/draft-store.js";
+import { uniqueStrings } from "../ltm-utils.js";
+import { retrieveLongTermMemory } from "../recall/retrieval.js";
+import { loadOrRebuildLongTermMemoryIndexes, type LtmRecallIndex } from "../recall/rebuild.js";
+import { reconcileEvidenceUnitCandidates } from "./candidate-reconciliation.js";
+import { canUpdateLtmScopedTarget, resolveScopedEvidenceUnitTargets, scopedVariantNoteId } from "./scoped-targets.js";
+import { LongTermMemoryStorage } from "../persistence/storage.js";
+import { normalizeStructuredSummaryEvidenceUnits } from "./structured-summary-normalizer.js";
+import {
+  prepareLtmSubjectIdentityContext,
+  trustedLtmIdentityNotesForSource,
+  trustedLtmCharacterAliasIdentifiers,
+  type TrustedLtmSubjectCatalog,
+} from "../identity/subject-identity.js";
+import { subjectsEqual } from "../identity/subject-equality.js";
+import { noteIdForLtmDraftMutation, projectLtmDraftOntoNotes } from "../drafts/draft-projector.js";
+import { stableJsonHash } from "../recall/chunking.js";
+import { extractionFingerprintForLtmSourceNote, extractionFingerprintsEqual } from "./source-hash.js";
+import { LtmServiceError } from "../service-error.js";
+export type ExtractLongTermMemoryFromSourceNoteOptions = {
+  noteId: string;
+  languageModel: PackageLanguageModel;
+  root: string;
+  scope?: LtmScope;
+  modes?: LtmMode[];
+  mode?: LtmMode;
+  extractionMode?: LtmMode;
+  instruction?: string;
+  signal?: AbortSignal;
+  operationId?: string;
+  chatId?: string;
+  trustedSubjectCatalog?: TrustedLtmSubjectCatalog;
+};
+
+/**
+ * Re-runs the vault-derived stages (reconciliation, scope target resolution, compilation) against a
+ * caller-supplied candidate set without repeating the provider call. Preparation captures the index
+ * before responding; the commit path calls this so a target created by a sibling batch item or a
+ * concurrent import is still reused.
+ */
+export type LtmSourceExtractionRecompile = (options: { candidateNotes: readonly LtmNote[] }) => Promise<{
+  response: LtmExtractionResponse;
+  diagnostics: LtmExtractionDiagnostic[];
+  requiresReview: boolean;
+  outcome: LtmExtractionOutcome;
+  accounting: LtmExtractionAccounting;
+}>;
+
+export type ExtractLongTermMemoryFromSourceNoteResult = {
+  operationId: string;
+  chatId?: string;
+  sourceNote: LtmNote;
+  sourceFingerprintBeforeBinding: LtmExtractionFingerprint;
+  extractionMode: LtmMode;
+  response: LtmExtractionResponse;
+  diagnostics: LtmExtractionDiagnostic[];
+  requiresReview: boolean;
+  outcome: LtmExtractionOutcome;
+  accounting: LtmExtractionAccounting;
+  recompile: LtmSourceExtractionRecompile;
+};
+
+export function isLtmSourceNote(note: LtmNote) {
+  return isLtmSourceLikeNote(note);
+}
+
+export function getLtmSourceNoteText(note: LtmNote) {
+  return (note.sections.source?.text ?? note.sections.summary?.text ?? "").trim();
+}
+
+function bindSourceNoteToExtractionContext(options: { sourceNote: LtmNote; scope: LtmScope; modes: LtmMode[] }) {
+  const { sourceNote } = options;
+  if (
+    stableJsonHash(sourceNote.destinationScope ?? sourceNote.scope) === stableJsonHash(options.scope) &&
+    stableJsonHash(sourceNote.modes) === stableJsonHash(options.modes)
+  ) {
+    return sourceNote;
+  }
+
+  // The binding stays in memory until commit so a failed or aborted preparation leaves the source note untouched.
+  return { ...sourceNote, destinationScope: options.scope, modes: options.modes };
+}
+
+function compatibleProjectedCreate(
+  existing: LtmNote,
+  incoming: Extract<LtmDraftMutation, { kind: "create_note" }>["note"],
+) {
+  if (existing.type !== incoming.type) return false;
+  if (!canUpdateLtmScopedTarget(existing.scope, incoming.scope)) return false;
+  if (existing.subjects && incoming.subjects && !subjectsEqual(existing.subjects, incoming.subjects)) return false;
+  return true;
+}
+
+function remapDraftMutationTargets(mutations: LtmDraftMutation[], remaps: ReadonlyMap<string, string>) {
+  if (remaps.size === 0) return mutations;
+  return mutations.map((mutation): LtmDraftMutation => {
+    if (mutation.kind === "create_note") {
+      return {
+        ...mutation,
+        note: {
+          ...mutation.note,
+          id: remaps.get(mutation.note.id) ?? mutation.note.id,
+          links: mutation.note.links.map((link) => ({
+            ...link,
+            target: remaps.get(link.target) ?? link.target,
+          })),
+        },
+      };
+    }
+    const noteId = remaps.get(mutation.noteId) ?? mutation.noteId;
+    if (mutation.kind === "add_link") {
+      return {
+        ...mutation,
+        noteId,
+        link: {
+          ...mutation.link,
+          target: remaps.get(mutation.link.target) ?? mutation.link.target,
+        },
+      };
+    }
+    return { ...mutation, noteId };
+  });
+}
+
+async function remapDraftCreatesForProjection(options: {
+  response: LtmExtractionResponse;
+  storage: LongTermMemoryStorage;
+  overlay?: ReadonlyMap<string, LtmNote>;
+}) {
+  const createMutations = options.response.mutations.filter(
+    (mutation): mutation is Extract<LtmDraftMutation, { kind: "create_note" }> => mutation.kind === "create_note",
+  );
+  if (createMutations.length === 0) return options.response;
+
+  const baseIds = uniqueStrings(createMutations.map((mutation) => mutation.note.id));
+  const committed = await options.storage.getNotesByIds(baseIds);
+  const visible = new Map(committed);
+  for (const noteId of baseIds) {
+    const projected = options.overlay?.get(noteId);
+    if (projected) visible.set(noteId, projected);
+  }
+
+  const remaps = new Map<string, string>();
+  const reserved = new Set<string>();
+  for (const mutation of createMutations) {
+    const existing = visible.get(mutation.note.id);
+    if (!existing || compatibleProjectedCreate(existing, mutation.note)) continue;
+
+    let resolvedId: string | null = null;
+    for (let attempt = 0; attempt < 20; attempt += 1) {
+      const candidateId = scopedVariantNoteId(mutation.note.id, mutation.note.scope, attempt);
+      if (reserved.has(candidateId)) continue;
+      const candidate = options.overlay?.get(candidateId) ?? (await options.storage.getNote(candidateId));
+      if (!candidate || compatibleProjectedCreate(candidate, mutation.note)) {
+        resolvedId = candidateId;
+        if (candidate) visible.set(candidateId, candidate);
+        break;
+      }
+    }
+    if (!resolvedId) {
+      throw new Error(`Unable to resolve projected long-term memory note id for ${mutation.note.id}`);
+    }
+    remaps.set(mutation.note.id, resolvedId);
+    reserved.add(resolvedId);
+  }
+
+  return remaps.size > 0
+    ? { ...options.response, mutations: remapDraftMutationTargets(options.response.mutations, remaps) }
+    : options.response;
+}
+
+export async function finalizeLongTermMemoryExtractionDraft(
+  input: {
+    sourceNote: LtmNote;
+    sourceFingerprintBeforeBinding: LtmExtractionFingerprint;
+    response: LtmExtractionResponse;
+    scope: LtmScope;
+    modes: LtmMode[];
+    extractionMode?: LtmMode;
+    operationId?: string;
+    diagnostics?: LtmExtractionDiagnostic[];
+    outcome?: LtmExtractionOutcome;
+    accounting?: LtmExtractionAccounting;
+    chatId?: string;
+    reviewRequired?: boolean;
+    afterWrite?: (draft: LtmExtractionDraft) => Promise<unknown>;
+  },
+  options: { root?: string; overlay?: Map<string, LtmNote> } = {},
+) {
+  const storage = new LongTermMemoryStorage(options.root);
+  const currentSource = await storage.getNote(input.sourceNote.id);
+  if (!currentSource || !isLtmSourceNote(currentSource)) {
+    throw new LtmServiceError(
+      `Long-term memory source note disappeared before draft finalization: ${input.sourceNote.id}`,
+      404,
+      "ltm_note_not_found",
+    );
+  }
+  if (sourceHashForEvidenceUnitExtraction(currentSource) !== sourceHashForEvidenceUnitExtraction(input.sourceNote)) {
+    throw new LtmServiceError(
+      `Long-term memory source note changed before draft finalization: ${input.sourceNote.id}`,
+      409,
+      "ltm_source_changed",
+    );
+  }
+  // Context binding is deferred until commit, so verify the stored note still carries the context it had before
+  // preparation. A concurrent bind or provenance change is rejected instead of being silently overwritten.
+  const currentFingerprint = extractionFingerprintForLtmSourceNote(currentSource, {
+    extractionMode: input.extractionMode,
+  });
+  if (!extractionFingerprintsEqual(currentFingerprint, input.sourceFingerprintBeforeBinding)) {
+    throw new LtmServiceError(
+      `Long-term memory source extraction context changed before draft finalization: ${input.sourceNote.id}`,
+      409,
+      "ltm_source_context_changed",
+    );
+  }
+
+  const response = input.response.mutations.length
+    ? await remapDraftCreatesForProjection({
+        response: input.response,
+        storage,
+        overlay: options.overlay,
+      })
+    : input.response;
+  const sourceMetadata = sourceMetadataForEvidenceUnitDraft(currentSource, {
+    scope: input.scope,
+    modes: input.modes,
+    extractionMode: input.extractionMode,
+  });
+  const source = {
+    ...sourceMetadata,
+    ...(!sourceMetadata.chatId && input.chatId ? { chatId: input.chatId } : {}),
+  };
+  const projected = response.mutations.length
+    ? await (async () => {
+        const targetNoteIds = uniqueStrings(response.mutations.map(noteIdForLtmDraftMutation));
+        const committedNotes = await storage.getNotesByIds(targetNoteIds);
+        const baseNotes = new Map(committedNotes);
+        for (const noteId of targetNoteIds) {
+          const overlaid = options.overlay?.get(noteId);
+          if (overlaid) baseNotes.set(noteId, overlaid);
+        }
+        return projectLtmDraftOntoNotes({
+          notes: baseNotes,
+          mutations: response.mutations,
+          context: { source, scope: input.scope, modes: input.modes },
+          timestamp: new Date().toISOString(),
+        });
+      })()
+    : null;
+  const draft = await new LongTermMemoryDraftStore(options.root).createDraft({
+    scope: input.scope,
+    modes: input.modes,
+    source,
+    response,
+    operationId: input.operationId,
+    diagnostics: input.diagnostics,
+    outcome: input.outcome,
+    accounting: input.accounting,
+    reviewRequired: input.reviewRequired,
+    afterWrite: input.afterWrite,
+  });
+  if (options.overlay && projected) {
+    for (const projection of projected.projections) options.overlay.set(projection.noteId, projection.after);
+  }
+  return draft;
+}
+
+async function getExistingTypedNotes(options: {
+  storage: LongTermMemoryStorage;
+  root: string;
+  sourceText: string;
+  sourceTitle?: string;
+  scope: LtmScope;
+  mode?: LtmMode;
+  maxChunks: number;
+  maxTokens: number;
+  trustedSubjectCatalog?: TrustedLtmSubjectCatalog;
+  index?: LtmRecallIndex;
+  signal?: AbortSignal;
+}) {
+  const retrieval = await retrieveLongTermMemory({
+    root: options.root,
+    queryText: options.sourceText,
+    scope: options.scope,
+    mode: options.mode,
+    characterIds: options.scope.characterIds,
+    maxChunks: options.maxChunks,
+    maxTokens: options.maxTokens,
+    index: options.index,
+    signal: options.signal,
+  });
+  const identityNotes = options.trustedSubjectCatalog
+    ? trustedLtmIdentityNotesForSource({
+        sourceText: options.sourceText,
+        sourceTitle: options.sourceTitle,
+        mode: options.mode,
+        catalog: {
+          ...options.trustedSubjectCatalog,
+          entries:
+            options.mode === "roleplay"
+              ? options.trustedSubjectCatalog.entries
+              : options.trustedSubjectCatalog.entries.filter((entry) => entry.subject.ref?.kind !== "local_character"),
+          notes:
+            options.mode === "roleplay"
+              ? options.trustedSubjectCatalog.notes
+              : options.trustedSubjectCatalog.notes.filter(
+                  (note) => !note.subjects?.some((subject) => subject.ref?.kind === "local_character"),
+                ),
+        },
+      })
+    : [];
+  const noteIds = Array.from(
+    new Set([...identityNotes.map((note) => note.id), ...retrieval.chunks.map((chunk) => chunk.chunk.noteId)]),
+  );
+  const notesById = await options.storage.getNotesByIds(noteIds);
+  const notes = noteIds
+    .map((noteId) => notesById.get(noteId))
+    .filter((note): note is LtmNote => {
+      if (!note) return false;
+      if (isLtmSourceNote(note)) return false;
+      if (!canUpdateLtmScopedTarget(note.scope, options.scope)) return false;
+      return true;
+    });
+  const identityIds = new Set(identityNotes.map((note) => note.id));
+  return notes.sort(
+    (left, right) =>
+      Number(identityIds.has(right.id)) - Number(identityIds.has(left.id)) || left.id.localeCompare(right.id),
+  );
+}
+
+export async function extractLongTermMemoryFromSourceNote(
+  options: ExtractLongTermMemoryFromSourceNoteOptions,
+): Promise<ExtractLongTermMemoryFromSourceNoteResult> {
+  return withLtmDebugOperation(
+    {
+      operationId: options.operationId,
+      root: options.root,
+      phase: "extraction",
+      action: "extract_source_note",
+      sourceNoteId: options.noteId,
+      model: options.languageModel.model,
+      message: "Extract memory streams from source note",
+    },
+    async (operationId) => extractLongTermMemoryFromSourceNoteInner({ ...options, operationId }),
+  );
+}
+
+async function extractLongTermMemoryFromSourceNoteInner(
+  options: ExtractLongTermMemoryFromSourceNoteOptions & { operationId: string },
+): Promise<ExtractLongTermMemoryFromSourceNoteResult> {
+  const storage = new LongTermMemoryStorage(options.root);
+  let sourceNote = await storage.getNote(options.noteId);
+  if (!sourceNote) {
+    logger.warn("[ltm] Source note not found: %s", options.noteId);
+    throw new LtmServiceError(`Long-term memory note not found: ${options.noteId}`, 404, "ltm_note_not_found");
+  }
+  if (!isLtmSourceNote(sourceNote)) {
+    logger.warn("[ltm] Note %s is not a source note", options.noteId);
+    throw new LtmServiceError(
+      `Long-term memory note is not a source note: ${options.noteId}`,
+      400,
+      "ltm_source_invalid",
+    );
+  }
+
+  const requestedScope = options.scope ?? sourceNote.destinationScope ?? sourceNote.scope;
+  const importedWithoutChatContext =
+    !options.chatId && (sourceNote.provenance?.kind === "character" || sourceNote.provenance?.kind === "lorebook");
+  const requestedModes = options.modes?.length
+    ? options.modes
+    : sourceNote.modes?.length
+      ? sourceNote.modes
+      : importedWithoutChatContext && !options.mode
+        ? [DEFAULT_LTM_IMPORTED_SOURCE_MODE]
+        : sourceNote.modes;
+  const resolvedMode =
+    options.extractionMode ??
+    options.mode ??
+    sourceNote.extractionFingerprint?.extractionMode ??
+    requestedModes[0] ??
+    "roleplay";
+  if (!options.extractionMode && !requestedModes.includes(resolvedMode)) {
+    throw new LtmServiceError(
+      `Long-term memory extraction mode is not enabled for source note: ${resolvedMode}`,
+      400,
+      "ltm_mode_not_enabled",
+    );
+  }
+  const sourceFingerprintBeforeBinding = extractionFingerprintForLtmSourceNote(sourceNote, {
+    extractionMode: resolvedMode,
+  });
+  sourceNote = bindSourceNoteToExtractionContext({
+    sourceNote,
+    scope: requestedScope,
+    modes: requestedModes,
+  });
+  const sourceText = getLtmSourceNoteText(sourceNote);
+  if (!sourceText) {
+    logger.warn("[ltm] Source note %s has no source text", options.noteId);
+    throw new LtmServiceError(
+      `Long-term memory source note has no source text: ${options.noteId}`,
+      400,
+      "ltm_source_empty",
+    );
+  }
+
+  const scope = sourceNote.destinationScope ?? sourceNote.scope;
+  const modes = sourceNote.modes;
+  const allowedBuckets = [...DEFAULT_LTM_ALLOWED_STREAMS_BY_MODE[resolvedMode]];
+  const extractionConfig = await getLtmExtractionConfig(options.root, resolvedMode);
+  const estimatedSourceTokens = Math.max(1, Math.ceil(sourceText.length / 4));
+  const sourceExceedsTokenLimit = estimatedSourceTokens > extractionConfig.maxSourceTokens;
+  if (sourceExceedsTokenLimit) {
+    throw new LtmServiceError(
+      `source_too_large: source requires about ${estimatedSourceTokens} tokens; maximum is ${extractionConfig.maxSourceTokens}`,
+      400,
+      "ltm_source_too_large",
+    );
+  }
+  const extractionText = sourceText;
+  await recordLtmDebugEvent({
+    operationId: options.operationId,
+    root: options.root,
+    phase: "source_note",
+    action: "source_note_loaded",
+    status: "ok",
+    sourceNoteId: sourceNote.id,
+    counts: {
+      sourceChars: sourceText.length,
+      sections: Object.keys(sourceNote.sections).length,
+      modes: modes.length,
+    },
+    details: {
+      scope,
+      tags: sourceNote.tags,
+      mode: resolvedMode,
+      extractionSettings: {
+        reasoningEffort: extractionConfig.reasoningEffort,
+        verbosity: extractionConfig.verbosity,
+        maxOutputTokens: extractionConfig.maxOutputTokens,
+        temperature: extractionConfig.temperature,
+        sourceTextPolicy: "full",
+        maxSourceTokens: extractionConfig.maxSourceTokens,
+        existingNoteCandidateChunks: extractionConfig.existingNoteMaxChunks,
+        existingNoteMaxTokens: extractionConfig.existingNoteMaxTokens,
+        activePromptTemplateId: extractionConfig.activePromptTemplateId,
+        usesPromptTemplate: Boolean(extractionConfig.activePromptTemplateId),
+        hasPromptOverride: extractionConfig.systemPrompt !== DEFAULT_LTM_EXTRACTION_PROMPTS_BY_MODE[resolvedMode],
+        aiKeywordExtraction: extractionConfig.aiKeywordExtraction,
+      },
+    },
+  });
+  const recallIndex = await loadOrRebuildLongTermMemoryIndexes(options.root, undefined, undefined, options.signal);
+  const existingNotes = await getExistingTypedNotes({
+    storage,
+    root: options.root,
+    sourceText: extractionText,
+    sourceTitle: sourceNote.title,
+    scope,
+    mode: resolvedMode,
+    maxChunks: extractionConfig.existingNoteMaxChunks,
+    maxTokens: extractionConfig.existingNoteMaxTokens,
+    trustedSubjectCatalog: options.trustedSubjectCatalog,
+    index: recallIndex,
+    signal: options.signal,
+  });
+  await recordLtmDebugEvent({
+    operationId: options.operationId,
+    root: options.root,
+    phase: "retrieval",
+    action: "existing_notes_loaded",
+    status: "ok",
+    sourceNoteId: sourceNote.id,
+    counts: {
+      existingNotes: existingNotes.length,
+    },
+    details: {
+      noteIds: existingNotes.map((note) => note.id).slice(0, 80),
+    },
+  });
+  const sourceHash = sourceHashForEvidenceUnitExtraction(sourceNote);
+  await recordLtmDebugEvent({
+    operationId: options.operationId,
+    root: options.root,
+    phase: "extraction",
+    action: "source_hash_ready",
+    status: "ok",
+    sourceNoteId: sourceNote.id,
+    details: { sourceHash },
+  });
+
+  const baseExtractionOptions = {
+    sourceNote,
+    sourceText: extractionText,
+    languageModel: options.languageModel,
+    root: options.root,
+    scope,
+    modes,
+    sourceHash,
+    instruction: options.instruction,
+    systemPrompt: extractionConfig.systemPrompt,
+    reasoningEffort: extractionConfig.reasoningEffort,
+    verbosity: extractionConfig.verbosity,
+    maxOutputTokens: extractionConfig.maxOutputTokens,
+    temperature: extractionConfig.temperature,
+    signal: options.signal,
+    operationId: options.operationId,
+    allowedBuckets,
+    mode: resolvedMode,
+    aiKeywordExtraction: extractionConfig.aiKeywordExtraction,
+    resolveSubjectNames: true,
+    trustedSubjectCatalog: options.trustedSubjectCatalog,
+  };
+
+  const extractionPayload = await runLongTermMemoryEvidenceUnitExtraction(baseExtractionOptions);
+  const identityContext = prepareLtmSubjectIdentityContext({
+    units: extractionPayload.response.units,
+    catalog: options.trustedSubjectCatalog ?? { entries: [], notes: [] },
+    scope,
+    mode: resolvedMode,
+    sourceBackedNpcSourceText: sourceText,
+    sourceBackedNpcSourceTitle: sourceNote.title,
+  });
+  const normalizedExtraction = normalizeStructuredSummaryEvidenceUnits({
+    units: extractionPayload.response.units,
+    sourceText,
+    sourceNote,
+    sourceHash,
+    existingNotes,
+    allowedBuckets,
+    mode: resolvedMode,
+    modes,
+    relationshipIdentityKey: identityContext.identityKeyForUnit,
+    characterIdentityKey: identityContext.identityKeyForUnit,
+  });
+  const unitResponse = {
+    ...extractionPayload.response,
+    units: normalizedExtraction.units,
+  };
+  const identityResolution = identityContext.resolve({
+    units: unitResponse.units,
+    existingNotes,
+    enforceTrustedSubjects: Boolean(options.trustedSubjectCatalog),
+  });
+  // Compilation is vault-derived: reconciliation matches against existing notes, scope and identity
+  // targets resolve, and the units compile into draft mutations. It runs at preparation against the
+  // captured recall index and again at commit against the caller's fresh candidate set (see the
+  // `recompile` result below), because a sibling batch item or concurrent import can create a
+  // target in between. The provider call is never repeated.
+  const compileExtraction = async (reconcileOptions: {
+    index?: LtmRecallIndex;
+    candidateNotes?: readonly LtmNote[];
+  }) => {
+    const reconciliation = await reconcileEvidenceUnitCandidates({
+      units: identityResolution.units,
+      root: options.root,
+      scope,
+      mode: resolvedMode,
+      storage,
+      ...reconcileOptions,
+    });
+    const targetResolution = await resolveScopedEvidenceUnitTargets({
+      storage,
+      existingNotes: identityResolution.existingNotes,
+      units: reconciliation.units,
+      scope,
+    });
+    const compiled = compileEvidenceUnitExtraction({
+      unitResponse: {
+        ...unitResponse,
+        units: targetResolution.units,
+      },
+      providerCandidates: extractionPayload.totalCandidates,
+      userSkippedUnits: identityResolution.skippedUnits,
+      parserRejectionCount: extractionPayload.parserRejections,
+      normalizedAdditions: normalizedExtraction.addedUnits,
+      parserDroppedCandidates: extractionPayload.droppedCandidates,
+      preValidationDroppedCandidates: identityResolution.droppedCandidates,
+      aliasChoices: identityResolution.aliasChoices,
+      sourceText,
+      sourceNote,
+      existingNotes: targetResolution.existingNotes,
+      scope,
+      modes: requestedModes,
+      mode: resolvedMode,
+      sourceHash,
+      allowedBuckets,
+      eventSubjectIdentityKeys: options.trustedSubjectCatalog
+        ? trustedLtmCharacterAliasIdentifiers(options.trustedSubjectCatalog)
+        : undefined,
+      skipStructuredBackfill: true,
+    });
+    // Appended after compile's retained-list bound; fold into the review signal, then re-bound.
+    const appendedDiagnostics = [
+      ...identityResolution.diagnostics,
+      ...reconciliation.diagnostics,
+      ...targetResolution.diagnostics,
+    ];
+    const requiresReview = compiled.requiresReview || diagnosticsRequireExtractionReview(appendedDiagnostics);
+    compiled.diagnostics = boundLtmExtractionDiagnostics([...compiled.diagnostics, ...appendedDiagnostics]);
+    return {
+      reconciliation,
+      targetResolution,
+      compiled: {
+        ...compiled,
+        requiresReview,
+      },
+    };
+  };
+
+  // The recall index is the preparation snapshot. The commit path recompiles against fresh
+  // candidates rather than re-scanning here.
+  const { reconciliation, targetResolution, compiled } = await compileExtraction({ index: recallIndex });
+  // Always recorded, so the create rate (groups matching no other existing note) can be read from the log.
+  await recordLtmDebugEvent({
+    operationId: options.operationId,
+    root: options.root,
+    phase: "retrieval",
+    action: "candidate_reconciliation",
+    status: reconciliation.counts.ambiguous + reconciliation.counts.incomplete > 0 ? "warning" : "ok",
+    sourceNoteId: sourceNote.id,
+    counts: reconciliation.counts,
+    details: {
+      matches: reconciliation.matches,
+      remaps: Object.fromEntries(reconciliation.remaps),
+    },
+  });
+  const compilerExistingNotes = targetResolution.existingNotes;
+  if (compilerExistingNotes.length !== existingNotes.length || targetResolution.remaps.size > 0) {
+    await recordLtmDebugEvent({
+      operationId: options.operationId,
+      root: options.root,
+      phase: "retrieval",
+      action: "existing_target_notes_loaded",
+      status: targetResolution.remaps.size > 0 ? "warning" : "ok",
+      sourceNoteId: sourceNote.id,
+      counts: {
+        existingNotes: compilerExistingNotes.length,
+        addedTargetNotes: compilerExistingNotes.length - existingNotes.length,
+        scopedTargetRemaps: targetResolution.remaps.size,
+      },
+      details: {
+        noteIds: compilerExistingNotes.map((note) => note.id).slice(0, 80),
+        scopedTargetRemaps: Object.fromEntries(targetResolution.remaps),
+      },
+    });
+  }
+  const compiledSummary = summarizeCompiledEvidenceUnitExtraction(compiled);
+  await recordLtmDebugEvent({
+    operationId: options.operationId,
+    root: options.root,
+    phase: "compiler",
+    action: "evidence_units_compiled",
+    status: compiledSummary.counts.candidateRejectionDiagnostics > 0 ? "warning" : "ok",
+    sourceNoteId: sourceNote.id,
+    counts: compiledSummary.counts,
+    diagnostics: compiled.diagnostics.map((diagnostic) => ({ ...diagnostic })),
+    details: {
+      mutationKinds: compiledSummary.mutationKinds,
+      targetNoteIds: compiledSummary.targetNoteIds,
+      summary: compiled.compiledResponse.summary,
+    },
+  });
+
+  await recordLtmDebugEvent({
+    operationId: options.operationId,
+    root: options.root,
+    phase: "draft",
+    action: "draft_deferred",
+    status: "ok",
+    sourceNoteId: sourceNote.id,
+    draftId: undefined,
+    counts: {
+      mutations: compiled.compiledResponse.mutations.length,
+      diagnostics: compiled.diagnostics.length,
+      droppedUnits: compiled.outcome.droppedUnits,
+    },
+    diagnostics: compiled.diagnostics.map((diagnostic) => ({ ...diagnostic })),
+    details: {
+      reason: "deferred_for_commit",
+      extractionOutcome: compiled.outcome,
+    },
+  });
+  return {
+    operationId: options.operationId,
+    ...(options.chatId ? { chatId: options.chatId } : {}),
+    sourceNote,
+    sourceFingerprintBeforeBinding,
+    extractionMode: resolvedMode,
+    response: compiled.compiledResponse,
+    diagnostics: compiled.diagnostics,
+    requiresReview: compiled.requiresReview,
+    outcome: compiled.outcome,
+    accounting: compiled.accounting,
+    recompile: async ({ candidateNotes }) => {
+      const fresh = await compileExtraction({ candidateNotes });
+      return {
+        response: fresh.compiled.compiledResponse,
+        diagnostics: fresh.compiled.diagnostics,
+        requiresReview: fresh.compiled.requiresReview,
+        outcome: fresh.compiled.outcome,
+        accounting: fresh.compiled.accounting,
+      };
+    },
+  };
+}

@@ -109,7 +109,7 @@ export type PackageLanguageModel = Awaited<
 export type PackageEmbeddingAdapter = {
   spaceId: string;
   label: string;
-  embed(texts: string[], signal?: AbortSignal): Promise<number[][] | null>;
+  embed(texts: string[], signal?: AbortSignal, inputType?: "query" | "document"): Promise<number[][] | null>;
 };
 
 let host: CapabilityRuntimeHost | null = null;

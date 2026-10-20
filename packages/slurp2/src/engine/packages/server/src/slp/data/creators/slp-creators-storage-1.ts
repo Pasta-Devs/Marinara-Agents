@@ -1,3 +1,4 @@
+import { deleteSlurpThreadMessageDeepDetails } from "../messages/slp-message-deep-details-storage.js";
 import { setSlurpPaused } from "../../base/model/slp-pause.js";
 import { and, eq, like, or } from "../../../db/file-query.js";
 import { PROFESSOR_MARI_ID } from "@marinara-engine/shared";
@@ -158,6 +159,7 @@ export function createCreatorsStorage1(context: SlurpStorageContext) {
         for (const thread of threads) {
           await tx.delete(slurpMessageClaims).where(eq(slurpMessageClaims.threadId, thread.id));
           await tx.delete(slurpMessages).where(eq(slurpMessages.threadId, thread.id));
+          await deleteSlurpThreadMessageDeepDetails(tx, [String(thread.id)]);
           await tx.delete(slurpReplyBubbles).where(eq(slurpReplyBubbles.threadId, thread.id));
           await tx.delete(slurpThreads).where(eq(slurpThreads.id, thread.id));
         }

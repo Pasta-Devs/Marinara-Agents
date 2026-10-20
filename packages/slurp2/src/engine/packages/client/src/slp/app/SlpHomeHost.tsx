@@ -128,11 +128,13 @@ export function SlurpHome({ navigation, onNavigate, onLeave }: SlurpHomeProps) {
       const target = event.target instanceof Element ? event.target : null;
       // The picture itself, or a blurred one inside the button or link that was activated: Enter or
       // Space on a picture button sends its click to the button, not the picture.
+      // Inline SVG art (the coin, G's face) is interface and never blurred, so it never eats a tap.
+      const picture = 'img:not([src^="data:image/svg"])';
       const media =
-        target?.closest("img, video") ??
+        target?.closest(`${picture}, video`) ??
         target
           ?.closest("button, a, [role='button']")
-          ?.querySelector("img:not([data-slp-revealed]), video:not([data-slp-revealed])");
+          ?.querySelector(`${picture}:not([data-slp-revealed]), video:not([data-slp-revealed])`);
       if (!media || media.hasAttribute("data-slp-revealed") || !media.closest(SLP_SCOPE_SELECTOR)) return;
       event.preventDefault();
       event.stopPropagation();

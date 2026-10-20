@@ -1,8 +1,8 @@
 import { createHash } from "node:crypto";
-import { existsSync, realpathSync } from "node:fs";
+import { existsSync, readdirSync, realpathSync } from "node:fs";
 import { copyFile, cp, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { basename, dirname, join, relative, resolve, sep } from "node:path";
+import { basename, delimiter, dirname, join, relative, resolve, sep } from "node:path";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { createRequire } from "node:module";
@@ -13,6 +13,13 @@ import { assertHierarchicalMapsPrivateImportBoundary } from "./hierarchical-maps
 import { assertPackagePrivateImportBoundary } from "./package-engine-boundary.mjs";
 import { withPackageActivationGuidance } from "./catalog-package-guidance.mjs";
 import { writeEnglishPackageLocale } from "./package-locales.mjs";
+import {
+  HOST_CAPABILITY_API,
+  hostModulesPlugin,
+  runEsbuild,
+  sharedTreeShakingPlugin,
+} from "./esbuild-host-plugins.mjs";
+import { assertClientHostGates } from "./client-host-gates.mjs";
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const engineRoot = resolve(process.env.MARINARA_ENGINE_ROOT || join(repoRoot, "../Marinara-Engine"));
@@ -22,7 +29,6 @@ const engineRoot = resolve(process.env.MARINARA_ENGINE_ROOT || join(repoRoot, ".
 // shell-mode spawning would mangle arguments that contain spaces (the esbuild
 // banner). Resolution goes through the engine workspace that declares each
 // tool, so the pnpm strict layout still applies.
-const engineRequire = createRequire(pathToFileURL(join(engineRoot, "package.json")));
 const engineClientRequire = createRequire(pathToFileURL(join(engineRoot, "packages/client/package.json")));
 // esbuild honors NODE_PATH; `pnpm exec` used to provide the module paths, so
 // list every workspace node_modules a vendored source can import from (pnpm's
@@ -40,16 +46,6 @@ const engineNodePathDirs = [
 ];
 let engineNodePath = engineNodePathDirs.join(process.platform === "win32" ? ";" : ":");
 
-// esbuild's bin is a JS shim on Windows but is optimized into the NATIVE
-// executable by its postinstall on POSIX — running that under node would try
-// to parse machine code as JavaScript. Spawn it directly where it is
-// executable; only Windows needs the node indirection (review finding).
-function spawnEsbuild(args, options) {
-  const bin = engineRequire.resolve("esbuild/bin/esbuild");
-  return process.platform === "win32"
-    ? spawnSync(process.execPath, [bin, ...args], options)
-    : spawnSync(bin, args, options);
-}
 const artifactsDir = join(repoRoot, "artifacts");
 const packagesDir = join(repoRoot, "packages");
 const sourcesRoot = join(repoRoot, "sources/engine");
@@ -78,6 +74,18 @@ const sharedBundleEntry = process.env.MARINARA_ENGINE_SHARED_ROOT
   : packageSharedEntry;
 const MIN_ENGINE_VERSION = "2.3.0";
 const MAX_ENGINE_EXCLUSIVE = "4.0.0";
+// Every package built here takes the Engine's own code through its host (`__MARINARA_HOST__` and api.runtime), so each
+// one requires the capability API that provides it. That, not engine.min, gates them: an Engine without it never
+// installs these versions and keeps the one it has (Pasta-Devs/Marinara-Agents#1487).
+const [hostApiMajor, hostApiMinor] = HOST_CAPABILITY_API.split(".").map(Number);
+const PACKAGE_CAPABILITY_API = Object.freeze({ major: hostApiMajor, minor: hostApiMinor });
+// The one Engine commit every feature package is built against (MARINARA_ENGINE_ROOT): the first Engine staging commit
+// with the host namespace and the api.runtime members (Pasta-Devs/Marinara-Engine#7869 and #7868). The
+// engine-boundary.json files of World Maps, Long-Term Memory and Memory Nag record the same commit.
+const PACKAGE_BUILT_AGAINST = Object.freeze({
+  engineVersion: "2.5.0",
+  engineCommit: "25f8df7b0a388fe36f657d69c6fcaa9f27e066ed",
+});
 const hierarchicalMapsOwnedSourcePaths = [
   "packages/server/src/routes/spatial-context.routes.ts",
   "packages/server/src/services/spatial-context",
@@ -154,10 +162,78 @@ const slurp2OwnedSourcePaths = [
   "packages/client/src/slp",
   "packages/server/src/slp",
   "packages/shared/src/slp",
-  "packages/client/src/lib/api-client.ts",
   "packages/server/src/services/garnish-ads",
   "packages/server/src/db/schema/slurp.ts",
 ];
+// Calls owns these files. The surface and routes replace vendored copies that stay under
+// sources/engine only because scripts/vendored-engine-baseline.json pins them; Calls does not build from those.
+const conversationCallsSourceRoot = join(packagesDir, "conversation-calls/src/engine");
+const conversationCallsOwnedSourcePaths = [
+  "packages/client/src/components/chat/ConversationCallSurface.tsx",
+  "packages/client/src/lib/call-mic-segmenter.ts",
+  "packages/client/src/lib/call-speech-queue.ts",
+  "packages/server/src/routes/conversation-calls.routes.ts",
+  "packages/server/src/services/conversation/call-command.ts",
+  "packages/server/src/services/conversation/call-transcription.ts",
+  "packages/server/src/services/conversation/call-upload.ts",
+  // Replaces the vendored host shim, which rang nothing when registered as the [call] service.
+  "packages/server/src/services/generation/conversation-call-command-runtime.ts",
+];
+// Package clients use the Engine's stores, services and components through `__MARINARA_HOST__` (capability API 1.341):
+// every feature build stacks these adapters over the vendored modules, so no client bundles a copy that keeps its own
+// state (#1478: the UI store copy reset Engine settings; #1487). scripts/client-host-gates.mjs holds each bundle to it.
+const hostClientOverlayRoot = join(repoRoot, "sources/host-client-overlay");
+// Package-owned overlays stacked over sources/engine in feature build roots. Their files are never captured into
+// sources/engine. Each exists only while its work does, hence the guard.
+const OVERLAY_ROOTS = [
+  join(repoRoot, "sources/host-client-overlay"),
+  join(repoRoot, "sources/host-runtime-overlay"),
+].filter((root) => existsSync(root));
+/** Every file the overlays stack, relative to a build root. */
+function stackedOverlayPaths() {
+  return OVERLAY_ROOTS.flatMap((root) =>
+    readdirSync(root, { recursive: true, withFileTypes: true })
+      .filter((entry) => entry.isFile())
+      .map((entry) => relative(root, join(entry.parentPath, entry.name)).split(sep).join("/")),
+  );
+}
+// Calls, Noodle and Slurp reach the Engine's live services through api.runtime instead of bundling copies of
+// them (Pasta-Devs/Marinara-Agents#1487): this overlay replaces each such vendored module at the same path.
+// The generated server entry binds api.runtime first in activate(); see bundleServer().
+const hostRuntimeOverlayRoot = join(repoRoot, "sources/host-runtime-overlay");
+const HOST_RUNTIME_FEATURES = new Set(["conversation-calls", "noodle", "slurp2"]);
+// Libraries every package server loads from the Engine's own install instead of bundling a second copy. A
+// snapshot's node_modules links to the Engine's packages/server/node_modules, and pnpm's strict layout resolves
+// only that package's direct dependencies there, so each name must be one.
+const HOST_SERVER_EXTERNALS = [
+  "@huggingface/transformers",
+  "onnxruntime-node",
+  "onnxruntime-web",
+  "sharp",
+  "pino",
+  "pino-pretty",
+  // Bundling undici gives the package a second copy whose dispatcher shape does not match the Engine's. Handing
+  // one to the other's fetch fails with "invalid onRequestStart method", which broke every outbound request.
+  "undici",
+  "zod",
+  "adm-zip",
+  "dotenv",
+  "nanoid",
+  "jsonrepair",
+];
+async function assertHostServerExternals() {
+  const manifest = JSON.parse(await readFile(join(engineRoot, "packages/server/package.json"), "utf8"));
+  const direct = new Set([
+    ...Object.keys(manifest.dependencies ?? {}),
+    ...Object.keys(manifest.optionalDependencies ?? {}),
+  ]);
+  const missing = HOST_SERVER_EXTERNALS.filter((name) => !direct.has(name));
+  if (missing.length) {
+    throw new Error(
+      `Server externals must be direct dependencies of the Engine's packages/server (${engineRoot}): ${missing.join(", ")}`,
+    );
+  }
+}
 // Release builds must bundle the current source; runtime reuse is for explicit non-release verification builds.
 const releaseBuild = process.env.MARINARA_RELEASE_BUILD !== "0";
 const reuseExistingRuntime = !releaseBuild && process.env.MARINARA_REUSE_FEATURE_RUNTIME === "1";
@@ -181,44 +257,26 @@ function featurePermissions(feature) {
   return optional.length ? [...new Set([...feature.permissions, ...optional])].sort() : feature.permissions;
 }
 
+/**
+ * A temporary build root for one feature: the vendored Engine sources (for features that build from them), the shared
+ * overlays, then the package's own sources. Every feature gets the host client overlay, and nothing is built in place
+ * in sources/engine.
+ */
 async function prepareFeatureBuildRoot(feature) {
-  if (feature.id === "noodle" || feature.id === "slurp2") {
-    if (!existsSync(feature.packageSourceRoot)) {
-      throw new Error(`Missing package-owned ${feature.name} source`);
-    }
-    const buildRoot = await mkdtemp(join(tmpdir(), `marinara-${feature.id}-source-`));
-    await cp(sourceRoot, buildRoot, { recursive: true, force: true });
-    await cp(feature.packageSourceRoot, buildRoot, { recursive: true, force: true });
-    return {
-      buildRoot,
-      cleanup: () => rm(buildRoot, { recursive: true, force: true }),
-    };
+  const ownRoot = feature.id === "hierarchical-maps" ? hierarchicalMapsSourceRoot : (feature.packageSourceRoot ?? null);
+  if (ownRoot && !existsSync(ownRoot)) throw new Error(`Missing package-owned ${feature.name} source`);
+  // Long-Term Memory, Memory Nag and World Maps carry every Engine file they build from.
+  const fromVendoredEngine =
+    feature.id !== "long-term-memory" && feature.id !== "memory-nag" && feature.id !== "hierarchical-maps";
+  const buildRoot = await mkdtemp(join(tmpdir(), `marinara-${feature.id}-source-`));
+  try {
+    if (fromVendoredEngine) await cp(sourceRoot, buildRoot, { recursive: true, force: true });
+    await cp(hostClientOverlayRoot, buildRoot, { recursive: true, force: true });
+    if (ownRoot) await cp(ownRoot, buildRoot, { recursive: true, force: true });
+  } catch (error) {
+    await rm(buildRoot, { recursive: true, force: true });
+    throw error;
   }
-  if (feature.id === "long-term-memory" || feature.id === "memory-nag") {
-    if (!existsSync(feature.packageSourceRoot)) {
-      throw new Error(`Missing package-owned ${feature.name} source`);
-    }
-    const buildRoot = await mkdtemp(join(tmpdir(), `marinara-${feature.id}-source-`));
-    await cp(feature.packageSourceRoot, buildRoot, {
-      recursive: true,
-      force: true,
-    });
-    return {
-      buildRoot,
-      cleanup: () => rm(buildRoot, { recursive: true, force: true }),
-    };
-  }
-  if (feature.id !== "hierarchical-maps") {
-    return { buildRoot: sourceRoot, cleanup: async () => {} };
-  }
-  if (!existsSync(hierarchicalMapsSourceRoot)) {
-    throw new Error("Missing package-owned Hierarchical Maps source");
-  }
-  const buildRoot = await mkdtemp(join(tmpdir(), "marinara-hierarchical-maps-source-"));
-  await cp(hierarchicalMapsSourceRoot, buildRoot, {
-    recursive: true,
-    force: true,
-  });
   return {
     buildRoot,
     cleanup: () => rm(buildRoot, { recursive: true, force: true }),
@@ -271,6 +329,13 @@ async function capturePackageSources(metafilePath, buildRoot, excludedPaths) {
   }
 }
 
+/** Owned paths stay out of sources/engine; so does every stacked overlay file. */
+function ownedCapturePaths(feature) {
+  const owned =
+    feature.ownedSourcePaths ?? (feature.id === "hierarchical-maps" ? hierarchicalMapsOwnedSourcePaths : []);
+  return [...owned, ...stackedOverlayPaths()];
+}
+
 async function removeOwnedSourceSnapshots(excludedPaths) {
   for (const path of excludedPaths) {
     await rm(join(sourcesRoot, path), { recursive: true, force: true });
@@ -280,10 +345,10 @@ async function removeOwnedSourceSnapshots(excludedPaths) {
 const features = [
   {
     id: "noodle",
-    version: "1.5.1",
+    version: "1.5.8",
     minEngineVersion: "2.4.6",
-    capabilityApi: { major: 1, minor: 35 },
-    builtAgainst: { engineVersion: "2.4.6", engineCommit: "2f5c8e314f8583cc274b488cfd309a2bc2a214d3" },
+    capabilityApi: PACKAGE_CAPABILITY_API,
+    builtAgainst: PACKAGE_BUILT_AGAINST,
     maxEngineExclusive: MAX_ENGINE_EXCLUSIVE,
     name: "Noodle",
     description: "A pretend social network where your characters post, share photos, and talk about your chats.",
@@ -360,7 +425,7 @@ const features = [
   },
   {
     id: "slurp2",
-    version: "0.3.17",
+    version: "0.3.52",
     minEngineVersion: "2.4.6",
     maxEngineExclusive: MAX_ENGINE_EXCLUSIVE,
     name: "Slurp",
@@ -414,11 +479,8 @@ const features = [
     clientImport: "packages/client/src/slp/slp-client-entry.tsx",
     packageSourceRoot: slurp2SourceRoot,
     ownedSourcePaths: slurp2OwnedSourcePaths,
-    capabilityApi: { major: 1, minor: 66 },
-    builtAgainst: {
-      engineVersion: "2.4.6",
-      engineCommit: "5a6fafa079c921a3dc1166169f41f318549d595e",
-    },
+    capabilityApi: PACKAGE_CAPABILITY_API,
+    builtAgainst: PACKAGE_BUILT_AGAINST,
     libraryHidden: true,
     // `slurpcoin.svg` is deliberately not shipped: the Engine keeps SVG out of its servable
     // package-asset content types, so the route 404s it whatever the manifest declares. The coin
@@ -438,7 +500,7 @@ const features = [
   },
   {
     id: "long-term-memory",
-    version: "1.4.7",
+    version: "1.4.57",
     minEngineVersion: "2.4.1",
     maxEngineExclusive: MAX_ENGINE_EXCLUSIVE,
     name: "Long-Term Memory",
@@ -455,7 +517,7 @@ const features = [
     ownedSourcePaths: longTermMemoryOwnedSourcePaths,
     engineBoundaryPath: join(packagesDir, "long-term-memory/engine-boundary.json"),
     boundaryDisplayName: "Long-Term Memory",
-    capabilityApi: { major: 1, minor: 6 },
+    capabilityApi: PACKAGE_CAPABILITY_API,
     contributions: {
       agentDetail: { agentIds: ["long-term-memory"] },
       slots: ["chat-settings"],
@@ -463,7 +525,7 @@ const features = [
   },
   {
     id: "memory-nag",
-    version: "1.1.3",
+    version: "1.2.1",
     minEngineVersion: "2.4.4",
     maxEngineExclusive: MAX_ENGINE_EXCLUSIVE,
     name: "Memory Nag",
@@ -480,7 +542,7 @@ const features = [
     ownedSourcePaths: memoryNagOwnedSourcePaths,
     engineBoundaryPath: join(packagesDir, "memory-nag/engine-boundary.json"),
     boundaryDisplayName: "Memory Nag",
-    capabilityApi: { major: 1, minor: 14 },
+    capabilityApi: PACKAGE_CAPABILITY_API,
     agent: {
       description:
         "Remembers loose ends from your roleplay, like promises and open questions, and reminds the AI when they matter.",
@@ -518,7 +580,7 @@ const features = [
   },
   {
     id: "hierarchical-maps",
-    version: "1.5.1",
+    version: "1.5.2",
     minEngineVersion: "2.4.2",
     maxEngineExclusive: MAX_ENGINE_EXCLUSIVE,
     name: "World Maps",
@@ -535,8 +597,10 @@ const features = [
   {
     id: "conversation-calls",
     name: "Calls",
-    version: "1.0.17",
+    version: "1.1.7",
     minEngineVersion: "2.4.1",
+    capabilityApi: PACKAGE_CAPABILITY_API,
+    builtAgainst: PACKAGE_BUILT_AGAINST,
     description: "Adds live audio and video calls with Conversation characters.",
     kind: ["agent", "conversation-calls"],
     modes: ["conversation"],
@@ -544,6 +608,8 @@ const features = [
     serverImport: "packages/server/src/routes/conversation-calls.routes.ts",
     serverExport: "conversationCallsRoutes",
     prefix: "/api/conversation-calls",
+    packageSourceRoot: conversationCallsSourceRoot,
+    ownedSourcePaths: conversationCallsOwnedSourcePaths,
   },
   ...[
     ["uno", "UNO", "Play UNO with Conversation characters.", "Uno", "/uno", ["uno"], "Group card game"],
@@ -587,8 +653,10 @@ const features = [
   ].map(([id, name, description, clientName, command, aliases, playerLabel]) => ({
     id,
     name,
-    version: "1.0.5",
+    version: "1.0.6",
     maxEngineExclusive: "4.0.0",
+    capabilityApi: PACKAGE_CAPABILITY_API,
+    builtAgainst: PACKAGE_BUILT_AGAINST,
     description,
     agent: { description: withPackageActivationGuidance(id, description) },
     kind: ["agent", "turn-game"],
@@ -638,7 +706,7 @@ const longTermMemoryBoundary = selectedFeatures.some((feature) => feature.id ===
       sourceRoot: longTermMemorySourceRoot,
       boundaryPath: join(packagesDir, "long-term-memory/engine-boundary.json"),
       displayName: "Long-Term Memory",
-      capabilityApi: { major: 1, minor: 6 },
+      capabilityApi: PACKAGE_CAPABILITY_API,
     })
   : null;
 const memoryNagBoundary = selectedFeatures.some((feature) => feature.id === "memory-nag")
@@ -646,17 +714,72 @@ const memoryNagBoundary = selectedFeatures.some((feature) => feature.id === "mem
       sourceRoot: memoryNagSourceRoot,
       boundaryPath: join(packagesDir, "memory-nag/engine-boundary.json"),
       displayName: "Memory Nag",
-      capabilityApi: { major: 1, minor: 14 },
+      capabilityApi: PACKAGE_CAPABILITY_API,
     })
   : null;
 
+/** Relative paths of every file under an overlay root, with forward slashes. */
+async function overlayFilePaths(root) {
+  const entries = await readdir(root, { recursive: true, withFileTypes: true });
+  return entries
+    .filter((entry) => entry.isFile())
+    .map((entry) => relative(root, join(entry.parentPath, entry.name)).split(sep).join("/"))
+    .sort();
+}
+
+/**
+ * Stacks sources/host-runtime-overlay over a feature's temporary build root, after its own sources. An overlay
+ * replaces vendored Engine modules only: a path the package owns is a build error, never silently replaced.
+ */
+async function stackHostRuntimeOverlay(feature, buildRoot) {
+  if (resolve(buildRoot) === resolve(sourceRoot)) {
+    throw new Error(`${feature.id}: the host runtime overlay needs a temporary build root`);
+  }
+  const paths = await overlayFilePaths(hostRuntimeOverlayRoot);
+  const owned = paths.filter(
+    (path) =>
+      (feature.ownedSourcePaths ?? []).some((ownedPath) => path === ownedPath || path.startsWith(`${ownedPath}/`)) ||
+      (feature.packageSourceRoot && existsSync(join(feature.packageSourceRoot, path))),
+  );
+  if (owned.length) {
+    throw new Error(`${feature.id}: host runtime overlay paths are package-owned: ${owned.join(", ")}`);
+  }
+  await cp(hostRuntimeOverlayRoot, buildRoot, { recursive: true, force: true });
+  return paths;
+}
+
 async function bundleServer(feature, output) {
+  await assertHostServerExternals();
   const temporary = await mkdtemp(join(tmpdir(), `marinara-feature-entry-${feature.id}-`));
   const prepared = await prepareFeatureBuildRoot(feature);
   try {
+    const hostRuntime = HOST_RUNTIME_FEATURES.has(feature.id);
+    const hostRuntimeOverlayPaths = hostRuntime ? await stackHostRuntimeOverlay(feature, prepared.buildRoot) : [];
+    const hostRuntimeModule = JSON.stringify(resolve(prepared.buildRoot, "packages/server/src/lib/host-runtime.ts"));
     const target = resolve(prepared.buildRoot, feature.serverImport || feature.engineImport);
+    // A host runtime package binds api.runtime before its own activate() runs and unbinds in its cleanup. Its
+    // privileged routes answer a missing host member with HTTP 501 (`code: "host_feature_unavailable"`).
     const source = feature.serverEntry
-      ? `export { activate, selfCheck } from ${JSON.stringify(target)};\n`
+      ? hostRuntime
+        ? `import { activate as activatePackage, selfCheck } from ${JSON.stringify(target)};
+import { bindHostRuntime, withHostFeatureErrors } from ${hostRuntimeModule};
+export { selfCheck };
+export async function activate(context) {
+  const unbind = bindHostRuntime(context.api.runtime);
+  try {
+    const api = {
+      ...context.api,
+      registerPrivilegedRoutes: (routes, options) =>
+        context.api.registerPrivilegedRoutes((router, pluginOptions) => routes(withHostFeatureErrors(router), pluginOptions), options),
+    };
+    const cleanup = await activatePackage({ ...context, api });
+    return async () => { try { if (typeof cleanup === "function") await cleanup(); } finally { unbind(); } };
+  } catch (error) {
+    unbind();
+    throw error;
+  }
+}\n`
+        : `export { activate, selfCheck } from ${JSON.stringify(target)};\n`
       : feature.id === "hierarchical-maps"
         ? `import { ${feature.serverExport} as register } from ${JSON.stringify(target)};
 import * as projection from ${JSON.stringify(resolve(prepared.buildRoot, "packages/server/src/services/spatial-context/projection.ts"))};
@@ -725,18 +848,27 @@ export async function selfCheck({ api }) {
 }\n`
         : feature.id === "conversation-calls"
           ? `import { ${feature.serverExport} as register } from ${JSON.stringify(target)};
-import * as commandRuntime from ${JSON.stringify(resolve(sourceRoot, "packages/server/src/services/generation/conversation-call-command-runtime.ts"))};
-import * as characterVideos from ${JSON.stringify(resolve(sourceRoot, "packages/server/src/services/conversation/call-character-videos.service.ts"))};
-import { createConversationCallsStorage } from ${JSON.stringify(resolve(sourceRoot, "packages/server/src/services/storage/conversation-calls.storage.ts"))};
+import * as commandRuntime from ${JSON.stringify(resolve(prepared.buildRoot, "packages/server/src/services/generation/conversation-call-command-runtime.ts"))};
+import * as characterVideos from ${JSON.stringify(resolve(prepared.buildRoot, "packages/server/src/services/conversation/call-character-videos.service.ts"))};
+import { createConversationCallsStorage } from ${JSON.stringify(resolve(prepared.buildRoot, "packages/server/src/services/storage/conversation-calls.storage.ts"))};
+import { bindHostRuntime, hostFeatureErrorHandler } from ${hostRuntimeModule};
 let readinessStorage = null;
 export async function activate({ app, api }) {
-  await app.register(register, { prefix: ${JSON.stringify(feature.prefix)} });
-  readinessStorage = createConversationCallsStorage(app.db);
-  const cleanups = [
-    api.registerService("conversation-calls:command", commandRuntime),
-    api.registerService("conversation-calls:character-videos", characterVideos),
-  ];
-  return () => { readinessStorage = null; for (const cleanup of cleanups.reverse()) cleanup(); };
+  const unbind = bindHostRuntime(api.runtime);
+  try {
+    // The routes get their own scope, whose error handler answers a missing host member with HTTP 501.
+    const routes = async (scope, options) => { scope.setErrorHandler(hostFeatureErrorHandler); await register(scope, options); };
+    await app.register(routes, { prefix: ${JSON.stringify(feature.prefix)}, runtime: api.runtime });
+    readinessStorage = createConversationCallsStorage(app.db);
+    const cleanups = [
+      api.registerService("conversation-calls:command", commandRuntime),
+      api.registerService("conversation-calls:character-videos", characterVideos),
+    ];
+    return () => { readinessStorage = null; try { for (const cleanup of cleanups.reverse()) cleanup(); } finally { unbind(); } };
+  } catch (error) {
+    unbind();
+    throw error;
+  }
 }
 export async function selfCheck() {
   if (!readinessStorage) throw new Error("Conversation Calls storage did not initialize");
@@ -748,43 +880,41 @@ export async function selfCheck() {
     const entry = join(temporary, "entry.mjs");
     const metafile = join(temporary, "meta.json");
     await writeFile(entry, source);
-    const result = spawnEsbuild(
-      [
-        entry,
-        "--bundle",
-        "--platform=node",
-        "--format=esm",
-        "--target=node22",
-        "--minify",
-        "--log-limit=0",
-        "--banner:js=import { createRequire as __createRequire } from 'node:module'; const require = __createRequire(import.meta.url);",
-        "--external:@huggingface/transformers",
-        "--external:onnxruntime-node",
-        "--external:onnxruntime-web",
-        "--external:sharp",
-        "--external:pino",
-        "--external:pino-pretty",
-        // Bundling undici gives the package a second copy whose dispatcher shape does not match
-        // the Engine's. Handing one to the other's fetch fails with "invalid onRequestStart
-        // method", which broke every outbound request the package made. The runtime provisions
-        // undici alongside the snapshot, so resolving to the Engine's copy is the fix.
-        "--external:undici",
-        ...(feature.id === "long-term-memory" || feature.id === "slurp2" ? ["--external:zod"] : []),
-        `--alias:@marinara-engine/shared=${sharedBundleEntry}`,
-        `--metafile=${metafile}`,
-        `--outfile=${output}`,
-      ],
-      {
-        cwd: engineRoot,
-        encoding: "utf8",
-        env: { ...process.env, NODE_PATH: engineNodePath },
+    // Only the vendored shared modules the server uses, as on the client (contract C6).
+    const result = await runEsbuild({
+      absWorkingDir: engineRoot,
+      entryPoints: [entry],
+      bundle: true,
+      platform: "node",
+      format: "esm",
+      target: "node22",
+      minify: true,
+      banner: {
+        js: "import { createRequire as __createRequire } from 'node:module'; const require = __createRequire(import.meta.url);",
       },
-    );
-    if (result.status !== 0) {
-      throw new Error(result.stderr || result.stdout || result.error?.message || `esbuild failed for ${feature.id}`);
-    }
+      external: HOST_SERVER_EXTERNALS,
+      alias: { "@marinara-engine/shared": sharedBundleEntry },
+      nodePaths: engineNodePath.split(delimiter),
+      metafile: true,
+      outfile: output,
+      plugins: [sharedTreeShakingPlugin({ roots: sharedRoots, files: [packageSharedEntry] })],
+    });
+    await writeFile(metafile, JSON.stringify(result.metafile));
+    const { assertServerHostGates } = await import("./server-host-gates.mjs");
+    assertServerHostGates({
+      packageId: feature.id,
+      metafilePath: metafile,
+      cwd: engineRoot,
+      buildRoot: prepared.buildRoot,
+      overlayRoot: hostRuntime ? hostRuntimeOverlayRoot : null,
+      packageSourceRoot:
+        feature.packageSourceRoot ?? (feature.id === "hierarchical-maps" ? hierarchicalMapsSourceRoot : null),
+    });
     if (feature.ownedSourcePaths?.length) {
-      await capturePackageSources(metafile, prepared.buildRoot, feature.ownedSourcePaths);
+      await capturePackageSources(metafile, prepared.buildRoot, [
+        ...ownedCapturePaths(feature),
+        ...hostRuntimeOverlayPaths,
+      ]);
       if (feature.id === "slurp2") {
         await removeOwnedSourceSnapshots([
           "packages/client/src/localization/locales",
@@ -793,11 +923,7 @@ export async function selfCheck() {
         ]);
       }
     } else {
-      await captureEngineSources(
-        metafile,
-        prepared.buildRoot,
-        feature.id === "hierarchical-maps" ? hierarchicalMapsOwnedSourcePaths : [],
-      );
+      await captureEngineSources(metafile, prepared.buildRoot, ownedCapturePaths(feature));
     }
   } finally {
     await rm(temporary, { recursive: true, force: true });
@@ -805,20 +931,75 @@ export async function selfCheck() {
   }
 }
 
+// Package clients bundle with the Engine's host: its libraries through hostModulesPlugin, its stores, services and
+// components through sources/host-client-overlay, and only the vendored shared modules they use. Both client gates
+// run on every bundle (scripts/client-host-gates.mjs).
+let hostModules = null;
+const sharedRoots = [
+  join(sourcesRoot, "packages/shared/dist"),
+  ...(process.env.MARINARA_ENGINE_SHARED_ROOT ? [dirname(sharedBundleEntry)] : []),
+];
+
+async function bundleClientEntry(feature, entry, output, metafilePath, buildRoot) {
+  hostModules ??= hostModulesPlugin({ engineRoot });
+  // The other games reach UNO's query keys through the vendored game hooks, and with them UNO's game store, which only
+  // UNO may carry (scripts/client-host-gates.mjs).
+  const sharedTreeShaking = sharedTreeShakingPlugin({
+    roots: sharedRoots,
+    files: [
+      packageSharedEntry,
+      ...(feature.id === "uno" ? [] : [join(buildRoot, "packages/client/src/stores/uno-game.store.ts")]),
+    ],
+  });
+  const result = await runEsbuild({
+    absWorkingDir: engineRoot,
+    entryPoints: [entry],
+    bundle: true,
+    platform: "browser",
+    format: "esm",
+    target: "es2020",
+    minify: true,
+    jsx: "automatic",
+    define: {
+      "process.env.NODE_ENV": '"production"',
+      "import.meta.env.DEV": "false",
+      "import.meta.env.PROD": "true",
+      "import.meta.env.MODE": '"production"',
+    },
+    alias: { "@marinara-engine/shared": sharedBundleEntry },
+    nodePaths: engineNodePath.split(delimiter),
+    metafile: true,
+    outfile: output,
+    plugins: [hostModules, sharedTreeShaking],
+  });
+  await writeFile(metafilePath, JSON.stringify(result.metafile));
+  // For size reports: keeps each client metafile (`<id>.client.json`) in this directory.
+  if (process.env.MARINARA_CLIENT_METAFILE_DIR) {
+    await copyFile(metafilePath, join(process.env.MARINARA_CLIENT_METAFILE_DIR, `${feature.id}.client.json`));
+  }
+  assertClientHostGates({
+    packageId: feature.id,
+    metafile: result.metafile,
+    workingDir: engineRoot,
+    overlayRoot: hostClientOverlayRoot,
+  });
+}
+
 async function bundleGameClient(feature, output) {
   const temporary = await mkdtemp(join(tmpdir(), `marinara-feature-client-${feature.id}-`));
+  const prepared = await prepareFeatureBuildRoot(feature);
   try {
-    const board = resolve(sourceRoot, `packages/client/src/components/chat/${feature.clientName}Board.tsx`);
-    const setup = resolve(sourceRoot, `packages/client/src/components/chat/${feature.clientName}Setup.tsx`);
+    const board = resolve(prepared.buildRoot, `packages/client/src/components/chat/${feature.clientName}Board.tsx`);
+    const setup = resolve(prepared.buildRoot, `packages/client/src/components/chat/${feature.clientName}Setup.tsx`);
     const tag = `marinara-capability-${feature.id}`;
+    // The Engine's QueryClient and toasts: one cache, and toasts where the user put them.
     const source = `
 import React, { useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { Toaster } from "sonner";
+import { QueryClientProvider } from "@tanstack/react-query";
+import { queryClient as client } from "marinara:host";
 import { ${feature.clientName}Board as Board } from ${JSON.stringify(board)};
 import { ${feature.clientName}Setup as Setup } from ${JSON.stringify(setup)};
-const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
 window.addEventListener("marinara-capability-server-event", (event) => { if (event.detail?.packageId === ${JSON.stringify(feature.id)}) void client.invalidateQueries({ queryKey: ["turn-games"] }); });
 
 function PackageRoot({ element }) {
@@ -832,9 +1013,9 @@ function PackageRoot({ element }) {
   const chatId = typeof props.chatId === "string" ? props.chatId : "";
   if (!chatId) return null;
   if (element.getAttribute("view") === "setup") {
-    return <><Setup chatId={chatId} open={props.open !== false} onClose={() => props.onClose?.()} /><Toaster richColors /></>;
+    return <Setup chatId={chatId} open={props.open !== false} onClose={() => props.onClose?.()} />;
   }
-  return <><Board chatId={chatId} /><Toaster richColors /></>;
+  return <Board chatId={chatId} />;
 }
 
 class MarinaraCapabilityElement extends HTMLElement {
@@ -853,35 +1034,11 @@ if (!customElements.get(${JSON.stringify(tag)})) customElements.define(${JSON.st
     const entry = join(temporary, "entry.tsx");
     const metafile = join(temporary, "meta.json");
     await writeFile(entry, source);
-    const result = spawnEsbuild(
-      [
-        entry,
-        "--bundle",
-        "--platform=browser",
-        "--format=esm",
-        "--target=es2020",
-        "--minify",
-        "--log-limit=0",
-        "--jsx=automatic",
-        '--define:process.env.NODE_ENV="production"',
-        "--define:import.meta.env.DEV=false",
-        "--define:import.meta.env.PROD=true",
-        '--define:import.meta.env.MODE="production"',
-        `--alias:@marinara-engine/shared=${sharedBundleEntry}`,
-        `--metafile=${metafile}`,
-        `--outfile=${output}`,
-      ],
-      {
-        cwd: engineRoot,
-        encoding: "utf8",
-        env: { ...process.env, NODE_PATH: engineNodePath },
-      },
-    );
-    if (result.status !== 0)
-      throw new Error(result.stderr || result.stdout || `client esbuild failed for ${feature.id}`);
-    await captureEngineSources(metafile);
+    await bundleClientEntry(feature, entry, output, metafile, prepared.buildRoot);
+    await captureEngineSources(metafile, prepared.buildRoot, ownedCapturePaths(feature));
   } finally {
     await rm(temporary, { recursive: true, force: true });
+    await prepared.cleanup();
   }
 }
 
@@ -891,9 +1048,17 @@ async function buildPackageStyles(buildRoot, temporary, capabilityId) {
   const config = join(temporary, `vite.${capabilityId}.config.mjs`);
   const globals = join(engineRoot, "packages/client/src/styles/globals.css");
   const packageClientSources = join(buildRoot, "packages/client/src").split(sep).join("/");
+  // Only the utilities the package's own client sources use. The Engine's stylesheet is already on the page, so its
+  // theme, variants and components come by @reference and none of it is emitted again: the package follows the live
+  // Engine theme instead of a copy taken at build time (#1487; Noodle carried 903 KB of mostly Engine CSS).
   await writeFile(
     input,
-    `@import ${JSON.stringify(globals)};\n@source ${JSON.stringify(`${packageClientSources}/**/*.{ts,tsx}`)};\n`,
+    [
+      `@reference ${JSON.stringify(globals)};`,
+      `@import "tailwindcss/utilities.css" layer(utilities) source(none);`,
+      `@source ${JSON.stringify(`${packageClientSources}/**/*.{ts,tsx}`)};`,
+      "",
+    ].join("\n"),
   );
   const viteModule = pathToFileURL(
     realpathSync(join(engineRoot, "packages/client/node_modules/vite/dist/node/index.js")),
@@ -1198,8 +1363,8 @@ async function bundleSpecialClient(feature, output) {
 import React, { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { createRoot } from "react-dom/client";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { Toaster } from "sonner";
+import { QueryClientProvider } from "@tanstack/react-query";
+import { queryClient as client } from "marinara:host";
 import { SpatialContextSettingsSection } from ${JSON.stringify(settings)};
 import { SpatialMapsHome } from ${JSON.stringify(home)};
 import { SpatialMapWorkspace } from ${JSON.stringify(workspace)};
@@ -1214,7 +1379,6 @@ import { findSpatialRoute } from ${JSON.stringify(routePlans)};
 const workspaceStyles = ${JSON.stringify(workspaceStyles)};
 const worldMapStyles = ${JSON.stringify(worldMapStyles)};
 const runtimeStyles = ${JSON.stringify(runtimeStyles)};
-const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
 class CapabilityClientErrorBoundary extends React.Component {
   constructor(props) { super(props); this.state = { error: null }; }
   componentDidCatch(error, info) {
@@ -1318,8 +1482,8 @@ function WorldMapView({ props, chatId, onOpenEditor, useParentScroll = false }) 
   return <><style data-marinara-maps-world-styles>{worldMapStyles}</style><GameWorldMap chatId={chatId} spatial={spatial.data} disabled={props.disabled === true} compact={props.compact === true} useParentScroll={useParentScroll} onOpenEditor={onOpenEditor} /><PendingBridge chatId={chatId} onChange={props.onPendingTransitionChange} /></>;
 }
 function stopOverlayEvent(event) { event.stopPropagation(); }
-function WorkspaceOverlay({ chatId, props, stagedTemplate, onClose, onOpenTemplates }) { return createPortal(<div data-chat-floating-panel data-marinara-maps-workspace-overlay className="fixed inset-0 isolate flex min-h-0 flex-col overflow-hidden bg-[var(--background)]" style={{ zIndex: 10020, backgroundColor: "var(--background)" }} onPointerDown={stopOverlayEvent} onMouseDown={stopOverlayEvent} onTouchStart={stopOverlayEvent} onClick={stopOverlayEvent}><style data-marinara-maps-workspace-styles>{workspaceStyles}</style><SpatialMapWorkspace chatId={chatId} debugMode={props.debugMode === true} stagedTemplate={stagedTemplate} pendingDraftReview={props.pendingDraftReview?.mode === "template" ? null : props.pendingDraftReview || null} onClearPendingDraftReview={() => props.onClearPendingDraftReview?.()} onDirtyChange={(dirty) => props.onDirtyChange?.(dirty)} onOpenLorebook={(lorebookId) => props.onOpenLorebook?.(lorebookId)} onLorebooksChanged={() => props.onLorebooksChanged?.()} onOpenTemplates={onOpenTemplates} onClose={onClose} /><Toaster richColors /></div>, document.body); }
-function LibraryOverlay({ chatId, props, setupSelection, startOverReplacement, onClose, onAppliedToChat, onSelectForSetup, onSelectSharedWorldForSetup }) { const sharedWorldSetupSupported = Array.isArray(props.supportedSelectionKinds) && props.supportedSelectionKinds.includes("shared-world"); return createPortal(<div data-chat-floating-panel data-marinara-maps-workspace-overlay className="fixed inset-0 isolate flex min-h-0 flex-col overflow-hidden bg-[var(--background)]" style={{ zIndex: 10020, backgroundColor: "var(--background)" }} onPointerDown={stopOverlayEvent} onMouseDown={stopOverlayEvent} onTouchStart={stopOverlayEvent} onClick={stopOverlayEvent}><style data-marinara-maps-workspace-styles>{workspaceStyles}</style><SpatialMapLibrary chatId={chatId || null} chatName={typeof props.chatName === "string" ? props.chatName : null} chatMode={typeof props.chatMode === "string" ? props.chatMode : null} enabledForChat={props.enabledForChat === true} startOverReplacement={startOverReplacement} onOpenLorebook={(lorebookId) => props.onOpenLorebook?.(lorebookId)} onLorebooksChanged={() => props.onLorebooksChanged?.()} onEnabledForChatChange={typeof props.onEnabledForChatChange === "function" ? props.onEnabledForChatChange : undefined} onAppliedToChat={onAppliedToChat} onSelectForSetup={setupSelection ? onSelectForSetup : undefined} onSelectSharedWorldForSetup={setupSelection && sharedWorldSetupSupported ? onSelectSharedWorldForSetup : undefined} onClose={onClose} /><Toaster richColors /></div>, document.body); }
+function WorkspaceOverlay({ chatId, props, stagedTemplate, onClose, onOpenTemplates }) { return createPortal(<div data-chat-floating-panel data-marinara-maps-workspace-overlay className="fixed inset-0 isolate flex min-h-0 flex-col overflow-hidden bg-[var(--background)]" style={{ zIndex: 10020, backgroundColor: "var(--background)" }} onPointerDown={stopOverlayEvent} onMouseDown={stopOverlayEvent} onTouchStart={stopOverlayEvent} onClick={stopOverlayEvent}><style data-marinara-maps-workspace-styles>{workspaceStyles}</style><SpatialMapWorkspace chatId={chatId} debugMode={props.debugMode === true} stagedTemplate={stagedTemplate} pendingDraftReview={props.pendingDraftReview?.mode === "template" ? null : props.pendingDraftReview || null} onClearPendingDraftReview={() => props.onClearPendingDraftReview?.()} onDirtyChange={(dirty) => props.onDirtyChange?.(dirty)} onOpenLorebook={(lorebookId) => props.onOpenLorebook?.(lorebookId)} onLorebooksChanged={() => props.onLorebooksChanged?.()} onOpenTemplates={onOpenTemplates} onClose={onClose} /></div>, document.body); }
+function LibraryOverlay({ chatId, props, setupSelection, startOverReplacement, onClose, onAppliedToChat, onSelectForSetup, onSelectSharedWorldForSetup }) { const sharedWorldSetupSupported = Array.isArray(props.supportedSelectionKinds) && props.supportedSelectionKinds.includes("shared-world"); return createPortal(<div data-chat-floating-panel data-marinara-maps-workspace-overlay className="fixed inset-0 isolate flex min-h-0 flex-col overflow-hidden bg-[var(--background)]" style={{ zIndex: 10020, backgroundColor: "var(--background)" }} onPointerDown={stopOverlayEvent} onMouseDown={stopOverlayEvent} onTouchStart={stopOverlayEvent} onClick={stopOverlayEvent}><style data-marinara-maps-workspace-styles>{workspaceStyles}</style><SpatialMapLibrary chatId={chatId || null} chatName={typeof props.chatName === "string" ? props.chatName : null} chatMode={typeof props.chatMode === "string" ? props.chatMode : null} enabledForChat={props.enabledForChat === true} startOverReplacement={startOverReplacement} onOpenLorebook={(lorebookId) => props.onOpenLorebook?.(lorebookId)} onLorebooksChanged={() => props.onLorebooksChanged?.()} onEnabledForChatChange={typeof props.onEnabledForChatChange === "function" ? props.onEnabledForChatChange : undefined} onAppliedToChat={onAppliedToChat} onSelectForSetup={setupSelection ? onSelectForSetup : undefined} onSelectSharedWorldForSetup={setupSelection && sharedWorldSetupSupported ? onSelectSharedWorldForSetup : undefined} onClose={onClose} /></div>, document.body); }
 function SetupSharedWorldApply({ chatId, props }) {
   const attemptRef = useRef("");
   const onAppliedRef = useRef(props.onApplied);
@@ -1382,7 +1546,6 @@ function WorldMapOverlay({ chatId, props, onClose, onOpenEditor }) {
         <WorldMapView props={props} chatId={chatId} useParentScroll />
       </div>
     </main>
-    <Toaster richColors />
   </div>, document.body);
 }
 function Root({ element }) {
@@ -1466,11 +1629,11 @@ function Root({ element }) {
   else if (libraryOpen) content = <LibraryOverlay chatId={chatId} props={props} setupSelection={setupTemplateNeedsSelection} startOverReplacement={libraryStartOver} onSelectForSetup={selectTemplateForSetup} onClose={closeLibrary} onAppliedToChat={() => { setLibraryOpen(false); setLibraryStartOver(false); setWorkspaceOpen(true); }} />;
   else if (workspaceOpen && chatId) content = <WorkspaceOverlay chatId={chatId} props={props} stagedTemplate={stagedTemplate || pendingSetupTemplate} onClose={closeWorkspace} onOpenTemplates={(options) => { setLibraryStartOver(options?.startOver === true); setLibraryOpen(true); }} />;
   else if (worldMapOpen && chatId) content = <WorldMapOverlay chatId={chatId} props={props} onClose={() => setWorldMapOpen(false)} onOpenEditor={editFromWorldMap} />;
-  else if (view === "detail") content = <><SpatialMapsHome chatId={chatId || null} chatName={typeof props.chatName === "string" ? props.chatName : null} chatMode={typeof props.chatMode === "string" ? props.chatMode : null} enabledForChat={props.enabledForChat === true} packageInfo={props.package || null} agentInfo={props.agent || null} onEnabledForChatChange={typeof props.onEnabledForChatChange === "function" ? props.onEnabledForChatChange : undefined} onOpenMap={() => setWorldMapOpen(true)} onOpenEditor={() => setWorkspaceOpen(true)} onOpenLibrary={() => setLibraryOpen(true)} onManagePackage={typeof props.onManagePackage === "function" ? props.onManagePackage : undefined} confirmAction={typeof props.confirmAction === "function" ? props.confirmAction : undefined} onDirtyChange={typeof props.onDirtyChange === "function" ? props.onDirtyChange : undefined} onClose={typeof props.onClose === "function" ? props.onClose : undefined} /><Toaster richColors /></>;
+  else if (view === "detail") content = <><SpatialMapsHome chatId={chatId || null} chatName={typeof props.chatName === "string" ? props.chatName : null} chatMode={typeof props.chatMode === "string" ? props.chatMode : null} enabledForChat={props.enabledForChat === true} packageInfo={props.package || null} agentInfo={props.agent || null} onEnabledForChatChange={typeof props.onEnabledForChatChange === "function" ? props.onEnabledForChatChange : undefined} onOpenMap={() => setWorldMapOpen(true)} onOpenEditor={() => setWorkspaceOpen(true)} onOpenLibrary={() => setLibraryOpen(true)} onManagePackage={typeof props.onManagePackage === "function" ? props.onManagePackage : undefined} confirmAction={typeof props.confirmAction === "function" ? props.confirmAction : undefined} onDirtyChange={typeof props.onDirtyChange === "function" ? props.onDirtyChange : undefined} onClose={typeof props.onClose === "function" ? props.onClose : undefined} /></>;
   else if (chatId && view === "runtime") content = <><style data-marinara-maps-world-styles>{worldMapStyles}</style><style data-marinara-maps-runtime-styles>{runtimeStyles}</style><SpatialContextRuntimeBar chatId={chatId} disabled={props.disabled === true} onOpenEditor={() => setWorkspaceOpen(true)} /><PendingBridge chatId={chatId} onChange={props.onPendingTransitionChange} /></>;
   else if (chatId && view === "world-map") content = <WorldMapView props={props} chatId={chatId} onOpenEditor={() => setWorkspaceOpen(true)} />;
   else if (chatId && view === "workspace") content = <WorkspaceOverlay chatId={chatId} props={props} stagedTemplate={stagedTemplate || pendingSetupTemplate} onClose={closeWorkspace} onOpenTemplates={(options) => { setLibraryStartOver(options?.startOver === true); setLibraryOpen(true); }} />;
-  else if (chatId) content = <><SpatialContextSettingsSection chatId={chatId} style={props.style} enabledForChat={props.enabledForChat === true} onEnabledForChatChange={typeof props.onEnabledForChatChange === "function" ? props.onEnabledForChatChange : undefined} onOpenEditor={() => setWorkspaceOpen(true)} /><Toaster richColors /></>;
+  else if (chatId) content = <><SpatialContextSettingsSection chatId={chatId} style={props.style} enabledForChat={props.enabledForChat === true} onEnabledForChatChange={typeof props.onEnabledForChatChange === "function" ? props.onEnabledForChatChange : undefined} onOpenEditor={() => setWorkspaceOpen(true)} /></>;
   return <SpatialMapLocalizationProvider localization={props.localization}>{content}</SpatialMapLocalizationProvider>;
 }
 class Element extends HTMLElement { connectedCallback() { if (!this.__root) this.__root = createRoot(this); this.__root.render(<QueryClientProvider client={client}><CapabilityClientErrorBoundary element={this}><Root element={this} /></CapabilityClientErrorBoundary></QueryClientProvider>); } disconnectedCallback() { queueMicrotask(() => { if (!this.isConnected && this.__root) { this.__root.unmount(); this.__root = null; } }); } }
@@ -1482,13 +1645,14 @@ if (!customElements.get(${JSON.stringify(tag)})) customElements.define(${JSON.st
       source = `
 import React, { useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { QueryClientProvider } from "@tanstack/react-query";
+import { queryClient as client } from "marinara:host";
 import { ChevronRight, Loader2, Phone, PhoneIncoming, PhoneOff } from "lucide-react";
-import { Toaster, toast } from "sonner";
+import { toast } from "sonner";
 import { ConversationCallSurface } from ${JSON.stringify(surface)};
 import { useAcceptConversationCall, useConversationCallStatus, useDeclineConversationCall, useStartConversationCall } from ${JSON.stringify(hooks)};
 import { useTTSConfig, useUpdateTTSConfig } from ${JSON.stringify(ttsHooks)};
-const client = new QueryClient({ defaultOptions: { queries: { retry: false } } }); window.addEventListener("marinara-capability-server-event", (event) => { if (event.detail?.packageId === "conversation-calls") void client.invalidateQueries({ queryKey: ["conversation-calls"] }); }); let expandedChatId = null; const listeners = new Set(); function setExpanded(chatId) { expandedChatId = chatId; for (const listener of listeners) listener(); } function useExpanded(chatId) { const [, redraw] = useState(0); useEffect(() => { const fn = () => redraw((v) => v + 1); listeners.add(fn); return () => listeners.delete(fn); }, []); return expandedChatId === chatId; }
+window.addEventListener("marinara-capability-server-event", (event) => { if (event.detail?.packageId === "conversation-calls") void client.invalidateQueries({ queryKey: ["conversation-calls"] }); }); let expandedChatId = null; const listeners = new Set(); function setExpanded(chatId) { expandedChatId = chatId; for (const listener of listeners) listener(); } function useExpanded(chatId) { const [, redraw] = useState(0); useEffect(() => { const fn = () => redraw((v) => v + 1); listeners.add(fn); return () => listeners.delete(fn); }, []); return expandedChatId === chatId; }
 function Toggle({ label, description, enabled, disabled, pending, compact, onClick }) {
   return <button type="button" disabled={disabled} onClick={onClick} className={(compact ? "mari-chat-option-field " : "") + "flex w-full items-center justify-between gap-3 rounded-lg bg-[var(--background)]/35 px-2.5 py-2 text-left transition-all hover:bg-[var(--secondary)]/50" + (enabled && compact ? " mari-chat-option-field--active" : "") + (disabled ? " cursor-not-allowed opacity-60" : "")}>
     <span className="min-w-0 flex-1">
@@ -1605,8 +1769,8 @@ function Root({ element }) {
       }
     }}>{start.isPending ? <Loader2 size="0.875rem" className="animate-spin" /> : active ? <PhoneIncoming size="0.875rem" /> : <Phone size="0.875rem" />}</button>;
   }
-  if (expanded && active) return <div className="absolute inset-0 z-40 flex min-h-0 bg-[var(--background)]"><ConversationCallSurface chatId={chatId} session={active} characterMap={props.characterMap || new Map()} chatCharIds={props.chatCharIds || []} personaInfo={props.personaInfo} onEnded={() => setExpanded(null)} embedded /><Toaster richColors /></div>;
-  if (ringing && !active) return <div className="px-3 pb-2"><div className="flex w-full items-center gap-3 rounded-lg border border-[var(--border)] bg-[var(--popover)] p-3 shadow-xl"><div className="flex h-9 w-9 items-center justify-center rounded-full bg-emerald-500/15 text-emerald-400"><PhoneIncoming size="1rem" /></div><div className="min-w-0 flex-1 text-sm font-semibold">Incoming call</div><button type="button" className="mari-chrome-control h-9 w-9 p-0 text-[var(--destructive)]" onClick={() => void decline.mutateAsync(ringing.id)}><PhoneOff size="0.875rem" /></button><button type="button" className="mari-chrome-control h-9 w-9 p-0 text-emerald-400" onClick={async () => { await accept.mutateAsync(ringing.id); setExpanded(chatId); }}><Phone size="0.875rem" /></button></div><Toaster richColors /></div>;
+  if (expanded && active) return <div className="absolute inset-0 z-40 flex min-h-0 bg-[var(--background)]"><ConversationCallSurface chatId={chatId} session={active} characterMap={props.characterMap || new Map()} chatCharIds={props.chatCharIds || []} personaInfo={props.personaInfo} onEnded={() => setExpanded(null)} embedded /></div>;
+  if (ringing && !active) return <div className="px-3 pb-2"><div className="flex w-full items-center gap-3 rounded-lg border border-[var(--border)] bg-[var(--popover)] p-3 shadow-xl"><div className="flex h-9 w-9 items-center justify-center rounded-full bg-emerald-500/15 text-emerald-400"><PhoneIncoming size="1rem" /></div><div className="min-w-0 flex-1 text-sm font-semibold">Incoming call</div><button type="button" className="mari-chrome-control h-9 w-9 p-0 text-[var(--destructive)]" onClick={() => void decline.mutateAsync(ringing.id)}><PhoneOff size="0.875rem" /></button><button type="button" className="mari-chrome-control h-9 w-9 p-0 text-emerald-400" onClick={async () => { await accept.mutateAsync(ringing.id); setExpanded(chatId); }}><Phone size="0.875rem" /></button></div></div>;
   return null;
 }
 class Element extends HTMLElement { connectedCallback() { if (!this.__root) this.__root = createRoot(this); this.__root.render(<QueryClientProvider client={client}><Root element={this} /></QueryClientProvider>); } disconnectedCallback() { queueMicrotask(() => { if (!this.isConnected && this.__root) { this.__root.unmount(); this.__root = null; } }); } }
@@ -1622,40 +1786,11 @@ if (!customElements.get(${JSON.stringify(tag)})) customElements.define(${JSON.st
     const entry = join(temporary, "entry.tsx");
     const metafile = join(temporary, "meta.json");
     await writeFile(entry, source);
-    const result = spawnEsbuild(
-      [
-        entry,
-        "--bundle",
-        "--platform=browser",
-        "--format=esm",
-        "--target=es2020",
-        "--minify",
-        "--log-limit=0",
-        "--jsx=automatic",
-        '--define:process.env.NODE_ENV="production"',
-        "--define:import.meta.env.DEV=false",
-        "--define:import.meta.env.PROD=true",
-        '--define:import.meta.env.MODE="production"',
-        `--alias:@marinara-engine/shared=${sharedBundleEntry}`,
-        `--metafile=${metafile}`,
-        `--outfile=${output}`,
-      ],
-      {
-        cwd: engineRoot,
-        encoding: "utf8",
-        env: { ...process.env, NODE_PATH: engineNodePath },
-      },
-    );
-    if (result.status !== 0)
-      throw new Error(result.stderr || result.stdout || `client esbuild failed for ${feature.id}`);
+    await bundleClientEntry(feature, entry, output, metafile, prepared.buildRoot);
     if (feature.ownedSourcePaths?.length) {
-      await capturePackageSources(metafile, prepared.buildRoot, feature.ownedSourcePaths);
+      await capturePackageSources(metafile, prepared.buildRoot, ownedCapturePaths(feature));
     } else {
-      await captureEngineSources(
-        metafile,
-        prepared.buildRoot,
-        feature.id === "hierarchical-maps" ? hierarchicalMapsOwnedSourcePaths : [],
-      );
+      await captureEngineSources(metafile, prepared.buildRoot, ownedCapturePaths(feature));
     }
   } finally {
     await rm(temporary, { recursive: true, force: true });
@@ -1721,8 +1856,9 @@ for (const feature of selectedFeatures) {
     throw new Error(`Missing package-owned client source for ${feature.id}`);
   }
   const clientBuffer = clientPath ? await readFile(clientPath) : null;
+  const assetPaths = feature.assetPaths ?? [];
   const assetPayloads = await Promise.all(
-    (feature.assetPaths ?? []).map(async (assetPath) => {
+    assetPaths.map(async (assetPath) => {
       const assetFile = resolve(sourceDir, assetPath);
       if (assetFile !== sourceDir && !assetFile.startsWith(`${sourceDir}${sep}`)) {
         throw new Error(`Unsafe package asset path for ${feature.id}: ${assetPath}`);

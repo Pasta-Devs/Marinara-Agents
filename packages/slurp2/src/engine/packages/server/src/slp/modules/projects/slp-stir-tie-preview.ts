@@ -28,7 +28,7 @@ import { slurpCoupleMisfitOf } from "./slp-couple-fit.js";
 import type { SlpActionParsed } from "../../../../../shared/src/slp/slp-actions.js";
 import { slurpAddToCouple, slurpCoupleMembers, slurpNameList } from "./slp-couple-group.js";
 import type { SlpActionPreview, SlpStirNote } from "../../../../../shared/src/slp/slp-stir.js";
-import { slurpEndBond, slurpSetBond, type SlurpBond } from "./slp-creator-bonds.js";
+import { slurpSyncExBonds, slurpEndBond, slurpSetBond, type SlurpBond } from "./slp-creator-bonds.js";
 
 export const SLURP_TIE_LEVERS = [
   "suggest-collab",
@@ -65,6 +65,7 @@ const FORCED_NOTE: Record<SlurpCoupleForced["misfit"], SlpStirNote["kind"]> = {
   noDating: "awkward",
   orientation: "awkward",
   romance: "awkward",
+  family: "family",
 };
 
 export type SlurpTiePreview = Pick<SlpActionPreview, "who" | "detail" | "when" | "notes" | "error" | "summary"> &
@@ -181,12 +182,12 @@ export function slurpPreviewTieLever(
       });
     }
     case "steer-couple": {
-      const { coupleId, steer } = input as SlpActionParsed<"steer-couple">;
+      const { coupleId, steer, aftermath } = input as SlpActionParsed<"steer-couple">;
       const couple = couples.find((entry) => entry.id === coupleId);
-      const next = slurpSteerCouple(couples, coupleId, steer, { at, creators: world.creators });
+      const next = slurpSteerCouple(couples, coupleId, steer, { at, creators: world.creators, aftermath });
       return result({
         who: couple ? people(world, [couple.aId, couple.bId]) : [],
-        detail: { steer },
+        detail: { steer, ...(steer === "breakUp" && aftermath && aftermath !== "keep" ? { aftermath } : {}) },
         when: "nextPost",
         error: typeof next === "string" ? next : null,
         // A breakup closes an open shared page, and that is not taken back (the run keeps no Undo).
@@ -310,7 +311,7 @@ type TieDocument = { ties: SlurpCreatorTies; couples: SlurpCouple[]; bonds?: Slu
  * Undo would break it: a collab already planned or posted, a rivalry or collab that changed again,
  * a couple that opened a page since, or a partner who is with someone else now.
  */
-export function slurpUndoTie(document: TieDocument, undo: SlurpTieUndo): TieDocument | null {
+export function slurpUndoTie(document: TieDocument, undo: SlurpTieUndo, at = new Date()): TieDocument | null {
   const { ties, couples } = document;
   switch (undo.kind) {
     case "removeCollab": {
@@ -373,9 +374,17 @@ export function slurpUndoTie(document: TieDocument, undo: SlurpTieUndo): TieDocu
         moreIds: previous.moreIds,
         moments: previous.moments,
         secret: previous.secret,
+        // #1293: the breakup's aftermath goes back too, whichever way the play changed it.
+        aftermath: previous.aftermath,
       };
       if (!previous.secret) delete restored.secret;
-      return { ties, couples: couples.map((entry) => (entry.id === previous.id ? restored : entry)) };
+      if (!previous.aftermath) delete restored.aftermath;
+      const restoredCouples = couples.map((entry) => (entry.id === previous.id ? restored : entry));
+      return {
+        ties,
+        couples: restoredCouples,
+        ...(document.bonds ? { bonds: slurpSyncExBonds(document.bonds, restoredCouples, at) } : {}),
+      };
     }
     case "closeCouplePage":
       return null;

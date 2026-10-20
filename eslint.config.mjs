@@ -5,6 +5,7 @@ import tseslint from "typescript-eslint";
 
 const maintainedSourceFiles = [
   "packages/**/src/**/*.{js,mjs,ts,tsx}",
+  "sources/*-overlay/**/*.{mjs,ts,tsx}",
   "scripts/**/*.{js,mjs}",
   "tests/**/*.{js,mjs,ts,tsx}",
   "eslint.config.mjs",
@@ -138,6 +139,8 @@ export default tseslint.config(
         QM_OVERLAY_TOP_SLOTS: "readonly",
         QM_OVERLAY_BOTTOM_SLOTS: "readonly",
         QM_OVERLAY_SLOT_PAIRS: "readonly",
+        QM_OVERLAY_SLOT_LAYERS: "readonly",
+        QM_OVERLAY_EXTRA_SLOTS: "readonly",
         QM_OVERLAY_SLOT_LABELS: "readonly",
         QM_OVERLAY_SLOT_LABEL_LINES: "readonly",
         qmLocationLabel: "readonly",

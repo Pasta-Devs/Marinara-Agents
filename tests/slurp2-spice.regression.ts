@@ -193,6 +193,45 @@ for (let sequence = 0; sequence < 200; sequence += 1) {
   recent = [{ kind: angle.kind }, ...recent].slice(0, 6);
 }
 assert.ok(repeats <= 12, `the same kind twice in a row stays rare (${repeats} of 200)`);
+// No drift (#104): fed its own last 8 spicy posts, an explicit page keeps a spread of kinds. With
+// only the last three damped, the heaviest kinds (toys, partner scenes) took most of the posts.
+const kindShare = new Map<string, number>();
+recent = [];
+for (let sequence = 0; sequence < 400; sequence += 1) {
+  const angle = slurpSpiceAngle({ ...base, level: "explicit", access: "locked", teaser: false, recent, sequence })!;
+  kindShare.set(angle.kind, (kindShare.get(angle.kind) ?? 0) + 1);
+  recent = [{ kind: angle.kind }, ...recent].slice(0, 8);
+}
+const top = Math.max(...kindShare.values());
+console.log("spice kind spread over 400:", Object.fromEntries(kindShare));
+assert.ok(top <= 400 * 0.2, `no kind takes over an explicit page (${top} of 400)`);
+// No feed-wide shower evening (#104): when other Creators posted showers today, this one mostly
+// does something else, and a feed-wide taste waits its turn, unless it is this Creator's turn-on.
+const showers = (feed: { kind: string; taste?: string | null }[], turnOns: string[] = []) =>
+  Array.from({ length: 400 }, (_, sequence) =>
+    slurpSpiceAngle({
+      ...base,
+      creator: creator({ turnOns }),
+      spice: { tastes: [taste("shower", "obsessed")], never: [] },
+      level: "explicit",
+      access: "locked",
+      teaser: false,
+      feed,
+      sequence,
+    }),
+  );
+const showerFeed = Array.from({ length: 5 }, () => ({ kind: "shower", taste: "shower" }));
+const kindOf = (angles: ReturnType<typeof showers>) => angles.filter((angle) => angle?.kind === "shower").length;
+const tasteOf = (angles: ReturnType<typeof showers>) => angles.filter((angle) => angle?.taste === "shower").length;
+const quiet = showers([]);
+const busy = showers(showerFeed);
+assert.ok(kindOf(busy) < kindOf(quiet) * 0.5, `shower posts step aside (${kindOf(quiet)} → ${kindOf(busy)})`);
+assert.ok(tasteOf(busy) < tasteOf(quiet) * 0.3, `a feed-wide taste waits (${tasteOf(quiet)} → ${tasteOf(busy)})`);
+assert.ok(tasteOf(showers(showerFeed, ["shower"])) > tasteOf(busy) * 2, "a turn-on still leans in");
+assert.ok(
+  busy.every((angle) => angle !== null),
+  "the level stays: every locked post is still spicy",
+);
 
 // Partners: a couple partner from the card, a collab partner, or someone unnamed.
 const couple = creator({ anchors: anchors([{ name: "Jonas", relation: "boyfriend" }]) });
@@ -478,16 +517,8 @@ for (const [path, pattern] of [
     /recordSlurpTasteSignal\(app\.db, \{ metadata: post\.metadata \}, "unlock"\)/u,
   ],
   [
-    "features/economy/slp-wallet-routes.ts",
-    /recordSlurpTasteSignal\(app\.db, \{ creatorId: creatorAccountId \}, "tip"\)/u,
-  ],
-  [
     "features/feed/slp-feed-post-routes.ts",
     /recordSlurpTasteSignal\(app\.db, \{ metadata: gated\.post\.metadata \}, parsed\.data\.type\)/u,
-  ],
-  [
-    "features/messages/slp-messages-send-routes.ts",
-    /recordSlurpTasteSignal\(app\.db, \{ creatorId: parsed\.data\.creatorAccountId \}, "tip"\)/u,
   ],
   ["features/messages/slp-messages-send-routes.ts", /"unlock"\);\n\s*\}/u],
   [
@@ -497,6 +528,9 @@ for (const [path, pattern] of [
 ] as const) {
   assert.match(server(path), pattern, `learning signal in ${path}`);
 }
+// A tip on a profile or in a chat does not credit the latest spicy post: that guess fed itself (#104).
+for (const path of ["features/economy/slp-wallet-routes.ts", "features/messages/slp-messages-send-routes.ts"])
+  assert.doesNotMatch(server(path), /recordSlurpTasteSignal\(app\.db, \{ creatorId/u, `no tip guess in ${path}`);
 const routes = server("features/creators/slp-spice-routes.ts");
 for (const route of ['app.get("/slurp/spice"', 'app.patch("/slurp/spice"', 'app.post("/slurp/spice/noticed"'])
   assert.ok(routes.includes(route), route);

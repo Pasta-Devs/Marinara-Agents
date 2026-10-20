@@ -4,7 +4,7 @@ Official downloadable agents and capability packages for [Marinara Engine](https
 
 Marinara Engine starts lightweight: a fresh installation contains no optional agents. Open **Agents → Download Agents** on desktop or mobile to browse this catalog, read what each package does, and install only the features you want. Installed packages appear in the normal Agents panel and the chat modes they support. You can update or uninstall them from the same catalog. Restart Marinara Engine when the installer asks you to do so.
 
-Across its Engine compatibility lanes, the stable catalog currently contains **39 first-party packages**: 6 Writer Agents, 13 Tracker Agents, and 20 Misc Agents. Staging-only previews below are additional and are not included in these stable counts. Most packages support **Marinara Engine v2.3.0+**; World Maps and Storyboard require **v2.4.2**; Inventory Tracker and Haptic Feedback require **v2.4.3**; Beholder, Noodle, Memory Nag, Gacha Forge, and Relationship Tracker require **v2.4.4**; Long-Term Memory requires **v2.4.1**; and Slurp and Quartermaster require **v2.4.6**. Every package accepts compatible Engine v2 and v3 releases below **v4.0.0**. Each Engine release sees only the packages compatible with its major version. Users upgrading from an older Engine keep every feature that was available before the package split. Migration downloads matching packages once and preserves existing chat selections, agent settings, runtime data, and history.
+Across its Engine compatibility lanes, the stable catalog currently contains **41 first-party packages**: 6 Writer Agents, 13 Tracker Agents, and 22 Misc Agents. Staging-only previews below are additional and are not included in these stable counts. Most packages support **Marinara Engine v2.3.0+**; Storyboard requires **v2.4.2**; Inventory Tracker and Haptic Feedback require **v2.4.3**; Beholder, Gacha Forge, and Relationship Tracker require **v2.4.4**; Quartermaster requires **v2.4.6**; and 2D Avatars and 3D Avatars need Capability API 1.73, so they install on the first Engine release after **v2.5.0**. Noodle, Slurp, Calls, World Maps, Long-Term Memory, Memory Nag and the six Conversation games use the Engine's own code instead of carrying copies of it, so their current versions need Capability API 1.341 and also install on the first Engine release after **v2.5.0**; an older Engine keeps the version it already has. Every package accepts compatible Engine v2 and v3 releases below **v4.0.0**. Each Engine release sees only the packages compatible with its major version. Users upgrading from an older Engine keep every feature that was available before the package split. Migration downloads matching packages once and preserves existing chat selections, agent settings, runtime data, and history.
 
 ## Official catalog
 
@@ -41,6 +41,8 @@ Across its Engine compatibility lanes, the stable catalog currently contains **3
 
 | Agent | Package | What it does |
 | --- | --- | --- |
+| 2D Avatars | [`2d-avatars`](packages/2d-avatars/manifest.json) | Shows your characters and personas as animated 2D avatars that blink, talk, and change faces with each reply, from your sprites or a mesh avatar file. |
+| 3D Avatars | [`3d-avatars`](packages/3d-avatars/manifest.json) | Shows your characters and personas as animated 3D models that blink, talk, and change faces with each reply, from VRM model files, such as ones made in VRoid Studio. |
 | 8-Ball Pool | [`eightball`](packages/eightball/manifest.json) | Adds a complete Conversation-mode 8-Ball Pool table and `/8ball` command. |
 | Chess | [`chess`](packages/chess/manifest.json) | Adds a Conversation-mode chess board and `/chess` command. |
 | Combat | [`combat`](packages/combat/manifest.json) | Manages combat encounters, initiative, HP tracking, and turn-based actions. |
@@ -67,6 +69,8 @@ For complete mode, lifecycle, and settings documentation for every package, see 
 For manual-only Illustrator on the updated Engine staging build, set **Run Interval** to **0** in its setup or when adding it to a chat. This stops automatic Illustrator runs, including automatic scene backgrounds, while keeping the **Gallery → Illustrate** and **Background** actions available. The default remains **5**; choose a positive interval to resume automatic runs. This is an Engine scheduling option, so no Illustrator package update is required.
 
 Slurp offers **Image context for reactions** in settings for fan reactions and creator replies: **Auto** prefers the stored image prompt and falls back to vision, **Stored image prompt only** uses that prompt only, and **Vision** describes the image. Public fans do not receive locked images. Manual creator refresh shows how many requests remain.
+
+When breaking a Slurp couple up, choose whether they keep the usual breakup history, **Move on** without dwelling on it, or **Forget the relationship** in future posts and chats. For existing exes, **Stir → Nudge a couple** can move them on or forget the relationship. Published posts and messages stay. Where Undo is offered, use **Recent plays → Undo** to restore the previous choice.
 
 ### In development
 
@@ -111,7 +115,7 @@ node scripts/validate-package-locales.mjs
 node scripts/validate-catalog.mjs
 ```
 
-The build records generic Engine source dependencies needed by feature packages under `sources/engine`. Package-owned implementations stay with their package; for example, World Maps, Long-Term Memory, and Noodle source live under their respective `packages/<id>/src/engine/` trees and are overlaid on those generic dependencies during each build. Noodle also compiles and embeds the same Engine design utilities used by its former built-in interface, preventing visual drift when it runs as a downloaded Home tab.
+The build records generic Engine source dependencies needed by feature packages under `sources/engine`. Package-owned implementations stay with their package; for example, World Maps, Long-Term Memory, and Noodle source live under their respective `packages/<id>/src/engine/` trees and are overlaid on those generic dependencies during each build. Package clients and servers take the Engine's stores, libraries and services from the running Engine instead of bundling copies (see [Using the Engine's host](CONTRIBUTING.md#using-the-engines-host)). Noodle and Slurp compile only the utility classes their own interfaces use, against the Engine's live theme, so they follow it when it changes.
 
 ---
 

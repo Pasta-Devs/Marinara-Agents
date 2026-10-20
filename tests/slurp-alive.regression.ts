@@ -132,7 +132,7 @@ const hooks = read("client/src/hooks/use-slurp.ts");
 const threadsQuery = hooks.slice(hooks.indexOf("export function useSlurpThreads"));
 assert.match(threadsQuery.slice(0, 1200), /refetchInterval: personaId \? 30_000 : false/u);
 const threadQuery = hooks.slice(hooks.indexOf("export function useSlurpThread("));
-assert.match(threadQuery.slice(0, 1400), /refetchInterval: threadId && personaId \? 30_000 : false/u);
+assert.match(threadQuery.slice(0, 1600), /refetchInterval: threadId && personaId \? 30_000 : false/u);
 
 // ── Comments must be a conversation, not parallel monologues ─────────────────
 const fanService = read("server/src/services/slurp/slurp-fan-activity.service.ts");
@@ -156,7 +156,7 @@ const worldOperation = read("server/src/services/slurp/slurp-world.operation.ts"
 assert.match(worldOperation, /listQuotedCommissions/u);
 assert.match(
   worldOperation,
-  /slurpFanTypeCommissionBudget\(slurpResolveFanType\(settings\.fanTypes, member\), member\.id\)/u,
+  /member\s+\? slurpResolveFanType\(settings\.fanTypes, member\)[\s\S]*?slurpFanTypeCommissionBudget\(fanType, commission\.viewerAccountId\)/u,
   "the member’s configured Fan Type must decide their commission budget",
 );
 // Never the instant the price is named, unless the player sets "Time before fans answer a quote" to 0.
@@ -197,7 +197,7 @@ assert.ok(bank.size > 300, `the reaction bank is too small to hide repetition ($
 // comment; without them the endpoint hands back text about a locked post they never paid for.
 // Audience replies get a second, narrower door rather than a hole in that one.
 assert.match(slurpStorage, /async claimNoodlerAudienceReply\(/u);
-assert.match(slurpStorage, /canViewNoodlerPost\(\{/u, "the player-facing access check must survive");
+assert.match(slurpStorage, /canViewCreatorPost\(\{/u, "the player-facing access check must survive");
 const audienceClaim = slurpStorage.slice(
   slurpStorage.indexOf("async claimNoodlerAudienceReply("),
   slurpStorage.indexOf("Release a claim whose generation never produced a reply"),

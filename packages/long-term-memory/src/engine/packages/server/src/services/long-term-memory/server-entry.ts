@@ -1,9 +1,13 @@
 import { join } from "node:path";
 import { configurePackageRuntime, type CapabilityRuntimeHost } from "./package-runtime.js";
 import { activateLongTermMemoryStorage, withLongTermMemoryVaultMutation } from "./runtime.js";
-import { prepareGenerationLongTermMemory, recordGenerationLongTermMemoryDispatch } from "./generation-injection.js";
+import { refreshLongTermMemoryIndexes } from "./recall/rebuild.js";
+import {
+  prepareGenerationLongTermMemory,
+  recordGenerationLongTermMemoryDispatch,
+} from "./recall/generation-injection.js";
 import { createLongTermMemoryRoutes } from "./routes.js";
-import { adoptLegacyLongTermMemoryAgentConfig, adoptLegacyLongTermMemoryChats } from "./legacy-adoption.js";
+import { adoptLegacyLongTermMemoryAgentConfig, adoptLegacyLongTermMemoryChats } from "./maintenance/legacy-adoption.js";
 import type { FastifyPluginAsync } from "fastify";
 
 let active: Awaited<ReturnType<typeof activateLongTermMemoryStorage>> | null = null;
@@ -35,6 +39,10 @@ export async function activate({ api, dataDir }: ActivationContext) {
       drafts: active.draftStore,
     });
     const releaseRuntimeService = api.registerService("long-term-memory:runtime", {
+      refresh: async ({ signal }: { signal: AbortSignal }) => {
+        await refreshLongTermMemoryIndexes(activationRoot, signal);
+        return { status: "refreshed" as const };
+      },
       recall: (input: {
         chatId: string;
         chatMode: string;

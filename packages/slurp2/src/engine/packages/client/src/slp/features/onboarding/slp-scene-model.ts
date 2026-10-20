@@ -48,6 +48,8 @@ export type SlpSceneSetup = {
   /** The creator seat: the existing Creator who helps. */
   helper?: Pick<SlpAccount, "id" | "displayName" | "handle" | "avatarUrl"> | null;
   disclosureMode: SlpIdentityDisclosure;
+  /** false: "The image model knows this character" is off for the new Creator. */
+  imageNameKnown?: boolean;
   connectionId?: string;
 };
 
@@ -253,7 +255,11 @@ export function useSlpSceneModel(setup: SlpSceneSetup, hostLabel: string) {
         await update.mutateAsync({ accountId: accountRef.current, ...stageProfile });
         return { id: accountRef.current };
       }
-      const profile = await create.mutateAsync({ sourceAccountId: setup.source.id, stageProfile });
+      const profile = await create.mutateAsync({
+        sourceAccountId: setup.source.id,
+        stageProfile,
+        imageNameKnown: setup.imageNameKnown,
+      });
       accountRef.current = profile.id;
       setAccountId(profile.id);
       return { id: profile.id };

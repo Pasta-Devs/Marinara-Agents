@@ -2,11 +2,22 @@ import { SLURP_DEFAULT_REPLY_DELAYS, slurpDelayInRange, type SlurpReplyDelays } 
 
 type CreatorSource = { kind: string; entityId: string; displayName: string };
 
+/** `status` is the Engine's presence for the block; a routine read from the card has none. */
+type ScheduleBlock = { time: string; activity: string; status?: unknown };
+
 type WeekSchedule = {
   weekStart: string;
   enabled?: boolean;
-  days: Record<string, Array<{ time: string; activity: string }>>;
+  days: Record<string, ScheduleBlock[]>;
 };
+
+const SCHEDULE_DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
+
+/** Yesterday's, today's and tomorrow's blocks, Monday-first like the Engine's day names. */
+function scheduleDaysAround(schedule: WeekSchedule, localNow: Date): (ScheduleBlock[] | undefined)[] {
+  const today = (localNow.getDay() + 6) % 7;
+  return [-1, 0, 1].map((offset) => schedule.days[SCHEDULE_DAYS[(today + offset + 7) % 7]!]);
+}
 
 type ScheduleCharacter = { data?: unknown } | null;
 
@@ -127,7 +138,8 @@ export async function resolveSlurpCreatorScheduleContext(
 
 /**
  * Activities that mean "cannot pick up the phone". Everything else counts as reachable, because
- * a creator at lunch or on the train still answers a DM — only these actually stop them.
+ * a creator at lunch or on the train still answers a DM — only these actually stop them. Read only
+ * for a block without an Engine status; a status decides on its own.
  */
 export const SLURP_AWAY_ACTIVITIES = [
   "sleep",
@@ -152,7 +164,7 @@ export type SlurpCreatorAvailability = {
   online: boolean;
   /** What the schedule says they are doing right now, for the reply prompt. */
   activity: string | null;
-  /** Minutes until the next schedule block starts. `null` when nothing is left today. */
+  /** Minutes until the next reachable stretch starts. `null` when no return time is known. */
   minutesUntilOnline: number | null;
   /** True when there is no active schedule and the status is guessed from recent posts. */
   estimated?: boolean;
@@ -228,13 +240,102 @@ function simpleHash(str: string): number {
   return Math.abs(hash);
 }
 
-const minutesOfDay = (time: string): number | null => {
-  const match = /^(\d{1,2}):(\d{2})$/u.exec(time.trim());
-  if (!match) return null;
-  const hours = Number(match[1]);
-  const mins = Number(match[2]);
-  if (!Number.isInteger(hours) || !Number.isInteger(mins) || hours > 23 || mins > 59) return null;
-  return hours * 60 + mins;
+const clockMinutes = (value: string | undefined): number | null => {
+  if (!value) return null;
+  const [hoursRaw, minutesRaw] = value.split(":");
+  const hours = Number(hoursRaw);
+  const minutes = Number(minutesRaw);
+  if (!Number.isInteger(hours) || !Number.isInteger(minutes) || hours < 0 || hours > 23 || minutes < 0 || minutes > 59)
+    return null;
+  return hours * 60 + minutes;
+};
+
+/**
+ * A block's time in minutes from midnight. The Engine stores a range ("06:00-08:00") and this reads
+ * it the way the Engine does (shared `conversation-presence.ts`); an end at or before the start
+ * crosses midnight. A bare "06:00" is the older timeline form and has no end of its own.
+ */
+function blockMinutes(time: string): { start: number; end: number | null } | null {
+  const [startText, endText] = time.split("-");
+  const start = clockMinutes(startText);
+  if (start === null) return null;
+  if (endText === undefined) return { start, end: null };
+  const end = clockMinutes(endText);
+  return end === null ? null : { start, end };
+}
+
+type SchedulePresence = "online" | "idle" | "dnd" | "offline";
+const SCHEDULE_PRESENCES: ReadonlySet<unknown> = new Set(["online", "idle", "dnd", "offline"]);
+type ScheduleSegment = { start: number; end: number; activity: string; presence: SchedulePresence | null };
+
+/**
+ * The Creator's day from yesterday to tomorrow as back-to-back segments, in minutes from today's
+ * midnight, read the way the Engine reads a Conversation Schedule (`getAdjacentScheduleBlocks`): a
+ * range covers its own hours, one that crosses midnight belongs to the day it starts on, the
+ * later-starting block wins an overlap, and time no block covers is free time, online (#1436).
+ *
+ * A bare time runs until the next block of its day starts, and the day's last one wraps round to
+ * its first, as the timeline form always did. A day with no readable block is unknown, not free,
+ * so nothing is promised about it.
+ */
+function scheduleSegments(days: readonly (readonly ScheduleBlock[] | undefined)[]): ScheduleSegment[] {
+  const blocks: ScheduleSegment[] = [];
+  const knownDays: number[] = [];
+  days.forEach((day, index) => {
+    const offset = (index - 1) * 1440;
+    const parsed = (day ?? [])
+      .flatMap((block) => {
+        const range = typeof block.time === "string" ? blockMinutes(block.time) : null;
+        const activity = typeof block.activity === "string" ? block.activity.trim() : "";
+        const presence = SCHEDULE_PRESENCES.has(block.status) ? (block.status as SchedulePresence) : null;
+        return range && activity ? [{ ...range, activity, presence }] : [];
+      })
+      .sort((left, right) => left.start - right.start);
+    if (parsed.length === 0) return;
+    knownDays.push(offset);
+    for (const [position, block] of parsed.entries()) {
+      const segment = { activity: block.activity, presence: block.presence, start: offset + block.start };
+      const next = parsed[position + 1];
+      if (block.end !== null) {
+        blocks.push({ ...segment, end: offset + block.end + (block.end <= block.start ? 1440 : 0) });
+      } else if (next) {
+        blocks.push({ ...segment, end: offset + next.start });
+      } else {
+        blocks.push({ ...segment, end: offset + 1440 });
+        blocks.push({ ...segment, start: offset, end: offset + parsed[0]!.start });
+      }
+    }
+  });
+  const ordered = blocks.filter((block) => block.end > block.start).sort((left, right) => left.start - right.start);
+  const edges = [
+    ...new Set([
+      ...ordered.flatMap((block) => [block.start, block.end]),
+      ...knownDays.flatMap((day) => [day, day + 1440]),
+    ]),
+  ].sort((left, right) => left - right);
+  const segments: ScheduleSegment[] = [];
+  for (const [position, start] of edges.entries()) {
+    const end = edges[position + 1];
+    if (end === undefined) break;
+    let owner: ScheduleSegment | null = null;
+    for (const block of ordered) if (block.start <= start && start < block.end) owner = block;
+    const piece =
+      owner ??
+      (knownDays.some((day) => day <= start && start < day + 1440)
+        ? { activity: "free time", presence: "online" as const }
+        : null);
+    if (!piece) continue;
+    const last = segments.at(-1);
+    if (last && last.end === start && last.activity === piece.activity && last.presence === piece.presence)
+      last.end = end;
+    else segments.push({ start, end, activity: piece.activity, presence: piece.presence });
+  }
+  return segments;
+}
+
+const segmentAt = (segments: readonly ScheduleSegment[], localNow: Date): number => {
+  const minutes = localNow.getHours() * 60 + localNow.getMinutes();
+  return segments.findIndex((segment) => segment.start <= minutes && minutes < segment.end);
 };
 
 /**
@@ -244,54 +345,57 @@ const minutesOfDay = (time: string): number | null => {
 export const SLURP_NO_POST_ACTIVITIES = ["sleep", "asleep", "sleeping", "bed", "driving"] as const;
 
 /**
- * Where the day stands at `localNow`: the block running now and the one before it. A block runs
- * until the next one starts; before the first block, yesterday's last one is still running. Used
- * for the post brief's day plan, from a schedule or from a routine extracted from the card.
+ * Where the day stands at `localNow`: the block running now and the one before it, from the same
+ * segments availability reads, so a gap between ranges is free time here too. Used for the post
+ * brief's day plan, from a schedule or from a routine extracted from the card. Without `around`,
+ * the day repeats, as a routine does.
  *
  * A post due while they sleep or drive was written just before: the moment steps back to the last
  * block they could post from, and `queued` says so.
  */
 export function slurpTimelineMoment(
-  blocks: readonly { time: string; activity: string }[],
+  blocks: readonly ScheduleBlock[],
   localNow: Date,
+  around: { yesterday?: readonly ScheduleBlock[]; tomorrow?: readonly ScheduleBlock[] } = {
+    yesterday: blocks,
+    tomorrow: blocks,
+  },
 ): { current: string; previous: string | null; queued: boolean } | null {
-  const timeline = blocks
-    .map((block) => ({ at: minutesOfDay(block.time), activity: block.activity.trim() }))
-    .filter((block): block is { at: number; activity: string } => block.at !== null && Boolean(block.activity))
-    .sort((left, right) => left.at - right.at);
-  if (timeline.length === 0) return null;
-  const nowMinutes = localNow.getHours() * 60 + localNow.getMinutes();
-  let index = -1;
-  for (const [position, block] of timeline.entries()) if (block.at <= nowMinutes) index = position;
-  if (index === -1) index = timeline.length - 1;
-  const at = (position: number) => timeline[(position + timeline.length) % timeline.length]!.activity;
-  const noPost = (activity: string) =>
-    SLURP_NO_POST_ACTIVITIES.some((needle) => activity.toLowerCase().includes(needle));
-  let steps = 0;
-  while (noPost(at(index - steps)) && steps < timeline.length - 1) steps += 1;
-  const current = at(index - steps);
+  const segments = scheduleSegments([around.yesterday, blocks, around.tomorrow]);
+  const now = segmentAt(segments, localNow);
+  if (now === -1) return null;
+  const noPost = (segment: ScheduleSegment) =>
+    SLURP_NO_POST_ACTIVITIES.some((needle) => segment.activity.toLowerCase().includes(needle));
+  const follows = (index: number) => index > 0 && segments[index - 1]!.end === segments[index]!.start;
+  let index = now;
+  while (noPost(segments[index]!) && follows(index)) index -= 1;
+  const current = segments[index]!.activity;
   // A day of nothing but sleep has no block to step back to; say nothing rather than "asleep".
-  if (noPost(current)) return null;
-  const previous = timeline.length > 1 ? at(index - steps - 1) : null;
-  return { current, previous: previous === current ? null : previous, queued: steps > 0 };
+  if (noPost(segments[index]!)) return null;
+  const previous = follows(index) ? segments[index - 1]!.activity : null;
+  return { current, previous: previous === current ? null : previous, queued: index !== now };
 }
 
-/** Today's schedule blocks for a character-backed Creator, or null when there is no usable schedule. */
+/**
+ * Today's schedule blocks for a character-backed Creator, with yesterday's and tomorrow's for a
+ * range that crosses midnight, or null when there is no usable schedule today. A day without blocks
+ * still counts while yesterday's night block runs into it.
+ */
 export async function resolveSlurpCreatorScheduleBlocks(
   characters: { getById(id: string): Promise<ScheduleCharacter> },
   source: CreatorSource,
   now: Date = new Date(),
   timeZone?: string,
-): Promise<{ blocks: { time: string; activity: string }[]; localNow: Date } | null> {
+): Promise<{ blocks: ScheduleBlock[]; yesterday: ScheduleBlock[]; tomorrow: ScheduleBlock[]; localNow: Date } | null> {
   if (source.kind !== "character") return null;
   const character = await characters.getById(source.entityId);
   if (!scheduleEnabled(character)) return null;
   const schedule = parseSlurpWeekSchedule(record(record(character?.data).extensions).conversationSchedule);
   if (!schedule || schedule.enabled === false) return null;
   const localNow = zonedDate(now, timeZone);
-  const days = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
-  const today = schedule.days[days[(localNow.getDay() + 6) % 7]!];
-  return today?.length ? { blocks: today, localNow } : null;
+  const [yesterday, today, tomorrow] = scheduleDaysAround(schedule, localNow);
+  if (!today?.length && segmentAt(scheduleSegments([yesterday, today, tomorrow]), localNow) === -1) return null;
+  return { blocks: today ?? [], yesterday: yesterday ?? [], tomorrow: tomorrow ?? [], localNow };
 }
 
 /**
@@ -299,8 +403,10 @@ export async function resolveSlurpCreatorScheduleBlocks(
  * context is built from. One parser, so the text a creator says about their day and the delay
  * before they answer can never disagree.
  *
- * A block is treated as running until the next block starts, which is how the Engine schedule
- * reads: the entries are a timeline, not a set of appointments with end times.
+ * A block's Engine status decides (#1436): offline and dnd are away, online and idle answer. Only a
+ * block without one falls back to its activity, matched against `awayActivities`. Free time between
+ * blocks is online, as in the Engine. The wait runs to the next reachable stretch the schedule
+ * knows about, and is `null` when none is known.
  */
 export function slurpCreatorAvailability(
   schedule: WeekSchedule | null,
@@ -308,34 +414,26 @@ export function slurpCreatorAvailability(
   awayActivities: readonly string[] = SLURP_AWAY_ACTIVITIES,
 ): SlurpCreatorAvailability | null {
   if (!schedule) return null;
-  const days = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
-  const today = schedule.days[days[(localNow.getDay() + 6) % 7]!];
-  if (!today?.length) return null;
-  const blocks = today
-    .map((block) => ({ at: minutesOfDay(block.time), activity: block.activity }))
-    .filter((block): block is { at: number; activity: string } => block.at !== null)
-    .sort((left, right) => left.at - right.at);
-  if (blocks.length === 0) return null;
-
+  const segments = scheduleSegments(scheduleDaysAround(schedule, localNow));
+  const index = segmentAt(segments, localNow);
+  if (index === -1) return null;
+  const away = (segment: ScheduleSegment) =>
+    segment.presence
+      ? segment.presence === "offline" || segment.presence === "dnd"
+      : awayActivities.some((needle) => segment.activity.toLowerCase().includes(needle));
+  const current = segments[index]!;
+  if (!away(current)) return { online: true, activity: current.activity, minutesUntilOnline: 0 };
   const nowMinutes = localNow.getHours() * 60 + localNow.getMinutes();
-  let current: { at: number; activity: string } | null = null;
-  for (const block of blocks) {
-    if (block.at <= nowMinutes) current = block;
-    else break;
+  let minutesUntilOnline: number | null = null;
+  for (let next = index + 1; next < segments.length; next += 1) {
+    // A day the schedule says nothing about ends the search: the wait is unknown, not free.
+    if (segments[next]!.start !== segments[next - 1]!.end) break;
+    if (!away(segments[next]!)) {
+      minutesUntilOnline = segments[next]!.start - nowMinutes;
+      break;
+    }
   }
-  // Before the first block of the day, the previous day's last activity is still running. Sleep
-  // is the overwhelmingly common case there, so treat the pre-dawn gap as away rather than free.
-  const activity = current?.activity ?? blocks[blocks.length - 1]!.activity;
-  const away = awayActivities.some((needle) => activity.toLowerCase().includes(needle));
-  if (!away) return { online: true, activity, minutesUntilOnline: 0 };
-  const next = blocks.find(
-    (block) => block.at > nowMinutes && !awayActivities.some((needle) => block.activity.toLowerCase().includes(needle)),
-  );
-  return {
-    online: false,
-    activity,
-    minutesUntilOnline: next ? next.at - nowMinutes : null,
-  };
+  return { online: false, activity: current.activity, minutesUntilOnline };
 }
 
 /** The availability for one creator, read from the Engine character the profile points at. */

@@ -81,10 +81,10 @@ const ltmGlobalSettingsShape = z
     longTermMemoryScoreThreshold: z.number().finite().min(0).max(1).optional(),
     longTermMemoryRecallContextMessages: z.number().int().min(1).max(20).optional(),
     longTermMemoryRecallStyle: z.enum(["balanced", "exact", "broad", "story", "custom"]).optional(),
-    longTermMemorySemanticWeight: z.number().finite().min(0).max(1).nullable().optional(),
-    longTermMemoryLexicalWeight: z.number().finite().min(0).max(1).nullable().optional(),
-    longTermMemoryGraphWeight: z.number().finite().min(0).max(1).nullable().optional(),
-    longTermMemoryKeywordWeight: z.number().finite().min(0).max(1).nullable().optional(),
+    longTermMemorySemanticWeight: z.number().finite().min(0).max(1).optional(),
+    longTermMemoryLexicalWeight: z.number().finite().min(0).max(1).optional(),
+    longTermMemoryGraphWeight: z.number().finite().min(0).max(1).optional(),
+    longTermMemoryKeywordWeight: z.number().finite().min(0).max(1).optional(),
     longTermMemoryStopWords: z.array(z.string().trim().min(1).max(80)).max(200).optional(),
     longTermMemoryStopWordsFilterGenerated: z.boolean().optional(),
     longTermMemoryIncludeResolved: z.boolean().optional(),
@@ -105,6 +105,14 @@ export const ltmGlobalSettingsSchema = z.preprocess((value) => {
   for (const key of Object.keys(normalized)) {
     if (LTM_GLOBAL_LEGACY_KEYS.test(key)) delete normalized[key];
   }
+  for (const key of [
+    "longTermMemorySemanticWeight",
+    "longTermMemoryLexicalWeight",
+    "longTermMemoryGraphWeight",
+    "longTermMemoryKeywordWeight",
+  ]) {
+    if (normalized[key] == null) delete normalized[key];
+  }
   if ("longTermMemoryRecallStyle" in normalized) {
     normalized.longTermMemoryRecallStyle =
       input.longTermMemoryRecallStyle === "exact" ||
@@ -114,6 +122,7 @@ export const ltmGlobalSettingsSchema = z.preprocess((value) => {
       input.longTermMemoryRecallStyle === "balanced"
         ? input.longTermMemoryRecallStyle
         : undefined;
+    if (normalized.longTermMemoryRecallStyle === undefined) delete normalized.longTermMemoryRecallStyle;
   }
   return normalized;
 }, ltmGlobalSettingsShape);
@@ -144,8 +153,8 @@ export const DEFAULT_LTM_GLOBAL_SETTINGS = ltmResolvedGlobalSettingsSchema.parse
   version: 1,
   enableLongTermMemory: true,
   longTermMemoryBudgetTokens: 4096,
-  longTermMemoryMaxChunks: 20,
-  longTermMemoryScoreThreshold: 0,
+  longTermMemoryMaxChunks: 12,
+  longTermMemoryScoreThreshold: 0.35,
   longTermMemoryRecallContextMessages: 4,
   longTermMemoryRecallStyle: DEFAULT_LTM_RECALL_STYLE,
   longTermMemorySemanticWeight: DEFAULT_LTM_RECALL_STYLE_WEIGHTS.semanticWeight,
@@ -1348,6 +1357,8 @@ export const ltmRetentionConfigSchema = z
   .object({
     version: z.literal(1).default(1),
     auditWindowDays: z.number().int().min(1).max(3_650).default(30),
+    // No cleanup uses it since per-memory usage counters were dropped, so it isn't checked against
+    // auditWindowDays. Kept so older settings files and backups still parse.
     usageRetentionDays: z.number().int().min(1).max(3_650).default(180),
     receiptRetentionDays: z.number().int().min(1).max(3_650).default(180),
     eventRetentionDays: z.number().int().min(1).max(3_650).default(180),
@@ -1357,7 +1368,6 @@ export const ltmRetentionConfigSchema = z
   .strict()
   .superRefine((value, ctx) => {
     for (const key of [
-      "usageRetentionDays",
       "receiptRetentionDays",
       "eventRetentionDays",
       "incompleteGenerationRetentionDays",
@@ -1402,6 +1412,11 @@ export const ltmEmbeddingIndexEntrySchema = z
   .object({
     chunkId: z.string().min(1).max(240),
     sourceHash: z.string().regex(/^[a-f0-9]{64}$/),
+    /** Hash of the embedded text. A rebuild reuses the vector of a chunk whose text hash is unchanged. */
+    textHash: z
+      .string()
+      .regex(/^[a-f0-9]{64}$/)
+      .optional(),
     vector: z.array(z.number().finite()).min(1).optional(),
   })
   .strict();
@@ -1639,6 +1654,10 @@ export const ltmStatusResponseSchema = z
         chunkFormatVersion: z.number().int().min(1).nullable(),
         embeddingsAvailable: z.boolean(),
         embeddedChunkCount: z.number().int().min(0),
+        /** Label of the source recall would embed with now; null when none resolves. */
+        embeddingSource: z.string().min(1).max(240).nullable(),
+        /** Label of the source the stored vectors came from; null when the index has none. */
+        indexedEmbeddingSource: z.string().min(1).max(240).nullable(),
       })
       .strict(),
   })

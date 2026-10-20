@@ -13,6 +13,7 @@ import { logger } from "../../../lib/logger.js";
 import type { SlpAccount } from "../../../../../shared/src/slp/slp-social.types.js";
 import type { SlpCreatorGenerationRequest } from "../../../../../shared/src/slp/slp-social-generation.schema.js";
 import { slurpOnlyIntent, slurpPostAxes, slurpReuseDelivery } from "../../modules/feed/slp-content-axes.js";
+import { createSlurpStorage } from "../../data/slp-storage.js";
 import type { SlurpCreatorStrategy } from "../../modules/creators/slp-creator-strategy.js";
 import { findReusableSlurpShoot } from "../../data/feed/slp-shoot-storage.js";
 import {
@@ -22,7 +23,8 @@ import {
   findSlurpOpportunityBySlot,
   planSlurpOpportunity,
 } from "../../data/feed/slp-opportunity-storage.js";
-import { planSlurpBeat, readSlurpCanonAnchorState, type SlurpBeatContext } from "./slp-post-beat-service.js";
+import { planSlurpBeat, type SlurpBeatContext } from "./slp-post-beat-service.js";
+import { readSlurpCanonAnchorState } from "../../data/creators/slp-canon-anchor-storage.js";
 import { slurpSharedIdeasFor } from "./slp-shared-preseed-service.js";
 import { slurpBeatIntents } from "../../modules/feed/slp-post-beat.js";
 import { topSlurpDemandTrend } from "../../data/feed/slp-demand-storage.js";
@@ -230,9 +232,16 @@ export async function planSlurpPost(
           return null;
         })
       : null;
+  // The player's picture reuse setting limits automatic reuse only; a delivery they picked still reuses.
+  const pictureReuse = reuse ? (await createSlurpStorage(db).getSettings()).pictureReuse : "regular";
   const reusedAxesDrawn =
     // A campaign teaser shows its set whenever a preview can be cut; that is what the stage is for.
-    requestedAxes && reuse && stage?.kind === "teaser" && reuse.preview && requestedAxes.delivery === "new_capture"
+    requestedAxes &&
+    reuse &&
+    pictureReuse !== "off" &&
+    stage?.kind === "teaser" &&
+    reuse.preview &&
+    requestedAxes.delivery === "new_capture"
       ? { ...requestedAxes, delivery: "cropped_preview" as const }
       : requestedAxes && reuse && requestedAxes.delivery === "new_capture"
         ? slurpReuseDelivery(
@@ -240,6 +249,7 @@ export async function planSlurpPost(
             { shoot: Boolean(reuse.shoot), archive: Boolean(reuse.archive), preview: Boolean(reuse.preview) },
             account.id,
             sequence,
+            pictureReuse,
           )
         : requestedAxes;
   const reusedAxes =

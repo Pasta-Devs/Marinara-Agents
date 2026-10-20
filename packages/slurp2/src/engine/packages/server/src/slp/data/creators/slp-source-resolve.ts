@@ -11,6 +11,7 @@ import type { DB } from "../../../db/connection.js";
 import { createCharactersStorage } from "../../../services/storage/characters.storage.js";
 import { parseRecord } from "../../modules/creators/slp-public-support.js";
 import { slpCreatorCharacterCanonText } from "../../base/prompting/slp-prompt-safety.js";
+import { slpCardImageAppearance } from "../../modules/creators/slp-appearance-profile.js";
 import {
   slurpAudienceCharacterVoice,
   slurpCharacterIdFromFanEntityId,
@@ -47,12 +48,14 @@ export async function resolveCreatorCharacterCanon(
   db: DB,
   publicAccount: Pick<SlpAccount, "kind" | "entityId"> | null,
   disclosureMode: SlpIdentityDisclosure,
+  /** `SLP_CANON_READING_SCALE` for the cached card reading; a prompt keeps the default. */
+  scale = 1,
 ): Promise<string> {
   if (!publicAccount) return "";
   const characters = createCharactersStorage(db);
   if (publicAccount.kind === "character") {
     const source = await characters.getById(publicAccount.entityId);
-    return source ? slpCreatorCharacterCanonText(source.data, disclosureMode === "open") : "";
+    return source ? slpCreatorCharacterCanonText(source.data, disclosureMode === "open", scale) : "";
   }
   if (publicAccount.kind === "persona") {
     const source = await characters.getPersona(publicAccount.entityId);
@@ -67,6 +70,7 @@ export async function resolveCreatorCharacterCanon(
             backstory: source.backstory,
           },
           disclosureMode === "open",
+          scale,
         )
       : "";
   }
@@ -109,6 +113,23 @@ export async function resolveCreatorSourceSnapshot(
     };
   }
   return null;
+}
+
+/** The linked card's image tags, kept out of the source snapshot so they never count as a card change. */
+export async function resolveCreatorImageAppearance(
+  db: DB,
+  publicAccount: Pick<SlpAccount, "kind" | "entityId">,
+): Promise<string> {
+  const characters = createCharactersStorage(db);
+  if (publicAccount.kind === "character") {
+    const source = await characters.getById(publicAccount.entityId);
+    return source ? slpCardImageAppearance(parseRecord(parseRecord(source.data).extensions)) : "";
+  }
+  if (publicAccount.kind === "persona") {
+    const source = await characters.getPersona(publicAccount.entityId);
+    return source ? slpCardImageAppearance(source) : "";
+  }
+  return "";
 }
 
 /**

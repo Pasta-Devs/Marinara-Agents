@@ -13,26 +13,33 @@ const evaluate = (code: string, scope: Record<string, unknown>) =>
 async function main() {
   // A 600-character idea and long brand/collab copy cannot truncate disclosure or partner instructions.
   const assist = source("server/src/slp/features/assist/slp-assist-service.ts");
-  let prompt: { context: string; note: string } | undefined;
+  let guide = "";
   const draft = evaluate(`${assist.slice(assist.indexOf("export async function draftSlpPost"))}\ndraftSlpPost;`, {
     readSlurpCreatorTiesDocument: async () => ({
       deals: [{ id: "deal", creatorId: "page", brand: "Brand", product: "Product", copy: "x".repeat(600) }],
       ties: { collabs: [{ id: "collab", hostId: "page", partnerId: "partner", idea: "y".repeat(600) }] },
     }),
-    createSlurpStorage: () => ({ getNoodlerAccountById: async () => ({ handle: "partner" }) }),
-    runSlpAssistText: async (_db: unknown, input: typeof prompt) => {
-      prompt = input;
-      return { ok: true, value: { text: "caption" } };
+    createSlurpStorage: () => ({
+      getNoodlerAccountById: async () => ({ id: "page", handle: "partner" }),
+      getSettings: async () => ({ modelBudget: {}, generationConnectionId: "c" }),
+    }),
+    createConnectionsStorage: () => ({}),
+    resolveSlurpTextConnection: async () => ({}),
+    generateCreatorPost: async (_db: unknown, input: { request: { noodlerPostGuide: string } }) => {
+      guide = input.request.noodlerPostGuide;
+      return { title: "Title", content: "caption", imagePrompt: null };
     },
-    SLP_ASSIST_NOTE_MAX: 400,
+    // A tight limit, so the wish and what rides along compete for it.
+    SLP_CREATOR_POST_GUIDE_MAX_LENGTH: 1700,
+    logger: { warn: () => undefined },
     fail: () => {
       throw new Error("Unexpected refusal");
     },
   }) as (db: object, input: object) => Promise<unknown>;
   await draft({}, { accountId: "page", dealId: "deal", collabId: "collab", idea: "z".repeat(600), picture: false });
-  assert.match(prompt!.context, /mark it #ad/u);
-  assert.match(prompt!.context, /@partner.*Tag them/u);
-  assert.equal(prompt!.note.length, 400);
+  assert.match(guide, /mark it #ad/u);
+  assert.match(guide, /@partner.*Tag them/u);
+  assert.ok(guide.length <= 1700 && guide.startsWith("z") && !guide.includes("z".repeat(600)), "the wish gives way");
 
   // Discarding a sponsored draft must not settle the old deal on the next unrelated post.
   const composer = source("client/src/slp/app/screens/SlpScreenComposer.tsx");
@@ -44,6 +51,7 @@ async function main() {
       drafting: false,
       setComposeGuide: () => undefined,
       guideDealId,
+      guideIdeaId: { current: null },
       onDiscardDraft: () => undefined,
       resetLocal: () => undefined,
       onClose: () => undefined,

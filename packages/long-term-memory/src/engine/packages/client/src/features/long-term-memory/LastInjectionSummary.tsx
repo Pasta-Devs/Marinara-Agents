@@ -9,6 +9,9 @@ export function LastInjectionSummary({
   onOpenMemory,
   onRetry,
   compact = false,
+  // D27 uses initial-load state for the title, so a retry needs its own in-flight
+  // guard: without it, a cached-data refetch could be restarted by repeated clicks.
+  retryPending = false,
 }: {
   data?: LtmLastInjectionResponse;
   loading?: boolean;
@@ -16,6 +19,7 @@ export function LastInjectionSummary({
   onOpenMemory?: (noteId: string) => void;
   onRetry?: () => void;
   compact?: boolean;
+  retryPending?: boolean;
 }) {
   const { t: localizeUi, locale } = useLtmTranslation();
   const observedAttempt = data?.attempt ?? null;
@@ -93,7 +97,12 @@ export function LastInjectionSummary({
           <StatusSurface tone="danger" compact={compact}>
             {localizeUi("ui.longTermMemory.lastinjectionsummary.theLastRecallCouldNotLoad")}
             {onRetry ? (
-              <button type="button" className="underline" onClick={onRetry} disabled={loading}>
+              <button
+                type="button"
+                className={`inline-flex items-center underline ${compact ? "min-h-6" : "min-h-11"}`}
+                onClick={onRetry}
+                disabled={loading || retryPending}
+              >
                 {localizeUi("ui.longTermMemory.activityview.retry")}
               </button>
             ) : null}
@@ -114,7 +123,7 @@ export function LastInjectionSummary({
                   <button
                     type="button"
                     data-ltm-recalled-note={memory.noteId}
-                    className="min-w-0 truncate text-left text-[var(--primary)] underline underline-offset-2"
+                    className="inline-flex min-h-11 min-w-0 items-center truncate text-left text-[var(--primary)] underline underline-offset-2"
                     onClick={() => onOpenMemory(memory.noteId)}
                   >
                     {memory.title}

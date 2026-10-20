@@ -76,9 +76,10 @@ assert.match(coin, /data-slurp-coin-spent=/u, "a balance decrease must render sp
 assert.match(coin, /data-slurp-coin-earned=/u, "a balance increase must render earning feedback");
 assert.match(coin, /export function SlurpCoinBurst/u, "transaction controls must share one coin-trail effect");
 assert.match(coin, /if \(reduceMotion\) return null/u, "coin movement must respect reduced motion");
+// The balance in the shell is the one that watches; the Home screen no longer renders it.
 assert.match(
-  home,
-  /amount=\{coins\.toLocaleString\(\)\} watchAmount=\{coins\}/u,
+  shell,
+  /amount=\{coins \?\? "…"\} watchAmount=\{coins \?\? undefined\}/u,
   "the Wallet balance must animate spending and earning",
 );
 assert.match(home, /function SlurpAccessTransition/u, "locked and revealed post shapes need a persistent shell");
@@ -106,20 +107,20 @@ assert.match(
 );
 assert.match(
   home,
-  /const \{ moments, feed, searchResults, discoveredCreators, suggestedCreators \} = useMemo/u,
+  /discoveredCreators,\s*suggestedCreators,\s*\} = useMemo\(\s*\(\) =>\s*deriveSlurpHubView\(/u,
   "feed projections must stay cached across unrelated renders",
 );
 assert.match(mediaHook, /MEDIA_CACHE_RETENTION_MS = 2 \* 60_000/u, "recent media must stay warm for back-scrolling");
 const viewerQuery = hooks.slice(
-  hooks.indexOf("export function useNoodlerViewer"),
-  hooks.indexOf("export function useNoodlerUnseenCount"),
+  hooks.indexOf("export function useCreatorViewer"),
+  hooks.indexOf("export function useSlurpViewerFeedSlice"),
 );
 assert.match(viewerQuery, /queryFn: async \(\{ signal \}\)/u, "feed requests must support cancellation");
 assert.match(viewerQuery, /staleTime: 30_000[\s\S]*?gcTime: 10 \* 60_000/u, "feed data must survive quick remounts");
 assert.doesNotMatch(viewerQuery, /refetchOnMount: "always"/u, "fresh cached feeds must not refetch on every mount");
 assert.match(
   hooks,
-  /useUnlockNoodlerPost[\s\S]*?viewer-wallets/u,
+  /useUnlockCreatorPost[\s\S]*?viewer-wallets/u,
   "unlocking must refresh the shared wallet balance that drives transaction feedback",
 );
 
@@ -136,24 +137,29 @@ assert.match(wall, /LoadMoreFeedButton/u, "The media wall must keep paging throu
 assert.match(shell, /\{desktopSidebar \?\? \(/u, "The shell must be able to swap its desktop nav");
 assert.match(
   home,
-  /desktopSidebar=\{\s*<SlurpSettingsSidebar navigation=\{navigation\} onNavigate=\{onNavigate\} onExit=\{exitToCreatorHub\}/u,
+  /desktopSidebar=\{\s*<SlpBackstageSidebar navigation=\{navigation\} onNavigate=\{onNavigate\} onExit=\{exitToCreatorHub\}/u,
   "Settings must supply the desktop sidebar with a way out",
 );
 assert.match(home, /desktopSidebar/u, "The shell must own the desktop settings navigation");
 
-// Mobile uses one compact destination picker instead of the quick tabs, and search gets its own row.
-const row = settings.slice(
-  settings.indexOf("function SlurpSettingsSectionRow("),
-  settings.indexOf("function useSlurpBackstageController("),
+// Mobile keeps every destination in one row that scrolls sideways, and the active one is marked.
+const navigation = slurp2Source(
+  join(root, "packages/slurp2/src/engine/packages/client/src/slp/features/backstage/SlpBackstageNavigation.tsx"),
 );
-assert.match(row, /<select/u, "The active destination must be exposed as a native picker");
-assert.match(row, /<optgroup/u, "The picker must reach a page, not only its section");
-assert.match(row, /md:hidden/u, "The destination picker is mobile only");
-assert.match(settings, /<SlurpBackstageSubnav\s+className="hidden md:flex"/u, "Mobile must hide the quick tabs");
+assert.match(
+  navigation,
+  /aria-current=\{item === target \? "page" : undefined\}/u,
+  "The active destination must be exposed",
+);
+assert.match(navigation, /overflow-x-auto[\s\S]*?md:flex-wrap/u, "Mobile destinations must scroll in one row");
+// The section header's search must stay reachable on a phone: its row wraps, and the group that
+// holds the search takes the full row on mobile instead of disappearing (`max-md:hidden` used to
+// hide it entirely). The search keeps its desktop width (`sm:max-w-xs`, auto width).
+assert.match(settings, /className="max-w-none w-full sm:w-auto sm:max-w-xs"/u, "Mobile search must use a full row");
 assert.match(
   settings,
-  /className="max-w-none basis-full md:max-w-xl md:basis-auto"/u,
-  "Mobile search must use a full row",
+  /flex min-w-0 flex-1 flex-wrap items-center justify-end gap-3 basis-full sm:basis-auto/u,
+  "The group holding the search must take a full row on phones",
 );
 
 const card = slurp2Source(join(componentsDir, "SlurpCreatorProfileCard.tsx"));
@@ -161,10 +167,10 @@ const card = slurp2Source(join(componentsDir, "SlurpCreatorProfileCard.tsx"));
 // One creator card everywhere; only Discover opts into its horizontal layout and actions.
 assert.match(card, /layout = "grid"/u, "the shared card must preserve the grid default");
 assert.doesNotMatch(home, /variant="compact"/u, "No surface may fall back to the old row-shaped card");
-const suggestions = home.slice(
-  home.indexOf("function SlurpInlineSuggestedCreators("),
-  home.indexOf("type SlurpMoment ="),
-);
+// The component now lives in its own screen file, which the concatenated source reads after the
+// Moments type; so the slice ends at the function's closing brace instead of that type.
+const suggestionsStart = home.indexOf("function SlurpInlineSuggestedCreators(");
+const suggestions = home.slice(suggestionsStart, home.indexOf("\n}\n", suggestionsStart));
 assert.match(suggestions, /<SlurpCreatorProfileCard/u, "Inline suggestions must use the full creator card");
 
 // The strip belongs to the page, so the hide-on-scroll header cannot take it away.
@@ -173,12 +179,15 @@ const stickyHeader = home.slice(
   home.indexOf("<SlurpMomentsShelf"),
 );
 assert.doesNotMatch(stickyHeader, /SlurpMomentsShelf/u, "The moments strip must sit outside the sticky header");
-assert.match(stickyHeader, /h-11 w-11/u, "The mobile refresh control must keep a full touch target");
-assert.match(stickyHeader, /absolute start-1\/2[\s\S]*?-translate-x-1\/2/u, "The logo must stay geometrically centred");
-assert.match(stickyHeader, /<SlurpCoinAmount amount=\{walletCoins\}/u, "the sticky header shows the coin balance");
+// The refresh control was removed on purpose: the feed updates itself (SlpScreenHub, "No refresh").
+// Step 1 of the shell redesign traded the absolutely-centred logo for a left-aligned wordmark next
+// to the balance chip (40c582ffd); the brand mark still has to render in the header.
+assert.match(stickyHeader, /<SlpWordmark \/>/u, "The sticky header keeps the wordmark brand mark");
+assert.match(stickyHeader, /<SlpBalanceChip/u, "the sticky header shows the coin balance");
 
 // Shared subpage headers are real page headings and retain visible keyboard focus.
-const frame = home.slice(home.indexOf("function NoodlerFrame("), home.indexOf("function SlurpStudioView("));
+const frameStart = home.indexOf("export function SlpCreatorFrame(");
+const frame = home.slice(frameStart, home.indexOf("\n}\n", frameStart));
 assert.match(frame, /focus-visible:ring-2/u);
 assert.match(frame, /<h1 className="min-w-0 flex-1 truncate/u);
 assert.match(frame, /rtl:-scale-x-100/u);
@@ -193,10 +202,11 @@ for (const [name, source] of [
   ["settings", settings],
   ["home", home],
 ] as const) {
-  // An image-derived stage background (the `object-cover opacity-25 blur-*` pattern shared with
-  // PostImageCropEditor) is a media surface, not a decorative panel glow. Only the latter is banned.
-  const decorativeGlow = source.replace(/scale-110 object-cover opacity-25 blur-3xl/gu, "");
-  assert.doesNotMatch(decorativeGlow, /blur-3xl/u, `${name} panels must not carry one-off decorative glows`);
+  // An image-derived stage background (a `scale-110 … blur-{2xl,3xl}` wrapper around a blurred
+  // copy of the post image, shared with PostImageCropEditor and the Moments viewer) is a media
+  // surface, not a decorative panel glow. Only the latter is banned.
+  const decorativeGlow = source.replace(/scale-110[^"]*blur-(?:2xl|3xl)/gu, "");
+  assert.doesNotMatch(decorativeGlow, /blur-(?:2xl|3xl)/u, `${name} panels must not carry one-off decorative glows`);
 }
 
 // Creator studio was a second door into Settings.
@@ -221,7 +231,7 @@ assert.doesNotMatch(
 assert.match(home, /onOpenPost=\{setOpenPostId\}/u, "Wall tiles must open the post dialog");
 assert.match(
   home,
-  /side=\{<SlurpCreatorPostCard post=\{\{ \.\.\.post, imageUrl: null, imagePrompt: null \}\}/u,
+  /side=\{<SlpPostCard post=\{post\} ctx=\{ctx\} surface="dialog" hideImage \/>\}/u,
   "The dialog must not draw the image or its prompt twice",
 );
 assert.match(home, /function SlurpMomentViewer\(/u);
@@ -230,7 +240,7 @@ assert.match(moment, /<SlurpMediaDialog/u, "Stories must use the same dialog sha
 
 // Settings owns the way out, loudly, under the app mark the shell keeps.
 assert.match(settings, /bg-\[var\(--noodle-accent\)\]\/15[\s\S]*?ui\.slurp\.settings\.exit/u);
-assert.match(shell, /<NoodleLogo[\s\S]*?\{desktopSidebar \?\? \(/u, "The mark must survive the sidebar swap");
+assert.match(shell, /<SlpLogo[\s\S]*?\{desktopSidebar \?\? \(/u, "The mark must survive the sidebar swap");
 
 const postCard = slurp2Source(join(componentsDir, "SlurpCreatorPostCard.tsx"));
 const imageFrame = slurp2Source(join(componentsDir, "PostImageCropEditor.tsx"));
@@ -270,7 +280,7 @@ assert.match(
 );
 
 // Banners are environmental covers. They must not receive character avatar references or context.
-assert.match(artwork, /suppressCharacterContext: input\.kind === "banner"/u);
+// The banner decision is taken once, from the operation's `kind` argument.
 assert.match(artwork, /suppressCharacterContext: kind === "banner"/u);
 assert.match(
   images,
@@ -279,12 +289,14 @@ assert.match(
 );
 assert.match(
   images,
-  /if \(!input\.suppressCharacterContext && sourceAppearance && input\.settings\.imageGenerationIncludeDescriptions\)/u,
+  /if \(includeAppearance && !stageAppearance && !input\.suppressCharacterContext && sourceAppearance\)/u,
   "Banner suppression must also prevent appearance text",
 );
 
 // Home order: header, then stories, then the tabs sitting on top of the posts.
-const homeFeed = home.slice(home.indexOf('data-component="SlurpHome.StickyHeader"'), home.indexOf("SlurpFeedSkeleton"));
+// The feed skeleton is defined earlier in the concatenated source, so the slice ends at the next export.
+const homeFeedStart = home.indexOf('data-component="SlurpHome.StickyHeader"');
+const homeFeed = home.slice(homeFeedStart, home.indexOf("\nexport ", homeFeedStart));
 assert.ok(
   homeFeed.indexOf("<SlurpMomentsShelf") < homeFeed.indexOf("data-slurp-home-masthead"),
   "Stories must sit above the feed tabs",
@@ -297,7 +309,7 @@ assert.ok(
 // Posts hold still, carry their three actions, and hand image clicks to the dialog.
 assert.doesNotMatch(postCard, /hover:-translate-y/u, "Posts must not move under the pointer");
 assert.match(postCard, /MoreHorizontal/u, "Creator posts must have the shared action menu");
-assert.match(postCard, /Share as image/u, "Creator posts must expose share as image");
+assert.match(postCard, /ui\.slurp\.post\.saveImage/u, "Creator posts must expose save as image");
 assert.match(postCard, /if \(ctx\.openPost\) ctx\.openPost\(post\.id\);/u, "Post images open the post dialog");
 
 // Portrait images get their own shape instead of a stamp in a 4:3 box.

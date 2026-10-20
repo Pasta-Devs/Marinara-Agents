@@ -103,7 +103,13 @@ assert.match(hostSource, /document\.addEventListener\("click", reveal, true\)/u,
 assert.match(hostSource, /media\.setAttribute\("data-slp-revealed", ""\)/u);
 assert.match(
   slurp2Source("packages/slurp2/src/engine/packages/client/src/slp/slp-client-entry.tsx"),
-  /\[data-slp-blur\][^{]*:is\(img, video\):not\(\[data-slp-revealed\]\)/u,
+  /\[data-slp-blur\][^{]*:is\(img:not\(\[src\^="data:image\/svg"\]\), video\):not\(\[data-slp-revealed\]\)/u,
+  "inline SVG art (coin, G) stays sharp (#61)",
+);
+assert.match(
+  hostSource,
+  /const picture = 'img:not\(\[src\^="data:image\/svg"\]\)';/u,
+  "a tap on the coin is not a reveal",
 );
 
 // --- A tap on a post picture -------------------------------------------------------------------------

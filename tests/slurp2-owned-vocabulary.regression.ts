@@ -23,6 +23,17 @@ const ALLOWED_ENGINE_IMPORTS = new Set([
   "avatarCropSchema",
   "isOpenAIGpt56Model",
   "normalizeAvatarCrop",
+  // Generic Engine host contracts added after Slice 12: scene origin (the Engine scene API that
+  // Slurp DM scenes plug into), capability integrations, chat and image types, macro resolution.
+  "CapabilityIntegrationHost",
+  "CapabilityIntegrationProvider",
+  "ChatMessage",
+  "ImageGenResult",
+  "StagedGalleryImage",
+  "inferImageSource",
+  "resolveMacros",
+  "SceneOriginEnd",
+  "SceneOriginProvider",
 ]);
 
 // Every Engine name Slice 12 reclassified as Slurp2-owned, mapped to the name that replaced it.

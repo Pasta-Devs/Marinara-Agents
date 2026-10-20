@@ -20,6 +20,8 @@ import {
 import {
   checkSlurpBeatClaims,
   normalizeSlurpCanonAnchors,
+  slurpCanonAnchorsPrompt,
+  slurpPageAboutText,
   parseSlurpBeatClaims,
   slurpPostBriefSection,
   slurpBeatFactFromPost,
@@ -28,6 +30,7 @@ import {
   slurpPostVariation,
   slurpPostVariationInstruction,
 } from "../packages/slurp2/src/engine/packages/server/src/slp/modules/feed/slp-post-variation.ts";
+import { slurp2Source } from "./slurp2-source.ts";
 import { slurpPostAxes } from "../packages/slurp2/src/engine/packages/server/src/slp/modules/feed/slp-content-axes.ts";
 
 // The beats planner picks what happens in an ordinary post from the Creator's own card, so the model
@@ -204,7 +207,7 @@ assert.match(
     metadata: { slurpBeat: { type: "showcase", line: "You show the finished cape", anchor: "cape" } },
   };
   const fact = slurpBeatFactFromPost(post);
-  assert.equal(fact?.text, "Posted about: You show the finished cape");
+  assert.equal(fact?.text, "Already posted about this earlier in the week: You show the finished cape");
   assert.equal(fact?.audienceScope, "creator_private", "a locked post's moment stays with the Creator");
   assert.equal(fact?.expiresAt.toISOString(), "2026-10-02T10:00:00.000Z");
   assert.equal(slurpBeatFactFromPost({ ...post, metadata: {} }), null);
@@ -426,6 +429,33 @@ assert.match(
     if (slurpPlannedExplicitLevel("explicit", 2, "creator-z", sequence) === "suggestive") suggestive += 1;
   }
   assert.ok(suggestive > 0, "a suggestive card can still be planned at suggestive");
+}
+
+// The bio and stage voice steer what the planner plans (a hobby that lives only in the bio).
+{
+  const about = slurpPageAboutText("Cosplayer and prop maker", "Chatty, loves a costume reveal");
+  assert.match(slurpCanonAnchorsPrompt(`Card text${about}`).user, /Bio: Cosplayer and prop maker/u);
+  assert.match(about, /Stage voice: Chatty, loves a costume reveal/u);
+  assert.notEqual(`Card${slurpPageAboutText("Cosplayer", "")}`, `Card${slurpPageAboutText("Gardener", "")}`);
+  assert.equal(slurpPageAboutText("  ", ""), "", "an empty bio and voice leave the planner text as it was");
+  const root = "packages/slurp2/src/engine/packages/server/src/slp/";
+  const generation = slurp2Source(`${root}features/feed/slp-generation-service.ts`);
+  // Same identity protection as the post prompt, and the anchor cache is keyed by the same text.
+  const beatService = slurp2Source(`${root}features/feed/slp-post-beat-service.ts`);
+  assert.match(
+    beatService,
+    /slurpPageAboutText\(protect\(account\.bio\), protect\(account\.settings\.privacy\.stagePersonality\)\)/u,
+  );
+  assert.match(beatService, /mode !== "open" && !publicIdentity \? ""/u);
+  assert.match(beatService, /protectCreatorGeneratedIdentity\(value, mode, publicIdentity\)/u);
+  assert.match(slurp2Source(`${root}features/feed/slp-generation-service.ts`), /canonText: beatRun.planText,/u);
+  assert.match(
+    slurp2Source(`${root}features/feed/slp-canon-anchor-routes.ts`),
+    /card \+ slurpAccountPageAbout\(account, mode, identity\)/u,
+  );
+  const prompt = slurp2Source(`${root}features/feed/slp-post-prompt.ts`);
+  assert.match(prompt, /The bio and stage voice also say what this page is about/u);
+  assert.match(prompt, /A theme the bio, stage voice, or card names as what you do is not a repeat/u);
 }
 
 console.log("slurp2 post beats regression checks passed");

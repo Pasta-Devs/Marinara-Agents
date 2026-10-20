@@ -21,11 +21,8 @@ only on `zod` and `@marinara-engine/shared`, and holds no I/O, no React, and no 
 server may import it. A rule belongs here only when both sides already need it; a rule one side
 needs stays in that side's `base/` or `modules/`.
 
-Three named exceptions live outside the roots and are owned separately:
+Two named exceptions live outside the roots and are owned separately:
 
-- `packages/client/src/lib/api-client.ts` — a package-owned override of the Engine host file. The
-  Engine-generic `hooks/use-creator-personas.ts` imports it, so it cannot move. That hook stays
-  unowned and byte-identical to Engine.
 - `packages/server/src/services/garnish-ads/` — Garnish, a separate reusable ad module. Slurp uses
   it through the adapters in `features/ads/`; Garnish never imports Slurp.
 - `packages/server/src/db/schema/slurp.ts` — the Drizzle table schema. It is co-owned by the frozen
@@ -34,8 +31,12 @@ Three named exceptions live outside the roots and are owned separately:
 
 Every file under a root or exception must be in `slurp2OwnedSourcePaths` in
 `scripts/build-feature-packages.mjs`. Otherwise the builder captures it into `sources/engine` as
-generic Engine material. The final ownership list is exactly the three roots plus the three
+generic Engine material. The final ownership list is exactly the three roots plus the two
 exceptions.
+
+Slurp has no API client of its own. Its requests, and those of the Engine-generic
+`hooks/use-creator-personas.ts`, go through the Engine's client, which the feature build stacks over
+`packages/client/src/lib/api-client.ts` from `sources/host-client-overlay`.
 
 ## Client layers
 

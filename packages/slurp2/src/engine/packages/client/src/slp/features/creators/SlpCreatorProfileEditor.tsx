@@ -52,6 +52,7 @@ export function SlurpCreatorProfileEditor({
       appearance: creator.appearance,
       wardrobe: creator.wardrobe,
       locations: creator.locations,
+      clothingStyle: creator.clothingStyle ?? "auto",
       disclosureMode: creator.disclosureMode ?? "hinted",
       gender: creator.gender,
       tags: creator.tags,

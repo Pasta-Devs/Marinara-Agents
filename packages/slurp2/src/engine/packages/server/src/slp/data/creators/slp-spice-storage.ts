@@ -98,33 +98,27 @@ export async function updateSlurpSpice(
 
 /**
  * Learn a little from something the player did: an unlock, a like, a tip or a request. `metadata`
- * is a post's (what made it spicy, `slurpSpiceLabelsOf`), `text` a request or a paid picture,
- * `creatorId` a tip (what that Creator's spicy posts have been lately). Any other `signal` (a reply,
- * a vote) teaches nothing. Never costs the action itself.
+ * is a post's (what made it spicy, `slurpSpiceLabelsOf`), `text` a request or a paid picture. Any
+ * other `signal` (a reply, a vote) teaches nothing. Never costs the action itself.
+ *
+ * A tip on a profile or in a chat used to credit whatever the Creator's latest spicy post was. That
+ * guess fed itself: the next post leaned on it, drew the next tip, and pages drifted to toys and
+ * showers (#104). Only a signal on the post itself, or words the player wrote, teaches now.
  */
 export function recordSlurpTasteSignal(
   db: DB,
-  source: { metadata?: unknown; text?: string; creatorId?: string },
+  source: { metadata?: unknown; text?: string },
   signal: SlurpTasteSignal | (string & {}),
 ): void {
   if (!(signal in SLURP_TASTE_SIGNAL_WEIGHT)) return;
   const labels = slurpSpiceLabelsOf(source.metadata);
   const run = async () => {
-    const fromCreator = source.creatorId
-      ? ((await createSlurpStorage(db).listNoodlerPostsByAccount(source.creatorId, 8))
-          .map((post: { metadata?: unknown }) => slurpSpiceLabelsOf(post.metadata))
-          .find((labels: string[]) => labels.length) ?? [])
-      : [];
     await updateSlurpSpice(db, (state) => {
-      const all = [
-        ...labels,
-        ...fromCreator,
-        ...(source.text ? slurpTasteLabelsIn(source.text, state, SLP_TASTE_IDEAS) : []),
-      ];
+      const all = [...labels, ...(source.text ? slurpTasteLabelsIn(source.text, state, SLP_TASTE_IDEAS) : [])];
       return all.length ? slurpLearnTaste(state, all, signal as SlurpTasteSignal, new Date()) : state;
     });
   };
-  if (!labels.length && !source.text?.trim() && !source.creatorId) return;
+  if (!labels.length && !source.text?.trim()) return;
   void run().catch((error: unknown) => logger.warn(error, "[slurp] Could not learn from a taste signal"));
 }
 

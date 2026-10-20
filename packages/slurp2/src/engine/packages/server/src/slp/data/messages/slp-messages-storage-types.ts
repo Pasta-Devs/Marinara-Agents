@@ -78,7 +78,6 @@ export type SlurpCommission = {
   price: number;
   deliveryMessageId: string | null;
   deliverAt: string | null;
-  mediaPath: string | null;
   cancellationId: string | null;
   deliveryId: string | null;
   deliveryClaimToken: string | null;

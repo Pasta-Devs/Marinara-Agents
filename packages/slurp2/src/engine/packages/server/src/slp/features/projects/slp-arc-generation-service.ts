@@ -19,10 +19,7 @@ import { createLLMProvider } from "../../../services/llm/provider-registry.js";
 import { createConnectionsStorage } from "../../../services/storage/connections.storage.js";
 import { createSlurpStorage } from "../../data/slp-storage.js";
 import { resolveSlurpTextConnection } from "../../base/identity/slp-connection.js";
-import {
-  withConnectionAdmissionProvider,
-  type ConnectionAdmissionMode,
-} from "../../../services/generation/connection-admission.js";
+import { type ConnectionAdmissionMode } from "../../../services/generation/connection-admission.js";
 import { SLURP_MODIFIER_KINDS } from "../../modules/creators/slp-creator-state.js";
 import { modelAnswerForCorrection, requireModelAnswer } from "../../base/model/slp-model-answer.js";
 import { slpSamplingOptions } from "../../base/prompting/slp-sampling-options.js";
@@ -221,7 +218,8 @@ export async function generateSlurpArc(
       promptBlocks: slurpPromptContext(settings).blocks,
     });
     const fallbackConnection = await connections.getFallbackForMain();
-    const fallbackProvider = slpWithProviderRetry(
+    // The Engine admits the call (both legs of the fallback chain) on the arc's admission mode.
+    const provider = slpWithProviderRetry(
       withConnectionFallbackProvider({
         primary: createLLMProvider(
           connection.provider,
@@ -238,9 +236,9 @@ export async function generateSlurpArc(
         fallbackConnection,
         fallbackBaseUrl: fallbackConnection ? resolveBaseUrl(fallbackConnection) : "",
         category: "main",
+        admissionMode,
       }),
     );
-    const provider = withConnectionAdmissionProvider(fallbackProvider, connection.id, admissionMode);
     const options = {
       model: connection.model,
       maxTokens: clampGenerationMaxOutputTokens({

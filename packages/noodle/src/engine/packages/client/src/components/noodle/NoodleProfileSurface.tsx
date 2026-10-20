@@ -44,6 +44,8 @@ interface NoodleProfileSurfaceProps<TTab extends string = NoodleProfileTab> {
     onBioChange: (value: string) => void;
     location: string;
     onLocationChange: (value: string) => void;
+    /** Extra controls under the profile fields, such as card settings for a character account. */
+    footer?: ReactNode;
   };
   followAction?: { followed: boolean; pending: boolean; onToggle: () => void };
   leadingActions?: ReactNode;
@@ -254,6 +256,7 @@ export function NoodleProfileSurface<TTab extends string = NoodleProfileTab>({
                 placeholder={localizeUi("ui.noodle.noodleprofilesurface.somewhereCozy")}
               />
             </label>
+            {editor.footer}
           </div>
         ) : (
           <div className="mt-3">

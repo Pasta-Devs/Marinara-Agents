@@ -4,6 +4,7 @@ import {
   slpStageProfileUpdateSchema,
 } from "../../../../../shared/src/slp/slp-social.schema.js";
 import { slpContinuityRoutes } from "./slp-continuity-routes.js";
+import { readSlurpCarryoverReach } from "./slp-chat-context.js";
 import {
   slurpDiscoveryProfileSchema,
   SLURP_DISCOVERY_TAG_LIMIT,
@@ -25,6 +26,10 @@ import { slurpDisclosureMode, slpCreatorDisclosureReviewReasons } from "../../mo
 import { stageProfileContainsPublicIdentity, stageProfileContainsSourceDetails } from "../feed/slp-feed-contract.js";
 import { compareCreatorSourceSnapshots, minimizeCreatorSourceSnapshot } from "../../base/identity/slp-source.js";
 import { verifyCreatorSourceRevisionToken } from "../../base/identity/slp-source-revision.js";
+import {
+  stageProfilePublicIdentityLeak,
+  stageProfileSourceDetailLeak,
+} from "../../base/identity/slp-identity-protection.js";
 import type { FastifyInstance } from "fastify";
 import { slurpDiscoveryTagNameSchema } from "../../modules/requests/slp-request-schemas.js";
 import type { SlpRouteDeps } from "../viewer/slp-viewer-contract.js";
@@ -33,6 +38,8 @@ import { slpWardrobeRoutes } from "./slp-wardrobe-routes.js";
 import { resolveImageAppearance } from "../media/slp-media-contract.js";
 import { normalizeSlpCreatorPage } from "../../../../../shared/src/slp/slp-creator-page.js";
 import { composeSlpCreatorPage, protectSlpCreatorPage } from "./slp-creator-page-service.js";
+import { suggestSlpPageStyle } from "./slp-page-style-service.js";
+import { SlpStrategyConflictError } from "../../modules/creators/slp-creator-strategy.js";
 
 const slpStageProfileUpdateRequestSchema = slpStageProfileUpdateSchema.extend({
   ...slurpDiscoveryProfileSchema.shape,
@@ -47,6 +54,8 @@ export async function slpCreatorsRoutes(app: FastifyInstance, deps: SlpRouteDeps
   await slpContinuityRoutes(app);
   await slpWardrobeRoutes(app, deps);
   const { characters, connections, noodle, resolveNoodlerPublicIdentity, resolveViewerPersona } = deps;
+  // Settings → Carryover to chats: how many chats with a Creator have their own switch on.
+  app.get("/settings/carryover-reach", async () => readSlurpCarryoverReach(app.db));
   // One edit for many Creators, also used for a single Creator's quick edit. Capped so one request stays bounded.
   app.post("/slurp/accounts/bulk-update", async (req, reply) => {
     const tagList = z.array(slurpDiscoveryTagNameSchema).max(SLURP_DISCOVERY_TAG_LIMIT);
@@ -86,9 +95,23 @@ export async function slpCreatorsRoutes(app: FastifyInstance, deps: SlpRouteDeps
     }
     // The editor no longer shows the sign-up chat's spice lines; move them before a save drops them.
     if (parsed.data.subtree === "strategy") await moveSlurpStrategyLimits(app.db, account).catch(() => undefined);
-    const updated = await noodle.patchAccountSettings(id, parsed.data);
+    let updated;
+    try {
+      updated = await noodle.patchAccountSettings(id, parsed.data);
+    } catch (error) {
+      if (error instanceof SlpStrategyConflictError) return reply.code(409).send({ error: error.message });
+      throw error;
+    }
     if (!updated) return reply.code(404).send({ error: "Creator account not found" });
     return updated;
+  });
+
+  // "Suggest page style": one model call that proposes a strategy. Saves nothing.
+  app.post("/slurp/accounts/:id/strategy/suggest", async (req, reply) => {
+    const { id } = req.params as { id: string };
+    const result = await suggestSlpPageStyle(app.db, id);
+    if (!result.ok) return reply.code(result.status).send({ error: result.error });
+    return result.suggestion;
   });
 
   app.patch("/accounts/:id/profile", async (req, reply) => {
@@ -158,6 +181,7 @@ export async function slpCreatorsRoutes(app: FastifyInstance, deps: SlpRouteDeps
           connectionId: settings.generationConnectionId,
           mode: settings.appearanceProfileMode,
           regenerate: parsed.data.action === "regenerate",
+          foreground: true,
         });
       } catch (error) {
         return reply.code(422).send({ error: getErrorMessage(error) });
@@ -316,12 +340,12 @@ export async function slpCreatorsRoutes(app: FastifyInstance, deps: SlpRouteDeps
       const currentSourceSnapshot = publicAccount ? await resolveCreatorSourceSnapshot(app.db, publicAccount) : null;
       // The shared schema still accepts Secret; Slurp saves it as Hinted.
       parsed.data.disclosureMode = slurpDisclosureMode(parsed.data.disclosureMode);
-      if (
-        publicAccount &&
-        (stageProfileContainsPublicIdentity(parsed.data, await resolveNoodlerPublicIdentity(publicAccount)) ||
-          (currentSourceSnapshot && stageProfileContainsSourceDetails(parsed.data, currentSourceSnapshot)))
-      ) {
-        return { status: "identity_conflict" } as const;
+      const leak = publicAccount
+        ? (stageProfilePublicIdentityLeak(parsed.data, await resolveNoodlerPublicIdentity(publicAccount)) ??
+          (currentSourceSnapshot ? stageProfileSourceDetailLeak(parsed.data, currentSourceSnapshot) : null))
+        : null;
+      if (leak !== null) {
+        return { status: "identity_conflict", tag: leak } as const;
       }
       const submittedSnapshotIsCurrent =
         parsed.data.sourceSnapshot &&
@@ -420,8 +444,12 @@ export async function slpCreatorsRoutes(app: FastifyInstance, deps: SlpRouteDeps
       });
     }
     if (locked.value.status === "identity_conflict") {
+      // Name the tag, so the editor can say which one to change (#73).
       return reply.code(400).send({
-        error: "Hinted stage profiles cannot use identifying source names or details.",
+        error: locked.value.tag
+          ? `The tag "${locked.value.tag}" gives away who this Creator is. Remove or reword it, or set the identity to Open.`
+          : "Hinted stage profiles cannot use identifying source names or details.",
+        ...(locked.value.tag ? { conflictTag: locked.value.tag } : {}),
       });
     }
     if (locked.value.status === "disclosure_review_required") {

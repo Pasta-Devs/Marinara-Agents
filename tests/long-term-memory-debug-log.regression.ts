@@ -6,9 +6,9 @@ import { runRegressionToCompletion } from "./regression-helpers.ts";
 
 async function main() {
   const { LTM_DEBUG_MAX_EVENT_BYTES, LTM_DEBUG_MAX_LOG_BYTES, readLtmDebugLog, recordLtmDebugEvent } =
-    await import("../packages/long-term-memory/src/engine/packages/server/src/services/long-term-memory/debug-log.ts");
+    await import("../packages/long-term-memory/src/engine/packages/server/src/services/long-term-memory/maintenance/debug-log.ts");
   const { getLongTermMemoryDirectories } =
-    await import("../packages/long-term-memory/src/engine/packages/server/src/services/long-term-memory/paths.ts");
+    await import("../packages/long-term-memory/src/engine/packages/server/src/services/long-term-memory/persistence/paths.ts");
   const root = await mkdtemp(join(tmpdir(), "marinara-ltm-debug-log-"));
   try {
     const boundedCounts = await recordLtmDebugEvent({

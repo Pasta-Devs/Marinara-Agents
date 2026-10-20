@@ -179,9 +179,13 @@ export function SlpCreatorSteeringCard({
   name,
   onPostNow,
   postNowPending = false,
+  relationshipOnly = false,
 }: {
   creatorId: string;
   name: string;
+  /** A page the player runs: Slurp writes nothing for it, but its relationship style still decides
+   *  whether it can join a polyamorous couple (#68). */
+  relationshipOnly?: boolean;
   /** Write the next post now (it takes the oldest idea). Absent where there is no such action. */
   onPostNow?: () => void;
   postNowPending?: boolean;
@@ -221,7 +225,10 @@ export function SlpCreatorSteeringCard({
     });
 
   if (query.isError) return <p className={noteClass}>{t("ui.slurp.steering.loadFailed")}</p>;
-  if (!steering) return <p className={noteClass}>{t("ui.slurp.settings.loading", { defaultValue: "Loading…" })}</p>;
+  if (!steering)
+    return relationshipOnly ? null : (
+      <p className={noteClass}>{t("ui.slurp.settings.loading", { defaultValue: "Loading…" })}</p>
+    );
 
   const full = steering.nudges.length >= SLP_STEERING_NUDGES_MAX;
   const submitIdea = () => {
@@ -238,6 +245,35 @@ export function SlpCreatorSteeringCard({
       },
     );
   };
+
+  const relationships = polyamory && (
+    // Polyamory (0.3.5): whether they can be with more than one person. "From their card" reads it.
+    <PillChoice<SlpRelationshipStyle | "card">
+      layout="row"
+      label={t("ui.slurp.steering.relationshipStyle", { defaultValue: "Relationships" })}
+      options={[
+        {
+          value: "card",
+          label: t("ui.slurp.steering.relationshipStyles.card", { defaultValue: "From their card" }),
+        },
+        ...SLP_RELATIONSHIP_STYLES.map((style) => ({
+          value: style,
+          label: t(`ui.slurp.steering.relationshipStyles.${style}`, {
+            defaultValue: style === "poly" ? "Polyamorous" : "Monogamous",
+          }),
+        })),
+      ]}
+      value={steering.relationshipStyle ?? "card"}
+      onChange={(style) => save({ relationshipStyle: style === "card" ? null : style })}
+    />
+  );
+  // Same surface as the Stir sheet's steering panel, which shows it for pages Slurp runs.
+  if (relationshipOnly)
+    return relationships ? (
+      <section className="rounded-2xl bg-[var(--slurp-surface-raised)] px-4 pb-4 pt-3 shadow-[var(--slurp-shadow-raised),var(--slurp-highlight)]">
+        {relationships}
+      </section>
+    ) : null;
 
   return (
     <section data-slurp-steering className="space-y-4" aria-labelledby={`${lifeId}-title`}>
@@ -373,27 +409,7 @@ export function SlpCreatorSteeringCard({
         )}
       </div>
 
-      {polyamory && (
-        // Polyamory (0.3.5): whether they can be with more than one person. "From their card" reads it.
-        <PillChoice<SlpRelationshipStyle | "card">
-          layout="row"
-          label={t("ui.slurp.steering.relationshipStyle", { defaultValue: "Relationships" })}
-          options={[
-            {
-              value: "card",
-              label: t("ui.slurp.steering.relationshipStyles.card", { defaultValue: "From their card" }),
-            },
-            ...SLP_RELATIONSHIP_STYLES.map((style) => ({
-              value: style,
-              label: t(`ui.slurp.steering.relationshipStyles.${style}`, {
-                defaultValue: style === "poly" ? "Polyamorous" : "Monogamous",
-              }),
-            })),
-          ]}
-          value={steering.relationshipStyle ?? "card"}
-          onChange={(style) => save({ relationshipStyle: style === "card" ? null : style })}
-        />
-      )}
+      {relationships}
 
       <PillChoice<SlpSteeringPace>
         layout="row"

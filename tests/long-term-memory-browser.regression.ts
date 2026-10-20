@@ -7,6 +7,7 @@ import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { compileEngineVisualStyles } from "./engine-visual-styles.ts";
+import { buildPackageHostFixture } from "./package-host-fixture.ts";
 import { runRegressionToCompletion, runWithSafeCleanup } from "./regression-helpers.ts";
 
 const repoRoot = resolve(dirname(process.argv[1] ?? process.cwd()), "..");
@@ -70,6 +71,8 @@ async function main() {
     engineRoot,
     join(repoRoot, "packages/long-term-memory/src/engine/packages/client/src/**/*.{ts,tsx}"),
   );
+  // The client takes React and React Query from the Engine's host namespace, which this bare page must provide first.
+  const hostScript = await buildPackageHostFixture(engineRoot);
   const { labelKeys, localizedLabel } = await import(
     pathToFileURL(
       join(
@@ -204,7 +207,30 @@ async function main() {
           },
         },
       };
+      // Assigned to one branch of Conversation A, as saved before branches stopped being places (#1420).
+      let outsideChatNote = {
+        id: "world_outside_current_chat",
+        title: "Memory outside current chat",
+        type: "world",
+        status: "active",
+        modes: ["roleplay"],
+        scope: { chatId: "memory-chat", chatIds: ["memory-chat"] } as Record<string, unknown>,
+        tags: [],
+        keywords: [],
+        links: [],
+        sections: {
+          facts: {
+            text: "This memory belongs to another chat.",
+            importance: "major",
+            updatedAt: "2026-07-30T00:00:00.000Z",
+          },
+        },
+        createdAt: "2026-07-30T00:00:00.000Z",
+        updatedAt: "2026-07-30T00:00:00.000Z",
+        version: 1,
+      };
       const availabilityPatches: Array<Record<string, unknown>> = [];
+      const branchAvailabilityPatches: Array<Record<string, unknown>> = [];
       const batchNotesCalls: Array<Record<string, unknown>> = [];
       const batchNotesFailure = false;
       let batchNotesPartial = false;
@@ -571,10 +597,11 @@ async function main() {
         if (url.pathname === "/")
           return send(
             200,
-            `<!doctype html><meta name="viewport" content="width=device-width, initial-scale=1"><link rel="stylesheet" href="/globals.css"><script type="module" src="/client.js"></script>`,
+            `<!doctype html><meta name="viewport" content="width=device-width, initial-scale=1"><link rel="stylesheet" href="/globals.css"><script type="module" src="/host.js"></script><script type="module" src="/client.js"></script>`,
             "text/html",
           );
         if (url.pathname === "/globals.css") return send(200, engineStyles, "text/css");
+        if (url.pathname === "/host.js") return send(200, hostScript, "application/javascript");
         if (url.pathname === "/client.js") return send(200, artifactClient, "application/javascript");
         if (request.method === "GET" && url.pathname === "/api/connections") return send(200, []);
         if (!url.pathname.startsWith("/api/long-term-memory/")) return send(404, {});
@@ -607,6 +634,12 @@ async function main() {
             },
           });
         if (request.method === "GET" && url.pathname.endsWith("/settings")) return send(200, {});
+        if (request.method === "PUT" && url.pathname.endsWith("/settings")) {
+          const chunks: Buffer[] = [];
+          for await (const chunk of request) chunks.push(Buffer.from(chunk));
+          // Echo the saved settings so the toggle-local Save can be observed end to end.
+          return send(200, JSON.parse(Buffer.concat(chunks).toString("utf8") || "{}"));
+        }
         if (request.method === "POST" && url.pathname.endsWith("/notes/batch")) {
           const chunks: Buffer[] = [];
           for await (const chunk of request) chunks.push(Buffer.from(chunk));
@@ -656,19 +689,21 @@ async function main() {
           return send(200, { count: pendingDraftCount });
         if (request.method === "GET" && url.pathname.endsWith("/last-injection/chat-artifact")) {
           lastInjectionRequests += 1;
-          return lastInjectionRequests === 1
-            ? send(200, {
-                memoryCount: 1,
-                tokenCount: 42,
-                memories: [
-                  {
-                    noteId: "retained-memory",
-                    title: "Retained memory",
-                    tokenCount: 42,
-                  },
-                ],
-              })
-            : send(503, { error: "latest recall failed" });
+          if (lastInjectionRequests === 1)
+            return send(200, {
+              memoryCount: 1,
+              tokenCount: 42,
+              memories: [
+                {
+                  noteId: "retained-memory",
+                  title: "Retained memory",
+                  tokenCount: 42,
+                },
+              ],
+            });
+          // Keep the failure in flight briefly so the retry's disabled guard is observable.
+          await new Promise((resolve) => setTimeout(resolve, 120));
+          return send(503, { error: "latest recall failed" });
         }
         if (request.method === "GET" && url.pathname.endsWith("/drafts/review")) {
           reviewQueries.push(url.search);
@@ -728,7 +763,11 @@ async function main() {
           scopeTargetQueries.push(url.search);
           return send(200, {
             currentScope: { chatId: "desktop-chat", chatIds: ["desktop-chat"] },
-            memoryPresence: [{ chatId: "memory-chat", chatIds: ["memory-chat"] }],
+            memoryPresence: [
+              { chatId: "memory-chat", chatIds: ["memory-chat"] },
+              { characterIds: ["character-a"] },
+              { personaId: "persona-a", personaIds: ["persona-a"] },
+            ],
             chats: [
               {
                 id: "desktop-chat",
@@ -854,27 +893,7 @@ async function main() {
               updatedAt: "2026-07-30T00:00:00.000Z",
               version: 1,
             },
-            {
-              id: "world_outside_current_chat",
-              title: "Memory outside current chat",
-              type: "world",
-              status: "active",
-              modes: ["roleplay"],
-              scope: { chatId: "memory-chat", chatIds: ["memory-chat"] },
-              tags: [],
-              keywords: [],
-              links: [],
-              sections: {
-                facts: {
-                  text: "This memory belongs to another chat.",
-                  importance: "major",
-                  updatedAt: "2026-07-30T00:00:00.000Z",
-                },
-              },
-              createdAt: "2026-07-30T00:00:00.000Z",
-              updatedAt: "2026-07-30T00:00:00.000Z",
-              version: 1,
-            },
+            outsideChatNote,
             {
               id: "source_mobile_recovery",
               title: "Mobile recovery source",
@@ -953,15 +972,20 @@ async function main() {
               notes.filter((note) => requestedIds.has(note.id) && note.id !== omitReviewContextId),
             );
           }
+          const requestedChatIds = url.searchParams.get("scopeChatIds")?.split(",") ?? [];
           return send(
             200,
-            url.searchParams.get("scopeCharacterIds") === "character-a"
-              ? notes.filter((note) => note.id === "world_second_mobile")
-              : url.searchParams.get("scopeChatIds") === "desktop-chat"
-                ? notes.filter((note) => note.id !== "world_outside_current_chat")
-                : url.searchParams.get("scopePersonaId") === "persona-b"
-                  ? []
-                  : notes,
+            url.searchParams.get("scopeGroupId") === "conversation-a"
+              ? notes.filter((note) =>
+                  ((note.scope as { chatIds?: string[] }).chatIds ?? []).some((id) => requestedChatIds.includes(id)),
+                )
+              : url.searchParams.get("scopeCharacterIds") === "character-a"
+                ? notes.filter((note) => note.id === "world_second_mobile")
+                : url.searchParams.get("scopeChatIds") === "desktop-chat"
+                  ? notes.filter((note) => note.id !== "world_outside_current_chat")
+                  : url.searchParams.get("scopePersonaId") === "persona-b"
+                    ? []
+                    : notes,
           );
         }
         if (request.method === "GET" && url.pathname.endsWith("/notes/world_second_mobile"))
@@ -1012,6 +1036,21 @@ async function main() {
           return send(200, legacyGlobalNote);
         if (request.method === "GET" && url.pathname.endsWith(`/notes/${scopedDesktopNote.id}`))
           return send(200, scopedDesktopNote);
+        if (request.method === "GET" && url.pathname.endsWith(`/notes/${outsideChatNote.id}`))
+          return send(200, outsideChatNote);
+        if (request.method === "PATCH" && url.pathname.endsWith(`/notes/${outsideChatNote.id}`)) {
+          const chunks: Buffer[] = [];
+          for await (const chunk of request) chunks.push(Buffer.from(chunk));
+          const patch = JSON.parse(Buffer.concat(chunks).toString("utf8"));
+          branchAvailabilityPatches.push(patch);
+          outsideChatNote = {
+            ...outsideChatNote,
+            ...patch,
+            updatedAt: noteTimestamp,
+            version: outsideChatNote.version + 1,
+          };
+          return send(200, { note: outsideChatNote });
+        }
         if (request.method === "PATCH" && url.pathname.endsWith(`/notes/${legacyGlobalNote.id}`)) {
           const chunks: Buffer[] = [];
           for await (const chunk of request) chunks.push(Buffer.from(chunk));
@@ -1673,237 +1712,237 @@ async function main() {
       }, packageManifest.version);
       await page.locator('[data-ltm-surface="detail"]').waitFor();
       await page.locator("[data-ltm-browser-controls]").waitFor();
-      const memoryScope = page.locator("[data-ltm-memory-scope]");
-      await memoryScope.locator(":scope > summary").waitFor();
-      assert.equal(
-        (await memoryScope.locator(":scope > summary").textContent())?.trim(),
-        "Currently viewing memories in:desktop chat",
+      const memoryScope = page.locator('[data-ltm-scope-picker="vault"]');
+      const memoryScopeTrigger = memoryScope.locator("[data-ltm-scope-picker-trigger]");
+      const memoryScopePopup = memoryScope.locator("[data-ltm-scope-picker-popup]");
+      const memoryScopeSearch = memoryScopePopup.locator("input");
+      const secondaryScope = page.locator('[data-ltm-scope-picker="vault-secondary"]');
+      const secondaryScopeTrigger = secondaryScope.locator("[data-ltm-scope-picker-trigger]");
+      const worldGroupSummary = page.locator('[data-ltm-memory-group="world"] > summary');
+      const openWorldGroup = async () => {
+        if (!(await page.locator('[data-ltm-memory-group="world"][open]').count())) await worldGroupSummary.click();
+      };
+      const notesRequest = (predicate: (params: URLSearchParams) => boolean) =>
+        page.waitForRequest((request) => {
+          const url = new URL(request.url());
+          return request.method() === "GET" && url.pathname.endsWith("/notes") && predicate(url.searchParams);
+        });
+      const colorAlpha = (color: string) => {
+        const slash = /\/\s*([\d.]+)(%?)\s*\)$/u.exec(color);
+        if (slash) return Number(slash[1]) / (slash[2] ? 100 : 1);
+        const rgba = /^rgba\([^,]+,[^,]+,[^,]+,\s*([\d.]+)\)$/u.exec(color);
+        return rgba ? Number(rgba[1]) : 1;
+      };
+      // Opens a place picker, moves to a kind tab and picks an option without the mouse.
+      const choosePlaceByKeyboard = async (picker: string, kind: string, optionId: string) => {
+        const root = page.locator(`[data-ltm-scope-picker="${picker}"]`);
+        await root.locator("[data-ltm-scope-picker-trigger]").focus();
+        await page.keyboard.press("Enter");
+        await root.locator("[data-ltm-scope-picker-popup] input:focus").waitFor();
+        await page.keyboard.press("Tab");
+        await root.locator('[data-ltm-scope-tab="all"]:focus').waitFor();
+        for (let step = 0; step < 3 && !(await root.locator(`[data-ltm-scope-tab="${kind}"]:focus`).count()); step += 1)
+          await page.keyboard.press("ArrowRight");
+        await root.locator(`[data-ltm-scope-tab="${kind}"][aria-selected="true"]:focus`).waitFor();
+        await page.keyboard.press("Shift+Tab");
+        await root.locator("[data-ltm-scope-picker-popup] input:focus").waitFor();
+        const option = root.locator(`[data-ltm-scope-option="${optionId}"]`);
+        const order = await root
+          .locator('[role="option"]')
+          .evaluateAll((options) =>
+            options.map((item) => [item.getAttribute("data-ltm-scope-option"), item.getAttribute("data-highlighted")]),
+          );
+        const key =
+          order.findIndex(([, highlighted]) => highlighted === "true") > order.findIndex(([id]) => id === optionId)
+            ? "ArrowUp"
+            : "ArrowDown";
+        for (let step = 0; step < 150 && (await option.getAttribute("data-highlighted")) !== "true"; step += 1)
+          await page.keyboard.press(key);
+        assert.equal(await option.getAttribute("data-highlighted"), "true", `${optionId} is reachable with ArrowDown`);
+        await page.keyboard.press("Enter");
+        await root.locator("[data-ltm-scope-picker-popup]").waitFor({ state: "detached" });
+      };
+      const choosePlaceBySearch = async (picker: string, query: string, optionId: string) => {
+        const root = page.locator(`[data-ltm-scope-picker="${picker}"]`);
+        await root.locator("[data-ltm-scope-picker-trigger]").click();
+        await root.locator("[data-ltm-scope-picker-popup] input").fill(query);
+        await root.locator(`[data-ltm-scope-option="${optionId}"]`).click();
+        await root.locator("[data-ltm-scope-picker-popup]").waitFor({ state: "detached" });
+      };
+      await memoryScopeTrigger.waitFor();
+      assert.match(
+        await page.locator("[data-ltm-memory-scope]").innerText(),
+        /^Currently viewing memories in:\s*Current\b/u,
       );
       assert.equal(await page.getByText("Memory outside current chat").count(), 0);
-      await memoryScope.locator(":scope > summary").click();
+      await memoryScopeTrigger.click();
+      await memoryScopePopup.waitFor();
       assert.equal(
-        await memoryScope.locator('[data-ltm-vault-scope-target="chat:desktop-chat"][aria-checked="true"]').count(),
-        1,
-        "The contextual Current row is checked by selected ID",
+        await memoryScope.locator('[data-ltm-scope-option="chat:desktop-chat"]').getAttribute("aria-selected"),
+        "true",
+        "The contextual Current place is selected by ID",
       );
-      assert.equal(
-        await memoryScope.locator('[data-ltm-vault-scope-target="all"][aria-checked="false"]').count(),
-        1,
-        "The all option is present in the shared scope list",
+      assert.equal(await memoryScope.locator('[data-ltm-scope-option="all"]').getAttribute("aria-selected"), "false");
+      assert.deepEqual(
+        await memoryScope
+          .locator("[data-ltm-scope-tab]")
+          .evaluateAll((tabs) => tabs.map((tab) => tab.getAttribute("data-ltm-scope-tab"))),
+        ["all", "chat", "character", "persona"],
       );
-      const scopeControlStyle = await page.locator("[data-ltm-vault-scope-control]").evaluate((element) => {
-        const browserControls = document.querySelector<HTMLElement>("[data-ltm-browser-controls]")!;
-        const control = element.getBoundingClientRect();
-        const bounds = browserControls.getBoundingClientRect();
+      const scopePopupLayout = await memoryScopePopup.evaluate((popup) => {
+        const style = getComputedStyle(popup);
+        const tablist = popup.querySelector<HTMLElement>("[data-ltm-scope-tablist]")!;
+        const bounds = document.querySelector<HTMLElement>("[data-ltm-browser-controls]")!.getBoundingClientRect();
+        const control = document.querySelector<HTMLElement>("[data-ltm-memory-scope]")!.getBoundingClientRect();
         return {
-          width: control.width,
-          maxWidth: bounds.width,
-          right: control.right,
-          maxRight: bounds.right,
-        };
-      });
-      assert.ok(scopeControlStyle.width <= scopeControlStyle.maxWidth + 1, JSON.stringify(scopeControlStyle));
-      assert.ok(scopeControlStyle.right <= scopeControlStyle.maxRight + 1, JSON.stringify(scopeControlStyle));
-      const scopePickerLayout = await page.locator("[data-ltm-vault-scope-control]").evaluate((control) => {
-        const tablist = control.querySelector<HTMLElement>("[data-ltm-vault-scope-tablist]")!;
-        const tab = control.querySelector<HTMLElement>('[data-ltm-vault-scope-tab="all"]')!;
-        const search = control.querySelector<HTMLElement>("[data-ltm-vault-scope-search]")!.getBoundingClientRect();
-        const list = control.querySelector<HTMLElement>("[data-ltm-vault-scope-list]")!.getBoundingClientRect();
-        const rail = tablist.getBoundingClientRect();
-        const shape = document.createElement("span");
-        control.append(shape);
-        shape.className = "rounded-md";
-        const controlRadius = getComputedStyle(shape).borderRadius;
-        shape.className = "rounded-lg";
-        const railRadius = getComputedStyle(shape).borderRadius;
-        shape.remove();
-        return {
-          width: tablist.getBoundingClientRect().width,
+          backgroundColor: style.backgroundColor,
+          backgroundImage: style.backgroundImage,
           columns: getComputedStyle(tablist).gridTemplateColumns.split(" ").length,
-          tabBorderRadius: getComputedStyle(tab).borderRadius,
-          selectedPillCount: control.querySelectorAll("[data-ltm-vault-selected-scope]").length,
-          railRadius: getComputedStyle(tablist).borderRadius,
-          expectedControlRadius: controlRadius,
-          expectedRailRadius: railRadius,
-          leftEdges: [rail.left, search.left, list.left],
-          rightEdges: [rail.right, search.right, list.right],
-          inOrder: search.bottom <= rail.top && rail.bottom <= list.top,
+          controlFits: control.width <= bounds.width + 1 && control.right <= bounds.right + 1,
         };
       });
-      assert.equal(scopePickerLayout.columns, 5, JSON.stringify(scopePickerLayout));
-      assert.equal(
-        scopePickerLayout.tabBorderRadius,
-        scopePickerLayout.expectedControlRadius,
-        JSON.stringify(scopePickerLayout),
-      );
-      assert.equal(
-        scopePickerLayout.railRadius,
-        scopePickerLayout.expectedRailRadius,
-        JSON.stringify(scopePickerLayout),
-      );
-      assert.ok(scopePickerLayout.inOrder, JSON.stringify(scopePickerLayout));
-      for (const edges of [scopePickerLayout.leftEdges, scopePickerLayout.rightEdges])
-        assert.ok(Math.max(...edges) - Math.min(...edges) <= 1, JSON.stringify(scopePickerLayout));
-      assert.equal(scopePickerLayout.selectedPillCount, 0, JSON.stringify(scopePickerLayout));
-      const branchTab = memoryScope.locator('[data-ltm-vault-scope-tab="branch"]');
-      for (const active of [false, true]) {
-        if (active) await branchTab.click();
-        await page.mouse.move(0, 0);
-        const colours = await branchTab.evaluate((tab, active) => {
-          const probe = document.createElement("span");
-          probe.style.background = active
-            ? "var(--marinara-editor-control-bg-hover)"
-            : "var(--marinara-editor-control-bg)";
-          probe.style.color = active ? "var(--marinara-editor-text)" : "var(--marinara-editor-muted)";
-          tab.append(probe);
-          const actual = getComputedStyle(tab);
-          const expected = getComputedStyle(probe);
-          const result = {
-            background: actual.backgroundColor,
-            expectedBackground: expected.backgroundColor,
-            text: actual.color,
-            expectedText: expected.color,
-          };
-          probe.remove();
-          return result;
-        }, active);
-        assert.equal(colours.background, colours.expectedBackground, JSON.stringify({ active, ...colours }));
-        assert.equal(colours.text, colours.expectedText, JSON.stringify({ active, ...colours }));
-      }
-      assert.equal(await memoryScope.locator('[data-ltm-vault-scope-tab="chat"]').count(), 1);
-      for (const kind of ["character", "chat", "branch", "persona"]) {
-        await memoryScope.locator(`[data-ltm-vault-scope-tab="${kind}"]`).click();
-        for (const query of ["", "does-not-match"]) {
-          await memoryScope.locator("[data-ltm-vault-scope-search]").fill(query);
-          const rows = memoryScope.locator('[data-ltm-vault-scope-list] [role="checkbox"]');
-          assert.equal(await rows.nth(0).getAttribute("data-ltm-vault-scope-pinned"), "all");
-          assert.equal(await rows.nth(1).getAttribute("data-ltm-vault-scope-pinned"), "current");
-          assert.equal(await rows.nth(1).isDisabled(), kind === "branch");
-          if (query) assert.equal(await rows.count(), 2);
-        }
-        await memoryScope.locator("[data-ltm-vault-scope-search]").fill("");
-        if (kind === "persona") {
-          await memoryScope.locator('[data-ltm-vault-scope-current="persona"]').click();
-          await memoryScope.locator('[data-ltm-vault-scope-current="persona"][aria-checked="true"]').waitFor();
-          assert.ok(noteQueries.some((query) => query.includes("scopePersonaId=persona-a")));
-        }
-        await memoryScope.locator('[data-ltm-vault-scope-pinned="all"]').click();
-        await memoryScope.locator('[data-ltm-vault-scope-pinned="all"][aria-checked="true"]').waitFor();
-      }
-      await memoryScope.locator('[data-ltm-vault-scope-tab="chat"]').click();
-      assert.equal(await memoryScope.locator('[data-ltm-vault-scope-target="group:conversation-a"]').count(), 1);
-      await memoryScope.locator("[data-ltm-vault-scope-search]").fill("does-not-match");
-      assert.equal(await memoryScope.locator('[data-ltm-vault-scope-target="group:conversation-a"]').count(), 0);
-      await memoryScope.locator("[data-ltm-vault-scope-search]").fill("");
-      await memoryScope.locator('[data-ltm-vault-scope-target="group:conversation-a"]').click();
-      await memoryScope.locator('[data-ltm-vault-scope-target="group:conversation-a"][aria-checked="true"]').waitFor();
-      assert.equal(
-        await memoryScope.locator('[data-ltm-vault-scope-target="group:conversation-a"][aria-checked="true"]').count(),
-        1,
-      );
-      await memoryScope.locator('[data-ltm-vault-scope-tab="branch"]').click();
-      assert.equal(await memoryScope.locator('[data-ltm-vault-scope-presence="with-memories"]').count(), 1);
-      assert.equal(await memoryScope.locator('[data-ltm-vault-scope-presence="no-memories"]').count(), 1);
-      await memoryScope.locator('[data-ltm-vault-scope-presence="no-memories"]:not([open])').waitFor();
-      assert.equal(
-        await memoryScope.locator('[data-ltm-vault-scope-presence="no-memories"]').getAttribute("open"),
-        null,
-      );
-      assert.equal(
-        await memoryScope.locator('[data-ltm-vault-scope-target="chat:memory-chat"]').getAttribute("title"),
-        "Memory Conversation - Member Final Branch",
-      );
-      await memoryScope.locator("[data-ltm-vault-scope-search]").fill("Memory Conversation");
-      await memoryScope.locator('[data-ltm-vault-scope-presence="no-memories"][open]').waitFor();
-      await memoryScope.locator('[data-ltm-vault-scope-presence="no-memories"] > summary').click();
-      await memoryScope.locator('[data-ltm-vault-scope-presence="no-memories"]:not([open])').waitFor();
-      // Check the user's collapsed preference after clearing the search, without
-      // batching an immediate clear/refill back to the same controlled value.
-      await memoryScope.locator("[data-ltm-vault-scope-search]").fill("");
-      await memoryScope.locator('[data-ltm-vault-scope-presence="no-memories"]:not([open])').waitFor();
-      assert.ok(await memoryScope.locator('[data-ltm-vault-scope-current="branch"]').isDisabled());
-      await memoryScope.locator('[data-ltm-vault-scope-tab="chat"]').click();
-      assert.equal(
-        await memoryScope.locator('[data-ltm-vault-scope-current="chat"]').getAttribute("data-ltm-vault-scope-target"),
-        "chat:desktop-chat",
-      );
-      await memoryScope.locator('[data-ltm-vault-scope-tab="character"]').click();
-      assert.equal(await memoryScope.locator('[data-ltm-vault-scope-target="character:character-a"]').count(), 1);
-      await memoryScope.locator('[data-ltm-vault-scope-target="character:character-a"]').focus();
-      await memoryScope.locator('[data-ltm-vault-scope-target="character:character-a"]').press("Enter");
-      assert.equal(
-        await memoryScope.locator('[data-ltm-vault-scope-target="character:character-a"][aria-checked="true"]').count(),
-        1,
-      );
-      await memoryScope.locator(":scope > summary").click();
-      const memoryGroupSummary = page.locator('[data-ltm-memory-group="world"] > summary');
-      await page.evaluate(() => {
-        document.body.tabIndex = -1;
-        document.body.focus();
-      });
-      for (let index = 0; index < 200; index += 1) {
-        if (await memoryGroupSummary.evaluate((summary) => summary.matches(":focus"))) break;
-        await page.keyboard.press("Tab");
-      }
-      const memoryGroupFocus = await memoryGroupSummary.evaluate((summary) => ({
-        outlineStyle: getComputedStyle(summary).outlineStyle,
-        outlineWidth: getComputedStyle(summary).outlineWidth,
-        height: summary.getBoundingClientRect().height,
-      }));
-      assert.notEqual(memoryGroupFocus.outlineStyle, "none");
-      assert.ok(memoryGroupFocus.height >= 44, JSON.stringify(memoryGroupFocus));
-      await page.evaluate(() => document.body.removeAttribute("tabindex"));
-      await memoryScope.locator(":scope > summary").click();
-      await memoryScope.locator('[data-ltm-vault-scope-tab="all"]').click();
-      await memoryScope.locator('[data-ltm-vault-scope-target="all"]').click();
-      await page.locator('[data-ltm-memory-group="world"] > summary').click();
+      // The dropdown is a solid surface, so the memory list never shows through it.
+      assert.equal(colorAlpha(scopePopupLayout.backgroundColor), 1, JSON.stringify(scopePopupLayout));
+      assert.match(scopePopupLayout.backgroundImage, /gradient/u, JSON.stringify(scopePopupLayout));
+      assert.equal(scopePopupLayout.columns, 4, JSON.stringify(scopePopupLayout));
+      assert.ok(scopePopupLayout.controlFits, JSON.stringify(scopePopupLayout));
+      await page.keyboard.press("Escape");
+      await memoryScopePopup.waitFor({ state: "detached" });
+      // Every place kind is chosen by keyboard, and the list follows the choice (#1420).
+      const allPlaceQueryStart = noteQueries.length;
+      await choosePlaceByKeyboard("vault", "all", "all");
+      assert.equal((await memoryScopeTrigger.innerText()).trim(), "All");
+      await openWorldGroup();
       await page.getByText("Memory outside current chat").waitFor();
-      assert.ok(noteQueries.some((query) => !query.includes("scopeChatIds")));
-      const secondaryScope = page.locator("[data-ltm-memory-scope-secondary]");
+      assert.ok(
+        noteQueries.slice(allPlaceQueryStart).some((query) => !query.includes("scopeChatIds")),
+        "choosing All loads notes without a chat scope",
+      );
+      // With no character folded into the places, chats split by whether they hold memories.
+      await memoryScopeTrigger.click();
+      await memoryScope.locator('[data-ltm-scope-tab="chat"]').click();
+      const withMemories = memoryScope.locator('[data-ltm-scope-presence="with-memories"]');
+      const noMemories = memoryScope.locator('[data-ltm-scope-presence="no-memories"]');
+      const showNoMemories = memoryScope.locator("[data-ltm-scope-show-no-memories]");
+      const listboxRoles = () =>
+        memoryScope
+          .locator('[role="listbox"]')
+          .evaluate((list) => [...new Set([...list.children].map((child) => child.getAttribute("role")))].sort());
+      assert.equal(await withMemories.getAttribute("aria-label"), "With memories");
+      assert.match(
+        await withMemories.locator('[data-ltm-scope-option="group:conversation-a"]').innerText(),
+        /Conversation A[\s\S]*All branches/u,
+        "a chat with branches is one Chats entry",
+      );
+      assert.equal(await memoryScope.locator('[data-ltm-scope-option="chat:memory-chat"]').count(), 0);
+      // While collapsed, places without memories are one "Show N places" option, so the listbox holds
+      // only options and groups (#1442).
+      assert.equal(await noMemories.count(), 0, "places without memories start collapsed");
+      assert.match(await showNoMemories.innerText(), /^Show \d+ places with no memories$/u);
+      assert.equal(await showNoMemories.getAttribute("role"), "option");
+      assert.deepEqual(await listboxRoles(), ["group", "option"]);
+      await memoryScopeSearch.fill("Bulk chat 1");
+      await noMemories.waitFor();
+      // A tab change during a search keeps the group open (#1442).
+      await memoryScope.locator('[data-ltm-scope-tab="all"]').click();
+      await memoryScope.locator('[data-ltm-scope-tab="chat"]').click();
+      assert.equal(await noMemories.locator('[data-ltm-scope-option="chat:bulk-chat-1"]').count(), 1);
+      assert.equal(await showNoMemories.count(), 0);
+      // Clearing the search returns to the collapsed choice, without batching an immediate
+      // clear/refill back to the same controlled value.
+      await memoryScopeSearch.fill("");
+      await showNoMemories.waitFor();
+      assert.equal(await noMemories.count(), 0);
+      // ArrowDown from the search box reaches the "Show" option, and Enter opens the group in place.
+      await memoryScopeSearch.focus();
+      for (let step = 0; step < 20 && (await showNoMemories.getAttribute("data-highlighted")) !== "true"; step += 1)
+        await page.keyboard.press("ArrowDown");
+      assert.equal(await showNoMemories.getAttribute("data-highlighted"), "true", "ArrowDown reaches the Show option");
+      await page.keyboard.press("Enter");
+      await noMemories.waitFor();
+      assert.equal(await noMemories.getAttribute("role"), "group");
+      assert.equal(await noMemories.getAttribute("aria-label"), "No memories");
+      assert.equal(await showNoMemories.count(), 0);
+      assert.deepEqual(await listboxRoles(), ["group", "option"]);
+      assert.equal(await memoryScopeTrigger.getAttribute("aria-expanded"), "true", "opening the group is not a choice");
+      await memoryScopeSearch.fill("Member Final Branch");
+      assert.equal(
+        await memoryScope.locator('[data-ltm-scope-option="group:conversation-a"]').count(),
+        1,
+        "a chat is searchable by a branch name",
+      );
+      await memoryScopeSearch.fill("");
+      await noMemories.waitFor();
+      await page.keyboard.press("Escape");
+      await memoryScopePopup.waitFor({ state: "detached" });
+      const wholeChatRequest = notesRequest((params) => params.get("scopeGroupId") === "conversation-a");
+      await choosePlaceByKeyboard("vault", "chat", "group:conversation-a");
+      assert.deepEqual(
+        new URL((await wholeChatRequest).url()).searchParams.get("scopeChatIds")?.split(","),
+        ["memory-chat", "memory-conversation-branch"],
+        "the whole chat covers every branch, including branch assignments",
+      );
+      await page.getByText("Second mobile review memory", { exact: true }).waitFor({ state: "detached" });
+      await openWorldGroup();
+      await page.getByText("Memory outside current chat").waitFor();
+      await choosePlaceByKeyboard("vault", "chat", "chat:desktop-chat");
+      assert.match(await memoryScopeTrigger.innerText(), /^Current\n/u);
+      await page.getByText("Memory outside current chat").waitFor({ state: "detached" });
+      const characterPlaceRequest = notesRequest((params) => params.get("scopeCharacterIds") === "character-a");
+      await choosePlaceByKeyboard("vault", "character", "character:character-a");
+      await characterPlaceRequest;
+      await openWorldGroup();
+      await page.getByText("Second mobile review memory", { exact: true }).waitFor();
+      assert.equal(await page.getByText("Memory outside current chat").count(), 0);
+      const personaPlaceRequest = notesRequest((params) => params.get("scopePersonaId") === "persona-a");
+      await choosePlaceByKeyboard("vault", "persona", "persona:persona-a");
+      await personaPlaceRequest;
+      assert.match(await memoryScopeTrigger.innerText(), /Persona A\nSpace explorer/u);
+      // ...and by search, including a place inside the collapsed No memories group.
+      await choosePlaceBySearch("vault", "Member Final Branch", "group:conversation-a");
+      assert.match(await memoryScopeTrigger.innerText(), /All branches/u);
+      await openWorldGroup();
+      await page.getByText("Memory outside current chat").waitFor();
+      await choosePlaceBySearch("vault", "Character A", "character:character-a");
+      await page.getByText("Memory outside current chat").waitFor({ state: "detached" });
+      const hiddenPersonaRequest = notesRequest((params) => params.get("scopePersonaId") === "persona-b");
+      await memoryScopeTrigger.click();
+      await memoryScopeSearch.fill("Private detective");
+      await memoryScope
+        .locator('[data-ltm-scope-presence="no-memories"] [data-ltm-scope-option="persona:persona-b"]')
+        .click();
+      await hiddenPersonaRequest;
+      assert.match(await memoryScopeTrigger.innerText(), /Private detective/u);
+      await choosePlaceBySearch("vault", "does-not-match", "all");
+      await openWorldGroup();
+      await page.getByText("Memory outside current chat").waitFor();
       // Repair proof: a secondary place must stay literal. Inheriting the primary
       // place's character turns "A AND (B OR A)" back into A, so memories the second
       // place does not hold would still reach the list and bulk selection.
-      await memoryScope.locator('[data-ltm-vault-scope-tab="character"]').click();
-      await memoryScope.locator('[data-ltm-vault-scope-target="character:character-a"]').click();
-      await memoryScope.locator('[data-ltm-vault-scope-target="character:character-a"][aria-checked="true"]').waitFor();
-      const secondaryPlaceRequestPromise = page.waitForRequest(
-        (request) => request.method() === "GET" && request.url().includes("scopeGroupId=conversation-a"),
-      );
-      await secondaryScope.locator(":scope > summary").click();
-      await secondaryScope.locator('[data-ltm-vault-scope-tab="chat"]').click();
-      await secondaryScope.locator('[data-ltm-vault-scope-target="group:conversation-a"]').click();
-      await secondaryScope
-        .locator('[data-ltm-vault-scope-target="group:conversation-a"][aria-checked="true"]')
-        .waitFor();
+      await choosePlaceBySearch("vault", "Character A", "character:character-a");
+      const secondaryPlaceRequestPromise = notesRequest((params) => params.get("scopeGroupId") === "conversation-a");
+      await choosePlaceBySearch("vault-secondary", "Member Final Branch", "group:conversation-a");
       const secondaryPlaceRequest = await secondaryPlaceRequestPromise;
       assert.doesNotMatch(
         secondaryPlaceRequest.url(),
         /scopeCharacterIds/u,
         `the second place must not inherit the primary character: ${secondaryPlaceRequest.url()}`,
       );
-      await secondaryScope.locator('[data-ltm-vault-scope-target="all"]').click();
-      await secondaryScope.locator(":scope > summary").click();
-      await memoryScope.locator('[data-ltm-vault-scope-tab="all"]').click();
-      await memoryScope.locator('[data-ltm-vault-scope-target="all"]').click();
-      const worldGroupSummary = page.locator('[data-ltm-memory-group="world"] > summary');
-      if (!(await page.locator('[data-ltm-memory-group="world"][open]').count())) await worldGroupSummary.click();
+      await choosePlaceBySearch("vault-secondary", "does-not-match", "all");
+      await choosePlaceBySearch("vault", "does-not-match", "all");
+      await openWorldGroup();
       await page.getByText("Memory outside current chat").waitFor();
-      const secondaryCharacterRequestPromise = page.waitForRequest(
-        (request) => request.method() === "GET" && request.url().includes("scopeCharacterIds=character-a"),
+      const secondaryCharacterRequestPromise = notesRequest(
+        (params) => params.get("scopeCharacterIds") === "character-a",
       );
-      await secondaryScope.locator(":scope > summary").click();
-      await secondaryScope.locator('[data-ltm-vault-scope-tab="character"]').click();
-      await secondaryScope.locator('[data-ltm-vault-scope-target="character:character-a"]').click();
-      await secondaryScope
-        .locator('[data-ltm-vault-scope-target="character:character-a"][aria-checked="true"]')
-        .waitFor();
+      await choosePlaceByKeyboard("vault-secondary", "character", "character:character-a");
       const secondaryCharacterRequest = await secondaryCharacterRequestPromise;
       assert.match(
         secondaryCharacterRequest.url(),
         /scopeCharacterIds=character-a/u,
         "the second place must issue its own scope query",
       );
-      if (!(await page.locator('[data-ltm-memory-group="world"][open]').count())) await worldGroupSummary.click();
+      await openWorldGroup();
       await page.getByText("Second mobile review memory", { exact: true }).waitFor();
       assert.equal(
         await page.getByText("Memory outside current chat").count(),
@@ -1919,17 +1958,54 @@ async function main() {
       await secondaryContextSearch.fill("");
       // Repair proof: an empty AND intersection still names the combined scope
       // instead of falling back to the generic "no memories" copy.
-      if (!(await page.locator("[data-ltm-memory-scope-secondary][open]").count())) {
-        await secondaryScope.locator(":scope > summary").click();
-      }
-      await secondaryScope.locator('[data-ltm-vault-scope-tab="persona"]').click();
-      await secondaryScope.locator('[data-ltm-vault-scope-presence="no-memories"] > summary').click();
-      await secondaryScope.locator('[data-ltm-vault-scope-target="persona:persona-b"]').click();
-      await secondaryScope.locator('[data-ltm-vault-scope-target="persona:persona-b"][aria-checked="true"]').waitFor();
+      await secondaryScopeTrigger.click();
+      await secondaryScope.locator("[data-ltm-scope-picker-popup] input").fill("Private detective");
+      await secondaryScope
+        .locator('[data-ltm-scope-presence="no-memories"] [data-ltm-scope-option="persona:persona-b"]')
+        .click();
       await page.getByText(/No memories are available in .*AND/u).waitFor();
-      await secondaryScope.locator('[data-ltm-vault-scope-target="all"]').click();
-      assert.match((await secondaryScope.locator(":scope > summary").textContent()) ?? "", /No second place/u);
-      await secondaryScope.locator(":scope > summary").click();
+      await choosePlaceBySearch("vault-secondary", "does-not-match", "all");
+      assert.match(await secondaryScopeTrigger.innerText(), /No second place/u);
+      await openWorldGroup();
+      await page.getByText("Memory outside current chat").waitFor();
+      // Unsaved edits: Keep editing and Discard both return focus to the place button (#1442).
+      await page
+        .locator('[data-ltm-note-type="world"]')
+        .filter({ hasText: /^Second mobile review memory/u })
+        .locator("button")
+        .first()
+        .click();
+      await page.locator('[data-ltm-field="title"]').fill("Second mobile review memory, edited");
+      const focusedPlaceButton = memoryScope.locator("[data-ltm-scope-picker-trigger]:focus");
+      await choosePlaceByKeyboard("vault", "character", "character:character-a");
+      await page.locator("[data-ltm-unsaved-stay]:focus").waitFor();
+      await page.keyboard.press("Enter");
+      await focusedPlaceButton.waitFor();
+      assert.equal((await memoryScopeTrigger.innerText()).trim(), "All", "Keep editing stays in the place");
+      const discardPlaceRequest = notesRequest((params) => params.get("scopeCharacterIds") === "character-a");
+      await choosePlaceByKeyboard("vault", "character", "character:character-a");
+      await page.getByRole("button", { name: "Discard and continue", exact: true }).click();
+      await discardPlaceRequest;
+      await focusedPlaceButton.waitFor();
+      await choosePlaceBySearch("vault", "does-not-match", "all");
+      await openWorldGroup();
+      await page.getByText("Memory outside current chat").waitFor();
+      await page.evaluate(() => {
+        document.body.tabIndex = -1;
+        document.body.focus();
+      });
+      for (let index = 0; index < 200; index += 1) {
+        if (await worldGroupSummary.evaluate((summary) => summary.matches(":focus"))) break;
+        await page.keyboard.press("Tab");
+      }
+      const memoryGroupFocus = await worldGroupSummary.evaluate((summary) => ({
+        outlineStyle: getComputedStyle(summary).outlineStyle,
+        outlineWidth: getComputedStyle(summary).outlineWidth,
+        height: summary.getBoundingClientRect().height,
+      }));
+      assert.notEqual(memoryGroupFocus.outlineStyle, "none");
+      assert.ok(memoryGroupFocus.height >= 44, JSON.stringify(memoryGroupFocus));
+      await page.evaluate(() => document.body.removeAttribute("tabindex"));
       const setupGuide = page.getByRole("button", { name: "Show setup guide" });
       await setupGuide.click();
       const onboardingTitle = page.locator("#ltm-onboarding-title");
@@ -2045,6 +2121,185 @@ async function main() {
       assert.equal(await page.locator('[data-ltm-availability-workbench] [role="alert"]').count(), 1);
       assert.equal(availabilityPatches.length, 1);
       await page.getByRole("button", { name: "Cancel" }).click();
+      // An existing branch assignment keeps working (#1420): its chip reads "Chat - Branch", saving
+      // other places leaves it alone, and it can be removed in bulk and in the single editor.
+      await memorySearch.fill("Memory outside current chat");
+      const branchCard = page
+        .locator('[data-ltm-note-type="world"]')
+        .filter({ hasText: /^Memory outside current chat/u });
+      await branchCard.waitFor();
+      await branchCard.locator("button").first().click();
+      await page.getByRole("button", { name: "Edit availability" }).click();
+      const branchAvailability = page.locator("[data-ltm-availability-workbench]");
+      await branchAvailability.waitFor();
+      const branchPill = branchAvailability.getByRole("button", {
+        name: "Remove Memory Conversation - Member Final Branch",
+        exact: true,
+      });
+      assert.equal(await branchPill.count(), 1);
+      await branchAvailability.locator("[data-ltm-availability-picker] > summary").click();
+      const branchRail = branchAvailability.locator("[data-ltm-availability-tabs]");
+      assert.deepEqual(
+        await branchRail
+          .locator("[data-ltm-availability-tab]")
+          .evaluateAll((tabs) =>
+            tabs.map((tab) => [tab.getAttribute("data-ltm-availability-tab"), tab.getAttribute("aria-selected")]),
+          ),
+        [
+          ["all", "true"],
+          ["chat", "false"],
+          ["character", "false"],
+          ["persona", "false"],
+        ],
+      );
+      assert.equal(await branchRail.locator('[data-ltm-availability-target="chat:memory-chat"]').count(), 0);
+      assert.match(
+        await branchRail.locator('[data-ltm-availability-target="chat:conversation-a"]').innerText(),
+        /Chat · All branches/u,
+      );
+      // Keyboard and search: a persona from the All tab, then a character from its own tab.
+      const branchAllSearch = branchRail.locator('[data-ltm-availability-search="all"]');
+      await branchAllSearch.fill("Space explorer");
+      assert.deepEqual(
+        await branchRail
+          .locator("[data-ltm-availability-target]")
+          .evaluateAll((rows) => rows.map((row) => row.getAttribute("data-ltm-availability-target"))),
+        ["persona:persona-a"],
+      );
+      await branchAllSearch.press("Tab");
+      await branchRail.locator('[data-ltm-availability-target="persona:persona-a"]:focus').waitFor();
+      await page.keyboard.press("Enter");
+      await branchRail.locator('[data-ltm-availability-target="persona:persona-a"][aria-pressed="true"]').waitFor();
+      await branchRail.locator('[data-ltm-availability-tab="all"]').focus();
+      await page.keyboard.press("ArrowRight");
+      await branchRail.locator('[data-ltm-availability-tab="chat"]:focus').waitFor();
+      await page.keyboard.press("ArrowRight");
+      await branchRail.locator('[data-ltm-availability-tab="character"][aria-selected="true"]:focus').waitFor();
+      await page.keyboard.press("Tab");
+      await branchRail.locator('[data-ltm-availability-search="character"]:focus').waitFor();
+      await page.keyboard.type("Character A");
+      await page.keyboard.press("Tab");
+      await branchRail.locator('[data-ltm-availability-target="character:character-a"]:focus').waitFor();
+      await page.keyboard.press("Space");
+      await branchRail.locator('[data-ltm-availability-target="character:character-a"][aria-pressed="true"]').waitFor();
+      await branchRail.locator('[data-ltm-availability-tab="chat"]').click();
+      await branchRail.locator('[data-ltm-availability-target="chat:bulk-chat-7"]').click();
+      await branchRail.locator('[data-ltm-availability-target="chat:bulk-chat-7"][aria-pressed="true"]').waitFor();
+      assert.equal(await branchPill.count(), 1, "adding places keeps the branch chip");
+      // Choosing the branch's whole chat covers it (#1442): the chat's chip stands for the branch.
+      await branchRail.locator('[data-ltm-availability-target="chat:conversation-a"]').click();
+      await branchRail.locator('[data-ltm-availability-target="chat:conversation-a"][aria-pressed="true"]').waitFor();
+      assert.equal(await branchPill.count(), 0, "a selected whole chat covers its branch chip");
+      await branchAvailability.getByRole("button", { name: "Save availability" }).click();
+      await page.waitForFunction(() => document.querySelector("[data-ltm-availability-workbench]") === null);
+      type SavedScope = { chatIds?: string[]; groupIds?: string[]; characterIds?: string[]; personaIds?: string[] };
+      const keptBranchScope = branchAvailabilityPatches.at(-1)?.scope as SavedScope;
+      assert.deepEqual(
+        keptBranchScope.chatIds?.toSorted(),
+        ["bulk-chat-7", "memory-chat"],
+        JSON.stringify(keptBranchScope),
+      );
+      assert.deepEqual(keptBranchScope.groupIds, ["conversation-a"], JSON.stringify(keptBranchScope));
+      assert.deepEqual(keptBranchScope.characterIds, ["character-a"], JSON.stringify(keptBranchScope));
+      assert.deepEqual(keptBranchScope.personaIds, ["persona-a"], JSON.stringify(keptBranchScope));
+      // Bulk remove lists the branch assignment the selected memory already has.
+      await page.locator("[data-ltm-select-mode]").click();
+      await branchCard.locator('input[type="checkbox"]').check();
+      await page.locator("[data-ltm-bulk-availability]").click();
+      const bulkBranchRemoval = page.locator("[data-ltm-bulk-availability-workbench]");
+      await bulkBranchRemoval.waitFor();
+      await bulkBranchRemoval.getByRole("button", { name: "Remove availability", exact: true }).click();
+      await bulkBranchRemoval.locator("[data-ltm-availability-picker] > summary").click();
+      const bulkBranchRail = bulkBranchRemoval.locator("[data-ltm-availability-tabs]");
+      await bulkBranchRail.locator('[data-ltm-availability-tab="chat"]').click();
+      const bulkBranchRow = bulkBranchRail.locator('[data-ltm-availability-target="chat:memory-chat"]');
+      assert.match(await bulkBranchRow.innerText(), /Memory Conversation - Member Final Branch/u);
+      await bulkBranchRow.click();
+      assert.equal(await bulkBranchRow.getAttribute("aria-pressed"), "true");
+      await bulkBranchRemoval.getByRole("button", { name: "Add availability", exact: true }).click();
+      assert.equal(await bulkBranchRow.count(), 0, "a branch is not a place to add");
+      await bulkBranchRemoval.getByRole("button", { name: "Remove availability", exact: true }).click();
+      assert.equal(await bulkBranchRow.getAttribute("aria-pressed"), "false", "switching to Add drops the branch");
+      await bulkBranchRow.click();
+      const bulkBranchRequest = page.waitForRequest(
+        (request) => request.method() === "POST" && request.url().includes("/api/long-term-memory/notes/batch"),
+      );
+      // The memory now also names a chat deleted since it was assigned; the refresh after Apply loads it.
+      outsideChatNote = {
+        ...outsideChatNote,
+        scope: { ...keptBranchScope, chatIds: [...(keptBranchScope.chatIds ?? []), "deleted-chat"] },
+      };
+      await bulkBranchRemoval.getByRole("button", { name: "Apply", exact: true }).click();
+      assert.deepEqual((await bulkBranchRequest).postDataJSON().removeScope, { chatIds: ["memory-chat"] });
+      await bulkBranchRemoval.waitFor({ state: "detached" });
+      if ((await page.locator("[data-ltm-select-mode]").innerText()).trim() === "Done")
+        await page.locator("[data-ltm-select-mode]").click();
+      // Bulk Remove lists a place that no longer exists, with the single editor's fallback label (#1442).
+      await page.locator("[data-ltm-select-mode]").click();
+      await branchCard.locator('input[type="checkbox"]').check();
+      await page.locator("[data-ltm-bulk-availability]").click();
+      await bulkBranchRemoval.waitFor();
+      await bulkBranchRemoval.getByRole("button", { name: "Remove availability", exact: true }).click();
+      await bulkBranchRemoval.locator("[data-ltm-availability-picker] > summary").click();
+      await bulkBranchRail.locator('[data-ltm-availability-tab="chat"]').click();
+      const deletedChatRow = bulkBranchRail.locator('[data-ltm-availability-target="chat:deleted-chat"]');
+      assert.match(await deletedChatRow.innerText(), /Unavailable chat/u);
+      await deletedChatRow.click();
+      assert.equal(await deletedChatRow.getAttribute("aria-pressed"), "true");
+      // Removing a whole chat in bulk also removes its branch ids (#1442).
+      await bulkBranchRail.locator('[data-ltm-availability-target="chat:conversation-a"]').click();
+      // Sources' "All branches" import saves the chat's group id with every branch id; the refresh loads it.
+      outsideChatNote = {
+        ...outsideChatNote,
+        scope: {
+          groupId: "conversation-a",
+          groupIds: ["conversation-a"],
+          chatId: "memory-chat",
+          chatIds: ["memory-chat", "memory-conversation-branch", "bulk-chat-7"],
+          characterIds: ["character-a"],
+          personaId: "persona-a",
+          personaIds: ["persona-a"],
+        },
+      };
+      const deletedChatRequest = page.waitForRequest(
+        (request) => request.method() === "POST" && request.url().includes("/api/long-term-memory/notes/batch"),
+      );
+      await bulkBranchRemoval.getByRole("button", { name: "Apply", exact: true }).click();
+      assert.deepEqual((await deletedChatRequest).postDataJSON().removeScope, {
+        chatIds: ["deleted-chat", "memory-chat", "memory-conversation-branch"],
+        groupIds: ["conversation-a"],
+      });
+      await bulkBranchRemoval.waitFor({ state: "detached" });
+      if ((await page.locator("[data-ltm-select-mode]").innerText()).trim() === "Done")
+        await page.locator("[data-ltm-select-mode]").click();
+      // An imported whole chat shows one chip, and removing or unticking it removes its branches too (#1442).
+      const branchPills = branchAvailability.getByRole("button", { name: /^Remove Memory Conversation - /u });
+      const wholeChatPill = branchAvailability.getByRole("button", { name: "Remove Conversation A", exact: true });
+      await branchCard.locator("button").first().click();
+      await page.getByRole("button", { name: "Edit availability" }).click();
+      await branchAvailability.waitFor();
+      assert.equal(await wholeChatPill.count(), 1);
+      assert.equal(await branchPills.count(), 0, "the whole chat's chip covers its branches");
+      assert.equal(await branchAvailability.locator("[data-ltm-availability-pills] button").count(), 4);
+      await wholeChatPill.click();
+      assert.equal(await wholeChatPill.count(), 0);
+      assert.equal(await branchPills.count(), 0, "removing the whole chat removes its branches");
+      await branchAvailability.getByRole("button", { name: "Cancel", exact: true }).click();
+      await page.getByRole("button", { name: "Edit availability" }).click();
+      await branchAvailability.waitFor();
+      await branchAvailability.locator("[data-ltm-availability-picker] > summary").click();
+      await branchRail.locator('[data-ltm-availability-tab="chat"]').click();
+      await branchRail.locator('[data-ltm-availability-target="chat:conversation-a"]').click();
+      await branchRail.locator('[data-ltm-availability-target="chat:conversation-a"][aria-pressed="false"]').waitFor();
+      assert.equal(await branchPills.count(), 0, "unticking the whole chat removes its branches");
+      await branchAvailability.getByRole("button", { name: "Save availability" }).click();
+      await page.waitForFunction(() => document.querySelector("[data-ltm-availability-workbench]") === null);
+      const removedBranchScope = branchAvailabilityPatches.at(-1)?.scope as SavedScope & { groupId?: string };
+      assert.deepEqual(removedBranchScope.chatIds, ["bulk-chat-7"], JSON.stringify(removedBranchScope));
+      assert.equal(removedBranchScope.groupIds, undefined, JSON.stringify(removedBranchScope));
+      assert.equal(removedBranchScope.groupId, undefined, JSON.stringify(removedBranchScope));
+      assert.equal(branchAvailabilityPatches.length, 2);
+      await memorySearch.fill("Scoped desktop memory");
       await page.locator('[data-ltm-navigation="desktop"] [data-ltm-destination="review"]').click();
       const recoverySource = page.locator('[data-ltm-review-source-select="source_mobile_recovery"]');
       if ((await recoverySource.getAttribute("aria-expanded")) !== "true") await recoverySource.click();
@@ -2400,17 +2655,20 @@ async function main() {
         sourceNoteId: legacyGlobalNote.id,
         ...fields,
       });
+      const secondsAfter = (seconds: number) => new Date(Date.parse(noteTimestamp) + seconds * 1000).toISOString();
       const debugEvents = [
         debugEvent("estimated", "extract_source_note", "started"),
         debugEvent("estimated", "evidence_unit_request", "started", {
+          ts: secondsAfter(2),
           model: "fixture-model",
           counts: { estimatedPromptTokens: 123 },
         }),
         debugEvent("estimated", "evidence_unit_response", "ok", {
-          durationMs: 450,
+          ts: secondsAfter(74),
+          durationMs: 72_000,
           details: { finishReason: "stop", responseSnippet: "private response snippet" },
         }),
-        debugEvent("estimated", "extract_source_note", "ok", { durationMs: 500 }),
+        debugEvent("estimated", "extract_source_note", "ok", { ts: secondsAfter(75), durationMs: 500 }),
         debugEvent("reported", "evidence_unit_request", "started", { counts: { estimatedPromptTokens: 123 } }),
         debugEvent("reported", "evidence_unit_response", "ok", {
           counts: { promptTokens: 40, completionTokens: 12, completionReasoningTokens: 8, totalTokens: 60 },
@@ -2433,76 +2691,1168 @@ async function main() {
         debugEvent("partial", "import_sources", "started"),
         debugEvent("partial", "extract_source_note", "error", { error: { message: "One source failed." } }),
         debugEvent("partial", "import_sources", "ok"),
-        debugEvent("noduration", "recall_explanation", "ok"),
+        debugEvent("breakdown", "evidence_units_compiled", "warning", {
+          sourceNoteId: "source_mobile_review",
+          counts: {
+            totalCandidates: 12,
+            units: 7,
+            mutations: 2,
+            targetNotes: 2,
+            deduplications: 1,
+            candidateRejectionDiagnostics: 4,
+          },
+          details: {
+            mutationKinds: { create_note: 1, append_section: 1 },
+            targetNoteIds: ["world_legacy_global", "world_scoped_desktop"],
+            // The server always logs the model's own summary, which does not explain the warning.
+            summary: "Compiled the extraction into seven units.",
+          },
+        }),
+        debugEvent("breakdown", "draft_deferred", "ok", {
+          sourceNoteId: "source_mobile_review",
+          counts: { droppedUnits: 9 },
+          details: {
+            extractionOutcome: {
+              state: "partial_success",
+              totalCandidates: 12,
+              keptUnits: 7,
+              droppedUnits: 4,
+              droppedCandidateDetailsTruncated: true,
+              droppedCandidates: [
+                { reason: "missing_source_evidence", message: "No supporting quote.", snippet: "x".repeat(280) },
+                { reason: "missing_source_evidence", message: "Evidence was omitted." },
+                {
+                  reason: "candidate_overflow",
+                  message: "Dropped candidates exceeding the extraction processing limit.",
+                },
+              ],
+            },
+          },
+        }),
+        debugEvent("noduration", "recall_explanation", "ok", {
+          details: { selected: "truncated", rejected: [null], weights: "truncated", eligibleChunks: 3 },
+        }),
+        debugEvent("noduration", "draft_deferred", "ok", {
+          details: { extractionOutcome: { droppedUnits: "truncated" } },
+        }),
+        debugEvent("counts-only", "draft_deferred", "ok", {
+          counts: { droppedUnits: 3 },
+          details: { truncated: true },
+        }),
+        debugEvent("sample-only", "draft_deferred", "ok", {
+          counts: { droppedUnits: 3 },
+          details: {
+            extractionOutcome: {
+              droppedUnits: "truncated",
+              droppedCandidates: [{ reason: "invalid_format", message: "One recorded sample." }],
+            },
+          },
+        }),
+        debugEvent("missing-samples", "draft_deferred", "ok", {
+          counts: { droppedUnits: 5 },
+          details: { extractionOutcome: { droppedUnits: 0 } },
+        }),
+        debugEvent("complete-empty", "draft_deferred", "ok", {
+          counts: { droppedUnits: 5 },
+          details: { extractionOutcome: { droppedUnits: 0, droppedCandidates: [] } },
+        }),
+        // Fixture events predate the one-hour stale-threshold, so a started step in
+        // a completed operation must not read as unfinished (M1), while a
+        // started-only operation still reads "No completion recorded".
+        debugEvent("oldstarted", "extract_source_note", "started"),
+        // Every recall is an ordinary history row: one names its source chat by the
+        // /scope-targets label, one keeps the raw id when the lookup has no match.
+        debugEvent("recall-desktop", "recall_explanation", "ok", {
+          phase: "retrieval",
+          chatId: "desktop-chat",
+          counts: { selected: 1, rejected: 0, usedTokens: 12 },
+          details: {
+            chatId: "desktop-chat",
+            selected: [],
+            rejected: [],
+          },
+        }),
+        debugEvent("recall", "recall_explanation", "ok", {
+          phase: "retrieval",
+          // No shared source note: this recall must match the memory filter only
+          // through its selected candidate id.
+          sourceNoteId: undefined,
+          chatId: "chat-artifact",
+          counts: { selected: 1, rejected: 6, usedTokens: 42 },
+          details: {
+            chatId: "chat-artifact",
+            maxChunks: 8,
+            maxTokens: 2048,
+            scoreThreshold: 0.5,
+            mode: "on_relevance",
+            includeResolved: false,
+            exclusiveCharacterTargeting: false,
+            contextMessagesUsed: 3,
+            indexLoadOutcome: "loaded",
+            indexedChunks: 4,
+            eligibleChunks: 3,
+            embeddedChunks: 2,
+            semanticOutcome: "available",
+            rejectedLimit: 20,
+            weights: { semanticWeight: 0.6 },
+            selected: [
+              {
+                noteId: "world_legacy_global",
+                sectionKey: "facts",
+                score: 0.35,
+                fusedScore: 0.02,
+                fusedRank: 1,
+                lanes: ["semantic"],
+              },
+            ],
+            rejected: [
+              {
+                noteId: "world_scoped_desktop",
+                sectionKey: "facts",
+                score: 0.45,
+                fusedScore: 0.01,
+                fusedRank: 2,
+                rejectionReason: "lower_rank",
+              },
+              ...["budget", "duplicate_text", "score_threshold", "missing_chunk", "prompt_budget"].map(
+                (rejectionReason) => ({ noteId: "world_scoped_desktop", sectionKey: "facts", rejectionReason }),
+              ),
+            ],
+          },
+        }),
+        // D31: explicit memory-id references the Vault memory filter must match (produced
+        // target, rejected recall candidate), plus operations it must not: an unrelated
+        // source and an apply carrying only change/mutation ids.
+        debugEvent("target", "evidence_units_compiled", "ok", {
+          sourceNoteId: "source_target_other",
+          details: { targetNoteIds: [legacyGlobalNote.id] },
+        }),
+        // Two events; only the second references the memory, so matching must find the
+        // operation by that single event and still show both events and the status.
+        debugEvent("late-reference", "extract_source_note", "started", { sourceNoteId: "world_unrelated" }),
+        debugEvent("late-reference", "extract_source_note", "ok", {
+          sourceNoteId: undefined,
+          noteId: legacyGlobalNote.id,
+          durationMs: 700,
+        }),
+        debugEvent("recall-rejected", "recall_explanation", "ok", {
+          phase: "retrieval",
+          // Matches only through the rejected candidate id, not a shared source note.
+          sourceNoteId: undefined,
+          chatId: "chat-artifact",
+          details: {
+            chatId: "chat-artifact",
+            selected: [],
+            rejected: [
+              { noteId: legacyGlobalNote.id, sectionKey: "facts", score: 0.3, rejectionReason: "score_threshold" },
+            ],
+          },
+        }),
+        debugEvent("recall-rejected-threshold", "recall_explanation", "ok", {
+          phase: "retrieval",
+          sourceNoteId: undefined,
+          chatId: "chat-artifact",
+          details: {
+            chatId: "chat-artifact",
+            scoreThreshold: 0.5,
+            selected: [],
+            rejected: [
+              { noteId: legacyGlobalNote.id, sectionKey: "facts", score: 0.3, rejectionReason: "score_threshold" },
+            ],
+          },
+        }),
+        debugEvent("apply", "apply_changes", "ok", { sourceNoteId: undefined }),
+        // The server logs the selected ids on mutations_selected, with the skipped ids in details.
+        debugEvent("apply", "mutations_selected", "ok", {
+          sourceNoteId: undefined,
+          mutationIds: ["66666666-7777-8888-9999-000000000000"],
+          details: { skippedMutationIds: ["11111111-2222-3333-4444-555555555555"] },
+        }),
+        // An auto-apply runs inside the extraction's operation, so the extraction's own terminal
+        // event makes the operation read completed_with_warnings rather than error.
+        debugEvent("apply-failed", "extract_source_note", "started", { sourceNoteId: undefined }),
+        debugEvent("apply-failed", "extract_source_note", "ok", { sourceNoteId: undefined }),
+        // The selection is logged before the write, so a failed apply saved an unknown share of it.
+        debugEvent("apply-failed", "mutations_selected", "ok", {
+          sourceNoteId: undefined,
+          mutationIds: ["77777777-8888-9999-0000-111111111111"],
+          details: { skippedMutationIds: [] },
+        }),
+        debugEvent("apply-failed", "apply_draft", "error", {
+          sourceNoteId: undefined,
+          error: { message: "The memory could not be written." },
+        }),
+        // One operation applying two drafts: the failure belongs to its own draft only.
+        debugEvent("apply-mixed", "mutations_selected", "ok", {
+          id: "apply-mixed-selected-a",
+          draftId: "draft-a",
+          sourceNoteId: undefined,
+          mutationIds: ["88888888-9999-0000-1111-222222222222"],
+          details: { skippedMutationIds: [] },
+        }),
+        debugEvent("apply-mixed", "apply_draft", "error", {
+          draftId: "draft-a",
+          sourceNoteId: undefined,
+          error: { message: "The memory could not be written." },
+        }),
+        debugEvent("apply-mixed", "mutations_selected", "ok", {
+          id: "apply-mixed-selected-b",
+          draftId: "draft-b",
+          sourceNoteId: undefined,
+          mutationIds: ["99999999-0000-1111-2222-333333333333"],
+          details: { skippedMutationIds: [] },
+        }),
+        debugEvent("apply-mixed", "apply_draft", "ok", { draftId: "draft-b", sourceNoteId: undefined }),
+        debugEvent("unrelated", "extract_source_note", "ok", { sourceNoteId: "world_unrelated" }),
       ];
-      const assertDebugActivity = async (activityPage: typeof page) => {
+      // Simulates a retained log that holds no events for the handed memory.
+      let debugLogEmpty = false;
+      let debugReviewPending = true;
+      let debugExportError = false;
+      let debugLogError = false;
+      let debugClearDeletes = 0;
+      let debugLogDelayMs = 0;
+      let debugLogRequests = 0;
+      const debugReviewSources = structuredClone(reviewSources);
+      const assertDebugActivity = async (activityPage: typeof page, navigation: "desktop" | "mobile") => {
+        // D18/D33: the noncompact Activity log Retry keeps a 44px target. Fail the
+        // first load, measure the Retry, then recover through it.
+        debugLogError = true;
         await activityPage.locator("#settings-tab-debug").click();
         const activity = activityPage.locator('[data-ltm-surface="activity"]');
-        const operation = (id: string) =>
-          activity
-            .locator(":scope > ol > li > details > summary")
-            .nth(
-              ["estimated", "reported", "zero", "truncated", "context", "budget", "partial", "noduration"].indexOf(id),
-            );
-        await operation("estimated").waitFor();
-        const estimated = await operation("estimated").innerText();
+        const details = activity.locator("[data-ltm-debug-details]");
+        const activityRetry = activity.locator('[data-ltm-status="danger"]').getByRole("button", { name: "Retry" });
+        await activityRetry.waitFor();
+        const activityRetryBox = await activityRetry.boundingBox();
+        assert.ok(activityRetryBox && activityRetryBox.height >= 44, "Activity log Retry keeps a 44px target");
+        debugLogError = false;
+        await activityRetry.click();
+        await activity.locator('[data-ltm-debug-operation="estimated"]').waitFor();
+        const showEvents = async () => {
+          const tab = activity.locator('[data-ltm-workspace-pane-tab="navigator"]');
+          if (await tab.count()) await tab.click();
+        };
+        const operation = async (id: string) => {
+          await showEvents();
+          await activity.locator(`[data-ltm-debug-operation="${id}"]`).click();
+          await details.waitFor();
+          return details.innerText();
+        };
+        const estimated = await operation("estimated");
         assert.match(estimated, /AI extraction/u);
         assert.match(estimated, /fixture-model/u);
         assert.match(estimated, /500 ms/u);
         assert.match(estimated, /Estimated input: 123 tokens/u);
         assert.doesNotMatch(estimated, /Input \(provider-reported\)|Output:|Total:/u);
-        const reported = await operation("reported").innerText();
+        // Steps read as sentences with their offset from the start, in the shared duration units.
+        assert.match(estimated, /\+2\.0 s[\s\S]*Sent to the model[\s\S]*Started/u);
+        assert.match(estimated, /\+1 min 14 s[\s\S]*Model replied after 1 min 12 s[\s\S]*Succeeded/u);
+        assert.match(estimated, /took 500 ms/u, "the header names the operation's recorded duration");
+        assert.doesNotMatch(estimated, /Phase \/|LLM \//u, "steps no longer lead with a Phase / Action heading");
+        assert.doesNotMatch(estimated, /72,000 ms/u);
+        assert.match(estimated, /Copy JSON copies the 4 log records for this operation\./u);
+        assert.match(estimated, /It includes the model's reply excerpt, which isn't shown here\./u);
+        assert.equal(
+          await details.locator("time[datetime]").first().getAttribute("datetime"),
+          secondsAfter(75),
+          "the header time is the operation's last event",
+        );
+        // M1: a completed operation's old started steps must not age into "No completion
+        // recorded"; a started-only old operation still must.
+        assert.doesNotMatch(estimated, /No completion recorded/u);
+        assert.match(await operation("oldstarted"), /No completion recorded/u);
+        const reported = await operation("reported");
         assert.match(reported, /Completed/u, "a standalone request/response pair must not stay Running");
         assert.match(reported, /Input \(provider-reported\): 40 tokens/u);
         assert.match(reported, /Reasoning: 8 tokens/u);
         assert.match(reported, /Output: 12 tokens/u);
         assert.match(reported, /Total: 60 tokens/u);
-        assert.match(await operation("zero").innerText(), /Estimated input: 123 tokens/u);
-        assert.match(await operation("zero").innerText(), /Input \(provider-reported\): 0 tokens/u);
-        assert.match(await operation("truncated").innerText(), /Completed with warnings/u);
-        assert.match(await operation("truncated").innerText(), /output limit.*length/iu);
-        assert.match(await operation("context").innerText(), /Failed/u);
-        assert.match(await operation("context").innerText(), /too large.*context/iu);
-        assert.match(await operation("budget").innerText(), /Failed/u);
-        assert.match(await operation("budget").innerText(), /too small.*response/iu);
-        assert.match(await operation("partial").innerText(), /Completed with warnings/u);
-        assert.match(await operation("partial").innerText(), /One source failed\./u);
+        assert.match(await operation("zero"), /Estimated input: 123 tokens/u);
+        assert.match(await operation("zero"), /Input \(provider-reported\): 0 tokens/u);
+        assert.match(await operation("truncated"), /Completed with warnings/u);
+        assert.match(await operation("truncated"), /output limit.*length/iu);
+        assert.match(await operation("context"), /Failed/u);
+        assert.match(await operation("context"), /too large.*context/iu);
+        assert.match(await operation("budget"), /Failed/u);
+        assert.match(await operation("budget"), /too small.*response/iu);
+        assert.match(await operation("partial"), /Completed with warnings/u);
+        assert.match(await operation("partial"), /One source failed\./u);
+        assert.match(await operation("truncated"), /What to try[\s\S]*output budget/iu);
+        const breakdown = await operation("breakdown");
+        assert.match(breakdown, /Result\s+12\s+candidates found\s+→\s+7\s+kept\s+→\s+2\s+changes/u);
+        assert.doesNotMatch(breakdown, /kept units/u);
+        assert.match(breakdown, /Create note[\s\S]*Append section/u);
+        assert.match(breakdown, /Kept 7 of 12 candidates/u);
+        assert.match(breakdown, /4 candidates failed checks; see Not kept\./u);
+        assert.doesNotMatch(breakdown, /Compile evidence: Warning/u);
+        assert.match(breakdown, /Not kept[\s\S]*No supporting quote\.[\s\S]*Evidence was omitted\./u);
+        assert.match(breakdown, /The extraction processing limit was exceeded\./u);
+        assert.doesNotMatch(breakdown, /unspecified extraction reason/u);
+        assert.equal(await details.locator("[data-ltm-debug-drop-reason]").count(), 2);
+        assert.equal(await details.locator("blockquote").count(), 1, "missing snippets do not render blank quotes");
+        assert.match(breakdown, /and 1 more/u);
+        assert.equal(
+          await activityPage.evaluate(
+            () => document.documentElement.scrollWidth <= document.documentElement.clientWidth,
+          ),
+          true,
+          "long candidate quotes must wrap on desktop and mobile",
+        );
+        await details.getByRole("button", { name: "Open Review Queue" }).click();
+        await activityPage.locator('[data-ltm-review-source-select="source_mobile_review"]').waitFor();
+        debugReviewPending = false;
+        await activityPage.locator(`[data-ltm-navigation="${navigation}"] [data-ltm-destination="settings"]`).click();
+        await activityPage.locator("#settings-tab-debug").click();
+        await operation("breakdown");
+        await details.getByRole("button", { name: "Open Review Queue" }).waitFor({ state: "hidden" });
+        debugReviewPending = true;
+        const applied = await operation("apply");
+        assert.match(applied, /Result\s+2\s+changes in the draft\s+→\s+1\s+saved/u);
+        assert.match(applied, /Selected 1 of 2 changes/u);
+        assert.match(applied, /Not saved[\s\S]*1 change skipped/u);
+        assert.doesNotMatch(applied, /11111111-2222-3333-4444-555555555555|66666666-7777-8888-9999-000000000000/u);
+        assert.equal(
+          await details.locator("[data-ltm-debug-facts]").count(),
+          0,
+          "an operation with no facts renders no empty Details section",
+        );
+        await details.getByRole("button", { name: /^Copy JSON/u }).click();
+        assert.match(
+          await activityPage.evaluate(() => navigator.clipboard.readText()),
+          /11111111-2222-3333-4444-555555555555/u,
+          "raw ids stay available through Copy JSON",
+        );
+        const failedApply = await operation("apply-failed");
+        assert.match(failedApply, /Result[\s\S]*Not recorded/u);
         assert.doesNotMatch(
-          await operation("noduration").innerText(),
-          / ms/u,
+          failedApply,
+          /1 saved|1 change skipped|No skipped changes/u,
+          "a failed apply claims no saves",
+        );
+        const mixedApply = await operation("apply-mixed");
+        assert.match(
+          mixedApply,
+          /Result[\s\S]*Not recorded[\s\S]*1\s+change in the draft\s+→\s+1\s+saved/u,
+          "only the failed draft loses its saved count",
+        );
+        for (const [id, count, more, incomplete] of [
+          ["counts-only", 3, 3, true],
+          ["sample-only", 3, 2, true],
+          ["missing-samples", 0, 0, true],
+          ["complete-empty", 0, 0, false],
+        ] as const) {
+          const outcome = await operation(id);
+          assert.match(outcome, new RegExp(`\\b${count} not kept\\b`, "u"));
+          if (more) assert.match(outcome, new RegExp(`and ${more} more`, "u"));
+          else assert.doesNotMatch(outcome, /and \d+ more/u);
+          assert.equal(outcome.includes("this breakdown is incomplete."), incomplete);
+        }
+        assert.doesNotMatch(
+          await operation("noduration"),
+          / ms|\d s\b/u,
           "an operation without a recorded duration must not display a fabricated one",
         );
+        // Settings are whole labels; an unrecorded one reads "Not recorded" and a missing count is left out.
+        const recordedSetting = (term: string) =>
+          details.locator("dt", { hasText: term }).locator("xpath=following-sibling::dd[1]").innerText();
+        assert.equal(await recordedSetting("Minimum relevance"), "Not recorded");
+        assert.match(await details.innerText(), /3\s+usable in this chat/u);
+        assert.doesNotMatch(await details.innerText(), /indexed/u);
+        assert.equal(
+          await details.locator("[data-ltm-debug-nothing-added]").count(),
+          0,
+          "malformed rows add no callout",
+        );
+        const missingOutcome = await details
+          .getByRole("heading", { name: "Not kept", exact: true })
+          .locator("..")
+          .innerText();
+        assert.match(missingOutcome.trim(), /^Not kept\s+Not recorded\s+Only the recorded candidate samples/u);
+        assert.match(missingOutcome, /this breakdown is incomplete\./u);
+        // The response snippet is never on screen; Copy JSON is the only raw-record path.
         assert.doesNotMatch(await activity.innerText(), /private response snippet/u);
+        await operation("estimated");
+        await details.getByRole("button", { name: /^Copy JSON/u }).click();
+        const copied = await activityPage.evaluate(() => navigator.clipboard.readText());
+        assert.match(copied, /private response snippet/u);
+        assert.match(copied, /"operationId": "estimated"/u);
+        assert.match(copied, /estimated-evidence_unit_response-ok/u);
+        assert.doesNotMatch(await activity.innerText(), /private response snippet/u);
+        // Chips filter whole operations: a partial import that ended ok but recorded
+        // an error must not flip to "Failed" under Problems.
+        await showEvents();
+        await activity.locator('[data-ltm-debug-chip="problems"]').click();
+        await activity.locator('[data-ltm-debug-operation="partial"]').waitFor();
+        const partial = await operation("partial");
+        assert.match(partial, /Completed with warnings/u);
+        assert.match(partial, /One source failed\./u);
+        // The active chip reads pressed with the pointer elsewhere.
+        await showEvents();
+        await activityPage.mouse.move(0, 0);
+        const chipBackground = (chip: string) =>
+          activity
+            .locator(`[data-ltm-debug-chip="${chip}"]`)
+            .evaluate((element) => getComputedStyle(element).backgroundColor);
+        assert.notEqual(await chipBackground("problems"), await chipBackground("recall"));
+        await showEvents();
+        await activity.locator('[data-ltm-debug-chip="all"]').click();
+        // Rows show the outcome rather than repeating their title.
+        const rowText = async (id: string) => {
+          await showEvents();
+          return activity.locator(`[data-ltm-debug-operation="${id}"]`).innerText();
+        };
+        assert.match(await rowText("breakdown"), /7 of 12 kept/u);
+        assert.match(await rowText("recall"), /1 added · 6 not added/u);
+        assert.match(await rowText("apply"), /1 saved · 1 skipped/u);
+        assert.doesNotMatch(
+          await activity.locator("[data-ltm-debug-list]").innerText(),
+          /(AI extraction|Memory recall|Deferred draft): Ok\./u,
+        );
+        assert.doesNotMatch(await operation("estimated"), /AI extraction: Ok\./u, "timeline steps do not repeat it");
+        // The open event stays marked with the pointer elsewhere, also after returning to Events.
+        await showEvents();
+        await activity.locator('[data-ltm-debug-operation="recall"]').click();
+        await showEvents();
+        await activityPage.mouse.move(0, 0);
+        const selectedRow = activity.locator('[data-ltm-debug-operation="recall"]');
+        const rowStyle = (row: typeof selectedRow) =>
+          row.evaluate((element) => {
+            // Read the settled colors, not a mid-transition frame.
+            for (const animation of element.getAnimations({ subtree: true })) animation.finish();
+            return {
+              background: getComputedStyle(element).backgroundColor,
+              bar: getComputedStyle(element).boxShadow,
+              title: getComputedStyle(element.querySelector(".font-semibold")!).color,
+              summary: getComputedStyle(element.querySelector(".line-clamp-2")!).color,
+            };
+          });
+        const selectedStyle = await rowStyle(selectedRow);
+        const otherStyle = await rowStyle(activity.locator('[data-ltm-debug-operation="recall-desktop"]'));
+        assert.notEqual(selectedStyle.background, otherStyle.background);
+        assert.notEqual(selectedStyle.bar, otherStyle.bar, "the selected row carries an accent bar");
+        assert.equal(selectedStyle.summary, selectedStyle.title, "muted row text meets contrast when selected");
+        assert.ok(
+          await activity.locator("[data-ltm-debug-list] .line-clamp-2").evaluateAll((spans) =>
+            spans.every((span) => {
+              const style = getComputedStyle(span);
+              return span.getBoundingClientRect().height <= Number.parseFloat(style.lineHeight) * 2 + 1;
+            }),
+          ),
+          "row summaries clamp to two lines",
+        );
+        // A hovered row reads like the selected one, wherever on the row the pointer is.
+        await activity.locator('[data-ltm-debug-operation="recall-desktop"] .font-semibold').hover();
+        const hoveredStyle = await rowStyle(activity.locator('[data-ltm-debug-operation="recall-desktop"]'));
+        assert.equal(hoveredStyle.summary, hoveredStyle.title, "muted row text meets contrast when hovered");
+        await activityPage.mouse.move(0, 0);
+        // Search narrows whole operations and keeps the full event list of the match.
+        await showEvents();
+        const searchBox = activity.locator("[data-ltm-debug-search]");
+        await searchBox.fill("fixture-model");
+        await activity.locator('[data-ltm-debug-operation="estimated"]').waitFor();
+        assert.equal(await activity.locator('[data-ltm-debug-operation="reported"]').count(), 0);
+        const searchedEstimated = await operation("estimated");
+        assert.match(searchedEstimated, /AI extraction/u);
+        assert.match(searchedEstimated, /500 ms/u);
+        await showEvents();
+        await searchBox.fill("");
+        // A recorded recall is an ordinary history row naming its source chat, and
+        // its selected/rejected memory names read before the run parameters.
+        const recall = await operation("recall");
+        assert.match(recall, /Memory recall/u);
+        assert.match(recall, /Recall from chat-artifact/u);
+        assert.match(
+          recall,
+          /Result\s+4\s+indexed\s+→\s+3\s+usable in this chat\s+→\s+1\s+added[\s\S]*Added[\s\S]*Not added[\s\S]*Recall settings used/u,
+        );
+        assert.doesNotMatch(recall, /1 selected · 6 rejected/u, "recall counts appear once, under Result");
+        assert.equal(await recordedSetting("Minimum relevance"), "50%");
+        assert.equal(await recordedSetting("Memory limit"), "8");
+        assert.equal(await recordedSetting("Token limit"), "2,048");
+        assert.equal(await recordedSetting("Tokens used"), "42");
+        assert.equal(await recordedSetting("Messages read"), "3");
+        assert.equal(await recordedSetting("Ranking weights"), "Semantic 0.6");
+        assert.doesNotMatch(recall, /Limits:|chunks ·|Used:|Weights:|Run parameters|Relevance:/u);
+        assert.doesNotMatch(recall, /No memory/u, "a recall that added a memory needs no explanation");
+        // Candidates are flat rows: no filled box around each one.
+        const candidateBackgrounds = await details
+          .locator("[data-ltm-recalled-note]")
+          .first()
+          .evaluate((link) => getComputedStyle(link.closest("li")!).backgroundColor);
+        assert.equal(candidateBackgrounds, "rgba(0, 0, 0, 0)");
+        assert.match(recall, /Ranked below the 8-memory limit/u);
+        for (const reason of [
+          "Didn't fit the 2,048-token limit",
+          "Duplicate text",
+          "Below minimum relevance",
+          "Memory chunk unavailable",
+          "Prompt budget reached",
+        ])
+          assert.match(recall, new RegExp(reason, "u"));
+        assert.match(recall, /Legacy global memory/u);
+        assert.match(recall, /35%\s*·\s*Fused rank 1/u);
+        assert.match(recall, /45%\s*·\s*Fused rank 2/u);
+        // The nothing-added explanation names the limit that applied, or the generic fact without one.
+        const rejectedRecall = await operation("recall-rejected");
+        assert.match(rejectedRecall, /No memory was added to this reply\./u);
+        assert.doesNotMatch(rejectedRecall, /minimum relevance\./u);
+        assert.match(rejectedRecall, /What to try: If you expected a memory/u);
+        const thresholdRecall = await operation("recall-rejected-threshold");
+        assert.match(thresholdRecall, /No memory reached the 50% minimum relevance\./u);
+        assert.match(thresholdRecall, /What to try: If you expected a memory/u);
+        // The two paragraphs stack inside the flex callout rather than sitting side by side.
+        const calloutBoxes = await details
+          .locator("[data-ltm-debug-nothing-added] p")
+          .evaluateAll((paragraphs) =>
+            paragraphs.map((p) => p.getBoundingClientRect()).map(({ top, bottom }) => ({ top, bottom })),
+          );
+        assert.equal(calloutBoxes.length, 2);
+        assert.ok(calloutBoxes[1].top >= calloutBoxes[0].bottom - 1, "callout paragraphs are stacked");
+        // Every row names how long ago its operation last logged an event.
+        await showEvents();
+        const rowTimes = await activity.locator("[data-ltm-debug-operation]").evaluateAll((rows) =>
+          rows.map((row) => ({
+            id: row.getAttribute("data-ltm-debug-operation"),
+            datetime: row.querySelector("time")?.getAttribute("datetime"),
+            text: row.querySelector("time")?.textContent?.trim(),
+          })),
+        );
+        assert.ok(rowTimes.length > 0 && rowTimes.every((row) => row.datetime && /\bago$/u.test(row.text ?? "")));
+        assert.equal(rowTimes.find((row) => row.id === "estimated")?.datetime, secondsAfter(75));
+        await operation("recall");
+        // M6: the recalled-memory link keeps a 44px touch target.
+        const recalledBox = await activity.locator('[data-ltm-recalled-note="world_legacy_global"]').boundingBox();
+        assert.ok(recalledBox && recalledBox.height >= 44, "recalled memory links keep a 44px touch target");
+        // PR 4 (#1275): label/separator/health and honest export controls.
+        assert.equal(
+          await activity.getByRole("heading", { name: "Activity log", exact: true }).count(),
+          1,
+          "the log heading reads Activity log",
+        );
+        assert.equal(
+          await activity.locator('[role="group"][aria-label="Log actions"]').count(),
+          1,
+          "the toolbar is named Log actions",
+        );
+        assert.match(
+          await activity.locator("[data-ltm-debug-export-warning]").innerText(),
+          /full Activity log[\s\S]*model output[\s\S]*before sharing[\s\S]*Filters and search do not limit the export/iu,
+        );
+        const healthText = await activity.locator("[data-ltm-debug-health]").innerText();
+        assert.match(healthText, /\d+ events loaded/u);
+        assert.doesNotMatch(healthText, /Log size/u);
+        assert.match(healthText, /Index /u);
+        assert.match(healthText, /Semantic search /u);
+        // #1304: the source shows on the health line, and the "source changed" note follows
+        // availability (the embedding space), not a label difference.
+        const sourceChangedNote = activity.locator("[data-ltm-embedding-source-changed]");
+        if (navigation === "desktop") {
+          assert.match(healthText, /Semantic search unavailable · Renamed connection \(bge-m3\)/u);
+          assert.equal(await sourceChangedNote.count(), 1, "unavailable vectors with equal labels show the note");
+          assert.match(await sourceChangedNote.innerText(), /different embedding model or endpoint/u);
+        } else {
+          assert.match(healthText, /Semantic search available · Renamed connection \(bge-m3\)/u);
+          assert.equal(await sourceChangedNote.count(), 0, "a renamed connection with usable vectors shows no note");
+        }
+        // D21: operation metadata composes with one spaced middle-dot separator.
+        assert.match(reported, /Reasoning: 8 tokens · Output: 12 tokens[\s\S]*Total: 60 tokens/u);
+        // D20: runtime count/weight names read as localized labels, not camelCase.
+        assert.match(breakdown, /12 candidates · 7 units · 2 mutations/u);
+        assert.doesNotMatch(breakdown, /totalCandidates|deduplications/u);
+        assert.match(recall, /Tokens used\s+42/u);
+        assert.doesNotMatch(recall, /42 used tokens/u, "the used-token count is not repeated under Details");
+        assert.match(recall, /Ranking weights\s+Semantic 0\.6/u);
+        assert.doesNotMatch(recall, /Semantic weight/u);
+        // D23: a completed operation's start step is Started/Succeeded, never Running.
+        assert.match(estimated, /Started/u);
+        assert.match(estimated, /Succeeded/u);
+        assert.doesNotMatch(estimated, /Running/u);
+        // D14: a warning status carries an icon and stronger weight.
+        await operation("truncated");
+        const warningStatus = details.locator('[data-ltm-debug-detail-status="completed_with_warnings"]');
+        assert.equal((await warningStatus.locator("svg").count()) > 0, true, "warning status shows an icon");
+        assert.match((await warningStatus.getAttribute("class")) ?? "", /items-center/u);
+        assert.equal(
+          await warningStatus.locator("span.font-semibold").count(),
+          1,
+          "warning status label is emphasized",
+        );
+        // D13: Copy JSON keeps its polite live-region confirmation and reset.
+        await operation("estimated");
+        await details.getByRole("button", { name: /^Copy JSON/u }).click();
+        await activity.locator('[role="status"]', { hasText: "Copied" }).first().waitFor();
+        // D07: export uses a timestamped fallback filename and announces success.
+        const exportButton = activity.getByRole("button", { name: "Export full log" });
+        const downloadPromise = activityPage.waitForEvent("download");
+        await exportButton.click();
+        await activityPage.waitForFunction(() => {
+          const button = [...document.querySelectorAll("button")].find((candidate) =>
+            candidate.textContent?.includes("Export full log"),
+          );
+          return button instanceof HTMLButtonElement && button.getAttribute("aria-disabled") === "true";
+        });
+        assert.equal(
+          await activityPage.evaluate(() => document.activeElement?.textContent?.includes("Export full log") ?? false),
+          true,
+          "the export control keeps focus while the action is pending",
+        );
+        const download = await downloadPromise;
+        assert.match(download.suggestedFilename(), /^ltm-debug-log-\d{4}/u);
+        await activity.getByText("Full Activity log exported.").waitFor();
+        // D07: a failed export surfaces the server's JSON error text.
+        debugExportError = true;
+        await exportButton.click();
+        await activity.getByText("Export fixture failed.").waitFor();
+        debugExportError = false;
+        // D32: Clear confirms its all-chat scope and permanent, memory-safe behavior;
+        // cancelling makes no DELETE request.
+        const clearButton = activity.getByRole("button", { name: "Clear", exact: true });
+        const clearDeletesBefore = debugClearDeletes;
+        await activityPage.evaluate(() => {
+          (window as unknown as { __ltmConfirmResult?: boolean }).__ltmConfirmResult = false;
+          (window as unknown as { __ltmConfirmCalls?: number }).__ltmConfirmCalls = 0;
+          (window as unknown as { __ltmLastConfirm?: string }).__ltmLastConfirm = undefined;
+        });
+        // #1275 repair: a same-turn double activation opens the host confirmation once;
+        // the guard is acquired before the dialog is awaited.
+        await activityPage.evaluate(() => {
+          const button = [...document.querySelectorAll('[data-ltm-surface="activity"] button')].find(
+            (candidate) => candidate.textContent?.trim() === "Clear",
+          );
+          if (button instanceof HTMLButtonElement) {
+            button.click();
+            button.click();
+          }
+        });
+        await activityPage.waitForFunction(() =>
+          Boolean((window as unknown as { __ltmLastConfirm?: string }).__ltmLastConfirm),
+        );
+        assert.equal(
+          await activityPage.evaluate(
+            () => (window as unknown as { __ltmConfirmCalls?: number }).__ltmConfirmCalls ?? 0,
+          ),
+          1,
+          "a same-turn double Clear opens the confirmation once",
+        );
+        const clearConfirmation = await activityPage.evaluate(
+          () => (window as unknown as { __ltmLastConfirm?: string }).__ltmLastConfirm ?? "",
+        );
+        assert.match(clearConfirmation, /for every chat/u);
+        assert.match(clearConfirmation, /Memories and settings are not affected/u);
+        assert.equal(debugClearDeletes, clearDeletesBefore, "cancelling Clear must not send a DELETE");
+        await activityPage.evaluate(() => {
+          (window as unknown as { __ltmConfirmResult?: boolean }).__ltmConfirmResult = true;
+        });
+        await clearButton.click();
+        await activity.getByText("Activity log cleared.").waitFor();
+        assert.equal(debugClearDeletes, clearDeletesBefore + 1);
+        // D06: focus returns to the initiating control after the host confirmation.
+        await activityPage.waitForFunction(() =>
+          [...document.querySelectorAll("button")].some(
+            (button) => button.textContent?.trim() === "Clear" && button === document.activeElement,
+          ),
+        );
+        // D05: the Debug toggle shows a local cue and saves through the existing PUT
+        // flow, with its feedback shown exactly once in the Debug panel.
+        const debugToggle = activityPage.locator("#settings-panel-debug input[type=checkbox]").first();
+        const debugChecked = await debugToggle.isChecked();
+        const debugDirty = activityPage.locator("[data-ltm-debug-dirty]");
+        await debugToggle.click();
+        await debugDirty.getByText(/Unsaved change to recall explanations/u).waitFor();
+        await debugDirty.getByRole("button", { name: "Save now" }).click();
+        await activityPage.getByText("Memory settings saved.").waitFor();
+        assert.equal(
+          await activityPage
+            .locator('[data-ltm-surface="memory-settings"] [data-ltm-status]')
+            .filter({ hasText: "Memory settings saved." })
+            .count(),
+          1,
+          "save feedback is shown once in the Debug panel",
+        );
+        assert.equal(await debugToggle.isChecked(), !debugChecked, "saving persists the toggled Debug setting");
+        // D06 repair: a same-turn double Refresh must coalesce into one debug-log
+        // request; the button guard reads React Query's rendered `isFetching`, which is
+        // still false for a second activation in the same task.
+        debugLogDelayMs = 200;
+        const refreshRequestsBefore = debugLogRequests;
+        await activityPage.evaluate(() => {
+          const button = [...document.querySelectorAll('[data-ltm-surface="activity"] button')].find((candidate) =>
+            /refresh/i.test(candidate.textContent ?? ""),
+          );
+          if (button instanceof HTMLButtonElement) {
+            button.click();
+            button.click();
+          }
+        });
+        const refreshPending = (expectPending: boolean) => {
+          const button = [...document.querySelectorAll('[data-ltm-surface="activity"] button')].find((candidate) =>
+            /refresh/i.test(candidate.textContent ?? ""),
+          );
+          return (
+            button instanceof HTMLButtonElement && Boolean(button.querySelector(".animate-spin")) === expectPending
+          );
+        };
+        await activityPage.waitForFunction(refreshPending, true);
+        await activityPage.waitForFunction(refreshPending, false);
+        assert.equal(
+          debugLogRequests,
+          refreshRequestsBefore + 1,
+          "a same-turn double Refresh coalesces into one debug-log request",
+        );
+        debugLogDelayMs = 0;
+        // M2: a recall whose chat resolves through /scope-targets shows the chat label.
+        const resolvedRecall = await operation("recall-desktop");
+        assert.match(resolvedRecall, /Recall from Current Final Branch/u);
+        assert.doesNotMatch(resolvedRecall, /desktop-chat/u);
+        // M4: labelled Details facts (and the resolved source memory) render in the workbench.
+        const estimatedFacts = await operation("estimated");
+        assert.match(estimatedFacts, /Details[\s\S]*Source: Legacy global memory/u);
+        assert.match(estimatedFacts, /Model: fixture-model/u);
+        assert.match(estimatedFacts, /Duration: 500 ms/u);
+        // M3: search also matches the displayed subject, which is not in any event text.
+        await showEvents();
+        await searchBox.fill("Current Final Branch");
+        await activity.locator('[data-ltm-debug-operation="recall-desktop"]').waitFor();
+        assert.equal(await activity.locator('[data-ltm-debug-operation="recall"]').count(), 0);
+        await showEvents();
+        await searchBox.fill("");
         assert.equal(
           await activityPage.evaluate(
             () => document.documentElement.scrollWidth <= document.documentElement.clientWidth,
           ),
           true,
         );
+        if (navigation === "mobile") {
+          // M5: selecting a row on a phone opens Details and moves focus to its tab,
+          // leaving nothing focused on the now-hidden row; the switcher returns to Events.
+          await showEvents();
+          const focusRow = activity.locator('[data-ltm-debug-operation="estimated"]');
+          await focusRow.focus();
+          await focusRow.press("Enter");
+          await details.waitFor();
+          await activityPage.waitForFunction(
+            () => document.activeElement?.getAttribute("data-ltm-workspace-pane-tab") === "workbench",
+          );
+          assert.match(await details.innerText(), /AI extraction/u);
+          await activity.locator('[data-ltm-workspace-pane-tab="navigator"]').click();
+        }
+        return details;
+      };
+      // D31: the Vault memory link opens Debug filtered to that memory, with no server
+      // correlation. The filter matches only explicit structured memory-id references.
+      const assertMemoryFilteredDebug = async (debugPage: typeof page, navigation: "desktop" | "mobile") => {
+        const activity = debugPage.locator('[data-ltm-surface="activity"]');
+        const details = activity.locator("[data-ltm-debug-details]");
+        const filterChip = activity.locator('[data-ltm-debug-memory-filter="world_legacy_global"]');
+        const showEvents = async () => {
+          const tab = activity.locator('[data-ltm-workspace-pane-tab="navigator"]');
+          if (await tab.count()) await tab.click();
+        };
+        const openFromVault = async () => {
+          await debugPage.locator(`[data-ltm-navigation="${navigation}"] [data-ltm-destination="vault"]`).click();
+          await debugPage.locator('[data-ltm-surface="vault"]').waitFor();
+          await debugPage.getByLabel("Search memories").fill("Legacy global memory");
+          await debugPage
+            .locator('[data-ltm-note-type="world"]')
+            .filter({ hasText: /^Legacy global memory/u })
+            .locator("button")
+            .first()
+            .click();
+          // The link lives in the Vault inspector's collapsible Record info section.
+          await debugPage.locator("[data-ltm-details-toggle]").click();
+          await debugPage
+            .locator("[data-ltm-record-info]")
+            .first()
+            .evaluate((element) => {
+              (element as HTMLDetailsElement).open = true;
+            });
+          const openDebugLog = debugPage.getByRole("button", { name: "Open debug log" });
+          const openDebugLogBox = await openDebugLog.boundingBox();
+          assert.ok(openDebugLogBox && openDebugLogBox.height >= 44, "Open debug log keeps a 44px target");
+          await openDebugLog.click();
+          await activity.waitFor();
+          await filterChip.waitFor();
+        };
+
+        // A previous Debug selection must not survive the memory handoff.
+        await showEvents();
+        await activity.locator('[data-ltm-debug-operation="estimated"]').click();
+        await details.waitFor();
+        await openFromVault();
+        // Entry: nothing is selected, the filter names the memory, and the caveat is shown.
+        assert.equal(await details.count(), 0, "the memory handoff selects no operation");
+        assert.match(await filterChip.innerText(), /Legacy global memory/u);
+        assert.match(await activity.innerText(), /Apply operations log change IDs, not memory IDs/u);
+        // Matching extraction source, produced target, recall candidates, and a
+        // single later event each pull their whole operation in.
+        await activity.locator('[data-ltm-debug-operation="estimated"]').waitFor();
+        await activity.locator('[data-ltm-debug-operation="target"]').waitFor();
+        await activity.locator('[data-ltm-debug-operation="target"]').click();
+        await details.waitFor();
+        assert.match(await details.innerText(), /Result[\s\S]*Legacy global memory/u);
+        await showEvents();
+        await activity.locator('[data-ltm-debug-operation="recall"]').waitFor();
+        await activity.locator('[data-ltm-debug-operation="recall-rejected"]').waitFor();
+        await activity.locator('[data-ltm-debug-operation="late-reference"]').waitFor();
+        // Chip counts describe the memory-filtered domain, not the whole loaded log.
+        const listedOperations = await activity.locator("[data-ltm-debug-operation]").count();
+        assert.match(
+          await activity.locator('[data-ltm-debug-chip="all"]').innerText(),
+          new RegExp(`All\\s+${listedOperations}`, "u"),
+        );
+        // An unrelated operation and an apply carrying only change ids are excluded.
+        assert.equal(await activity.locator('[data-ltm-debug-operation="unrelated"]').count(), 0);
+        assert.equal(await activity.locator('[data-ltm-debug-operation="apply"]').count(), 0);
+        // A matching operation keeps its full event list and its status.
+        await activity.locator('[data-ltm-debug-operation="estimated"]').click();
+        await details.waitFor();
+        const matched = await details.innerText();
+        assert.match(matched, /AI extraction/u);
+        assert.match(matched, /500 ms/u);
+        // The recall rows match through their candidate ids, not a shared source note.
+        await showEvents();
+        await activity.locator('[data-ltm-debug-operation="recall-rejected"]').click();
+        await details.waitFor();
+        assert.match(await details.innerText(), /Legacy global memory/u);
+        // late-reference matches through one later event and still shows every event.
+        await showEvents();
+        await activity.locator('[data-ltm-debug-operation="late-reference"]').click();
+        await details.waitFor();
+        assert.match(await details.innerText(), /Completed/u);
+        assert.equal(await details.locator("ol > li").count(), 2, "a matched operation keeps all of its events");
+
+        // Clearing the filter makes the other loaded operations available again.
+        await showEvents();
+        await filterChip.getByRole("button", { name: "Clear memory filter" }).click();
+        await activity.locator('[data-ltm-debug-operation="unrelated"]').waitFor();
+        assert.equal(await activity.locator("[data-ltm-debug-memory-filter]").count(), 0);
+
+        // A cleared filter must not come back when the Debug tab is reopened.
+        await debugPage.locator("#settings-tab-recall").click();
+        await debugPage.locator("#settings-tab-debug").click();
+        await showEvents();
+        assert.equal(await activity.locator("[data-ltm-debug-memory-filter]").count(), 0);
+        await activity.locator('[data-ltm-debug-operation="unrelated"]').waitFor();
+
+        // Re-open from the Vault link and compose with the chips and search.
+        await openFromVault();
+        await showEvents();
+        await activity.locator('[data-ltm-debug-chip="recall"]').click();
+        await activity.locator('[data-ltm-debug-operation="recall"]').waitFor();
+        await activity.locator('[data-ltm-debug-operation="recall-rejected"]').waitFor();
+        assert.equal(await activity.locator('[data-ltm-debug-operation="estimated"]').count(), 0);
+        assert.equal(await activity.locator('[data-ltm-debug-operation="target"]').count(), 0);
+        await activity.locator('[data-ltm-debug-chip="all"]').click();
+        await activity.locator("[data-ltm-debug-search]").fill("fixture-model");
+        await activity.locator('[data-ltm-debug-operation="estimated"]').waitFor();
+        assert.equal(await activity.locator('[data-ltm-debug-operation="target"]').count(), 0);
+        // No-match: an empty result names the memory coverage, not a plain miss.
+        await activity.locator("[data-ltm-debug-search]").fill("no-such-operation");
+        await activity
+          .getByText("No matching operations in the loaded debug log. This does not mean the memory never changed.")
+          .waitFor();
+        await activity.locator("[data-ltm-debug-search]").fill("");
+
+        if (navigation === "mobile") {
+          // The link lands on Events; selecting a row opens Details; the switcher returns.
+          await showEvents();
+          assert.equal(await details.count(), 0);
+          await activity.locator('[data-ltm-debug-operation="estimated"]').click();
+          await details.waitFor();
+          assert.match(await details.innerText(), /AI extraction/u);
+          await activity.locator('[data-ltm-workspace-pane-tab="navigator"]').click();
+        }
+
+        // Leave the remaining Debug flow unfiltered.
+        await showEvents();
+        await filterChip.getByRole("button", { name: "Clear memory filter" }).click();
+
+        // An empty retained log still names the memory coverage, not "no activity".
+        debugLogEmpty = true;
+        await openFromVault();
+        await activity
+          .getByText("No matching operations in the loaded debug log. This does not mean the memory never changed.")
+          .waitFor();
+        debugLogEmpty = false;
+        // Restore the real log for the remaining Debug flow.
+        await debugPage.locator("#settings-tab-recall").click();
+        await debugPage.locator("#settings-tab-debug").click();
+        await activity.locator('[data-ltm-debug-operation="estimated"]').waitFor();
       };
       const openDebugActivity = async (context: typeof browserContext, navigation: "desktop" | "mobile") => {
+        await context.grantPermissions(["clipboard-read", "clipboard-write"], {
+          origin: `http://127.0.0.1:${address.port}`,
+        });
         const debugPage = await context.newPage();
-        await debugPage.route("**/api/long-term-memory/debug-log?*", (route) =>
-          route.fulfill({ json: { events: debugEvents } }),
-        );
+        await debugPage.route("**/api/long-term-memory/status*", async (route) => {
+          // #1304: desktop keeps two equal labels over unavailable vectors (a switched
+          // sidecar model); mobile shows differing labels over available vectors (a renamed connection).
+          const response = await route.fetch();
+          const status = await response.json();
+          const renamed = navigation === "mobile";
+          await route.fulfill({
+            response,
+            json: {
+              ...status,
+              indexes: {
+                ...status.indexes,
+                embeddingsAvailable: renamed,
+                embeddingSource: "Renamed connection (bge-m3)",
+                indexedEmbeddingSource: renamed ? "Old name (bge-m3)" : "Renamed connection (bge-m3)",
+              },
+            },
+          });
+        });
+        await debugPage.route("**/api/long-term-memory/drafts/review?*", async (route) => {
+          const response = await route.fetch();
+          const review = { ...(await response.json()), sources: structuredClone(debugReviewSources) };
+          for (const source of review.sources)
+            if (source.sourceNoteId === "source_mobile_review")
+              for (const item of source.drafts) item.draft.status = debugReviewPending ? "pending" : "accepted";
+          await route.fulfill({ response, json: review });
+        });
+        await debugPage.route("**/api/long-term-memory/debug-log?*", async (route) => {
+          debugLogRequests += 1;
+          // A delay keeps the first request in flight so a same-turn second activation is observable.
+          if (debugLogDelayMs > 0) await new Promise((resolve) => setTimeout(resolve, debugLogDelayMs));
+          if (debugLogError) {
+            route.fulfill({ status: 500, json: { error: "Activity fixture failed." } });
+            return;
+          }
+          if (debugLogEmpty) {
+            route.fulfill({ json: { events: [] } });
+            return;
+          }
+          const query = new URL(route.request().url()).searchParams;
+          const matches = (value: unknown, expected: string | null) => !expected || value === expected;
+          const filtered = debugEvents.filter((event) => {
+            const record = event as Record<string, unknown>;
+            return (
+              matches(record.operationId, query.get("operationId")) &&
+              matches(record.sourceNoteId, query.get("sourceNoteId")) &&
+              matches(record.draftId, query.get("draftId")) &&
+              matches(record.status, query.get("status")) &&
+              matches(record.phase, query.get("phase"))
+            );
+          });
+          const limit = Number(query.get("limit") ?? 0);
+          route.fulfill({ json: { events: limit > 0 ? filtered.slice(-limit) : filtered } });
+        });
+        await debugPage.route("**/api/long-term-memory/debug-log/export", async (route) => {
+          // A small delay lets the test observe the pending/disabled guard.
+          await new Promise((resolve) => setTimeout(resolve, 120));
+          if (debugExportError) {
+            await route.fulfill({
+              status: 500,
+              contentType: "application/json",
+              body: JSON.stringify({ error: "Export fixture failed." }),
+            });
+            return;
+          }
+          await route.fulfill({ contentType: "application/x-ndjson", body: '{"id":"fixture"}\n' });
+        });
+        await debugPage.route("**/api/long-term-memory/debug-log", async (route) => {
+          if (route.request().method() === "DELETE") {
+            debugClearDeletes += 1;
+            await route.fulfill({ json: { ok: true } });
+            return;
+          }
+          await route.continue();
+        });
         await debugPage.goto(`http://127.0.0.1:${address.port}/`);
         await debugPage.evaluate(() => customElements.whenDefined("marinara-capability-long-term-memory"));
-        await debugPage.evaluate(() => {
+        // String form keeps the inline confirmAction out of the tsx/esbuild `__name`
+        // transform, which is unavailable inside the page.
+        await debugPage.evaluate(`(() => {
           const element = document.createElement("marinara-capability-long-term-memory");
           element.setAttribute("view", "detail");
+          // Exercise the host confirmation flow rather than a native dialog, so
+          // cancel/confirm outcomes and focus restoration are observable.
+          element.capabilityProps = {
+            confirmAction: (options) => {
+              window.__ltmLastConfirm = options.message;
+              window.__ltmConfirmCalls = (window.__ltmConfirmCalls ?? 0) + 1;
+              return window.__ltmConfirmResult ?? true;
+            },
+          };
           document.body.append(element);
-        });
+        })()`);
         await debugPage.locator(`[data-ltm-navigation="${navigation}"] [data-ltm-destination="settings"]`).click();
-        await assertDebugActivity(debugPage);
+        // The detail view mounts the Vault first, which pages all notes; count
+        // note queries only from the settings navigation on, so this measures
+        // the Debug tab's own title lookup.
+        const noteQueryStart = noteQueries.length;
+        const notesByIdsResponse = debugPage.waitForResponse((response) =>
+          new URL(response.url()).searchParams.has("ids"),
+        );
+        await assertDebugActivity(debugPage, navigation);
+        await notesByIdsResponse;
+        // Start at the Debug tab's own ids lookup so a Vault page that is still
+        // in flight cannot be read as Debug paging the whole vault.
+        const idsIndex = noteQueries.slice(noteQueryStart).findIndex((query) => query.includes("ids="));
+        assert.ok(idsIndex >= 0, "Debug resolves memory titles by id");
+        assert.equal(
+          noteQueries.slice(noteQueryStart + idsIndex).some((query) => query.includes("limit=500")),
+          false,
+          "Debug does not page the whole vault for titles",
+        );
+        await assertMemoryFilteredDebug(debugPage, navigation);
         return debugPage;
       };
       const desktopDebugPage = await openDebugActivity(browserContext, "desktop");
-      const estimatedOperation = desktopDebugPage.locator('[data-ltm-surface="activity"] > ol > li > details').first();
-      await estimatedOperation.locator(":scope > summary").click();
-      const responseEvent = estimatedOperation.locator(":scope > ol > li").filter({ hasText: "450 ms" });
-      await responseEvent.getByText("Technical details", { exact: true }).click();
-      assert.match(await responseEvent.locator("pre").innerText(), /private response snippet/u);
+      // D31-adjacent handoff: a resolved recall-memory name opens its Vault memory.
+      await desktopDebugPage.locator('[data-ltm-debug-operation="recall"]').click();
+      await desktopDebugPage.locator('[data-ltm-recalled-note="world_legacy_global"]').click();
+      await desktopDebugPage.locator('[data-ltm-surface="vault"]').waitFor();
       await desktopDebugPage.close();
+      // #1376: Reset settings reloads the forms. The Maintenance panel stays mounted, so its
+      // result survives and its buttons stay disabled until the settings refetch resolves.
+      {
+        const resetPage = await browserContext.newPage();
+        let settingsGate: Promise<void> | null = null;
+        let releaseSettings = () => {};
+        let resetMaxChunks: number | null = null;
+        await resetPage.route("**/api/long-term-memory/settings/reset", (route) =>
+          route.fulfill({ json: { rebuild: { status: "deferred", error: "Fixture rebuild failed." } } }),
+        );
+        // Settings read after the reset serve a changed value, which the forms must show instead of the cache.
+        await resetPage.route("**/api/long-term-memory/settings", async (route) => {
+          if (resetMaxChunks === null || route.request().method() !== "GET") return route.continue();
+          if (settingsGate) await settingsGate;
+          const response = await route.fetch();
+          await route.fulfill({
+            response,
+            json: { ...(await response.json()), longTermMemoryMaxChunks: resetMaxChunks },
+          });
+        });
+        await resetPage.goto(`http://127.0.0.1:${address.port}/`);
+        await resetPage.evaluate(() => customElements.whenDefined("marinara-capability-long-term-memory"));
+        await resetPage.evaluate(`(() => {
+          const element = document.createElement("marinara-capability-long-term-memory");
+          element.setAttribute("view", "detail");
+          element.capabilityProps = { confirmAction: () => true };
+          document.body.append(element);
+        })()`);
+        await resetPage.locator('[data-ltm-navigation="desktop"] [data-ltm-destination="settings"]').click();
+        const maxChunks = resetPage.getByRole("spinbutton", { name: "Maximum recalled memories", exact: true });
+        const cachedMaxChunks = Number(await maxChunks.inputValue());
+        await resetPage.locator("#settings-tab-maintenance").click();
+        const maintenancePanel = resetPage.locator("#settings-panel-maintenance");
+        // The panel is hidden while the cleared forms reload, so find its button there too.
+        const resetButton = maintenancePanel.getByRole("button", { name: "Reset settings", includeHidden: true });
+        settingsGate = new Promise<void>((resolve) => {
+          releaseSettings = () => resolve();
+        });
+        resetMaxChunks = cachedMaxChunks === 37 ? 38 : 37;
+        const settingsRefetch = resetPage.waitForRequest(
+          (request) => request.method() === "GET" && new URL(request.url()).pathname.endsWith("/settings"),
+        );
+        // #1377: the invalidation already refetches the active settings query, so a reset reads them once.
+        let settingsReads = 0;
+        resetPage.on("request", (request) => {
+          if (request.method() === "GET" && new URL(request.url()).pathname.endsWith("/long-term-memory/settings"))
+            settingsReads += 1;
+        });
+        await resetButton.click();
+        await settingsRefetch;
+        // Let the cleared forms re-render while the refetch is still held.
+        await resetPage.waitForTimeout(300);
+        // #1452: the cleared forms wait for the refetch instead of refilling from the cached settings.
+        await resetPage.getByText("Loading memory settings.").waitFor();
+        assert.equal(await resetButton.isDisabled(), true, "Reset stays disabled until the settings refetch resolves");
+        settingsGate = null;
+        releaseSettings();
+        await maintenancePanel
+          .locator('[data-ltm-status="danger"]')
+          .filter({
+            hasText: "Memory settings reset to defaults, but the recall index rebuild failed: Fixture rebuild failed.",
+          })
+          .waitFor({ timeout: 5000 });
+        assert.equal(await resetButton.isDisabled(), false, "Reset is available again once the refetch resolves");
+        assert.equal(settingsReads, 1, "Reset reads the settings once");
+        await resetPage.locator("#settings-tab-recall").click();
+        assert.equal(
+          await maxChunks.inputValue(),
+          String(resetMaxChunks),
+          "the forms show the settings read after the reset",
+        );
+        await resetPage.close();
+      }
+      // #1452: when the settings read after Reset or Import fails, Retry on the error surface loads the
+      // new settings instead of the cached ones the action replaced. An import whose integrity read
+      // alone fails still shows the settings it refetched.
+      for (const failure of ["reset", "import", "import-integrity"] as const) {
+        const failPage = await browserContext.newPage();
+        const counts = { notes: 0, drafts: 0, rejectedSuggestions: 0 };
+        let nextMaxChunks: number | null = null;
+        let failSettings = false;
+        let failIntegrity = false;
+        await failPage.route("**/api/long-term-memory/settings/reset", (route) => route.fulfill({ json: {} }));
+        await failPage.route("**/api/long-term-memory/backup/preview", (route) =>
+          route.fulfill({ json: { incoming: counts, current: counts } }),
+        );
+        await failPage.route("**/api/long-term-memory/backup/import", (route) => route.fulfill({ json: {} }));
+        await failPage.route("**/api/long-term-memory/integrity", (route) =>
+          failIntegrity
+            ? route.fulfill({ status: 500, json: { error: "Fixture integrity read failed." } })
+            : route.continue(),
+        );
+        await failPage.route("**/api/long-term-memory/settings", async (route) => {
+          if (nextMaxChunks === null || route.request().method() !== "GET") return route.continue();
+          if (failSettings) return route.fulfill({ status: 500, json: { error: "Fixture settings read failed." } });
+          const response = await route.fetch();
+          await route.fulfill({
+            response,
+            json: { ...(await response.json()), longTermMemoryMaxChunks: nextMaxChunks },
+          });
+        });
+        await failPage.goto(`http://127.0.0.1:${address.port}/`);
+        await failPage.evaluate(() => customElements.whenDefined("marinara-capability-long-term-memory"));
+        await failPage.evaluate(`(() => {
+          const element = document.createElement("marinara-capability-long-term-memory");
+          element.setAttribute("view", "detail");
+          element.capabilityProps = { confirmAction: () => true };
+          document.body.append(element);
+        })()`);
+        await failPage.locator('[data-ltm-navigation="desktop"] [data-ltm-destination="settings"]').click();
+        const maxChunks = failPage.getByRole("spinbutton", { name: "Maximum recalled memories", exact: true });
+        const cachedMaxChunks = Number(await maxChunks.inputValue());
+        await failPage.locator("#settings-tab-maintenance").click();
+        const maintenancePanel = failPage.locator("#settings-panel-maintenance");
+        nextMaxChunks = cachedMaxChunks === 37 ? 38 : 37;
+        failSettings = failure !== "import-integrity";
+        failIntegrity = failure === "import-integrity";
+        if (failure === "reset") {
+          await maintenancePanel.getByRole("button", { name: "Reset settings" }).click();
+        } else {
+          await maintenancePanel
+            .getByLabel("Choose backup", { exact: true })
+            .setInputFiles({ name: "backup.json", mimeType: "application/json", buffer: Buffer.from("{}") });
+          await maintenancePanel.getByRole("button", { name: "Replace with this backup" }).click();
+        }
+        if (failSettings) {
+          const loadError = failPage
+            .locator('[data-ltm-status="danger"]')
+            .filter({ hasText: "Could not load memory settings." });
+          await loadError.waitFor({ timeout: 5000 });
+          failSettings = false;
+          await loadError.getByRole("button", { name: "Retry" }).click();
+        }
+        await maintenancePanel
+          .getByText(
+            failure === "reset"
+              ? "Memory settings reset to defaults."
+              : "Memory backup imported, but settings could not be refreshed.",
+          )
+          .waitFor({ timeout: 5000 });
+        await failPage.locator("#settings-tab-recall").click();
+        assert.equal(
+          await maxChunks.inputValue(),
+          String(nextMaxChunks),
+          `${failure}: the forms show the settings read after the action`,
+        );
+        await failPage.close();
+      }
       await page.locator('[data-ltm-navigation="desktop"] [data-ltm-destination="vault"]').click();
       await page.evaluate((version) => {
         const element = document.createElement("marinara-capability-long-term-memory") as HTMLElement & {
@@ -2534,8 +3884,25 @@ async function main() {
       });
       await lastInjection.click();
       await lastInjection.locator('[data-ltm-status="danger"]').waitFor();
-      await lastInjection.getByRole("button", { name: /retry/i }).click();
-      await lastInjection.locator('[data-ltm-status="danger"]').waitFor();
+      // D18: compact Retry keeps a 24px target.
+      const compactRetry = lastInjection.getByRole("button", { name: /retry/i });
+      const compactRetryBox = await compactRetry.boundingBox();
+      assert.ok(compactRetryBox && compactRetryBox.height >= 24, "compact Retry keeps a 24px target");
+      await compactRetry.click();
+      // D27 repair: a cached-data retry still shows the title without a loading flash,
+      // but the Retry control stays disabled while that refetch is in flight.
+      await page.waitForFunction(() => {
+        const button = [...document.querySelectorAll("button")].find((candidate) =>
+          /retry/i.test(candidate.textContent ?? ""),
+        );
+        return button instanceof HTMLButtonElement && button.disabled;
+      });
+      await page.waitForFunction(() => {
+        const button = [...document.querySelectorAll("button")].find((candidate) =>
+          /retry/i.test(candidate.textContent ?? ""),
+        );
+        return button instanceof HTMLButtonElement && !button.disabled;
+      });
       assert.equal(lastInjectionRequests, 3);
       assert.equal(await lastInjection.getByText("Retained memory").count(), 0);
       assert.equal(await lastInjection.getByText("42 tokens").count(), 0);
@@ -2956,6 +4323,11 @@ async function main() {
       await page.getByRole("button", { name: "Accept eligible (2)" }).click();
       await page.getByRole("button", { name: /^Apply preflighted \(2\)/ }).click();
       await page.getByRole("button", { name: "Retry failed review actions" }).waitFor();
+      // #1375: each part of the batch summary is its own sentence, not a fragment glued to the last.
+      assert.equal(
+        await page.getByText(/Applied \d+ mutations?; [1-9]\d* failed\. .*Draft action failed: .+\./u).count(),
+        1,
+      );
       failSecondReviewAccept = false;
       await page.getByRole("button", { name: "Retry failed review actions" }).click();
       await page.getByText("Retry preflight complete. Review the results before applying again.").waitFor();
@@ -3431,19 +4803,19 @@ async function main() {
           })),
         ),
         [
-          { kind: "character", selected: "true", tabIndex: "0", count: "0" },
-          { kind: "persona", selected: "false", tabIndex: "-1", count: "0" },
+          { kind: "all", selected: "true", tabIndex: "0", count: "0" },
           { kind: "chat", selected: "false", tabIndex: "-1", count: "1" },
-          { kind: "branch", selected: "false", tabIndex: "-1", count: "1" },
+          { kind: "character", selected: "false", tabIndex: "-1", count: "0" },
+          { kind: "persona", selected: "false", tabIndex: "-1", count: "0" },
         ],
       );
       assert.equal(
         await availabilityTabs.locator('[data-ltm-availability-tab="persona"] span').first().innerText(),
-        "Persona",
+        "Personas",
       );
       assert.equal(
         await availabilityTabs.locator('[data-ltm-availability-tab="chat"] span').first().innerText(),
-        "Chat",
+        "Chats",
       );
       const desktopRailLayout = await availabilityTabs.evaluate((rail) => {
         const tablist = rail.querySelector<HTMLElement>('[role="tablist"]')!;
@@ -3482,11 +4854,6 @@ async function main() {
         await availabilityTabs.locator('[data-ltm-availability-target="chat:all"]').getAttribute("aria-pressed"),
         "true",
       );
-      await availabilityTabs.locator('[data-ltm-availability-tab="branch"]').click();
-      assert.equal(
-        await availabilityTabs.locator('[data-ltm-availability-target="branch:all"]').getAttribute("aria-pressed"),
-        "true",
-      );
       await availabilityTabs.locator('[data-ltm-availability-tab="character"]').click();
       const characterTab = availabilityTabs.locator('[data-ltm-availability-tab="character"]');
       const personaTab = availabilityTabs.locator('[data-ltm-availability-tab="persona"]');
@@ -3497,12 +4864,12 @@ async function main() {
         await personaTab.getAttribute("id"),
       );
       await personaTab.press("Home");
-      assert.equal(await characterTab.getAttribute("aria-selected"), "true");
-      await characterTab.press("End");
       assert.equal(
-        await availabilityTabs.locator('[data-ltm-availability-tab="branch"]').getAttribute("aria-selected"),
+        await availabilityTabs.locator('[data-ltm-availability-tab="all"]').getAttribute("aria-selected"),
         "true",
       );
+      await characterTab.press("End");
+      assert.equal(await personaTab.getAttribute("aria-selected"), "true");
       await characterTab.click();
       await availabilityTabs.locator('[data-ltm-availability-search="character"]').fill("Character");
       await availabilityTabs.locator('[data-ltm-availability-target="character:character-a"]').click();
@@ -3533,7 +4900,7 @@ async function main() {
         };
       });
       assert.deepEqual(mobileRailLayout, {
-        columns: 1,
+        columns: 2,
         panelBelowTabs: true,
         pageFits: true,
       });
@@ -3542,8 +4909,7 @@ async function main() {
       await page.locator('[data-ltm-availability-target="persona:persona-a"]').click();
       await page.locator('[data-ltm-availability-tab="chat"]').click();
       await page.locator('[data-ltm-availability-target="chat:conversation-a"]').click();
-      await page.locator('[data-ltm-availability-tab="branch"]').click();
-      await page.locator('[data-ltm-availability-target="branch:memory-chat"]').click();
+      assert.equal(await page.locator('[data-ltm-availability-target="chat:memory-chat"]').count(), 0);
       assert.equal(await page.getByText("Groups", { exact: true }).count(), 0);
       await page.getByRole("button", { name: "Save availability" }).click();
       await page.locator("[data-ltm-select-mode]").click();
@@ -3583,11 +4949,6 @@ async function main() {
       await bulkRail.locator('[data-ltm-availability-tab="chat"]').click();
       assert.equal(
         await bulkRail.locator('[data-ltm-availability-target="chat:all"]').getAttribute("aria-pressed"),
-        "true",
-      );
-      await bulkRail.locator('[data-ltm-availability-tab="branch"]').click();
-      assert.equal(
-        await bulkRail.locator('[data-ltm-availability-target="branch:all"]').getAttribute("aria-pressed"),
         "true",
       );
       await bulkRail.locator('[data-ltm-availability-tab="persona"]').click();
@@ -3892,9 +5253,12 @@ async function main() {
       assert.match((await sourceScopeTrigger.innerText()).trim(), /All/u);
       await sourceScopeTrigger.click();
       assert.equal(await sourceScopePicker.locator('[role="listbox"] input').count(), 0);
-      for (const kind of ["all", "chat", "branch", "character", "persona"]) {
-        assert.equal(await sourceScopePicker.locator(`[data-ltm-scope-tab="${kind}"]`).count(), 1);
-      }
+      assert.deepEqual(
+        await sourceScopePicker
+          .locator("[data-ltm-scope-tab]")
+          .evaluateAll((tabs) => tabs.map((tab) => tab.getAttribute("data-ltm-scope-tab"))),
+        ["all", "chat", "character", "persona"],
+      );
       assert.equal(await sourceScopePicker.locator('[data-ltm-scope-tab="all"][data-active="true"]').count(), 1);
       assert.deepEqual(
         await sourceScopePicker.locator('[role="option"]').evaluateAll((options) =>
@@ -3927,14 +5291,15 @@ async function main() {
       );
       assert.equal(await sourceScopePicker.locator('[role="tabpanel"] [role="listbox"]').count(), 1);
       assert.equal(await sourceScopePicker.locator('[data-ltm-scope-option="chat:desktop-chat"]').count(), 1);
-      assert.equal(await sourceScopePicker.locator('[data-ltm-scope-option="group:conversation-a"]').count(), 0);
       assert.equal(await sourceScopePicker.locator('[data-ltm-scope-option="all"]').count(), 1);
-      await sourceScopePicker.locator('[data-ltm-scope-tab="branch"]').click();
-      assert.equal(await sourceScopePicker.locator('[data-ltm-scope-option="group:conversation-a"]').count(), 1);
-      assert.equal(await sourceScopePicker.locator('[data-ltm-scope-option="chat:desktop-chat"]').count(), 0);
+      assert.match(
+        await sourceScopePicker.locator('[data-ltm-scope-option="group:conversation-a"]').innerText(),
+        /^Conversation A\nAll branches$/u,
+        "a chat with branches is one Chats entry",
+      );
       assert.equal(
         await sourceScopePicker
-          .locator('[data-ltm-scope-tab="branch"]')
+          .locator('[data-ltm-scope-tab="chat"]')
           .evaluate((tab) => document.activeElement === tab),
         true,
         "mouse-activated tab receives focus so roving keyboard navigation can continue",
@@ -4015,9 +5380,20 @@ async function main() {
       assert.equal(await page.locator('[data-ltm-scope-picker="destination"]').count(), 0);
       assert.equal(await page.locator("[data-ltm-add-destination]").count(), 0);
       assert.equal(await destinationPanel.getByText("Make memories available in", { exact: true }).count(), 1);
-      for (const kind of ["all", "chat", "branch", "character", "persona"]) {
-        assert.equal(await destinationPanel.locator(`[data-ltm-availability-tab="${kind}"]`).count(), 1);
-      }
+      assert.deepEqual(
+        await destinationPanel
+          .locator("[data-ltm-availability-tab]")
+          .evaluateAll((tabs) =>
+            tabs.map((tab) => [tab.getAttribute("data-ltm-availability-tab"), tab.getAttribute("aria-selected")]),
+          ),
+        [
+          ["all", "true"],
+          ["chat", "false"],
+          ["character", "false"],
+          ["persona", "false"],
+        ],
+        "the destination shares the four place tabs and opens on All",
+      );
       // No active chat in this source workflow, so no destination is pre-selected and import is blocked.
       assert.equal(await destinationPanel.locator('button[aria-label^="Remove "]').count(), 0);
       assert.equal(
@@ -4025,17 +5401,27 @@ async function main() {
         1,
       );
 
-      // All tab shows concrete targets grouped by category.
-      await destinationPanel.locator('[data-ltm-availability-tab="all"]').click();
-      assert.equal(await destinationPanel.locator('[data-ltm-availability-target="chat:desktop-chat"]').count(), 1);
-      assert.equal(await destinationPanel.locator('[data-ltm-availability-target="persona:persona-a"]').count(), 1);
-      assert.equal(await destinationPanel.locator('[data-ltm-availability-target="branch:conversation-a"]').count(), 1);
-      assert.equal(await destinationPanel.locator('[data-ltm-availability-target="character:character-a"]').count(), 1);
+      // The All tab lists every place kind and labels each row with its kind.
+      for (const [target, kind] of [
+        ["chat:desktop-chat", "Chat · Current Final Branch"],
+        ["chat:conversation-a", "Chat · All branches"],
+        ["character:character-a", "Character"],
+        ["persona:persona-a", "Persona · Space explorer"],
+      ]) {
+        assert.match(
+          await destinationPanel.locator(`[data-ltm-availability-target="${target}"]`).innerText(),
+          new RegExp(kind, "u"),
+        );
+      }
 
-      // Each category view shows only its own kind.
+      // Each kind tab shows only its own places; a chat with branches is one Chats row.
       await destinationPanel.locator('[data-ltm-availability-tab="chat"]').click();
       assert.equal(await destinationPanel.locator('[data-ltm-availability-target="chat:desktop-chat"]').count(), 1);
       assert.equal(await destinationPanel.locator('[data-ltm-availability-target="persona:persona-a"]').count(), 0);
+      assert.equal(await destinationPanel.locator('[data-ltm-availability-target="chat:conversation-a"]').count(), 1);
+      assert.equal(await destinationPanel.locator('[data-ltm-availability-target="chat:valid-group"]').count(), 1);
+      assert.equal(await destinationPanel.locator('[data-ltm-availability-target="chat:overflow-group"]').count(), 0);
+      assert.equal(await destinationPanel.locator('[data-ltm-availability-target="chat:memory-chat"]').count(), 0);
       await destinationPanel.locator('[data-ltm-availability-search="chat"]').fill("Current Final Branch");
       assert.equal(
         await destinationPanel.locator('[data-ltm-availability-target="chat:desktop-chat"]').count(),
@@ -4043,14 +5429,9 @@ async function main() {
         "current target is searchable by its display name through the destination filter",
       );
       await destinationPanel.locator('[data-ltm-availability-search="chat"]').fill("");
-      await destinationPanel.locator('[data-ltm-availability-tab="branch"]').click();
-      assert.equal(await destinationPanel.locator('[data-ltm-availability-target="branch:conversation-a"]').count(), 1);
-      assert.equal(await destinationPanel.locator('[data-ltm-availability-target="branch:valid-group"]').count(), 1);
-      assert.equal(await destinationPanel.locator('[data-ltm-availability-target="branch:overflow-group"]').count(), 0);
-      assert.equal(await destinationPanel.locator('[data-ltm-availability-target="chat:desktop-chat"]').count(), 0);
       await destinationPanel.locator('[data-ltm-availability-tab="character"]').click();
       assert.equal(await destinationPanel.locator('[data-ltm-availability-target="character:character-a"]').count(), 1);
-      assert.equal(await destinationPanel.locator('[data-ltm-availability-target="branch:conversation-a"]').count(), 0);
+      assert.equal(await destinationPanel.locator('[data-ltm-availability-target="chat:conversation-a"]').count(), 0);
 
       // Personas are visible and searchable within their category.
       await destinationPanel.locator('[data-ltm-availability-tab="persona"]').click();
@@ -4061,39 +5442,35 @@ async function main() {
       assert.equal(await destinationPanel.locator('[data-ltm-availability-target="persona:persona-b"]').count(), 1);
       await personaSearch.fill("");
 
-      // Category action rows (Current / All chats / All branches / All characters) are present.
+      // All chats picks every chat that still fits the 100-ID limit, then clears them again.
       await destinationPanel.locator('[data-ltm-availability-tab="chat"]').click();
-      // A non-matching query keeps the pinned category action available.
-      await destinationPanel.locator('[data-ltm-availability-search="chat"]').fill("zzz-no-match");
-      assert.equal(await destinationPanel.locator('[data-ltm-availability-action="chat:all"]').count(), 1);
-      await destinationPanel.locator('[data-ltm-availability-search="chat"]').fill("");
-      assert.equal(await destinationPanel.locator('[data-ltm-availability-action="chat:current"]').count(), 1);
-      await destinationPanel.locator('[data-ltm-availability-action="chat:all"]').click();
-      assert.equal(
-        await destinationPanel.locator('[data-ltm-availability-target="chat:bulk-chat-99"] input').isChecked(),
-        true,
-      );
-      assert.equal(
-        await destinationPanel.locator('[data-ltm-availability-target="chat:desktop-chat"] input').isChecked(),
-        false,
-      );
-      assert.equal(await destinationPanel.locator('[data-ltm-availability-action="chat:all"]').count(), 1);
-      for (let index = 0; index < 100; index += 1) {
-        const bulkChat = destinationPanel.locator(`[data-ltm-availability-target="chat:bulk-chat-${index}"] input`);
-        await bulkChat.evaluate((element) => (element as HTMLInputElement).click());
+      const allChatsDestination = destinationPanel.locator('[data-ltm-availability-target="chat:all"]');
+      assert.equal(await allChatsDestination.getAttribute("aria-pressed"), "false");
+      await allChatsDestination.click();
+      assert.equal(await allChatsDestination.getAttribute("aria-pressed"), "true");
+      for (const [target, pressed] of [
+        ["chat:desktop-chat", "true"],
+        ["chat:bulk-chat-0", "true"],
+        ["chat:bulk-chat-99", "false"],
+        ["chat:valid-group", "false"],
+      ]) {
+        assert.equal(
+          await destinationPanel.locator(`[data-ltm-availability-target="${target}"]`).getAttribute("aria-pressed"),
+          pressed,
+          target,
+        );
       }
-      await destinationPanel.locator('[data-ltm-availability-tab="branch"]').click();
-      assert.equal(await destinationPanel.locator('[data-ltm-availability-action="branch:current"]').count(), 0);
-      assert.equal(await destinationPanel.locator('[data-ltm-availability-action="branch:all"]').count(), 1);
-      await destinationPanel.locator('[data-ltm-availability-tab="character"]').click();
-      assert.equal(await destinationPanel.locator('[data-ltm-availability-action="character:current"]').count(), 1);
-      assert.equal(await destinationPanel.locator('[data-ltm-availability-action="character:all"]').count(), 1);
+      assert.equal(await destinationPanel.getByText(/Some locations cannot be added/u).count(), 1);
+      // ponytail: 100 chips squeeze the rail as they did the old list; click through the DOM until the panel scrolls.
+      await allChatsDestination.evaluate((element) => (element as HTMLButtonElement).click());
+      assert.equal(await allChatsDestination.getAttribute("aria-pressed"), "false");
+      assert.equal(await destinationPanel.locator('button[aria-label^="Remove "]').count(), 0);
 
       // Home/End and Left/Right move focus across the category tabs.
-      await destinationPanel.locator('[data-ltm-availability-tab="branch"]').focus();
-      await destinationPanel.locator('[data-ltm-availability-tab="branch"]').press("Home");
+      await destinationPanel.locator('[data-ltm-availability-tab="chat"]').focus();
+      await destinationPanel.locator('[data-ltm-availability-tab="chat"]').press("Home");
       await page.waitForFunction(() => document.activeElement?.getAttribute("data-ltm-availability-tab") === "all");
-      await destinationPanel.locator('[data-ltm-availability-tab="branch"]').press("End");
+      await destinationPanel.locator('[data-ltm-availability-tab="chat"]').press("End");
       await page.waitForFunction(() => document.activeElement?.getAttribute("data-ltm-availability-tab") === "persona");
       assert.equal(
         await destinationPanel.locator('[data-ltm-availability-tab="persona"]').getAttribute("aria-selected"),
@@ -4108,19 +5485,20 @@ async function main() {
         "true",
       );
 
-      // Build a two-category selection: the current chat via the Current action, then a persona.
+      // Build a two-category selection: the current chat, then a persona.
       await destinationPanel.locator('[data-ltm-availability-tab="chat"]').click();
-      await destinationPanel.locator('[data-ltm-availability-action="chat:current"]').click();
-      assert.equal(
-        await destinationPanel.locator('[data-ltm-availability-action="chat:current"]').getAttribute("aria-pressed"),
-        "true",
-      );
+      const currentDestination = destinationPanel.locator('[data-ltm-availability-target="chat:desktop-chat"]');
+      assert.match(await currentDestination.innerText(), /^Current\nCurrent Final Branch$/u);
+      await currentDestination.click();
+      assert.equal(await currentDestination.getAttribute("aria-pressed"), "true");
       assert.equal(await destinationPanel.locator('button[aria-label^="Remove Current"]').count(), 1);
       await destinationPanel.locator('[data-ltm-availability-tab="persona"]').click();
-      await destinationPanel.locator('[data-ltm-availability-target="persona:persona-a"] input').check();
+      await destinationPanel.locator('[data-ltm-availability-target="persona:persona-a"]').click();
       assert.equal(
-        await destinationPanel.locator('[data-ltm-availability-target="persona:persona-a"] input').isChecked(),
-        true,
+        await destinationPanel
+          .locator('[data-ltm-availability-target="persona:persona-a"]')
+          .getAttribute("aria-pressed"),
+        "true",
       );
       assert.equal(
         await destinationPanel.locator('button[aria-label^="Remove Persona A (current and future chats)"]').count(),
@@ -4134,21 +5512,23 @@ async function main() {
 
       // Capacity: the per-kind 100-ID limit blocks the 100th additional chat.
       await destinationPanel.locator('[data-ltm-availability-tab="chat"]').click();
-      for (let index = 0; index < 99; index += 1) {
-        const bulkChat = destinationPanel.locator(`[data-ltm-availability-target="chat:bulk-chat-${index}"] input`);
-        await bulkChat.evaluate((element) => (element as HTMLInputElement).click());
-      }
-      const blockedBulkChat = destinationPanel.locator('[data-ltm-availability-target="chat:bulk-chat-99"] input');
-      assert.equal(await blockedBulkChat.isDisabled(), true);
+      const toggleBulkDestinationChats = async () => {
+        for (let index = 0; index < 99; index += 1)
+          await destinationPanel
+            .locator(`[data-ltm-availability-target="chat:bulk-chat-${index}"]`)
+            .evaluate((element) => (element as HTMLButtonElement).click());
+      };
+      await toggleBulkDestinationChats();
+      const blockedBulkChat = destinationPanel.locator('[data-ltm-availability-target="chat:bulk-chat-99"]');
+      await blockedBulkChat.evaluate((element) => (element as HTMLButtonElement).click());
+      assert.equal(await blockedBulkChat.getAttribute("aria-pressed"), "false", "a place past the limit is not added");
       assert.equal(await destinationPanel.getByText(/Some locations cannot be added/u).count(), 1);
       // Reset the chat selection back to the current chat only.
-      for (let index = 0; index < 99; index += 1) {
-        const bulkChat = destinationPanel.locator(`[data-ltm-availability-target="chat:bulk-chat-${index}"] input`);
-        await bulkChat.evaluate((element) => (element as HTMLInputElement).click());
-      }
+      await toggleBulkDestinationChats();
 
-      // The unified list is the bounded scroll container.
-      const destinationList = destinationPanel.locator("#ltm-bulk-destination-list");
+      // The rail list is the bounded scroll container.
+      const destinationListSelector = "#ltm-destination-scope-control [data-ltm-availability-list]";
+      const destinationList = page.locator(destinationListSelector);
       const destinationListHeightAllowance = 400;
       const listMetrics = await destinationList.evaluate((element) => ({
         scrollHeight: element.scrollHeight,
@@ -4164,9 +5544,8 @@ async function main() {
       await destinationList.hover();
       await page.mouse.wheel(0, 600);
       await page.waitForFunction(
-        () =>
-          (document.querySelector("#ltm-bulk-destination-list") as HTMLElement | null)?.scrollTop &&
-          (document.querySelector("#ltm-bulk-destination-list") as HTMLElement | null)!.scrollTop > 0,
+        (selector) => ((document.querySelector(selector) as HTMLElement | null)?.scrollTop ?? 0) > 0,
+        destinationListSelector,
       );
       const docHeightAfter = await destinationList.evaluate(() => document.documentElement.scrollHeight);
       assert.ok(docHeightAfter < listMetrics.docHeightBefore + destinationListHeightAllowance);
@@ -4174,9 +5553,8 @@ async function main() {
       // Mobile: the same list stays touch/wheel-scrollable inside the inspector pane.
       await page.setViewportSize({ width: 390, height: 844 });
       await showWorkspacePane("inspector");
-      const mobileDestinationList = page.locator("#ltm-bulk-destination-list");
-      await mobileDestinationList.scrollIntoViewIfNeeded();
-      const mobileListScrollable = await mobileDestinationList.evaluate((element) => ({
+      await destinationList.scrollIntoViewIfNeeded();
+      const mobileListScrollable = await destinationList.evaluate((element) => ({
         scrollHeight: element.scrollHeight,
         clientHeight: element.clientHeight,
         overflowY: getComputedStyle(element).overflowY,
@@ -4185,15 +5563,14 @@ async function main() {
       assert.ok(mobileListScrollable.scrollHeight > mobileListScrollable.clientHeight);
       assert.match(mobileListScrollable.overflowY, /auto|scroll/u);
       assert.equal(mobileListScrollable.pageLocked, false);
-      await mobileDestinationList.evaluate((element) => {
+      await destinationList.evaluate((element) => {
         element.scrollTop = 0;
       });
-      await mobileDestinationList.hover();
+      await destinationList.hover();
       await page.mouse.wheel(0, 600);
       await page.waitForFunction(
-        () =>
-          (document.querySelector("#ltm-bulk-destination-list") as HTMLElement | null)?.scrollTop &&
-          (document.querySelector("#ltm-bulk-destination-list") as HTMLElement | null)!.scrollTop > 0,
+        (selector) => ((document.querySelector(selector) as HTMLElement | null)?.scrollTop ?? 0) > 0,
+        destinationListSelector,
       );
       await page.setViewportSize({ width: 1280, height: 900 });
       await page
@@ -4216,14 +5593,29 @@ async function main() {
         personaIds: ["persona-a"],
       });
       await page.locator("[data-ltm-import-scope-result]").waitFor();
-      await destinationPanel.locator('[data-ltm-availability-tab="chat"]').click();
       await destinationPanel.locator('button[aria-label^="Remove Current"]').click();
-      await destinationPanel.locator('[data-ltm-availability-tab="branch"]').click();
-      await destinationPanel.locator('[data-ltm-availability-target="branch:valid-group"] input').check();
+      // A whole chat and a character found by keyboard search import into the chosen places.
+      await destinationPanel.locator('[data-ltm-availability-tab="chat"]').click();
+      await destinationPanel.locator('[data-ltm-availability-target="chat:valid-group"]').click();
       assert.equal(
-        await destinationPanel.locator('[data-ltm-availability-target="branch:valid-group"] input').isChecked(),
-        true,
+        await destinationPanel
+          .locator('[data-ltm-availability-target="chat:valid-group"]')
+          .getAttribute("aria-pressed"),
+        "true",
       );
+      await destinationPanel.locator('[data-ltm-availability-tab="all"]').click();
+      const destinationAllSearch = destinationPanel.locator('[data-ltm-availability-search="all"]');
+      await destinationAllSearch.fill("Character A");
+      await destinationAllSearch.press("Tab");
+      await destinationPanel.locator('[data-ltm-availability-target="character:character-a"]:focus').waitFor();
+      await page.keyboard.press("Enter");
+      assert.equal(
+        await destinationPanel
+          .locator('[data-ltm-availability-target="character:character-a"]')
+          .getAttribute("aria-pressed"),
+        "true",
+      );
+      await destinationAllSearch.fill("");
       await page.locator('[data-ltm-source-select="character-outside-current-chat"]').check();
       const validGroupRequestPromise = page.waitForRequest(
         (request) => request.method() === "POST" && request.url().includes("/api/long-term-memory/import/source-notes"),
@@ -4237,6 +5629,7 @@ async function main() {
         chatIds: Array.from({ length: 100 }, (_, index) => `valid-group-chat-${index}`),
         groupId: "valid-group",
         groupIds: ["valid-group"],
+        characterIds: ["character-a"],
         personaId: "persona-a",
         personaIds: ["persona-a"],
       });
@@ -4427,9 +5820,17 @@ async function main() {
       await retryReextract.click();
       await page.locator("[data-ltm-reextract-result]").waitFor();
       assert.match(await desktopSourcesNavigation.innerText(), /Completed 1/u);
+      // Re-extract and its retry send the current availability modes (#1227);
+      // the retry repeats the original selection even after the mode filter changes.
       assert.deepEqual(reextractionRequests, [
-        { path: "/api/long-term-memory/notes/source_desktop_reextract/extract", body: {} },
-        { path: "/api/long-term-memory/notes/source_desktop_reextract/extract", body: {} },
+        {
+          path: "/api/long-term-memory/notes/source_desktop_reextract/extract",
+          body: { modes: ["conversation"] },
+        },
+        {
+          path: "/api/long-term-memory/notes/source_desktop_reextract/extract",
+          body: { modes: ["conversation"] },
+        },
       ]);
       await page.locator('[data-ltm-source-tab="lorebooks"]').click();
       await page.locator('[data-ltm-source-preview="lorebooks"]').waitFor();
@@ -4448,8 +5849,12 @@ async function main() {
       if ((await destinationScope.getAttribute("open")) === null) {
         await destinationScope.locator("summary").click();
       }
-      await destinationPanel.locator('[data-ltm-availability-tab="branch"]').click();
-      await destinationPanel.locator('[data-ltm-availability-target="branch:conversation-a"] input').check();
+      const destinationChipRemovers = destinationPanel.locator('button[aria-label^="Remove "]');
+      while (await destinationChipRemovers.count()) await destinationChipRemovers.first().click();
+      await destinationPanel.locator('[data-ltm-availability-tab="chat"]').click();
+      const wholeChatDestination = destinationPanel.locator('[data-ltm-availability-target="chat:conversation-a"]');
+      await wholeChatDestination.click();
+      assert.equal(await wholeChatDestination.getAttribute("aria-pressed"), "true");
       await page.locator('[data-ltm-lorebook-id="lorebook_mobile_fixture"]').click();
       assert.equal(await page.locator('[data-ltm-lorebook-workbench="lorebook_mobile_fixture"]').isVisible(), true);
       await page.locator('[data-ltm-lorebook-entry="entry_mobile_harbor"]').waitFor();
@@ -4475,7 +5880,14 @@ async function main() {
         (request) => request.method() === "POST" && request.url().includes("/api/long-term-memory/import/source-notes"),
       );
       await page.locator('[data-ltm-lorebook-action="import-selected"]').click();
-      await persistedImportRequest;
+      const persistedImport = (await persistedImportRequest).postDataJSON() as { destinationScope?: unknown };
+      // A whole chat imports as the chat and every branch in it.
+      assert.deepEqual(persistedImport.destinationScope, {
+        chatId: "memory-chat",
+        chatIds: ["memory-chat", "memory-conversation-branch"],
+        groupId: "conversation-a",
+        groupIds: ["conversation-a"],
+      });
       const liveImportResult = page.locator("[data-ltm-source-import-result]");
       await liveImportResult.waitFor();
       assert.equal(

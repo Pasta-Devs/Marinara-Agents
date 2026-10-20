@@ -71,12 +71,7 @@ export function IconButton({
 }
 
 export function ClickSurface({ className = "", ...props }: HTMLAttributes<HTMLDivElement>) {
-  return (
-    <div
-      className={`focus-within:outline-none focus-within:ring-2 focus-within:ring-[var(--ring)] ${className}`}
-      {...props}
-    />
-  );
+  return <div className={`focus-within:ring-2 focus-within:ring-[var(--ring)] ${className}`} {...props} />;
 }
 
 export function InfoPopover({
@@ -183,7 +178,7 @@ export function InfoPopover({
         aria-controls={open ? `${id}-panel` : undefined}
         aria-describedby={open && !pinned ? `${id}-panel` : undefined}
         data-ltm-info={label}
-        className={`${compact ? "h-7 w-7" : "h-11 w-11"} inline-grid shrink-0 place-items-center rounded-md text-[var(--muted-foreground)] hover:bg-[var(--accent)] hover:text-[var(--foreground)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)]`}
+        className={`${compact ? "h-7 w-7" : "h-11 w-11"} inline-flex shrink-0 items-center justify-center rounded-md text-[var(--muted-foreground)] hover:bg-[var(--accent)] hover:text-[var(--foreground)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)]`}
         style={
           compact
             ? { height: "1.75rem", width: "1.75rem", flexShrink: 0 }
@@ -214,8 +209,13 @@ export function InfoPopover({
               aria-modal={pinned ? false : undefined}
               aria-label={pinned ? label : undefined}
               data-ltm-info-panel={label}
-              style={{ top: position.top, left: position.left }}
-              className={`mari-editor-panel fixed z-[100] max-h-[min(20rem,calc(100vh-1rem))] overflow-auto p-3 text-xs leading-5 text-[var(--marinara-editor-text)] shadow-lg ${wide ? "w-[min(26rem,calc(100vw-1rem))]" : "w-[min(18rem,calc(100vw-1rem))]"}`}
+              style={{
+                top: position.top,
+                left: position.left,
+                maxHeight: "min(20rem, calc(100vh - 1rem))",
+                width: wide ? "min(26rem, calc(100vw - 1rem))" : "min(18rem, calc(100vw - 1rem))",
+              }}
+              className="mari-editor-panel fixed z-[100] overflow-auto p-3 text-xs leading-5 text-[var(--marinara-editor-text)] shadow-lg"
               onMouseEnter={clearCloseTimer}
               onMouseLeave={scheduleClose}
             >
@@ -322,8 +322,8 @@ export function StatusSurface({
 } & HTMLAttributes<HTMLDivElement>) {
   const toneClass = {
     neutral: "text-[var(--marinara-editor-muted)]",
-    success: "border-[var(--marinara-editor-accent)]/35 text-[var(--marinara-editor-accent)]",
-    warning: "border-[var(--marinara-editor-warning)]/40 text-[var(--marinara-editor-warning)]",
+    success: "text-[var(--marinara-editor-accent)]",
+    warning: "",
     danger: "border-[var(--destructive)]/35 text-[var(--destructive)]",
   }[tone];
   return (

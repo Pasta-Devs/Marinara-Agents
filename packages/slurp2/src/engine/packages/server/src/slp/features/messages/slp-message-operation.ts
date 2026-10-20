@@ -15,7 +15,8 @@ import { createSlurpStorage } from "../../data/slp-storage.js";
 import { createSlurpMessagesStorage, type SlurpMessage } from "../../data/slp-storage.js";
 import { createSlurpEventsStorage } from "../../data/notifications/slp-notification-storage.js";
 import { tryCreatorAccountOperation } from "../../base/locking/slp-account-operation-lock.js";
-import { generateSlurpMessageReply, SlurpMessageBudgetUnavailableError } from "./slp-message-generation-service.js";
+import { generateSlurpMessageReply } from "./slp-message-generation-service.js";
+import { SlurpMessageBudgetUnavailableError } from "./slp-message-budget-error.js";
 import { resolveSlurpReplyAvailability, resolveSlurpReplyViewer } from "./slp-thread-stance.js";
 import { describeSlurpDayVibe, dropSlurpPendingText } from "../world/slp-world-contract.js";
 import { recoverSlurpMood } from "../../modules/world/slp-mood.js";
@@ -61,6 +62,7 @@ import {
 import { slurpContinuityIdentityOf } from "../../modules/continuity/slp-continuity-rules.js";
 
 import { slurpCreatorInScene } from "./scenes/slp-roleplay-scene-lock.js";
+import { saveSlurpMessageDeepDetails } from "../../data/messages/slp-message-deep-details-storage.js";
 export type SlurpReplyOutcome =
   | { status: "replied"; message: SlurpMessage; pacing: SlurpReplyPacing }
   | { status: "queued"; pacing: SlurpReplyPacing }
@@ -365,6 +367,14 @@ export async function replyToSlurpMessage(
         delayed: queuedBubbles.map((bubble) => ({ ...bubble, id: `${claim.claimId}:${bubble.sequence}` })),
       });
       if (!stored) return { status: "ineligible" } as const;
+      // Deep details, read from the Message menu. Nobody can open an AI fan's thread, so it keeps none.
+      if (reply.deepDetails && !aiFan)
+        await saveSlurpMessageDeepDetails(db, {
+          messageId: stored.id,
+          threadId: thread.id,
+          creatorAccountId: thread.creatorAccountId,
+          record: reply.deepDetails,
+        });
       // Never echo a post already shared in this conversation: the creator used to send back the very
       // post the fan had just shared, as if it were news.
       const alreadyShared =

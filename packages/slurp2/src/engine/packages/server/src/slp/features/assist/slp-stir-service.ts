@@ -7,6 +7,9 @@
  *   with what one Undo needs. Plays are free (a sandbox); only an action that calls the AI costs a call.
  * - `undoSlpStirPlay`, `readSlpStirView`.
  */
+import type { APIProvider } from "@marinara-engine/shared";
+import { resolveStoredMaxTokens } from "../../../services/generation/generation-parameters.js";
+import { clampGenerationMaxOutputTokens } from "../../../services/generation/output-token-limits.js";
 import type { DB } from "../../../db/connection.js";
 import { logger } from "../../../lib/logger.js";
 import { resolveBaseUrl } from "../../../services/generation/connection-base-url.js";
@@ -209,6 +212,8 @@ export async function planSlpStir(
       connection.claudeFastMode === "true",
       connection.treatAsLocalEndpoint === "true",
       connection.defaultParameters,
+      // The player's own plan is foreground work on the connection; a Creator's proposal runs inside its reply.
+      origin === "player" ? connection.id : undefined,
     ),
   );
   const result = await provider.chatComplete(
@@ -240,7 +245,16 @@ export async function planSlpStir(
       followUp: request.followUp ?? null,
     }),
     // Reasoning headroom, like the writing help: a plan is short, the thinking may not be.
-    { model: connection.model, temperature: 0.3, maxTokens: 3072 },
+    {
+      model: connection.model,
+      temperature: 0.3,
+      maxTokens: clampGenerationMaxOutputTokens({
+        provider: connection.provider as APIProvider,
+        model: connection.model,
+        maxTokens: Math.max(resolveStoredMaxTokens(connection.defaultParameters, 3072), 3072),
+        maxTokensOverride: connection.maxTokensOverride,
+      }),
+    },
   );
   const answer = readSlpStirPlanAnswer(result.content);
   if (!answer) return { ok: false, status: 502, error: "That plan came back garbled. Try again, or play a card." };
@@ -422,10 +436,31 @@ export async function readSlpStirView(
     matches,
     dismissed,
   };
+  const shownPlays = plays.slice(0, 12);
+  // Step 1 (Stir follows through): the collabs the shown plays started or pushed, finished ones too,
+  // so a row can say how it went and open the joint post while it exists.
+  const playedIds = new Set(
+    shownPlays.flatMap((play) =>
+      play.steps.flatMap((step) => [step.ref?.collabId ?? step.input.collabId].filter((id) => typeof id === "string")),
+    ),
+  );
+  const playedCollabs = await Promise.all(
+    document.ties.collabs
+      .filter((collab) => playedIds.has(collab.id))
+      .map(async (collab) => ({
+        id: collab.id,
+        hostId: collab.hostId,
+        partnerId: collab.partnerId,
+        status: collab.status,
+        decline: collab.decline,
+        postId: collab.postId && (await storage.getPostById(collab.postId)) ? collab.postId : null,
+      })),
+  );
   return {
     live: slpStirLive(liveInput),
     suggestions: slpStirSuggestions(liveInput),
-    plays: plays.slice(0, 12).map(({ undo: _undo, ...play }) => play),
+    plays: shownPlays.map(({ undo: _undo, ...play }) => play),
+    playedCollabs,
     creators: creators.map(({ lastPostAt: _last, pace: _pace, ideas: _ideas, ...creator }) => creator),
     events: world.events,
     couples: world.couples,

@@ -23,10 +23,10 @@ import {
   readSlurpDramaState,
 } from "../../data/world/slp-drama-storage.js";
 import { slpDramaCatalog, slpEnabledDrama } from "../../modules/world/events/slp-drama-library.js";
+import { slpDramaText } from "../../modules/world/events/slp-drama-words.js";
 import {
   slpAdvanceDrama,
   slpAnswerDramaChoice,
-  slpDramaText,
   slpDueDramaJobs,
   slpMarkDramaJob,
   type SlpDramaJob,
@@ -154,6 +154,8 @@ async function sendDramaJob(
       const sent = await messages.sendCreatorMessage(job.actorId, viewer, {
         content: text(job.choice!.question),
         metadata: {
+          // Nobody asked this question either; it is the drama runtime writing first. Settings ›
+          // Messaging "Stop after one unanswered text" reads any `dramaChoice` message as unsolicited.
           dramaChoice: {
             runId: job.runId,
             stage: job.choice!.stage ?? null,

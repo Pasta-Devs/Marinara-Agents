@@ -11,27 +11,28 @@
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",
-    "@playwright/test": "1.63.0",
+    "@playwright/test": "1.64.0",
     "eslint": "10.11.0",
     "eslint-plugin-react-hooks": "7.1.1",
     "globals": "17.12.0",
-    "prettier": "3.9.9",
+    "prettier": "3.9.10",
     "tsx": "4.23.15",
-    "typescript-eslint": "8.70.1",
+    "typescript-eslint": "8.71.1",
     "zod": "3.25.76"
   },
   "scripts": {
     "build:5e-srd-catalogs": "node scripts/build-5e-srd-catalogs.mjs",
     "build:rulesets": "node scripts/build-ruleset-packages.mjs",
     "check": "npm run format:check && npm run lint",
-    "format": "prettier --write \"packages/**/src/**/*.{js,mjs,ts,tsx}\" \"scripts/**/*.{js,mjs}\" \"tests/**/*.{js,mjs,ts,tsx}\" eslint.config.mjs",
-    "format:check": "prettier --check \"packages/**/src/**/*.{js,mjs,ts,tsx}\" \"scripts/**/*.{js,mjs}\" \"tests/**/*.{js,mjs,ts,tsx}\" eslint.config.mjs",
-    "lint": "eslint \"packages/**/src/**/*.{js,mjs,ts,tsx}\" \"scripts/**/*.{js,mjs}\" \"tests/**/*.{js,mjs,ts,tsx}\" eslint.config.mjs",
-    "test:browser:noodle": "node scripts/run-package-browser-tests.mjs noodle tests/package-noodle.e2e.ts",
+    "format": "prettier --write \"packages/**/src/**/*.{js,mjs,ts,tsx}\" \"sources/*-overlay/**/*.{mjs,ts,tsx}\" \"scripts/**/*.{js,mjs}\" \"tests/**/*.{js,mjs,ts,tsx}\" eslint.config.mjs",
+    "format:check": "prettier --check \"packages/**/src/**/*.{js,mjs,ts,tsx}\" \"sources/*-overlay/**/*.{mjs,ts,tsx}\" \"scripts/**/*.{js,mjs}\" \"tests/**/*.{js,mjs,ts,tsx}\" eslint.config.mjs",
+    "lint": "eslint \"packages/**/src/**/*.{js,mjs,ts,tsx}\" \"sources/*-overlay/**/*.{mjs,ts,tsx}\" \"scripts/**/*.{js,mjs}\" \"tests/**/*.{js,mjs,ts,tsx}\" eslint.config.mjs",
+    "test:browser:noodle": "node scripts/run-package-browser-tests.mjs noodle tests/package-noodle.e2e.ts tests/package-noodle-picker-scope.e2e.ts",
     "test:browser:slurp2": "node scripts/run-package-browser-tests.mjs slurp2 tests/package-slurp2.e2e.ts",
-    "test:noodle:regressions": "sh -c 'for test in tests/noodle*.regression.ts tests/noodler-*.regression.ts tests/slurp-*.regression.ts tests/slurp2-*.regression.ts; do if [ \"$test\" = tests/slurp-phase1-durability.regression.ts ]; then tsx \"$test\"; else tsx --tsconfig tests/tsconfig.regressions.json \"$test\"; fi || exit 1; done'",
+    "test:noodle:regressions": "sh -c 'for test in tests/noodle*.regression.ts tests/noodler-*.regression.ts tests/slurp-*.regression.ts tests/slurp2-*.regression.ts; do if [ \"$test\" = tests/slurp-phase1-durability.regression.ts ] || [ \"$test\" = tests/slurp2-reset-activity.regression.ts ] || [ \"$test\" = tests/slurp2-anchor-edits.regression.ts ] || [ \"$test\" = tests/slurp2-message-deep-details.regression.ts ] || [ \"$test\" = tests/slurp2-engine-avatar-variant.regression.ts ] || [ \"$test\" = tests/slurp2-restore-media.regression.ts ]; then tsx \"$test\"; else tsx --tsconfig tests/tsconfig.regressions.json \"$test\"; fi || exit 1; done'",
+    "test:slurp:regressions": "node scripts/run-slurp-regressions.mjs",
     "test:noodle:quality": "node scripts/evaluate-noodle-generation.mjs tests/fixtures/noodle-generation-quality.samples.json",
     "test:security": "node scripts/tests/catalog-path-safety.regression.mjs && tsx tests/long-term-memory-index-keys.regression.ts",
-    "typecheck:packages": "node scripts/typecheck-packages.mjs noodle slurp2 long-term-memory memory-nag"
+    "typecheck:packages": "node scripts/typecheck-packages.mjs noodle slurp2 long-term-memory memory-nag conversation-calls hierarchical-maps games"
   }
 }

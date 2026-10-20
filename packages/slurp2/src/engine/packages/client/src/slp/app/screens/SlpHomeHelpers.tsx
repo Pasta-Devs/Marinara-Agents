@@ -94,6 +94,7 @@ export const EMPTY_STAGE_PROFILE: SlurpStageProfileInput = {
   appearance: "",
   wardrobe: "",
   locations: "",
+  clothingStyle: "auto",
   disclosureMode: "open",
   gender: null,
   tags: [],

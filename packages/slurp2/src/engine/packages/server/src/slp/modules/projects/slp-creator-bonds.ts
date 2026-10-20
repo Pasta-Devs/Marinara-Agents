@@ -21,7 +21,7 @@
  */
 import { DAY_MS, clampText, hash } from "./slp-project.js";
 import { slurpPairKey, slurpSharedNiche, type SlurpTieCreator } from "./slp-creator-ties.js";
-import type { SlurpCouple } from "./slp-creator-couples.js";
+import { slurpCoupleOf, type SlurpCouple } from "./slp-creator-couples.js";
 
 export const SLURP_BOND_KINDS = ["friend", "roommate", "coworker", "ex"] as const;
 export type SlurpBondKind = (typeof SLURP_BOND_KINDS)[number];
@@ -45,6 +45,7 @@ export const SLURP_BOND_NOTE_CODES = [
   "together",
   "left",
   "ended",
+  "forget",
   "drama",
 ] as const;
 export type SlurpBondNoteCode = (typeof SLURP_BOND_NOTE_CODES)[number];
@@ -261,15 +262,24 @@ export function slurpAdvanceBonds(bonds: readonly SlurpBond[], input: SlurpBonds
     hash(`${window}:${label}`) % 100 < Math.round(percent * Math.max(0, input.activity));
 
   // Somebody left Slurp: every bond they had ends, locked or not.
-  let next = bonds.map((bond) =>
+  let next = slurpSyncExBonds(bonds, input.couples, at).map((bond) =>
     slurpBondActive(bond) && (!byId.has(bond.aId) || !byId.has(bond.bId)) ? end(bond, stamp, "left", "left") : bond,
   );
 
-  // Exes: a breakup leaves one; getting back together ends it.
+  // Exes: a breakup leaves one; getting back together ends it, and so does forgetting (#1293): a
+  // forgotten ex is not fed to drama casting or the People map as one anymore. Ended, not deleted, so
+  // a card or another breakup never remakes it (`made` below counts an ended bond too).
   for (const couple of input.couples) {
-    const ex = activeOf(next, couple.aId, couple.bId, "ex");
-    if (couple.stage !== "split" && ex)
-      next = next.map((bond) => (bond === ex ? end(bond, stamp, "together", "together") : bond));
+    if (slurpCoupleOf(input.couples, couple.aId, couple.bId) !== couple) continue;
+    // All of this pair's active ex bonds, not just one: a stray extra never survives a reunion or a forget.
+    const exes = next.filter(
+      (bond) =>
+        bond.kind === "ex" &&
+        slurpBondActive(bond) &&
+        slurpPairKey(bond.aId, bond.bId) === slurpPairKey(couple.aId, couple.bId),
+    );
+    if (exes.length && couple.stage !== "split")
+      next = next.map((bond) => (exes.includes(bond) ? end(bond, stamp, "together", "together") : bond));
     // One ex bond per breakup: once it ended (the player, or they left), this breakup made its bond.
     const made = next.some(
       (bond) =>
@@ -280,6 +290,7 @@ export function slurpAdvanceBonds(bonds: readonly SlurpBond[], input: SlurpBonds
     if (
       couple.stage === "split" &&
       couple.ending === "breakup" &&
+      couple.aftermath !== "forget" &&
       !made &&
       byId.has(couple.aId) &&
       byId.has(couple.bId)
@@ -303,13 +314,15 @@ export function slurpAdvanceBonds(bonds: readonly SlurpBond[], input: SlurpBonds
       const other = meant && creatorNamed(person.name, input.creators, creator.id);
       // Seeded once: a card bond that ended (drifted, or the player ended it) does not come back.
       if (!meant || !other || everOf(next, creator.id, other.id, meant.kind)) continue;
-      // A card ex while they are a couple again is old news; the couple wins.
+      // A card ex while they are a couple again is old news; the couple wins. A forgotten ex stays
+      // forgotten: the card does not hand it straight back as a fresh bond.
       if (
         meant.kind === "ex" &&
-        input.couples.some(
-          (couple) =>
-            couple.stage !== "split" && slurpPairKey(couple.aId, couple.bId) === slurpPairKey(creator.id, other.id),
-        )
+        (slurpCoupleOf(input.couples, creator.id, other.id)?.aftermath === "forget" ||
+          input.couples.some(
+            (couple) =>
+              couple.stage !== "split" && slurpPairKey(couple.aId, couple.bId) === slurpPairKey(creator.id, other.id),
+          ))
       )
         continue;
       next = [
@@ -459,4 +472,27 @@ export function slurpEndBond(bonds: readonly SlurpBond[], id: string, at: Date):
   const bond = bonds.find((entry) => entry.id === id && slurpBondActive(entry));
   if (!bond) return "unknown";
   return bonds.map((entry) => (entry === bond ? end(entry, at.toISOString(), "player", "ended") : entry));
+}
+
+/** Apply the newest couple's memory choice to ex bonds immediately, including every group pair.
+ * The distinct end reason lets Undo or moveOn restore only bonds ended by forgetting. */
+export function slurpSyncExBonds(bonds: readonly SlurpBond[], couples: readonly SlurpCouple[], at: Date): SlurpBond[] {
+  const stamp = at.toISOString();
+  return bonds.map((bond) => {
+    if (bond.kind !== "ex") return bond;
+    const couple = slurpCoupleOf(couples, bond.aId, bond.bId);
+    if (!couple) return bond;
+    if (couple.stage !== "split")
+      return slurpBondActive(bond) || bond.notes.at(-1)?.code === "forget"
+        ? end(bond, stamp, "together", "together")
+        : bond;
+    if (couple.aftermath === "forget") return slurpBondActive(bond) ? end(bond, stamp, "player", "forget") : bond;
+    if (
+      !slurpBondActive(bond) &&
+      bond.notes.at(-1)?.code === "forget" &&
+      Date.parse(bond.notes.at(-1)!.at) >= Date.parse(couple.stageAt)
+    )
+      return note({ ...bond, endedAt: null, ending: null }, { at: stamp, code: "player" });
+    return bond;
+  });
 }

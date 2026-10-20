@@ -14,7 +14,17 @@ const root = "packages/slurp2/src/engine/packages/";
 const read = (path: string) => slurp2Source(root + path);
 const routes = read("server/src/routes/slurp.routes.ts");
 const storage = read("server/src/services/storage/slurp.storage.ts");
-const settings = slurp2BackstageSource();
+// The Creators and Discovery tabs moved out of the Backstage files into feature panels.
+const settings = [
+  slurp2BackstageSource(),
+  read("client/src/slp/features/creators/SlpCreatorsPanel.tsx"),
+  read("client/src/slp/features/discovery/SlpDiscoveryPanel.tsx"),
+  read("client/src/slp/features/creators/SlpStageProfileForm.tsx"),
+].join("\n");
+const creatorsPanel = read("client/src/slp/features/creators/SlpCreatorsPanel.tsx");
+const stageForm = read("client/src/slp/features/creators/SlpStageProfileForm.tsx");
+const creatorSettings = read("client/src/slp/features/creators/settings/SlpCreatorSettingsSections.tsx");
+const discoveryPanel = read("client/src/slp/features/discovery/SlpDiscoveryPanel.tsx");
 const tagsPage = read("client/src/components/slurp/SlurpTagsSettings.tsx");
 const bulkEdit = read("client/src/components/slurp/SlurpCreatorBulkEdit.tsx");
 const en = JSON.parse(read("client/src/localization/locales/en.json")) as Record<string, string>;
@@ -43,15 +53,26 @@ assert.equal(
 );
 
 // Tags page: no browser prompts, and the filter label is positioned so Firefox does not scroll on focus.
-assert.match(settings, /<SlurpTagsSettings/u);
+assert.match(discoveryPanel, /<SlurpTagsSettings/u);
 assert.doesNotMatch(tagsPage, /window\.(prompt|confirm)\(/u);
 assert.match(tagsPage, /<label className="relative flex/u);
 
-// Creators tab: select mode, the bulk panel, and a quick edit that uses the same route.
-assert.match(settings, /<SlurpCreatorBulkEdit/u);
-assert.match(settings, /<SlurpDiscoveryProfileEditor/u);
-assert.match(settings, /ids: \[selectedCreator\.id\]/u);
-assert.match(read("client/src/hooks/use-slurp.ts"), /"\/slurp2\/slurp\/accounts\/bulk-update"/u);
+// Creators tab: select mode plus the bulk panel for many Creators at once. Each control is checked
+// in the panel that renders it, so a control on another tab cannot satisfy the check.
+assert.match(creatorsPanel, /<SlurpCreatorBulkEdit/u);
+assert.match(stageForm, /<SlurpDiscoveryProfileEditor/u);
+// A single Creator's gender/tags moved off the instant bulk-update quick edit and into the whole
+// profile editor (commit 95cd4c0a0, "whole profile in the Creators tab"), saved with the rest of
+// the profile through the stage-profile route instead of a one-field bulk-update call.
+assert.match(creatorSettings, /<SlurpCreatorProfileEditor/u);
+assert.match(
+  read("client/src/slp/features/creators/slp-creator-profile-hooks.ts"),
+  /\/slurp2\/slurp\/accounts\/\$\{encodeURIComponent\(accountId\)\}\/stage-profile/u,
+);
+assert.match(
+  read("client/src/slp/features/creators/slp-creators-hooks.ts"),
+  /"\/slurp2\/slurp\/accounts\/bulk-update"/u,
+);
 
 // Every literal key the new UI uses exists in English (plural keys may only have _one/_other).
 for (const source of [tagsPage, bulkEdit, settings]) {

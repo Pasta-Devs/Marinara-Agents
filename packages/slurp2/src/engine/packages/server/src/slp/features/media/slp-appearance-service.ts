@@ -1,3 +1,8 @@
+import type { APIProvider } from "@marinara-engine/shared";
+import { slpAccountGender } from "../../../../../shared/src/slp/slp-gender.js";
+import { slurpImageSexWord } from "../../base/media/slp-image-prompt.js";
+import { resolveStoredMaxTokens } from "../../../services/generation/generation-parameters.js";
+import { clampGenerationMaxOutputTokens } from "../../../services/generation/output-token-limits.js";
 import type { SlpAccount } from "../../../../../shared/src/slp/slp-social.types.js";
 import type { DB } from "../../../db/connection.js";
 import { resolveBaseUrl } from "../../../services/generation/connection-base-url.js";
@@ -33,11 +38,15 @@ export async function resolveImageAppearance(input: {
   connectionId?: string | null;
   mode: SlpAppearanceProfileMode;
   regenerate?: boolean;
+  /** The player asked for it: the reading is booked as foreground work on the connection. */
+  foreground?: boolean;
 }): Promise<string> {
   const key = `${input.account.id}:${input.regenerate === true}`;
   const inFlight = appearanceFlights.get(key);
   if (inFlight) return inFlight;
-  const flight = resolveImageAppearanceOnce(input);
+  const flight = resolveImageAppearanceOnce(input).then((text) =>
+    slurpImageSexWord(text, slpAccountGender(input.account)),
+  );
   appearanceFlights.set(key, flight);
   try {
     return await flight;
@@ -120,6 +129,8 @@ async function resolveImageAppearanceOnce(input: Parameters<typeof resolveImageA
       connection.claudeFastMode === "true",
       connection.treatAsLocalEndpoint === "true",
       connection.defaultParameters,
+      // The player's own request is foreground work on the connection; a picture run's reading is not.
+      input.foreground ? connection.id : undefined,
     ),
   );
   const messages = [
@@ -134,7 +145,16 @@ async function resolveImageAppearanceOnce(input: Parameters<typeof resolveImageA
       ...(image ? { images: [image] } : {}),
     },
   ];
-  const options = { model: connection.model, maxTokens: 500, stream: false } as const;
+  const options = {
+    model: connection.model,
+    maxTokens: clampGenerationMaxOutputTokens({
+      provider: connection.provider as APIProvider,
+      model: connection.model,
+      maxTokens: Math.max(resolveStoredMaxTokens(connection.defaultParameters, 500), 500),
+      maxTokensOverride: connection.maxTokensOverride,
+    }),
+    stream: false,
+  } as const;
   let usedImage = Boolean(image);
   const response = await provider
     .chatComplete(messages, options)

@@ -99,8 +99,9 @@ for (const maxContext of [8_192, 16_384, 32_768, 49_152, 128_000]) {
   }
 }
 
-// Every timeline call (first try, text-only retry and correction) goes through the wrapper, and only
-// the primary connection is wrapped, so a configured fallback still gets the original request.
+// Every timeline call (first try, text-only retry and correction) goes through the wrapper. It wraps the
+// Engine's fallback chain, because the Engine builds a fallback only around a provider it created itself
+// (Pasta-Devs/Marinara-Agents#1487): the budget is sized for the primary connection.
 const service = readFileSync(
   new URL(
     "../packages/noodle/src/engine/packages/server/src/services/noodle/noodle-public-generation.service.ts",
@@ -114,7 +115,10 @@ assert.deepEqual(service.match(/[\w.]*provider\.chatComplete\([^)]*\)/gi), [
   "timelineProvider.chatComplete(prompt.textOnlyMessages, completionOptions)",
   "timelineProvider.chatComplete(correctionMessages, completionOptions)",
 ]);
-assert.match(service, /const timelinePrimary = new NoodleTimelineBudgetProvider\(primaryProvider\);/);
-assert.match(service, /withConnectionFallbackProvider\(\{ primary: timelinePrimary, \.\.\.fallbackArgs \}\)/);
+assert.match(
+  service,
+  /const timelineProvider = new NoodleTimelineBudgetProvider\(\s*withConnectionFallbackProvider\(\{ primary: primaryProvider, \.\.\.fallbackArgs \}\),\s*\);/,
+);
+assert.doesNotMatch(service, /primary: new NoodleTimelineBudgetProvider/, "the Engine refuses a package-made primary");
 
 console.log("noodle timeline context budget regression passed");

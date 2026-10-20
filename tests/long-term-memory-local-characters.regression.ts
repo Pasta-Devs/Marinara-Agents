@@ -29,23 +29,25 @@ function unit(input: {
 }
 
 async function main() {
-  const { compileLtmEvidenceUnits } = await import(`${source}/evidence-unit-compiler.ts`);
-  const { projectLtmDraftMutationGroup } = await import(`${source}/draft-projector.ts`);
+  const { compileLtmEvidenceUnits } = await import(`${source}/extraction/evidence-unit-compiler.ts`);
+  const { projectLtmDraftMutationGroup } = await import(`${source}/drafts/draft-projector.ts`);
   const { ltmDraftMutationSchema, ltmDraftReviewChangeSchema } =
     await import("../packages/long-term-memory/src/engine/packages/shared/src/features/agents/long-term-memory/schema.ts");
   const { compileEvidenceUnitExtraction, parseEvidenceUnitPayload } = await import(
-    `${source}/evidence-unit-extraction.ts`
+    `${source}/extraction/evidence-unit-extraction.ts`
   );
-  const { sourceHashForLtmSourceNote } = await import(`${source}/source-hash.ts`);
-  const { normalizeStructuredSummaryEvidenceUnits } = await import(`${source}/structured-summary-normalizer.ts`);
+  const { sourceHashForLtmSourceNote } = await import(`${source}/extraction/source-hash.ts`);
+  const { normalizeStructuredSummaryEvidenceUnits } = await import(
+    `${source}/extraction/structured-summary-normalizer.ts`
+  );
   const { isLocalCharacterSubject, localCharacterScopeError, localCharacterSubjectForName, ltmScopeFamilyId } =
-    await import(`${source}/chat-scope.ts`);
+    await import(`${source}/identity/chat-scope.ts`);
   const {
     analyzeTrustedLtmNoteSubjects,
     buildTrustedLtmSubjectCatalog,
     prepareLtmSubjectIdentityContext,
     trustedLtmIdentityNotesForSource,
-  } = await import(`${source}/subject-identity.ts`);
+  } = await import(`${source}/identity/subject-identity.ts`);
 
   const sourceNote = {
     id: "roleplay-source",
@@ -342,7 +344,7 @@ async function main() {
     namedCollision.diagnostics.some((item) => item.code === "ambiguous_subject_link_target"),
     "an exact name must not override conflicting batch link targets",
   );
-  const { ambiguousLtmDraftLinkChoiceError } = await import(`${source}/reconciliation.ts`);
+  const { ambiguousLtmDraftLinkChoiceError } = await import(`${source}/drafts/reconciliation.ts`);
   const originalLinkMutation = {
     id: "link-choice",
     kind: "add_link" as const,
@@ -652,7 +654,7 @@ async function main() {
     gameCatalog.entries.some((entry) => entry.name === "Vela"),
     false,
   );
-  const { evidenceUnitMessages } = await import(`${source}/evidence-unit-extraction.ts`);
+  const { evidenceUnitMessages } = await import(`${source}/extraction/evidence-unit-extraction.ts`);
   const messages = evidenceUnitMessages({
     sourceNote: { ...sourceNote, modes: ["game"] } as any,
     sourceText: "Mara visits the party.",
@@ -667,6 +669,23 @@ async function main() {
   });
   const promptBody = JSON.stringify(messages);
   assert.equal(promptBody.includes("local_character:"), false);
+  const roleplayMessages = evidenceUnitMessages({
+    sourceNote: sourceNote as any,
+    sourceText: "Mara visits the party.",
+    sourceHash: "a".repeat(64),
+    modes: ["roleplay"],
+    mode: "roleplay",
+    trustedSubjectCatalog: {
+      entries: [{ subject: validSubject, name: "Mara", aliases: [], canonicalSlug: "mara", familyId: "chat_chat_a" }],
+      notes: [],
+    },
+    languageModel: {} as any,
+  });
+  assert.deepEqual(
+    JSON.parse(String(roleplayMessages[1]!.content)).trustedSubjects,
+    [{ name: "Mara", aliases: [] }],
+    "issue #1448: the prompt catalog carries names and aliases, never subject keys or refs",
+  );
 
   // --- I01: Ambiguity diagnostics & competing records with provenance ---
   const duplicateDisplayNameCatalog = buildTrustedLtmSubjectCatalog({
@@ -914,6 +933,29 @@ async function main() {
       scope,
     }).resolve({ units: malformedRelationship.response.units, existingNotes: [] }).units[0]?.subjectKeys,
     ["character:char_maria", "character:char_marie"],
+  );
+  // Issue #1448: a provider-supplied subject key never overrides the named subject.
+  const wrongKeyInput = parseEvidenceUnitPayload(
+    {
+      units: [
+        unit({
+          bucket: "character_fact",
+          subjectId: "marie",
+          subjectNames: ["Marie"],
+          subjectKeys: ["character:char_ming"],
+          text: "Marie prefers tea over coffee.",
+        }),
+      ],
+    },
+    "a".repeat(64),
+  ).response.units;
+  assert.equal(wrongKeyInput[0]?.subjectKeys, undefined);
+  assert.deepEqual(
+    prepareLtmSubjectIdentityContext({ units: wrongKeyInput, catalog: identityCatalog, scope }).resolve({
+      units: wrongKeyInput,
+      existingNotes: [],
+    }).units[0]?.subjectKeys,
+    ["character:char_marie"],
   );
   assert.equal(resolveIdentity("Mariya").units.length, 0, "fuzzy neighbors must not assign a subject");
   const ambiguousAlias = resolveIdentity("Sam");
@@ -2341,6 +2383,7 @@ async function main() {
       ...unit({ bucket: "character_fact", subjectId: "mara", subjectNames: ["Mara"], text: "Mara keeps the map." }),
       subjects: [mara.subject],
       claimKind: "static" as const,
+      links: [{ target: "char_jordan_the_innkeeper", relation: "involves" as const }],
       sourceHash: innHash,
     },
     {
@@ -2409,6 +2452,21 @@ async function main() {
   assert.equal(dropped.outcome.droppedCandidates[0]?.validatorCode, "local_character_requires_roleplay");
   assert.equal(dropped.accounting.validationRejections, 1);
   assert.equal(dropped.outcome.state, "partial_success");
+  const maraLinks = (result: ReturnType<typeof compileInn>) =>
+    result.compiledResponse.mutations.flatMap((mutation) =>
+      mutation.kind === "create_note" && mutation.note.id === "char_mara"
+        ? mutation.note.links.map((link) => link.target)
+        : [],
+    );
+  assert.deepEqual(maraLinks(restricted), ["char_jordan_the_innkeeper"]);
+  assert.deepEqual(maraLinks(dropped), [], "issue #1448: a link to the dropped local character is stripped");
+  assert.deepEqual(
+    dropped.diagnostics
+      .filter((diagnostic) => diagnostic.code === "unknown_link_target")
+      .map((diagnostic) => [diagnostic.noteId, diagnostic.candidateIndex]),
+    [["char_mara", 1]],
+    "issue #1448: the stripped-link warning keeps Mara's candidate index after Jordan is dropped",
+  );
 
   process.stdout.write(
     "Long-Term Memory local-character regression: scoped identity, review risk, safeguards, and isolation passed\n",

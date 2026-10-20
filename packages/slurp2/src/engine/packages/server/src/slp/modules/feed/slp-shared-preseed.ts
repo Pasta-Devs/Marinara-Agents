@@ -44,9 +44,10 @@ export function slurpWorldTickPrompt(input: { date: string; withEvent: boolean }
   return {
     system: [
       "You plan shared moments for a simulated creator platform, one day at a time.",
-      `Return JSON only: {"ideas":[{"type":"","anchorKind":"","template":""}]${input.withEvent ? ',"event":{"name":"","guidance":"","days":3}' : ""}}.`,
+      `Return JSON only: {"ideas":[{"type":"","anchorKind":"","template":""}],"trend":{"label":"","line":""}${input.withEvent ? ',"event":{"name":"","guidance":"","days":3}' : ""}}.`,
       `ideas: up to ${IDEAS_MAX} moments that fit this date for anybody: season, weather, a holiday, or a light platform trend.`,
       IDEA_RULES,
+      "trend: a light thing people could do for a few days on a social platform, like a challenge or a meme format. label is at most six words; line is one sentence in the second person with exactly one {a} slot. Use null most days.",
       ...(input.withEvent
         ? [
             "event: one short platform-wide theme for the next days (a challenge or themed week) with a name of at most 60 characters, one or two sentences of guidance for creators, and days from 1 to 7. Use null when nothing fits.",
@@ -119,6 +120,20 @@ export function normalizeSlurpSharedWorldEvent(raw: unknown): SlurpSharedWorldEv
   const days = Number(event.days);
   if (!name || !guidance) return null;
   return { name, guidance, days: Number.isFinite(days) ? Math.min(7, Math.max(1, Math.round(days))) : 3 };
+}
+
+/** The optional trend in a world-tick answer, or null. The line needs exactly one `{a}` slot. */
+export function normalizeSlurpSharedWorldTrend(raw: unknown): { label: string; line: string } | null {
+  const value = Array.isArray(raw) && raw.length === 1 ? raw[0] : raw;
+  const trend = record(record(value).trend);
+  const label = String(trend.label ?? "")
+    .replace(/\s+/gu, " ")
+    .trim()
+    .slice(0, 60);
+  const line = String(trend.line ?? "")
+    .replace(/\s+/gu, " ")
+    .trim();
+  return label && line.length <= TEMPLATE_MAX && line.split("{a}").length === 2 ? { label, line } : null;
 }
 
 /** A Creator's topic tags: their tags minus curated mood and adult tags. Custom tags count as topics. */

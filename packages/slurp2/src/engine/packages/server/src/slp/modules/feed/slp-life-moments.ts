@@ -276,14 +276,7 @@ const POOL: readonly LifeMoment[] = [
     topic: /\bpost\w*/iu,
     weight: 0.5,
   },
-  {
-    id: "trend",
-    kind: "platform",
-    type: "audience_game",
-    line: "A silly trend is going around Slurp right now, and you do your own take on it, or roast it.",
-    topic: /\btrends?\b/iu,
-    weight: 0.6,
-  },
+  // No invented trend here: a real one is joined through `planSlurpTrendBeat` (docs/TRENDS.md).
   // Only when it really happened.
   {
     id: "back-after-quiet",

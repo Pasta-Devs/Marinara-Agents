@@ -1,11 +1,11 @@
 import { useState } from "react";
-import { ChevronRight, Clapperboard, RotateCcw, Users, X } from "lucide-react";
+import { ChevronRight, Clapperboard, Users, X } from "lucide-react";
 import { toast } from "sonner";
 import { useTranslation } from "react-i18next";
 import { cn } from "../../../lib/utils";
 import { Avatar, SLP_PAGE_SCROLL_CLASS, SLP_TOP_BAR_CLASS, SLP_TYPE } from "../../base/chrome/SlpChrome";
 import { SlpHeartGlyph, SlpSparkleGlyph, SlpStirGlyph } from "../../base/chrome/SlpGlyphs";
-import { formatRelativeTime, formatUpcomingDay } from "../../base/ui/slp-date-time";
+import { formatUpcomingDay } from "../../base/ui/slp-date-time";
 import { errorMessage } from "../../modules/settings/slp-backstage-format";
 import type { SlpPulseTarget } from "../../base/state/slp-task-store";
 import { SlpButton, SlpChip, SlpSegment } from "../../modules/chrome/SlpButton";
@@ -21,7 +21,6 @@ import {
 import type {
   SlpActionPreview,
   SlpStirLive,
-  SlpStirPlay,
   SlpStirSuggestion,
   SlpStirView,
 } from "../../../../../shared/src/slp/slp-stir.js";
@@ -29,13 +28,14 @@ import { SlpPeoplePanel } from "../projects/slp-projects-contract";
 import { SlpStirCollabButtons } from "./SlpStirCollabButtons";
 import { useSlurpStir, useSlurpStirDismiss, useSlurpStirPreview } from "./slp-stir-hooks";
 import { SlpStirBox } from "./SlpStirBox";
-import { SlpStirPlanSheet, useSlpStirDoIt, useSlpStirUndo } from "./SlpStirCards";
+import { SlpStirPlanSheet, useSlpStirDoIt } from "./SlpStirCards";
 import { SlpYouTwo } from "./SlpYouTwo";
 import { SlpStirPlaySheet } from "./SlpStirPlaySheet";
 import { SlpStirDesk } from "./SlpStirDesk";
 import { useSlurpSettings } from "../settings/slp-settings-contract";
 import { SLP_STIR_DECK, SLP_STIR_DECK_ORDER } from "./slp-stir-deck";
-import { slpStirDeckNeed, slpStirLiveLever, slpStirPlayTarget } from "./slp-stir-screen-model";
+import { slpStirDeckNeed, slpStirLiveLever } from "./slp-stir-screen-model";
+import { SlpStirRecentPlays } from "./SlpStirRecentPlays";
 
 const HINT_KEY = "slurp2:stir-hint-seen";
 
@@ -351,108 +351,6 @@ function Suggested({
 }
 
 /**
- * "Recent plays" (0.3.1): what the player made happen, newest first, with Undo while it can still
- * be taken back and a way to what it touched. The ledger keeps a short memory, not history.
- */
-function RecentPlays({
-  plays,
-  creators,
-  onOpenTarget,
-}: {
-  plays: SlpStirPlay[];
-  creators: SlpStirView["creators"];
-  onOpenTarget?: (target: SlpPulseTarget) => void;
-}) {
-  const { t, i18n } = useTranslation();
-  const [all, setAll] = useState(false);
-  const undo = useSlpStirUndo();
-  const names = new Map(creators.map((creator) => [creator.id, creator.name]));
-  if (!plays.length) return null;
-  const shown = all ? plays : plays.slice(0, 4);
-  return (
-    <section aria-labelledby="slp-stir-recent" className="space-y-2" data-slp-stir-recent>
-      <div className="flex items-center justify-between px-1">
-        <h2 id="slp-stir-recent" className={SLP_TYPE.title}>
-          {t("ui.slurp.stir.recent")}
-        </h2>
-        {plays.length > shown.length && (
-          <SlpButton variant="tertiary" onClick={() => setAll(true)} className="min-h-11 text-xs">
-            {t("ui.slurp.stir.recentAll")}
-          </SlpButton>
-        )}
-      </div>
-      <ul className={SLP_CARD_STACK_CLASS}>
-        {shown.map((play) => {
-          const first = play.steps[0];
-          const who = [
-            ...new Set(
-              play.steps.flatMap((step) =>
-                ["accountId", "aId", "bId", "fromId", "toId", "withIds"]
-                  .flatMap((key) => [step.input[key]].flat())
-                  .flatMap((id) => (typeof id === "string" && names.has(id) ? [names.get(id)!] : [])),
-              ),
-            ),
-          ];
-          const failed = play.steps.filter((step) => !step.ok).length;
-          const target = onOpenTarget ? slpStirPlayTarget(play) : null;
-          const title = first
-            ? play.steps.length > 1
-              ? t("ui.slurp.stir.taskLabelMore", {
-                  what: t(`ui.slurp.stir.card.${first.action}.title`, { defaultValue: first.action }),
-                  count: play.steps.length - 1,
-                })
-              : t(`ui.slurp.stir.card.${first.action}.title`, { defaultValue: first.action })
-            : "";
-          const status = play.undone
-            ? t("ui.slurp.stir.recentUndone")
-            : failed
-              ? t("ui.slurp.stir.recentFailed", { count: failed })
-              : null;
-          return (
-            <li
-              key={play.id}
-              className="flex items-center gap-2 rounded-2xl bg-[var(--slurp-surface-raised)] p-2 ps-3 shadow-[var(--slurp-shadow-raised),var(--slurp-highlight)]"
-            >
-              <button
-                type="button"
-                disabled={!target}
-                onClick={() => target && onOpenTarget?.(target)}
-                className="flex min-h-11 min-w-0 flex-1 flex-col justify-center rounded-xl text-start focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] disabled:cursor-default"
-              >
-                <span
-                  className={cn(
-                    SLP_TYPE.body,
-                    "block truncate font-semibold",
-                    play.undone && "line-through opacity-70",
-                  )}
-                >
-                  {title}
-                </span>
-                <span className={cn(SLP_TYPE.meta, "block truncate text-[var(--slurp-muted)]")}>
-                  {[who.join(", "), formatRelativeTime(play.at, i18n.language), status].filter(Boolean).join(" · ")}
-                </span>
-              </button>
-              {play.undoable && !play.undone && (
-                <SlpButton
-                  variant="quiet"
-                  disabled={undo.pending}
-                  onClick={() => void undo.run(play.id)}
-                  aria-label={t("ui.slurp.stir.undoPlay", { title })}
-                  className="min-h-11 shrink-0 px-3 text-xs"
-                >
-                  <RotateCcw size={14} aria-hidden="true" />
-                  {t("ui.slurp.wallet.undo", { defaultValue: "Undo" })}
-                </SlpButton>
-              )}
-            </li>
-          );
-        })}
-      </ul>
-    </section>
-  );
-}
-
-/**
  * "Start a story" (0.3.11): the drama packs first, then every lever as a one-step story, by genre. A
  * card shows its icon, a name and one line; a card with nothing to act on yet says what it needs.
  * The genres are tabs (arrow keys move between them).
@@ -757,7 +655,13 @@ export function SlpStirScreen({
                     onOpenSettings={onOpenSettings}
                     onSurprise={surprise}
                   />
-                  <RecentPlays plays={view.plays} creators={view.creators} onOpenTarget={onOpenTarget} />
+                  <SlpStirRecentPlays
+                    plays={view.plays}
+                    collabs={view.playedCollabs}
+                    creators={view.creators}
+                    onOpenTarget={onOpenTarget}
+                    onOpen={setPlaying}
+                  />
                 </>
               ) : null}
             </>

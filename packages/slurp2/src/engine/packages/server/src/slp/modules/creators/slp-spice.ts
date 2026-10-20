@@ -28,6 +28,7 @@ import {
 import type { SlurpCanonAnchors } from "../feed/slp-post-beat.js";
 import { SLURP_NEVER_PATTERN } from "../feed/slp-life-moments.js";
 import { slurpWeightedPick } from "../feed/slp-weighted.js";
+import type { SlpWear } from "../../../../../shared/src/slp/slp-gender.js";
 
 /** What is known about one Creator for spice decisions. */
 export type SlurpSpiceCreator = {
@@ -37,6 +38,8 @@ export type SlurpSpiceCreator = {
   turnOns: readonly string[];
   hardNoes: readonly string[];
   anchors?: SlurpCanonAnchors | null;
+  /** What they wear (`slpWear`): a masculine Creator's "lingerie" is briefs. Absent: feminine, as before. */
+  wear?: SlpWear;
 };
 
 // --- Words ---------------------------------------------------------------------------------------
@@ -145,6 +148,33 @@ const KINDS: readonly SpiceKind[] = [
     moment: "having sex with {partner}",
   },
 ];
+
+/**
+ * The lingerie kind for a Creator who does not wear lingerie (user, 2026-10-14: male Creators kept
+ * getting bra-and-panties shoots). The id and label stay, so the player's learned taste still counts.
+ */
+const WEAR_KINDS: Record<Exclude<SlpWear, "feminine">, Record<string, Partial<SpiceKind>>> = {
+  masculine: {
+    lingerie: {
+      words: ["underwear", "briefs", "boxers", "jockstrap", "lingerie"],
+      line: "an underwear shoot, something new on and shown off properly",
+      tease: "the underwear set you have not shown yet",
+      moment: "posing in underwear, briefs",
+    },
+  },
+  neutral: {
+    lingerie: {
+      words: ["lingerie", "underwear", "lace", "briefs"],
+      line: "an underwear shoot, lingerie or briefs, whatever is yours, shown off properly",
+      tease: "the underwear set you have not shown yet",
+      moment: "posing in underwear",
+    },
+  },
+};
+
+/** A kind as this Creator wears it. */
+const worn = (kind: SpiceKind, wear: SlpWear | undefined): SpiceKind =>
+  wear && wear !== "feminine" ? { ...kind, ...WEAR_KINDS[wear][kind.id] } : kind;
 
 export const SLURP_SPICE_KIND_IDS = KINDS.map((kind) => kind.id);
 
@@ -256,6 +286,8 @@ export function slurpSpiceAngle(input: {
   couple?: string | null;
   /** Earlier spicy posts of this Creator, newest first. */
   recent: readonly { kind: string; taste?: string | null }[];
+  /** Other Creators' spicy posts of the last day, posted or prepared (#104). */
+  feed?: readonly { kind: string; taste?: string | null }[];
   sequence: number;
   /** A drop delivers the kind its tease hinted at, when it is still allowed (3b). */
   teasedKind?: string | null;
@@ -266,14 +298,22 @@ export function slurpSpiceAngle(input: {
   // What the post is about: the post's level when locked, the Creator's ceiling when teased.
   const about = locked ? input.level : input.ceiling;
   const top = LEVEL_INDEX(about);
-  const kinds = KINDS.filter((kind) => LEVEL_INDEX(kind.min) <= top).filter(
-    (kind) =>
-      !kind.words.some((word) => blocked(word, input.creator, input.spice.never)) &&
-      !(kind.partnered && input.madeWith === null),
-  );
+  const kinds = KINDS.map((kind) => worn(kind, input.creator.wear))
+    .filter((kind) => LEVEL_INDEX(kind.min) <= top)
+    .filter(
+      (kind) =>
+        !kind.words.some((word) => blocked(word, input.creator, input.spice.never)) &&
+        !(kind.partnered && input.madeWith === null),
+    );
   if (!kinds.length) return null;
   const seed = input.creator.accountId;
-  const lastKinds = input.recent.slice(0, 3).map((entry) => entry.kind);
+  // Every recent spicy post counts, not only the last three: a kind that keeps winning (toys at an
+  // explicit ceiling weigh most) halves with each repeat, so a page does not settle on one (#104).
+  const lastKind = input.recent[0]?.kind;
+  const repeats = (id: string) => input.recent.filter((entry) => entry.kind === id).length;
+  // Other Creators' spicy posts of the last day count too, softer: one taste sent the whole feed
+  // into the shower on the same evening (#104). The level stays; only the kind spreads out.
+  const elsewhere = (id: string) => (input.feed ?? []).filter((entry) => entry.kind === id).length;
   const teased = locked ? kinds.find((candidate) => candidate.id === input.teasedKind) : undefined;
   const kind =
     teased ??
@@ -287,7 +327,8 @@ export function slurpSpiceAngle(input: {
           // The top of the range carries the most weight: an explicit page is mostly explicit.
           (1 + 2 * (LEVEL_INDEX(candidate.min) / Math.max(1, top))) *
           (input.creator.turnOns.some((on) => candidate.words.some((word) => shareWord(on, word))) ? 3 : 1) *
-          (lastKinds[0] === candidate.id ? 0.1 : lastKinds.includes(candidate.id) ? 0.4 : 1),
+          (lastKind === candidate.id ? 0.1 : 0.5 ** repeats(candidate.id)) *
+          SLURP_FEED_KIND_DAMPING ** elsewhere(candidate.id),
       })),
     );
   const partner: SlurpSpicePartner | null = !kind.partnered
@@ -299,7 +340,7 @@ export function slurpSpiceAngle(input: {
       : slurpSpicePartner(input.creator, input.collabs ?? [], seed, input.sequence, input.couple);
   const who = partner?.name ?? "someone you are seeing";
   const fill = (value: string) => value.replace("{partner}", who);
-  const taste = slurpTastePick(input.spice, input.creator, seed, input.sequence, input.recent);
+  const taste = slurpTastePick(input.spice, input.creator, seed, input.sequence, input.recent, input.feed);
   const tasteLine = taste
     ? `Your fans have been into ${taste.text} lately. Work it in if you can, your way, without making it the whole post.`
     : "";
@@ -323,6 +364,9 @@ export function slurpSpiceAngle(input: {
     taste: taste?.text ?? null,
   };
 }
+
+/** How much one other Creator's spicy post of the same kind in the last day lowers this kind's weight. */
+const SLURP_FEED_KIND_DAMPING = 0.75;
 
 // --- The player's taste --------------------------------------------------------------------------
 
@@ -356,16 +400,19 @@ export function slurpTastePick(
   seed: string,
   sequence: number,
   recent: readonly { taste?: string | null }[] = [],
+  /** Other Creators' spicy posts of the last day: a taste already all over the feed waits a turn. */
+  feed: readonly { taste?: string | null }[] = [],
 ): SlpTaste | null {
   const last = recent.slice(0, 3).map((entry) => (entry.taste ? slpTasteKey(entry.taste) : ""));
   const chances = spice.tastes
     .map((taste) => {
       const key = slpTasteKey(taste.text);
-      const variety = last[0] === key ? 0 : last.includes(key) ? 0.35 : 1;
-      return {
-        taste,
-        chance: slurpTasteChance(taste.strength, slurpTasteFit(taste.text, creator, spice.never)) * variety,
-      };
+      const fit = slurpTasteFit(taste.text, creator, spice.never);
+      const elsewhere = feed.filter((entry) => entry.taste && slpTasteKey(entry.taste) === key).length;
+      // A Creator whose turn-ons it is still leans in; everyone else steps aside sooner.
+      const spread = (fit >= 1 ? 0.85 : 0.6) ** elsewhere;
+      const variety = (last[0] === key ? 0 : last.includes(key) ? 0.35 : 1) * spread;
+      return { taste, chance: slurpTasteChance(taste.strength, fit) * variety };
     })
     .filter((entry) => entry.chance > 0);
   if (!chances.length) return null;

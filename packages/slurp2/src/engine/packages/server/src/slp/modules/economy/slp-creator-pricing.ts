@@ -45,6 +45,17 @@ export function slurpCommissionQuote(brief: string, pricing: SlurpCommissionPric
   return Math.min(max, Math.max(min, Math.round(pricing.commissionBase * slurpCommissionComplexity(brief))));
 }
 
+/** The range `slurpCommissionQuote` can return, for the DM prompt (#45). */
+export function slurpCommissionPriceRange(pricing: SlurpCommissionPricing): {
+  usual: number;
+  from: number;
+  upTo: number;
+} {
+  const from = Math.max(1, Math.min(pricing.commissionMin, pricing.commissionMax));
+  const upTo = Math.max(from, pricing.commissionMax);
+  return { usual: Math.min(upTo, Math.max(from, Math.round(pricing.commissionBase))), from, upTo };
+}
+
 export type SlurpCreatorHaggleAnswer = { kind: "accept" } | { kind: "meet"; price: number } | { kind: "hold" };
 
 /**

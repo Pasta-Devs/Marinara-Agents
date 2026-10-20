@@ -1,4 +1,4 @@
-/** Render the actual composer with small host fakes; prove compact preview, Edit, and publish safety. */
+/** Render the actual composer with small host fakes; prove the draft fills the one composer, and publish safety. */
 import assert from "node:assert/strict";
 import { transformSync } from "esbuild";
 import { runInNewContext } from "node:vm";
@@ -17,6 +17,7 @@ const store = {
     store.composeGuide = guide;
   },
 };
+const usedIdeas: string[] = [];
 const names = new Map<string, (...args: any[]) => any>();
 const named = (name: string) => {
   if (!names.has(name))
@@ -55,6 +56,11 @@ const host: Record<string, any> = {
   useSlurpUIStore: (select: (value: typeof store) => any) => select(store),
   useSlpViewerPersonaId: () => "persona",
   useSlurpTiesMutations: () => ({ markPosted: { mutate: () => undefined } }),
+  useSlurpCreatorSteeringMutations: () => ({ removeIdea: { mutate: (id: string) => usedIdeas.push(id) } }),
+  useSlurpProjects: () => ({ data: { projects: [{ id: "arc", title: "Moving out", status: "active" }] } }),
+  useSlurpCreatorSteering: () => ({ data: { steering: { nudges: [{ id: "idea", text: "Beach day" }] } } }),
+  useSlurpWardrobe: () => ({ data: { looks: [{ id: "look", name: "Red dress", enabled: true }] } }),
+  slurpIntentFitsAccess: () => true,
   useSlurpSettings: () => ({ data: {} }),
   useSlurpCreatorMessagingSettings: () => ({ data: undefined }),
   isEmptyCreatorPostDraft: (draft: any) => !draft.body && !draft.image,
@@ -119,47 +125,51 @@ async function main() {
     return composer({ ...props, draft });
   };
   let tree = render();
-  assert.equal(component(tree, "SlpAutoGrowTextarea").length, 0, "Stir opens a preview, not the full editor");
+  assert.equal(tree.props.title, "ui.slurp.composer.newPost", "Stir opens the one composer, not a second mode");
+  assert.equal(component(tree, "SlpAutoGrowTextarea").length, 1, "The editor is there from the start");
+  const footerOf = (node: Element) => ({ type: "footer", props: { children: node.props.footer } });
   const guide = component(tree, "SlpPostGuide")[0];
   draft = { ...draft, body: "An older draft" };
   guide.props.onPendingChange(true);
   tree = render();
   assert.equal(tree.props.closeDisabled, true, "Cannot close while the draft is generating");
-  assert.equal(
-    component({ type: "footer", props: { children: tree.props.footer } }, "SlpPrimaryButton")[0].props.disabled,
-    true,
-  );
-  await component({ type: "footer", props: { children: tree.props.footer } }, "SlpPrimaryButton")[0].props.onClick();
+  assert.equal(component(footerOf(tree), "SlpPrimaryButton")[0].props.disabled, true);
+  await component(footerOf(tree), "SlpPrimaryButton")[0].props.onClick();
   assert.equal(posts, 0, "Generating never publishes an older draft");
   tree.props.onClose();
   assert.equal(closed, 0, "Generating cannot close the sheet");
-  guide.props.onDraft({ text: "A drafted caption", image: "data:image/png;base64,AA", dealId: null });
+  component(tree, "SlpComposerAudience")[0].props.onChange({ access: "locked", unlockPrice: null });
+  assert.equal(draft.access, "locked", "One audience control: the composer's own, which the guide writes for");
+  guide.props.onDraft({
+    title: "A drafted title",
+    text: "A drafted caption",
+    image: "data:image/png;base64,AA",
+    dealId: null,
+    ideaId: "idea",
+  });
   guide.props.onPendingChange(false);
   tree = render();
   assert.equal(component(tree, "SlpCreatorDraftImageFrame").length, 1);
+  assert.equal(draft.title, "A drafted title", "The draft's title lands in the title field");
+  assert.equal(component(tree, "SlpAutoGrowTextarea")[0].props.value, "A drafted caption");
+  assert.equal(component(footerOf(tree), "SlpButton").length, 0, "No Edit step: the draft is already editable");
   const keptPicture = draft.image;
-  component(tree, "SlpPostGuide")[0].props.onDraft({ text: "A drafted caption", image: null, dealId: null });
+  component(tree, "SlpPostGuide")[0].props.onDraft({
+    title: "",
+    text: "A drafted caption",
+    image: null,
+    dealId: null,
+    ideaId: "idea",
+  });
   assert.equal(draft.image, keptPicture, "Text-only drafting preserves an uploaded or existing picture");
-  assert.equal(
-    component(tree, "SlpAutoGrowTextarea").length,
-    0,
-    "The preview remains compact after handoff is cleared",
-  );
-  const footer = { type: "footer", props: { children: tree.props.footer } };
-  component(footer, "SlpButton")[0].props.onClick();
-  tree = render();
-  assert.equal(
-    component(tree, "SlpAutoGrowTextarea")[0].props.value,
-    "A drafted caption",
-    "Edit preserves the caption",
-  );
-  assert.equal(component(tree, "SlpCreatorDraftImageFrame").length, 1, "Edit preserves the picture");
   assert.equal(posts, 0);
   assert.equal(closed, 0);
-  component({ type: "footer", props: { children: tree.props.footer } }, "SlpPrimaryButton")[0].props.onClick();
+  tree = render();
+  component(footerOf(tree), "SlpPrimaryButton")[0].props.onClick();
   await new Promise<void>((resolve) => setImmediate(resolve));
   assert.equal(posts, 1, "Only the explicit Post action publishes");
   assert.equal(closed, 1);
+  assert.deepEqual(usedIdeas, ["idea"], "Posting a draft written from a saved idea uses the idea up");
   assert.equal(store.composeGuide, null, "Publishing clears the handoff for the next Stir request");
 
   // The own-page action enters Stir directly; other pages keep the existing manual composer.
@@ -228,19 +238,27 @@ async function main() {
   const requests: any[] = [];
   host.runSlpAction = async (_action: string, input: any) => {
     requests.push(input);
-    return { text: "Caption", image: null, imageError: null };
+    return { title: "Title", text: "Caption", image: null, imageError: null };
   };
   const postGuide = load("../../features/assist/SlpPostGuide.tsx").SlpPostGuide;
-  let uploads = 0;
+  const drafts: any[] = [];
+  const chip = (label: string) =>
+    component(renderGuide(), "SlpChip").find((node) => JSON.stringify(node.props.children).includes(label))!;
+  const option = (label: string) =>
+    elements(renderGuide()).find(
+      (node) => node.type === "button" && JSON.stringify(node.props.children).includes(label),
+    )!;
+  let hasImage = false;
   const renderGuide = () => {
     cursor = 0;
     return postGuide({
       accountId: "persona",
       personaId: "persona",
       story: false,
+      access: "locked",
+      hasImage,
       initialIdea: "An idea",
-      onDraft: () => undefined,
-      onUpload: () => uploads++,
+      onDraft: (value: any) => drafts.push(value),
     });
   };
   const submitGuide = async () => {
@@ -251,18 +269,29 @@ async function main() {
   };
   await submitGuide();
   assert.equal(requests.at(-1).picture, true, "Image generation is explicit in the request");
-  elements(renderGuide())
-    .find((node) => node.type === "input" && node.props.type === "checkbox")!
-    .props.onChange({ target: { checked: false } });
+  assert.equal(requests.at(-1).access, "locked", "The draft is written for the audience picked beforehand");
+  chip("ui.slurp.postGuide.withPicture").props.onClick();
   await submitGuide();
   assert.equal(requests.at(-1).picture, false, "The toggle permits text-only drafting");
-  elements(renderGuide())
-    .find((node) => node.type === "input" && node.props.type === "checkbox")!
-    .props.onChange({ target: { checked: true } });
-  component(renderGuide(), "SlpButton")[0].props.onClick();
-  assert.equal(uploads, 1, "Upload is available directly in the shared guide");
+  chip("ui.slurp.postGuide.withPicture").props.onClick();
+  hasImage = true;
+  assert.equal(chip("ui.slurp.postGuide.withPicture"), undefined, "A post with a picture offers no second one");
   await submitGuide();
-  assert.equal(requests.at(-1).picture, false, "Uploading turns generation off to preserve the picture");
+  assert.equal(requests.at(-1).picture, false, "A picture already in the composer is kept, none is drawn");
+  hasImage = false;
+  // Add from Slurp: a storyline and a look ride along by id; a saved idea becomes the wish.
+  chip("ui.slurp.postGuide.storyline").props.onClick();
+  option("Moving out").props.onClick();
+  chip("ui.slurp.postGuide.look").props.onClick();
+  option("Red dress").props.onClick();
+  chip("ui.slurp.postGuide.idea").props.onClick();
+  option("Beach day").props.onClick();
+  await submitGuide();
+  assert.equal(requests.at(-1).projectId, "arc");
+  assert.equal(requests.at(-1).lookId, "look");
+  assert.equal(requests.at(-1).idea, "Beach day", "A saved idea is the wish itself");
+  assert.equal(drafts.at(-1).ideaId, "idea");
+  assert.equal(drafts.at(-1).title, "Title");
   console.log("slurp2 guided preview: ok");
 }
 void main().catch((error) => {

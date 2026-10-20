@@ -145,6 +145,8 @@ export async function generateSlurpConversationSchedule(
       connection.claudeFastMode === "true",
       connection.treatAsLocalEndpoint === "true",
       connection.defaultParameters,
+      // Only the player's "Generate" button calls this: booked as foreground work on the connection.
+      connection.id,
     ),
   );
   const messages = [

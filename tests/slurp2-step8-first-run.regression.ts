@@ -23,7 +23,8 @@ assert.equal(slurp2SplashKind(null), "welcome");
 assert.equal(slurp2SplashKind("0.2.60"), "whats-new");
 assert.equal(slurp2SplashKind("an-unknown-version"), "whats-new");
 assert.equal(slurp2SplashKind(SLURP2_VERSION), null);
-assert.equal(getSlurp2UnseenReleases("0.2.72").length, 3);
+// A browser on the fourth-newest release has three releases to show.
+assert.equal(getSlurp2UnseenReleases(SLURP2_RELEASES[3]!.version).length, 3);
 
 const splash = src("features/onboarding/SlpSplash.tsx");
 const welcome = splash.slice(splash.indexOf("function SlurpWelcome("), splash.indexOf("function ReleaseNotes("));
@@ -141,7 +142,7 @@ assert.match(
 );
 assert.match(panel, /ui\.slurp\.wizard\.revealToContinue/u);
 assert.match(panel, /ui\.slurp\.wizard\.pickOne/u);
-assert.match(panel, /note=\{running \|\| reason\}/u, "every disabled primary says why under it");
+assert.match(panel, /note=\{running \? .*: reason\}/u, "every disabled primary says why under it");
 assert.match(src("modules/chrome/SlpWizardChrome.tsx"), /\[&>button\]:whitespace-nowrap/u, "the footer never wraps");
 assert.match(src("modules/chrome/SlpButton.tsx"), /export function SlpSquareCheck[\s\S]*?rounded-\[5px\]/u);
 // The demo stays, and its title stays hidden until the reveal (B16).

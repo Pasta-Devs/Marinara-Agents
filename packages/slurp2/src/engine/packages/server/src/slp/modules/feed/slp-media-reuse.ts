@@ -40,6 +40,11 @@ function hasMedia(post: SlurpReusablePost): boolean {
   return typeof path === "string" && path.length > 0;
 }
 
+function reusedFrom(post: SlurpReusablePost): string | null {
+  const source = post.metadata?.reusedFromPostId;
+  return typeof source === "string" && source ? source : null;
+}
+
 function isStory(post: SlurpReusablePost): boolean {
   return post.metadata?.noodlerPostType === "story";
 }
@@ -58,8 +63,12 @@ export function slurpReuseCandidates(
   input: { kind: SlurpReuseKind; access: string; at: Date; shootId?: string | null },
 ): SlurpReusablePost[] {
   const now = input.at.getTime();
+  // A picture goes up again at most once, and a repost is never the source of the next one: a
+  // Creator reposts an old photo, not the repost of it. Reuse of any kind (shoot, archive, preview)
+  // counts. ponytail: only sees reuse inside the lookback window the caller passes.
+  const reused = new Set(posts.map(reusedFrom).filter(Boolean));
   return posts.filter((post) => {
-    if (!hasMedia(post) || isStory(post)) return false;
+    if (!hasMedia(post) || isStory(post) || reusedFrom(post) || reused.has(post.id)) return false;
     const age = now - Date.parse(post.createdAt);
     if (!Number.isFinite(age) || age < 0) return false;
     if (input.kind === "preview") {

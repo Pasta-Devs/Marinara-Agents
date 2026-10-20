@@ -45,17 +45,38 @@ export function slurpVisualBriefPolicyText(brief: SlurpVisualBrief): string {
   ].join("\n");
 }
 
-/** A cheap last-resort check for obvious sexual escalation before text reaches an image provider. */
-export function slurpVisualBriefPromptViolatesPolicy(brief: SlurpVisualBrief, prompt: string): boolean {
+const NEGATED_TERM = /\b(?:no|non|not|without|never)[\s-]+[a-z]+/gu;
+// A limit in the handed text ("not a nude portrait") reaches over a few words, so it is cut wider.
+const NEGATED_LIMIT = /\b(?:no|non|not|without|never)\b(?:[\s-]+[a-z]+){1,3}/gu;
+
+/**
+ * A cheap last-resort check for sexual escalation before text reaches an image provider. `known` is
+ * the scene's own facts the rewrite was handed (the card's appearance and the draft): a word the
+ * rewrite found there is carried over, not escalated. Without it a card that says "large breasts"
+ * rejected every rewrite of a clothed scene. Limits in `known` ("no nudity") are not carried.
+ */
+export function slurpVisualBriefPromptViolatesPolicy(
+  brief: SlurpVisualBrief | undefined,
+  prompt: string | null | undefined,
+  known: string = "",
+): boolean {
+  if (!brief || !prompt) return false;
   // Negated terms are the brief's own limits ("no nudity, non-sexual"), not an escalation. Reading
   // them as matches rejected every rewrite that kept the level line.
-  const value = prompt.toLocaleLowerCase().replace(/\b(?:no|non|not|without|never)[\s-]+[a-z]+/gu, " ");
+  const value = prompt.toLocaleLowerCase().replace(NEGATED_TERM, " ");
+  const carried = new Set(
+    known
+      .toLocaleLowerCase()
+      .replace(NEGATED_LIMIT, " ")
+      .match(/[a-z]+/gu),
+  );
+  const has = (pattern: RegExp) => (value.match(new RegExp(pattern.source, "gu")) ?? []).some((w) => !carried.has(w));
   const explicit = /\b(?:explicit|pornographic|sex|sexual|intercourse|penetration|cum|clit|pussy|cock|balls)\b/u;
   const nude = /\b(?:nude|naked|topless|bottomless|lingerie|nipples?|breasts?|genitals?)\b/u;
-  if (brief.sexualLevel === "none") return explicit.test(value) || nude.test(value);
+  if (brief.sexualLevel === "none") return has(explicit) || has(nude);
   // Suggestive allows "partly undressed", so lingerie and a mention of breasts are within it.
   if (brief.sexualLevel === "suggestive")
-    return explicit.test(value) || /\b(?:nude|naked|topless|bottomless|nipples?|genitals?)\b/u.test(value);
-  if (brief.sexualLevel === "nudity") return explicit.test(value);
+    return has(explicit) || has(/\b(?:nude|naked|topless|bottomless|nipples?|genitals?)\b/u);
+  if (brief.sexualLevel === "nudity") return has(explicit);
   return false;
 }

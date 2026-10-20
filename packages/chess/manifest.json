@@ -1,8 +1,16 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
+  "capabilityApi": {
+    "major": 1,
+    "minor": 341
+  },
+  "builtAgainst": {
+    "engineVersion": "2.5.0",
+    "engineCommit": "25f8df7b0a388fe36f657d69c6fcaa9f27e066ed"
+  },
   "id": "chess",
   "name": "Chess",
-  "version": "1.0.5",
+  "version": "1.0.6",
   "description": "Play Chess with a Conversation character. Install to use /chess manually in any Conversation chat. Add under Chat Settings → Agents → Commands only to let characters initiate it.",
   "engine": {
     "min": "2.3.0",
@@ -37,13 +45,13 @@
     },
     {
       "path": "server.mjs",
-      "sha256": "0473cb2ef2446c512a8194b4de265cc3db141c4ef0390b7d1b12c41fe5df23f9",
-      "bytes": 108076
+      "sha256": "2f6ecd0c0e724f97f45381b6ab6375fbd181688e885db3472d48753cdc042402",
+      "bytes": 48304
     },
     {
       "path": "client.js",
-      "sha256": "440a0c52a2e34b071858db7d89fd3ca0c68ae84fd93a16264ab1d49dd7940fce",
-      "bytes": 566758
+      "sha256": "af7ec37a1091476f7ae4cc1fe39b1492a327c4daa195e9a3d99432770651d610",
+      "bytes": 28916
     }
   ],
   "permissions": [

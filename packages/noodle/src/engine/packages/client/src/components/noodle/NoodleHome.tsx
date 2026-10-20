@@ -72,7 +72,13 @@ import { api, ApiError } from "../../lib/api-client";
 import { showConfirmDialog } from "../../lib/app-dialogs";
 import { DEFAULT_NOODLE_SETTINGS, normalizeAvatarCrop, type AvatarCrop } from "@marinara-engine/shared";
 import { cn } from "../../lib/utils";
-import { useActivePersona, useCharacterGroups, useCharacters, usePersonas } from "../../hooks/use-characters";
+import {
+  useActivePersona,
+  useCharacterGroups,
+  useCharacters,
+  usePersonas,
+  useUpdateCharacter,
+} from "../../hooks/use-characters";
 import { useConnections } from "../../hooks/use-connections";
 import { useNoodleCustomEmojiMap } from "../../hooks/use-noodle-custom-emojis";
 import {
@@ -654,6 +660,8 @@ export function NoodleHome({ navigation, onNavigate, focusPostId, onFocusPostHan
   const rerollAmbientProfiles = useRerollAmbientNoodleProfiles();
   const updateAccountFollow = useUpdateNoodleAccountFollow();
   const updateAccountProfile = useUpdateNoodleAccountProfile();
+  const updateCharacter = useUpdateCharacter();
+  const openCharacter = useUIStore((state) => state.openCharacter);
   const patchAccountSettings = usePatchNoodleAccountSettings();
   const inviteCharacter = useInviteNoodleCharacter();
   const inviteCharacters = useInviteNoodleCharacters();
@@ -1166,11 +1174,8 @@ export function NoodleHome({ navigation, onNavigate, focusPostId, onFocusPostHan
       })
         .then(() => {
           window.localStorage.removeItem("marinara:noodle:legacy-image-size");
-          if (legacyState) {
-            delete legacyState.imageNoodleWidth;
-            delete legacyState.imageNoodleHeight;
-            window.localStorage.setItem("marinara-engine-ui", JSON.stringify(envelope));
-          }
+          // The Engine owns "marinara-engine-ui": writing back this copy, read before the save, could undo
+          // settings the Engine saved meanwhile (#1478). The migration flag keeps this from running again.
           window.localStorage.setItem(migrationKey, "1");
         })
         .catch(() => undefined);
@@ -1845,6 +1850,28 @@ export function NoodleHome({ navigation, onNavigate, focusPostId, onFocusPostHan
                 : false;
   const normalizedProfileHandle = profileHandle.trim().replace(/^@+/, "");
   const isEditingProfile = canEditViewedProfile && profileEditing;
+  const viewedCharacter =
+    viewedProfileAccount?.kind === "character"
+      ? characters.find((character) => character.id === viewedProfileAccount.entityId)
+      : undefined;
+  const viewedCharacterId = typeof viewedCharacter?.id === "string" ? viewedCharacter.id : null;
+  // Card flags live on the character, so they save at once instead of with the profile draft.
+  // Slurp reads the image-instruction flag as its default.
+  const viewedExtensions = {
+    ...parseRecord(parseRecord(viewedCharacter?.data).extensions),
+    ...(updateCharacter.isPending && updateCharacter.variables?.id === viewedCharacterId
+      ? parseRecord(updateCharacter.variables?.data?.extensions)
+      : {}),
+  };
+  const applyImageInstructions = viewedExtensions.applyConversationImageInstructionsToNoodle === true;
+  const characterImageConnectionId = readString(viewedExtensions.noodleImageConnectionId);
+  const saveViewedCharacterExtensions = (extensions: Record<string, unknown>) => {
+    if (!viewedCharacterId) return;
+    updateCharacter.mutate(
+      { id: viewedCharacterId, data: { extensions }, skipVersionSnapshot: true },
+      { onError: () => toast.error(localizeUi("ui.noodle.noodlehome.imageInstructionsSaveFailed")) },
+    );
+  };
   const profileDisplayName = canEditViewedProfile
     ? profileName.trim() || viewedProfileAccount?.displayName || "Noodle Account"
     : viewedProfileAccount?.displayName || "Noodle Account";
@@ -5288,6 +5315,61 @@ export function NoodleHome({ navigation, onNavigate, focusPostId, onFocusPostHan
                       onBioChange: setProfileBio,
                       location: profileLocation,
                       onLocationChange: setProfileLocation,
+                      footer: viewedCharacterId ? (
+                        <div className="space-y-1.5 border-t border-[var(--noodle-divider)] pt-3">
+                          <label className="flex items-start gap-2 text-xs">
+                            <input
+                              type="checkbox"
+                              checked={applyImageInstructions}
+                              disabled={updateCharacter.isPending}
+                              onChange={(event) =>
+                                saveViewedCharacterExtensions({
+                                  applyConversationImageInstructionsToNoodle: event.target.checked,
+                                })
+                              }
+                              className="mt-0.5 h-3.5 w-3.5 shrink-0 accent-[var(--noodle-accent)]"
+                            />
+                            <span>{localizeUi("ui.noodle.noodlehome.useCharacterImageInstructions")}</span>
+                            <HelpTooltip
+                              wide
+                              text={localizeUi("ui.noodle.noodlehome.useCharacterImageInstructionsHelp")}
+                            />
+                          </label>
+                          {openCharacter && (
+                            <button
+                              type="button"
+                              onClick={() => openCharacter(viewedCharacterId, { tab: "convo" })}
+                              className="ml-5 text-xs font-semibold text-[var(--noodle-accent)] hover:underline"
+                            >
+                              {localizeUi("ui.noodle.noodlehome.editImageInstructions")}
+                            </button>
+                          )}
+                          <label className="block space-y-1.5 pt-1.5">
+                            <span className={cn(labelClass, "flex items-center gap-1")}>
+                              {localizeUi("ui.noodle.noodlehome.characterImageConnection")}
+                              <HelpTooltip
+                                wide
+                                text={localizeUi("ui.noodle.noodlehome.characterImageConnectionHelp")}
+                              />
+                            </span>
+                            <select
+                              value={characterImageConnectionId}
+                              disabled={updateCharacter.isPending}
+                              onChange={(event) =>
+                                saveViewedCharacterExtensions({ noodleImageConnectionId: event.target.value || null })
+                              }
+                              className={fieldClass}
+                            >
+                              <option value="">{localizeUi("ui.noodle.noodlehome.useNoodleImageConnection")}</option>
+                              {imageConnections.map((connection) => (
+                                <option key={String(connection.id)} value={String(connection.id)}>
+                                  {String(connection.name ?? connection.model ?? "Image connection")}
+                                </option>
+                              ))}
+                            </select>
+                          </label>
+                        </div>
+                      ) : undefined,
                     }
                   : undefined
               }

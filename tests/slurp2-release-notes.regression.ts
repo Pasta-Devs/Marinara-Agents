@@ -11,104 +11,38 @@ import {
 const root = join(import.meta.dirname, "..", "packages", "slurp2");
 const manifest = JSON.parse(readFileSync(join(root, "manifest.json"), "utf8")) as { version: string };
 const changelog = readFileSync(join(root, "CHANGELOG.md"), "utf8");
-const expectedVersions = [
-  "0.2.75",
-  "0.2.74",
-  "0.2.73",
-  "0.2.72",
-  "0.2.71",
-  "0.2.70",
-  "0.2.69",
-  "0.2.68",
-  "0.2.67",
-  "0.2.66",
-  "0.2.65",
-  "0.2.64",
-  "0.2.63",
-  "0.2.62",
-  "0.2.61",
-  "0.2.60",
-  "0.2.59",
-  "0.2.58",
-  "0.2.57",
-  "0.2.56",
-  "0.2.55",
-  "0.2.54",
-  "0.2.53",
-  "0.2.52",
-  "0.2.51",
-  "0.2.50",
-  "0.2.49",
-  "0.2.48",
-  "0.2.47",
-  "0.2.46",
-  "0.2.45",
-  "0.2.44",
-  "0.2.43",
-  "0.2.42",
-  "0.2.41",
-  "0.2.40",
-  "0.2.39",
-  "0.2.38",
-  "0.2.37",
-  "0.2.36",
-  "0.2.35",
-  "0.2.34",
-  "0.2.29",
-  "0.2.28",
-  "0.2.27",
-  "0.2.26",
-  "0.2.24",
-  "0.2.23",
-  "0.2.22",
-  "0.2.20",
-  "0.2.19",
-  "0.2.18",
-  "0.2.17",
-  "0.2.16",
-  "0.2.15",
-  "0.2.8",
-  "0.2.7",
-  "0.2.5",
-  "0.2.4",
-  "0.2.3",
-  "0.2.2",
-  "0.2.1",
-  "0.2.0",
-  "0.1.3",
-  "0.1.2",
-  "0.1.1",
-  "0.1.0",
-  "0.0.22",
-];
+// The splash is a curated subset of the changelog: pre-release and some old entries are not shown.
+// Check what must hold for any version: same order as the changelog, newest matches the package,
+// and nothing on the current minor line is hidden.
+const changelogVersions = [...changelog.matchAll(/^## (\d+\.\d+\.\d+) — /gmu)].map(([, version]) => version!);
+const splashVersions = SLURP2_RELEASES.map((release) => release.version);
+const currentLine = manifest.version.split(".").slice(0, 2).join(".") + ".";
 
-assert.equal(SLURP2_VERSION, "0.2.75");
+assert.ok(changelogVersions.length > 0, "CHANGELOG.md must list releases");
+assert.equal(changelogVersions[0], manifest.version, "CHANGELOG.md's newest entry is the packaged version");
 assert.equal(SLURP2_VERSION, manifest.version);
-for (const version of expectedVersions) assert.match(changelog, new RegExp(`^## ${version} — `, "mu"));
+assert.equal(splashVersions[0], SLURP2_VERSION, "the splash's newest release is the current version");
 assert.deepEqual(
-  SLURP2_RELEASES.map((release) => release.version),
-  expectedVersions,
+  splashVersions.filter((version) => changelogVersions.includes(version)),
+  splashVersions,
+  "every splash release must exist in CHANGELOG.md",
 );
-const unseenAfter = (seenVersion: string) => expectedVersions.slice(0, expectedVersions.indexOf(seenVersion));
+const inChangelogOrder = splashVersions.map((version) => changelogVersions.indexOf(version));
+assert.deepEqual(
+  inChangelogOrder,
+  [...inChangelogOrder].sort((a, b) => a - b),
+  "splash releases keep CHANGELOG.md order",
+);
+for (const version of changelogVersions.filter((item) => item.startsWith(currentLine))) {
+  assert.ok(splashVersions.includes(version), `${version} is on the current line and must be shown in the splash`);
+}
+
+const unseenAfter = (seenVersion: string) => splashVersions.slice(0, splashVersions.indexOf(seenVersion));
 assert.deepEqual(
   getSlurp2UnseenReleases(null).map((release) => release.version),
-  expectedVersions,
+  splashVersions,
 );
-for (const seenVersion of [
-  "0.0.22",
-  "0.1.0",
-  "0.1.1",
-  "0.1.3",
-  "0.2.0",
-  "0.2.1",
-  "0.2.2",
-  "0.2.3",
-  "0.2.4",
-  "0.2.5",
-  "0.2.28",
-  "0.2.29",
-  "0.2.34",
-]) {
+for (const seenVersion of [splashVersions[1]!, splashVersions.at(-1)!]) {
   assert.deepEqual(
     getSlurp2UnseenReleases(seenVersion).map((release) => release.version),
     unseenAfter(seenVersion),

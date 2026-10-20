@@ -8,6 +8,7 @@
  * This is the other direction and nothing more — one answer from the audience member in this
  * thread, in their own Fan Type voice, asked for by the player who owns the Creator.
  */
+import { slpAccountGender, slpPronouns } from "../../../../../shared/src/slp/slp-gender.js";
 import type { APIProvider } from "@marinara-engine/shared";
 import type { DB } from "../../../db/connection.js";
 import { createConnectionsStorage } from "../../../services/storage/connections.storage.js";
@@ -107,7 +108,7 @@ export async function replyAsSlurpFan(
 
   // The same roles and transcript as the Creator's side, told from the fan's seat.
   const parties = {
-    creator: { name: creator.displayName, handle: creator.handle },
+    creator: { name: creator.displayName, handle: creator.handle, pronouns: slpPronouns(slpAccountGender(creator)) },
     viewer: { name: speaker, handle: member?.handle ?? fanAccount?.handle ?? "" },
   };
   const roleHeader = slurpDmRoleHeader({

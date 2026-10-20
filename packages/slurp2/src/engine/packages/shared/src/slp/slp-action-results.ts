@@ -5,6 +5,9 @@
 import type { SlpBrandDealPreview, SlpBrandFit } from "./slp-brand-deal-preview.js";
 import type { SlpStirWorld } from "./slp-actions.js";
 
+/** The live trends `list-world` adds, so a helper can name one in `steer-trend`. */
+export type SlpStirTrends = { trends: { id: string; label: string; lean: string | null; stage: string }[] };
+
 /** What each action answers with. Steering and posting answer with what their own routes answer. */
 export type SlpActionResult = {
   "write-text": { text: string };
@@ -18,8 +21,8 @@ export type SlpActionResult = {
   "list-creators": { creators: { id: string; name: string; handle: string }[] };
   "write-post": unknown;
   /** `image` is null when the picture could not be drawn; `imageError` says why. */
-  "draft-post": { text: string; image: string | null; imageError: string | null };
-  "list-world": SlpStirWorld;
+  "draft-post": { title: string; text: string; image: string | null; imageError: string | null };
+  "list-world": SlpStirWorld & SlpStirTrends;
   "suggest-collab": { collabId: string };
   "push-collab": { collabId: string };
   "start-rivalry": { rivalryId: string };
@@ -52,6 +55,8 @@ export type SlpActionResult = {
   "set-tip-goal": { accountId: string };
   "new-look": { accountId: string };
   "invent-event": { eventId: string; occurrenceId: string };
+  "start-trend": { trendId: string };
+  "steer-trend": { trendId: string };
   "add-to-couple": { coupleId: string };
   "grant-perk": { accountId: string };
   "set-challenge": { accountId: string; challengeId: string };

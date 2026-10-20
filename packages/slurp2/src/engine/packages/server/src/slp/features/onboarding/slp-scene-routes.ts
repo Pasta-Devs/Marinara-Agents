@@ -2,6 +2,7 @@ import type { FastifyInstance } from "fastify";
 import { slpSceneKeepRequestSchema, slpSceneTurnRequestSchema } from "../../../../../shared/src/slp/slp-scene.js";
 import { logger } from "../../../lib/logger.js";
 import { resolveSlurpTextConnection } from "../../base/identity/slp-connection.js";
+import { slpUnreachableCode } from "../../base/model/slp-provider-retry.js";
 import { getErrorMessage } from "../../modules/creators/slp-public-support.js";
 import type { SlpRouteDeps } from "../viewer/slp-viewer-contract.js";
 import { keepSlpSceneTranscript } from "./slp-scene-keep-service.js";
@@ -23,6 +24,12 @@ export async function slpSceneRoutes(app: FastifyInstance, deps: SlpRouteDeps) {
       return await generateSlpSceneTurn(app.db, { request: parsed.data, connection });
     } catch (error) {
       logger.error(error, "[slurp] Sign-up scene turn failed using %s", connection.model || connection.provider);
+      // The sign-up shows this line with Retry, so say what to do, not the raw socket error.
+      const unreachable = slpUnreachableCode(error);
+      if (unreachable)
+        return reply.code(502).send({
+          error: `Slurp could not reach the connection "${connection.name || connection.model}" (${unreachable}). Start that model, or choose another generation connection, then press Retry.`,
+        });
       return reply.code(500).send({ error: getErrorMessage(error) });
     }
   });

@@ -47,7 +47,7 @@ function assertActivationContext(context) {
 
 function errorResponse(error) {
   if (error instanceof RelationshipStateError || error instanceof RelationshipHistoryError) {
-    return { statusCode: error.statusCode, body: { error: error.message, code: error.code } };
+    return { statusCode: error.statusCode, body: { error: error.message, code: error.code, ...(error.review ? { review: error.review } : {}) } };
   }
   if (error instanceof RelationshipTrackingError) {
     return { statusCode: 502, body: { error: error.message, code: "invalid_relationship_snapshot" } };
@@ -127,6 +127,7 @@ export async function activate(context) {
     resumeAutomaticRelationship: repository.resumeAutomaticRelationship,
     getProcessingStatus: activity.getStatus,
     updateFromHistory: historyUpdates.updateFromHistory,
+    saveReviewedHistoryChanges: historyUpdates.saveReviewedChanges,
   });
   const releases = [];
   try {
@@ -187,6 +188,10 @@ export async function activate(context) {
         try { return reply.send(await historyUpdates.updateFromHistory(request?.params?.chatId, request?.body)); }
         catch (error) { return sendFailure(context, reply, "history update", error); }
       });
+      routes.post("/chats/:chatId/history-update/review", async (request, reply) => {
+        try { return reply.send(await historyUpdates.saveReviewedChanges(request?.params?.chatId, request?.body)); }
+        catch (error) { return sendFailure(context, reply, "reviewed history update", error); }
+      });
     }, { prefix: `/api/${PACKAGE_ID}/v1` }));
     activeService = service;
     activePromptContributor = promptContributor;
@@ -200,6 +205,7 @@ export async function activate(context) {
     activeService = null;
     activePromptContributor = null;
     activity.clear();
+    historyUpdates.dispose();
     for (const release of releases.reverse()) await release();
   };
 }

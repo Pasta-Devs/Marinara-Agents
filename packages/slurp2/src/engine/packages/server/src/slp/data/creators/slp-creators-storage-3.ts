@@ -1,3 +1,5 @@
+import { deleteSlurpThreadMessageDeepDetails } from "../messages/slp-message-deep-details-storage.js";
+import { slurpIsCouplePage } from "../../modules/projects/slp-creator-couples.js";
 import { and, desc, eq, inArray, or } from "../../../db/file-query.js";
 import { deleteSlurpCreatorPlanningRows } from "../continuity/slp-continuity-storage.js";
 import { slurpCreatorStrategy } from "../../modules/creators/slp-creator-strategy.js";
@@ -47,7 +49,7 @@ import {
   compareMinimizedCreatorSourceSnapshot,
   minimizeCreatorSourceSnapshot,
 } from "../../base/identity/slp-source.js";
-import { resolveCreatorSourceSnapshot } from "./slp-source-resolve.js";
+import { resolveCreatorImageAppearance, resolveCreatorSourceSnapshot } from "./slp-source-resolve.js";
 import { withoutHiddenAmbientAccounts } from "../audience/slp-ambient-profiles.js";
 import { isSlurpCharacterFanAccount } from "../../../../../shared/src/slp/slp-audience-characters.js";
 import { slurpViewerSettingsKey } from "../host/slp-storage-constants.js";
@@ -228,6 +230,7 @@ export function createCreatorsStorage3(context: SlurpStorageContext) {
             ),
           );
           await tx.delete(slurpMessages).where(inArray(slurpMessages.threadId, threadIds));
+          await deleteSlurpThreadMessageDeepDetails(tx, threadIds);
           await tx.delete(slurpReplyBubbles).where(inArray(slurpReplyBubbles.threadId, threadIds));
           await tx.delete(slurpMessageClaims).where(inArray(slurpMessageClaims.threadId, threadIds));
           await tx.delete(slurpThreads).where(inArray(slurpThreads.id, threadIds));
@@ -321,10 +324,12 @@ export function createCreatorsStorage3(context: SlurpStorageContext) {
               text: appearance.text ?? "",
               needsReview: appearance.needsReview,
               linkedAppearance: currentSource?.appearance ?? "",
+              imageAppearance: publicAccount ? await resolveCreatorImageAppearance(db, publicAccount) : "",
               profile: appearance.profile,
             },
             wardrobe: account.settings.stage?.wardrobe ?? "",
             locations: account.settings.stage?.locations ?? "",
+            clothingStyle: account.settings.stage?.clothingStyle ?? "auto",
             access: account.settings.privacy.access,
             autoPosting:
               currentSource && !(account.kind === "persona" && account.sourceKind === "persona")
@@ -351,13 +356,17 @@ export function createCreatorsStorage3(context: SlurpStorageContext) {
                   displayName: publicAccount.displayName,
                 })
               : { state: "not-applicable" as const },
-            sourceStatus: !currentSource
-              ? { state: "missing" as const }
-              : compareMinimizedCreatorSourceSnapshot(
-                  baseline ?? minimizeCreatorSourceSnapshot(currentSource, disclosureMode ?? "open"),
-                  currentSource,
-                  disclosureMode ?? "open",
-                ),
+            // A shared Couples page has no Engine character by design: its posts come from the two
+            // of them. Calling that "missing" flagged every Couples page as paused (#31).
+            sourceStatus: slurpIsCouplePage(account)
+              ? { state: "current" as const }
+              : !currentSource
+                ? { state: "missing" as const }
+                : compareMinimizedCreatorSourceSnapshot(
+                    baseline ?? minimizeCreatorSourceSnapshot(currentSource, disclosureMode ?? "open"),
+                    currentSource,
+                    disclosureMode ?? "open",
+                  ),
             publicIdentity:
               publicAccount && (disclosureMode === "open" || disclosureMode === "hinted")
                 ? { displayName: publicAccount.displayName, handle: publicAccount.handle }

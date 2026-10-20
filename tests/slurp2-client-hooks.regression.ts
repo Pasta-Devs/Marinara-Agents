@@ -227,8 +227,8 @@ const EXPORTED_BEFORE = [
   "useSetSlurpImprovementJobState",
   "useSetSlurpThreadNotes",
   "useSetSlurpWalletCoinsForDevelopment",
+  // useSlurpAdPool was removed in 0.3.9 with its only caller, so it is no longer a snapshot export.
   "useSlurpAdLorebooks",
-  "useSlurpAdPool",
   "useSlurpAdState",
   "useSlurpAmbientProfiles",
   "useSlurpArcConfig",
@@ -306,7 +306,9 @@ for (const name of EXPORTED_BEFORE) {
 const factories = [...combined.matchAll(/^export const ([A-Za-z0-9_]+Keys) = \{/gmu)].map((m) => m[1]).sort();
 assert.deepEqual(factories, ["messageKeys", "slpKeys"], "exactly two query-key factories may exist");
 const NOODLE_KEYS_BEFORE = `export const slpKeys = {
-  all: ["noodle"] as const,
+  // Slurp shares the Engine's query cache (Pasta-Devs/Marinara-Agents#1487). Its keys used to start with "noodle",
+  // which Noodle's own keys also do, so they start with the package id.
+  all: ["slurp2"] as const,
   bootstrap: () => [...slpKeys.all, "bootstrap"] as const,
   settings: () => ["slurp", "settings"] as const,
   refreshIndicator: () => [...slpKeys.all, "refresh-indicator"] as const,
@@ -361,12 +363,14 @@ const addedCalls = [
   "get /slurp2/messages/unread-count?personaId=${encodeURIComponent(personaId!)}",
   "get /slurp2/slurp/notifications/unseen-count?personaId=${encodeURIComponent(personaId!)}",
   "get /slurp2/slurp/posts/${encodeURIComponent(postId)}/deep-details",
+  "get /slurp2/slurp/messages/${encodeURIComponent(messageId)}/deep-details?personaId=${encodeURIComponent(personaId)}",
   "post /slurp2/settings/prompt-blocks/generate-preview",
   // The studio keeps every block live for the preview Creator (useSlurpLivePromptBlocks).
   "post /slurp2/settings/prompt-blocks/preview",
   "get /slurp2/continuity/${encodeURIComponent(creatorAccountId!)}?${query}",
   "get /slurp2/messages/threads/${encodeURIComponent(threadId!)}/requests?personaId=${encodeURIComponent(personaId!)}",
   "get /slurp2/slurp/tasks",
+  "get /slurp2/slurp/trends",
   "get /slurp2/slurp/viewer/feed?personaId=${encodeURIComponent(personaId)}&tab=all&limit=20${cursorQuery(current.nextCursor)}",
   "get /slurp2/slurp/viewer/feed?personaId=${encodedPersonaId}&tab=all&limit=20",
   "post /slurp2/slurp/accounts/${encodeURIComponent(input.accountId)}/appearance",
@@ -387,8 +391,116 @@ const addedCalls = [
   "post /slurp2/story-packs/preview",
   "post /slurp2/story-packs/previews/${encodeURIComponent(input.previewId)}/apply",
   "post /slurp2/story/occurrences/${encodeURIComponent(input.id)}/status",
+  // Client calls added since the staging snapshot. The multiset check below only passes when every
+  // call the live source makes is named somewhere in this file; a call that is neither in the
+  // frozen staging fixture nor named here fails the test, so this list is what makes a silent
+  // addition (or removal, the other direction of the same check) impossible to miss. It was last
+  // refreshed mechanically from a source diff (7e31e6080) — present here, not independently vetted.
+  "delete ${path(creatorId)}/ideas/${encodeURIComponent(ideaId)}",
+  "delete ${path(creatorId)}/support-note",
+  "delete /slurp2/data/unused",
+  "delete /slurp2/slurp/ads/brands/${encodeURIComponent(id)}",
+  "get ${base}?personaId=${encodeURIComponent(personaId!)}",
+  "get ${base}?personaId=${encodeURIComponent(personaId!)}",
+  "post ${path(creatorId)}/rewrite-prepared",
+  "post ${path}/noticed",
+  "get /connections",
+  "get /slurp2/ambient-profiles",
+  "get /slurp2/continuity",
+  "get /slurp2/continuity/${encodeURIComponent(creatorId)}/signals",
+  "get /slurp2/discovery-tags/usage",
+  "get /slurp2/messages/compose?personaId=${encodeURIComponent(personaId!)}&creatorAccountId=${encodeURIComponent(creatorAccountId!)}${support ? ",
+  "get /slurp2/messages/creators/${encodeURIComponent(creatorAccountId!)}/rapport?personaId=${encodeURIComponent(personaId!)}&viewerAccountId=${encodeURIComponent(viewerAccountId!)}",
+  "get /slurp2/messages/creators/${encodeURIComponent(creatorAccountId!)}/settings?personaId=${encodeURIComponent(personaId!)}",
+  "get /slurp2/messages/threads/${encodeURIComponent(input.threadId)}?personaId=${encodeURIComponent(input.personaId)}&cursorAt=${encodeURIComponent(input.cursor.createdAt)}&cursorId=${encodeURIComponent(input.cursor.id)}",
+  "get /slurp2/messages/threads/${encodeURIComponent(threadId!)}?personaId=${encodeURIComponent(personaId!)}",
+  "get /slurp2/messages/threads/${encodeURIComponent(threadId!)}?personaId=${encodeURIComponent(personaId!)}&search=${encodeURIComponent(search.trim())}&limit=120${pageParam ? ",
+  "get /slurp2/messages/threads?personaId=${encodeURIComponent(personaId!)}",
+  "get /slurp2/model-budget/usage",
+  "get /slurp2/settings/audience-characters?limit=30&offset=${pageParam}",
+  "get /slurp2/slurp/accounts/${encodeURIComponent(accountId!)}/followers",
+  "get /slurp2/slurp/accounts/${encodeURIComponent(accountId!)}/subscribers?limit=20${cursorQuery(pageParam)}",
+  "get /slurp2/slurp/accounts/${encodeURIComponent(creatorId)}/wardrobe",
+  "get /slurp2/slurp/accounts/bulk/${encodeURIComponent(input.executionId!)}",
+  "get /slurp2/slurp/ads/brands",
+  "get /slurp2/slurp/ads/lorebooks",
+  "get /slurp2/slurp/desk?personaId=${encodeURIComponent(personaId!)}",
+  "get /slurp2/slurp/drama",
+  "get /slurp2/slurp/eligible-accounts?limit=100&offset=${pageParam}&search=${encodeURIComponent(normalizedSearch)}${kind === ",
+  "get /slurp2/slurp/fan-activity/status",
+  "get /slurp2/slurp/first-posts/status?executionId=${encodeURIComponent(executionId!)}",
+  "get /slurp2/slurp/image-style-profiles",
+  "get /slurp2/slurp/notifications?personaId=${encodeURIComponent(personaId!)}",
+  "get /slurp2/slurp/stories/${encodeURIComponent(storyId!)}/views?personaId=${encodeURIComponent(personaId!)}",
+  "get /slurp2/slurp/studio?personaId=${encodeURIComponent(personaId!)}${mark ? ",
+  "get /slurp2/slurp/viewer/ads/state?personaId=${encodeURIComponent(personaId!)}",
+  "get /slurp2/slurp/viewer/feed?personaId=${encodeURIComponent(personaId!)}&tab=${tab}&limit=20${\n          term ? ",
+  "get /slurp2/slurp/viewer/feed?personaId=${encodedPersonaId}&tab=all&limit=20${cursorQuery(next)}",
+  "get /slurp2/slurp/wardrobe/lorebooks",
+  "get /slurp2/story/calendar?from=${encodeURIComponent(from.toISOString())}&to=${encodeURIComponent(to.toISOString())}",
+  "get /slurp2/story/timeline",
+  "patch /slurp2/messages/threads/${encodeURIComponent(threadId!)}/details",
+  "patch /slurp2/slurp/accounts/${encodeURIComponent(id)}/steering",
+  "patch /slurp2/slurp/ads/brands/${encodeURIComponent(id)}",
+  "patch /slurp2/slurp/ads/pool/${encodeURIComponent(id)}",
+  "post ${base}${path}",
+  "post ${base}/plan",
+  "post ${base}/play",
+  "post ${base}/plays/${encodeURIComponent(id)}/undo",
+  "post ${base}/preview",
+  "post ${base}/suggestions/${encodeURIComponent(id)}/dismiss",
+  "post ${path(creatorId)}/ideas",
+  "post ${path(creatorId)}/support-undo",
+  "post ${threadPath(input.threadId)}/scene/plan",
+  "post ${threadPath(threadId)}/scene/origin",
+  "post /slurp2${retry.path}",
+  "post /slurp2/backstage/improvement-jobs/${encodeURIComponent(jobId)}/apply",
+  "post /slurp2/messages/cheat",
+  "post /slurp2/messages/creators/${encodeURIComponent(input.creatorAccountId)}/draft-reply",
+  "post /slurp2/messages/creators/${encodeURIComponent(input.creatorAccountId)}/reply",
+  "post /slurp2/messages/creators/${encodeURIComponent(input.creatorAccountId)}/request-fan-reply",
+  "post /slurp2/messages/ppv/unlock",
+  "post /slurp2/messages/share-post",
+  "post /slurp2/messages/threads/${encodeURIComponent(input.threadId)}/request-reply",
+  "post /slurp2/messages/threads/${encodeURIComponent(input.threadId)}/viewer-image",
+  "post /slurp2/refresh",
+  "post /slurp2/slurp/accounts/${encodeURIComponent(accountId)}/page/compose",
+  "post /slurp2/slurp/accounts/${encodeURIComponent(creatorId)}/wardrobe/import-preview",
+  "post /slurp2/slurp/accounts/${encodeURIComponent(typeof input === ",
+  "post /slurp2/slurp/accounts/bulk",
+  "post /slurp2/slurp/accounts/bulk-update",
+  "post /slurp2/slurp/actions/${name}",
+  "post /slurp2/slurp/actions/list-brands",
+  "post /slurp2/slurp/actions/run-audience",
+  "post /slurp2/slurp/ads/brands",
+  "post /slurp2/slurp/ads/brands/${encodeURIComponent(brandId)}/products",
+  "post /slurp2/slurp/ads/generate",
+  "post /slurp2/slurp/ads/import",
+  "post /slurp2/slurp/ads/pool/${encodeURIComponent(id)}/picture",
+  "post /slurp2/slurp/desk/note",
+  "post /slurp2/slurp/desk/offer/answer",
+  "post /slurp2/slurp/desk/ticket/resolve",
+  "post /slurp2/slurp/drama/choice",
+  "post /slurp2/slurp/drama/runs/${encodeURIComponent(runId)}/end",
+  "post /slurp2/slurp/drama/start",
+  "post /slurp2/slurp/fan-activity/refresh-now",
+  "post /slurp2/slurp/notifications/${encodeURIComponent(event.id)}/fan-note",
+  "post /slurp2/slurp/onboarding/scene/keep",
+  "post /slurp2/slurp/posts/${encodeURIComponent(input.postId)}/report",
+  "post /slurp2/slurp/posts/${encodeURIComponent(postId)}/gamble-unlock",
+  "post /slurp2/slurp/refresh/images/cancel",
+  "post /slurp2/slurp/stir/play",
+  "post /slurp2/slurp/stir/preview",
+  "post /slurp2/slurp/stories/${encodeURIComponent(input.storyId)}/view",
+  "put /slurp2/messages/threads/${encodeURIComponent(input.threadId)}/notes",
+  "put /slurp2/slurp/accounts/${encodeURIComponent(input.accountId)}/page",
+  "post /slurp2/slurp/accounts/${encodeURIComponent(accountId)}/strategy/suggest",
+  "upload /slurp2/messages/threads/${encodeURIComponent(input.threadId)}/image-upload",
+  "get /slurp2/settings/carryover-reach",
 ];
 const removedCalls = [
+  // The staging ads-pool GET went with the removed useSlurpAdPool hook (0.3.9).
+  "get /slurp2/slurp/ads/pool",
   "post /slurp2/slurp/posts/${encodeURIComponent(id)}/restore",
   "patch /slurp2/accounts/${encodeURIComponent(accountId)}/settings",
   "get /slurp2/slurp/viewer?personaId=${encodedPersonaId}",
@@ -398,7 +510,11 @@ const renamedCalls = new Map([
   ["get /slurp2/settings/prompt-blocks?mode=${encodeURIComponent(mode)}", "get /slurp2/settings/prompt-blocks"],
 ]);
 const calls = [
-  ...combined.matchAll(/api\.(get|post|put|patch|delete|upload|raw)\s*(?:<[^;]*?>)?\s*\(\s*[`"]([^`"]*)/gu),
+  // The generic may hold `;` (an object type), so it is matched across the whole type argument. The
+  // lookahead keeps that scan inside one call, so it cannot run on into the next api call.
+  ...combined.matchAll(
+    /api\.(get|post|put|patch|delete|upload|raw)\s*(?:<(?:(?!api\.)[\s\S])*?>)?\s*\(\s*[`"]([^`"]*)/gu,
+  ),
 ]
   .map((m) => `${m[1]} ${m[2]}`)
   .sort();
@@ -438,19 +554,26 @@ const counts = Object.fromEntries(
 assert.deepEqual(
   counts,
   {
-    useMutation: 156,
-    useQuery: 221,
-    useInfiniteQuery: 5,
-    invalidateQueries: 128,
-    setQueryData: 21,
+    // 0.3.27 "Suggest page style": one mutation, its two error states, and the strategy save now
+    // refreshes the list when settled (a refused apply also means the list is stale).
+    useMutation: 213,
+    // 0.3.28: +2 (the import and the one query of SlpMessageDeepDetails). 0.3.42: +1 (carryover reach).
+    // 0.3.44: +2 (the import and the trends row query).
+    useQuery: 287,
+    useInfiniteQuery: 9,
+    // 0.3.35: +2 (adding a Creator refreshes the settings, which now hold the image name choice).
+    invalidateQueries: 153,
+    setQueryData: 26,
     cancelQueries: 7,
     removeQueries: 1,
     refetchQueries: 0,
     onMutate: 2,
-    onError: 16,
-    onSettled: 9,
+    // SlpConnectionsPanel.tsx moved into the SlurpBackstagePrompts component mapping, so its one
+    // onError no longer counts as state-layer code.
+    onError: 93,
+    onSettled: 37,
   },
-  "query and mutation wiring counts match the monolith plus the planner, continuity and story-pack hooks",
+  "query and mutation wiring counts match the monolith plus the later Slurp2 hooks",
 );
 
 // The shared invalidators are still called directly from the mutation callbacks that owned them.
@@ -461,7 +584,7 @@ const invalidatorCalls = {
 };
 assert.deepEqual(
   invalidatorCalls,
-  { invalidateSlurpMessages: 26, invalidateSlurpProjects: 5, mergeSlurpViewerShell: 4 },
+  { invalidateSlurpMessages: 32, invalidateSlurpProjects: 5, mergeSlurpViewerShell: 4 },
   "shared invalidation helpers must stay wired to the same call sites",
 );
 
@@ -503,18 +626,14 @@ for (const [name, path] of [
   assert.deepEqual(exported.get(name), [path], `${name} must live in ${path}`);
 }
 
-// 6. The generic Engine persona hook stays outside Slurp and keeps the package API-client override.
+// 6. The generic Engine persona hook stays outside Slurp, and Slurp uses the Engine's API client.
 const generic = join(clientSrc, "hooks/use-creator-personas.ts");
 assert.ok(existsSync(generic), "the generic persona hook must stay outside the slp roots");
 assert.doesNotMatch(readFileSync(generic, "utf8"), /\/slp\//u, "the generic hook must not reach into Slurp");
 assert.ok(!paths.some((path) => /creator-personas/u.test(path)), "Slurp must not fork the generic persona hook");
-const apiClient = join(clientSrc, "lib/api-client.ts");
-assert.ok(existsSync(apiClient), "the package-owned API client must stay at lib/api-client.ts");
-assert.match(
-  readFileSync(apiClient, "utf8"),
-  /apiBaseUrl|API_BASE|host/iu,
-  "the API-client host override must survive",
-);
+// The feature build stacks sources/host-client-overlay's lib/api-client.ts, which is the Engine's own client
+// (__MARINARA_HOST__.api); a package copy would carry a second ApiError class and its own rules (#1487).
+assert.ok(!existsSync(join(clientSrc, "lib/api-client.ts")), "Slurp must not carry its own API client");
 
 // 7. The Creators panel keeps its filter state and opens the shared settings modal.
 const creatorsPanel = readFileSync(join(slpRoot, "features/creators/SlpCreatorsPanel.tsx"), "utf8");

@@ -53,7 +53,15 @@ export function slpStirWhat(t: T, card: SlpActionPreview): string {
         level: d.level ? t(`ui.slurp.spice.levels.${d.level}`) : t("ui.slurp.stir.defaultLevel"),
       });
     case "steer-couple":
-      return t(`ui.slurp.stir.what.steer-couple.${d.steer}`, names);
+      // #1293: a breakup that moves on or forgets says so on its card.
+      return t(
+        d.steer === "breakUp" && d.aftermath === "moveOn"
+          ? "ui.slurp.stir.what.steer-couple.breakUpMoveOn"
+          : d.steer === "breakUp" && d.aftermath === "forget"
+            ? "ui.slurp.stir.what.steer-couple.breakUpForget"
+            : `ui.slurp.stir.what.steer-couple.${d.steer}`,
+        names,
+      );
     case "steer-storyline":
       return t(`ui.slurp.stir.what.steer-storyline.${d.move}`, {
         ...names,
@@ -100,6 +108,13 @@ export function slpStirWhat(t: T, card: SlpActionPreview): string {
       return t("ui.slurp.stir.what.new-look", { ...names, change: d.change ?? "" });
     case "invent-event":
       return t("ui.slurp.stir.what.invent-event", { name: d.name ?? "", count: Number(d.days) || 1 });
+    case "start-trend":
+      return t("ui.slurp.stir.what.start-trend", { name: d.name ?? "" });
+    case "steer-trend":
+      return t(d.lean ? "ui.slurp.stir.what.steer-trend" : "ui.slurp.stir.what.steer-trend.clear", {
+        name: d.name ?? "",
+        lean: d.lean ?? "",
+      });
     case "offer-brand-deal":
       return t(
         card.input.happen ? "ui.slurp.stir.what.offer-brand-deal.happen" : "ui.slurp.stir.what.offer-brand-deal",

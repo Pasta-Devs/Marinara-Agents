@@ -290,6 +290,24 @@ export function describeSlurpRapport(rapport: SlurpRapport, viewerName: string):
   }`;
 }
 
+const CHAT_BRIDGE_TIER: Record<SlurpRapportTier, (her: string, you: string) => string> = {
+  stranger: () => "",
+  acquaintance: (her, you) => `${you} is a familiar name to ${her} on Slurp.`,
+  regular: (her, you) => `${you} is one of ${her}'s regulars on Slurp.`,
+  favourite: (her, you) => `${you} is one of ${her}'s favourite fans on Slurp.`,
+  whale: (her, you) => `${you} is one of ${her}'s biggest supporters on Slurp.`,
+};
+
+/**
+ * Where the player stands with a character, for an ordinary Engine chat with that character (the
+ * chat bridge, `slp-chat-context.ts`): one third-person line, or "". The tier only — the score is
+ * never shown — and nothing for a partner, whose couple line already says who they are.
+ */
+export function slurpChatBridgeRapportLine(rapport: SlurpRapport, input: { her: string; you: string }): string {
+  if (slurpRapportPartner(rapport)) return "";
+  return CHAT_BRIDGE_TIER[rapport.tier]?.(input.her, input.you) ?? "";
+}
+
 /** Read stored weights back, falling back per field so a hand-edited blob costs nothing. */
 export function readSlurpRapportWeights(value: unknown): SlurpRapportWeights {
   const raw = value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : {};

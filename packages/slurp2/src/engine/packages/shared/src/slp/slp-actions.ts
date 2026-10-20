@@ -17,6 +17,8 @@ import {
   SLP_STEERING_TEXT_MAX,
 } from "./slp-creator-steering.js";
 import { SLP_SPICE_LEVELS } from "./slp-spice.js";
+import { SLP_TREND_ACTIONS } from "./slp-trend-actions.js";
+import { SLURP_CONTENT_DELIVERIES, SLURP_CONTENT_INTENTS } from "./slp-content-axes.js";
 import {
   SLP_DESK_BADGES,
   SLP_DESK_CHALLENGE_METRICS,
@@ -83,7 +85,16 @@ export const SLP_COUPLE_STEERS = [
   "official",
   "secret",
   "public",
+  "moveOn",
+  "forget",
 ] as const;
+/**
+ * What a breakup leaves behind (#1293): the usual memory and fallout, moved on (history stays, no
+ * more dwelling), or forgotten (stops reaching future posts and chats). The client omits "keep"; absent
+ * means keep, so older servers and clients still agree.
+ */
+export const SLP_BREAKUP_AFTERMATHS = ["keep", "moveOn", "forget"] as const;
+export type SlpBreakupAftermath = (typeof SLP_BREAKUP_AFTERMATHS)[number];
 /** The chapter moves open without Director mode. */
 export const SLP_STORYLINE_MOVES = ["hold", "release", "skip", "back", "insert", "label"] as const;
 const note = z.string().trim().max(SLP_ASSIST_NOTE_MAX).optional();
@@ -218,13 +229,18 @@ export const SLP_ACTIONS = {
   },
   "draft-post": {
     summary:
-      "Draft a post from one idea: the caption and its picture, returned without posting so the player reviews it. For the player's own page, which nothing posts for unattended.",
+      "Draft a post from one idea, the way the page's own posts are written: title, text and its picture, returned without posting so the player reviews it.",
     inputs: {
       accountId: "The Creator page.",
       idea: "What the post is about, in the player's words.",
       story: "True for a Story (optional).",
       dealId: "A brand deal this post is the #ad for (optional).",
       collabId: "A collab this post is about (optional).",
+      projectId: "One of the page's storylines: the post is its next step (optional).",
+      lookId: "A wardrobe look they wear in the picture (optional).",
+      access: "public or locked: who the post is written for (optional, public).",
+      contentIntent: "A one-shot post purpose (optional).",
+      contentDelivery: "A one-shot delivery, with a purpose (optional).",
       picture: "False for text only (optional).",
     },
     schema: z
@@ -234,6 +250,11 @@ export const SLP_ACTIONS = {
         story: z.boolean().default(false),
         dealId: accountId.optional(),
         collabId: accountId.optional(),
+        projectId: accountId.optional(),
+        lookId: accountId.optional(),
+        access: z.enum(["public", "locked"]).default("public"),
+        contentIntent: z.enum(SLURP_CONTENT_INTENTS).optional(),
+        contentDelivery: z.enum(SLURP_CONTENT_DELIVERIES).optional(),
         picture: z.boolean().default(true),
       })
       .strict(),
@@ -286,12 +307,20 @@ export const SLP_ACTIONS = {
     schema: z.object({ aId: accountId, bId: accountId }).strict(),
   },
   "steer-couple": {
-    summary: "Nudge a couple: plan a date, stir some drama, patch it up, break up, or get back together.",
+    summary:
+      "Nudge a couple: plan a date, stir some drama, patch it up, break up, or get back together. For an ex (moveOn, forget) it changes what the breakup leaves behind.",
     inputs: {
       coupleId: "The couple (from list-world).",
       steer: `One of: ${SLP_COUPLE_STEERS.join(", ")}.`,
+      aftermath: `For breakUp only: one of ${SLP_BREAKUP_AFTERMATHS.join(", ")} (optional; default keep). Never send it with moveOn, forget or any other steer.`,
     },
-    schema: z.object({ coupleId: accountId, steer: z.enum(SLP_COUPLE_STEERS) }).strict(),
+    schema: z
+      .object({
+        coupleId: accountId,
+        steer: z.enum(SLP_COUPLE_STEERS),
+        aftermath: z.enum(SLP_BREAKUP_AFTERMATHS).optional(),
+      })
+      .strict(),
   },
   "set-bond": {
     summary:
@@ -593,6 +622,7 @@ export const SLP_ACTIONS = {
       })
       .strict(),
   },
+  ...SLP_TREND_ACTIONS,
 } as const;
 
 export type SlpActionName = keyof typeof SLP_ACTIONS;
@@ -612,6 +642,8 @@ export type SlpStirWorld = {
     page: "open" | "closed" | null;
     /** A couple with the player's own page, kept out of public. */
     secret?: boolean;
+    /** #1293: how an ex handles the breakup; absent is the usual memory and fallout. */
+    aftermath?: Exclude<SlpBreakupAftermath, "keep"> | null;
   }[];
   collabs: { id: string; hostId: string; partnerId: string; status: string }[];
   rivalries: { id: string; fromId: string; toId: string; stage: string }[];
@@ -707,6 +739,8 @@ export const SLP_ACTION_META: Record<
   "set-tip-goal": { category: "work", targets: "creator", reversible: true, ai: false, refusable: false, deck: true },
   "new-look": { category: "life", targets: "creator", reversible: true, ai: false, refusable: false, deck: true },
   "invent-event": { category: "world", targets: "none", reversible: true, ai: false, refusable: false, deck: true },
+  "start-trend": { category: "world", targets: "none", reversible: true, ai: false, refusable: false, deck: true },
+  "steer-trend": { category: "world", targets: "none", reversible: true, ai: false, refusable: false, deck: true },
   "add-to-couple": { category: "love", targets: "couple", reversible: true, ai: false, refusable: false, deck: true },
   // The Support desk's tools live on the desk and in Support threads, not in the deck.
   "grant-perk": { category: "desk", targets: "creator", reversible: true, ai: false, refusable: false, deck: false },

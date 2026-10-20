@@ -10,7 +10,7 @@
   },
   "id": "relationship-tracker",
   "name": "Relationship Tracker",
-  "version": "0.6.2",
+  "version": "0.7.1",
   "description": "Tracks how the characters and your persona feel about each other. Add the Agent in Chat Settings → Agents → Tracker Agents for Roleplay mode.",
   "engine": {
     "min": "2.4.4",
@@ -38,13 +38,13 @@
     },
     {
       "path": "server.mjs",
-      "sha256": "75d852ec5787b87365598fd297debcb924b975685490814e2775cc5aabab7fe5",
-      "bytes": 12187
+      "sha256": "c73cb24e40b621c68d87c9cd0ac16ef453bf2da98425a281a4be6c0d710ae684",
+      "bytes": 12645
     },
     {
       "path": "state.mjs",
-      "sha256": "597023170e26cdeb1e27ab1d5021c5f7d69d5610d42ff38691ce965ad5f21c1f",
-      "bytes": 27236
+      "sha256": "1e9dd277e7f6a2028f787023ff15fa571a2eee83270e76b5614a5829440f6965",
+      "bytes": 27619
     },
     {
       "path": "prompt.mjs",
@@ -53,8 +53,8 @@
     },
     {
       "path": "tracking.mjs",
-      "sha256": "ce5249609624ca41edda8fed10e1124adb365bf432d2a0723222ec45f3efa1bd",
-      "bytes": 38234
+      "sha256": "0e551eaa2a3586f026eda414fc410ed14077fdfda72b6f5c0b6285e2d15454d4",
+      "bytes": 38520
     },
     {
       "path": "activity.mjs",
@@ -63,8 +63,8 @@
     },
     {
       "path": "history.mjs",
-      "sha256": "eff43a4a279f159d36f7a01bdc0f5b6fb53a9db8f45dabc2c0d481f7307c4c0a",
-      "bytes": 14777
+      "sha256": "703668068763f9be3a6405f8829957ab98e6ffb3e32d8f9496f64868a4273c3e",
+      "bytes": 37720
     },
     {
       "path": "persona-state.mjs",
@@ -73,13 +73,13 @@
     },
     {
       "path": "persona-tracking.mjs",
-      "sha256": "cb36514b2de3155a6b7276b038fddd06734be5bddf2eb78be3773b36ea4b6815",
-      "bytes": 6014
+      "sha256": "24e682ad16bfa400760912728964308ab12e62b32622c5c159727f7e4bbe44b1",
+      "bytes": 7022
     },
     {
       "path": "client.js",
-      "sha256": "c009aef56c8b6ac495005570b38ba1d4047ccea5485cfb04f89ab16132960b31",
-      "bytes": 60590
+      "sha256": "a76ba1a1284fe7516447a74b0e9336d752c142fb4e15f50708a2985906abb3e8",
+      "bytes": 84902
     },
     {
       "path": "contracts/relationship-state-v1.schema.json",

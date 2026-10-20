@@ -94,9 +94,9 @@ class NoodleTimelineTooLongError extends Error {
 }
 
 /**
- * Lowers each timeline request's max_tokens for the connection it wraps, so the bundled context fitter
- * never has to cut the prompt. Only the primary connection is wrapped: a configured fallback still gets
- * the original request and fits it to its own context.
+ * Lowers each timeline request's max_tokens to fit the primary connection's context, so the context
+ * fitter never has to cut the prompt. It wraps the Engine's whole fallback chain: the Engine only builds
+ * a fallback around a provider it created itself, so a configured fallback gets the lowered request too.
  */
 class NoodleTimelineBudgetProvider extends BaseLLMProvider {
   /** True when this connection's last answer ran out of a lowered max_tokens. */
@@ -142,8 +142,8 @@ class NoodleTimelineBudgetProvider extends BaseLLMProvider {
     this.answeredUnderLoweredBudget = false;
     const sized = this.sized(messages, options);
     const result = await this.provider.chatComplete(messages, sized);
-    // Only a length stop counts: an empty "error" result sends ConnectionFallbackProvider to the
-    // fallback, whose own length stop must not be read as this connection's.
+    // Only a length stop under the lowered budget counts. A fallback connection that answered got the
+    // lowered budget too, unless its own saved settings set one.
     this.answeredUnderLoweredBudget = sized.maxTokens !== options.maxTokens && result.finishReason === "length";
     return result;
   }
@@ -238,8 +238,9 @@ export function createPublicNoodleGenerationService(db: DB) {
           admissionMode: input.admissionMode,
         } as const;
         const provider = withConnectionFallbackProvider({ primary: primaryProvider, ...fallbackArgs });
-        const timelinePrimary = new NoodleTimelineBudgetProvider(primaryProvider);
-        const timelineProvider = withConnectionFallbackProvider({ primary: timelinePrimary, ...fallbackArgs });
+        const timelineProvider = new NoodleTimelineBudgetProvider(
+          withConnectionFallbackProvider({ primary: primaryProvider, ...fallbackArgs }),
+        );
         await ensurePersonaAccounts(noodle, characters);
         if (settings.allowProfessorMari) await ensureProfessorMariAccount(noodle, characters);
         const personaAccount = await resolvePersonaAccount(noodle, characters, input.personaId);
@@ -404,7 +405,7 @@ export function createPublicNoodleGenerationService(db: DB) {
         } as const;
         // A lowered answer that ran out of room is a context problem, not a bad answer worth correcting.
         const cutByLoweredBudget = (completion: ChatCompletionResult) =>
-          completion.finishReason === "length" && timelinePrimary.answeredUnderLoweredBudget;
+          completion.finishReason === "length" && timelineProvider.answeredUnderLoweredBudget;
         let result: Awaited<ReturnType<typeof timelineProvider.chatComplete>>;
         try {
           result = await timelineProvider.chatComplete(requestMessages, completionOptions);

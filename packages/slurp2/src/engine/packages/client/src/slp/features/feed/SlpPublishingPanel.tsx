@@ -301,6 +301,19 @@ export function SlpPublishingPanel(page: SlpBackstagePageProps) {
           value={settings.teaserRate}
           onChange={(value: SlurpSettings["teaserRate"]) => void update("teaserRate", value)}
         />
+        <ChoiceSetting
+          settingKey="pictureReuse"
+          label={t("ui.slurp.settings.pictureReuse")}
+          detail={t("ui.slurp.settings.pictureReuseDetail")}
+          options={[
+            { value: "off", label: t("ui.slurp.settings.storyRateOff") },
+            { value: "rare", label: t("ui.slurp.settings.storyRateRare") },
+            { value: "regular", label: t("ui.slurp.settings.storyRateRegular") },
+          ]}
+          value={settings.pictureReuse}
+          disabled={updateSettings.isPending}
+          onChange={(value: SlurpSettings["pictureReuse"]) => void update("pictureReuse", value)}
+        />
       </SettingsGroup>
       <AdvancedGroup
         icon={<FileText size={17} className="text-[var(--slurp-violet)]" aria-hidden="true" />}

@@ -4,6 +4,7 @@ import {
   type SlpWardrobeLook,
   type SlpWardrobeScene,
 } from "../../../../../shared/src/slp/slp-wardrobe.js";
+import { slpResolveCardMacros } from "../../base/prompting/slp-prompt-safety.js";
 
 export type SlurpWardrobeSelection = {
   look: SlpWardrobeLook | null;
@@ -15,8 +16,12 @@ export function slurpWardrobePrompt(
   looks: readonly SlpWardrobeLook[],
   access: "public" | "locked",
   recentIds: readonly string[],
+  creatorName: string,
 ): string | null {
-  const enabled = looks.filter((look) => look.enabled);
+  // Engine macros (`{{char}}`, `{{random::…}}`) resolve per post, so a look can vary between posts.
+  const enabled = looks
+    .filter((look) => look.enabled)
+    .map((look) => ({ ...look, summary: slpResolveCardMacros(look.summary, creatorName) }));
   if (enabled.length === 0) return null;
   return [
     "# Creator wardrobe",
@@ -35,11 +40,16 @@ export function resolveSlurpWardrobeSelection(input: {
   access: "public" | "locked";
   scene?: SlpWardrobeScene | null;
   recentIds?: readonly string[];
+  creatorName: string;
 }): SlurpWardrobeSelection {
+  const resolve = (look: SlpWardrobeLook): SlpWardrobeLook => ({
+    ...look,
+    description: slpResolveCardMacros(look.description, input.creatorName),
+  });
   const requestedId = input.scene?.wardrobeId?.trim() || null;
   const requested = requestedId ? input.looks.find((look) => look.id === requestedId) : null;
   if (requested && slpWardrobeLookFits(requested, input.access)) {
-    return { look: requested, requestedId, fallback: false };
+    return { look: resolve(requested), requestedId, fallback: false };
   }
   const recent = input.recentIds ?? [];
   const recency = new Map(recent.map((id, index) => [id, index]));
@@ -49,5 +59,9 @@ export function resolveSlurpWardrobeSelection(input: {
     const rightRecent = recency.has(right.id) ? recent.length - recency.get(right.id)! : 0;
     return leftRecent - rightRecent || left.createdAt.localeCompare(right.createdAt) || left.id.localeCompare(right.id);
   });
-  return { look: compatible[0] ?? null, requestedId, fallback: Boolean(requestedId || compatible.length) };
+  return {
+    look: compatible[0] ? resolve(compatible[0]) : null,
+    requestedId,
+    fallback: Boolean(requestedId || compatible.length),
+  };
 }

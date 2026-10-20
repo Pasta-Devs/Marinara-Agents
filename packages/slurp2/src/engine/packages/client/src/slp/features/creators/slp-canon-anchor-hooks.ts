@@ -6,7 +6,7 @@ import type { SlpCanonAnchors } from "./slp-canon-anchor-text";
 export type SlpCanonAnchorState = {
   anchors: SlpCanonAnchors | null;
   edited: boolean;
-  /** False when the card changed since: the next Beats post reads it again. */
+  /** False when the card changed since: the next post reads it again and keeps the player's edits. */
   current: boolean;
   /** False until the card was read once. */
   read: boolean;

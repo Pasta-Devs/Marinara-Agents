@@ -5,6 +5,7 @@ import { BackstagePageHeader, SettingAnchor } from "../../modules/settings/SlpSe
 import { Field, NumberSetting, SettingsGroup, Toggle } from "../../modules/settings/SlpSettingsControls";
 import { errorMessage } from "../../modules/settings/slp-backstage-format";
 import type { SlpBackstagePageProps } from "../backstage/slp-backstage-contract";
+import { useSlurpCarryoverReach } from "./slp-settings-hooks";
 
 type Connection = { id: string; name?: string; model?: string; provider?: string };
 
@@ -21,6 +22,7 @@ export function SlpConnectionsPanel({
   imageSettingsQuery,
   updateImages,
 }: SlpBackstagePageProps) {
+  const reach = useSlurpCarryoverReach(settings.carryoverModes.length > 0).data;
   const connections = (connectionsQuery.data ?? []) as Connection[];
   const textConnections = connections.filter((connection) => connection.provider !== "image_generation");
   const imageConnections = connections.filter((connection) => connection.provider === "image_generation");
@@ -208,6 +210,14 @@ export function SlpConnectionsPanel({
         </SettingAnchor>
         {settings.carryoverModes.length > 0 && (
           <>
+            {reach && (
+              <p className="text-xs leading-5 text-[var(--slurp-muted)]">
+                {reach.on + reach.off === 0
+                  ? t("ui.slurp.settings.carryover.reachNone")
+                  : t("ui.slurp.settings.carryover.reach", { on: reach.on, total: reach.on + reach.off })}
+                {reach.off > 0 && ` ${t("ui.slurp.settings.carryover.reachOff")}`}
+              </p>
+            )}
             <Field
               settingKey="carryoverHours"
               label={t("ui.slurp.settings.carryover.hours")}

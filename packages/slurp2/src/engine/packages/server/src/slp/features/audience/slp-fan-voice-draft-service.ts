@@ -1,3 +1,6 @@
+import type { APIProvider } from "@marinara-engine/shared";
+import { resolveStoredMaxTokens } from "../../../services/generation/generation-parameters.js";
+import { clampGenerationMaxOutputTokens } from "../../../services/generation/output-token-limits.js";
 import type { DB } from "../../../db/connection.js";
 import { resolveBaseUrl } from "../../../services/generation/connection-base-url.js";
 import { createLLMProvider } from "../../../services/llm/provider-registry.js";
@@ -37,12 +40,19 @@ export async function draftSlpFanTypeVoice(db: DB, input: SlpFanVoiceDraftInput)
       connection.claudeFastMode === "true",
       connection.treatAsLocalEndpoint === "true",
       connection.defaultParameters,
+      // The player pressed it: booked as foreground work on the connection, like their chats.
+      connection.id,
     ),
   );
   const result = await provider.chatComplete(buildSlpFanVoiceDraftMessages(input), {
     model: connection.model,
     temperature: 0.9,
-    maxTokens: 400,
+    maxTokens: clampGenerationMaxOutputTokens({
+      provider: connection.provider as APIProvider,
+      model: connection.model,
+      maxTokens: Math.max(resolveStoredMaxTokens(connection.defaultParameters, 400), 400),
+      maxTokensOverride: connection.maxTokensOverride,
+    }),
   });
   const voice = cleanSlpFanVoiceDraft(result.content);
   return voice

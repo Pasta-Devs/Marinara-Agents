@@ -146,6 +146,27 @@ export function SlpCreatorIdentitySection({
                 {t(appearance.linkedAppearance ? "ui.slurp.appearance.useLinked" : "ui.slurp.appearance.clearOverride")}
               </button>
             )}
+            {appearance.imageAppearance && appearance.imageAppearance !== appearance.text && (
+              <button
+                type="button"
+                disabled={appearanceAction.isPending}
+                onClick={async () => {
+                  // A hand-written appearance is replaced, and nothing brings it back.
+                  if (
+                    appearance.source === "override" &&
+                    !(await showConfirmDialog({
+                      title: t("ui.slurp.appearance.useImageTags"),
+                      message: t("ui.slurp.appearance.useImageTagsConfirm"),
+                    }))
+                  )
+                    return;
+                  runAppearanceAction("edit_override", appearance.imageAppearance);
+                }}
+                className={quietButton}
+              >
+                {t("ui.slurp.appearance.useImageTags")}
+              </button>
+            )}
             {appearance.text && (
               <button type="button" onClick={() => setAppearanceDraft(appearance.text)} className={quietButton}>
                 {t("ui.slurp.appearance.edit")}
@@ -242,8 +263,9 @@ export function SlpCreatorContentRulesSection(props: SlpCreatorSettingsSectionPr
 export function SlpCreatorProductionSection({ creator, active }: SlpCreatorSettingsSectionProps) {
   return (
     <div className="space-y-5">
-      <SlpCreatorImagesSection creator={creator} active={active} />
+      {/* Page style first: how they post decides what the picture settings below are for. */}
       <SlurpCreatorStrategyGroup creator={creator} />
+      <SlpCreatorImagesSection creator={creator} active={active} />
     </div>
   );
 }
@@ -497,6 +519,30 @@ export function SlpCreatorImagesSection({ creator, active }: SlpCreatorSettingsS
           }}
         />
       )}
+      {settings && (
+        <Field
+          settingKey="creatorImagePrefixes"
+          label={t("ui.slurp.settings.creators.imagePrefix")}
+          detail={t("ui.slurp.settings.creators.imagePrefixDetail")}
+        >
+          {/* Saved on leaving the field; blank removes it. */}
+          <input
+            key={`${creator.id}:${settings.creatorImagePrefixes?.[creator.id] ?? ""}`}
+            type="text"
+            maxLength={300}
+            defaultValue={settings.creatorImagePrefixes?.[creator.id] ?? ""}
+            disabled={updateSettings.isPending}
+            placeholder={t("ui.slurp.settings.creators.imagePrefixPlaceholder")}
+            onBlur={(event) => {
+              const value = event.target.value.trim();
+              const { [creator.id]: previous = "", ...rest } = settings.creatorImagePrefixes ?? {};
+              if (value === previous) return;
+              updateSettings.mutate({ creatorImagePrefixes: value ? { ...rest, [creator.id]: value } : rest });
+            }}
+            className={selectClass}
+          />
+        </Field>
+      )}
       {creator.sourceAccountId && !personaBacked && settings && (
         <Field
           settingKey="characterImageInstructions"
@@ -563,18 +609,17 @@ export function SlpCreatorMessagesSection({ creator, onClose }: SlpCreatorSettin
 /** What this Creator's world remembers about them. */
 export function SlpCreatorContinuitySection({ creator }: SlpCreatorSettingsSectionProps) {
   const { t } = useTranslation();
-  // Life details only feed "Post ideas: The Creator's life"; with Model's choice they do nothing.
+  // With Model's choice only "Always true" is used; the rest feeds "Post ideas: The Creator's life".
   const lifeIdeas = useSlurpSettings().data?.postPlanner !== "classic";
   return (
     <div className="space-y-6">
       <SlurpContinuityPanel
         creatorAccountId={creator.id}
         lifeDetails={
-          lifeIdeas ? (
+          <>
+            {lifeIdeas ? null : <p className={noteClass}>{t("ui.slurp.canonAnchors.classicNote")}</p>}
             <SlpCanonAnchorsEditor creatorId={creator.id} />
-          ) : (
-            <p className={noteClass}>{t("ui.slurp.canonAnchors.classicNote")}</p>
-          )
+          </>
         }
       />
       <SlpCreatorSignalsList creatorId={creator.id} />

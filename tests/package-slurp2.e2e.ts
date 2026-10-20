@@ -108,10 +108,8 @@ test.describe("standalone Slurp package", () => {
     ).toContainText("Settings → Advanced → Admin Access");
   });
 
-  test("image context choices persist and creator refresh counts down", async ({ page }, testInfo) => {
+  test("image context choices persist after Apply changes", async ({ page }, testInfo) => {
     const initialSettings = await (await getSlurpSettings(page)).json();
-    let profileId: string | null = null;
-    const releases: Array<() => void> = [];
     try {
       expect(
         (
@@ -120,11 +118,55 @@ test.describe("standalone Slurp package", () => {
           })
         ).ok(),
       ).toBe(true);
+      await page.addInitScript(() =>
+        localStorage.setItem(
+          "marinara:slurp2:package-ui",
+          JSON.stringify({ navigation: { mode: "creator-settings", section: "images" }, onboardingState: "completed" }),
+        ),
+      );
+      await page.goto("/");
+      await openSlurp(page);
+      const contextModes = {
+        auto: /^Auto: prompt, then vision/u,
+        imagePrompt: /^Stored image prompt only/u,
+        vision: /^Vision description/u,
+      } as const;
+      await expect(page.getByRole("radio", { name: contextModes.auto })).toBeChecked();
+      for (const mode of ["imagePrompt", "auto", "vision"] as const) {
+        // The radio input is visually hidden, so click the label that wraps it.
+        const choice = page.getByRole("radio", { name: contextModes[mode] });
+        await page.locator("label", { has: choice }).click();
+        await expect(choice).toBeChecked();
+        await page.getByRole("button", { name: "Apply changes", exact: true }).click();
+        await expect
+          .poll(
+            async () =>
+              ((await (await page.request.get("/api/slurp2/settings")).json()) as { imageContextMode: string })
+                .imageContextMode,
+          )
+          .toBe(mode);
+      }
+      await page.reload();
+      await openSlurp(page);
+      await expect(page.getByRole("radio", { name: contextModes.vision })).toBeChecked();
+      await page.screenshot({ path: testInfo.outputPath("slurp2-image-context-settings.png") });
+    } finally {
+      await page.request.patch("/api/slurp2/settings", {
+        data: { imageContextMode: initialSettings.imageContextMode, onboarding: initialSettings.onboarding },
+      });
+    }
+  });
+
+  test("creator refresh runs as a Pulse task and reports when it is done", async ({ page }, testInfo) => {
+    const releases: Array<() => void> = [];
+    let profileId: string | null = null;
+    try {
+      expect((await page.request.patch("/api/slurp2/settings", { data: { onboarding: "completed" } })).ok()).toBe(true);
       const profileResponse = await page.request.post("/api/slurp2/accounts/__professor_mari__/noodler", {
         data: {
           stageProfile: {
-            displayName: "Image context fixture",
-            handle: `image_fixture_${Date.now()}`,
+            displayName: "Refresh fixture",
+            handle: `refresh_fixture_${Date.now()}`,
             bio: "Fixture",
             stagePersonality: "Concise",
             disclosureMode: "open",
@@ -163,22 +205,6 @@ test.describe("standalone Slurp package", () => {
       );
       await page.goto("/");
       await openSlurp(page);
-      const choice = page.getByRole("combobox", { name: /Image context for reactions/ });
-      await expect(choice).toHaveValue("auto");
-      for (const mode of ["imagePrompt", "vision", "auto"]) {
-        await expect(choice).toBeEnabled();
-        await choice.selectOption(mode);
-        await expect(choice).toHaveValue(mode);
-        await page.getByRole("button", { name: "Apply changes", exact: true }).click();
-        await expect
-          .poll(
-            async () =>
-              ((await (await page.request.get("/api/slurp2/settings")).json()) as { imageContextMode: string })
-                .imageContextMode,
-          )
-          .toBe(mode);
-      }
-      await page.screenshot({ path: testInfo.outputPath("slurp2-image-context-settings.png") });
       if (testInfo.project.name.includes("mobile")) {
         // Phones go back to the settings list and open Posting from it.
         await page.getByRole("button", { name: "Settings", exact: true }).first().click();
@@ -195,21 +221,14 @@ test.describe("standalone Slurp package", () => {
       await page.getByRole("button", { name: "Generate posts", exact: true }).click();
       const dialog = page.getByRole("dialog", { name: "Generate posts", exact: true });
       await dialog.getByRole("button", { name: "Generate 3", exact: true }).click();
-      await expect.poll(() => releases.length).toBe(3);
-      await expect(dialog.getByRole("status")).toHaveText("3 remaining");
-      releases[0]!();
-      await expect(dialog.getByRole("status")).toHaveText("2 remaining");
-      await expect(dialog.getByRole("button", { name: "Cancel", exact: true })).toBeDisabled();
-      await page.screenshot({ path: testInfo.outputPath("slurp2-remaining-generations.png") });
-      releases[1]!();
-      await expect(dialog.getByRole("status")).toHaveText("1 remaining");
-      releases[2]!();
+      // The modal closes at once. The three requests wait in the background, one per Creator.
       await expect(dialog).toBeHidden();
+      await expect.poll(() => releases.length).toBe(3);
+      await expect(page.getByText("Started. You can keep going.", { exact: true })).toBeVisible();
+      releases.forEach((release) => release());
+      await expect(page.getByText("New posts for 3 Creators: done", { exact: true })).toBeVisible();
     } finally {
       releases.forEach((release) => release());
-      await page.request.patch("/api/slurp2/settings", {
-        data: { imageContextMode: initialSettings.imageContextMode, onboarding: initialSettings.onboarding },
-      });
       if (profileId) await page.request.delete(`/api/slurp2/slurp/accounts/${profileId}`);
     }
   });
@@ -221,24 +240,47 @@ test.describe("standalone Slurp package", () => {
       onboarding: string;
     };
     expect(typeof settings.onboarding).toBe("string");
+    // Without a viewer persona the phone shows the "Create a persona" state, and the header with its logo is absent.
+    const personaName = `Surface viewer ${Date.now()}`;
+    const persona = (await (
+      await page.request.post("/api/characters/personas", { data: { name: personaName } })
+    ).json()) as { id: string };
+    await page.addInitScript(
+      (personaId) =>
+        localStorage.setItem(
+          "marinara:slurp2:package-ui",
+          JSON.stringify({ viewerPersonaId: personaId, onboardingState: "completed" }),
+        ),
+      persona.id,
+    );
 
-    await page.goto("/");
-    await openSlurp(page);
+    try {
+      await page.goto("/");
+      await openSlurp(page);
 
-    const slurp = page.locator('[data-component="NoodleView"]');
-    await expect
-      .poll(() => slurp.evaluate((element) => getComputedStyle(element).getPropertyValue("--noodle-accent").trim()))
-      .toBe("#FF7EC1");
-    if (testInfo.project.name.includes("mobile")) {
-      await slurp.getByRole("button", { name: "More", exact: true }).click();
+      const slurp = page.locator('[data-component="NoodleView"]');
+      await expect
+        .poll(() => slurp.evaluate((element) => getComputedStyle(element).getPropertyValue("--noodle-accent").trim()))
+        .toBe("#FF7EC1");
+      // Both widths show the logo in the header, so check it before any drawer opens.
+      const logo = slurp.locator('img[src^="data:image/png;base64,"]:visible').first();
+      await expect(logo).toBeVisible();
+      await expect.poll(() => logo.evaluate((element: HTMLImageElement) => element.naturalWidth)).toBeGreaterThan(0);
+      if (testInfo.project.name.includes("mobile")) {
+        await slurp.getByRole("button", { name: "More", exact: true }).click();
+        // The drawer's account card and the switcher both carry the viewer persona's name.
+        const drawer = page.getByRole("dialog", { name: "More" });
+        await expect(drawer).toBeVisible();
+        await expect(drawer.getByRole("button", { name: new RegExp(personaName) })).toBeVisible();
+        await expect(page.locator('[data-component="NoodleView.AccountSwitcher"]')).toContainText(personaName);
+      }
+      if (testInfo.project.name.includes("desktop")) {
+        await expect(page.getByRole("button", { name: "Back to Marinara Home" })).toBeVisible();
+      }
+      expect(errors).toEqual([]);
+    } finally {
+      await page.request.delete(`/api/characters/personas/${persona.id}`);
     }
-    const logo = slurp.locator('img[src^="data:image/png;base64,"]:visible').first();
-    await expect(logo).toBeVisible();
-    await expect.poll(() => logo.evaluate((element: HTMLImageElement) => element.naturalWidth)).toBeGreaterThan(0);
-    if (testInfo.project.name.includes("desktop")) {
-      await expect(page.getByRole("button", { name: "Back to Marinara Home" })).toBeVisible();
-    }
-    expect(errors).toEqual([]);
   });
 
   test("renders the responsive settings overview in the Slurp theme", async ({ page }, testInfo) => {
@@ -273,7 +315,7 @@ test.describe("standalone Slurp package", () => {
 
     if (testInfo.project.name.includes("mobile")) {
       const mobileNavigation = slurp.getByRole("navigation", { name: "Slurp navigation" });
-      for (const label of ["Slurp", "Profile", "Inbox", "Discover", "More"]) {
+      for (const label of ["Hub", "Discover", "Stir", "Inbox", "More"]) {
         await expect(mobileNavigation.getByRole("button", { name: label, exact: true })).toBeVisible();
       }
       // A saved section opens its page; the Settings link above the title returns to the list.
@@ -312,11 +354,17 @@ test.describe("standalone Slurp package", () => {
     await page.goto("/");
     await openSlurp(page);
     const slurp = page.locator('[data-component="NoodleView"]');
-    await expect(slurp.getByRole("heading", { name: "Prompt Studio", exact: true })).toBeVisible();
+    // The page no longer has a "Prompt Studio" heading; its header carries this detail line.
+    await expect(
+      slurp.getByText("Shape how Slurp writes, speaks, and creates. Your prompts stay visible and easy to edit.", {
+        exact: true,
+      }),
+    ).toBeVisible();
     for (const outcome of ["Voice and writing", "Post behavior", "Image direction"]) {
       await expect(slurp.getByRole("heading", { name: outcome, exact: true })).toBeVisible();
     }
-    await expect(slurp.getByText("Generation guidance", { exact: true })).toBeVisible();
+    // The status strip and the outcome card both show this label.
+    await expect(slurp.getByText("Generation guidance", { exact: true }).first()).toBeVisible();
     await expect(slurp.getByText("Public post direction", { exact: true })).toBeVisible();
     await expect(slurp.getByText("Locked post direction", { exact: true })).toBeVisible();
     await expect(slurp.getByRole("heading", { name: "Prompt recipes", exact: true })).toBeVisible();
@@ -346,27 +394,44 @@ test.describe("standalone Slurp package", () => {
     expect(errors).toEqual([]);
   });
 
-  test("requires the current release acknowledgement and keeps older notes collapsed", async ({ page }, testInfo) => {
+  test("requires the current release acknowledgement before entering", async ({ page }, testInfo) => {
     const errors = collectUnexpectedErrors(page);
     await page.addInitScript(() => localStorage.removeItem("slurp2:splash-seen-version"));
     await page.goto("/");
     await openSlurp(page);
+    // A fresh install shows the welcome consent. It has no release history.
     const splash = page.getByRole("dialog", { name: `Slurp ${SLURP_VERSION}`, exact: true });
     await expect(splash).toBeVisible();
     const enter = splash.getByRole("button", { name: "Let me in" });
     await expect(enter).toBeDisabled();
-    await expect(splash.locator("#slurp2-earlier-releases")).toBeHidden();
-    const history = splash.getByRole("button", { name: /Show \d+ earlier releases/u });
-    await history.click();
-    await expect(splash.locator("#slurp2-earlier-releases")).toBeVisible();
-    await splash.getByRole("button", { name: "Hide earlier releases" }).click();
-    await page.keyboard.press("Escape");
-    await expect(splash).toBeVisible();
+    await expect(splash.getByRole("button", { name: /Show \d+ earlier releases/u })).toHaveCount(0);
     await splash.screenshot({ path: testInfo.outputPath("slurp2-release-acknowledgement.png") });
-    await splash.getByRole("checkbox", { name: /I understand this is alpha software/u }).check();
+    // The checkbox input is visually hidden, so click its label.
+    await splash.locator("label", { hasText: "I understand this is alpha software" }).click();
+    await expect(splash.getByRole("checkbox", { name: /I understand this is alpha software/u })).toBeChecked();
     await enter.click();
     await expect(splash).toBeHidden();
     expect(await page.evaluate(() => localStorage.getItem("slurp2:splash-seen-version"))).toBe(SLURP_VERSION);
+    expect(errors).toEqual([]);
+  });
+
+  test("keeps older release notes collapsed after an update", async ({ page }, testInfo) => {
+    const errors = collectUnexpectedErrors(page);
+    // An update shows "What's new" for every release after the last one this browser saw.
+    await page.addInitScript(() => localStorage.setItem("slurp2:splash-seen-version", "0.3.15"));
+    await page.goto("/");
+    await openSlurp(page);
+    const whatsNew = page.getByRole("dialog", { name: `What's new in ${SLURP_VERSION}`, exact: true });
+    await expect(whatsNew).toBeVisible();
+    await expect(whatsNew.locator("#slurp2-earlier-releases")).toBeHidden();
+    const history = whatsNew.getByRole("button", { name: /Show \d+ earlier releases/u });
+    await history.click();
+    await expect(whatsNew.locator("#slurp2-earlier-releases")).toBeVisible();
+    await whatsNew.getByRole("button", { name: "Hide earlier releases" }).click();
+    await expect(whatsNew.locator("#slurp2-earlier-releases")).toBeHidden();
+    await whatsNew.screenshot({ path: testInfo.outputPath("slurp2-whats-new.png") });
+    await whatsNew.getByRole("button", { name: "Got it", exact: true }).click();
+    await expect(whatsNew).toBeHidden();
     expect(errors).toEqual([]);
   });
 
@@ -381,9 +446,7 @@ test.describe("standalone Slurp package", () => {
     await openSlurp(page);
     const introduction = page.getByRole("dialog", { name: "Slurp", exact: true });
     await expect(introduction.getByRole("heading", { name: "So, what is Slurp?" })).toBeVisible();
-    await expect(
-      introduction.getByText("Slurp is a local roleplay space for creators, fans, posts, and conversations."),
-    ).toBeVisible();
+    await expect(introduction.getByText("The creator app where your favourites post just for you.")).toBeVisible();
     await expect(introduction).not.toContainText("ui.noodle.");
     await introduction.screenshot({ path: testInfo.outputPath("slurp2-first-run-introduction.png") });
     expect(errors).toEqual([]);
@@ -408,11 +471,16 @@ test.describe("standalone Slurp package", () => {
         }),
       );
     });
-    await page.route("**/api/slurp2/slurp/ads/pool", async (route) => {
+    // The Brands panel reads each brand with its products. An older ad has no rating, so it falls back to tame.
+    await page.route("**/api/slurp2/slurp/ads/brands", async (route) => {
       const response = await route.fetch();
-      const data = (await response.json()) as { items: Array<{ id: string; contentRating?: string }> };
-      for (const ad of data.items) {
-        if (ad.id === "nightjar-midnight-blend") delete ad.contentRating;
+      const data = (await response.json()) as {
+        items: Array<{ products: Array<{ id: string; contentRating?: string }> }>;
+      };
+      for (const brand of data.items) {
+        for (const product of brand.products) {
+          if (product.id === "nightjar-midnight-blend") delete product.contentRating;
+        }
       }
       await route.fulfill({ response, json: data });
     });
@@ -426,31 +494,34 @@ test.describe("standalone Slurp package", () => {
     await expect
       .poll(async () => (await (await page.request.get("/api/slurp2/settings")).json()).inlineAdsImagesEnabled)
       .toBe(true);
-    await expect(slurp.getByRole("heading", { name: "Ad controls", exact: true })).toBeVisible();
+    await expect(slurp.getByRole("heading", { name: "In your feed", exact: true })).toBeVisible();
     await slurp.getByText("Ad images", { exact: true }).click({ force: true });
     await expect(imageToggle).not.toBeChecked();
     await slurp.getByRole("button", { name: "Apply changes", exact: true }).click();
     await expect
       .poll(async () => (await (await page.request.get("/api/slurp2/settings")).json()).inlineAdsImagesEnabled)
       .toBe(false);
+    // Brands start collapsed. Open the Nightjar group to reach its ad.
+    await slurp.getByRole("button", { name: /^Nightjar Coffee/u }).click();
     const ad = slurp
       .getByRole("listitem")
-      .filter({ has: page.getByRole("button", { name: "Edit the Nightjar Coffee ad" }) });
-    await expect(ad.getByText("Tame only", { exact: true })).toBeVisible();
-    await ad.getByRole("button", { name: "Edit the Nightjar Coffee ad" }).click();
-    await expect(ad.getByRole("combobox")).toHaveValue("tame");
+      .filter({ has: page.getByRole("button", { name: "Edit the Midnight Blend ad" }) })
+      .last();
+    await expect(ad.getByText(/Anyone/u)).toBeVisible();
+    await ad.getByRole("button", { name: "Edit the Midnight Blend ad" }).click();
+    // The spice level is a radio group now. An older ad keeps the tame level.
+    await expect(ad.getByRole("radio", { name: /^Anyone/u })).toBeChecked();
     await ad.getByRole("button", { name: "Save", exact: true }).click();
-    await ad.getByRole("button", { name: "Hide the Nightjar Coffee ad" }).click();
+    await ad.getByRole("button", { name: "Hide the Midnight Blend ad" }).click();
     await expect(ad.getByText(/Retired/u)).toBeVisible();
-    await ad.getByRole("button", { name: "Restore the Nightjar Coffee ad" }).click();
-    await expect(ad.getByText("Tame only", { exact: true })).toBeVisible();
+    await ad.getByRole("button", { name: "Restore the Midnight Blend ad" }).click();
+    await expect(ad.getByText(/Anyone/u)).toBeVisible();
     await ad.scrollIntoViewIfNeeded();
     await page.screenshot({ path: testInfo.outputPath("slurp2-ad-controls.png") });
     expect(errors).toEqual([]);
   });
 
   test("creates package-owned profiles and shows their viewer feed", async ({ page, request }, testInfo) => {
-    test.setTimeout(120_000);
     test.skip(
       !testInfo.project.name.includes("desktop"),
       "The complete standalone Creator flow is covered on desktop.",
@@ -589,7 +660,8 @@ test.describe("standalone Slurp package", () => {
       await page.goto("/");
       await openSlurp(page);
       const slurp = page.locator('[data-component="NoodleView"]');
-      await slurp.getByRole("tab", { name: "All creators" }).click();
+      // The feed choice is a radio group, not tabs.
+      await slurp.getByRole("radio", { name: "All creators" }).click();
       const postArticle = slurp.getByRole("article").filter({ hasText: postContent, visible: true });
       await expect(postArticle).toBeVisible();
       await expect(postArticle).toContainText(stageProfile.displayName);
@@ -616,15 +688,15 @@ test.describe("standalone Slurp package", () => {
       await creatorRow.click();
       const creatorSettings = page.getByRole("dialog", { name: `${stageProfile.displayName}'s settings` });
       await expect(creatorSettings).toBeVisible();
-      await creatorSettings.getByRole("tab", { name: "Identity", exact: true }).click();
+      await creatorSettings.getByRole("tab", { name: "Profile", exact: true }).click();
       const profileName = creatorSettings.getByLabel("Stage name");
       const originalProfileName = await profileName.inputValue();
       await profileName.fill(`${originalProfileName} draft`);
-      await creatorSettings.getByRole("tab", { name: "Production", exact: true }).click();
-      await creatorSettings.getByRole("tab", { name: "Identity", exact: true }).click();
+      await creatorSettings.getByRole("tab", { name: "Posting", exact: true }).click();
+      await creatorSettings.getByRole("tab", { name: "Profile", exact: true }).click();
       await expect(profileName).toHaveValue(`${originalProfileName} draft`);
       await profileName.fill(originalProfileName);
-      await creatorSettings.getByRole("tab", { name: "Production", exact: true }).click();
+      await creatorSettings.getByRole("tab", { name: "Posting", exact: true }).click();
       const imageConnectionSelect = creatorSettings.getByRole("combobox", { name: /^Image connection/u });
       await expect(imageConnectionSelect).toBeEnabled({ timeout: 30_000 });
       await imageConnectionSelect.selectOption(imageConnectionIds[1]);
@@ -637,11 +709,12 @@ test.describe("standalone Slurp package", () => {
         })
         .toBe(imageConnectionIds[1]);
 
-      await creatorSettings.getByRole("tab", { name: "Automation", exact: true }).click();
-      await expect(creatorSettings.getByRole("region", { name: "Posting Schedule" })).toBeVisible();
-      await creatorSettings.getByRole("button", { name: "Close dialog" }).click();
+      await creatorSettings.getByRole("tab", { name: "Posting", exact: true }).click();
+      await expect(creatorSettings.getByText("Posting Schedule", { exact: true })).toBeVisible();
+      // The Engine's own Modal (Pasta-Devs/Marinara-Agents#1487) names its close button after the dialog.
+      await creatorSettings.getByRole("button", { name: `Close ${stageProfile.displayName}'s settings` }).click();
 
-      await slurp.getByRole("button", { name: "Prompts", exact: true }).click();
+      await slurp.getByRole("button", { name: "Writing", exact: true }).click();
       await slurp.getByRole("button", { name: "Edit prompt", exact: true }).first().click();
       const promptDialog = page.getByRole("dialog", { name: "Edit generation guidance" });
       const savePrompt = promptDialog.getByRole("button", { name: "Apply to draft" });
@@ -656,8 +729,10 @@ test.describe("standalone Slurp package", () => {
         .toBe(true);
       await expect
         .poll(() =>
-          page
+          // The dialog is the Engine's Modal; its content keeps Slurp's scope and accent (sources/host-client-overlay).
+          promptDialog
             .locator('[data-marinara-capability-scope="slurp2"]')
+            .first()
             .evaluate((element) => getComputedStyle(element).getPropertyValue("--noodle-accent").trim().toLowerCase()),
         )
         .toBe("#ff7ec1");
@@ -679,8 +754,8 @@ test.describe("standalone Slurp package", () => {
       );
       await page.reload();
       await openSlurp(page);
-      const profileControls = slurp.getByRole("button", { name: "Profile controls", exact: true });
-      if ((await profileControls.getAttribute("aria-expanded")) !== "true") await profileControls.click();
+      // Prove the persona view loaded before the absence checks below count for anything.
+      await expect(slurp.getByRole("button", { name: "Back to Slurp", exact: true })).toBeVisible();
       await expect(page.getByRole("button", { name: /^Automation/u })).toHaveCount(0);
       // Viewer access was removed: every persona sees every Creator.
       await expect(page.getByRole("button", { name: "Access", exact: true })).toHaveCount(0);

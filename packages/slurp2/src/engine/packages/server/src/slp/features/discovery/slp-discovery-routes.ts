@@ -2,9 +2,12 @@ import { z } from "zod";
 import type { FastifyInstance } from "fastify";
 import { slurpDiscoveryTagNameSchema } from "../../modules/requests/slp-request-schemas.js";
 import type { SlpRouteDeps } from "../viewer/slp-viewer-contract.js";
+import { listSlurpTrendViews } from "./slp-trends-service.js";
 
 export async function slpDiscoveryRoutes(app: FastifyInstance, deps: SlpRouteDeps) {
   const { noodle } = deps;
+  // What is trending on Slurp right now, for Discover (docs/TRENDS.md).
+  app.get("/slurp/trends", async () => ({ items: await listSlurpTrendViews(app.db) }));
   app.get("/discovery-tags/usage", async () => noodle.countDiscoveryTagUsage());
   app.post("/discovery-tags/rename", async (req, reply) => {
     const body = z.object({ from: slurpDiscoveryTagNameSchema, to: slurpDiscoveryTagNameSchema }).safeParse(req.body);

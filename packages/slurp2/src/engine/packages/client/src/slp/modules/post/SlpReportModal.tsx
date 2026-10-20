@@ -29,21 +29,27 @@ const REASON_LABELS: Record<SlpReportReason, string> = {
   other: "Something else",
 };
 
-export function SlpReportModal({
-  open,
-  onClose,
-  personaId,
-  postId,
-  targetType,
-  targetId,
-}: {
+type SlpReportModalProps = {
   open: boolean;
   onClose: () => void;
   personaId: string;
   postId: string;
   targetType: "post" | "reply";
   targetId: string;
-}) {
+};
+
+/**
+ * Every post card and reply carries one, and almost none are ever opened: rendering the closed sheet
+ * on each was the biggest single Slurp cost when a feed or profile mounted (0.3.41). It stays away
+ * until the first open, then stays mounted so the sheet can play its close.
+ */
+export function SlpReportModal(props: SlpReportModalProps) {
+  const [opened, setOpened] = useState(props.open);
+  if (props.open && !opened) setOpened(true);
+  return opened ? <SlpReportSheet {...props} /> : null;
+}
+
+function SlpReportSheet({ open, onClose, personaId, postId, targetType, targetId }: SlpReportModalProps) {
   const { t: localizeUi } = useUiTranslation();
   const report = useReportSlpContent();
   const [reason, setReason] = useState<SlpReportReason | null>(null);

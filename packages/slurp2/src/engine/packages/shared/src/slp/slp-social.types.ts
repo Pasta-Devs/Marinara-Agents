@@ -2,6 +2,7 @@
 // Slurp social shapes. Copied from the Engine Noodle types so Slurp2 owns its own vocabulary;
 // AvatarCrop stays an Engine contract because Engine avatar rendering consumes it.
 // ──────────────────────────────────────────────
+import type { SlpClothingStyle } from "./slp-gender.js";
 import type { AvatarCrop } from "@marinara-engine/shared";
 import type { SlpCreatorPage } from "./slp-creator-page.js";
 
@@ -87,6 +88,8 @@ export interface SlpCreatorStageFacts {
   wardrobe?: string;
   /** The places she posts from, so "somewhere she usually is" has an answer. */
   locations?: string;
+  /** Lingerie or briefs: see `slpWear`. Absent is `auto`, from the page's gender. */
+  clothingStyle?: SlpClothingStyle;
 }
 
 export type SlpAppearanceProfileMode = "ask" | "high_confidence" | "always";
@@ -180,6 +183,29 @@ export interface SlpCreatorStrategySettings {
   intentWeights?: Record<string, number>;
   /** Free text about how this person runs their page. Supplementary to the values above. */
   strategyText?: string;
+}
+
+/** The strategy values a page-style suggestion can change, as the planner uses them now. */
+export interface SlpPageStyleCurrent {
+  style: string;
+  textOnlyRate: number;
+  intentWeights: Record<string, number>;
+  strategyText: string;
+}
+
+/** Only the fields a suggestion would change. */
+export type SlpPageStylePatch = Partial<SlpPageStyleCurrent>;
+
+/** "Suggest page style": nothing is saved until the player applies `proposal`. */
+export interface SlpPageStyleSuggestion {
+  explanation: string;
+  current: SlpPageStyleCurrent;
+  proposal: SlpPageStylePatch;
+  /** What was saved when the suggestion was made, so an apply can refuse a value edited meanwhile. */
+  saved: SlpCreatorStrategySettings;
+  /** What the planner would use after applying: a new style also moves the defaults it derives. */
+  before: { style: string; skipRate: number; textOnlyRate: number };
+  after: { style: string; skipRate: number; textOnlyRate: number };
 }
 
 export interface SlpAccountSettings {
@@ -314,6 +340,7 @@ export interface SlpCreatorStageProfile {
   appearance: string;
   wardrobe: string;
   locations: string;
+  clothingStyle: SlpClothingStyle;
   publicIdentity: { displayName: string; handle: string } | null;
   /** The Creator's Page, or null before one is made. */
   page: SlpCreatorPage | null;
@@ -340,6 +367,8 @@ export interface SlpCreatorManagedStageProfile extends SlpCreatorStageProfile {
     text: string;
     needsReview: boolean;
     linkedAppearance: string;
+    /** Image tags of the linked card while its Image Appearance Override is on; otherwise empty. */
+    imageAppearance: string;
     profile: SlpAppearanceProfile | null;
   };
   fanActivity: SlpCreatorFanActivitySettings | null;

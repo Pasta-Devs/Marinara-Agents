@@ -1,17 +1,20 @@
-import { createHash } from "node:crypto";
 import type { APIProvider } from "@marinara-engine/shared";
 import type { DB } from "../../../db/connection.js";
 import { logger } from "../../../lib/logger.js";
 import { parseGameJsonish } from "../../../services/game/jsonish.js";
 import { resolveStoredChatOptions } from "../../../services/generation/generation-parameters.js";
 import { clampGenerationMaxOutputTokens } from "../../../services/generation/output-token-limits.js";
-import { createAppSettingsStorage } from "../../../services/storage/app-settings.storage.js";
-import { completeSlurpWithHost, createSlurpPostProvider } from "../../base/host/slp-generation-integrations.js";
+import {
+  completeSlurpWithHost,
+  createSlurpPostProvider,
+  slpRequireBackgroundIdle,
+} from "../../base/host/slp-generation-integrations.js";
 import { requireModelAnswer } from "../../base/model/slp-model-answer.js";
 import { slpSamplingOptions } from "../../base/prompting/slp-sampling-options.js";
 import { listSlurpOpportunities, readSlurpBeatHistory } from "../../data/feed/slp-opportunity-storage.js";
 import type { SlurpContentIntent } from "../../../../../shared/src/slp/slp-content-axes.js";
 import {
+  SLURP_ANCHOR_KINDS,
   selectSlurpBeat,
   slurpAnchorsWithout,
   slurpNudgeBeat,
@@ -27,15 +30,20 @@ import { planSlurpOccasionBeat } from "./slp-occasion-service.js";
 import { selectSlurpReference, slurpReferenceCandidates } from "../../modules/feed/slp-post-reference.js";
 import { createSlurpStorage } from "../../data/slp-storage.js";
 import { resolveCreatorCharacterCanon } from "../../data/creators/slp-source-resolve.js";
+import { SLP_CANON_READING_SCALE } from "../../base/prompting/slp-prompt-safety.js";
+import { createCharactersStorage } from "../../../services/storage/characters.storage.js";
 import type { SlurpAccount } from "../../modules/records/slp-storage-model.js";
 import { planSlurpBondBeat, planSlurpTieBeat } from "../projects/slp-projects-contract.js";
 import { planSlurpDramaBeat } from "../world/slp-world-contract.js";
-import { SLURP_CANON_ANCHORS_KEY as ANCHORS_KEY } from "../../data/creators/slp-flavour-source.js";
+import { planSlurpTrendBeat } from "../discovery/slp-discovery-contract.js";
+import { readSlurpCanonAnchorState, slurpCanonAnchorsFor } from "../../data/creators/slp-canon-anchor-storage.js";
 import {
   normalizeSlurpCanonAnchors,
   slurpBeatFactFromPost,
   slurpCanonAnchorsPrompt,
+  slurpPageAboutText,
 } from "../../modules/feed/slp-post-brief.js";
+import { protectCreatorGeneratedIdentity, type PublicIdentity } from "../../base/identity/slp-identity-protection.js";
 import {
   createSlurpContinuityFact,
   hasSlurpContinuityFact,
@@ -56,8 +64,16 @@ type SlurpBeatConnection = Parameters<typeof createSlurpPostProvider>[0]["connec
 /** What the beats planner needs from the post run. Absent in classic mode. */
 export type SlurpBeatContext = {
   canonText: string;
+  /**
+   * The card as the cached reading sees it: `canonText` with wider field limits
+   * (`SLP_CANON_READING_SCALE`). The anchors are read from it and keyed by it, so a change past a
+   * post's cut still refreshes them. Falls back to `canonText`.
+   */
+  readingText?: string;
   connection: SlurpBeatConnection;
   fallbackConnection: Parameters<typeof createSlurpPostProvider>[0]["fallbackConnection"];
+  /** The post run is automatic (background admission): its readings yield to the player's own work. */
+  background?: boolean;
   /** Level 1, when the shared-ideas setting is on: the Creator's tags and the Slurp-wide event toggle. */
   shared?: { tags: readonly string[]; worldEvents: boolean } | null;
   /** This post continues an active arc: its chapter is the beat. See `slurpArcBeat`. */
@@ -79,69 +95,28 @@ export type SlurpBeatContext = {
 
 /** Beat facts kept active at once; older ones expire so real notes are not crowded out. */
 const SLURP_ACTIVE_BEAT_FACTS = 3;
-// Bumped when the extraction asks for more (v2 added the routine), so every cache refreshes once.
-const ANCHORS_VERSION = "v2";
-const anchorKey = (canonText: string) => createHash("sha256").update(`${ANCHORS_VERSION}:${canonText}`).digest("hex");
-const FAILED_WAIT_MS = 30 * 60_000;
-
-/** Keyed by a hash of the card text the post prompt sees, so a card edit re-extracts. */
-type AnchorCache = Record<string, { key: string; anchors: SlurpCanonAnchors | null; edited?: boolean }>;
-
-// ponytail: one JSON blob in app settings, rewritten per extraction, and in-memory in-flight and
-// failure maps that reset on restart. A table per Creator if installs grow past a few hundred.
-const inFlight = new Set<string>();
-const failedUntil = new Map<string, number>();
-let writeQueue: Promise<unknown> = Promise.resolve();
-
-async function readAnchorCache(db: DB): Promise<AnchorCache> {
-  try {
-    const raw = await createAppSettingsStorage(db).get(ANCHORS_KEY);
-    const parsed = typeof raw === "string" ? JSON.parse(raw) : raw;
-    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? (parsed as AnchorCache) : {};
-  } catch {
-    return {};
-  }
-}
-
-/**
- * `null` removes the entry, so the next Beats post reads the card again. `keepEdited` is for the
- * background read: it never replaces the player's own anchors for the same card.
- */
-function writeAnchors(
-  db: DB,
-  accountId: string,
-  entry: AnchorCache[string] | null,
-  keepEdited = false,
-): Promise<unknown> {
-  writeQueue = writeQueue
-    .then(async () => {
-      const cache = await readAnchorCache(db);
-      const stored = cache[accountId];
-      if (keepEdited && entry && stored?.edited && stored.key === entry.key) return;
-      if (entry) cache[accountId] = entry;
-      else delete cache[accountId];
-      await createAppSettingsStorage(db).set(ANCHORS_KEY, JSON.stringify(cache));
-    })
-    .catch((error: unknown) => logger.warn(error, "[slurp] Could not store canon anchors"));
-  return writeQueue;
-}
 
 /**
  * One small JSON call for the beats planner (anchors, world tick, niche patterns). Not a slot of its
  * own: it runs beside the post that noticed the cache was stale, and nothing waits on it.
  */
 export async function completeSlurpBeatJson(
-  context: Pick<SlurpBeatContext, "connection" | "fallbackConnection">,
+  context: Pick<SlurpBeatContext, "connection" | "fallbackConnection" | "background">,
   prompt: { system: string; user: string },
   label: string,
   /** Extractions stay close to the card; idea generation needs more range. */
   temperature = 0.2,
 ): Promise<unknown> {
   const { connection } = context;
+  // An automatic post's reading runs only while background work may use the connection (no chat streaming, none
+  // for 30 s), and books nothing: holding the one background slot would refuse the post it runs beside, and a
+  // foreground booking kept every other automatic job (Noodle's too) waiting for 30 s. A player's post books it as
+  // their own foreground work.
+  if (context.background) slpRequireBackgroundIdle(connection.id);
   const provider = createSlurpPostProvider({
     connection,
     fallbackConnection: context.fallbackConnection,
-    admissionMode: { kind: "none" },
+    admissionMode: context.background ? { kind: "none" } : { kind: "foreground" },
   });
   const response = await completeSlurpWithHost(
     provider,
@@ -168,40 +143,25 @@ export async function completeSlurpBeatJson(
   return parseGameJsonish(requireModelAnswer(response.content ?? "", label));
 }
 
-/** One extraction call. Never awaited by a post. */
-async function extractAnchors(db: DB, accountId: string, key: string, context: SlurpBeatContext): Promise<void> {
-  const anchors = normalizeSlurpCanonAnchors(
-    await completeSlurpBeatJson(context, slurpCanonAnchorsPrompt(context.canonText), "canon anchors"),
-  );
-  // A card with nothing concrete is stored too, so it is not re-read before every post.
-  await writeAnchors(db, accountId, { key, anchors }, true);
-}
+const readingText = (context: Pick<SlurpBeatContext, "canonText" | "readingText">) =>
+  context.readingText ?? context.canonText;
 
 /**
- * This Creator's canon anchors, or null. A missing or stale entry starts one background extraction
- * and returns null, so this post is planned the classic way and never waits on it.
+ * This Creator's canon anchors, or null when the card was never read (this post is then planned
+ * the classic way). A missing or stale entry starts one background reading: one model call, never
+ * awaited.
  */
-export async function slurpBeatAnchorsFor(
+export function slurpBeatAnchorsFor(
   db: DB,
   accountId: string,
   context: SlurpBeatContext,
   at: Date,
 ): Promise<SlurpCanonAnchors | null> {
-  if (!context.canonText.trim()) return null;
-  const key = anchorKey(context.canonText);
-  const cached = (await readAnchorCache(db))[accountId];
-  if (cached?.key === key) return cached.anchors;
-  if (!inFlight.has(accountId) && (failedUntil.get(accountId) ?? 0) <= at.getTime()) {
-    inFlight.add(accountId);
-    void extractAnchors(db, accountId, key, context)
-      .then(() => failedUntil.delete(accountId))
-      .catch((error: unknown) => {
-        failedUntil.set(accountId, at.getTime() + FAILED_WAIT_MS);
-        logger.warn(error, "[slurp] Canon anchor extraction failed; posts stay on the classic planner for now");
-      })
-      .finally(() => inFlight.delete(accountId));
-  }
-  return null;
+  return slurpCanonAnchorsFor(db, accountId, readingText(context), at, async () =>
+    normalizeSlurpCanonAnchors(
+      await completeSlurpBeatJson(context, slurpCanonAnchorsPrompt(readingText(context)), "canon anchors"),
+    ),
+  );
 }
 
 /**
@@ -225,7 +185,9 @@ export async function planSlurpBeat(
   },
 ): Promise<SlurpBeat | null> {
   try {
-    const read = await slurpBeatAnchorsFor(db, input.accountId, input.context, input.at);
+    const stored = await slurpBeatAnchorsFor(db, input.accountId, input.context, input.at);
+    // Essentials alone are for the brief; a beat needs a person, place, or thing to be about.
+    const read = stored && SLURP_ANCHOR_KINDS.some((kind) => stored[kind].length > 0) ? stored : null;
     if (input.context.nudge) return slurpNudgeBeat(input.context.nudge, read, input.intents);
     // A collab they host or a brand deal they took is a commitment; a rivalry post now and then (7b-c).
     const tie = await planSlurpTieBeat(db, {
@@ -245,6 +207,18 @@ export async function planSlurpBeat(
       previewOnly: input.previewOnly,
     });
     if (drama) return drama;
+    // A trend going round Slurp that this Creator joins (docs/TRENDS.md): their own take, never a copy.
+    const trend = await planSlurpTrendBeat(db, {
+      creatorId: input.accountId,
+      creatorText: input.context.canonText,
+      tags: input.context.life?.tags ?? input.context.shared?.tags ?? [],
+      sequence: input.sequence,
+      intents: input.intents,
+      avoid: input.context.steering?.avoid ?? [],
+      at: input.at,
+      previewOnly: input.previewOnly,
+    });
+    if (trend) return trend;
     const history = await readSlurpBeatHistory(db, input.accountId, input.at);
     // A pack occasion running now (SlurpCon, a holiday, their birthday week): only one that fits them.
     const occasion = await planSlurpOccasionBeat(db, {
@@ -380,14 +354,87 @@ export async function resolveSlurpBeatDay(
     const scheduled = input.source
       ? await resolveSlurpCreatorScheduleBlocks(input.characters, input.source, input.at)
       : null;
-    if (scheduled) return slurpTimelineMoment(scheduled.blocks, scheduled.localNow);
-    const cached = (await readAnchorCache(db))[input.accountId];
-    const routine = cached?.key === anchorKey(input.canonText) ? cached.anchors?.routine : undefined;
+    if (scheduled) return slurpTimelineMoment(scheduled.blocks, scheduled.localNow, scheduled);
+    const read = await readSlurpCanonAnchorState(db, input.accountId, input.canonText);
+    // A stale routine is still their day until the card is read again.
+    const routine = read.anchors?.routine;
     return routine?.length ? slurpTimelineMoment(routine, input.at) : null;
   } catch (error) {
     logger.warn(error, "[slurp] Could not place the post in the Creator's day");
     return null;
   }
+}
+
+/**
+ * The bio and stage voice, identity-protected like the post prompt's, as what this page is about.
+ * The beat planner and the canon-anchor routes both read it, so they key the cached reading alike.
+ */
+export function slurpAccountPageAbout(
+  account: Pick<SlpAccount, "bio" | "settings">,
+  mode: Parameters<typeof resolveCreatorCharacterCanon>[2],
+  publicIdentity: PublicIdentity | null,
+): string {
+  // A concealed Creator whose source is gone has no identity to redact with: say nothing rather than leak.
+  const protect = (value: string | undefined) =>
+    mode !== "open" && !publicIdentity ? "" : (protectCreatorGeneratedIdentity(value, mode, publicIdentity) ?? "");
+  return slurpPageAboutText(protect(account.bio), protect(account.settings.privacy.stagePersonality));
+}
+
+/**
+ * Before a post is planned: the card as the cached reading sees it (more of each field than the
+ * prompt carries), the last posts as facts, and where the day stands at publication.
+ *
+ * The one background reading of a new or changed card starts here, whatever the planner: it is
+ * never waited on, and a prompt preview starts none.
+ */
+export async function prepareSlurpBeatRun(
+  db: DB,
+  input: {
+    account: Parameters<typeof slurpContinuityIdentityOf>[0] & Pick<SlpAccount, "id" | "bio" | "settings">;
+    canonText: string;
+    source: (Parameters<typeof resolveSlurpCreatorScheduleBlocks>[1] & Pick<SlpAccount, "kind" | "entityId">) | null;
+    disclosureMode: Parameters<typeof resolveCreatorCharacterCanon>[2];
+    publicIdentity: PublicIdentity | null;
+    /** The "Post ideas come from" setting is The Creator's life. */
+    beats: boolean;
+    /** A prompt preview: writes nothing and starts no reading. */
+    preview: boolean;
+    model: Pick<SlurpBeatContext, "connection" | "fallbackConnection" | "background">;
+    recentPosts: readonly SlpCreatorManagedPost[];
+    at: Date;
+    publishAt?: Date | null;
+  },
+): Promise<{ readingText: string; planText: string; day: SlurpDayMoment | null }> {
+  const card = await resolveCreatorCharacterCanon(
+    db,
+    input.source,
+    input.disclosureMode,
+    SLP_CANON_READING_SCALE,
+    // Empty starts no reading: the post's shorter text would replace a good reading with a worse one.
+  ).catch(() => "");
+  const page = slurpAccountPageAbout(input.account, input.disclosureMode, input.publicIdentity);
+  const readingText = card && page ? card + page : card;
+  const planText = input.canonText + page;
+  // Started here for every post, not only where a beat is planned: a directed post, an arc chapter
+  // or a "Model's choice" post plans no beat, and the brief still needs what must always hold.
+  if (!input.preview)
+    void slurpBeatAnchorsFor(
+      db,
+      input.account.id,
+      { canonText: planText, readingText, ...input.model },
+      input.at,
+    ).catch(() => null);
+  if (!input.beats) return { readingText, planText, day: null };
+  // Beats mode keeps the last posts as facts, not quotes, so they are written before planning.
+  if (!input.preview) await recordSlurpBeatFacts(db, input.account, input.recentPosts, input.at);
+  const day = await resolveSlurpBeatDay(db, {
+    accountId: input.account.id,
+    canonText: readingText,
+    source: input.source,
+    characters: createCharactersStorage(db),
+    at: input.publishAt ?? input.at,
+  });
+  return { readingText, planText, day };
 }
 
 /** Everything this Creator could refer back to. A failed read means no callback, never no post. */
@@ -410,41 +457,6 @@ async function readReferenceCandidates(db: DB, accountId: string, at: Date) {
     logger.warn(error, "[slurp] Could not read callback references");
     return [];
   }
-}
-
-/**
- * The anchors a Creator's editor shows: what is stored, whether the player edited it, and whether
- * it still belongs to the current card. A card edit makes an entry stale; the next Beats post then
- * reads the card again and replaces it, edits included.
- */
-export async function readSlurpCanonAnchorState(
-  db: DB,
-  accountId: string,
-  canonText: string,
-): Promise<{ anchors: SlurpCanonAnchors | null; edited: boolean; current: boolean; read: boolean }> {
-  const cached = (await readAnchorCache(db))[accountId];
-  return {
-    anchors: cached?.anchors ?? null,
-    edited: cached?.edited === true,
-    current: Boolean(cached) && cached!.key === anchorKey(canonText),
-    read: Boolean(cached),
-  };
-}
-
-/** Store the player's own anchors for the current card. They win until the card changes. */
-export async function saveSlurpCanonAnchors(
-  db: DB,
-  accountId: string,
-  canonText: string,
-  anchors: SlurpCanonAnchors | null,
-): Promise<void> {
-  await writeAnchors(db, accountId, { key: anchorKey(canonText), anchors, edited: true });
-}
-
-/** Forget the anchors, so the next Beats post reads the card again. */
-export async function clearSlurpCanonAnchors(db: DB, accountId: string): Promise<void> {
-  failedUntil.delete(accountId);
-  await writeAnchors(db, accountId, null);
 }
 
 /** How much of another Creator's card the post writer reads: who they are, not their whole story. */

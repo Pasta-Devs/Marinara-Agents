@@ -71,6 +71,7 @@ export function useSlurpOnboardingWizardModel(props: WizardProps) {
   // Empty means the Slurp-wide default image connection. Chosen here because the first post is
   // written during this run: setting it afterwards in Backstage would already be too late.
   const [imageConnectionId, setImageConnectionId] = useState("");
+  const [imageNameKnown, setImageNameKnown] = useState(true);
   const [generateNow, setGenerateNow] = useState(true);
   const [createdIds, setCreatedIds] = useState<string[]>([]);
   const [creationFailures, setCreationFailures] = useState(0);
@@ -122,6 +123,7 @@ export function useSlurpOnboardingWizardModel(props: WizardProps) {
     setSelectionInitialized(false);
     setSettingsSeeded(false);
     setDisclosure("open");
+    setImageNameKnown(true);
     setExceptions({});
     setGenerateNow(true);
     setCreatedIds([]);
@@ -270,6 +272,8 @@ export function useSlurpOnboardingWizardModel(props: WizardProps) {
           ? {}
           : {
               onboarding: state === "completed" ? "completed" : "not_started",
+              // First run only: background avatars and banners follow the images choice made here.
+              ...(settingsQuery.data?.onboarding === "completed" ? {} : { autoCreatorArtworkEnabled: imagesEnabled }),
             }),
       });
       return true;
@@ -315,6 +319,7 @@ export function useSlurpOnboardingWizardModel(props: WizardProps) {
             imageConnectionId: imageConnectionId || null,
             personaId: useSlurpUIStore.getState().viewerPersonaId ?? undefined,
             completeOnboarding: !selectionOnly,
+            imageNameKnown: imagesEnabled ? imageNameKnown : true,
           },
           onProgress: (done, total) => setSignUpProgress({ done, total }),
         });
@@ -482,6 +487,8 @@ export function useSlurpOnboardingWizardModel(props: WizardProps) {
     setImagesEnabled,
     imageConnectionId,
     setImageConnectionId,
+    imageNameKnown,
+    setImageNameKnown,
     generateNow,
     setGenerateNow,
     createdIds,

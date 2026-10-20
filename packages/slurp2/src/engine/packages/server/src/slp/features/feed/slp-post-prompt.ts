@@ -3,6 +3,7 @@ import {
   SLP_LOCKED_TEASER_MAX_LENGTH,
   type SlpCreatorGenerationRequest,
 } from "../../../../../shared/src/slp/slp-social-generation.schema.js";
+import { slpAccountGender, slpPronouns, slpWear } from "../../../../../shared/src/slp/slp-gender.js";
 import {
   type SlpAccount,
   type SlpCreatorManagedPost,
@@ -64,7 +65,8 @@ const NOODLER_FORMAT_PROMPTS: Record<SlpCreatorContentFormat, string> = {
 };
 
 export type SlurpPostPromptInput = {
-  account: Pick<SlpAccount, "displayName" | "handle" | "bio">;
+  /** `settings` carries the page's gender: pronouns, and what the clothing style `auto` means. */
+  account: Pick<SlpAccount, "displayName" | "handle" | "bio"> & { settings?: unknown };
   stagePersonality: string;
   /** The Creator's private content menu. See `slurp-post-guidance.ts`. */
   contentMenu?: string;
@@ -159,8 +161,8 @@ export function buildSlurpPostBlocks(input: SlurpPostPromptInput): SlurpPromptBl
       id: "character",
       kind: "context" as const,
       text: input.flavourBrief?.trim()
-        ? '"Who you are" is this Creator as a person: their temperament, voice, life, and what is going on lately. Take how they talk and what they care about from it. The stage voice describes how they perform on Slurp and how they treat the people reading, layered over that person, not a replacement for them.'
-        : "The source character is who this Creator actually is: take their temperament, register, humour, and interests from it. The stage voice describes how they perform on Slurp and how they treat the people reading, layered over that person, not a replacement for them.",
+        ? '"Who you are" is this Creator as a person: their temperament, voice, life, and what is going on lately. Take how they talk and what they care about from it. The stage voice describes how they perform on Slurp and how they treat the people reading, layered over that person, not a replacement for them. The bio and stage voice also say what this page is about, so an interest or hobby named there is something this Creator posts about.'
+        : "The source character is who this Creator actually is: take their temperament, register, humour, and interests from it. The stage voice describes how they perform on Slurp and how they treat the people reading, layered over that person, not a replacement for them. The bio and stage voice also say what this page is about, so an interest or hobby named there is something this Creator posts about.",
     },
     // Up to 20,000 characters of free-text user guidance spliced in bare, between two hard rules,
     // with nothing marking where it ends. Long guidance blurred into the disclosure instruction
@@ -237,7 +239,7 @@ export function buildSlurpPostBlocks(input: SlurpPostPromptInput): SlurpPromptBl
     {
       id: "continuity",
       kind: "editable" as const,
-      text: "Do not repeat a recent post's setting, activity, framing, or wardrobe, or a subject another Creator just posted about, and do not reuse wording. Do not rate the picture or narrate how it was taken unless that is the point of the post. Let how you are today shape the tone without restating it. Write the title and content in the language of your bio and recent posts.\nEvery post needs a title: a short specific headline of at most 80 characters, never a repeat of the body text.",
+      text: "Do not repeat a recent post's setting, framing, or exact outfit, or a subject another Creator just posted about, and do not reuse wording. A theme the bio, stage voice, or card names as what you do is not a repeat: give it a new setting, framing, and look each time. Do not rate the picture or narrate how it was taken unless that is the point of the post. Let how you are today shape the tone without restating it. Write the title and content in the language of your bio and recent posts.\nEvery post needs a title: a short specific headline of at most 80 characters, never a repeat of the body text.",
     },
     {
       id: "imageDirection",
@@ -254,14 +256,21 @@ export function buildSlurpPostBlocks(input: SlurpPostPromptInput): SlurpPromptBl
       id: "wardrobe",
       kind: "context" as const,
       optional: true,
-      text: input.allowScenePlan ? (input.wardrobePrompt?.trim() ?? "") : "",
+      // The closet expands `{{char}}` with the Creator's real name; a Hinted or Secret Creator's is redacted.
+      text: input.allowScenePlan
+        ? (protectCreatorGeneratedIdentity(
+            input.wardrobePrompt?.trim() ?? "",
+            input.disclosureMode,
+            input.publicIdentity,
+          ) ?? "")
+        : "",
     },
     {
       id: "output",
       kind: "required" as const,
       text: `${
         input.allowScenePlan
-          ? "Return one JSON object with title, content, and scene. scene has wardrobeId (from the supplied wardrobe, or null), setting, action, expression, visualDirection, outfit, and subject. The scene is the attractive, believable photograph for this caption and goes to an image model as written: write every scene field in English as concrete visible facts. setting and action make the angle concrete without changing the person, company, camera source, or access level. outfit is exactly what they wear in this photo (or what little). visualDirection is one memorable composition, light, or prop detail, not tags or policy. subject is who is in the photo as an image model knows them: for a character from an existing anime, game, show or book, their name and series the way image sites tag it ('fubuki (one punch man)'); null for an original character. Do not return imagePrompt or a poll." +
+          ? "Return one JSON object with title, content, and scene. scene has wardrobeId (from the supplied wardrobe, or null), setting, action, expression, visualDirection, outfit, and subject. The scene is the attractive, believable photograph for this caption and goes to an image model as written: write every scene field in English as concrete visible facts. setting and action make the angle concrete without changing the person, company, camera source, or access level. outfit is exactly what they wear in this photo (or what little); clothes are in good condition and suit them, never worn-out, faded or shabby, unless the card or the caption calls for that. visualDirection is one memorable composition, light, or prop detail, not tags or policy. subject is who is in the photo as an image model knows them: for a character from an existing anime, game, show or book, their name and series the way image sites tag it ('fubuki (one punch man)'); null for an original character. Do not return imagePrompt or a poll." +
             (input.sceneShots ? `\n${slurpSceneShotsInstruction(input.sceneShots)}` : "")
           : input.allowImagePrompt
             ? // The old contract asked for "subject, pose, setting, lighting, framing", which is a
@@ -307,13 +316,17 @@ export function buildNoodlerPostMessages(input: SlurpPostPromptInput): ChatMessa
     `Handle: @${protect(input.account.handle)}`,
     `Bio: ${protect(input.account.bio) || "No bio provided."}`,
     `Stage voice: ${protect(input.stagePersonality) || "No additional stage voice provided."}`,
+    `Pronouns: ${slpPronouns(slpAccountGender(input.account))}`,
+    `Clothing style: ${slpWear(slpAccountGender(input.account), input.stageFacts?.clothingStyle)}`,
     // Stage facts, not a character card. These are what this page is actually made of: the same
     // body in every picture, clothes that are hers, and places she is repeatedly in. Without them
     // the model reinvents an average person each post, which is what made every Creator read the
     // same way.
     ...(input.stageFacts?.appearance?.trim() ? [`Appearance: ${protect(input.stageFacts.appearance)}`] : []),
     ...(input.stageFacts?.wardrobe?.trim() ? [`Usual wardrobe: ${protect(input.stageFacts.wardrobe)}`] : []),
-    ...(input.stageFacts?.locations?.trim() ? [`Where her life happens: ${protect(input.stageFacts.locations)}`] : []),
+    ...(input.stageFacts?.locations?.trim()
+      ? [`Where their life happens: ${protect(input.stageFacts.locations)}`]
+      : []),
     ...(input.contentMenu?.trim()
       ? [
           `Content menu (private; what this Creator offers and will not do, never quoted): ${protect(input.contentMenu)}`,

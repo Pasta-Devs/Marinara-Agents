@@ -5,10 +5,13 @@ import { createSlurpStorage } from "../../data/slp-storage.js";
 import {
   isFollowUpDue,
   isFollowUpLate,
+  isFollowUpPastAwayLimit,
   formatFollowUpContext,
+  slurpAllowsUnsolicitedText,
   type ScheduledFollowUp,
 } from "../../modules/messages/slp-follow-up.js";
-import { generateSlurpMessageReply, SlurpMessageBudgetUnavailableError } from "./slp-message-generation-service.js";
+import { generateSlurpMessageReply } from "./slp-message-generation-service.js";
+import { SlurpMessageBudgetUnavailableError } from "./slp-message-budget-error.js";
 import { resolveSlurpTextConnection } from "../../base/identity/slp-connection.js";
 import { describeSlurpDayVibe } from "../world/slp-world-contract.js";
 import { createConnectionsStorage } from "../../../services/storage/connections.storage.js";
@@ -22,6 +25,7 @@ import { trySlpOperation } from "../../base/locking/slp-operation-lock.js";
 import { tryCreatorAccountOperation } from "../../base/locking/slp-account-operation-lock.js";
 import { incrementFollowUpCount } from "../../modules/messages/slp-thread-notes.js";
 import { slurpCreatorInScene } from "./scenes/slp-roleplay-scene-lock.js";
+import { saveSlurpMessageDeepDetails } from "../../data/messages/slp-message-deep-details-storage.js";
 
 const INITIAL_DELAY_MS = 60_000; // Start after 1 minute
 const POLL_MS = 120_000; // Check every 2 minutes
@@ -142,7 +146,12 @@ export function startSlurpFollowUpScheduler(app: FastifyInstance, registerStop?:
                   settings,
                 )
               : { online: true, activity: null, minutesUntilOnline: 0 };
-            const availability = { ...naturalAvailability, ...details.availability };
+            const availability = {
+              ...naturalAvailability,
+              ...details.availability,
+              // Twelve hours past its first due time it no longer waits for the Creator to be free.
+              ...(isFollowUpPastAwayLimit(followUp.firstDueAt ?? followUp.scheduledAt) ? { online: true } : {}),
+            };
             const quiet = settings.nightQuiet && isCreatorNightQuietTime(new Date());
             if (coolingOff || quiet || (!availability.online && availability.minutesUntilOnline !== null)) {
               const delayMinutes = coolingOff
@@ -168,6 +177,21 @@ export function startSlurpFollowUpScheduler(app: FastifyInstance, registerStop?:
             // asked for it) is dropped, never postponed. A promise was made in a reply and still goes
             // out (Pulse + E decision: follow-ups are promises; the switch stops new first messages).
             if (!messaging.proactiveMessages && followUp.type === "opener") {
+              await messages.cancelScheduledFollowUp(threadRow.id, followUp.id);
+              continue;
+            }
+            // Nobody asked for this one either (an opener, a check-in, or a recurring update); a
+            // promise, reminder, or task update is owed and is never checked here. Cancelled, not
+            // postponed, same as the switch above: `appendMessage` re-checks this at write time
+            // (against a fresh settings read, not this poll's), so this is only the early exit that
+            // saves the model call — a toggle flipped mid-poll never causes a wrong cancellation.
+            const unsolicited =
+              followUp.type === "opener" || followUp.type === "check_in" || followUp.type === "recurring";
+            if (
+              unsolicited &&
+              (await slurp.getSettings()).messagesPauseFollowUpsUntilReply &&
+              !slurpAllowsUnsolicitedText(history)
+            ) {
               await messages.cancelScheduledFollowUp(threadRow.id, followUp.id);
               continue;
             }
@@ -247,6 +271,13 @@ export function startSlurpFollowUpScheduler(app: FastifyInstance, registerStop?:
                 await messages.cancelScheduledFollowUp(threadRow.id, followUp.id);
                 return false;
               }
+              if (reply.deepDetails)
+                await saveSlurpMessageDeepDetails(app.db, {
+                  messageId: stored.id,
+                  threadId: threadRow.id,
+                  creatorAccountId: threadRow.creatorAccountId,
+                  record: reply.deepDetails,
+                });
               await messages.recordReplyOutcome(threadRow.id, {
                 moodShift: reply.moodShift,
                 remember: reply.remember,

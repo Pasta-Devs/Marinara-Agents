@@ -1,6 +1,6 @@
 import { MAX_RELATIONSHIP_DESCRIPTION_LENGTH, MAX_RELATIONSHIP_LABEL_LENGTH } from "./state.mjs";
 
-export const PERSONA_TRACKING_INSTRUCTIONS = "Also track each assigned character's subjective perception of the active persona. Return a compact p array alongside u. Each p item is exactly [characterAlias,state,label,perception,colorCategory]. perception must begin with the character's natural name, name the persona, and describe only that character's subjective, possibly mistaken view. Never assert or invent the persona's thoughts, feelings, wants, intentions, dialogue, decisions, or actions. Omit unchanged and locked perceptions.";
+export const PERSONA_TRACKING_INSTRUCTIONS = "Also track each assigned character's subjective perception of the active persona. Return a compact p array alongside u. existingPersonaPerceptions is the compact persona baseline; each item is [characterAlias,state,label,perception,colorCategory,locked]. Each p item must contain exactly five positional values: characterAlias, state, label, perception, colorCategory. Never copy the baseline locked value or the activePersona alias into p; copy characterAlias only from allowedCharacters.alias. Never put the activePersona alias in u; a character's view of the persona belongs only in p. perception must begin with the character's natural name, name the persona, and describe only that character's subjective, possibly mistaken view. Never assert or invent the persona's thoughts, feelings, wants, intentions, dialogue, decisions, or actions. Omit unchanged and locked perceptions.";
 const COLORS = new Set(["positive", "neutral", "negative", "complicated"]);
 const compact = (value) => typeof value === "string" ? value.replace(/\s+/gu, " ").trim() : "";
 const escapeRegex = (value) => value.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
@@ -12,6 +12,12 @@ export class PersonaTrackingError extends Error {
   }
 }
 function fail(message) { throw new PersonaTrackingError(message); }
+
+// Quotes a value the model wrote so error messages show exactly what it sent.
+export function describeModelValue(value) {
+  const text = typeof value === "string" ? `"${value}"` : JSON.stringify(value) ?? String(value);
+  return text.length > 42 ? `${text.slice(0, 41)}…` : text;
+}
 
 export function modelPersonaSnapshot(snapshot, allowedCharacters) {
   const aliases = new Map(allowedCharacters.map((entry) => [entry.characterId, entry.alias]));
@@ -51,10 +57,15 @@ export function normalizePersonaDelta(input, allowedCharacters, personaSnapshot,
   const seen = new Set();
   const updates = [];
   for (const [index, tuple] of input.entries()) {
-    if (!Array.isArray(tuple) || tuple.length !== 5) fail(`Persona update ${index + 1} must contain exactly five values.`);
+    if (!Array.isArray(tuple) || tuple.length !== 5) {
+      const received = Array.isArray(tuple) ? `${tuple.length} values` : "a non-array value";
+      fail(`Persona update ${index + 1} must contain exactly five values: characterAlias, state, label, perception, colorCategory (received ${received}).`);
+    }
     const [alias, state, rawLabel, rawDescription, colorCategory] = tuple;
     const character = byAlias.get(alias);
-    if (!character) fail("Persona update references an unknown character alias.");
+    if (!character) {
+      fail(`Persona update ${index + 1} uses an unknown character alias (${describeModelValue(alias)}); allowed aliases are ${allowedCharacters.map((entry) => entry.alias).join(", ") || "none"}.`);
+    }
     if (seen.has(character.characterId)) fail("Persona result contains a duplicate character perception.");
     seen.add(character.characterId);
     if (state !== "defined" && state !== "undefined") fail("Persona perception state must be defined or undefined.");

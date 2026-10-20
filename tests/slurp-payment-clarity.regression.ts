@@ -32,7 +32,7 @@ assert.equal(ended.wallet.coins, 100, "an ended cancellation must not charge ano
 assert.equal(ended.wallet.subscriptions.c1, undefined);
 
 const storage = read("packages/slurp2/src/engine/packages/server/src/services/storage/slurp.storage.ts");
-assert.match(storage, /!expire && current && Date\.parse\(current\.paidThroughAt\) > Date\.now\(\)/u);
+assert.match(storage, /!expire && !gone && current && Date\.parse\(current\.paidThroughAt\) > Date\.now\(\)/u);
 assert.match(storage, /unsubscribe\(viewerAccountId, creatorAccountId, true, true\)/u);
 
 // 5.1 / 5.3 / 5.4 copy and the cancel confirmation.

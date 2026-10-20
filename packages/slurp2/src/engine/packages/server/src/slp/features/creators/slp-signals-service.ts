@@ -42,7 +42,7 @@ export async function listSlurpSignals(db: DB, creatorId: string, at = new Date(
     listSlurpOtherCreatorSubjects(db, creatorId, at),
     source ? safe(resolveSlurpCreatorScheduleBlocks(createCharactersStorage(db), source, at), null) : null,
   ]);
-  const moment = day ? slurpTimelineMoment(day.blocks, day.localNow) : null;
+  const moment = day ? slurpTimelineMoment(day.blocks, day.localNow, day) : null;
   return slurpOrderSignals(
     [
       ...posts.map(slurpSignalFromPost),

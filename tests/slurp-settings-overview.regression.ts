@@ -3,7 +3,7 @@ import { readFile } from "node:fs/promises";
 import {
   slurpActivityPresetForSettings,
   slurpActivityPresetPatch,
-} from "../packages/slurp2/src/engine/packages/client/src/components/slurp/slurp-activity-presets";
+} from "../packages/slurp2/src/engine/packages/client/src/slp/modules/creator/slp-activity-presets";
 import { slurp2BackstageSource } from "./slurp2-backstage-source";
 import { slurp2Source } from "./slurp2-source";
 
@@ -22,25 +22,33 @@ async function main() {
     readFile("packages/slurp2/src/engine/packages/client/src/slp/base/navigation/slp-navigation.types.ts", "utf8"),
     slurp2Source("packages/slurp2/src/engine/packages/client/src/stores/slurp-package.store.ts"),
     slurp2Source("packages/slurp2/src/engine/packages/client/src/components/slurp/SlurpHome.tsx"),
-    readFile("packages/slurp2/src/engine/packages/client/src/components/slurp/SlurpShell.tsx", "utf8"),
-    slurp2Source("packages/slurp2/src/engine/packages/client/src/localization/locales/en.json"),
+    // SlpShell.tsx alone no longer carries its own theme tokens; read the shell's full
+    // concatenation (chrome tokens + persona switcher + shell) like the other tests do.
+    slurp2Source("packages/slurp2/src/engine/packages/client/src/components/slurp/SlurpShell.tsx"),
+    slurp2Source("packages/slurp2/src/engine/packages/client/src/slp/locales/en.json"),
   ]);
 
   assert.match(navigation, /section\?: SlurpBackstageSection;/u);
   assert.match(navigation, /target\?: SlurpBackstageTarget;/u);
   // The store validates both halves of a deep link and migrates every persisted legacy section.
-  assert.match(store, /isSlurpBackstageSection\(value\.section\)/u);
+  assert.match(store, /isSlpBackstageSection\(value\.section\)/u);
   assert.match(store, /targetBelongsToSection\(value\.section, value\.target\)/u);
-  assert.match(store, /SLURP_LEGACY_SETTINGS_DESTINATION/u);
+  // Slice 12 renamed SLURP_LEGACY_SETTINGS_DESTINATION to SLP_LEGACY_SETTINGS_DESTINATION.
+  assert.match(store, /SLP_LEGACY_SETTINGS_DESTINATION/u);
   assert.match(home, /section: "overview"/u);
   assert.match(settings, /const settingsSections = SLURP_SETTINGS_SECTIONS;/u);
   assert.match(
     navigation,
-    /SLURP_BACKSTAGE_SECTIONS as SLURP_SETTINGS_SECTIONS/u,
+    /SLP_BACKSTAGE_SECTIONS as SLURP_SETTINGS_SECTIONS/u,
     "the five Backstage destinations must remain the shared navigation source",
   );
   assert.match(settings, /section === "overview"/u);
-  assert.match(settings, /const imagesReady = imageConnections\.length > 0 && imageEnabledCreators\.length > 0/u);
+  // Moved into the shared slp-media-backstage-contract.ts hook, and refined to check the actually
+  // selected (or Engine-default) connection rather than "any connection exists in the list".
+  assert.match(
+    settings,
+    /const imagesReady =\s*\n\s*Boolean\(selectedImageConnection \|\| engineDefaultImageConnection\) && imageEnabledCreators\.length > 0/u,
+  );
   assert.match(settings, /updatePatch\(\{ autoPostingScheduleEnabled: true, postsPerDay: value \}\)/u);
   assert.match(settings, /slurpAudiencePresetFor\(settings\)/u);
   assert.match(settings, /<OverviewActivity/u);
@@ -51,8 +59,13 @@ async function main() {
   assert.match(shell, /"--slurp-nav-active"/u);
   assert.match(english, /"ui\.slurp\.settings\.tabs\.overview": "Overview"/u);
   assert.match(home, /inlineAdsEnabled=\{slurpSettingsQuery\.data\?\.inlineAdsEnabled !== false\}/u);
-  assert.match(home, /if \(!inlineAdsEnabled \|\| searchTerm \|\| tab !== "all" \|\| !ad\) return null;/u);
-  assert.match(home, /onCompose: openPostComposer/u);
+  // Following now carries ads too (the query already tags "following"); only the search results
+  // stay ad-free. Dropped the tab !== "all" gate on purpose.
+  assert.match(home, /if \(!inlineAdsEnabled \|\| searchTerm \|\| !ad\) return null;/u);
+  // The shell-level onCompose callback was dropped when composing consolidated into one
+  // full-screen composer sheet (89bdb4f53); openPostComposer is still exported and used directly
+  // by its own callers (e.g. New post in the leading-actions row).
+  assert.match(home, /const openPostComposer = \(\) => \{/u);
   assert.match(settings, /value=\{settings\.inlineAdsEnabled\}/u);
   assert.match(settings, /target === "ads"/u);
   assert.match(settings, /inlineAdsFrequency/u);
@@ -64,16 +77,12 @@ async function main() {
   );
   // Lorebook context is opt-in, scoped to Slurp, and never costs a post.
   assert.match(settings, /update\("enableLorebookContext", value\)/u);
-  const generation = await readFile(
+  const generation = slurp2Source(
     "packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-generation.service.ts",
-    "utf8",
   );
-  assert.match(generation, /settings\.enableLorebookContext\s*\?\s*await processLorebooks\(/u);
+  assert.match(generation, /if \(!settings\.enableLorebookContext\) return empty;[\s\S]*?await processLorebooks\(/u);
   assert.match(generation, /generationTriggers: \["slurp"\],\s*previewOnly: true,/u);
-  assert.match(
-    generation,
-    /\.catch\(\(error: unknown\) => \{\s*logger\.warn\(error, "\[slurp\] Lorebook context failed/u,
-  );
+  assert.match(generation, /\} catch \(error\) \{\s*logger\.warn\(error, "\[slurp\] Lorebook context failed/u);
   assert.match(generation, /"# World lore", protect\(input\.loreContext\)/u);
   // Carryover to chats is controlled from Slurp itself.
   assert.match(settings, /ui\.slurp\.settings\.carryover\.title/u);

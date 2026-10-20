@@ -92,7 +92,7 @@ for (const bad of [Number.NaN, Infinity]) {
   assert.deepEqual(slurpMembersActiveAt(roster, 3, 5), slurpMembersActiveAt(roster, 3, 5));
   const night = slurpMembersActiveAt(roster, 3, 5).map((member) => member.activeHour);
   const morning = slurpMembersActiveAt(roster, 9, 5).map((member) => member.activeHour);
-  assert.notDeepEqual(night, morning, "different hours must bring different people");
+  assert.notDeepStrictEqual(night, morning, "different hours must bring different people");
   assert.ok(night.every((hour) => Math.min(Math.abs(hour - 3), 24 - Math.abs(hour - 3)) <= 3));
   assert.deepEqual(slurpMembersActiveAt(roster, 3, 0), []);
 }
@@ -141,7 +141,10 @@ assert.match(slurpStorage, /advanceAudienceTie\(viewerAccountId, post\.authorAcc
 // Rapport weighs a tip and an unlock differently, so the funnel has to record which one it was.
 // It used to read both back out of the wallet ledger, which is capped at 60 entries across every
 // creator — a whale's history aged out of their own score.
-assert.match(slurpStorage, /unlocked: price/u);
+assert.match(
+  slurp2Source("packages/slurp2/src/engine/packages/server/src/services/storage/slurp-messages.storage.ts"),
+  /unlocked: price/u,
+);
 // Tips record their share once the payment is durable, in the shared tip effects.
 assert.match(
   read("services/storage/slurp-messages.storage.ts"),

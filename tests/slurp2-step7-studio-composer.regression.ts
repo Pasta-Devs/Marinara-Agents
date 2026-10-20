@@ -81,7 +81,14 @@ assert.match(
   composer,
   /footer=\{[\s\S]*?<SlpPrimaryButton onClick=\{\(\) => void publish\(\)\} disabled=\{!canPost\}/u,
 );
-assert.ok(composer.indexOf("{media}") < composer.indexOf("<SlpAutoGrowTextarea"), "media before the caption");
+// 0.3.31: the picture, who sees it, then one switch for the text: typed by hand or Guided.
+const body = composer.slice(composer.indexOf('data-component="SlurpHome.NoodlerPostComposer"'));
+assert.ok(body.indexOf("{media}") < body.indexOf("<SlpComposerAudience"), "the picture on top");
+assert.ok(body.indexOf("<SlpComposerAudience") < body.indexOf("<SlpSegment"), "audience before the text switch");
+assert.ok(body.indexOf("<SlpSegment") < body.indexOf("<SlpPostGuide"), "the switch before Guided");
+assert.match(body, /<div hidden=\{by !== "guide"\}>\s*<SlpPostGuide/u);
+assert.match(body, /<div hidden=\{by !== "me"\} aria-busy=\{drafting\}/u);
+assert.match(composer, /useState<"me" \| "guide">\("me"\)/u, "a new post opens on Write it myself");
 assert.ok(
   composer.indexOf("<SlpComposerAudience") < composer.indexOf('id="slurp-composer-advanced"'),
   "access chips before Advanced",
@@ -141,12 +148,10 @@ assert.ok(
   crop.indexOf("aria-pressed={aspect === option.value}") < crop.indexOf('type="range"'),
   "chips before the zoom slider",
 );
-assert.match(client("slp-client-entry.tsx"), /z-index: 10002;/u, "toasts (Undo) sit above the sheets");
-assert.match(
-  client("slp-client-entry.tsx"),
-  /return portal \? createPortal\(toaster, portal\) : toaster;/u,
-  "in the sheets' portal",
-);
+// Toasts (Undo) are the Engine's, which sit above the sheets: Slurp's portal stays on the Engine's Modal layer
+// (Pasta-Devs/Marinara-Agents#1487).
+assert.match(client("slp-client-entry.tsx"), /zIndex: "10000",/u, "the sheets' portal sits below the Engine's toasts");
+assert.doesNotMatch(client("slp-client-entry.tsx"), /<Toaster\b/u, "Slurp renders no toaster of its own");
 
 // ── 3. Studio: money, then fans, then goal, posts, and the storyline closed at the end ──
 // W: Studio's own-page half is the Dashboard sheet; the storyline moved to Stir (chapter moves) and

@@ -16,6 +16,34 @@
     negative: "#fb7185",
     complicated: "#c084fc",
   });
+  const SECTION_TITLE = "Relationship Tracker";
+  const SECTION_COLLAPSED_STORAGE_KEY = "marinara.relationship-tracker.trackerPanelCollapsed";
+  // 24px stroke icons drawn like the Lucide icons on the Engine's built-in tracker sections.
+  const svgIcon = (paths, size) => `<svg viewBox="0 0 24 24" width="24" height="24" style="width:${size};height:${size}" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">${paths}</svg>`;
+  const WEB_ICON_PATHS = '<circle cx="12" cy="5" r="3"></circle><circle cx="5" cy="18" r="3"></circle><circle cx="19" cy="18" r="3"></circle><path d="M10.6 7.6 6.4 15.4M13.4 7.6l4.2 7.8M8 18h8"></path>';
+  const CHEVRON_ICON_PATHS = '<path d="m6 9 6 6 6-6"></path>';
+
+  // Remembered across reloads like the built-in sections' collapsed state; blocked storage keeps it for this page.
+  let sectionCollapsedFallback = false;
+
+  function isSectionCollapsed() {
+    try {
+      const stored = globalThis.localStorage?.getItem(SECTION_COLLAPSED_STORAGE_KEY);
+      if (stored === "true" || stored === "false") return stored === "true";
+    } catch {
+      // Storage can be blocked; use this page's choice.
+    }
+    return sectionCollapsedFallback;
+  }
+
+  function rememberSectionCollapsed(collapsed) {
+    sectionCollapsedFallback = collapsed;
+    try {
+      globalThis.localStorage?.setItem(SECTION_COLLAPSED_STORAGE_KEY, String(collapsed));
+    } catch {
+      // The choice still lasts for this page.
+    }
+  }
 
   const escapeHtml = (value) => String(value ?? "")
     .replaceAll("&", "&amp;")
@@ -134,6 +162,72 @@
       .find((edge) => pairKey(edge.characterAId, edge.characterBId) === key) ?? null;
   }
 
+  const COLOR_CATEGORY_NAMES = ["positive", "neutral", "negative", "complicated"];
+  const reviewString = (value) => typeof value === "string" ? value : "";
+
+  function normalizeReviewChange(change) {
+    const common = {
+      state: change?.state === "undefined" ? "undefined" : "defined",
+      label: reviewString(change?.label),
+      colorCategory: reviewString(change?.colorCategory),
+      issue: reviewString(change?.issue),
+      note: reviewString(change?.note),
+    };
+    if (change?.kind === "card") {
+      return {
+        kind: "card",
+        aliasA: reviewString(change.aliasA),
+        aliasB: reviewString(change.aliasB),
+        perspectiveA: reviewString(change.perspectiveA),
+        perspectiveB: reviewString(change.perspectiveB),
+        ...common,
+      };
+    }
+    if (change?.kind === "persona") return { kind: "persona", alias: reviewString(change.alias), perception: reviewString(change.perception), ...common };
+    return null;
+  }
+
+  // The server's editable copy of a History answer it rejected; malformed parts are left out.
+  function normalizeHistoryReview(value, reason) {
+    if (!value || typeof value !== "object" || typeof value.id !== "string" || !value.id) return null;
+    const changes = (Array.isArray(value.changes) ? value.changes : []).map(normalizeReviewChange).filter(Boolean);
+    return {
+      id: value.id,
+      reason: reviewString(reason),
+      modelResponse: reviewString(value.modelResponse),
+      characters: (Array.isArray(value.characters) ? value.characters : [])
+        .filter((character) => typeof character?.alias === "string" && typeof character?.name === "string")
+        .map(({ alias, name }) => ({ alias, name })),
+      persona: typeof value.persona?.name === "string" ? { name: value.persona.name } : null,
+      changes,
+      initialCount: changes.length,
+      saving: null,
+      error: "",
+      savedAny: false,
+      detailsOpen: false,
+    };
+  }
+
+  function reviewRequestChange(change) {
+    const defined = change.state === "defined";
+    const prose = (value) => defined ? value.trim() : "";
+    const colorCategory = defined && change.colorCategory ? change.colorCategory : null;
+    return change.kind === "card"
+      ? {
+        kind: "card",
+        aliasA: change.aliasA,
+        aliasB: change.aliasB,
+        state: change.state,
+        label: prose(change.label),
+        perspectiveA: prose(change.perspectiveA),
+        perspectiveB: prose(change.perspectiveB),
+        colorCategory,
+      }
+      : { kind: "persona", alias: change.alias, state: change.state, label: prose(change.label), perception: prose(change.perception), colorCategory };
+  }
+
+  const countOf = (count, noun) => `${count} ${noun}${count === 1 ? "" : "s"}`;
+
   class RelationshipTrackerElement extends HTMLElement {
     static get observedAttributes() {
       return ["view"];
@@ -225,6 +319,7 @@
         status: "idle",
         error: "",
         result: null,
+        review: null,
       };
     }
 
@@ -308,7 +403,7 @@
 
     isEditing() {
       const active = this.shadowRoot.activeElement;
-      return Boolean(active?.closest?.("[data-relationship-editor], [data-persona-editor]") &&
+      return Boolean(active?.closest?.("[data-relationship-editor], [data-persona-editor], [data-history-review]") &&
         /^(INPUT|TEXTAREA|SELECT)$/u.test(active.tagName));
     }
 
@@ -317,6 +412,22 @@
       for (const group of this.shadowRoot.querySelectorAll?.("[data-line-group]") ?? []) {
         group.classList.toggle("line-label-active", group.dataset.lineGroup === key);
       }
+    }
+
+    // Collapse in place: a full render() would wipe unsaved editor input.
+    setSectionCollapsed(collapsed) {
+      rememberSectionCollapsed(collapsed);
+      const toggle = this.shadowRoot.querySelector?.("[data-section-toggle]");
+      toggle?.setAttribute("aria-expanded", String(!collapsed));
+      toggle?.setAttribute("title", `${collapsed ? "Expand" : "Collapse"} ${SECTION_TITLE}`);
+      const body = this.shadowRoot.querySelector?.("[data-section-body]");
+      if (body) body.hidden = collapsed;
+    }
+
+    // The desktop Trackers window wraps each tracker in a drawer that already shows its title and
+    // collapse arrow, as it does for built-in trackers; only the Tracker Panel needs this header.
+    hostProvidesHeader() {
+      return Boolean(this.closest?.(".mari-drawer__body"));
     }
 
     async loadPortrait(characterId) {
@@ -465,12 +576,13 @@
           status: "error",
           error: `Choose an integer from ${MIN_HISTORY_MESSAGES} through ${MAX_HISTORY_MESSAGES}.`,
           result: null,
+          review: null,
         };
         this.render();
         return;
       }
       const token = ++this._historyRequestToken;
-      this._history = { chatId, messageCount, status: "updating", error: "", result: null };
+      this._history = { chatId, messageCount, status: "updating", error: "", result: null, review: null };
       this.render();
       try {
         const response = await apiFetch(`/api/relationship-tracker/v1/chats/${encodeURIComponent(chatId)}/history-update`, {
@@ -478,9 +590,13 @@
           body: { messageCount },
         });
         const body = await response.json().catch(() => ({}));
-        if (!response.ok) throw new Error(responseError(response, body, "History update failed"));
+        if (!response.ok) {
+          throw Object.assign(new Error(responseError(response, body, "History update failed")), {
+            review: normalizeHistoryReview(body?.review, body?.error),
+          });
+        }
         if (token !== this._historyRequestToken || chatId !== this.currentChatId()) return;
-        this._history = { chatId, messageCount, status: "success", error: "", result: body };
+        this._history = { chatId, messageCount, status: "success", error: "", result: body, review: null };
         await this.loadPanel(chatId);
       } catch (error) {
         if (token !== this._historyRequestToken || chatId !== this.currentChatId()) return;
@@ -490,9 +606,91 @@
           status: "error",
           error: error instanceof Error ? error.message : String(error),
           result: null,
+          review: error?.review ?? null,
         };
         this.render();
       }
+    }
+
+    // Saves one kind of reviewed change; the server checks it against the rejected run's messages and state.
+    async saveReviewedChanges(kind) {
+      const chatId = this.currentChatId();
+      const review = this._history.review;
+      if (!chatId || !review || review.saving || this._history.chatId !== chatId ||
+          this._panel.status === "saving" || this._history.status === "updating") return;
+      const sent = review.changes.filter((change) => change.kind === kind);
+      if (sent.length === 0) return;
+      const token = ++this._historyRequestToken;
+      this._history = { ...this._history, review: { ...review, saving: kind, error: "" } };
+      this.render();
+      try {
+        const response = await apiFetch(`/api/relationship-tracker/v1/chats/${encodeURIComponent(chatId)}/history-update/review`, {
+          method: "POST",
+          body: { reviewId: review.id, changes: sent.map(reviewRequestChange) },
+        });
+        const body = await response.json().catch(() => ({}));
+        if (!response.ok) {
+          throw Object.assign(new Error(responseError(response, body, "Saving the reviewed changes failed")), {
+            code: typeof body?.code === "string" ? body.code : "",
+            review: normalizeHistoryReview(body?.review, body?.error),
+          });
+        }
+        if (token !== this._historyRequestToken || chatId !== this.currentChatId()) return;
+        const remaining = review.changes.filter((change) => change.kind !== kind);
+        this._history = {
+          ...this._history,
+          status: "success",
+          error: "",
+          result: body,
+          review: remaining.length > 0 ? { ...review, changes: remaining, saving: null, error: "", savedAny: true } : null,
+        };
+        await this.loadPanel(chatId);
+      } catch (error) {
+        if (token !== this._historyRequestToken || chatId !== this.currentChatId()) return;
+        const message = error instanceof Error ? error.message : String(error);
+        if (error?.review) {
+          // Show the server's check of what was sent in place, keeping the notes and the other kind's changes.
+          let position = 0;
+          const changes = review.changes.map((change) => {
+            if (change.kind !== kind) return change;
+            const checked = error.review.changes[position++];
+            return checked ? { ...checked, note: change.note } : change;
+          });
+          this._history = { ...this._history, review: { ...review, changes, saving: null, error: message } };
+        } else if (["history_review_expired", "history_review_stale", "history_state_changed"].includes(error?.code)) {
+          this._history = { ...this._history, status: "error", error: message, result: null, review: null };
+        } else {
+          this._history = { ...this._history, review: { ...review, saving: null, error: message } };
+        }
+        this.render();
+      }
+    }
+
+    // Edits are kept on the review itself so a re-render never loses them.
+    updateReviewChange(index, field, value, rerender) {
+      const review = this._history.review;
+      const change = review?.changes?.[index];
+      if (!change || review.saving || !Object.hasOwn(change, field) || field === "kind" || field === "issue" || field === "note") return;
+      change[field] = value;
+      change.issue = "";
+      if (rerender) this.render();
+    }
+
+    removeReviewChange(index) {
+      const review = this._history.review;
+      if (!review || review.saving) return;
+      review.changes = review.changes.filter((_, position) => position !== index);
+      this.render();
+    }
+
+    dismissReview() {
+      if (!this._history.review || this._history.review.saving) return;
+      this._history = {
+        ...this._history,
+        review: null,
+        ...(this._history.status === "error" ? { status: "idle", error: "" } : {}),
+      };
+      this.render();
     }
 
     bindControls() {
@@ -606,6 +804,25 @@
           this._history.messageCount = messageCount;
         }
       });
+      for (const row of this.shadowRoot.querySelectorAll?.("[data-review-change]") ?? []) {
+        const index = Number(row.dataset.reviewChange);
+        for (const control of row.querySelectorAll?.("[data-review-field]") ?? []) {
+          // Choices change the row's wording and fields, so they re-render; typing only updates the draft.
+          const choice = control.tagName === "SELECT";
+          control.addEventListener(choice ? "change" : "input", () => {
+            this.updateReviewChange(index, control.dataset.reviewField, control.value, choice);
+          });
+        }
+        row.querySelector?.("[data-review-remove]")?.addEventListener("click", () => this.removeReviewChange(index));
+      }
+      for (const button of this.shadowRoot.querySelectorAll?.("[data-review-save]") ?? []) {
+        button.addEventListener("click", () => void this.saveReviewedChanges(button.dataset.reviewSave));
+      }
+      this.shadowRoot.querySelector?.("[data-review-dismiss]")?.addEventListener("click", () => this.dismissReview());
+      const reviewDetails = this.shadowRoot.querySelector?.("[data-review-details]");
+      reviewDetails?.addEventListener("toggle", () => {
+        if (this._history.review) this._history.review.detailsOpen = reviewDetails.open;
+      });
       for (const hitTarget of this.shadowRoot.querySelectorAll?.("[data-line-key]") ?? []) {
         hitTarget.addEventListener("pointerup", (event) => {
           if (event.pointerType !== "touch" && event.pointerType !== "pen") return;
@@ -620,6 +837,9 @@
         if ((event.pointerType === "touch" || event.pointerType === "pen") && !packageLine && this._activeLineLabel !== null) {
           this.setActiveLineLabel(null);
         }
+      });
+      this.shadowRoot.querySelector?.("[data-section-toggle]")?.addEventListener("click", () => {
+        this.setSectionCollapsed(!isSectionCollapsed());
       });
       const settingsDetails = this.shadowRoot.querySelector?.("[data-settings-details]");
       settingsDetails?.addEventListener("toggle", () => { this._settingsOpen = settingsDetails.open; });
@@ -849,14 +1069,22 @@
       const messageCount = Number.isInteger(history.messageCount) ? history.messageCount : DEFAULT_HISTORY_MESSAGES;
       const updating = history.status === "updating";
       const unavailable = busy || value?.configured !== true;
+      const review = history.review ?? null;
       let feedback = "";
       if (history.status === "success" && history.result) {
         const processed = Number.isInteger(history.result.processedMessageCount) ? history.result.processedMessageCount : messageCount;
         const saved = Number.isInteger(history.result.diagnostics?.savedUpdates) ? history.result.diagnostics.savedUpdates : 0;
+        const perceptions = Number.isInteger(history.result.diagnostics?.personaUpdates) ? history.result.diagnostics.personaUpdates : 0;
         const ignored = Number.isInteger(history.result.diagnostics?.ignoredLockedUpdates)
           ? history.result.diagnostics.ignoredLockedUpdates
           : 0;
-        feedback = `<p class="history-success" role="status">Processed ${processed} recent message${processed === 1 ? "" : "s"}; saved ${saved} relationship change${saved === 1 ? "" : "s"}${ignored > 0 ? `; preserved ${ignored} manually locked update${ignored === 1 ? "" : "s"}` : ""}.</p>`;
+        const savedParts = [
+          ...(saved > 0 || perceptions === 0 ? [countOf(saved, "relationship change")] : []),
+          ...(perceptions > 0 ? [countOf(perceptions, "persona perception")] : []),
+        ];
+        feedback = `<p class="history-success" role="status">Processed ${processed} recent message${processed === 1 ? "" : "s"}; saved ${savedParts.join(" and ")}${ignored > 0 ? `; preserved ${ignored} manually locked update${ignored === 1 ? "" : "s"}` : ""}.</p>`;
+      } else if (history.status === "error" && review) {
+        feedback = "";
       } else if (history.status === "error") {
         feedback = `<p class="error" role="alert">${escapeHtml(history.error)}</p>`;
       } else if (updating) {
@@ -876,7 +1104,86 @@
             ? "Check the latest recent messages and updates all lines in the web that aren't locked."
             : "Select an injection mode below to initialize this chat before updating from history."}</p>
           ${feedback}
+          ${review ? this.renderHistoryReview(review, busy) : ""}
         </section>
+      `;
+    }
+
+    renderReviewChange(change, index, review, names, disabled) {
+      const characterOptions = (selected) => `${names.has(selected) ? "" : `<option value="" selected disabled>Choose a character…</option>`}${review.characters.map((character) => `<option value="${escapeHtml(character.alias)}" ${character.alias === selected ? "selected" : ""}>${escapeHtml(character.name)}</option>`).join("")}`;
+      const defined = change.state === "defined";
+      const off = defined ? "" : "disabled";
+      const stateField = `<label>State<select data-review-field="state"><option value="defined" ${defined ? "selected" : ""}>Defined</option><option value="undefined" ${defined ? "" : "selected"}>Undefined</option></select></label>`;
+      const colorField = `<label>Color category<select data-review-field="colorCategory" ${off}>${COLOR_CATEGORY_NAMES.includes(change.colorCategory) ? "" : `<option value="" selected disabled>Choose a color…</option>`}${COLOR_CATEGORY_NAMES.map((category) => `<option value="${category}" ${change.colorCategory === category ? "selected" : ""}>${category[0].toUpperCase()}${category.slice(1)}</option>`).join("")}</select></label>`;
+      const footer = `${defined ? "" : `<p class="wide-field">Undefined removes this line from the web.</p>`}${change.note ? `<p class="review-note wide-field">${escapeHtml(change.note)}</p>` : ""}${change.issue ? `<p class="error wide-field">${escapeHtml(change.issue)}</p>` : ""}<div class="editor-actions wide-field"><button type="button" class="secondary" data-review-remove>Remove this change</button></div>`;
+      const open = `<fieldset class="review-change${change.issue ? " needs-fix" : ""}" data-review-change="${index}" ${disabled ? "disabled" : ""}>`;
+      if (change.kind === "card") {
+        const nameA = escapeHtml(names.get(change.aliasA) ?? "Character A");
+        const nameB = escapeHtml(names.get(change.aliasB) ?? "Character B");
+        return `${open}
+          <legend>${nameA} and ${nameB}</legend>
+          <label>Character A<select data-review-field="aliasA">${characterOptions(change.aliasA)}</select></label>
+          <label>Character B<select data-review-field="aliasB">${characterOptions(change.aliasB)}</select></label>
+          ${stateField}${colorField}
+          <label class="wide-field">Label<input data-review-field="label" type="text" maxlength="48" value="${escapeHtml(change.label)}" ${off}></label>
+          <label class="wide-field">How ${nameA} sees ${nameB}<input data-review-field="perspectiveA" type="text" maxlength="80" placeholder="For example: trusts ${nameB}" value="${escapeHtml(change.perspectiveA)}" ${off}></label>
+          <label class="wide-field">How ${nameB} sees ${nameA}<input data-review-field="perspectiveB" type="text" maxlength="80" placeholder="For example: trusts ${nameA}" value="${escapeHtml(change.perspectiveB)}" ${off}></label>
+          ${footer}
+        </fieldset>`;
+      }
+      const name = escapeHtml(names.get(change.alias) ?? "This character");
+      const persona = escapeHtml(review.persona?.name ?? "the persona");
+      return `${open}
+        <legend>${name}'s view of ${persona}</legend>
+        <label>Character<select data-review-field="alias">${characterOptions(change.alias)}</select></label>
+        ${stateField}${colorField}
+        <label class="wide-field">Label<input data-review-field="label" type="text" maxlength="80" value="${escapeHtml(change.label)}" ${off}></label>
+        <label class="wide-field">Character's Perception<textarea data-review-field="perception" maxlength="240" rows="2" placeholder="For example: ${name} sees ${persona} as a trusted friend" ${off}>${escapeHtml(change.perception)}</textarea></label>
+        ${footer}
+      </fieldset>`;
+    }
+
+    // A rejected History answer shown as plain editable changes, so nobody has to read the model's JSON.
+    renderHistoryReview(review, busy) {
+      const names = new Map(review.characters.map((character) => [character.alias, character.name]));
+      const persona = escapeHtml(review.persona?.name ?? "the persona");
+      const cardCount = review.changes.filter((change) => change.kind === "card").length;
+      const personaCount = review.changes.length - cardCount;
+      const disabled = busy || review.saving !== null;
+      let headline;
+      let guidance = "";
+      if (review.initialCount === 0) {
+        headline = "The model's answer couldn't be used, so nothing was saved.";
+        guidance = "Run the update again; choosing fewer messages or a different model connection often helps. You can also set relationships yourself in the editors below.";
+      } else if (review.changes.length === 0) {
+        headline = "No suggested changes are left to save.";
+      } else if (review.savedAny) {
+        headline = "The model also suggested these changes.";
+      } else {
+        headline = "Update from History couldn't save the model's suggestions on its own. Nothing has been saved yet.";
+        guidance = "Check the changes below, fix anything marked, then save them. You can also run the update again; choosing fewer messages or a different model connection often helps.";
+      }
+      const saveButton = (kind, count, text) => count > 0
+        ? `<button type="button" data-review-save="${kind}" ${disabled ? "disabled" : ""}>${review.saving === kind ? "Saving…" : text}</button>`
+        : "";
+      return `
+        <div class="history-review" data-history-review>
+          <p class="${review.savedAny ? "" : "error"}" role="${review.savedAny ? "status" : "alert"}">${headline}</p>
+          ${guidance ? `<p>${guidance}</p>` : ""}
+          ${review.changes.map((change, index) => this.renderReviewChange(change, index, review, names, disabled)).join("")}
+          ${cardCount > 0 && personaCount > 0 ? `<p>Relationship changes and perceptions of ${persona} are saved separately.</p>` : ""}
+          ${review.error ? `<p class="error" role="alert">${escapeHtml(review.error)}</p>` : ""}
+          <div class="editor-actions">
+            ${saveButton("card", cardCount, `Save ${countOf(cardCount, "relationship change")}`)}
+            ${saveButton("persona", personaCount, `Save ${countOf(personaCount, "perception")} of ${persona}`)}
+            <button type="button" class="secondary" data-review-dismiss ${review.saving ? "disabled" : ""}>Dismiss</button>
+          </div>
+          <details class="review-details" data-review-details ${review.detailsOpen ? "open" : ""}>
+            <summary>Details for bug reports</summary>
+            ${review.reason ? `<p>${escapeHtml(review.reason)}</p>` : ""}
+            <pre>${escapeHtml(review.modelResponse || "(The model's answer was empty.)")}</pre>
+          </details>
+        </div>
       `;
     }
 
@@ -913,6 +1220,34 @@
     updateProcessingStatusView() {
       const slot = this.shadowRoot.querySelector?.("[data-processing-status-slot]");
       if (slot) slot.innerHTML = this.renderProcessingStatus();
+      const headerSlot = this.shadowRoot.querySelector?.("[data-processing-header-slot]");
+      if (headerSlot) headerSlot.innerHTML = this.renderHeaderActivity();
+    }
+
+    processingLabel() {
+      return this._processing.source === "history"
+        ? "Relationship Tracker is updating from history…"
+        : "Relationship Tracker is processing this turn…";
+    }
+
+    // Built-in section headers spin their re-run icon while trackers run, so a collapsed section still shows activity.
+    renderHeaderActivity() {
+      const status = this._processing;
+      if (status.chatId !== this.currentChatId() || !status.processing) return "";
+      return `<span class="section-spinner" aria-hidden="true" title="${this.processingLabel()}"></span>`;
+    }
+
+    renderSectionHeader(collapsed) {
+      return `
+        <div class="section-header">
+          <button type="button" class="section-toggle" data-section-toggle aria-expanded="${!collapsed}" aria-controls="relationship-tracker-body" title="${collapsed ? "Expand" : "Collapse"} ${SECTION_TITLE}">
+            <span class="section-chevron" aria-hidden="true">${svgIcon(CHEVRON_ICON_PATHS, "0.6875rem")}</span>
+            <span class="section-icon" aria-hidden="true">${svgIcon(WEB_ICON_PATHS, "0.6875rem")}</span>
+            <span class="section-title">${SECTION_TITLE}</span>
+          </button>
+          <span class="section-actions" data-processing-header-slot>${this.renderHeaderActivity()}</span>
+        </div>
+      `;
     }
 
     renderProcessingStatus() {
@@ -920,9 +1255,7 @@
       if (status.chatId !== this.currentChatId()) return "";
       if (status.processing) {
         const history = status.source === "history";
-        const label = history
-          ? "Relationship Tracker is updating from history…"
-          : "Relationship Tracker is processing this turn…";
+        const label = this.processingLabel();
         return `
           <div class="processing-status" role="status" aria-live="polite" data-processing-source="${history ? "history" : "automatic"}">
             <span class="processing-spinner" aria-hidden="true"></span>
@@ -945,18 +1278,37 @@
         content = `<p class="error">${escapeHtml(state.error)}</p><button type="button" data-retry>Retry</button>`;
       } else {
         const saving = state.status === "saving";
-        const busy = saving || this._history.status === "updating";
+        const busy = saving || this._history.status === "updating" || Boolean(this._history.review?.saving);
         // One error slot for every action (settings, relationship, persona), visible even with fewer than two cards.
         const actionError = state.error ? `<p class="error" role="alert">${escapeHtml(state.error)}</p>` : "";
         content = `${actionError}${this.renderGraph(state.value)}${this.renderHistory(state.value, busy)}${this.renderEditor(state.value, busy)}${this.renderPersonaEditor(state.value, busy)}${this.renderSettings(state.value, busy)}`;
       }
+      const ownHeader = !this.hostProvidesHeader();
+      const collapsed = ownHeader && isSectionCollapsed();
+      this.replaceChildren?.(); // Drop a toolbar tile left in light DOM by an earlier view.
       this.shadowRoot.innerHTML = `
         <style>
           :host { display: block; min-width: 0; color: var(--foreground, #f5f5f5); container-type: inline-size; }
           * { box-sizing: border-box; }
-          .relationship-tracker { display: grid; min-width: 0; gap: 0.7rem; padding: clamp(0.45rem, 2.5cqw, 0.8rem); border: 1px solid var(--border, rgba(127,127,127,.35)); border-radius: 0.8rem; background: var(--tracker-panel-section-background, transparent); font: inherit; overflow: hidden; }
-          h3, h4, p, fieldset { margin: 0; }
-          h3 { font-size: 0.95rem; line-height: 1.25; }
+          /* No card of its own: the host's section shell supplies the background, veil and divider, as for built-in trackers. */
+          .relationship-tracker { display: block; min-width: 0; font: inherit; }
+          .section-body { display: grid; min-width: 0; gap: 0.7rem; padding: clamp(0.45rem, 2.5cqw, 0.8rem); overflow: hidden; }
+          .section-body[hidden] { display: none; }
+          /* Mirrors the Engine's SectionHeader (SectionControls.tsx) and its constrained-width title scale. */
+          .section-header { position: relative; display: flex; min-height: 1.75rem; align-items: center; gap: 0.25rem; border-bottom: 1px solid color-mix(in oklab, var(--border, #3f3f46) 42%, transparent); padding: 0.125rem 0.25rem; }
+          .section-toggle { display: flex; flex: 1 1 0%; min-width: 0; align-items: center; align-self: stretch; gap: 0.25rem; margin: 0; padding: 0; border: 0; border-radius: var(--radius-sm, 0.25rem); color: inherit; background: transparent; font: inherit; text-align: left; cursor: pointer; user-select: none; overflow-wrap: normal; transition: background-color .15s cubic-bezier(.4, 0, .2, 1); }
+          .section-toggle:hover { background: color-mix(in oklab, var(--accent, #27272a) 18%, transparent); }
+          .section-toggle:focus-visible { outline: none; box-shadow: inset 0 0 0 1px var(--border, #3f3f46); }
+          .section-chevron, .section-icon { display: flex; flex-shrink: 0; align-items: center; justify-content: center; height: 0.875rem; color: var(--tracker-profile-icon, var(--muted-foreground, #a1a1aa)); }
+          .section-chevron { width: 0.75rem; opacity: .6; }
+          .section-chevron svg { transition: transform .15s cubic-bezier(.16, 1, .3, 1); }
+          .section-toggle[aria-expanded="false"] .section-chevron svg { transform: rotate(-90deg); }
+          .section-icon { width: 0.875rem; opacity: .75; }
+          .section-title { min-width: 0; flex: 1 1 0%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: color-mix(in oklab, var(--foreground, #f4f4f5) 62%, transparent); font-size: calc(0.625rem * var(--tracker-panel-font-scale, 1)); font-weight: 600; line-height: calc(0.75rem * var(--tracker-panel-font-scale, 1)); letter-spacing: 0.08em; text-transform: uppercase; }
+          .section-actions { display: flex; min-height: 1.5rem; flex-shrink: 0; align-items: center; gap: 0.125rem; margin-left: 0.125rem; }
+          .section-actions:empty { display: none; }
+          .section-spinner { width: 0.75rem; height: 0.75rem; margin: 0.375rem; border: 2px solid color-mix(in oklab, var(--muted-foreground, #a1a1aa) 28%, transparent); border-top-color: color-mix(in oklab, var(--muted-foreground, #a1a1aa) 62%, transparent); border-radius: 999px; animation: spin .8s linear infinite; }
+          h4, p, fieldset { margin: 0; }
           h4 { font-size: 0.84rem; line-height: 1.3; }
           p { color: var(--muted-foreground, #a3a3a3); font-size: 0.78rem; line-height: 1.4; }
           .error { color: color-mix(in srgb, #ef4444 65%, var(--foreground, #f5f5f5)); }
@@ -994,6 +1346,15 @@
           .history-form label { display: grid; gap: 0.3rem; }
           .history-form input { width: 6rem; }
           .history-success { color: color-mix(in srgb, #10b981 65%, var(--foreground, #f5f5f5)); }
+          .history-review { display: grid; gap: 0.55rem; }
+          .review-change { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 0.5rem; margin: 0; border: 1px solid color-mix(in srgb, var(--border, #64748b) 72%, transparent); border-radius: 0.55rem; padding: 0.55rem; }
+          .review-change.needs-fix { border-color: color-mix(in srgb, #ef4444 60%, var(--border, #64748b)); }
+          .review-change legend { padding: 0 0.25rem; color: var(--foreground, #f5f5f5); font-size: 0.78rem; font-weight: 650; }
+          .review-change label { display: grid; align-content: start; gap: 0.3rem; }
+          .review-note { color: color-mix(in srgb, #f59e0b 65%, var(--foreground, #f5f5f5)); }
+          .review-change .editor-actions { justify-content: flex-end; }
+          .review-change .editor-actions button { flex: 0 0 auto; padding: 0.3rem 0.55rem; font-size: 0.75rem; }
+          .review-details pre { max-height: 14rem; margin: 0.4rem 0 0; padding: 0.45rem; overflow: auto; border-radius: 0.45rem; background: color-mix(in srgb, var(--border, #64748b) 18%, transparent); font-size: 0.72rem; white-space: pre-wrap; overflow-wrap: anywhere; }
           .section-heading { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 0.4rem; }
           .lock-status, .automatic-status { border-radius: 999px; padding: 0.16rem 0.45rem; font-size: 0.68rem; font-weight: 700; }
           .lock-status { color: color-mix(in srgb, #f59e0b 65%, var(--foreground, #f5f5f5)); background: rgba(245, 158, 11, .16); }
@@ -1021,43 +1382,61 @@
           .settings input { width: 4.5rem; }
           textarea { resize: vertical; line-height: 1.35; }
           @container (max-width: 320px) {
-            .relationship-tracker { padding: 0.45rem; }
+            .section-body { padding: 0.45rem; }
             .history-form, .editor fieldset, .settings fieldset { grid-template-columns: 1fr; }
             .editor label, .wide-field { grid-column: 1; }
+            .review-change { grid-template-columns: 1fr; }
             .relationship-web { min-height: 12rem; }
             .edge-label, .character-name { font-size: 13px; }
           }
-          @media (prefers-reduced-motion: reduce) { .loading span, .processing-spinner { animation: none; } .edge-label { transition: none; } }
+          @media (prefers-reduced-motion: reduce) { .loading span, .processing-spinner, .section-spinner { animation: none; } .edge-label, .section-toggle, .section-chevron svg { transition: none; } }
         </style>
-        <section class="relationship-tracker" aria-label="Relationship Tracker">
-          <h3>Relationship Tracker</h3>
-          <details class="panel-help" data-help-details ${this._helpOpen ? "open" : ""}>
-            <summary>Panel size & layout</summary>
-            <p>Choose Compact, Standard, or Expanded under Settings → Appearance → Tracker Panel → Desktop size. Use the Tracker Panel header controls to dock or detach the whole panel.</p>
-          </details>
-          <div class="processing-slot" data-processing-status-slot>${this.renderProcessingStatus()}</div>
-          ${content}
+        <section class="relationship-tracker" aria-label="${SECTION_TITLE}">
+          ${ownHeader ? this.renderSectionHeader(collapsed) : ""}
+          <div class="section-body" id="relationship-tracker-body" data-section-body ${collapsed ? "hidden" : ""}>
+            <details class="panel-help" data-help-details ${this._helpOpen ? "open" : ""}>
+              <summary>Panel size & layout</summary>
+              <p>Choose Compact, Standard, or Expanded under Settings → Appearance → Tracker Panel → Desktop size. Use the Tracker Panel header controls to dock or detach the whole panel.</p>
+            </details>
+            <div class="processing-slot" data-processing-status-slot>${this.renderProcessingStatus()}</div>
+            ${content}
+          </div>
         </section>
       `;
       this.bindControls();
     }
 
+    renderToolbar() {
+      const hostClass = typeof this._props?.toolbarButtonClass === "string" ? this._props.toolbarButtonClass.trim() : "";
+      if (hostClass) {
+        // Wear the host's chat-widget button class like other packages' controls. Host classes style only light
+        // DOM, so the tile is slotted. It has no action of its own: presses pass through, so in the Trackers
+        // window they open the drawer, as a built-in tracker's preview does.
+        this.shadowRoot.innerHTML = "<style>:host { display: contents; }</style><slot></slot>";
+        this.innerHTML = `<span class="${escapeHtml(hostClass)}" role="img" aria-label="${SECTION_TITLE}" style="pointer-events: none;">${svgIcon(WEB_ICON_PATHS, "0.875rem")}</span>`;
+        return;
+      }
+      this.replaceChildren?.();
+      this.shadowRoot.innerHTML = `
+        <style>
+          :host { display: contents; }
+          button { display: inline-flex; align-items: center; justify-content: center; min-width: 2rem; min-height: 2rem; padding: 0.4rem; border: 0; border-radius: 0.5rem; color: inherit; background: transparent; font: inherit; opacity: 0.7; }
+        </style>
+        <button type="button" disabled aria-label="${SECTION_TITLE}" title="Relationship Tracker web loaded">${svgIcon(WEB_ICON_PATHS, "0.875rem")}</button>
+      `;
+    }
+
     render() {
       const view = this.getAttribute("view");
       if (view === "toolbar") {
-        this.shadowRoot.innerHTML = `
-          <style>
-            :host { display: contents; }
-            button { display: inline-flex; align-items: center; justify-content: center; min-width: 2rem; min-height: 2rem; padding: 0.4rem; border: 0; border-radius: 0.5rem; color: inherit; background: transparent; font: inherit; opacity: 0.7; }
-          </style>
-          <button type="button" disabled aria-label="Relationship Tracker" title="Relationship Tracker web loaded">↔</button>
-        `;
+        this.renderToolbar();
         return;
       }
       if (view === "tracker") {
         this.renderTracker();
         return;
       }
+      this.replaceChildren?.();
       this.shadowRoot.innerHTML = "";
     }
   }

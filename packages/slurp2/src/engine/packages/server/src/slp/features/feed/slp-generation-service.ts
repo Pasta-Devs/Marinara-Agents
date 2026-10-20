@@ -27,7 +27,7 @@ import { type SlurpAccount } from "../../modules/records/slp-storage-model.js";
 import { createPromptOverridesStorage } from "../../../services/storage/prompt-overrides.storage.js";
 import { generateCreatorPostImage, SLURP_SECONDARY_IMAGE_COUNT } from "../media/slp-media-contract.js";
 import { finishSlurpPostImage } from "./slp-post-media-operation.js";
-import { recordSlurpBeatFacts, resolveSlurpBeatCastContext, resolveSlurpBeatDay } from "./slp-post-beat-service.js";
+import { prepareSlurpBeatRun, resolveSlurpBeatCastContext } from "./slp-post-beat-service.js";
 import { slurpArcBeat, slurpPlannedExplicitLevel } from "../../modules/feed/slp-post-beat.js";
 import { slpCreatorUnlockPriceMetadata } from "../../modules/economy/slp-prices.js";
 import { persistCreatorPostWithUploadedMedia, type SlpCreatorPostMediaUpload } from "../../base/media/slp-media.js";
@@ -42,11 +42,8 @@ import {
 import { slurpArcPoll, slurpArcRotation, slurpProjectChapter } from "../../modules/projects/slp-arc-progress.js";
 import { slurpPurposeMetadata } from "../../modules/feed/slp-post-purpose.js";
 import { resolveSlurpCreatorScheduleContext } from "../creators/slp-creators-contract.js";
-import { createChatsStorage } from "../../../services/storage/chats.storage.js";
 import { type SlpCreatorContentFormat } from "../../base/prompting/slp-content-format.js";
-import { resolveSlurpPostLore } from "./slp-post-lore.js";
-import { createCharacterGalleryStorage } from "../../../services/storage/character-gallery.storage.js";
-import { createGalleryStorage } from "../../../services/storage/gallery.storage.js";
+import { resolveSlurpLoreContext } from "../../data/host/slp-lore-context.js";
 import { pickGalleryAttachmentForAccount } from "./slp-generated-activity-service.js";
 import { protectCreatorGeneratedIdentity, type PublicIdentity } from "../../base/identity/slp-identity-protection.js";
 import { resolveCreatorCharacterCanon } from "../../data/creators/slp-source-resolve.js";
@@ -115,6 +112,7 @@ export type SlpCreatorPostGenerationInput = {
   slotId?: string | null;
   /** Skip continuity writes when `prepareOnly` is used for a settings preview. */
   previewOnly?: boolean;
+  skipImagePromptPreview?: boolean;
 };
 
 const SLP_CREATOR_POST_MAX_TOKENS = 2048;
@@ -145,26 +143,21 @@ export async function generateCreatorPost(
     fallbackConnection,
     admissionMode: input.admissionMode ?? { kind: "foreground" },
   });
+  const at = input.generatedAt ?? new Date();
   const recentPosts = await noodle.listNoodlerPostsByAccount(account.id, 8);
-  const otherCreatorSubjects = await listSlurpOtherCreatorSubjects(db, account.id, input.generatedAt ?? new Date());
+  const otherCreatorSubjects = await listSlurpOtherCreatorSubjects(db, account.id, at);
   const disclosureMode = account.settings.privacy.identityDisclosure ?? "open";
   const linkedPublicAccount = await noodle.resolveAccountSource(account as SlurpAccount);
   const scheduleContext = linkedPublicAccount
-    ? await resolveSlurpCreatorScheduleContext(
-        createCharactersStorage(db),
-        linkedPublicAccount,
-        undefined,
-        input.generatedAt ?? new Date(),
-      )
+    ? await resolveSlurpCreatorScheduleContext(createCharactersStorage(db), linkedPublicAccount, undefined, at)
     : undefined;
   // Derive the identity from the row already in hand; resolving it again would re-read it.
   const publicIdentity = await slpCreatorPublicIdentityFor(db, linkedPublicAccount);
-  // Read the card at post time (not the bio and voice frozen at setup), so a sharper character makes a
-  // sharper Creator without a migration. Concealed modes get the stage seed; disclosure limits what, not who.
+  // Read the card at post time, not the bio and voice frozen at setup. Concealed modes get the stage seed.
   const sourceCharacterContext = await resolveCreatorCharacterCanon(db, linkedPublicAccount, disclosureMode);
-  const loreContext = await resolveSlurpPostLore(db, {
+  const { text: loreContext } = await resolveSlurpLoreContext(db, {
     settings,
-    recentPosts,
+    texts: recentPosts.map((post) => post.content).reverse(),
     sourceCharacterContext,
     source: linkedPublicAccount,
   });
@@ -216,20 +209,19 @@ export async function generateCreatorPost(
   // Same slot the scheduler used to choose free access, so only its teasers read as one.
   const isTeaser =
     input.request.access === "public" && !directed && slurpTeaserPost(account.id, sequence, settings.teaserRate);
-  // Where the day stands at publication, before planning: the schedule decides where they are.
-  const beatDay =
-    settings.postPlanner === "beats"
-      ? await resolveSlurpBeatDay(db, {
-          accountId: account.id,
-          canonText: sourceCharacterContext,
-          source: linkedPublicAccount,
-          characters: createCharactersStorage(db),
-          at: input.publicationTime ?? input.generatedAt ?? new Date(),
-        })
-      : null;
-  // Beats mode keeps the last posts as facts, not quotes, so they are written before planning.
-  if (settings.postPlanner === "beats" && !input.previewOnly)
-    await recordSlurpBeatFacts(db, account, recentPosts, input.generatedAt ?? new Date());
+  const beatRun = await prepareSlurpBeatRun(db, {
+    account,
+    canonText: sourceCharacterContext,
+    source: linkedPublicAccount,
+    disclosureMode,
+    publicIdentity,
+    beats: settings.postPlanner === "beats",
+    preview: input.previewOnly === true,
+    model: { connection: input.connection, fallbackConnection, background: input.admissionMode?.kind === "background" },
+    recentPosts,
+    at: input.generatedAt ?? new Date(),
+    publishAt: input.publicationTime,
+  });
   // What this post is for, as opposed to what it is about, and how it goes out. Story and teaser
   // are passed in rather than chosen again, so the decisions cannot contradict each other.
   const {
@@ -260,11 +252,13 @@ export async function generateCreatorPost(
     beats:
       settings.postPlanner === "beats"
         ? {
-            canonText: sourceCharacterContext,
+            canonText: beatRun.planText,
+            readingText: beatRun.readingText,
             connection: input.connection,
             fallbackConnection,
+            background: input.admissionMode?.kind === "background",
             arc: project ? slurpArcBeat(project) : null,
-            day: beatDay,
+            day: beatRun.day,
             steering,
             nudge,
             life: { account, tags: account.settings.profile.tags ?? [], rate: settings.lifeMomentRate },
@@ -353,6 +347,7 @@ export async function generateCreatorPost(
     variation,
     beat: plannedBeat,
     teasedKind: purpose.spiceKind,
+    at,
   });
   const { postLevel, angle: spiceAngle, beat } = spiced;
   variation = spiced.variation;
@@ -403,7 +398,7 @@ export async function generateCreatorPost(
     allowScenePlan: askModelForScene,
     sceneShots,
     wardrobePrompt: askModelForScene
-      ? slurpWardrobePrompt(wardrobeLooks, input.request.access, recentWardrobeIds)
+      ? slurpWardrobePrompt(wardrobeLooks, input.request.access, recentWardrobeIds, account.displayName)
       : null,
     imageGenerationPrompt: settings.imageGenerationPrompt,
     generationGuidance: settings.generationGuidance,
@@ -417,7 +412,7 @@ export async function generateCreatorPost(
     productionInstruction: slurpStrategyInstruction(strategy),
     beat,
     beatCompany: variation?.company,
-    beatDay: beat ? beatDay : null,
+    beatDay: beat ? beatRun.day : null,
     generatedAt: input.generatedAt ?? new Date(),
     publicationTime: input.publicationTime,
   });
@@ -503,6 +498,7 @@ export async function generateCreatorPost(
     access: input.request.access,
     scene: askModelForScene ? generated.scene : null,
     recentIds: recentWardrobeIds,
+    creatorName: account.displayName,
   });
 
   // What the picture is and may show, in one place so the two briefs agree on level, shoot and effort.
@@ -628,6 +624,8 @@ export async function generateCreatorPost(
       ...(beat ? { slurpBeat: { type: beat.type, line: beat.line, anchor: beat.anchor } } : {}),
       // A collab, a sponsored post or a rivalry post: labels, the partner's page, the split, the fee.
       ...(beat?.tie ? { slurpTie: beat.tie } : {}),
+      // A trend this post joins: the chip, and the origin post it quotes.
+      ...(beat?.trend ? { slurpTrend: beat.trend } : {}),
       ...(pictureCast && beat?.castIds?.length ? { slurpPictureCast: beat.castIds } : {}),
       // What made it spicy, so unlocks, likes and tips can teach Slurp the player's taste.
       ...spiced.metadata,
@@ -686,7 +684,7 @@ export async function generateCreatorPost(
 
   if (input.prepareOnly) {
     let providerPrompt: string | null = null;
-    if (input.previewOnly && draftImagePrompt) {
+    if (input.previewOnly && draftImagePrompt && !input.skipImagePromptPreview) {
       const previewInput = await resolveImageInput(draftImagePrompt);
       if (previewInput) {
         providerPrompt = (
@@ -771,10 +769,9 @@ export async function generateCreatorPost(
   const galleryFallback = async (): Promise<{ imageUrl?: string; metadata?: Record<string, unknown> }> => {
     if (textOnly || !settings.allowGalleryImageAttachments || linkedPublicAccount?.kind !== "character") return {};
     const attachment = await pickGalleryAttachmentForAccount({
+      db,
       account: linkedPublicAccount,
-      chats: createChatsStorage(db),
-      gallery: createGalleryStorage(db),
-      characterGallery: createCharacterGalleryStorage(db),
+      postingAccountId: account.id,
     }).catch((error: unknown) => {
       logger.warn(error, "[slurp] Could not attach a gallery image for %s", account.displayName);
       return null;

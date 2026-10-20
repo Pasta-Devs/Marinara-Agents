@@ -46,6 +46,9 @@ BH.onboard = {
     tip.className = "beholder-onboard";
     tip.setAttribute("role", "dialog");
     tip.setAttribute("aria-label", "About Beholder");
+    // It sits on the body, outside the panel. Unmarked, a press on it counts as a press
+    // outside the Engine's shortcut window, which closes and takes Beholder with it.
+    tip.setAttribute("data-chat-floating-panel", "");
     tip.innerHTML = `
       <div class="bh-onboard-arrow"></div>
       <div class="bh-onboard-head">
@@ -72,11 +75,16 @@ BH.onboard = {
     document.body.appendChild(tip);
     this.place(tip, panel);
 
-    const dismiss = () => {
+    const hide = () => {
       tip.remove();
-      this.remember();
       window.removeEventListener("resize", reposition);
+      this._hide = null;
     };
+    const dismiss = () => {
+      hide();
+      this.remember();
+    };
+    this._hide = hide;
     // Follows the panel: it is a draggable, resizable window, and a note pinned to where
     // the panel used to be is worse than no note.
     const reposition = () => this.place(tip, panel);
@@ -86,6 +94,11 @@ BH.onboard = {
     }
     tip.querySelector(".bh-onboard-dismiss")?.focus?.();
     return true;
+  },
+
+  /** Closing Beholder takes the note down with its listener, without counting it as read. */
+  hide() {
+    this._hide?.();
   },
 
   /**

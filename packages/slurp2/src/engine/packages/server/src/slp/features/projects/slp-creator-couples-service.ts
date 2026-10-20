@@ -229,7 +229,11 @@ export async function slurpCoupleDmPage(
   const { couples } = await readSlurpCreatorTiesDocument(db).catch(() => ({ couples: [] as SlurpCouple[] }));
   const couple = slurpCoupleOf(couples, creatorId, page.id);
   const partner = Boolean(couple && slurpCoupleTaken(couple));
-  if (!party && !(player && couple && slurpCoupleActive(couple))) return party;
+  // #1293: an ex with a chosen aftermath (moveOn, forget) still needs its line to reach a concealed
+  // page's header, so the override can stand against whatever the old chat already shows. A split
+  // couple with no choice (today's "keep") stays out, as before: nothing new leaks about an ex.
+  const endedWithChoice = Boolean(couple && !slurpCoupleActive(couple) && couple.aftermath);
+  if (!party && !(player && couple && (slurpCoupleActive(couple) || endedWithChoice))) return party;
   const relationship = await readSlurpRelationshipLine(db, creatorId, { withId: page.id });
   return {
     ...(party ?? { name: page.displayName, handle: page.handle, concealed: true }),

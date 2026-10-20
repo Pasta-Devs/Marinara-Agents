@@ -1,0 +1,93 @@
+name: Long-Term Memory Package Browser
+
+on:
+  pull_request:
+    types: [opened, reopened, synchronize, ready_for_review]
+    paths:
+      - ".github/workflows/ltm-browser.yml"
+      - "artifacts/long-term-memory-*.zip"
+      - "packages/long-term-memory/**"
+      - "scripts/typecheck-packages.mjs"
+      - "tests/engine-visual-styles.ts"
+      - "tests/long-term-memory-*"
+      - "tests/regression-helpers.ts"
+      - "tests/regression-helpers.mjs"
+
+concurrency:
+  group: ltm-browser-pr-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  ltm-browser:
+    name: Long-Term Memory package browser
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout Marinara Agents
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Checkout Marinara Engine staging
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          repository: Pasta-Devs/Marinara-Engine
+          ref: staging
+          path: engine
+          persist-credentials: false
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+        with:
+          package_json_file: engine/package.json
+          run_install: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+
+      - name: Install Engine dependencies
+        run: pnpm --dir engine install --frozen-lockfile
+
+      # The browser regression loads Playwright from the Engine checkout, so install that version's Chromium.
+      - name: Install Playwright Chromium
+        run: pnpm --dir engine exec playwright install --with-deps chromium
+
+      - name: Run Long-Term Memory browser regression
+        env:
+          MARINARA_ENGINE_ROOT: ${{ github.workspace }}/engine
+        run: pnpm --dir engine --filter @marinara-engine/server exec tsx "$GITHUB_WORKSPACE/tests/long-term-memory-browser.regression.ts"
+
+      # routes and installation import the Engine server, which loads the built shared package (dist/ is not committed).
+      - name: Build Engine shared package
+        run: pnpm --dir engine --filter @marinara-engine/shared build
+
+      # These run through the Engine checkout's tsx, like the browser regression. lifecycle only chains browser and
+      # installation, and routes-notes is a prefix of routes, so neither is listed. routes-imports, -drafts, -scope-identity
+      # and -backup start from their own seed or have scenario-only assertions, so they run beside routes.
+      - name: Run Long-Term Memory regressions
+        env:
+          MARINARA_ENGINE_ROOT: ${{ github.workspace }}/engine
+        run: |
+          for test in candidate-reconciliation conversation-summary-import debug-log delta-review extraction-graph \
+            engine-fields extraction-reliability index-keys local-characters reconciliation-recall branch-recall storage routes routes-imports routes-drafts routes-scope-identity routes-backup runtime installation host-styles; do
+            pnpm --dir engine --filter @marinara-engine/server exec tsx "$GITHUB_WORKSPACE/tests/long-term-memory-$test.regression.ts"
+          done
+          node tests/long-term-memory-loading.regression.mjs
+
+      # The strict run checks the package against the Engine's own dependency types, so it needs this Engine checkout;
+      # Pull Request Checks has none and runs only the name check. tsc comes from the Agents lockfile, installed last so
+      # the regressions above resolve the package's imports exactly as before.
+      - name: Install locked Agents dependencies
+        run: npm ci
+
+      - name: Typecheck Long-Term Memory strictly
+        env:
+          MARINARA_ENGINE_ROOT: ${{ github.workspace }}/engine
+        run: node scripts/typecheck-packages.mjs long-term-memory

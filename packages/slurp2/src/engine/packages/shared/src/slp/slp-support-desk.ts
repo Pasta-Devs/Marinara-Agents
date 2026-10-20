@@ -565,7 +565,7 @@ export function slpDeskTick(
     elapsed > 0 &&
     rolls[1] < 1 - Math.pow(1 - pace, elapsed / DAY_MS)
   ) {
-    events.push({ kind: "ticket", topic: slpDeskTicketTopic(next, input.situation ?? {}, rolls[2]) });
+    events.push({ kind: "ticket", topic: slpDeskTicketTopic(next, input.situation ?? {}, rolls[2], at) });
   }
   return { desk: next, events };
 }
@@ -575,8 +575,9 @@ export function slpDeskTicketTopic(
   desk: SlpSupportDesk,
   situation: { viewsDown?: boolean; hasCollabWish?: boolean },
   roll: number,
+  at = new Date(),
 ): SlpDeskTicketTopic {
-  if (situation.viewsDown || (desk.throttle && slpDeskActive(desk.throttle.until))) return "views";
+  if (situation.viewsDown || (desk.throttle && slpDeskActive(desk.throttle.until, at))) return "views";
   if (situation.hasCollabWish) return "collab";
   const open: SlpDeskTicketTopic[] = ["fan", "money", "burnout", ...(desk.badges.length < 2 ? ["badge" as const] : [])];
   return open[Math.min(open.length - 1, Math.floor(roll * open.length))]!;

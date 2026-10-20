@@ -135,6 +135,11 @@ for (const name of legacyNames) {
 // Media restore is the other half of the trust boundary.
 const media = read("packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-media.ts");
 assert.match(media, /if \(!archivePath\.startsWith\("media\/"\)\) return false;/u);
-assert.match(media, /if \(!isAllowedImageBuffer\(data\)\) return false;/u, "an archive must not write non-images");
+// The extension must also name the type the bytes show (#1476); slurp2-restore-media proves it at runtime.
+assert.match(
+  media,
+  /if \(!expected \|\| isAllowedImageBuffer\(data, "\.avif"\)\?\.ext !== expected\) return false;/u,
+  "an archive must not write non-images",
+);
 
 console.log("slurp2 backup round-trip regression passed");

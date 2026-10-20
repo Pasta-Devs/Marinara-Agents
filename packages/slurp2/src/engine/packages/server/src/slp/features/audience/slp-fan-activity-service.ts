@@ -324,6 +324,7 @@ async function generateFanActivity(input: {
     | "audienceTone"
     | "imageContextMode"
     | "imageContextConnectionId"
+    | "imageCaptionPrompt"
     | "promptBlocks"
   >;
   creators: SlpCreatorFanCreatorCandidate[];
@@ -345,7 +346,14 @@ async function generateFanActivity(input: {
   const imageContexts = await prepareSlurpPostImageContexts({
     posts: input.creators.flatMap((candidate) => candidate.posts),
     mode: input.settings.imageContextMode,
-    captioning: await slurpImageCaptioning(input.db, input.settings.imageContextConnectionId, input.connection),
+    captioning: await slurpImageCaptioning(
+      input.db,
+      input.settings.imageContextConnectionId,
+      input.connection,
+      input.settings.imageCaptionPrompt,
+      // The fan activity run holds its connection's background slot (tryBackgroundConnection).
+      false,
+    ),
     onDescribed: (post, description, source) =>
       createSlurpStorage(input.db).setNoodlerPostImageDescription(post.id, description, source),
     debugMode: input.debugMode,
@@ -534,7 +542,12 @@ export async function generateCreatorFanActivityBatch(input: {
   db: DB;
   settings: Pick<
     SlurpSettings,
-    "fanLikesPerRefresh" | "fanRepliesPerRefresh" | "audienceTone" | "imageContextMode" | "imageContextConnectionId"
+    | "fanLikesPerRefresh"
+    | "fanRepliesPerRefresh"
+    | "audienceTone"
+    | "imageContextMode"
+    | "imageContextConnectionId"
+    | "imageCaptionPrompt"
   >;
   connection: GenerationConnection;
   creators: SlpCreatorFanCreatorCandidate[];

@@ -481,6 +481,8 @@ export async function applySlurpPlayerUs(
   return mutateSlurpCreatorTies(db, (document) => {
     const last = slurpCoupleOf(document.couples, creator.id, page.id);
     if (last && slurpCoupleActive(last)) {
+      // A private DM can describe a group relationship, but only its primary pair steers the group.
+      if (![last.aId, last.bId].includes(creator.id) || ![last.aId, last.bId].includes(page.id)) return null;
       const next = slurpPlayerCoupleStep(last, input.step, { at, creatorId: creator.id, detail: input.why });
       if (!next) return null;
       return {
@@ -491,6 +493,9 @@ export async function applySlurpPlayerUs(
     // A new crush: only "closer", only where her card allows it, and not right after the last one ended.
     if (input.step !== "closer" || !slurpCoupleFit(creator, page).fits) return null;
     if (last && at.getTime() - Date.parse(last.stageAt) < SLURP_PLAYER_CRUSH_REST_DAYS * DAY_MS) return null;
+    // #1293: an ex with a chosen aftermath never restarts on its own from a talk that only revisits
+    // old messages; getting back together then takes an explicit reunite, not a model's "closer".
+    if (last?.aftermath) return null;
     const id = newId();
     const next = slurpSetUpCouple(document.couples, creator, page, { at, id, polyamory, crush: true });
     if (typeof next === "string") return null;

@@ -36,4 +36,5 @@ export const SLP_CREATOR_SETTING_TAB: Record<string, import("./slp-creator-setti
   creatorCollabs: "collaborations",
   characterImageInstructions: "production",
   creatorImageNames: "production",
+  creatorImagePrefixes: "production",
 };

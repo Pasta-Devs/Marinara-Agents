@@ -22,15 +22,19 @@ export function useCreateCreatorStageProfile() {
     mutationFn: ({
       sourceAccountId,
       stageProfile,
+      imageNameKnown,
     }: {
       sourceAccountId: string;
       stageProfile: SlurpStageProfileInput;
+      imageNameKnown?: boolean;
     }) =>
       api.post<SlurpManagedStageProfile>(`/slurp2/accounts/${encodeURIComponent(sourceAccountId)}/noodler`, {
         stageProfile,
+        ...(imageNameKnown === false ? { imageNameKnown } : {}),
       }),
     onSuccess: () =>
       Promise.all([
+        qc.invalidateQueries({ queryKey: slpKeys.settings() }),
         qc.invalidateQueries({ queryKey: slpKeys.noodlerAccounts() }),
         qc.invalidateQueries({
           queryKey: slpKeys.noodlerEligibleAccountsRoot(),
@@ -58,6 +62,7 @@ export function useBulkCreateCreatorStageProfiles() {
         imageConnectionId?: string | null;
         personaId?: string;
         completeOnboarding?: boolean;
+        imageNameKnown?: boolean;
       };
       onProgress?: (done: number, total: number) => void;
     }) => {
@@ -96,6 +101,7 @@ export function useBulkCreateCreatorStageProfiles() {
         toast.success(localizeUi("ui.noodle.noodlerbulkcreatepanel.createdValue1SkippedValue2", counts));
       }
       return Promise.all([
+        qc.invalidateQueries({ queryKey: slpKeys.settings() }),
         qc.invalidateQueries({ queryKey: slpKeys.noodlerAccounts() }),
         qc.invalidateQueries({
           queryKey: slpKeys.noodlerEligibleAccountsRoot(),

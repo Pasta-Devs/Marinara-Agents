@@ -32,7 +32,23 @@ function isSymlink(entry) {
   return ((entry.attr >>> 16) & 0o170000) === 0o120000;
 }
 
-export async function installPackageBrowserFixture({ agentsRoot, engineRoot, dataDir, packageId }) {
+/**
+ * Installs `packageId`, or every id in `packageIds`, from this checkout's catalog and artifacts into one fresh
+ * `capability-packages` folder with a single installed.json.
+ */
+export async function installPackageBrowserFixture({ agentsRoot, engineRoot, dataDir, packageId, packageIds }) {
+  const installRoot = join(dataDir, "capability-packages");
+  await rm(installRoot, { recursive: true, force: true });
+  const packages = [];
+  for (const id of [...new Set(packageIds ?? [packageId])]) {
+    packages.push(await installOne({ agentsRoot, engineRoot, installRoot, packageId: id }));
+  }
+  await writeFile(join(installRoot, "installed.json"), `${JSON.stringify({ schemaVersion: 1, packages }, null, 2)}\n`, {
+    mode: 0o600,
+  });
+}
+
+async function installOne({ agentsRoot, engineRoot, installRoot, packageId }) {
   const packageRoot = join(agentsRoot, "packages", packageId);
   const manifest = JSON.parse(await readFile(join(packageRoot, "manifest.json"), "utf8"));
   if (manifest.id !== packageId) throw new Error(`Package manifest ID does not match ${packageId}`);
@@ -68,9 +84,7 @@ export async function installPackageBrowserFixture({ agentsRoot, engineRoot, dat
     throw new Error(`${packageId} artifact manifest differs from the package manifest`);
   }
 
-  const installRoot = join(dataDir, "capability-packages");
   const versionRoot = join(installRoot, "versions", packageId, manifest.version);
-  await rm(installRoot, { recursive: true, force: true });
   await mkdir(versionRoot, { recursive: true });
 
   for (const entry of entries) {
@@ -99,28 +113,15 @@ export async function installPackageBrowserFixture({ agentsRoot, engineRoot, dat
     throw new Error(`${packageId} artifact contains missing or extra payload files`);
   }
 
-  await writeFile(
-    join(installRoot, "installed.json"),
-    `${JSON.stringify(
-      {
-        schemaVersion: 1,
-        packages: [
-          {
-            id: packageId,
-            version: manifest.version,
-            manifest,
-            installedAt: new Date().toISOString(),
-            status: "active",
-            error: null,
-            readiness: manifest.entrypoints.server ? "pending" : "ready",
-            readinessError: null,
-            legacy: false,
-          },
-        ],
-      },
-      null,
-      2,
-    )}\n`,
-    { mode: 0o600 },
-  );
+  return {
+    id: packageId,
+    version: manifest.version,
+    manifest,
+    installedAt: new Date().toISOString(),
+    status: "active",
+    error: null,
+    readiness: manifest.entrypoints.server ? "pending" : "ready",
+    readinessError: null,
+    legacy: false,
+  };
 }

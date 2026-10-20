@@ -16,8 +16,14 @@ assert.deepEqual(draft.parse({ accountId: "a", idea: "gym selfie" }), {
   accountId: "a",
   idea: "gym selfie",
   story: false,
+  access: "public",
   picture: true,
 });
+assert.equal(draft.safeParse({ accountId: "a", idea: "x", access: "subscribers" }).success, false);
+assert.equal(
+  draft.parse({ accountId: "a", idea: "x", access: "locked", lookId: "l", projectId: "p" }).access,
+  "locked",
+);
 assert.equal(SLP_ACTION_META["draft-post"].deck, false);
 
 const service = engine("server/src/slp/features/assist/slp-assist-service.ts");
@@ -28,6 +34,21 @@ assert.doesNotMatch(
   "A draft posts nothing",
 );
 assert.match(service, /That brand deal is not this page's/u, "A deal from another page is refused");
+// 0.3.31: the draft is the page's normal post, written by the post generator in draft mode with the
+// wish as its direction. Its picture is drawn from the image prompt the post wrote, not from the wish.
+const drafting = service.slice(service.indexOf("export async function draftSlpPost"));
+assert.match(
+  drafting,
+  /generateCreatorPost\(db, \{[\s\S]*?prepareOnly: true,\s*previewOnly: true,[\s\S]{0,160}?skipImagePromptPreview: true,/u,
+  "the normal generator, with nothing saved",
+);
+assert.match(drafting, /access: input\.access,/u, "the audience picked in the composer decides the guidance");
+assert.match(drafting, /noodlerPostGuide: \[wish, extra\]/u, "the wish is the post direction");
+assert.match(drafting, /request: post\.imagePrompt \?\? "",/u, "the picture comes from the post's own image prompt");
+assert.doesNotMatch(drafting, /runSlpAssistText|request: input\.idea/u, "never the small Write prompt or the raw wish");
+assert.match(drafting, /That storyline is not this page's/u);
+assert.match(drafting, /That look is not in this page's wardrobe/u);
+assert.match(drafting, /\{ access: input\.access \}/u, "a public draft draws at the public level");
 
 // Stir: review for everyone, so a write-post card is always a draft hand-over.
 const preview = engine("server/src/slp/features/assist/slp-action-preview.ts");

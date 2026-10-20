@@ -16,6 +16,7 @@ import {
   slurpModelLacksVision,
 } from "./slp-vision.js";
 import { slpWithProviderRetry } from "../../base/model/slp-provider-retry.js";
+import { slpRequireBackgroundIdle } from "../host/slp-generation-integrations.js";
 
 type GenerationConnection = NonNullable<Awaited<ReturnType<ReturnType<typeof createConnectionsStorage>["getWithKey"]>>>;
 
@@ -23,6 +24,16 @@ export type SlurpImageContextPost = Pick<
   SlpCreatorManagedPost,
   "id" | "access" | "imageUrl" | "imagePrompt" | "metadata" | "createdAt"
 >;
+
+/**
+ * How Slurp asks for a picture's description. The Engine's chat default asks for the style too, and
+ * the writer then talked about brushwork instead of the person (player report); the player can
+ * replace this in Settings › Images.
+ */
+export const SLURP_IMAGE_CAPTION_PROMPT =
+  "You describe pictures from a social feed for a writer who cannot see them. " +
+  "Write a faithful, concise description of what is visible: the people, their clothing, pose and expression, what they are doing, the place, and any readable text. " +
+  "Do not describe the art style, medium, or image quality, and do not add speculation beyond what is visible.";
 
 /**
  * The connection that describes pictures. A text-only Creator model cannot read an image, so the
@@ -33,9 +44,15 @@ export async function slurpImageCaptioning(
   db: DB,
   connectionId: string | null,
   textConnection: GenerationConnection,
+  /** The player's caption instructions; blank uses SLURP_IMAGE_CAPTION_PROMPT. */
+  prompt = "",
+  /** False inside a run that holds the text connection's background slot. */
+  bookConnection = true,
 ): Promise<ImageCaptioningRuntime> {
   const connection =
     (connectionId ? await createConnectionsStorage(db).getWithKey(connectionId) : null) ?? textConnection;
+  // The run's slot covers only its own connection: on another one, each caption waits like other background work.
+  const yieldToForeground = !bookConnection && connection.id !== textConnection.id;
   const provider = slpWithProviderRetry(
     createLLMProvider(
       connection.provider,
@@ -47,13 +64,22 @@ export async function slurpImageCaptioning(
       connection.claudeFastMode === "true",
       connection.treatAsLocalEndpoint === "true",
       connection.defaultParameters,
+      // Booked as foreground work, like the reply it describes pictures for. A caller that already holds the
+      // connection's background slot passes false: a foreground booking inside it would hold off other work.
+      bookConnection ? connection.id : undefined,
     ),
   );
-  // The Engine's caption helper swallows provider errors, so a refusal is only visible here.
+  const instructions = prompt.trim() || SLURP_IMAGE_CAPTION_PROMPT;
+  // The Engine's caption helper swallows provider errors, so a refusal is only visible here. Older Engines
+  // hardcode its one system message (the chat default), so Slurp's instructions replace it here.
   const guardedProvider = Object.assign(Object.create(provider) as typeof provider, {
-    chatComplete: async (...args: Parameters<typeof provider.chatComplete>) => {
+    chatComplete: async (...[messages, ...rest]: Parameters<typeof provider.chatComplete>) => {
+      if (yieldToForeground) slpRequireBackgroundIdle(connection.id);
       try {
-        return await provider.chatComplete(...args);
+        const own = messages.map((message) =>
+          message.role === "system" ? { ...message, content: instructions } : message,
+        );
+        return await provider.chatComplete(own, ...rest);
       } catch (error) {
         if (isUnsupportedSlpVisionInputError(error)) rememberSlurpVisionRejection(connection);
         throw error;
@@ -78,6 +104,14 @@ function imageSource(post: SlurpImageContextPost): string {
  * A picture is described once. `onDescribed` keeps the description, and the next call reads it
  * back instead of paying the vision model again for the same pixels.
  */
+/**
+ * How every picture reaches a prompt. A stored prompt carries style tags and a caption says "an
+ * anime illustration", so fans started reviewing the art style (#38). In the world a picture is a
+ * photo of the Creator; the label says so once per picture.
+ */
+const PICTURE_SEEN =
+  "an ordinary photo in this world: react to what it shows, never to art style, drawing, rendering or picture quality";
+
 export async function prepareSlurpPostImageContexts(input: {
   posts: readonly SlurpImageContextPost[];
   mode: "auto" | "imagePrompt" | "vision";
@@ -97,10 +131,10 @@ export async function prepareSlurpPostImageContexts(input: {
         ? post.metadata.imageDescription.trim()
         : "";
     if (input.mode !== "vision" && prompt) {
-      contexts.set(post.id, `Intended image (stored image prompt): ${prompt}`);
+      contexts.set(post.id, `Picture, from its prompt (${PICTURE_SEEN}): ${prompt}`);
     } else if (saved) {
       // Already paid for, so even prompt-only mode may use it.
-      contexts.set(post.id, `Image description: ${saved}`);
+      contexts.set(post.id, `Picture (${PICTURE_SEEN}): ${saved}`);
     } else if (input.mode !== "imagePrompt") {
       visionPosts.push(post);
     }
@@ -133,7 +167,7 @@ export async function prepareSlurpPostImageContexts(input: {
   );
   for (const { input: image, caption } of captions) {
     if (!caption) continue;
-    contexts.set(image.filename, `Image description: ${caption}`);
+    contexts.set(image.filename, `Picture (${PICTURE_SEEN}): ${caption}`);
     const post = visionPosts.find((candidate) => candidate.id === image.filename);
     // Keeping it is a saving, not a requirement: a failed write only means describing it again.
     const onDescribed = input.onDescribed;

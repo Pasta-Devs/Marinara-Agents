@@ -66,10 +66,7 @@ export function stageProfileContainsPublicIdentity(
   profile: SlpStageProfileInput & { tags?: readonly string[] },
   publicIdentity: PublicIdentity,
 ): boolean {
-  if (profile.disclosureMode === "open") return false;
-  const values = [profile.displayName, profile.handle, profile.bio, profile.stagePersonality, ...(profile.tags ?? [])];
-  const protectedValues = protectedIdentityValues(publicIdentity);
-  return values.some((value) => protectedValues.some((identifier) => containsIdentity(value, identifier)));
+  return stageProfilePublicIdentityLeak(profile, publicIdentity) !== null;
 }
 
 /**
@@ -86,19 +83,9 @@ export function normalizedDisclosureWords(value: string): string[] {
     .filter((word) => word.length >= 4);
 }
 
-export function stageProfileContainsSourceDetails(
-  profile: SlpStageProfileInput & { tags?: readonly string[] },
-  source: SlpCreatorSourceSnapshot,
-): boolean {
-  if (profile.disclosureMode === "open") return false;
-  const profileText = [
-    profile.displayName,
-    profile.handle,
-    profile.bio,
-    profile.stagePersonality,
-    ...(profile.tags ?? []),
-  ].join(" ");
-  const normalizedProfile = ` ${normalizedDisclosureWords(profileText).join(" ")} `;
+/** Whether `text` copies a source field: a whole short field, or a run of four distinctive words. */
+function textCopiesSourceDetails(text: string, source: SlpCreatorSourceSnapshot): boolean {
+  const normalizedText = ` ${normalizedDisclosureWords(text).join(" ")} `;
   // Personality is deliberately part of the seed both concealed modes receive: "body, voice, and
   // everyday texture are inseparable from the person and stay in" (slurp-prompt-safety.ts). Checking
   // Secret against it punished that mode for using material it was handed, and made Secret the tier
@@ -108,13 +95,51 @@ export function stageProfileContainsSourceDetails(
     const words = normalizedDisclosureWords(field);
     if (words.length === 0) return false;
     if (words.length <= 3) {
-      return words.every((word) => normalizedProfile.includes(` ${word} `));
+      return words.every((word) => normalizedText.includes(` ${word} `));
     }
     for (let index = 0; index <= words.length - 4; index += 1) {
-      if (normalizedProfile.includes(` ${words.slice(index, index + 4).join(" ")} `)) {
+      if (normalizedText.includes(` ${words.slice(index, index + 4).join(" ")} `)) {
         return true;
       }
     }
     return false;
   });
+}
+
+/**
+ * The tag that gives a concealed profile away, `""` when the profile text does, or null.
+ *
+ * Tags are separate labels, so each one is checked on its own: joined with the bio, words from
+ * different fields completed a short source field ("long silver hair") that no field copied, and
+ * the editor could not say which tag to change (#73).
+ */
+export function stageProfileSourceDetailLeak(
+  profile: SlpStageProfileInput & { tags?: readonly string[] },
+  source: SlpCreatorSourceSnapshot,
+): string | null {
+  if (profile.disclosureMode === "open") return null;
+  const tag = (profile.tags ?? []).find((value) => textCopiesSourceDetails(value, source));
+  if (tag) return tag;
+  const profileText = [profile.displayName, profile.handle, profile.bio, profile.stagePersonality].join(" ");
+  return textCopiesSourceDetails(profileText, source) ? "" : null;
+}
+
+export function stageProfileContainsSourceDetails(
+  profile: SlpStageProfileInput & { tags?: readonly string[] },
+  source: SlpCreatorSourceSnapshot,
+): boolean {
+  return stageProfileSourceDetailLeak(profile, source) !== null;
+}
+
+/** The tag that names the source, `""` when the profile text does, or null. */
+export function stageProfilePublicIdentityLeak(
+  profile: SlpStageProfileInput & { tags?: readonly string[] },
+  publicIdentity: PublicIdentity,
+): string | null {
+  if (profile.disclosureMode === "open") return null;
+  const protectedValues = protectedIdentityValues(publicIdentity);
+  const names = (value: string) => protectedValues.some((identifier) => containsIdentity(value, identifier));
+  const tag = (profile.tags ?? []).find(names);
+  if (tag) return tag;
+  return [profile.displayName, profile.handle, profile.bio, profile.stagePersonality].some(names) ? "" : null;
 }

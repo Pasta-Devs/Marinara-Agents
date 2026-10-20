@@ -7,6 +7,8 @@ import {
   protectedIdentityValues,
   stageProfileContainsPublicIdentity,
   stageProfileContainsSourceDetails,
+  stageProfilePublicIdentityLeak,
+  stageProfileSourceDetailLeak,
 } from "../packages/slurp2/src/engine/packages/server/src/slp/base/identity/slp-identity-protection";
 import { slurp2Source } from "./slurp2-source";
 
@@ -119,6 +121,28 @@ assert.ok(
   ),
   "custom tags participate in source-detail leak checks",
 );
+
+// #73: tags are separate labels. Words spread over the bio and a tag must not add up to a short
+// source field that neither of them copies, and the leaking tag is named for the editor.
+const shortSource = { ...source, appearance: "Long silver hair" };
+assert.ok(
+  !stageProfileContainsSourceDetails(
+    { ...copiedProfile, bio: "Long nights, longer playlists.", tags: ["silver", "hair care"] },
+    shortSource,
+  ),
+  "words from the bio and separate tags do not add up to a copied field",
+);
+assert.equal(
+  stageProfileSourceDetailLeak({ ...copiedProfile, bio: "Reworded.", tags: ["cosy", "long silver hair"] }, shortSource),
+  "long silver hair",
+);
+assert.equal(stageProfileSourceDetailLeak(copiedProfile, source), "", "a leak in the profile text names no tag");
+assert.equal(stageProfileSourceDetailLeak({ ...copiedProfile, bio: "Reworded." }, source), null);
+assert.equal(
+  stageProfilePublicIdentityLeak({ ...leakyProfile, bio: "Quieter than most.", tags: ["cosy", "Mari Vale"] }, identity),
+  "Mari Vale",
+);
+assert.equal(stageProfilePublicIdentityLeak(leakyProfile, identity), "");
 
 // Open is never checked against the source.
 assert.ok(!stageProfileContainsSourceDetails({ ...copiedProfile, disclosureMode: "open" }, source));

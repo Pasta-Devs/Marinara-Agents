@@ -171,6 +171,9 @@ export function SlpStirCreatorSheet({
               )}
             </section>
           )}
+          {creator && !creator.automatic && !creator.couplePage && (
+            <SlpCreatorSteeringCard creatorId={creator.id} name={creator.name} relationshipOnly />
+          )}
           {creator && onOpenSupport && (
             <button
               type="button"

@@ -18,6 +18,8 @@ const EXPECTED = [
   "POST /slurp/desk/offer/answer",
   "PATCH /messages/threads/:threadId/details",
   "GET /slurp/posts/:id/deep-details",
+  // Deep details for a chat reply, from the Message menu (seat-gated).
+  "GET /slurp/messages/:messageId/deep-details",
   "GET /continuity",
   "GET /continuity/:creatorAccountId",
   "GET /messages/threads/:threadId/requests",
@@ -54,6 +56,8 @@ const EXPECTED = [
   "GET /slurp/stir",
   // 7b-c: collabs, rivalries and brand deals in Studio.
   "GET /slurp/ties",
+  // 0.3.44: what is trending, for Discover.
+  "GET /slurp/trends",
   "POST /slurp/ties/collabs",
   "POST /slurp/ties/collabs/:id/push",
   "POST /slurp/ties/collabs/:id/decline",
@@ -79,6 +83,8 @@ const EXPECTED = [
   // 0.3.2 Creator Pages: the player's edit, and "Let <Creator> design it".
   "PUT /slurp/accounts/:id/page",
   "POST /slurp/accounts/:id/page/compose",
+  // 0.3.27: "Suggest page style" proposes a Creator strategy; applying it uses the settings PATCH.
+  "POST /slurp/accounts/:id/strategy/suggest",
   // 7b-spice: Backstage › Spice (the Slurp-wide limit, the player's taste, "Slurp noticed you like …").
   "GET /slurp/spice",
   "PATCH /slurp/spice",
@@ -111,6 +117,7 @@ const EXPECTED = [
   "GET /backup/jobs/:id",
   "GET /backup/jobs/:id/download",
   "GET /discovery-tags/usage",
+  "GET /engine-avatars/:fileName",
   "GET /fan-types/rebalance/preview",
   "GET /maintenance/summary",
   "GET /messages/:messageId/media",
@@ -166,6 +173,7 @@ const EXPECTED = [
   "GET /settings",
   "GET /settings/audience-characters",
   "GET /settings/audience-characters/groups",
+  "GET /settings/carryover-reach",
   "GET /settings/defaults",
   "GET /settings/prompt-blocks",
   "POST /settings/prompt-blocks/generate-preview",
@@ -366,6 +374,8 @@ const ADDED_ROUTES = new Set([
   "GET /slurp/stir",
   // 7b-c: collabs, rivalries and brand deals in Studio.
   "GET /slurp/ties",
+  // 0.3.44: what is trending, for Discover.
+  "GET /slurp/trends",
   "POST /slurp/ties/collabs",
   "POST /slurp/ties/collabs/:id/push",
   "POST /slurp/ties/collabs/:id/decline",
@@ -395,6 +405,8 @@ const ADDED_ROUTES = new Set([
   // 0.3.2 Creator Pages: the player's edit, and "Let <Creator> design it".
   "PUT /slurp/accounts/:id/page",
   "POST /slurp/accounts/:id/page/compose",
+  // 0.3.27: "Suggest page style" proposes a Creator strategy; applying it uses the settings PATCH.
+  "POST /slurp/accounts/:id/strategy/suggest",
   // 7b-spice: Backstage › Spice (the Slurp-wide limit, the player's taste, "Slurp noticed you like …").
   "GET /slurp/spice",
   "PATCH /slurp/spice",
@@ -402,6 +414,8 @@ const ADDED_ROUTES = new Set([
   "GET /messages/unread-count",
   "GET /slurp/notifications/unseen-count",
   "GET /slurp/posts/:id/deep-details",
+  // Deep details for a chat reply, from the Message menu (seat-gated).
+  "GET /slurp/messages/:messageId/deep-details",
   "POST /settings/prompt-blocks/generate-preview",
   "GET /continuity",
   "GET /continuity/:creatorAccountId",
@@ -453,6 +467,10 @@ const ADDED_ROUTES = new Set([
   "POST /slurp/desk/offer/answer",
   // 0.3.7: "Rewrite all now" in AI budget settings.
   "POST /model-budget/rewrite-pending",
+  // 0.3.41: small copies of Engine avatars, which the Engine serves only at full size.
+  "GET /engine-avatars/:fileName",
+  // 0.3.42: carryover settings count the Creator chats that let Slurp activity in.
+  "GET /settings/carryover-reach",
 ]);
 
 // Routes staging had that Slurp2 no longer serves. The share card is now drawn on a canvas in
@@ -482,13 +500,13 @@ const EXPECTED_HANDLER_COUNTS = {
   "features/ads": 24,
   "features/assist": 9,
   "features/audience": 13,
-  "features/creators": 49,
-  "features/discovery": 4,
+  "features/creators": 51,
+  "features/discovery": 5,
   "features/economy": 14,
   "features/feed": 39,
   "features/maintenance": 15,
-  "features/media": 7,
-  "features/messages": 49,
+  "features/media": 8,
+  "features/messages": 50,
   "features/notifications": 4,
   "features/onboarding": 7,
   "features/projects": 31,
@@ -498,7 +516,8 @@ const EXPECTED_HANDLER_COUNTS = {
 // W: +5 POST, +1 GET (Stir). R: +3 POST, +1 GET, +1 PATCH, +1 DELETE (brands).
 // 0.3.4: +1 POST, +1 PUT (Creator Pages). 0.3.5: +1 GET, +3 POST (Support desk). 0.3.7: +1 POST (rewrite all).
 // 0.3.8: +1 GET, +5 POST (Drama: bonds, drama view, choice, start, end). 0.3.11: +1 POST (fan notes).
-const EXPECTED_METHOD_COUNTS = { DELETE: 19, GET: 84, PATCH: 20, POST: 158, PUT: 7 } as const;
+// 0.3.28: +1 GET (Deep details for a chat reply). 0.3.42: +1 GET (carryover reach).
+const EXPECTED_METHOD_COUNTS = { DELETE: 19, GET: 88, PATCH: 20, POST: 159, PUT: 7 } as const;
 
 const root = join(import.meta.dirname, "../packages/slurp2/src/engine/packages/server/src/slp");
 const registration = /\bapp\.(get|post|put|patch|delete|addContentTypeParser)(?:<[^()]*?>)?\(\s*["'`]([^"'`]+)["'`]/gu;
@@ -554,7 +573,8 @@ const methodCounts = Object.fromEntries(
 );
 assert.deepEqual(methodCounts, EXPECTED_METHOD_COUNTS, "HTTP method multiset changed from staging");
 // 0.3.5: +4 (the Support desk). 0.3.7: +1 (rewrite all). Roleplay scenes: +4. 0.3.17: +2 (collab drop, post now).
-assert.equal(foundRoutes.filter((route) => !route.startsWith("ADDCONTENTTYPEPARSER ")).length, 288);
+// 0.3.41: +1 (Engine avatar copies).
+assert.equal(foundRoutes.filter((route) => !route.startsWith("ADDCONTENTTYPEPARSER ")).length, 293);
 assert.deepEqual(handlerCounts, EXPECTED_HANDLER_COUNTS, "handler count changed in a feature");
 assert.ok(foundRoutes.includes("POST /slurp/posts/:id/media"), "the renamed POST media route must remain registered");
 assert.ok(

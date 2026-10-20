@@ -4,16 +4,54 @@
 
 const QM = {};
 
+const QM_UNSAFE_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"]);
+
+// ponytail: every package route sits behind the Engine's privileged gate, so a
+// session from another device needs the admin secret the Engine's own client
+// keeps under this localStorage key (loopback is exempt, which is why this went
+// unnoticed). Same approach as Memory Nag and Relationship Tracker; replace
+// with a host-provided fetch if the Engine ever adds one.
+function qmAdminSecret() {
+  try {
+    return localStorage.getItem("marinara_admin_secret")?.trim() || "";
+  } catch {
+    return "";
+  }
+}
+
+// CSRF marker sent explicitly rather than relying on the Engine's global fetch shim.
+function qmAuthHeaders(method) {
+  const headers = {};
+  if (QM_UNSAFE_METHODS.has(method)) headers["x-marinara-csrf"] = "1";
+  const secret = qmAdminSecret();
+  if (secret) headers["X-Admin-Secret"] = secret;
+  return headers;
+}
+
+// Turns the gate's refusal into a step the user can take on this device.
+// Wording matches Relationship Tracker, Noodle and Slurp (#1136).
+function qmResponseError(response, body) {
+  const message = body && typeof body.error === "string" ? body.error : "";
+  if (response.status === 403 && /admin.secret/i.test(message)) {
+    return /X-Admin-Secret/.test(message) && qmAdminSecret()
+      ? "The Admin Secret saved on this device does not match the Engine's ADMIN_SECRET. Enter the same value in Settings → Advanced → Admin Access."
+      : "Marinara Engine blocked Quartermaster because this device has no Admin Secret. Set ADMIN_SECRET in the Engine's .env file if it is not set yet, then enter the same value in Settings → Advanced → Admin Access.";
+  }
+  return message || `Request failed (${response.status})`;
+}
+
 async function qmRequest(path, options) {
+  const method = (options && options.method) || "GET";
   // Only set Content-Type when there's actually a JSON body — Fastify's body
   // parser rejects a bodyless request (GET/DELETE) that still declares
   // application/json with "Body cannot be empty when content-type is set to
   // 'application/json'".
-  const headers = options && options.body ? { "Content-Type": "application/json" } : {};
-  const response = await fetch(`/api/quartermaster${path}`, { ...options, headers });
+  const headers = qmAuthHeaders(method);
+  if (options && options.body) headers["Content-Type"] = "application/json";
+  const response = await fetch(`/api/quartermaster${path}`, { ...options, headers, credentials: "same-origin" });
   const body = await response.json().catch(() => null);
   if (!response.ok) {
-    throw new Error((body && body.error) || `Request failed (${response.status})`);
+    throw new Error(qmResponseError(response, body));
   }
   return body;
 }
@@ -173,7 +211,10 @@ QM.generateOutfitPortrait = (chatId, ownerId, outfitId, prompt) =>
 // so this needs no package permission. Filtered client-side the same way
 // server.mjs's own resolveImageConnection filters server-side.
 QM.listImageConnections = async () => {
-  const response = await fetch("/api/connections", { headers: { Accept: "application/json" } });
+  const response = await fetch("/api/connections", {
+    headers: { ...qmAuthHeaders("GET"), Accept: "application/json" },
+    credentials: "same-origin",
+  });
   if (!response.ok) throw new Error(`Could not load connections (${response.status})`);
   const connections = await response.json();
   return Array.isArray(connections) ? connections.filter((c) => c && c.provider === "image_generation") : [];
@@ -197,7 +238,8 @@ QM.itemImageUrl = (chatId, ownerId, itemId) =>
 // just once — don't keep re-requesting (and re-404ing/re-logging) a URL
 // already known to fail. Session-lifetime only, not persisted: a page
 // reload re-checks everything once, which is fine. Cleared for a specific
-// item by uploadItemImage/deleteItemImage below; a rename that happens to
+// item by uploadItemImage/deleteItemImage below, and entirely by Refresh
+// Images or an Admin Secret change (qmSyncImageSecret); a rename that happens to
 // newly match a pack image is the one case this can go stale on, until the
 // next reload — rare enough not to warrant duplicating the server's
 // name-matching logic here just to key this more precisely.
@@ -227,6 +269,104 @@ QM.deleteOutfitPortrait = (chatId, ownerId, outfitId) =>
 // so plain is fine) only if they need to force a reload of the SAME filename.
 QM.outfitPortraitUrl = (chatId, ownerId, outfitId) =>
   `/api/quartermaster/inventory/${encodeURIComponent(chatId)}/${encodeURIComponent(ownerId)}/outfits/${encodeURIComponent(outfitId)}/portrait`;
+
+// An <img src> can't send X-Admin-Secret, so with a secret saved on this device
+// our own (gated) image URLs load through fetch into a session cache of object
+// URLs, shared by every element showing that image: the dock rebuilds its lists
+// on every repaint, so loading per element would refetch everything each time.
+// Without a saved secret nothing changes: a plain src, as before.
+//
+// Entry status: "loading", "ok", "missing" (a confirmed 404, like
+// _missingItemImageIds) or "failed" (refused secret, server or network error).
+// Both failures stay cached so repaints don't refetch them; reopening the dock
+// retries "failed" ones, and Refresh Images or a secret change retries all.
+// The cache is our only cache (no-store), so a cleared entry never comes back
+// from the browser's HTTP cache, where portraits are marked immutable.
+const qmImageCache = new Map();
+// img -> the cache entry it last asked for, so only its latest request applies.
+const qmImageTargets = new WeakMap();
+let qmImageCacheSecret = null;
+
+// ponytail: a retired object URL is revoked after a delay instead of tracking
+// every element using it. An image already on screen keeps its decoded
+// picture; the delay covers one that was still loading it.
+function qmRetireImage(entry) {
+  const objectUrl = entry.objectUrl;
+  if (objectUrl) setTimeout(() => URL.revokeObjectURL(objectUrl), 30000);
+}
+
+QM.forgetImage = (url) => {
+  const entry = qmImageCache.get(url);
+  if (!entry) return;
+  qmImageCache.delete(url);
+  qmRetireImage(entry);
+};
+
+QM.clearImageCache = () => {
+  for (const entry of qmImageCache.values()) qmRetireImage(entry);
+  qmImageCache.clear();
+};
+
+// A new or removed secret can fix (or cause) refused requests, so everything,
+// including items remembered as having no image, gets a fresh try.
+function qmSyncImageSecret(secret) {
+  if (qmImageCacheSecret === null) qmImageCacheSecret = secret;
+  if (secret === qmImageCacheSecret) return;
+  qmImageCacheSecret = secret;
+  QM.clearImageCache();
+  QM._missingItemImageIds.clear();
+}
+
+QM.retryFailedImages = () => {
+  qmSyncImageSecret(qmAdminSecret());
+  for (const [url, entry] of qmImageCache) {
+    if (entry.status === "failed") qmImageCache.delete(url);
+  }
+};
+
+function qmLoadImage(url) {
+  const entry = { status: "loading", objectUrl: null, ready: null };
+  qmImageCache.set(url, entry);
+  entry.ready = fetch(url, { headers: qmAuthHeaders("GET"), credentials: "same-origin", cache: "no-store" })
+    .then(async (response) => {
+      if (!response.ok) return response.status === 404 ? "missing" : "failed";
+      const blob = await response.blob();
+      // Forgotten while loading: discard without creating an object URL.
+      if (qmImageCache.get(url) !== entry) return "stale";
+      entry.objectUrl = URL.createObjectURL(blob);
+      return "ok";
+    })
+    .catch(() => "failed")
+    .then((status) => {
+      entry.status = status;
+    });
+  return entry;
+}
+
+// A failed load fires the img's "error" event, which every caller already uses
+// for its fallback; event.qmRetryable marks a failure that isn't a real "no image".
+QM.setImageSrc = (img, url) => {
+  const secret = qmAdminSecret();
+  qmSyncImageSecret(secret);
+  if (!secret || !url.startsWith("/api/quartermaster/")) {
+    qmImageTargets.delete(img);
+    img.src = url;
+    return;
+  }
+  const entry = qmImageCache.get(url) || qmLoadImage(url);
+  if (qmImageTargets.get(img) === entry) return;
+  qmImageTargets.set(img, entry);
+  entry.ready.then(() => {
+    if (qmImageTargets.get(img) !== entry || qmImageCache.get(url) !== entry) return;
+    if (entry.status === "ok") {
+      img.src = entry.objectUrl;
+      return;
+    }
+    const event = new Event("error");
+    event.qmRetryable = entry.status === "failed";
+    img.dispatchEvent(event);
+  });
+};
 
 QM.exportInventory = (chatId, ownerId) =>
   qmRequest(`/inventory/${encodeURIComponent(chatId)}/${encodeURIComponent(ownerId)}/export`, { method: "GET" });

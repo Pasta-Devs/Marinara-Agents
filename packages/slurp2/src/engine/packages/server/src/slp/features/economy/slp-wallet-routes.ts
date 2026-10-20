@@ -177,7 +177,6 @@ export async function slpWalletRoutes(app: FastifyInstance, deps: SlpRouteDeps) 
       kind: "tip",
       amount: parsed.data.amount,
     });
-    recordSlurpTasteSignal(app.db, { creatorId: creatorAccountId }, "tip");
     return wallet;
   });
 

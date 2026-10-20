@@ -20,6 +20,7 @@ import {
 } from "../../modules/creators/slp-creator-flavour.js";
 import type { SlurpCanonAnchors } from "../../modules/feed/slp-post-beat.js";
 import { readSlurpCreatorSteering } from "./slp-steering-storage.js";
+import { SLURP_CANON_ANCHORS_KEY } from "./slp-canon-anchor-storage.js";
 import { readSlurpCreatorTiesDocument } from "../projects/slp-creator-ties-storage.js";
 import { resolveSlurpExplicitLevel } from "../settings/slp-post-guidance-storage.js";
 import { SLP_EXPLICIT_LEVELS } from "../../../../../shared/src/slp/slp-spice.js";
@@ -27,6 +28,7 @@ import { slurpCouplePartners } from "../../modules/projects/slp-couple-group.js"
 import { slurpPartnerWord, slurpRelationshipLine } from "../../modules/projects/slp-couple-lines.js";
 import { readSlurpAgentMemoryLines } from "./slp-agent-memory-source.js";
 import { createSlurpStorage } from "../slp-storage.js";
+import { slpWear, type SlpClothingStyle, type SlpGender } from "../../../../../shared/src/slp/slp-gender.js";
 import { resolveSlurpCreatorSpice, type SlurpCreatorSpice } from "./slp-spice-storage.js";
 import {
   slurpDmSpiceLevel,
@@ -34,9 +36,6 @@ import {
   slurpTastePick,
   type SlurpSpiceCreator,
 } from "../../modules/creators/slp-spice.js";
-
-/** The beats planner's anchor cache, one entry per Creator. Written by `slp-post-beat-service.ts`. */
-export const SLURP_CANON_ANCHORS_KEY = "slurp2.canon-anchors";
 
 const text = (value: unknown) => (typeof value === "string" ? value : "");
 
@@ -201,7 +200,13 @@ export function slurpSpiceCreatorFrom(
 export async function resolveSlurpSpiceCreator(
   db: DB,
   input: {
-    account: Pick<SlpAccount, "id"> & { settings: { strategy?: unknown } };
+    account: Pick<SlpAccount, "id"> & {
+      settings: {
+        strategy?: unknown;
+        profile?: { gender?: SlpGender | null };
+        stage?: { clothingStyle?: SlpClothingStyle };
+      };
+    };
     source: Pick<SlpAccount, "kind" | "entityId"> | null;
     disclosureMode: SlpIdentityDisclosure;
   },
@@ -209,7 +214,8 @@ export async function resolveSlurpSpiceCreator(
   const spice = await resolveSlurpCreatorSpice(db, input.account);
   const card = await readFlavourCard(db, input.source, input.disclosureMode);
   const anchors = await readAnchors(db, input.account.id);
-  return { spice, creator: slurpSpiceCreatorFrom(input.account.id, card?.card ?? {}, anchors, spice) };
+  const wear = slpWear(input.account.settings.profile?.gender, input.account.settings.stage?.clothingStyle);
+  return { spice, creator: { ...slurpSpiceCreatorFrom(input.account.id, card?.card ?? {}, anchors, spice), wear } };
 }
 
 async function flavourSpiceLines(

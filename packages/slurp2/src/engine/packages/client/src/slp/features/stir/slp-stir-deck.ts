@@ -3,6 +3,8 @@ import {
   CalendarPlus,
   Palette,
   Target,
+  TrendingUp,
+  Compass,
   CalendarHeart,
   Flame,
   Handshake,
@@ -55,6 +57,8 @@ const ICONS: Partial<Record<SlpActionName, LucideIcon>> = {
   "set-tip-goal": Target,
   "new-look": Palette,
   "invent-event": CalendarPlus,
+  "start-trend": TrendingUp,
+  "steer-trend": Compass,
   "set-bond": Users,
   "start-drama": Clapperboard,
 };
@@ -102,6 +106,8 @@ export const SLP_STIR_DECK_ORDER: SlpActionName[] = [
   "set-spice",
   "start-event",
   "invent-event",
+  "start-trend",
+  "steer-trend",
   "steer-storyline",
   "run-audience",
 ];

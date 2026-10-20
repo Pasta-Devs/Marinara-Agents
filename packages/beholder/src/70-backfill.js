@@ -203,6 +203,9 @@ BH.backfill = {
     const menu = document.createElement("div");
     menu.className = "beholder-bf-menu";
     menu.setAttribute("role", "menu");
+    // On the body like the first-open note, so it needs the same marker: without it a
+    // press here closes the Engine's shortcut window, and Beholder with it.
+    menu.setAttribute("data-chat-floating-panel", "");
     menu.innerHTML = `
       <button type="button" class="bh-bf-mode" data-mode="build" role="menuitem">
         <i class="fa-solid fa-clock-rotate-left" aria-hidden="true"></i>

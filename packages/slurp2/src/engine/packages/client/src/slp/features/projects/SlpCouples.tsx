@@ -1,5 +1,14 @@
-import type { ReactNode } from "react";
-import { BriefcaseBusiness, CalendarHeart, DoorClosed, DoorOpen, HeartCrack, HeartHandshake, Zap } from "lucide-react";
+import { useState, type ReactNode } from "react";
+import {
+  BriefcaseBusiness,
+  CalendarHeart,
+  DoorClosed,
+  DoorOpen,
+  HeartCrack,
+  HeartHandshake,
+  HeartOff,
+  Zap,
+} from "lucide-react";
 import { toast } from "sonner";
 import { useTranslation } from "react-i18next";
 import { cn } from "../../../lib/utils";
@@ -7,6 +16,8 @@ import { SLP_EYEBROW_CLASS, SLP_TYPE } from "../../base/chrome/SlpChrome";
 import { SlpHeartGlyph } from "../../base/chrome/SlpGlyphs";
 import { SlpButton } from "../../modules/chrome/SlpButton";
 import { SlpSheet } from "../../modules/chrome/SlpSheet";
+import { SlpBreakupAftermathSheet } from "../../modules/creator/SlpBreakupAftermath";
+import { slpAftermathChoices } from "../../modules/creator/slp-breakup-aftermath";
 import { formatRelativeTime } from "../../base/ui/slp-date-time";
 import { errorMessage } from "../../modules/settings/slp-backstage-format";
 import {
@@ -56,15 +67,34 @@ export function SlpCouplesSection({
   const { t, i18n } = useTranslation();
   const actions = useSlurpTiesMutations(personaId);
   const momentLine = useMomentLine();
+  // #1293: a breakup (or an ex's later change) asks what it leaves behind before it runs.
+  const [ending, setEnding] = useState<SlurpTiesCouple | null>(null);
   if (!couples.length) return null;
   const name = (id: string) => byId.get(id)?.name ?? t("ui.slurp.ties.someone");
   const busy = actions.steerCouple.isPending || actions.couplePage.isPending || actions.suggest.isPending;
   const onError = (error: unknown) => toast.error(errorMessage(error));
-  const steer = (couple: SlurpTiesCouple, value: SlurpCoupleSteer) =>
+  const steer = (couple: SlurpTiesCouple, value: SlurpCoupleSteer, aftermath?: "moveOn" | "forget") =>
     actions.steerCouple.mutate(
-      { id: couple.id, steer: value },
-      { onSuccess: () => toast.success(t(`ui.slurp.ties.couple.done.${value}`)), onError },
+      { id: couple.id, steer: value, aftermath },
+      {
+        onSuccess: () => {
+          setEnding(null);
+          toast.success(
+            t(
+              value === "breakUp" && aftermath === "moveOn"
+                ? "ui.slurp.ties.couple.done.breakUpMoveOn"
+                : value === "breakUp" && aftermath === "forget"
+                  ? "ui.slurp.ties.couple.done.breakUpForget"
+                  : `ui.slurp.ties.couple.done.${value}`,
+            ),
+          );
+        },
+        onError,
+      },
     );
+  const endingNames = ending
+    ? { a: [ending.aId, ...(ending.moreIds ?? [])].map(name).join(", "), b: name(ending.bId) }
+    : { a: "", b: "" };
   const page = (couple: SlurpTiesCouple, open: boolean) =>
     actions.couplePage.mutate(
       { id: couple.id, open },
@@ -98,7 +128,8 @@ export function SlpCouplesSection({
           const forced = couple.forced
             ? t(`ui.slurp.ties.couple.forced.${couple.forced.misfit}`, { name: name(couple.forced.byId) })
             : "";
-          const line = [momentLine(couple, name), forced].filter(Boolean).join(" · ");
+          const after = !live && couple.aftermath ? t(`ui.slurp.breakup.state.${couple.aftermath}`) : "";
+          const line = [momentLine(couple, name), forced, after].filter(Boolean).join(" · ");
           const when = formatRelativeTime(couple.moments.at(-1)?.at ?? couple.stageAt, i18n.language);
           return (
             <li key={couple.id} className={rowClass} data-slurp-couple={couple.stage}>
@@ -162,6 +193,18 @@ export function SlpCouplesSection({
                     {t(couple.ending === "fizzled" ? "ui.slurp.ties.couple.retry" : "ui.slurp.ties.couple.reunite")}
                   </SlpButton>
                 )}
+                {!live && (
+                  <SlpButton
+                    variant="tertiary"
+                    disabled={busy}
+                    onClick={() => setEnding(couple)}
+                    className="min-h-11 text-sm"
+                    data-slurp-couple-aftermath
+                  >
+                    <HeartOff size={15} aria-hidden="true" />
+                    {t("ui.slurp.breakup.afterwards")}
+                  </SlpButton>
+                )}
               </div>
               {live ? (
                 <div className="flex flex-wrap gap-x-2">
@@ -191,7 +234,8 @@ export function SlpCouplesSection({
                     <SlpButton
                       variant="tertiary"
                       disabled={busy}
-                      onClick={() => steer(couple, "breakUp")}
+                      onClick={() => setEnding(couple)}
+                      data-slurp-couple-break-up
                       className="min-h-11 text-sm"
                     >
                       <HeartCrack size={15} aria-hidden="true" />
@@ -204,6 +248,23 @@ export function SlpCouplesSection({
           );
         })}
       </ul>
+      <SlpBreakupAftermathSheet
+        open={Boolean(ending)}
+        title={t(ending?.stage === "split" ? "ui.slurp.breakup.afterTitle" : "ui.slurp.breakup.title", endingNames)}
+        label={t(ending?.stage === "split" ? "ui.slurp.breakup.aftermath.labelEx" : "ui.slurp.breakup.aftermath.label")}
+        options={ending ? slpAftermathChoices(ending) : []}
+        confirmLabel={t(ending?.stage === "split" ? "ui.slurp.breakup.apply" : "ui.slurp.ties.couple.breakUp")}
+        busy={actions.steerCouple.isPending}
+        // A breakup closes an open shared page, and Undo does not reopen it (runSlurpTieLever).
+        undoable={ending?.stage === "split" || !ending?.page || Boolean(ending.page.closedAt)}
+        onClose={() => setEnding(null)}
+        onConfirm={(aftermath) =>
+          ending &&
+          (ending.stage === "split"
+            ? steer(ending, aftermath as SlurpCoupleSteer)
+            : steer(ending, "breakUp", aftermath === "keep" ? undefined : aftermath))
+        }
+      />
     </section>
   );
 }

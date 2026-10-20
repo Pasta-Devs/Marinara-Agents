@@ -48,6 +48,7 @@ import {
   useUpdateCreatorInteraction,
 } from "../features/feed/slp-feed-viewer-hooks";
 import { useSlurpUnreadCount } from "../features/messages/slp-messages-hooks";
+import { useSyncViewerPersona } from "./slp-viewer-persona-sync";
 import { useSlurpSettings, useUpdateSlurpSettings } from "../features/settings/slp-settings-hooks";
 import { useActivePersona, usePersonas } from "../../hooks/use-creator-personas";
 import { useSlurpConnections } from "../base/state/slp-host-connections";
@@ -96,6 +97,7 @@ export function useSlurpHomeBaseState({ navigation, onNavigate: navigateRaw, onL
   }, [onboardingState, setOnboardingState, slurpSettingsQuery.data?.onboarding]);
   const storedPersonaId = useSlurpUIStore((state) => state.viewerPersonaId);
   const setStoredPersonaId = useSlurpUIStore((state) => state.setViewerPersonaId);
+  useSyncViewerPersona(slurpSettingsQuery.data?.viewerPersonaId, updateSlurpSettings.mutate);
   const personas = personasQuery.data ?? [];
   const viewerPersonaId = useSlpViewerPersonaId();
   const activeWalletCoins = viewerWalletsQuery.data?.[viewerPersonaId ?? ""]?.coins ?? null;
@@ -301,6 +303,7 @@ export function useSlurpHomeBaseState({ navigation, onNavigate: navigateRaw, onL
   const [creationStep, setCreationStep] = useState<"source" | "disclosure" | "draft" | "automatic" | null>(null);
   const [autoPostSetupId, setAutoPostSetupId] = useState<string | null>(null);
   const [creationDisclosure, setCreationDisclosure] = useState<SlpIdentityDisclosure>("open");
+  const [creationImageNameKnown, setCreationImageNameKnown] = useState(true);
   const [draftGuidance, setDraftGuidance] = useState("");
   const [draftConnectionId, setDraftConnectionId] = useState("");
   const [previousDraft, setPreviousDraft] = useState<SlurpStageProfileInput | null>(null);
@@ -715,6 +718,8 @@ export function useSlurpHomeBaseState({ navigation, onNavigate: navigateRaw, onL
     setAutoPostSetupId,
     creationDisclosure,
     setCreationDisclosure,
+    creationImageNameKnown,
+    setCreationImageNameKnown,
     draftGuidance,
     setDraftGuidance,
     draftConnectionId,

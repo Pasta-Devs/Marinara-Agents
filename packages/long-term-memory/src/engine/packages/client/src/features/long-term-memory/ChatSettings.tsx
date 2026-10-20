@@ -5,7 +5,7 @@ import type {
   LtmGlobalSettings,
   LtmLastInjectionResponse,
 } from "../../../../shared/src/features/agents/long-term-memory/schema.js";
-import { queryKeys, request } from "./api";
+import { errorMessage, queryKeys, request } from "./api";
 import { InfoPopover, NumberField, StatusSurface, compactInputClass, compactInputStyle } from "./shared-controls";
 import type { CapabilityProps } from "./types";
 import { LastInjectionSummary } from "./LastInjectionSummary";
@@ -32,11 +32,7 @@ export function ChatSettings({ props }: { props: CapabilityProps }) {
     try {
       await operation();
     } catch (error) {
-      setMessage(
-        error instanceof Error
-          ? error.message
-          : localizeUi("ui.longTermMemory.longtermmemorydetail.couldNotUpdateThisChat"),
-      );
+      setMessage(errorMessage(error, localizeUi("ui.longTermMemory.longtermmemorydetail.couldNotUpdateThisChat")));
     } finally {
       setPending(false);
     }
@@ -137,9 +133,12 @@ export function ChatSettings({ props }: { props: CapabilityProps }) {
           ) : null}
         </div>
       </div>
+      {/* D27: initial load only, so a background refetch keeps the existing data and
+          title instead of flashing the loading title; error/Retry behavior is unchanged. */}
       <LastInjectionSummary
         data={lastInjection.data}
-        loading={lastInjection.isFetching}
+        loading={lastInjection.isLoading}
+        retryPending={lastInjection.isFetching}
         error={lastInjection.isError}
         onRetry={() => void lastInjection.refetch()}
         compact

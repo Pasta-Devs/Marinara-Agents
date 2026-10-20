@@ -1,3 +1,8 @@
+## 1.8.13 — 2026-10-19
+- Fixed: places named in Korean, or in any other non-Latin script, get their background painted. Their names used to come out empty, so the background was never made; places whose names mixed Hangul and numbers could also share one background.
+- Backgrounds already painted for a place keep showing; nothing is painted twice.
+- On a phone held sideways the game uses more of the screen, text no longer grows when you turn the phone, and Settings packs its panels tighter. Where the browser has no fullscreen (iPhone Safari), the fullscreen button is hidden instead of doing nothing.
+
 ## 1.8.12 — 2026-10-02
 - Fixed: Character Stories can be merged too. In Settings > Continuity a compressed Character Story takes a tick like a chapter, and merges with the chapters next to it or with other Character Stories; the merged entry names each one, and the story never sends a merged one twice.
 - Only chapters played to the end can be merged, and a merge that cannot happen says why.

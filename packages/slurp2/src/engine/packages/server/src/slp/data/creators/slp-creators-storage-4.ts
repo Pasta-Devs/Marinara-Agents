@@ -1,5 +1,5 @@
 import { and, eq, like, or } from "../../../db/file-query.js";
-import { normalizeSlurpCreatorStrategy } from "../../modules/creators/slp-creator-strategy.js";
+import { mergeSlurpCreatorStrategy } from "../../modules/creators/slp-creator-strategy.js";
 import { AvatarCrop } from "@marinara-engine/shared";
 import {
   SlpAccountProfileUpdateInput,
@@ -283,15 +283,9 @@ export function createCreatorsStorage4(context: SlurpStorageContext) {
           }
           next = { ...current, social };
         } else if (input.subtree === "strategy") {
-          // Merged key by key so one control never resets another; `null` returns a value to the
-          // derived default. The normalizer drops anything out of range rather than storing it.
-          const merged: Record<string, unknown> = { ...current.strategy };
-          for (const [key, value] of Object.entries(input.patch)) {
-            if (value === null) delete merged[key];
-            else if (value !== undefined) merged[key] = value;
-          }
+          // Throws `SlpStrategyConflictError` inside the transaction, so a refused save writes nothing.
           const { strategy: _previous, ...rest } = current;
-          const strategy = normalizeSlurpCreatorStrategy(merged);
+          const strategy = mergeSlurpCreatorStrategy(current.strategy, input.patch, input.expect);
           next = { ...rest, ...(strategy && { strategy }) };
         } else if (input.subtree === "scheduler") {
           if (row.sourceKind === "persona" && row.kind === "persona" && input.patch.autoPosting?.enabled === true) {
