@@ -724,6 +724,163 @@ async function main() {
     "a provider fact already covering the structured line must not be re-added",
   );
 
+  // A cause written in words on a structured character line resolves to an
+  // event the extraction holds, as relationship causes do, or is left out. It must
+  // not become an invented `timeline_<words>` id that validation then drops.
+  const wordCauseLine =
+    "- Mara | section: facts | text: Mara reads the observatory script fluently. | caused_by: the night lesson";
+  const wordCauseSource = sourceNote(
+    "source_word_cause",
+    { kind: "chat_summary", sourceId: "chat-word-cause", entryId: "summary-word-cause" },
+    ["## character_fact", wordCauseLine].join("\n"),
+  );
+  const normalizeWordCause = (
+    note: ReturnType<typeof sourceNote>,
+    units: ReturnType<typeof unit>[],
+    existingNotes: any[] = [],
+  ) =>
+    normalizeStructuredSummaryEvidenceUnits({
+      units,
+      sourceText: note.sections.source.text,
+      sourceNote: note,
+      sourceHash: sourceHashForLtmSourceNote(note),
+      existingNotes,
+      mode: "roleplay",
+      modes: ["roleplay"],
+    }).units;
+  // Validation drops are reported as `candidate_dropped_*` with the validator code in the details.
+  const hasDropCode = (result: ReturnType<typeof compile>, code: string) =>
+    result.diagnostics.some((diagnostic) => diagnostic.code === code || diagnostic.details?.validatorCode === code);
+  const unmatchedWordCause = compile(wordCauseSource, [], false);
+  assert.equal(
+    hasDropCode(unmatchedWordCause, "unknown_link_target"),
+    false,
+    "a cause that matches no event must not drop the fact the server added",
+  );
+  assert.equal(unmatchedWordCause.accounting.keptUnits, 1);
+  assert.deepEqual(
+    normalizeWordCause(wordCauseSource, []).find((candidate) => candidate.bucket === "character_fact")?.links,
+    [],
+    "a static fact keeps no link for a cause that matches no event",
+  );
+
+  const nightLessonEvent = (note: ReturnType<typeof sourceNote>) =>
+    unit(note, {
+      bucket: "timeline_event",
+      subjectId: "night_lesson",
+      sectionKey: "event",
+      text: "Rowan taught Mara the observatory script at night.",
+      claimKind: "change",
+      links: [{ target: note.id, relation: "extracted_from" }],
+    });
+  const matchedWordCause = normalizeWordCause(wordCauseSource, [nightLessonEvent(wordCauseSource)]);
+  const matchedNightLesson = matchedWordCause.find((candidate) => candidate.bucket === "timeline_event");
+  assert.deepEqual(
+    matchedWordCause.find((candidate) => candidate.bucket === "character_fact")?.links,
+    [{ target: `timeline_${matchedNightLesson?.subjectId}`, relation: "evidenced_by" }],
+    "a cause in words resolves to the matching event in the answer",
+  );
+  const matchedWordCauseCompiled = compile(wordCauseSource, [nightLessonEvent(wordCauseSource)], false);
+  assert.equal(hasDropCode(matchedWordCauseCompiled, "unknown_link_target"), false);
+  assert.equal(matchedWordCauseCompiled.accounting.keptUnits, 2);
+
+  const exactCauseSource = sourceNote(
+    "source_exact_cause",
+    { kind: "chat_summary", sourceId: "chat-exact-cause", entryId: "summary-exact-cause" },
+    [
+      "## character_fact",
+      "- Mara | section: facts | text: Mara reads the observatory script fluently. | caused_by: night_lesson",
+    ].join("\n"),
+  );
+  const exactCause = normalizeWordCause(exactCauseSource, [nightLessonEvent(exactCauseSource)]);
+  assert.deepEqual(
+    exactCause.find((candidate) => candidate.bucket === "character_fact")?.links,
+    [
+      {
+        target: `timeline_${exactCause.find((candidate) => candidate.bucket === "timeline_event")?.subjectId}`,
+        relation: "evidenced_by",
+      },
+    ],
+    "a cause given as the event id keeps its link",
+  );
+
+  const unmatchedChangeSource = sourceNote(
+    "source_word_cause_change",
+    { kind: "chat_summary", sourceId: "chat-word-cause-change", entryId: "summary-word-cause-change" },
+    [
+      "## character_fact",
+      "- Mara | section: developments | text: Mara started reading the observatory script aloud. | caused_by: the night lesson",
+    ].join("\n"),
+  );
+  const unmatchedChange = compile(unmatchedChangeSource, [], false);
+  assert.equal(
+    hasDropCode(unmatchedChange, "unknown_link_target"),
+    false,
+    "a change fact's unmatched cause must not become an invented event link",
+  );
+  assert.equal(
+    hasDropCode(unmatchedChange, "source_event_graph_open"),
+    true,
+    "a change fact still without an event is dropped for the missing event",
+  );
+
+  const existingNightLesson = {
+    id: "timeline_night_lesson_abc",
+    title: "Night lesson",
+    type: "timeline_event" as const,
+    status: "active" as const,
+    modes: ["roleplay" as const],
+    scope: {},
+    tags: [],
+    keywords: [],
+    links: [],
+    sections: { event: { text: "Rowan taught Mara the observatory script at night.", updatedAt: timestamp } },
+    createdAt: timestamp,
+    updatedAt: timestamp,
+    version: 1,
+  };
+  assert.deepEqual(
+    normalizeWordCause(wordCauseSource, [], [existingNightLesson]).find(
+      (candidate) => candidate.bucket === "character_fact",
+    )?.links,
+    [{ target: existingNightLesson.id, relation: "evidenced_by" }],
+    "a cause in words resolves to a matching event already in the vault",
+  );
+
+  const sourceIdCauseSource = sourceNote(
+    "source_id_cause",
+    { kind: "chat_summary", sourceId: "chat-id-cause", entryId: "summary-id-cause" },
+    [
+      "## character_fact",
+      "- Mara | section: facts | text: Mara reads the observatory script fluently. | evidenced_by: source_id_cause",
+    ].join("\n"),
+  );
+  assert.deepEqual(
+    normalizeWordCause(sourceIdCauseSource, []).find((candidate) => candidate.bucket === "character_fact")?.links,
+    [{ target: sourceIdCauseSource.id, relation: "evidenced_by" }],
+    "evidence given as a held note id links to that note",
+  );
+
+  // A declared event the model left out is not held, so a change fact's unmatched cause
+  // must not fall back to it; the fact is dropped for its missing event instead.
+  const omittedEventSource = sourceNote(
+    "source_omitted_event",
+    { kind: "chat_summary", sourceId: "chat-omitted-event", entryId: "summary-omitted-event" },
+    [
+      "## timeline_event",
+      "- market_fire: The market burned down.",
+      "## character_fact",
+      "- Mara | section: developments | text: Mara started selling bread from a cart. | caused_by: the old quarrel",
+    ].join("\n"),
+  );
+  const omittedEvent = compile(omittedEventSource, [], false);
+  assert.equal(
+    hasDropCode(omittedEvent, "unknown_link_target"),
+    false,
+    "an unmatched cause must not fall back to a declared event the extraction does not hold",
+  );
+  assert.equal(hasDropCode(omittedEvent, "source_event_graph_open"), true);
+
   const idiomaticStaticSource = sourceNote(
     "source_static_fact_heuristic",
     { kind: "chat_summary", sourceId: "chat-static", entryId: "summary-static" },
