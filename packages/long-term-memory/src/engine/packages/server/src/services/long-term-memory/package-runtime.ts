@@ -1,3 +1,5 @@
+import { LtmServiceError } from "./service-error.js";
+
 export type RuntimeLogArgument = string | number | boolean | null | undefined | object;
 
 export type PackageLanguageModelError = Error & {
@@ -159,6 +161,32 @@ export function getPackageLanguageModels() {
   const languageModels = currentHost().languageModels;
   if (!languageModels) throw new Error("Long-Term Memory runtime host did not provide languageModels");
   return languageModels;
+}
+
+// The Engine words a missing, deleted or unusable model connection for users. Anything else the resolver throws,
+// such as a database or key-file error, can name file paths, so it goes on to routeError, which logs it.
+// ponytail: matches the Engine's current wording, so a reworded setup message gets the route's fallback until the
+// Engine marks these errors with a code.
+const LANGUAGE_MODEL_SETUP_ERRORS = [
+  "Choose a language model connection ",
+  "No language model connection ",
+  "The selected connection ",
+  "The selected language model connection ",
+  "Language model connection not found: ",
+  "Chat language model connection not found: ",
+  "Decision connections cannot ",
+];
+
+export async function resolvePackageLanguageModel(
+  request: Parameters<NonNullable<CapabilityRuntimeHost["languageModels"]>["resolveForRequest"]>[0],
+) {
+  try {
+    return await getPackageLanguageModels().resolveForRequest(request);
+  } catch (error) {
+    if (error instanceof Error && LANGUAGE_MODEL_SETUP_ERRORS.some((start) => error.message.startsWith(start)))
+      throw new LtmServiceError(error.message, 400, "ltm_model_configuration");
+    throw error;
+  }
 }
 
 export function getPackageResources() {
