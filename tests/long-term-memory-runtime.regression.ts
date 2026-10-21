@@ -71,9 +71,12 @@ async function main() {
     ),
     true,
   );
-  const { configurePackageRuntime, getPackageEmbeddingAdapter, resolvePackageEmbeddingAdapter } = await import(
-    `${source}/package-runtime.ts`
-  );
+  const {
+    configurePackageRuntime,
+    getPackageEmbeddingAdapter,
+    logger: packageLogger,
+    resolvePackageEmbeddingAdapter,
+  } = await import(`${source}/package-runtime.ts`);
   const { embedLongTermMemoryTexts } = await import(`${source}/recall/embedding-adapter.ts`);
   const timestamp = "2026-07-17T00:00:00.000Z";
   const makeChunk = (
@@ -1871,6 +1874,20 @@ async function main() {
       assert.equal(getPackageEmbeddingAdapter()?.label, "newer");
       assert.equal(getPackageEmbeddingAdapter()?.spaceId, "newer-space");
       releaseNewer();
+      // Like pino, the Engine's logger, this host keeps only the message: pino drops an argument it has no placeholder for.
+      const warnings: unknown[][] = [];
+      const releaseWarnings = configurePackageRuntime({
+        dataDir,
+        logger: { ...logger, warn: (...args: unknown[]) => void warnings.push(args) },
+      });
+      packageLogger.warn(new Error("cause text"), "message %s", "chat-1");
+      releaseWarnings();
+      assert.match(
+        String(warnings[0]?.[0] ?? ""),
+        /^message %s: .*cause text/,
+        "a warning logged with its error first must keep the cause",
+      );
+      assert.deepEqual(warnings[0]?.slice(1), ["chat-1"], "the printf arguments must reach the host unchanged");
       releaseRestoredRuntime?.();
       releaseRestoredRuntime = configurePackageRuntime({
         ...api.runtime,
