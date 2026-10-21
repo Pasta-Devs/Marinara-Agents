@@ -571,10 +571,15 @@ function normalizeUnit(
           sectionKey: unit.sectionKey,
           suffixes: CHARACTER_SUBJECT_SECTION_SUFFIXES,
         });
+    // A section hint written as an id is keyed with its prefix stripped once (`char_aznable` for `char_char_aznable`),
+    // so identity's id, which keeps a repeated prefix, also looks it up that way.
+    const hintIds = unit.subjects?.length
+      ? [normalized.subjectId, stripUnitSubjectPrefix(unit.bucket, unit.subjectId)]
+      : [normalized.subjectId];
     return {
       ...unit,
       subjectId: normalized.subjectId,
-      sectionKey: characterSectionKey({ ...unit, sectionKey: normalized.sectionKey }, normalized.subjectId, hints),
+      sectionKey: characterSectionKey({ ...unit, sectionKey: normalized.sectionKey }, hintIds, hints),
       links,
     };
   }
@@ -1590,8 +1595,8 @@ function normalizeThreadSubject(subjectId: string, hints: StructuredSummaryHints
   return hints.threadIds.length === 1 ? hints.threadIds[0]! : stripped;
 }
 
-function characterSectionKey(unit: LtmEvidenceUnit, subjectId: string, hints: StructuredSummaryHints) {
-  const sourceSection = hints.characterSections.get(subjectId);
+function characterSectionKey(unit: LtmEvidenceUnit, subjectIds: string[], hints: StructuredSummaryHints) {
+  const sourceSection = subjectIds.map((subjectId) => hints.characterSections.get(subjectId)).find(Boolean);
   if (sourceSection) return sourceSection;
   return structuredCharacterSectionKey(unit.sectionKey, unit.text);
 }

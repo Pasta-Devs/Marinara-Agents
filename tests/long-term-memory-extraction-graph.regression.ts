@@ -1259,6 +1259,24 @@ async function main() {
       80,
       "the summary's relationship dimensions reach the memory",
     );
+
+    // A summary section that names the character by its id gives that memory's section. The hint is keyed with the
+    // prefix stripped once (`char_aznable`), while identity's id keeps the repeated prefix.
+    const sectionSource = [
+      "## character_fact",
+      "character_id: char_char_aznable",
+      "section: core",
+      "",
+      "Char Aznable pilots a red mobile suit. Mara repairs the hangar lights.",
+    ].join("\n");
+    const sectioned = await extractFromRoster(sectionSource, true, false);
+    const characterUpdates = sectioned.mutations.filter((mutation: any) => mutation.noteId === "char_char_aznable");
+    assert.ok(characterUpdates.length > 0, "the summary updates the character's memory");
+    assert.deepEqual(
+      [...new Set(characterUpdates.map((mutation: any) => mutation.sectionKey))],
+      ["core"],
+      "the summary's section for a character whose id repeats its prefix reaches the memory",
+    );
   }
 
   {
