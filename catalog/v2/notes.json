@@ -298,9 +298,15 @@
     "long-term-memory": {
       "versions": [
         {
-          "version": "1.4.61",
+          "version": "1.4.62",
           "date": "2026-10-21",
           "notes": "- A relationship or character change from a chat summary no longer links to the wrong event because a short event name happens to sit inside a word. A cause such as \"the training\" could link to an event named \"rain\", a change whose cause matched nothing could take an event named \"art show\" from the words \"start showing\", and a cause that named an event from the same summary in several words could lose its link when a shorter event name appeared inside one of its words. Event names now match whole words, and the last word may still be plural (\"the training sessions\" finds \"training session\").",
+          "highlight": false
+        },
+        {
+          "version": "1.4.61",
+          "date": "2026-10-21",
+          "notes": "- Saving several imported or re-extracted sources into a large memory vault is faster, and recall and other memory actions wait less while it happens. Each source used to re-read and re-check every memory in the vault while it saved; now a batch reads the vault once and re-reads only the memories that changed. The same memories are matched as before.",
           "highlight": false
         },
         {
@@ -409,12 +415,6 @@
           "version": "1.4.43",
           "date": "2026-10-17",
           "notes": "- The Long-Term Memory server routes now live in one file per area (notes, drafts, imports, maintenance and settings) instead of one 1,600-line file. Every endpoint keeps its path, size limit and response, so nothing changes in the app.",
-          "highlight": false
-        },
-        {
-          "version": "1.4.42",
-          "date": "2026-10-16",
-          "notes": "- Long-Term Memory no longer keeps finished extraction drafts forever. The daily cleanup now deletes accepted, auto-applied and superseded drafts once they are older than the audit window (30 days by default). Pending and invalidated drafts stay, so Review and Activity show the same items as before. Opening the Long-Term Memory screen and creating a new draft read fewer files as a result.\n- A reply that injects memories no longer rewrites per-memory usage counters in `usage.json`, because nothing read them. The next such reply removes the counters already stored there. Duplicate replies are still recorded only once.",
           "highlight": false
         }
       ]

@@ -1,8 +1,12 @@
 # Long-Term Memory changelog
 
-## 1.4.61 — 2026-10-21
+## 1.4.62 — 2026-10-21
 
 - A relationship or character change from a chat summary no longer links to the wrong event because a short event name happens to sit inside a word. A cause such as "the training" could link to an event named "rain", a change whose cause matched nothing could take an event named "art show" from the words "start showing", and a cause that named an event from the same summary in several words could lose its link when a shorter event name appeared inside one of its words. Event names now match whole words, and the last word may still be plural ("the training sessions" finds "training session").
+
+## 1.4.61 — 2026-10-21
+
+- Saving several imported or re-extracted sources into a large memory vault is faster, and recall and other memory actions wait less while it happens. Each source used to re-read and re-check every memory in the vault while it saved; now a batch reads the vault once and re-reads only the memories that changed. The same memories are matched as before.
 
 ## 1.4.60 — 2026-10-21
 
