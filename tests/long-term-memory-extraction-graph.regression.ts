@@ -1100,7 +1100,12 @@ async function main() {
         section: "state",
       },
     ];
-    const extractFromRoster = async (sourceText: string, withCanonicalNotes: boolean, withModelRelationship = true) => {
+    const extractFromRoster = async (
+      sourceText: string,
+      withCanonicalNotes: boolean,
+      withModelRelationship = true,
+      extraFacts: [string, string, string][] = [],
+    ) => {
       const dataDir = await mkdtemp(join(tmpdir(), "marinara-ltm-prefix-word-names-"));
       const releaseHost = configurePackageRuntime({
         isDebugAgentsEnabled: () => false,
@@ -1172,6 +1177,7 @@ async function main() {
             { target: source.id, relation: "extracted_from" },
             { target: "char_aznable", relation: "affects_character" },
           ]),
+          ...extraFacts.map(([subjectId, name, text]) => fact("character_fact", subjectId, [name], text)),
         ].filter((unit) => withModelRelationship || unit.bucket !== "relationship_state");
         const committed = await processLongTermMemorySource({
           sourceNote: source as never,
@@ -1276,6 +1282,106 @@ async function main() {
       [...new Set(characterUpdates.map((mutation: any) => mutation.sectionKey))],
       ["core"],
       "the summary's section for a character whose id repeats its prefix reaches the memory",
+    );
+
+    // A name a structured summary writes out is not an id: "Char Aznable" keeps its first word, while an id followed
+    // by the name (`char_mara (Mara)`) is still an id. The character's section hint reaches its memory, a summary line
+    // for a fact the model already returned is not added again under a shortened subject (`aznable`) for identity to
+    // drop, and a relationship only the summary holds is kept rather than dropped under one (`varga_sayla_mass`).
+    const namedSource = [
+      "Char Aznable carries a red pendant. Mara carries a brass key. Char Aznable defected from the fleet.",
+      "## character_fact",
+      "character: Char Aznable",
+      "section: profile",
+      "- Char Aznable | section: profile | text: Char Aznable pilots a red mobile suit.",
+      "- character: Char Aznable | section: profile | text: Char Aznable leads the Red Comet squadron.",
+      "## character_fact",
+      "character: Mara",
+      "section: profile",
+      "- char_mara | section: profile | text: Mara repairs the hangar lights.",
+      "- char_mara (Mara) | section: profile | text: Mara keeps a spare fuse.",
+      "- character: char_mara (Mara) | section: profile | text: Mara signs the hangar log.",
+      "## relationship_state",
+      "- Rel Varga, Sayla Mass | text: Rel Varga trusts Sayla Mass.",
+      "- relationship: Rel Varga, Sayla Mass | text: Rel Varga trusts Sayla Mass.",
+      "- Rel Varga, Sayla Mass | caused_by: the hangar fire | text: Rel Varga owes Sayla Mass a favor.",
+    ].join("\n");
+    const named = await extractFromRoster(namedSource, false, false, [
+      ["char_aznable", "Char Aznable", "Char Aznable carries a red pendant."],
+      ["mara", "Mara", "Mara carries a brass key."],
+    ]);
+    const createdSections = (draft: { mutations: any[] }, noteId: string) =>
+      Object.keys(
+        draft.mutations.find((mutation) => mutation.kind === "create_note" && mutation.note.id === noteId)?.note
+          .sections ?? {},
+      );
+    assert.deepEqual(
+      createdIds(named),
+      ["char_char_aznable", "char_mara", "rel_rel_varga_sayla_mass"],
+      "a summary line that names its characters reaches the memory with the whole names in its id",
+    );
+    assert.deepEqual(
+      createdSections(named, "char_char_aznable"),
+      ["profile"],
+      "a summary's section hint for a name that starts with a prefix word reaches the memory",
+    );
+    assert.match(
+      named.mutations.find((mutation) => mutation.note?.id === "char_char_aznable")?.note.sections.profile.text ?? "",
+      /Red Comet squadron/,
+      "a summary line that names its character in a field reaches the memory",
+    );
+    assert.deepEqual(createdSections(named, "char_mara"), ["profile"]);
+    for (const text of [/spare fuse/, /hangar log/]) {
+      assert.match(
+        named.mutations.find((mutation) => mutation.note?.id === "char_mara")?.note.sections.profile.text ?? "",
+        text,
+        "a summary line that writes an id and then the name keeps the id",
+      );
+    }
+    assert.deepEqual(
+      named.extractionOutcome!.droppedCandidates,
+      [],
+      "a summary line that names its characters is not dropped under a shortened subject",
+    );
+    assert.deepEqual(
+      named.mutations
+        .flatMap((mutation) => (mutation.note?.type === "timeline_event" ? [mutation.note.sections.event.text] : []))
+        .sort(),
+      [
+        "- Char Aznable defected from the fleet.",
+        "- rel and varga and sayla and mass relationship changed after the hangar fire.",
+      ],
+      "the event made for the relationship's cause does not repeat the note prefix",
+    );
+    // A memory saved under the shorter id before (`char_aznable`, subject id `aznable`) still takes the hint.
+    const namedSummary = sourceNote(
+      "source_named_summary",
+      { kind: "chat_summary", sourceId: "chat-named", entryId: "summary-named" },
+      namedSource,
+    );
+    const legacyMemoryUnit = normalizeStructuredSummaryEvidenceUnits({
+      units: [
+        {
+          ...unit(namedSummary, {
+            bucket: "character_fact",
+            subjectId: "aznable",
+            sectionKey: "facts",
+            text: "Char Aznable carries a red pendant.",
+          }),
+          subjects: [{ key: "character:char-aznable", ref: { kind: "character" as const, id: "char-aznable" } }],
+        },
+      ],
+      sourceText: namedSource,
+      sourceNote: namedSummary,
+      sourceHash: sourceHashForLtmSourceNote(namedSummary),
+      mode: "roleplay",
+      modes: ["roleplay"],
+      addStructuredUnits: false,
+    }).units[0];
+    assert.equal(
+      legacyMemoryUnit?.sectionKey,
+      "profile",
+      "a memory saved under the shorter id still takes the summary's section hint",
     );
   }
 

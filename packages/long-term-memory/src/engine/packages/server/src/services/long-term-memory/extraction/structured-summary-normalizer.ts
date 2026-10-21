@@ -500,9 +500,10 @@ function structuredSummaryHints(
     }
 
     if (section.bucket === "character_fact") {
-      const subject = characterSubject(section);
       const sectionKey = normalizeSectionKey(firstFieldValue(section, ["section", "section_key", "stream"]) ?? "", "");
-      if (subject && sectionKey) characterSections.set(subject, sectionKey);
+      for (const subject of characterSubjects(section)) {
+        if (subject && sectionKey) characterSections.set(subject, sectionKey);
+      }
       continue;
     }
 
@@ -775,7 +776,7 @@ function parseStructuredRelationshipLine(
     if (!parsed) {
       const segmentIdentifier = normalizeIdentifier(segment, "");
       if (!subjectId && (index === 0 || NOTE_ID_PREFIX_PATTERN.test(segmentIdentifier))) {
-        subjectId = stripUnitSubjectPrefix("relationship_state", segmentIdentifier);
+        subjectId = structuredSubjectId("relationship_state", segment);
         continue;
       }
       textParts.push(segment);
@@ -787,7 +788,7 @@ function parseStructuredRelationshipLine(
     if (!value) continue;
 
     if (["id", "subject", "relationship", "relationship_id"].includes(key)) {
-      subjectId = stripUnitSubjectPrefix("relationship_state", normalizeIdentifier(value, subjectId));
+      subjectId = structuredSubjectId("relationship_state", value) || subjectId;
       explicitSubjectId = true;
       continue;
     }
@@ -848,12 +849,15 @@ function parseStructuredRelationshipLine(
 
   const uniqueSubjectNames = uniqueStrings(subjectNames);
   if (!explicitSubjectId && uniqueSubjectNames.length > 0) {
-    subjectId = uniqueSubjectNames
-      .map((name) => normalizeIdentifier(name, ""))
-      .filter(Boolean)
-      .join("_");
+    subjectId = stripUnitSubjectPrefix(
+      "relationship_state",
+      uniqueSubjectNames
+        .map((name) => normalizeIdentifier(name, ""))
+        .filter(Boolean)
+        .join("_"),
+    );
   }
-  const normalizedSubject = stripUnitSubjectPrefix("relationship_state", normalizeIdentifier(subjectId, ""));
+  const normalizedSubject = normalizeIdentifier(subjectId, "");
   const text = textParts.join(" | ").replace(/\s+/g, " ").trim();
   if (!normalizedSubject || !text) return null;
 
@@ -1013,7 +1017,9 @@ function structuredCauseTimelineUnit({
 }): LtmEvidenceUnit {
   const causeSubject = compactCauseIdentifier(cause, "relationship_change");
   const subjectId = normalizeIdentifier(`${relationshipSubjectId}_${causeSubject}`, relationshipSubjectId);
-  const relationshipText = relationshipSubjectId.split("_").join(" and ");
+  // The id carries the note prefix again when the first name starts with "Rel" (`rel_varga_sayla_mass`) or the summary
+  // wrote it twice (`rel_rel_ana_bo`); the event text leaves that prefix out.
+  const relationshipText = stripUnitSubjectPrefix("relationship_state", relationshipSubjectId).split("_").join(" and ");
   const causeText = cause.trim().replace(/[.?!]\s*$/u, "");
   const text = `${relationshipText} relationship changed after ${causeText}.`;
   return {
@@ -1222,6 +1228,7 @@ function parseStructuredCharacterLine(
 
   const importanceResult = extractStructuredImportance(cleaned);
   let subjectId = "";
+  let subjectText = "";
   let subjectNames: string[] | undefined;
   let sectionKey = "";
   let importance = importanceResult.importance;
@@ -1243,6 +1250,7 @@ function parseStructuredCharacterLine(
       const segmentSection = normalizeSectionKey(segment, "");
       if (!subjectId && (index === 0 || NOTE_ID_PREFIX_PATTERN.test(segmentIdentifier))) {
         subjectId = segmentIdentifier;
+        subjectText = segment;
         continue;
       }
       if (!sectionKey && CHARACTER_STRUCTURED_SECTION_KEYS.has(segmentSection)) {
@@ -1258,6 +1266,7 @@ function parseStructuredCharacterLine(
     if (!value) continue;
 
     if (["id", "subject", "character", "character_id", "character_name", "name"].includes(key)) {
+      if (normalizeIdentifier(value, "")) subjectText = value;
       subjectId = normalizeIdentifier(value, subjectId);
       const isIdentifierOnly =
         ["id", "character_id"].includes(key) || NOTE_ID_PREFIX_PATTERN.test(subjectId) || value.includes("_");
@@ -1300,6 +1309,7 @@ function parseStructuredCharacterLine(
     const keySection = normalizeSectionKey(key, "");
     if (index === 0 && !subjectId && keyIdentifier) {
       subjectId = keyIdentifier;
+      subjectText = parsed.key;
       textParts.push(value);
       continue;
     }
@@ -1317,7 +1327,7 @@ function parseStructuredCharacterLine(
     }
   }
 
-  const normalizedSubject = stripUnitSubjectPrefix("character_fact", normalizeIdentifier(subjectId, ""));
+  const normalizedSubject = structuredSubjectId("character_fact", subjectText);
   const normalizedSection = structuredCharacterSectionKey(
     normalizeSectionKey(sectionKey, "facts"),
     textParts.join(" | "),
@@ -1544,9 +1554,15 @@ function threadSubject(section: StructuredSection) {
   return raw ? stripUnitSubjectPrefix("thread", normalizeIdentifier(raw, "")) : null;
 }
 
-function characterSubject(section: StructuredSection) {
+// Keyed by the subject id of the memory the value names, and by the value read as an id as before, which a memory
+// saved under the shorter id (`char_aznable` for "Char Aznable") still uses.
+function characterSubjects(section: StructuredSection) {
   const raw = firstFieldValue(section, ["character_id", "character", "subject", "id"]);
-  return raw ? stripUnitSubjectPrefix("character_fact", normalizeIdentifier(raw, "")) : null;
+  if (!raw) return [];
+  return [
+    structuredSubjectId("character_fact", raw),
+    stripUnitSubjectPrefix("character_fact", normalizeIdentifier(raw, "")),
+  ];
 }
 
 function relationshipIdentityKeyForSubject(subjectId: string, identityKey?: LtmRelationshipIdentityKey) {
@@ -1776,6 +1792,16 @@ function normalizeIdentifier(value: string, fallback: string) {
 function normalizeSectionKey(value: string, fallback: string) {
   const normalized = normalizeFieldKey(value).slice(0, 80).replace(/_+$/g, "");
   return /^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$/.test(normalized) ? normalized : fallback;
+}
+
+// A value with no space, or whose first word has an underscore (`char_mara (Mara)`), is an id and loses its note
+// prefix: `char_aznable` is `aznable`. Any other value is a name and gets the subject id identity gives its memory:
+// "Char Aznable" is `char_char_aznable`, "Mara Lee" is `mara_lee`.
+function structuredSubjectId(bucket: LtmEvidenceUnit["bucket"], value: string) {
+  const id = normalizeIdentifier(value, "");
+  if (!/\s/.test(value.trim()) || /^\S*_/.test(value.trim())) return stripUnitSubjectPrefix(bucket, id);
+  const prefix = prefixForBucket(bucket);
+  return unprefixedSubjectId(prefix, `${prefix}_${id}`);
 }
 
 function stripUnitSubjectPrefix(bucket: LtmEvidenceUnit["bucket"], subjectId: string) {
