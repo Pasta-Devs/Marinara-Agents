@@ -669,6 +669,12 @@ function normalizeEvidenceUnitResponse(
     normalizedEvidenceUnitRecord(unit, expectedSourceHash, trustedEvidence, resolveSubjectNames),
   );
   const targetHints = rawEvidenceUnitTargetHints(normalizedUnits);
+  // The request names the source note by its bare id. Keep that id as a link target, as `source_note:<id>` is,
+  // instead of reading it as a timeline or thread subject.
+  for (const evidence of trustedEvidence) {
+    const sourceNoteId = evidence.match(/^source_note:(.+)$/)?.[1];
+    if (sourceNoteId) targetHints.targetNoteIds.add(sourceNoteId);
+  }
   for (const [index, original] of units.entries()) {
     if (!original || typeof original !== "object" || Array.isArray(original)) continue;
     const old = original as Record<string, unknown>;
