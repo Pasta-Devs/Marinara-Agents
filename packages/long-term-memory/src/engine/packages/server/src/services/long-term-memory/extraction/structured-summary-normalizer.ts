@@ -48,6 +48,7 @@ type StructuredSummaryHints = {
   threadResolvers: Map<string, string>;
   characterSections: Map<string, string>;
   toneText?: string;
+  sourceNoteId?: string;
 };
 
 export type StructuredSummaryNormalizationResult = {
@@ -235,7 +236,7 @@ export function normalizeStructuredSummaryEvidenceUnits({
   }
 
   const allowed = new Set(allowedBuckets ?? DEFAULT_LTM_ALLOWED_STREAMS_BY_MODE[mode ?? modes?.[0] ?? "roleplay"]);
-  const hints = structuredSummaryHints(sections, relationshipIdentityKey);
+  const hints = { ...structuredSummaryHints(sections, relationshipIdentityKey), sourceNoteId: sourceNote?.id };
   const normalized = normalizeCanonicalTargetLinks(
     units,
     units.map((unit) => normalizeUnit(unit, hints, relationshipIdentityKey)),
@@ -1679,11 +1680,11 @@ function characterTimelineRelation(
 function normalizeLinkTarget(
   target: string,
   relation: LtmEvidenceUnit["links"][number]["relation"],
-  hints: Pick<StructuredSummaryHints, "eventIds" | "threadIds">,
+  hints: Pick<StructuredSummaryHints, "eventIds" | "threadIds" | "sourceNoteId">,
 ) {
   const identifier = normalizeIdentifier(target, "");
   if (!identifier) return target;
-  if (NOTE_ID_PREFIX_PATTERN.test(identifier)) return identifier;
+  if (NOTE_ID_PREFIX_PATTERN.test(identifier) || identifier === hints.sourceNoteId) return identifier;
   if (hints.eventIds.includes(identifier) || TIMELINE_LINK_RELATIONS.has(relation)) return `timeline_${identifier}`;
   if (hints.threadIds.includes(identifier) || relation === "blocks") return `thread_${identifier}`;
   if (relation === "affects_character") return `char_${identifier}`;

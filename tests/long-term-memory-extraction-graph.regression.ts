@@ -37,6 +37,7 @@ async function main() {
   const { processLongTermMemorySource } = await import(`${source}/extraction/source-processing.ts`);
   const { LongTermMemoryStorage } = await import(`${source}/persistence/storage.ts`);
   const { longTermMemoryRecallIndexPath, rebuildLongTermMemoryIndexes } = await import(`${source}/recall/rebuild.ts`);
+  const { flushLtmIndexRebuild } = await import(`${source}/recall/rebuild-job.ts`);
   const { getLtmExtractionConfig, updateLtmExtractionConfig } = await import(
     `${source}/extraction/extraction-config.ts`
   );
@@ -1392,7 +1393,8 @@ async function main() {
           reviewSignal === "control",
           `${reviewSignal}: only the control may auto-apply`,
         );
-        // #1364: extraction rebuilds the recall index only when it applied mutations.
+        // #1364: extraction schedules a recall index rebuild only when it applied mutations.
+        await flushLtmIndexRebuild(root);
         assert.equal(
           (await recallIndexMtime()) !== indexBeforeExtraction,
           reviewSignal === "control",
@@ -1701,6 +1703,53 @@ async function main() {
     parsedSourcePrefixedLink.response.units[0]?.links,
     [{ target: chat.id, relation: "extracted_from" }],
     "source_note:<id> extracted_from targets must normalize to the source note id",
+  );
+  // The request names the source note by its bare id, so a fact citing that id keeps it as the target, also on a
+  // source whose text has section headings.
+  const headedChat = sourceNote(
+    "source_chat_headed_regression",
+    { kind: "chat_summary", sourceId: "chat-a", entryId: "summary-headed" },
+    "## world_fact\n- The observatory script is written in an old court cipher.",
+  );
+  const bareSourceLinks = parseEvidenceUnitPayload(
+    {
+      summary: "Bare source note links",
+      units: [
+        unit(headedChat, {
+          bucket: "world_fact",
+          subjectId: "observatory_script",
+          sectionKey: "facts",
+          text: "The observatory script is written in an old court cipher.",
+          claimKind: "static",
+          links: [{ target: headedChat.id, relation: "evidenced_by" }],
+        }),
+        unit(headedChat, {
+          bucket: "world_fact",
+          subjectId: "court_cipher",
+          sectionKey: "facts",
+          text: "The old court cipher is still read in the observatory.",
+          claimKind: "static",
+          links: [{ target: "source_chat_other_summary", relation: "evidenced_by" }],
+        }),
+      ],
+    },
+    sourceHashForLtmSourceNote(headedChat),
+    [`source_note:${headedChat.id}`],
+  );
+  assert.equal(
+    bareSourceLinks.response.units[1]?.links[0]?.target,
+    "timeline_source_chat_other_summary",
+    "a bare id the request did not name must still read as a timeline subject",
+  );
+  const bareSourceCompile = compile(headedChat, bareSourceLinks.response.units as ReturnType<typeof unit>[]);
+  assert.equal(bareSourceCompile.accounting.keptUnits, 1);
+  assert.ok(
+    bareSourceCompile.compiledResponse.mutations.some(
+      (mutation) =>
+        mutation.kind === "create_note" &&
+        mutation.note.links.some((link) => link.relation === "evidenced_by" && link.target === headedChat.id),
+    ),
+    "a fact that cites the source note by its bare id must keep it and the link",
   );
   const nearLimitEvent = parseEvidenceUnitPayload(
     {

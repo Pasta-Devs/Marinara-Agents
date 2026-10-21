@@ -3,6 +3,7 @@ import { mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { Module } from "node:module";
 import { tmpdir } from "node:os";
 import { delimiter, dirname, join, resolve } from "node:path";
+import { mock } from "node:test";
 import { runRegressionToCompletion, runWithSafeCleanup } from "./regression-helpers.ts";
 
 async function main() {
@@ -31,6 +32,9 @@ async function main() {
     rebuildLongTermMemoryIndexes,
     loadOrRebuildLongTermMemoryIndexes,
   } = await import(`${source}/recall/rebuild.ts`);
+  const { LTM_REBUILD_QUIET_MS, resumeLtmIndexRebuild, stopLtmIndexRebuild } = await import(
+    `${source}/recall/rebuild-job.ts`
+  );
   const { withLtmVaultLock } = await import(`${source}/persistence/vault-lock.ts`);
   const { LongTermMemoryStorage } = await import(`${source}/persistence/storage.ts`);
   const { notePathForId } = await import(`${source}/persistence/paths.ts`);
@@ -994,27 +998,33 @@ async function main() {
       const mismatchedSpace = JSON.parse(indexBeforeRecall);
       mismatchedSpace.embeddings.spaceId = "other-space";
       await writeFile(recallIndexPath, JSON.stringify(mismatchedSpace));
-      const lexicalFallback = await retrieveLongTermMemory({
+      const cobaltRecall = {
         root: storage.root,
         queryText: "cobalt archive",
         scope: { chatId: "chat-a", chatIds: ["chat-a"] },
-        mode: "roleplay",
+        mode: "roleplay" as const,
         semanticWeight: 1,
         maxChunks: 5,
         maxTokens: 4096,
-      });
+      };
+      const lexicalFallback = await retrieveLongTermMemory(cobaltRecall);
       assert.equal(lexicalFallback.embeddingsAvailable, false);
-      assert.equal(
-        lexicalFallback.semanticOutcome,
-        "no_matches",
-        "#1211: an unavailable-looking embeddingsAvailable must distinguish a valid index with no matches",
-      );
-      assert.equal(lexicalFallback.indexSnapshot.loadOutcome, "upgraded");
+      // Recall answers from the keyword lanes at once and moves the index to the new source in the background.
+      assert.equal(lexicalFallback.semanticOutcome, "incompatible");
+      assert.equal(lexicalFallback.indexSnapshot.loadOutcome, "loaded");
       assert.equal(
         lexicalFallback.chunks.some((chunk: any) => chunk.chunk.noteId === "world_visible"),
         true,
       );
+      assert.equal(JSON.parse(await readFile(recallIndexPath, "utf8")).embeddings.spaceId, "other-space");
       await rebuildLongTermMemoryIndexes({ root: storage.root });
+      const upgraded = await retrieveLongTermMemory(cobaltRecall);
+      assert.equal(upgraded.embeddingsAvailable, false);
+      assert.equal(
+        upgraded.semanticOutcome,
+        "no_matches",
+        "#1211: an unavailable-looking embeddingsAvailable must distinguish a valid index with no matches",
+      );
       const thresholded = await retrieveLongTermMemory({
         root: storage.root,
         queryText: "world_visible cobalt archive",
@@ -2227,36 +2237,59 @@ async function main() {
         assert.equal(waiterDone, true, "cancelled rebuild must release the vault lock for waiters");
         assert.equal(recallOutcome?.error?.name, "AbortError", "cancelled recall must not resolve after abort");
 
-        // Cancellation during a semantic upgrade must not quarantine the valid lexical
-        // index or suppress a later upgrade retry.
+        // A semantic upgrade runs in the background. Stopping it mid-embed (package deactivation) must not
+        // quarantine or rewrite the valid lexical index, or suppress an upgrade once the package is active again.
         await rebuildLongTermMemoryIndexes({ root: vaultRoot, embeddingAdapter: null, stopWords: [] });
         const lexicalIndexBytes = await readFile(recallIndexPath, "utf8");
-        const upgradeController = new AbortController();
+        const upgradeEntered = deferred();
+        let upgradeSignal: AbortSignal | undefined;
         const abortingAdapter = {
           spaceId: "test-space",
           label: "aborting test embeddings",
-          async embed() {
-            upgradeController.abort();
-            throw new DOMException("cancelled", "AbortError");
+          embed(_texts: string[], signal?: AbortSignal) {
+            upgradeSignal = signal;
+            upgradeEntered.resolve();
+            return new Promise<number[][]>((_resolve, reject) =>
+              signal?.addEventListener("abort", () => reject(signal.reason), { once: true }),
+            );
           },
         };
-        await assert.rejects(
-          () => loadOrRebuildLongTermMemoryIndexes(vaultRoot, abortingAdapter, [], upgradeController.signal),
-          { name: "AbortError" },
-          "a cancelled semantic upgrade must surface cancellation",
-        );
+        mock.timers.enable({ apis: ["setTimeout"] });
+        try {
+          const lexical = await loadOrRebuildLongTermMemoryIndexes(vaultRoot, abortingAdapter, []);
+          assert.equal(lexical.embeddings.embeddedChunkCount, 0, "recall must not wait for a semantic upgrade");
+          mock.timers.tick(LTM_REBUILD_QUIET_MS);
+        } finally {
+          mock.timers.reset();
+        }
+        await upgradeEntered.promise;
+        await stopLtmIndexRebuild(vaultRoot);
+        assert.equal(upgradeSignal?.aborted, true, "deactivation must abort the upgrade's embedding");
         assert.equal(
           await readFile(recallIndexPath, "utf8"),
           lexicalIndexBytes,
           "cancellation must not quarantine or rewrite the valid lexical index",
         );
-        const upgraded = await loadOrRebuildLongTermMemoryIndexes(vaultRoot, {
+        resumeLtmIndexRebuild(vaultRoot);
+        const retryAdapter = {
           spaceId: "test-space",
           label: "retry test embeddings",
           async embed(texts: string[]) {
             return texts.map(() => [1, 0]);
           },
-        });
+        };
+        mock.timers.enable({ apis: ["setTimeout"] });
+        try {
+          await loadOrRebuildLongTermMemoryIndexes(vaultRoot, retryAdapter, []);
+          mock.timers.tick(LTM_REBUILD_QUIET_MS);
+        } finally {
+          mock.timers.reset();
+        }
+        let upgraded = parseLtmRecallIndex(JSON.parse(lexicalIndexBytes));
+        for (let turn = 0; turn < 1_000 && !upgraded.embeddings.embeddedChunkCount; turn += 1) {
+          await new Promise((resolve) => setImmediate(resolve));
+          upgraded = await loadOrRebuildLongTermMemoryIndexes(vaultRoot, retryAdapter, []);
+        }
         assert.ok(upgraded.embeddings.embeddedChunkCount > 0, "a later semantic upgrade must still be attempted");
 
         // A cancelled recall that is handed an already-current index must reject before
@@ -2653,21 +2686,29 @@ async function main() {
           "a refresh that cannot embed the new space must reject so the Engine reports failure",
         );
 
-        // A failed in-flight upgrade must not suppress the retry a save just asked for: the save
-        // clears the guard under the vault lock, so refresh cannot skip on a restored guard.
+        // A save's refresh while an upgrade to the same space is still embedding, and about to fail: the refresh
+        // aborts the upgrade and embeds with the corrected source.
         let releaseRaceEmbed!: () => void;
         let raceEmbedEntered!: () => void;
+        let raceSignal: AbortSignal | undefined;
         const raceEmbedStarted = new Promise<void>((resolve) => (raceEmbedEntered = resolve));
         const raceEmbedHeld = new Promise<void>((resolve) => (releaseRaceEmbed = resolve));
-        const staleUpgrade = loadOrRebuildLongTermMemoryIndexes(vaultRoot, {
-          spaceId: "refresh-race-space",
-          label: "race failing",
-          async embed() {
-            raceEmbedEntered();
-            await raceEmbedHeld;
-            throw new Error("provider unavailable");
-          },
-        });
+        mock.timers.enable({ apis: ["setTimeout"] });
+        try {
+          await loadOrRebuildLongTermMemoryIndexes(vaultRoot, {
+            spaceId: "refresh-race-space",
+            label: "race failing",
+            async embed(_texts: string[], signal?: AbortSignal) {
+              raceSignal = signal;
+              raceEmbedEntered();
+              await raceEmbedHeld;
+              throw new Error("provider unavailable");
+            },
+          });
+          mock.timers.tick(LTM_REBUILD_QUIET_MS);
+        } finally {
+          mock.timers.reset();
+        }
         await raceEmbedStarted;
         let raceEmbeds = 0;
         resolvedAdapter = {
@@ -2678,16 +2719,14 @@ async function main() {
             return texts.map(() => [8]);
           },
         };
-        const retryRefresh = liveRuntime.refresh({ signal: new AbortController().signal });
-        await new Promise((resolve) => setImmediate(resolve)); // let refresh queue on the lock first
-        releaseRaceEmbed();
-        await staleUpgrade;
         assert.deepEqual(
-          await retryRefresh,
+          await liveRuntime.refresh({ signal: new AbortController().signal }),
           { status: "refreshed" },
-          "a refresh must retry after an in-flight upgrade fails, not skip on the guard it restored",
+          "a refresh during an in-flight upgrade must embed with the corrected source",
         );
         assert.ok(raceEmbeds > 0, "the corrected embedding source must actually run");
+        assert.equal(raceSignal?.aborted, true, "the refresh must abort the in-flight upgrade");
+        releaseRaceEmbed();
       }
     },
     [
