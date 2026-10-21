@@ -1,4 +1,5 @@
 import { basename } from "node:path";
+import { isDeepStrictEqual } from "node:util";
 import type { z } from "zod";
 import {
   DEFAULT_LTM_GLOBAL_SETTINGS,
@@ -14,46 +15,127 @@ import { withLtmVaultLock } from "./persistence/vault-lock.js";
 export const ltmSettingsPath = (root = getLongTermMemoryRoot()) =>
   safeJoin(getLongTermMemoryDirectories(root).config, "settings.json");
 const loggedUnknownSettings = new Set<string>();
+type LtmSettingsPath = (string | number)[];
+const isSettingsRecord = (value: unknown): value is Record<string, unknown> =>
+  Boolean(value) && typeof value === "object" && !Array.isArray(value);
+const settingsValueAt = (value: unknown, path: LtmSettingsPath) =>
+  path.reduce<unknown>(
+    (node, key) => (node && typeof node === "object" ? (node as Record<string | number, unknown>)[key] : undefined),
+    value,
+  );
 /**
- * Splits a stored settings file into the part this version knows and the
- * top-level fields a newer version added, which the strict schema reports as
- * unrecognized. Removed legacy fields are dropped by the schema's preprocessor
- * and never count as unknown. Unknown fields are logged by name, once per file,
- * never with their values. Request bodies keep using the strict schema directly.
+ * Splits a stored settings file into the part this version knows and what a newer
+ * version wrote: fields this version does not have, at any depth, enum values it does
+ * not have (a new option or mode), and values outside this version's range (a raised
+ * maximum or longer text). Those are removed so the field falls back to its default; a
+ * list keeps its other entries. A wrong type or a different `version` still fails the
+ * parse. Removed legacy fields are dropped by the schema's preprocessor and never count.
+ * Names are logged once per file, never values. Request bodies keep using the strict
+ * schema directly.
  */
 export function splitUnknownLtmSettings(schema: z.ZodTypeAny, value: unknown, path: string) {
-  const result = schema.safeParse(value);
-  const keys = result.success
-    ? []
-    : result.error.issues.flatMap((issue) =>
-        issue.code === "unrecognized_keys" && issue.path.length === 0 ? issue.keys : [],
-      );
-  if (!keys.length || !value || typeof value !== "object" || Array.isArray(value)) return { known: value, unknown: {} };
-  const known: Record<string, unknown> = { ...value };
+  const raw: Record<string, unknown> = isSettingsRecord(value) ? value : {};
+  if (!isSettingsRecord(value)) return { known: value, unknown: {}, newer: [] as LtmSettingsPath[], raw };
+  const known: Record<string, unknown> = structuredClone(value);
   const unknown: Record<string, unknown> = {};
-  for (const key of keys) {
-    unknown[key] = known[key];
-    delete known[key];
+  const newer: LtmSettingsPath[] = [];
+  // Each pass removes what the last parse reported; a removal can only expose issues below it.
+  // Range issues wait for a pass with nothing else to remove, so a list first loses its newer entries.
+  for (let pass = 0; pass < 4; pass += 1) {
+    const result = schema.safeParse(known);
+    if (result.success) break;
+    let changed = false;
+    const dropped = new Map<string, { list: LtmSettingsPath; indexes: Set<number> }>();
+    const remove = (issuePath: LtmSettingsPath) => {
+      const parent = settingsValueAt(known, issuePath.slice(0, -1));
+      const key = issuePath[issuePath.length - 1]!;
+      if (Array.isArray(parent) && typeof key === "number" && key < parent.length) {
+        const list = issuePath.slice(0, -1);
+        const id = list.join(".");
+        if (!dropped.has(id)) dropped.set(id, { list, indexes: new Set<number>() });
+        dropped.get(id)!.indexes.add(key);
+      } else if (isSettingsRecord(parent) && key in parent) delete parent[key];
+      else return;
+      newer.push(issuePath);
+      changed = true;
+    };
+    const outOfRange: LtmSettingsPath[] = [];
+    for (const issue of result.error.issues) {
+      if (issue.code === "unrecognized_keys") {
+        const parent = settingsValueAt(known, issue.path);
+        if (!isSettingsRecord(parent)) continue;
+        for (const key of issue.keys) {
+          if (issue.path.length === 0) unknown[key] = parent[key];
+          else newer.push([...issue.path, key]);
+          delete parent[key];
+          changed = true;
+        }
+      } else if (issue.code === "invalid_enum_value" && issue.path.length > 0) remove(issue.path);
+      else if ((issue.code === "too_big" || issue.code === "too_small") && issue.path.length > 0)
+        outOfRange.push(issue.path);
+    }
+    if (!changed) outOfRange.forEach(remove);
+    for (const { list, indexes } of dropped.values()) {
+      const parent = settingsValueAt(known, list.slice(0, -1)) as Record<string | number, unknown>;
+      const key = list[list.length - 1]!;
+      if (!Array.isArray(parent?.[key])) continue;
+      const kept = (parent[key] as unknown[]).filter((_, index) => !indexes.has(index));
+      // A list left with nothing this version knows falls back to its default.
+      if (kept.length) parent[key] = kept;
+      else delete parent[key];
+    }
+    if (!changed) break;
   }
-  const logKey = `${path}\n${keys.join("\n")}`;
-  if (!loggedUnknownSettings.has(logKey)) {
+  const names = [...new Set([...Object.keys(unknown), ...newer.map((entry) => entry.join("."))])];
+  const logKey = `${path}\n${names.join("\n")}`;
+  if (names.length && !loggedUnknownSettings.has(logKey)) {
     loggedUnknownSettings.add(logKey);
-    logger.warn("[ltm] Ignoring settings this version does not know in %s: %s", basename(path), keys.join(", "));
+    logger.warn("[ltm] Ignoring settings this version does not know in %s: %s", basename(path), names.join(", "));
   }
-  return { known, unknown };
+  return { known, unknown, newer, raw };
 }
-/** Reads a settings file leniently; a writer spreads `unknown` back into the file it saves. */
+export type LtmSettingsRead = Pick<ReturnType<typeof splitUnknownLtmSettings>, "unknown" | "newer" | "raw">;
+/**
+ * What a writer saves: `saved`, plus what a newer version wrote that this save did not
+ * change, so the file keeps it for that version. A request field equal to what readers
+ * were shown (`shown`) is unchanged: the Settings page sends its whole form. A newer
+ * value inside a list comes back with its whole top-level field; elsewhere it comes back
+ * at its own key.
+ */
+export function withNewerLtmSettings(saved: object, read: LtmSettingsRead, request: unknown = {}, shown: object = {}) {
+  const output: Record<string, unknown> = structuredClone({ ...read.unknown, ...saved });
+  const requested = isSettingsRecord(request) ? request : {};
+  for (const entry of read.newer) {
+    const field = entry[0] as string;
+    if (!(field in requested) || isDeepStrictEqual(requested[field], (shown as Record<string, unknown>)[field])) {
+      output[field] = structuredClone(read.raw[field]);
+      continue;
+    }
+    if (entry.some((key) => typeof key === "number")) continue;
+    const parent = settingsValueAt(output, entry.slice(0, -1));
+    const key = entry[entry.length - 1] as string;
+    if (isSettingsRecord(parent) && !(key in parent)) parent[key] = structuredClone(settingsValueAt(read.raw, entry));
+  }
+  return output;
+}
+/** Reads a settings file leniently; a writer saves through `withNewerLtmSettings`. */
 export async function readLtmSettingsFile<T>(
   path: string,
   schema: z.ZodType<T, z.ZodTypeDef, unknown>,
   fallback: unknown,
 ) {
-  const { known, unknown } = splitUnknownLtmSettings(schema, await readJsonFile<unknown>(path, fallback), path);
-  return { settings: schema.parse(known), unknown };
+  const value = await readJsonFile<unknown>(path, fallback);
+  const { known, ...read } = splitUnknownLtmSettings(schema, value, path);
+  const parsed = schema.safeParse(known);
+  // A fallback that leaves the file invalid (a required field, a cross-field rule) is not
+  // applied, and the error names what the file holds, such as a value over this version's limit.
+  return { settings: parsed.success ? parsed.data : schema.parse(value), ...read };
 }
+const resolveLtmGlobalSettings = (settings: LtmGlobalSettings) =>
+  ltmResolvedGlobalSettingsSchema.parse({ ...DEFAULT_LTM_GLOBAL_SETTINGS, ...settings, version: 1 });
 export async function getLtmGlobalSettings(root = getLongTermMemoryRoot()) {
   const { settings } = await readLtmSettingsFile(ltmSettingsPath(root), ltmGlobalSettingsSchema, { version: 1 });
-  return ltmResolvedGlobalSettingsSchema.parse({ ...DEFAULT_LTM_GLOBAL_SETTINGS, ...settings, version: 1 });
+  return resolveLtmGlobalSettings(settings);
 }
 /**
  * Custom stop words that may filter generated keywords. Returns none while the
@@ -65,7 +147,7 @@ export function ltmGeneratedStopWords(settings: LtmResolvedGlobalSettings) {
 export async function updateLtmGlobalSettings(input: unknown, root = getLongTermMemoryRoot()) {
   return withLtmVaultLock(root, async () => {
     const path = ltmSettingsPath(root);
-    const { known, unknown } = splitUnknownLtmSettings(
+    const { known, ...read } = splitUnknownLtmSettings(
       ltmGlobalSettingsSchema,
       await readJsonFile<unknown>(path, { version: 1 }),
       path,
@@ -75,8 +157,24 @@ export async function updateLtmGlobalSettings(input: unknown, root = getLongTerm
       ...(input && typeof input === "object" && !Array.isArray(input) ? input : {}),
     };
     const parsed: LtmGlobalSettings = ltmGlobalSettingsSchema.parse(merged);
-    // Fields from a newer version stay in the file so upgrading again restores them.
-    await writeJsonAtomic(path, { ...unknown, ...parsed });
+    const loaded = ltmGlobalSettingsSchema.safeParse(known);
+    const shown = loaded.success ? resolveLtmGlobalSettings(loaded.data) : undefined;
+    // Fields from a newer version stay in the file so upgrading again restores them. The page
+    // saves the stop words it shows lowercased and without repeats.
+    await writeJsonAtomic(
+      path,
+      withNewerLtmSettings(
+        parsed,
+        read,
+        input,
+        shown
+          ? {
+              ...shown,
+              longTermMemoryStopWords: [...new Set(shown.longTermMemoryStopWords.map((word) => word.toLowerCase()))],
+            }
+          : {},
+      ),
+    );
     return getLtmGlobalSettings(root);
   });
 }

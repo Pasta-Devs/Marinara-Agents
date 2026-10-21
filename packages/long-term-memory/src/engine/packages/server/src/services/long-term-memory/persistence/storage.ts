@@ -48,7 +48,7 @@ import {
 } from "./paths.js";
 import { isLtmBackupRestoreActive, recoverInterruptedLtmBackupRestore } from "./restore-recovery.js";
 import { readLtmNoteSummary } from "./index-state.js";
-import { ltmSettingsPath, readLtmSettingsFile } from "../settings.js";
+import { ltmSettingsPath, readLtmSettingsFile, withNewerLtmSettings } from "../settings.js";
 import { longTermMemoryRetentionConfigPath, runLongTermMemoryRetention } from "./retention.js";
 import { parseStoredLtmNote } from "./stored-note.js";
 import { withLtmVaultLock } from "./vault-lock.js";
@@ -245,8 +245,8 @@ export class LongTermMemoryStorage {
         [ltmSettingsPath(this.root), ltmGlobalSettingsSchema, { version: 1 }],
       ] as const;
       for (const [path, schema, fallback] of configs) {
-        const { settings, unknown } = await readLtmSettingsFile<object>(path, schema, fallback);
-        await writeJsonAtomic(path, { ...unknown, ...settings });
+        const { settings, ...read } = await readLtmSettingsFile<object>(path, schema, fallback);
+        await writeJsonAtomic(path, withNewerLtmSettings(settings, read));
       }
       initialized.add(rootKey);
       await runLongTermMemoryRetention({ root: this.root }).catch((error) =>

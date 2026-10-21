@@ -16,7 +16,7 @@ import {
 } from "../../../../../shared/src/features/agents/long-term-memory/schema.js";
 import { writeJsonAtomic } from "../persistence/atomic-json.js";
 import { getLongTermMemoryDirectories, getLongTermMemoryRoot, safeJoin } from "../persistence/paths.js";
-import { readLtmSettingsFile } from "../settings.js";
+import { readLtmSettingsFile, withNewerLtmSettings } from "../settings.js";
 import { withLtmVaultLock } from "../persistence/vault-lock.js";
 export const DEFAULT_LTM_EXTRACTION_CONFIG = ltmResolvedExtractionSettingsSchema.parse({
   version: 1,
@@ -37,15 +37,17 @@ export const DEFAULT_LTM_EXTRACTION_CONFIG = ltmResolvedExtractionSettingsSchema
 });
 export const ltmExtractionConfigPath = (root = getLongTermMemoryRoot()) =>
   safeJoin(getLongTermMemoryDirectories(root).config, "extraction.json");
+const resolveLtmExtractionConfig = (settings: object) =>
+  ltmResolvedExtractionSettingsSchema.parse({
+    ...DEFAULT_LTM_EXTRACTION_CONFIG,
+    ...settings,
+    version: 1,
+  });
 export async function getLtmExtractionConfig(root = getLongTermMemoryRoot(), mode?: string) {
   const { settings: parsed } = await readLtmSettingsFile(ltmExtractionConfigPath(root), ltmExtractionSettingsSchema, {
     version: 1,
   });
-  const resolved = ltmResolvedExtractionSettingsSchema.parse({
-    ...DEFAULT_LTM_EXTRACTION_CONFIG,
-    ...parsed,
-    version: 1,
-  });
+  const resolved = resolveLtmExtractionConfig(parsed);
   if (!mode) return resolved;
   const templateId =
     resolved.activePromptTemplateIdsByMode[mode as keyof typeof resolved.activePromptTemplateIdsByMode];
@@ -70,7 +72,7 @@ export async function getLtmExtractionConfig(root = getLongTermMemoryRoot(), mod
 }
 export async function updateLtmExtractionConfig(input: unknown, root = getLongTermMemoryRoot()) {
   return withLtmVaultLock(root, async () => {
-    const { settings: stored, unknown } = await readLtmSettingsFile(
+    const { settings: stored, ...read } = await readLtmSettingsFile(
       ltmExtractionConfigPath(root),
       ltmExtractionSettingsSchema,
       { version: 1 },
@@ -87,17 +89,22 @@ export async function updateLtmExtractionConfig(input: unknown, root = getLongTe
       activePromptTemplateIdsByMode,
     });
     // Persist a complete validated configuration so omitted patch fields are never lost.
-    const resolved = ltmResolvedExtractionSettingsSchema.parse({
-      ...DEFAULT_LTM_EXTRACTION_CONFIG,
-      ...merged,
-      version: 1,
-    });
+    const resolved = resolveLtmExtractionConfig(merged);
     const { systemPrompt: _systemPrompt, activePromptTemplateId: _activePromptTemplateId, ...persisted } = resolved;
     // Fields from a newer version stay in the file so upgrading again restores them.
-    await writeJsonAtomic(ltmExtractionConfigPath(root), {
-      ...unknown,
-      ...ltmExtractionSettingsSchema.parse(persisted),
-    });
+    const saved = withNewerLtmSettings(
+      ltmExtractionSettingsSchema.parse(persisted),
+      read,
+      patch,
+      resolveLtmExtractionConfig(stored),
+    );
+    // A newer mode's restored choice must name a saved template, or that version cannot load the file.
+    const templateIds = new Set(
+      (saved.promptTemplates as { id: string }[] | undefined)?.map((template) => template.id),
+    );
+    const active = (saved.activePromptTemplateIdsByMode ?? {}) as Record<string, string | null>;
+    for (const [mode, id] of Object.entries(active)) if (id && !templateIds.has(id)) delete active[mode];
+    await writeJsonAtomic(ltmExtractionConfigPath(root), saved);
     return getLtmExtractionConfig(root);
   });
 }

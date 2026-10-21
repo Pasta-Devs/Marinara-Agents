@@ -1,5 +1,9 @@
 # Long-Term Memory changelog
 
+## Unreleased
+
+- Long-Term Memory now also starts after a rollback when a newer version saved a setting this version can't use: a new field inside a group of settings (such as a prompt template), a new choice (such as a reasoning effort or chat mode), or a value above this version's limit. That setting uses its default, a list keeps the entries this version knows, and the server log names it once, without its value. The file usually keeps the newer value, and saving Settings or Delete all keeps it unless you change that setting. While the retention settings hold such a value, automatic cleanup of old receipts, logs and drafts pauses, so nothing is deleted by a limit you didn't choose. It resumes when the newer version returns, when you reset the settings, or when you restore a backup made during the rollback, whose limits then apply. Before, the package failed to activate. Wrong types, prompt templates too long for this version, more templates than it allows while one is active, and backups from a newer version are still refused.
+
 ## 1.4.66 — 2026-10-21
 
 - Extraction from a prose summary (a summary written as a narrative rather than under the memory-stream headings, whether from a custom summary prompt, another app's summary or a transcript recap) now keeps each narrated beat as its own timeline event, keeps a quoted line with its event when the summary presents it as memorable, and records recurring motifs and the durable register the prose states. Before, the prompt told the model to omit incidental actions and prefer a few substantial units for prose, which dropped about a third of the events and the quotes that a summary with headings kept. Summaries with headings, character cards and lorebooks are extracted as before.
