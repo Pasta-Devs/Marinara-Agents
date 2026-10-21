@@ -20,7 +20,7 @@ import {
 import { LongTermMemoryDraftStore } from "./draft-store.js";
 import { nowIso } from "../ltm-utils.js";
 import { scheduleLongTermMemoryIndexRebuild } from "../recall/rebuild.js";
-import { canUpdateLtmScopedTarget } from "../extraction/scoped-targets.js";
+import { canUpdateLtmScopedTarget, isSharedLtmScopedTarget } from "../extraction/scoped-targets.js";
 import { isLtmSourceExtractionFingerprintCurrent } from "../extraction/source-hash.js";
 import { LongTermMemoryStorage } from "../persistence/storage.js";
 import { LtmServiceError } from "../service-error.js";
@@ -272,7 +272,10 @@ async function preflight(
   storage: LongTermMemoryStorage,
   draft: LtmExtractionDraft,
   mutations: LtmDraftMutation[],
-  originals: readonly LtmDraftMutation[] = draft.mutations,
+  {
+    originals = draft.mutations,
+    namedIds,
+  }: { originals?: readonly LtmDraftMutation[]; namedIds: ReadonlySet<string> | null },
 ) {
   const createIds = new Set<string>();
   const required = new Set<string>();
@@ -320,6 +323,11 @@ async function preflight(
         409,
         "ltm_draft_target_missing",
       );
+  // A memory shared beyond the draft's scope takes only changes the caller named itself: never low-risk auto-apply's
+  // (those changes are never low risk; this is the backstop), and never one included alongside another row.
+  const unnamedTargetIds = new Set(
+    mutations.filter((mutation) => !namedIds?.has(mutation.id)).map((mutation) => mutationTargetId(mutation)),
+  );
   for (const id of required)
     if (!createIds.has(id)) {
       const note = existing.get(id);
@@ -335,7 +343,10 @@ async function preflight(
           400,
           "ltm_draft_mutation_invalid",
         );
-      if (!canUpdateLtmScopedTarget(note.scope, draft.scope))
+      if (
+        !canUpdateLtmScopedTarget(note.scope, draft.scope) &&
+        !(isSharedLtmScopedTarget(note.scope, draft.scope) && !unnamedTargetIds.has(id))
+      )
         throw new LtmDraftApplyError(
           `Long-term memory draft cannot mutate ${id} because it belongs to another scope.`,
           409,
@@ -557,7 +568,7 @@ export async function preflightLongTermMemoryDraft(
   const bulkApply = selected.length > 1;
   const projectionRows = new Map<string, { disposition: "new" | "merge" | "rewrite" }>();
   try {
-    const projection = await preflight(storage, draft, preflightMutations);
+    const projection = await preflight(storage, draft, preflightMutations, { namedIds: selectedIds });
     for (const item of projection.projections)
       for (const row of item.mutations) projectionRows.set(row.mutationId, row);
   } catch (error) {
@@ -569,7 +580,7 @@ export async function preflightLongTermMemoryDraft(
     let failedGroup = false;
     for (const mutationsForTarget of mutationsByTarget.values()) {
       try {
-        const projection = await preflight(storage, draft, mutationsForTarget);
+        const projection = await preflight(storage, draft, mutationsForTarget, { namedIds: selectedIds });
         for (const item of projection.projections)
           for (const row of item.mutations) projectionRows.set(row.mutationId, row);
       } catch (singleError) {
@@ -842,6 +853,8 @@ async function applyInner(
             event?.links.some((link) => link.relation === "extracted_from" && link.target === draft.source.sourceNoteId)
           )
             continue;
+          // A shared event's changes wait for their own review rows.
+          if (event && isSharedLtmScopedTarget(event.scope, draft.scope)) continue;
           for (const mutation of eventMutationsByNoteId.get(target) ?? []) {
             if (!selected.some((item) => item.id === mutation.id)) {
               selected.unshift(mutation);
@@ -913,7 +926,12 @@ async function applyInner(
         "ltm_draft_no_pending_mutations",
       );
     }
-    const projection = await preflight(storage, draft, selected, originalDraftMutations);
+    const projection = await preflight(storage, draft, selected, {
+      originals: originalDraftMutations,
+      namedIds: options.autoApplyLowRiskOnly
+        ? null
+        : (selectedIds ?? new Set(draft.mutations.map((mutation) => mutation.id))),
+    });
     const userSelectedCount = selectedIds
       ? selected.filter((mutation) => selectedIds.has(mutation.id)).length
       : selected.length;

@@ -43,6 +43,18 @@ export function canUpdateLtmScopedTarget(existingScope: LtmScope, incomingScope:
   );
 }
 
+/**
+ * True when a note that `incomingScope` may not update still includes every link of that scope: the user shared the
+ * memory beyond it, or it kept a broad scope from before chat-only destinations. Extraction offers its changes as
+ * review suggestions on that note instead of forking a private copy (unless the source already keeps one), and only
+ * changes the reviewer selected may write them.
+ */
+export function isSharedLtmScopedTarget(existingScope: LtmScope, incomingScope: LtmScope) {
+  return (
+    !canUpdateLtmScopedTarget(existingScope, incomingScope) && canUpdateLtmScopedTarget(incomingScope, existingScope)
+  );
+}
+
 export function equivalentLtmForkAvailability(left: LtmNote, right: LtmNote) {
   const normalize = (scope: LtmScope) => {
     const value = normalizeLtmScope(scope);
@@ -111,6 +123,9 @@ export async function resolveScopedEvidenceUnitTargets({
       continue;
     }
 
+    const identityConflict = Boolean(
+      unit.subjects && existing.subjects && !subjectsEqual(existing.subjects, unit.subjects),
+    );
     const resolvedNoteId = await resolveScopedVariantNoteId({
       baseId: noteId,
       scope,
@@ -118,16 +133,19 @@ export async function resolveScopedEvidenceUnitTargets({
       safeExistingById,
       unit,
     });
+    const resolvedExisting = safeExistingById.get(resolvedNoteId) ?? (await getNoteById(storage, resolvedNoteId));
+    // A source that already keeps its own copy goes on updating it, as candidate reconciliation and the prompt do;
+    // otherwise its changes to a shared memory are offered on that memory.
+    if (!identityConflict && !resolvedExisting && isSharedLtmScopedTarget(existing.scope, scope)) {
+      safeExistingById.set(existing.id, existing);
+      continue;
+    }
     remaps.set(noteId, resolvedNoteId);
 
-    const resolvedExisting = safeExistingById.get(resolvedNoteId) ?? (await getNoteById(storage, resolvedNoteId));
     if (resolvedExisting && !isSourceOrScene(resolvedExisting) && canUseEvidenceTarget(resolvedExisting, unit, scope)) {
       safeExistingById.set(resolvedExisting.id, resolvedExisting);
     }
 
-    const identityConflict = Boolean(
-      unit.subjects && existing.subjects && !subjectsEqual(existing.subjects, unit.subjects),
-    );
     diagnostics.push({
       severity: "warning",
       code: identityConflict ? "target_note_identity_variant" : "target_note_scoped_variant",

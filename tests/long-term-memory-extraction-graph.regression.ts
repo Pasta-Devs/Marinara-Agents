@@ -35,6 +35,9 @@ async function main() {
   );
   const { configurePackageRuntime } = await import(`${source}/package-runtime.ts`);
   const { processLongTermMemorySource } = await import(`${source}/extraction/source-processing.ts`);
+  const { projectLongTermMemoryDraftReview } = await import(`${source}/drafts/draft-review.ts`);
+  const { applyLongTermMemoryDraft, preflightLongTermMemoryDraft } = await import(`${source}/drafts/reconciliation.ts`);
+  const { LongTermMemoryDraftStore } = await import(`${source}/drafts/draft-store.ts`);
   const { LongTermMemoryStorage } = await import(`${source}/persistence/storage.ts`);
   const { longTermMemoryRecallIndexPath, rebuildLongTermMemoryIndexes } = await import(`${source}/recall/rebuild.ts`);
   const { flushLtmIndexRebuild } = await import(`${source}/recall/rebuild-job.ts`);
@@ -1177,6 +1180,381 @@ async function main() {
   }
 
   {
+    // A chat memory the user shared with a character keeps one copy. The chat's new evidence becomes a
+    // review suggestion on it, never a silent private copy and never an automatic write.
+    const dataDir = await mkdtemp(join(tmpdir(), "marinara-ltm-shared-memory-review-"));
+    const releaseHost = configurePackageRuntime({
+      isDebugAgentsEnabled: () => false,
+      logger: { debug() {}, info() {}, warn() {}, error() {} },
+      dataDir,
+      resources: { listCharacters: async () => [], listPersonas: async () => [], listLorebooks: async () => [] },
+      persistence: { getChat: async () => null, listChats: async () => [], updateChatMetadata: async () => {} },
+    });
+    const root = join(dataDir, "long-term-memory");
+    const chatOnly = { chatId: "chat-shared", chatIds: ["chat-shared"] };
+    const sharedScope = { ...chatOnly, characterIds: ["character-shared"] };
+    try {
+      const storage = new LongTermMemoryStorage(root);
+      const newFact = "The harbor gate now opens only for a brass token.";
+      await storage.createNote({
+        ...chat,
+        id: "source_shared_world",
+        title: "Shared world source",
+        scope: chatOnly,
+        provenance: { kind: "chat_summary", sourceId: "chat-shared", entryId: "summary-shared" },
+        sections: { source: { text: newFact, updatedAt: timestamp } },
+      } as never);
+      await storage.createNote({
+        id: "world_harbor_gate",
+        title: "Harbor gate",
+        type: "world",
+        status: "active",
+        modes: ["roleplay"],
+        scope: sharedScope,
+        tags: [],
+        keywords: ["harbor"],
+        links: [],
+        sections: { facts: { text: "The harbor gate closes at dusk.", updatedAt: timestamp } },
+      } as never);
+      const sharedSource = (await storage.getNote("source_shared_world"))!;
+      const committed = await processLongTermMemorySource({
+        sourceNote: sharedSource as never,
+        languageModel: {
+          name: "FixtureModel",
+          model: "fixture-model",
+          maxContext: null,
+          maxOutputTokens: null,
+          fitContext(messages: unknown[], fitOptions: { maxTokens: number }) {
+            return {
+              messages,
+              maxTokens: fitOptions.maxTokens,
+              estimatedTokensBefore: 20,
+              estimatedTokensAfter: 20,
+              trimmed: false,
+            };
+          },
+          async chatComplete() {
+            return {
+              content: JSON.stringify({
+                summary: "The harbor gate changed.",
+                units: [
+                  {
+                    bucket: "world_fact",
+                    subjectId: "harbor_gate",
+                    sectionKey: "facts",
+                    text: newFact,
+                    claimKind: "static",
+                    importance: "major",
+                    evidence: [`source_note:${sharedSource.id}`],
+                    confidence: 0.95,
+                    salience: 0.8,
+                    status: "active",
+                    links: [],
+                    sourceHash: sourceHashForLtmSourceNote(sharedSource),
+                  },
+                ],
+              }),
+              finishReason: "stop",
+            };
+          },
+        } as never,
+        scope: chatOnly,
+        modes: ["roleplay"],
+        mode: "roleplay",
+        extractionMode: "roleplay",
+        operationId: randomUUID(),
+        root,
+        applyLowRisk: true,
+      });
+      assert.equal(
+        committed.draft.mutations.some(
+          (mutation) => mutation.kind === "create_note" && mutation.note.id.startsWith("world_harbor_gate_"),
+        ),
+        false,
+        "the chat's evidence must not fork a private copy of the shared memory",
+      );
+      const sharedMutations = committed.draft.mutations.filter(
+        (mutation) => mutation.kind !== "create_note" && mutation.noteId === "world_harbor_gate",
+      );
+      assert.ok(sharedMutations.length > 0, "the chat's evidence must be offered on the shared memory");
+      assert.ok(
+        sharedMutations.every((mutation) => mutation.risk !== "low"),
+        "changes to a shared memory are never low risk",
+      );
+      assert.equal(
+        committed.appliedMutationIds.some((id) => sharedMutations.some((mutation) => mutation.id === id)),
+        false,
+        "low-risk auto-apply must leave changes to a shared memory for review",
+      );
+      assert.equal(committed.draft.status, "pending");
+      assert.equal(
+        (await storage.getNote("world_harbor_gate"))!.sections.facts?.text,
+        "The harbor gate closes at dusk.",
+      );
+
+      const review = await projectLongTermMemoryDraftReview({ root });
+      const reviewTarget = review.sources
+        .flatMap((reviewSource) => reviewSource.targets)
+        .find((target) => target.noteId === "world_harbor_gate");
+      assert.ok(reviewTarget, "the shared memory must appear in Review");
+      assert.ok(
+        reviewTarget.rows.every((row) =>
+          row.diagnostics.some(
+            (diagnostic) => diagnostic.code === "shared_memory_update" && diagnostic.mutationId === row.mutation.id,
+          ),
+        ),
+        "every Review row on the shared memory must say the change reaches beyond the chat",
+      );
+
+      // Backstop: even a change marked low risk cannot reach the shared memory through auto-apply.
+      const drafts = new LongTermMemoryDraftStore(root);
+      const pending = (await drafts.getDraft(committed.draft.id))!;
+      await drafts.updateDraft(pending.id, {
+        mutations: pending.mutations.map((mutation) => ({ ...mutation, risk: "low" as const })),
+      });
+      await assert.rejects(
+        applyLongTermMemoryDraft(pending.id, {
+          root,
+          actor: "maintenance_api",
+          autoApplyLowRiskOnly: true,
+          rebuildIndexes: false,
+        }),
+        /belongs to another scope/u,
+      );
+      assert.equal(
+        (await storage.getNote("world_harbor_gate"))!.sections.facts?.text,
+        "The harbor gate closes at dusk.",
+      );
+
+      // Only a memory shared beyond this chat is admitted: once it belongs to another chat, even a reviewed apply fails.
+      await storage.updateNote("world_harbor_gate", {
+        scope: { chatId: "chat-other", chatIds: ["chat-other"], characterIds: ["character-shared"] },
+      });
+      await assert.rejects(
+        applyLongTermMemoryDraft(pending.id, {
+          root,
+          mutationIds: sharedMutations.map((mutation) => mutation.id),
+          rebuildIndexes: false,
+        }),
+        /belongs to another scope/u,
+      );
+      await storage.updateNote("world_harbor_gate", { scope: sharedScope });
+
+      const accepted = await applyLongTermMemoryDraft(pending.id, {
+        root,
+        mutationIds: sharedMutations.map((mutation) => mutation.id),
+        rebuildIndexes: false,
+      });
+      assert.deepEqual(
+        new Set(
+          sharedMutations.map((mutation) => mutation.id).filter((id) => accepted.appliedMutationIds.includes(id)),
+        ),
+        new Set(sharedMutations.map((mutation) => mutation.id)),
+      );
+      const updated = (await storage.getNote("world_harbor_gate"))!;
+      assert.match(
+        updated.sections.facts?.text ?? "",
+        /brass token/u,
+        "accepting the suggestion updates the shared memory",
+      );
+      assert.deepEqual(updated.scope.characterIds, ["character-shared"], "accepting keeps the memory shared");
+
+      // Accepting one row writes only what you selected: a chat memory's link to a shared event does not carry
+      // that event's own pending change along with it. A static link applies alone; a change that needs the event
+      // grounded in this source waits until you accept the event's row too.
+      await storage.createNote({
+        id: "timeline_harbor_closing",
+        title: "Harbor closing",
+        type: "timeline_event",
+        status: "active",
+        modes: ["roleplay"],
+        scope: sharedScope,
+        tags: ["typed_memory", "timeline_event"],
+        keywords: [],
+        links: [],
+        sections: { event: { text: "The harbor closed for the storm.", updatedAt: timestamp } },
+      } as never);
+      await storage.createNote({
+        id: "world_lantern_house",
+        title: "Lantern house",
+        type: "world",
+        status: "active",
+        modes: ["roleplay"],
+        scope: chatOnly,
+        tags: [],
+        keywords: ["lantern"],
+        links: [],
+        sections: { facts: { text: "The lantern house watches the harbor.", updatedAt: timestamp } },
+      } as never);
+      await storage.createNote({
+        id: "world_harbor_watch",
+        title: "Harbor watch",
+        type: "world",
+        status: "active",
+        modes: ["roleplay"],
+        scope: chatOnly,
+        tags: [],
+        keywords: ["watch"],
+        links: [],
+        sections: { facts: { text: "The harbor watch guards the quay.", updatedAt: timestamp } },
+      } as never);
+      const linkMutationId = randomUUID();
+      const changeLinkMutationId = randomUUID();
+      const eventMutationId = randomUUID();
+      const linkDraft = await drafts.createDraft({
+        source: { sourceNoteId: sharedSource.id, chatId: "chat-shared" },
+        scope: chatOnly,
+        modes: ["roleplay"],
+        response: {
+          summary: "Link a chat memory to a shared event.",
+          mutations: [
+            {
+              id: linkMutationId,
+              kind: "add_link",
+              claimKind: "static",
+              risk: "medium",
+              confidence: 0.9,
+              summary: "Link the lantern house to the closing",
+              evidence: [`source_note:${sharedSource.id}`],
+              noteId: "world_lantern_house",
+              link: { target: "timeline_harbor_closing", relation: "evidenced_by" },
+            },
+            {
+              id: changeLinkMutationId,
+              kind: "add_link",
+              claimKind: "change",
+              risk: "medium",
+              confidence: 0.9,
+              summary: "The watch changed with the closing",
+              evidence: [`source_note:${sharedSource.id}`],
+              noteId: "world_harbor_watch",
+              link: { target: "timeline_harbor_closing", relation: "caused_by" },
+            },
+            {
+              id: eventMutationId,
+              kind: "update_section",
+              risk: "medium",
+              confidence: 0.9,
+              summary: "Change the shared event",
+              evidence: [`source_note:${sharedSource.id}`],
+              noteId: "timeline_harbor_closing",
+              sectionKey: "event",
+              section: { text: "The harbor closed for good.", updatedAt: timestamp },
+            },
+          ],
+        },
+      } as never);
+      const linked = await applyLongTermMemoryDraft(linkDraft.id, {
+        root,
+        mutationIds: [linkMutationId],
+        rebuildIndexes: false,
+      });
+      assert.deepEqual(linked.appliedMutationIds, [linkMutationId]);
+      assert.equal(
+        (await storage.getNote("timeline_harbor_closing"))!.sections.event?.text,
+        "The harbor closed for the storm.",
+        "accepting one row must not write a shared event's change you did not select",
+      );
+      assert.equal((await storage.getNote("world_lantern_house"))!.links[0]?.target, "timeline_harbor_closing");
+      await assert.rejects(
+        applyLongTermMemoryDraft(linkDraft.id, {
+          root,
+          mutationIds: [changeLinkMutationId],
+          rebuildIndexes: false,
+        }),
+        /grounded in the same source/u,
+      );
+      assert.equal(
+        (await storage.getNote("timeline_harbor_closing"))!.sections.event?.text,
+        "The harbor closed for the storm.",
+      );
+
+      // API contract: an apply writes to a shared memory only the rows it names. The link that grounds a change in a
+      // new event writes to the shared memory too, so the server blocks the change until that row is named as well.
+      // Review's client names it for you (`acceptedMutationIds` adds the link and event to the accepted ids).
+      const eventCreateId = randomUUID();
+      const groundingLinkId = randomUUID();
+      const sharedChangeId = randomUUID();
+      const changeDraft = await drafts.createDraft({
+        source: { sourceNoteId: sharedSource.id, chatId: "chat-shared" },
+        scope: chatOnly,
+        modes: ["roleplay"],
+        response: {
+          summary: "Change a shared memory through a new event.",
+          mutations: [
+            {
+              id: eventCreateId,
+              kind: "create_note",
+              risk: "medium",
+              confidence: 0.9,
+              summary: "Create the token event",
+              evidence: [`source_note:${sharedSource.id}`],
+              note: {
+                id: "timeline_gate_token",
+                title: "Gate token",
+                type: "timeline_event",
+                status: "active",
+                modes: ["roleplay"],
+                scope: chatOnly,
+                tags: ["typed_memory", "timeline_event"],
+                keywords: [],
+                links: [{ target: sharedSource.id, relation: "extracted_from" }],
+                sections: { event: { text: "The watch began stamping brass tokens.", updatedAt: timestamp } },
+              },
+            },
+            {
+              id: groundingLinkId,
+              kind: "add_link",
+              risk: "medium",
+              confidence: 0.9,
+              summary: "Ground the gate change",
+              evidence: [`source_note:${sharedSource.id}`],
+              noteId: "world_harbor_gate",
+              link: { target: "timeline_gate_token", relation: "caused_by" },
+            },
+            {
+              id: sharedChangeId,
+              kind: "append_section",
+              claimKind: "change",
+              risk: "medium",
+              confidence: 0.9,
+              summary: "The gate wants stamped tokens",
+              evidence: [`source_note:${sharedSource.id}`],
+              noteId: "world_harbor_gate",
+              sectionKey: "facts",
+              text: "Only tokens stamped by the watch open the gate.",
+            },
+          ],
+        },
+      } as never);
+      const gateBefore = (await storage.getNote("world_harbor_gate"))!;
+      const changePreflight = await preflightLongTermMemoryDraft(changeDraft.id, {
+        root,
+        mutationIds: [sharedChangeId],
+      });
+      assert.ok(
+        changePreflight.blockedMutationIds.includes(sharedChangeId),
+        "Review blocks a shared memory change that would bring an unselected row on that memory",
+      );
+      await assert.rejects(
+        applyLongTermMemoryDraft(changeDraft.id, { root, mutationIds: [sharedChangeId], rebuildIndexes: false }),
+        /belongs to another scope/u,
+      );
+      assert.deepEqual((await storage.getNote("world_harbor_gate"))!.links, gateBefore.links);
+      const changed = await applyLongTermMemoryDraft(changeDraft.id, {
+        root,
+        mutationIds: [groundingLinkId, sharedChangeId],
+        rebuildIndexes: false,
+      });
+      assert.deepEqual(new Set(changed.appliedMutationIds), new Set([eventCreateId, groundingLinkId, sharedChangeId]));
+      assert.match((await storage.getNote("world_harbor_gate"))!.sections.facts?.text ?? "", /stamped by the watch/u);
+    } finally {
+      releaseHost();
+      await rm(dataDir, { recursive: true, force: true });
+    }
+  }
+
+  {
     // Pad diagnostics past the retained-list bound so the event-shaped warning is truncated
     // out of the bounded array but still forces requiresReview / blocks auto-apply.
     const padUnits = Array.from({ length: 520 }, (_, index) =>
@@ -1983,14 +2361,68 @@ async function main() {
   });
   assert.equal(
     narrowerResolution.remaps.has("world_legacy_scope_fact"),
-    true,
-    "chat-only evidence forks instead of updating a persona-visible memory",
+    false,
+    "chat-only evidence for a memory with a legacy broad scope targets that memory for review instead of forking a copy",
   );
   assert.equal(
     narrowerResolution.existingNotes.some((note) => note.id === "world_legacy_scope_fact"),
-    false,
+    true,
   );
-  assert.notEqual(narrowerResolution.units[0]?.subjectId, "legacy_scope_fact");
+  assert.equal(narrowerResolution.units[0]?.subjectId, "legacy_scope_fact");
+  const chatCopy = {
+    ...legacyNote,
+    id: scopedVariantNoteId("world_legacy_scope_fact", chatOnlyDestination),
+    scope: chatOnlyDestination,
+  };
+  const keptCopyResolution = await resolveScopedEvidenceUnitTargets({
+    units: [
+      unit(chat, {
+        bucket: "world_fact",
+        subjectId: "legacy_scope_fact",
+        sectionKey: "facts",
+        text: "Only chat A may see this new evidence.",
+        links: [{ target: chat.id, relation: "extracted_from" }],
+      }),
+    ],
+    existingNotes: [],
+    storage: {
+      getNotesByIds: async () =>
+        new Map([
+          ["world_legacy_scope_fact", { ...legacyNote, id: "world_legacy_scope_fact" }],
+          [chatCopy.id, chatCopy],
+        ]),
+    },
+    scope: chatOnlyDestination,
+  });
+  assert.equal(
+    keptCopyResolution.remaps.get("world_legacy_scope_fact"),
+    chatCopy.id,
+    "a chat that already keeps its own copy goes on updating it, as candidate reconciliation and the prompt do",
+  );
+  const otherChatNote = {
+    ...legacyNote,
+    id: "world_legacy_scope_fact",
+    scope: { chatId: "chat-b", chatIds: ["chat-b"], characterIds: ["character-a"] },
+  };
+  const otherChatResolution = await resolveScopedEvidenceUnitTargets({
+    units: [
+      unit(chat, {
+        bucket: "world_fact",
+        subjectId: "legacy_scope_fact",
+        sectionKey: "facts",
+        text: "Only chat A may see this new evidence.",
+        links: [{ target: chat.id, relation: "extracted_from" }],
+      }),
+    ],
+    existingNotes: [],
+    storage: { getNotesByIds: async () => new Map([[otherChatNote.id, otherChatNote]]) },
+    scope: chatOnlyDestination,
+  });
+  assert.equal(
+    otherChatResolution.remaps.has("world_legacy_scope_fact"),
+    true,
+    "a memory from another chat still forks: sharing its character never lets this chat write into it",
+  );
   const destinationScopeVariants = [
     { groupIds: ["group-a"], chatIds: ["chat-a"] },
     { groupIds: ["group-a"], chatIds: ["chat-b"] },
