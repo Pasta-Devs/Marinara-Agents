@@ -13,7 +13,7 @@ import type {
 } from "../../../../../shared/src/features/agents/long-term-memory/schema.js";
 import { isLtmSourceLikeNote } from "../../../../../shared/src/features/agents/long-term-memory/schema.js";
 import { logger, type PackageLanguageModel } from "../package-runtime.js";
-import { rebuildLongTermMemoryIndexes } from "../recall/rebuild.js";
+import { scheduleLongTermMemoryIndexRebuild } from "../recall/rebuild.js";
 import { applyLongTermMemoryDraft } from "../drafts/reconciliation.js";
 import {
   extractLongTermMemoryFromSourceNote,
@@ -147,14 +147,6 @@ function canMarkCurrent(prepared: PreparedSource) {
   }
   return false;
 }
-async function rebuildAfterSourceExtraction(root?: string) {
-  try {
-    await rebuildLongTermMemoryIndexes({ root });
-  } catch (error) {
-    logger.warn(error, "[ltm] Deferred index rebuild after source extraction");
-  }
-}
-
 function deterministicUuid(seed: string) {
   const hex = createHash("sha256").update(seed).digest("hex");
   return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-4${hex.slice(13, 16)}-${((Number.parseInt(hex[16]!, 16) & 3) | 8).toString(16)}${hex.slice(17, 20)}-${hex.slice(20, 32)}`;
@@ -445,7 +437,7 @@ export async function processLongTermMemorySource(options: PrepareOptions & { ap
     root: options.root,
     applyLowRisk: options.applyLowRisk,
   });
-  if (committed.applyResult?.appliedMutationIds.length) await rebuildAfterSourceExtraction(options.root);
+  if (committed.applyResult?.appliedMutationIds.length) scheduleLongTermMemoryIndexRebuild(options.root);
   return {
     operationId: prepared.operationId,
     draft: committed.draft,
@@ -633,6 +625,6 @@ export async function processLongTermMemorySourceBatch(options: {
       }
     }
   }).finally(committedNotes.stop);
-  if (hasAppliedMutations) await rebuildAfterSourceExtraction(options.root);
+  if (hasAppliedMutations) scheduleLongTermMemoryIndexRebuild(options.root);
   return results;
 }

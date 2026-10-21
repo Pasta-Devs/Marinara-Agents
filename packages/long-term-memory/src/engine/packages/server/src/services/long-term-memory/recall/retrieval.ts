@@ -15,7 +15,7 @@ import { buildStopWordSet, normalizeKeywordTerms } from "./keyword-extract.js";
 import { LTM_KEYWORD_MAX_SCORE, searchLtmKeywordIndex } from "./keyword-index.js";
 import { getLtmMetadataMatches } from "./metadata-index.js";
 import { resolvePackageEmbeddingAdapter } from "../package-runtime.js";
-import { loadOrRebuildLongTermMemoryIndexes, type LtmRecallIndex } from "./rebuild.js";
+import { loadOrRebuildLongTermMemoryIndexes, waitForScheduledLtmIndexRebuild, type LtmRecallIndex } from "./rebuild.js";
 import { reciprocalRankFuse, type LtmRankedCandidate, type LtmRankLane } from "./ranking.js";
 import { getLtmGlobalSettings, ltmGeneratedStopWords } from "../settings.js";
 import { withLtmVaultLock } from "../persistence/vault-lock.js";
@@ -78,9 +78,11 @@ export async function retrieveLongTermMemory(input: RetrieveLongTermMemoryInput)
   // Read settings and load the index under one vault-lock scope so a recall that queues
   // behind a settings save judges freshness against the settings that save persisted. The
   // loader's own lock is reentrant, so nesting it here cannot deadlock.
-  // The loader reports how it obtained the index (loaded, upgraded, rebuilt) so a
+  // The loader reports how it obtained the index (loaded or rebuilt) so a
   // recall explanation can say which index served the recall without re-reading it.
   const indexObservation: { outcome?: LtmIndexLoadOutcome } = {};
+  // The loader waits for a scheduled rebuild only outside the vault lock, so wait before taking it here.
+  if (!input.index) await waitForScheduledLtmIndexRebuild(input.root, input.signal);
   const { triggerStopWords, index } = await withLtmVaultLock(input.root, async () => {
     const settings = await getLtmGlobalSettings(input.root);
     return {

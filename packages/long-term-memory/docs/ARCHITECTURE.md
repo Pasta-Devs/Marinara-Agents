@@ -137,6 +137,19 @@ on the same vault, are seen after a restart or that process's next mutation. A
 rebuild embeds only chunks whose `textHash` is new when the previous index shares
 the embedding space.
 
+Draft apply and source extraction schedule the rebuild in the background
+(`rebuild-job.ts`) instead of running it before they answer. The job starts 1 s
+after the last request, or 10 s after the first one during a steady stream, and
+holds the vault lock only to read the notes and to publish; while it embeds,
+saves, recall and debug writes go ahead. A write in between moves the
+index-state revision, so the job publishes nothing and builds again, reusing the
+vectors it embedded. Recall, extraction, the Engine refresh and the integrity
+check run a scheduled rebuild at once and wait for it before they take the vault
+lock, so they never read an index older than the notes. Waiting for the job while
+holding the vault lock would deadlock, so `flushLtmIndexRebuild` throws there.
+Editor, settings, scope-link, repair, restore and explicit rebuilds still run
+under the lock, because their responses carry the rebuild's result.
+
 The retrieval entrypoint is `retrieval.ts`; ranking and budget behavior are in
 `ranking.ts` and `budget.ts`; the linked-recall lookup is in `graph.ts`; host
 injection and receipts are in `generation-injection.ts`.
@@ -157,7 +170,10 @@ multilingual vector lane is the only cross-language bridge.
 recall would embed with now) and `indexes.indexedEmbeddingSource` (the label
 stored with the vectors). `embeddingsAvailable` is true only while the stored
 `spaceId` matches the current adapter's `spaceId`; after a source switch it
-reads false and the vault re-embeds on the next recall or reindex. The labels
+reads false. The next recall answers from the keyword lanes and schedules a
+background job that re-embeds the vault; an Engine refresh or reindex re-embeds
+it before answering and stops that job. The job also stops, without trying
+again, when a write lands while it embeds. The labels
 are display text only: the clients show the "source changed" note from
 `embeddingsAvailable === false`, because a renamed connection keeps its
 `spaceId` (vectors stay usable) while a switched sidecar model keeps its

@@ -37,6 +37,7 @@ async function main() {
   const { processLongTermMemorySource } = await import(`${source}/extraction/source-processing.ts`);
   const { LongTermMemoryStorage } = await import(`${source}/persistence/storage.ts`);
   const { longTermMemoryRecallIndexPath, rebuildLongTermMemoryIndexes } = await import(`${source}/recall/rebuild.ts`);
+  const { flushLtmIndexRebuild } = await import(`${source}/recall/rebuild-job.ts`);
   const { getLtmExtractionConfig, updateLtmExtractionConfig } = await import(
     `${source}/extraction/extraction-config.ts`
   );
@@ -1392,7 +1393,8 @@ async function main() {
           reviewSignal === "control",
           `${reviewSignal}: only the control may auto-apply`,
         );
-        // #1364: extraction rebuilds the recall index only when it applied mutations.
+        // #1364: extraction schedules a recall index rebuild only when it applied mutations.
+        await flushLtmIndexRebuild(root);
         assert.equal(
           (await recallIndexMtime()) !== indexBeforeExtraction,
           reviewSignal === "control",

@@ -60,7 +60,7 @@ type ApplyDraftResponse = {
   appliedMutationIds: string[];
   skippedMutationIds: string[];
   autoIncludedMutationIds: string[];
-  indexRebuild: { status: "not_requested" | "succeeded" } | { status: "failed"; error: string };
+  indexRebuild: { status: "not_requested" | "pending" | "succeeded" } | { status: "failed"; error: string };
 };
 
 type PreflightRow = LtmDraftPreflightResponse["rows"][number];
