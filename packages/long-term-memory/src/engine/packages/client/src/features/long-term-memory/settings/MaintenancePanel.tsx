@@ -90,6 +90,18 @@ export function MaintenancePanel({
     current: { notes: number; drafts: number; rejectedSuggestions: number };
   } | null>(null);
   const backupInput = useRef<HTMLInputElement>(null);
+  const chooseBackupButton = useRef<HTMLButtonElement>(null);
+  const resetButton = useRef<HTMLButtonElement>(null);
+  // Reset and backup import hide this panel while the forms reload, which drops focus to the page.
+  // Once the panel is back and idle, return focus to the control that started the action, unless
+  // the user has already moved it. Import's Replace button is gone by then, so it uses Choose backup.
+  const focusAfterReload = useRef<HTMLElement | null>(null);
+  useEffect(() => {
+    const target = focusAfterReload.current;
+    if (hidden || pending || !target) return;
+    focusAfterReload.current = null;
+    if (target.isConnected && document.activeElement === document.body) target.focus();
+  }, [hidden, pending]);
 
   /** True when `key` was refetched at or after `since`; a failed or paused refetch leaves the old data in the cache. */
   const refetchedSince = (key: readonly unknown[], since: number) => {
@@ -390,16 +402,18 @@ export function MaintenancePanel({
       return;
     setPending("backup-import");
     setMessage("");
+    focusAfterReload.current = chooseBackupButton.current;
     try {
       await request("/backup/import", "POST", backupPreview.backup);
       setBackupPreview(null);
       // The import replaces the whole vault, so everything cached is stale. The call waits for the
-      // active queries to refetch; the forms and the integrity report read that result below.
+      // active queries to refetch; the forms read that result below. A failed integrity read shows
+      // its own error with Retry, so only a failed settings read changes the message.
       const startedAt = Date.now();
       await invalidateLtmQueries(queryClient, [queryKeys.root]);
       setMessage(localizeUi("ui.longTermMemory.memorysettings.memoryBackupImported"));
       const refreshed = refreshedSettings(startedAt);
-      if (!refreshed || !refetchedSince(queryKeys.integrity, startedAt)) {
+      if (!refreshed) {
         settings.clear(startedAt);
         setMessage(localizeUi("ui.longTermMemory.memorysettings.backupImportedSettingsNotRefreshed"));
       } else {
@@ -428,6 +442,7 @@ export function MaintenancePanel({
       return;
     setPending("settings-reset");
     setMessage("");
+    focusAfterReload.current = resetButton.current;
     try {
       const response = await request<{ rebuild?: SettingsRebuildOutcome | null }>("/settings/reset", "POST");
       const startedAt = Date.now();
@@ -520,7 +535,13 @@ export function MaintenancePanel({
         <h3 className="text-sm font-semibold">{localizeUi("ui.longTermMemory.memorysettings.vaultMaintenance")}</h3>
         <p className="mt-1 text-xs text-[var(--muted-foreground)]">
           {localizeUi("ui.longTermMemory.memorysettings.integrityState")}{" "}
-          {localizedLabel(integrity.data?.health ?? "loading", localizeUi, labelKeys.integrity)}.
+          {/* A retained "healthy" reading from before a failed reload would contradict the error below it. */}
+          {localizedLabel(
+            integrity.isError ? "loading" : (integrity.data?.health ?? "loading"),
+            localizeUi,
+            labelKeys.integrity,
+          )}
+          .
         </p>
       </div>
       <div className="border-t border-[var(--border)] pt-3">
@@ -536,7 +557,7 @@ export function MaintenancePanel({
             <Download aria-hidden="true" size="0.875rem" />{" "}
             {localizeUi("ui.longTermMemory.memorysettings.exportBackup")}
           </Button>
-          <Button disabled={busy} onClick={() => backupInput.current?.click()}>
+          <Button ref={chooseBackupButton} disabled={busy} onClick={() => backupInput.current?.click()}>
             <Upload aria-hidden="true" size="0.875rem" /> {localizeUi("ui.longTermMemory.memorysettings.chooseBackup")}
           </Button>
           <input
@@ -550,7 +571,7 @@ export function MaintenancePanel({
               if (file) void previewBackup(file);
             }}
           />
-          <Button disabled={busy} onClick={() => void resetSettings()}>
+          <Button ref={resetButton} disabled={busy} onClick={() => void resetSettings()}>
             <RotateCcw aria-hidden="true" size="0.875rem" />{" "}
             {localizeUi("ui.longTermMemory.memorysettings.resetSettings")}
           </Button>
@@ -588,7 +609,7 @@ export function MaintenancePanel({
           </button>
         </StatusSurface>
       ) : null}
-      {integrity.data ? (
+      {integrity.data && !integrity.isError ? (
         <StatusSurface tone={integrity.data.ok ? "success" : "danger"}>
           {integrity.data.ok
             ? localizeUi("ui.longTermMemory.memorysettings.integrityCheckPassedForValue1Notes", {
@@ -599,7 +620,7 @@ export function MaintenancePanel({
               })}
         </StatusSurface>
       ) : null}
-      {integrity.data?.issues.length ? (
+      {integrity.data?.issues.length && !integrity.isError ? (
         <ul className="space-y-1 text-xs text-[var(--muted-foreground)]">
           {integrity.data.issues.slice(0, 20).map((issue, index) => (
             <li key={`${issue.code}-${index}`}>

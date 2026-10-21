@@ -3853,7 +3853,7 @@ async function main() {
       }
       // #1452: when the settings read after Reset or Import fails, Retry on the error surface loads the
       // new settings instead of the cached ones the action replaced. An import whose integrity read
-      // alone fails still shows the settings it refetched.
+      // alone fails still shows the settings it refetched (and says the backup was imported).
       for (const failure of ["reset", "import", "import-integrity"] as const) {
         const failPage = await browserContext.newPage();
         const counts = { notes: 0, drafts: 0, rejectedSuggestions: 0 };
@@ -3915,9 +3915,26 @@ async function main() {
           .getByText(
             failure === "reset"
               ? "Memory settings reset to defaults."
-              : "Memory backup imported, but settings could not be refreshed.",
+              : failure === "import"
+                ? "Memory backup imported, but settings could not be refreshed."
+                : "Memory backup imported.",
           )
           .waitFor({ timeout: 5000 });
+        if (failure === "import-integrity") {
+          // The failed integrity read shows only its error, not the report cached before the import.
+          await maintenancePanel.getByText("Integrity check could not load.").waitFor();
+          assert.equal(
+            await maintenancePanel.getByText("Integrity check passed").count(),
+            0,
+            "a failed integrity read hides the report cached before the import",
+          );
+          // Review: the retained "healthy" reading must not sit above the load error (it shows Loading instead).
+          assert.equal(
+            await maintenancePanel.getByText("Vault healthy").count(),
+            0,
+            "a failed integrity read does not show the health reading cached before the import",
+          );
+        }
         await failPage.locator("#settings-tab-recall").click();
         assert.equal(
           await maxChunks.inputValue(),
@@ -3925,6 +3942,121 @@ async function main() {
           `${failure}: the forms show the settings read after the action`,
         );
         await failPage.close();
+      }
+      // Settings that remount after a failed reload wait for a successful read instead of filling
+      // the forms from the settings cached before the Reset, which the next Save would write back.
+      {
+        const remountPage = await browserContext.newPage();
+        let nextMaxChunks: number | null = null;
+        let failSettings = false;
+        await remountPage.route("**/api/long-term-memory/settings/reset", (route) => route.fulfill({ json: {} }));
+        await remountPage.route("**/api/long-term-memory/settings", async (route) => {
+          if (nextMaxChunks === null || route.request().method() !== "GET") return route.continue();
+          if (failSettings) return route.fulfill({ status: 500, json: { error: "Fixture settings read failed." } });
+          const response = await route.fetch();
+          await route.fulfill({
+            response,
+            json: { ...(await response.json()), longTermMemoryMaxChunks: nextMaxChunks },
+          });
+        });
+        await remountPage.goto(`http://127.0.0.1:${address.port}/`);
+        await remountPage.evaluate(() => customElements.whenDefined("marinara-capability-long-term-memory"));
+        await remountPage.evaluate(`(() => {
+          const element = document.createElement("marinara-capability-long-term-memory");
+          element.setAttribute("view", "detail");
+          element.capabilityProps = { confirmAction: () => true };
+          document.body.append(element);
+        })()`);
+        const settingsNav = remountPage.locator('[data-ltm-navigation="desktop"] [data-ltm-destination="settings"]');
+        await settingsNav.click();
+        const maxChunks = remountPage.getByRole("spinbutton", { name: "Maximum recalled memories", exact: true });
+        const cachedMaxChunks = Number(await maxChunks.inputValue());
+        await remountPage.locator("#settings-tab-maintenance").click();
+        nextMaxChunks = cachedMaxChunks === 37 ? 38 : 37;
+        failSettings = true;
+        await remountPage
+          .locator("#settings-panel-maintenance")
+          .getByRole("button", { name: "Reset settings" })
+          .click();
+        await remountPage
+          .locator('[data-ltm-status="danger"]')
+          .filter({ hasText: "Could not load memory settings." })
+          .waitFor({ timeout: 5000 });
+        await remountPage.locator('[data-ltm-navigation="desktop"] [data-ltm-destination="vault"]').click();
+        failSettings = false;
+        await settingsNav.click();
+        await maxChunks.waitFor({ timeout: 5000 });
+        assert.equal(
+          await maxChunks.inputValue(),
+          String(nextMaxChunks),
+          "Settings reopened after a failed reload show the settings read after the Reset",
+        );
+        await remountPage.close();
+      }
+      // Reset and Import hide the Maintenance panel while the forms reload. Focus then returns to
+      // the control that started the action; Import's Replace button is gone, so it lands on Choose backup.
+      {
+        const focusPage = await browserContext.newPage();
+        const counts = { notes: 0, drafts: 0, rejectedSuggestions: 0 };
+        let settingsGate: Promise<void> | null = null;
+        let releaseSettings = () => {};
+        await focusPage.route("**/api/long-term-memory/settings/reset", (route) => route.fulfill({ json: {} }));
+        await focusPage.route("**/api/long-term-memory/backup/preview", (route) =>
+          route.fulfill({ json: { incoming: counts, current: counts } }),
+        );
+        await focusPage.route("**/api/long-term-memory/backup/import", (route) => route.fulfill({ json: {} }));
+        await focusPage.route("**/api/long-term-memory/settings", async (route) => {
+          if (route.request().method() === "GET" && settingsGate) await settingsGate;
+          await route.continue();
+        });
+        await focusPage.goto(`http://127.0.0.1:${address.port}/`);
+        await focusPage.evaluate(() => customElements.whenDefined("marinara-capability-long-term-memory"));
+        await focusPage.evaluate(`(() => {
+          const element = document.createElement("marinara-capability-long-term-memory");
+          element.setAttribute("view", "detail");
+          element.capabilityProps = { confirmAction: () => true };
+          document.body.append(element);
+        })()`);
+        await focusPage.locator('[data-ltm-navigation="desktop"] [data-ltm-destination="settings"]').click();
+        await focusPage.locator("#settings-tab-maintenance").click();
+        const maintenancePanel = focusPage.locator("#settings-panel-maintenance");
+        const focusedControl = () =>
+          focusPage.evaluate(() =>
+            document.activeElement === document.body ? "body" : (document.activeElement?.textContent?.trim() ?? ""),
+          );
+        for (const action of ["reset", "import"] as const) {
+          settingsGate = new Promise<void>((resolve) => {
+            releaseSettings = () => resolve();
+          });
+          const settingsRefetch = focusPage.waitForRequest(
+            (request) => request.method() === "GET" && new URL(request.url()).pathname.endsWith("/settings"),
+          );
+          // Keyboard activation, so focus starts on the control.
+          if (action === "reset") {
+            await maintenancePanel.getByRole("button", { name: "Reset settings" }).press("Enter");
+          } else {
+            await maintenancePanel
+              .getByLabel("Choose backup", { exact: true })
+              .setInputFiles({ name: "backup.json", mimeType: "application/json", buffer: Buffer.from("{}") });
+            await maintenancePanel.getByRole("button", { name: "Replace with this backup" }).press("Enter");
+          }
+          await settingsRefetch;
+          await focusPage.waitForTimeout(300);
+          settingsGate = null;
+          releaseSettings();
+          await maintenancePanel
+            .getByText(action === "reset" ? "Memory settings reset to defaults." : "Memory backup imported.")
+            .waitFor({ timeout: 5000 });
+          await focusPage
+            .waitForFunction(() => document.activeElement !== document.body, undefined, { timeout: 2000 })
+            .catch(() => undefined);
+          assert.equal(
+            await focusedControl(),
+            action === "reset" ? "Reset settings" : "Choose backup",
+            `${action}: focus returns to the Maintenance panel after the settings reload`,
+          );
+        }
+        await focusPage.close();
       }
       await page.locator('[data-ltm-navigation="desktop"] [data-ltm-destination="vault"]').click();
       await page.evaluate((version) => {

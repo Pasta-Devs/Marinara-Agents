@@ -759,6 +759,186 @@ async function main() {
       assertCounts(result, { groups: 1, incomplete: 1 });
     }
 
+    // The complete commit-time set (`candidateNotes`) keeps the bounded path's rules: the same
+    // filters, identity keys, content threshold and candidate order.
+    {
+      const words = Array.from({ length: 33 }, (_, index) => `token${index}`);
+      const text = (count: number) => words.slice(0, count).join(" ");
+      const worldUnit = (subjectId: string, extra: { title?: string; text?: string; subjectNames?: string[] } = {}) =>
+        unit({
+          bucket: "world_fact",
+          subjectId,
+          sectionKey: "facts",
+          text: extra.text ?? "An unrelated sentence about the observatory floorboards.",
+          ...(extra.title ? { title: extra.title } : {}),
+          ...(extra.subjectNames ? { subjectNames: extra.subjectNames } : {}),
+        });
+      const lantern = (id: string, overrides: Record<string, unknown> = {}) => ({
+        ...note({ id, type: "world", title: "Lantern Bridge", text: "The lantern bridge spans the river." }),
+        ...overrides,
+      });
+      const cases: Array<{
+        name: string;
+        units: unknown[];
+        candidateNotes: unknown[];
+        scope?: Record<string, unknown>;
+        remap?: [string, string];
+        matchKind?: "identity" | "content";
+        ambiguous?: string[];
+      }> = [
+        {
+          name: "identity by title",
+          units: [worldUnit("river_crossing", { title: "Lantern Bridge" })],
+          candidateNotes: [lantern("world_lantern_bridge_old")],
+          remap: ["world_river_crossing", "world_lantern_bridge_old"],
+          matchKind: "identity",
+        },
+        {
+          name: "identity by subjectId",
+          units: [worldUnit("lantern_bridge")],
+          candidateNotes: [lantern("world_lantern_bridge_old")],
+          remap: ["world_lantern_bridge", "world_lantern_bridge_old"],
+          matchKind: "identity",
+        },
+        {
+          name: "identity by subjectNames",
+          units: [worldUnit("river_crossing", { subjectNames: ["Lantern Bridge"] })],
+          candidateNotes: [lantern("world_lantern_bridge_old")],
+          remap: ["world_river_crossing", "world_lantern_bridge_old"],
+          matchKind: "identity",
+        },
+        {
+          name: "same content with other case and punctuation",
+          units: [worldUnit("river_span", { text: "the LANTERN bridge, spans the river!" })],
+          candidateNotes: [lantern("world_lantern_bridge_old", { title: "Old Crossing" })],
+          remap: ["world_river_span", "world_lantern_bridge_old"],
+          matchKind: "content",
+        },
+        {
+          name: "content overlap at the 0.85 threshold",
+          units: [worldUnit("token_set", { text: text(17) })],
+          candidateNotes: [note({ id: "world_token_note", type: "world", title: "Token Note", text: text(20) })],
+          remap: ["world_token_set", "world_token_note"],
+          matchKind: "content",
+        },
+        {
+          name: "content overlap just below the threshold",
+          units: [worldUnit("token_set", { text: text(28) })],
+          candidateNotes: [note({ id: "world_token_note", type: "world", title: "Token Note", text: text(33) })],
+        },
+        {
+          name: "a note with an empty title or no sections",
+          units: [worldUnit("punctuation_only", { title: "!!!", text: "The lantern bridge spans the river." })],
+          candidateNotes: [
+            lantern("world_empty_title", { title: "!!!", sections: {} }),
+            lantern("world_no_sections", { title: "Quiet Ford", sections: {} }),
+          ],
+        },
+        {
+          name: "archived, resolved, source, scene, global, other-scope, other-mode and other-type notes",
+          units: [worldUnit("river_crossing", { title: "Lantern Bridge" })],
+          candidateNotes: [
+            lantern("world_archived", { status: "archived" }),
+            lantern("world_resolved", { status: "resolved" }),
+            lantern("source_lantern", { type: "source" }),
+            lantern("scene_lantern", { type: "scene" }),
+            lantern("world_global", { scope: {} }),
+            lantern("world_other_chat", { scope: scopeB }),
+            lantern("world_shared_wider", { scope: { ...scopeA, characterIds: ["character-x"] } }),
+            lantern("world_game_mode", { modes: ["game"] }),
+            lantern("thread_lantern", { type: "thread" }),
+            lantern("world_lantern_bridge_old"),
+          ],
+          remap: ["world_river_crossing", "world_lantern_bridge_old"],
+          matchKind: "identity",
+        },
+        {
+          name: "a note in a narrower scope than the source",
+          units: [worldUnit("river_crossing", { title: "Lantern Bridge" })],
+          scope: { ...scopeA, characterIds: ["character-x"] },
+          candidateNotes: [lantern("world_lantern_bridge_old")],
+          remap: ["world_river_crossing", "world_lantern_bridge_old"],
+          matchKind: "identity",
+        },
+        {
+          name: "the derived id",
+          units: [worldUnit("lantern_bridge", { title: "Lantern Bridge" })],
+          candidateNotes: [lantern("world_lantern_bridge")],
+        },
+        {
+          // The diagnostic keeps the first eight plausible notes in candidate order, then sorts them.
+          name: "nine plausible notes",
+          units: [worldUnit("river_crossing", { title: "Lantern Bridge" })],
+          candidateNotes: ["8", "7", "6", "5", "4", "3", "2", "1", "0"].map((suffix) =>
+            lantern(`world_lantern_${suffix}`),
+          ),
+          ambiguous: ["1", "2", "3", "4", "5", "6", "7", "8"].map((suffix) => `world_lantern_${suffix}`),
+        },
+      ];
+      for (const testCase of cases) {
+        const result = await reconcile(testCase.units, {
+          candidateNotes: testCase.candidateNotes,
+          ...(testCase.scope ? { scope: testCase.scope } : {}),
+        });
+        assert.deepEqual(
+          [...result.remaps],
+          testCase.remap ? [testCase.remap] : [],
+          `candidateNotes, ${testCase.name}: remap`,
+        );
+        assert.deepEqual(
+          result.matches.map((match: { matchKind: string }) => match.matchKind),
+          testCase.matchKind ? [testCase.matchKind] : [],
+          `candidateNotes, ${testCase.name}: match kind`,
+        );
+        const ambiguity = result.diagnostics.find(
+          (candidate: { code: string }) => candidate.code === "candidate_reconciliation_ambiguous",
+        );
+        assert.deepEqual(
+          ambiguity?.details?.candidateTargetNoteIds,
+          testCase.ambiguous,
+          `candidateNotes, ${testCase.name}: ambiguity`,
+        );
+        assert.equal(
+          result.diagnostics.some(
+            (candidate: { code: string }) => candidate.code === "candidate_reconciliation_incomplete",
+          ),
+          false,
+          `candidateNotes, ${testCase.name}: a complete set is never incomplete`,
+        );
+      }
+    }
+
+    // A commit-time reconciliation filters and reads each candidate note once per call, not once
+    // per candidate group, so its cost stays one pass over the vault however many groups a source has.
+    {
+      let scopeReads = 0;
+      let sectionReads = 0;
+      const counted = (id: string) => {
+        const plain = note({ id, type: "world", title: `Counted ${id}`, text: `The ${id} ledger is sealed.` });
+        const { scope, sections, ...rest } = plain;
+        return Object.defineProperties(rest, {
+          scope: { enumerable: true, get: () => (scopeReads++, scope) },
+          sections: { enumerable: true, get: () => (sectionReads++, sections) },
+        });
+      };
+      const candidateNotes = ["world_count_a", "world_count_b", "world_count_c", "world_count_d"].map(counted);
+      const result = await reconcile(
+        ["first_group", "second_group", "third_group"].map((subjectId) =>
+          unit({ bucket: "world_fact", subjectId, sectionKey: "facts", text: `The ${subjectId} harbor is flooded.` }),
+        ),
+        { candidateNotes },
+      );
+      assertCounts(result, { groups: 3, created: 3 });
+      assert.ok(
+        scopeReads <= candidateNotes.length,
+        `each candidate's scope must be checked once per call, not per group (${scopeReads} reads)`,
+      );
+      assert.ok(
+        sectionReads <= candidateNotes.length,
+        `each candidate's sections must be read once per call, not per group (${sectionReads} reads)`,
+      );
+    }
+
     process.stdout.write(
       "Long-Term Memory candidate reconciliation regression: bounded reuse, create, ambiguity, scope, link closure, mutation kinds ok\n",
     );
