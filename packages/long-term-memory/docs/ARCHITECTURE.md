@@ -17,6 +17,26 @@ composes one file per area under `routes/` (notes, drafts, imports, maintenance,
 settings), with shared limits, errors and the post-mutation rebuild in
 `routes/shared.ts`.
 
+### Shared schema
+
+The shared layer is in `src/engine/packages/shared/src/features/agents/long-term-memory/`.
+`schema.ts` is a barrel that re-exports the ten area files in `schema/`, so
+importers keep one specifier. A file imports only from the files above it in
+this list, so the zod schemas are defined before use.
+
+| File (`schema/`) | Defines |
+| --- | --- |
+| `primitives` | note types, statuses, modes, vault folders, ids, subjects, scopes, links and other building blocks the rest reuse |
+| `settings` | global, extraction, retrieval, retention and per-agent settings, and the defaults |
+| `debug` | debug log statuses, phases, errors and events |
+| `recall` | usage counts, the last-injection summary and recall attempts |
+| `notes` | notes, sections, evidence units, events, bulk actions, note transfer and fork, section rename and delete |
+| `indexes` | index health, chunks, and the embedding, BM25 and graph indexes |
+| `identity` | identity-repair previews, candidates and conflicts |
+| `drafts` | drafts, extraction outcomes and diagnostics, rejected suggestions, draft review and preflight |
+| `sources` | Engine chat and lorebook previews, source details and source import |
+| `backup` | the backup file |
+
 ### Engine fields read directly
 
 The package reads these Engine-owned values without a declared Engine API, so
