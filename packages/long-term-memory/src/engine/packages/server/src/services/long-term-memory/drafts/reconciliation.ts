@@ -883,6 +883,16 @@ async function applyInner(
       selected = selected.filter(
         (mutation) => mutation.kind === "create_note" || !excludedAmbiguousCreateIds.has(mutation.noteId),
       );
+      // A memory shared after extraction keeps its stored low risk: leave its rows for Review instead of failing the batch.
+      const draftScope = draft.scope;
+      const targets = await storage.getNotesByIds(
+        selected.flatMap((mutation) => (mutation.kind === "create_note" ? [] : [mutation.noteId])),
+      );
+      selected = selected.filter((mutation) => {
+        if (mutation.kind === "create_note") return true;
+        const target = targets.get(mutation.noteId);
+        return !target || !isSharedLtmScopedTarget(target.scope, draftScope);
+      });
       selected = await filterAutoApplyDependencies(storage, selected);
     }
     if (options.editedMutations?.length) {

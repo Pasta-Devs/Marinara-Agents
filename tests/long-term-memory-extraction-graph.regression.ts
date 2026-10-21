@@ -1306,20 +1306,26 @@ async function main() {
         "every Review row on the shared memory must say the change reaches beyond the chat",
       );
 
-      // Backstop: even a change marked low risk cannot reach the shared memory through auto-apply.
+      // Even a change marked low risk (a memory shared after extraction keeps its stored risk) cannot reach the shared
+      // memory through auto-apply: auto-apply leaves it for Review instead of failing the batch.
       const drafts = new LongTermMemoryDraftStore(root);
       const pending = (await drafts.getDraft(committed.draft.id))!;
       await drafts.updateDraft(pending.id, {
         mutations: pending.mutations.map((mutation) => ({ ...mutation, risk: "low" as const })),
       });
-      await assert.rejects(
-        applyLongTermMemoryDraft(pending.id, {
-          root,
-          actor: "maintenance_api",
-          autoApplyLowRiskOnly: true,
-          rebuildIndexes: false,
-        }),
-        /belongs to another scope/u,
+      const autoApplied = await applyLongTermMemoryDraft(pending.id, {
+        root,
+        actor: "maintenance_api",
+        autoApplyLowRiskOnly: true,
+        rebuildIndexes: false,
+      });
+      assert.ok(
+        sharedMutations.every(
+          (mutation) =>
+            !autoApplied.appliedMutationIds.includes(mutation.id) &&
+            autoApplied.skippedMutationIds.includes(mutation.id),
+        ),
+        "low-risk auto-apply must leave every change to the shared memory for Review",
       );
       assert.equal(
         (await storage.getNote("world_harbor_gate"))!.sections.facts?.text,
