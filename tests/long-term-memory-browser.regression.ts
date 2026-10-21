@@ -1770,6 +1770,8 @@ async function main() {
         await root.locator("[data-ltm-scope-picker-popup]").waitFor({ state: "detached" });
       };
       await memoryScopeTrigger.waitFor();
+      // The place reads "All" until the scope targets load.
+      await memoryScopeTrigger.getByText("Current", { exact: true }).waitFor();
       assert.match(
         await page.locator("[data-ltm-memory-scope]").innerText(),
         /^Currently viewing memories in:\s*Current\b/u,
@@ -6523,7 +6525,8 @@ async function main() {
         document.body.append(element);
       }, packageManifest.version);
       await firstRunPage.locator('[data-ltm-surface="detail"]').waitFor();
-      assert.equal(await firstRunPage.locator('[data-ltm-surface="onboarding"]').count(), 1);
+      // The guide reopens at its saved step once /status has loaded.
+      await firstRunPage.locator('[data-ltm-surface="onboarding"]').waitFor();
       await firstRunPage.getByRole("button", { name: "Show setup guide" }).click();
       await firstRunPage.locator('[data-ltm-surface="onboarding"]').waitFor();
       await firstRunContext.close();
