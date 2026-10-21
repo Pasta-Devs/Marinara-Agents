@@ -1177,7 +1177,7 @@ export function evidenceUnitMessages(options: RunLongTermMemoryEvidenceUnitExtra
   // The request no longer carries a card's tags or evidence, so say what a card is.
   const characterCardRule =
     options.sourceNote.provenance?.kind === "character"
-      ? "This source is an imported character card: it describes who the character is, not what happened in a chat. Record its backstory as static facts, not timeline_event units, and do not create thread units from its scenario."
+      ? "This source is an imported character card: it describes who the character is, not what happened in a chat. Record its backstory as static facts, not timeline_event units, and do not create thread units from its scenario. In subjectNames, name this character exactly as trustedSubjects lists it, even where the card calls it by a shorter or different name."
       : "";
   const systemPrompt = [baseSystemPrompt, sourceTrustRule, characterCardRule, serverEnforcedLinkPrompt(validationRules)]
     .filter(Boolean)
