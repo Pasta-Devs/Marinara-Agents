@@ -298,6 +298,12 @@
     "long-term-memory": {
       "versions": [
         {
+          "version": "1.4.67",
+          "date": "2026-10-21",
+          "notes": "- Applying several Review suggestions in a row, and extraction that applies memories, no longer rebuild the recall index after each one. One rebuild runs in the background a second after the last change (at most 10 seconds after the first). While it embeds, other saves and debug log entries no longer wait, unless new changes interrupt it three times in a row; it then finishes under the vault lock, as before. Recall still sees every applied memory, because it waits for that rebuild first. After you switch the embedding source, recall answers straight away from keyword matching while the vault is embedded again in the background, then uses the new embeddings; before, the first recall waited for the whole vault to be embedded again. Review no longer says the index rebuild failed after you accept a suggestion. The index status shows stale or building until it is next loaded, then failed (or stale if the embedding source could not be loaded), and the next change or recall rebuilds it.",
+          "highlight": false
+        },
+        {
           "version": "1.4.66",
           "date": "2026-10-21",
           "notes": "- Extraction from a prose summary (a summary written as a narrative rather than under the memory-stream headings, whether from a custom summary prompt, another app's summary or a transcript recap) now keeps each narrated beat as its own timeline event, keeps a quoted line with its event when the summary presents it as memorable, and records recurring motifs and the durable register the prose states. Before, the prompt told the model to omit incidental actions and prefer a few substantial units for prose, which dropped about a third of the events and the quotes that a summary with headings kept. Summaries with headings, character cards and lorebooks are extracted as before.",
@@ -409,12 +415,6 @@
           "version": "1.4.48",
           "date": "2026-10-17",
           "notes": "- The daily cleanup now also deletes invalidated drafts that nobody discarded once they are older than the audit window (30 days by default), counted from when they were invalidated. A draft is invalidated when the memory or detail it targets is deleted, so Review can only discard it. Pending drafts still stay until you review them.\n- `usage.json` stays small: it now keeps the id of each reply that injected memories for one to two days instead of 180. The id only stops a repeat of the same reply from being recorded twice, and a repeat arrives within moments.\n- The daily cleanup now clears the per-memory usage counters that versions before 1.4.42 left in `usage.json`, including in vaults that haven't injected a memory since. Permanently deleting a memory no longer rewrites `usage.json`. A retention audit window longer than 180 days no longer requires the unused `usageRetentionDays` to be raised too.",
-          "highlight": false
-        },
-        {
-          "version": "1.4.47",
-          "date": "2026-10-17",
-          "notes": "- In the place dropdown, either answer to the unsaved-changes prompt now returns focus to the place button. Changing tabs during a search keeps \"No memories\" open. While closed, that group is a \"Show N places with no memories\" row that arrow keys and Enter reach like a place.\n- A chat imported with \"All branches\" now shows one chip in the availability editors, not one per branch, and unticking or removing it removes its branches too. Removing a chat in bulk \"Remove availability\" removes its branches from every selected memory. It also lists chats, characters and personas that no longer exist, so you can remove them.\n- If the shared-history lookup fails, a branch now recalls its own memories instead of none. `/search` given only a chat returns the shared memories a reply recalls. In Game and Conversation chats, only rolling summaries count toward shared-history recall. Day, week and game-session summaries don't, because each branch can write its own under the same name.",
           "highlight": false
         }
       ]
