@@ -27,7 +27,11 @@ import {
   normalizeLtmChatCharacterIds,
 } from "./chat-scope.js";
 import type { LtmExtractionDiagnostic } from "../../../../../shared/src/features/agents/long-term-memory/schema.js";
-import { noteIdForEvidenceUnit, recoveryCandidateForUnit } from "../extraction/evidence-unit-validation.js";
+import {
+  noteIdForEvidenceUnit,
+  recoveryCandidateForUnit,
+  unprefixedSubjectId,
+} from "../extraction/evidence-unit-validation.js";
 import { subjectsEqual } from "./subject-equality.js";
 import { safeSnippet, uniqueStrings, normalizeSubjectName } from "../ltm-utils.js";
 import { LongTermMemoryStorage } from "../persistence/storage.js";
@@ -2553,8 +2557,7 @@ function canonicalNoteIdForEntries(entries: TrustedLtmSubjectCatalogEntry[], buc
 }
 
 function subjectIdForTarget(noteId: string, bucket: LtmEvidenceUnit["bucket"]) {
-  const prefix = bucket === "character_fact" ? "char_" : "rel_";
-  return noteId.startsWith(prefix) ? noteId.slice(prefix.length) : noteId;
+  return unprefixedSubjectId(bucket === "character_fact" ? "char" : "rel", noteId);
 }
 
 function subjectRejection(unit: LtmEvidenceUnit, match: Exclude<SubjectMatch, { status: "matched" }>, index: number) {

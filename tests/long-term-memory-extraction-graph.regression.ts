@@ -1080,6 +1080,188 @@ async function main() {
   assertEventShapedWarningKept("Mara returned to the observatory.", mara);
 
   {
+    // A name that starts with a note prefix word keeps that word in the memory's id: "Char Aznable" is
+    // `char_char_aznable`, and Rel Varga with Sayla Mass is `rel_rel_varga_sayla_mass`. Removing the prefix once
+    // left `char_aznable`, another note, so extraction made a second memory and dropped events linked to the first.
+    const roster = [
+      { id: "char-aznable", name: "Char Aznable" },
+      { id: "rel-varga", name: "Rel Varga" },
+      { id: "sayla-mass", name: "Sayla Mass" },
+      { id: "mara", name: "Mara" },
+    ];
+    const rosterScope = { characterIds: roster.map((character) => character.id) };
+    const canonicalNotes = [
+      { id: "char_char_aznable", type: "character", title: "Char Aznable", keys: ["char-aznable"], section: "facts" },
+      {
+        id: "rel_rel_varga_sayla_mass",
+        type: "relationship",
+        title: "Rel Varga and Sayla Mass",
+        keys: ["rel-varga", "sayla-mass"],
+        section: "state",
+      },
+    ];
+    const extractFromRoster = async (sourceText: string, withCanonicalNotes: boolean, withModelRelationship = true) => {
+      const dataDir = await mkdtemp(join(tmpdir(), "marinara-ltm-prefix-word-names-"));
+      const releaseHost = configurePackageRuntime({
+        isDebugAgentsEnabled: () => false,
+        logger: { debug() {}, info() {}, warn() {}, error() {} },
+        dataDir,
+        resources: {
+          listCharacters: async () => roster.map(({ id, name }) => ({ id, data: { name }, comment: "" })),
+          listPersonas: async () => [],
+          listLorebooks: async () => [],
+        },
+        persistence: { getChat: async () => null, listChats: async () => [], updateChatMetadata: async () => {} },
+      });
+      const root = join(dataDir, "long-term-memory");
+      try {
+        const storage = new LongTermMemoryStorage(root);
+        for (const note of withCanonicalNotes ? canonicalNotes : []) {
+          await storage.createNote({
+            id: note.id,
+            title: note.title,
+            type: note.type,
+            status: "active",
+            modes: ["roleplay"],
+            scope: rosterScope,
+            tags: [],
+            keywords: [],
+            links: [],
+            subjects: note.keys.map((id) => ({ key: `character:${id}`, ref: { kind: "character", id } })),
+            sections: { [note.section]: { text: `${note.title} met at the hangar.`, updatedAt: timestamp } },
+          } as never);
+        }
+        await storage.createNote({
+          ...chat,
+          id: "source_prefix_word_names",
+          scope: rosterScope,
+          sections: { source: { text: sourceText, updatedAt: timestamp } },
+        } as never);
+        const source = (await storage.getNote("source_prefix_word_names"))!;
+        const fact = (
+          bucket: string,
+          subjectId: string,
+          subjectNames: string[],
+          text: string,
+          links: object[] = [],
+        ) => ({
+          bucket,
+          subjectId,
+          sectionKey: bucket === "timeline_event" ? "event" : bucket === "character_fact" ? "facts" : "state",
+          text,
+          claimKind: bucket === "timeline_event" ? "change" : "static",
+          importance: "major",
+          evidence: [`source_note:${source.id}`],
+          confidence: 0.9,
+          salience: 0.8,
+          status: "active",
+          links,
+          subjectNames,
+          sourceHash: sourceHashForLtmSourceNote(source),
+        });
+        const units = [
+          fact("character_fact", "char_aznable", ["Char Aznable"], "Char Aznable pilots a red mobile suit."),
+          fact(
+            "relationship_state",
+            "rel_varga_sayla_mass",
+            ["Rel Varga", "Sayla Mass"],
+            "Rel Varga trusts Sayla Mass.",
+          ),
+          fact("character_fact", "mara", ["Mara"], "Mara repairs the hangar lights."),
+          fact("timeline_event", "fleet_defection", [], "Char Aznable defected from the fleet.", [
+            { target: source.id, relation: "extracted_from" },
+            { target: "char_aznable", relation: "affects_character" },
+          ]),
+        ].filter((unit) => withModelRelationship || unit.bucket !== "relationship_state");
+        const committed = await processLongTermMemorySource({
+          sourceNote: source as never,
+          languageModel: {
+            name: "FixtureModel",
+            model: "fixture-model",
+            maxContext: null,
+            maxOutputTokens: null,
+            fitContext(messages: unknown[], fitOptions: { maxTokens: number }) {
+              return {
+                messages,
+                maxTokens: fitOptions.maxTokens,
+                estimatedTokensBefore: 20,
+                estimatedTokensAfter: 20,
+                trimmed: false,
+              };
+            },
+            async chatComplete() {
+              return { content: JSON.stringify({ summary: "Prefix-word names.", units }), finishReason: "stop" };
+            },
+          } as never,
+          scope: rosterScope,
+          modes: ["roleplay"],
+          mode: "roleplay",
+          extractionMode: "roleplay",
+          operationId: randomUUID(),
+          root,
+          applyLowRisk: false,
+        });
+        return committed.draft;
+      } finally {
+        releaseHost();
+        await rm(dataDir, { recursive: true, force: true });
+      }
+    };
+    const createdIds = (draft: { mutations: any[] }) =>
+      draft.mutations
+        .flatMap((mutation) =>
+          mutation.kind === "create_note" && mutation.note.type !== "timeline_event" ? [mutation.note.id] : [],
+        )
+        .sort();
+    const updatedIds = (draft: { mutations: any[] }) =>
+      [
+        ...new Set(draft.mutations.flatMap((mutation) => (mutation.kind === "create_note" ? [] : [mutation.noteId]))),
+      ].sort();
+    const plainSource =
+      "Char Aznable pilots a red mobile suit. Rel Varga trusts Sayla Mass. Mara repairs the hangar lights. Char Aznable defected from the fleet.";
+    const created = await extractFromRoster(plainSource, false);
+    assert.deepEqual(
+      createdIds(created),
+      ["char_char_aznable", "char_mara", "rel_rel_varga_sayla_mass"],
+      "a new memory for a name that starts with a prefix word keeps the whole name in its id",
+    );
+    assert.deepEqual(created.extractionOutcome!.droppedCandidates, []);
+    const defection = created.mutations.find(
+      (mutation: any) => mutation.kind === "create_note" && mutation.note.type === "timeline_event",
+    ) as any;
+    assert.ok(
+      defection?.note.links.some(
+        (link: any) => link.target === "char_char_aznable" && link.relation === "affects_character",
+      ),
+      "an event that affects the character links to the character's memory",
+    );
+
+    // A structured summary takes the other normalizer path; the existing memories are updated, not copied. The
+    // model leaves the relationship out, so the summary line supplies it, with the section's dimensions.
+    const structuredSource = [
+      "## character_fact",
+      "- Char Aznable | section: facts | text: Char Aznable pilots a red mobile suit.",
+      "## relationship_state",
+      "relationship_id: rel_varga_sayla_mass",
+      "dimensions: trust 80",
+      "- Rel Varga and Sayla Mass | characters: Rel Varga, Sayla Mass | text: Rel Varga trusts Sayla Mass.",
+      "",
+      "Mara repairs the hangar lights. Char Aznable defected from the fleet.",
+    ].join("\n");
+    const updated = await extractFromRoster(structuredSource, true, false);
+    assert.deepEqual(createdIds(updated), ["char_mara"]);
+    assert.deepEqual(updatedIds(updated), ["char_char_aznable", "rel_rel_varga_sayla_mass"]);
+    const relationshipUpdate = updated.mutations.find(
+      (mutation: any) => mutation.noteId === "rel_rel_varga_sayla_mass",
+    ) as any;
+    assert.equal(
+      relationshipUpdate?.section.dimensions?.trust,
+      80,
+      "the summary's relationship dimensions reach the memory",
+    );
+  }
+
+  {
     const dataDir = await mkdtemp(join(tmpdir(), "marinara-ltm-event-shaped-review-"));
     const releaseHost = configurePackageRuntime({
       isDebugAgentsEnabled: () => false,
