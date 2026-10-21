@@ -1,5 +1,9 @@
 # Long-Term Memory changelog
 
+## Unreleased
+
+- Applying several Review suggestions in a row, and extraction that applies memories, no longer rebuild the recall index after each one. One rebuild runs in the background a second after the last change (at most 10 seconds after the first). While it embeds, other saves and debug log entries no longer wait, unless new changes interrupt it three times in a row; it then finishes under the vault lock, as every rebuild did before. Recall still sees every applied memory, because it waits for that rebuild first. After you switch the embedding source, recall now answers straight away from keyword matching while the vault is embedded again in the background, and uses the new embeddings once that finishes. Before, the first recall after the switch waited until the whole vault was embedded again, which takes seconds even for a small vault. Review no longer says the index rebuild failed after you accept a suggestion. The index status shows stale or building until it is next loaded, then failed (or still stale if the embedding source could not be loaded), and the next change or recall rebuilds the index.
+
 ## 1.4.66 — 2026-10-21
 
 - Extraction from a prose summary (a summary written as a narrative rather than under the memory-stream headings, whether from a custom summary prompt, another app's summary or a transcript recap) now keeps each narrated beat as its own timeline event, keeps a quoted line with its event when the summary presents it as memorable, and records recurring motifs and the durable register the prose states. Before, the prompt told the model to omit incidental actions and prefer a few substantial units for prose, which dropped about a third of the events and the quotes that a summary with headings kept. Summaries with headings, character cards and lorebooks are extracted as before.
