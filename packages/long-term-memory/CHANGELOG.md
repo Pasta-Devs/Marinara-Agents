@@ -1,8 +1,12 @@
 # Long-Term Memory changelog
 
-## 1.4.60 — 2026-10-21
+## 1.4.61 — 2026-10-21
 
 - A relationship or character change from a chat summary no longer links to the wrong event because a short event name happens to sit inside a word. A cause such as "the training" could link to an event named "rain", a change whose cause matched nothing could take an event named "art show" from the words "start showing", and a cause that named an event from the same summary in several words could lose its link when a shorter event name appeared inside one of its words. Event names now match whole words, and the last word may still be plural ("the training sessions" finds "training session").
+
+## 1.4.60 — 2026-10-21
+
+- When something unexpected goes wrong on the server, the message now names what you were doing, such as "Could not reset memory settings.", instead of the raw server error. Before, it could show a file path or a library error, or just "Internal Server Error". The full error is written to the server log. Messages written for you, such as "Every memory detail needs text.", show as before. The help text for the existing-note token budget in Memory Settings now says those memories are used to match and merge extracted details; they are not sent to the model.
 
 ## 1.4.59 — 2026-10-21
 
