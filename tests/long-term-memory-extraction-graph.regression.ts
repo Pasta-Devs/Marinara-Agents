@@ -1349,9 +1349,9 @@ async function main() {
         .sort(),
       [
         "- Char Aznable defected from the fleet.",
-        "- rel and varga and sayla and mass relationship changed after the hangar fire.",
+        "- Rel Varga and Sayla Mass relationship changed after the hangar fire.",
       ],
-      "the event made for the relationship's cause does not repeat the note prefix",
+      "the event made for the relationship's cause names the pair as the summary wrote it",
     );
     // A memory saved under the shorter id before (`char_aznable`, subject id `aznable`) still takes the hint.
     const namedSummary = sourceNote(
@@ -1382,6 +1382,23 @@ async function main() {
       legacyMemoryUnit?.sectionKey,
       "profile",
       "a memory saved under the shorter id still takes the summary's section hint",
+    );
+    const fieldPairUnit = normalizeStructuredSummaryEvidenceUnits({
+      units: [],
+      sourceText: [
+        "## relationship_state",
+        "- characters: Rel Varga, Sayla Mass | text: Rel Varga trusts Sayla Mass.",
+      ].join("\n"),
+      sourceNote: namedSummary,
+      sourceHash: sourceHashForLtmSourceNote(namedSummary),
+      mode: "roleplay",
+      modes: ["roleplay"],
+      addStructuredUnits: true,
+    }).units.find((candidate) => candidate.bucket === "relationship_state");
+    assert.equal(
+      fieldPairUnit?.subjectId,
+      "rel_rel_varga_sayla_mass",
+      "a relationship line that names its pair in a characters field gets the id the leading pair gets",
     );
   }
 

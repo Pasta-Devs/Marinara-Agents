@@ -32,6 +32,7 @@ export type LtmRelationshipIdentityKey = (unit: RelationshipIdentityCandidate) =
 type RelationshipStructuredLine = {
   unit: LtmEvidenceUnit;
   causedBy?: string;
+  participantNames?: string[];
   sourceLine: string;
 };
 
@@ -698,6 +699,7 @@ function maybeAddStructuredRelationshipUnits({
       ? resolveStructuredCauseTarget({
           value: structured.causedBy,
           relationshipSubjectId: structured.unit.subjectId,
+          relationshipNames: structured.participantNames,
           units: next,
           existingNotes,
           generatedTimelineTargets,
@@ -757,6 +759,7 @@ function parseStructuredRelationshipLine(
   const importanceResult = extractStructuredImportance(cleaned);
   let subjectId = "";
   let explicitSubjectId = false;
+  let participantNames: string[] = [];
   const subjectNames: string[] = [];
   let importance = importanceResult.importance;
   let confidence = 0.9;
@@ -777,6 +780,7 @@ function parseStructuredRelationshipLine(
       const segmentIdentifier = normalizeIdentifier(segment, "");
       if (!subjectId && (index === 0 || NOTE_ID_PREFIX_PATTERN.test(segmentIdentifier))) {
         subjectId = structuredSubjectId("relationship_state", segment);
+        participantNames = writtenNames(segment);
         continue;
       }
       textParts.push(segment);
@@ -788,7 +792,11 @@ function parseStructuredRelationshipLine(
     if (!value) continue;
 
     if (["id", "subject", "relationship", "relationship_id"].includes(key)) {
-      subjectId = structuredSubjectId("relationship_state", value) || subjectId;
+      const id = structuredSubjectId("relationship_state", value);
+      if (id) {
+        subjectId = id;
+        participantNames = writtenNames(value);
+      }
       explicitSubjectId = true;
       continue;
     }
@@ -849,13 +857,9 @@ function parseStructuredRelationshipLine(
 
   const uniqueSubjectNames = uniqueStrings(subjectNames);
   if (!explicitSubjectId && uniqueSubjectNames.length > 0) {
-    subjectId = stripUnitSubjectPrefix(
-      "relationship_state",
-      uniqueSubjectNames
-        .map((name) => normalizeIdentifier(name, ""))
-        .filter(Boolean)
-        .join("_"),
-    );
+    const written = uniqueSubjectNames.filter((name) => normalizeIdentifier(name, "")).join(", ");
+    subjectId = structuredSubjectId("relationship_state", written);
+    participantNames = writtenNames(written);
   }
   const normalizedSubject = normalizeIdentifier(subjectId, "");
   const text = textParts.join(" | ").replace(/\s+/g, " ").trim();
@@ -887,6 +891,7 @@ function parseStructuredRelationshipLine(
   return {
     unit,
     ...(causedBy ? { causedBy } : {}),
+    ...(participantNames.length > 0 ? { participantNames } : {}),
     sourceLine: cleaned,
   };
 }
@@ -894,6 +899,7 @@ function parseStructuredRelationshipLine(
 function resolveStructuredCauseTarget({
   value,
   relationshipSubjectId,
+  relationshipNames,
   units,
   existingNotes,
   generatedTimelineTargets,
@@ -905,6 +911,7 @@ function resolveStructuredCauseTarget({
 }: {
   value: string;
   relationshipSubjectId: string;
+  relationshipNames?: string[];
   units: LtmEvidenceUnit[];
   existingNotes: LtmNote[];
   generatedTimelineTargets: Map<string, string>;
@@ -930,6 +937,7 @@ function resolveStructuredCauseTarget({
   const unit = structuredCauseTimelineUnit({
     cause: value,
     relationshipSubjectId,
+    relationshipNames,
     sourceNote,
     sourceHash,
     importance,
@@ -1003,6 +1011,7 @@ function fuzzyTimelineTargetFromCause(value: string, candidates: TimelineTargetC
 function structuredCauseTimelineUnit({
   cause,
   relationshipSubjectId,
+  relationshipNames,
   sourceNote,
   sourceHash,
   importance,
@@ -1010,6 +1019,7 @@ function structuredCauseTimelineUnit({
 }: {
   cause: string;
   relationshipSubjectId: string;
+  relationshipNames?: string[];
   sourceNote: LtmNote;
   sourceHash: string;
   importance: LtmEvidenceUnit["importance"];
@@ -1017,9 +1027,11 @@ function structuredCauseTimelineUnit({
 }): LtmEvidenceUnit {
   const causeSubject = compactCauseIdentifier(cause, "relationship_change");
   const subjectId = normalizeIdentifier(`${relationshipSubjectId}_${causeSubject}`, relationshipSubjectId);
-  // The id carries the note prefix again when the first name starts with "Rel" (`rel_varga_sayla_mass`) or the summary
-  // wrote it twice (`rel_rel_ana_bo`); the event text leaves that prefix out.
-  const relationshipText = stripUnitSubjectPrefix("relationship_state", relationshipSubjectId).split("_").join(" and ");
+  // Names the line writes out are used as written ("Rel Varga and Sayla Mass"). Otherwise the text comes from the id,
+  // which leaves out the note prefix it carries again when the summary wrote it twice (`rel_rel_ana_bo`).
+  const relationshipText = relationshipNames?.length
+    ? relationshipNames.join(" and ")
+    : stripUnitSubjectPrefix("relationship_state", relationshipSubjectId).split("_").join(" and ");
   const causeText = cause.trim().replace(/[.?!]\s*$/u, "");
   const text = `${relationshipText} relationship changed after ${causeText}.`;
   return {
@@ -1799,9 +1811,22 @@ function normalizeSectionKey(value: string, fallback: string) {
 // "Char Aznable" is `char_char_aznable`, "Mara Lee" is `mara_lee`.
 function structuredSubjectId(bucket: LtmEvidenceUnit["bucket"], value: string) {
   const id = normalizeIdentifier(value, "");
-  if (!/\s/.test(value.trim()) || /^\S*_/.test(value.trim())) return stripUnitSubjectPrefix(bucket, id);
+  if (!isWrittenName(value)) return stripUnitSubjectPrefix(bucket, id);
   const prefix = prefixForBucket(bucket);
   return unprefixedSubjectId(prefix, `${prefix}_${id}`);
+}
+
+function isWrittenName(value: string) {
+  return /\s/.test(value.trim()) && !/^\S*_/.test(value.trim());
+}
+
+// The names a relationship value writes out ("Rel Varga, Sayla Mass"), or none for an id.
+function writtenNames(value: string) {
+  if (!isWrittenName(value)) return [];
+  return value
+    .split(/[,;\n]|\s+and\s+/i)
+    .map((name) => name.trim())
+    .filter(Boolean);
 }
 
 function stripUnitSubjectPrefix(bucket: LtmEvidenceUnit["bucket"], subjectId: string) {
