@@ -4754,6 +4754,8 @@ async function main() {
         document.body.append(element);
       }, packageManifest.version);
       await page.locator('[data-ltm-surface="detail"]').waitFor();
+      // The pill shows "Loading status" until the status read returns; wait for the healthy reading.
+      await page.locator('[data-ltm-surface="vault-health-pill"]').waitFor({ state: "detached" });
       assert.equal(await page.locator('[data-ltm-surface="vault-health-pill"]').count(), 0);
       assert.equal(await page.locator('[data-ltm-surface="vault-health-warning"]').count(), 0);
       await page.locator('[data-ltm-control="navigation"][data-ltm-destination="review"]').first().click();
