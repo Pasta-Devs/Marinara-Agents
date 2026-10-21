@@ -100,6 +100,11 @@ apply JSON changes atomically, publish events, and leave recovery information
 for interrupted work. Review remains mandatory: generation recall never writes
 durable memory directly.
 
+Before compiling, source extraction recalls existing memories that match the
+source, bounded by the `existingNoteMaxChunks` and `existingNoteMaxTokens`
+extraction settings. The server uses them to drop duplicate details and to pick
+the memories a new unit updates. They are never sent to the model.
+
 ## Backup and Restore
 
 `backup-restore.ts` exports notes, drafts, rejected suggestions, and package

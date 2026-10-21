@@ -123,13 +123,19 @@ function blockingReasons(notes: LtmNote[]) {
 
 async function selectedNotes(request: LtmNoteForkPreviewRequest, root?: string) {
   const notes = await new LongTermMemoryStorage(root).getNotesByIds(request.noteIds);
-  if (notes.size !== request.noteIds.length) throw new Error("One or more fork notes no longer exist.");
+  if (notes.size !== request.noteIds.length)
+    throw new LtmServiceError("One or more fork notes no longer exist.", 404, "ltm_note_not_found");
   const selected = request.noteIds.map((id) => notes.get(id)!);
   if (selected.some((note) => note.type !== "thread" && note.type !== "world"))
-    throw new Error("Only thread and world notes can be reviewed as forks.");
-  if (new Set(selected.map((note) => note.type)).size !== 1) throw new Error("Fork notes must have the same type.");
+    throw new LtmServiceError(
+      "Only thread and world notes can be reviewed as forks.",
+      400,
+      "ltm_fork_selection_invalid",
+    );
+  if (new Set(selected.map((note) => note.type)).size !== 1)
+    throw new LtmServiceError("Fork notes must have the same type.", 400, "ltm_fork_selection_invalid");
   if (selected.some((note) => note.status === "archived"))
-    throw new Error("Archived notes cannot be selected as forks.");
+    throw new LtmServiceError("Archived notes cannot be selected as forks.", 400, "ltm_fork_selection_invalid");
   const ordered = [...selected].sort(
     (left, right) => left.createdAt.localeCompare(right.createdAt) || left.id.localeCompare(right.id),
   );

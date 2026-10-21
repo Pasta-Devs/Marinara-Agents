@@ -1,8 +1,12 @@
 # Long-Term Memory changelog
 
-## 1.4.60 — 2026-10-21
+## 1.4.61 — 2026-10-21
 
 - The Vault stays responsive in places with many memories. Each letter you type into the search now appears at once and the list follows, instead of waiting for every memory's row to be redrawn. Each type shows its first 100 memories, with a Show more button for the next 100. The counts, search, the filters and Select visible still include every memory. With 8,000 memories on a desktop, the worst letter took about 3 seconds to appear and now takes about 50 ms, the list follows in about a third of a second, and the Vault opens in about 0.7 to 1.1 seconds instead of about 1.7.
+
+## 1.4.60 — 2026-10-21
+
+- When something unexpected goes wrong on the server, the message now names what you were doing, such as "Could not reset memory settings.", instead of the raw server error. Before, it could show a file path or a library error, or just "Internal Server Error". The full error is written to the server log. Messages written for you, such as "Every memory detail needs text.", show as before. The help text for the existing-note token budget in Memory Settings now says those memories are used to match and merge extracted details; they are not sent to the model.
 
 ## 1.4.59 — 2026-10-21
 
