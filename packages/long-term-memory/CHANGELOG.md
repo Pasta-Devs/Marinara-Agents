@@ -1,5 +1,9 @@
 # Long-Term Memory changelog
 
+## Unreleased
+
+- A relationship or character change from a chat summary no longer links to the wrong event because a short event name happens to sit inside a word. A cause such as "the training" could link to an event named "rain", a change whose cause matched nothing could take an event named "art show" from the words "start showing", and a cause that named an event from the same summary in several words could lose its link when a shorter event name appeared inside one of its words. Event names now match whole words, and the last word may still be plural ("the training sessions" finds "training session").
+
 ## 1.4.59 — 2026-10-21
 
 - A character fact that extraction adds from a structured chat summary is no longer dropped when its "because of" note is written in words, such as `caused_by: the night lesson`. The note now links to a matching event, from the same extraction or already in memory, or to none, and the fact is kept. A fact about a change still needs its event and is dropped without one. Before, the words were turned into an event id that didn't exist and the fact was dropped as linking to a memory the extraction could not find.
