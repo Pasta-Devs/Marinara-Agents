@@ -1,5 +1,9 @@
 # Long-Term Memory changelog
 
+## Unreleased
+
+- After a recall index rebuild fails, the integrity check in Maintenance and the package status no longer show the raw error, which could include the vault's file paths. They now say that the latest index rebuild failed and to see the server log, which records the full error. A rebuild that fails while the Engine switches to a new embedding connection is now logged there too.
+
 ## 1.4.72 — 2026-10-21
 
 - No change in what Long-Term Memory does. Internally, the shared file that defines settings, memories, drafts and backups is split into ten files by area.

@@ -1022,6 +1022,7 @@ async function main(routeScenario: RouteScenario) {
       });
       assert.equal(filterOnSettingsSave.statusCode, 200, filterOnSettingsSave.body);
       assert.equal(filterOnSettingsSave.json().rebuild?.status, "complete");
+      const builtRecallIndex = await readFile(rebuildPath, "utf8");
       await rm(rebuildPath, { force: true });
       await mkdir(rebuildPath);
       const settingsSaveWithFailedRebuild = await app.inject({
@@ -1051,6 +1052,20 @@ async function main(routeScenario: RouteScenario) {
       });
       assert.equal(failedSettingsStatus.json().indexes.rebuildState, "failed");
       assert.deepEqual(failedSettingsStatus.json().indexes.errors, [{ index: "recall", code: "index_rebuild_failed" }]);
+      // The raw failure names the vault's file paths.
+      const fixedRebuildFailure = "The latest index rebuild failed; see the server log.";
+      assert.deepEqual(failedSettingsStatus.json().indexes.warnings, [fixedRebuildFailure]);
+      // The integrity check reports a failed rebuild only beside a readable index.
+      await writeFile(rebuildPath, builtRecallIndex);
+      const failedSettingsIntegrity = await app.inject({
+        method: "GET",
+        url: "/api/long-term-memory/integrity",
+        headers,
+      });
+      assert.equal(
+        failedSettingsIntegrity.json().issues.find((issue: any) => issue.code === "index_rebuild_failed")?.message,
+        fixedRebuildFailure,
+      );
       // Restore defaults through the settings route so a later rebuild succeeds without
       // resetting extraction settings mid-scenario (reset rewrites legacy prompt state).
       const restoredSettings = await app.inject({
