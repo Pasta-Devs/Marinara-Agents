@@ -27,5 +27,6 @@ export const ltmSourcePaths = {
   targetPicker: at(`${client}vault/TargetPicker.tsx`),
   types: at(`${client}types.ts`),
   vault: at(`${client}vault/MemoryVault.tsx`),
+  vaultRow: at(`${client}vault/VaultRow.tsx`),
   workspaceLayout: at(`${client}LtmWorkspace.tsx`),
 };

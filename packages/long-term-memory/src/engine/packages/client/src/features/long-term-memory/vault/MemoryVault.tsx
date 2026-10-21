@@ -1,7 +1,7 @@
-import { useEffect, useId, useMemo, useRef, useState } from "react";
+import { useCallback, useDeferredValue, useEffect, useId, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Archive, ChevronRight, Ellipsis, FileText, Link2, Plus, Search, Trash2, X } from "lucide-react";
+import { Archive, ChevronRight, FileText, Link2, Plus, Search, Trash2, X } from "lucide-react";
 import type {
   LtmBulkNoteResult,
   LtmLink,
@@ -36,7 +36,7 @@ import {
   scopeTargetsQueryOptions,
   settingsQueryOptions,
 } from "../api";
-import { Button, ClickSurface, IconButton, InfoPopover, inputClass, StatusSurface } from "../shared-controls";
+import { Button, IconButton, InfoPopover, inputClass, StatusSurface } from "../shared-controls";
 import type { LongTermMemoryDestinationProps } from "../types";
 import {
   humanizeLabel,
@@ -73,6 +73,7 @@ import type { AvailabilityTargets, Target } from "./vault-shared";
 import { MemoryAvailabilityWorkbench } from "./MemoryAvailabilityWorkbench";
 import { BulkAvailabilityWorkbench } from "./BulkAvailabilityWorkbench";
 import { Pill } from "./Pill";
+import { VaultRow, type VaultRowActions } from "./VaultRow";
 
 const noteTypes: readonly LtmNoteType[] = [
   "timeline_event",
@@ -224,6 +225,10 @@ type NavigatorState = {
   filterModes?: LtmMode[];
 };
 const navigatorStates = new Map<string, NavigatorState>();
+// Each type group in the navigator renders at most this many rows until "Show more". Search,
+// the filters, the group counts and "Select visible" still cover every memory in the place.
+const vaultGroupRowLimit = 100;
+const noShownRowCounts: Partial<Record<LtmNoteType, number>> = {};
 
 function fingerprint(note: LtmNote | null) {
   return note ? JSON.stringify(note) : "";
@@ -409,7 +414,10 @@ export default function MemoryVault({
 }: LongTermMemoryDestinationProps) {
   const { t: localizeUi, locale } = useLtmTranslation();
   const untitledMemoryLabel = localizeUi("ui.longTermMemory.memoryvault.untitledMemory");
-  const memoryLabel = (note: Pick<LtmNote, "title"> | null | undefined) => formatMemoryLabel(note, untitledMemoryLabel);
+  const memoryLabel = useCallback(
+    (note: Pick<LtmNote, "title"> | null | undefined) => formatMemoryLabel(note, untitledMemoryLabel),
+    [untitledMemoryLabel],
+  );
   const noteTypeLabel = (type: string) => formatNoteTypeLabel(type, localizeUi);
   const statusLabel = (status: string) => localizedLabel(status, localizeUi, labelKeys.status);
   const modeLabel = (mode: string) => localizedLabel(mode, localizeUi, labelKeys.mode);
@@ -685,33 +693,94 @@ export default function MemoryVault({
     () => new Map((notes.data?.linkContext ?? []).map((note) => [note.id, note])),
     [notes.data],
   );
-  const subjectSearchLabel = (subject: LtmSubject) => {
-    if (!subject.ref) return localizeUi("ui.longTermMemory.memoryvault.unresolvedSubject");
-    const targets =
-      subject.ref.kind === "character"
-        ? scopeTargets.data?.characters
-        : subject.ref.kind === "persona"
-          ? scopeTargets.data?.personas
-          : subject.ref.kind === "local_character"
-            ? localCharacters.data
-            : [];
-    return targets?.find((target) => target.id === subject.ref!.id)?.label ?? subject.ref.id;
+  const subjectSearchLabel = useCallback(
+    (subject: LtmSubject) => {
+      if (!subject.ref) return localizeUi("ui.longTermMemory.memoryvault.unresolvedSubject");
+      const targets =
+        subject.ref.kind === "character"
+          ? scopeTargets.data?.characters
+          : subject.ref.kind === "persona"
+            ? scopeTargets.data?.personas
+            : subject.ref.kind === "local_character"
+              ? localCharacters.data
+              : [];
+      return targets?.find((target) => target.id === subject.ref!.id)?.label ?? subject.ref.id;
+    },
+    [localCharacters.data, localizeUi, scopeTargets.data],
+  );
+  // The list filters with a deferred copy of the search, so the field updates at once and React
+  // renders the filtered rows in the background, dropping that render when another key arrives.
+  const deferredSearch = useDeferredValue(search);
+  const visible = useMemo(() => {
+    const query = deferredSearch.trim().toLocaleLowerCase();
+    return (notes.data?.displayed ?? [])
+      .filter(
+        (note) =>
+          (statusFilter === "all" || note.status === statusFilter) &&
+          (sourceFilter ? note.type === "source" : note.type !== "source") &&
+          (!filterModes.length || filterModes.some((mode) => note.modes.includes(mode))) &&
+          (!query || searchable(note, notesById, subjectSearchLabel).includes(query)),
+      )
+      .sort((left, right) =>
+        sort === "title"
+          ? memoryLabel(left).localeCompare(memoryLabel(right))
+          : sort === "created"
+            ? right.createdAt.localeCompare(left.createdAt)
+            : right.updatedAt.localeCompare(left.updatedAt),
+      );
+  }, [
+    deferredSearch,
+    filterModes,
+    memoryLabel,
+    notes.data?.displayed,
+    notesById,
+    sort,
+    sourceFilter,
+    statusFilter,
+    subjectSearchLabel,
+  ]);
+  // "Show more" counts apply to one list: a new search, filter, sort or place starts again at the limit.
+  const shownRowsKey = JSON.stringify([
+    contextKey,
+    target?.id,
+    secondaryTarget?.id,
+    deferredSearch,
+    statusFilter,
+    sourceFilter,
+    filterModes,
+    sort,
+  ]);
+  const [shownRows, setShownRows] = useState({ key: shownRowsKey, counts: noShownRowCounts });
+  if (shownRows.key !== shownRowsKey && shownRows.counts !== noShownRowCounts)
+    setShownRows({ key: shownRowsKey, counts: noShownRowCounts });
+  const shownRowCounts = shownRows.key === shownRowsKey ? shownRows.counts : noShownRowCounts;
+  const navigatorGroups = useMemo(
+    () =>
+      groupedNoteTypes.flatMap(({ type, labelKey }) => {
+        const group = visible.filter((note) => note.type === type);
+        if (!group.length) return [];
+        const shown = group.slice(0, shownRowCounts[type] ?? vaultGroupRowLimit).map((note) => ({
+          note,
+          preview: preview(note, deferredSearch, localizeUi, notesById, subjectSearchLabel),
+        }));
+        return [{ type, labelKey, count: group.length, shown, nextNoteId: group[shown.length]?.id }];
+      }),
+    [deferredSearch, localizeUi, notesById, shownRowCounts, subjectSearchLabel, visible],
+  );
+  // Show more moves focus to the first row it adds, so keyboard users continue where the list grew.
+  const focusRowAfterShowMore = useRef<string | null>(null);
+  const showMoreRows = (type: LtmNoteType, shownCount: number, nextNoteId: string | undefined) => {
+    focusRowAfterShowMore.current = nextNoteId ?? null;
+    setShownRows({ key: shownRowsKey, counts: { ...shownRowCounts, [type]: shownCount + vaultGroupRowLimit } });
   };
-  const visible = allNotes
-    .filter(
-      (note) =>
-        (statusFilter === "all" || note.status === statusFilter) &&
-        (sourceFilter ? note.type === "source" : note.type !== "source") &&
-        (!filterModes.length || filterModes.some((mode) => note.modes.includes(mode))) &&
-        (!search.trim() || searchable(note, notesById, subjectSearchLabel).includes(search.trim().toLocaleLowerCase())),
-    )
-    .sort((left, right) =>
-      sort === "title"
-        ? memoryLabel(left).localeCompare(memoryLabel(right))
-        : sort === "created"
-          ? right.createdAt.localeCompare(left.createdAt)
-          : right.updatedAt.localeCompare(left.updatedAt),
-    );
+  useEffect(() => {
+    const noteId = focusRowAfterShowMore.current;
+    if (!noteId) return;
+    focusRowAfterShowMore.current = null;
+    navigatorScrollRef.current
+      ?.querySelector<HTMLElement>(`[data-ltm-note-id="${CSS.escape(noteId)}"] button`)
+      ?.focus();
+  }, [shownRows]);
   const hasFilterableNotes = allNotes.length > 0 && (sourceFilter || allNotes.some((note) => note.type !== "source"));
   const clearNavigatorFilters = () => {
     setSearch("");
@@ -1930,6 +1999,19 @@ export default function MemoryVault({
     event.stopPropagation();
     setOpenActionNoteId((current) => (current === noteId ? null : noteId));
   };
+  const rowActions = useRef<VaultRowActions | null>(null);
+  rowActions.current = {
+    openNote: (note) => void openNote(note),
+    toggleChecked: (noteId) =>
+      setChecked((current) => {
+        const next = new Set(current);
+        if (next.has(noteId)) next.delete(noteId);
+        else next.add(noteId);
+        return next;
+      }),
+    runNoteAction: (event, note, action) => void runNoteAction(event, note, action),
+    toggleNoteActions,
+  };
   const update = <K extends keyof LtmNote>(key: K, value: LtmNote[K]) => {
     setSaveState("idle");
     setDraft((current) => (current ? { ...current, [key]: value } : current));
@@ -2501,13 +2583,11 @@ export default function MemoryVault({
                     </button>
                   </StatusSurface>
                 ) : null}
-                {groupedNoteTypes.map(({ type, labelKey }) => {
-                  const group = visible.filter((note) => note.type === type);
-                  if (!group.length) return null;
+                {navigatorGroups.map(({ type, labelKey, count, shown, nextNoteId }) => {
                   return (
                     <details
                       key={type}
-                      open={search.trim() ? true : undefined}
+                      open={deferredSearch.trim() ? true : undefined}
                       className="group"
                       data-ltm-memory-group={type}
                     >
@@ -2522,127 +2602,34 @@ export default function MemoryVault({
                           className="transition-transform group-open:rotate-90"
                         />
                         <span>{localizeUi(labelKey)}</span>
-                        <span className="ml-auto text-[var(--muted-foreground)]">{group.length}</span>
+                        <span className="ml-auto text-[var(--muted-foreground)]">{count}</span>
                       </summary>
-                      {group.map((note) => {
-                        const notePreview = preview(note, search, localizeUi, notesById, subjectSearchLabel);
-                        return (
-                          <ClickSurface
-                            key={note.id}
-                            data-ltm-note-type={note.type}
-                            data-ltm-note-source={note.type === "source" || undefined}
-                            data-ltm-note-actions-open={openActionNoteId === note.id || undefined}
-                            className={`group border-b border-[var(--border)]/70 p-2 ${draft?.id === note.id ? "bg-[var(--accent)]/50" : ""}`}
-                          >
-                            <div className="flex min-w-0 gap-2">
-                              {selectMode && note.type !== "source" ? (
-                                <label className="flex min-h-11 min-w-8 items-center justify-center">
-                                  <input
-                                    type="checkbox"
-                                    className="h-4 w-4"
-                                    checked={checked.has(note.id)}
-                                    onChange={() =>
-                                      setChecked((current) => {
-                                        const next = new Set(current);
-                                        if (next.has(note.id)) next.delete(note.id);
-                                        else next.add(note.id);
-                                        return next;
-                                      })
-                                    }
-                                    aria-label={localizeUi("ui.longTermMemory.memoryvault.selectValue1", {
-                                      value1: memoryLabel(note),
-                                    })}
-                                  />
-                                </label>
-                              ) : null}
-                              <button
-                                type="button"
-                                onClick={() => void openNote(note)}
-                                className="min-h-14 min-w-0 flex-1 overflow-hidden rounded-md px-2 text-left hover:bg-[var(--accent)]"
-                              >
-                                <span className="flex items-center gap-2">
-                                  <strong className="truncate text-sm">{memoryLabel(note)}</strong>
-                                  <ChevronRight aria-hidden="true" size="0.875rem" className="shrink-0" />
-                                </span>
-                                <span className="mt-1 flex gap-1 text-xs">
-                                  <span className="rounded border border-[var(--border)] bg-[var(--secondary)] px-1.5 py-0.5">
-                                    {noteTypeLabel(note.type)}
-                                  </span>
-                                  <span className="rounded border border-[var(--border)] bg-[var(--secondary)] px-1.5 py-0.5">
-                                    {statusLabel(note.status)}
-                                  </span>
-                                </span>
-                                {notePreview ? (
-                                  <span className="mt-1 line-clamp-2 break-words text-xs leading-5 text-[var(--muted-foreground)]">
-                                    <span className="font-medium text-[var(--foreground)]">{notePreview.label}:</span>{" "}
-                                    {notePreview.text}
-                                  </span>
-                                ) : null}
-                              </button>
-                              {note.type !== "source" ? (
-                                <div
-                                  data-ltm-note-actions-desktop
-                                  className="hidden shrink-0 flex-col items-start gap-1 pt-1 text-[var(--muted-foreground)] md:flex"
-                                >
-                                  <IconButton
-                                    icon={Archive}
-                                    label={localizeUi("ui.longTermMemory.memoryvault.archiveValue1", {
-                                      value1: memoryLabel(note),
-                                    })}
-                                    disabled={Boolean(busy)}
-                                    onClick={(event) => void runNoteAction(event, note, "archive")}
-                                  />
-                                  <IconButton
-                                    icon={Trash2}
-                                    label={localizeUi("ui.longTermMemory.memoryvault.deleteValue1", {
-                                      value1: memoryLabel(note),
-                                    })}
-                                    destructive
-                                    disabled={Boolean(busy)}
-                                    onClick={(event) => void runNoteAction(event, note, "delete")}
-                                  />
-                                </div>
-                              ) : null}
-                              {note.type !== "source" ? (
-                                <div className="md:hidden">
-                                  <IconButton
-                                    icon={Ellipsis}
-                                    label={localizeUi("ui.longTermMemory.memoryvault.moreActionsForValue1", {
-                                      value1: memoryLabel(note),
-                                    })}
-                                    aria-expanded={openActionNoteId === note.id}
-                                    aria-controls={
-                                      openActionNoteId === note.id ? `ltm-note-actions-${note.id}` : undefined
-                                    }
-                                    onClick={(event) => toggleNoteActions(event, note.id)}
-                                  />
-                                </div>
-                              ) : null}
-                            </div>
-                            {note.type !== "source" && openActionNoteId === note.id ? (
-                              <div id={`ltm-note-actions-${note.id}`} className="ml-10 flex gap-2 pt-2 md:hidden">
-                                <Button
-                                  className="flex-1"
-                                  disabled={Boolean(busy)}
-                                  onClick={(event) => void runNoteAction(event, note, "archive")}
-                                >
-                                  <Archive aria-hidden="true" size="1rem" className="shrink-0" />
-                                  {localizeUi("ui.longTermMemory.memoryvault.archive")}
-                                </Button>
-                                <Button
-                                  className="flex-1"
-                                  destructive
-                                  disabled={Boolean(busy)}
-                                  onClick={(event) => void runNoteAction(event, note, "delete")}
-                                >
-                                  <Trash2 aria-hidden="true" size="1rem" className="shrink-0" />
-                                  {localizeUi("ui.longTermMemory.extractionprompttemplates.delete")}
-                                </Button>
-                              </div>
-                            ) : null}
-                          </ClickSurface>
-                        );
-                      })}
+                      {shown.map(({ note, preview: notePreview }) => (
+                        <VaultRow
+                          key={note.id}
+                          note={note}
+                          label={memoryLabel(note)}
+                          previewLabel={notePreview?.label}
+                          previewText={notePreview?.text}
+                          selected={draft?.id === note.id}
+                          actionsOpen={openActionNoteId === note.id}
+                          selectMode={selectMode}
+                          checked={checked.has(note.id)}
+                          busy={Boolean(busy)}
+                          actions={rowActions}
+                        />
+                      ))}
+                      {count > shown.length ? (
+                        <div className="border-b border-[var(--border)]/70 p-2">
+                          <Button className="w-full" onClick={() => showMoreRows(type, shown.length, nextNoteId)}>
+                            {localizeUi("ui.longTermMemory.memoryvault.showMoreMemories", {
+                              value1: Math.min(vaultGroupRowLimit, count - shown.length),
+                            })}
+                            {/* Two groups past the cap would otherwise give two buttons the same accessible name. */}
+                            <span className="sr-only"> {localizeUi(labelKey)}</span>
+                          </Button>
+                        </div>
+                      ) : null}
                     </details>
                   );
                 })}

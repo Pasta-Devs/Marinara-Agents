@@ -3705,6 +3705,79 @@ async function main() {
       await desktopDebugPage.locator('[data-ltm-recalled-note="world_legacy_global"]').click();
       await desktopDebugPage.locator('[data-ltm-surface="vault"]').waitFor();
       await desktopDebugPage.close();
+      // A Vault group renders at most 100 rows until Show more. Its count, the shown total and
+      // search still cover every memory in the place.
+      {
+        const capPage = await browserContext.newPage();
+        const capNotes = Array.from({ length: 250 }, (_, index) => {
+          const number = String(index).padStart(3, "0");
+          const timestamp = new Date(Date.UTC(2026, 6, 30) - index * 60_000).toISOString();
+          return {
+            id: `world_cap_${number}`,
+            title: `Capped memory ${number}`,
+            type: "world",
+            status: "active",
+            modes: ["roleplay"],
+            scope: {},
+            tags: [],
+            keywords: [],
+            links: [],
+            sections: {
+              facts: {
+                text: index === 230 ? "The lighthouse keeper hid the ledger." : `Capped memory ${number} text.`,
+                updatedAt: timestamp,
+              },
+            },
+            createdAt: timestamp,
+            updatedAt: timestamp,
+            version: 1,
+          };
+        });
+        await capPage.route(
+          (url) => url.pathname.endsWith("/api/long-term-memory/notes"),
+          (route) =>
+            route.request().method() === "GET" && !new URL(route.request().url()).searchParams.has("ids")
+              ? route.fulfill({ json: capNotes })
+              : route.continue(),
+        );
+        await capPage.goto(`http://127.0.0.1:${address.port}/`);
+        await capPage.evaluate(() => customElements.whenDefined("marinara-capability-long-term-memory"));
+        await capPage.evaluate(`(() => {
+          const element = document.createElement("marinara-capability-long-term-memory");
+          element.setAttribute("view", "detail");
+          element.capabilityProps = { confirmAction: () => true };
+          document.body.append(element);
+        })()`);
+        await capPage.locator('[data-ltm-navigation="desktop"] [data-ltm-destination="vault"]').click();
+        const capGroupSummary = capPage.locator('[data-ltm-memory-group="world"] > summary');
+        const capRows = capPage.locator('[data-ltm-memory-group="world"] [data-ltm-note-type]');
+        await capGroupSummary.click();
+        await capRows.first().waitFor();
+        await capPage.getByText("250 shown").waitFor();
+        assert.match(await capGroupSummary.innerText(), /250/u, "the group counts every memory");
+        assert.equal(await capRows.count(), 100, "a group renders 100 rows before Show more");
+        await capPage.getByRole("button", { name: "Show 100 more" }).press("Enter");
+        await capPage.waitForFunction(
+          () => document.activeElement?.textContent?.includes("Capped memory 100") ?? false,
+          undefined,
+          { timeout: 2000 },
+        );
+        assert.equal(await capRows.count(), 200, "Show more adds the next 100 rows");
+        assert.match(
+          await capPage.evaluate(() => document.activeElement?.textContent ?? ""),
+          /Capped memory 100/u,
+          "Show more moves focus to the first row it added",
+        );
+        assert.equal(await capPage.getByRole("button", { name: "Show 50 more" }).count(), 1);
+        const capSearch = capPage.getByLabel("Search memories", { exact: true });
+        await capSearch.fill("lighthouse");
+        await capRows.filter({ hasText: "Capped memory 230" }).waitFor({ timeout: 5000 });
+        assert.equal(await capRows.count(), 1, "search covers memories beyond the cap");
+        await capSearch.fill("");
+        await capPage.getByText("250 shown").waitFor();
+        assert.equal(await capRows.count(), 100, "a new search starts again at 100 rows");
+        await capPage.close();
+      }
       // #1376: Reset settings reloads the forms. The Maintenance panel stays mounted, so its
       // result survives and its buttons stay disabled until the settings refetch resolves.
       {
@@ -5059,7 +5132,11 @@ async function main() {
       for (const card of deleteTargetCards) await card.locator('input[type="checkbox"]').check();
       const deleteMemorySearch = page.getByLabel("Search memories", { exact: true });
       await deleteMemorySearch.fill("no-delete-target-match");
-      assert.match(await page.locator("[data-ltm-selection-count]").innerText(), /2 selected, 2 hidden by filters/u);
+      // The list follows the search box a moment later, so wait for the count instead of reading it once.
+      await page
+        .locator("[data-ltm-selection-count]")
+        .filter({ hasText: /2 selected, 2 hidden by filters/u })
+        .waitFor();
       confirmDelete = false;
       lastDeleteConfirmation = null;
       await page.evaluate(() => {
@@ -5117,6 +5194,7 @@ async function main() {
       // A selection change while the delete-target lookup is still resolving must
       // cancel the pending permanent delete instead of acting on the stale IDs.
       await deleteMemorySearch.fill("");
+      await deleteTargetCards[0]!.waitFor({ state: "attached" });
       const worldNoteGroup = page.locator('[data-ltm-memory-group="world"]');
       if (!(await worldNoteGroup.evaluate((element) => (element as HTMLDetailsElement).open)))
         await worldNoteGroup.locator("summary").click();

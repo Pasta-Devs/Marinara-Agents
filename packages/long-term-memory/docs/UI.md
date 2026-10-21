@@ -68,7 +68,11 @@ the mobile bottom navigation; reduced-motion behavior is defined in `DESIGN.md`.
 
 The navigator resolves scope targets before loading notes. Search, status,
 source-only, and sort filters apply to the visible note list; clearing filters
-does not change the selected scope. The workbench distinguishes read-only
+does not change the selected scope. Each type group renders at most 100 rows;
+Show more adds the next 100 and moves focus to the first row it added. Group
+counts, the shown total, search, and Select visible still cover every memory,
+and a new search, filter, sort, or place starts again at 100 rows. The
+workbench distinguishes read-only
 source notes from editable memories and keeps validation, evidence, freshness,
 confidence, subjects, links, keywords, and availability visible as applicable.
 Archive supports undo. Destructive actions and navigation away from edits use
