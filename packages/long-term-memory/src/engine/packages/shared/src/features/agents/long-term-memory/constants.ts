@@ -1,5 +1,5 @@
-import type { LtmExtractionReasoningEffort, LtmExtractionVerbosity } from "./schema.js";
-import type { LtmEvidenceUnitBucket, LtmMode } from "./schema.js";
+import type { LtmExtractionReasoningEffort, LtmExtractionVerbosity } from "./schema/primitives.js";
+import type { LtmEvidenceUnitBucket, LtmMode } from "./schema/primitives.js";
 export type LongTermMemoryRecallStyle = "balanced" | "exact" | "broad" | "custom" | "story";
 
 export const DEFAULT_LTM_EXTRACTION_REASONING_EFFORT = "low" satisfies LtmExtractionReasoningEffort;

@@ -1411,6 +1411,33 @@ export default function MemoryVault({
       queryKeys.scopeTargetsRoot,
     ]);
   }
+  // A bulk change edits notes on the server whatever the editor has opened since. Reload the lists, and the open
+  // memory if the change edited it, so the editor neither shows nor saves back the availability from before the
+  // change. Unsaved edits keep everything but the availability, as in saveAvailability. The reloaded copy is dropped
+  // when the editor changed memory meanwhile or already holds a newer save.
+  async function refreshAfterBatch(changedNoteIds: string[]) {
+    await invalidate();
+    const session = editorSession.current;
+    const openNoteId = draftRef.current?.id;
+    if (!openNoteId || !changedNoteIds.includes(openNoteId)) return;
+    const next = await request<LtmNote>(`/notes/${encodeURIComponent(openNoteId)}`).catch(() => null);
+    if (
+      !next ||
+      session !== editorSession.current ||
+      draftRef.current?.id !== next.id ||
+      draftRef.current.version > next.version
+    )
+      return;
+    const editorWasDirty = dirtyRef.current;
+    setDraft((current) =>
+      current?.id === next.id
+        ? editorWasDirty
+          ? { ...current, scope: next.scope, modes: next.modes, updatedAt: next.updatedAt, version: next.version }
+          : next
+        : current,
+    );
+    setSaved(fingerprint(next));
+  }
   async function undoArchive(recovery: ArchiveUndoState) {
     if (archiveUndo !== recovery) return;
     const session = editorSession.current;
@@ -1469,7 +1496,10 @@ export default function MemoryVault({
           { count: recovery.notes.length },
         ),
       );
-      await invalidate();
+      // Reload the open memory too if the undo restored it, so it neither shows nor saves back the archived status.
+      await refreshAfterBatch(
+        results.flatMap((result) => (result.status === "fulfilled" ? result.value.affectedNoteIds : [])),
+      );
     } catch {
       if (session === editorSession.current) {
         setError(localizeUi("ui.longTermMemory.memoryvault.archiveUndoFailed"));
@@ -1918,7 +1948,10 @@ export default function MemoryVault({
             }
           : {}),
       });
-      if (session !== editorSession.current) return;
+      if (session !== editorSession.current) {
+        await refreshAfterBatch(result.affectedNoteIds);
+        return;
+      }
       const unresolved = new Set([...result.skippedNoteIds, ...result.failedNoteIds]);
       if (options?.preserveSelection) {
         setChecked((current) => {
@@ -1972,12 +2005,12 @@ export default function MemoryVault({
         setNotice(message);
         setError("");
       }
-      await invalidate();
+      await refreshAfterBatch(result.affectedNoteIds);
     } catch (cause) {
       if (session === editorSession.current)
         setError(errorMessage(cause, localizeUi("ui.longTermMemory.memoryvault.couldNotUpdateMemories")));
     } finally {
-      if (session === editorSession.current) setBusy("");
+      setBusy((current) => (current === action ? "" : current));
     }
   }
   async function batch(action: "status" | "modes" | "availability" | "remove-availability" | "archive" | "delete") {
