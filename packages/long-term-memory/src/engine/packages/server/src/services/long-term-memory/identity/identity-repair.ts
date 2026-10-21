@@ -151,9 +151,10 @@ export async function applyLtmIdentityRepairs(
         try {
           await restoreLtmIdentityRepairBackup(root, backup);
         } catch (restoreError) {
+          logger.error(error, "[ltm] Identity repair failed");
           logger.error(restoreError, "[ltm] Failed to restore identity-repair backup %s", backup.id);
           throw new LtmIdentityRepairError(
-            `Identity repair failed and its backup could not be restored: ${message(error)}`,
+            "Identity repair failed and its backup could not be restored. Details are in the server log.",
             500,
             "identity_repair_restore_failed",
           );
@@ -602,7 +603,4 @@ async function withRepairLock<T>(root: string, operation: () => Promise<T>) {
     release();
     if (locks.get(root) === tail) locks.delete(root);
   }
-}
-function message(error: unknown) {
-  return error instanceof Error ? error.message : String(error);
 }

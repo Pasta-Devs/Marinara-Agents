@@ -458,7 +458,14 @@ function failed(
   isCancelled: boolean,
   prepared?: PreparedSource,
 ): LtmImportedSourceResult {
-  const message = error instanceof Error ? error.message : `Failed to ${stage} imported source`,
+  // An unexpected failure's message can carry file paths or library internals, so it stays in the server log.
+  const unexpected = !isCancelled && !(error instanceof LtmServiceError);
+  if (unexpected) logger.error(error, "[ltm] Failed to %s imported source %s", stage, item.sourceId);
+  const message = unexpected
+      ? `Failed to ${stage} imported source. Details are in the server log.`
+      : error instanceof Error
+        ? error.message
+        : `Failed to ${stage} imported source`,
     base = {
       sourceId: item.sourceId,
       title: item.title,

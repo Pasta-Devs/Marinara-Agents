@@ -19,6 +19,7 @@ import {
 } from "./draft-projector.js";
 import { LongTermMemoryDraftStore } from "./draft-store.js";
 import { nowIso } from "../ltm-utils.js";
+import { logger } from "../package-runtime.js";
 import { scheduleLongTermMemoryIndexRebuild } from "../recall/rebuild.js";
 import { canUpdateLtmScopedTarget, isSharedLtmScopedTarget } from "../extraction/scoped-targets.js";
 import { isLtmSourceExtractionFingerprintCurrent } from "../extraction/source-hash.js";
@@ -483,7 +484,12 @@ export async function preflightLongTermMemoryDraft(
 
   const blockers = new Map<string, { code: string; message: string }[]>();
   const addBlocker = (mutationIds: string[], error: unknown) => {
-    const message = error instanceof Error ? error.message : "Long-term memory preflight failed.";
+    // An unexpected failure's message can carry file paths or library internals, so it stays in the server log.
+    if (!(error instanceof LtmServiceError)) logger.error(error, "[ltm] Preflight failed for draft %s", id);
+    const message =
+      error instanceof LtmServiceError
+        ? error.message
+        : "Long-term memory preflight failed. Details are in the server log.";
     const code = error instanceof LtmDraftProjectionError ? error.code : "preflight_blocked";
     for (const mutationId of mutationIds)
       blockers.set(mutationId, [...(blockers.get(mutationId) ?? []), { code, message }]);

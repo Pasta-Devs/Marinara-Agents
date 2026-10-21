@@ -46,10 +46,18 @@ async function main() {
   };
   const validContent = JSON.stringify({ summary: "One durable event.", units: [validUnit] });
   const calls: any[] = [];
+  const loggedErrors: unknown[] = [];
   let response: any = { content: validContent, finishReason: "stop" };
   const release = configurePackageRuntime({
     isDebugAgentsEnabled: () => false,
-    logger: { debug() {}, info() {}, warn() {}, error() {} },
+    logger: {
+      debug() {},
+      info() {},
+      warn() {},
+      error(error: unknown) {
+        loggedErrors.push(error);
+      },
+    },
     dataDir: root,
     resources: {
       listCharacters: async () => [],
@@ -1372,7 +1380,15 @@ async function main() {
         });
         assert.equal(snapshotFailureBatch[0]?.extractionStatus, "succeeded", JSON.stringify(snapshotFailureBatch[0]));
         assert.equal(snapshotFailureBatch[1]?.extractionStatus, "failed");
-        assert.equal(snapshotFailureBatch[1]?.error?.code, "extract_failed");
+        // An internal failure is logged; the source's result points to the server log instead of carrying it.
+        assert.deepEqual(snapshotFailureBatch[1]?.error, {
+          code: "extract_failed",
+          message: "Failed to extract imported source. Details are in the server log.",
+        });
+        assert.equal(
+          loggedErrors.some((error) => error instanceof Error && error.message === "snapshot unavailable"),
+          true,
+        );
       } finally {
         LongTermMemoryStorage.prototype.listNotes = originalListNotesForFailure;
       }

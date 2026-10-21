@@ -1,5 +1,9 @@
 # Long-Term Memory changelog
 
+## Unreleased
+
+- A few more unexpected failures no longer show their raw error text, which could include file paths. In Sources, a source that could not be saved or extracted now says "Failed to write imported source note." or "Failed to extract imported source.", followed by "Details are in the server log."; this includes the model provider rejecting the request during an import. In Review, a change that could not be checked says "Long-term memory preflight failed. Details are in the server log." An identity repair in settings whose backup could not be restored says so without the cause. The full error is written to the server log. Messages written for you, such as a model reply that was cut off, show as before.
+
 ## 1.4.72 — 2026-10-21
 
 - No change in what Long-Term Memory does. Internally, the shared file that defines settings, memories, drafts and backups is split into ten files by area.

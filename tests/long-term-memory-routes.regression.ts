@@ -3897,13 +3897,50 @@ async function main(routeScenario: RouteScenario) {
         .json()
         .candidates.find((candidate: any) => candidate.duplicateNoteIds.includes("char_nyra_persona_b"));
       assert.ok(personaIdentityCandidate);
-      // Issue #1328: a repair backup only serves its own rollback, so a successful identity repair
-      // keeps the newest three and always keeps its own.
+      const personaIdentityRepair = {
+        scope: { personaId: "persona-fixture" },
+        repairs: [
+          {
+            candidateId: personaIdentityCandidate.id,
+            canonicalNoteId: personaIdentityCandidate.canonicalNoteId,
+            excludedNoteIds: [],
+            sectionChoices: [],
+          },
+        ],
+      };
       const identityBackupsRoot = join(
         dirname(storageService.storage.root),
         "backups",
         "long-term-memory-identity-repairs",
       );
+      // A repair that fails and cannot restore its backup says so without the underlying message, which is logged.
+      const earlierIdentityBackups = new Set(await readdir(identityBackupsRoot));
+      const originalUpdateNote = storagePrototype.updateNote;
+      const repairWriteError = new Error("EIO: write '/private/marinara/char_nyra_persona_a.json'");
+      storagePrototype.updateNote = async () => {
+        for (const name of await readdir(identityBackupsRoot))
+          if (!earlierIdentityBackups.has(name)) await rm(join(identityBackupsRoot, name), { recursive: true });
+        throw repairWriteError;
+      };
+      let unrestoredIdentityApply: any;
+      try {
+        unrestoredIdentityApply = await app.inject({
+          method: "POST",
+          url: "/api/long-term-memory/identity-repair/apply",
+          headers,
+          payload: personaIdentityRepair,
+        });
+      } finally {
+        storagePrototype.updateNote = originalUpdateNote;
+      }
+      assert.equal(unrestoredIdentityApply.statusCode, 500, unrestoredIdentityApply.body);
+      assert.deepEqual(unrestoredIdentityApply.json(), {
+        error: "Identity repair failed and its backup could not be restored. Details are in the server log.",
+        code: "identity_repair_restore_failed",
+      });
+      assert.equal(loggedErrors.includes(repairWriteError), true);
+      // Issue #1328: a repair backup only serves its own rollback, so a successful identity repair
+      // keeps the newest three and always keeps its own.
       const staleBackupNames = ["stale-1", "stale-2", "stale-3", "stale-4"];
       for (const [position, name] of staleBackupNames.entries()) {
         await mkdir(join(identityBackupsRoot, name), { recursive: true });
@@ -3914,17 +3951,7 @@ async function main(routeScenario: RouteScenario) {
         method: "POST",
         url: "/api/long-term-memory/identity-repair/apply",
         headers,
-        payload: {
-          scope: { personaId: "persona-fixture" },
-          repairs: [
-            {
-              candidateId: personaIdentityCandidate.id,
-              canonicalNoteId: personaIdentityCandidate.canonicalNoteId,
-              excludedNoteIds: [],
-              sectionChoices: [],
-            },
-          ],
-        },
+        payload: personaIdentityRepair,
       });
       assert.equal(personaIdentityApply.statusCode, 200, personaIdentityApply.body);
       const keptIdentityBackups = await readdir(identityBackupsRoot);
@@ -3995,6 +4022,16 @@ async function main(routeScenario: RouteScenario) {
         body: { error: "Fallback text", code: "ltm_unexpected_failure" },
       });
       assert.equal(loggedErrors.includes(socketError), true);
+      // Nor is one with a status and a code, such as Fastify's.
+      const fastifyError = Object.assign(new Error("Request body is too large: /private/upload"), {
+        statusCode: 413,
+        code: "FST_ERR_CTP_BODY_TOO_LARGE",
+      });
+      assert.deepEqual(routeError(fastifyError, "Fallback text"), {
+        statusCode: 500,
+        body: { error: "Fallback text", code: "ltm_unexpected_failure" },
+      });
+      assert.equal(loggedErrors.includes(fastifyError), true);
       // A cancelled request has no reader and is not a failure, so it is not logged.
       const cancelled = Object.assign(new Error("Long-term memory import was cancelled."), { name: "AbortError" });
       assert.equal(routeError(cancelled, "Fallback text").body.error, "Fallback text");
@@ -4400,6 +4437,35 @@ async function main(routeScenario: RouteScenario) {
       assert.deepEqual(refreshedNote.keywords, ["preserve-me"]);
       assert.deepEqual(refreshedNote.links, [{ target: "world_route_fixture", relation: "evidenced_by" }]);
       assert.equal(refreshedNote.sections.notes.text, "User-owned section.");
+      // A source that cannot be written is listed with a message that points to the server log, not the cause.
+      const storagePrototype = Object.getPrototypeOf(storageService.storage);
+      const originalUpdateNote = storagePrototype.updateNote;
+      const sourceWriteError = new Error("EACCES: open '/private/marinara/source_chat_a.json'");
+      storagePrototype.updateNote = async () => {
+        throw sourceWriteError;
+      };
+      let failedSourceWrite: any;
+      try {
+        failedSourceWrite = await app.inject({
+          method: "POST",
+          url: "/api/long-term-memory/import/source-notes",
+          headers,
+          payload: {
+            source: "chats",
+            sourceIds: ["chat-a:summary-a"],
+            extract: false,
+            destinationScope: { chatIds: ["chat-a", "chat-b"] },
+          },
+        });
+      } finally {
+        storagePrototype.updateNote = originalUpdateNote;
+      }
+      assert.equal(failedSourceWrite.statusCode, 200, failedSourceWrite.body);
+      assert.deepEqual(failedSourceWrite.json().writeFailures[0].error, {
+        code: "source_write_failed",
+        message: "Failed to write imported source note. Details are in the server log.",
+      });
+      assert.equal(loggedErrors.includes(sourceWriteError), true);
       chats[0].metadata.summaryEntries.push({
         id: "summary-empty-response",
         content: "An empty provider response must remain retryable.",
@@ -4536,7 +4602,10 @@ async function main(routeScenario: RouteScenario) {
           warn(...args: any[]) {
             refineWarnings.push(args.map((value) => (value instanceof Error ? value.message : value)));
           },
-          error() {},
+          // The full suite runs the drafts scenario under this runtime, and it checks a logged error.
+          error(error: unknown) {
+            loggedErrors.push(error);
+          },
           debugOverride() {},
         },
         isDebugAgentsEnabled() {
@@ -4986,6 +5055,11 @@ async function main(routeScenario: RouteScenario) {
       assert.equal(fallbackGame.statusCode, 200, fallbackGame.body);
       assert.equal(fallbackGame.json().imported[0].extractionStatus, "failed");
       assert.equal(fallbackGame.json().imported[0].retryable, true);
+      // The provider's text stays out of the source's result, which points to the server log instead.
+      assert.deepEqual(fallbackGame.json().imported[0].error, {
+        code: "extract_failed",
+        message: "Failed to extract imported source. Details are in the server log.",
+      });
       failGameRefine = false;
       await app.inject({
         method: "PUT",
@@ -5447,6 +5521,36 @@ async function main(routeScenario: RouteScenario) {
       assert.deepEqual(blockedPreflight.json().blockedMutationIds, [blockedMutationId]);
       assert.equal(blockedPreflight.json().rows[0].status, "blocked");
       assert.match(blockedPreflight.json().rows[0].blockers[0].message, /link target not found/u);
+      // An unexpected failure inside the check blocks the row without its message. Preflight's first read, before
+      // the check, passes, so the failure comes from the check's own reads.
+      const storagePrototype = Object.getPrototypeOf(storageService.storage);
+      const originalGetNotesByIds = storagePrototype.getNotesByIds;
+      const vaultReadError = new Error("EIO: read '/private/marinara/world_missing_target.json'");
+      let preflightReads = 0;
+      storagePrototype.getNotesByIds = async function (ids: string[]) {
+        preflightReads += 1;
+        if (preflightReads > 1 && ids.includes("world_missing_target")) throw vaultReadError;
+        return originalGetNotesByIds.call(this, ids);
+      };
+      let unreadablePreflight: any;
+      try {
+        unreadablePreflight = await app.inject({
+          method: "POST",
+          url: `/api/long-term-memory/drafts/${blockedDraft.id}/preflight`,
+          headers,
+          payload: { mutationIds: [blockedMutationId] },
+        });
+      } finally {
+        storagePrototype.getNotesByIds = originalGetNotesByIds;
+      }
+      assert.equal(unreadablePreflight.statusCode, 200, unreadablePreflight.body);
+      assert.deepEqual(unreadablePreflight.json().rows[0].blockers, [
+        {
+          code: "preflight_blocked",
+          message: "Long-term memory preflight failed. Details are in the server log.",
+        },
+      ]);
+      assert.equal(loggedErrors.includes(vaultReadError), true);
       const emptyDraft = await storageService.drafts.createDraft({
         source: { sourceNoteId: "source_route_blocked", chatId: "chat-a" },
         scope: { chatId: "chat-a", chatIds: ["chat-a"] },
