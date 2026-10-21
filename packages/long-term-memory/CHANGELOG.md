@@ -1,8 +1,28 @@
 # Long-Term Memory changelog
 
-## 1.4.60 — 2026-10-21
+## 1.4.65 — 2026-10-21
 
 - Extraction requests are about 3,100 characters (about 775 tokens) shorter. They no longer repeat the link rules three times, ask the model to copy the source's hash and evidence, or send the chat, character and persona ids. In a test with Claude Haiku the answers were also about a fifth shorter, so fewer of them run into the model's output limit. A suggested memory is no longer left out because the model sent an empty evidence list, a blank title or an empty value for an optional field. An imported character card is now described to the model as the character's sheet, so its backstory is kept as facts about the character instead of a timeline event, and its scenario no longer becomes an open thread.
+
+## 1.4.64 — 2026-10-21
+
+- The Vault stays responsive in places with many memories. Each letter you type into the search now appears at once and the list follows, instead of waiting for every memory's row to be redrawn. Each type shows its first 100 memories, with a Show more button for the next 100. The counts, search, the filters and Select visible still include every memory. With 8,000 memories on a desktop, the worst letter took about 3 seconds to appear and now takes about 50 ms, the list follows in about a third of a second, and the Vault opens in about 0.7 to 1.1 seconds instead of about 1.7.
+
+## 1.4.63 — 2026-10-21
+
+- When the settings fail to reload after Reset settings or a backup import, leaving Memory Settings and coming back now waits for the new settings. Before, the forms filled with the settings from before the reset or import, so the next Save wrote them back. A backup import that refreshed the settings but not the integrity check now says the backup was imported and shows only the integrity check's load error with Retry, instead of "settings could not be refreshed" and the report from before the import. After the settings reload, keyboard focus returns to Reset settings, or to Choose backup after an import, instead of the page.
+
+## 1.4.62 — 2026-10-21
+
+- A relationship or character change from a chat summary no longer links to the wrong event because a short event name happens to sit inside a word. A cause such as "the training" could link to an event named "rain", a change whose cause matched nothing could take an event named "art show" from the words "start showing", and a cause that named an event from the same summary in several words could lose its link when a shorter event name appeared inside one of its words. Event names now match whole words, and the last word may still be plural ("the training sessions" finds "training session").
+
+## 1.4.61 — 2026-10-21
+
+- Saving several imported or re-extracted sources into a large memory vault is faster, and recall and other memory actions wait less while it happens. Each source used to re-read and re-check every memory in the vault while it saved; now a batch reads the vault once and re-reads only the memories that changed. The same memories are matched as before.
+
+## 1.4.60 — 2026-10-21
+
+- When something unexpected goes wrong on the server, the message now names what you were doing, such as "Could not reset memory settings.", instead of the raw server error. Before, it could show a file path or a library error, or just "Internal Server Error". The full error is written to the server log. Messages written for you, such as "Every memory detail needs text.", show as before. The help text for the existing-note token budget in Memory Settings now says those memories are used to match and merge extracted details; they are not sent to the model.
 
 ## 1.4.59 — 2026-10-21
 

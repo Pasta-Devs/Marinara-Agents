@@ -3705,6 +3705,83 @@ async function main() {
       await desktopDebugPage.locator('[data-ltm-recalled-note="world_legacy_global"]').click();
       await desktopDebugPage.locator('[data-ltm-surface="vault"]').waitFor();
       await desktopDebugPage.close();
+      // A Vault group renders at most 100 rows until Show more. Its count, the shown total and
+      // search still cover every memory in the place.
+      {
+        const capPage = await browserContext.newPage();
+        const capNotes = Array.from({ length: 250 }, (_, index) => {
+          const number = String(index).padStart(3, "0");
+          const timestamp = new Date(Date.UTC(2026, 6, 30) - index * 60_000).toISOString();
+          return {
+            id: `world_cap_${number}`,
+            title: `Capped memory ${number}`,
+            type: "world",
+            status: "active",
+            modes: ["roleplay"],
+            scope: {},
+            tags: [],
+            keywords: [],
+            links: [],
+            sections: {
+              facts: {
+                text: index === 230 ? "The lighthouse keeper hid the ledger." : `Capped memory ${number} text.`,
+                updatedAt: timestamp,
+              },
+            },
+            createdAt: timestamp,
+            updatedAt: timestamp,
+            version: 1,
+          };
+        });
+        await capPage.route(
+          (url) => url.pathname.endsWith("/api/long-term-memory/notes"),
+          (route) =>
+            route.request().method() === "GET" && !new URL(route.request().url()).searchParams.has("ids")
+              ? route.fulfill({ json: capNotes })
+              : route.continue(),
+        );
+        await capPage.goto(`http://127.0.0.1:${address.port}/`);
+        await capPage.evaluate(() => customElements.whenDefined("marinara-capability-long-term-memory"));
+        await capPage.evaluate(`(() => {
+          const element = document.createElement("marinara-capability-long-term-memory");
+          element.setAttribute("view", "detail");
+          element.capabilityProps = { confirmAction: () => true };
+          document.body.append(element);
+        })()`);
+        await capPage.locator('[data-ltm-navigation="desktop"] [data-ltm-destination="vault"]').click();
+        const capGroupSummary = capPage.locator('[data-ltm-memory-group="world"] > summary');
+        const capRows = capPage.locator('[data-ltm-memory-group="world"] [data-ltm-note-type]');
+        await capGroupSummary.click();
+        await capRows.first().waitFor();
+        await capPage.getByText("250 shown").waitFor();
+        assert.match(await capGroupSummary.innerText(), /250/u, "the group counts every memory");
+        assert.equal(await capRows.count(), 100, "a group renders 100 rows before Show more");
+        await capPage.getByRole("button", { name: "Show 100 more" }).press("Enter");
+        await capPage.waitForFunction(
+          () => document.activeElement?.textContent?.includes("Capped memory 100") ?? false,
+          undefined,
+          { timeout: 2000 },
+        );
+        assert.equal(await capRows.count(), 200, "Show more adds the next 100 rows");
+        assert.match(
+          await capPage.evaluate(() => document.activeElement?.textContent ?? ""),
+          /Capped memory 100/u,
+          "Show more moves focus to the first row it added",
+        );
+        assert.equal(await capPage.getByRole("button", { name: "Show 50 more" }).count(), 1);
+        const capSearch = capPage.getByLabel("Search memories", { exact: true });
+        await capSearch.fill("lighthouse");
+        await capRows.filter({ hasText: "Capped memory 230" }).waitFor({ timeout: 5000 });
+        assert.equal(await capRows.count(), 1, "search covers memories beyond the cap");
+        await capSearch.fill("");
+        await capPage.getByText("250 shown").waitFor();
+        assert.equal(await capRows.count(), 100, "a new search starts again at 100 rows");
+        // Select visible covers every memory in the place, not only the rendered rows.
+        await capPage.locator("[data-ltm-select-mode]").click();
+        await capPage.getByLabel("Select visible", { exact: true }).check();
+        await capPage.locator("[data-ltm-selection-count]").filter({ hasText: "250 selected" }).waitFor();
+        await capPage.close();
+      }
       // #1376: Reset settings reloads the forms. The Maintenance panel stays mounted, so its
       // result survives and its buttons stay disabled until the settings refetch resolves.
       {
@@ -3780,7 +3857,7 @@ async function main() {
       }
       // #1452: when the settings read after Reset or Import fails, Retry on the error surface loads the
       // new settings instead of the cached ones the action replaced. An import whose integrity read
-      // alone fails still shows the settings it refetched.
+      // alone fails still shows the settings it refetched (and says the backup was imported).
       for (const failure of ["reset", "import", "import-integrity"] as const) {
         const failPage = await browserContext.newPage();
         const counts = { notes: 0, drafts: 0, rejectedSuggestions: 0 };
@@ -3842,9 +3919,26 @@ async function main() {
           .getByText(
             failure === "reset"
               ? "Memory settings reset to defaults."
-              : "Memory backup imported, but settings could not be refreshed.",
+              : failure === "import"
+                ? "Memory backup imported, but settings could not be refreshed."
+                : "Memory backup imported.",
           )
           .waitFor({ timeout: 5000 });
+        if (failure === "import-integrity") {
+          // The failed integrity read shows only its error, not the report cached before the import.
+          await maintenancePanel.getByText("Integrity check could not load.").waitFor();
+          assert.equal(
+            await maintenancePanel.getByText("Integrity check passed").count(),
+            0,
+            "a failed integrity read hides the report cached before the import",
+          );
+          // Review: the retained "healthy" reading must not sit above the load error (it shows Loading instead).
+          assert.equal(
+            await maintenancePanel.getByText("Vault healthy").count(),
+            0,
+            "a failed integrity read does not show the health reading cached before the import",
+          );
+        }
         await failPage.locator("#settings-tab-recall").click();
         assert.equal(
           await maxChunks.inputValue(),
@@ -3852,6 +3946,121 @@ async function main() {
           `${failure}: the forms show the settings read after the action`,
         );
         await failPage.close();
+      }
+      // Settings that remount after a failed reload wait for a successful read instead of filling
+      // the forms from the settings cached before the Reset, which the next Save would write back.
+      {
+        const remountPage = await browserContext.newPage();
+        let nextMaxChunks: number | null = null;
+        let failSettings = false;
+        await remountPage.route("**/api/long-term-memory/settings/reset", (route) => route.fulfill({ json: {} }));
+        await remountPage.route("**/api/long-term-memory/settings", async (route) => {
+          if (nextMaxChunks === null || route.request().method() !== "GET") return route.continue();
+          if (failSettings) return route.fulfill({ status: 500, json: { error: "Fixture settings read failed." } });
+          const response = await route.fetch();
+          await route.fulfill({
+            response,
+            json: { ...(await response.json()), longTermMemoryMaxChunks: nextMaxChunks },
+          });
+        });
+        await remountPage.goto(`http://127.0.0.1:${address.port}/`);
+        await remountPage.evaluate(() => customElements.whenDefined("marinara-capability-long-term-memory"));
+        await remountPage.evaluate(`(() => {
+          const element = document.createElement("marinara-capability-long-term-memory");
+          element.setAttribute("view", "detail");
+          element.capabilityProps = { confirmAction: () => true };
+          document.body.append(element);
+        })()`);
+        const settingsNav = remountPage.locator('[data-ltm-navigation="desktop"] [data-ltm-destination="settings"]');
+        await settingsNav.click();
+        const maxChunks = remountPage.getByRole("spinbutton", { name: "Maximum recalled memories", exact: true });
+        const cachedMaxChunks = Number(await maxChunks.inputValue());
+        await remountPage.locator("#settings-tab-maintenance").click();
+        nextMaxChunks = cachedMaxChunks === 37 ? 38 : 37;
+        failSettings = true;
+        await remountPage
+          .locator("#settings-panel-maintenance")
+          .getByRole("button", { name: "Reset settings" })
+          .click();
+        await remountPage
+          .locator('[data-ltm-status="danger"]')
+          .filter({ hasText: "Could not load memory settings." })
+          .waitFor({ timeout: 5000 });
+        await remountPage.locator('[data-ltm-navigation="desktop"] [data-ltm-destination="vault"]').click();
+        failSettings = false;
+        await settingsNav.click();
+        await maxChunks.waitFor({ timeout: 5000 });
+        assert.equal(
+          await maxChunks.inputValue(),
+          String(nextMaxChunks),
+          "Settings reopened after a failed reload show the settings read after the Reset",
+        );
+        await remountPage.close();
+      }
+      // Reset and Import hide the Maintenance panel while the forms reload. Focus then returns to
+      // the control that started the action; Import's Replace button is gone, so it lands on Choose backup.
+      {
+        const focusPage = await browserContext.newPage();
+        const counts = { notes: 0, drafts: 0, rejectedSuggestions: 0 };
+        let settingsGate: Promise<void> | null = null;
+        let releaseSettings = () => {};
+        await focusPage.route("**/api/long-term-memory/settings/reset", (route) => route.fulfill({ json: {} }));
+        await focusPage.route("**/api/long-term-memory/backup/preview", (route) =>
+          route.fulfill({ json: { incoming: counts, current: counts } }),
+        );
+        await focusPage.route("**/api/long-term-memory/backup/import", (route) => route.fulfill({ json: {} }));
+        await focusPage.route("**/api/long-term-memory/settings", async (route) => {
+          if (route.request().method() === "GET" && settingsGate) await settingsGate;
+          await route.continue();
+        });
+        await focusPage.goto(`http://127.0.0.1:${address.port}/`);
+        await focusPage.evaluate(() => customElements.whenDefined("marinara-capability-long-term-memory"));
+        await focusPage.evaluate(`(() => {
+          const element = document.createElement("marinara-capability-long-term-memory");
+          element.setAttribute("view", "detail");
+          element.capabilityProps = { confirmAction: () => true };
+          document.body.append(element);
+        })()`);
+        await focusPage.locator('[data-ltm-navigation="desktop"] [data-ltm-destination="settings"]').click();
+        await focusPage.locator("#settings-tab-maintenance").click();
+        const maintenancePanel = focusPage.locator("#settings-panel-maintenance");
+        const focusedControl = () =>
+          focusPage.evaluate(() =>
+            document.activeElement === document.body ? "body" : (document.activeElement?.textContent?.trim() ?? ""),
+          );
+        for (const action of ["reset", "import"] as const) {
+          settingsGate = new Promise<void>((resolve) => {
+            releaseSettings = () => resolve();
+          });
+          const settingsRefetch = focusPage.waitForRequest(
+            (request) => request.method() === "GET" && new URL(request.url()).pathname.endsWith("/settings"),
+          );
+          // Keyboard activation, so focus starts on the control.
+          if (action === "reset") {
+            await maintenancePanel.getByRole("button", { name: "Reset settings" }).press("Enter");
+          } else {
+            await maintenancePanel
+              .getByLabel("Choose backup", { exact: true })
+              .setInputFiles({ name: "backup.json", mimeType: "application/json", buffer: Buffer.from("{}") });
+            await maintenancePanel.getByRole("button", { name: "Replace with this backup" }).press("Enter");
+          }
+          await settingsRefetch;
+          await focusPage.waitForTimeout(300);
+          settingsGate = null;
+          releaseSettings();
+          await maintenancePanel
+            .getByText(action === "reset" ? "Memory settings reset to defaults." : "Memory backup imported.")
+            .waitFor({ timeout: 5000 });
+          await focusPage
+            .waitForFunction(() => document.activeElement !== document.body, undefined, { timeout: 2000 })
+            .catch(() => undefined);
+          assert.equal(
+            await focusedControl(),
+            action === "reset" ? "Reset settings" : "Choose backup",
+            `${action}: focus returns to the Maintenance panel after the settings reload`,
+          );
+        }
+        await focusPage.close();
       }
       await page.locator('[data-ltm-navigation="desktop"] [data-ltm-destination="vault"]').click();
       await page.evaluate((version) => {
@@ -4549,6 +4758,8 @@ async function main() {
         document.body.append(element);
       }, packageManifest.version);
       await page.locator('[data-ltm-surface="detail"]').waitFor();
+      // The pill shows "Loading status" until the status read returns; wait for the healthy reading.
+      await page.locator('[data-ltm-surface="vault-health-pill"]').waitFor({ state: "detached" });
       assert.equal(await page.locator('[data-ltm-surface="vault-health-pill"]').count(), 0);
       assert.equal(await page.locator('[data-ltm-surface="vault-health-warning"]').count(), 0);
       await page.locator('[data-ltm-control="navigation"][data-ltm-destination="review"]').first().click();
@@ -5059,7 +5270,11 @@ async function main() {
       for (const card of deleteTargetCards) await card.locator('input[type="checkbox"]').check();
       const deleteMemorySearch = page.getByLabel("Search memories", { exact: true });
       await deleteMemorySearch.fill("no-delete-target-match");
-      assert.match(await page.locator("[data-ltm-selection-count]").innerText(), /2 selected, 2 hidden by filters/u);
+      // The list follows the search box a moment later, so wait for the count instead of reading it once.
+      await page
+        .locator("[data-ltm-selection-count]")
+        .filter({ hasText: /2 selected, 2 hidden by filters/u })
+        .waitFor();
       confirmDelete = false;
       lastDeleteConfirmation = null;
       await page.evaluate(() => {
@@ -5117,6 +5332,7 @@ async function main() {
       // A selection change while the delete-target lookup is still resolving must
       // cancel the pending permanent delete instead of acting on the stale IDs.
       await deleteMemorySearch.fill("");
+      await deleteTargetCards[0]!.waitFor({ state: "attached" });
       const worldNoteGroup = page.locator('[data-ltm-memory-group="world"]');
       if (!(await worldNoteGroup.evaluate((element) => (element as HTMLDetailsElement).open)))
         await worldNoteGroup.locator("summary").click();

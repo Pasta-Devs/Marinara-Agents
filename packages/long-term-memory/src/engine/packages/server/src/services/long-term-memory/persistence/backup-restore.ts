@@ -32,6 +32,7 @@ import { rebuildLongTermMemoryIndexes } from "../recall/rebuild.js";
 import { checkLongTermMemoryIntegrity } from "../maintenance/maintenance.js";
 import { withLtmVaultLock } from "./vault-lock.js";
 import { readAllRejectedSuggestions, writeRejectedSuggestions } from "../drafts/rejected-suggestions.js";
+import { LtmServiceError } from "../service-error.js";
 
 const backupFormat = "marinara-long-term-memory" as const;
 
@@ -141,7 +142,12 @@ export async function replaceLongTermMemoryData(value: unknown, root = getLongTe
         await writeBackupRoot(staging, backup);
         const stagedRebuild = await rebuildLongTermMemoryIndexes({ root: staging });
         const stagedIntegrity = await checkLongTermMemoryIntegrity(staging);
-        if (!stagedIntegrity.ok) throw new Error("Imported Long-Term Memory data failed integrity verification.");
+        if (!stagedIntegrity.ok)
+          throw new LtmServiceError(
+            "Imported Long-Term Memory data failed integrity verification.",
+            400,
+            "ltm_backup_integrity_failed",
+          );
         await writeLtmBackupRestoreJournal(root, journal);
         journalWritten = true;
         const activeStorage = new LongTermMemoryStorage(root);

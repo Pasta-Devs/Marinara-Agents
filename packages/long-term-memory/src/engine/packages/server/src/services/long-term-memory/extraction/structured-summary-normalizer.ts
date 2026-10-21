@@ -964,13 +964,12 @@ function fuzzyTimelineTargetFromCause(value: string, candidates: TimelineTargetC
   const causeTokens = tokenize(value);
   if (!causeIdentifier || causeTokens.size === 0) return null;
 
+  // Ids are compared on whole `_`-separated words, so a short event id such as `rain`
+  // does not match inside "the training". The target's `timeline_` prefix is left out.
+  const causeWords = `_${causeIdentifier}_`;
   const scored = candidates.flatMap((candidate) => {
-    const candidateIdentifier = normalizeFieldKey(`${candidate.subjectId} ${candidate.target}`);
-    if (
-      candidateIdentifier === causeIdentifier ||
-      candidateIdentifier.includes(causeIdentifier) ||
-      causeIdentifier.includes(candidate.subjectId)
-    ) {
+    const subjectId = normalizeFieldKey(candidate.subjectId);
+    if (`_${subjectId}_`.includes(causeWords) || hasIdWords(causeWords, subjectId)) {
       return [{ target: candidate.target, score: 1 }];
     }
     const candidateTokens = tokenize(`${candidate.subjectId} ${candidate.text}`);
@@ -1653,17 +1652,16 @@ function deriveTimelineLinkForStructuredCharacter({
 }
 
 function exactTimelineTargetFromLine(line: string, hints: StructuredSummaryHints) {
-  const normalizedLine = normalizeFieldKey(line);
-  const matches = hints.eventIds.filter((eventId) => {
-    const noteId = `timeline_${eventId}`;
-    return (
-      normalizedLine === eventId ||
-      normalizedLine === noteId ||
-      normalizedLine.includes(eventId) ||
-      normalizedLine.includes(noteId)
-    );
-  });
+  // `art_show` is not in "start showing"; a written `timeline_art_show` still contains it.
+  const lineWords = `_${normalizeFieldKey(line)}_`;
+  const matches = hints.eventIds.filter((eventId) => hasIdWords(lineWords, eventId));
   return matches.length === 1 ? `timeline_${matches[0]}` : null;
+}
+
+// Whether `words` (a `normalizeFieldKey` value wrapped in `_…_`) holds the id as whole words,
+// its last word also in the plural ("the night lessons" holds `night_lesson`).
+function hasIdWords(words: string, id: string) {
+  return id !== "" && [`_${id}_`, `_${id}s_`, `_${id}es_`].some((form) => words.includes(form));
 }
 
 function singleTimelineTarget(hints: StructuredSummaryHints) {
