@@ -1,8 +1,12 @@
 # Long-Term Memory changelog
 
-## Unreleased
+## 1.4.74 — 2026-10-21
 
 - After a recall index rebuild fails, the integrity check in Maintenance and the package status no longer show the raw error, which could include the vault's file paths. They now say that the latest index rebuild failed and to see the server log, which records the full error. A rebuild that fails while the Engine switches to a new embedding connection is now logged there too.
+
+## 1.4.73 — 2026-10-21
+
+- An extraction no longer fails as a whole when it leaves out a memory about a note whose id has a digit right after its prefix. This hit older notes with ids such as rel_96dfe1cd8f75, and new characters whose name starts with a digit, such as "2B". The left-out suggestion couldn't be saved, so nothing from that source was kept. The left-out memory now appears as a rejected suggestion, like any other.
 
 ## 1.4.72 — 2026-10-21
 

@@ -298,6 +298,18 @@
     "long-term-memory": {
       "versions": [
         {
+          "version": "1.4.74",
+          "date": "2026-10-21",
+          "notes": "- After a recall index rebuild fails, the integrity check in Maintenance and the package status no longer show the raw error, which could include the vault's file paths. They now say that the latest index rebuild failed and to see the server log, which records the full error. A rebuild that fails while the Engine switches to a new embedding connection is now logged there too.",
+          "highlight": false
+        },
+        {
+          "version": "1.4.73",
+          "date": "2026-10-21",
+          "notes": "- An extraction no longer fails as a whole when it leaves out a memory about a note whose id has a digit right after its prefix. This hit older notes with ids such as rel_96dfe1cd8f75, and new characters whose name starts with a digit, such as \"2B\". The left-out suggestion couldn't be saved, so nothing from that source was kept. The left-out memory now appears as a rejected suggestion, like any other.",
+          "highlight": false
+        },
+        {
           "version": "1.4.72",
           "date": "2026-10-21",
           "notes": "- No change in what Long-Term Memory does. Internally, the shared file that defines settings, memories, drafts and backups is split into ten files by area.",
@@ -403,18 +415,6 @@
           "version": "1.4.55",
           "date": "2026-10-19",
           "notes": "- Behind-the-scenes fixes from a stricter code check; nothing you see changes. Extraction can no longer be started without knowing where your memories are stored, which would have failed. Characters who share a name now keep their other names in the same form as every other character.",
-          "highlight": false
-        },
-        {
-          "version": "1.4.54",
-          "date": "2026-10-19",
-          "notes": "- Recall is faster when a chat's memories have many keywords. The keyword search no longer builds a new pattern for every keyword on every recall, which took most of the recall time, and it no longer runs at all when the keyword weight is 0. The same memories are recalled as before.\n- A memory that shares one uncommon word with the chat is now recalled when full-text search also rates it a good match. Before, a single shared keyword that is not a name always stayed under the default threshold, so a memory such as \"Elena's violin was smashed in the storm\" was never recalled when the chat mentioned the violin. Everyday words, names, phrases and memories that share two keywords score as before.",
-          "highlight": false
-        },
-        {
-          "version": "1.4.53",
-          "date": "2026-10-18",
-          "notes": "- When the settings fail to reload after Reset settings or a backup import, Retry on the Memory Settings load error now loads the new settings. Before, Retry brought back the settings from before the reset or import, so a later Save could write them back. Reset settings also shows the loading message while it reloads the settings, instead of the old ones.",
           "highlight": false
         }
       ]
