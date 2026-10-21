@@ -22,7 +22,7 @@ import {
 import { uniqueLinks } from "../../../../../shared/src/features/agents/long-term-memory/utils.js";
 import { stableStringify } from "../recall/chunking.js";
 import { uniqueStrings } from "../ltm-utils.js";
-import { canUpdateLtmScopedTarget } from "../extraction/scoped-targets.js";
+import { canUpdateLtmScopedTarget, isSharedLtmScopedTarget } from "../extraction/scoped-targets.js";
 import { subjectsEqual } from "../identity/subject-equality.js";
 import { LtmServiceError } from "../service-error.js";
 import {
@@ -246,7 +246,8 @@ function projectMutation(
       `Long-term memory mutation target not found: ${mutation.noteId}`,
       "missing_target",
     );
-  if (!canUpdateLtmScopedTarget(current.scope, context.scope))
+  // A shared note is projected for review; `preflight` in reconciliation.ts admits only changes the reviewer named.
+  if (!canUpdateLtmScopedTarget(current.scope, context.scope) && !isSharedLtmScopedTarget(current.scope, context.scope))
     throw new LtmDraftProjectionError(
       `Long-term memory draft cannot mutate ${current.id} because it belongs to another scope.`,
       "scope_mismatch",

@@ -16,7 +16,7 @@ async function main() {
   const { LongTermMemoryStorage } = await import(`${source}/persistence/storage.ts`);
   const { previewLtmNoteForkRepair, applyLtmNoteForkRepair } = await import(`${source}/identity/note-fork-repair.ts`);
   const { renderSectionContributions } = await import(`${source}/persistence/section-contributions.ts`);
-  const { canUpdateLtmScopedTarget } = await import(`${source}/extraction/scoped-targets.ts`);
+  const { canUpdateLtmScopedTarget, isSharedLtmScopedTarget } = await import(`${source}/extraction/scoped-targets.ts`);
   const { ltmRejectedSuggestionsPath } = await import(`${source}/persistence/paths.ts`);
 
   const timestamp = "2026-09-20T00:00:00.000Z";
@@ -74,6 +74,26 @@ async function main() {
     true,
     "explicitly widening a destination remains possible",
   );
+  assert.equal(
+    isSharedLtmScopedTarget({ chatIds: ["chat-x"], characterIds: ["character-a"] }, { chatIds: ["chat-x"] }),
+    true,
+    "a chat memory shared with a character takes that chat's changes as review suggestions",
+  );
+  assert.equal(
+    isSharedLtmScopedTarget({ chatIds: ["chat-x", "chat-y"], groupIds: ["group-g"] }, { chatIds: ["chat-x"] }),
+    true,
+  );
+  assert.equal(
+    isSharedLtmScopedTarget({ chatIds: ["chat-y"], characterIds: ["character-a"] }, { chatIds: ["chat-x"] }),
+    false,
+    "another chat's memory is never a review target, even when it shares a character",
+  );
+  assert.equal(
+    isSharedLtmScopedTarget({ chatIds: ["chat-x"] }, { chatIds: ["chat-x"] }),
+    false,
+    "a note the scope may update is not a shared target",
+  );
+  assert.equal(isSharedLtmScopedTarget({}, { chatIds: ["chat-x"] }), false, "a global memory is not a review target");
 
   const createRoot = async (label: string) => {
     const dataDir = await mkdtemp(join(tmpdir(), `marinara-ltm-delta-${label}-`));

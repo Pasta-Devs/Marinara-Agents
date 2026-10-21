@@ -17,7 +17,7 @@ import { LongTermMemoryDraftStore } from "./draft-store.js";
 import { nowIso, uniqueStrings } from "../ltm-utils.js";
 import { isLtmSourceExtractionFingerprintCurrent } from "../extraction/source-hash.js";
 import { LongTermMemoryStorage } from "../persistence/storage.js";
-import { canUpdateLtmScopedTarget } from "../extraction/scoped-targets.js";
+import { canUpdateLtmScopedTarget, isSharedLtmScopedTarget } from "../extraction/scoped-targets.js";
 
 export type ProjectLtmDraftReviewOptions = {
   root?: string;
@@ -85,6 +85,8 @@ export async function projectLongTermMemoryDraftReview(
         });
         const mutations = new Map(draft.mutations.map((mutation) => [mutation.id, mutation]));
         for (const note of projection.projections) {
+          // Read at review time, so a memory shared after extraction still says so before you accept.
+          const shared = Boolean(note.before && isSharedLtmScopedTarget(note.before.scope, draft.scope));
           const rows: LtmDraftReviewMutation[] = note.mutations.map((item) => ({
             draftId: draft.id,
             mutation: mutations.get(item.mutationId)!,
@@ -92,6 +94,7 @@ export async function projectLongTermMemoryDraftReview(
             diagnostics: [
               ...(rowDiagnostics.get(item.mutationId) ?? []),
               ...suspiciousResolvedThreadDiagnostics(item, note.after, openThreads),
+              ...(shared ? [sharedMemoryUpdateDiagnostic(item.mutationId, note.noteId)] : []),
             ],
             changes: item.changes,
           }));
@@ -188,6 +191,17 @@ function suspiciousResolvedThreadDiagnostics(
       details: { existingThreadId: match.candidate.id, similarity: Number(match.score.toFixed(3)) },
     },
   ];
+}
+
+function sharedMemoryUpdateDiagnostic(mutationId: string, noteId: string): LtmExtractionDiagnostic {
+  return {
+    severity: "warning",
+    code: "shared_memory_update",
+    mutationId,
+    noteId,
+    message:
+      "This memory is shared beyond this source, for example with a character or persona. Accepting adds this change everywhere it is shared; reject it to keep the change out.",
+  };
 }
 
 function noteText(note: LtmNote) {
