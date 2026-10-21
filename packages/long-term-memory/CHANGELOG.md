@@ -1,6 +1,6 @@
 # Long-Term Memory changelog
 
-## Unreleased
+## 1.4.80 — 2026-10-22
 
 - No change in what Long-Term Memory does. Internally, the server file that matches names in chats and summaries to memories is split into four files.
 
