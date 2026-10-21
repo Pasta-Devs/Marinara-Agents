@@ -114,6 +114,7 @@ export interface RunLongTermMemoryEvidenceUnitExtractionOptions {
   allowedBuckets?: LtmEvidenceUnit["bucket"][];
   mode?: LtmMode;
   aiKeywordExtraction?: boolean;
+  finishCutOffAnswers?: boolean;
   resolveSubjectNames?: boolean;
   trustedSubjectCatalog?: TrustedLtmSubjectCatalog;
 }
@@ -1286,6 +1287,132 @@ export function evidenceUnitMessages(options: RunLongTermMemoryEvidenceUnitExtra
   ];
 }
 
+const LTM_EXTRACTION_MAX_CONTINUATION_ROUNDS = 3;
+const EVIDENCE_UNIT_CONTINUATION_INSTRUCTION =
+  "An earlier pass over this same sourceNote wrote the units listed under alreadyExtracted, in that order, and was cut off at the output limit. Continue that pass: return only units that are not listed there. Begin with the rest of the stream that was interrupted (the stream of the last listed unit), then the remaining streams in allowedStreams order. Do not repeat, rewrite or correct a listed unit. Links may target listed units through the same derived note ids. Use the same JSON shape; summary may be one short sentence.";
+
+function isCutOffFinishReason(finishReason: string) {
+  return ["length", "max_tokens", "token_limit"].includes(finishReason.toLowerCase());
+}
+
+function evidenceUnitSignature(unit: LtmEvidenceUnit) {
+  return JSON.stringify([unit.bucket, unit.subjectId, unit.sectionKey, unit.text]);
+}
+
+function evidenceUnitContinuationMessages(
+  messages: LanguageModelMessage[],
+  units: readonly LtmEvidenceUnit[],
+): LanguageModelMessage[] {
+  return messages.map((message) =>
+    message.role === "user"
+      ? {
+          ...message,
+          content: JSON.stringify({
+            ...JSON.parse(message.content),
+            continuation: {
+              instruction: EVIDENCE_UNIT_CONTINUATION_INSTRUCTION,
+              alreadyExtracted: units.map((unit) => ({
+                bucket: unit.bucket,
+                subjectId: unit.subjectId,
+                sectionKey: unit.sectionKey,
+                text: Array.from(unit.text).slice(0, 100).join(""),
+              })),
+            },
+          }),
+        }
+      : message,
+  );
+}
+
+// Asks for the rest of a cut-off answer and merges the new units into `held`. Returns whether the
+// answer is still incomplete: a round that adds nothing or fails keeps what is held and stops.
+async function continueCutOffEvidenceUnitAnswer({
+  messages,
+  chatOptions,
+  extractionOptions,
+  held,
+}: {
+  messages: LanguageModelMessage[];
+  chatOptions: LtmEvidenceUnitChatOptions;
+  extractionOptions: RunLongTermMemoryEvidenceUnitExtractionOptions;
+  held: ParsedEvidenceUnitPayload;
+}) {
+  const seen = new Set(held.response.units.map(evidenceUnitSignature));
+  for (let round = 1; round <= LTM_EXTRACTION_MAX_CONTINUATION_ROUNDS; round += 1) {
+    const started = Date.now();
+    const debugEvent = {
+      operationId: extractionOptions.operationId,
+      root: extractionOptions.root,
+      phase: "llm" as const,
+      action: "evidence_unit_continuation",
+      sourceNoteId: extractionOptions.sourceNote.id,
+      provider: extractionOptions.languageModel.name,
+      model: extractionOptions.languageModel.model,
+    };
+    try {
+      const result = await chatCompleteWithReasoningFallback({
+        messages: evidenceUnitContinuationMessages(messages, held.response.units),
+        chatOptions,
+        extractionOptions,
+      });
+      const content = result.content?.trim() ?? "";
+      const cut = isCutOffFinishReason(result.finishReason);
+      let rawPayload: unknown = null;
+      try {
+        rawPayload = JSON.parse(extractJsonObject(content));
+      } catch {
+        if (cut) rawPayload = recoverTruncatedEvidenceUnitPayload(content);
+      }
+      const next = isEvidenceUnitResponseObject(rawPayload)
+        ? parseEvidenceUnitPayload(
+            rawPayload,
+            extractionOptions.sourceHash,
+            evidenceFromSourceNote(extractionOptions.sourceNote),
+            extractionOptions.resolveSubjectNames !== false,
+          )
+        : null;
+      const fresh: LtmEvidenceUnit[] = [];
+      for (const unit of next?.response.units ?? []) {
+        const signature = evidenceUnitSignature(unit);
+        if (seen.has(signature)) continue;
+        seen.add(signature);
+        fresh.push(unit);
+      }
+      const added = fresh.slice(0, LTM_EXTRACTION_MAX_CANDIDATES - held.response.units.length);
+      if (next && added.length) {
+        held.response.units.push(...added);
+        // Repeats are not new candidates; units past the candidate cap are rejected like one answer's overflow.
+        held.totalCandidates += next.totalCandidates - (next.response.units.length - fresh.length);
+        held.parserRejections += next.parserRejections + fresh.length - added.length;
+        held.droppedCandidates = [...held.droppedCandidates, ...next.droppedCandidates].slice(
+          0,
+          LTM_EXTRACTION_MAX_REJECTION_DETAILS,
+        );
+      }
+      await recordLtmDebugEvent({
+        ...debugEvent,
+        status: cut || !added.length ? "warning" : "ok",
+        durationMs: Date.now() - started,
+        counts: { round, addedUnits: added.length, units: held.response.units.length, responseChars: content.length },
+        details: { finishReason: result.finishReason },
+      });
+      if (!added.length) return true;
+      if (!cut) return false;
+    } catch (error) {
+      if (extractionOptions.signal?.aborted) throw error;
+      await recordLtmDebugEvent({
+        ...debugEvent,
+        status: "error",
+        durationMs: Date.now() - started,
+        counts: { round, addedUnits: 0, units: held.response.units.length },
+        error,
+      });
+      return true;
+    }
+  }
+  return true;
+}
+
 export async function runLongTermMemoryEvidenceUnitExtraction(
   options: RunLongTermMemoryEvidenceUnitExtractionOptions,
 ): Promise<ParsedEvidenceUnitPayload> {
@@ -1353,7 +1480,7 @@ export async function runLongTermMemoryEvidenceUnitExtraction(
     });
 
     const content = result.content?.trim() ?? "";
-    const incomplete = ["length", "max_tokens", "token_limit"].includes(result.finishReason.toLowerCase());
+    const incomplete = isCutOffFinishReason(result.finishReason);
     await recordLtmDebugEvent({
       operationId: options.operationId,
       root: options.root,
@@ -1385,6 +1512,7 @@ export async function runLongTermMemoryEvidenceUnitExtraction(
         "ltm_model_output_empty",
       );
     }
+    let parsed: ParsedEvidenceUnitPayload;
     try {
       let rawPayload: unknown;
       try {
@@ -1414,7 +1542,7 @@ export async function runLongTermMemoryEvidenceUnitExtraction(
           "ltm_model_output_unusable",
         );
       }
-      const parsed = parseEvidenceUnitPayload(
+      parsed = parseEvidenceUnitPayload(
         rawPayload,
         options.sourceHash,
         evidenceFromSourceNote(options.sourceNote),
@@ -1443,7 +1571,6 @@ export async function runLongTermMemoryEvidenceUnitExtraction(
           responseChars: content.length,
         },
       });
-      return parsed;
     } catch (parseErr) {
       const error =
         parseErr instanceof LtmServiceError
@@ -1466,6 +1593,15 @@ export async function runLongTermMemoryEvidenceUnitExtraction(
       });
       throw error;
     }
+    if (incomplete && options.finishCutOffAnswers) {
+      parsed.response.incomplete = await continueCutOffEvidenceUnitAnswer({
+        messages,
+        chatOptions,
+        extractionOptions: options,
+        held: parsed,
+      });
+    }
+    return parsed;
   } catch (err) {
     logger.error(err, "[ltm] Evidence unit extraction failed for note %s", options.sourceNote.id);
     await recordLtmDebugEvent({
@@ -1504,6 +1640,7 @@ export function compileEvidenceUnitExtraction(options: {
   allowedBuckets?: readonly LtmEvidenceUnit["bucket"][];
   eventSubjectIdentityKeys?: ReadonlySet<string>;
   skipStructuredBackfill?: boolean;
+  finishCutOffAnswers?: boolean;
 }): CompileEvidenceUnitExtractionResult {
   const normalized = normalizeStructuredSummaryEvidenceUnits({
     units: options.unitResponse.units,
@@ -1632,7 +1769,9 @@ export function compileEvidenceUnitExtraction(options: {
     diagnostics.push({
       severity: "warning",
       code: "ltm_model_output_incomplete",
-      message: "Extraction output was cut off by the model limit; the source remains retryable.",
+      message: options.finishCutOffAnswers
+        ? "Extraction output was cut off by the model limit; the source remains retryable."
+        : "The answer stopped at the output limit, so Retry will stop at the same place. Turn on 'Finish cut-off answers' in Memory Settings to fetch the rest.",
     });
   }
   // Review gating must see every diagnostic, including ones dropped by the retained-list bound below.

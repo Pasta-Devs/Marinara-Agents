@@ -8,7 +8,9 @@ import { runRegressionToCompletion } from "./regression-helpers.ts";
 async function main() {
   const source = "../packages/long-term-memory/src/engine/packages/server/src/services/long-term-memory";
   const { configurePackageRuntime } = await import(`${source}/package-runtime.ts`);
-  const { runLongTermMemoryEvidenceUnitExtraction } = await import(`${source}/extraction/evidence-unit-extraction.ts`);
+  const { compileEvidenceUnitExtraction, runLongTermMemoryEvidenceUnitExtraction } = await import(
+    `${source}/extraction/evidence-unit-extraction.ts`
+  );
   const { readLtmDebugLog } = await import(`${source}/maintenance/debug-log.ts`);
   const { sourceHashForLtmSourceNote } = await import(`${source}/extraction/source-hash.ts`);
   const root = await mkdtemp(join(tmpdir(), "marinara-ltm-extraction-reliability-"));
@@ -155,14 +157,17 @@ async function main() {
         message: "token_limit finish reason without recoverable units must fail explicitly",
       },
     ]) {
-      calls.length = 0;
-      response = testCase.response;
-      await assert.rejects(
-        () => runLongTermMemoryEvidenceUnitExtraction({ ...options, operationId: randomUUID() }),
-        (error: any) =>
-          error.code === testCase.expectedCode && (!testCase.matchMessage || testCase.matchMessage.test(error.message)),
-      );
-      assert.equal(calls.length, 1, testCase.message);
+      for (const finishCutOffAnswers of [false, true]) {
+        calls.length = 0;
+        response = testCase.response;
+        await assert.rejects(
+          () => runLongTermMemoryEvidenceUnitExtraction({ ...options, operationId: randomUUID(), finishCutOffAnswers }),
+          (error: any) =>
+            error.code === testCase.expectedCode &&
+            (!testCase.matchMessage || testCase.matchMessage.test(error.message)),
+        );
+        assert.equal(calls.length, 1, testCase.message);
+      }
     }
 
     calls.length = 0;
@@ -178,6 +183,19 @@ async function main() {
     assert.equal(overflowRun.droppedCandidates.length, 1);
     assert.equal(overflowRun.droppedCandidates[0]?.reason, "candidate_overflow");
 
+    const incompleteWarning = (unitResponse: any, finishCutOffAnswers: boolean) =>
+      compileEvidenceUnitExtraction({
+        unitResponse,
+        sourceText: sourceNote.sections.source.text,
+        sourceNote,
+        existingNotes: [],
+        scope: {},
+        modes: ["roleplay"],
+        mode: "roleplay",
+        sourceHash,
+        allowedBuckets: ["timeline_event"],
+        finishCutOffAnswers,
+      }).diagnostics.find((diagnostic: any) => diagnostic.code === "ltm_model_output_incomplete")?.message;
     for (const finishReason of ["length", "max_tokens", "token_limit"]) {
       calls.length = 0;
       const truncatedPayloadContent =
@@ -195,7 +213,134 @@ async function main() {
       const result = events.find((event) => event.action === "evidence_unit_response")!;
       assert.equal(result.status, "warning", "recovered truncation must remain visible in debug reporting");
       assert.equal(result.details!.finishReason, finishReason);
+      assert.equal(
+        incompleteWarning(recoveredRun.response, false),
+        "The answer stopped at the output limit, so Retry will stop at the same place. Turn on 'Finish cut-off answers' in Memory Settings to fetch the rest.",
+      );
     }
+
+    // "Finish cut-off answers" asks for the rest of a cut answer, at most 3 rounds, and keeps what it holds on failure.
+    const cutContent = (unit: any) =>
+      '{"summary":"Cut.","units":[' +
+      JSON.stringify(unit) +
+      ',{"bucket":"timeline_event","subjectId":"partial_event","sectionKey":"event","text":"Mara was interrup';
+    const laterUnit = (subjectId: string) => ({ ...validUnit, subjectId, text: `Mara reached ${subjectId}.` });
+    const continuationRun = async (answers: any[], signal?: AbortSignal) => {
+      const requests: any[] = [];
+      const operationId = randomUUID();
+      const run = await runLongTermMemoryEvidenceUnitExtraction({
+        ...options,
+        operationId,
+        finishCutOffAnswers: true,
+        signal,
+        languageModel: {
+          ...options.languageModel,
+          async chatComplete(messages: any[], chatOptions: any) {
+            const user = JSON.parse(messages.find((message) => message.role === "user").content);
+            requests.push({ user, chatOptions });
+            const answer = answers.shift();
+            if (typeof answer === "function") return answer();
+            if (answer instanceof Error) throw answer;
+            return answer;
+          },
+        },
+      });
+      const rounds = (await readLtmDebugLog({ operationId }, root)).filter(
+        (event) => event.action === "evidence_unit_continuation",
+      );
+      return { run, requests, rounds };
+    };
+
+    const completed = await continuationRun([
+      { content: cutContent(validUnit), finishReason: "length" },
+      {
+        content: JSON.stringify({ summary: "Rest.", units: [validUnit, laterUnit("observatory_lamp_lit")] }),
+        finishReason: "stop",
+      },
+    ]);
+    assert.equal(completed.requests.length, 2);
+    assert.equal(completed.requests[0].user.continuation, undefined);
+    assert.deepEqual(completed.requests[1].user.continuation.alreadyExtracted, [
+      { bucket: "timeline_event", subjectId: "observatory_gate_sealed", sectionKey: "event", text: validUnit.text },
+    ]);
+    assert.equal(completed.requests[1].user.sourceText, completed.requests[0].user.sourceText);
+    assert.equal(completed.requests[1].chatOptions.maxTokens, completed.requests[0].chatOptions.maxTokens);
+    assert.deepEqual(
+      completed.requests[1].chatOptions.responseFormat,
+      completed.requests[0].chatOptions.responseFormat,
+    );
+    assert.deepEqual(
+      completed.run.response.units.map((unit: any) => unit.subjectId),
+      ["observatory_gate_sealed", "observatory_lamp_lit"],
+      "the continuation's units are appended and an exact repeat is dropped",
+    );
+    assert.equal(completed.run.response.incomplete, false);
+    assert.equal(
+      completed.run.totalCandidates - completed.run.parserRejections,
+      completed.run.response.units.length,
+      "a dropped repeat is not counted as a candidate",
+    );
+    assert.deepEqual(
+      completed.rounds.map((event) => [event.counts!.round, event.counts!.addedUnits]),
+      [[1, 1]],
+    );
+
+    const roundLimit = await continuationRun([
+      { content: cutContent(validUnit), finishReason: "length" },
+      ...[1, 2, 3].map((round) => ({
+        content: cutContent(laterUnit(`round_${round}_event`)),
+        finishReason: "max_tokens",
+      })),
+    ]);
+    assert.equal(roundLimit.requests.length, 4, "the continuation stops after 3 rounds");
+    assert.equal(roundLimit.run.response.units.length, 4);
+    assert.equal(roundLimit.run.response.incomplete, true);
+    assert.deepEqual(
+      roundLimit.rounds.map((event) => [event.counts!.round, event.counts!.addedUnits]),
+      [
+        [1, 1],
+        [2, 1],
+        [3, 1],
+      ],
+    );
+    assert.equal(
+      incompleteWarning(roundLimit.run.response, true),
+      "Extraction output was cut off by the model limit; the source remains retryable.",
+    );
+
+    for (const failedContinuation of [
+      { content: JSON.stringify({ summary: "Nothing new.", units: [validUnit] }), finishReason: "stop" },
+      new Error("503 provider overloaded"),
+    ]) {
+      const kept = await continuationRun([
+        { content: cutContent(validUnit), finishReason: "length" },
+        failedContinuation,
+      ]);
+      assert.equal(kept.requests.length, 2);
+      assert.deepEqual(
+        kept.run.response.units.map((unit: any) => unit.subjectId),
+        ["observatory_gate_sealed"],
+      );
+      assert.equal(kept.run.response.incomplete, true);
+      assert.equal(kept.rounds[0]?.status, failedContinuation instanceof Error ? "error" : "warning");
+    }
+
+    // A cancel during a continuation still cancels the extraction instead of keeping the salvaged units.
+    const controller = new AbortController();
+    const abortError = Object.assign(new Error("aborted"), { name: "AbortError" });
+    await assert.rejects(
+      continuationRun(
+        [
+          { content: cutContent(validUnit), finishReason: "length" },
+          () => {
+            controller.abort();
+            throw abortError;
+          },
+        ],
+        controller.signal,
+      ),
+      (error) => error === abortError,
+    );
 
     calls.length = 0;
     const slimUnit = {
@@ -1591,6 +1736,11 @@ async function main() {
         });
         assert.equal(truncResult.outcome.incomplete, true);
         assert.equal(truncResult.outcome.keptUnits, 1);
+        assert.match(
+          truncResult.diagnostics.find((diagnostic: any) => diagnostic.code === "ltm_model_output_incomplete")?.message,
+          /Turn on 'Finish cut-off answers'/,
+          "the extraction setting is off by default, so the warning names it",
+        );
         const truncNoteAfter = await storage.getNote(truncSource.id);
         assert.equal(
           Boolean(truncNoteAfter?.extractionFingerprint),
