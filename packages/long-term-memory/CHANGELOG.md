@@ -1,8 +1,12 @@
 # Long-Term Memory changelog
 
-## Unreleased
+## 1.4.59 — 2026-10-21
 
 - When something unexpected goes wrong on the server, the message now names what you were doing, such as "Could not reset memory settings.", instead of the raw server error. Before, it could show a file path or a library error, or just "Internal Server Error". The full error is written to the server log. Messages written for you, such as "Every memory detail needs text.", show as before. The help text for the existing-note token budget in Memory Settings now says those memories are used to match and merge extracted details; they are not sent to the model.
+
+## 1.4.58 — 2026-10-21
+
+- Long-Term Memory warnings in the server log now include the error that caused them. Before, the Engine's log dropped that error, so a warning such as a failed index rebuild gave no cause, and a warning that names a chat, draft or file showed the error's message in place of that name.
 
 ## 1.4.57 — 2026-10-20
 
