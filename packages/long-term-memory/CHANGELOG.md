@@ -1,5 +1,9 @@
 # Long-Term Memory changelog
 
+## Unreleased
+
+- Extraction requests are about 3,100 characters (about 775 tokens) shorter. They no longer repeat the link rules three times, ask the model to copy the source's hash and evidence, or send the chat, character and persona ids. In a test with Claude Haiku the answers were also about a fifth shorter, so fewer of them run into the model's output limit. A suggested memory is no longer left out because the model sent an empty evidence list, a blank title or an empty value for an optional field. An imported character card is now described to the model as the character's sheet, so its backstory is kept as facts about the character instead of a timeline event, and its scenario no longer becomes an open thread.
+
 ## 1.4.59 — 2026-10-21
 
 - A character fact that extraction adds from a structured chat summary is no longer dropped when its "because of" note is written in words, such as `caused_by: the night lesson`. The note now links to a matching event, from the same extraction or already in memory, or to none, and the fact is kept. A fact about a change still needs its event and is dropped without one. Before, the words were turned into an event id that didn't exist and the fact was dropped as linking to a memory the extraction could not find.

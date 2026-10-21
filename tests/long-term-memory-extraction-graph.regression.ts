@@ -1436,18 +1436,22 @@ async function main() {
   );
   const unitFields = extractionPrompt.unitFields;
   assert.match(unitFields.title, /short memory label/i);
-  assert.ok(
-    extractionPrompt.validationRules.some((rule: string) =>
-      /timeline_event.*directly caused another.*caused_by/.test(rule),
-    ),
+  assert.match(
+    String(extractionMessages[0]?.content),
+    /timeline_event.*directly caused another.*caused_by/,
     "issue #1362: the prompt must ask for caused_by between same-response events",
   );
-  for (const relation of ["planted_in", "paid_off_in"]) {
+  for (const relation of ["planted_in", "paid_off_in", "extracted_from"]) {
     assert.ok(
-      extractionPrompt.allowedTimelineRelations.includes(relation),
-      `issue #1138: allowedTimelineRelations must advertise ${relation}`,
+      extractionPrompt.allowedLinkRelations?.includes(relation),
+      `issue #1138: allowedLinkRelations must advertise ${relation}`,
     );
   }
+  assert.match(
+    unitFields.links,
+    /"target".*"relation".*allowedLinkRelations/,
+    "a provider without response_format must still see the link object shape",
+  );
   assert.equal(
     evidenceUnitResponseFormat({
       allowedBuckets: ["timeline_event"],
@@ -1462,6 +1466,114 @@ async function main() {
     false,
     "issue #1448: the provider schema must not offer subjectKeys",
   );
+  // Each server link rule goes out once, and the request carries no server-owned values or scope ids.
+  const scopedSource = {
+    ...chat,
+    scope: { chatId: "chat-a", chatIds: ["chat-a"], characterIds: ["char-a"], personaIds: ["persona-a"] },
+    sections: { source: { text: "", updatedAt: timestamp, evidence: ["chat:chat-a", "summary_entry:summary-a"] } },
+  };
+  for (const mode of ["roleplay", "conversation", "game"] as const) {
+    const messages = evidenceUnitMessages({
+      sourceNote: scopedSource,
+      sourceText: "",
+      scope: scopedSource.scope,
+      modes: [mode],
+      sourceHash,
+      mode,
+      resolveSubjectNames: true,
+    } as any);
+    const system = String(messages[0]?.content);
+    const user = String(messages[1]?.content);
+    const request = `${system}\n${user}`;
+    const rules = (system.split("SERVER-ENFORCED LINK REQUIREMENTS\n")[1] ?? "")
+      .split("\n")
+      .map((line) => line.replace(/^- /, ""));
+    assert.ok(rules.length >= 4, `${mode}: the system prompt must state the server link rules`);
+    for (const rule of rules) {
+      // The user message is JSON, so a copy there has its quotes escaped.
+      const copies = system.split(rule).length - 1 + user.split(JSON.stringify(rule).slice(1, -1)).length - 1;
+      assert.equal(copies, 1, `${mode}: link rule must appear once: ${rule.slice(0, 60)}`);
+    }
+    const payload = JSON.parse(user);
+    for (const key of [
+      "validationRules",
+      "requiredEvidence",
+      "scope",
+      "modes",
+      "allowedStatuses",
+      "allowedImportance",
+      "streamAllowedStatuses",
+      "streamScanOrder",
+      "allowedTimelineRelations",
+    ]) {
+      assert.equal(key in payload, false, `${mode}: the request must not send ${key}`);
+    }
+    assert.deepEqual(Object.keys(payload.sourceNote).sort(), ["id", "title"]);
+    assert.equal("evidence" in payload.unitFields, false, `${mode}: evidence is server-owned`);
+    for (const value of [sourceHash, "chat-a", "char-a", "persona-a", "summary_entry:summary-a"]) {
+      assert.equal(request.includes(value), false, `${mode}: the request must not carry ${value}`);
+    }
+  }
+  // An imported character card describes the character, not the chat: no event from its backstory, no thread from
+  // its scenario. Only card sources get the rule.
+  const card = sourceNote(
+    "source_card_graph_regression",
+    { kind: "character", sourceId: "card-a" },
+    "Backstory:\nMara lost her ship years ago.\n\nScenario:\nThe harbor is closed.",
+  );
+  for (const [source, expected] of [
+    [card, 1],
+    [lore, 0],
+    [chat, 0],
+  ] as const) {
+    const system = String(
+      evidenceUnitMessages({
+        sourceNote: source,
+        sourceText: source.sections.source.text,
+        scope: {},
+        modes: ["roleplay"],
+        sourceHash,
+        mode: "roleplay",
+      } as any)[0]?.content,
+    );
+    assert.equal(
+      system.split("This source is an imported character card").length - 1,
+      expected,
+      `${source.id}: the character card rule goes to card sources only, once`,
+    );
+  }
+  // An empty or null optional field no longer drops a unit, and evidence always comes from the source note.
+  const trustedEvidence = [`source_note:${chat.id}`, "chat:chat-a"];
+  const optionalFieldUnits = parseEvidenceUnitPayload(
+    {
+      summary: "Optional field normalization",
+      units: [{ evidence: [] }, { title: "" }, { dimensions: null }, { evidence: ["chat:elsewhere"] }].map(
+        (extra, index) => ({
+          bucket: "world_fact",
+          subjectId: `observatory_fact_${index}`,
+          sectionKey: "facts",
+          text: `The observatory keeps record ${index}.`,
+          claimKind: "static",
+          importance: "minor",
+          confidence: 0.9,
+          salience: 0.5,
+          status: "active",
+          links: [],
+          subjectNames: [],
+          ...extra,
+        }),
+      ),
+    },
+    sourceHash,
+    trustedEvidence,
+  );
+  assert.equal(
+    optionalFieldUnits.response.units.length,
+    4,
+    JSON.stringify(optionalFieldUnits.droppedCandidates.map((candidate: any) => candidate.issues)),
+  );
+  for (const parsedUnit of optionalFieldUnits.response.units) assert.deepEqual(parsedUnit.evidence, trustedEvidence);
+  assert.equal(optionalFieldUnits.response.units[1]?.title, undefined);
   // Issue #1448: a whitespace-only prompt template falls back to the mode's default prompt.
   assert.ok(
     String(
@@ -1857,6 +1969,7 @@ async function main() {
     assert.equal(item.required.includes("id"), false);
     assert.equal(item.required.includes("sourceHash"), false);
     assert.equal(item.required.includes("evidence"), false);
+    assert.equal("evidence" in item.properties, false, "evidence is server-owned");
     assert.equal(item.required.includes("subjectNames"), resolveSubjectNames);
     assert.equal(item.properties.dimensions.properties.trust.minimum, 0);
     assert.equal(item.properties.dimensionChanges.properties.trust.minimum, -100);
