@@ -1259,7 +1259,7 @@ export function evidenceUnitMessages(options: RunLongTermMemoryEvidenceUnitExtra
           "relationship_state dimension keys must come only from allowedRelationshipDimensions. Put professional curiosity, reputation, gossip, or attention as text/thread/world/timeline facts, not dimensions.",
           ...(resolveSubjectNames
             ? [
-                "Copy each subjectNames value exactly from the sourceText or sourceNote.title. Use the visible short name when the source says a short name; the server resolves exact names and unique aliases.",
+                "For a character listed in trustedSubjects, write its name or alias in subjectNames exactly as listed there, even where the source uses a longer or different form. Otherwise copy each subjectNames value exactly from the sourceText or sourceNote.title. Use the visible short name when the source says a short name; the server resolves exact names and unique aliases.",
                 "A genuinely new identity may be a one to four token proper name visible in the source. Never use lowercase descriptors or generic roles such as guitarist, User, Assistant, or Narrator as character names.",
               ]
             : []),
