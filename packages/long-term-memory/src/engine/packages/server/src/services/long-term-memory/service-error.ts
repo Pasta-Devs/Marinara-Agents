@@ -9,7 +9,7 @@ export class LtmServiceError extends Error {
   }
 }
 
-function isLtmServiceError(error: unknown): error is LtmServiceError {
+export function isLtmServiceError(error: unknown): error is LtmServiceError {
   return Boolean(
     error &&
     typeof error === "object" &&
@@ -19,9 +19,6 @@ function isLtmServiceError(error: unknown): error is LtmServiceError {
   );
 }
 
-export function ltmErrorResponse(error: unknown, fallback: string) {
-  if (isLtmServiceError(error))
-    return { statusCode: error.statusCode, body: { error: error.message, code: error.code } };
-  const message = error instanceof Error ? error.message : fallback;
-  return { statusCode: 500, body: { error: message, code: "ltm_unexpected_failure" } };
+export function ltmErrorResponse(error: LtmServiceError) {
+  return { statusCode: error.statusCode, body: { error: error.message, code: error.code } };
 }
