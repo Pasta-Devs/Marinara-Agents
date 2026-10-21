@@ -1,6 +1,6 @@
 # Long-Term Memory changelog
 
-## Unreleased
+## 1.4.60 — 2026-10-21
 
 - Extraction from a prose summary (a summary written as a narrative rather than under the memory-stream headings, whether from a custom summary prompt, another app's summary or a transcript recap) now keeps each narrated beat as its own timeline event, keeps a quoted line with its event when the summary presents it as memorable, and records recurring motifs and the durable register the prose states. Before, the prompt told the model to omit incidental actions and prefer a few substantial units for prose, which dropped about a third of the events and the quotes that a summary with headings kept. Summaries with headings, character cards and lorebooks are extracted as before.
 
