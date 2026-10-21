@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { mkdir, mkdtemp, readdir, readFile, rm, utimes, writeFile } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, readdir, readFile, rm, utimes, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { dirname } from "node:path";
@@ -343,6 +343,11 @@ async function main(routeScenario: RouteScenario) {
               modelRequests.push(request);
               if (request.model === "missing-model")
                 throw new Error("Language model connection not found: connection-a");
+              // Any other resolver failure, such as the Engine's corrupt key file, can name an absolute path.
+              if (request.model?.startsWith("corrupt-key-"))
+                throw new Error(
+                  `Encryption key file at /private/marinara/${request.model}/.encryption-key is corrupt.`,
+                );
               return {
                 name: "FixtureModel",
                 connectionId: request.connectionId ?? "connection-a",
@@ -3392,6 +3397,18 @@ async function main(routeScenario: RouteScenario) {
       });
       assert.equal(missingModel.statusCode, 400, missingModel.body);
       assert.equal(missingModel.json().code, "ltm_model_configuration");
+      assert.equal(missingModel.json().error, "Language model connection not found: connection-a");
+      const brokenModel = await app.inject({
+        method: "POST",
+        url: "/api/long-term-memory/notes/source_route_extract/extract",
+        headers,
+        payload: { chatId: "chat-a", model: "corrupt-key-extract" },
+      });
+      assert.equal(brokenModel.statusCode, 500, brokenModel.body);
+      assert.deepEqual(brokenModel.json(), {
+        error: "Failed to extract long-term memory from source note",
+        code: "ltm_unexpected_failure",
+      });
       const extracted = await app.inject({
         method: "POST",
         url: "/api/long-term-memory/notes/source_route_extract/extract",
@@ -3981,6 +3998,48 @@ async function main(routeScenario: RouteScenario) {
         personaId: "persona-fixture",
         personaIds: ["persona-fixture"],
       });
+      // A read failure's message names the absolute path, so the integrity report leaves it in the server log. The
+      // identity-repair, repair and backup-restore responses carry the same report. A parse or schema error describes
+      // the note, so its message stays.
+      const ltmRoot = storageService.storage.root;
+      const unreadableNote = join(ltmRoot, "vault", "characters", "char_nyra_persona_a.json");
+      const unreadableEventLog = join(ltmRoot, "events", "log.jsonl");
+      const unparsableNote = join(ltmRoot, "vault", "world", "world_unparsable.json");
+      const schemaInvalidNote = join(ltmRoot, "vault", "world", "world_schema_invalid.json");
+      await chmod(unreadableNote, 0o000);
+      await chmod(unreadableEventLog, 0o000);
+      await writeFile(unparsableNote, "{");
+      await writeFile(
+        schemaInvalidNote,
+        JSON.stringify({ id: "world_schema_invalid", type: "world", status: "bogus" }),
+      );
+      let unreadableIntegrity: any;
+      try {
+        unreadableIntegrity = await app.inject({ method: "GET", url: "/api/long-term-memory/integrity", headers });
+      } finally {
+        await chmod(unreadableNote, 0o600);
+        await chmod(unreadableEventLog, 0o600);
+        await rm(unparsableNote);
+        await rm(schemaInvalidNote);
+      }
+      assert.equal(unreadableIntegrity.statusCode, 200, unreadableIntegrity.body);
+      const issueAt = (path: string) => unreadableIntegrity.json().issues.find((issue: any) => issue.path === path);
+      assert.deepEqual(issueAt("vault/characters/char_nyra_persona_a.json"), {
+        severity: "error",
+        code: "malformed_note",
+        path: "vault/characters/char_nyra_persona_a.json",
+        message:
+          "Note file vault/characters/char_nyra_persona_a.json could not be read or validated. Details are in the server log.",
+      });
+      assert.deepEqual(issueAt("events/log.jsonl"), {
+        severity: "error",
+        code: "event_log_unreadable",
+        path: "events/log.jsonl",
+        message: "Event log could not be read. Details are in the server log.",
+      });
+      assert.match(issueAt("vault/world/world_unparsable.json").message, /JSON/);
+      assert.match(issueAt("vault/world/world_schema_invalid.json").message, /invalid_enum_value|Required/);
+      assert.equal(unreadableIntegrity.body.includes(ltmRoot), false, unreadableIntegrity.body);
       // An unexpected failure is logged, and the client gets the route's fallback, not the internal message.
       const failedIdentityApply = await app.inject({
         method: "POST",
@@ -4250,6 +4309,29 @@ async function main(routeScenario: RouteScenario) {
       });
       assert.equal(failedProvider.statusCode, 400, failedProvider.body);
       assert.equal(failedProvider.json().code, "ltm_model_configuration");
+      assert.equal(failedProvider.json().error, "Language model connection not found: connection-a");
+      const brokenProvider = await app.inject({
+        method: "POST",
+        url: "/api/long-term-memory/import/source-notes",
+        headers,
+        payload: {
+          source: "chats",
+          sourceIds: ["chat-a:summary-provider-fail"],
+          model: "corrupt-key-import",
+          destinationScope: { chatId: "chat-a", chatIds: ["chat-a"] },
+        },
+      });
+      assert.equal(brokenProvider.statusCode, 500, brokenProvider.body);
+      assert.deepEqual(brokenProvider.json(), {
+        error: "Failed to import long-term memory sources",
+        code: "ltm_unexpected_failure",
+      });
+      assert.equal(
+        loggedErrors.some(
+          (error) => error instanceof Error && error.message.includes("/private/marinara/corrupt-key-import/"),
+        ),
+        true,
+      );
       assert.equal(
         (await storageService.storage.listNotes({ type: "source" })).some(
           (note: any) => note.provenance?.entryId === "summary-provider-fail",

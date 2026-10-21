@@ -31,7 +31,7 @@ import {
 import { getLtmExtractionConfig } from "../extraction/extraction-config.js";
 import { branchInheritedNoteIds } from "../recall/generation-injection.js";
 import { applyLtmNoteTransfer, previewLtmNoteTransfer } from "../maintenance/note-transfer.js";
-import { getPackageLanguageModels, getPackagePersistence, getPackageResources, logger } from "../package-runtime.js";
+import { getPackagePersistence, getPackageResources, logger, resolvePackageLanguageModel } from "../package-runtime.js";
 import { retrieveLongTermMemory } from "../recall/retrieval.js";
 import { applyLtmScopeLinksToDerivedNotes } from "../identity/scope-links.js";
 import { getLtmGlobalSettings } from "../settings.js";
@@ -573,21 +573,12 @@ export function registerNotesRoutes(app: FastifyInstance, runtime: LtmRouteRunti
       request.raw.once("aborted", abort);
       request.raw.once("close", close);
       try {
-        let languageModel;
-        try {
-          const extractionConfig = await getLtmExtractionConfig(root, body.mode);
-          languageModel = await getPackageLanguageModels().resolveForRequest({
-            connectionId: body.connectionId ?? extractionConfig.connectionId,
-            chatConnectionId: chat?.connectionId ?? null,
-            model: body.model,
-          });
-        } catch (error) {
-          throw new LtmServiceError(
-            error instanceof Error ? error.message : "Language model configuration is invalid",
-            400,
-            "ltm_model_configuration",
-          );
-        }
+        const extractionConfig = await getLtmExtractionConfig(root, body.mode);
+        const languageModel = await resolvePackageLanguageModel({
+          connectionId: body.connectionId ?? extractionConfig.connectionId,
+          chatConnectionId: chat?.connectionId ?? null,
+          model: body.model,
+        });
         // Re-extract applies the current availability selection, like a fresh import. An explicit mode
         // must still be enabled; otherwise the previous extraction mode is kept, as import keeps the chat's.
         if (body.modes && body.mode && !body.modes.includes(body.mode))
