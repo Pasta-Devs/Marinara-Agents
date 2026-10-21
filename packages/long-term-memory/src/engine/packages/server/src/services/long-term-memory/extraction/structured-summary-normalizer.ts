@@ -265,6 +265,7 @@ export function normalizeStructuredSummaryEvidenceUnits({
     allowed,
     sourceNote,
     sourceHash,
+    existingNotes,
     hints,
     deriveTimelineLinks: isRoleplayMode(mode, modes),
     characterIdentityKey,
@@ -1135,6 +1136,7 @@ function maybeAddStructuredCharacterUnits({
   allowed,
   sourceNote,
   sourceHash,
+  existingNotes,
   hints,
   deriveTimelineLinks,
   characterIdentityKey,
@@ -1144,6 +1146,7 @@ function maybeAddStructuredCharacterUnits({
   allowed: Set<LtmEvidenceUnit["bucket"]>;
   sourceNote?: LtmNote;
   sourceHash: string;
+  existingNotes: LtmNote[];
   hints: StructuredSummaryHints;
   deriveTimelineLinks: boolean;
   characterIdentityKey?: (unit: LtmEvidenceUnit) => string;
@@ -1156,6 +1159,19 @@ function maybeAddStructuredCharacterUnits({
   // candidate must not be treated as covered by a sibling backfill unit.
   const providerCharacters = next.filter((unit) => unit.bucket === "character_fact");
   const seen = new Set(providerCharacters.map((unit) => characterUnitIdentity(unit, characterIdentityKey)));
+  // A cause or evidence value links only to a note this extraction holds, as relationship
+  // causes do: an exact id, else a word match over the events. Nothing invents an event id.
+  const heldTargets = new Set([
+    sourceNote.id,
+    ...existingNotes.map((note) => note.id),
+    ...next.map(noteIdForEvidenceUnit),
+  ]);
+  const candidates = timelineTargetCandidates(next, existingNotes);
+  const resolveLinkTarget = (value: string) => {
+    const identifier = normalizeIdentifier(value, "");
+    if (heldTargets.has(identifier)) return identifier;
+    return exactTargetFromCauseValue(value, candidates) ?? fuzzyTimelineTargetFromCause(value, candidates);
+  };
 
   for (const section of sections) {
     if (section.bucket !== "character_fact") continue;
@@ -1163,6 +1179,8 @@ function maybeAddStructuredCharacterUnits({
       const unit = parseStructuredCharacterLine(line, sourceNote, sourceHash, {
         hints,
         deriveTimelineLinks,
+        heldTargets,
+        resolveLinkTarget,
       });
       if (!unit) continue;
       const identity = characterUnitIdentity(unit, characterIdentityKey);
@@ -1174,6 +1192,7 @@ function maybeAddStructuredCharacterUnits({
       if (providerCharacters.some((existing) => characterFactCovers(existing, unit, characterIdentityKey))) continue;
       seen.add(identity);
       next.push(unit);
+      heldTargets.add(noteIdForEvidenceUnit(unit));
     }
   }
 
@@ -1184,7 +1203,12 @@ function parseStructuredCharacterLine(
   line: string,
   sourceNote: LtmNote,
   sourceHash: string,
-  options: { hints: StructuredSummaryHints; deriveTimelineLinks: boolean },
+  options: {
+    hints: StructuredSummaryHints;
+    deriveTimelineLinks: boolean;
+    heldTargets: ReadonlySet<string>;
+    resolveLinkTarget: (value: string) => string | null;
+  },
 ): LtmEvidenceUnit | null {
   const cleaned = stripInlineMarkup(cleanListLine(line));
   if (!cleaned || isMetadataOnlyLine(cleaned)) return null;
@@ -1199,6 +1223,7 @@ function parseStructuredCharacterLine(
   const textParts: string[] = [];
   const links: LtmEvidenceUnit["links"] = [];
   const missingTimelineLinkRelations: EvidenceUnitLink["relation"][] = [];
+  const unmatchedTimelineLinkRelations: EvidenceUnitLink["relation"][] = [];
   const segments = importanceResult.text
     .split("|")
     .map((segment) => stripInlineMarkup(segment))
@@ -1255,11 +1280,11 @@ function parseStructuredCharacterLine(
     }
     if (STRUCTURED_CHARACTER_LINK_KEYS.has(key as EvidenceUnitLink["relation"])) {
       const relation = key as EvidenceUnitLink["relation"];
-      const explicitLink = timelineLinkFromValue(value, relation);
-      if (explicitLink) {
-        links.push(explicitLink);
-      } else if (options.deriveTimelineLinks && isEmptyLinkValue(value)) {
-        missingTimelineLinkRelations.push(relation);
+      const target = isEmptyLinkValue(value) ? null : options.resolveLinkTarget(value);
+      if (target) {
+        links.push({ target, relation });
+      } else if (options.deriveTimelineLinks) {
+        (isEmptyLinkValue(value) ? missingTimelineLinkRelations : unmatchedTimelineLinkRelations).push(relation);
       }
       continue;
     }
@@ -1292,14 +1317,23 @@ function parseStructuredCharacterLine(
   );
   const text = textParts.join(" | ").replace(/\s+/g, " ").trim();
   if (!normalizedSubject || !normalizedSection || !text) return null;
-  for (const relation of missingTimelineLinkRelations) {
-    const derived = deriveTimelineLinkForStructuredCharacter({
+  const claimKind = ["developments", "progression"].includes(normalizedSection) ? "change" : "static";
+  const deriveLink = (relation: EvidenceUnitLink["relation"]) =>
+    deriveTimelineLinkForStructuredCharacter({
       line: cleaned,
       relation,
       sectionKey: normalizedSection,
       hints: options.hints,
     });
+  for (const relation of missingTimelineLinkRelations) {
+    const derived = deriveLink(relation);
     if (derived) links.push(derived);
+  }
+  // A static fact needs no event, so an unmatched cause is left out rather than guessed. On a
+  // change fact it falls back to the line's declared event, if the extraction holds that event.
+  for (const relation of claimKind === "change" ? unmatchedTimelineLinkRelations : []) {
+    const derived = deriveLink(relation);
+    if (derived && options.heldTargets.has(derived.target)) links.push(derived);
   }
   const normalizedLinks = links.map((link) =>
     TIMELINE_LINK_RELATIONS.has(link.relation)
@@ -1315,7 +1349,7 @@ function parseStructuredCharacterLine(
     subjectId: normalizedSubject,
     sectionKey: normalizedSection,
     text: text.slice(0, 2_000),
-    claimKind: ["developments", "progression"].includes(normalizedSection) ? "change" : "static",
+    claimKind,
     importance,
     keywords: [],
     evidence: sourceEvidence(sourceNote),
