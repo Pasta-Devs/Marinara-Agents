@@ -21,7 +21,7 @@ import {
   type LtmSourceExtractionRecompile,
 } from "./source-extraction.js";
 import { LongTermMemoryStorage } from "../persistence/storage.js";
-import { loadTrustedLtmSubjectCatalog } from "../identity/subject-identity.js";
+import { loadTrustedLtmSubjectCatalog } from "../identity/subject-catalog.js";
 import {
   compileEvidenceUnitExtraction,
   sourceHashForEvidenceUnitExtraction,

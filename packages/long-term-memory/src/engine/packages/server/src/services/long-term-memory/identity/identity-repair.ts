@@ -35,11 +35,8 @@ import { getLongTermMemoryRoot } from "../persistence/paths.js";
 import { rebuildLongTermMemoryIndexes } from "../recall/rebuild.js";
 import { getLtmRepairBackupsRoot, pruneLtmRepairBackups } from "../persistence/retention.js";
 import { LongTermMemoryStorage, type UpdateLtmNotePatch } from "../persistence/storage.js";
-import {
-  analyzeTrustedLtmNoteSubjects,
-  type TrustedLtmNoteSubjectMatch,
-  type TrustedLtmSubjectCatalog,
-} from "./subject-identity.js";
+import { analyzeTrustedLtmNoteSubjects, type TrustedLtmNoteSubjectMatch } from "./subject-catalog.js";
+import type { TrustedLtmSubjectCatalog } from "./subject-matching.js";
 import { withLtmVaultLock } from "../persistence/vault-lock.js";
 import { invalidateLtmVaultSnapshot } from "../persistence/vault-snapshot.js";
 import { LtmServiceError } from "../service-error.js";

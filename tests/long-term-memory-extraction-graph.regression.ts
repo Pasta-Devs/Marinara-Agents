@@ -16,13 +16,11 @@ async function main() {
   } = await import(`${source}/extraction/evidence-unit-extraction.ts`);
   const { compileLtmEvidenceUnits } = await import(`${source}/extraction/evidence-unit-compiler.ts`);
   const { deduplicateUnits } = await import(`${source}/extraction/dedup.ts`);
-  const {
-    analyzeTrustedLtmNoteSubjects,
-    buildTrustedLtmSubjectCatalog,
-    prepareLtmSubjectIdentityContext,
-    resolveLtmSubjectIdentities,
-    trustedLtmIdentityNotesForSource,
-  } = await import(`${source}/identity/subject-identity.ts`);
+  const { analyzeTrustedLtmNoteSubjects, buildTrustedLtmSubjectCatalog, trustedLtmIdentityNotesForSource } =
+    await import(`${source}/identity/subject-catalog.ts`);
+  const { prepareLtmSubjectIdentityContext, resolveLtmSubjectIdentities } = await import(
+    `${source}/identity/subject-identity.ts`
+  );
   const { subjectsEqual } = await import(`${source}/identity/subject-equality.ts`);
   const { projectLtmDraftMutationGroup } = await import(`${source}/drafts/draft-projector.ts`);
   const { sourceHashForLtmSourceNote } = await import(`${source}/extraction/source-hash.ts`);

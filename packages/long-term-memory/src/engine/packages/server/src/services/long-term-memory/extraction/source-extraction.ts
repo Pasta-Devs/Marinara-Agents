@@ -34,12 +34,9 @@ import { reconcileEvidenceUnitCandidates } from "./candidate-reconciliation.js";
 import { canUpdateLtmScopedTarget, resolveScopedEvidenceUnitTargets, scopedVariantNoteId } from "./scoped-targets.js";
 import { LongTermMemoryStorage } from "../persistence/storage.js";
 import { normalizeStructuredSummaryEvidenceUnits } from "./structured-summary-normalizer.js";
-import {
-  prepareLtmSubjectIdentityContext,
-  trustedLtmIdentityNotesForSource,
-  trustedLtmCharacterAliasIdentifiers,
-  type TrustedLtmSubjectCatalog,
-} from "../identity/subject-identity.js";
+import { prepareLtmSubjectIdentityContext } from "../identity/subject-identity.js";
+import { trustedLtmIdentityNotesForSource, trustedLtmCharacterAliasIdentifiers } from "../identity/subject-catalog.js";
+import type { TrustedLtmSubjectCatalog } from "../identity/subject-matching.js";
 import { subjectsEqual } from "../identity/subject-equality.js";
 import { noteIdForLtmDraftMutation, projectLtmDraftOntoNotes } from "../drafts/draft-projector.js";
 import { stableJsonHash } from "../recall/chunking.js";

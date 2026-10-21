@@ -97,7 +97,9 @@ async function main(routeScenario: RouteScenario) {
     await import("../packages/long-term-memory/src/engine/packages/server/src/services/long-term-memory/drafts/rejected-suggestions.ts");
   const { extractionFingerprintForLtmSourceNote, sourceHashForLtmSourceNote } =
     await import("../packages/long-term-memory/src/engine/packages/server/src/services/long-term-memory/extraction/source-hash.ts");
-  const { buildTrustedLtmSubjectCatalog, loadTrustedLtmSubjectCatalog, prepareLtmSubjectIdentityContext } =
+  const { buildTrustedLtmSubjectCatalog, loadTrustedLtmSubjectCatalog } =
+    await import("../packages/long-term-memory/src/engine/packages/server/src/services/long-term-memory/identity/subject-catalog.ts");
+  const { prepareLtmSubjectIdentityContext } =
     await import("../packages/long-term-memory/src/engine/packages/server/src/services/long-term-memory/identity/subject-identity.ts");
   const { compileEvidenceUnitExtraction } =
     await import("../packages/long-term-memory/src/engine/packages/server/src/services/long-term-memory/extraction/evidence-unit-extraction.ts");

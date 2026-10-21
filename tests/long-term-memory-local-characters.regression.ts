@@ -42,12 +42,9 @@ async function main() {
   );
   const { isLocalCharacterSubject, localCharacterScopeError, localCharacterSubjectForName, ltmScopeFamilyId } =
     await import(`${source}/identity/chat-scope.ts`);
-  const {
-    analyzeTrustedLtmNoteSubjects,
-    buildTrustedLtmSubjectCatalog,
-    prepareLtmSubjectIdentityContext,
-    trustedLtmIdentityNotesForSource,
-  } = await import(`${source}/identity/subject-identity.ts`);
+  const { analyzeTrustedLtmNoteSubjects, buildTrustedLtmSubjectCatalog, trustedLtmIdentityNotesForSource } =
+    await import(`${source}/identity/subject-catalog.ts`);
+  const { prepareLtmSubjectIdentityContext } = await import(`${source}/identity/subject-identity.ts`);
 
   const sourceNote = {
     id: "roleplay-source",

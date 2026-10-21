@@ -54,7 +54,7 @@ import {
   getLtmScopePersonaIds,
   isGlobalLtmScope,
 } from "../../../../../shared/src/features/agents/long-term-memory/scope.js";
-import { loadTrustedLtmSubjectCatalog } from "../identity/subject-identity.js";
+import { loadTrustedLtmSubjectCatalog } from "../identity/subject-catalog.js";
 import { LtmServiceError } from "../service-error.js";
 import type { FastifyInstance } from "fastify";
 import {

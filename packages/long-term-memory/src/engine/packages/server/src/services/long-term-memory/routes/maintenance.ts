@@ -33,7 +33,7 @@ import {
   LtmIdentityRepairError,
   previewLtmIdentityRepairs,
 } from "../identity/identity-repair.js";
-import { loadTrustedLtmSubjectCatalog } from "../identity/subject-identity.js";
+import { loadTrustedLtmSubjectCatalog } from "../identity/subject-catalog.js";
 import {
   deleteAllLongTermMemoryData,
   exportLongTermMemoryData,

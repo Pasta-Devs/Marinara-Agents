@@ -86,9 +86,8 @@ async function main() {
   const { compileEvidenceUnitExtraction, sourceMetadataForEvidenceUnitDraft } = await import(
     `${source}/extraction/evidence-unit-extraction.ts`
   );
-  const { buildTrustedLtmSubjectCatalog, resolveLtmSubjectIdentities } = await import(
-    `${source}/identity/subject-identity.ts`
-  );
+  const { buildTrustedLtmSubjectCatalog } = await import(`${source}/identity/subject-catalog.ts`);
+  const { resolveLtmSubjectIdentities } = await import(`${source}/identity/subject-identity.ts`);
   const { extractionFingerprintForLtmSourceNote, isLtmSourceExtractionFingerprintCurrent, sourceHashForLtmSourceNote } =
     await import(`${source}/extraction/source-hash.ts`);
   const { projectLongTermMemoryDraftReview } = await import(`${source}/drafts/draft-review.ts`);

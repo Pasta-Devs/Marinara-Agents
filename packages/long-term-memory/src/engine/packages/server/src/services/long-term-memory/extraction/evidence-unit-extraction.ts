@@ -42,7 +42,8 @@ import {
 } from "./evidence-unit-validation.js";
 import { normalizeStructuredSummaryEvidenceUnits } from "./structured-summary-normalizer.js";
 import { isLocalCharacterSubject } from "../identity/chat-scope.js";
-import { trustedLtmSubjectPromptCatalog, type TrustedLtmSubjectCatalog } from "../identity/subject-identity.js";
+import { trustedLtmSubjectPromptCatalog } from "../identity/subject-catalog.js";
+import type { TrustedLtmSubjectCatalog } from "../identity/subject-matching.js";
 
 const LTM_EXTRACTION_IMPORTANCE_VALUES = ["critical", "major", "moderate", "minor"] as const;
 const LTM_EXTRACTION_LINK_RELATIONS = [
