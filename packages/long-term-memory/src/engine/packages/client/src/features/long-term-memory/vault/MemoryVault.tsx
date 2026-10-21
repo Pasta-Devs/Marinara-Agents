@@ -1456,7 +1456,8 @@ export default function MemoryVault({
           request<LtmBulkNoteResult>("/notes/batch", "POST", { noteIds, status }),
         ),
       );
-      if (session !== editorSession.current) return;
+      // The restores changed stored notes, so the rollback and the reload run even if another memory was opened
+      // meanwhile; only the notice and the error belong to the editor session that started the undo.
       const successfulRestores = results.flatMap((result, index) => {
         const group = restoreGroups[index];
         if (!group || result.status !== "fulfilled") return [];
@@ -1487,7 +1488,12 @@ export default function MemoryVault({
         await invalidate();
         throw new Error();
       }
-      setArchiveUndo(null);
+      setArchiveUndo((current) => (current === recovery ? null : current));
+      // Reload the open memory too if the undo restored it, so it neither shows nor saves back the archived status.
+      await refreshAfterBatch(
+        results.flatMap((result) => (result.status === "fulfilled" ? result.value.affectedNoteIds : [])),
+      );
+      if (session !== editorSession.current) return;
       setNotice(
         localizeUi(
           selectLtmPluralForm(locale, recovery.notes.length) === "one"
@@ -1496,16 +1502,12 @@ export default function MemoryVault({
           { count: recovery.notes.length },
         ),
       );
-      // Reload the open memory too if the undo restored it, so it neither shows nor saves back the archived status.
-      await refreshAfterBatch(
-        results.flatMap((result) => (result.status === "fulfilled" ? result.value.affectedNoteIds : [])),
-      );
     } catch {
       if (session === editorSession.current) {
         setError(localizeUi("ui.longTermMemory.memoryvault.archiveUndoFailed"));
       }
     } finally {
-      if (session === editorSession.current) setBusy("");
+      setBusy((current) => (current === "undo-archive" ? "" : current));
     }
   }
   function openAvailability() {
@@ -1623,7 +1625,13 @@ export default function MemoryVault({
                   })(draft),
           );
       const next = structuredClone(response.note);
-      if (session !== editorSession.current) return false;
+      // Another memory was opened meanwhile, or this one again: free Save and reload the lists, and the open memory if
+      // it is the one just saved, so the editor does not keep the copy from before the save.
+      if (session !== editorSession.current) {
+        setSaveState("idle");
+        await refreshAfterBatch([next.id]);
+        return false;
+      }
       if (response.rebuild?.status === "deferred") {
         setSaved(fingerprint(next));
         setIsNew(false);
@@ -1696,7 +1704,7 @@ export default function MemoryVault({
       if (session === editorSession.current)
         setError(errorMessage(cause, localizeUi("ui.longTermMemory.memoryvault.couldNotSaveMemory")));
     } finally {
-      if (session === editorSession.current) setBusy("");
+      setBusy((current) => (current === "save" ? "" : current));
     }
     return succeeded;
   }
@@ -1705,18 +1713,22 @@ export default function MemoryVault({
     setBusy("delete");
     try {
       const result = await request<{ deletedIds: string[] }>("/notes/permanent-delete", "POST", { ids });
-      if (session !== editorSession.current) return;
       setChecked((current) => {
         const next = new Set(current);
         result.deletedIds.forEach((id) => next.delete(id));
         return next;
       });
       setOpenActionNoteId(null);
-      if (draft && result.deletedIds.includes(draft.id)) {
+      // Close the open memory if it was deleted, even one opened while the deletion ran.
+      const closedOpenMemory = Boolean(draftRef.current && result.deletedIds.includes(draftRef.current.id));
+      if (closedOpenMemory) {
         setDraft(null);
         setSaved("");
         setMobilePaneAndFocus("navigator");
       }
+      await invalidate();
+      // The notice belongs to the editor session that started the deletion, and also explains a memory it closed.
+      if (session !== editorSession.current && !closedOpenMemory) return;
       setNotice(
         localizeUi(
           selectLtmPluralForm(locale, result.deletedIds.length) === "one"
@@ -1725,7 +1737,6 @@ export default function MemoryVault({
           { count: result.deletedIds.length },
         ),
       );
-      await invalidate();
     } catch (cause) {
       if (session === editorSession.current)
         setError(errorMessage(cause, localizeUi("ui.longTermMemory.memoryvault.couldNotUpdateMemories")));
@@ -2523,6 +2534,8 @@ export default function MemoryVault({
                   aria-labelledby="ltm-rename-detail-title"
                   onCancel={(event) => {
                     event.preventDefault();
+                    // Like the disabled Cancel button, Escape keeps the dialog open while the rename runs.
+                    if (busy) return;
                     setRenamingSectionKey(null);
                     setRenamedSectionKey("");
                     setRenamePreview(null);

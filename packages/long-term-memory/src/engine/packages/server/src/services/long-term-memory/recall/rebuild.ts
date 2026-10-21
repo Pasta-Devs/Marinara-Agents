@@ -21,7 +21,7 @@ import { buildLtmMetadataIndex } from "./metadata-index.js";
 import { getLongTermMemoryDirectories, getLongTermMemoryRoot, safeJoin } from "../persistence/paths.js";
 import { getLtmGlobalSettings, ltmGeneratedStopWords } from "../settings.js";
 import { LongTermMemoryStorage } from "../persistence/storage.js";
-import { resolvePackageEmbeddingAdapter, type PackageEmbeddingAdapter } from "../package-runtime.js";
+import { logger, resolvePackageEmbeddingAdapter, type PackageEmbeddingAdapter } from "../package-runtime.js";
 import {
   markLtmIndexesBuilding,
   markLtmIndexesClean,
@@ -444,6 +444,7 @@ export async function refreshLongTermMemoryIndexes(root: string, signal?: AbortS
         return parseLtmRecallIndex(JSON.parse(await readFile(longTermMemoryRecallIndexPath(root), "utf8")));
     } catch (error) {
       if (isCancellation(error, signal)) throw error;
+      logger.warn(error, "[ltm] Index rebuild for the new embedding source failed");
     }
     setAutoUpgradeFailure(root, embeddingAdapter);
     return loaded;
