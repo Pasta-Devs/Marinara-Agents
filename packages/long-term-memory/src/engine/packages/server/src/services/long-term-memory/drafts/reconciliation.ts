@@ -19,8 +19,7 @@ import {
 } from "./draft-projector.js";
 import { LongTermMemoryDraftStore } from "./draft-store.js";
 import { nowIso } from "../ltm-utils.js";
-import { logger } from "../package-runtime.js";
-import { rebuildLongTermMemoryIndexes } from "../recall/rebuild.js";
+import { scheduleLongTermMemoryIndexRebuild } from "../recall/rebuild.js";
 import { canUpdateLtmScopedTarget } from "../extraction/scoped-targets.js";
 import { isLtmSourceExtractionFingerprintCurrent } from "../extraction/source-hash.js";
 import { LongTermMemoryStorage } from "../persistence/storage.js";
@@ -41,7 +40,8 @@ export interface ApplyLtmDraftResult {
   appliedMutationIds: string[];
   skippedMutationIds: string[];
   autoIncludedMutationIds: string[];
-  indexRebuild: { status: "not_requested" } | { status: "succeeded" } | { status: "failed"; error: string };
+  indexRebuild:
+    { status: "not_requested" } | { status: "pending" } | { status: "succeeded" } | { status: "failed"; error: string };
 }
 export class LtmDraftApplyError extends LtmServiceError {
   constructor(
@@ -968,7 +968,7 @@ async function applyInner(
     }
     const partial = skippedMutationIds.length > 0;
     const shouldRebuild = options.rebuildIndexes !== false && appliedMutationIds.length > 0;
-    let final = await store.updateDraftStatusUnlocked(
+    const final = await store.updateDraftStatusUnlocked(
       id,
       options.autoApplyLowRiskOnly && !partial ? "auto_applied" : partial ? "pending" : "accepted",
       {
@@ -989,28 +989,10 @@ async function applyInner(
       status: "not_requested",
     };
     if (shouldRebuild) {
-      try {
-        await rebuildLongTermMemoryIndexes({ root: options.root });
-        final =
-          (await store.updateDraftUnlocked(id, {
-            indexRebuildStatus: "succeeded",
-            indexRebuildAt: nowIso(),
-            indexRebuildError: undefined,
-          })) ?? final;
-        indexRebuild = { status: "succeeded" };
-      } catch (error) {
-        const message =
-          (error instanceof Error ? error.message : String(error)).slice(0, 2_000) ||
-          "Long-term memory index rebuild failed";
-        final =
-          (await store.updateDraftUnlocked(id, {
-            indexRebuildStatus: "failed",
-            indexRebuildAt: nowIso(),
-            indexRebuildError: message,
-          })) ?? final;
-        indexRebuild = { status: "failed", error: message };
-        logger.error(error, "[ltm] Index rebuild failed after committing draft %s", id);
-      }
+      // One background rebuild covers every draft applied within its quiet period ("apply all" sends one request
+      // per draft); recall waits for it, so the draft stays `pending` and a failure shows in the index status.
+      scheduleLongTermMemoryIndexRebuild(options.root);
+      indexRebuild = { status: "pending" };
     }
     return {
       draft: final,

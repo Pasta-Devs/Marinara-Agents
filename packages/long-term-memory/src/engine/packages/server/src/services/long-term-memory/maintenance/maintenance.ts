@@ -25,7 +25,12 @@ import {
   safeJoin,
   vaultFolderForNoteType,
 } from "../persistence/paths.js";
-import { longTermMemoryRecallIndexPath, parseLtmRecallIndex, rebuildLongTermMemoryIndexes } from "../recall/rebuild.js";
+import {
+  longTermMemoryRecallIndexPath,
+  parseLtmRecallIndex,
+  rebuildLongTermMemoryIndexes,
+  waitForScheduledLtmIndexRebuild,
+} from "../recall/rebuild.js";
 import { getLtmGlobalSettings, ltmGeneratedStopWords } from "../settings.js";
 import { LongTermMemoryStorage } from "../persistence/storage.js";
 import { parseStoredLtmNote } from "../persistence/stored-note.js";
@@ -192,6 +197,8 @@ async function checkRecallIndex(root: string, notes: LtmNote[], issues: LtmInteg
 }
 
 export async function checkLongTermMemoryIntegrity(root = getLongTermMemoryRoot()): Promise<LtmIntegrityResponse> {
+  // A rebuild a write scheduled would otherwise show as a stale index until it runs.
+  await waitForScheduledLtmIndexRebuild(root);
   return withLtmVaultLock(root, () => checkLongTermMemoryIntegrityUnlocked(root));
 }
 
