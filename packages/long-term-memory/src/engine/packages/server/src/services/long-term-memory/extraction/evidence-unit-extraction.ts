@@ -37,6 +37,7 @@ import { compileLtmEvidenceUnits } from "./evidence-unit-compiler.js";
 import {
   closeLtmEvidenceUnitLinks,
   noteIdForEvidenceUnit,
+  recoveryCandidateForUnit,
   validateLtmEvidenceUnits,
 } from "./evidence-unit-validation.js";
 import { normalizeStructuredSummaryEvidenceUnits } from "./structured-summary-normalizer.js";
@@ -1694,7 +1695,7 @@ function dropLocalCharactersOutsideRoleplay(units: LtmEvidenceUnit[], modes: Ltm
       validatorCode: "local_character_requires_roleplay",
       message,
       snippet: safeSnippet(unit.text),
-      recoveryCandidate: unit,
+      recoveryCandidate: recoveryCandidateForUnit(unit),
     });
     diagnostics.push({
       severity: "error",
@@ -1753,7 +1754,7 @@ function closeSourceEventGraph(
         validatorCode: "source_event_graph_open",
         message,
         snippet: safeSnippet(unit.text),
-        recoveryCandidate: unit,
+        recoveryCandidate: recoveryCandidateForUnit(unit),
       });
       diagnostics.push({
         severity: "error",
