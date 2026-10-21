@@ -3776,6 +3776,10 @@ async function main() {
         await capSearch.fill("");
         await capPage.getByText("250 shown").waitFor();
         assert.equal(await capRows.count(), 100, "a new search starts again at 100 rows");
+        // Select visible covers every memory in the place, not only the rendered rows.
+        await capPage.locator("[data-ltm-select-mode]").click();
+        await capPage.getByLabel("Select visible", { exact: true }).check();
+        await capPage.locator("[data-ltm-selection-count]").filter({ hasText: "250 selected" }).waitFor();
         await capPage.close();
       }
       // #1376: Reset settings reloads the forms. The Maintenance panel stays mounted, so its
