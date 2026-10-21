@@ -1,8 +1,12 @@
 # Long-Term Memory changelog
 
-## Unreleased
+## 1.4.78 — 2026-10-22
 
 - Two more places no longer show raw error text, which could include file paths. In the integrity list in memory settings, a note file or event log that cannot be read now says "Note file vault/… could not be read or validated." or "Event log could not be read.", followed by "Details are in the server log."; a note whose contents are broken still says what is wrong with it. When importing or re-extracting a source fails because the memory model or its settings could not be loaded for a server reason, Sources and Review show their usual "could not be imported" or "could not be re-extracted" message and the error goes to the server log. Messages that tell you how to fix the model setup, such as "Choose a language model connection before generating content.", show as before.
+
+## 1.4.77 — 2026-10-21
+
+- Extraction now saves facts about a character whose name starts with "Char", such as "Char Aznable", or a relationship whose first name starts with "Rel", to the memory chosen for them instead of a second memory under a shorter id, and no longer drops events about them as linked to a missing memory. The same holds for any chosen memory whose id repeats its prefix, such as an imported char_char_mara. A memory already saved under the shorter id keeps receiving facts only while it is linked to the character or titled with its full name; if you have two memories for one character, merge them in the app.
 
 ## 1.4.76 — 2026-10-21
 

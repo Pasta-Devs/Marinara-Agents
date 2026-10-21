@@ -9,7 +9,7 @@ import {
   type LtmNote,
 } from "../../../../../shared/src/features/agents/long-term-memory/index.js";
 import { uniqueStrings } from "../ltm-utils.js";
-import { noteIdForEvidenceUnit } from "./evidence-unit-validation.js";
+import { noteIdForEvidenceUnit, unprefixedSubjectId } from "./evidence-unit-validation.js";
 
 type StructuredSection = {
   bucket: LtmEvidenceUnit["bucket"];
@@ -325,7 +325,7 @@ function normalizeTargetShapeUnit(unit: LtmEvidenceUnit): LtmEvidenceUnit {
 
   if (unit.bucket === "character_fact") {
     const normalized = unit.subjects?.length
-      ? { subjectId: stripUnitSubjectPrefix(unit.bucket, unit.subjectId), sectionKey: unit.sectionKey }
+      ? { subjectId: unprefixedSubjectId("char", unit.subjectId), sectionKey: unit.sectionKey }
       : normalizeSubjectSectionSuffix({
           subjectId: stripUnitSubjectPrefix(unit.bucket, unit.subjectId),
           sectionKey: unit.sectionKey,
@@ -538,8 +538,10 @@ function normalizeUnit(
   }
 
   if (unit.bucket === "relationship_state") {
-    const subjectId = stripUnitSubjectPrefix(unit.bucket, unit.subjectId);
-    const relationship = relationshipHintsFor({ ...unit, subjectId }, hints, relationshipIdentityKey);
+    // Identity's ids (units with `subjects`) keep a repeated prefix; model ids and hint lookups strip it once.
+    const stripped = stripUnitSubjectPrefix(unit.bucket, unit.subjectId);
+    const subjectId = unit.subjects?.length ? unprefixedSubjectId("rel", unit.subjectId) : stripped;
+    const relationship = relationshipHintsFor({ ...unit, subjectId: stripped }, hints, relationshipIdentityKey);
     return {
       ...unit,
       subjectId,
@@ -563,16 +565,21 @@ function normalizeUnit(
 
   if (unit.bucket === "character_fact") {
     const normalized = unit.subjects?.length
-      ? { subjectId: stripUnitSubjectPrefix(unit.bucket, unit.subjectId), sectionKey: unit.sectionKey }
+      ? { subjectId: unprefixedSubjectId("char", unit.subjectId), sectionKey: unit.sectionKey }
       : normalizeSubjectSectionSuffix({
           subjectId: stripUnitSubjectPrefix(unit.bucket, unit.subjectId),
           sectionKey: unit.sectionKey,
           suffixes: CHARACTER_SUBJECT_SECTION_SUFFIXES,
         });
+    // A section hint written as an id is keyed with its prefix stripped once (`char_aznable` for `char_char_aznable`),
+    // so identity's id, which keeps a repeated prefix, also looks it up that way.
+    const hintIds = unit.subjects?.length
+      ? [normalized.subjectId, stripUnitSubjectPrefix(unit.bucket, unit.subjectId)]
+      : [normalized.subjectId];
     return {
       ...unit,
       subjectId: normalized.subjectId,
-      sectionKey: characterSectionKey({ ...unit, sectionKey: normalized.sectionKey }, normalized.subjectId, hints),
+      sectionKey: characterSectionKey({ ...unit, sectionKey: normalized.sectionKey }, hintIds, hints),
       links,
     };
   }
@@ -1588,8 +1595,8 @@ function normalizeThreadSubject(subjectId: string, hints: StructuredSummaryHints
   return hints.threadIds.length === 1 ? hints.threadIds[0]! : stripped;
 }
 
-function characterSectionKey(unit: LtmEvidenceUnit, subjectId: string, hints: StructuredSummaryHints) {
-  const sourceSection = hints.characterSections.get(subjectId);
+function characterSectionKey(unit: LtmEvidenceUnit, subjectIds: string[], hints: StructuredSummaryHints) {
+  const sourceSection = subjectIds.map((subjectId) => hints.characterSections.get(subjectId)).find(Boolean);
   if (sourceSection) return sourceSection;
   return structuredCharacterSectionKey(unit.sectionKey, unit.text);
 }

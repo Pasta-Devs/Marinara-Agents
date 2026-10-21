@@ -768,6 +768,15 @@ function prefixed(prefix: string, subjectId: string) {
   return subjectId.startsWith(`${prefix}_`) ? subjectId : `${prefix}_${subjectId}`;
 }
 
+/**
+ * `id` without its prefix, unless what is left starts with the prefix again, so `prefixed` maps the result back to
+ * the same note. A character named "Char Aznable" has the note `char_char_aznable`, and `char_aznable` names another.
+ */
+export function unprefixedSubjectId(prefix: string, id: string) {
+  const rest = id.startsWith(`${prefix}_`) ? id.slice(prefix.length + 1) : id;
+  return rest.startsWith(`${prefix}_`) ? id : rest;
+}
+
 function noteIdForAnchor(subjectId: string, sectionKey: string) {
   if (sectionKey.startsWith("tone")) return prefixed("tone", subjectId);
   return prefixed("world", subjectId);
