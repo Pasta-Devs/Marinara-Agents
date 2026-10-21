@@ -1,5 +1,9 @@
 # Long-Term Memory changelog
 
+## Unreleased
+
+- A memory you open, or already have open, while a bulk change in the Memory Vault is running now shows the new availability once the change finishes, so saving the memory then no longer puts the old places back, and the bulk buttons no longer stay disabled. An open memory without unsaved changes also shows its new status after a bulk change and after an archive Undo, so saving it does not change the status back.
+
 ## 1.4.69 — 2026-10-21
 
 - Long-Term Memory now starts after a rollback when a newer version saved a setting this version can't use: a new field inside a settings group (such as a prompt template), a new choice (such as a reasoning effort or chat mode), or a value above this version's limit. That setting uses its default, a list keeps the entries this version knows, and the server log names it once, without its value. The file usually keeps the newer value, and saving Settings or Delete all keeps it unless you change that setting. While the retention settings hold such a value, automatic cleanup of old receipts, logs and drafts pauses, so no limit you didn't choose deletes anything. It resumes when the newer version returns, or when you reset the settings or restore a backup made during the rollback, whose limits then apply. Before, activation failed. Wrong types, prompt templates too long for this version, more templates than it allows while one is active, and backups from a newer version are still refused.
