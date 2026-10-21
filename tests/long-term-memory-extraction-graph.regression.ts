@@ -881,6 +881,84 @@ async function main() {
   );
   assert.equal(hasDropCode(omittedEvent, "source_event_graph_open"), true);
 
+  // A cause matches an event id on whole words only, for relationship and character
+  // lines alike: a short id such as `rain` is not inside "the training", a short cause
+  // such as "rain" is not inside `training_session`, and the `timeline_` prefix every
+  // event id carries is not a word of the event.
+  const vaultEvent = (id: string, text: string) => ({
+    ...existingNightLesson,
+    id,
+    title: id,
+    sections: { event: { text, updatedAt: timestamp } },
+  });
+  const rainEvent = vaultEvent("timeline_rain", "It rained over the harbor all night.");
+  const trainingEvent = vaultEvent("timeline_training_session", "Mara and Rowan sparred in the yard.");
+  const fireworksEvent = vaultEvent("timeline_fireworks_show", "Fireworks lit up the harbor.");
+  const causeTargets = (cause: string, existingNotes: any[]) => {
+    const note = sourceNote(
+      "source_cause_words",
+      { kind: "chat_summary", sourceId: "chat-cause-words", entryId: "summary-cause-words" },
+      [
+        "## relationship_state",
+        `- alice_rowan | text: Alice and Rowan trust each other again. | caused_by: ${cause}`,
+        "## character_fact",
+        `- Mara | section: facts | text: Mara is calm now. | caused_by: ${cause}`,
+      ].join("\n"),
+    );
+    const units = normalizeWordCause(note, [], existingNotes);
+    return ["relationship_state", "character_fact"].map(
+      (bucket) => units.find((candidate) => candidate.bucket === bucket)?.links[0]?.target,
+    );
+  };
+  for (const [cause, event] of [
+    ["the training", rainEvent],
+    ["timeline", rainEvent],
+    ["rain", trainingEvent],
+    ["fire", fireworksEvent],
+  ] as const) {
+    assert.equal(
+      causeTargets(cause, [event]).includes(event.id),
+      false,
+      `the cause "${cause}" must not link to ${event.id}`,
+    );
+  }
+  assert.deepEqual(
+    causeTargets("the long training session at the old barracks", [rainEvent, trainingEvent]),
+    [trainingEvent.id, trainingEvent.id],
+    "a cause that names an event id in words links to it beside a shorter event id",
+  );
+  assert.deepEqual(
+    causeTargets("the training sessions", [trainingEvent]),
+    [trainingEvent.id, trainingEvent.id],
+    "a cause that names an event in the plural links to it",
+  );
+
+  // A change fact whose cause matches no event falls back to an event id the summary
+  // declares in its line, on whole words too: `art_show` is not in "start showing".
+  const lineWordsSource = sourceNote(
+    "source_line_words",
+    { kind: "chat_summary", sourceId: "chat-line-words", entryId: "summary-line-words" },
+    [
+      "## timeline_event",
+      "- art_show: Mara exhibited her paintings at the harbor hall.",
+      "- market_fire: The market burned down.",
+      "## character_fact",
+      "- Mara | section: developments | text: Mara will start showing her students the old script. | caused_by: the long winter",
+    ].join("\n"),
+  );
+  const declaredEvents = [
+    ["art_show", "Mara exhibited her paintings at the harbor hall."],
+    ["market_fire", "The market burned down."],
+  ].map(([subjectId, text]) =>
+    unit(lineWordsSource, { bucket: "timeline_event", subjectId, sectionKey: "event", text }),
+  );
+  assert.deepEqual(
+    normalizeWordCause(lineWordsSource, declaredEvents).find((candidate) => candidate.bucket === "character_fact")
+      ?.links,
+    [],
+    "an event id inside a word of a change fact's line is not that fact's event",
+  );
+
   const idiomaticStaticSource = sourceNote(
     "source_static_fact_heuristic",
     { kind: "chat_summary", sourceId: "chat-static", entryId: "summary-static" },

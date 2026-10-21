@@ -394,6 +394,7 @@ async function main() {
     const { LongTermMemoryStorage } = await import(`${source}/persistence/storage.ts`);
     const { LongTermMemoryDraftStore } = await import(`${source}/drafts/draft-store.ts`);
     const { withLtmVaultLock } = await import(`${source}/persistence/vault-lock.ts`);
+    const { invalidateLtmVaultSnapshot } = await import(`${source}/persistence/vault-snapshot.ts`);
     const commitRoot = await mkdtemp(join(tmpdir(), "marinara-ltm-source-commit-"));
     try {
       const storage = new LongTermMemoryStorage(commitRoot);
@@ -1063,6 +1064,163 @@ async function main() {
       } finally {
         LongTermMemoryDraftStore.prototype.createDraft = originalCreateDraftForOverlayStatus;
       }
+
+      // The ordered commit loop lists the committed vault once per batch, then re-reads only the
+      // notes a later write reported, so a large vault is not parsed again for every item while the batch
+      // holds the vault lock. Writes the batch did not make still reach later items: a note created after
+      // the first item is reused, and a deleted one is no longer a candidate. A write that names no files
+      // makes the next item list the whole vault again.
+      const listingSources = [];
+      for (const name of ["alpha", "beta", "gamma", "delta", "epsilon", "zeta", "eta", "theta"])
+        listingSources.push(
+          await storage.createNote({
+            id: `source_batch_listing_${name}`,
+            title: `Batch listing ${name}`,
+            type: "source",
+            status: "active",
+            modes: ["roleplay"],
+            scope: { chatId: "chat-a", chatIds: ["chat-a"] },
+            tags: ["source_summary"],
+            keywords: [],
+            links: [],
+            provenance: { kind: "chat_summary", sourceId: "chat-a", entryId: `summary-batch-listing-${name}` },
+            sections: {
+              source: { text: `The ${name} beacon ledger records the harbor survey.`, updatedAt: timestamp },
+            },
+          }),
+        );
+      options.languageModel.chatComplete = async (messages: any[], chatOptions: any) => {
+        calls.push(chatOptions);
+        const source = listingSources.find((note) => JSON.stringify(messages).includes(note.sections.source!.text))!;
+        const name = source.id.replace("source_batch_listing_", "");
+        const unit = {
+          ...worldUnitFor(source, `${name}_beacon`, source.sections.source!.text),
+          title: `${name} beacon`,
+        };
+        return { content: JSON.stringify({ summary: "Beacon fact.", units: [unit] }), finishReason: "stop" };
+      };
+      const beaconNote = (id: string, title: string) => ({
+        id,
+        title,
+        type: "world",
+        status: "active",
+        modes: ["roleplay"],
+        scope: { chatId: "chat-a", chatIds: ["chat-a"] },
+        tags: [],
+        keywords: [],
+        links: [],
+        sections: { facts: { text: `${title} stands over the harbor.`, updatedAt: timestamp } },
+      });
+      // Frozen so an in-place change to the note copies the batch shares between items fails here.
+      const deepFreeze = (value: any): any => {
+        if (value && typeof value === "object" && !Object.isFrozen(value)) {
+          Object.freeze(value);
+          for (const child of Object.values(value)) deepFreeze(child);
+        }
+        return value;
+      };
+      const runListingBatch = async (
+        sources: typeof listingSources,
+        onFirstDraft: () => Promise<unknown>,
+        duringNextReRead?: () => void,
+      ) => {
+        const originalListNotes = LongTermMemoryStorage.prototype.listNotes;
+        const originalGetNotesByIds = LongTermMemoryStorage.prototype.getNotesByIds;
+        const originalCreateDraft = LongTermMemoryDraftStore.prototype.createDraft;
+        let drafted = false;
+        let hookRunning = false;
+        let listings = 0;
+        LongTermMemoryStorage.prototype.listNotes = async function (...args: any[]) {
+          // Count only the batch's own unfiltered vault listings, the kind commit-time reconciliation makes.
+          if (drafted && !hookRunning && Object.keys(args[0] ?? {}).length === 0) listings += 1;
+          return deepFreeze(await originalListNotes.apply(this, args));
+        };
+        LongTermMemoryStorage.prototype.getNotesByIds = async function (...args: any[]) {
+          const notes = await originalGetNotesByIds.apply(this, args);
+          if (drafted && !hookRunning) duringNextReRead?.();
+          duringNextReRead = drafted && !hookRunning ? undefined : duringNextReRead;
+          for (const note of notes.values()) deepFreeze(note);
+          return notes;
+        };
+        LongTermMemoryDraftStore.prototype.createDraft = async function (input: any) {
+          const draft = await originalCreateDraft.call(this, input);
+          if (!drafted) {
+            drafted = true;
+            hookRunning = true;
+            try {
+              await onFirstDraft();
+            } finally {
+              hookRunning = false;
+            }
+          }
+          return draft;
+        };
+        try {
+          const batch = await processLongTermMemorySourceBatch({
+            items: sources.map((note) => ({
+              sourceId: note.id,
+              title: note.title!,
+              note,
+              created: false,
+              extractionMode: "roleplay",
+            })),
+            languageModel: options.languageModel,
+            operationId: randomUUID(),
+            signal: new AbortController().signal,
+            concurrency: 3,
+            root: commitRoot,
+          });
+          assert.deepEqual(
+            batch.map((result: any) => result.extractionStatus),
+            sources.map(() => "succeeded"),
+            JSON.stringify(batch.map((result: any) => result.error)),
+          );
+          return { batch, listings };
+        } finally {
+          LongTermMemoryStorage.prototype.listNotes = originalListNotes;
+          LongTermMemoryStorage.prototype.getNotesByIds = originalGetNotesByIds;
+          LongTermMemoryDraftStore.prototype.createDraft = originalCreateDraft;
+        }
+      };
+      await storage.createNote(beaconNote("world_gamma_lighthouse", "gamma beacon"));
+      const reused = await runListingBatch(listingSources.slice(0, 3), async () => {
+        await storage.createNote(beaconNote("world_beta_lighthouse", "beta beacon"));
+        await storage.deleteNotesPermanently(["world_gamma_lighthouse"]);
+      });
+      assert.equal(
+        reused.listings,
+        0,
+        "later batch items must reuse the batch's vault listing instead of listing the vault again",
+      );
+      assert.deepEqual(
+        [...new Set(mutationTargetNoteIds(reused.batch[1]))],
+        ["world_beta_lighthouse"],
+        "a note created after the batch listed the vault must still be reused by a later item",
+      );
+      assert.deepEqual(
+        [...new Set(mutationTargetNoteIds(reused.batch[2]))],
+        ["world_gamma_beacon"],
+        "a note deleted after the batch listed the vault must no longer be a candidate for a later item",
+      );
+      const relisted = await runListingBatch(listingSources.slice(3, 6), async () =>
+        invalidateLtmVaultSnapshot(commitRoot),
+      );
+      assert.equal(
+        relisted.listings,
+        1,
+        "a vault write that names no files must make the next item list the vault again, and only that item",
+      );
+      // Two items, so the relist cannot move to a later item: the second item's re-read is the last chance.
+      const racedReRead = await runListingBatch(
+        listingSources.slice(6),
+        async () => {},
+        () => invalidateLtmVaultSnapshot(commitRoot),
+      );
+      assert.equal(
+        racedReRead.listings,
+        1,
+        "a write that names no files while an item re-reads changed notes must make that item list the vault again",
+      );
 
       // Issue #1087 lock-scope case: the ordered commit loop must hold one vault lock across items
       // so an independent writer cannot land between commits and make the shared batch overlay
