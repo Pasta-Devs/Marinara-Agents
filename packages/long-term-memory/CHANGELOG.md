@@ -1,6 +1,6 @@
 # Long-Term Memory changelog
 
-## Unreleased
+## 1.4.70 — 2026-10-21
 
 - When a chat adds to a memory you shared with a character or persona, Review now offers the change on that memory, with a note that accepting adds it everywhere the memory is shared. Before, extraction silently made a private copy for that chat, so the chat recalled two versions and the shared memory never changed. These changes are never applied automatically. Accepting writes only the rows you selected, plus the link and timeline event those rows need, so a change you accept on a shared memory can add that link or event too. If you reject one, the chat no longer keeps that fact as a memory (it stays in the chat summary). Memories from before 1.3.14 that picked up a character or group automatically count as shared too. A chat that already has its own copy keeps updating that copy; delete the copy to get suggestions on the shared memory instead. Memories from other chats and global memories still get a private copy, as before.
 
