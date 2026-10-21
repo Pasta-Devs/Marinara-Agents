@@ -755,6 +755,15 @@ export function noteIdForEvidenceUnit(unit: Pick<LtmEvidenceUnit, "bucket" | "su
   return prefixed("char", unit.subjectId);
 }
 
+/**
+ * The copy of a dropped unit that Review can recover. Removing the bucket prefix from a note id with a digit after
+ * it (`rel_96dfe1cd8f75`, or `char_2_b` for a character named "2B") leaves a subject id the draft schema rejects,
+ * which fails the whole draft. That copy carries the full note id instead, which names the same note.
+ */
+export function recoveryCandidateForUnit(unit: LtmEvidenceUnit): LtmEvidenceUnit {
+  return /^[a-z]/.test(unit.subjectId) ? unit : { ...unit, subjectId: noteIdForEvidenceUnit(unit) };
+}
+
 function prefixed(prefix: string, subjectId: string) {
   return subjectId.startsWith(`${prefix}_`) ? subjectId : `${prefix}_${subjectId}`;
 }
@@ -784,7 +793,7 @@ function droppedCandidate(
       ? { snippet: safeSnippet(input.snippet ?? input.unit.text)! }
       : {}),
     ...(recovery ? { recovery } : {}),
-    ...(input.unit ? { recoveryCandidate: input.unit } : {}),
+    ...(input.unit ? { recoveryCandidate: recoveryCandidateForUnit(input.unit) } : {}),
   };
 }
 

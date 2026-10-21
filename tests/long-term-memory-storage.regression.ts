@@ -86,6 +86,9 @@ async function main() {
   const { compileEvidenceUnitExtraction, sourceMetadataForEvidenceUnitDraft } = await import(
     `${source}/extraction/evidence-unit-extraction.ts`
   );
+  const { buildTrustedLtmSubjectCatalog, resolveLtmSubjectIdentities } = await import(
+    `${source}/identity/subject-identity.ts`
+  );
   const { extractionFingerprintForLtmSourceNote, isLtmSourceExtractionFingerprintCurrent, sourceHashForLtmSourceNote } =
     await import(`${source}/extraction/source-hash.ts`);
   const { projectLongTermMemoryDraftReview } = await import(`${source}/drafts/draft-review.ts`);
@@ -1541,6 +1544,165 @@ async function main() {
         .find((line) => line.includes(oversizedSubjectOperationId));
       assert.ok(oversizedLine && Buffer.byteLength(`${oversizedLine}\n`) <= 64 * 1024);
       assert.equal(oversizedLine.includes(rejectedCandidateText), false);
+
+      // A dropped unit matched to a note whose id has a digit after the prefix (an older
+      // `rel_96dfe1cd8f75` note, or a new character named "2B", `char_2_b`) keeps the full note id
+      // in its recovery copy. Removing the prefix left an id that fails the identifier rule, so the
+      // draft was never written.
+      const digitCatalog = buildTrustedLtmSubjectCatalog({
+        roster: [
+          { kind: "character", id: "alice", name: "Alice" },
+          { kind: "character", id: "rowan", name: "Rowan" },
+          { kind: "character", id: "two-b", name: "2B" },
+        ],
+        notes: [],
+      });
+      const digitRelationshipNote = {
+        id: "rel_96dfe1cd8f75",
+        title: "Alice and Rowan",
+        type: "relationship",
+        status: "active",
+        modes: ["roleplay"],
+        scope: legacySource.scope,
+        tags: [],
+        keywords: [],
+        links: [],
+        subjects: ["Alice", "Rowan"].map(
+          (name) => digitCatalog.entries.find((entry: any) => entry.name === name)!.subject,
+        ),
+        sections: { state: { text: "Alice and Rowan are wary allies.", updatedAt: timestamp } },
+        createdAt: timestamp,
+        updatedAt: timestamp,
+        version: 1,
+      } as any;
+      digitCatalog.notes.push(digitRelationshipNote);
+      // The compile step normalizes structured summaries again, so a structured source is
+      // checked as well as the unstructured legacy one.
+      const structuredDigitSource = {
+        ...legacySource,
+        id: "source_import_chat_structured_digit",
+        sections: {
+          source: {
+            text: [
+              "## relationship_state",
+              "- Alice and Rowan | text: Alice trusts Rowan less after the argument.",
+              "## character_fact",
+              "- 2B | section: developments | text: 2B started guarding the gate.",
+            ].join("\n"),
+            updatedAt: timestamp,
+          },
+        },
+      };
+      const digitUnit = (
+        source: typeof legacySource,
+        input: {
+          bucket: "relationship_state" | "character_fact" | "timeline_event";
+          subjectId: string;
+          sectionKey: string;
+          text: string;
+          claimKind: "static" | "change";
+          subjectNames?: string[];
+        },
+      ) => ({
+        id: randomUUID(),
+        ...input,
+        importance: "major" as const,
+        keywords: [],
+        evidence: [`source_note:${source.id}`],
+        confidence: 0.9,
+        salience: 0.8,
+        status: "active" as const,
+        links: [],
+        sourceHash: sourceHashForLtmSourceNote(source),
+      });
+      const digitRelationshipUnit = (claimKind: "static" | "change", source = legacySource) =>
+        digitUnit(source, {
+          bucket: "relationship_state",
+          subjectId: "alice_rowan",
+          sectionKey: "state",
+          text: "Alice trusts Rowan less after the argument.",
+          claimKind,
+          subjectNames: ["Alice", "Rowan"],
+        });
+      const digitCharacterUnit = (source: typeof legacySource) =>
+        digitUnit(source, {
+          bucket: "character_fact",
+          subjectId: "two_b",
+          sectionKey: "developments",
+          text: "2B started guarding the gate.",
+          claimKind: "change",
+          subjectNames: ["2B"],
+        });
+      const compileDigit = (unit: ReturnType<typeof digitUnit>, noteId: string, source = legacySource) => {
+        const identity = resolveLtmSubjectIdentities({
+          units: [unit],
+          catalog: digitCatalog,
+          existingNotes: [digitRelationshipNote],
+          scope: source.scope,
+          mode: "roleplay",
+        });
+        return compileEvidenceUnitExtraction({
+          unitResponse: { summary: "Digit-led note id", units: identity.units },
+          providerCandidates: 1,
+          sourceText: source.sections.source.text,
+          sourceNote: source,
+          existingNotes: [digitRelationshipNote],
+          scope: source.scope,
+          modes: ["roleplay"],
+          mode: "roleplay",
+          sourceHash: sourceHashForLtmSourceNote(source),
+          skipStructuredBackfill: true,
+        });
+      };
+      for (const [source, unit, noteId] of [
+        [legacySource, digitRelationshipUnit("change"), "rel_96dfe1cd8f75"],
+        [structuredDigitSource, digitRelationshipUnit("change", structuredDigitSource), "rel_96dfe1cd8f75"],
+        [legacySource, digitCharacterUnit(legacySource), "char_2_b"],
+        [structuredDigitSource, digitCharacterUnit(structuredDigitSource), "char_2_b"],
+      ] as const) {
+        const droppedDigit = compileDigit(unit, noteId, source);
+        assert.equal(droppedDigit.accounting.keptUnits, 0);
+        assert.equal(droppedDigit.outcome.droppedCandidates[0]?.recoveryCandidate?.subjectId, noteId);
+        const droppedDigitOperationId = randomUUID();
+        const droppedDigitDraft = await draftStore.createDraft({
+          source: { sourceNoteId: source.id, chatId: "chat-a" },
+          scope: source.scope,
+          modes: ["roleplay"],
+          response: droppedDigit.compiledResponse,
+          operationId: droppedDigitOperationId,
+          outcome: droppedDigit.outcome,
+        });
+        assert.equal(
+          (await draftStore.getDraft(droppedDigitDraft.id))?.extractionOutcome?.droppedCandidates[0]?.recoveryCandidate
+            ?.subjectId,
+          noteId,
+          "a draft whose dropped unit matched a digit-led note id must be written",
+        );
+        assert.equal(
+          (await readLtmDebugLog({ operationId: droppedDigitOperationId }, root)).some(
+            (entry: any) => entry.action === "recovery_subject_id_validation_failed",
+          ),
+          false,
+        );
+        await draftStore.deleteDraft(droppedDigitDraft.id);
+      }
+      // Identity drops a unit whose subject it cannot resolve, with the unit as its recovery copy.
+      const unknownDigit = resolveLtmSubjectIdentities({
+        units: [{ ...digitCharacterUnit(legacySource), subjectId: "3_c", subjectNames: [] }],
+        catalog: digitCatalog,
+        existingNotes: [digitRelationshipNote],
+        scope: legacySource.scope,
+        mode: "roleplay",
+      });
+      assert.equal(unknownDigit.units.length, 0);
+      assert.equal(unknownDigit.droppedCandidates[0]?.recoveryCandidate?.subjectId, "char_3_c");
+      const keptDigit = compileDigit(digitRelationshipUnit("static"), "rel_96dfe1cd8f75");
+      assert.equal(keptDigit.accounting.keptUnits, 1);
+      assert.deepEqual(
+        keptDigit.compiledResponse.mutations.map((mutation: any) => mutation.noteId ?? mutation.note?.id),
+        keptDigit.compiledResponse.mutations.map(() => "rel_96dfe1cd8f75"),
+        "a kept unit still updates the digit-led note and creates no rel_rel_ note",
+      );
       let afterWriteRan = false;
       let afterWriteDraftId = "";
       await assert.rejects(
