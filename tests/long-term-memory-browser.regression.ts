@@ -2234,6 +2234,8 @@ async function main() {
       await bulkBranchRemoval.getByRole("button", { name: "Apply", exact: true }).click();
       assert.deepEqual((await bulkBranchRequest).postDataJSON().removeScope, { chatIds: ["memory-chat"] });
       await bulkBranchRemoval.waitFor({ state: "detached" });
+      // The open memory was part of the change, so it reloads: its summary now counts the deleted chat.
+      await page.locator("[data-ltm-availability-summary]").getByText("5 places, 1 chat modes").waitFor();
       if ((await page.locator("[data-ltm-select-mode]").innerText()).trim() === "Done")
         await page.locator("[data-ltm-select-mode]").click();
       // Bulk Remove lists a place that no longer exists, with the single editor's fallback label (#1442).
@@ -2266,6 +2268,19 @@ async function main() {
       const deletedChatRequest = page.waitForRequest(
         (request) => request.method() === "POST" && request.url().includes("/api/long-term-memory/notes/batch"),
       );
+      // Hold the response, so the memory is opened and edited while the change is still running.
+      let releaseDeletedChatBatch: (() => void) | null = null;
+      const deletedChatBatchHeld = new Promise<void>((resolve) => {
+        releaseDeletedChatBatch = resolve;
+      });
+      await page.route(
+        "**/api/long-term-memory/notes/batch",
+        async (route) => {
+          await deletedChatBatchHeld;
+          await route.continue();
+        },
+        { times: 1 },
+      );
       await bulkBranchRemoval.getByRole("button", { name: "Apply", exact: true }).click();
       assert.deepEqual((await deletedChatRequest).postDataJSON().removeScope, {
         chatIds: ["deleted-chat", "memory-chat", "memory-conversation-branch"],
@@ -2278,6 +2293,16 @@ async function main() {
       const branchPills = branchAvailability.getByRole("button", { name: /^Remove Memory Conversation - /u });
       const wholeChatPill = branchAvailability.getByRole("button", { name: "Remove Conversation A", exact: true });
       await branchCard.locator("button").first().click();
+      const branchTitle = page.locator("[data-ltm-field='title']");
+      await branchTitle.fill("Memory outside current chat, edited");
+      const noteQueriesBeforeBatch = noteQueries.length;
+      releaseDeletedChatBatch?.();
+      // When the change finishes, the row actions work again, the list reloads and the open memory keeps its unsaved
+      // title; the availability panel below shows the places after the change.
+      await branchCard.locator("[data-ltm-note-actions-desktop] button:enabled").first().waitFor();
+      assert.ok(noteQueries.length > noteQueriesBeforeBatch, "the memory list reloads after the change");
+      assert.equal(await branchTitle.inputValue(), "Memory outside current chat, edited");
+      await branchTitle.fill("Memory outside current chat");
       await page.getByRole("button", { name: "Edit availability" }).click();
       await branchAvailability.waitFor();
       assert.equal(await wholeChatPill.count(), 1);
@@ -5233,7 +5258,12 @@ async function main() {
       batchNotesPartial = false;
 
       // 2. Complete restore sends restore batches grouped by prior status.
-      // Re-archive the two notes cleanly
+      // Re-archive the two notes cleanly, with one of them open
+      await activeWorldCard.locator("button").first().click();
+      await page.waitForFunction(
+        () =>
+          document.querySelector<HTMLInputElement>("[data-ltm-field='title']")?.value === "Second mobile review memory",
+      );
       await activeWorldCard.locator('input[type="checkbox"]').check();
       await resolvedWorldCard.locator('input[type="checkbox"]').check();
       await archiveBatch.getByRole("button", { name: "Archive" }).click();
@@ -5242,11 +5272,18 @@ async function main() {
         .getByText(/2 memories archived/u)
         .waitFor();
       const freshUndoButton = page.locator("[data-ltm-vault-feedback]").getByRole("button", { name: "Undo" });
+      // The undo reloads the open memory it restored, as the archive did.
+      await page.locator("[data-ltm-vault-feedback] button:enabled", { hasText: "Undo" }).waitFor();
+      const restoredNoteReload = page.waitForRequest(
+        (request) =>
+          request.method() === "GET" && request.url().endsWith("/long-term-memory/notes/world_second_mobile"),
+      );
       await freshUndoButton.click();
       await page
         .locator("[data-ltm-vault-feedback]")
         .getByText(/2 memories restored/u)
         .waitFor();
+      await restoredNoteReload;
       assert.equal(await page.locator("[data-ltm-vault-feedback]").getByRole("button", { name: "Undo" }).count(), 0);
       const restoreCalls = batchNotesCalls.slice(-2);
       const activeRestoreCall = restoreCalls.find((call) => call.status === "active");
