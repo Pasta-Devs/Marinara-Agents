@@ -298,6 +298,24 @@
     "long-term-memory": {
       "versions": [
         {
+          "version": "1.4.60",
+          "date": "2026-10-21",
+          "notes": "- Saving several imported or re-extracted sources into a large memory vault is faster, and recall and other memory actions wait less while it happens. Each source used to re-read and re-check every memory in the vault while it saved; now a batch reads the vault once and re-reads only the memories that changed. The same memories are matched as before.",
+          "highlight": false
+        },
+        {
+          "version": "1.4.59",
+          "date": "2026-10-21",
+          "notes": "- A character fact that extraction adds from a structured chat summary is no longer dropped when its \"because of\" note is written in words, such as `caused_by: the night lesson`. The note now links to a matching event, from the same extraction or already in memory, or to none, and the fact is kept. A fact about a change still needs its event and is dropped without one. Before, the words were turned into an event id that didn't exist and the fact was dropped as linking to a memory the extraction could not find.",
+          "highlight": false
+        },
+        {
+          "version": "1.4.58",
+          "date": "2026-10-21",
+          "notes": "- Long-Term Memory warnings in the server log now include the error that caused them. Before, the Engine's log dropped that error, so a warning such as a failed index rebuild gave no cause, and a warning that names a chat, draft or file showed the error's message in place of that name.",
+          "highlight": false
+        },
+        {
           "version": "1.4.57",
           "date": "2026-10-20",
           "notes": "- Professor Mari's setup guide shows its pictures again. Marinara Engine renamed them, and the guide still asked for the old files.",
@@ -397,24 +415,6 @@
           "version": "1.4.41",
           "date": "2026-10-16",
           "notes": "- The memory extraction instructions no longer use real-looking character names in their example timeline ids, so the model can no longer mix those example names up with characters in your chat who share them. Nothing else about extraction changes.",
-          "highlight": false
-        },
-        {
-          "version": "1.4.40",
-          "date": "2026-10-16",
-          "notes": "- The Long-Term Memory server modules no longer import each other in a loop. The helper that compares two lists of memory subjects moved to its own module. Recall, extraction and storage behave exactly as before.",
-          "highlight": false
-        },
-        {
-          "version": "1.4.39",
-          "date": "2026-10-16",
-          "notes": "- Long-Term Memory now starts when its settings files contain a field from a newer version, for example after a failed update rolls the package back. Until now such a field stopped the package from activating, so no chat had recall or extraction, and backup export failed too. The field is now ignored and named in one warning in the server log, and saving settings keeps it in the file, so updating again restores it. This applies to the memory, extraction, agent and retention settings. Settings sent from the app are still checked strictly, a known setting with an invalid value still fails, and settings fields from older versions are still removed.",
-          "highlight": false
-        },
-        {
-          "version": "1.4.38",
-          "date": "2026-10-15",
-          "notes": "- Switching between the Vault, Review, Sources and Settings screens no longer shows a brief \"Loading\" panel, because the screens ship in the one bundle the package already loads. Importing a backup, resetting memory settings and deleting all memory data now read each setting and the integrity report once instead of two or three times. Nothing else changes in what the screens show or how they behave. Internally the duplicated tab-key handling, scope labels, confirm dialog, availability copy and shared queries are now one copy each, and 155 unused interface strings were removed.",
           "highlight": false
         }
       ]
