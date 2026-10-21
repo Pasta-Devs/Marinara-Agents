@@ -33,7 +33,7 @@ import {
 } from "../identity/chat-scope.js";
 import { DEFAULT_LTM_IMPORTED_SOURCE_MODE } from "../../../../../shared/src/features/agents/long-term-memory/constants.js";
 import { nowIso } from "../ltm-utils.js";
-import { getPackageLanguageModels, getPackagePersistence, getPackageResources } from "../package-runtime.js";
+import { getPackageLanguageModels, getPackagePersistence, getPackageResources, logger } from "../package-runtime.js";
 import { processLongTermMemorySourceBatch, type ImportedSourceItem } from "../extraction/source-processing.js";
 import { getLtmExtractionConfig } from "../extraction/extraction-config.js";
 import { extractionFingerprintForLtmSourceMaterial } from "../extraction/source-hash.js";
@@ -1007,6 +1007,9 @@ export async function importPackageInterop(
         ...(row.deterministicSourceText ? { deterministicSourceText: row.deterministicSourceText } : {}),
       });
     } catch (error) {
+      // An unexpected failure's message can carry file paths or library internals, so it stays in the server log.
+      if (!(error instanceof LtmServiceError))
+        logger.error(error, "[ltm] Failed to write imported source %s", row.sourceId);
       writeFailures.push({
         sourceId: row.sourceId,
         title: row.title,
@@ -1015,7 +1018,10 @@ export async function importPackageInterop(
         retryable: true,
         error: {
           code: "source_write_failed",
-          message: error instanceof Error ? error.message : "Failed to write imported source note",
+          message:
+            error instanceof LtmServiceError
+              ? error.message
+              : "Failed to write imported source note. Details are in the server log.",
         },
       });
     }
