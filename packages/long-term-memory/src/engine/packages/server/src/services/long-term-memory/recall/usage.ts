@@ -41,11 +41,11 @@ export async function readLongTermMemoryUsage(root = getLongTermMemoryRoot()) {
   try {
     return parseUsage(await readJsonFile(path, empty()));
   } catch (error) {
-    // The file only holds per-chat injection stats and the receipt de-duplication list, so
+    // The file only holds the receipt de-duplication list (per-chat counters stopped in 1.4.42), so
     // malformed content is set aside and restarted rather than failing recall and activation.
     // An I/O failure is rethrown: the file may be intact.
     if (!(error instanceof SyntaxError || (error as { name?: string } | null)?.name === "ZodError")) throw error;
-    logger.warn(error, "[ltm] Quarantined malformed usage.json; usage statistics restart from empty");
+    logger.warn(error, "[ltm] Quarantined malformed usage.json; receipt de-duplication restarts from empty");
     // Setting the file aside keeps the original recoverable. If that fails, surface it rather than
     // return empty statistics that the next write would use to replace the only copy.
     await quarantineLtmIndexArtifact(root, path);

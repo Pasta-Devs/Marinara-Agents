@@ -881,6 +881,84 @@ async function main() {
   );
   assert.equal(hasDropCode(omittedEvent, "source_event_graph_open"), true);
 
+  // A cause matches an event id on whole words only, for relationship and character
+  // lines alike: a short id such as `rain` is not inside "the training", a short cause
+  // such as "rain" is not inside `training_session`, and the `timeline_` prefix every
+  // event id carries is not a word of the event.
+  const vaultEvent = (id: string, text: string) => ({
+    ...existingNightLesson,
+    id,
+    title: id,
+    sections: { event: { text, updatedAt: timestamp } },
+  });
+  const rainEvent = vaultEvent("timeline_rain", "It rained over the harbor all night.");
+  const trainingEvent = vaultEvent("timeline_training_session", "Mara and Rowan sparred in the yard.");
+  const fireworksEvent = vaultEvent("timeline_fireworks_show", "Fireworks lit up the harbor.");
+  const causeTargets = (cause: string, existingNotes: any[]) => {
+    const note = sourceNote(
+      "source_cause_words",
+      { kind: "chat_summary", sourceId: "chat-cause-words", entryId: "summary-cause-words" },
+      [
+        "## relationship_state",
+        `- alice_rowan | text: Alice and Rowan trust each other again. | caused_by: ${cause}`,
+        "## character_fact",
+        `- Mara | section: facts | text: Mara is calm now. | caused_by: ${cause}`,
+      ].join("\n"),
+    );
+    const units = normalizeWordCause(note, [], existingNotes);
+    return ["relationship_state", "character_fact"].map(
+      (bucket) => units.find((candidate) => candidate.bucket === bucket)?.links[0]?.target,
+    );
+  };
+  for (const [cause, event] of [
+    ["the training", rainEvent],
+    ["timeline", rainEvent],
+    ["rain", trainingEvent],
+    ["fire", fireworksEvent],
+  ] as const) {
+    assert.equal(
+      causeTargets(cause, [event]).includes(event.id),
+      false,
+      `the cause "${cause}" must not link to ${event.id}`,
+    );
+  }
+  assert.deepEqual(
+    causeTargets("the long training session at the old barracks", [rainEvent, trainingEvent]),
+    [trainingEvent.id, trainingEvent.id],
+    "a cause that names an event id in words links to it beside a shorter event id",
+  );
+  assert.deepEqual(
+    causeTargets("the training sessions", [trainingEvent]),
+    [trainingEvent.id, trainingEvent.id],
+    "a cause that names an event in the plural links to it",
+  );
+
+  // A change fact whose cause matches no event falls back to an event id the summary
+  // declares in its line, on whole words too: `art_show` is not in "start showing".
+  const lineWordsSource = sourceNote(
+    "source_line_words",
+    { kind: "chat_summary", sourceId: "chat-line-words", entryId: "summary-line-words" },
+    [
+      "## timeline_event",
+      "- art_show: Mara exhibited her paintings at the harbor hall.",
+      "- market_fire: The market burned down.",
+      "## character_fact",
+      "- Mara | section: developments | text: Mara will start showing her students the old script. | caused_by: the long winter",
+    ].join("\n"),
+  );
+  const declaredEvents = [
+    ["art_show", "Mara exhibited her paintings at the harbor hall."],
+    ["market_fire", "The market burned down."],
+  ].map(([subjectId, text]) =>
+    unit(lineWordsSource, { bucket: "timeline_event", subjectId, sectionKey: "event", text }),
+  );
+  assert.deepEqual(
+    normalizeWordCause(lineWordsSource, declaredEvents).find((candidate) => candidate.bucket === "character_fact")
+      ?.links,
+    [],
+    "an event id inside a word of a change fact's line is not that fact's event",
+  );
+
   const idiomaticStaticSource = sourceNote(
     "source_static_fact_heuristic",
     { kind: "chat_summary", sourceId: "chat-static", entryId: "summary-static" },
@@ -1436,18 +1514,22 @@ async function main() {
   );
   const unitFields = extractionPrompt.unitFields;
   assert.match(unitFields.title, /short memory label/i);
-  assert.ok(
-    extractionPrompt.validationRules.some((rule: string) =>
-      /timeline_event.*directly caused another.*caused_by/.test(rule),
-    ),
+  assert.match(
+    String(extractionMessages[0]?.content),
+    /timeline_event.*directly caused another.*caused_by/,
     "issue #1362: the prompt must ask for caused_by between same-response events",
   );
-  for (const relation of ["planted_in", "paid_off_in"]) {
+  for (const relation of ["planted_in", "paid_off_in", "extracted_from"]) {
     assert.ok(
-      extractionPrompt.allowedTimelineRelations.includes(relation),
-      `issue #1138: allowedTimelineRelations must advertise ${relation}`,
+      extractionPrompt.allowedLinkRelations?.includes(relation),
+      `issue #1138: allowedLinkRelations must advertise ${relation}`,
     );
   }
+  assert.match(
+    unitFields.links,
+    /"target".*"relation".*allowedLinkRelations/,
+    "a provider without response_format must still see the link object shape",
+  );
   assert.equal(
     evidenceUnitResponseFormat({
       allowedBuckets: ["timeline_event"],
@@ -1462,6 +1544,114 @@ async function main() {
     false,
     "issue #1448: the provider schema must not offer subjectKeys",
   );
+  // Each server link rule goes out once, and the request carries no server-owned values or scope ids.
+  const scopedSource = {
+    ...chat,
+    scope: { chatId: "chat-a", chatIds: ["chat-a"], characterIds: ["char-a"], personaIds: ["persona-a"] },
+    sections: { source: { text: "", updatedAt: timestamp, evidence: ["chat:chat-a", "summary_entry:summary-a"] } },
+  };
+  for (const mode of ["roleplay", "conversation", "game"] as const) {
+    const messages = evidenceUnitMessages({
+      sourceNote: scopedSource,
+      sourceText: "",
+      scope: scopedSource.scope,
+      modes: [mode],
+      sourceHash,
+      mode,
+      resolveSubjectNames: true,
+    } as any);
+    const system = String(messages[0]?.content);
+    const user = String(messages[1]?.content);
+    const request = `${system}\n${user}`;
+    const rules = (system.split("SERVER-ENFORCED LINK REQUIREMENTS\n")[1] ?? "")
+      .split("\n")
+      .map((line) => line.replace(/^- /, ""));
+    assert.ok(rules.length >= 4, `${mode}: the system prompt must state the server link rules`);
+    for (const rule of rules) {
+      // The user message is JSON, so a copy there has its quotes escaped.
+      const copies = system.split(rule).length - 1 + user.split(JSON.stringify(rule).slice(1, -1)).length - 1;
+      assert.equal(copies, 1, `${mode}: link rule must appear once: ${rule.slice(0, 60)}`);
+    }
+    const payload = JSON.parse(user);
+    for (const key of [
+      "validationRules",
+      "requiredEvidence",
+      "scope",
+      "modes",
+      "allowedStatuses",
+      "allowedImportance",
+      "streamAllowedStatuses",
+      "streamScanOrder",
+      "allowedTimelineRelations",
+    ]) {
+      assert.equal(key in payload, false, `${mode}: the request must not send ${key}`);
+    }
+    assert.deepEqual(Object.keys(payload.sourceNote).sort(), ["id", "title"]);
+    assert.equal("evidence" in payload.unitFields, false, `${mode}: evidence is server-owned`);
+    for (const value of [sourceHash, "chat-a", "char-a", "persona-a", "summary_entry:summary-a"]) {
+      assert.equal(request.includes(value), false, `${mode}: the request must not carry ${value}`);
+    }
+  }
+  // An imported character card describes the character, not the chat: no event from its backstory, no thread from
+  // its scenario. Only card sources get the rule.
+  const card = sourceNote(
+    "source_card_graph_regression",
+    { kind: "character", sourceId: "card-a" },
+    "Backstory:\nMara lost her ship years ago.\n\nScenario:\nThe harbor is closed.",
+  );
+  for (const [source, expected] of [
+    [card, 1],
+    [lore, 0],
+    [chat, 0],
+  ] as const) {
+    const system = String(
+      evidenceUnitMessages({
+        sourceNote: source,
+        sourceText: source.sections.source.text,
+        scope: {},
+        modes: ["roleplay"],
+        sourceHash,
+        mode: "roleplay",
+      } as any)[0]?.content,
+    );
+    assert.equal(
+      system.split("This source is an imported character card").length - 1,
+      expected,
+      `${source.id}: the character card rule goes to card sources only, once`,
+    );
+  }
+  // An empty or null optional field no longer drops a unit, and evidence always comes from the source note.
+  const trustedEvidence = [`source_note:${chat.id}`, "chat:chat-a"];
+  const optionalFieldUnits = parseEvidenceUnitPayload(
+    {
+      summary: "Optional field normalization",
+      units: [{ evidence: [] }, { title: "" }, { dimensions: null }, { evidence: ["chat:elsewhere"] }].map(
+        (extra, index) => ({
+          bucket: "world_fact",
+          subjectId: `observatory_fact_${index}`,
+          sectionKey: "facts",
+          text: `The observatory keeps record ${index}.`,
+          claimKind: "static",
+          importance: "minor",
+          confidence: 0.9,
+          salience: 0.5,
+          status: "active",
+          links: [],
+          subjectNames: [],
+          ...extra,
+        }),
+      ),
+    },
+    sourceHash,
+    trustedEvidence,
+  );
+  assert.equal(
+    optionalFieldUnits.response.units.length,
+    4,
+    JSON.stringify(optionalFieldUnits.droppedCandidates.map((candidate: any) => candidate.issues)),
+  );
+  for (const parsedUnit of optionalFieldUnits.response.units) assert.deepEqual(parsedUnit.evidence, trustedEvidence);
+  assert.equal(optionalFieldUnits.response.units[1]?.title, undefined);
   // Issue #1448: a whitespace-only prompt template falls back to the mode's default prompt.
   assert.ok(
     String(
@@ -1857,6 +2047,7 @@ async function main() {
     assert.equal(item.required.includes("id"), false);
     assert.equal(item.required.includes("sourceHash"), false);
     assert.equal(item.required.includes("evidence"), false);
+    assert.equal("evidence" in item.properties, false, "evidence is server-owned");
     assert.equal(item.required.includes("subjectNames"), resolveSubjectNames);
     assert.equal(item.properties.dimensions.properties.trust.minimum, 0);
     assert.equal(item.properties.dimensionChanges.properties.trust.minimum, -100);

@@ -36,13 +36,32 @@ export function setVerifiedLtmRecallIndex(root: string, verified: LtmVerifiedRec
   verifiedIndexes.set(resolve(root), verified);
 }
 
+const writeWatchers = new Map<string, Set<(paths: readonly string[] | undefined) => void>>();
+
 /**
  * Drop the parsed vault snapshot, and the verified recall index derived from it, for a root so the
- * next read rebuilds them from disk. Every vault mutation and repair already calls this.
+ * next read rebuilds them from disk, and report the write to that root's write watchers. Every vault
+ * mutation and repair already calls this; a mutation also names the root-relative paths it writes.
  */
-export function invalidateLtmVaultSnapshot(root: string) {
+export function invalidateLtmVaultSnapshot(root: string, paths?: readonly string[]) {
   snapshots.delete(resolve(root));
   verifiedIndexes.delete(resolve(root));
+  for (const onWrite of writeWatchers.get(resolve(root)) ?? []) onWrite(paths);
+}
+
+/**
+ * Report every later vault write for a root until the returned stop function runs: the root-relative paths a
+ * mutation wrote, or undefined for a write that names none (recovery, repair, cleanup).
+ */
+export function watchLtmVaultWrites(root: string, onWrite: (paths: readonly string[] | undefined) => void) {
+  const key = resolve(root);
+  const watchers = writeWatchers.get(key) ?? new Set();
+  writeWatchers.set(key, watchers.add(onWrite));
+  return () => {
+    watchers.delete(onWrite);
+    // Only drop this set: after a repeated stop, the root may already hold another batch's watchers.
+    if (!watchers.size && writeWatchers.get(key) === watchers) writeWatchers.delete(key);
+  };
 }
 
 /**

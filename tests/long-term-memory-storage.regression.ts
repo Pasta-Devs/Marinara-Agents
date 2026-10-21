@@ -75,7 +75,9 @@ async function main() {
   const { getLongTermMemoryDirectories, getLongTermMemoryRoot, ltmRejectedSuggestionsPath, notePathForId } =
     await import(`${source}/persistence/paths.ts`);
   const { LongTermMemoryStorage } = await import(`${source}/persistence/storage.ts`);
-  const { invalidateLtmVaultSnapshot, readLtmVaultSnapshot } = await import(`${source}/persistence/vault-snapshot.ts`);
+  const { invalidateLtmVaultSnapshot, readLtmVaultSnapshot, watchLtmVaultWrites } = await import(
+    `${source}/persistence/vault-snapshot.ts`
+  );
   const { LongTermMemoryDraftStore } = await import(`${source}/drafts/draft-store.ts`);
   const { applyLongTermMemoryDraft, preflightLongTermMemoryDraft, LtmDraftApplyError } = await import(
     `${source}/drafts/reconciliation.ts`
@@ -3216,6 +3218,57 @@ async function main() {
       invalidateLtmVaultSnapshot(countRoot);
       await readLtmVaultSnapshot(countRoot, loadSnapshot);
       assert.equal(snapshotLoads, 2, "snapshot invalidation must permit a fresh scan");
+
+      // A source batch keeps one committed-note listing and re-reads only the notes later writes
+      // touched, so every vault write must report the root-relative paths it wrote, or undefined when it
+      // names none, and nothing once the watcher stops.
+      const watchRoot = join(dataDir, "vault-write-watch");
+      const watchStorage = new LongTermMemoryStorage(watchRoot);
+      await watchStorage.initializeLtmStore();
+      const reportedWrites: (readonly string[] | undefined)[] = [];
+      const stopWatching = watchLtmVaultWrites(watchRoot, (paths: readonly string[] | undefined) =>
+        reportedWrites.push(paths),
+      );
+      const reportedBy = async (operation: () => Promise<unknown>) => {
+        const start = reportedWrites.length;
+        await operation();
+        return reportedWrites.slice(start);
+      };
+      const watchedPath = "vault/world/world_watch_a.json";
+      for (const [name, operation] of [
+        ["create", () => watchStorage.createNote({ ...noteInput, id: "world_watch_a", title: "Watch A" })],
+        ["update", () => watchStorage.updateNote("world_watch_a", { title: "Watch A updated" })],
+        ["delete", () => watchStorage.deleteNotesPermanently(["world_watch_a"])],
+      ] as const) {
+        const reports = await reportedBy(operation);
+        assert.ok(
+          reports.some((paths) => paths?.includes(watchedPath)),
+          `${name} must report the note's root-relative path: ${JSON.stringify(reports)}`,
+        );
+        assert.ok(
+          reports.every((paths) => paths?.every((path) => !path.startsWith("/") && !path.includes(".."))),
+          `${name} must report only root-relative paths: ${JSON.stringify(reports)}`,
+        );
+      }
+      assert.ok(
+        (await reportedBy(() => watchStorage.cleanup())).includes(undefined),
+        "a vault write that names no files must report undefined",
+      );
+      stopWatching();
+      assert.deepEqual(
+        await reportedBy(() => watchStorage.createNote({ ...noteInput, id: "world_watch_b", title: "Watch B" })),
+        [],
+        "a stopped watcher must not hear later writes",
+      );
+      const laterWrites: (readonly string[] | undefined)[] = [];
+      const stopLaterWatcher = watchLtmVaultWrites(watchRoot, (paths: readonly string[] | undefined) =>
+        laterWrites.push(paths),
+      );
+      stopWatching();
+      await watchStorage.updateNote("world_watch_b", { title: "Watch B updated" });
+      assert.ok(laterWrites.length > 0, "stopping a watcher again must not remove another watcher on the same root");
+      stopLaterWatcher();
+      await watchStorage.cleanup();
 
       const isolationRoot = join(dataDir, "vault-error-isolation");
       const isolationStorage = new LongTermMemoryStorage(isolationRoot);

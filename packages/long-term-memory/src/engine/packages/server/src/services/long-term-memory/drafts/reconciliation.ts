@@ -62,12 +62,30 @@ function applyEdits(mutations: LtmDraftMutation[], edits: NonNullable<ApplyLtmDr
   const edited = new Map<string, LtmDraftMutation>();
   for (const edit of edits) {
     const original = originals.get(edit.id);
-    if (!original) throw new Error(`Long-term memory edited mutation not found: ${edit.id}`);
-    if (edited.has(edit.id)) throw new Error(`Long-term memory edited mutation appears more than once: ${edit.id}`);
+    if (!original)
+      throw new LtmDraftApplyError(
+        `Long-term memory edited mutation not found: ${edit.id}`,
+        409,
+        "ltm_draft_mutation_missing",
+      );
+    if (edited.has(edit.id))
+      throw new LtmDraftApplyError(
+        `Long-term memory edited mutation appears more than once: ${edit.id}`,
+        400,
+        "ltm_draft_edit_invalid",
+      );
     if (edit.kind !== undefined && edit.kind !== original.kind)
-      throw new Error(`Long-term memory edited mutation cannot change kind: ${edit.id}`);
+      throw new LtmDraftApplyError(
+        `Long-term memory edited mutation cannot change kind: ${edit.id}`,
+        400,
+        "ltm_draft_edit_invalid",
+      );
     if (edit.claimKind !== undefined && edit.claimKind !== original.claimKind)
-      throw new Error(`Long-term memory edited mutation cannot change claimKind: ${edit.id}`);
+      throw new LtmDraftApplyError(
+        `Long-term memory edited mutation cannot change claimKind: ${edit.id}`,
+        400,
+        "ltm_draft_edit_invalid",
+      );
     const { id: _id, kind: _kind, claimKind: _claimKind, ...patch } = edit;
     const parsed = ltmDraftMutationSchema.safeParse({
       ...original,
@@ -77,8 +95,10 @@ function applyEdits(mutations: LtmDraftMutation[], edits: NonNullable<ApplyLtmDr
       claimKind: original.claimKind,
     });
     if (!parsed.success)
-      throw new Error(
+      throw new LtmDraftApplyError(
         `Long-term memory edited mutation is invalid (${edit.id}): ${parsed.error.issues[0]?.message ?? "schema validation failed"}`,
+        400,
+        "ltm_draft_edit_invalid",
       );
     edited.set(edit.id, parsed.data);
   }
@@ -260,14 +280,24 @@ async function preflight(
   const sourceEvidence = `source_note:${draft.source.sourceNoteId}`;
   for (const mutation of mutations) {
     if (!mutation.evidence.includes(sourceEvidence))
-      throw new Error(`Long-term memory draft mutation ${mutation.id} must reference ${sourceEvidence}.`);
+      throw new LtmDraftApplyError(
+        `Long-term memory draft mutation ${mutation.id} must reference ${sourceEvidence}.`,
+        400,
+        "ltm_draft_mutation_invalid",
+      );
     if (mutation.kind === "create_note") {
       if (isLtmSourceLikeNote(mutation.note) || mutation.note.type === "scene")
-        throw new Error(
+        throw new LtmDraftApplyError(
           `Long-term memory source extraction draft cannot create scene/source notes: ${mutation.note.id}`,
+          400,
+          "ltm_draft_mutation_invalid",
         );
       if (createIds.has(mutation.note.id))
-        throw new Error(`Long-term memory draft creates the same note more than once: ${mutation.note.id}`);
+        throw new LtmDraftApplyError(
+          `Long-term memory draft creates the same note more than once: ${mutation.note.id}`,
+          400,
+          "ltm_draft_mutation_invalid",
+        );
       createIds.add(mutation.note.id);
       for (const link of mutation.note.links) links.add(link.target);
     } else {
@@ -284,26 +314,48 @@ async function preflight(
   }
   assertCurrentAmbiguousLinkTargets(draft, mutations, originals, existing, createIds);
   for (const id of links)
-    if (!createIds.has(id) && !existing.has(id)) throw new Error(`Long-term memory draft link target not found: ${id}`);
+    if (!createIds.has(id) && !existing.has(id))
+      throw new LtmDraftApplyError(
+        `Long-term memory draft link target not found: ${id}`,
+        409,
+        "ltm_draft_target_missing",
+      );
   for (const id of required)
     if (!createIds.has(id)) {
       const note = existing.get(id);
-      if (!note) throw new Error(`Long-term memory draft mutation target not found: ${id}`);
+      if (!note)
+        throw new LtmDraftApplyError(
+          `Long-term memory draft mutation target not found: ${id}`,
+          409,
+          "ltm_draft_target_missing",
+        );
       if (isLtmSourceLikeNote(note) || note.type === "scene")
-        throw new Error(`Long-term memory source extraction draft cannot mutate scene/source notes: ${id}`);
+        throw new LtmDraftApplyError(
+          `Long-term memory source extraction draft cannot mutate scene/source notes: ${id}`,
+          400,
+          "ltm_draft_mutation_invalid",
+        );
       if (!canUpdateLtmScopedTarget(note.scope, draft.scope))
-        throw new Error(`Long-term memory draft cannot mutate ${id} because it belongs to another scope.`);
+        throw new LtmDraftApplyError(
+          `Long-term memory draft cannot mutate ${id} because it belongs to another scope.`,
+          409,
+          "ltm_draft_target_scope_conflict",
+        );
     }
   for (const mutation of mutations)
     if (mutation.kind === "create_note") {
       if (!canUpdateLtmScopedTarget(mutation.note.scope, draft.scope))
-        throw new Error(
+        throw new LtmDraftApplyError(
           `Long-term memory draft cannot create ${mutation.note.id} because its scope does not match the draft.`,
+          400,
+          "ltm_draft_mutation_invalid",
         );
       const note = existing.get(mutation.note.id);
       if (note && !canUpdateLtmScopedTarget(note.scope, mutation.note.scope))
-        throw new Error(
+        throw new LtmDraftApplyError(
           `Long-term memory draft cannot merge scoped create ${mutation.note.id} into an existing note from another scope.`,
+          409,
+          "ltm_draft_target_scope_conflict",
         );
     }
   const pendingConflicts = mutations.flatMap((mutation) => {
@@ -679,13 +731,22 @@ async function applyInner(
     const unknown = options.mutationIds?.filter(
       (mutationId) => !draft!.mutations.some((mutation) => mutation.id === mutationId),
     );
-    if (unknown?.length) throw new Error(`Long-term memory draft mutation not found: ${unknown.join(", ")}`);
+    if (unknown?.length)
+      throw new LtmDraftApplyError(
+        `Long-term memory draft mutation not found: ${unknown.join(", ")}`,
+        409,
+        "ltm_draft_mutation_missing",
+      );
     const previouslyApplied = new Set(draft.appliedMutationIds ?? []);
     const originalDraftMutations = draft.mutations;
     if (options.editedMutations?.length) {
       for (const edit of options.editedMutations) {
         if (previouslyApplied.has(edit.id))
-          throw new Error(`Long-term memory edited mutation was already applied: ${edit.id}`);
+          throw new LtmDraftApplyError(
+            `Long-term memory edited mutation was already applied: ${edit.id}`,
+            409,
+            "ltm_draft_edit_already_applied",
+          );
       }
       draft = {
         ...draft,

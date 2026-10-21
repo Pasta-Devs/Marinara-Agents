@@ -148,6 +148,7 @@ async function main(routeScenario: RouteScenario) {
   const completionOptions: any[] = [];
   const completionMessages: any[] = [];
   const debugOverrides: any[] = [];
+  const loggedErrors: unknown[] = [];
   let failGameRefine = false;
   let emptyModelResponse = false;
   let truncatedModelResponse = false;
@@ -330,7 +331,9 @@ async function main(routeScenario: RouteScenario) {
             debug() {},
             info() {},
             warn() {},
-            error() {},
+            error(error: unknown) {
+              loggedErrors.push(error);
+            },
             debugOverride(enabled: boolean, message: string, ...args: any[]) {
               debugOverrides.push({ enabled, message, args });
             },
@@ -492,6 +495,7 @@ async function main(routeScenario: RouteScenario) {
           },
           persistence: {
             async getChat(chatId: string) {
+              if (chatId === "chat-unreadable") throw new Error("ENOENT: open '/private/marinara/chats.db'");
               return chats.find((chat) => chat.id === chatId) ?? null;
             },
             async listChats() {
@@ -3935,6 +3939,72 @@ async function main(routeScenario: RouteScenario) {
         personaId: "persona-fixture",
         personaIds: ["persona-fixture"],
       });
+      // An unexpected failure is logged, and the client gets the route's fallback, not the internal message.
+      const failedIdentityApply = await app.inject({
+        method: "POST",
+        url: "/api/long-term-memory/identity-repair/apply",
+        headers,
+        payload: {
+          scope: { chatId: "chat-unreadable", chatIds: ["chat-unreadable"] },
+          repairs: [
+            {
+              candidateId: "a".repeat(64),
+              canonicalNoteId: "char_mara_legacy_a",
+              excludedNoteIds: [],
+              sectionChoices: [],
+            },
+          ],
+        },
+      });
+      assert.equal(failedIdentityApply.statusCode, 500, failedIdentityApply.body);
+      assert.deepEqual(failedIdentityApply.json(), {
+        error: "Failed to repair long-term memory identities",
+        code: "ltm_unexpected_failure",
+      });
+      assert.equal(
+        loggedErrors.some((error) => error instanceof Error && error.message.includes("/private/marinara/chats.db")),
+        true,
+      );
+      // A message written for users still reaches the client: fork review takes only thread and world memories.
+      const characterForkPreview = await app.inject({
+        method: "POST",
+        url: "/api/long-term-memory/fork-repair/preview",
+        headers,
+        payload: { noteIds: ["char_mara_legacy_a", "char_mara_legacy_b"] },
+      });
+      assert.equal(characterForkPreview.statusCode, 400, characterForkPreview.body);
+      assert.deepEqual(characterForkPreview.json(), {
+        error: "Only thread and world notes can be reviewed as forks.",
+        code: "ltm_fork_selection_invalid",
+      });
+      const { rebuildAfterMutation, routeError } =
+        await import("../packages/long-term-memory/src/engine/packages/server/src/services/long-term-memory/routes/shared.ts");
+      const internalError = new Error("ENOENT: open '/private/path'");
+      assert.deepEqual(routeError(internalError, "Fallback text"), {
+        statusCode: 500,
+        body: { error: "Fallback text", code: "ltm_unexpected_failure" },
+      });
+      assert.equal(loggedErrors.includes(internalError), true);
+      // A library error that carries a code but no status is not a service error either.
+      const socketError = Object.assign(new Error("connect ECONNREFUSED /private/socket"), {
+        statusCode: undefined,
+        code: "ECONNREFUSED",
+      });
+      assert.deepEqual(routeError(socketError, "Fallback text"), {
+        statusCode: 500,
+        body: { error: "Fallback text", code: "ltm_unexpected_failure" },
+      });
+      assert.equal(loggedErrors.includes(socketError), true);
+      // A cancelled request has no reader and is not a failure, so it is not logged.
+      const cancelled = Object.assign(new Error("Long-term memory import was cancelled."), { name: "AbortError" });
+      assert.equal(routeError(cancelled, "Fallback text").body.error, "Fallback text");
+      assert.equal(loggedErrors.includes(cancelled), false);
+      const notADirectory = join(dataDir, "rebuild-root-file");
+      await writeFile(notADirectory, "");
+      assert.deepEqual(await rebuildAfterMutation(notADirectory), {
+        status: "deferred",
+        error: "Index rebuild failed",
+      });
     }
     if (routeScenario === "all" || routeScenario === "imports") {
       const preview = await app.inject({
@@ -4176,7 +4246,15 @@ async function main(routeScenario: RouteScenario) {
         .samples.find((sample: any) => sample.sourceId === "chat-a:summary-a");
       assert.equal(currentChatSample.status, "imported");
       assert.ok(currentChatPreview.json().totals.imported > 0);
-      assert.equal(currentChatSample.freshness, "extraction_incomplete");
+      // On its own the import keeps all three units and is current. In the full run an earlier step makes Mara
+      // ambiguous, so the character unit is left out and the source stays incomplete.
+      assert.equal(currentChatSample.freshness, routeScenario === "imports" ? "current" : "extraction_incomplete");
+      if (routeScenario !== "imports") {
+        assert.deepEqual(
+          importedChat.json().imported[0]?.outcome?.droppedCandidates.map((candidate: any) => candidate.validatorCode),
+          ["ambiguous_subject_identity"],
+        );
+      }
       assert.equal(currentChatSample.existingNoteId, importedChatNote.id);
       const destinationChatPreview = await app.inject({
         method: "POST",
@@ -4494,19 +4572,14 @@ async function main(routeScenario: RouteScenario) {
                     );
                   });
                 }
+                // Match the summary text: the request no longer carries summary entry ids.
                 const isCrossScope = messages.some(
                   (message: any) =>
                     typeof message.content === "string" &&
-                    (message.content.includes("cross-extract") ||
-                      message.content.includes("persona-write-scope") ||
-                      message.content.includes("chat-only-default") ||
+                    (message.content.includes("inherit the chat persona") ||
+                      message.content.includes("chat-only availability") ||
                       message.content.includes("destination")),
                 );
-                let requiredEvidence = ["source"];
-                try {
-                  const parsedPayload = JSON.parse(messages.at(-1).content);
-                  requiredEvidence = parsedPayload.requiredEvidence ?? [`source_note:${parsedPayload.sourceNote?.id}`];
-                } catch {}
                 return {
                   content: JSON.stringify({
                     summary: "Extracted Moon Vault discovery.",
@@ -4523,7 +4596,6 @@ async function main(routeScenario: RouteScenario) {
                             confidence: 0.9,
                             salience: 0.8,
                             status: "active",
-                            evidence: requiredEvidence,
                             links: [],
                           },
                         ]
@@ -5725,7 +5797,9 @@ async function main(routeScenario: RouteScenario) {
       });
       assert.equal(backup.statusCode, 200, backup.body);
       assert.equal(backup.json().format, "marinara-long-term-memory");
-      const expectedRejectedCount = routeScenario === "backup" ? 1 : 11;
+      // Evidence is server-owned: the fixture model's fixed source_note evidence no longer rejects units from
+      // other sources, so only format, identity and link rejections remain.
+      const expectedRejectedCount = routeScenario === "backup" ? 1 : 4;
       assert.equal(backup.json().rejectedSuggestions.length, expectedRejectedCount);
       const backupPreview = await app.inject({
         method: "POST",

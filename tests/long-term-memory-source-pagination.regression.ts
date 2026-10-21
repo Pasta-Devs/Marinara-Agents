@@ -278,13 +278,43 @@ async function main() {
         ),
         "Export blocked.",
       );
+      // An unexpected server failure has no text for users: LTM's route fallback, or the Engine's generic 500 for a
+      // route without routeError. The caller's localized message shows; the server text stays on the error.
+      const routeFallback = await failedResponseError(
+        Response.json({ error: "Failed to reset settings", code: "ltm_unexpected_failure" }, { status: 500 }),
+      );
+      assert.equal(errorMessage(routeFallback, "Could not reset memory settings."), "Could not reset memory settings.");
+      assert.equal(routeFallback.message, "Failed to reset settings");
+      assert.equal(
+        errorMessage(
+          await failedResponseError(Response.json({ error: "Internal Server Error" }, { status: 500 })),
+          "Could not reset memory settings.",
+        ),
+        "Could not reset memory settings.",
+      );
+      assert.equal(
+        errorMessage(
+          await failedResponseError(
+            Response.json({ error: "Memory not found.", code: "ltm_note_not_found" }, { status: 404 }),
+          ),
+          "Could not load.",
+        ),
+        "Memory not found.",
+      );
+      assert.equal(
+        errorMessage(
+          await failedResponseError(Response.json({ error: "Export fixture failed." }, { status: 500 })),
+          "Could not export.",
+        ),
+        "Export fixture failed.",
+      );
       assert.equal(errorMessage(new Error("Plain failure"), "Could not load."), "Plain failure");
       assert.equal(errorMessage("not an error", "Could not load."), "Could not load.");
     } finally {
       globalThis.fetch = originalFetch;
     }
     console.log(
-      "Long-Term Memory source pagination passed: scoped cursors, mutation-safe continuation, import status, limits, empty books, split entries, status-only request errors and export failures.",
+      "Long-Term Memory source pagination passed: scoped cursors, mutation-safe continuation, import status, limits, empty books, split entries, status-only request errors, unexpected server failures and export failures.",
     );
   } finally {
     release();
