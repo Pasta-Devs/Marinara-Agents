@@ -37,151 +37,117 @@ jobs:
       - name: Check package source names
         run: npm run typecheck:packages
 
-      - name: Test the package typecheck fails without tsc
-        run: node scripts/tests/typecheck-packages-missing-tsc.regression.mjs
-
-      - name: Test package security invariants
-        run: npm run test:security
-
-      - name: Test Calls autoplay recovery
-        run: npx tsx tests/calls-playback.regression.ts
-
-      - name: Test Calls speech-to-text server fallback and speech queue
-        run: npx tsx tests/calls-speech-to-text.regression.ts
-
-      - name: Test Calls mic clips and media uploads
-        run: npx tsx tests/calls-mic-segments.regression.ts
-
-      - name: Test Calls character-started calls
-        run: npx tsx tests/calls-character-call.regression.ts
-
-      - name: Test Calls release and SwarmUI video generation
+      # The regressions and validators below are independent of each other and write only under the system temp
+      # directory, so they run concurrently, one per core (#1579). Each command's output is printed as its own log
+      # group when it finishes; a failed command is printed expanded with an error annotation, and every command
+      # still runs so one job shows every failure.
+      - name: Test and validate the packages, catalog and repository gates
         run: |
+          node scripts/run-parallel.mjs <<'COMMANDS'
+          node scripts/tests/typecheck-packages-missing-tsc.regression.mjs
+          npm run test:security
+
+          # Calls: autoplay recovery, speech-to-text server fallback and speech queue, mic clips and media uploads,
+          # character-started calls, release and SwarmUI video generation.
+          npx tsx tests/calls-playback.regression.ts
+          npx tsx tests/calls-speech-to-text.regression.ts
+          npx tsx tests/calls-mic-segments.regression.ts
+          npx tsx tests/calls-character-call.regression.ts
           node tests/conversation-calls-summary.regression.mjs
           node tests/calls-swarmui-video.regression.mjs
 
-      - name: Test Memory Nag recall selection
-        run: npx tsx tests/memory-nag-selection.regression.ts
-
-      - name: Test Memory Nag ranges and Pixelforge weather contract
-        run: |
+          # Memory Nag recall selection and ranges, the Pixelforge weather contract, and Relationship Tracker and
+          # Memory Nag reading Roleplay whispers.
+          npx tsx tests/memory-nag-selection.regression.ts
           npx tsx tests/memory-nag-range.regression.ts
           node tests/pixelforge-weather-contract.regression.mjs
+          npx tsx tests/roleplay-whispers.regression.ts
 
-      - name: Test Relationship Tracker and Memory Nag reading Roleplay whispers
-        run: npx tsx tests/roleplay-whispers.regression.ts
-
-      - name: Test Pixelforge world, setup, and startup contracts
-        run: |
+          # Pixelforge world, setup, and startup contracts.
           node packages/pixelforge/test-brief.mjs
           node tests/pixelforge-startup.regression.mjs
 
-      - name: Test Beholder client bundle contract
-        run: |
+          # Beholder client bundle contract and host release.
           npx tsx tests/beholder-client-contract.regression.ts
           npx tsx tests/beholder-host-release.regression.ts
 
-      - name: Test Quartermaster dialogs and inventory export
-        run: node tests/quartermaster-modal-lifecycle.regression.mjs
+          # Quartermaster dialogs and inventory export; Gacha Forge location IDs and landscape layout.
+          node tests/quartermaster-modal-lifecycle.regression.mjs
+          node tests/gacha-forge-location-ids.regression.mjs
 
-      - name: Test Gacha Forge location IDs and landscape layout
-        run: node tests/gacha-forge-location-ids.regression.mjs
+          # Prints how much of the reference extension's interface the Beholder package actually
+          # renders. It is here so the number is read from a run rather than asserted from
+          # memory — three separate claims of parity were wrong before this test existed.
+          npx tsx tests/beholder-parity.regression.ts
 
-      # Prints how much of the reference extension's interface this package actually
-      # renders. It is here so the number is read from a run rather than asserted from
-      # memory — three separate claims of parity were wrong before this test existed.
-      - name: Measure Beholder UI parity against the reference extension
-        run: npx tsx tests/beholder-parity.regression.ts
+          # Vendored Engine drift detection.
+          node scripts/tests/vendored-engine.regression.mjs
 
-      - name: Test vendored Engine drift detection
-        run: node scripts/tests/vendored-engine.regression.mjs
-
-      # Calls, Noodle and Slurp reach the Engine's live services through api.runtime instead of bundling copies
-      # (sources/host-runtime-overlay). The gates fail a package server that ships a copy again.
-      - name: Test the package server host runtime and its gates
-        run: |
+          # Calls, Noodle and Slurp reach the Engine's live services through api.runtime instead of bundling copies
+          # (sources/host-runtime-overlay). The gates fail a package server that ships a copy again.
           node --experimental-transform-types tests/host-runtime-overlay.regression.mjs
           node scripts/tests/server-host-gates.regression.mjs
           node scripts/tests/server-singleton-gate.regression.mjs
 
-      # Review fixes to the host de-duplication: Slurp's connection admission, the Calls volume and Local Model,
-      # Noodle's picker scope and Long-Term Memory's guide pictures (the picture check needs an Engine checkout).
-      - name: Test the host de-duplication review fixes
-        run: node tests/dedup-review-fixes.regression.mjs
+          # Review fixes to the host de-duplication: Slurp's connection admission, the Calls volume and Local Model,
+          # Noodle's picker scope and Long-Term Memory's guide pictures (the picture check needs an Engine checkout).
+          node tests/dedup-review-fixes.regression.mjs
 
-      - name: Test catalog lane routing and build provenance
-        run: node scripts/test-catalog-lanes.mjs
+          # Catalog lane routing and build provenance.
+          node scripts/test-catalog-lanes.mjs
 
-      - name: Test Slurp unanswered follow-up control
-        run: npx tsx --tsconfig tests/tsconfig.regressions.json tests/slurp2-pause-follow-ups-until-reply.regression.ts
+          # Slurp unanswered follow-up control.
+          npx tsx --tsconfig tests/tsconfig.regressions.json tests/slurp2-pause-follow-ups-until-reply.regression.ts
 
-      # These read scripts/build-feature-packages.mjs, which the Noodle and Slurp browser workflow
-      # no longer triggers on. None of them needs an Engine checkout (the PR-checks job has none).
-      - name: Test Slurp builder text assertions
-        run: |
+          # Slurp builder text assertions. These read scripts/build-feature-packages.mjs, which the Noodle and Slurp
+          # browser workflow no longer triggers on. None of them needs an Engine checkout (the PR-checks job has none).
           npx tsx --tsconfig tests/tsconfig.regressions.json tests/slurp-generation-integrations.regression.ts
           npx tsx --tsconfig tests/tsconfig.regressions.json tests/slurp2-architecture.regression.ts
           npx tsx --tsconfig tests/tsconfig.regressions.json tests/slurp2-slice-i.regression.ts
           npx tsx --tsconfig tests/tsconfig.regressions.json tests/slurp2-step1-shell.regression.ts
 
-      - name: Validate package localization catalogs
-        run: |
+          # Package localization catalogs.
           node scripts/tests/ui-translation-retention.regression.mjs
           node scripts/validate-package-locales.mjs
 
-      # A package bundles shared Engine components but owns its locale catalog, so a component from
-      # a shared folder can ship with no strings and render raw key names to users.
-      - name: Validate bundled localization keys resolve
-        run: node scripts/validate-package-locale-keys.mjs
+          # A package bundles shared Engine components but owns its locale catalog, so a component from
+          # a shared folder can ship with no strings and render raw key names to users.
+          node scripts/validate-package-locale-keys.mjs
 
-      - name: Validate catalogs, packages, artifacts, and README coverage
-        run: node scripts/validate-catalog.mjs
+          # Catalogs, packages, artifacts, and README coverage.
+          node scripts/validate-catalog.mjs
 
-      # Package clients use the Engine's host namespace (__MARINARA_HOST__) instead of bundled copies (#1478, #1487).
-      - name: Test the Engine-owned browser storage gate
-        run: node scripts/tests/host-storage-key-gate.regression.mjs
+          # Package clients use the Engine's host namespace (__MARINARA_HOST__) instead of bundled copies (#1478, #1487):
+          # the Engine-owned browser storage gate, the host client adapters bundle, the host module shims and their
+          # export check, and the client bundle host gates.
+          node scripts/tests/host-storage-key-gate.regression.mjs
+          node tests/host-client-adapters.regression.mjs
+          node scripts/tests/host-module-shims.regression.mjs
+          node scripts/tests/client-host-gates.regression.mjs
 
-      - name: Test the host client adapters packages bundle
-        run: node tests/host-client-adapters.regression.mjs
+          # Catalog generatedAt determinism and package release notes.
+          node scripts/tests/catalog-generatedat-determinism.regression.mjs
+          node scripts/tests/catalog-release-notes.regression.mjs
 
-      - name: Test the host module shims and their export check
-        run: node scripts/tests/host-module-shims.regression.mjs
+          # A ruleset package ships no Agent, so the catalog's agent-definition checks
+          # are skipped for it and this contract is the only thing holding its shape.
+          node scripts/tests/ruleset-package.regression.mjs
 
-      - name: Test the client bundle host gates
-        run: node scripts/tests/client-host-gates.regression.mjs
+          # The avatar packages are built ahead of the Engine surfaces that read them, so this holds their
+          # agent definitions and generation prompts to the Engine's Capability API 1.73 contract.
+          node scripts/tests/avatar-package.regression.mjs
 
-      - name: Test catalog generatedAt determinism
-        run: node scripts/tests/catalog-generatedat-determinism.regression.mjs
-
-      - name: Test package release notes
-        run: node scripts/tests/catalog-release-notes.regression.mjs
-
-      # A ruleset package ships no Agent, so the catalog's agent-definition checks
-      # are skipped for it and this contract is the only thing holding its shape.
-      - name: Test ruleset package contract
-        run: node scripts/tests/ruleset-package.regression.mjs
-
-      # The avatar packages are built ahead of the Engine surfaces that read them, so this holds their
-      # agent definitions and generation prompts to the Engine's Capability API 1.73 contract.
-      - name: Test avatar package contract
-        run: node scripts/tests/avatar-package.regression.mjs
-
-      - name: Test World Maps UI contracts and location limit
-        run: |
+          # World Maps UI contracts and location limit.
           node tests/world-maps-ui-contract.regression.mjs
           npx tsx --tsconfig tests/tsconfig.regressions.json tests/map-location-limit.regression.ts
 
-      - name: Test Noodle timeline context budget, writer images and image prompts
-        run: |
+          # Noodle timeline context budget, writer images and image prompts.
           npx tsx --tsconfig tests/tsconfig.regressions.json tests/noodle-timeline-context-budget.regression.ts
           npx tsx --tsconfig tests/tsconfig.regressions.json tests/noodle-writer-images.regression.ts
           npx tsx --tsconfig tests/tsconfig.regressions.json tests/noodle-image-prompt-instructions.regression.ts
 
-      - name: Test Long-Term Memory feedback clarity UI contracts
-        run: node tests/long-term-memory-feedback-clarity-ui.regression.mjs
-
-      - name: Test Long-Term Memory Engine-free regressions
-        run: |
+          # Long-Term Memory feedback clarity UI contracts and Engine-free regressions.
+          node tests/long-term-memory-feedback-clarity-ui.regression.mjs
           npx tsx tests/long-term-memory-scope-targets.regression.ts
           npx tsx tests/long-term-memory-scope-fallback-labels.regression.ts
           npx tsx tests/long-term-memory-tab-keys.regression.ts
@@ -190,11 +156,10 @@ jobs:
           npx tsx tests/long-term-memory-source-pagination.regression.ts
           npx tsx tests/long-term-memory-debug-activity.regression.ts
 
-      - name: Validate pull request gate topology
-        run: node scripts/validate-pr-triage.mjs
-
-      - name: Test owner approval evaluator
-        run: node scripts/test-owner-approval.mjs
+          # Pull request gate topology and the owner approval evaluator.
+          node scripts/validate-pr-triage.mjs
+          node scripts/test-owner-approval.mjs
+          COMMANDS
 
       - name: Check whitespace
         env:

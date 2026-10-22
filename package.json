@@ -23,10 +23,10 @@
   "scripts": {
     "build:5e-srd-catalogs": "node scripts/build-5e-srd-catalogs.mjs",
     "build:rulesets": "node scripts/build-ruleset-packages.mjs",
-    "check": "npm run format:check && npm run lint",
+    "check": "node scripts/run-parallel.mjs \"npm run format:check\" \"npm run lint\"",
     "format": "prettier --write \"packages/**/src/**/*.{js,mjs,ts,tsx}\" \"sources/*-overlay/**/*.{mjs,ts,tsx}\" \"scripts/**/*.{js,mjs}\" \"tests/**/*.{js,mjs,ts,tsx}\" eslint.config.mjs",
     "format:check": "prettier --check \"packages/**/src/**/*.{js,mjs,ts,tsx}\" \"sources/*-overlay/**/*.{mjs,ts,tsx}\" \"scripts/**/*.{js,mjs}\" \"tests/**/*.{js,mjs,ts,tsx}\" eslint.config.mjs",
-    "lint": "eslint \"packages/**/src/**/*.{js,mjs,ts,tsx}\" \"sources/*-overlay/**/*.{mjs,ts,tsx}\" \"scripts/**/*.{js,mjs}\" \"tests/**/*.{js,mjs,ts,tsx}\" eslint.config.mjs",
+    "lint": "eslint --concurrency auto \"packages/**/src/**/*.{js,mjs,ts,tsx}\" \"sources/*-overlay/**/*.{mjs,ts,tsx}\" \"scripts/**/*.{js,mjs}\" \"tests/**/*.{js,mjs,ts,tsx}\" eslint.config.mjs",
     "test:browser:noodle": "node scripts/run-package-browser-tests.mjs noodle tests/package-noodle.e2e.ts tests/package-noodle-picker-scope.e2e.ts",
     "test:browser:slurp2": "node scripts/run-package-browser-tests.mjs slurp2 tests/package-slurp2.e2e.ts",
     "test:noodle:regressions": "sh -c 'for test in tests/noodle*.regression.ts tests/noodler-*.regression.ts tests/slurp-*.regression.ts tests/slurp2-*.regression.ts; do if [ \"$test\" = tests/slurp-phase1-durability.regression.ts ] || [ \"$test\" = tests/slurp2-reset-activity.regression.ts ] || [ \"$test\" = tests/slurp2-anchor-edits.regression.ts ] || [ \"$test\" = tests/slurp2-message-deep-details.regression.ts ] || [ \"$test\" = tests/slurp2-engine-avatar-variant.regression.ts ] || [ \"$test\" = tests/slurp2-restore-media.regression.ts ]; then tsx \"$test\"; else tsx --tsconfig tests/tsconfig.regressions.json \"$test\"; fi || exit 1; done'",
