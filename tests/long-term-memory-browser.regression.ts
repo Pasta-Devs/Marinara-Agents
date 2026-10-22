@@ -1875,6 +1875,22 @@ async function main() {
       );
       await memoryScopeSearch.fill("");
       await noMemories.waitFor();
+      // Arrow keys keep the highlighted place inside the list's visible area (#1584).
+      for (let step = 0; step < 20; step += 1) await page.keyboard.press("ArrowDown");
+      const highlightBox = await memoryScope.locator('[role="listbox"]').evaluate((list) => {
+        const option = list.querySelector('[data-highlighted="true"]');
+        return {
+          list: list.getBoundingClientRect().toJSON(),
+          option: option?.getBoundingClientRect().toJSON(),
+          id: option?.getAttribute("data-ltm-scope-option"),
+        };
+      });
+      assert.ok(
+        highlightBox.option &&
+          highlightBox.option.top >= highlightBox.list.top &&
+          highlightBox.option.bottom <= highlightBox.list.bottom,
+        `the highlighted place is inside the visible list: ${JSON.stringify(highlightBox)}`,
+      );
       await page.keyboard.press("Escape");
       await memoryScopePopup.waitFor({ state: "detached" });
       const wholeChatRequest = notesRequest((params) => params.get("scopeGroupId") === "conversation-a");
@@ -2400,6 +2416,28 @@ async function main() {
       releaseRename?.();
       await renameDialog.waitFor({ state: "detached" });
       await page.unroute(renameRoute);
+      // Below 48rem the memory list's pane is hidden while the details show; Rename detail still opens a
+      // visible dialog instead of an invisible one that freezes the page (#1584).
+      const vaultViewport = page.viewportSize();
+      await page.setViewportSize({ width: 390, height: 844 });
+      await page.locator('[data-ltm-workspace-pane-tab="navigator"]').waitFor({ state: "visible" });
+      const narrowInspectorTab = page.locator('[data-ltm-workspace-pane-tab="inspector"]');
+      if (await narrowInspectorTab.count()) await narrowInspectorTab.click();
+      else await page.locator("[data-ltm-details-toggle]").click();
+      if (!(await renameDetailButton.isVisible())) await page.locator("summary", { hasText: "Rename details" }).click();
+      await renameDetailButton.click();
+      assert.equal(await page.locator('[data-ltm-workspace-pane="navigator"]').isVisible(), false);
+      const narrowRenameDialog = await renameDialog.evaluate((dialog) => ({
+        open: (dialog as HTMLDialogElement).open,
+        ...dialog.getBoundingClientRect().toJSON(),
+      }));
+      assert.ok(
+        narrowRenameDialog.open && narrowRenameDialog.width > 0 && narrowRenameDialog.height > 0,
+        `the open Rename details dialog is visible at 390px: ${JSON.stringify(narrowRenameDialog)}`,
+      );
+      await renameDialog.getByRole("button", { name: "Cancel" }).click();
+      await renameDialog.waitFor({ state: "detached" });
+      if (vaultViewport) await page.setViewportSize(vaultViewport);
       await memorySearch.fill("Scoped desktop memory");
       await page.locator('[data-ltm-navigation="desktop"] [data-ltm-destination="review"]').click();
       const recoverySource = page.locator('[data-ltm-review-source-select="source_mobile_recovery"]');
@@ -4129,6 +4167,16 @@ async function main() {
           focusPage.evaluate(() =>
             document.activeElement === document.body ? "body" : (document.activeElement?.textContent?.trim() ?? ""),
           );
+        // The visible Choose backup button opens the file input, so Tab goes from it to Reset settings (#1584).
+        assert.deepEqual(
+          await maintenancePanel
+            .locator('input[type="file"]')
+            .evaluate((input) => [(input as HTMLInputElement).tabIndex, input.getAttribute("aria-hidden")]),
+          [-1, "true"],
+        );
+        await maintenancePanel.locator("button", { hasText: "Choose backup" }).focus();
+        await focusPage.keyboard.press("Tab");
+        assert.equal(await focusedControl(), "Reset settings");
         for (const action of ["reset", "import"] as const) {
           settingsGate = new Promise<void>((resolve) => {
             releaseSettings = () => resolve();
@@ -4480,12 +4528,70 @@ async function main() {
       const firstMutation = page.locator(`[data-ltm-review-mutation="${reviewMutationIds.first}"]`);
       assert.equal(await firstMutation.locator("[data-ltm-review-summary]").count(), 1);
       assert.equal(await firstMutation.locator("[data-ltm-review-evidence-summary]").count(), 1);
-      await page
-        .locator(`[data-ltm-review-mutation="${reviewMutationIds.first}"] [data-ltm-review-action="apply"]`)
-        .click();
-      await page.waitForFunction(
-        (mutationId) => !document.querySelector(`[data-ltm-review-mutation="${mutationId}"]`),
+      // An accept keeps the queue on screen while its memory context reloads, and every action waits for the
+      // reloaded context (#1584).
+      const reviewWorkspace = page.locator('[data-ltm-surface="review-queue"] [data-ltm-workspace-container]');
+      const reviewContextRoute = (url: URL) =>
+        url.pathname.endsWith("/api/long-term-memory/notes") && url.searchParams.has("ids");
+      const acceptWithReviewContextHeld = async (
+        mutationId: string,
+        accept: () => Promise<void>,
+        whileHeld = async () => {},
+      ) => {
+        await reviewWorkspace.evaluate((workspace) => {
+          const record = { hidden: false };
+          (window as Window & { reviewWorkspaceHidden?: typeof record }).reviewWorkspaceHidden = record;
+          new MutationObserver(() => {
+            if (workspace.classList.contains("hidden")) record.hidden = true;
+          }).observe(workspace, { attributes: true, attributeFilter: ["class"] });
+        });
+        let releaseReviewContext = () => {};
+        const reviewContextHeld = new Promise<void>((resolve) => {
+          releaseReviewContext = resolve;
+        });
+        await page.route(reviewContextRoute, async (route) => {
+          await reviewContextHeld;
+          await route.continue();
+        });
+        await accept();
+        await page.waitForFunction((id) => !document.querySelector(`[data-ltm-review-mutation="${id}"]`), mutationId);
+        assert.equal(await reviewWorkspace.isVisible(), true, "the queue stays on screen while its context reloads");
+        assert.equal(await page.locator("[data-ltm-review-context-refreshing]").count(), 1);
+        assert.deepEqual(
+          await page
+            .locator('[data-ltm-surface="review-queue"] [data-ltm-review-action]')
+            .evaluateAll((actions) => actions.filter((action) => !(action as HTMLButtonElement).disabled).length),
+          0,
+          "no change can be accepted against the reloading context",
+        );
+        await whileHeld();
+        releaseReviewContext();
+        await page.locator("[data-ltm-review-context-refreshing]").waitFor({ state: "detached" });
+        await page.unroute(reviewContextRoute);
+        assert.equal(
+          await page.evaluate(
+            () => (window as Window & { reviewWorkspaceHidden?: { hidden: boolean } }).reviewWorkspaceHidden?.hidden,
+          ),
+          false,
+          "the queue is never hidden during the accept",
+        );
+      };
+      // The next draft and the keyboard position survive the accept.
+      await acceptWithReviewContextHeld(
         reviewMutationIds.first,
+        () =>
+          page
+            .locator(`[data-ltm-review-mutation="${reviewMutationIds.first}"] [data-ltm-review-action="apply"]`)
+            .click(),
+        async () => {
+          assert.equal(await page.locator(`[data-ltm-review-draft-select="${reviewDraftIds.second}"]`).count(), 1);
+          await page.keyboard.press("Tab");
+          assert.equal(
+            await page.evaluate(() => Boolean(document.activeElement?.closest('[data-ltm-surface="review-queue"]'))),
+            true,
+            "Tab after the accept continues inside the queue",
+          );
+        },
       );
       reviewSources = reviewSources.filter((source) => !missingSources.includes(source.sourceNoteId));
       missingSourceReview = false;
@@ -4643,10 +4749,10 @@ async function main() {
       await page.getByText("Retry preflight complete. Review the results before applying again.").waitFor();
       const editedPartial = page.locator(`[data-ltm-review-mutation="${reviewMutationIds.partial}"]`);
       assert.match(await editedPartial.locator("[data-ltm-review-summary]").innerText(), /Edited proposal/u);
-      await page.getByRole("button", { name: /^Apply preflighted \(/ }).click();
-      await page.waitForFunction(
-        (mutationId) => !document.querySelector(`[data-ltm-review-mutation="${mutationId}"]`),
-        reviewMutationIds.second,
+      // This accept drops the second change's merge target from the memory context, so the context reloads under a
+      // new id list while the last one stays on screen (#1584).
+      await acceptWithReviewContextHeld(reviewMutationIds.second, () =>
+        page.getByRole("button", { name: /^Apply preflighted \(/ }).click(),
       );
       assert.deepEqual(reviewEditedMutationIds.at(-1), [reviewMutationIds.partial]);
       assert.deepEqual(reviewActionCalls, [
@@ -6165,14 +6271,24 @@ async function main() {
         /character card|Summary Prompt|lorebook entries as source notes/iu,
       );
       await page.locator('[data-ltm-source-tab="chats"]').click();
+      await page.locator('[data-ltm-source-status-filter="imported"]').click();
+      assert.match(await page.locator('[data-ltm-source-status-filter="imported"]').innerText(), /\([1-9]\d*\)/u);
+      const desktopReextractRow = page.locator('[data-ltm-source-id="chat-a:summary-desktop-reextract"]');
+      // Tab reaches the name of an imported row, which has no Import button, and Enter opens the row in the
+      // workbench (#1584).
+      await page.locator('[data-ltm-source-status-filter="imported"]').focus();
+      const reextractRowNameFocused = () =>
+        page.evaluate(
+          () => document.activeElement?.matches('[data-ltm-source-open="chat-a:summary-desktop-reextract"]') ?? false,
+        );
+      for (let step = 0; step < 30 && !(await reextractRowNameFocused()); step += 1) await page.keyboard.press("Tab");
+      assert.equal(await reextractRowNameFocused(), true, "Tab reaches the name of the imported source row");
       const sourceDetailsRequestPromise = page.waitForRequest(
         (request) =>
           request.method() === "POST" && request.url().includes("/api/long-term-memory/import/source-details"),
       );
-      await page.locator('[data-ltm-source-status-filter="imported"]').click();
-      assert.match(await page.locator('[data-ltm-source-status-filter="imported"]').innerText(), /\([1-9]\d*\)/u);
-      const desktopReextractRow = page.locator('[data-ltm-source-id="chat-a:summary-desktop-reextract"]');
-      await desktopReextractRow.click();
+      await page.keyboard.press("Enter");
+      await page.locator("[data-ltm-source-workbench] h2", { hasText: "Desktop re-extract source" }).waitFor();
       const sourceDetailsRequest = (await sourceDetailsRequestPromise).postDataJSON() as Record<string, unknown>;
       assert.equal(Object.hasOwn(sourceDetailsRequest, "chatId"), false);
       await page.locator("[data-ltm-source-management] > summary").click();

@@ -1,5 +1,9 @@
 # Long-Term Memory changelog
 
+## Unreleased
+
+- Five keyboard and focus fixes. In Sources, Tab now reaches the name of each chat or character source in the list, and Enter or Space opens it, so Re-extract, Manage, Review and Open memory work without a mouse. Accepting a change in the Review Queue no longer hides the queue while the memories it shows reload: the list, your place in it and the keyboard position stay, a small spinner shows beside "Review Queue", and Accept waits until the memories have reloaded. On a narrow panel, the Memory Vault's "Rename details" and unsaved-changes dialogs now show instead of leaving the screen frozen. Arrow keys in the place picker keep the highlighted place in view. In Memory Settings, Tab after "Choose backup" goes straight to "Reset settings", and screen readers name "Choose backup" once.
+
 ## 1.4.84 — 2026-10-22
 
 - Other Agents can now ask Long-Term Memory for memories about the characters they write as, ranked against what they are about to write. They get only memories available to that character everywhere: never memories limited to a chat or group, archived memories or suggestions, and they can't change anything. A new setting in Memory Settings, "Other Agents can read memories" (on by default), turns this off, also for Slurp's "What your other Agents know", and names the Agents that read memories lately. Each read shows in Activity as "Read by another Agent".

@@ -2476,126 +2476,6 @@ export default function MemoryVault({
                   </>
                 </section>
               ) : null}
-              {unsavedNavigation ? (
-                <dialog
-                  ref={unsavedDialogRef}
-                  aria-modal="true"
-                  aria-labelledby="ltm-unsaved-title"
-                  aria-describedby="ltm-unsaved-description"
-                  onCancel={(event) => {
-                    event.preventDefault();
-                    finishUnsavedDecision("stay");
-                  }}
-                  onKeyDown={(event) => {
-                    if (event.key !== "Tab") return;
-                    const focusable = Array.from(
-                      event.currentTarget.querySelectorAll<HTMLElement>(
-                        'button:not(:disabled), [href], input:not(:disabled), select:not(:disabled), textarea:not(:disabled), [tabindex]:not([tabindex="-1"])',
-                      ),
-                    );
-                    if (!focusable.length) return;
-                    const first = focusable[0];
-                    const last = focusable[focusable.length - 1];
-                    if (event.shiftKey && document.activeElement === first) {
-                      event.preventDefault();
-                      last.focus();
-                    } else if (!event.shiftKey && document.activeElement === last) {
-                      event.preventDefault();
-                      first.focus();
-                    }
-                  }}
-                  className="fixed inset-0 z-50 grid h-full w-full place-items-center bg-black/50 p-4"
-                >
-                  <section className="mari-editor-panel w-full max-w-md space-y-3 p-3 shadow-xl">
-                    <h3 id="ltm-unsaved-title" className="text-base font-semibold">
-                      {localizeUi("ui.longTermMemory.memoryvault.unsavedNavigationTitle")}
-                    </h3>
-                    <p id="ltm-unsaved-description" className="text-sm text-[var(--muted-foreground)]">
-                      {localizeUi("ui.longTermMemory.memoryvault.unsavedNavigationDescription")}
-                    </p>
-                    <div className="flex flex-wrap justify-end gap-2">
-                      <Button data-ltm-unsaved-stay onClick={() => finishUnsavedDecision("stay")}>
-                        {localizeUi("ui.longTermMemory.memoryvault.keepEditing")}
-                      </Button>
-                      <Button destructive onClick={() => finishUnsavedDecision("discard")}>
-                        {localizeUi("ui.longTermMemory.memoryvault.discardAndContinue")}
-                      </Button>
-                      <Button primary onClick={() => finishUnsavedDecision("save")}>
-                        {localizeUi("ui.longTermMemory.memoryvault.saveAndContinue")}
-                      </Button>
-                    </div>
-                  </section>
-                </dialog>
-              ) : null}
-              {renamingSectionKey ? (
-                <dialog
-                  ref={renameDialogRef}
-                  aria-modal="true"
-                  aria-labelledby="ltm-rename-detail-title"
-                  onCancel={(event) => {
-                    event.preventDefault();
-                    // Like the disabled Cancel button, Escape keeps the dialog open while the rename runs.
-                    if (busy) return;
-                    setRenamingSectionKey(null);
-                    setRenamedSectionKey("");
-                    setRenamePreview(null);
-                  }}
-                  className="fixed inset-0 z-50 grid h-full w-full place-items-center bg-black/50 p-4"
-                >
-                  <section className="mari-editor-panel w-full max-w-md space-y-3 p-3 shadow-xl">
-                    <h3 id="ltm-rename-detail-title" className="text-base font-semibold">
-                      {localizeUi("ui.longTermMemory.memoryvault.renameDetails")}
-                    </h3>
-                    <label className="block space-y-1 text-xs font-medium">
-                      <span>{localizeUi("ui.longTermMemory.memoryvault.nameThisDetail")}</span>
-                      <input
-                        className={inputClass}
-                        value={renamedSectionKey}
-                        aria-label={localizeUi("ui.longTermMemory.memoryvault.newSectionName")}
-                        onChange={(event) => setRenamedSectionKey(event.target.value)}
-                      />
-                      <span className="block text-[var(--muted-foreground)]">
-                        {localizeUi("ui.longTermMemory.memoryvault.storedKey")}:{" "}
-                        {normalizeDetailName(renamedSectionKey) || localizeUi("ui.longTermMemory.memoryvault.notSet")}
-                      </span>
-                    </label>
-                    {renamePreview ? (
-                      <p className="text-xs text-[var(--muted-foreground)]">
-                        {localizeUi("ui.longTermMemory.memoryvault.renamePreview", {
-                          name: renamedSectionKey,
-                          key: renamePreview.toSectionKey,
-                          count: renamePreview.rewrittenDraftCount,
-                        })}
-                      </p>
-                    ) : null}
-                    <div className="flex flex-wrap justify-end gap-2">
-                      <Button
-                        onClick={() => {
-                          setRenamingSectionKey(null);
-                          setRenamedSectionKey("");
-                          setRenamePreview(null);
-                        }}
-                        disabled={Boolean(busy)}
-                      >
-                        {localizeUi("ui.longTermMemory.memoryvault.cancel")}
-                      </Button>
-                      <Button
-                        onClick={() => void previewRename()}
-                        disabled={Boolean(busy) || !renamedSectionKey.trim()}
-                      >
-                        {localizeUi("ui.longTermMemory.memoryvault.previewRename")}
-                      </Button>
-                      <Button
-                        primary
-                        onClick={() => void renameSection()}
-                        disabled={Boolean(busy) || !renamedSectionKey.trim()}
-                      >
-                        {localizeUi("ui.longTermMemory.memoryvault.saveDetailName")}
-                      </Button>
-                    </div>
-                  </section>
-                </dialog>
-              ) : null}
               <section
                 ref={navigatorScrollRef}
                 data-ltm-memory-list
@@ -3616,6 +3496,123 @@ export default function MemoryVault({
             : undefined
         }
       />
+      {unsavedNavigation ? (
+        <dialog
+          ref={unsavedDialogRef}
+          aria-modal="true"
+          aria-labelledby="ltm-unsaved-title"
+          aria-describedby="ltm-unsaved-description"
+          onCancel={(event) => {
+            event.preventDefault();
+            finishUnsavedDecision("stay");
+          }}
+          onKeyDown={(event) => {
+            if (event.key !== "Tab") return;
+            const focusable = Array.from(
+              event.currentTarget.querySelectorAll<HTMLElement>(
+                'button:not(:disabled), [href], input:not(:disabled), select:not(:disabled), textarea:not(:disabled), [tabindex]:not([tabindex="-1"])',
+              ),
+            );
+            if (!focusable.length) return;
+            const first = focusable[0];
+            const last = focusable[focusable.length - 1];
+            if (event.shiftKey && document.activeElement === first) {
+              event.preventDefault();
+              last.focus();
+            } else if (!event.shiftKey && document.activeElement === last) {
+              event.preventDefault();
+              first.focus();
+            }
+          }}
+          className="fixed inset-0 z-50 grid h-full w-full place-items-center bg-black/50 p-4"
+        >
+          <section className="mari-editor-panel w-full max-w-md space-y-3 p-3 shadow-xl">
+            <h3 id="ltm-unsaved-title" className="text-base font-semibold">
+              {localizeUi("ui.longTermMemory.memoryvault.unsavedNavigationTitle")}
+            </h3>
+            <p id="ltm-unsaved-description" className="text-sm text-[var(--muted-foreground)]">
+              {localizeUi("ui.longTermMemory.memoryvault.unsavedNavigationDescription")}
+            </p>
+            <div className="flex flex-wrap justify-end gap-2">
+              <Button data-ltm-unsaved-stay onClick={() => finishUnsavedDecision("stay")}>
+                {localizeUi("ui.longTermMemory.memoryvault.keepEditing")}
+              </Button>
+              <Button destructive onClick={() => finishUnsavedDecision("discard")}>
+                {localizeUi("ui.longTermMemory.memoryvault.discardAndContinue")}
+              </Button>
+              <Button primary onClick={() => finishUnsavedDecision("save")}>
+                {localizeUi("ui.longTermMemory.memoryvault.saveAndContinue")}
+              </Button>
+            </div>
+          </section>
+        </dialog>
+      ) : null}
+      {renamingSectionKey ? (
+        <dialog
+          ref={renameDialogRef}
+          aria-modal="true"
+          aria-labelledby="ltm-rename-detail-title"
+          onCancel={(event) => {
+            event.preventDefault();
+            // Like the disabled Cancel button, Escape keeps the dialog open while the rename runs.
+            if (busy) return;
+            setRenamingSectionKey(null);
+            setRenamedSectionKey("");
+            setRenamePreview(null);
+          }}
+          className="fixed inset-0 z-50 grid h-full w-full place-items-center bg-black/50 p-4"
+        >
+          <section className="mari-editor-panel w-full max-w-md space-y-3 p-3 shadow-xl">
+            <h3 id="ltm-rename-detail-title" className="text-base font-semibold">
+              {localizeUi("ui.longTermMemory.memoryvault.renameDetails")}
+            </h3>
+            <label className="block space-y-1 text-xs font-medium">
+              <span>{localizeUi("ui.longTermMemory.memoryvault.nameThisDetail")}</span>
+              <input
+                className={inputClass}
+                value={renamedSectionKey}
+                aria-label={localizeUi("ui.longTermMemory.memoryvault.newSectionName")}
+                onChange={(event) => setRenamedSectionKey(event.target.value)}
+              />
+              <span className="block text-[var(--muted-foreground)]">
+                {localizeUi("ui.longTermMemory.memoryvault.storedKey")}:{" "}
+                {normalizeDetailName(renamedSectionKey) || localizeUi("ui.longTermMemory.memoryvault.notSet")}
+              </span>
+            </label>
+            {renamePreview ? (
+              <p className="text-xs text-[var(--muted-foreground)]">
+                {localizeUi("ui.longTermMemory.memoryvault.renamePreview", {
+                  name: renamedSectionKey,
+                  key: renamePreview.toSectionKey,
+                  count: renamePreview.rewrittenDraftCount,
+                })}
+              </p>
+            ) : null}
+            <div className="flex flex-wrap justify-end gap-2">
+              <Button
+                onClick={() => {
+                  setRenamingSectionKey(null);
+                  setRenamedSectionKey("");
+                  setRenamePreview(null);
+                }}
+                disabled={Boolean(busy)}
+              >
+                {localizeUi("ui.longTermMemory.memoryvault.cancel")}
+              </Button>
+              <Button onClick={() => void previewRename()} disabled={Boolean(busy) || !renamedSectionKey.trim()}>
+                {localizeUi("ui.longTermMemory.memoryvault.previewRename")}
+              </Button>
+              <Button
+                primary
+                onClick={() => void renameSection()}
+                disabled={Boolean(busy) || !renamedSectionKey.trim()}
+              >
+                {localizeUi("ui.longTermMemory.memoryvault.saveDetailName")}
+              </Button>
+            </div>
+          </section>
+        </dialog>
+      ) : null}
     </section>
   );
 }

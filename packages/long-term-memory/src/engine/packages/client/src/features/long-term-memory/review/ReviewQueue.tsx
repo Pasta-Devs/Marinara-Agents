@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Check, ChevronRight, Loader2, X } from "lucide-react";
 import {
   type LtmDraftLinkChoice,
@@ -350,12 +350,15 @@ export default function ReviewQueue({
     queryKey: [...queryKeys.notes, "review-context", contextNoteIds],
     queryFn: ({ signal }) => requestNotesByIds<LtmNote>(contextNoteIds, signal, true),
     enabled: review.isSuccess && rejectedSuggestions.isSuccess,
+    // A changed id list keeps the last context on screen; Accept stays off until the new one loads.
+    placeholderData: keepPreviousData,
   });
   const noteById = useMemo(() => new Map((notes.data ?? []).map((note) => [note.id, note])), [notes.data]);
   const reviewContextBusy =
     review.isSuccess && rejectedSuggestions.isSuccess && !notes.isError && (!notes.isSuccess || notes.isFetching);
+  const reviewContextLoading = reviewContextBusy && !notes.isSuccess;
   const reviewContextFailed = notes.isError;
-  const reviewContextReady = notes.isSuccess && !notes.isFetching;
+  const reviewContextReady = notes.isSuccess && !notes.isFetching && !notes.isPlaceholderData;
   const missingContextTitle = reviewContextFailed
     ? localizeUi("ui.longTermMemory.reviewqueue.memoryContextUnavailable")
     : reviewContextBusy
@@ -1966,7 +1969,7 @@ export default function ReviewQueue({
     !review.data?.sources.length &&
     !rejectedSuggestions.data?.suggestions.length &&
     !savedIdentityChoices.data?.suggestions.some((suggestion) => suggestion.identityResolution);
-  const workspaceUnavailable = reviewQueueEmpty || reviewContextBusy || reviewContextFailed;
+  const workspaceUnavailable = reviewQueueEmpty || reviewContextLoading || reviewContextFailed;
   const reviewDataUnavailable =
     review.isLoading || review.isError || rejectedSuggestions.isLoading || rejectedSuggestions.isError;
 
@@ -2072,7 +2075,7 @@ export default function ReviewQueue({
           </Button>
         </StatusSurface>
       ) : null}
-      {reviewContextBusy ? (
+      {reviewContextLoading ? (
         <StatusSurface busy>{localizeUi("ui.longTermMemory.reviewqueue.loadingMemoryContext")}</StatusSurface>
       ) : null}
       {reviewContextFailed ? (
@@ -2095,8 +2098,16 @@ export default function ReviewQueue({
           content: (
             <div data-ltm-review-navigator className="space-y-3">
               <header className="space-y-1 px-1">
-                <h2 className="text-base font-semibold tracking-tight">
+                <h2 className="flex items-center gap-2 text-base font-semibold tracking-tight">
                   {localizeUi("ui.longTermMemory.reviewqueue.reviewQueue")}
+                  {reviewContextBusy && !reviewContextLoading ? (
+                    <Loader2
+                      aria-hidden="true"
+                      data-ltm-review-context-refreshing
+                      size="0.875rem"
+                      className="animate-spin text-[var(--muted-foreground)] motion-reduce:animate-none"
+                    />
+                  ) : null}
                 </h2>
                 <ReviewProgress {...reviewProgress} />
               </header>

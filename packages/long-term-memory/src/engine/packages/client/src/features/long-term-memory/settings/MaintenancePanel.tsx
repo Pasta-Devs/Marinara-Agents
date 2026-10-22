@@ -566,6 +566,8 @@ export function MaintenancePanel({
             aria-label={localizeUi("ui.longTermMemory.memorysettings.chooseBackup")}
             accept="application/json,.json"
             className="sr-only"
+            tabIndex={-1}
+            aria-hidden="true"
             onChange={(event) => {
               const file = event.target.files?.[0];
               if (file) void previewBackup(file);

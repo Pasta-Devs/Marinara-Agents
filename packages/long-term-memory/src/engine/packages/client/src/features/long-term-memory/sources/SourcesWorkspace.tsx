@@ -1279,7 +1279,12 @@ export default function SourcesWorkspace({
             data-ltm-source-select={row.sourceId}
           />
         ) : null}
-        <span className="min-w-0 flex-1">
+        {/* The row's onClick opens the source, so Enter and Space on this button open it too. */}
+        <button
+          type="button"
+          data-ltm-source-open={row.sourceId}
+          className="min-w-0 flex-1 text-left focus-visible:outline-none"
+        >
           <span className="flex flex-wrap items-center gap-2">
             <strong className="truncate text-sm">{row.title}</strong>
             <span
@@ -1290,7 +1295,7 @@ export default function SourcesWorkspace({
             </span>
           </span>
           <span className="mt-1 block truncate text-xs text-[var(--muted-foreground)]">{row.summary}</span>
-        </span>
+        </button>
         {ready ? (
           <IconButton
             icon={FileInput}

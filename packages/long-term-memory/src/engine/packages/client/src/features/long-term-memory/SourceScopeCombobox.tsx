@@ -139,6 +139,7 @@ export function SourceScopeCombobox({
           : optionIds.length - 1
         : (currentIndex + direction + optionIds.length) % optionIds.length;
     setHighlightedId(optionIds[nextIndex]!);
+    document.getElementById(`${listId}-option-${optionIds[nextIndex]}`)?.scrollIntoView({ block: "nearest" });
   };
   const handleTabKey = (event: KeyboardEvent<HTMLButtonElement>, index: number) => {
     const nextIndex = nextTabIndex(event.key, index, categories.length);
