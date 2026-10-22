@@ -360,12 +360,14 @@ async function main() {
         false,
         "backup export must succeed and leave out fields this version does not know",
       );
-      await updateLtmExtractionConfig({ aiKeywordExtraction: true }, root);
+      assert.equal((await getLtmExtractionConfig(root)).finishCutOffAnswers, false, "finishCutOffAnswers defaults off");
+      await updateLtmExtractionConfig({ aiKeywordExtraction: true, finishCutOffAnswers: true }, root);
       assert.equal(
         JSON.parse(await readFile(ltmExtractionConfigPath(root), "utf8")).someNewExtractionSetting,
         true,
         "saving extraction settings must keep a newer field",
       );
+      assert.equal((await getLtmExtractionConfig(root)).finishCutOffAnswers, true, "finishCutOffAnswers saves");
       await writeFile(ltmSettingsPath(root), '{"version":1,"someNewSetting":true,"longTermMemoryBudgetTokens":"x"}\n');
       await assert.rejects(getLtmGlobalSettings(root), /expected number/i, "an invalid known field must still fail");
 

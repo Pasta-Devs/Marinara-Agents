@@ -291,6 +291,7 @@ const ltmExtractionSettingsFields = {
   promptTemplates: ltmPromptTemplatesSchema,
   activePromptTemplateIdsByMode: ltmActivePromptTemplateIdsByModeSchema.optional(),
   aiKeywordExtraction: z.boolean().optional(),
+  finishCutOffAnswers: z.boolean().optional(),
   useExtractionAgentOnGameMode: z.boolean().optional(),
 };
 
@@ -337,6 +338,7 @@ export const ltmResolvedExtractionSettingsSchema = z
     activePromptTemplateId: z.string().min(1).max(64).nullable(),
     activePromptTemplateIdsByMode: ltmActivePromptTemplateIdsByModeSchema,
     aiKeywordExtraction: z.boolean(),
+    finishCutOffAnswers: z.boolean(),
     useExtractionAgentOnGameMode: z.boolean(),
   })
   .strict();

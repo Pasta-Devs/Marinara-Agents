@@ -159,6 +159,7 @@ function extractionForm(settings: LtmExtractionSettingsPatch): ExtractionForm {
     promptTemplates: resolved.promptTemplates ?? [],
     activePromptTemplateIdsByMode: resolved.activePromptTemplateIdsByMode ?? {},
     aiKeywordExtraction: resolved.aiKeywordExtraction ?? false,
+    finishCutOffAnswers: resolved.finishCutOffAnswers ?? false,
     useExtractionAgentOnGameMode: resolved.useExtractionAgentOnGameMode ?? false,
     ...(resolved.systemPrompt === undefined ? {} : { systemPrompt: resolved.systemPrompt }),
     ...(resolved.activePromptTemplateId === undefined
@@ -815,6 +816,17 @@ export default function MemorySettings({
               setExtractionFormState({
                 ...extractionFormState,
                 maxOutputTokens: value,
+              })
+            }
+          />
+          <Toggle
+            label={localizeUi("ui.longTermMemory.memorysettings.finishCutOffAnswers")}
+            help={localizeUi("ui.longTermMemory.memorysettings.whenTheModelsAnswerStopsAtTheOutputLimit")}
+            checked={extractionFormState.finishCutOffAnswers}
+            onChange={(value) =>
+              setExtractionFormState({
+                ...extractionFormState,
+                finishCutOffAnswers: value,
               })
             }
           />

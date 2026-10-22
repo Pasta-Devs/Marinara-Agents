@@ -474,6 +474,7 @@ async function extractLongTermMemoryFromSourceNoteInner(
         usesPromptTemplate: Boolean(extractionConfig.activePromptTemplateId),
         hasPromptOverride: extractionConfig.systemPrompt !== DEFAULT_LTM_EXTRACTION_PROMPTS_BY_MODE[resolvedMode],
         aiKeywordExtraction: extractionConfig.aiKeywordExtraction,
+        finishCutOffAnswers: extractionConfig.finishCutOffAnswers,
       },
     },
   });
@@ -535,6 +536,7 @@ async function extractLongTermMemoryFromSourceNoteInner(
     allowedBuckets,
     mode: resolvedMode,
     aiKeywordExtraction: extractionConfig.aiKeywordExtraction,
+    finishCutOffAnswers: extractionConfig.finishCutOffAnswers,
     resolveSubjectNames: true,
     trustedSubjectCatalog: options.trustedSubjectCatalog,
   };
@@ -612,6 +614,7 @@ async function extractLongTermMemoryFromSourceNoteInner(
       mode: resolvedMode,
       sourceHash,
       allowedBuckets,
+      finishCutOffAnswers: extractionConfig.finishCutOffAnswers,
       eventSubjectIdentityKeys: options.trustedSubjectCatalog
         ? trustedLtmCharacterAliasIdentifiers(options.trustedSubjectCatalog)
         : undefined,
