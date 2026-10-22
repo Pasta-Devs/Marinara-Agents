@@ -791,8 +791,10 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
                   data-ltm-surface="vault-health-warning"
                   className="min-h-12 justify-between px-3 py-2 text-sm font-medium"
                 >
-                  <span className="flex min-w-0 items-center gap-2">
-                    <TriangleAlert aria-hidden="true" size="1rem" className="shrink-0" />
+                  <span className="flex min-w-0 flex-1 items-center gap-2">
+                    {healthNeedsDangerTone ? (
+                      <TriangleAlert aria-hidden="true" size="1rem" className="shrink-0" />
+                    ) : null}
                     <span className="font-semibold">{healthLabel}</span>
                     <span className="hidden truncate sm:inline">
                       {localizeUi("ui.longTermMemory.longtermmemorydetail.checkSettingsMaintenanceReindexRecallData")}
@@ -811,8 +813,7 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
                   data-ltm-surface="semantic-recall-warning"
                   className="min-h-12 justify-between px-3 py-2 text-sm font-medium"
                 >
-                  <span className="flex min-w-0 items-center gap-2">
-                    <TriangleAlert aria-hidden="true" size="1rem" className="shrink-0" />
+                  <span className="flex min-w-0 flex-1 items-center gap-2">
                     <span className="font-semibold">
                       {localizeUi("ui.longTermMemory.longtermmemorydetail.savedButNotSearchable")}
                     </span>

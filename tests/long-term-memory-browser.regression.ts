@@ -2662,6 +2662,21 @@ async function main() {
       await page.locator('[data-ltm-surface="detail"]').waitFor();
       await page.locator('[data-ltm-navigation="desktop"] [data-ltm-destination="review"]').click();
       await page.locator("[data-ltm-review-state-warning]").waitFor();
+      // #1588: a warning carries an icon and the strong editor border, not only a tone attribute.
+      const reviewStateWarning = page.locator("[data-ltm-review-state-warning]");
+      assert.equal(await reviewStateWarning.locator("[data-ltm-status-icon]").count(), 1);
+      assert.equal(
+        await reviewStateWarning.evaluate((surface) => {
+          const probe = document.createElement("div");
+          probe.style.border = "1px solid var(--marinara-editor-border-strong)";
+          surface.parentElement?.append(probe);
+          const expected = getComputedStyle(probe).borderTopColor;
+          probe.remove();
+          const actual = getComputedStyle(surface).borderTopColor;
+          return actual === expected ? "strong" : `${actual} is not ${expected}`;
+        }),
+        "strong",
+      );
       reviewFingerprintRevision = 0;
       await setupGuide.click();
       await page.getByRole("button", { name: "Next: How recall works" }).click();
@@ -4617,6 +4632,16 @@ async function main() {
       assert.ok(navigatorBox);
       await page.locator('[data-ltm-surface="vault-health-warning"]').waitFor();
       assert.equal(await page.locator('[data-ltm-surface="vault-health-warning"] [data-ltm-info]').count(), 1);
+      // #1588: the warning banner shows StatusSurface's icon once, not a second one of its own.
+      assert.equal(
+        await page.locator('[data-ltm-surface="vault-health-warning"]').getAttribute("data-ltm-status"),
+        "warning",
+      );
+      assert.equal(await page.locator('[data-ltm-surface="vault-health-warning"] [data-ltm-status-icon]').count(), 1);
+      assert.equal(
+        await page.locator('[data-ltm-surface="vault-health-warning"] svg.lucide-triangle-alert').count(),
+        1,
+      );
       await page.locator('[data-ltm-surface="vault-health-warning"] [data-ltm-info]').click();
       const healthInfoPanel = page.locator("[data-ltm-info-panel]").last();
       await healthInfoPanel.waitFor();

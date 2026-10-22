@@ -180,7 +180,7 @@ function resultToneClass(status: string) {
   return tone === "success"
     ? "border border-[var(--border)] bg-[var(--marinara-editor-accent)]/15"
     : tone === "warning"
-      ? "border"
+      ? "border border-[var(--marinara-editor-border-strong)]"
       : tone === "danger"
         ? "border border-[var(--destructive)]/40 bg-[var(--destructive)]/10 text-[var(--destructive)]"
         : "border border-[var(--border)] bg-[var(--secondary)]";

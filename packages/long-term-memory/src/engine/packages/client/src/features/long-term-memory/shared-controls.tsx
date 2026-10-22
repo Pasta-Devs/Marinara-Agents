@@ -10,7 +10,7 @@ import {
   type ReactNode,
 } from "react";
 import { createPortal } from "react-dom";
-import { Info, Loader2, type LucideIcon } from "lucide-react";
+import { Info, Loader2, TriangleAlert, type LucideIcon } from "lucide-react";
 import { useLtmTranslation } from "./localization";
 
 let activePopover: { id: string; close: () => void } | null = null;
@@ -331,6 +331,7 @@ export function StatusSurface({
   busy = false,
   compact = false,
   className = "",
+  style,
   ...props
 }: {
   children: ReactNode;
@@ -342,18 +343,30 @@ export function StatusSurface({
   const toneClass = {
     neutral: "text-[var(--marinara-editor-muted)]",
     success: "text-[var(--marinara-editor-accent)]",
-    warning: "",
+    warning: "text-[var(--marinara-editor-text)]",
     danger: "border-[var(--destructive)]/35 text-[var(--destructive)]",
   }[tone];
+  // No Engine defines a warning color, so a warning says so with an icon and the strong editor border. The border
+  // is inline because the Engine's unlayered .mari-editor-panel border outranks utility classes.
+  const warning = tone === "warning";
   return (
     <div
       role={tone === "danger" ? "alert" : "status"}
       aria-live="polite"
       data-ltm-status={tone}
-      className={`${compact ? "rounded-md border border-[var(--border)] bg-[var(--background)]/75 px-2 py-1.5 text-[0.625rem]" : "mari-editor-panel mari-editor-panel--soft min-h-11 px-3 text-xs"} flex items-center gap-2 ${toneClass} ${className}`}
+      className={`${compact ? `rounded-md border ${warning ? "" : "border-[var(--border)]"} bg-[var(--background)]/75 px-2 py-1.5 text-[0.625rem]` : "mari-editor-panel mari-editor-panel--soft min-h-11 px-3 text-xs"} flex items-center gap-2 ${toneClass} ${className}`}
+      style={warning ? { borderColor: "var(--marinara-editor-border-strong)", ...style } : style}
       {...props}
     >
       {busy ? <Loader2 aria-hidden="true" size="0.875rem" className="animate-spin motion-reduce:animate-none" /> : null}
+      {warning ? (
+        <TriangleAlert
+          aria-hidden="true"
+          size={compact ? "0.75rem" : "1rem"}
+          className="shrink-0"
+          data-ltm-status-icon
+        />
+      ) : null}
       {children}
     </div>
   );
