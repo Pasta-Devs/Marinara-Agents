@@ -227,6 +227,16 @@ async function checkPackage(id) {
   return { lines, failed };
 }
 
-const results = await Promise.all(packages.map(checkPackage));
-for (const { lines } of results) for (const [method, text] of lines) console[method](text);
-process.exit(results.some((result) => result.failed) ? 1 : 0);
+// Each package settles on its own: one package whose setup or compiler fails must not discard the others' reports.
+const results = await Promise.allSettled(packages.map(checkPackage));
+let failed = false;
+for (const [index, result] of results.entries()) {
+  if (result.status === "fulfilled") {
+    for (const [method, text] of result.value.lines) console[method](text);
+    failed ||= result.value.failed;
+  } else {
+    console.error(`${packages[index]}: ${result.reason?.message ?? result.reason}`);
+    failed = true;
+  }
+}
+process.exitCode = failed ? 1 : 0;

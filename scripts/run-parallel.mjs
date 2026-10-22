@@ -8,18 +8,24 @@
  * collapsed log group on GitHub Actions. Every command runs even after one fails, so one run shows every failure, and
  * the exit status is 1 if any command failed.
  *
- * ponytail: no per-command timeout; the job's own timeout bounds a hung command.
+ * Output is held until a command finishes, so a command that never finishes would print nothing. Each command
+ * therefore has a ceiling (--timeout, default 600 s): a command still running at the ceiling is killed and reported as
+ * timed out by name.
  */
 import { spawn } from "node:child_process";
 import { availableParallelism } from "node:os";
 
-const USAGE = "Usage: node scripts/run-parallel.mjs [--jobs <n>] [<command>...]  (no commands: one per line on stdin)";
+const USAGE =
+  "Usage: node scripts/run-parallel.mjs [--jobs <n>] [--timeout <seconds>] [<command>...]  (no commands: one per line on stdin)";
 
 const args = process.argv.slice(2);
 let jobs = availableParallelism();
-if (args[0] === "--jobs") {
-  if (!/^[1-9]\d*$/.test(args[1] ?? "")) usage("--jobs takes a positive whole number.");
-  jobs = Number(args.splice(0, 2)[1]);
+let timeoutSeconds = 600;
+while (args[0] === "--jobs" || args[0] === "--timeout") {
+  if (!/^[1-9]\d*$/.test(args[1] ?? "")) usage(`${args[0]} takes a positive whole number.`);
+  if (args[0] === "--jobs") jobs = Number(args[1]);
+  else timeoutSeconds = Number(args[1]);
+  args.splice(0, 2);
 }
 const commands = (args.length ? args : (await readStdin()).split("\n"))
   .map((line) => line.trim())
@@ -41,13 +47,16 @@ let next = 0;
 async function worker() {
   while (next < commands.length) {
     const command = commands[next++];
-    const { code, signal, output } = await run(command);
-    const status = code === 0 ? "passed" : `failed (${signal ?? `exit ${code}`})`;
+    const { code, signal, timedOut, output } = await run(command);
+    const status =
+      code === 0
+        ? "passed"
+        : `failed (${timedOut ? `timed out after ${timeoutSeconds}s` : (signal ?? `exit ${code}`)})`;
     const title = `${command}: ${status} in ${seconds(output.started)}s`;
     if (code !== 0) failures += 1;
     // A failure stays expanded so the log shows it; GitHub collapses groups by default.
     if (onActions && code !== 0) console.log(`::error::${title}`);
-    if (onActions && code === 0) console.log(`::group::${title}`);
+    else if (onActions) console.log(`::group::${title}`);
     else console.log(`+ ${title}`);
     process.stdout.write(output.text);
     if (onActions && code === 0) console.log("::endgroup::");
@@ -58,9 +67,22 @@ function run(command) {
   return new Promise((resolve) => {
     const output = { started: performance.now(), text: "" };
     const child = spawn(command, { shell: true, stdio: ["ignore", "pipe", "pipe"] });
-    for (const stream of [child.stdout, child.stderr]) stream.on("data", (chunk) => (output.text += chunk));
-    child.on("error", (error) => resolve({ code: 1, signal: null, output: { ...output, text: `${error}\n` } }));
-    child.on("close", (code, signal) => resolve({ code: code ?? 1, signal, output }));
+    for (const stream of [child.stdout, child.stderr]) {
+      stream.setEncoding("utf8");
+      stream.on("data", (chunk) => (output.text += chunk));
+    }
+    let timedOut = false;
+    const timer = setTimeout(() => {
+      timedOut = true;
+      child.kill("SIGKILL");
+    }, timeoutSeconds * 1000);
+    child.on("error", (error) =>
+      resolve({ code: 1, signal: null, timedOut, output: { ...output, text: `${error}\n` } }),
+    );
+    child.on("close", (code, signal) => {
+      clearTimeout(timer);
+      resolve({ code: code ?? 1, signal, timedOut, output });
+    });
   });
 }
 
@@ -78,4 +100,5 @@ await Promise.all(Array.from({ length: Math.min(jobs, commands.length) }, worker
 console.log(
   `${commands.length - failures} of ${commands.length} commands passed in ${seconds(started)}s (${jobs} jobs)`,
 );
-process.exit(failures ? 1 : 0);
+// Not process.exit: on a pipe the last writes may still be queued, and exiting now could cut them off.
+process.exitCode = failures ? 1 : 0;

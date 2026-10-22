@@ -12,6 +12,8 @@ jobs:
   catalog-validate:
     name: Catalog validation
     runs-on: ubuntu-latest
+    # The job takes about 2.5 minutes; a stall should fail here, not at GitHub's six-hour default.
+    timeout-minutes: 15
     permissions:
       contents: read
 
