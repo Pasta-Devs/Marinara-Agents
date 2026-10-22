@@ -441,7 +441,7 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
         }
         [data-ltm-activation-label] {
           color: var(--marinara-editor-text);
-          font-size: 0.8125rem;
+          font-size: 0.75rem;
           font-weight: 600;
           line-height: 1.25;
         }
