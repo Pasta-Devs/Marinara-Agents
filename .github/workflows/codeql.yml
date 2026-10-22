@@ -29,10 +29,17 @@ jobs:
       matrix:
         language: [actions, javascript-typescript]
     steps:
+      # artifacts/ holds 2.5 GB of package zips that CodeQL never reads; the rest of the tree is about 80 MB. A sparse
+      # checkout fetches with --filter=blob:none, so the zips are never transferred (#1578). Non-cone mode is needed
+      # because cone mode can only include directories, not exclude one.
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+          sparse-checkout: |
+            /*
+            !/artifacts/
+          sparse-checkout-cone-mode: false
 
       - name: Initialize CodeQL
         uses: github/codeql-action/init@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4.39.1
