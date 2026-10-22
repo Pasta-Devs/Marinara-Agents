@@ -90,6 +90,8 @@ const actionLabelKeys: Record<string, string> = {
   evidence_unit_response: "ui.longTermMemory.activityview.actionAiExtraction",
   evidence_unit_json_parse: "ui.longTermMemory.activityview.actionReadExtractionResult",
   recall_explanation: "ui.longTermMemory.activityview.actionMemoryRecall",
+  package_list: "ui.longTermMemory.activityview.actionReadByAnotherAgent",
+  package_recall: "ui.longTermMemory.activityview.actionReadByAnotherAgent",
   evidence_units_compiled: "ui.longTermMemory.activityview.actionCompileEvidence",
   candidate_reconciliation: "ui.longTermMemory.activityview.actionCandidateReconciliation",
   draft_deferred: "ui.longTermMemory.activityview.actionDraftDeferred",
@@ -768,7 +770,7 @@ export default function ActivityView({
         return;
       setActionState({ text: "", tone: "success" });
       await request<unknown>("/debug-log", "DELETE");
-      await invalidateLtmQueries(queryClient, [queryKeys.activity]);
+      await invalidateLtmQueries(queryClient, [queryKeys.activity, queryKeys.packageReaders]);
       setActionState({ text: localizeUi("ui.longTermMemory.activityview.clearedLog"), tone: "success" });
     } catch (error) {
       setActionState({

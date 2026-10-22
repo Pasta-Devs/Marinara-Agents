@@ -33,6 +33,7 @@ type GlobalForm = {
   longTermMemoryIncludeResolved: boolean;
   longTermMemoryRecallPreamble: string;
   longTermMemoryDebug: boolean;
+  longTermMemoryShareWithPackages: boolean;
   sourcesAvailabilityModes?: ("conversation" | "roleplay" | "game")[];
 };
 type ExtractionForm = Required<LtmExtractionSettingsPatch> & {
@@ -90,6 +91,7 @@ function settingsForm(settings: LtmGlobalSettings): GlobalForm {
     longTermMemoryIncludeResolved: settings.longTermMemoryIncludeResolved ?? false,
     longTermMemoryRecallPreamble: settings.longTermMemoryRecallPreamble ?? "",
     longTermMemoryDebug: settings.longTermMemoryDebug ?? false,
+    longTermMemoryShareWithPackages: settings.longTermMemoryShareWithPackages ?? true,
     ...(settings.sourcesAvailabilityModes ? { sourcesAvailabilityModes: settings.sourcesAvailabilityModes } : {}),
   };
 }
@@ -202,6 +204,11 @@ export default function MemorySettings({
   const connections = useQuery({
     queryKey: ["long-term-memory", "language-connections"],
     queryFn: () => requestHost<LanguageConnection[]>("/api/connections"),
+  });
+  const packageReaders = useQuery({
+    queryKey: queryKeys.packageReaders,
+    queryFn: () =>
+      request<{ readers: Array<{ caller: string | null; lastReadAt: string }> }>("/settings/package-readers"),
   });
   const availableConnections = (connections.data ?? []).filter(
     (connection) => connection.provider !== "image_generation" && connection.provider !== "video_generation",
@@ -695,6 +702,27 @@ export default function MemorySettings({
             })
           }
         />
+        <div className="space-y-1">
+          <Toggle
+            label={localizeUi("ui.longTermMemory.memorysettings.otherAgentsCanReadMemories")}
+            help={localizeUi("ui.longTermMemory.memorysettings.otherAgentsReadOnlyMemoriesAvailableEverywhere")}
+            checked={globalForm.longTermMemoryShareWithPackages}
+            onChange={(value) => setGlobalForm({ ...globalForm, longTermMemoryShareWithPackages: value })}
+          />
+          {packageReaders.data ? (
+            <p className="text-xs text-[var(--muted-foreground)]">
+              {packageReaders.data.readers.length
+                ? localizeUi("ui.longTermMemory.memorysettings.readLatelyBy", {
+                    names: packageReaders.data.readers
+                      .map(
+                        (reader) => reader.caller ?? localizeUi("ui.longTermMemory.memorysettings.anAgentWithoutAName"),
+                      )
+                      .join(", "),
+                  })
+                : localizeUi("ui.longTermMemory.memorysettings.noOtherAgentHasReadMemoriesLately")}
+            </p>
+          ) : null}
+        </div>
       </section>
 
       <section

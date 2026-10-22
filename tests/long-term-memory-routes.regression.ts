@@ -36,6 +36,7 @@ const EXPECTED_ROUTES = [
   "GET /api/long-term-memory/rejected-suggestions",
   "GET /api/long-term-memory/scope-targets",
   "GET /api/long-term-memory/settings",
+  "GET /api/long-term-memory/settings/package-readers",
   "GET /api/long-term-memory/status",
   "PATCH /api/long-term-memory/notes/:id",
   "POST /api/long-term-memory/backup/import",

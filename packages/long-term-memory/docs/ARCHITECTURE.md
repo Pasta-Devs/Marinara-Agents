@@ -10,9 +10,10 @@ server  -> persistence, extraction, retrieval, routes, runtime integration
 client  -> vault, review queue, sources, settings, and injection summary
 ```
 
-The server registers `long-term-memory:storage` (a filtered note list other
-packages read, from `services/`) and `long-term-memory:runtime` (chat recall,
-receipts and the vault lock for the Engine) with the Engine and mounts
+The server registers `long-term-memory:recall` and `long-term-memory:storage`
+(read-only memories for other packages, from `services/`; see Services for
+Other Packages) and `long-term-memory:runtime` (chat recall, receipts and the
+vault lock for the Engine) with the Engine and mounts
 privileged routes under `/api/long-term-memory`. Registration is in
 `server-entry.ts`; `routes.ts` composes one file per area under `routes/`
 (notes, drafts, imports, maintenance, settings), with shared limits, errors and
@@ -75,7 +76,7 @@ folder owns one area.
 | `drafts/` | the draft store, projection and review, applying drafts to notes, rejected suggestions | `draft-store`, `draft-projector`, `draft-review`, `reconciliation`, `rejected-suggestions` |
 | `maintenance/` | integrity checks and repair, note transfer, legacy adoption and quarantine, the debug log | `maintenance`, `note-transfer`, `legacy-adoption`, `legacy-source-quarantine`, `debug-log` |
 | `sources/` | Engine chats and summaries read as sources | `interop`, `source-identity` |
-| `services/` | what other packages can look up through the Engine: a character's memories available everywhere (`storage-read`) | `storage-read` |
+| `services/` | what other packages can look up through the Engine: recalled memories about the accounts they write as (`recall`), a character's memories available everywhere (`storage-read`), the reads switch and the reader list | `recall`, `storage-read` |
 
 The folders are areas, not enforced layers. `persistence/` still imports from
 the areas above it: `storage.ts` uses `drafts/draft-projector`,
@@ -201,6 +202,46 @@ are display text only: the clients show the "source changed" note from
 `spaceId` (vectors stay usable) while a switched sidecar model keeps its
 label.
 
+## Services for Other Packages
+
+Other packages look these up with `api.runtime.services.get(key)`. The Engine
+does not say who asks, so `caller` is the name a package gives itself. Each read
+is a debug-log line ("Read by another Agent" in Activity), and Memory Settings
+lists the ten names that read most lately, so Clear log empties that list. Both
+services give nothing while "Other Agents can read memories" is off.
+
+`long-term-memory:recall`, version 1:
+
+```ts
+recall({
+  caller?: string,         // up to 64 letters, digits and . _ : -, else dropped
+  queryText: string,       // 1-8,000 characters: what the package is about to write
+  characterIds?: string[], // the accounts it writes as, up to 20
+  personaId?: string,      // only when the persona's own account writes
+  mode?: "roleplay" | "conversation",
+  maxTokens?: number,      // 50-4,000, default 800
+  signal?: AbortSignal,
+}): Promise<{ version: 1; sections: { noteId; type; title?; text }[] } | null>
+```
+
+- `null` for invalid input (no query, or no character or persona), an aborted
+  call or reads turned off; `{ version: 1, sections: [] }` when nothing matches.
+  Other errors are thrown; malformed vault files are skipped, as in chat recall.
+- Sections are memories available to the named characters or persona
+  everywhere: never limited to a chat or group, archived, game-only or tone
+  memories. A character or relationship memory comes back only when one of its
+  subjects is a named account. Resolved threads and events are included.
+- Order: thread, timeline_event, relationship, character, world, scene, and
+  within a type the order chat recall ranks them in (the user's recall
+  weights). `text` is the recalled part of each memory, within `maxTokens` and
+  at most 20 recalled parts in all. Recall receipts and usage are not touched.
+- A new section field can be added without a version change; removing or
+  renaming one raises `version`.
+
+`long-term-memory:storage` offers `storage.listNotes({ caller?, type?,
+characterIds })`: whole notes available to those characters everywhere, not
+imported sources, archived or game-only (Slurp's flavour brief).
+
 ## Scope and Safety
 
 Scope resolution is shared between chat context and server retrieval. Changes
@@ -209,9 +250,9 @@ and global targets. Inspect shared `scope.ts`, `identity/chat-scope.ts`, and
 `extraction/scoped-targets.ts` before changing identity or visibility behavior.
 
 Any installed package can look up a registered service, so whatever `services/`
-hands out lists only memories available to the named characters everywhere:
-never memories limited to a chat or group, imported sources, archived or
-game-only memories, drafts, or the vault folder.
+hands out lists only memories available to the named characters or persona
+everywhere: never memories limited to a chat or group, imported sources,
+archived or game-only memories, drafts, or the vault folder.
 
 For storage or recovery changes, inspect `paths.ts`, `atomic-json.ts`,
 `mutation-transaction.ts`, `vault-lock.ts`, `restore-recovery.ts`, and the

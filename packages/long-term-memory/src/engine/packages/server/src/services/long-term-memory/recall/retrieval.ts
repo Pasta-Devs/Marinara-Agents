@@ -45,6 +45,8 @@ export type RetrieveLongTermMemoryInput = MemoryRecallEmbeddingOptions & {
   promptNormalizedEstimate?: boolean;
   /** Restrict ranking to these note types before budgeting, so bounded callers do not lose targets to unrelated chunks. */
   noteTypes?: readonly LtmNote["type"][];
+  /** Restrict ranking to these notes before budgeting, for callers that select notes by more than scope. */
+  noteIds?: ReadonlySet<string>;
   /** Reconciliation needs every matching chunk, even when two notes share identical text. */
   dedupeExactText?: boolean;
   /** Preloaded recall index so callers can run several bounded queries without reloading the vault. */
@@ -110,6 +112,7 @@ export async function retrieveLongTermMemory(input: RetrieveLongTermMemoryInput)
       .filter((chunk) => input.includeResolved || chunk.status !== "resolved")
       .filter((chunk) => !input.mode || chunk.modes?.includes(input.mode))
       .filter((chunk) => !input.noteTypes || input.noteTypes.includes(chunk.noteType))
+      .filter((chunk) => !input.noteIds || input.noteIds.has(chunk.noteId))
       .filter((chunk) => {
         const exclusiveCharacterIds = input.exclusiveCharacterIds;
         if (exclusiveCharacterIds !== undefined) {

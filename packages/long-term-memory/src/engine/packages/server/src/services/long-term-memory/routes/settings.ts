@@ -8,6 +8,7 @@ import { getLtmGlobalSettings, ltmGeneratedStopWords, updateLtmGlobalSettings } 
 import { buildStopWordSet } from "../recall/keyword-extract.js";
 import { withLtmVaultLock } from "../persistence/vault-lock.js";
 import { resetLongTermMemorySettings } from "../persistence/backup-restore.js";
+import { listLtmPackageReaders } from "../services/storage-read.js";
 import type { FastifyInstance } from "fastify";
 import {
   MAINTENANCE_BODY_LIMIT_BYTES,
@@ -24,6 +25,7 @@ export function registerSettingsRoutes(app: FastifyInstance, runtime: LtmRouteRu
   const effectiveIndexStopWords = (settings: LtmResolvedGlobalSettings) =>
     JSON.stringify([...buildStopWordSet(ltmGeneratedStopWords(settings))].sort());
   app.get("/settings", async () => getLtmGlobalSettings(root));
+  app.get("/settings/package-readers", async () => ({ readers: await listLtmPackageReaders(root) }));
   // Settings that change the recall index persist first, then rebuild under the
   // reentrant vault lock so a concurrent recall never sees the new settings beside a
   // stale index. A failed rebuild is reported as deferred without rolling the save back.
