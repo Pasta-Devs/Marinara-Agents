@@ -2677,6 +2677,11 @@ async function main() {
         }),
         "strong",
       );
+      assert.equal(
+        await reviewStateWarning.evaluate((surface) => getComputedStyle(surface).paddingTop),
+        "8px",
+        "a status surface keeps its text and actions off its border",
+      );
       reviewFingerprintRevision = 0;
       await setupGuide.click();
       await page.getByRole("button", { name: "Next: How recall works" }).click();
@@ -3380,7 +3385,13 @@ async function main() {
         assert.match(searchedEstimated, /AI extraction/u);
         assert.match(searchedEstimated, /500 ms/u);
         await showEvents();
-        await searchBox.fill("");
+        // #1588: clearing the search keeps focus in the search box.
+        await activity.getByRole("button", { name: "Clear activity search" }).click();
+        assert.deepEqual(
+          await searchBox.evaluate((input) => [input === document.activeElement, (input as HTMLInputElement).value]),
+          [true, ""],
+          "clearing the activity search keeps focus in the empty search box",
+        );
         // A recorded recall is an ordinary history row naming its source chat, and
         // its selected/rejected memory names read before the run parameters.
         const recall = await operation("recall");
@@ -4441,6 +4452,46 @@ async function main() {
           );
         }
         await focusPage.close();
+      }
+      {
+        // #1588: clearing the memory search keeps focus in the search box, Create detail moves focus into the
+        // new detail's text, and Cancel returns it to the button that opened the form.
+        const detailPage = await browserContext.newPage();
+        await detailPage.goto(`http://127.0.0.1:${address.port}/`);
+        await detailPage.evaluate(() => customElements.whenDefined("marinara-capability-long-term-memory"));
+        await detailPage.evaluate(`(() => {
+          const element = document.createElement("marinara-capability-long-term-memory");
+          element.setAttribute("view", "detail");
+          element.capabilityProps = { confirmAction: () => true };
+          document.body.append(element);
+        })()`);
+        const detailSearch = detailPage.getByLabel("Search memories", { exact: true });
+        await detailSearch.fill("Scoped desktop memory");
+        await detailPage.getByRole("button", { name: "Clear memory search" }).click();
+        assert.deepEqual(
+          await detailSearch.evaluate((input) => [input === document.activeElement, (input as HTMLInputElement).value]),
+          [true, ""],
+          "clearing the memory search keeps focus in the empty search box",
+        );
+        await detailSearch.fill("Scoped desktop memory");
+        const detailCard = detailPage
+          .locator('[data-ltm-note-type="world"]')
+          .filter({ hasText: /^Scoped desktop memory/u })
+          .first();
+        await detailCard.waitFor();
+        await detailCard.locator("button").first().click();
+        const createDetail = detailPage.getByRole("button", { name: "Create new memory detail" });
+        await createDetail.waitFor();
+        await createDetail.click();
+        await detailPage.locator("[data-ltm-details]").getByRole("button", { name: "Cancel", exact: true }).click();
+        await detailPage.waitForFunction(
+          () => document.activeElement?.textContent?.trim() === "Create new memory detail",
+        );
+        await createDetail.click();
+        await detailPage.locator("[data-ltm-details]").getByLabel("New detail name").fill("habits");
+        await detailPage.getByRole("button", { name: "Create detail", exact: true }).click();
+        await detailPage.waitForFunction(() => document.activeElement?.id === "ltm-section-habits");
+        await detailPage.close();
       }
       await page.locator('[data-ltm-navigation="desktop"] [data-ltm-destination="vault"]').click();
       await page.evaluate((version) => {
@@ -5869,6 +5920,19 @@ async function main() {
       assert.match(
         await page.locator('[data-ltm-vault-feedback] [role="alert"]').innerText(),
         /Could not undo the archive/u,
+      );
+      // #1588: the danger border applies; the Engine's unlayered panel border used to outrank its utility class.
+      assert.equal(
+        await page.locator('[data-ltm-vault-feedback] [role="alert"]').evaluate((surface) => {
+          const probe = document.createElement("div");
+          probe.style.border = "1px solid color-mix(in oklab, var(--destructive) 35%, transparent)";
+          surface.parentElement?.append(probe);
+          const expected = getComputedStyle(probe).borderTopColor;
+          probe.remove();
+          const actual = getComputedStyle(surface).borderTopColor;
+          return actual === expected ? "danger" : `${actual} is not ${expected}`;
+        }),
+        "danger",
       );
       // The rollback call re-archives only the successfully restored active note, leaving the failed resolved note untouched
       const rollbackCall = batchNotesCalls.at(-1);

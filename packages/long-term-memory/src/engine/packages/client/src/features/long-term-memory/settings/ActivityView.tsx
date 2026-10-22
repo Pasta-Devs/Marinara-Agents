@@ -647,6 +647,7 @@ export default function ActivityView({
   };
   const [chip, setChip] = useState<DebugChip>("all");
   const [search, setSearch] = useState("");
+  const searchInputRef = useRef<HTMLInputElement>(null);
   const [selectedOperationId, setSelectedOperationId] = useState<string | null>(null);
   const [activePane, setActivePane] = useState<LtmWorkspacePane>("navigator");
   const [limit, setLimit] = useState(200);
@@ -1756,6 +1757,7 @@ export default function ActivityView({
                     className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[var(--muted-foreground)]"
                   />
                   <input
+                    ref={searchInputRef}
                     className={`${inputClass} pl-9 pr-10`}
                     data-ltm-debug-search
                     value={search}
@@ -1768,7 +1770,10 @@ export default function ActivityView({
                       type="button"
                       aria-label={localizeUi("ui.longTermMemory.activityview.clearSearch")}
                       title={localizeUi("ui.longTermMemory.activityview.clearSearch")}
-                      onClick={() => setSearch("")}
+                      onClick={() => {
+                        setSearch("");
+                        searchInputRef.current?.focus();
+                      }}
                       className="absolute right-1 top-1/2 grid h-11 w-11 -translate-y-1/2 place-items-center rounded-md text-[var(--muted-foreground)] hover:bg-[var(--accent)]"
                     >
                       <X aria-hidden="true" size="0.875rem" />

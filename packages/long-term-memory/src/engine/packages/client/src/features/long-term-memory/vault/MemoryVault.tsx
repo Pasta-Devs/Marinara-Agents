@@ -442,6 +442,7 @@ export default function MemoryVault({
   const contextKey = props.chatId ?? "__global__";
   const initialNavigatorState = navigatorStates.get(contextKey);
   const [search, setSearch] = useState(initialNavigatorState?.search ?? "");
+  const searchInputRef = useRef<HTMLInputElement>(null);
   const [target, setTarget] = useState<Target | null>(() => sessionTargets.get(contextKey) ?? null);
   const [secondaryTarget, setSecondaryTarget] = useState<Target | null>(
     () => sessionSecondaryTargets.get(contextKey) ?? null,
@@ -511,6 +512,7 @@ export default function MemoryVault({
   const visibleKeywordError = keywordError?.input === keywordInput ? keywordError.message : "";
   const [sectionKey, setSectionKey] = useState("");
   const [addingSection, setAddingSection] = useState(false);
+  const addSectionButtonRef = useRef<HTMLButtonElement>(null);
   const [renamingSectionKey, setRenamingSectionKey] = useState<string | null>(null);
   const [renamedSectionKey, setRenamedSectionKey] = useState("");
   const [renamePreview, setRenamePreview] = useState<LtmRenameNoteSectionPreviewResponse | null>(null);
@@ -2254,6 +2256,7 @@ export default function MemoryVault({
     });
     setSectionKey("");
     setAddingSection(false);
+    requestAnimationFrame(() => document.getElementById(`ltm-section-${key}`)?.focus());
   };
   const changeNewMemoryType = (type: LtmNoteType) => {
     if (!draft) return;
@@ -2393,6 +2396,7 @@ export default function MemoryVault({
                     className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[var(--muted-foreground)]"
                   />
                   <input
+                    ref={searchInputRef}
                     className={`${inputClass} pl-9 pr-10`}
                     value={search}
                     onChange={(event) => setSearch(event.target.value)}
@@ -2404,7 +2408,10 @@ export default function MemoryVault({
                       type="button"
                       aria-label={localizeUi("ui.longTermMemory.memoryvault.clearMemorySearch")}
                       title={localizeUi("ui.longTermMemory.memoryvault.clearMemorySearch")}
-                      onClick={() => setSearch("")}
+                      onClick={() => {
+                        setSearch("");
+                        searchInputRef.current?.focus();
+                      }}
                       className="absolute right-1 top-1/2 grid h-11 w-11 -translate-y-1/2 place-items-center rounded-md text-[var(--muted-foreground)] hover:bg-[var(--accent)]"
                     >
                       <X aria-hidden="true" size="0.875rem" />
@@ -3085,7 +3092,7 @@ export default function MemoryVault({
                               {localizeUi("ui.longTermMemory.memoryvault.memorySections")}
                             </h4>
                             {!addingSection ? (
-                              <Button onClick={() => setAddingSection(true)}>
+                              <Button ref={addSectionButtonRef} onClick={() => setAddingSection(true)}>
                                 <Plus aria-hidden="true" size="1rem" className="shrink-0" />
                                 {localizeUi("ui.longTermMemory.memoryvault.createNewMemoryDetail")}
                               </Button>
@@ -3117,6 +3124,7 @@ export default function MemoryVault({
                                 onClick={() => {
                                   setAddingSection(false);
                                   setSectionKey("");
+                                  requestAnimationFrame(() => addSectionButtonRef.current?.focus());
                                 }}
                               >
                                 {localizeUi("ui.longTermMemory.memoryvault.cancel")}

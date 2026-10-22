@@ -344,18 +344,23 @@ export function StatusSurface({
     neutral: "text-[var(--marinara-editor-muted)]",
     success: "text-[var(--marinara-editor-accent)]",
     warning: "text-[var(--marinara-editor-text)]",
-    danger: "border-[var(--destructive)]/35 text-[var(--destructive)]",
+    danger: "text-[var(--destructive)]",
   }[tone];
-  // No Engine defines a warning color, so a warning says so with an icon and the strong editor border. The border
-  // is inline because the Engine's unlayered .mari-editor-panel border outranks utility classes.
+  // No Engine defines a warning color, so a warning says so with an icon and the strong editor border. Tone
+  // borders are inline because the Engine's unlayered .mari-editor-panel border outranks utility classes.
   const warning = tone === "warning";
+  const borderColor = warning
+    ? "var(--marinara-editor-border-strong)"
+    : tone === "danger"
+      ? "color-mix(in oklab, var(--destructive) 35%, transparent)"
+      : undefined;
   return (
     <div
       role={tone === "danger" ? "alert" : "status"}
       aria-live="polite"
       data-ltm-status={tone}
-      className={`${compact ? `rounded-md border ${warning ? "" : "border-[var(--border)]"} bg-[var(--background)]/75 px-2 py-1.5 text-[0.625rem]` : "mari-editor-panel mari-editor-panel--soft min-h-11 px-3 text-xs"} flex items-center gap-2 ${toneClass} ${className}`}
-      style={warning ? { borderColor: "var(--marinara-editor-border-strong)", ...style } : style}
+      className={`${compact ? `rounded-md border ${borderColor ? "" : "border-[var(--border)]"} bg-[var(--background)]/75 px-2 py-1.5 text-[0.625rem]` : "mari-editor-panel mari-editor-panel--soft min-h-11 px-3 py-2 text-xs"} flex items-center gap-2 ${toneClass} ${className}`}
+      style={borderColor ? { borderColor, ...style } : style}
       {...props}
     >
       {busy ? <Loader2 aria-hidden="true" size="0.875rem" className="animate-spin motion-reduce:animate-none" /> : null}
