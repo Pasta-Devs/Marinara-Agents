@@ -4553,10 +4553,17 @@ async function main() {
           await reviewContextHeld;
           await route.continue();
         });
+        // The refresh is announced through a status line that is already mounted, so its text change is heard.
+        const reviewContextStatus = page.locator(
+          '[data-ltm-surface="review-queue"] [role="status"][data-ltm-review-context-status]',
+        );
+        assert.equal(await reviewContextStatus.count(), 1, "the context status line is mounted before the accept");
+        assert.equal(await reviewContextStatus.textContent(), "");
         await accept();
         await page.waitForFunction((id) => !document.querySelector(`[data-ltm-review-mutation="${id}"]`), mutationId);
         assert.equal(await reviewWorkspace.isVisible(), true, "the queue stays on screen while its context reloads");
         assert.equal(await page.locator("[data-ltm-review-context-refreshing]").count(), 1);
+        assert.equal(await reviewContextStatus.textContent(), "Loading memory context.");
         assert.deepEqual(
           await page
             .locator('[data-ltm-surface="review-queue"] [data-ltm-review-action]')
@@ -4568,6 +4575,7 @@ async function main() {
         releaseReviewContext();
         await page.locator("[data-ltm-review-context-refreshing]").waitFor({ state: "detached" });
         await page.unroute(reviewContextRoute);
+        assert.equal(await reviewContextStatus.textContent(), "");
         assert.equal(
           await page.evaluate(
             () => (window as Window & { reviewWorkspaceHidden?: { hidden: boolean } }).reviewWorkspaceHidden?.hidden,

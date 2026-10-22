@@ -357,6 +357,7 @@ export default function ReviewQueue({
   const reviewContextBusy =
     review.isSuccess && rejectedSuggestions.isSuccess && !notes.isError && (!notes.isSuccess || notes.isFetching);
   const reviewContextLoading = reviewContextBusy && !notes.isSuccess;
+  const reviewContextRefreshing = reviewContextBusy && !reviewContextLoading;
   const reviewContextFailed = notes.isError;
   const reviewContextReady = notes.isSuccess && !notes.isFetching && !notes.isPlaceholderData;
   const missingContextTitle = reviewContextFailed
@@ -2088,6 +2089,10 @@ export default function ReviewQueue({
           </Button>
         </StatusSurface>
       ) : null}
+      {/* Always mounted, so screen readers hear a refresh while the queue stays on screen. */}
+      <span data-ltm-review-context-status role="status" aria-live="polite" className="sr-only">
+        {reviewContextRefreshing ? localizeUi("ui.longTermMemory.reviewqueue.loadingMemoryContext") : null}
+      </span>
       <LtmWorkspace
         className={workspaceUnavailable || reviewDataUnavailable ? "hidden" : ""}
         activeMobilePane={mobilePane}
@@ -2100,7 +2105,7 @@ export default function ReviewQueue({
               <header className="space-y-1 px-1">
                 <h2 className="flex items-center gap-2 text-base font-semibold tracking-tight">
                   {localizeUi("ui.longTermMemory.reviewqueue.reviewQueue")}
-                  {reviewContextBusy && !reviewContextLoading ? (
+                  {reviewContextRefreshing ? (
                     <Loader2
                       aria-hidden="true"
                       data-ltm-review-context-refreshing
