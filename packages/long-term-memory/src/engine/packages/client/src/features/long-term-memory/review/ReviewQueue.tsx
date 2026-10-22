@@ -860,21 +860,28 @@ export default function ReviewQueue({
     [activeDraftRows],
   );
   const selectedRows = activeDraftRows.filter((row) => selectedIds.has(row.mutation.id));
-  const eligibleIds = new Set<string>();
-  for (const source of review.data?.sources ?? []) {
-    if (!noteById.has(source.sourceNoteId)) continue;
-    for (const item of source.drafts) {
-      if (item.freshness !== "fresh" || item.blockReasons.length) continue;
-      for (const mutation of item.draft.mutations) {
-        if (!item.draft.appliedMutationIds?.includes(mutation.id)) eligibleIds.add(mutation.id);
+  const eligibleIds = useMemo(() => {
+    const ids = new Set<string>();
+    for (const source of review.data?.sources ?? []) {
+      if (!noteById.has(source.sourceNoteId)) continue;
+      for (const item of source.drafts) {
+        if (item.freshness !== "fresh" || item.blockReasons.length) continue;
+        for (const mutation of item.draft.mutations) {
+          if (!item.draft.appliedMutationIds?.includes(mutation.id)) ids.add(mutation.id);
+        }
       }
     }
-  }
+    return ids;
+  }, [noteById, review.data]);
   const eligibleSelectedRows = selectedRows.filter((row) => eligibleIds.has(row.mutation.id));
-  const skippableDraftIds = new Set(
-    (review.data?.sources ?? []).flatMap((source) =>
-      source.drafts.filter((item) => item.draft.status === "pending").map((item) => item.draft.id),
-    ),
+  const skippableDraftIds = useMemo(
+    () =>
+      new Set(
+        (review.data?.sources ?? []).flatMap((source) =>
+          source.drafts.filter((item) => item.draft.status === "pending").map((item) => item.draft.id),
+        ),
+      ),
+    [review.data],
   );
   const skippableSelectedRows = selectedRows.filter((row) => skippableDraftIds.has(row.draftId));
   const invalidSelectedEdits = eligibleSelectedRows.filter((row) => {
@@ -1612,13 +1619,18 @@ export default function ReviewQueue({
     const previewChanges = hideProjection ? [] : row.changes;
     const expanded = expandedMutationIds.has(row.mutation.id);
     const preflight = preflightRows.get(row.mutation.id);
-    const rowRequestKey = acceptRequestKey(buildAcceptRequests([row], rows));
-    const rowPreflighted = preflightKey === rowRequestKey;
     const rowPreflight = preflightByDraftId.get(row.draftId)?.selectedMutationIds.includes(row.mutation.id)
       ? preflight
       : undefined;
     const preflightBlocked = rowPreflight?.status === "blocked";
-    const preflightReady = rowPreflighted && rowPreflight?.status === "ready";
+    // The request key walks every row and serialises the edits, so it is built only for a row whose preflight
+    // came back ready, not for every row on every keystroke.
+    // ponytail: rows with a ready preflight still cost rows x rows per render; past a few hundred ready rows,
+    // build one key map per draft per render and look each row up in it.
+    const preflightReady =
+      rowPreflight?.status === "ready" &&
+      preflightKey !== null &&
+      preflightKey === acceptRequestKey(buildAcceptRequests([row], rows));
     const dependencyCount = dependencyCounts.get(row.mutation.id) ?? 0;
     const mutationLabel = localizeUi(mutationLabels[mutation.kind]);
     const dispositionLabel = localizeUi(dispositionLabels[row.disposition]);

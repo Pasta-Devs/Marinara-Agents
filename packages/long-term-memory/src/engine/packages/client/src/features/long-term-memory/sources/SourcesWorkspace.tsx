@@ -244,6 +244,11 @@ function extractionResultLabel(
   return localizeUi("ui.longTermMemory.sourcesworkspace.readyForReview");
 }
 
+/** True when two preview keys differ only in their trailing search text. */
+function onlySearchDiffers(previous: readonly unknown[] | undefined, key: readonly unknown[]) {
+  return previous !== undefined && JSON.stringify(previous.slice(0, -1)) === JSON.stringify(key.slice(0, -1));
+}
+
 function handleTabKey<T extends string>(
   event: KeyboardEvent<HTMLButtonElement>,
   ids: readonly T[],
@@ -299,6 +304,8 @@ export default function SourcesWorkspace({
   const [availabilitySaving, setAvailabilitySaving] = useState(false);
   const availabilitySavingRef = useRef(false);
   const [sourceQuery, setSourceQuery] = useState("");
+  // The previews search by the settled text, so typing sends one request per pause instead of one per keystroke.
+  const [committedSourceQuery, setCommittedSourceQuery] = useState("");
   const [sourceStatusFilter, setSourceStatusFilter] = useState<SourceStatusFilter>("all");
   const [selectionMode, setSelectionMode] = useState(false);
   const [sourceGroupsOpen, setSourceGroupsOpen] = useState<Record<Source, { ready: boolean; imported: boolean }>>({
@@ -568,8 +575,21 @@ export default function SourcesWorkspace({
   const sourceScope = sourceTarget?.sourceScope;
   const previewScope = source === "chats" ? sourceScope : undefined;
   const effectiveImportScope = `${sourceTargetId}:${[...selectedDestinationTargetIds].sort().join(",")}`;
+  const previewQueryKey = [...queryKeys.preview, "pages", source, previewScope, modeFilter, committedSourceQuery];
+  const lorebookPreviewQueryKey = [
+    ...queryKeys.lorebookPreview,
+    "pages",
+    previewScope,
+    modeFilter,
+    committedSourceQuery,
+  ];
+  const previewEnabled = sourceContextMatchesProps && sourceTargetResolved && source !== "lorebooks";
+  const lorebookPreviewEnabled = sourceContextMatchesProps && sourceTargetResolved && source === "lorebooks";
   const preview = useInfiniteQuery({
-    queryKey: [...queryKeys.preview, "pages", source, previewScope, modeFilter, sourceQuery],
+    queryKey: previewQueryKey,
+    // A new search keeps the rows on screen until its results arrive, instead of emptying the list.
+    placeholderData: (previous, previousQuery) =>
+      previewEnabled && onlySearchDiffers(previousQuery?.queryKey, previewQueryKey) ? previous : undefined,
     initialPageParam: undefined as string | undefined,
     getNextPageParam: (lastPage: LtmInteropPreviewResponse) => lastPage.nextCursor ?? undefined,
     queryFn: ({ pageParam, signal }) =>
@@ -585,14 +605,18 @@ export default function SourcesWorkspace({
           ...(pageParam ? { cursor: pageParam } : {}),
           ...(previewScope ? { sourceScope: previewScope } : {}),
           ...(modeFilter !== "all" ? { mode: modeFilter } : {}),
-          ...(sourceQuery.trim() ? { query: sourceQuery } : {}),
+          ...(committedSourceQuery.trim() ? { query: committedSourceQuery } : {}),
         },
         signal,
       ),
-    enabled: sourceContextMatchesProps && sourceTargetResolved && source !== "lorebooks",
+    enabled: previewEnabled,
   });
   const lorebookPreview = useInfiniteQuery({
-    queryKey: [...queryKeys.lorebookPreview, "pages", previewScope, modeFilter, sourceQuery],
+    queryKey: lorebookPreviewQueryKey,
+    placeholderData: (previous, previousQuery) =>
+      lorebookPreviewEnabled && onlySearchDiffers(previousQuery?.queryKey, lorebookPreviewQueryKey)
+        ? previous
+        : undefined,
     initialPageParam: undefined as string | undefined,
     getNextPageParam: (lastPage: LtmLorebookPreviewResponse) => lastPage.nextCursor ?? undefined,
     queryFn: ({ pageParam, signal }) =>
@@ -607,11 +631,11 @@ export default function SourcesWorkspace({
           ...(pageParam ? { cursor: pageParam } : {}),
           ...(previewScope ? { sourceScope: previewScope } : {}),
           ...(modeFilter !== "all" ? { mode: modeFilter } : {}),
-          ...(sourceQuery.trim() ? { query: sourceQuery } : {}),
+          ...(committedSourceQuery.trim() ? { query: committedSourceQuery } : {}),
         },
         signal,
       ),
-    enabled: sourceContextMatchesProps && sourceTargetResolved && source === "lorebooks",
+    enabled: lorebookPreviewEnabled,
   });
   const sourceDetails = useQuery({
     queryKey: [...queryKeys.preview, "details", source, previewScope, modeFilter, focusedFlatSourceId],
@@ -871,6 +895,7 @@ export default function SourcesWorkspace({
       focusedLorebookByType.current[source] = selectedLorebookId;
       openLorebookEntryByType.current[source] = openLorebookEntryId;
       setSourceQuery(sourceQueryByType.current[next]);
+      setCommittedSourceQuery(sourceQueryByType.current[next]);
       setSourceStatusFilter(sourceStatusByType.current[next]);
       setFocusedFlatSourceId(focusedSourceByType.current[next]);
       setSelectedLorebookId(focusedLorebookByType.current[next]);
@@ -970,6 +995,11 @@ export default function SourcesWorkspace({
     focusedLorebookByType.current[source] = selectedLorebookId;
     openLorebookEntryByType.current[source] = openLorebookEntryId;
   }, [focusedFlatSourceId, openLorebookEntryId, selectedLorebookId, source, sourceQuery, sourceStatusFilter]);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => setCommittedSourceQuery(sourceQuery), 250);
+    return () => window.clearTimeout(timer);
+  }, [sourceQuery]);
 
   useEffect(() => {
     const searching = Boolean(sourceQuery.trim());
@@ -1880,7 +1910,12 @@ export default function SourcesWorkspace({
                       })}
                     </div>
                   </div>
-                  <div id={`ltm-source-results-${source}`} role="list" className="divide-y divide-[var(--border)]">
+                  <div
+                    id={`ltm-source-results-${source}`}
+                    role="list"
+                    aria-busy={lorebookPreview.isPlaceholderData}
+                    className="divide-y divide-[var(--border)]"
+                  >
                     {activeLorebooks.map((book) => (
                       <div key={book.id} role="listitem">
                         <button
@@ -2421,7 +2456,12 @@ export default function SourcesWorkspace({
                       </div>
                     ) : null}
                   </header>
-                  <div id={`ltm-source-results-${source}`} role="list" className="divide-y divide-[var(--border)]">
+                  <div
+                    id={`ltm-source-results-${source}`}
+                    role="list"
+                    aria-busy={preview.isPlaceholderData}
+                    className="divide-y divide-[var(--border)]"
+                  >
                     {sourceStatusFilter === "all" ? (
                       <>
                         <details

@@ -329,7 +329,10 @@ assert.match(availabilityTabRail, /@container \(min-width: 22rem\)[\s\S]*repeat\
 assert.doesNotMatch(availabilityTabRail, /grid-template-columns: minmax\(0, 1fr\)/u);
 assert.match(availabilityTabRail, /border-radius: 0/u);
 assert.match(availabilityTabRail, /data-ltm-availability-panel=\{activeKind\}[\s\S]*className="space-y-3 p-3"/u);
-assert.match(availabilityTabRail, /<div data-ltm-availability-list className="max-h-52 overflow-y-auto">/u);
+assert.match(
+  availabilityTabRail,
+  /<div ref=\{listRef\} data-ltm-availability-list className="max-h-52 overflow-y-auto">/u,
+);
 assert.doesNotMatch(availabilityTabRail, /border-t border-\[var\(--marinara-editor-divider\)\]/u);
 assert.match(availabilityTabRail, /nextTabIndex\(event\.key/u);
 assert.doesNotMatch(availabilityTabRail, /aria-expanded/u);

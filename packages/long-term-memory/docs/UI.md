@@ -91,6 +91,9 @@ rejected-suggestion cleanup preserve access to relevant diagnostics.
 Import and refresh require a source scope and a destination scope. Source and
 destination target pickers support search, pinned current targets, grouped
 target kinds, keyboard selection, and explicit capacity/validation feedback.
+Place pickers and the destination rail render 100 places per list or memory
+group, with a Show more row for the rest. The source search waits for a pause
+in typing and keeps the current rows, marked busy, until its results arrive.
 Long-running source tasks expose running, completed, cancelled, partial-failure,
 and failed states through the Sources navigation and workspace feedback. A
 running task can be cancelled and its latest result can be revisited.

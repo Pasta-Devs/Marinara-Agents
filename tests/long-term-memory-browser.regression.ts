@@ -4042,6 +4042,62 @@ async function main() {
         await capPage.locator("[data-ltm-selection-count]").filter({ hasText: "250 selected" }).waitFor();
         await capPage.close();
       }
+      // #1588: each memory group in the place picker shows 100 places at a time, so with more than 100 places
+      // holding memories, "Show N places with no memories" still opens its group.
+      {
+        const groupCapPage = await browserContext.newPage();
+        await groupCapPage.route(
+          (url) => url.pathname.endsWith("/api/long-term-memory/scope-targets"),
+          async (route) => {
+            const response = await route.fetch();
+            const targets = await response.json();
+            const capChats = Array.from({ length: 101 }, (_, index) => ({
+              id: `cap-chat-${index}`,
+              label: `Cap chat ${index}`,
+              mode: "conversation",
+              groupId: null,
+              personaId: null,
+              characterIds: [],
+            }));
+            await route.fulfill({
+              response,
+              json: {
+                ...targets,
+                chats: [...targets.chats, ...capChats],
+                memoryPresence: [...targets.memoryPresence, ...capChats.map((chat) => ({ chatId: chat.id }))],
+              },
+            });
+          },
+        );
+        await groupCapPage.goto(`http://127.0.0.1:${address.port}/`);
+        await groupCapPage.evaluate(() => customElements.whenDefined("marinara-capability-long-term-memory"));
+        await groupCapPage.evaluate(`(() => {
+          const element = document.createElement("marinara-capability-long-term-memory");
+          element.setAttribute("view", "detail");
+          element.capabilityProps = { confirmAction: () => true };
+          document.body.append(element);
+        })()`);
+        await groupCapPage.locator('[data-ltm-navigation="desktop"] [data-ltm-destination="vault"]').click();
+        const groupCapPicker = groupCapPage.locator('[data-ltm-scope-picker="vault"]');
+        const groupCapWith = groupCapPicker.locator('[data-ltm-scope-presence="with-memories"]');
+        const groupCapWithout = groupCapPicker.locator('[data-ltm-scope-presence="no-memories"]');
+        await groupCapPicker.locator("[data-ltm-scope-picker-trigger]").click();
+        await groupCapPicker.locator('[data-ltm-scope-tab="chat"]').click();
+        assert.equal(await groupCapWith.locator("[data-ltm-scope-option]").count(), 100);
+        await groupCapPicker.locator("[data-ltm-scope-show-no-memories]").click();
+        await groupCapWithout.waitFor({ timeout: 5000 });
+        assert.equal(
+          await groupCapWithout.locator('[data-ltm-scope-option][data-highlighted="true"]').count(),
+          1,
+          "opening the group highlights its first place",
+        );
+        const groupCapWithMore = groupCapWith.locator("[data-ltm-scope-show-more]");
+        assert.match((await groupCapWithMore.innerText()).trim(), /^Show \d more$/u);
+        await groupCapWithMore.click();
+        assert.equal(await groupCapWithMore.count(), 0);
+        assert.equal(await groupCapWith.locator('[data-ltm-scope-option="chat:cap-chat-100"]').count(), 1);
+        await groupCapPage.close();
+      }
       // #1376: Reset settings reloads the forms. The Maintenance panel stays mounted, so its
       // result survives and its buttons stay disabled until the settings refetch resolves.
       {
@@ -6148,7 +6204,29 @@ async function main() {
       );
       assert.equal(await sourceScopePicker.locator('[data-ltm-scope-option="chat:desktop-chat"]').count(), 1);
       assert.equal(await sourceScopePicker.locator('[data-ltm-scope-option="all"]').count(), 1);
+      // #1588: the list renders 100 places at a time. The fixture's 100 bulk chats come before the group, so the
+      // group is one "Show more" away, and the next tab or search starts again at 100. From the search box the
+      // arrows reach "Show more" and Enter moves the highlight to the first place it adds.
+      const sourceScopeShowMore = sourceScopePicker.locator("[data-ltm-scope-show-more]");
+      const sourceScopeSearch = sourceScopePicker.locator("[data-ltm-scope-picker-popup] input");
+      assert.equal(await sourceScopePicker.locator("[data-ltm-scope-option]").count(), 102);
+      assert.equal(await sourceScopePicker.locator('[data-ltm-scope-option="group:conversation-a"]').count(), 0);
+      assert.equal((await sourceScopeShowMore.innerText()).trim(), "Show 6 more");
+      await sourceScopeSearch.focus();
+      await page.keyboard.press("ArrowUp");
+      await page.keyboard.press("ArrowUp");
+      assert.equal(
+        await sourceScopeSearch.getAttribute("aria-activedescendant"),
+        await sourceScopeShowMore.getAttribute("id"),
+      );
+      await page.keyboard.press("Enter");
       assert.equal(await sourceScopePicker.locator('[data-ltm-scope-option="group:conversation-a"]').count(), 1);
+      assert.equal(await sourceScopeShowMore.count(), 0);
+      assert.equal(
+        await sourceScopeSearch.getAttribute("aria-activedescendant"),
+        await sourceScopePicker.locator("[data-ltm-scope-option]").nth(102).getAttribute("id"),
+        "Enter on Show more highlights the 101st place",
+      );
       await sourceScopePicker.locator('[data-ltm-scope-tab="chat"]').click();
       assert.equal(await sourceScopePicker.locator('[data-ltm-scope-tab="chat"][data-active="true"]').count(), 1);
       assert.equal(await sourceScopePicker.locator('[data-ltm-scope-tabpanel="chat"][role="tabpanel"]').count(), 1);
@@ -6163,6 +6241,7 @@ async function main() {
       assert.equal(await sourceScopePicker.locator('[role="tabpanel"] [role="listbox"]').count(), 1);
       assert.equal(await sourceScopePicker.locator('[data-ltm-scope-option="chat:desktop-chat"]').count(), 1);
       assert.equal(await sourceScopePicker.locator('[data-ltm-scope-option="all"]').count(), 1);
+      await sourceScopeShowMore.click();
       assert.match(
         await sourceScopePicker.locator('[data-ltm-scope-option="group:conversation-a"]').innerText(),
         /^Conversation A\nAll branches$/u,
@@ -6195,6 +6274,7 @@ async function main() {
         "branch family is searchable by a member branch display name",
       );
       await sourceScopePicker.locator("[data-ltm-scope-picker-popup] input").fill("");
+      await sourceScopeShowMore.click();
       assert.equal(
         await sourceScopePicker.locator('[role="option"][data-ltm-scope-option="chat:memory-chat"]').count(),
         0,
@@ -6295,7 +6375,19 @@ async function main() {
       await chatsSelectToggle.waitFor();
       await page.locator('[data-ltm-source-status-filter="all"]').click();
 
-      // The All tab lists every place kind and labels each row with its kind.
+      // The All tab lists every place kind and labels each row with its kind. #1588: the rail renders 100 places
+      // at a time, and the fixture's 100 bulk chats push the rest behind "Show more"; a new tab starts again at 100.
+      const destinationShowMore = destinationPanel.locator("[data-ltm-availability-show-more]");
+      assert.equal(await destinationPanel.locator("[data-ltm-availability-target]").count(), 100);
+      assert.equal((await destinationShowMore.innerText()).trim(), "Show 6 more");
+      await destinationShowMore.click();
+      // Show more focuses the first place it adds, the 101st row.
+      await page.waitForFunction(
+        () =>
+          document.activeElement ===
+          document.querySelectorAll("#ltm-destination-scope-control [data-ltm-availability-target]")[100],
+      );
+      assert.equal(await destinationShowMore.count(), 0);
       for (const [target, kind] of [
         ["chat:desktop-chat", "Chat · Current Final Branch"],
         ["chat:conversation-a", "Chat · All branches"],
@@ -6310,6 +6402,7 @@ async function main() {
 
       // Each kind tab shows only its own places; a chat with branches is one Chats row.
       await destinationPanel.locator('[data-ltm-availability-tab="chat"]').click();
+      await destinationShowMore.click();
       assert.equal(await destinationPanel.locator('[data-ltm-availability-target="chat:desktop-chat"]').count(), 1);
       assert.equal(await destinationPanel.locator('[data-ltm-availability-target="persona:persona-a"]').count(), 0);
       assert.equal(await destinationPanel.locator('[data-ltm-availability-target="chat:conversation-a"]').count(), 1);
@@ -6338,6 +6431,7 @@ async function main() {
 
       // All chats picks every chat that still fits the 100-ID limit, then clears them again.
       await destinationPanel.locator('[data-ltm-availability-tab="chat"]').click();
+      await destinationShowMore.click();
       const allChatsDestination = destinationPanel.locator('[data-ltm-availability-target="chat:all"]');
       assert.equal(await allChatsDestination.getAttribute("aria-pressed"), "false");
       await allChatsDestination.click();
@@ -6406,6 +6500,7 @@ async function main() {
 
       // Capacity: the per-kind 100-ID limit blocks the 100th additional chat.
       await destinationPanel.locator('[data-ltm-availability-tab="chat"]').click();
+      await destinationShowMore.click();
       const toggleBulkDestinationChats = async () => {
         for (let index = 0; index < 99; index += 1)
           await destinationPanel
@@ -6683,21 +6778,51 @@ async function main() {
       assert.equal(await importingButton.isEnabled(), true);
       assert.equal(await importingButton.locator("svg").getAttribute("class"), idleIcon);
       await selectedCharacter.check();
-      const searchRestart = page.waitForRequest(
-        (request) =>
-          request.method() === "POST" &&
-          request.url().endsWith("/import/preview") &&
-          request.postDataJSON()?.query === "Navigator",
-      );
-      await page.locator("[data-ltm-source-search]").fill("Navigator");
-      assert.equal(
-        Object.hasOwn((await searchRestart).postDataJSON(), "cursor"),
-        false,
-        "changing search restarts at the first page",
-      );
+      const searchRoute = "**/api/long-term-memory/import/preview";
+      let releaseSearch!: () => void;
+      const searchPending = new Promise<void>((resolve) => {
+        releaseSearch = resolve;
+      });
+      // A failed check below unroutes before the held request continues, so that late continue may find the
+      // route already handled.
+      await page.route(searchRoute, async (route) => {
+        await searchPending;
+        await route.continue().catch(() => undefined);
+      });
+      try {
+        const searchRestart = page.waitForRequest(
+          (request) =>
+            request.method() === "POST" &&
+            request.url().endsWith("/import/preview") &&
+            request.postDataJSON()?.query === "Navigator",
+        );
+        await page.locator("[data-ltm-source-search]").fill("Navigator");
+        assert.equal(
+          Object.hasOwn((await searchRestart).postDataJSON(), "cursor"),
+          false,
+          "changing search restarts at the first page",
+        );
+        // #1588: the rows stay on screen until the search results arrive, and the list says it is loading.
+        assert.equal(
+          await page.locator('[data-ltm-source-row-status][data-ltm-source-id="character-next-page"]').count(),
+          1,
+          "a new search keeps the current rows while it loads",
+        );
+        assert.equal(await page.locator("#ltm-source-results-characters").getAttribute("aria-busy"), "true");
+        const searchResponse = page.waitForResponse(
+          (response) =>
+            response.url().endsWith("/import/preview") && response.request().postDataJSON()?.query === "Navigator",
+        );
+        releaseSearch();
+        await searchResponse;
+      } finally {
+        releaseSearch();
+        await page.unroute(searchRoute);
+      }
       await page
         .locator('[data-ltm-source-row-status][data-ltm-source-id="character-next-page"]')
         .waitFor({ state: "detached" });
+      assert.equal(await page.locator("#ltm-source-results-characters").getAttribute("aria-busy"), "false");
       await page.locator("[data-ltm-source-search]").fill("");
       await page.locator('[data-ltm-source-row-status][data-ltm-source-id="character-next-page"]').waitFor();
       assert.equal(await selectedCharacter.isChecked(), true);
@@ -6814,6 +6939,7 @@ async function main() {
       const destinationChipRemovers = destinationPanel.locator('button[aria-label^="Remove "]');
       while (await destinationChipRemovers.count()) await destinationChipRemovers.first().click();
       await destinationPanel.locator('[data-ltm-availability-tab="chat"]').click();
+      await destinationShowMore.click();
       const wholeChatDestination = destinationPanel.locator('[data-ltm-availability-target="chat:conversation-a"]');
       await wholeChatDestination.click();
       assert.equal(await wholeChatDestination.getAttribute("aria-pressed"), "true");
