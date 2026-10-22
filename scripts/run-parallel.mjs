@@ -82,13 +82,11 @@ function run(command) {
       } catch {
         child.kill("SIGKILL");
       }
-      // Settle when the shell is gone, with the output gathered so far: a survivor that escaped the group could hold
-      // the pipes open and keep `close` from ever firing.
-      child.once("exit", (code, signal) => {
-        child.stdout.destroy();
-        child.stderr.destroy();
-        settle(code, signal);
-      });
+      // The timer itself settles, with the output gathered so far: a survivor that escaped the group could hold the
+      // pipes open and keep `close` from ever firing, and the shell may already have exited.
+      child.stdout.destroy();
+      child.stderr.destroy();
+      settle(null, "SIGKILL");
     }, timeoutSeconds * 1000);
     child.on("error", (error) =>
       resolve({ code: 1, signal: null, timedOut, output: { ...output, text: `${error}\n` } }),

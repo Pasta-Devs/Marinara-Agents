@@ -43,7 +43,7 @@ import { execFile, execFileSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { dirname, join, posix, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { promisify } from "node:util";
+import { inspect, promisify } from "node:util";
 
 const repoRoot = resolve(fileURLToPath(new URL("..", import.meta.url)));
 const engineSources = join(repoRoot, "sources/engine");
@@ -223,18 +223,20 @@ async function checkPackage(id, report) {
   } finally {
     await rm(overlay, { recursive: true, force: true });
   }
-  return { report, failed };
+  return failed;
 }
 
 // Each package settles on its own: a setup or compiler failure is reported by name after whatever that package had
 // already gathered, and never discards the other packages' reports.
 const results = await Promise.all(
-  packages.map((id) => {
+  packages.map(async (id) => {
     const report = [];
-    return checkPackage(id, report).catch((cause) => ({
-      report: [...report, ["error", `${id}: ${cause?.message ?? cause}`]],
-      failed: true,
-    }));
+    try {
+      return { report, failed: await checkPackage(id, report) };
+    } catch (cause) {
+      report.push(["error", `${id}: ${cause instanceof Error ? cause.message : inspect(cause)}`]);
+      return { report, failed: true };
+    }
   }),
 );
 for (const { report } of results) for (const [method, text] of report) console[method](text);
