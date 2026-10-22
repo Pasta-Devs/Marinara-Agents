@@ -74,6 +74,83 @@
         "schemaVersion": 2,
         "capabilityApi": {
           "major": 1,
+          "minor": 341
+        },
+        "builtAgainst": {
+          "engineVersion": "2.5.0",
+          "engineCommit": "25f8df7b0a388fe36f657d69c6fcaa9f27e066ed"
+        },
+        "id": "blackjack",
+        "name": "Blackjack",
+        "version": "1.0.0",
+        "description": "Play Blackjack against the house with Conversation characters. Install to use /blackjack manually in any Conversation chat, or type a message like \"let's play blackjack\" to open the table setup. Characters cannot start a game on their own yet.",
+        "engine": {
+          "min": "2.3.0",
+          "maxExclusive": "4.0.0"
+        },
+        "kind": [
+          "agent",
+          "turn-game"
+        ],
+        "entrypoints": {
+          "agents": "agents.json",
+          "server": "server.mjs",
+          "client": "client.js"
+        },
+        "contributions": {
+          "slots": [
+            "conversation-surface"
+          ],
+          "conversationGame": {
+            "command": "/blackjack",
+            "aliases": [
+              "blackjack",
+              "black jack",
+              "twenty-one"
+            ],
+            "playerLabel": "Table game"
+          }
+        },
+        "files": [
+          {
+            "path": "agents.json",
+            "sha256": "0bab18126b37a8782f05a3b3d6983587dea55f0b12ebe6d0f9b84aa0a20b1216",
+            "bytes": 633
+          },
+          {
+            "path": "server.mjs",
+            "sha256": "a1837084f1898fd55fa1b42f1ad273972fbfa3de930cf1ecbc6cd2d5495e9b2d",
+            "bytes": 17479
+          },
+          {
+            "path": "client.js",
+            "sha256": "86f49d7296e634c7cb9954fe59b1bf262c29ead4da948620ecb109b982ee12b5",
+            "bytes": 162378
+          }
+        ],
+        "permissions": [
+          "agent-runtime",
+          "chat-read",
+          "chat-write",
+          "storage",
+          "ui"
+        ],
+        "restartRequired": true
+      },
+      "category": "misc",
+      "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/blackjack.png",
+      "artifact": {
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/blackjack-1.0.0.zip",
+        "sha256": "43f9607bf5327ccf3444d058a837229b5dcdaf1dc4d51c0ac15d6ab8a4b94dda",
+        "bytes": 182507
+      },
+      "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents#blackjack"
+    },
+    {
+      "manifest": {
+        "schemaVersion": 2,
+        "capabilityApi": {
+          "major": 1,
           "minor": 9
         },
         "builtAgainst": {

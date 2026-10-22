@@ -1,5 +1,16 @@
 # Gacha Forge
 
+## In-app fullscreen and fluid screens (1.9.0)
+
+The fullscreen button beside Settings expands Gacha Forge inside the Engine. Outward arrows enter;
+inward arrows return to the Home browser. Home's tabs, address bar and bookmarks hide while the Engine
+topbar stays available. Screens without the shared Settings bar keep a floating toggle. This also works
+on mobile browsers without native element fullscreen. The game stage fills the available width and
+height in both modes rather than fitting a fixed 16:9 frame. The existing portrait rotation prompt
+remains; landscape phones gain the width previously left in the gutters.
+
+Requires Engine capability API 1.376. Earlier releases described below retain their historical behavior.
+
 Gacha Forge is a standalone gacha game mode: describe a world and it builds the rest — banners to pull on, a cast the model writes and paints for you, and the story, battles and events that grow around them. Lorebooks feed the forge when you have them; a hand-written scenario is enough.
 
 Find the package in **Agents → Download Agents**. Installation requires a restart: once installed and Marinara Engine restarts, **Gacha Forge** appears as a second tab in Home's browser shell. Uninstalling the package removes that tab and stops its routes after restart.
@@ -127,11 +138,17 @@ The two side rails of 1.6.0 are gone: Help and the changelog live only in Settin
 
 **1.8.13 is a world named in Korean, and a phone held sideways.** A location's ID was its name lowercased with everything outside `a-z0-9` turned into dashes (`gs` on the server, `oc` on the client), so `달빛 숲` became an empty ID: the server skipped the place and `/background` refused it, and `숲 1` and `동굴 1` both became `1` and shared one picture. Both sides now keep Unicode letters, marks and digits after NFC (marks too, or Hindi `काला` and `किला` would collide), and cap at 60 code points instead of UTF-16 units; an ASCII name keeps exactly the ID it had. A place already painted under its old lossy ID is still found: the locations document is read through `gsPlaces`, which also answers to each stored place's new ID (from its stored name) without rewriting anything, so nothing is painted twice and two names that used to collide stop sharing. `/background` refuses a slug carrying a path separator, `..` or a control character (`bgSlug`). On iPhone, the package's `:host { all: initial }` undid the Engine's `-webkit-text-size-adjust: 100%`, so Safari enlarged the game's text in landscape; the arena sets it back. The arena caps at `100dvh` (with a `100vh` fallback), a fullscreen arena pads by the safe-area insets, a short landscape screen (`max-height: 500px`) drops the frame's padding, border and shadow and tightens the Settings plates, and a fullscreen toggle the browser cannot honour (iPhone Safari has no element fullscreen) is removed rather than left doing nothing. The 16:9 stage and the orientation handling are unchanged.
 
+**1.8.14 is world creation on a phone held sideways, and a field iPhone zoomed into.** Every screen lives in the 16:9 stage, so on a landscape phone (~874×402) the creator was a 533px-wide box with gutters either side, and its pinned brand row, step tabs, error line and nav took about 250px, leaving the field grid (its only scroll region) 30–70px. On a short landscape screen (`max-height: 500px`) the setup sheet now widens the stage to the arena (`.gf-stage:has(.ob-root)`) and makes `.ob-frame` the one scroll region: the brand and tabs scroll away with the fields, the mark is hidden, the textarea is shorter, and the nav sticks to the bottom on the creator’s `--ink` until a text field has focus (the keyboard is up), when it rejoins the page. Changing step scrolls the frame back to the top and an error scrolls it to the end, where the error sits above the nav (`obScroll`); a desktop frame never scrolls, so both are no-ops there. iOS zooms into any focused field under 16px, and the game’s ramp drew them at 7–9px; the Engine’s own 16px floor stops at the package’s `:host { all: initial }`, so on a coarse pointer the arena sets typed fields to 16px. A mouse keeps the ramp, and the Settings readout and in-game changelog now say 1.8.14.
+
+**1.8.15 is a list that stays where you left it.** Ticking a card for the cast, or a theme for outfits, re-renders the whole list (the cast's `.cs-list` in `bi()`'s `w()`, the theme list in `vi()`) through `innerHTML`. Chromium keeps a scroll box's position across that, but WebKit (every iPhone browser, and Safari on a Mac) resets the list to the top, and every scrolling ancestor with it; on a sideways phone, where 1.8.14 made `.ob-frame` the one scroll region, the whole creator page jumped too. Both renders now note the `scrollTop` of the list and each scrolling ancestor before the rebuild and put them back after it. Changing step still lands at the top (`obScroll`), and the Settings readout and in-game changelog now say 1.8.15.
+
 All generation — world text, cast sheets, portraits, banner art — runs through the Engine profile's own configured model and image connections. The package adds no external services and sends nothing anywhere else.
 
 ## Payloads
 
 `client.js` and `server.mjs` are single-file esbuild bundles contributed from the package's own source tree, which is maintained outside this repository. The artifact zip, manifest hashes, and catalog entry are re-derived from the committed payload bytes by the package builder, so they cannot drift from what ships.
+
+From 1.8.13 on, `client.js` and `server.mjs` have been edited by hand here. For each, `bundle-patches.json` names the last contributed bundle (its commit, sha256 and size) and records each later edit, in order, as a find-and-replace pair; `tests/gacha-forge-location-ids.regression.mjs` undoes them on the committed bundle to reach those base bytes and redoes them to reach the manifest's hash, and fails if a new hand edit is not recorded. A new upstream drop should carry these edits, and then becomes the new base with an empty patch list.
 
 Rebuild the artifact and catalog entry from the repository root:
 

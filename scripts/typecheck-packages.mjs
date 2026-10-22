@@ -92,6 +92,8 @@ const ENGINE_HOST_MODULES = new Set([
   "packages/client/src/lib/agent-failures",
   "packages/server/src/db/connection",
   "packages/server/src/services/prompt-overrides/types",
+  // Type-only for turn-game engines (Blackjack's tool manifest and the vendored engine contract).
+  "packages/shared/src/features/function-calls/tool-definitions",
 ]);
 // Packages whose own sources are clean under strict tsc. Each run checks the package files under its roots; the
 // client run uses the Engine client's lib.

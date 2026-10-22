@@ -1,6 +1,6 @@
 # Long-Term Memory changelog
 
-## Unreleased
+## 1.4.86 — 2026-10-23
 
 - Keyboard focus now moves somewhere sensible after you act in Review, the Memory Vault, Sources, the setup guide, Settings and Debug, and field errors sit under their fields and are read with them.
 - Results show beside the action that made them. Sources names a failed or partial import as such, and Review and Sources say why Accept or Import is off.

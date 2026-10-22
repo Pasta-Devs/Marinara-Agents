@@ -33,6 +33,6 @@
     "test:slurp:regressions": "node scripts/run-slurp-regressions.mjs",
     "test:noodle:quality": "node scripts/evaluate-noodle-generation.mjs tests/fixtures/noodle-generation-quality.samples.json",
     "test:security": "node scripts/tests/catalog-path-safety.regression.mjs && tsx tests/long-term-memory-index-keys.regression.ts",
-    "typecheck:packages": "node scripts/typecheck-packages.mjs noodle slurp2 long-term-memory memory-nag conversation-calls hierarchical-maps games"
+    "typecheck:packages": "node scripts/typecheck-packages.mjs noodle slurp2 long-term-memory memory-nag conversation-calls hierarchical-maps blackjack games"
   }
 }

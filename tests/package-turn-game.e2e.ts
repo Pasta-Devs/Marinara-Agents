@@ -1,5 +1,5 @@
-// Mount smoke for one installed turn game (MARINARA_PACKAGE_ID: chess, eightball, poker, rock-paper-scissors,
-// tic-tac-toe or uno): its board renders in a Conversation with the Engine's React, and it locks while the Engine's
+// Mount smoke for one installed turn game (MARINARA_PACKAGE_ID: blackjack, chess, eightball, poker,
+// rock-paper-scissors, tic-tac-toe or uno): its board renders in a Conversation with the Engine's React, and it locks while the Engine's
 // own chat store says the character is replying in that chat. The bundled store copy the games used to carry never
 // heard the Engine stream, so boards stayed playable mid-reply (Pasta-Devs/Marinara-Agents#1487).
 // Run: node scripts/run-package-browser-tests.mjs tic-tac-toe tests/package-turn-game.e2e.ts
@@ -13,6 +13,7 @@ const packageId = process.env.MARINARA_PACKAGE_ID ?? "";
 const version = JSON.parse(readFileSync(resolve(engineRoot, "package.json"), "utf8")).version;
 // What each game's Setup sends, chosen so the player moves first and the board has something to lock.
 const START_CONFIG: Record<string, Record<string, unknown>> = {
+  blackjack: {},
   chess: { humanColor: "white" },
   eightball: { raceTo: 1, humanBreaks: "you" },
   poker: {},

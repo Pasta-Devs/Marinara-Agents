@@ -1,3 +1,17 @@
+## 1.9.0 — 2026-10-22
+
+### New
+- The fullscreen control beside Settings expands inside the Engine, hiding Home browser controls while keeping the Engine topbar. Outward/inward arrows show the action, and the button works on iPhone Safari too.
+- Every Forge screen fills the available width and height instead of fitting a fixed 16:9 frame.
+- A floating exit control stays available on screens without the shared toolbar and on the portrait rotation notice. Requires Engine capability API 1.376.
+
+## 1.8.15 — 2026-10-22
+- Fixed: on iPhone and other Safari-based browsers, ticking a cast member or an outfit theme no longer scrolls the list (and, on a phone turned sideways, the whole world-creation page) back to the top.
+
+## 1.8.14 — 2026-10-22
+- On a phone turned sideways, creating a world now uses the whole width of the screen and scrolls as one page: the title and the step tabs scroll away with the fields, and a slim Back and Next row stays at the bottom until you start typing.
+- Fixed: tapping a text field in the game no longer makes iPhone zoom in.
+
 ## 1.8.13 — 2026-10-19
 - Fixed: places named in Korean, or in any other non-Latin script, get their background painted. Their names used to come out empty, so the background was never made; places whose names mixed Hangul and numbers could also share one background.
 - Backgrounds already painted for a place keep showing; nothing is painted twice.

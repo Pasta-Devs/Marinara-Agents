@@ -1,0 +1,175 @@
+{
+  "note": "client.js and server.mjs are pre-built esbuild bundles whose source tree lives outside this repository. For each file, base is the last bundle contributed from that tree; patches are the hand edits made here on top of it, in order. Each find occurs exactly once when its edit is applied, and each replace exactly once right after, so the edits run both ways: tests/gacha-forge-location-ids.regression.mjs undoes them on the committed file to reach base and redoes them to reach the manifest's bytes. Mirror these edits into the package source; once a new bundle carrying them is contributed, make it that file's base and empty its patches.",
+  "files": {
+    "client.js": {
+      "base": {
+        "version": "1.8.12",
+        "commit": "aa0cece0fea33552d32e1ba55d6ac451d9ebc4fc",
+        "sha256": "ac1c971aad07e98c4eb9b5360953f88c20985f044a98df489e0df1d4a052e5a4",
+        "bytes": 1438795
+      },
+      "patches": [
+        {
+          "version": "1.8.13",
+          "commits": ["a222c867e9737e9dbbc1208a44e6cd1e5ba57435"],
+          "edits": [
+            {
+              "find": "String(t??\"\").trim().toLowerCase().replace(/[^a-z0-9]+/g,\"-\").replace(/(^-|-$)/g,\"\").slice(0,60",
+              "replace": "Array.from(String(t??\"\").normalize(\"NFC\").trim().toLowerCase().replace(/[^\\p{L}\\p{M}\\p{N}]+/gu,\"-\").replace(/(^-|-$)/g,\"\")).slice(0,60).join(\"\""
+            },
+            {
+              "find": "%;\n  /",
+              "replace": "%;\n  /* NEVER TALLER THAN THE SCREEN YOU CAN SEE. 100dvh follows a phone browser's bars as they come and\n     go; 100vh is the fallback for a browser that predates it. */\n  max-height: 100vh;\n  max-height: 100dvh;\n  /"
+            },
+            {
+              "find": "\n}\n\n/* C",
+              "replace": "\n}\n\n/* iOS ENLARGES TEXT WHEN A PHONE TURNS SIDEWAYS unless the page opts out. The Engine opts out on its\n   own root, and the all: initial on the host undoes that for this box, so the game opts out again.\n   The universal half reaches the leaving screen's clone, whose own host rule resets it too. */\n.gf-arena, .gf-arena * { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }\n\n/* C"
+            },
+            {
+              "find": ":host(:fullscreen) .gf-arena { padding: 0",
+              "replace": "/* Fullscreen covers the whole screen, notch and rounded corners included, so the frame keeps clear of\n   them. Outside fullscreen the Engine's own shell already does. */\n:host(:fullscreen) .gf-arena { padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left)"
+            },
+            {
+              "find": "}\n}\n\n",
+              "replace": "}\n}\n\n/* A PHONE ON ITS SIDE. The Engine's own bars already take part of a short screen, so the frame gives\n   up its padding, border and shadow and the stage takes every pixel left. The ratio stays: every\n   screen is built for 16:9. */\n@media (orientation: landscape) and (max-height: 500px) {\n  .gf-arena { padding: 0; }\n  .gf-stage { border: 0; box-shadow: none; }\n}\n\n"
+            },
+            {
+              "find": "ny); }\n`",
+              "replace": "ny); }\n\n/* A PHONE ON ITS SIDE: the plates give up their air before the panel has to scroll. */\n@media (orientation: landscape) and (max-height: 500px) {\n  .body { gap: var(--sp-2); padding: 0 var(--sp-2) var(--sp-2); }\n  .st-plate { padding: var(--sp-2) var(--sp-2) var(--sp-1); }\n}\n`"
+            },
+            {
+              "find": ".()}",
+              "replace": ".()},s=typeof this.requestFullscreen==\"function\"&&document.fullscreenEnabled!==!1"
+            },
+            {
+              "find": "r.addEventListener(\"click\",e)}",
+              "replace": "(s?r.addEventListener(\"click\",e):r.remove())}s||Zo(this._root),"
+            }
+          ]
+        },
+        {
+          "version": "1.8.14",
+          "commits": ["881c9000c53b85bc5bf719e870b778e8ded00ea6", "9b7d0fb106e72a255db21e4e62f1c4d1524eb2fe"],
+          "edits": [
+            {
+              "find": "2\";f",
+              "replace": "4\";f"
+            },
+            {
+              "find": "%; }\n\n/* C",
+              "replace": "%; }\n\n/* iOS ZOOMS THE PAGE INTO A FIELD WHOSE TEXT IS UNDER 16px, and the game's ramp puts every field at 7-9px.\n   The Engine's own 16px floor cannot reach past the all: initial on the host, so the arena sets it for a\n   touch screen. Every screen, the creator's Expand popup and the modals mount inside this box; a mouse\n   keeps the ramp. */\n@media (pointer: coarse) {\n  .gf-arena :is(input:not([type=\"range\"], [type=\"checkbox\"], [type=\"radio\"], [type=\"file\"], [type=\"color\"]), textarea, select, [contenteditable=\"true\"], [contenteditable=\"\"]) { font-size: 16px !important; }\n}\n\n/* C"
+            },
+            {
+              "find": "}\n${W",
+              "replace": "}\n\n/* A PHONE ON ITS SIDE (~874x402). The pinned brand, steps and nav took ~250px and left the grid 30-70px,\n   and the 16:9 stage left gutters either side. Here the creator takes the stage's whole width and the\n   FRAME is the one scroll region: brand and steps scroll away with the fields, and the nav stays pinned,\n   slim, on the creator's own ink until a text field takes the keyboard, when it rejoins the page. A restored\n   draft's notice leads the page instead of waiting below the fold, and where the floating fullscreen toggle\n   exists the whole frame keeps clear of its corner, not just the brand row.\n   ponytail: 1.8.14 was written straight into this pre-built bundle (as 1.8.13 was): this block, the\n   coarse-pointer 16px field floor in the shell sheet, and obScroll() with its calls in re() and qe().\n   The source of truth is the package's own source tree outside this repository; until the change is\n   mirrored there, tests/gacha-forge-location-ids.regression.mjs fails any bundle drop that loses it. */\n@media (orientation: landscape) and (max-height: 500px) {\n  .gf-stage:has(.ob-root) { width: 100%; }\n  .ob-frame { display: block; padding: .35rem .75rem 0; overflow-y: auto; overscroll-behavior: contain; }\n  .ob-intake { width: 100%; min-height: 100%; max-height: none; gap: .35rem; }\n  .ob-step { gap: .35rem; }\n  .ob-step .ob-grid { flex: none; overflow: visible; padding-right: 0; }\n  .ob-mark { display: none; }\n  .ob-steps button { padding-top: .25rem; gap: .3rem; letter-spacing: .08em; }\n  .ob-steps .n { width: 1.05rem; height: 1.05rem; }\n  .ob-error { padding: .3rem .6rem; }\n  .ob-error.-note { order: -1; }\n  .ob-back, .ob-cancel, .ob-next, .ob-forge { padding-top: .42rem; padding-bottom: .42rem; }\n  .ob-presets { padding: .3rem .7rem; }\n  .gf-stage:has(> .gf-fs-exit) .ob-frame { padding-right: 2.6rem; }\n  .ob-nav { position: sticky; bottom: 0; z-index: 3; margin: auto -.75rem 0; padding: .3rem .75rem .35rem; background: var(--ink); }\n  .gf-stage:has(> .gf-fs-exit) .ob-nav { margin-right: -2.6rem; padding-right: 2.6rem; }\n  .ob-intake:has(:is(textarea, input:not([type=\"range\"])):focus) .ob-nav { position: static; }\n  textarea.ob-control { min-height: 5rem; }\n}\n${W"
+            },
+            {
+              "find": "function Dh",
+              "replace": "/* ponytail: hand-added to the bundle in 1.8.14; mirror into the package source (see the creator's landscape block). */function obScroll(t,e){let a=t&&typeof t.querySelector==\"function\"?t.querySelector(\".ob-frame\"):null;a&&(a.scrollTop=e?a.scrollHeight:0)}function Dh"
+            },
+            {
+              "find": "G&&C",
+              "replace": "obScroll(t,!1),G&&C"
+            },
+            {
+              "find": "!F)",
+              "replace": "!F,F&&obScroll(t,!0))"
+            },
+            {
+              "find": "l,de",
+              "replace": "l,fixed:[\"On a phone turned sideways, creating a world uses the whole width of the screen and scrolls as one page, with a slim Next row that stays in reach.\",\"Text fields no longer make an iPhone zoom in when you tap them.\"]},{version:\"1.8.12\",de"
+            }
+          ]
+        },
+        {
+          "version": "1.8.15",
+          "commits": ["52d72aaf9a1cb440a158714f4928493950c18f22"],
+          "edits": [
+            {
+              "find": "4\";",
+              "replace": "5\";"
+            },
+            {
+              "find": "let g=m()",
+              "replace": "/* ponytail: WebKit drops a scroll box's position when its rows are rebuilt, so the list and its scrolling ancestors are put back; hand-added to the pre-built bundle in 1.8.15, mirror into the package source. */let g=m(),kept=[];for(let e=l;e;e=e.parentElement)e.scrollTop&&kept.push([e,e.scrollTop])"
+            },
+            {
+              "find": "\"\");for(let b",
+              "replace": "\"\");for(let[e,y]of kept)e.scrollTop=y;for(let b"
+            },
+            {
+              "find": ";B.",
+              "replace": ";/* ponytail: WebKit drops a scroll box's position when its rows are rebuilt, so the list and its scrolling ancestors are put back; hand-added to the pre-built bundle in 1.8.15, mirror into the package source. */let kept=[];for(let e=B;e;e=e.parentElement)e.scrollTop&&kept.push([e,e.scrollTop]);B."
+            },
+            {
+              "find": "}function x(",
+              "replace": ";for(let[e,y]of kept)e.scrollTop=y}function x("
+            },
+            {
+              "find": "l,fi",
+              "replace": "l,fixed:[\"Ticking a character for your cast, or a theme for outfits, keeps the list where it was instead of jumping back to the top.\"]},{version:\"1.8.14\",fi"
+            }
+          ]
+        },
+        {
+          "version": "1.9.0",
+          "notes": "Builder-generated in-app fullscreen integration from maintained package source; fluid stage in every view.",
+          "edits": [
+            {
+              "find": "var ac=",
+              "replaceFrom": "src/browser-presentation.mjs"
+            },
+            {
+              "find": "_wireFullscreen(){let e=()=>{document.fullscreenElement?document.exitFullscreen?.():this.requestFullscreen?.()},s=typeof this.requestFullscreen==\"function\"&&document.fullscreenEnabled!==!1;for(let a of[\".gf-fs\",\".gf-fs-exit\",\".gf-fs-bar\"]){let r=this._root.querySelector(a);r&&(s?r.addEventListener(\"click\",e):r.remove())}s||Zo(this._root),this._wireLandscape()}",
+              "replace": "_wireFullscreen(){wireForgeBrowserFullscreen(this),this._wireLandscape()}"
+            },
+            {
+              "find": "this._apply()}static get observedAttributes()",
+              "replace": "this._apply(),syncForgeBrowserPresentation(this)}static get observedAttributes()"
+            },
+            {
+              "find": "try{!document.fullscreenElement&&this.requestFullscreen&&await this.requestFullscreen()}catch{}",
+              "replace": "this._props.browserFullscreen?.setActive(true);"
+            },
+            {
+              "find": "ds=\"1.8.15\"",
+              "replace": "ds=\"1.9.0\""
+            },
+            {
+              "find": "oy=[{version:null,fixed:",
+              "replace": "oy=[{version:null,fixed:[\"Fullscreen now fills the Engine content area while keeping its topbar, including on iPhone Safari.\",\"Every game screen uses the available width instead of fitting a fixed 16:9 frame.\"]},{version:\"1.8.15\",fixed:"
+            }
+          ]
+        }
+      ]
+    },
+    "server.mjs": {
+      "base": {
+        "version": "1.8.12",
+        "commit": "aa0cece0fea33552d32e1ba55d6ac451d9ebc4fc",
+        "sha256": "6bd9ec1f95f5296b65e974ea723e50e59a0335efabc97b6585c0979fb6153284",
+        "bytes": 502921
+      },
+      "patches": [
+        {
+          "version": "1.8.13",
+          "commits": ["a222c867e9737e9dbbc1208a44e6cd1e5ba57435"],
+          "edits": [
+            {
+              "find": "String(e??\"\").trim().toLowerCase().replace(/[^a-z0-9]+/g,\"-\").replace(/(^-|-$)/g,\"\").slice(0,60)",
+              "replace": "Array.from(String(e??\"\").normalize(\"NFC\").trim().toLowerCase().replace(/[^\\p{L}\\p{M}\\p{N}]+/gu,\"-\").replace(/(^-|-$)/g,\"\")).slice(0,60).join(\"\")}function bgSlug(e,t){return typeof e==\"string\"&&/[\\/\\\\]|\\.\\.|\\p{Cc}/u.test(e)?\"\":gs(e||t)}function gsPlaces(e){let t={...e};for(let n of Object.values(e)){let r=n&&gs(n.name);r&&!Object.hasOwn(t,r)&&(t[r]=n)}return t"
+            },
+            {
+              "find": "u&&u.data&&u.data.places||{}",
+              "replace": "gsPlaces(u&&u.data&&u.data.places||{})"
+            },
+            {
+              "find": "gs(u.slug||",
+              "replace": "bgSlug(u.slug,"
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

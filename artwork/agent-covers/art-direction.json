@@ -32,6 +32,12 @@
       "palette": "sunset coral, sky blue, leaf green, warm gold"
     },
     {
+      "id": "blackjack",
+      "name": "Blackjack",
+      "concept": "Mari winks behind a curved blackjack table, holding up an Ace of Spades and a King of Hearts for a natural twenty-one, with chip stacks and one face-down card on the felt.",
+      "palette": "emerald felt, casino gold, heart red, navy"
+    },
+    {
       "id": "card-evolution-auditor",
       "name": "Card Evolution Auditor",
       "concept": "Mari audits two illustrated character profile cards at a desk with a magnifying glass, comparing before-and-after details and marking one precise approved change with a check stamp.",
