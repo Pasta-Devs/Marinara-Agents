@@ -248,7 +248,7 @@ export function DestinationScopePanel({
         />
       </details>
       {!selectedTargets.length ? (
-        <span role="alert" className="block shrink-0 text-xs">
+        <span role="status" className="block shrink-0 text-xs">
           {localizeUi("ui.longTermMemory.sourcesworkspace.chooseDestinationBeforeImport")}
         </span>
       ) : null}

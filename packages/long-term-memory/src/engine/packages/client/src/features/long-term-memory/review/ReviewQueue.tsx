@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Check, ChevronRight, Loader2, X } from "lucide-react";
+import { Check, ChevronRight, CircleAlert, Loader2, X } from "lucide-react";
 import {
   type LtmDraftLinkChoice,
   type LtmDraftMutation,
@@ -37,6 +37,7 @@ import {
   mutationDisplayLabel,
   mutationFingerprint,
   mutationLabels,
+  mutationHasOverlongText,
   mutationProposedText,
   noteBody,
   noteDisplayTitle,
@@ -879,6 +880,25 @@ export default function ReviewQueue({
     const edited = editedById.get(row.mutation.id);
     return edited ? !selectedEditIsValid(edited) : false;
   });
+  // Why the batch Accept is off, when the bar itself does not already say so.
+  const batchAcceptReason = invalidSelectedEdits.length
+    ? localizeUi(
+        selectLtmPluralForm(locale, invalidSelectedEdits.length) === "one"
+          ? "ui.longTermMemory.reviewqueue.invalidEditedMutationOne"
+          : "ui.longTermMemory.reviewqueue.invalidEditedMutationOther",
+        {
+          count: invalidSelectedEdits.length,
+          labels: invalidSelectedEdits
+            .map(
+              (row) =>
+                mutationDisplayLabels.get(row.mutation.id) ?? localizeUi("ui.longTermMemory.reviewqueue.editedChange"),
+            )
+            .join(", "),
+        },
+      )
+    : selectedRows.length && !eligibleSelectedRows.length && reviewContextReady
+      ? localizeUi("ui.longTermMemory.reviewqueue.acceptNoEligibleSelection")
+      : null;
   const allSelected = activeDraftRows.length > 0 && selectedRows.length === activeDraftRows.length;
   const someSelected = selectedRows.length > 0 && !allSelected;
   const reviewMutationIds = useMemo(
@@ -920,7 +940,9 @@ export default function ReviewQueue({
     setPreflightRows(new Map());
     setPreflightByDraftId(new Map());
     setPreflightKey(null);
-    setResult(null);
+    // A preflight summary goes stale with the selection or an edit. A finished run's result, with its
+    // failures and index-rebuild warning, stays until the next run.
+    setResult((current) => (current?.phase === "preflight" ? null : current));
   };
 
   const toggleSelection = (id: string) => {
@@ -1279,7 +1301,7 @@ export default function ReviewQueue({
         ready: 0,
         completed: completedIds.size,
         failed: failedIds.size,
-        remaining: remainingIds.size + failedIds.size,
+        remaining: remainingIds.size,
         autoIncluded: autoIncludedIds.size,
         indexRebuildFailures,
         messages,
@@ -1577,6 +1599,15 @@ export default function ReviewQueue({
     const edited = editedById.has(row.mutation.id);
     const hideProjection = edited || projectionStale;
     const valid = selectedEditIsValid(mutation);
+    // Shown on the row itself, so a collapsed row still says why its Accept is off.
+    const acceptReason = valid
+      ? null
+      : localizeUi(
+          mutationHasOverlongText(mutation)
+            ? "ui.longTermMemory.reviewqueue.acceptNeedsShorterText"
+            : "ui.longTermMemory.reviewqueue.acceptNeedsText",
+        );
+    const acceptReasonId = `ltm-review-accept-reason-${row.mutation.id}`;
     const previewChanges = hideProjection ? [] : row.changes;
     const expanded = expandedMutationIds.has(row.mutation.id);
     const preflight = preflightRows.get(row.mutation.id);
@@ -1759,6 +1790,7 @@ export default function ReviewQueue({
               style={{ height: 44, minHeight: 44, width: 44, minWidth: 44 }}
               disabled={!eligibleIds.has(row.mutation.id) || !valid || preflightBlocked}
               aria-disabled={runBusy || undefined}
+              aria-describedby={acceptReason ? acceptReasonId : undefined}
               onClick={() => {
                 if (!runBusy) void runBatch("accept", [row]);
               }}
@@ -1780,6 +1812,16 @@ export default function ReviewQueue({
             />
           </div>
         </div>
+        {acceptReason ? (
+          <p
+            id={acceptReasonId}
+            data-ltm-review-accept-reason
+            className="mt-2 flex items-start gap-1.5 px-2 text-xs text-[var(--destructive)]"
+          >
+            <CircleAlert aria-hidden="true" size="0.875rem" className="mt-0.5 shrink-0" />
+            {acceptReason}
+          </p>
+        ) : null}
         {expanded ? (
           <div
             id={`ltm-review-mutation-details-${row.mutation.id}`}
@@ -2564,6 +2606,7 @@ export default function ReviewQueue({
                     className={runBusy ? "opacity-50" : ""}
                     disabled={!eligibleSelectedRows.length || invalidSelectedEdits.length > 0 || preflightApplyDisabled}
                     aria-disabled={runBusy || undefined}
+                    aria-describedby={batchAcceptReason ? "ltm-review-batch-accept-reason" : undefined}
                     onClick={() => {
                       if (!runBusy) void runBatch("accept");
                     }}
@@ -2602,6 +2645,16 @@ export default function ReviewQueue({
                   >
                     {localizeUi("ui.longTermMemory.activityview.clear")}
                   </Button>
+                  {batchAcceptReason ? (
+                    <p
+                      id="ltm-review-batch-accept-reason"
+                      data-ltm-review-batch-accept-reason
+                      className="flex basis-full items-start gap-1.5 text-xs text-[var(--destructive)]"
+                    >
+                      <CircleAlert aria-hidden="true" size="0.875rem" className="mt-0.5 shrink-0" />
+                      {batchAcceptReason}
+                    </p>
+                  ) : null}
                 </div>
               ) : null}
               {review.data?.sources

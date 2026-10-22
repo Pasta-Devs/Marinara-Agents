@@ -4054,6 +4054,45 @@ async function main() {
           .waitFor({ timeout: 5000 });
         assert.equal(await resetButton.isDisabled(), false, "Reset is available again once the refetch resolves");
         assert.equal(settingsReads, 1, "Reset reads the settings once");
+        // #1588: each result shows under the controls that produced it, not at the top of the panel.
+        const maintenanceResultPlace = (text: RegExp) =>
+          maintenancePanel
+            .locator("[data-ltm-status]")
+            .filter({ hasText: text })
+            .evaluate((result) => {
+              const buttons = [...document.querySelectorAll<HTMLButtonElement>("#settings-panel-maintenance button")];
+              const reset = buttons.find((item) => item.textContent?.trim() === "Reset settings")!;
+              const run = buttons.find((item) => item.textContent?.trim() === "Run selected maintenance")!;
+              return {
+                afterReset: Boolean(reset.compareDocumentPosition(result) & Node.DOCUMENT_POSITION_FOLLOWING),
+                beforeRun: Boolean(result.compareDocumentPosition(run) & Node.DOCUMENT_POSITION_FOLLOWING),
+                afterRun: Boolean(run.compareDocumentPosition(result) & Node.DOCUMENT_POSITION_FOLLOWING),
+              };
+            });
+        assert.deepEqual(await maintenanceResultPlace(/^Memory settings reset to defaults, but/u), {
+          afterReset: true,
+          beforeRun: true,
+          afterRun: false,
+        });
+        await resetPage.route("**/api/long-term-memory/repair", (route) =>
+          route.fulfill({ json: { actions: [{ action: "rebuild_indexes", result: "completed", count: 4 }] } }),
+        );
+        await maintenancePanel.getByRole("checkbox", { name: "Reindex recall data", exact: true }).check();
+        await maintenancePanel.getByRole("button", { name: "Run selected maintenance" }).click();
+        await maintenancePanel
+          .locator("[data-ltm-status]")
+          .filter({ hasText: /\(4\)$/u })
+          .waitFor();
+        assert.deepEqual(await maintenanceResultPlace(/\(4\)$/u), {
+          afterReset: true,
+          beforeRun: false,
+          afterRun: true,
+        });
+        assert.equal(
+          await maintenancePanel.getByText(/^Memory settings reset to defaults, but/u).count(),
+          0,
+          "a new run replaces the previous result",
+        );
         await resetPage.locator("#settings-tab-recall").click();
         assert.equal(
           await maxChunks.inputValue(),
@@ -4463,6 +4502,66 @@ async function main() {
       await healthInfoPanel.waitFor();
       assert.match(await healthInfoPanel.innerText(), /12 indexed chunks/u);
       assert.match(await healthInfoPanel.innerText(), /Check Settings > Maintenance > Reindex recall data\./u);
+      // #1588: the Reindex result shows under the health banner, not only inside its closed info popover.
+      // A pointer press outside closes the popover; Escape would refocus the trigger, which reopens it.
+      await page.mouse.move(0, 0);
+      await page.locator("body").dispatchEvent("pointerdown");
+      await healthInfoPanel.waitFor({ state: "detached" });
+      let failReindex = true;
+      let releaseReindex: (() => void) | null = null;
+      const reindexHeld = new Promise<void>((resolve) => {
+        releaseReindex = resolve;
+      });
+      await page.route("**/api/long-term-memory/repair", async (route) => {
+        if (failReindex) {
+          failReindex = false;
+          return route.fulfill({
+            status: 500,
+            contentType: "application/json",
+            body: JSON.stringify({ error: "Reindex fixture failed" }),
+          });
+        }
+        await reindexHeld;
+        return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ ok: true }) });
+      });
+      const reindexButton = page
+        .locator('[data-ltm-surface="vault-health-warning"]')
+        .getByRole("button", { name: "Reindex recall" });
+      const reindexResult = (state: string) =>
+        page.locator(`[data-ltm-reindex-result="${state}"]`).evaluate((result) => ({
+          role: result.getAttribute("role"),
+          text: result.textContent?.trim(),
+          inPopover: Boolean(result.closest("[data-ltm-info-panel]")),
+          afterBanner: Boolean(
+            document.querySelector('[data-ltm-surface="vault-health-warning"]')?.compareDocumentPosition(result) ===
+            Node.DOCUMENT_POSITION_FOLLOWING,
+          ),
+        }));
+      await reindexButton.click();
+      await page.locator('[data-ltm-reindex-result="danger"]').waitFor();
+      assert.deepEqual(await reindexResult("danger"), {
+        role: "alert",
+        text: "Reindex fixture failed",
+        inPopover: false,
+        afterBanner: true,
+      });
+      await reindexButton.click();
+      await page.locator('[data-ltm-reindex-result="pending"]').waitFor();
+      assert.deepEqual(await reindexResult("pending"), {
+        role: "status",
+        text: "Rebuilding the recall index...",
+        inPopover: false,
+        afterBanner: true,
+      });
+      releaseReindex?.();
+      await page.locator('[data-ltm-reindex-result="success"]').waitFor();
+      assert.deepEqual(await reindexResult("success"), {
+        role: "status",
+        text: "Recall index repair completed.",
+        inPopover: false,
+        afterBanner: true,
+      });
+      await page.unroute("**/api/long-term-memory/repair");
 
       const showWorkspacePane = async (pane: "navigator" | "workbench" | "inspector") => {
         const target = page.locator(`[data-ltm-workspace-pane="${pane}"]`);
@@ -4792,12 +4891,27 @@ async function main() {
       await page
         .locator(`[data-ltm-review-mutation="${reviewMutationIds.partial}"] [data-ltm-review-mutation-toggle]`)
         .click();
+      // #1588: an emptied edit says why Accept is off, on the row and in the batch bar.
+      const emptiedPartial = page.locator(`[data-ltm-review-mutation="${reviewMutationIds.partial}"]`);
+      await emptiedPartial.locator("textarea").fill("");
+      const partialAcceptReason = emptiedPartial.locator("[data-ltm-review-accept-reason]");
+      assert.equal(await partialAcceptReason.innerText(), "Can't accept yet: an edited section is empty.");
+      assert.equal(
+        await emptiedPartial.locator('[data-ltm-review-action="review"]').getAttribute("aria-describedby"),
+        await partialAcceptReason.getAttribute("id"),
+      );
+      await emptiedPartial.locator('[data-ltm-control="review-select"]').check();
+      assert.match(
+        await page.locator("[data-ltm-review-batch-accept-reason]").innerText(),
+        /^Fix 1 invalid edited mutation before accepting: /u,
+      );
       await page
         .locator(`[data-ltm-review-mutation="${reviewMutationIds.partial}"] textarea`)
         .fill("Edited pending partial memory");
-      await page
-        .locator(`[data-ltm-review-mutation="${reviewMutationIds.partial}"] [data-ltm-control="review-select"]`)
-        .check();
+      assert.equal(
+        await page.locator("[data-ltm-review-accept-reason], [data-ltm-review-batch-accept-reason]").count(),
+        0,
+      );
       reviewPreflightBlocked = true;
       failSecondReviewAccept = false;
       await page.getByRole("button", { name: "Accept eligible (2)" }).click();
@@ -4838,6 +4952,15 @@ async function main() {
         await page.getByText(/Applied \d+ mutations?; [1-9]\d* failed\. .*Draft action failed: .+\./u).count(),
         1,
       );
+      // #1588: failed changes are not counted again as "other pending", and the result stays when the
+      // selection changes, until the next run.
+      assert.doesNotMatch(await page.locator("[data-ltm-review-result]").innerText(), /other mutations? pending/u);
+      const partialSelect = page.locator(
+        `[data-ltm-review-mutation="${reviewMutationIds.partial}"] [data-ltm-control="review-select"]`,
+      );
+      await partialSelect.uncheck();
+      await partialSelect.check();
+      assert.equal(await page.getByRole("button", { name: "Retry failed review actions" }).count(), 1);
       failSecondReviewAccept = false;
       await page.getByRole("button", { name: "Retry failed review actions" }).click();
       await page.getByText("Retry preflight complete. Review the results before applying again.").waitFor();
@@ -6018,6 +6141,29 @@ async function main() {
         await destinationPanel.getByText("Choose a destination before importing scoped memories.").count(),
         1,
       );
+      // #1588: the selection bar says why Import is off, and the button points at that reason.
+      const chatsSelectToggle = page
+        .locator('[data-ltm-source-preview="chats"]')
+        .getByRole("button", { name: "Select", exact: true });
+      await chatsSelectToggle.click();
+      await page.locator('[data-ltm-source-status-filter="ready"]').click();
+      const firstSourceSelect = page.locator('[data-ltm-source-select="character-outside-current-chat"]');
+      await firstSourceSelect.check();
+      const importReasonId = await page
+        .locator(':is([data-ltm-source-action="import-selected"], [data-ltm-source-action="refresh-selected"]):visible')
+        .first()
+        .getAttribute("aria-describedby");
+      assert.ok(importReasonId, "the off Import button points at its reason");
+      const importReasonLine = page.locator(`[id="${importReasonId}"][data-ltm-import-reason]:visible`);
+      assert.equal(await importReasonLine.count(), 1, "the reason the button points at is on screen");
+      assert.equal(await importReasonLine.innerText(), "Choose a destination before importing scoped memories.");
+      await firstSourceSelect.uncheck();
+      await page
+        .locator('[data-ltm-source-preview="chats"]')
+        .getByRole("button", { name: "Done", exact: true })
+        .click();
+      await chatsSelectToggle.waitFor();
+      await page.locator('[data-ltm-source-status-filter="all"]').click();
 
       // The All tab lists every place kind and labels each row with its kind.
       for (const [target, kind] of [
@@ -6197,6 +6343,14 @@ async function main() {
         .click();
       await page.locator('[data-ltm-source-status-filter="ready"]').click();
       await page.locator('[data-ltm-source-select="character-outside-current-chat"]').check();
+      assert.equal(
+        await page.locator("[data-ltm-import-result-status]").count(),
+        1,
+        "the import status line is mounted before the import",
+      );
+      await page.locator("[data-ltm-import-result-status]").evaluate((line) => {
+        (line as HTMLElement & { ltmMountedBeforeImport?: boolean }).ltmMountedBeforeImport = true;
+      });
       const mergedDestinationRequestPromise = page.waitForRequest(
         (request) => request.method() === "POST" && request.url().includes("/api/long-term-memory/import/source-notes"),
       );
@@ -6211,6 +6365,20 @@ async function main() {
         personaIds: ["persona-a"],
       });
       await page.locator("[data-ltm-import-scope-result]").waitFor();
+      // #1588: the fixture batch fails, so the result is named as failed, never "complete", and the
+      // status line that was already mounted reads it out.
+      assert.equal(await page.locator("[data-ltm-import-result-heading]").innerText(), "Source import failed");
+      assert.match(
+        (await page.locator("[data-ltm-import-result-status]").textContent()) ?? "",
+        /Requested 1; .*missing 1;/u,
+      );
+      assert.equal(
+        await page
+          .locator("[data-ltm-import-result-status]")
+          .evaluate((line) => (line as HTMLElement & { ltmMountedBeforeImport?: boolean }).ltmMountedBeforeImport),
+        true,
+        "the status line stays mounted, so the result is read as a change",
+      );
       await destinationPanel.locator('button[aria-label^="Remove Current"]').click();
       // A whole chat and a character found by keyboard search import into the chosen places.
       await destinationPanel.locator('[data-ltm-availability-tab="chat"]').click();
@@ -6419,6 +6587,13 @@ async function main() {
         await sourceOperationWorkbench.evaluate((element) => Boolean(element.closest("[data-ltm-source-workbench]"))),
         true,
       );
+      // #1588: Close leaves the action and returns focus to the menu item that opened it.
+      await sourceOperationWorkbench.locator("[data-ltm-source-operation-close]").click();
+      await sourceOperationWorkbench.waitFor({ state: "detached" });
+      await page.waitForFunction(
+        () => document.activeElement?.matches('[data-ltm-source-management-action="copy"]') ?? false,
+      );
+      await page.locator("[data-ltm-source-workbench] h2", { hasText: "Desktop re-extract source" }).waitFor();
       await page.locator('[data-ltm-source-tab="characters"]').click();
       await page.locator('[data-ltm-source-preview="characters"]').waitFor();
       await page.locator('[data-ltm-source-tab="chats"]').click();
@@ -6538,6 +6713,8 @@ async function main() {
       }, packageManifest.version);
       await page.locator('[data-ltm-surface="detail"]').waitFor();
       await page.locator('[data-ltm-control="navigation"][data-ltm-destination="sources"]').first().click();
+      // #1588: the last task shows its batch outcome as a label, not the raw task state.
+      assert.match(await page.locator("[data-ltm-latest-source-task]").innerText(), / · Failed$/u);
       await page.locator("[data-ltm-latest-source-task]").click();
       const restoredSourceResult = page.locator('[data-ltm-safe-source-task-result="completed"]');
       await restoredSourceResult.waitFor();

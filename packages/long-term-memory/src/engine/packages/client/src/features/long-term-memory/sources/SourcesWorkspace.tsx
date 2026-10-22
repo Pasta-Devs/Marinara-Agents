@@ -127,6 +127,24 @@ const importStatusLabelKeys: Record<string, string> = {
   success: "ui.longTermMemory.sourcesworkspace.statusSuccess",
   partial_success: "ui.longTermMemory.sourcesworkspace.statusPartialSuccess",
   no_suggestions_created: "ui.longTermMemory.sourcesworkspace.statusNoSuggestionsCreated",
+  running: "ui.longTermMemory.sourcesworkspace.statusRunning",
+  completed: "ui.longTermMemory.sourcesworkspace.statusCompleted",
+};
+
+// The result heading names the batch outcome, so a failed or cancelled batch never reads "complete".
+const importResultHeadingKeys: Record<"import" | "refresh", Record<string, string>> = {
+  import: {
+    success: "ui.longTermMemory.sourcesworkspace.sourceImportComplete",
+    partial_success: "ui.longTermMemory.sourcesworkspace.sourceImportFinishedWithIssues",
+    failed: "ui.longTermMemory.sourcesworkspace.sourceImportFailed",
+    cancelled: "ui.longTermMemory.sourcesworkspace.sourceImportCancelled",
+  },
+  refresh: {
+    success: "ui.longTermMemory.sourcesworkspace.sourceRefreshComplete",
+    partial_success: "ui.longTermMemory.sourcesworkspace.sourceRefreshFinishedWithIssues",
+    failed: "ui.longTermMemory.sourcesworkspace.sourceRefreshFailed",
+    cancelled: "ui.longTermMemory.sourcesworkspace.sourceRefreshCancelled",
+  },
 };
 
 const mobilePrimaryActionsClass =
@@ -247,6 +265,7 @@ export default function SourcesWorkspace({
   const confirmAction = props.confirmAction;
   const sourceScopeLabelId = useId();
   const importResultLabelId = useId();
+  const importReasonId = useId();
   const client = useQueryClient();
   const selectAllRef = useRef<HTMLInputElement>(null);
   const importResultRef = useRef<HTMLElement>(null);
@@ -306,6 +325,42 @@ export default function SourcesWorkspace({
     operation?: SourceOperation;
   } | null>(null);
   const [openSourceActionId, setOpenSourceActionId] = useState<string | null>(null);
+  const sourceOperationTriggerRef = useRef<HTMLElement | null>(null);
+  const openSourceOperation = (next: { id: string; title: string; operation?: SourceOperation }) => {
+    // A click that does not focus its button (Safari) leaves the body active, which is no trigger.
+    sourceOperationTriggerRef.current =
+      document.activeElement instanceof HTMLElement && document.activeElement !== document.body
+        ? document.activeElement
+        : null;
+    setSourceOperation(next);
+  };
+  // The operation panel hides the workbench, including an inline Manage button, so Close returns
+  // to the pane that held the trigger and focuses it once it shows again. A trigger from the
+  // closed phone menu is gone; that row's Manage or More actions button stands in, and after a
+  // move, archive or delete removed the row, the selected source tab.
+  const closeSourceOperation = () => {
+    const trigger = sourceOperationTriggerRef.current;
+    const noteId = sourceOperation?.id;
+    sourceOperationTriggerRef.current = null;
+    const pane = trigger?.closest<HTMLElement>("[data-ltm-workspace-pane]")?.dataset.ltmWorkspacePane;
+    if (pane) setWorkspacePane(pane as LtmWorkspacePane);
+    setSourceOperation(null);
+    requestAnimationFrame(() => {
+      const visible = (element: HTMLElement | null | undefined): element is HTMLElement =>
+        Boolean(element?.isConnected && element.getClientRects().length);
+      [
+        trigger,
+        ...(noteId
+          ? document.querySelectorAll<HTMLElement>(
+              `[data-ltm-surface="sources"] [data-ltm-source-action="manage"][data-ltm-source-note-id="${CSS.escape(noteId)}"], [data-ltm-surface="sources"] [data-ltm-source-more="${CSS.escape(noteId)}"]`,
+            )
+          : []),
+        document.querySelector<HTMLElement>('[data-ltm-surface="sources"] [data-ltm-source-tab][aria-selected="true"]'),
+      ]
+        .find(visible)
+        ?.focus();
+    });
+  };
   const importing =
     sourceTask.active?.status === "running" &&
     (sourceTask.active.kind === "import" || sourceTask.active.kind === "refresh");
@@ -481,6 +536,18 @@ export default function SourcesWorkspace({
     return target ? [target] : [];
   });
   const currentDestinationScope = mergedDestinationScope(selectedDestinationTargets);
+  // A visible reason beside Import and Refresh while they wait for a destination.
+  const importReason = (id: string) =>
+    currentDestinationScope ? null : (
+      <p
+        id={id}
+        data-ltm-import-reason
+        className="flex basis-full items-start gap-1.5 text-xs text-[var(--muted-foreground)]"
+      >
+        <CircleAlert aria-hidden="true" size="0.875rem" className="mt-0.5 shrink-0" />
+        {localizeUi("ui.longTermMemory.sourcesworkspace.chooseDestinationBeforeImport")}
+      </p>
+    );
   const currentDestinationLabel = selectedDestinationTargets.length
     ? selectedDestinationTargets.map((target) => targetDisplayLabel(target, true)).join(", ")
     : localizeUi("ui.longTermMemory.sourcesworkspace.chooseDestination");
@@ -662,6 +729,24 @@ export default function SourcesWorkspace({
                   count: proposalCount,
                 })
               : localizeUi("ui.longTermMemory.sourcesworkspace.sourceSavedNoProposals");
+  const importResultHeading = importResult
+    ? localizeUi(
+        importResultHeadingKeys[importResultContract?.action === "refresh" ? "refresh" : "import"][
+          importResult.batchStatus
+        ] ?? "ui.longTermMemory.sourcesworkspace.sourceImportComplete",
+      )
+    : "";
+  const importResultSummary = importResult
+    ? localizeUi("ui.longTermMemory.sourcesworkspace.importResultSummary", {
+        requested: importResult.counts.requested,
+        wrote: importResult.counts.sourceNotesWritten,
+        succeeded: importResult.counts.succeeded,
+        failed: importResult.counts.failed,
+        cancelled: importResult.counts.cancelled,
+        missing: importResult.counts.missing,
+        writeFailures: importResult.counts.sourceWriteFailed,
+      })
+    : "";
   const importScopeResultMessage = importResultContract
     ? localizeUi("ui.longTermMemory.sourcesworkspace.importScopeResult", {
         source: importResultContract.sourceTargetLabel,
@@ -686,6 +771,14 @@ export default function SourcesWorkspace({
       : latestSourceTask.kind === "refresh"
         ? localizeUi("ui.longTermMemory.sourcesworkspace.lastRefresh")
         : localizeUi("ui.longTermMemory.sourcesworkspace.lastReExtract")
+    : "";
+  const latestSourceTaskStatus = latestSourceTask
+    ? importStatusLabel(
+        latestSourceTask.status === "completed" && latestSourceTask.safeResult?.batchStatus
+          ? latestSourceTask.safeResult.batchStatus
+          : latestSourceTask.status,
+        localizeUi,
+      )
     : "";
   const closeTaskResult = () => {
     if (latestSourceTask) setDismissedTaskResultId(latestSourceTask.id);
@@ -1198,7 +1291,7 @@ export default function SourcesWorkspace({
           })}
           onClick={(event) => {
             stopRowAction(event);
-            setSourceOperation({ id: noteId, title, operation: "copy" });
+            openSourceOperation({ id: noteId, title, operation: "copy" });
           }}
           data-ltm-source-action="manage"
           data-ltm-source-note-id={noteId}
@@ -1232,7 +1325,7 @@ export default function SourcesWorkspace({
               onClick={(event) => {
                 stopRowAction(event);
                 setOpenSourceActionId(null);
-                setSourceOperation({ id: noteId, title, operation: "copy" });
+                openSourceOperation({ id: noteId, title, operation: "copy" });
               }}
               data-ltm-source-action="manage"
             />
@@ -1243,6 +1336,7 @@ export default function SourcesWorkspace({
           label={localizeUi("ui.longTermMemory.sourcesworkspace.moreActionsForValue1", { value1: title })}
           aria-expanded={openSourceActionId === noteId}
           onClick={(event) => toggleSourceActions(event, noteId)}
+          data-ltm-source-more={noteId}
         />
       </div>
     </>
@@ -1326,6 +1420,7 @@ export default function SourcesWorkspace({
         await invalidateAfterMutation();
         await (source === "lorebooks" ? lorebookPreview.refetch() : preview.refetch());
       }}
+      onClose={closeSourceOperation}
     />
   ) : null;
   const restoredImportResult =
@@ -1381,7 +1476,9 @@ export default function SourcesWorkspace({
       {restoredImportResult.items?.map((item) => (
         <article key={item.sourceId} className="space-y-1 border-t border-[var(--border)] pt-3 text-xs">
           <strong>{item.title}</strong>
-          {item.status ? <p className="text-[var(--muted-foreground)]">{humanizeLabel(item.status)}</p> : null}
+          {item.status ? (
+            <p className="text-[var(--muted-foreground)]">{importStatusLabel(item.status, localizeUi)}</p>
+          ) : null}
           {item.error?.message ? (
             <p data-ltm-import-item-error className="flex items-start gap-2 text-xs text-[var(--destructive)]">
               <CircleAlert aria-hidden="true" size="0.875rem" className="mt-0.5 shrink-0" />
@@ -1849,6 +1946,7 @@ export default function SourcesWorkspace({
                         <Button
                           primary
                           disabled={!currentDestinationScope || importDisabled || selectedBookImportIds.length === 0}
+                          aria-describedby={currentDestinationScope ? undefined : importReasonId}
                           onClick={() =>
                             void runImport(selectedBookImportIds, "import", undefined, lorebookImportSelectionKey)
                           }
@@ -1861,6 +1959,7 @@ export default function SourcesWorkspace({
                         </Button>
                         <Button
                           disabled={!currentDestinationScope || importDisabled || selectedBookRefreshIds.length === 0}
+                          aria-describedby={currentDestinationScope ? undefined : importReasonId}
                           onClick={() =>
                             void runImport(selectedBookRefreshIds, "refresh", undefined, lorebookRefreshSelectionKey)
                           }
@@ -1876,6 +1975,7 @@ export default function SourcesWorkspace({
                             {localizeUi("ui.longTermMemory.memoryvault.cancel")}
                           </Button>
                         ) : null}
+                        {importReason(importReasonId)}
                       </div>
 
                       <div role="list" className="divide-y divide-[var(--border)]">
@@ -2064,7 +2164,7 @@ export default function SourcesWorkspace({
                       onOpenReview={onOpenReview}
                       onReextract={(id) => void reextract(id)}
                       onManage={(id, title, operation) => {
-                        setSourceOperation({ id, title, operation });
+                        openSourceOperation({ id, title, operation });
                         setWorkspacePane("workbench");
                       }}
                     />
@@ -2077,8 +2177,8 @@ export default function SourcesWorkspace({
                       onClick={() => void openLatestTaskResult()}
                     >
                       <span className="font-semibold">{latestSourceTaskLabel}</span>
-                      <span className="text-[var(--muted-foreground)]">
-                        {latestSourceTask.sourceCount} · {latestSourceTask.status}
+                      <span className="text-[var(--muted-foreground)]" data-ltm-latest-source-task-status>
+                        {latestSourceTask.sourceCount} · {latestSourceTaskStatus}
                       </span>
                     </button>
                   ) : null}
@@ -2263,6 +2363,7 @@ export default function SourcesWorkspace({
                           <Button
                             primary
                             disabled={!currentDestinationScope || importDisabled}
+                            aria-describedby={currentDestinationScope ? undefined : `${importReasonId}-list`}
                             onClick={() => void runImport([...selectedIds])}
                             data-ltm-source-action="import-selected"
                           >
@@ -2273,6 +2374,7 @@ export default function SourcesWorkspace({
                         {selectedImportedIds.size ? (
                           <Button
                             disabled={!currentDestinationScope || importDisabled}
+                            aria-describedby={currentDestinationScope ? undefined : `${importReasonId}-list`}
                             onClick={() => void runImport([...selectedImportedIds], "refresh")}
                             data-ltm-source-action="refresh-selected"
                           >
@@ -2285,6 +2387,7 @@ export default function SourcesWorkspace({
                             {localizeUi("ui.longTermMemory.memoryvault.cancel")}
                           </Button>
                         ) : null}
+                        {selectedIds.size || selectedImportedIds.size ? importReason(`${importReasonId}-list`) : null}
                       </div>
                     ) : null}
                   </header>
@@ -2438,6 +2541,7 @@ export default function SourcesWorkspace({
                           <Button
                             primary
                             disabled={!currentDestinationScope || importDisabled}
+                            aria-describedby={currentDestinationScope ? undefined : importReasonId}
                             onClick={() => void runImport([...selectedIds])}
                             data-ltm-source-action="import-selected"
                           >
@@ -2449,6 +2553,7 @@ export default function SourcesWorkspace({
                         ) : selectedImportedIds.size ? (
                           <Button
                             disabled={!currentDestinationScope || importDisabled}
+                            aria-describedby={currentDestinationScope ? undefined : importReasonId}
                             onClick={() => void runImport([...selectedImportedIds], "refresh")}
                             data-ltm-source-action="refresh-selected"
                           >
@@ -2461,6 +2566,7 @@ export default function SourcesWorkspace({
                           <Button
                             primary
                             disabled={!currentDestinationScope || importDisabled}
+                            aria-describedby={currentDestinationScope ? undefined : importReasonId}
                             onClick={() => void runImport([focusedFlatRow.sourceId])}
                             data-ltm-source-action="import"
                           >
@@ -2473,6 +2579,7 @@ export default function SourcesWorkspace({
                           <>
                             <Button
                               disabled={!currentDestinationScope || importing}
+                              aria-describedby={currentDestinationScope ? undefined : importReasonId}
                               onClick={() => void runImport([focusedFlatRow.sourceId], "refresh")}
                               data-ltm-source-action="refresh"
                             >
@@ -2484,6 +2591,7 @@ export default function SourcesWorkspace({
                               : sourceInlineActions(focusedFlatRow.existingNoteId, focusedFlatRow.existingNoteTitle)}
                           </>
                         )}
+                        {importReason(importReasonId)}
                       </div>
                       {focusedFlatRow.status === "imported" ? (
                         <button
@@ -2537,7 +2645,7 @@ export default function SourcesWorkspace({
                       onOpenReview={onOpenReview}
                       onReextract={(id) => void reextract(id)}
                       onManage={(id, title, operation) => {
-                        setSourceOperation({ id, title, operation });
+                        openSourceOperation({ id, title, operation });
                         setWorkspacePane("workbench");
                       }}
                     />
@@ -2550,8 +2658,8 @@ export default function SourcesWorkspace({
                       onClick={() => void openLatestTaskResult()}
                     >
                       <span className="font-semibold">{latestSourceTaskLabel}</span>
-                      <span className="text-[var(--muted-foreground)]">
-                        {latestSourceTask.sourceCount} · {latestSourceTask.status}
+                      <span className="text-[var(--muted-foreground)]" data-ltm-latest-source-task-status>
+                        {latestSourceTask.sourceCount} · {latestSourceTaskStatus}
                       </span>
                     </button>
                   ) : null}
@@ -2561,6 +2669,10 @@ export default function SourcesWorkspace({
           />
         </section>
       )}
+      {/* Always mounted, so a finished import or refresh is read out instead of mounting with its text. */}
+      <p role="status" data-ltm-import-result-status className="sr-only">
+        {visibleImportResult ? `${importResultMessage} ${importResultSummary}` : null}
+      </p>
 
       {importResult && visibleImportResult && resultWorkbenchHost
         ? createPortal(
@@ -2572,8 +2684,8 @@ export default function SourcesWorkspace({
               data-ltm-source-task-result-workbench
               className="mari-editor-panel space-y-3 p-3"
             >
-              <h2 id={importResultLabelId} className="text-sm font-semibold">
-                {localizeUi("ui.longTermMemory.sourcesworkspace.sourceImportComplete")}
+              <h2 id={importResultLabelId} className="text-sm font-semibold" data-ltm-import-result-heading>
+                {importResultHeading}
               </h2>
               {importScopeResultMessage ? (
                 <p className="text-xs font-medium" data-ltm-import-scope-result>
@@ -2606,17 +2718,9 @@ export default function SourcesWorkspace({
                   </Button>
                 ) : null}
               </div>
-              {/* One polite summary for the batch; the per-source failures below are not live regions. */}
-              <p role="status" data-ltm-import-result-summary className="text-xs text-[var(--muted-foreground)]">
-                {localizeUi("ui.longTermMemory.sourcesworkspace.importResultSummary", {
-                  requested: importResult.counts.requested,
-                  wrote: importResult.counts.sourceNotesWritten,
-                  succeeded: importResult.counts.succeeded,
-                  failed: importResult.counts.failed,
-                  cancelled: importResult.counts.cancelled,
-                  missing: importResult.counts.missing,
-                  writeFailures: importResult.counts.sourceWriteFailed,
-                })}
+              {/* The always-mounted task status line reads this summary; the panel itself holds no live region. */}
+              <p data-ltm-import-result-summary className="text-xs text-[var(--muted-foreground)]">
+                {importResultSummary}
               </p>
               {importResult.imported.map((item) => (
                 <article

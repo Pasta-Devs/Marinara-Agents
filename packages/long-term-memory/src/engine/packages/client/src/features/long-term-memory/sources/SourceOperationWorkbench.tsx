@@ -23,6 +23,7 @@ export function SourceOperationWorkbench({
   disabled,
   confirmAction,
   onComplete,
+  onClose,
 }: {
   sourceNoteId: string;
   sourceTitle: string;
@@ -31,6 +32,8 @@ export function SourceOperationWorkbench({
   disabled: boolean;
   confirmAction?: LongTermMemoryDestinationProps["props"]["confirmAction"];
   onComplete: () => Promise<void>;
+  /** Leaves the operation panel; the caller returns focus to the control that opened it. */
+  onClose: () => void;
 }) {
   const { t: localizeUi } = useLtmTranslation();
   const headingRef = useRef<HTMLHeadingElement>(null);
@@ -212,6 +215,17 @@ export function SourceOperationWorkbench({
           wide
           content={localizeUi("ui.longTermMemory.sourceoperation.description")}
         />
+        <Button
+          className={`ml-auto ${busy ? "opacity-50" : ""}`}
+          aria-disabled={busy ? true : undefined}
+          onClick={() => {
+            // Closing during an apply would hide its result.
+            if (!busy) onClose();
+          }}
+          data-ltm-source-operation-close
+        >
+          {localizeUi("ui.longTermMemory.memoryvault.close")}
+        </Button>
       </div>
       <label className="block space-y-1 text-xs font-medium text-[var(--muted-foreground)]">
         {localizeUi("ui.longTermMemory.sourceoperation.operation")}
