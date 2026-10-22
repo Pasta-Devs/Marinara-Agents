@@ -53,7 +53,7 @@ export const VaultRow = memo(function VaultRow({
     >
       <div className="flex min-w-0 gap-2">
         {selectMode && note.type !== "source" ? (
-          <label className="flex min-h-11 min-w-8 items-center justify-center">
+          <label className="flex min-h-11 min-w-11 items-center justify-center">
             <input
               type="checkbox"
               className="h-4 w-4"
@@ -91,7 +91,8 @@ export const VaultRow = memo(function VaultRow({
         {note.type !== "source" ? (
           <div
             data-ltm-note-actions-desktop
-            className="hidden shrink-0 flex-col items-start gap-1 pt-1 text-[var(--muted-foreground)] md:flex"
+            data-ltm-row-actions="inline"
+            className="shrink-0 flex-col items-start gap-1 pt-1 text-[var(--muted-foreground)]"
           >
             <IconButton
               icon={Archive}
@@ -115,7 +116,7 @@ export const VaultRow = memo(function VaultRow({
           </div>
         ) : null}
         {note.type !== "source" ? (
-          <div className="md:hidden">
+          <div data-ltm-row-actions="menu">
             <IconButton
               icon={Ellipsis}
               label={localizeUi("ui.longTermMemory.memoryvault.moreActionsForValue1", {
@@ -129,7 +130,7 @@ export const VaultRow = memo(function VaultRow({
         ) : null}
       </div>
       {note.type !== "source" && actionsOpen ? (
-        <div id={`ltm-note-actions-${note.id}`} className="ml-10 flex gap-2 pt-2 md:hidden">
+        <div id={`ltm-note-actions-${note.id}`} data-ltm-row-actions="menu" className="ml-10 flex gap-2 pt-2">
           <Button
             className={`flex-1 ${busy ? "opacity-50" : ""}`}
             aria-disabled={busy || undefined}

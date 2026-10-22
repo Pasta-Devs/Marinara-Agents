@@ -108,7 +108,6 @@ export function DestinationScopePanel({
       role="group"
       aria-labelledby={labelId}
       className="mari-editor-panel flex min-h-0 flex-col gap-3 p-3"
-      style={{ maxHeight: "calc(100vh - 12rem)" }}
     >
       <div className="flex shrink-0 items-center gap-2 text-xs font-semibold">
         <span id={labelId}>{localizeUi("ui.longTermMemory.sourcesworkspace.makeMemoriesAvailableIn")}</span>

@@ -594,16 +594,13 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
       ) : null}
       <header className="mari-editor-header relative z-20">
         <div className="mari-editor-header-main">
-          <button
-            type="button"
-            aria-label={backToAgentsLabel}
-            title={backToAgentsLabel}
+          <IconButton
+            icon={ArrowLeft}
+            iconSize="1.125rem"
+            label={backToAgentsLabel}
             data-ltm-control="back"
             onClick={() => void close()}
-            className="mari-editor-action inline-flex"
-          >
-            <ArrowLeft aria-hidden="true" size="1.125rem" />
-          </button>
+          />
           <span className="mari-editor-icon-tile">
             <Sparkles aria-hidden="true" size="1.125rem" className="max-md:!h-[0.875rem] max-md:!w-[0.875rem]" />
           </span>

@@ -564,6 +564,16 @@ export default function MemoryVault({
       if (navigatorScrollRef.current) navigatorScrollRef.current.scrollTop = state.scrollTop;
     });
   }, [contextKey]);
+  // Below 48rem the list scrolls with the page, so going back to it brings the open memory into view.
+  useEffect(() => {
+    const noteId = draftRef.current?.id;
+    if (mobilePane !== "navigator" || !noteId) return;
+    requestAnimationFrame(() =>
+      navigatorScrollRef.current
+        ?.querySelector(`[data-ltm-note-id="${CSS.escape(noteId)}"]`)
+        ?.scrollIntoView({ block: "nearest" }),
+    );
+  }, [mobilePane]);
   useEffect(() => {
     if (!validation.length) return;
     requestAnimationFrame(() => validationRef.current?.focus({ preventScroll: true }));
@@ -2290,6 +2300,17 @@ export default function MemoryVault({
         [data-ltm-surface="vault"] details[open] > summary [data-ltm-availability-chevron] {
           transform: rotate(90deg);
         }
+        @container ltm-note-workbench (min-width: 28rem) {
+          [data-ltm-surface="vault"] [data-ltm-note-title-status] {
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+          }
+        }
+        @container ltm-workspace (min-width: 48rem) {
+          [data-ltm-surface="vault"] [data-ltm-memory-list] {
+            max-height: max(20rem, calc(100vh - 12rem));
+            overflow-y: auto;
+          }
+        }
       `}</style>
       {error || notice || archiveUndo ? (
         <div data-ltm-vault-feedback className="contents">
@@ -2585,7 +2606,6 @@ export default function MemoryVault({
                 data-ltm-memory-list
                 className="mari-editor-panel min-w-0"
                 aria-label={localizeUi("ui.longTermMemory.memoryvault.memoryList")}
-                style={{ maxHeight: "calc(100vh - 12rem)", overflowY: "auto" }}
                 onScroll={(event) => {
                   const state = navigatorStates.get(contextKey);
                   if (state) state.scrollTop = event.currentTarget.scrollTop;
@@ -2594,7 +2614,11 @@ export default function MemoryVault({
                 {scopeTargets.isError ? (
                   <StatusSurface tone="danger">
                     {localizeUi("ui.longTermMemory.memoryvault.memoryScopeCouldNotLoad")}{" "}
-                    <button type="button" className="underline" onClick={() => void scopeTargets.refetch()}>
+                    <button
+                      type="button"
+                      className="inline-flex min-h-11 items-center underline"
+                      onClick={() => void scopeTargets.refetch()}
+                    >
                       {localizeUi("ui.longTermMemory.memoryvault.retryMemoryScope")}
                     </button>
                   </StatusSurface>
@@ -2608,7 +2632,11 @@ export default function MemoryVault({
                 {scopeTargetResolved && notes.isError ? (
                   <StatusSurface tone="danger">
                     {localizeUi("ui.longTermMemory.memoryvault.memoriesCouldNotLoad")}{" "}
-                    <button type="button" className="underline" onClick={() => void notes.refetch()}>
+                    <button
+                      type="button"
+                      className="inline-flex min-h-11 items-center underline"
+                      onClick={() => void notes.refetch()}
+                    >
                       {localizeUi("ui.longTermMemory.activityview.retry")}
                     </button>
                   </StatusSurface>
@@ -2938,7 +2966,7 @@ export default function MemoryVault({
                               <li key={`${issue.focus}-${issue.message}`}>
                                 <button
                                   type="button"
-                                  className="text-left underline underline-offset-2"
+                                  className="inline-flex min-h-11 items-center text-left underline underline-offset-2"
                                   onClick={() => focusValidation(issue.focus)}
                                 >
                                   {issue.message}
@@ -2951,7 +2979,7 @@ export default function MemoryVault({
                     ) : null}
                     <div data-ltm-note-layout data-details-open={detailsOpen} className="min-w-0">
                       <div data-ltm-note-editor className="space-y-4">
-                        <div className="grid gap-3 sm:grid-cols-2">
+                        <div data-ltm-note-title-status className="grid gap-3">
                           <div className="space-y-1 text-xs font-medium">
                             <label htmlFor={`${statusInputId}-title`} className="flex min-h-7 items-center">
                               {localizeUi("ui.longTermMemory.memoryvault.title")}
@@ -2992,7 +3020,7 @@ export default function MemoryVault({
                             </div>
                             <select
                               id={statusInputId}
-                              className={inputClass}
+                              className={`${inputClass} relative`}
                               value={draft.status}
                               onChange={(event) => update("status", event.target.value as LtmStatus)}
                             >
@@ -3340,13 +3368,15 @@ export default function MemoryVault({
                                       {localizeUi("ui.longTermMemory.memoryvault.memoriesLinkingHere")})
                                     </span>
                                   </summary>
-                                  <InfoPopover
-                                    label={localizeUi("ui.longTermMemory.memoryvault.linkedMemories")}
-                                    content={localizeUi(
-                                      "ui.longTermMemory.memoryvault.explicitRelationshipsUsedToConnectThisMemoryToRelated",
-                                    )}
-                                    compact
-                                  />
+                                  <div className="flex min-h-11 items-center">
+                                    <InfoPopover
+                                      label={localizeUi("ui.longTermMemory.memoryvault.linkedMemories")}
+                                      content={localizeUi(
+                                        "ui.longTermMemory.memoryvault.explicitRelationshipsUsedToConnectThisMemoryToRelated",
+                                      )}
+                                      compact
+                                    />
+                                  </div>
                                   <div className="flex flex-wrap gap-1.5">
                                     {outgoingLinks.map((link, index) => (
                                       <Pill
@@ -3366,7 +3396,7 @@ export default function MemoryVault({
                                         {relationLabel(link.relation).toLocaleLowerCase()}{" "}
                                         <button
                                           type="button"
-                                          className="underline underline-offset-2"
+                                          className="inline-flex min-h-11 items-center underline underline-offset-2"
                                           onClick={() => void openLinkedNote(link.target)}
                                         >
                                           {memoryLabel(notesById.get(link.target))}
@@ -3393,7 +3423,7 @@ export default function MemoryVault({
                                     <button
                                       key={note.id}
                                       type="button"
-                                      className="block text-left text-xs underline"
+                                      className="flex min-h-11 items-center text-left text-xs underline"
                                       onClick={() => void openLinkedNote(note.id)}
                                     >
                                       {memoryLabel(note)}
@@ -3588,7 +3618,7 @@ export default function MemoryVault({
                                     <dd className="mt-0.5 break-words">
                                       <button
                                         type="button"
-                                        className="underline underline-offset-2"
+                                        className="inline-flex min-h-11 items-center underline underline-offset-2"
                                         onClick={() => void copyDiagnostics()}
                                       >
                                         {localizeUi("ui.longTermMemory.memoryvault.copyDiagnostics")}

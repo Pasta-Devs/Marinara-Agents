@@ -1641,6 +1641,41 @@ async function main() {
       browser = await chromium.launch({ args: ["--disable-gpu"] });
       const browserContext = await browser.newContext({ hasTouch: true });
       const page = await browserContext.newPage();
+      // #1588: "fits" when a touch target is at least 2.75rem (44px) both ways, else its size.
+      const touchTargetSize = (target: ReturnType<typeof page.locator>) =>
+        target.evaluate((element) => {
+          const rect = element.getBoundingClientRect();
+          return rect.width >= 44 && rect.height >= 44 ? "fits" : `${rect.width}x${rect.height}`;
+        });
+      // #1588: scrolls the bar's scroller to one end; "in view" when the bar is still inside the scrollport and
+      // the window.
+      const stickyBarInView = (bar: ReturnType<typeof page.locator>, end: "top" | "bottom") =>
+        bar.evaluate((element, scrollEnd) => {
+          let scroller = element.parentElement;
+          while (
+            scroller &&
+            !(
+              /auto|scroll/u.test(getComputedStyle(scroller).overflowY) && scroller.scrollHeight > scroller.clientHeight
+            )
+          )
+            scroller = scroller.parentElement;
+          const scrolling = scroller ?? document.scrollingElement!;
+          scrolling.scrollTop = scrollEnd === "bottom" ? scrolling.scrollHeight : 0;
+          const box = scroller?.getBoundingClientRect() ?? { top: 0, bottom: innerHeight };
+          const port = { top: Math.max(box.top, 0), bottom: Math.min(box.bottom, innerHeight) };
+          const rect = element.getBoundingClientRect();
+          return rect.top >= port.top - 1 && rect.bottom <= port.bottom + 1
+            ? "in view"
+            : `bar ${rect.top}-${rect.bottom} outside ${port.top}-${port.bottom} at scrollTop ${scrolling.scrollTop}`;
+        }, end);
+      // #1588: sizes the detail panel as a host panel does: the window's height, so its content scrolls inside
+      // it, and a width ("" for full, "24rem" for a narrow side panel on a wide window); null undocks it.
+      const dockDetailPanel = (target: typeof page, maxWidth: string | null) =>
+        target.locator('[data-ltm-surface="detail"]').evaluate((surface, width) => {
+          (surface as HTMLElement).style.height = width === null ? "" : "100vh";
+          (surface as HTMLElement).style.maxWidth = width ?? "";
+          if (width !== null) surface.scrollIntoView({ block: "start" });
+        }, maxWidth);
       page.on("request", (request) => {
         if (request.method() !== "POST") return;
         const body = request.postDataJSON() as Record<string, unknown>;
@@ -2225,6 +2260,8 @@ async function main() {
       // Bulk remove lists the branch assignment the selected memory already has.
       await page.locator("[data-ltm-select-mode]").click();
       await branchCard.locator('input[type="checkbox"]').check();
+      // #1588: the whole label around a row checkbox is a 44px target, not just the box.
+      assert.equal(await touchTargetSize(branchCard.locator('label:has(input[type="checkbox"])')), "fits");
       await page.locator("[data-ltm-bulk-availability]").click();
       const bulkBranchRemoval = page.locator("[data-ltm-bulk-availability-workbench]");
       await bulkBranchRemoval.waitFor();
@@ -2452,6 +2489,22 @@ async function main() {
       await renameDialog.waitFor({ state: "detached" });
       await renameButtonFocused();
       if (vaultViewport) await page.setViewportSize(vaultViewport);
+
+      // #1588: docked narrow on a wide window, the Vault lays out by its own width: row actions move into
+      // the More menu and the memory list follows the page instead of a viewport-height scroller.
+      const vaultLayout = () =>
+        page.locator("[data-ltm-memory-list]").evaluate((list) => ({
+          inline: getComputedStyle(list.querySelector('[data-ltm-row-actions="inline"]')!).display,
+          menu: getComputedStyle(list.querySelector('[data-ltm-row-actions="menu"]')!).display,
+          capped: getComputedStyle(list).maxHeight !== "none",
+        }));
+      assert.deepEqual(await vaultLayout(), { inline: "flex", menu: "none", capped: true });
+      await dockDetailPanel(page, "24rem");
+      await page.locator('[data-ltm-workspace-pane-tab="navigator"]').click();
+      assert.deepEqual(await vaultLayout(), { inline: "none", menu: "block", capped: false });
+      if (visualOutputDir) await page.screenshot({ path: join(visualOutputDir, "long-term-memory-vault-docked.png") });
+      assert.equal(await touchTargetSize(page.locator('[data-ltm-control="back"]')), "fits");
+      await dockDetailPanel(page, null);
       await memorySearch.fill("Scoped desktop memory");
       await page.locator('[data-ltm-navigation="desktop"] [data-ltm-destination="review"]').click();
       const recoverySource = page.locator('[data-ltm-review-source-select="source_mobile_recovery"]');
@@ -4336,6 +4389,17 @@ async function main() {
       const selectBox = await chatSettings.locator('select[data-ltm-control="select"]').boundingBox();
       assert.ok(selectBox);
       assert.ok(selectBox.height <= 38, `Expected compact select height <= 38px, got ${selectBox.height}`);
+      // #1588: the compact info button keeps its 1.75rem look but answers taps 0.5rem around it.
+      assert.equal(
+        await chatSettings.locator('[data-ltm-info="Recall style"]').evaluate((button) => {
+          button.scrollIntoView({ block: "center" });
+          const rect = button.getBoundingClientRect();
+          const hit = document.elementFromPoint(rect.left - 6, rect.top + rect.height / 2);
+          return button.contains(hit) ? "inside" : `${rect.width}x${rect.height} hit ${hit?.outerHTML.slice(0, 120)}`;
+        }),
+        "inside",
+      );
+      assert.equal(await touchTargetSize(chatSettings.locator('[data-ltm-info="Recall style"] > span')), "fits");
       const lastInjection = chatSettings.locator("[data-ltm-last-injection]");
       await lastInjection.getByText(/1 saved memory included in the latest model context/u).waitFor();
       await lastInjection.click();
@@ -4891,6 +4955,72 @@ async function main() {
       await page
         .locator(`[data-ltm-review-mutation="${reviewMutationIds.partial}"] [data-ltm-review-mutation-toggle]`)
         .click();
+      // #1588: on a phone the batch bar sits above the rows and sticks to the top of the scroller, so it stays
+      // in view at the end of a long draft; the compact row checkbox and the preview summary are 44px targets.
+      const reviewWorkbench = page.locator("[data-ltm-review-workbench]");
+      const reviewBatchBar = page.locator("[data-ltm-review-batch-actions]");
+      await dockDetailPanel(page, "");
+      await reviewWorkbench.evaluate((workbench) => {
+        (workbench as HTMLElement).style.minHeight = "250vh";
+      });
+      assert.equal(await stickyBarInView(reviewBatchBar, "bottom"), "in view");
+      if (visualOutputDir)
+        await page.screenshot({ path: join(visualOutputDir, "long-term-memory-review-batch-bar-mobile.png") });
+      // Shift+Tab onto a row checkbox that sits under the stuck bar scrolls it out from under the bar.
+      const partialRowCheckbox = page.locator(
+        `[data-ltm-review-mutation="${reviewMutationIds.partial}"] [data-ltm-control="review-select"]`,
+      );
+      const partialCheckboxState = () =>
+        partialRowCheckbox.evaluate((checkbox) => {
+          const bar = document.querySelector("[data-ltm-review-batch-actions]")!.getBoundingClientRect();
+          const rect = checkbox.getBoundingClientRect();
+          const focus = document.activeElement === checkbox ? "focused" : "unfocused";
+          return `${focus} ${rect.bottom > bar.top && rect.top < bar.bottom ? "under bar" : "clear"}`;
+        });
+      await partialRowCheckbox.evaluate((checkbox) => {
+        const bar = document.querySelector("[data-ltm-review-batch-actions]")!;
+        let scroller = bar.parentElement;
+        while (
+          scroller &&
+          !(/auto|scroll/u.test(getComputedStyle(scroller).overflowY) && scroller.scrollHeight > scroller.clientHeight)
+        )
+          scroller = scroller.parentElement;
+        (scroller ?? document.scrollingElement!).scrollTop +=
+          checkbox.getBoundingClientRect().top - (bar.getBoundingClientRect().bottom - 8);
+      });
+      await page
+        .locator(`[data-ltm-review-mutation="${reviewMutationIds.partial}"] [data-ltm-review-mutation-toggle]`)
+        .evaluate((toggle) => (toggle as HTMLElement).focus({ preventScroll: true }));
+      assert.equal(await partialCheckboxState(), "unfocused under bar");
+      await page.keyboard.press("Shift+Tab");
+      let partialCheckboxAfterTab = "";
+      for (let attempt = 0; attempt < 20 && partialCheckboxAfterTab !== "focused clear"; attempt += 1) {
+        await page.waitForTimeout(50);
+        partialCheckboxAfterTab = await partialCheckboxState();
+      }
+      assert.equal(partialCheckboxAfterTab, "focused clear");
+      await reviewWorkbench.evaluate((workbench) => {
+        (workbench as HTMLElement).style.minHeight = "";
+      });
+      await dockDetailPanel(page, null);
+      const partialRow = page.locator(`[data-ltm-review-mutation="${reviewMutationIds.partial}"]`);
+      assert.equal(await touchTargetSize(partialRow.locator('label:has([data-ltm-control="review-select"])')), "fits");
+      assert.equal(await touchTargetSize(partialRow.locator("[data-ltm-review-preview] > summary")), "fits");
+      // Docked narrow on a wide window, the bar keeps sticking and the workbench keeps its phone padding.
+      const reviewBarLayout = () =>
+        reviewBatchBar.evaluate((bar) => ({
+          position: getComputedStyle(bar).position,
+          workbenchPadding: getComputedStyle(bar.closest("[data-ltm-review-workbench]")!).paddingTop,
+        }));
+      await page.setViewportSize({ width: 1280, height: 900 });
+      assert.deepEqual(await reviewBarLayout(), { position: "static", workbenchPadding: "16px" });
+      await dockDetailPanel(page, "24rem");
+      await showWorkspacePane("workbench");
+      assert.deepEqual(await reviewBarLayout(), { position: "sticky", workbenchPadding: "12px" });
+      if (visualOutputDir) await page.screenshot({ path: join(visualOutputDir, "long-term-memory-review-docked.png") });
+      await dockDetailPanel(page, null);
+      await page.setViewportSize({ width: 390, height: 844 });
+      await showWorkspacePane("workbench");
       // #1588: an emptied edit says why Accept is off, on the row and in the batch bar.
       const emptiedPartial = page.locator(`[data-ltm-review-mutation="${reviewMutationIds.partial}"]`);
       await emptiedPartial.locator("textarea").fill("");
@@ -6458,6 +6588,31 @@ async function main() {
         sourcePreviewRequests.filter((request) => request.source === "characters").at(-1)?.cursor,
         "characters-page-2",
       );
+      // #1588: docked narrow on a wide window, a source's Import bar stays pinned to the bottom of a long
+      // preview, the row checkbox label is a 44px target and the destination panel has no viewport-height cap.
+      await dockDetailPanel(page, "24rem");
+      await showWorkspacePane("navigator");
+      assert.equal(
+        await touchTargetSize(page.locator('label:has([data-ltm-source-select="character-outside-current-chat"])')),
+        "fits",
+      );
+      await page.locator('[data-ltm-source-open="character-outside-current-chat"]').click();
+      await showWorkspacePane("workbench");
+      const flatSourceBar = page.locator("[data-ltm-source-workbench] [data-ltm-source-primary-actions]");
+      await flatSourceBar.evaluate((bar) => {
+        (bar.previousElementSibling as HTMLElement).style.minHeight = "150vh";
+      });
+      assert.equal(await stickyBarInView(flatSourceBar, "top"), "in view");
+      if (visualOutputDir)
+        await page.screenshot({ path: join(visualOutputDir, "long-term-memory-source-bar-docked.png") });
+      await flatSourceBar.evaluate((bar) => {
+        (bar.previousElementSibling as HTMLElement).style.minHeight = "";
+      });
+      assert.equal(
+        await page.locator("#ltm-destination-scope-control").evaluate((panel) => getComputedStyle(panel).maxHeight),
+        "none",
+      );
+      await dockDetailPanel(page, null);
       if (visualOutputDir)
         await page.screenshot({
           path: join(visualOutputDir, "long-term-memory-source-pagination-desktop.png"),
@@ -6671,6 +6826,11 @@ async function main() {
       );
       await page.locator("[data-ltm-lorebook-browser]").getByRole("button", { name: "Select", exact: true }).click();
       await page.locator('[data-ltm-lorebook-entry-select="entry_mobile_harbor"]').check();
+      // #1588: the label around an entry checkbox is a 44px target.
+      assert.equal(
+        await touchTargetSize(page.locator('label:has([data-ltm-lorebook-entry-select="entry_mobile_harbor"])')),
+        "fits",
+      );
       await page.locator('[data-ltm-lorebook-id="lorebook_outside_current_chat"]').click();
       await page.locator('[data-ltm-lorebook-entry-select="entry_outside_current_chat"]').check();
       const selectionDialog = new Promise<void>((resolveDialog) => {
@@ -7017,6 +7177,23 @@ async function main() {
         await mobilePage.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth),
         true,
       );
+      // #1588: on a phone the lorebook's Import bar sits above the entries and sticks to the top of the
+      // scroller through a long list.
+      const lorebookWorkbench = mobilePage.locator('[data-ltm-lorebook-workbench="lorebook_mobile_fixture"]');
+      await dockDetailPanel(mobilePage, "");
+      await lorebookWorkbench.evaluate((workbench) => {
+        (workbench as HTMLElement).style.minHeight = "250vh";
+      });
+      assert.equal(
+        await stickyBarInView(lorebookWorkbench.locator("[data-ltm-source-primary-actions]"), "bottom"),
+        "in view",
+      );
+      if (visualOutputDir)
+        await mobilePage.screenshot({ path: join(visualOutputDir, "long-term-memory-lorebook-bar-mobile.png") });
+      await lorebookWorkbench.evaluate((workbench) => {
+        (workbench as HTMLElement).style.minHeight = "";
+      });
+      await dockDetailPanel(mobilePage, null);
       await mobileNavigation.locator('[data-ltm-destination="settings"]').click();
       await mobilePage.locator("#settings-tab-extraction").click();
       const mobileExtractionLayout = await mobilePage

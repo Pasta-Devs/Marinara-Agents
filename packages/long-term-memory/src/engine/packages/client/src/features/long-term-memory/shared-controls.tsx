@@ -5,6 +5,7 @@ import {
   useRef,
   useState,
   type ButtonHTMLAttributes,
+  type FocusEvent,
   type HTMLAttributes,
   type ReactNode,
 } from "react";
@@ -16,7 +17,23 @@ let activePopover: { id: string; close: () => void } | null = null;
 
 export const inputClass = "mari-editor-field min-h-11 w-full px-3 text-sm";
 export const compactInputClass = "mari-chrome-field min-h-9 w-full !rounded-md px-3 py-2 text-xs";
-export const compactInputStyle = { color: "var(--foreground)" } as const;
+// `relative` paints the field above a compact info button's enlarged hit area.
+export const compactInputStyle = { color: "var(--foreground)", position: "relative" } as const;
+
+/**
+ * Scrolls a keyboard-focused control out from under a pinned batch bar. The browser scrolls focus
+ * only to the edge of the scroller, which leaves Shift+Tab under a top bar and Tab under a bottom one.
+ */
+export function revealFocusUnderStickyBar(event: FocusEvent<HTMLElement>, bar: HTMLElement | null) {
+  const target = event.target;
+  if (!bar || bar.contains(target)) return;
+  requestAnimationFrame(() => {
+    if (getComputedStyle(bar).position !== "sticky" || !target.matches(":focus-visible")) return;
+    const barRect = bar.getBoundingClientRect();
+    const targetRect = target.getBoundingClientRect();
+    if (targetRect.bottom > barRect.top && targetRect.top < barRect.bottom) target.scrollIntoView({ block: "center" });
+  });
+}
 
 export const Button = forwardRef<
   HTMLButtonElement,
@@ -181,7 +198,7 @@ export function InfoPopover({
         className={`${compact ? "h-7 w-7" : "h-11 w-11"} inline-flex shrink-0 items-center justify-center rounded-md text-[var(--muted-foreground)] hover:bg-[var(--accent)] hover:text-[var(--foreground)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)]`}
         style={
           compact
-            ? { height: "1.75rem", width: "1.75rem", flexShrink: 0 }
+            ? { position: "relative", height: "1.75rem", width: "1.75rem", flexShrink: 0 }
             : { height: "2.75rem", width: "2.75rem", flexShrink: 0 }
         }
         onMouseEnter={show}
@@ -199,6 +216,8 @@ export function InfoPopover({
         }}
       >
         <Info aria-hidden="true" size="0.875rem" />
+        {/* The compact glyph keeps its 1.75rem box; this layer widens the touch target to 2.75rem. */}
+        {compact ? <span aria-hidden="true" style={{ position: "absolute", inset: "-0.5rem" }} /> : null}
       </button>
       {open
         ? createPortal(

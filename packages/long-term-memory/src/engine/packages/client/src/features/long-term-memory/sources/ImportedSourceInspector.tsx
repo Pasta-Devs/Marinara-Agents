@@ -41,7 +41,7 @@ export function ImportedSourceInspector({
         </Button>
       </div>
       <details data-ltm-source-management>
-        <summary className="cursor-pointer text-xs font-semibold">
+        <summary className="min-h-11 cursor-pointer py-3 text-xs font-semibold">
           {localizeUi("ui.longTermMemory.sourceoperation.manageSource")}
         </summary>
         <div className="mt-2 grid grid-cols-2 gap-2">

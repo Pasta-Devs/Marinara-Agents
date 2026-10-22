@@ -16,7 +16,7 @@ import {
 } from "../../../../../shared/src/features/agents/long-term-memory/schema.js";
 import { errorMessage, invalidateLtmQueries, queryKeys, request, requestNotesByIds } from "../api";
 import { humanizeLabel, labelKeys, localizedLabel, rejectionReasonLabels } from "../display-labels";
-import { Button, IconButton, StatusSurface } from "../shared-controls";
+import { Button, IconButton, StatusSurface, revealFocusUnderStickyBar } from "../shared-controls";
 import type { LongTermMemoryDestinationProps } from "../types";
 import { selectLtmPluralForm, useLtmTranslation } from "../localization";
 import { LtmWorkspace, type LtmWorkspacePane } from "../LtmWorkspace";
@@ -301,6 +301,7 @@ export default function ReviewQueue({
   const [sourceCollapsed, setSourceCollapsed] = useState(false);
   const [expandedMutationIds, setExpandedMutationIds] = useState<Set<string>>(new Set());
   const reviewRef = useRef<HTMLElement>(null);
+  const batchBarRef = useRef<HTMLDivElement>(null);
 
   function setMobilePaneAndFocus(pane: LtmWorkspacePane) {
     setMobilePane(pane);
@@ -1834,7 +1835,7 @@ export default function ReviewQueue({
               </Button>
             ) : null}
             <details data-ltm-review-preview className="text-xs">
-              <summary className="cursor-pointer font-medium">
+              <summary className="min-h-11 cursor-pointer py-3 font-medium">
                 {localizeUi("ui.longTermMemory.reviewqueue.evidenceAndPreview")} {row.mutation.evidence.length}{" "}
                 {localizeUi("ui.longTermMemory.reviewqueue.evidence")}
                 {previewChanges.length
@@ -1925,7 +1926,7 @@ export default function ReviewQueue({
                 ))}
                 {preflight.conflicts.length ? (
                   <details data-ltm-review-conflicts>
-                    <summary className="cursor-pointer font-medium">
+                    <summary className="min-h-11 cursor-pointer py-3 font-medium">
                       {localizeUi(
                         selectLtmPluralForm(locale, preflight.conflicts.length) === "one"
                           ? "ui.longTermMemory.reviewqueue.conflictsFoundOne"
@@ -1956,7 +1957,7 @@ export default function ReviewQueue({
                       ))}
                       {preflight.conflicts.length > CONFLICT_PREVIEW_LIMIT ? (
                         <details>
-                          <summary className="cursor-pointer text-[var(--muted-foreground)]">
+                          <summary className="min-h-11 cursor-pointer py-3 text-[var(--muted-foreground)]">
                             {localizeUi(
                               selectLtmPluralForm(locale, preflight.conflicts.length - CONFLICT_PREVIEW_LIMIT) === "one"
                                 ? "ui.longTermMemory.reviewqueue.moreConflictsOne"
@@ -2056,15 +2057,19 @@ export default function ReviewQueue({
       className="space-y-4"
     >
       <style>{`
-        @media (min-width: 40rem) {
+        @container ltm-workspace (min-width: 40rem) {
           [data-ltm-review-field-grid] {
             grid-template-columns: minmax(0, 1fr) 10rem;
           }
           [data-ltm-review-mutation-details] {
-            margin-left: 2.5rem;
+            margin-left: 4.25rem;
+          }
+          [data-ltm-review-workbench],
+          [data-ltm-review-draft] {
+            padding: 1rem;
           }
         }
-        @media (min-width: 48rem) {
+        @container ltm-workspace (min-width: 48rem) {
           [data-ltm-review-batch-actions] {
             position: static;
             z-index: auto;
@@ -2298,7 +2303,11 @@ export default function ReviewQueue({
         workbench={{
           label: localizeUi("ui.longTermMemory.reviewqueue.reviewPane"),
           content: (
-            <div data-ltm-review-workbench className="mari-editor-panel min-w-0 space-y-4 p-3 sm:p-4">
+            <div
+              data-ltm-review-workbench
+              className="mari-editor-panel min-w-0 space-y-4 p-3"
+              onFocus={(event) => revealFocusUnderStickyBar(event, batchBarRef.current)}
+            >
               <header className="flex flex-wrap items-start justify-between gap-3 border-b border-[var(--border)] pb-4">
                 <div className="min-w-0">
                   <h2 data-ltm-review-draft-title className="break-words text-base font-semibold tracking-tight">
@@ -2468,7 +2477,7 @@ export default function ReviewQueue({
                               </p>
                               {item.candidate.issues?.length ? (
                                 <details>
-                                  <summary className="cursor-pointer font-medium text-[var(--foreground)]">
+                                  <summary className="min-h-11 cursor-pointer py-3 font-medium text-[var(--foreground)]">
                                     {localizeUi("ui.longTermMemory.reviewqueue.parserIssues", {
                                       count: item.candidate.issues.length,
                                     })}
@@ -2596,10 +2605,11 @@ export default function ReviewQueue({
               </div>
               {selectedRows.length ? (
                 <div
+                  ref={batchBarRef}
                   data-ltm-review-batch-actions
                   role="group"
                   aria-label={localizeUi("ui.longTermMemory.reviewqueue.batchActions")}
-                  className="sticky bottom-2 z-10 flex flex-wrap items-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--background)] p-2 shadow-md"
+                  className="sticky top-1 z-10 flex flex-wrap items-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--background)] p-2 shadow-md"
                 >
                   <Button
                     primary
@@ -2688,7 +2698,7 @@ export default function ReviewQueue({
                               <section
                                 key={item.draft.id}
                                 data-ltm-review-draft={item.draft.id}
-                                className="mari-editor-panel space-y-3 p-3 sm:p-4"
+                                className="mari-editor-panel space-y-3 p-3"
                               >
                                 {item.blockReasons.length ? (
                                   <div

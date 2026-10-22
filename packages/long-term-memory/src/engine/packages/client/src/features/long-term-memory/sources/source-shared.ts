@@ -64,6 +64,8 @@ export function targetFitsDestinationScope(scope: LtmScope | undefined, target: 
 export const ALL_LTM_MODES: LtmMode[] = ["conversation", "roleplay", "game"];
 
 export const sourceCheckboxClass = "h-4 w-4 shrink-0 accent-[var(--primary)] [--primary:var(--marinara-editor-accent)]";
+// Wraps a checkbox that has no visible label so its touch target is 2.75rem square.
+export const sourceCheckboxHitClass = "flex min-h-11 min-w-11 shrink-0 cursor-pointer items-center justify-center";
 
 export function sourceModeLabel(mode: LtmMode, localizeUi: LtmTranslationFunction) {
   return localizeUi("ui.longTermMemory.sourcesworkspace.importsAsMode", {
