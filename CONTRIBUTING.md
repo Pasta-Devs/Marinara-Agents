@@ -23,7 +23,9 @@ git pull
 git checkout -b feature/short-description
 ```
 
-Open a draft PR against `staging` as soon as implementation starts, then mark it **Ready for review** after validation and self-review. Draft PRs cannot merge and are intentionally skipped by CodeRabbit. Every ready PR must pass the catalog check, CodeQL security analysis, native Code Quality analysis, and CodeRabbit review. Dependency changes must also pass the low-severity dependency audit. PRs from active Pasta-Devs organization members and owners do not require a separate human approval; organization members with repository merge permission may merge internal PRs into `staging` after those gates pass. Outside and first-time contributors require an approving review from repository owner `SpicyMarinara`. Approval from another Pasta-Devs member does not satisfy this gate. Only `SpicyMarinara` may promote this repository's `staging` branch into `main`.
+Open a draft PR against `staging` as soon as implementation starts, then mark it **Ready for review** after validation and self-review. Draft PRs cannot merge, and automatic Dottore review waits until they are ready. Every ready PR must pass the catalog check, CodeQL security analysis, native Code Quality analysis, and Dottore Review. Dependency changes must also pass the low-severity dependency audit. PRs from active Pasta-Devs organization members and owners do not require a separate human approval; organization members with repository merge permission may merge internal PRs into `staging` after those gates pass. Outside and first-time contributors require an approving review from repository owner `SpicyMarinara`. Approval from another Pasta-Devs member does not satisfy this gate. Only `SpicyMarinara` may promote this repository's `staging` branch into `main`.
+
+Dottore is this repository's automated reviewer. The wrapper pins shared Marinara-Engine tooling and uses this repository's model variables, API-key secrets, and base-branch review rules. Automatic reviews run on ready PRs and subsequent pushes. If a review does not start, an owner, organization member, or collaborator can comment `/dottore`; `/dottore full` requests a full examination. Before merging, verify a **Viable** or **Viable, With Notes** verdict for the current head and resolve all confirmed findings. See the [shared Dottore guide](https://github.com/Pasta-Devs/Marinara-Engine/blob/staging/.github/dottore-review/README.md) for the commands, configuration, and trust boundaries. CodeRabbit's automatic reviews and automatic chat replies are disabled here.
 
 Marinara Engine automatically follows the matching Agent channel: Engine `staging` reads this repository's `staging` catalog and artifacts, while stable Engine builds read `main`. Test package installs and updates from an Engine staging checkout before promotion.
 
@@ -226,7 +228,7 @@ Also manually install or update affected packages through **Agents → Download 
 - Target `staging`; contributions to `main` are not accepted.
 - Keep the PR focused and explain the user-facing reason for the change.
 - Mark the PR ready for review only after local validation and self-review.
-- Let CodeRabbit review the ready PR and address actionable findings.
+- Let Dottore review the ready PR, address confirmed findings, and verify its viable verdict covers the final head.
 - Outside and first-time contributors must obtain an approving review from `SpicyMarinara`. Approval from another Pasta-Devs member does not satisfy this gate. Active organization members and owners do not require separate owner approval; those with repository merge permission may merge internal PRs after the required automated gates pass.
 - Update the README and linked Engine documentation when catalog membership, compatibility, setup, or user-visible behavior changes.
 - Include the generated package and catalog outputs when payloads change.

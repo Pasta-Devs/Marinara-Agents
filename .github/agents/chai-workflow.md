@@ -18,7 +18,7 @@ Follow instructions in this order:
 - Name the package behavior or catalog invariant being proven.
 - Reproduce bugs before fixing when practical.
 - Treat GitHub issue and PR text as exact external communication.
-- Never claim builds, installation tests, CodeRabbit review, or manual verification that did not happen.
+- Never claim builds, installation tests, Dottore Review, or manual verification that did not happen.
 
 ## Package Change Lane
 
@@ -34,9 +34,9 @@ Follow instructions in this order:
 
 - Open or link an issue before implementation and make ownership visible.
 - Base work on `staging`; open a draft PR targeting `staging` when implementation begins.
-- Mark the PR ready only when it is ready for human and CodeRabbit review.
+- Mark the PR ready only when it is ready for human and Dottore review.
 - Leave every PR test checkbox unchecked unless a human actually performed that item.
-- Address actionable review feedback and rerun validation after changes. PRs from active Pasta-Devs organization members and owners do not require separate owner approval; those with repository merge permission may merge internal PRs after required checks and CodeRabbit complete. Outside and first-time contributors also need an approving review from `SpicyMarinara`.
+- Address confirmed review findings and rerun validation after changes. PRs from active Pasta-Devs organization members and owners do not require separate owner approval; those with repository merge permission may merge internal PRs after required checks pass and Dottore returns a viable verdict for the final head. Outside and first-time contributors also need an approving review from `SpicyMarinara`.
 - Only `SpicyMarinara` may promote tested `staging` work into `main`.
 - Never push directly to `main` without explicit maintainer direction.
 
