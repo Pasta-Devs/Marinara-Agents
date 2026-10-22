@@ -144,10 +144,10 @@ const isReportedMissingModule = (line) => {
 const packages = process.argv.slice(2);
 if (packages.length === 0) packages.push("slurp2");
 
-// Checks one package, appending its report to `lines` as [console method, text]; true in `failed` when the gate fails.
-async function checkPackage(id, lines) {
-  const log = (text) => lines.push(["log", text]);
-  const error = (text) => lines.push(["error", text]);
+// Checks one package, appending to `report` as [console method, text]; true in `failed` when the gate fails.
+async function checkPackage(id, report) {
+  const log = (text) => report.push(["log", text]);
+  const error = (text) => report.push(["error", text]);
   let failed = false;
   const packageSources = id === "games" ? null : join(repoRoot, `packages/${id}/src/engine`);
   if (packageSources && !existsSync(packageSources)) throw new Error(`No package-owned source for ${id}`);
@@ -223,19 +223,19 @@ async function checkPackage(id, lines) {
   } finally {
     await rm(overlay, { recursive: true, force: true });
   }
-  return { lines, failed };
+  return { report, failed };
 }
 
 // Each package settles on its own: a setup or compiler failure is reported by name after whatever that package had
 // already gathered, and never discards the other packages' reports.
 const results = await Promise.all(
   packages.map((id) => {
-    const lines = [];
-    return checkPackage(id, lines).catch((cause) => ({
-      lines: [...lines, ["error", `${id}: ${cause.message}`]],
+    const report = [];
+    return checkPackage(id, report).catch((cause) => ({
+      report: [...report, ["error", `${id}: ${cause?.message ?? cause}`]],
       failed: true,
     }));
   }),
 );
-for (const { lines } of results) for (const [method, text] of lines) console[method](text);
+for (const { report } of results) for (const [method, text] of report) console[method](text);
 process.exitCode = results.some((result) => result.failed) ? 1 : 0;

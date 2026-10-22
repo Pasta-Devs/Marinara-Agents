@@ -74,6 +74,7 @@ function run(command) {
       stream.on("data", (chunk) => (output.text += chunk));
     }
     let timedOut = false;
+    const settle = (code, signal) => resolve({ code: code ?? 1, signal, timedOut, output });
     const timer = setTimeout(() => {
       timedOut = true;
       try {
@@ -81,13 +82,20 @@ function run(command) {
       } catch {
         child.kill("SIGKILL");
       }
+      // Settle when the shell is gone, with the output gathered so far: a survivor that escaped the group could hold
+      // the pipes open and keep `close` from ever firing.
+      child.once("exit", (code, signal) => {
+        child.stdout.destroy();
+        child.stderr.destroy();
+        settle(code, signal);
+      });
     }, timeoutSeconds * 1000);
     child.on("error", (error) =>
       resolve({ code: 1, signal: null, timedOut, output: { ...output, text: `${error}\n` } }),
     );
     child.on("close", (code, signal) => {
       clearTimeout(timer);
-      resolve({ code: code ?? 1, signal, timedOut, output });
+      settle(code, signal);
     });
   });
 }
