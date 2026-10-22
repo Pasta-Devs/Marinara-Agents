@@ -298,6 +298,12 @@
     "long-term-memory": {
       "versions": [
         {
+          "version": "1.4.81",
+          "date": "2026-10-22",
+          "notes": "- Once the debug log reaches its 2 MB limit, Long-Term Memory now trims it to the newest 1.5 MB instead of to just under 2 MB. Before, every new debug line rewrote the whole file from then on, and saves and recalls waited for each rewrite. Now the lines after a trim are added to the end of the file again. The log keeps between 1.5 and 2 MB of the newest lines.",
+          "highlight": false
+        },
+        {
           "version": "1.4.80",
           "date": "2026-10-22",
           "notes": "- No change in what Long-Term Memory does. Internally, the server file that matches names in chats and summaries to memories is split into four files.",
@@ -409,12 +415,6 @@
           "version": "1.4.62",
           "date": "2026-10-21",
           "notes": "- A relationship or character change from a chat summary no longer links to the wrong event because a short event name happens to sit inside a word. A cause such as \"the training\" could link to an event named \"rain\", a change whose cause matched nothing could take an event named \"art show\" from the words \"start showing\", and a cause that named an event from the same summary in several words could lose its link when a shorter event name appeared inside one of its words. Event names now match whole words, and the last word may still be plural (\"the training sessions\" finds \"training session\").",
-          "highlight": false
-        },
-        {
-          "version": "1.4.61",
-          "date": "2026-10-21",
-          "notes": "- Saving several imported or re-extracted sources into a large memory vault is faster, and recall and other memory actions wait less while it happens. Each source used to re-read and re-check every memory in the vault while it saved; now a batch reads the vault once and re-reads only the memories that changed. The same memories are matched as before.",
           "highlight": false
         }
       ]
