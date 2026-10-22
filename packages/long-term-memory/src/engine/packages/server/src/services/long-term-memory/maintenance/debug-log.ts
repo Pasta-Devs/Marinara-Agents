@@ -20,6 +20,8 @@ export type LtmDebugEventInput = Omit<LtmDebugEvent, "id" | "ts" | "operationId"
 
 export const LTM_DEBUG_MAX_EVENT_BYTES = 64 * 1024;
 export const LTM_DEBUG_MAX_LOG_BYTES = 2 * 1024 * 1024;
+// A full log is cut back to this size, so the lines after a trim are plain appends instead of rewrites.
+export const LTM_DEBUG_TRIM_TARGET_BYTES = (LTM_DEBUG_MAX_LOG_BYTES * 3) / 4;
 const MAX_NESTED_STRING_LENGTH = 2_000;
 const MAX_ARRAY_ITEMS = 80;
 const MAX_OBJECT_KEYS = 80;
@@ -154,7 +156,7 @@ async function appendBounded(path: string, line: string) {
     if (isEnoent(error)) return "";
     throw error;
   });
-  const replacement = `${newestCompleteLines(content, LTM_DEBUG_MAX_LOG_BYTES - lineBytes)}${line}`;
+  const replacement = `${newestCompleteLines(content, LTM_DEBUG_TRIM_TARGET_BYTES - lineBytes)}${line}`;
   const temporary = `${path}.${randomUUID()}.tmp`;
   try {
     await writeFile(temporary, replacement, "utf8");
